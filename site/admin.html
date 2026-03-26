@@ -1,0 +1,399 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>SentinelEdge — Admin Console</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap"
+      rel="stylesheet"
+    >
+    <link rel="stylesheet" href="styles.css?v=5">
+    <style>
+      .admin-layout { padding-top: 80px; }
+
+      .admin-header {
+        display: flex; align-items: center; justify-content: space-between;
+        flex-wrap: wrap; gap: 1rem; margin-bottom: 2rem;
+      }
+      .admin-header h1 { font-size: clamp(1.4rem, 3vw, 1.8rem); }
+
+      .auth-bar {
+        display: flex; align-items: center; gap: 0.5rem;
+        background: var(--surface); padding: 0.4rem 0.8rem;
+        border-radius: var(--radius); border: 1px solid var(--border);
+      }
+      .auth-bar label { font-size: 0.82rem; color: var(--ink-3); white-space: nowrap; }
+      .auth-bar input {
+        font-family: 'JetBrains Mono', monospace; font-size: 0.78rem;
+        border: 1px solid var(--border); border-radius: 4px; padding: 0.3rem 0.5rem;
+        width: 280px; background: var(--bg);
+      }
+      .auth-status {
+        font-size: 0.75rem; padding: 0.2rem 0.5rem; border-radius: 4px;
+        font-weight: 600;
+      }
+      .auth-status.ok { background: var(--accent-light); color: var(--accent); }
+      .auth-status.none { background: #f5f5f5; color: var(--ink-3); }
+
+      .admin-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 1.5rem;
+        margin-bottom: 2rem;
+      }
+      @media (max-width: 768px) { .admin-grid { grid-template-columns: 1fr; } }
+
+      .panel {
+        background: var(--surface); border: 1px solid var(--border);
+        border-radius: var(--radius-lg); padding: 1.5rem;
+      }
+      .panel h2 {
+        font-size: 1rem; margin-bottom: 1rem; display: flex;
+        align-items: center; gap: 0.5rem;
+      }
+      .panel h2 .dot {
+        width: 8px; height: 8px; border-radius: 50%;
+        display: inline-block;
+      }
+      .dot-green { background: var(--accent); }
+      .dot-orange { background: var(--accent-2); }
+
+      .kv-grid {
+        display: grid; grid-template-columns: 1fr 1fr;
+        gap: 0.4rem 1rem; font-size: 0.88rem;
+      }
+      .kv-grid dt { color: var(--ink-3); }
+      .kv-grid dd { margin: 0; font-weight: 600; font-family: 'JetBrains Mono', monospace; }
+
+      .control-group { margin-bottom: 1rem; }
+      .control-group label {
+        display: block; font-size: 0.82rem;
+        color: var(--ink-3); margin-bottom: 0.3rem;
+      }
+
+      .btn-row { display: flex; gap: 0.5rem; flex-wrap: wrap; }
+      .btn-sm {
+        padding: 0.4rem 0.9rem; font-size: 0.82rem; border-radius: 6px;
+        border: 1px solid var(--border); background: var(--surface);
+        cursor: pointer; font-weight: 500; transition: var(--transition);
+      }
+      .btn-sm:hover { border-color: var(--accent); color: var(--accent); }
+      .btn-sm.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+      .btn-sm.primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+      .btn-sm.primary:hover { background: var(--accent-hover); }
+      .btn-sm.danger { border-color: #c0392b; color: #c0392b; }
+      .btn-sm.danger:hover { background: #c0392b; color: #fff; }
+
+      .sample-table {
+        width: 100%; border-collapse: collapse; font-size: 0.82rem;
+        margin-top: 0.5rem;
+      }
+      .sample-table th, .sample-table td {
+        padding: 0.4rem 0.6rem; text-align: left;
+        border-bottom: 1px solid var(--border-light);
+      }
+      .sample-table th { color: var(--ink-3); font-weight: 500; }
+      .sample-table .level-nominal { color: var(--ink-3); }
+      .sample-table .level-elevated { color: var(--accent-2); }
+      .sample-table .level-severe { color: #b94a00; font-weight: 600; }
+      .sample-table .level-critical { color: #c0392b; font-weight: 700; }
+
+      .log-area {
+        background: var(--console-bg); color: var(--console-fg);
+        font-family: 'JetBrains Mono', monospace; font-size: 0.75rem;
+        padding: 0.8rem; border-radius: var(--radius); max-height: 200px;
+        overflow-y: auto; line-height: 1.6; white-space: pre-wrap;
+      }
+
+      .full-width { grid-column: 1 / -1; }
+
+      .flash {
+        padding: 0.6rem 1rem; border-radius: var(--radius); font-size: 0.85rem;
+        margin-bottom: 1rem; display: none;
+      }
+      .flash.success { display: block; background: var(--accent-light); color: var(--accent); }
+      .flash.error { display: block; background: #fde8e8; color: #c0392b; }
+    </style>
+  </head>
+  <body>
+
+    <nav class="site-nav" id="site-nav">
+      <div class="nav-inner">
+        <a class="nav-brand" href="index.html">
+          <span class="nav-logo">SE</span>
+          <span class="nav-title">SentinelEdge</span>
+        </a>
+        <div class="nav-links">
+          <a href="index.html" class="nav-link">Documentation</a>
+          <a href="admin.html" class="nav-link active">Admin Console</a>
+        </div>
+      </div>
+    </nav>
+
+    <main class="main admin-layout">
+      <div class="container">
+
+        <div class="admin-header">
+          <h1>Admin Console</h1>
+          <div class="auth-bar">
+            <label for="auth-token">Token:</label>
+            <input type="password" id="auth-token" placeholder="Paste token from terminal">
+            <span class="auth-status none" id="auth-status">No token</span>
+          </div>
+        </div>
+
+        <div class="flash" id="flash"></div>
+
+        <div class="admin-grid">
+
+          <!-- Status Panel -->
+          <div class="panel">
+            <h2><span class="dot dot-green"></span> Runtime Status</h2>
+            <dl class="kv-grid" id="status-grid">
+              <dt>Updated</dt><dd id="s-updated">—</dd>
+              <dt>Backlog</dt><dd id="s-backlog">—</dd>
+              <dt>Phases</dt><dd id="s-phases">—</dd>
+              <dt>CLI commands</dt><dd id="s-commands">—</dd>
+              <dt>Implemented</dt><dd id="s-implemented">—</dd>
+              <dt>Partial</dt><dd id="s-partial">—</dd>
+              <dt>Not built</dt><dd id="s-not-built">—</dd>
+            </dl>
+            <div style="margin-top: 1rem;">
+              <button class="btn-sm primary" id="btn-refresh-status">Refresh Status</button>
+            </div>
+          </div>
+
+          <!-- Control Panel -->
+          <div class="panel">
+            <h2><span class="dot dot-orange"></span> Controls</h2>
+
+            <div class="control-group">
+              <label>Detection Mode</label>
+              <div class="btn-row">
+                <button class="btn-sm active" data-mode="normal">Normal</button>
+                <button class="btn-sm" data-mode="frozen">Frozen</button>
+                <button class="btn-sm" data-mode="decay">Decay</button>
+              </div>
+            </div>
+
+            <div class="control-group">
+              <label>Actions</label>
+              <div class="btn-row">
+                <button class="btn-sm primary" id="btn-run-demo">Run Demo Analysis</button>
+                <button class="btn-sm danger" id="btn-reset">Reset Baseline</button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Report Panel -->
+          <div class="panel full-width">
+            <h2><span class="dot dot-green"></span> Latest Report</h2>
+            <div id="report-summary" style="margin-bottom: 1rem;">
+              <dl class="kv-grid">
+                <dt>Samples</dt><dd id="r-samples">—</dd>
+                <dt>Alerts</dt><dd id="r-alerts">—</dd>
+                <dt>Critical</dt><dd id="r-critical">—</dd>
+                <dt>Avg Score</dt><dd id="r-avg">—</dd>
+                <dt>Max Score</dt><dd id="r-max">—</dd>
+                <dt>Generated</dt><dd id="r-generated">—</dd>
+              </dl>
+            </div>
+            <table class="sample-table" id="sample-table">
+              <thead>
+                <tr>
+                  <th>#</th><th>Timestamp</th><th>Score</th><th>Level</th>
+                  <th>Action</th><th>Isolation</th><th>Reasons</th>
+                </tr>
+              </thead>
+              <tbody id="sample-tbody">
+                <tr><td colspan="7" style="color:var(--ink-3);">No report loaded yet.</td></tr>
+              </tbody>
+            </table>
+            <div style="margin-top: 1rem;">
+              <button class="btn-sm primary" id="btn-refresh-report">Refresh Report</button>
+            </div>
+          </div>
+
+          <!-- Activity Log -->
+          <div class="panel full-width">
+            <h2><span class="dot dot-green"></span> Activity Log</h2>
+            <div class="log-area" id="activity-log">Ready. Connect to the runtime with `cargo run -- serve`.</div>
+          </div>
+
+        </div>
+      </div>
+    </main>
+
+    <script>
+    (function() {
+      const API = '';  // same origin when served by `cargo run -- serve`
+      const $ = (sel) => document.querySelector(sel);
+      const $$ = (sel) => document.querySelectorAll(sel);
+
+      function getToken() { return $('#auth-token').value.trim(); }
+      function authHeaders() {
+        const t = getToken();
+        const h = { 'Content-Type': 'application/json' };
+        if (t) h['Authorization'] = 'Bearer ' + t;
+        return h;
+      }
+
+      function log(msg) {
+        const el = $('#activity-log');
+        const ts = new Date().toLocaleTimeString();
+        el.textContent += '\n[' + ts + '] ' + msg;
+        el.scrollTop = el.scrollHeight;
+      }
+
+      function flash(msg, type) {
+        const el = $('#flash');
+        el.textContent = msg;
+        el.className = 'flash ' + type;
+        setTimeout(() => { el.className = 'flash'; }, 4000);
+      }
+
+      // ── Status ──
+
+      async function refreshStatus() {
+        try {
+          const res = await fetch(API + '/api/status');
+          if (!res.ok) throw new Error(res.statusText);
+          const d = await res.json();
+          $('#s-updated').textContent = d.updated_at;
+          $('#s-backlog').textContent = d.backlog_completed + '/' + d.backlog_total;
+          $('#s-phases').textContent = d.completed_phases + '/' + d.total_phases;
+          $('#s-commands').textContent = d.cli_commands.length;
+          $('#s-implemented').textContent = d.implemented.length;
+          $('#s-partial').textContent = d.partially_wired.length;
+          $('#s-not-built').textContent = d.not_implemented.length;
+          log('Status refreshed');
+        } catch(e) {
+          log('Status fetch failed: ' + e.message);
+        }
+      }
+
+      // ── Report ──
+
+      async function refreshReport() {
+        try {
+          const res = await fetch(API + '/api/report');
+          if (!res.ok) throw new Error(res.statusText);
+          const d = await res.json();
+          renderReport(d);
+          log('Report refreshed');
+        } catch(e) {
+          log('Report fetch failed: ' + e.message);
+        }
+      }
+
+      function renderReport(d) {
+        $('#r-samples').textContent = d.summary.total_samples;
+        $('#r-alerts').textContent = d.summary.alert_count;
+        $('#r-critical').textContent = d.summary.critical_count;
+        $('#r-avg').textContent = d.summary.average_score.toFixed(2);
+        $('#r-max').textContent = d.summary.max_score.toFixed(2);
+        $('#r-generated').textContent = d.generated_at.substring(0, 19);
+
+        const tbody = $('#sample-tbody');
+        tbody.innerHTML = '';
+        for (const s of d.samples) {
+          const tr = document.createElement('tr');
+          tr.innerHTML = [
+            '<td>' + s.index + '</td>',
+            '<td>' + s.timestamp_ms + '</td>',
+            '<td>' + s.score.toFixed(2) + '</td>',
+            '<td class="level-' + s.level + '">' + s.level + '</td>',
+            '<td>' + s.action + '</td>',
+            '<td>' + s.isolation_pct + '%</td>',
+            '<td>' + s.reasons.join('; ') + '</td>',
+          ].join('');
+          tbody.appendChild(tr);
+        }
+      }
+
+      // ── Controls ──
+
+      async function setMode(mode) {
+        try {
+          const res = await fetch(API + '/api/control/mode', {
+            method: 'POST', headers: authHeaders(),
+            body: JSON.stringify({ mode }),
+          });
+          if (res.status === 401) { flash('Unauthorized — check token', 'error'); return; }
+          if (!res.ok) throw new Error(res.statusText);
+          $$('[data-mode]').forEach(b => b.classList.toggle('active', b.dataset.mode === mode));
+          flash('Detection mode set to ' + mode, 'success');
+          log('Mode changed to ' + mode);
+        } catch(e) {
+          flash('Failed: ' + e.message, 'error');
+          log('Mode change failed: ' + e.message);
+        }
+      }
+
+      async function runDemo() {
+        try {
+          const res = await fetch(API + '/api/control/run-demo', {
+            method: 'POST', headers: authHeaders(),
+          });
+          if (res.status === 401) { flash('Unauthorized — check token', 'error'); return; }
+          if (!res.ok) throw new Error(res.statusText);
+          const d = await res.json();
+          renderReport(d);
+          flash('Demo analysis complete', 'success');
+          log('Demo analysis ran — ' + d.summary.total_samples + ' samples, ' + d.summary.alert_count + ' alerts');
+        } catch(e) {
+          flash('Failed: ' + e.message, 'error');
+          log('Demo run failed: ' + e.message);
+        }
+      }
+
+      async function resetBaseline() {
+        if (!confirm('Reset the detector baseline? This cannot be undone.')) return;
+        try {
+          const res = await fetch(API + '/api/control/reset-baseline', {
+            method: 'POST', headers: authHeaders(),
+          });
+          if (res.status === 401) { flash('Unauthorized — check token', 'error'); return; }
+          if (!res.ok) throw new Error(res.statusText);
+          flash('Baseline reset', 'success');
+          log('Baseline reset');
+        } catch(e) {
+          flash('Failed: ' + e.message, 'error');
+          log('Baseline reset failed: ' + e.message);
+        }
+      }
+
+      // ── Auth status indicator ──
+
+      $('#auth-token').addEventListener('input', function() {
+        const el = $('#auth-status');
+        if (this.value.trim()) {
+          el.textContent = 'Token set';
+          el.className = 'auth-status ok';
+        } else {
+          el.textContent = 'No token';
+          el.className = 'auth-status none';
+        }
+      });
+
+      // ── Wire up buttons ──
+
+      $('#btn-refresh-status').addEventListener('click', refreshStatus);
+      $('#btn-refresh-report').addEventListener('click', refreshReport);
+      $('#btn-run-demo').addEventListener('click', runDemo);
+      $('#btn-reset').addEventListener('click', resetBaseline);
+      $$('[data-mode]').forEach(btn => {
+        btn.addEventListener('click', () => setMode(btn.dataset.mode));
+      });
+
+      // ── Initial load ──
+      refreshStatus();
+      refreshReport();
+
+    })();
+    </script>
+  </body>
+</html>

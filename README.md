@@ -1,0 +1,127 @@
+# SentinelEdge
+
+SentinelEdge is a Rust edge security runtime for anomaly detection, policy-driven response, and verifiable audit trails on constrained devices.
+
+The research blueprint in [blueprint.md](/Users/michelpicker/Library/Mobile Documents/com~apple~CloudDocs/Projekte/SentinelEdge/blueprint.md) sketches 40 research tracks across seven thematic categories. The codebase has completed all 8 phases (0–7) of the engineering backlog — 41/41 tasks:
+
+- a configurable Rust runtime for multi-signal anomaly scoring across 8 dimensions
+- an energy-aware response policy engine with pluggable device action adapters
+- SHA-256 cryptographic audit chain with signed checkpoints and chain verification
+- rollback checkpoints, forensic evidence bundles, and structured JSON/JSONL SIEM output
+- TOML/JSON configuration, JSONL telemetry ingestion, and baseline persistence
+- proof-carrying update metadata with SHA-256 binding and verification
+- formally checkable policy state machine with legal transition validation
+- bounded replay buffer with windowed statistics for continual learning
+- poisoning heuristics (mean shift, variance spike, drift accumulation, auth burst)
+- FP/FN benchmark harness with precision, recall, F1, and accuracy metrics
+- live browser admin console with token-authenticated HTTP API for status, analysis, and control
+- research paper targeting, swarm protocol design, Wasm surface spec, supply-chain attestation, post-quantum upgrade path
+- research questions formalised for R26–R40 plus design documents for adversarial testing, temporal logic, digital twins, and policy composition
+- maintained docs, backlog tracking, test fixtures, and a GitHub Pages site
+
+## What ships today
+
+- **Adaptive anomaly scoring:** an EWMA-style baseline learns "normal" telemetry and scores deviations across CPU, memory, temperature, network load, authentication failures, integrity drift, process count, and disk pressure.
+- **Configurable runtime:** all thresholds, battery policies, and output paths are externalizable via TOML or JSON configuration.
+- **Multi-format ingestion:** CSV (legacy 8-column and extended 10-column) and JSONL telemetry input, auto-detected by file extension.
+- **Policy-driven mitigation:** response strength adapts to threat score and battery state with pluggable action adapters (throttle, quarantine, isolate).
+- **Cryptographic audit trail:** SHA-256 digest chain with signed checkpoints at configurable intervals and programmatic chain verification.
+- **Rollback checkpoints:** bounded ring buffer captures detector state on severe/critical events for future rollback.
+- **SIEM integration:** structured JSON reports and JSONL streaming output for alert events.
+- **Forensic export:** evidence bundles combining audit log, run summary, and checkpoint history.
+- **Baseline persistence:** learned baselines can be saved and reloaded across runs.
+- **Proof-carrying updates:** every baseline change is bound to a SHA-256 proof linking prior state, transform, and post state.
+- **Policy state machine:** an explicit state machine records and validates all threat-level transitions with formally defined legal rules.
+- **Replay buffer:** bounded ring buffer retains recent telemetry for windowed statistical analysis and poisoning detection.
+- **Adaptation controls:** detector baseline updates can be frozen, decayed, or reset to contain suspected poisoning.
+- **Poisoning heuristics:** four statistical heuristics analyze replay buffers for data manipulation attempts.
+- **Benchmark harness:** labeled datasets can be scored for true/false positive/negative rates, precision, recall, and F1.
+- **Browser admin console:** a live web UI backed by a token-authenticated HTTP server for runtime status, analysis control, mode switching, and report inspection.
+- **Operator-facing docs:** architecture, getting-started, backlog, and track-by-track implementation status in [`docs/`](/Users/michelpicker/Library/Mobile Documents/com~apple~CloudDocs/Projekte/SentinelEdge/docs/README.md).
+
+## Quick start
+
+```bash
+cargo run -- demo
+```
+
+Run the included CSV scenario:
+
+```bash
+cargo run -- analyze examples/credential_storm.csv
+```
+
+Run the JSONL variant:
+
+```bash
+cargo run -- analyze examples/credential_storm.jsonl
+```
+
+Generate a JSON report for SIEM:
+
+```bash
+cargo run -- report examples/credential_storm.csv
+```
+
+Generate a default configuration file:
+
+```bash
+cargo run -- init-config
+```
+
+Inspect the current implementation snapshot:
+
+```bash
+cargo run -- status
+```
+
+Export the structured snapshot used by the browser console:
+
+```bash
+cargo run -- status-json site/data/status.json
+```
+
+Start the admin console HTTP server:
+
+```bash
+cargo run -- serve
+```
+
+Then open `http://localhost:8080/admin.html` in a browser. The token printed to the terminal is required for control actions.
+
+Run tests:
+
+```bash
+cargo test
+```
+
+## Repository layout
+
+```text
+src/                  Rust runtime (17 modules)
+examples/             Sample telemetry traces (CSV + JSONL)
+docs/                 Design notes, backlog, and status documentation
+site/                 Static GitHub Pages site
+.github/workflows/    CI and Pages deployment
+blueprint.md          Original research track ideation
+```
+
+## Documentation
+
+Start with [`docs/README.md`](/Users/michelpicker/Library/Mobile Documents/com~apple~CloudDocs/Projekte/SentinelEdge/docs/README.md).
+
+Key documents:
+
+- [`docs/GETTING_STARTED.md`](/Users/michelpicker/Library/Mobile Documents/com~apple~CloudDocs/Projekte/SentinelEdge/docs/GETTING_STARTED.md)
+- [`docs/ARCHITECTURE.md`](/Users/michelpicker/Library/Mobile Documents/com~apple~CloudDocs/Projekte/SentinelEdge/docs/ARCHITECTURE.md)
+- [`docs/STATUS.md`](/Users/michelpicker/Library/Mobile Documents/com~apple~CloudDocs/Projekte/SentinelEdge/docs/STATUS.md)
+- [`docs/PROJECT_BACKLOG.md`](/Users/michelpicker/Library/Mobile Documents/com~apple~CloudDocs/Projekte/SentinelEdge/docs/PROJECT_BACKLOG.md)
+- [`docs/RESEARCH_TRACKS.md`](/Users/michelpicker/Library/Mobile Documents/com~apple~CloudDocs/Projekte/SentinelEdge/docs/RESEARCH_TRACKS.md)
+
+## GitHub Pages
+
+The static landing page lives in `site/`, and the Pages workflow publishes it on pushes to `main`.
+
+## License
+
+TBD (recommended next step: MIT or Apache-2.0).

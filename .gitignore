@@ -1,0 +1,18 @@
+target/
+var/
+.DS_Store
+
+# Keep editor and AI assistant customization files out of the repo.
+AGENTS.md
+CLAUDE.md
+GEMINI.md
+copilot-instructions.md
+.github/copilot-instructions.md
+**/*.instructions.md
+**/*.prompt.md
+**/*.agent.md
+**/SKILL.md
+.cursorrules
+.cursor/
+.roo/
+.windsurf/
