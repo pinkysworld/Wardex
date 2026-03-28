@@ -188,9 +188,15 @@ impl TelemetrySample {
             "disk_pressure_pct",
         )?;
 
-        if self.network_kbps < 0.0 {
+        if self.network_kbps.is_nan() || self.network_kbps.is_infinite() || self.network_kbps < 0.0 {
             return Err(ParseTelemetryError::new(format!(
-                "line {line_number}: network_kbps must be non-negative"
+                "line {line_number}: network_kbps must be a finite non-negative value"
+            )));
+        }
+
+        if self.temperature_c.is_nan() || self.temperature_c.is_infinite() {
+            return Err(ParseTelemetryError::new(format!(
+                "line {line_number}: temperature_c must be a finite value"
             )));
         }
 

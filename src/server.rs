@@ -156,9 +156,13 @@ fn handle_api(mut request: Request, state: &Arc<Mutex<AppState>>, _site_dir: &Pa
                 drop(s);
                 let result = runtime::execute(&runtime::demo_samples());
                 let report = JsonReport::from_run_result(&result);
-                let json = serde_json::to_string_pretty(&report).unwrap_or_default();
-                state.lock().unwrap().last_report = Some(report);
-                json_response(&json, 200)
+                match serde_json::to_string_pretty(&report) {
+                    Ok(json) => {
+                        state.lock().unwrap().last_report = Some(report);
+                        json_response(&json, 200)
+                    }
+                    Err(e) => error_json(&format!("serialization error: {e}"), 500),
+                }
             }
         }
         (Method::Post, "/api/analyze") => {
@@ -207,14 +211,18 @@ fn handle_api(mut request: Request, state: &Arc<Mutex<AppState>>, _site_dir: &Pa
             let demo = runtime::demo_samples();
             let result = runtime::execute(&demo);
             let report = JsonReport::from_run_result(&result);
-            let json = serde_json::to_string_pretty(&report).unwrap_or_default();
-            let mut s = state.lock().unwrap();
-            for sample in &demo {
-                s.detector.evaluate(sample);
+            match serde_json::to_string_pretty(&report) {
+                Ok(json) => {
+                    let mut s = state.lock().unwrap();
+                    for sample in &demo {
+                        s.detector.evaluate(sample);
+                    }
+                    s.last_report = Some(report);
+                    drop(s);
+                    json_response(&json, 200)
+                }
+                Err(e) => error_json(&format!("serialization error: {e}"), 500),
             }
-            s.last_report = Some(serde_json::from_str(&json).unwrap());
-            drop(s);
-            json_response(&json, 200)
         }
         (Method::Options, _) => {
             let data: Vec<u8> = Vec::new();
@@ -255,16 +263,17 @@ fn handle_analyze(request: &mut Request, state: &Arc<Mutex<AppState>>) -> Respon
     }) || (!body.trim_start().starts_with('{') && body.contains(','));
 
     let samples: Result<Vec<TelemetrySample>, String> = if is_csv {
-        // CSV: skip header row if present, parse each data line
+        // CSV: skip known header rows, parse each data line
+        use crate::telemetry::{CSV_HEADER, CSV_HEADER_LEGACY};
         body.lines()
-            .filter(|l| !l.trim().is_empty())
-            .filter(|l| {
-                // skip header row (first field is non-numeric)
-                !l.trim_start().starts_with(|c: char| c.is_ascii_alphabetic())
-            })
             .enumerate()
-            .map(|(i, line)| {
-                TelemetrySample::parse_line(line, i + 1)
+            .filter(|(_, l)| !l.trim().is_empty())
+            .filter(|(_, l)| {
+                let trimmed = l.trim();
+                trimmed != CSV_HEADER && trimmed != CSV_HEADER_LEGACY
+            })
+            .map(|(line_num, line)| {
+                TelemetrySample::parse_line(line, line_num + 1)
                     .map_err(|e| format!("{e}"))
             })
             .collect()
@@ -286,13 +295,16 @@ fn handle_analyze(request: &mut Request, state: &Arc<Mutex<AppState>>) -> Respon
         Ok(samples) if !samples.is_empty() => {
             let result = runtime::execute(&samples);
             let report = JsonReport::from_run_result(&result);
-            let json = serde_json::to_string_pretty(&report).unwrap_or_default();
+            let json = match serde_json::to_string_pretty(&report) {
+                Ok(j) => j,
+                Err(e) => return error_json(&format!("serialization error: {e}"), 500),
+            };
             let mut s = state.lock().unwrap();
             // Update the live detector baseline with the analyzed samples
             for sample in &samples {
                 s.detector.evaluate(sample);
             }
-            s.last_report = Some(serde_json::from_str(&json).unwrap());
+            s.last_report = Some(report);
             drop(s);
             json_response(&json, 200)
         }
@@ -322,7 +334,13 @@ fn handle_mode(request: &mut Request, state: &Arc<Mutex<AppState>>) -> Response<
     let mode = match mode_req.mode.as_str() {
         "normal" => AdaptationMode::Normal,
         "frozen" => AdaptationMode::Frozen,
-        "decay" => AdaptationMode::Decay(mode_req.decay_rate.unwrap_or(0.05)),
+        "decay" => {
+            let rate = mode_req.decay_rate.unwrap_or(0.05);
+            if !rate.is_finite() || !(0.0..=1.0).contains(&rate) {
+                return error_json("decay_rate must be a finite value in 0.0..=1.0", 400);
+            }
+            AdaptationMode::Decay(rate)
+        }
         other => return error_json(&format!("unknown mode: {other}"), 400),
     };
 

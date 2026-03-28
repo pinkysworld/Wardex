@@ -30,6 +30,9 @@ impl CheckpointStore {
 
     /// Push a pre-extracted baseline snapshot into the checkpoint store.
     pub fn push_snapshot(&mut self, baseline: PersistedBaseline) {
+        if self.capacity == 0 {
+            return;
+        }
         if self.entries.len() == self.capacity {
             self.entries.pop_front();
         }

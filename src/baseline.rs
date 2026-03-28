@@ -11,6 +11,8 @@ pub struct PersistedBaseline {
     pub auth_failures: f32,
     pub battery_pct: f32,
     pub integrity_drift: f32,
+    pub process_count: f32,
+    pub disk_pressure_pct: f32,
     pub observed_samples: usize,
 }
 
@@ -46,6 +48,8 @@ mod tests {
             auth_failures: 1.0,
             battery_pct: 88.0,
             integrity_drift: 0.02,
+            process_count: 42.0,
+            disk_pressure_pct: 15.0,
             observed_samples: 10,
         };
 
@@ -69,6 +73,8 @@ mod tests {
             auth_failures: 0.0,
             battery_pct: 95.0,
             integrity_drift: 0.01,
+            process_count: 35.0,
+            disk_pressure_pct: 10.0,
             observed_samples: 5,
         };
 

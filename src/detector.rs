@@ -38,8 +38,8 @@ impl TelemetryBaseline {
             auth_failures: p.auth_failures,
             battery_pct: p.battery_pct,
             integrity_drift: p.integrity_drift,
-            process_count: 0.0,
-            disk_pressure_pct: 0.0,
+            process_count: p.process_count,
+            disk_pressure_pct: p.disk_pressure_pct,
         }
     }
 
@@ -156,6 +156,8 @@ impl AnomalyDetector {
             auth_failures: b.auth_failures,
             battery_pct: b.battery_pct,
             integrity_drift: b.integrity_drift,
+            process_count: b.process_count,
+            disk_pressure_pct: b.disk_pressure_pct,
             observed_samples: self.observed_samples,
         })
     }

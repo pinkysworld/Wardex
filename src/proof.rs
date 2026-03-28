@@ -30,7 +30,7 @@ impl ProofRegistry {
         &self.proofs
     }
 
-    pub fn verify(&self, label: &str) -> bool {
+    pub fn contains(&self, label: &str) -> bool {
         self.proofs.iter().any(|p| p.label == label)
     }
 }
@@ -50,12 +50,12 @@ mod tests {
     }
 
     #[test]
-    fn verify_finds_existing_label() {
+    fn contains_finds_existing_label() {
         let mut registry = ProofRegistry::new();
         registry.record("test_proof", b"a", b"b");
 
-        assert!(registry.verify("test_proof"));
-        assert!(!registry.verify("nonexistent"));
+        assert!(registry.contains("test_proof"));
+        assert!(!registry.contains("nonexistent"));
     }
 
     #[test]

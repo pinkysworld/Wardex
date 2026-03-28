@@ -22,6 +22,17 @@ All notable changes to SentinelEdge are documented in this file.
 
 ### Fixed
 - Checkpoint save returned 0 on fresh detector — now works after any analysis run
+- `PersistedBaseline` now persists `process_count` and `disk_pressure_pct` (previously lost on checkpoint restore)
+- CSV header detection uses exact match against known headers instead of fragile alphabetic heuristic
+- Removed panicking `unwrap()` on JSON round-trips in run-demo and analyze handlers; store `JsonReport` directly
+- Three endpoints now return HTTP 500 on serialization failure instead of empty 200 responses
+- CSV parse error messages now report correct original line numbers
+- `auth_burst_detected()` uses `u64` accumulator to prevent overflow on large `auth_failures` sums
+- Ring buffers (`ReplayBuffer`, `CheckpointStore`) guard against capacity=0 edge case
+- `ProofRegistry::verify()` renamed to `contains()` to avoid implying cryptographic verification
+- `network_kbps` and `temperature_c` now reject NaN and Infinity values during validation
+- `decay_rate` parameter validated (must be finite, 0.0–1.0) in `/api/control/mode` endpoint
+- Admin console enforces 10 MB file size limit on uploads
 
 ## [0.5.0] — 2026-03-27
 

@@ -34,6 +34,9 @@ impl ReplayBuffer {
     }
 
     pub fn push(&mut self, sample: TelemetrySample) {
+        if self.capacity == 0 {
+            return;
+        }
         if self.samples.len() == self.capacity {
             self.samples.pop_front();
         }

@@ -708,6 +708,11 @@
 
       async function uploadFile(file) {
         const statusEl = $('#upload-status');
+        const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10 MB
+        if (file.size > MAX_FILE_SIZE) {
+          flash('File too large (max 10 MB)', 'error');
+          return;
+        }
         statusEl.textContent = 'Uploading ' + file.name + '…';
         try {
           const text = await file.text();

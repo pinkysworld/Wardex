@@ -74,3 +74,19 @@ This backlog lists the next concrete tasks in build order.
 3. ~~T063-T064~~ (completed) — live browser admin console with authenticated control plane.
 
 All 41 backlog items are now complete.
+
+## Code-quality sweep (post-Phase 7)
+
+The following hardening fixes were applied across three code-review rounds:
+
+- [x] CQ-01: Add `process_count` and `disk_pressure_pct` to `PersistedBaseline` — fixes data loss on checkpoint restore.
+- [x] CQ-02: Replace CSV header heuristic with exact match against `CSV_HEADER` / `CSV_HEADER_LEGACY`.
+- [x] CQ-03: Remove panicking `unwrap()` on `serde_json::from_str` round-trips in run-demo and analyze handlers — store `JsonReport` directly.
+- [x] CQ-04: Replace `unwrap_or_default()` serialization with proper 500 error responses in three endpoints.
+- [x] CQ-05: Fix CSV parse error line numbers — move `enumerate()` before `filter()`.
+- [x] CQ-06: Fix `u32` overflow risk in `auth_burst_detected()` — use `u64` accumulator.
+- [x] CQ-07: Guard ring buffers (`ReplayBuffer`, `CheckpointStore`) against capacity=0.
+- [x] CQ-08: Rename misleading `ProofRegistry::verify()` to `contains()`.
+- [x] CQ-09: Validate NaN/Infinity in `network_kbps` and `temperature_c` fields.
+- [x] CQ-10: Validate `decay_rate` parameter in `/api/control/mode` (must be finite, 0.0–1.0).
+- [x] CQ-11: Add client-side file size limit (10 MB) on admin console uploads.

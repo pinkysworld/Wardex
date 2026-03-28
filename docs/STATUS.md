@@ -1,6 +1,6 @@
 # Implementation Status
 
-Updated: 2026-03-12
+Updated: 2026-03-28
 
 ## Implemented now
 
@@ -59,6 +59,10 @@ Updated: 2026-03-12
 - Collapsible partially-wired and not-implemented detail lists in status panel
 - Cross-platform CI (Linux, macOS, Windows) with clippy and fmt checks
 - FEATURES.md one-page marketing summary and CHANGELOG.md
+- Three rounds of code-quality review with 11 hardening fixes (CQ-01 through CQ-11)
+- NaN/Infinity rejection in telemetry validation for `network_kbps` and `temperature_c`
+- Decay-rate API parameter validation (finite, 0.0–1.0)
+- Client-side 10 MB file upload limit in admin console
 
 ## Partially wired
 
@@ -84,4 +88,4 @@ Updated: 2026-03-12
 
 ## Practical milestone summary
 
-The repository has completed Phases 0–7 and provides a working edge security runtime with configurable detection, pluggable response actions, cryptographic audit trails, proof-carrying update metadata, a checkable policy state machine, poisoning heuristics, replay buffering, benchmark tooling, a live browser admin console backed by an authenticated HTTP API, and browser-based inspection of exported status/report artifacts. The admin console features auto-refresh polling, connection status indicator, drag-and-drop JSONL/CSV file upload for custom analysis, decay rate slider, checkpoint save/restore, CSV report export, threat-level filtering, improved error diagnostics, and dark mode support across the entire site. CORS is hardened to same-origin, and the analyze endpoint accepts both JSONL and CSV formats with auto-detecting column count. Eight CLI commands are available. Phase 5 produced design documents for research publication targeting, swarm coordination, Wasm extensibility, supply-chain attestation, and post-quantum cryptography upgrade. Phase 6 delivers a live control plane with token-authenticated endpoints for analysis, mode switching, baseline reset, checkpoint management, and demo execution. Phase 7 formalised research questions for all 15 expanded tracks (R26–R40) with hypotheses, evaluation criteria, and implementation sketches, plus design documents for adversarial robustness testing, temporal-logic monitoring, digital-twin simulation, and formal policy composition. The research agenda spans 40 tracks across seven thematic categories. All 41 backlog items are complete. 69 automated tests (55 unit + 14 integration) cover all modules. Differential privacy, ZK proofs, swarm coordination, and formal verification export are not implemented yet.
+The repository has completed Phases 0–7 and provides a working edge security runtime with configurable detection, pluggable response actions, cryptographic audit trails, proof-carrying update metadata, a checkable policy state machine, poisoning heuristics, replay buffering, benchmark tooling, a live browser admin console backed by an authenticated HTTP API, and browser-based inspection of exported status/report artifacts. The admin console features auto-refresh polling, connection status indicator, drag-and-drop JSONL/CSV file upload for custom analysis, decay rate slider, checkpoint save/restore, CSV report export, threat-level filtering, improved error diagnostics, and dark mode support across the entire site. CORS is hardened to same-origin, and the analyze endpoint accepts both JSONL and CSV formats with auto-detecting column count. Eight CLI commands are available. Phase 5 produced design documents for research publication targeting, swarm coordination, Wasm extensibility, supply-chain attestation, and post-quantum cryptography upgrade. Phase 6 delivers a live control plane with token-authenticated endpoints for analysis, mode switching, baseline reset, checkpoint management, and demo execution. Phase 7 formalised research questions for all 15 expanded tracks (R26–R40) with hypotheses, evaluation criteria, and implementation sketches, plus design documents for adversarial robustness testing, temporal-logic monitoring, digital-twin simulation, and formal policy composition. The research agenda spans 40 tracks across seven thematic categories. All 41 backlog items are complete. 69 automated tests (55 unit + 14 integration) cover all modules. Three rounds of code-quality review identified and fixed 11 hardening issues spanning data-loss bugs, panic risks, input validation gaps, API safety, and client-side protections. Differential privacy, ZK proofs, swarm coordination, and formal verification export are not implemented yet.

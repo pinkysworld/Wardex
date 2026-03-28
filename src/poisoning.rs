@@ -81,12 +81,12 @@ pub fn auth_burst_detected(buffer: &ReplayBuffer) -> bool {
         return false;
     }
 
-    let burst_threshold = 8u32;
+    let burst_threshold = 8u64;
     let burst_window = 3;
     let mut burst_count = 0usize;
 
     for window in samples.iter().collect::<Vec<_>>().windows(burst_window.min(samples.len())) {
-        let total_auth: u32 = window.iter().map(|s| s.auth_failures).sum();
+        let total_auth: u64 = window.iter().map(|s| s.auth_failures as u64).sum();
         if total_auth >= burst_threshold {
             burst_count += 1;
         }
