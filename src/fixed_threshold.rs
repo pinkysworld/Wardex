@@ -143,6 +143,7 @@ pub fn run_fixed_benchmark(
         let signal = detector.evaluate(sample);
         let predicted = signal.score >= threshold;
         harness.record(predicted, *is_anomaly);
+        harness.record_contributions(&signal.contributions);
     }
     harness.result()
 }

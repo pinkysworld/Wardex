@@ -339,5 +339,44 @@ fn run_bench(benign_path: &str, attack_path: &str, threshold: f32) -> Result<(),
     print_row("Adaptive EWMA", &ewma_result, elapsed_adaptive, total);
     print_row("Fixed Thresh.", &fixed_result, elapsed_fixed, total);
 
+    if !ewma_result.signal_contributions.is_empty() || !fixed_result.signal_contributions.is_empty()
+    {
+        println!();
+        println!("  Per-signal average contributions:");
+        let all_signals: Vec<&str> = {
+            let mut s: Vec<&str> = ewma_result
+                .signal_contributions
+                .iter()
+                .map(|(n, _)| n.as_str())
+                .chain(
+                    fixed_result
+                        .signal_contributions
+                        .iter()
+                        .map(|(n, _)| n.as_str()),
+                )
+                .collect();
+            s.sort();
+            s.dedup();
+            s
+        };
+        for signal in &all_signals {
+            let ewma_val = ewma_result
+                .signal_contributions
+                .iter()
+                .find(|(n, _)| n == signal)
+                .map(|(_, v)| *v)
+                .unwrap_or(0.0);
+            let fixed_val = fixed_result
+                .signal_contributions
+                .iter()
+                .find(|(n, _)| n == signal)
+                .map(|(_, v)| *v)
+                .unwrap_or(0.0);
+            println!(
+                "    {signal:<22} EWMA={ewma_val:.4}  Fixed={fixed_val:.4}"
+            );
+        }
+    }
+
     Ok(())
 }

@@ -1,3 +1,5 @@
+use std::collections::BTreeMap;
+
 use crate::detector::AnomalyDetector;
 use crate::telemetry::TelemetrySample;
 
@@ -11,6 +13,9 @@ pub struct BenchmarkResult {
     pub recall: f32,
     pub f1: f32,
     pub accuracy: f32,
+    /// Average per-signal contribution across all samples (T113).
+    /// Sorted by signal name. Empty when collected without attribution.
+    pub signal_contributions: Vec<(String, f32)>,
 }
 
 pub struct BenchmarkHarness {
@@ -18,6 +23,8 @@ pub struct BenchmarkHarness {
     false_positives: usize,
     true_negatives: usize,
     false_negatives: usize,
+    contribution_sums: BTreeMap<String, f32>,
+    sample_count: usize,
 }
 
 impl BenchmarkHarness {
@@ -27,6 +34,8 @@ impl BenchmarkHarness {
             false_positives: 0,
             true_negatives: 0,
             false_negatives: 0,
+            contribution_sums: BTreeMap::new(),
+            sample_count: 0,
         }
     }
 
@@ -36,6 +45,17 @@ impl BenchmarkHarness {
             (true, false) => self.false_positives += 1,
             (false, true) => self.false_negatives += 1,
             (false, false) => self.true_negatives += 1,
+        }
+    }
+
+    /// Record per-signal contributions from an anomaly signal evaluation.
+    pub fn record_contributions(&mut self, contributions: &[(&str, f32)]) {
+        self.sample_count += 1;
+        for (name, value) in contributions {
+            *self
+                .contribution_sums
+                .entry((*name).to_string())
+                .or_insert(0.0) += value;
         }
     }
 
@@ -63,6 +83,15 @@ impl BenchmarkHarness {
             0.0
         };
 
+        let signal_contributions: Vec<(String, f32)> = if self.sample_count > 0 {
+            self.contribution_sums
+                .iter()
+                .map(|(name, sum)| (name.clone(), sum / self.sample_count as f32))
+                .collect()
+        } else {
+            Vec::new()
+        };
+
         BenchmarkResult {
             true_positives: self.true_positives,
             false_positives: self.false_positives,
@@ -72,6 +101,7 @@ impl BenchmarkHarness {
             recall,
             f1,
             accuracy,
+            signal_contributions,
         }
     }
 }
@@ -86,6 +116,7 @@ pub fn run_benchmark(
         let signal = detector.evaluate(sample);
         let predicted = signal.score >= threshold;
         harness.record(predicted, *is_anomaly);
+        harness.record_contributions(&signal.contributions);
     }
     harness.result()
 }
@@ -237,5 +268,50 @@ mod tests {
 
         // F1 should be non-trivial on a 5% anomaly rate with clear separation
         assert!(result.f1 > 0.0, "F1 score is zero — detector not detecting anomalies");
+    }
+
+    #[test]
+    fn benchmark_collects_signal_contributions() {
+        let mut detector = AnomalyDetector::default();
+        let benign = TelemetrySample {
+            timestamp_ms: 1,
+            cpu_load_pct: 15.0,
+            memory_load_pct: 25.0,
+            temperature_c: 36.0,
+            network_kbps: 400.0,
+            auth_failures: 0,
+            battery_pct: 90.0,
+            integrity_drift: 0.01,
+            process_count: 40,
+            disk_pressure_pct: 10.0,
+        };
+        let attack = TelemetrySample {
+            timestamp_ms: 2,
+            cpu_load_pct: 85.0,
+            memory_load_pct: 80.0,
+            temperature_c: 60.0,
+            network_kbps: 8000.0,
+            auth_failures: 20,
+            battery_pct: 30.0,
+            integrity_drift: 0.25,
+            process_count: 200,
+            disk_pressure_pct: 90.0,
+        };
+        let labeled = vec![
+            (benign, false),
+            (benign, false),
+            (benign, false),
+            (attack, true),
+            (attack, true),
+        ];
+        let result = run_benchmark(&mut detector, &labeled, 2.0);
+        assert!(
+            !result.signal_contributions.is_empty(),
+            "expected signal contributions to be populated"
+        );
+        // Contributions are averages, should be non-negative
+        for (name, val) in &result.signal_contributions {
+            assert!(*val >= 0.0, "{name} had negative contribution {val}");
+        }
     }
 }
