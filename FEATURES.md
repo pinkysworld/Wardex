@@ -31,10 +31,11 @@ A 10-stage pipeline — ingest → parse → detect → decide → act → audit
 | Poisoning heuristics (4 detectors) | Differential privacy guarantees |
 | Proof backend interface with witness export | Zero-knowledge proof integration (Halo2) |
 | Bounded replay buffer with statistics | Swarm/cross-device coordination |
-| Token-authenticated HTTP API (10 endpoints) | Wasm-based extensible policies |
-| 125 automated tests (105 unit + 20 integration) | Supply-chain attestation |
-| Browser admin console with dark mode | Digital-twin fleet simulation |
-| CSV + JSONL multi-format ingestion | Quantum-walk anomaly propagation |
+| Token-authenticated HTTP API (11 endpoints) | Wasm-based extensible policies |
+| Supply-chain attestation foundations | Full attestation with Ed25519 signing |
+| 136 automated tests (115 unit + 21 integration) | Digital-twin fleet simulation |
+| Browser admin console with dark mode | Quantum-walk anomaly propagation |
+| CSV + JSONL multi-format ingestion | |
 
 ## Quick Start
 

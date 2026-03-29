@@ -370,3 +370,20 @@ fn research_tracks_returns_grouped_tracks() {
     assert!(t.get("status").is_some());
     assert!(t.get("summary").is_some());
 }
+
+// ── GET /api/attestation/status ────────────────────────────────
+
+#[test]
+fn attestation_status_returns_verification_result() {
+    let (port, _token) = spawn_test_server();
+    let resp = ureq::get(&format!("{}/api/attestation/status", base(port)))
+        .call()
+        .expect("attestation status request");
+    assert_eq!(resp.status(), 200);
+
+    let body: serde_json::Value = resp.into_json().unwrap();
+    assert!(body.get("passed").is_some());
+    assert!(body.get("checks").is_some());
+    let checks = body["checks"].as_array().unwrap();
+    assert!(!checks.is_empty());
+}

@@ -1,4 +1,5 @@
 pub mod actions;
+pub mod attestation;
 pub mod audit;
 pub mod baseline;
 pub mod benchmark;

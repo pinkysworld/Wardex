@@ -277,6 +277,20 @@ fn handle_api(mut request: Request, state: &Arc<Mutex<AppState>>, _site_dir: &Pa
                 Err(e) => error_json(&format!("serialization error: {e}"), 500),
             }
         }
+        (Method::Get, "/api/attestation/status") => {
+            let summary = crate::attestation::VerificationResult {
+                passed: false,
+                checks: vec![crate::attestation::CheckResult {
+                    name: "attestation_loaded".into(),
+                    passed: false,
+                    detail: "no manifest loaded; use the attest CLI to generate one".into(),
+                }],
+            };
+            match serde_json::to_string_pretty(&summary) {
+                Ok(json) => json_response(&json, 200),
+                Err(e) => error_json(&format!("serialization error: {e}"), 500),
+            }
+        }
         (Method::Post, "/api/control/run-demo") => {
             let demo = runtime::demo_samples();
             let result = runtime::execute(&demo);

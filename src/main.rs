@@ -1,7 +1,8 @@
 use std::env;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process;
 
+use sentineledge::attestation::BuildManifest;
 use sentineledge::config::Config;
 use sentineledge::harness::{self, HarnessConfig};
 use sentineledge::report::JsonReport;
@@ -199,6 +200,29 @@ fn run() -> Result<(), String> {
                 print!("{content}");
             }
         }
+        "attest" => {
+            let binary_path = args
+                .next()
+                .map(PathBuf::from)
+                .ok_or_else(|| "missing binary path for `attest`".to_string())?;
+            let output_path = args
+                .next()
+                .map(PathBuf::from)
+                .unwrap_or_else(|| PathBuf::from("var/manifest.json"));
+
+            let artifact_paths: Vec<PathBuf> = args.map(PathBuf::from).collect();
+            let artifact_refs: Vec<&Path> =
+                artifact_paths.iter().map(|p| p.as_path()).collect();
+
+            let manifest = BuildManifest::generate(&binary_path, &artifact_refs)?;
+            manifest.write_to_path(&output_path)?;
+            println!(
+                "Build manifest written to {} ({} artifact{})",
+                output_path.display(),
+                manifest.artifact_hashes.len(),
+                if manifest.artifact_hashes.len() == 1 { "" } else { "s" }
+            );
+        }
         "serve" => {
             let port: u16 = args
                 .next()
@@ -239,6 +263,7 @@ fn print_usage() {
     println!("  cargo run -- status-json [output_path]");
     println!("  cargo run -- harness");
     println!("  cargo run -- export-model <tla|alloy> [output_path]");
+    println!("  cargo run -- attest <binary_path> [manifest_path] [artifact...]");
     println!("  cargo run -- serve [port] [site_dir]");
     println!("  cargo run -- help");
 }

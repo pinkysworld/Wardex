@@ -472,17 +472,18 @@ pub fn status_snapshot() -> String {
         "  - adversarial harness CLI command (T093)",
         "  - behavioural device fingerprinting (T094)",
         "",
-        "Phase 10 — Integration Closure (in progress):",
+        "Phase 10 — Integration Closure (complete):",
         "  - adapter-backed checkpoint restore (T100)",
         "  - TLA+/Alloy model export for offline verification (T101)",
         "  - proof backend interface with witness export (T102)",
         "  - single-source research-track status data (T103)",
+        "  - supply-chain attestation foundations (T104)",
         "",
         "Foundation (complete):",
         "  - adaptive multi-signal anomaly scoring (8 dimensions)",
         "  - battery-aware mitigation scaling",
         "  - chained audit log output",
-        "  - CLI: demo, analyze, status, status-json, report, init-config, harness, export-model, serve, help",
+        "  - CLI: demo, analyze, status, status-json, report, init-config, harness, export-model, attest, serve, help",
         "  - documentation and GitHub Pages site",
         "",
         "Not built yet:",
@@ -498,9 +499,9 @@ pub fn status_snapshot() -> String {
 pub fn status_manifest() -> StatusManifest {
     StatusManifest {
         updated_at: "2026-03-29".into(),
-        backlog_completed: 55,
+        backlog_completed: 56,
         backlog_total: 56,
-        completed_phases: 10,
+        completed_phases: 11,
         total_phases: 11,
         cli_commands: vec![
             "demo".into(),
@@ -511,6 +512,7 @@ pub fn status_manifest() -> StatusManifest {
             "status-json".into(),
             "harness".into(),
             "export-model".into(),
+            "attest".into(),
             "serve".into(),
             "help".into(),
         ],
@@ -553,6 +555,7 @@ pub fn status_manifest() -> StatusManifest {
             "TLA+ and Alloy model export for offline formal verification".into(),
             "Proof backend interface with witness export for ZK integration".into(),
             "Single-source research-track data with API and static-file fallback".into(),
+            "Supply-chain attestation: build manifest generation, trust-store loading, artifact verification".into(),
         ],
         partially_wired: vec![
             "ZK proof circuit implementation (backend interface and witness export exist)".into(),
@@ -624,7 +627,7 @@ mod tests {
     #[test]
     fn status_manifest_reports_backlog_progress() {
         let manifest = status_manifest();
-        assert_eq!(manifest.backlog_completed, 55);
+        assert_eq!(manifest.backlog_completed, 56);
         assert_eq!(manifest.backlog_total, 56);
         assert_eq!(manifest.total_phases, 11);
         assert!(manifest.cli_commands.iter().any(|cmd| cmd == "status-json"));
