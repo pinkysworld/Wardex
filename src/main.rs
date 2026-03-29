@@ -3,7 +3,10 @@ use std::path::{Path, PathBuf};
 use std::process;
 
 use sentineledge::attestation::BuildManifest;
+use sentineledge::benchmark::{run_benchmark, BenchmarkResult};
 use sentineledge::config::Config;
+use sentineledge::detector::AnomalyDetector;
+use sentineledge::fixed_threshold::{run_fixed_benchmark, FixedThresholdDetector};
 use sentineledge::harness::{self, HarnessConfig};
 use sentineledge::report::JsonReport;
 use sentineledge::runtime;
@@ -223,6 +226,25 @@ fn run() -> Result<(), String> {
                 if manifest.artifact_hashes.len() == 1 { "" } else { "s" }
             );
         }
+        "bench" => {
+            let benign_path = args
+                .next()
+                .unwrap_or_else(|| "examples/benign_extended.csv".to_string());
+            let attack_path = args
+                .next()
+                .ok_or_else(|| "missing attack CSV path for `bench`".to_string())?;
+            let threshold: f32 = args
+                .next()
+                .map(|t| t.parse::<f32>().map_err(|_| "invalid threshold".to_string()))
+                .transpose()?
+                .unwrap_or(2.0);
+
+            if args.next().is_some() {
+                return Err("too many arguments for `bench`".into());
+            }
+
+            run_bench(&benign_path, &attack_path, threshold)?;
+        }
         "serve" => {
             let port: u16 = args
                 .next()
@@ -264,6 +286,58 @@ fn print_usage() {
     println!("  cargo run -- harness");
     println!("  cargo run -- export-model <tla|alloy> [output_path]");
     println!("  cargo run -- attest <binary_path> [manifest_path] [artifact...]");
+    println!("  cargo run -- bench <benign_csv> <attack_csv> [threshold]");
     println!("  cargo run -- serve [port] [site_dir]");
     println!("  cargo run -- help");
+}
+
+fn run_bench(benign_path: &str, attack_path: &str, threshold: f32) -> Result<(), String> {
+    let benign_samples =
+        TelemetrySample::parse_auto(Path::new(benign_path)).map_err(|e| e.to_string())?;
+    let attack_samples =
+        TelemetrySample::parse_auto(Path::new(attack_path)).map_err(|e| e.to_string())?;
+
+    let mut labeled: Vec<(TelemetrySample, bool)> = Vec::new();
+    for s in &benign_samples {
+        labeled.push((*s, false));
+    }
+    for s in &attack_samples {
+        labeled.push((*s, true));
+    }
+
+    let total = labeled.len();
+
+    // Adaptive EWMA detector
+    let mut adaptive = AnomalyDetector::default();
+    let start_adaptive = std::time::Instant::now();
+    let ewma_result = run_benchmark(&mut adaptive, &labeled, threshold);
+    let elapsed_adaptive = start_adaptive.elapsed();
+
+    // Fixed-threshold detector
+    let fixed = FixedThresholdDetector::default();
+    let start_fixed = std::time::Instant::now();
+    let fixed_result = run_fixed_benchmark(&fixed, &labeled, threshold);
+    let elapsed_fixed = start_fixed.elapsed();
+
+    println!("SentinelEdge benchmark comparison");
+    println!("  benign: {} ({} samples)", benign_path, benign_samples.len());
+    println!("  attack: {} ({} samples)", attack_path, attack_samples.len());
+    println!("  threshold: {threshold:.1}");
+    println!("  total samples: {total}");
+    println!();
+
+    fn print_row(label: &str, r: &BenchmarkResult, elapsed: std::time::Duration, total: usize) {
+        let throughput = total as f64 / elapsed.as_secs_f64();
+        println!(
+            "  {label:<16} P={:.3}  R={:.3}  F1={:.3}  Acc={:.3}  TP={:<4} FP={:<4} FN={:<4} TN={:<4}  {:.0} samples/s",
+            r.precision, r.recall, r.f1, r.accuracy,
+            r.true_positives, r.false_positives, r.false_negatives, r.true_negatives,
+            throughput,
+        );
+    }
+
+    print_row("Adaptive EWMA", &ewma_result, elapsed_adaptive, total);
+    print_row("Fixed Thresh.", &fixed_result, elapsed_fixed, total);
+
+    Ok(())
 }
