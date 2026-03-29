@@ -499,7 +499,7 @@ pub fn status_snapshot() -> String {
 pub fn status_manifest() -> StatusManifest {
     StatusManifest {
         updated_at: "2026-03-29".into(),
-        backlog_completed: 57,
+        backlog_completed: 58,
         backlog_total: 61,
         completed_phases: 11,
         total_phases: 12,
@@ -557,6 +557,7 @@ pub fn status_manifest() -> StatusManifest {
             "Single-source research-track data with API and static-file fallback".into(),
             "Supply-chain attestation: build manifest generation, trust-store loading, artifact verification".into(),
             "Extended 120-sample test fixtures for paper evaluation (4 scenarios)".into(),
+            "Fixed-threshold baseline comparison detector for paper evaluation".into(),
         ],
         partially_wired: vec![
             "ZK proof circuit implementation (backend interface and witness export exist)".into(),
@@ -628,7 +629,7 @@ mod tests {
     #[test]
     fn status_manifest_reports_backlog_progress() {
         let manifest = status_manifest();
-        assert_eq!(manifest.backlog_completed, 57);
+        assert_eq!(manifest.backlog_completed, 58);
         assert_eq!(manifest.backlog_total, 61);
         assert_eq!(manifest.total_phases, 12);
         assert!(manifest.cli_commands.iter().any(|cmd| cmd == "status-json"));

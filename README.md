@@ -2,7 +2,7 @@
 
 SentinelEdge is a Rust edge security runtime for anomaly detection, policy-driven response, and verifiable audit trails on constrained devices.
 
-The research blueprint in [blueprint.md](/Users/michelpicker/Library/Mobile Documents/com~apple~CloudDocs/Projekte/SentinelEdge/blueprint.md) sketches 40 research tracks across seven thematic categories. The codebase has completed all 10 phases of the engineering backlog — 57/61 tasks complete:
+The research blueprint in [blueprint.md](/Users/michelpicker/Library/Mobile Documents/com~apple~CloudDocs/Projekte/SentinelEdge/blueprint.md) sketches 40 research tracks across seven thematic categories. The codebase has completed all 10 phases of the engineering backlog — 58/61 tasks complete:
 
 - a configurable Rust runtime for multi-signal anomaly scoring across 8 dimensions
 - an energy-aware response policy engine with pluggable device action adapters
@@ -21,7 +21,7 @@ The research blueprint in [blueprint.md](/Users/michelpicker/Library/Mobile Docu
 - live browser admin console with token-authenticated HTTP API, auto-refresh, file upload, and dark mode
 - research paper targeting, swarm protocol design, Wasm surface spec, supply-chain attestation, post-quantum upgrade path
 - research questions formalised for R26–R40 plus design documents for adversarial testing, temporal logic, digital twins, and policy composition
-- 140 automated tests (119 unit + 21 integration) with 10k-sample benchmark
+- 146 automated tests (125 unit + 21 integration) with 10k-sample benchmark
 - cross-platform CI (Linux, macOS, Windows) with clippy and fmt
 - maintained docs, backlog tracking, test fixtures, and a GitHub Pages site
 

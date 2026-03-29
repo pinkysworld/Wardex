@@ -33,7 +33,7 @@ A 10-stage pipeline — ingest → parse → detect → decide → act → audit
 | Bounded replay buffer with statistics | Swarm/cross-device coordination |
 | Token-authenticated HTTP API (11 endpoints) | Wasm-based extensible policies |
 | Supply-chain attestation foundations | Full attestation with Ed25519 signing |
-| 140 automated tests (119 unit + 21 integration) | Digital-twin fleet simulation |
+| 146 automated tests (125 unit + 21 integration) | Digital-twin fleet simulation |
 | Browser admin console with dark mode | Quantum-walk anomaly propagation |
 | CSV + JSONL multi-format ingestion | |
 

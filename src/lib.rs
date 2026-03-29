@@ -8,6 +8,7 @@ pub mod config;
 pub mod correlation;
 pub mod detector;
 pub mod fingerprint;
+pub mod fixed_threshold;
 pub mod forensics;
 pub mod harness;
 pub mod monitor;
