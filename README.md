@@ -2,7 +2,7 @@
 
 SentinelEdge is a Rust edge security runtime for anomaly detection, policy-driven response, and verifiable audit trails on constrained devices.
 
-The research blueprint in [blueprint.md](/Users/michelpicker/Library/Mobile Documents/com~apple~CloudDocs/Projekte/SentinelEdge/blueprint.md) sketches 40 research tracks across seven thematic categories. The codebase has completed all 8 phases (0–7) of the engineering backlog — 41/41 tasks:
+The research blueprint in [blueprint.md](/Users/michelpicker/Library/Mobile Documents/com~apple~CloudDocs/Projekte/SentinelEdge/blueprint.md) sketches 40 research tracks across seven thematic categories. The codebase has completed all phases currently defined in the engineering backlog — Phases 0–9, 51/51 tasks:
 
 - a configurable Rust runtime for multi-signal anomaly scoring across 8 dimensions
 - an energy-aware response policy engine with pluggable device action adapters
@@ -14,10 +14,11 @@ The research blueprint in [blueprint.md](/Users/michelpicker/Library/Mobile Docu
 - bounded replay buffer with windowed statistics for continual learning
 - poisoning heuristics (mean shift, variance spike, drift accumulation, auth burst)
 - FP/FN benchmark harness with precision, recall, F1, and accuracy metrics
+- explainable anomaly attribution, multi-signal correlation analysis, temporal-logic runtime monitoring, and behavioural device fingerprinting
 - live browser admin console with token-authenticated HTTP API, auto-refresh, file upload, and dark mode
 - research paper targeting, swarm protocol design, Wasm surface spec, supply-chain attestation, post-quantum upgrade path
 - research questions formalised for R26–R40 plus design documents for adversarial testing, temporal logic, digital twins, and policy composition
-- 69 automated tests (55 unit + 14 integration) with 10k-sample benchmark
+- 105 automated tests (91 unit + 14 integration) with 10k-sample benchmark
 - cross-platform CI (Linux, macOS, Windows) with clippy and fmt
 - maintained docs, backlog tracking, test fixtures, and a GitHub Pages site
 

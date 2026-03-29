@@ -4,7 +4,7 @@ Updated: 2025-07-18
 
 ## Implemented now
 
-- Rust project scaffold and runnable CLI (`demo`, `analyze`, `status`, `report`, `init-config`, `harness`, `serve`)
+- Rust project scaffold and runnable CLI (`demo`, `analyze`, `status`, `status-json`, `report`, `init-config`, `harness`, `serve`, `help`)
 - Typed telemetry ingestion from CSV and JSONL (auto-detected by file extension)
 - TOML/JSON configuration loading for thresholds, battery policies, and output paths
 - Adaptive EWMA-based anomaly scoring across eight signal dimensions (CPU, memory, temperature, network, auth failures, integrity drift, process count, disk pressure)
@@ -36,7 +36,7 @@ Updated: 2025-07-18
 - CSV report export from admin console
 - Report filtering by threat level in admin console
 - Improved connection error messages (distinguishes auth failure, server offline, HTTP errors)
-- Auto-detecting CSV column count (8 or 10 columns) in `parse_line`
+- Auto-detecting CSV column count (8 or 10 columns) in CSV parsing
 - Research paper targeting document with evaluation plan (T050)
 - Swarm coordination protocol design with digest gossip, voting, and provenance (T051)
 - Wasm extension surface specification with sandboxed detector/response plugins (T052)
@@ -59,7 +59,7 @@ Updated: 2025-07-18
 - Collapsible partially-wired and not-implemented detail lists in status panel
 - Cross-platform CI (Linux, macOS, Windows) with clippy and fmt checks
 - FEATURES.md one-page marketing summary and CHANGELOG.md
-- Three rounds of code-quality review with 11 hardening fixes (CQ-01 through CQ-11)
+- Five rounds of code-quality review with 20 hardening fixes (CQ-01 through CQ-20)
 - NaN/Infinity rejection in telemetry validation for `network_kbps` and `temperature_c`
 - Decay-rate API parameter validation (finite, 0.0–1.0)
 - Client-side 10 MB file upload limit in admin console

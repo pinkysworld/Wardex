@@ -30,7 +30,7 @@ A 10-stage pipeline — ingest → parse → detect → decide → act → audit
 | Proof-carrying update metadata | Zero-knowledge proof integration (Halo2) |
 | Bounded replay buffer with statistics | Swarm/cross-device coordination |
 | Token-authenticated HTTP API (10 endpoints) | Wasm-based extensible policies |
-| 68 automated tests (54 unit + 14 integration) | Supply-chain attestation |
+| 105 automated tests (91 unit + 14 integration) | Supply-chain attestation |
 | Browser admin console with dark mode | Digital-twin fleet simulation |
 | CSV + JSONL multi-format ingestion | Quantum-walk anomaly propagation |
 
@@ -62,5 +62,6 @@ The `serve` command prints an auth token to the terminal. Open `http://localhost
 | `init-config` | Write a starter TOML config |
 | `status` | Print implementation status |
 | `status-json` | Export status as JSON |
+| `harness` | Run adversarial regression traces |
 | `serve` | Launch HTTP server + admin console |
 | `help` | Show usage |
