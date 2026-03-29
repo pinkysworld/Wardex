@@ -11,6 +11,7 @@ use crate::detector::{AdaptationMode, AnomalyDetector};
 use crate::replay::ReplayBuffer;
 use crate::report::JsonReport;
 use crate::runtime;
+use crate::state_machine::PolicyStateMachine;
 use crate::telemetry::TelemetrySample;
 
 struct AppState {
@@ -111,6 +112,22 @@ fn json_response(body: &str, status: u16) -> Response<std::io::Cursor<Vec<u8>>> 
 fn error_json(message: &str, status: u16) -> Response<std::io::Cursor<Vec<u8>>> {
     let body = format!(r#"{{"error":"{}"}}"#, message.replace('"', "\\\""));
     json_response(&body, status)
+}
+
+fn text_response(body: &str, status: u16) -> Response<std::io::Cursor<Vec<u8>>> {
+    let data = body.as_bytes().to_vec();
+    let len = data.len();
+    Response::new(
+        tiny_http::StatusCode(status),
+        vec![
+            Header::from_bytes(b"Content-Type", b"text/plain; charset=utf-8").unwrap(),
+            Header::from_bytes(b"Access-Control-Allow-Origin", b"http://localhost").unwrap(),
+            Header::from_bytes(b"Vary", b"Origin").unwrap(),
+        ],
+        std::io::Cursor::new(data),
+        Some(len),
+        None,
+    )
 }
 
 fn check_auth(request: &Request, state: &Arc<Mutex<AppState>>) -> bool {
@@ -235,6 +252,14 @@ fn handle_api(mut request: Request, state: &Arc<Mutex<AppState>>, _site_dir: &Pa
                 Ok(json) => json_response(&json, 200),
                 Err(e) => error_json(&format!("serialization error: {e}"), 500),
             }
+        }
+        (Method::Get, "/api/export/tla") => {
+            let sm = PolicyStateMachine::new();
+            text_response(&sm.export_tla(), 200)
+        }
+        (Method::Get, "/api/export/alloy") => {
+            let sm = PolicyStateMachine::new();
+            text_response(&sm.export_alloy(), 200)
         }
         (Method::Post, "/api/control/run-demo") => {
             let demo = runtime::demo_samples();

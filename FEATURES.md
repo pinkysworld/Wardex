@@ -25,13 +25,13 @@ A 10-stage pipeline — ingest → parse → detect → decide → act → audit
 | Available Now | Research Horizon |
 |---|---|
 | Adaptive EWMA anomaly scoring | Continual on-device learning |
-| Policy state machine with transition validation | Formal TLA+/Alloy export |
+| Policy state machine with TLA+/Alloy export | Full model-checking integration |
 | SHA-256 audit chain with signed checkpoints | Post-quantum signatures (hybrid lattice) |
 | Poisoning heuristics (4 detectors) | Differential privacy guarantees |
 | Proof-carrying update metadata | Zero-knowledge proof integration (Halo2) |
 | Bounded replay buffer with statistics | Swarm/cross-device coordination |
 | Token-authenticated HTTP API (10 endpoints) | Wasm-based extensible policies |
-| 111 automated tests (96 unit + 15 integration) | Supply-chain attestation |
+| 117 automated tests (100 unit + 17 integration) | Supply-chain attestation |
 | Browser admin console with dark mode | Digital-twin fleet simulation |
 | CSV + JSONL multi-format ingestion | Quantum-walk anomaly propagation |
 
@@ -64,5 +64,6 @@ The `serve` command prints an auth token to the terminal. Open `http://localhost
 | `status` | Print implementation status |
 | `status-json` | Export status as JSON |
 | `harness` | Run adversarial regression traces |
+| `export-model` | Export state machine as TLA+ or Alloy |
 | `serve` | Launch HTTP server + admin console |
 | `help` | Show usage |

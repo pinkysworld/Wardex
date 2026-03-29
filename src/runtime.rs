@@ -474,12 +474,13 @@ pub fn status_snapshot() -> String {
         "",
         "Phase 10 — Integration Closure (in progress):",
         "  - adapter-backed checkpoint restore (T100)",
+        "  - TLA+/Alloy model export for offline verification (T101)",
         "",
         "Foundation (complete):",
         "  - adaptive multi-signal anomaly scoring (8 dimensions)",
         "  - battery-aware mitigation scaling",
         "  - chained audit log output",
-        "  - CLI: demo, analyze, status, status-json, report, init-config, harness, serve, help",
+        "  - CLI: demo, analyze, status, status-json, report, init-config, harness, export-model, serve, help",
         "  - documentation and GitHub Pages site",
         "",
         "Not built yet:",
@@ -495,7 +496,7 @@ pub fn status_snapshot() -> String {
 pub fn status_manifest() -> StatusManifest {
     StatusManifest {
         updated_at: "2026-03-29".into(),
-        backlog_completed: 52,
+        backlog_completed: 53,
         backlog_total: 56,
         completed_phases: 10,
         total_phases: 11,
@@ -507,6 +508,7 @@ pub fn status_manifest() -> StatusManifest {
             "status".into(),
             "status-json".into(),
             "harness".into(),
+            "export-model".into(),
             "serve".into(),
             "help".into(),
         ],
@@ -546,10 +548,10 @@ pub fn status_manifest() -> StatusManifest {
             "Adversarial harness CLI command".into(),
             "Behavioural device fingerprinting with impersonation detection".into(),
             "Adapter-backed checkpoint restore for abstract device state".into(),
+            "TLA+ and Alloy model export for offline formal verification".into(),
         ],
         partially_wired: vec![
             "ZK proof placeholder in proof metadata".into(),
-            "TLA+/Alloy export path for the state machine".into(),
         ],
         not_implemented: vec![
             "Continual learning and privacy-preserving updates".into(),
@@ -629,7 +631,7 @@ mod tests {
     #[test]
     fn status_manifest_reports_backlog_progress() {
         let manifest = status_manifest();
-        assert_eq!(manifest.backlog_completed, 52);
+        assert_eq!(manifest.backlog_completed, 53);
         assert_eq!(manifest.backlog_total, 56);
         assert_eq!(manifest.total_phases, 11);
         assert!(manifest.cli_commands.iter().any(|cmd| cmd == "status-json"));

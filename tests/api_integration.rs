@@ -272,3 +272,37 @@ fn unknown_api_endpoint_returns_404() {
         other => panic!("expected 404, got {other:?}"),
     }
 }
+
+// ── GET /api/export/tla ────────────────────────────────────────
+
+#[test]
+fn export_tla_returns_valid_module() {
+    let (port, _token) = spawn_test_server();
+    let resp = ureq::get(&format!("{}/api/export/tla", base(port)))
+        .call()
+        .expect("export tla request");
+    assert_eq!(resp.status(), 200);
+
+    let body = resp.into_string().unwrap();
+    assert!(body.contains("MODULE PolicyStateMachine"));
+    assert!(body.contains("LegalTransition"));
+    assert!(body.contains("NoSkipDeescalation"));
+    assert!(body.contains("===="));
+}
+
+// ── GET /api/export/alloy ──────────────────────────────────────
+
+#[test]
+fn export_alloy_returns_valid_module() {
+    let (port, _token) = spawn_test_server();
+    let resp = ureq::get(&format!("{}/api/export/alloy", base(port)))
+        .call()
+        .expect("export alloy request");
+    assert_eq!(resp.status(), 200);
+
+    let body = resp.into_string().unwrap();
+    assert!(body.contains("module PolicyStateMachine"));
+    assert!(body.contains("legalTransition"));
+    assert!(body.contains("noSkipDeescalation"));
+    assert!(body.contains("check noSkipDeescalation"));
+}

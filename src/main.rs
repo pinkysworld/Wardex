@@ -7,6 +7,7 @@ use sentineledge::harness::{self, HarnessConfig};
 use sentineledge::report::JsonReport;
 use sentineledge::runtime;
 use sentineledge::server;
+use sentineledge::state_machine::PolicyStateMachine;
 use sentineledge::telemetry::TelemetrySample;
 
 fn main() {
@@ -171,6 +172,33 @@ fn run() -> Result<(), String> {
                 );
             }
         }
+        "export-model" => {
+            let format = args.next().unwrap_or_else(|| "tla".to_string());
+            let output_path = args.next().map(PathBuf::from);
+
+            if args.next().is_some() {
+                return Err("too many arguments for `export-model`".into());
+            }
+
+            let sm = PolicyStateMachine::new();
+            let content = match format.as_str() {
+                "tla" => sm.export_tla(),
+                "alloy" => sm.export_alloy(),
+                other => return Err(format!("unknown format `{other}`, expected `tla` or `alloy`")),
+            };
+
+            if let Some(path) = output_path {
+                if let Some(parent) = path.parent() {
+                    std::fs::create_dir_all(parent)
+                        .map_err(|e| format!("failed to create directory: {e}"))?;
+                }
+                std::fs::write(&path, &content)
+                    .map_err(|e| format!("failed to write model: {e}"))?;
+                println!("{} model written to {}", format, path.display());
+            } else {
+                print!("{content}");
+            }
+        }
         "serve" => {
             let port: u16 = args
                 .next()
@@ -210,6 +238,7 @@ fn print_usage() {
     println!("  cargo run -- status");
     println!("  cargo run -- status-json [output_path]");
     println!("  cargo run -- harness");
+    println!("  cargo run -- export-model <tla|alloy> [output_path]");
     println!("  cargo run -- serve [port] [site_dir]");
     println!("  cargo run -- help");
 }
