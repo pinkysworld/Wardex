@@ -83,9 +83,19 @@ This backlog lists the next concrete tasks in build order.
 - [x] T093: Add `harness` CLI command for adversarial regression testing from the command line (R28).
 - [x] T094: Add behavioural device fingerprinting module with statistical profiling and impersonation detection (R38).
 
+## Phase 10 - Integration closure (planned)
+
+- [ ] T100: Add a device-state restore abstraction so checkpoint restore can drive adapter-backed rollback beyond detector baseline state.
+- [ ] T101: Export the policy state machine to TLA+/Alloy-friendly artifacts for offline verification workflows.
+- [ ] T102: Introduce a proof backend interface and witness export path for future Halo2 / SNARK integration.
+- [ ] T103: Replace static research-track status duplication with a single generated source consumed by docs, runtime status, and the admin console.
+- [ ] T104: Implement supply-chain attestation foundations: build manifest generation, trust-store loading, and verification hooks.
+
 ## Recommended next build order
 
-All 51 backlog items (Phases 0–9) are complete.
+All 51 backlog items in Phases 0–9 are complete.
+
+Recommended next work: Phase 10 (T100–T104), in order.
 
 ## Code-quality sweep (post-Phase 7)
 
