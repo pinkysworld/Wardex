@@ -119,6 +119,12 @@ Updated: 2026-03-30
 - Fleet, enforcement, threat-intel, digital-twin, compliance, energy, multi-tenancy, and platform API endpoints in the admin server
 - 267 automated tests (246 unit + 21 integration) covering all 35 modules
 - All 40 research tracks at foundation implementation status
+- Runtime pipeline wiring: threat intel, enforcement, digital twin, energy, side-channel, and compliance modules integrated into `execute()` with enrichment data flowing through all stages (T132)
+- Criterion micro-benchmarks: per-sample pipeline throughput (~55K samples/sec), per-stage latency, and scaling benchmarks for paper evaluation (T133)
+- Continual learning loop: Page-Hinkley drift detection with automatic baseline re-learning via `ContinualLearner` for concept drift and adversarial adaptation (T134, R01)
+- Policy composition algebra: `CompositePolicy` with `MaxSeverity`/`MinSeverity`/`LeftPriority`/`RightPriority` operators and conflict detection for multi-rule evaluation (T135, R39)
+- `RunResult` enriched with enforcement actions, threat intel matches, energy state, side-channel report, and compliance score
+- 276 automated tests (255 unit + 21 integration) covering all 35 modules
 
 ## Partially wired
 

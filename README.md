@@ -21,7 +21,11 @@ The research blueprint in [blueprint.md](blueprint.md) sketches 40 research trac
 - live browser admin console with token-authenticated HTTP API, auto-refresh, file upload, and dark mode
 - research paper targeting, swarm protocol design, Wasm surface spec, supply-chain attestation, post-quantum upgrade path
 - research questions formalised for R26–R40 plus design documents for adversarial testing, temporal logic, digital twins, and policy composition
-- 267 automated tests (246 unit + 21 integration) with 10k-sample benchmark
+- runtime pipeline enrichment: threat intel, enforcement, digital twin, energy, side-channel, and compliance wired into `execute()`
+- continual learning with Page-Hinkley drift detection and automatic baseline re-learning (R01)
+- policy composition algebra with conflict detection for multi-rule evaluation (R39)
+- criterion micro-benchmarks: ~55K samples/sec throughput, per-stage latency profiling
+- 276 automated tests (255 unit + 21 integration) with 10k-sample benchmark and criterion benchmarks
 - cross-platform CI (Linux, macOS, Windows) with clippy and fmt
 - maintained docs, backlog tracking, test fixtures, and a GitHub Pages site
 

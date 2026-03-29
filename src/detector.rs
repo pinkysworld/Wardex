@@ -387,6 +387,139 @@ fn weighted_positive_delta(
     normalized * weight
 }
 
+// ─── Continual learning: concept drift detection (R01) ───
+
+/// Result of a drift check on a signal stream.
+#[derive(Debug, Clone)]
+pub struct DriftResult {
+    pub drifted: bool,
+    pub cumulative_sum: f64,
+    pub threshold: f64,
+    pub samples_since_reset: usize,
+}
+
+/// Page-Hinkley drift detector for a single signal stream.
+///
+/// Monitors a running mean and accumulates deviations. When the
+/// cumulative deviation exceeds `threshold` the detector signals a
+/// distribution shift, which the runtime can use to trigger baseline
+/// re-learning or alert on adversarial poisoning.
+#[derive(Debug, Clone)]
+pub struct DriftDetector {
+    /// Minimum deviation before accumulation starts (filters noise).
+    delta: f64,
+    /// Drift alarm threshold on cumulative sum.
+    threshold: f64,
+    mean: f64,
+    sum: f64,
+    min_sum: f64,
+    count: usize,
+}
+
+impl DriftDetector {
+    pub fn new(delta: f64, threshold: f64) -> Self {
+        Self {
+            delta,
+            threshold,
+            mean: 0.0,
+            sum: 0.0,
+            min_sum: 0.0,
+            count: 0,
+        }
+    }
+
+    /// Feed a new observation and return drift status.
+    pub fn update(&mut self, value: f64) -> DriftResult {
+        self.count += 1;
+        self.mean += (value - self.mean) / self.count as f64;
+        self.sum += value - self.mean - self.delta;
+        if self.sum < self.min_sum {
+            self.min_sum = self.sum;
+        }
+        let test_stat = self.sum - self.min_sum;
+        DriftResult {
+            drifted: test_stat > self.threshold,
+            cumulative_sum: test_stat,
+            threshold: self.threshold,
+            samples_since_reset: self.count,
+        }
+    }
+
+    /// Reset the detector after a drift alarm is handled.
+    pub fn reset(&mut self) {
+        self.mean = 0.0;
+        self.sum = 0.0;
+        self.min_sum = 0.0;
+        self.count = 0;
+    }
+
+    pub fn sample_count(&self) -> usize {
+        self.count
+    }
+}
+
+/// Multi-signal continual-learning monitor that wraps an `AnomalyDetector`
+/// with per-dimension drift detection and automatic baseline re-learning.
+pub struct ContinualLearner {
+    pub detector: AnomalyDetector,
+    drift_score: DriftDetector,
+    relearn_count: usize,
+    window: Vec<TelemetrySample>,
+    window_cap: usize,
+}
+
+impl ContinualLearner {
+    pub fn new(detector: AnomalyDetector, window_cap: usize) -> Self {
+        Self {
+            detector,
+            drift_score: DriftDetector::new(0.5, 15.0),
+            relearn_count: 0,
+            window: Vec::with_capacity(window_cap),
+            window_cap,
+        }
+    }
+
+    /// Evaluate a sample and perform drift-triggered re-learning.
+    ///
+    /// If the drift detector fires, the detector baseline is reset and
+    /// the recent window of samples is replayed so the model quickly
+    /// adapts to the new distribution.
+    pub fn step(&mut self, sample: &TelemetrySample) -> (AnomalySignal, Option<DriftResult>) {
+        let signal = self.detector.evaluate(sample);
+
+        // Maintain a sliding window for re-learning
+        if self.window.len() >= self.window_cap {
+            self.window.remove(0);
+        }
+        self.window.push(*sample);
+
+        let drift = self.drift_score.update(signal.score as f64);
+        if drift.drifted {
+            // Concept drift detected — reset baseline and re-learn from window
+            self.detector.reset_baseline();
+            let window_copy: Vec<TelemetrySample> = self.window.clone();
+            for ws in &window_copy {
+                let _ = self.detector.evaluate(ws);
+            }
+            self.drift_score.reset();
+            self.relearn_count += 1;
+            // Re-evaluate the current sample against the fresh baseline
+            let fresh_signal = self.detector.evaluate(sample);
+            return (fresh_signal, Some(drift));
+        }
+
+        (signal, None)
+    }
+
+    pub fn relearn_count(&self) -> usize {
+        self.relearn_count
+    }
+
+    pub fn window_len(&self) -> usize {
+        self.window.len()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::AnomalyDetector;
@@ -608,5 +741,90 @@ mod tests {
             signal.contributions.is_empty(),
             "first sample (baseline init) should have no contributions"
         );
+    }
+
+    #[test]
+    fn drift_detector_fires_on_shift() {
+        let mut dd = super::DriftDetector::new(0.1, 5.0);
+        // Feed stable values
+        for _ in 0..20 {
+            let r = dd.update(1.0);
+            assert!(!r.drifted);
+        }
+        // Sudden shift upward
+        let mut fired = false;
+        for _ in 0..50 {
+            let r = dd.update(10.0);
+            if r.drifted {
+                fired = true;
+                break;
+            }
+        }
+        assert!(fired, "drift detector should fire after distribution shift");
+    }
+
+    #[test]
+    fn drift_detector_reset_clears_state() {
+        let mut dd = super::DriftDetector::new(0.1, 5.0);
+        for _ in 0..10 {
+            dd.update(5.0);
+        }
+        dd.reset();
+        assert_eq!(dd.sample_count(), 0);
+    }
+
+    #[test]
+    fn continual_learner_relearns_on_drift() {
+        let detector = AnomalyDetector::default();
+        let mut learner = super::ContinualLearner::new(detector, 20);
+
+        // Feed stable benign samples
+        let benign = TelemetrySample {
+            timestamp_ms: 0,
+            cpu_load_pct: 15.0,
+            memory_load_pct: 25.0,
+            temperature_c: 36.0,
+            network_kbps: 300.0,
+            auth_failures: 0,
+            battery_pct: 90.0,
+            integrity_drift: 0.01,
+            process_count: 40,
+            disk_pressure_pct: 5.0,
+        };
+        for i in 0..10 {
+            let mut s = benign;
+            s.timestamp_ms = i;
+            learner.step(&s);
+        }
+        assert_eq!(learner.relearn_count(), 0);
+
+        // Feed high-anomaly samples to trigger drift
+        let anomalous = TelemetrySample {
+            timestamp_ms: 100,
+            cpu_load_pct: 95.0,
+            memory_load_pct: 90.0,
+            temperature_c: 70.0,
+            network_kbps: 20_000.0,
+            auth_failures: 30,
+            battery_pct: 20.0,
+            integrity_drift: 0.5,
+            process_count: 300,
+            disk_pressure_pct: 95.0,
+        };
+        let mut drift_triggered = false;
+        for i in 0..50 {
+            let mut s = anomalous;
+            s.timestamp_ms = 100 + i;
+            let (_, drift) = learner.step(&s);
+            if drift.is_some() {
+                drift_triggered = true;
+                break;
+            }
+        }
+        assert!(
+            drift_triggered,
+            "continual learner should trigger re-learn on distribution shift"
+        );
+        assert!(learner.relearn_count() >= 1);
     }
 }

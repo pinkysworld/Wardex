@@ -9,6 +9,8 @@ Lightweight Rust edge security runtime that detects anomalies, enforces adaptive
 - **Cryptographic audit trail** — SHA-256 digest chain with signed checkpoints and programmatic verification for tamper-evident logging
 - **Poisoning defence** — four heuristics (mean-shift, variance spike, drift accumulation, auth-burst) detect data manipulation; adaptation can be frozen or decayed
 - **Proof backend interface** — pluggable proof backends (`DigestBackend`, `ZkStubBackend`) with witness export for future Halo2/SNARK integration
+- **Continual learning** — Page-Hinkley drift detection with automatic baseline re-learning when the data distribution shifts (adversarial poisoning or concept drift)
+- **Policy composition algebra** — composable multi-rule policies with MaxSeverity/MinSeverity/Priority operators and conflict detection
 - **Rollback checkpoints** — bounded ring buffer captures and restores detector state via API
 - **Adapter-backed restore** — checkpoint rollback now reapplies abstract device isolation/quarantine state through the action layer
 - **Live admin console** — browser-based control plane with token auth, auto-refresh with exponential backoff, file upload (CSV/JSONL), CSV export, threat-level filtering, dark mode
@@ -19,21 +21,24 @@ Lightweight Rust edge security runtime that detects anomalies, enforces adaptive
 
 ## Architecture at a Glance
 
-A 10-stage pipeline — ingest → parse → detect → decide → act → audit → checkpoint → replay → benchmark → report — runs as a single-binary Rust process. An embedded HTTP server (`tiny_http`) exposes authenticated REST endpoints for live monitoring, analysis, and control. All state lives in-memory; baselines persist to disk between runs.
+A 16-stage enriched pipeline — ingest → parse → detect → decide → threat-intel → enforce → digital-twin → energy → side-channel → compliance → act → audit → checkpoint → replay → benchmark → report — runs as a single-binary Rust process. An embedded HTTP server (`tiny_http`) exposes authenticated REST endpoints for live monitoring, analysis, and control. All state lives in-memory; baselines persist to disk between runs.
 
 ## What's Built vs. Roadmap
 
 | Available Now | Research Horizon |
 |---|---|
-| Adaptive EWMA anomaly scoring | Continual on-device learning |
-| Policy state machine with TLA+/Alloy export | Full model-checking integration |
+| Adaptive EWMA anomaly scoring | Full model-checking integration |
+| Continual learning with drift detection | On-device neural adaptation |
+| Policy composition algebra with conflict detection | Multi-agent policy negotiation |
+| Policy state machine with TLA+/Alloy export | Automated property synthesis |
 | SHA-256 audit chain with signed checkpoints | Post-quantum signatures (hybrid lattice) |
 | Poisoning heuristics (4 detectors) | Differential privacy guarantees |
 | Proof backend interface with witness export | Zero-knowledge proof integration (Halo2) |
 | Bounded replay buffer with statistics | Swarm/cross-device coordination |
-| Token-authenticated HTTP API (15 endpoints) | Wasm-based extensible policies |
+| Token-authenticated HTTP API (25+ endpoints) | Wasm-based extensible policies |
 | Supply-chain attestation foundations | Full attestation with Ed25519 signing |
-| 147 automated tests (126 unit + 21 integration) | Digital-twin fleet simulation |
+| Criterion micro-benchmarks (55K samples/sec) | ARM cross-compilation profiling |
+| 276 automated tests (255 unit + 21 integration) | Digital-twin fleet simulation |
 | Browser admin console with dark mode | Quantum-walk anomaly propagation |
 | CSV + JSONL multi-format ingestion | |
 

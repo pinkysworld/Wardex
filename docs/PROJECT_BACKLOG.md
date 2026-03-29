@@ -99,9 +99,32 @@ This backlog lists the next concrete tasks in build order.
 - [x] T113: Add per-signal contribution percentage to `BenchmarkResult` for paper-ready attribution breakdowns.
 - [x] T114: Clean up stale documentation references (supply-chain now partially implemented, Phase 10 complete, update counts and recommended-next section).
 
+## Phase 12 - Complete research blueprint (completed)
+
+- [x] T120: Deep OS enforcement engine — process control, network isolation, filesystem quarantine (R07, R09, R16).
+- [x] T121: Hardware root-of-trust abstraction — software TPM with PCR extend/read/quote/seal/unseal (R16).
+- [x] T122: Post-quantum Lamport one-time signatures with epoch-based key rotation and quantum-walk threat propagation (R04, R11, R21).
+- [x] T123: Sigma-protocol ZK proof backend with commitment-challenge-response (R12).
+- [x] T124: Gossip-based swarm coordination with fleet orchestration, weighted voting, mesh self-organisation, and negotiated security posture (R03, R23, R24, R37).
+- [x] T125: Privacy-preserving coordination — differential privacy, federated averaging, secure aggregation, and forensic redaction (R08, R27, R40).
+- [x] T126: Sandboxed bytecode VM for extensible policy rules with step/stack limits and rule compiler (R17).
+- [x] T127: Threat intelligence store with IoC management, feed ingestion, deception engine, and attacker profiling (R15, R33).
+- [x] T128: Side-channel detection — timing analysis, cache monitoring, frequency analysis, covert channel identification (R35).
+- [x] T129: Digital twin simulation engine with device state modeling, what-if analysis, and fleet attack simulation (R31).
+- [x] T130: Formal verification — explicit-state model checker with safety, reachability, and invariant checking (R02, R13).
+- [x] T131: Regulatory compliance manager, causal analysis graph, multi-tenancy engine, edge-cloud hybrid workload offload, patch management, energy-aware scheduling, and model quantization (R10, R13, R14, R18, R19, R22, R25, R32, R34, R36).
+
+## Phase 13 - Research agenda advancement (completed)
+
+- [x] T132: Wire all Phase 12 modules into the runtime pipeline — threat intel, enforcement, digital twin, energy, side-channel, and compliance integrated into `execute()`.
+- [x] T133: Add criterion micro-benchmarks for pipeline latency measurement — per-sample throughput, per-stage latency, and scaling benchmarks (Paper 1 enabler).
+- [x] T134: Implement continual learning loop — Page-Hinkley drift detector with automatic baseline re-learning via `ContinualLearner` (R01).
+- [x] T135: Implement policy composition algebra — `CompositePolicy` with `MaxSeverity`/`MinSeverity`/`LeftPriority`/`RightPriority` operators and conflict detection (R39, Paper 2 enabler).
+- [x] T136: Update documentation — CHANGELOG, FEATURES, STATUS, README, and PROJECT_BACKLOG for Phase 13.
+
 ## Recommended next build order
 
-61 of 61 backlog items are complete. Phases 0–11 are complete.
+67 of 67 backlog items are complete. Phases 0–13 are complete.
 
 All tasks are done.
 

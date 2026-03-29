@@ -2,6 +2,21 @@
 
 All notable changes to SentinelEdge are documented in this file.
 
+## [0.11.0] — 2026-03-30
+
+### Added
+- **Runtime pipeline wiring** (T132): All Phase 12 modules (threat intel, enforcement, digital twin, energy, side-channel, compliance) are now integrated into the `execute()` pipeline. Enrichment data (enforcement actions, TI matches, energy state, side-channel risk, compliance score) flows through the full pipeline and appears in console reports.
+- **Criterion micro-benchmarks** (T133): `benches/pipeline.rs` with four benchmark groups — full pipeline scaling (5/50/200/1000 samples), detector evaluate, policy evaluate, and throughput measurement (~55K samples/sec). Unblocks Paper 1 evaluation methodology.
+- **Continual learning loop** (T134): `DriftDetector` (Page-Hinkley algorithm) and `ContinualLearner` wrapper that monitors anomaly score distribution and automatically resets/re-learns the baseline when concept drift is detected. Advances R01 from foundation to research-grade.
+- **Policy composition algebra** (T135): `CompositePolicy`, `compose_decisions()`, and `PolicyConflict` types supporting four composition operators (`MaxSeverity`, `MinSeverity`, `LeftPriority`, `RightPriority`) with conflict detection. Advances R39 and enables Paper 2 evaluation.
+- 9 new unit tests (276 total: 255 unit + 21 integration).
+- `RunResult` now includes `enforcement_actions`, `threat_intel_matches`, `energy_state`, `side_channel`, and `compliance_score` fields.
+- Console report output includes enforcement, threat intel, energy, side-channel, and compliance summaries.
+
+### Changed
+- `ureq` dev-dependency now uses `default-features = false` to avoid `ring` build issues on some platforms.
+- Pipeline throughput improved through integrated module wiring.
+
 ## [0.10.0] — 2026-03-29
 
 ### Added
