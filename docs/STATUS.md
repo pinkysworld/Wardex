@@ -1,6 +1,6 @@
 # Implementation Status
 
-Updated: 2025-07-18
+Updated: 2026-03-29
 
 ## Implemented now
 
@@ -33,6 +33,7 @@ Updated: 2025-07-18
 - CORS hardened to same-origin (`http://localhost`) with `Vary: Origin` header
 - CSV parsing support in the `/api/analyze` endpoint alongside existing JSONL support
 - Checkpoint save and restore via API (`/api/control/checkpoint`, `/api/control/restore-checkpoint`, `/api/checkpoints`)
+- Adapter-backed checkpoint restore for abstract device state (isolation/quarantine rollback)
 - CSV report export from admin console
 - Report filtering by threat level in admin console
 - Improved connection error messages (distinguishes auth failure, server offline, HTTP errors)
@@ -51,7 +52,7 @@ Updated: 2025-07-18
 - Formal policy composition algebra with conflict resolution and verification (T076)
 - Static GitHub Pages site and deployment workflow
 - Documentation index, architecture notes, backlog, and research-track mapping
-- 105 automated tests (91 unit + 14 integration) covering all modules
+- 111 automated tests (96 unit + 15 integration) covering all modules
 - 10,000-sample benchmark test for detector performance at scale
 - End-to-end HTTP API integration test suite (14 tests)
 - Auto-refresh exponential backoff with resume button in admin console
@@ -77,7 +78,6 @@ Updated: 2025-07-18
 ## Partially wired
 
 - Integrity-drift handling as a precursor to full spectral poisoning recovery
-- Rollback-and-escalate action semantics (checkpoint save/restore now wired via API; real device state restore deferred)
 - ZK proof integration in proof-carrying metadata (digest binding exists, Halo2/SNARK deferred)
 - TLA+/Alloy export from the policy state machine (model exists, export deferred)
 - Research-track status accounting for all 40 blueprint items (now live in admin console; static data, not auto-discovered)
@@ -98,4 +98,4 @@ Updated: 2025-07-18
 
 ## Practical milestone summary
 
-The repository has completed Phases 0–9 and provides a working edge security runtime with configurable detection, pluggable response actions, cryptographic audit trails, proof-carrying update metadata, a checkable policy state machine, poisoning heuristics, replay buffering, benchmark tooling, a live browser admin console backed by an authenticated HTTP API, and browser-based inspection of exported status/report artifacts. The admin console features auto-refresh polling, connection status indicator, drag-and-drop JSONL/CSV file upload for custom analysis, decay rate slider, checkpoint save/restore, CSV report export, threat-level filtering, improved error diagnostics, and dark mode support across the entire site. CORS is hardened to same-origin, and the analyze endpoint accepts both JSONL and CSV formats with auto-detecting column count. Nine CLI commands are available. Phase 5 produced design documents for research publication targeting, swarm coordination, Wasm extensibility, supply-chain attestation, and post-quantum cryptography upgrade. Phase 6 delivers a live control plane with token-authenticated endpoints for analysis, mode switching, baseline reset, checkpoint management, and demo execution. Phase 7 formalised research questions for all 15 expanded tracks (R26–R40) with hypotheses, evaluation criteria, and implementation sketches, plus design documents for adversarial robustness testing, temporal-logic monitoring, digital-twin simulation, and formal policy composition. Phase 8 adds runtime intelligence: explainable anomaly attribution with per-signal contribution breakdown, config validation with threshold ordering and range checks, Pearson-based multi-signal correlation detection, a temporal-logic runtime monitor supporting safety and bounded-liveness properties, and a grammar-based adversarial test harness with evasion strategies and decision-surface coverage metrics. Phase 9 integrates the Phase 8 modules into the runtime pipeline: the correlation engine and temporal-logic monitor are now wired into `execute()` with audit logging and console output, a `/api/correlation` endpoint exposes live analysis, the adversarial harness is accessible via CLI, and behavioural device fingerprinting enables impersonation detection from telemetry profiles. The research agenda spans 40 tracks across seven thematic categories. All 51 backlog items are complete. 105 automated tests (91 unit + 14 integration) cover all modules. Five rounds of code-quality review identified and fixed 20 hardening issues spanning data-loss bugs, panic risks, input validation gaps, API safety, statistical correctness, and client-side protections. Differential privacy, ZK proofs, swarm coordination, and formal verification export are not implemented yet.
+The repository has completed Phases 0–9 and started Phase 10, providing a working edge security runtime with configurable detection, pluggable response actions, cryptographic audit trails, proof-carrying update metadata, a checkable policy state machine, poisoning heuristics, replay buffering, benchmark tooling, a live browser admin console backed by an authenticated HTTP API, and browser-based inspection of exported status/report artifacts. The admin console features auto-refresh polling, connection status indicator, drag-and-drop JSONL/CSV file upload for custom analysis, decay rate slider, checkpoint save/restore, adapter-backed device-state restore, CSV report export, threat-level filtering, improved error diagnostics, and dark mode support across the entire site. CORS is hardened to same-origin, and the analyze endpoint accepts both JSONL and CSV formats with auto-detecting column count. Nine CLI commands are available. Phase 5 produced design documents for research publication targeting, swarm coordination, Wasm extensibility, supply-chain attestation, and post-quantum cryptography upgrade. Phase 6 delivers a live control plane with token-authenticated endpoints for analysis, mode switching, baseline reset, checkpoint management, and demo execution. Phase 7 formalised research questions for all 15 expanded tracks (R26–R40) with hypotheses, evaluation criteria, and implementation sketches, plus design documents for adversarial robustness testing, temporal-logic monitoring, digital-twin simulation, and formal policy composition. Phase 8 adds runtime intelligence: explainable anomaly attribution with per-signal contribution breakdown, config validation with threshold ordering and range checks, Pearson-based multi-signal correlation detection, a temporal-logic runtime monitor supporting safety and bounded-liveness properties, and a grammar-based adversarial test harness with evasion strategies and decision-surface coverage metrics. Phase 9 integrates the Phase 8 modules into the runtime pipeline: the correlation engine and temporal-logic monitor are now wired into `execute()` with audit logging and console output, a `/api/correlation` endpoint exposes live analysis, the adversarial harness is accessible via CLI, and behavioural device fingerprinting enables impersonation detection from telemetry profiles. Phase 10 begins by adding adapter-backed checkpoint restore so rollback now reapplies abstract device isolation/quarantine state as well as detector baseline state. The research agenda spans 40 tracks across seven thematic categories. 52 of 56 backlog items are complete. 111 automated tests (96 unit + 15 integration) cover all modules. Five rounds of code-quality review identified and fixed 20 hardening issues spanning data-loss bugs, panic risks, input validation gaps, API safety, statistical correctness, and client-side protections. Differential privacy, ZK proofs, swarm coordination, and formal verification export are not implemented yet.

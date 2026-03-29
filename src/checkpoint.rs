@@ -1,12 +1,21 @@
 use std::collections::VecDeque;
 
+use crate::actions::{ActionResult, DeviceController, DeviceStateSnapshot};
 use crate::baseline::PersistedBaseline;
 use crate::detector::AnomalyDetector;
 
 #[derive(Debug, Clone)]
 pub struct CheckpointEntry {
     pub baseline: PersistedBaseline,
+    pub device_state: DeviceStateSnapshot,
     pub timestamp_ms: u64,
+}
+
+#[derive(Debug, Clone)]
+pub struct RestoreOutcome {
+    pub baseline_restored: bool,
+    pub device_state: DeviceStateSnapshot,
+    pub action_results: Vec<ActionResult>,
 }
 
 pub struct CheckpointStore {
@@ -24,12 +33,12 @@ impl CheckpointStore {
 
     pub fn capture(&mut self, detector: &AnomalyDetector) {
         if let Some(snapshot) = detector.snapshot() {
-            self.push_snapshot(snapshot);
+            self.push_snapshot(snapshot, DeviceStateSnapshot::default());
         }
     }
 
     /// Push a pre-extracted baseline snapshot into the checkpoint store.
-    pub fn push_snapshot(&mut self, baseline: PersistedBaseline) {
+    pub fn push_snapshot(&mut self, baseline: PersistedBaseline, device_state: DeviceStateSnapshot) {
         if self.capacity == 0 {
             return;
         }
@@ -38,6 +47,7 @@ impl CheckpointStore {
         }
         self.entries.push_back(CheckpointEntry {
             baseline,
+            device_state,
             timestamp_ms: chrono::Utc::now().timestamp_millis() as u64,
         });
     }
@@ -68,11 +78,27 @@ impl CheckpointStore {
             false
         }
     }
+
+    pub fn restore_latest_with_device(
+        &self,
+        detector: &mut AnomalyDetector,
+        device: &mut DeviceController,
+    ) -> Option<RestoreOutcome> {
+        let entry = self.latest()?;
+        detector.restore_baseline(&entry.baseline);
+        let action_results = device.restore_snapshot(&entry.device_state);
+        Some(RestoreOutcome {
+            baseline_restored: true,
+            device_state: entry.device_state.clone(),
+            action_results,
+        })
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::CheckpointStore;
+    use crate::actions::{DeviceController, DeviceStateSnapshot};
     use crate::detector::AnomalyDetector;
     use crate::telemetry::TelemetrySample;
 
@@ -128,6 +154,44 @@ mod tests {
         detector.reset_baseline();
         assert!(store.restore_latest(&mut detector));
         assert!(detector.snapshot().is_some());
+    }
+
+    #[test]
+    fn capture_defaults_device_state() {
+        let mut detector = AnomalyDetector::default();
+        detector.evaluate(&sample());
+
+        let mut store = CheckpointStore::new(5);
+        store.capture(&detector);
+
+        let entry = store.latest().unwrap();
+        assert_eq!(entry.device_state, DeviceStateSnapshot::default());
+    }
+
+    #[test]
+    fn restore_latest_with_device_restores_snapshot() {
+        let mut detector = AnomalyDetector::default();
+        detector.evaluate(&sample());
+
+        let mut store = CheckpointStore::new(5);
+        store.push_snapshot(
+            detector.snapshot().unwrap(),
+            DeviceStateSnapshot {
+                isolation_pct: 85,
+                service_quarantined: true,
+                network_isolated: false,
+                last_action: "quarantine".into(),
+            },
+        );
+
+        detector.reset_baseline();
+        let mut device = DeviceController::default();
+        let restored = store.restore_latest_with_device(&mut detector, &mut device).unwrap();
+
+        assert!(restored.baseline_restored);
+        assert_eq!(restored.device_state.isolation_pct, 85);
+        assert_eq!(device.snapshot(), restored.device_state);
+        assert!(!restored.action_results.is_empty());
     }
 
     #[test]

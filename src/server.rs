@@ -4,6 +4,7 @@ use std::sync::{Arc, Mutex};
 
 use tiny_http::{Header, Method, Request, Response, Server};
 
+use crate::actions::DeviceController;
 use crate::checkpoint::CheckpointStore;
 use crate::correlation;
 use crate::detector::{AdaptationMode, AnomalyDetector};
@@ -15,6 +16,7 @@ use crate::telemetry::TelemetrySample;
 struct AppState {
     detector: AnomalyDetector,
     checkpoints: CheckpointStore,
+    device: DeviceController,
     replay: ReplayBuffer,
     last_report: Option<JsonReport>,
     token: String,
@@ -35,6 +37,7 @@ pub fn run_server(port: u16, site_dir: &Path) -> Result<(), String> {
     let state = Arc::new(Mutex::new(AppState {
         detector: AnomalyDetector::default(),
         checkpoints: CheckpointStore::new(10),
+        device: DeviceController::default(),
         replay: ReplayBuffer::new(200),
         last_report: None,
         token: token.clone(),
@@ -57,6 +60,7 @@ pub fn spawn_test_server() -> (u16, String) {
     let state = Arc::new(Mutex::new(AppState {
         detector: AnomalyDetector::default(),
         checkpoints: CheckpointStore::new(10),
+        device: DeviceController::default(),
         replay: ReplayBuffer::new(200),
         last_report: None,
         token: token.clone(),
@@ -184,7 +188,8 @@ fn handle_api(mut request: Request, state: &Arc<Mutex<AppState>>, _site_dir: &Pa
         (Method::Post, "/api/control/checkpoint") => {
             let mut s = state.lock().unwrap();
             if let Some(snapshot) = s.detector.snapshot() {
-                s.checkpoints.push_snapshot(snapshot);
+                let device_state = s.device.snapshot();
+                s.checkpoints.push_snapshot(snapshot, device_state);
             }
             let count = s.checkpoints.len();
             json_response(
@@ -194,10 +199,18 @@ fn handle_api(mut request: Request, state: &Arc<Mutex<AppState>>, _site_dir: &Pa
         }
         (Method::Post, "/api/control/restore-checkpoint") => {
             let mut s = state.lock().unwrap();
-            let baseline = s.checkpoints.latest().map(|e| e.baseline.clone());
-            if let Some(b) = baseline {
-                s.detector.restore_baseline(&b);
-                json_response(r#"{"status":"checkpoint restored"}"#, 200)
+            let restored = s.checkpoints.latest().cloned().map(|entry| {
+                s.detector.restore_baseline(&entry.baseline);
+                let action_results = s.device.restore_snapshot(&entry.device_state);
+                serde_json::json!({
+                    "status": "checkpoint restored",
+                    "baseline_restored": true,
+                    "device_state": entry.device_state,
+                    "actions": action_results,
+                })
+            });
+            if let Some(body) = restored {
+                json_response(&body.to_string(), 200)
             } else {
                 error_json("no checkpoints available", 404)
             }
@@ -208,6 +221,9 @@ fn handle_api(mut request: Request, state: &Arc<Mutex<AppState>>, _site_dir: &Pa
                 "count": s.checkpoints.len(),
                 "timestamps": s.checkpoints.entries().iter()
                     .map(|e| e.timestamp_ms)
+                    .collect::<Vec<_>>(),
+                "device_states": s.checkpoints.entries().iter()
+                    .map(|e| e.device_state.clone())
                     .collect::<Vec<_>>(),
             });
             json_response(&info.to_string(), 200)
@@ -227,8 +243,9 @@ fn handle_api(mut request: Request, state: &Arc<Mutex<AppState>>, _site_dir: &Pa
             match serde_json::to_string_pretty(&report) {
                 Ok(json) => {
                     let mut s = state.lock().unwrap();
-                    for sample in &demo {
+                    for (sample, report) in demo.iter().zip(result.reports.iter()) {
                         s.detector.evaluate(sample);
+                        s.device.apply_decision(&report.decision);
                         s.replay.push(*sample);
                     }
                     s.last_report = Some(report);
@@ -315,8 +332,9 @@ fn handle_analyze(request: &mut Request, state: &Arc<Mutex<AppState>>) -> Respon
             };
             let mut s = state.lock().unwrap();
             // Update the live detector baseline with the analyzed samples
-            for sample in &samples {
+            for (sample, report) in samples.iter().zip(result.reports.iter()) {
                 s.detector.evaluate(sample);
+                s.device.apply_decision(&report.decision);
                 s.replay.push(*sample);
             }
             s.last_report = Some(report);

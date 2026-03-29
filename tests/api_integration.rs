@@ -187,6 +187,7 @@ fn checkpoint_save_and_restore_round_trip() {
     assert_eq!(resp.status(), 200);
     let body: serde_json::Value = resp.into_json().unwrap();
     assert_eq!(body["count"].as_u64().unwrap(), 1);
+    assert_eq!(body["device_states"].as_array().unwrap().len(), 1);
 
     // Restore checkpoint
     let resp = ureq::post(&format!("{}/api/control/restore-checkpoint", base(port)))
@@ -194,6 +195,11 @@ fn checkpoint_save_and_restore_round_trip() {
         .send_string("")
         .expect("restore checkpoint");
     assert_eq!(resp.status(), 200);
+    let body: serde_json::Value = resp.into_json().unwrap();
+    assert_eq!(body["status"].as_str().unwrap(), "checkpoint restored");
+    assert!(body["baseline_restored"].as_bool().unwrap());
+    assert!(body["device_state"].is_object());
+    assert!(!body["actions"].as_array().unwrap().is_empty());
 }
 
 #[test]
@@ -206,6 +212,40 @@ fn restore_without_checkpoints_returns_404() {
         Err(ureq::Error::Status(404, _)) => {}
         other => panic!("expected 404, got {other:?}"),
     }
+}
+
+#[test]
+fn checkpoint_restore_reapplies_saved_device_state() {
+    let (port, token) = spawn_test_server();
+    let auth = auth_header(&token);
+
+    let csv = "1000,18.0,32.0,41.0,500.0,0,94.0,0.01,42,8.0\n\
+               2000,64.0,58.0,51.0,5400.0,8,63.0,0.11,98,55.0\n";
+    ureq::post(&format!("{}/api/analyze", base(port)))
+        .set("Authorization", &auth)
+        .set("Content-Type", "text/csv")
+        .send_string(csv)
+        .expect("analyze for quarantine state");
+
+    ureq::post(&format!("{}/api/control/checkpoint", base(port)))
+        .set("Authorization", &auth)
+        .send_string("")
+        .expect("checkpoint save");
+
+    let checkpoint_state = ureq::get(&format!("{}/api/checkpoints", base(port)))
+        .call()
+        .expect("list checkpoints")
+        .into_json::<serde_json::Value>()
+        .unwrap()["device_states"][0]
+        .clone();
+
+    let resp = ureq::post(&format!("{}/api/control/restore-checkpoint", base(port)))
+        .set("Authorization", &auth)
+        .send_string("")
+        .expect("restore checkpoint");
+    let body: serde_json::Value = resp.into_json().unwrap();
+
+    assert_eq!(body["device_state"], checkpoint_state);
 }
 
 // ── OPTIONS (CORS preflight) ──────────────────────────────────
