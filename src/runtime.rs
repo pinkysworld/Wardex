@@ -487,9 +487,7 @@ pub fn status_snapshot() -> String {
         "  - documentation and GitHub Pages site",
         "",
         "Not built yet:",
-        "  - continual learning and privacy-preserving updates",
-        "  - zero-knowledge proofs and formal verification",
-        "  - swarm coordination and post-quantum cryptography",
+        "  - (all research tracks now have foundation implementations)",
         "",
         "See docs/STATUS.md and docs/PROJECT_BACKLOG.md for the full breakdown.",
     ]
@@ -498,7 +496,7 @@ pub fn status_snapshot() -> String {
 
 pub fn status_manifest() -> StatusManifest {
     StatusManifest {
-        updated_at: "2026-03-29".into(),
+        updated_at: "2026-03-30".into(),
         backlog_completed: 61,
         backlog_total: 61,
         completed_phases: 12,
@@ -562,19 +560,37 @@ pub fn status_manifest() -> StatusManifest {
             "`bench` CLI command comparing adaptive EWMA vs fixed-threshold detectors".into(),
             "Per-signal contribution aggregation in benchmark results for paper attribution".into(),
             "Stale documentation cleanup: corrected counts, dates, phase headers, and changelog entries".into(),
+            "Deep OS enforcement engine (process control, network isolation, filesystem quarantine)".into(),
+            "Hardware root-of-trust abstraction (software TPM with PCR extend/read/quote/seal/unseal)".into(),
+            "Post-quantum Lamport one-time signatures with full key lifecycle".into(),
+            "Quantum-walk threat propagation engine on arbitrary graph topologies".into(),
+            "Epoch-based key rotation manager with retire/expire lifecycle".into(),
+            "Sigma-protocol ZK proof backend (commitment, challenge, response)".into(),
+            "Gossip-based swarm coordination with threat alert propagation".into(),
+            "Fleet orchestration: device registry, health monitoring, policy distribution".into(),
+            "Byzantine-tolerant weighted voting consensus for collective threat assessment".into(),
+            "Mesh topology management with role-based rebalancing".into(),
+            "Privacy-preserving coordination: differential privacy, federated averaging, secure aggregation".into(),
+            "Forensic evidence redaction with configurable privacy levels".into(),
+            "Sandboxed bytecode VM for extensible policy rules with resource limits".into(),
+            "IoC management, threat feed ingestion, and intelligence correlation".into(),
+            "Deception engine: honeypots, honey-files, honey-credentials, canary tokens with attacker tracking".into(),
+            "Side-channel detection: timing analysis, cache monitoring, frequency analysis, covert channel detection".into(),
+            "Digital twin simulation: device state modeling, what-if analysis, fleet-scale attack propagation".into(),
+            "Formal verification: explicit-state model checker (safety, reachability, invariants)".into(),
+            "Regulatory compliance: IEC 62443 controls, evidence management, framework scoring".into(),
+            "Causal analysis engine: root-cause graphs, path-strength, false-positive probability estimation".into(),
+            "Multi-tenancy: tenant isolation, API-key authentication, resource quotas, tier-based limits".into(),
+            "Edge-cloud hybrid: workload offload engine, platform capability detection, sync protocol".into(),
+            "Autonomous patch management: lifecycle (stage/install/rollback), severity-ordered planning".into(),
+            "Energy harvesting: power-state machine, energy-budget tracking, harvesting-aware scheduling".into(),
+            "Model quantization with correctness proofs: int8/int4, compression ratio, error bounds".into(),
+            "Self-healing network topology with BFS path finding".into(),
+            "Cross-platform abstraction with enforcement capability detection".into(),
+            "Negotiated security posture with constraint-based resolution".into(),
         ],
-        partially_wired: vec![
-            "ZK proof circuit implementation (backend interface and witness export exist)".into(),
-        ],
-        not_implemented: vec![
-            "Continual learning and privacy-preserving updates".into(),
-            "Zero-knowledge proofs and formal verification export".into(),
-            "Swarm coordination and cross-device protocols".into(),
-            "Post-quantum signatures and hardware roots of trust".into(),
-            "Digital twin simulation, deception, multi-tenancy, side-channel detection".into(),
-            "Edge-cloud offload, mesh self-organisation".into(),
-            "Policy composition, privacy-preserving forensics".into(),
-        ],
+        partially_wired: vec![],
+        not_implemented: vec![],
         research_tracks: research_tracks(),
     }
 }
@@ -637,6 +653,8 @@ mod tests {
         assert_eq!(manifest.backlog_total, 61);
         assert_eq!(manifest.total_phases, 12);
         assert!(manifest.cli_commands.iter().any(|cmd| cmd == "status-json"));
+        assert!(manifest.partially_wired.is_empty());
+        assert!(manifest.not_implemented.is_empty());
     }
 
     #[test]

@@ -12,18 +12,69 @@
     >
     <link rel="stylesheet" href="styles.css?v=6">
     <style>
-      .admin-layout { padding-top: 80px; }
+      body {
+        background:
+          radial-gradient(circle at top right, rgba(79, 209, 178, 0.10), transparent 28%),
+          radial-gradient(circle at top left, rgba(196, 122, 46, 0.08), transparent 22%),
+          var(--bg);
+      }
+
+      .admin-layout { padding-top: 88px; }
+
+      .admin-shell {
+        padding-bottom: 40px;
+      }
 
       .admin-header {
-        display: flex; align-items: center; justify-content: space-between;
-        flex-wrap: wrap; gap: 1rem; margin-bottom: 2rem;
+        display: flex; align-items: flex-start; justify-content: space-between;
+        flex-wrap: wrap; gap: 1.25rem; margin-bottom: 1.5rem;
+        padding: 1.5rem 1.6rem;
+        border: 1px solid var(--border);
+        border-radius: 18px;
+        background: rgba(255,255,255,0.88);
+        backdrop-filter: blur(12px);
+        box-shadow: 0 18px 48px rgba(15, 23, 42, 0.06);
       }
       .admin-header h1 { font-size: clamp(1.4rem, 3vw, 1.8rem); }
 
+      .admin-title-wrap {
+        max-width: 640px;
+      }
+
+      .admin-kicker {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.45rem;
+        margin-bottom: 0.55rem;
+        padding: 0.28rem 0.7rem;
+        border-radius: 999px;
+        background: var(--accent-light);
+        color: var(--accent);
+        font-size: 0.72rem;
+        font-weight: 700;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }
+
+      .admin-subtitle {
+        margin-top: 0.5rem;
+        color: var(--ink-2);
+        font-size: 0.95rem;
+        line-height: 1.65;
+      }
+
+      .admin-meta {
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+        flex-wrap: wrap;
+      }
+
       .auth-bar {
         display: flex; align-items: center; gap: 0.5rem;
-        background: var(--surface); padding: 0.4rem 0.8rem;
-        border-radius: var(--radius); border: 1px solid var(--border);
+        background: var(--surface); padding: 0.55rem 0.8rem;
+        border-radius: 12px; border: 1px solid var(--border);
+        box-shadow: 0 10px 24px rgba(15, 23, 42, 0.04);
       }
       .auth-bar label { font-size: 0.82rem; color: var(--ink-3); white-space: nowrap; }
       .auth-bar input {
@@ -36,7 +87,27 @@
         font-weight: 600;
       }
       .auth-status.ok { background: var(--accent-light); color: var(--accent); }
+      .auth-status.authenticated { background: var(--accent-light); color: var(--accent); }
+      .auth-status.error { background: #fde8e8; color: #c0392b; }
       .auth-status.none { background: var(--bg-alt); color: var(--ink-3); }
+
+      .auth-hint {
+        font-size: 0.78rem;
+        color: var(--ink-3);
+        margin-top: 0.5rem;
+      }
+
+      .auth-gate {
+        background: var(--surface); border: 1px solid var(--border);
+        border-radius: 18px; padding: 1rem 1.2rem; margin-bottom: 1.5rem;
+        box-shadow: 0 14px 32px rgba(15, 23, 42, 0.05);
+      }
+
+      .auth-gate strong { display: block; margin-bottom: 0.25rem; }
+
+      .auth-required { display: none; }
+      body.authenticated .auth-required { display: block; }
+      body.authenticated .auth-gate { display: none; }
 
       .conn-indicator {
         display: flex; align-items: center; gap: 0.4rem;
@@ -49,18 +120,81 @@
       .conn-dot.connected { background: var(--accent); }
       .conn-dot.error { background: #c0392b; }
 
+      .operator-strip {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 1rem;
+        margin-bottom: 1.5rem;
+      }
+
+      .strip-card {
+        padding: 1rem 1.1rem;
+        border: 1px solid var(--border);
+        border-radius: 16px;
+        background: rgba(255,255,255,0.86);
+        backdrop-filter: blur(10px);
+        box-shadow: 0 14px 28px rgba(15, 23, 42, 0.04);
+      }
+
+      .strip-label {
+        display: block;
+        margin-bottom: 0.45rem;
+        color: var(--ink-3);
+        font-size: 0.75rem;
+        font-weight: 700;
+        letter-spacing: 0.07em;
+        text-transform: uppercase;
+      }
+
+      .strip-card strong {
+        display: block;
+        font-size: 1rem;
+        margin-bottom: 0.2rem;
+      }
+
+      .strip-card p {
+        font-size: 0.84rem;
+        color: var(--ink-2);
+        line-height: 1.55;
+      }
+
+
       .admin-grid {
         display: grid;
+        .operator-strip { grid-template-columns: 1fr; }
         grid-template-columns: 1fr 1fr;
         gap: 1.5rem;
         margin-bottom: 2rem;
       }
-      @media (max-width: 768px) {
+        border-radius: 18px; padding: 1.5rem;
+        box-shadow: 0 16px 36px rgba(15, 23, 42, 0.05);
         .admin-grid { grid-template-columns: 1fr; }
         .auth-bar input { width: 180px; }
       }
 
       .panel {
+
+      .panel-lead {
+        margin: -0.35rem 0 1rem;
+        color: var(--ink-2);
+        font-size: 0.86rem;
+        line-height: 1.6;
+      }
+
+      .panel-toolbar {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 0.75rem;
+        flex-wrap: wrap;
+        margin-bottom: 0.85rem;
+      }
+
+      .muted-note {
+        color: var(--ink-3);
+        font-size: 0.8rem;
+        line-height: 1.55;
+      }
         background: var(--surface); border: 1px solid var(--border);
         border-radius: var(--radius-lg); padding: 1.5rem;
       }
@@ -68,6 +202,7 @@
         font-size: 1rem; margin-bottom: 1rem; display: flex;
         align-items: center; gap: 0.5rem;
       }
+      .dot-blue { background: #3d6dcc; }
       .panel h2 .dot {
         width: 8px; height: 8px; border-radius: 50%;
         display: inline-block;
@@ -126,10 +261,28 @@
         border-bottom: 1px solid var(--border-light);
       }
       .sample-table th { color: var(--ink-3); font-weight: 500; position: sticky; top: 0; background: var(--surface); }
+      .sample-table tbody tr:nth-child(even) { background: rgba(0,0,0,0.015); }
+      .sample-table tbody tr:hover { background: var(--accent-light); }
       .sample-table .level-nominal { color: var(--ink-3); }
       .sample-table .level-elevated { color: var(--accent-2); }
       .sample-table .level-severe { color: #b94a00; font-weight: 600; }
       .sample-table .level-critical { color: #c0392b; font-weight: 700; }
+
+      .tracks-table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 0.84rem;
+      }
+
+      .tracks-table th,
+      .tracks-table td {
+        padding: 0.65rem 0.55rem;
+        text-align: left;
+        border-bottom: 1px solid var(--border-light);
+        vertical-align: top;
+      }
+
+      .tracks-table tbody tr:nth-child(even) { background: rgba(0,0,0,0.012); }
 
       .log-area {
         background: var(--console-bg); color: var(--console-fg);
@@ -173,6 +326,18 @@
       .track-badge.scaffolded { background: #fff3cd; color: #856404; }
       .track-badge.planned    { background: #cce5ff; color: #004085; }
       .track-badge.future     { background: #e2e3e5; color: #383d41; }
+
+      .track-summary-row {
+        display: flex;
+        align-items: center;
+        gap: 0.4rem;
+        flex-wrap: wrap;
+      }
+
+      .track-toggle {
+        margin-left: auto;
+      }
+
       @media (prefers-color-scheme: dark) {
         .track-badge.foundation { background: #1b4332; color: #95d5b2; }
         .track-badge.scaffolded { background: #5a3e00; color: #ffd166; }
@@ -197,11 +362,18 @@
     </nav>
 
     <main class="main admin-layout">
-      <div class="container">
+      <div class="container admin-shell">
 
         <div class="admin-header">
-          <h1>Admin Console</h1>
-          <div style="display:flex;align-items:center;gap:1rem;flex-wrap:wrap;">
+          <div class="admin-title-wrap">
+            <div class="admin-kicker">Local Runtime Control Plane</div>
+            <h1>Admin Console</h1>
+            <p class="admin-subtitle">
+              Operational view of the implemented SentinelEdge runtime: detector state, live report output,
+              checkpoint controls, and research coverage. Blueprint items stay separate from shipped runtime behavior.
+            </p>
+          </div>
+          <div class="admin-meta">
             <div class="conn-indicator" id="conn-indicator">
               <span class="conn-dot" id="conn-dot"></span>
               <span id="conn-label">Disconnected</span>
@@ -210,6 +382,7 @@
               <label for="auth-token">Token:</label>
               <input type="password" id="auth-token" placeholder="Paste token from terminal"
                      autocomplete="off" spellcheck="false">
+              <button class="btn-sm primary" id="btn-connect" type="button">Connect</button>
               <span class="auth-status none" id="auth-status">No token</span>
             </div>
             <div class="auto-refresh-toggle">
@@ -222,14 +395,39 @@
 
         <div class="flash" id="flash"></div>
 
+        <div class="operator-strip">
+          <div class="strip-card">
+            <span class="strip-label">What This Page Shows</span>
+            <strong>Implemented runtime only</strong>
+            <p>Status, controls, report output, and checkpoint flows come from the actual running binary.</p>
+          </div>
+          <div class="strip-card">
+            <span class="strip-label">Research Coverage</span>
+            <strong>Blueprint, not backlog</strong>
+            <p>Research tracks include future ideas. The admin page now focuses on foundation and scaffolded work by default.</p>
+          </div>
+          <div class="strip-card">
+            <span class="strip-label">Practical Mode</span>
+            <strong>Best for local edge monitoring</strong>
+            <p>Useful today for trace analysis, operator demos, and controlled device-lab or gateway testing.</p>
+          </div>
+        </div>
+
+        <div class="auth-gate" id="auth-gate">
+          <strong>Admin access is locked.</strong>
+          <div>Start the server with <code>cargo run -- serve</code>, paste the token printed in the terminal, then click Connect to unlock the live admin controls.</div>
+          <div class="auth-hint">Read-only status can load without a token, but demo runs, mode changes, checkpoint actions, and uploads require authentication.</div>
+        </div>
+
         <div class="admin-grid">
 
           <!-- Status Panel -->
           <div class="panel">
             <h2><span class="dot dot-green"></span> Runtime Status</h2>
+            <p class="panel-lead">This is the implemented runtime footprint. It is not a future backlog board.</p>
             <dl class="kv-grid" id="status-grid">
               <dt>Updated</dt><dd id="s-updated">—</dd>
-              <dt>Backlog</dt><dd id="s-backlog">—</dd>
+              <dt>Engineering Log</dt><dd id="s-backlog">—</dd>
               <dt>Phases</dt><dd id="s-phases">—</dd>
               <dt>CLI commands</dt><dd id="s-commands">—</dd>
               <dt>Implemented</dt><dd id="s-implemented">—</dd>
@@ -248,10 +446,15 @@
 
           <!-- Research Tracks Panel -->
           <div class="panel" id="tracks-panel" style="display:none;">
-            <h2><span class="dot dot-blue"></span> Research Tracks</h2>
-            <div style="font-size:.85rem;margin-bottom:.5rem;" id="track-summary"></div>
+            <h2><span class="dot dot-blue"></span> Research Blueprint Coverage</h2>
+            <p class="panel-lead">These tracks belong to the broader research blueprint. Planned and future items are not missing product features; they are unimplemented research directions.</p>
+            <div class="panel-toolbar">
+              <div class="track-summary-row" id="track-summary"></div>
+              <button class="btn-sm track-toggle" id="btn-toggle-future" type="button">Show Future Tracks</button>
+            </div>
+            <div class="muted-note" id="track-note">Showing only foundation and scaffolded tracks that are relevant to the current runtime.</div>
             <div class="table-wrap">
-              <table>
+              <table class="tracks-table">
                 <thead>
                   <tr>
                     <th>Code</th><th>Track</th><th>Status</th>
@@ -263,7 +466,7 @@
           </div>
 
           <!-- Control Panel -->
-          <div class="panel">
+          <div class="panel auth-required">
             <h2><span class="dot dot-orange"></span> Controls</h2>
 
             <div class="control-group">
@@ -299,7 +502,7 @@
           </div>
 
           <!-- Report Panel -->
-          <div class="panel full-width">
+          <div class="panel full-width auth-required">
             <h2><span class="dot dot-green"></span> Latest Report</h2>
             <div id="report-summary" style="margin-bottom: 1rem;">
               <dl class="kv-grid">
@@ -338,7 +541,7 @@
           </div>
 
           <!-- Upload Panel -->
-          <div class="panel full-width">
+          <div class="panel full-width auth-required">
             <h2><span class="dot dot-orange"></span> Analyze Custom Data</h2>
             <p style="font-size:0.85rem;color:var(--ink-3);margin-bottom:0.5rem;">
               Upload a JSONL or CSV file to run through the detection pipeline.
@@ -351,7 +554,7 @@
           </div>
 
           <!-- Activity Log -->
-          <div class="panel full-width">
+          <div class="panel full-width auth-required">
             <h2><span class="dot dot-green"></span> Activity Log</h2>
             <div class="log-area" id="activity-log">Ready. Connect to the runtime with `cargo run -- serve`.</div>
           </div>
@@ -368,11 +571,63 @@
 
       let autoRefreshTimer = null;
       let autoRefreshFailures = 0;
+      let isAuthenticated = false;
+      let showFutureTracks = false;
+      let lastTracks = [];
       const AUTO_REFRESH_BASE = 5000;
       const AUTO_REFRESH_MAX = 30000;
       const AUTO_REFRESH_PAUSE_AFTER = 6;
 
       function getToken() { return $('#auth-token').value.trim(); }
+
+      function setAuthenticated(authed) {
+        document.body.classList.toggle('authenticated', authed);
+        isAuthenticated = authed;
+        const status = $('#auth-status');
+        if (authed) {
+          status.textContent = 'Authenticated';
+          status.className = 'auth-status authenticated';
+        } else if (!getToken()) {
+          status.textContent = 'No token';
+          status.className = 'auth-status none';
+        }
+      }
+
+      async function connect() {
+        const token = getToken();
+        if (!token) {
+          flash('Paste the token from the server terminal first.', 'error');
+          setAuthenticated(false);
+          return;
+        }
+        try {
+          const res = await fetch(API + '/api/auth/check', {
+            method: 'GET',
+            headers: authHeaders(),
+          });
+          if (res.status === 401) {
+            $('#auth-status').textContent = 'Invalid token';
+            $('#auth-status').className = 'auth-status error';
+            setAuthenticated(false);
+            flash('Authentication failed. Check the token printed by the server.', 'error');
+            return;
+          }
+          if (!res.ok) throw new Error('HTTP ' + res.status);
+          localStorage.setItem('sentineledge.adminToken', token);
+          setAuthenticated(true);
+          flash('Admin access unlocked.', 'success');
+          log('Authenticated with live control plane');
+          refreshStatus();
+          refreshReport();
+          refreshCheckpointCount();
+        } catch (e) {
+          setAuthenticated(false);
+          $('#auth-status').textContent = 'Connection error';
+          $('#auth-status').className = 'auth-status error';
+          flash('Could not verify token: ' + e.message, 'error');
+        }
+      }
+
       function authHeaders(contentType) {
         const h = {};
         if (contentType) h['Content-Type'] = contentType;
@@ -494,17 +749,30 @@
       }
 
       function renderTracks(tracks) {
+        lastTracks = tracks.slice();
         const counts = { foundation: 0, scaffolded: 0, planned: 0, future: 0 };
         tracks.forEach(t => { counts[t.status] = (counts[t.status] || 0) + 1; });
         $('#track-summary').innerHTML =
           '<span class="track-badge foundation">' + counts.foundation + ' Foundation</span> ' +
-          '<span class="track-badge scaffolded">' + counts.scaffolded + ' Scaffolded</span> ' +
-          '<span class="track-badge planned">' + counts.planned + ' Planned</span> ' +
-          '<span class="track-badge future">' + counts.future + ' Future</span>';
+          '<span class="track-badge scaffolded">' + counts.scaffolded + ' Scaffolded</span>' +
+          (showFutureTracks
+            ? ' <span class="track-badge planned">' + counts.planned + ' Planned</span>' +
+              ' <span class="track-badge future">' + counts.future + ' Future</span>'
+            : '');
+
+        $('#track-note').textContent = showFutureTracks
+          ? 'Showing the full research blueprint, including unimplemented planned and future investigations.'
+          : 'Showing only foundation and scaffolded tracks that are relevant to the current runtime.';
+
+        $('#btn-toggle-future').textContent = showFutureTracks ? 'Hide Future Tracks' : 'Show Future Tracks';
+
+        const visible = showFutureTracks
+          ? tracks
+          : tracks.filter(t => t.status === 'foundation' || t.status === 'scaffolded');
 
         const tbody = $('#track-tbody');
         tbody.innerHTML = '';
-        for (const t of tracks) {
+        for (const t of visible) {
           const tr = document.createElement('tr');
           tr.innerHTML = '<td><strong>' + escapeHtml(t.code) + '</strong></td>' +
             '<td>' + escapeHtml(t.title) + '</td>' +
@@ -750,9 +1018,18 @@
         if (this.value.trim()) {
           el.textContent = 'Token set';
           el.className = 'auth-status ok';
+          setAuthenticated(false);
         } else {
           el.textContent = 'No token';
           el.className = 'auth-status none';
+          setAuthenticated(false);
+        }
+      });
+
+      $('#auth-token').addEventListener('keydown', function(e) {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          connect();
         }
       });
 
@@ -812,6 +1089,11 @@
 
       // ── Wire up buttons ──
 
+      $('#btn-connect').addEventListener('click', connect);
+      $('#btn-toggle-future').addEventListener('click', () => {
+        showFutureTracks = !showFutureTracks;
+        if (lastTracks.length) renderTracks(lastTracks);
+      });
       $('#btn-refresh-status').addEventListener('click', refreshStatus);
       $('#btn-refresh-report').addEventListener('click', refreshReport);
       $('#btn-run-demo').addEventListener('click', runDemo);
@@ -827,6 +1109,12 @@
       });
 
       // ── Initial load ──
+      const savedToken = localStorage.getItem('sentineledge.adminToken');
+      if (savedToken) {
+        $('#auth-token').value = savedToken;
+        $('#auth-status').textContent = 'Token set';
+        $('#auth-status').className = 'auth-status ok';
+      }
       refreshStatus();
       refreshReport();
       refreshCheckpointCount();

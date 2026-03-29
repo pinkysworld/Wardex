@@ -6,14 +6,22 @@ use tiny_http::{Header, Method, Request, Response, Server};
 
 use crate::actions::DeviceController;
 use crate::checkpoint::CheckpointStore;
+use crate::compliance::ComplianceManager;
 use crate::correlation;
 use crate::detector::{AdaptationMode, AnomalyDetector};
+use crate::digital_twin::DigitalTwinEngine;
+use crate::edge_cloud::PlatformCapabilities;
+use crate::enforcement::EnforcementEngine;
+use crate::energy::EnergyBudget;
+use crate::multi_tenant::MultiTenantManager;
 use crate::proof::{DigestBackend, ProofRegistry};
 use crate::replay::ReplayBuffer;
 use crate::report::JsonReport;
 use crate::runtime;
 use crate::state_machine::PolicyStateMachine;
+use crate::swarm::{DeviceRecord, DeviceStatus, SwarmNode};
 use crate::telemetry::TelemetrySample;
+use crate::threat_intel::ThreatIntelStore;
 
 struct AppState {
     detector: AnomalyDetector,
@@ -23,6 +31,13 @@ struct AppState {
     proofs: ProofRegistry,
     last_report: Option<JsonReport>,
     token: String,
+    swarm: SwarmNode,
+    enforcement: EnforcementEngine,
+    threat_intel: ThreatIntelStore,
+    digital_twin: DigitalTwinEngine,
+    compliance: ComplianceManager,
+    multi_tenant: MultiTenantManager,
+    energy: EnergyBudget,
 }
 
 pub fn run_server(port: u16, site_dir: &Path) -> Result<(), String> {
@@ -44,6 +59,13 @@ pub fn run_server(port: u16, site_dir: &Path) -> Result<(), String> {
         proofs: ProofRegistry::new(),
         last_report: None,
         token: token.clone(),
+        swarm: SwarmNode::new("gateway-0"),
+        enforcement: EnforcementEngine::new(),
+        threat_intel: ThreatIntelStore::new(),
+        digital_twin: DigitalTwinEngine::new(),
+        compliance: ComplianceManager::new(),
+        multi_tenant: MultiTenantManager::new(),
+        energy: EnergyBudget::new(500.0),
     }));
 
     let site_dir = site_dir.to_path_buf();
@@ -68,6 +90,13 @@ pub fn spawn_test_server() -> (u16, String) {
         proofs: ProofRegistry::new(),
         last_report: None,
         token: token.clone(),
+        swarm: SwarmNode::new("test-node-0"),
+        enforcement: EnforcementEngine::new(),
+        threat_intel: ThreatIntelStore::new(),
+        digital_twin: DigitalTwinEngine::new(),
+        compliance: ComplianceManager::new(),
+        multi_tenant: MultiTenantManager::new(),
+        energy: EnergyBudget::new(500.0),
     }));
     let site_dir = PathBuf::from("site");
     std::thread::spawn(move || {
@@ -157,12 +186,18 @@ fn handle_api(mut request: Request, state: &Arc<Mutex<AppState>>, _site_dir: &Pa
     // Check auth for mutating endpoints before consuming the request body
     let needs_auth = matches!(
         (&method, url.as_str()),
-        (Method::Post, "/api/analyze")
+        (Method::Get, "/api/auth/check")
+            | (Method::Post, "/api/analyze")
             | (Method::Post, "/api/control/mode")
             | (Method::Post, "/api/control/reset-baseline")
             | (Method::Post, "/api/control/run-demo")
             | (Method::Post, "/api/control/checkpoint")
             | (Method::Post, "/api/control/restore-checkpoint")
+            | (Method::Post, "/api/fleet/register")
+            | (Method::Post, "/api/enforcement/quarantine")
+            | (Method::Post, "/api/threat-intel/ioc")
+            | (Method::Post, "/api/digital-twin/simulate")
+            | (Method::Post, "/api/energy/consume")
     );
 
     if needs_auth && !check_auth(&request, state) {
@@ -171,6 +206,7 @@ fn handle_api(mut request: Request, state: &Arc<Mutex<AppState>>, _site_dir: &Pa
     }
 
     let response = match (method, url.as_str()) {
+        (Method::Get, "/api/auth/check") => json_response(r#"{"status":"ok"}"#, 200),
         (Method::Get, "/api/status") => {
             let manifest = runtime::status_manifest();
             match serde_json::to_string_pretty(&manifest) {
@@ -319,6 +355,109 @@ fn handle_api(mut request: Request, state: &Arc<Mutex<AppState>>, _site_dir: &Pa
                 }
                 Err(e) => error_json(&format!("serialization error: {e}"), 500),
             }
+        }
+
+        // ── Fleet / Swarm ─────────────────────────────────────────
+        (Method::Get, "/api/fleet/status") => {
+            let s = state.lock().unwrap();
+            let report = s.swarm.health_report();
+            match serde_json::to_string_pretty(&report) {
+                Ok(json) => json_response(&json, 200),
+                Err(e) => error_json(&format!("serialization error: {e}"), 500),
+            }
+        }
+        (Method::Post, "/api/fleet/register") => {
+            handle_fleet_register(&mut request, state)
+        }
+
+        // ── Enforcement ───────────────────────────────────────────
+        (Method::Get, "/api/enforcement/status") => {
+            let s = state.lock().unwrap();
+            let tpm_status = s.enforcement.tpm.status();
+            let info = serde_json::json!({
+                "process_enforcer": "active",
+                "network_enforcer": "active",
+                "filesystem_enforcer": "active",
+                "tpm": tpm_status,
+                "topology_nodes": s.enforcement.topology.nodes.len(),
+                "history_len": s.enforcement.history().len(),
+            });
+            json_response(&info.to_string(), 200)
+        }
+        (Method::Post, "/api/enforcement/quarantine") => {
+            handle_enforcement_quarantine(&mut request, state)
+        }
+
+        // ── Threat Intelligence ───────────────────────────────────
+        (Method::Get, "/api/threat-intel/status") => {
+            let s = state.lock().unwrap();
+            let info = serde_json::json!({
+                "ioc_count": s.threat_intel.ioc_count(),
+            });
+            json_response(&info.to_string(), 200)
+        }
+        (Method::Post, "/api/threat-intel/ioc") => {
+            handle_threat_intel_ioc(&mut request, state)
+        }
+
+        // ── Digital Twin ──────────────────────────────────────────
+        (Method::Get, "/api/digital-twin/status") => {
+            let s = state.lock().unwrap();
+            let info = serde_json::json!({
+                "twin_count": s.digital_twin.device_count(),
+            });
+            json_response(&info.to_string(), 200)
+        }
+        (Method::Post, "/api/digital-twin/simulate") => {
+            handle_digital_twin_simulate(&mut request, state)
+        }
+
+        // ── Compliance ────────────────────────────────────────────
+        (Method::Get, "/api/compliance/status") => {
+            let s = state.lock().unwrap();
+            let report = s.compliance.report(&crate::compliance::Framework::Iec62443);
+            match serde_json::to_string_pretty(&report) {
+                Ok(json) => json_response(&json, 200),
+                Err(e) => error_json(&format!("serialization error: {e}"), 500),
+            }
+        }
+
+        // ── Energy ────────────────────────────────────────────────
+        (Method::Get, "/api/energy/status") => {
+            let s = state.lock().unwrap();
+            let info = serde_json::json!({
+                "remaining_pct": s.energy.remaining_pct(),
+                "capacity_mwh": s.energy.capacity_mwh,
+                "current_mwh": s.energy.current_mwh,
+                "power_state": format!("{:?}", s.energy.state),
+            });
+            json_response(&info.to_string(), 200)
+        }
+        (Method::Post, "/api/energy/consume") => {
+            handle_energy_consume(&mut request, state)
+        }
+
+        // ── Multi-tenancy ─────────────────────────────────────────
+        (Method::Get, "/api/tenants/count") => {
+            let s = state.lock().unwrap();
+            let info = serde_json::json!({
+                "tenant_count": s.multi_tenant.tenant_count(),
+            });
+            json_response(&info.to_string(), 200)
+        }
+
+        // ── Platform ──────────────────────────────────────────────
+        (Method::Get, "/api/platform") => {
+            let caps = PlatformCapabilities::detect_current();
+            let info = serde_json::json!({
+                "platform": format!("{:?}", caps.platform),
+                "has_tpm": caps.has_tpm,
+                "has_seccomp": caps.has_seccomp,
+                "has_ebpf": caps.has_ebpf,
+                "has_firewall": caps.has_firewall,
+                "max_threads": caps.max_threads,
+            });
+            json_response(&info.to_string(), 200)
         }
         (Method::Options, _) => {
             let data: Vec<u8> = Vec::new();
@@ -469,6 +608,209 @@ fn handle_mode(
         &format!(r#"{{"status":"mode set to {}"}}"#, mode_req.mode),
         200,
     )
+}
+
+fn handle_fleet_register(
+    request: &mut Request,
+    state: &Arc<Mutex<AppState>>,
+) -> Response<std::io::Cursor<Vec<u8>>> {
+    let mut body = String::new();
+    if std::io::Read::read_to_string(request.as_reader(), &mut body).is_err() {
+        return error_json("failed to read request body", 400);
+    }
+    #[derive(serde::Deserialize)]
+    struct Reg {
+        device_id: String,
+        #[serde(default)]
+        name: Option<String>,
+        #[serde(default)]
+        platform: Option<String>,
+    }
+    let req: Reg = match serde_json::from_str(&body) {
+        Ok(r) => r,
+        Err(e) => return error_json(&format!("invalid JSON: {e}"), 400),
+    };
+    let record = DeviceRecord {
+        device_id: req.device_id.clone(),
+        name: req.name.unwrap_or_else(|| req.device_id.clone()),
+        platform: req.platform.unwrap_or_else(|| "unknown".into()),
+        firmware_version: "0.0.0".into(),
+        enrolled_at: chrono::Utc::now().to_rfc3339(),
+        last_seen_ms: chrono::Utc::now().timestamp_millis() as u64,
+        status: DeviceStatus::Online,
+        tags: Vec::new(),
+    };
+    let mut s = state.lock().unwrap();
+    s.swarm.register_device(record);
+    json_response(
+        &format!(r#"{{"status":"registered","device":"{}"}}"#, req.device_id),
+        200,
+    )
+}
+
+fn handle_enforcement_quarantine(
+    request: &mut Request,
+    state: &Arc<Mutex<AppState>>,
+) -> Response<std::io::Cursor<Vec<u8>>> {
+    let mut body = String::new();
+    if std::io::Read::read_to_string(request.as_reader(), &mut body).is_err() {
+        return error_json("failed to read request body", 400);
+    }
+    #[derive(serde::Deserialize)]
+    struct QuarantineReq {
+        target: String,
+    }
+    let req: QuarantineReq = match serde_json::from_str(&body) {
+        Ok(r) => r,
+        Err(e) => return error_json(&format!("invalid JSON: {e}"), 400),
+    };
+    let mut s = state.lock().unwrap();
+    let results = s
+        .enforcement
+        .enforce(&crate::enforcement::EnforcementLevel::Quarantine, &req.target);
+    let info = serde_json::json!({
+        "target": req.target,
+        "actions": results.len(),
+        "results": results.iter().map(|r| serde_json::json!({
+            "action": r.action,
+            "success": r.success,
+            "detail": r.detail,
+        })).collect::<Vec<_>>(),
+    });
+    json_response(&info.to_string(), 200)
+}
+
+fn handle_threat_intel_ioc(
+    request: &mut Request,
+    state: &Arc<Mutex<AppState>>,
+) -> Response<std::io::Cursor<Vec<u8>>> {
+    let mut body = String::new();
+    if std::io::Read::read_to_string(request.as_reader(), &mut body).is_err() {
+        return error_json("failed to read request body", 400);
+    }
+    #[derive(serde::Deserialize)]
+    struct IocReq {
+        value: String,
+        ioc_type: String,
+        #[serde(default = "default_confidence")]
+        confidence: f32,
+    }
+    fn default_confidence() -> f32 {
+        0.8
+    }
+    let req: IocReq = match serde_json::from_str(&body) {
+        Ok(r) => r,
+        Err(e) => return error_json(&format!("invalid JSON: {e}"), 400),
+    };
+
+    let ioc_type = match req.ioc_type.as_str() {
+        "ip" => crate::threat_intel::IoCType::IpAddress,
+        "domain" => crate::threat_intel::IoCType::Domain,
+        "hash" => crate::threat_intel::IoCType::FileHash,
+        "process" => crate::threat_intel::IoCType::ProcessName,
+        _ => crate::threat_intel::IoCType::BehaviorPattern,
+    };
+
+    let now = chrono::Utc::now().to_rfc3339();
+    let mut s = state.lock().unwrap();
+    s.threat_intel.add_ioc(crate::threat_intel::IoC {
+        ioc_type,
+        value: req.value.clone(),
+        confidence: req.confidence,
+        severity: "medium".into(),
+        source: "api".into(),
+        first_seen: now.clone(),
+        last_seen: now,
+        tags: Vec::new(),
+        related_iocs: Vec::new(),
+    });
+    json_response(
+        &format!(r#"{{"status":"added","value":"{}"}}"#, req.value),
+        200,
+    )
+}
+
+fn handle_digital_twin_simulate(
+    request: &mut Request,
+    state: &Arc<Mutex<AppState>>,
+) -> Response<std::io::Cursor<Vec<u8>>> {
+    let mut body = String::new();
+    if std::io::Read::read_to_string(request.as_reader(), &mut body).is_err() {
+        return error_json("failed to read request body", 400);
+    }
+    #[derive(serde::Deserialize)]
+    struct SimReq {
+        device_id: String,
+        event_type: String,
+    }
+    let req: SimReq = match serde_json::from_str(&body) {
+        Ok(r) => r,
+        Err(e) => return error_json(&format!("invalid JSON: {e}"), 400),
+    };
+
+    let event = match req.event_type.as_str() {
+        "cpu_spike" => crate::digital_twin::SimEvent::CpuSpike {
+            target: req.device_id.clone(),
+            load: 95.0,
+        },
+        "memory_exhaust" => crate::digital_twin::SimEvent::MemoryExhaust {
+            target: req.device_id.clone(),
+            mb: 1800.0,
+        },
+        "network_flood" => crate::digital_twin::SimEvent::NetworkFlood {
+            target: req.device_id.clone(),
+            kbps: 10_000.0,
+        },
+        "malware_inject" => crate::digital_twin::SimEvent::MalwareInject {
+            target: req.device_id.clone(),
+            score: 9.0,
+        },
+        _ => crate::digital_twin::SimEvent::CpuSpike {
+            target: req.device_id.clone(),
+            load: 80.0,
+        },
+    };
+
+    let step = crate::digital_twin::SimStep {
+        tick: 1,
+        events: vec![event],
+    };
+
+    let mut s = state.lock().unwrap();
+    let result = s.digital_twin.simulate(&[step]);
+    let info = serde_json::json!({
+        "device_id": req.device_id,
+        "ticks_simulated": result.ticks_simulated,
+        "alerts": result.alerts_generated.len(),
+        "transitions": result.state_transitions.len(),
+    });
+    json_response(&info.to_string(), 200)
+}
+
+fn handle_energy_consume(
+    request: &mut Request,
+    state: &Arc<Mutex<AppState>>,
+) -> Response<std::io::Cursor<Vec<u8>>> {
+    let mut body = String::new();
+    if std::io::Read::read_to_string(request.as_reader(), &mut body).is_err() {
+        return error_json("failed to read request body", 400);
+    }
+    #[derive(serde::Deserialize)]
+    struct ConsumeReq {
+        drain_rate_mw: f64,
+    }
+    let req: ConsumeReq = match serde_json::from_str(&body) {
+        Ok(r) => r,
+        Err(e) => return error_json(&format!("invalid JSON: {e}"), 400),
+    };
+    let mut s = state.lock().unwrap();
+    s.energy.drain_rate_mw = req.drain_rate_mw;
+    let new_state = s.energy.tick();
+    let info = serde_json::json!({
+        "remaining_pct": s.energy.remaining_pct(),
+        "power_state": format!("{new_state:?}"),
+    });
+    json_response(&info.to_string(), 200)
 }
 
 fn serve_static(request: Request, site_dir: &Path) {

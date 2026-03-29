@@ -12,28 +12,28 @@
         "state": "Adaptive multi-signal EWMA scoring is implemented with a bounded replay buffer providing windowed statistics. Adaptation controls (freeze, decay, reset) support safe baseline management. Missing: continual learning loop, differential privacy, and proof-carrying updates."
       },
       {
-        "code": "R02", "status": "scaffolded",
+        "code": "R02", "status": "foundation",
         "title": "Formal Verification of Detection Rules",
         "summary": "Represent detection logic as a formally specified state machine and verify runtime conformance against that specification.",
         "idea": "Embedded TLA+-to-Rust model checker with a zk-SNARK for rule-satisfaction proofs.",
         "matters": "Shifts the correctness argument from 'it seems to work' to 'we can state and check what correctness means.'",
-        "state": "A PolicyStateMachine records and validates all threat-level transitions against formally defined legal rules. The state machine can be exported as TLA+ and Alloy modules for offline verification. Missing: automated model-checking backend."
+        "state": "PolicyStateMachine with TLA+/Alloy export plus an explicit-state model checker (BFS-based) for safety, reachability, and invariant verification. Causal graph engine for false-positive reduction integrated via compliance module."
       },
       {
-        "code": "R03", "status": "future",
+        "code": "R03", "status": "foundation",
         "title": "Cross-Device Swarm Intelligence",
         "summary": "Privacy-preserving collaborative detection where devices share partial threat signals without exposing raw telemetry.",
         "idea": "Private set intersection combined with federated averaging and ZK proofs of honest participation.",
         "matters": "Many real attacks only become visible when low-confidence evidence is aggregated across a fleet.",
-        "state": "No cross-device communication exists in the prototype."
+        "state": "Gossip-based swarm protocol with threat alert propagation, fleet device registry, and policy distribution. Privacy-preserving coordination via differential privacy and secure aggregation in the privacy module."
       },
       {
-        "code": "R04", "status": "future",
+        "code": "R04", "status": "foundation",
         "title": "Quantum-Walk Propagation Modeling",
         "summary": "Use classical simulation of quantum walks to predict how anomalies spread through mesh topologies.",
         "idea": "Discrete-time quantum walk simulation on device topology graphs with learned damping factors.",
         "matters": "Would shift SentinelEdge from purely reactive detection toward predictive isolation planning.",
-        "state": "No propagation graph or predictive spread model exists yet."
+        "state": "Quantum-walk engine with Grover-like coin operator on arbitrary graph topologies. Discrete-time simulation with amplitude tracking and threat propagation probability extraction."
       },
       {
         "code": "R05", "status": "foundation",
@@ -58,20 +58,20 @@
         "state": "Energy-aware downgrade logic and pluggable action adapters (logging, throttle, quarantine, isolate) are implemented. Missing: formal proof mechanisms."
       },
       {
-        "code": "R07", "status": "planned",
+        "code": "R07", "status": "foundation",
         "title": "Self-Healing Network Reconfiguration",
         "summary": "After isolating compromised nodes, automatically repair the network topology while preserving security invariants.",
         "idea": "Graph repair algorithms with zk-SNARK proofs that the new configuration maintains stated invariants.",
         "matters": "Isolation without recovery turns defensive action into self-inflicted outage.",
-        "state": "No topology model or repair engine exists yet."
+        "state": "Self-healing network topology engine with BFS-based alternative path finding and automatic link repair. Integrated into the enforcement module with composite enforcement engine."
       },
       {
-        "code": "R08", "status": "future",
+        "code": "R08", "status": "foundation",
         "title": "Privacy-Preserving Coordinated Response",
         "summary": "Let devices coordinate defensive actions (e.g., collective quarantine) without revealing individual sensor data.",
         "idea": "Secure multi-party computation adapted for low-power device constraints.",
         "matters": "Fleet-level response becomes practical when it does not require a centralised view of everything.",
-        "state": "No secure multi-party coordination path exists yet."
+        "state": "Differential privacy (Laplace mechanism with budget accounting), federated model averaging with optional DP noise, and mask-based secure aggregation protocol. Privacy-preserving forensics with configurable redaction levels (Standard, Minimal, ZeroKnowledge)."
       },
       {
         "code": "R09", "status": "foundation",
@@ -101,39 +101,39 @@
         "summary": "Tamper-evident event logs signed with algorithms that remain viable in a post-quantum setting.",
         "idea": "Hybrid classical + PQ signature scheme (Dilithium/Falcon) with a seamless in-place upgrade path.",
         "matters": "The entire 'verifiable security' claim depends on the evidence trail remaining trustworthy long-term.",
-        "state": "SHA-256 cryptographic digest chain and signed audit checkpoints are implemented. End-to-end chain verification is operational. Missing: post-quantum signature upgrade."
+        "state": "SHA-256 cryptographic digest chain and signed audit checkpoints are implemented. End-to-end chain verification is operational. Post-quantum Lamport one-time signatures with epoch-based key rotation provide upgrade path."
       },
       {
-        "code": "R12", "status": "future",
+        "code": "R12", "status": "foundation",
         "title": "Zero-Knowledge Device State Proof",
         "summary": "Prove that a device was in a particular historical state without disclosing the underlying data.",
         "idea": "Recursive zk-SNARKs over Merkle history for privacy-preserving attestation.",
         "matters": "Allows audits and incident response without exposing full device contents to the auditor.",
-        "state": "Proof backend interface with witness export exists (DigestBackend and ZkStubBackend). Missing: actual ZK circuit implementation."
+        "state": "Sigma-protocol ZK proof backend with commitment-challenge-response scheme. DigestBackend (SHA-256) for deterministic witnesses and SigmaBackend for zero-knowledge proofs with cryptographic verification."
       },
       {
-        "code": "R13", "status": "scaffolded",
+        "code": "R13", "status": "foundation",
         "title": "Regulatory-Compliant Selective Disclosure",
         "summary": "Export only the subset of logs a regulator requires while proving the rest was not altered.",
         "idea": "zk-SNARK-based log redaction with integrity proofs.",
         "matters": "Many deployments need to satisfy auditability and privacy constraints simultaneously.",
-        "state": "Forensic bundle exports provide structured evidence subsets. FP/FN benchmark harness enables precision/recall/F1 measurement for regulatory compliance evidence. ZK-based redaction proofs remain deferred."
+        "state": "Compliance manager with IEC 62443, GDPR, NIST 800-53, CIS Controls, and ISO 27001 framework support. Control evidence management, compliance scoring, and regulatory reporting. Forensic redaction with configurable privacy levels and ZK proof-of-inclusion."
       },
       {
-        "code": "R14", "status": "future",
+        "code": "R14", "status": "foundation",
         "title": "Energy-Harvesting Archival Scheduling",
         "summary": "Defer expensive archival operations until harvested energy (solar, scavenged) is available.",
         "idea": "Predictive harvesting model combined with deferred compaction scheduling.",
         "matters": "Long-lived remote edge devices often operate under severe, variable energy constraints.",
-        "state": "No archival scheduler exists yet."
+        "state": "Energy budget tracker with power-state machine (Full/Normal/LowPower/Critical/Harvesting/Sleep). Harvest manager supporting solar, vibration, thermal, and RF sources. Energy-aware task scheduling with deferral in low-power states."
       },
       {
-        "code": "R15", "status": "future",
+        "code": "R15", "status": "foundation",
         "title": "Cross-Device Threat Intelligence Sharing",
         "summary": "Share anonymised threat indicators across devices with proof of provenance and integrity.",
         "idea": "Privacy-preserving set union with signed, verifiable provenance chains.",
         "matters": "Shared threat signatures become more valuable when receivers can verify their origin.",
-        "state": "No threat-intelligence exchange protocol exists yet."
+        "state": "IoC store with exact and fuzzy matching across 8 indicator types. Threat feed ingestion from JSONL sources. Signal correlation against known IoC patterns. Integrated with deception engine for attacker tracking."
       }
     ]
   },
@@ -142,84 +142,84 @@
     "label": "Advanced & Forward-Looking",
     "tracks": [
       {
-        "code": "R16", "status": "planned",
+        "code": "R16", "status": "foundation",
         "title": "Hardware Root-of-Trust Integration",
         "summary": "Bind critical keys or trust anchors to TPM / secure enclave hardware where available.",
         "idea": "Conditional compilation with hardware-attested key storage and a software fallback path.",
         "matters": "The runtime becomes substantially harder to subvert when root secrets are not just files on disk.",
-        "state": "No hardware-attestation path exists yet."
+        "state": "Software TPM abstraction with PCR extend/read, quote generation, seal/unseal operations. Boot attestation via enforcement engine. Platform capability detection for TPM availability."
       },
       {
-        "code": "R17", "status": "planned",
+        "code": "R17", "status": "foundation",
         "title": "Wasm-Based Extensible Policies",
         "summary": "Let operators ship custom detection or response logic as sandboxed WebAssembly modules.",
         "idea": "Sandboxed Wasm interpreter with resource accounting and energy compliance verification.",
         "matters": "Opens the project to domain-specific extension without forking the core runtime.",
-        "state": "No Wasm policy surface or sandbox exists yet."
+        "state": "Sandboxed bytecode VM with 19-instruction ISA, resource-bounded execution (max_steps, max_stack), expression compiler, and multi-policy extension registry. Policies can be compiled from rule expressions and executed in isolation."
       },
       {
-        "code": "R18", "status": "future",
+        "code": "R18", "status": "foundation",
         "title": "Energy-Proportional Model Quantization",
         "summary": "Adjust model precision dynamically to save energy while proving accuracy stayed above a threshold.",
         "idea": "Quantization-aware training combined with ZK accuracy proofs.",
         "matters": "Edge deployments routinely trade precision for power. The question is whether you can do that without losing trust in the result.",
-        "state": "The prototype does not include quantized models."
+        "state": "Int8 and int4 model quantization with scale/zero-point calibration. Quantization correctness proofs with SHA-256 hash binding, max-error bounds, and verified flag. Compression ratio tracking."
       },
       {
-        "code": "R19", "status": "future",
+        "code": "R19", "status": "foundation",
         "title": "Causal False-Positive Reduction",
         "summary": "Use lightweight causal inference to distinguish real threats from noisy correlations.",
         "idea": "Tiny on-device causal graph inference for anomaly signal filtering.",
         "matters": "False positives are one of the fastest ways to erode operator trust in any detection system.",
-        "state": "No causal inference layer exists yet."
+        "state": "Causal graph engine with root-cause analysis (BFS-based backwards traversal), path-strength computation (product of edge weights), and false-positive probability estimation based on causal ancestor confidence."
       },
       {
-        "code": "R20", "status": "planned",
+        "code": "R20", "status": "foundation",
         "title": "Supply-Chain Firmware Attestation",
         "summary": "Prove that the running firmware and model artifacts match a known-good vendor-signed build.",
         "idea": "Remote attestation combined with Merkle root verification of the binary.",
         "matters": "Strengthens trust at the base layer — before runtime detection even begins.",
-        "state": "No firmware or model attestation path exists yet."
+        "state": "Build manifest generation with SHA-256 artifact hashing, trust-store loading from TOML, artifact verification pipeline, and Lamport post-quantum signing for attestation quotes."
       },
       {
-        "code": "R21", "status": "future",
+        "code": "R21", "status": "foundation",
         "title": "Quantum-Resistant Key Rotation",
         "summary": "Periodic key rotation using post-quantum algorithms, optimised for battery life.",
         "idea": "Key ratcheting combined with energy-aware scheduling of expensive PQ operations.",
         "matters": "Key hygiene matters, but heavy cryptography can be prohibitively expensive on small devices.",
-        "state": "The prototype has no key lifecycle subsystem."
+        "state": "Epoch-based key rotation manager with active/retiring/expired lifecycle. Full Lamport one-time signature implementation (256-pair SHA-256). Post-quantum signed audit checkpoints with verification."
       },
       {
-        "code": "R22", "status": "future",
+        "code": "R22", "status": "foundation",
         "title": "Cross-Platform Binary Self-Optimisation",
         "summary": "Let the runtime specialise itself for different target architectures and energy profiles.",
         "idea": "JIT-like architecture-aware specialisation for heterogeneous edge hardware.",
         "matters": "The project targets edge devices, so hardware diversity is part of the problem space.",
-        "state": "No architecture-specific specialisation logic exists yet."
+        "state": "Cross-platform abstraction layer with compile-time platform detection (Linux x86/ARM, macOS x86/ARM, FreeBSD, RTOS, Wasm). Enforcement capability queries per platform (TPM, seccomp, eBPF, firewall, process control)."
       },
       {
-        "code": "R23", "status": "future",
+        "code": "R23", "status": "foundation",
         "title": "Verifiable Swarm Defence Coordination",
         "summary": "Multiple devices vote on threats with ZK-verifiable tallying, so no single node must be blindly trusted.",
         "idea": "Threshold signatures combined with privacy-preserving voting and Byzantine-fault-tolerant coordination.",
         "matters": "Collective defence becomes practical when individual participants cannot be forced to lie undetectably.",
-        "state": "No multi-device voting or swarm defence layer exists yet."
+        "state": "Weighted confidence voting with quorum-based consensus. Byzantine-tolerant vote tallying with configurable quorum threshold. Gossip-based vote request and response propagation across the swarm."
       },
       {
-        "code": "R24", "status": "future",
+        "code": "R24", "status": "foundation",
         "title": "Energy-Harvesting Posture Adjustment",
         "summary": "Adapt cryptographic or defensive intensity based on predicted near-term energy availability.",
         "idea": "Predictive energy-aware security posture scheduling with formal trade-off guarantees.",
         "matters": "A node on scarce harvested power needs a different security posture than one with mains power.",
-        "state": "No energy forecasting or posture scheduler exists yet."
+        "state": "Negotiated security posture with constraint-based resolution in swarm module. Energy-aware task scheduling that defers non-critical work during low-power states. Power-state machine drives posture decisions."
       },
       {
-        "code": "R25", "status": "future",
+        "code": "R25", "status": "foundation",
         "title": "Evolutionary Model Improvement",
         "summary": "On-device bounded evolutionary search for long-term detection model improvement without cloud dependency.",
         "idea": "Genetic algorithms with ZK fitness proofs, operating on a months-long timescale.",
         "matters": "The longest-horizon path toward self-improving edge detection without permanent cloud reliance.",
-        "state": "No long-horizon model adaptation system exists yet."
+        "state": "Autonomous patch management with severity-ordered planning, staged installation, and automatic rollback. Long-term evolution via edge-cloud sync protocol with sequence tracking. Model quantization supports iterative compression experiments."
       }
     ]
   },
@@ -236,12 +236,12 @@
         "state": "Per-signal contribution breakdown is included in every anomaly report. Human-readable reasons explain each anomalous axis. Missing: formal Shapley-value attribution."
       },
       {
-        "code": "R27", "status": "future",
+        "code": "R27", "status": "foundation",
         "title": "Federated Threat Model Distillation",
         "summary": "Fleet-wide model improvement through federated learning rounds distilled into compact student models.",
         "idea": "Federated averaging with knowledge distillation, differential privacy, and proof-of-participation.",
         "matters": "Individual devices see limited threat diversity; federated distillation lets the fleet learn collectively.",
-        "state": "No federated learning or model distillation infrastructure exists yet."
+        "state": "Federated coordinator with weighted averaging, optional differential-privacy noise injection, and mask-based secure aggregation. Privacy accountant tracks epsilon budget across rounds."
       },
       {
         "code": "R28", "status": "foundation",
@@ -274,44 +274,44 @@
     "label": "Edge Infrastructure & Hardening",
     "tracks": [
       {
-        "code": "R31", "status": "future",
+        "code": "R31", "status": "foundation",
         "title": "Digital Twin Fleet Simulation",
         "summary": "Deterministic simulation harness modelling heterogeneous edge fleets for scenario testing.",
         "idea": "Discrete-event simulation with pluggable device profiles, attack injection, and differential comparison.",
         "matters": "Testing on a simulated fleet is cheaper and safer than experimenting on production hardware.",
-        "state": "Deterministic test fixtures exist for single-device scenarios. No fleet-scale simulation."
+        "state": "Digital twin engine with device state modelling, multi-event scenario simulation, what-if analysis (non-destructive), fleet-scale attack propagation with probabilistic lateral movement, and threshold-based alert generation."
       },
       {
-        "code": "R32", "status": "future",
+        "code": "R32", "status": "foundation",
         "title": "Autonomous Secure Patch Management",
         "summary": "Self-patching runtime that verifies patch integrity and proves post-patch state correctness.",
         "idea": "Signed delta patches with Merkle-rooted binary verification and automatic rollback on failure.",
         "matters": "Manual patching at scale is infeasible; automated patching without verification is a supply-chain risk.",
-        "state": "No patch management or binary update mechanism exists."
+        "state": "Patch manager with full lifecycle (available → staged → installed → rolled-back). Severity-ordered patch planning with estimated downtime. CVE tracking and rollback support for failed patches."
       },
       {
-        "code": "R33", "status": "future",
+        "code": "R33", "status": "foundation",
         "title": "Deception-Based Threat Engagement",
         "summary": "Lightweight honeypots and canary tokens at the edge to detect lateral movement and reconnaissance.",
         "idea": "Synthetic service emulation with canary credential injection and automated alert escalation.",
         "matters": "Deception forces attackers to reveal themselves by interacting with assets legitimate users never touch.",
-        "state": "No deception layer or canary token system exists."
+        "state": "Deception engine with 5 decoy types (Honeypot, HoneyFile, HoneyCredential, HoneyService, Canary). Interaction tracking with escalating threat scores. Attacker profiling with cross-decoy correlation and deception reports."
       },
       {
-        "code": "R34", "status": "future",
+        "code": "R34", "status": "foundation",
         "title": "Secure Multi-Tenancy Isolation",
         "summary": "Namespace-isolated detection and response policies on shared edge hardware.",
         "idea": "Per-tenant policy scoping, resource accounting, and cryptographic namespace separation.",
         "matters": "Shared edge gateways often serve multiple tenants who must not see each other's data.",
-        "state": "The runtime is single-tenant. No namespace isolation exists."
+        "state": "Multi-tenant manager with API-key authentication (SHA-256 hashed), tier-based resource quotas (Free/Standard/Enterprise/Government), device registration with quota enforcement, per-tenant usage tracking, and tenant deactivation."
       },
       {
-        "code": "R35", "status": "future",
+        "code": "R35", "status": "foundation",
         "title": "Side-Channel Attack Detection",
         "summary": "Detect timing, power, and EM side-channel attacks via statistical profiling of device operations.",
         "idea": "High-frequency sampling of execution timing and power draw with anomaly detection on side-channel signals.",
         "matters": "Side-channel attacks bypass software defenses entirely; detecting them requires hardware-layer observation.",
-        "state": "All detection is software-telemetry based. No hardware-level side-channel profiling."
+        "state": "Timing analyzer with Welford's online variance and z-score anomaly detection. Cache monitor with miss-rate profiling for Flush+Reload, Prime+Probe, and Evict+Time detection. DFT-based frequency analyzer for covert channel identification. Composite detector with risk scoring."
       }
     ]
   },
@@ -320,20 +320,20 @@
     "label": "Resilience & Long-Horizon",
     "tracks": [
       {
-        "code": "R36", "status": "future",
+        "code": "R36", "status": "foundation",
         "title": "Edge-Cloud Hybrid Offload",
         "summary": "Decide when to offload expensive analysis to the cloud with verifiable computation receipts.",
         "idea": "Selective offload policy with encrypted transfer, verifiable computation receipts, and local validation.",
         "matters": "Some analyses are too expensive for edge hardware, but blind cloud offload sacrifices privacy and autonomy.",
-        "state": "Runtime is fully local. No cloud offload path exists."
+        "state": "Workload offload engine with 4 processing tiers (EdgeOnly/EdgePreferred/CloudPreferred/CloudOnly). Capacity-aware decision making considering CPU, memory, and latency. Bidirectional sync tracker with sequence-based acknowledgement protocol."
       },
       {
-        "code": "R37", "status": "future",
+        "code": "R37", "status": "foundation",
         "title": "Resilient Mesh Self-Organisation",
         "summary": "Autonomous mesh network formation and repair maintaining security invariants after node loss.",
         "idea": "Distributed spanning-tree repair with cryptographic neighbour authentication and convergence proofs.",
         "matters": "Edge networks lose nodes to failure and compromise; automatic repair is a prerequisite for collective defense.",
-        "state": "No topology awareness or mesh networking exists."
+        "state": "Mesh topology manager with role-based node assignment (Leaf/Relay/Gateway/Coordinator). Automatic rebalancing when roles are over- or under-represented. Gossip-based status propagation and neighbor tracking."
       },
       {
         "code": "R38", "status": "foundation",
@@ -344,20 +344,20 @@
         "state": "Behavioural device fingerprinting module with statistical profiling across all telemetry dimensions and z-score-based impersonation detection is implemented."
       },
       {
-        "code": "R39", "status": "future",
+        "code": "R39", "status": "foundation",
         "title": "Formal Policy Composition",
         "summary": "Compose multiple policies with formal guarantees against contradictions and deadlocks.",
         "idea": "Policy algebra with automated conflict detection, priority resolution, and model-checked composition proofs.",
         "matters": "Realistic deployments layer vendor, operator, and regulatory policies that can silently conflict.",
-        "state": "A single policy engine maps scores to actions. No multi-policy composition exists."
+        "state": "Multi-policy extension registry in wasm_engine module supports named policy composition. Model checker can verify composed state machines for safety and deadlock freedom. Constraint-based posture negotiation resolves conflicting policy requirements."
       },
       {
-        "code": "R40", "status": "future",
+        "code": "R40", "status": "foundation",
         "title": "Privacy-Preserving Incident Forensics",
         "summary": "Cross-device forensic analysis without exposing raw sensor data to investigators.",
         "idea": "Secure multi-party computation for forensic queries with ZK evidence-consistency proofs.",
         "matters": "Incident response teams need evidence, but sharing raw telemetry can violate privacy regulations.",
-        "state": "Single-device forensic export exists. No multi-device privacy-preserving forensic protocol."
+        "state": "Forensic evidence redaction with 4 configurable levels (Full/Standard/Minimal/ZeroKnowledge). IP address anonymisation, PII stripping, and ZK proof-of-inclusion for redacted bundles. Integrated with privacy module's differential privacy and secure aggregation."
       }
     ]
   }

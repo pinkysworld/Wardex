@@ -21,7 +21,7 @@ The research blueprint in [blueprint.md](blueprint.md) sketches 40 research trac
 - live browser admin console with token-authenticated HTTP API, auto-refresh, file upload, and dark mode
 - research paper targeting, swarm protocol design, Wasm surface spec, supply-chain attestation, post-quantum upgrade path
 - research questions formalised for R26–R40 plus design documents for adversarial testing, temporal logic, digital twins, and policy composition
-- 147 automated tests (126 unit + 21 integration) with 10k-sample benchmark
+- 267 automated tests (246 unit + 21 integration) with 10k-sample benchmark
 - cross-platform CI (Linux, macOS, Windows) with clippy and fmt
 - maintained docs, backlog tracking, test fixtures, and a GitHub Pages site
 
@@ -106,7 +106,7 @@ cargo test
 ## Repository layout
 
 ```text
-src/                  Rust runtime (22 modules)
+src/                  Rust runtime (35 modules)
 examples/             Sample telemetry traces (CSV + JSONL)
 docs/                 Design notes, backlog, and status documentation
 site/                 Static GitHub Pages site

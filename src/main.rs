@@ -266,6 +266,7 @@ fn run() -> Result<(), String> {
                 .next()
                 .map(PathBuf::from)
                 .unwrap_or_else(|| PathBuf::from("site"));
+            let site_dir = resolve_site_dir(&site_dir)?;
 
             if args.next().is_some() {
                 return Err("too many arguments for `serve`".into());
@@ -281,6 +282,46 @@ fn run() -> Result<(), String> {
     }
 
     Ok(())
+}
+
+fn resolve_site_dir(site_dir: &Path) -> Result<PathBuf, String> {
+    if site_dir.is_absolute() {
+        return if site_dir.is_dir() {
+            Ok(site_dir.to_path_buf())
+        } else {
+            Err(format!(
+                "site directory does not exist: {}",
+                site_dir.display()
+            ))
+        };
+    }
+
+    let mut candidates = Vec::new();
+
+    if let Ok(current_dir) = env::current_dir() {
+        candidates.push(current_dir.join(site_dir));
+    }
+
+    if let Ok(exe_path) = env::current_exe() {
+        if let Some(exe_dir) = exe_path.parent() {
+            candidates.push(exe_dir.join(site_dir));
+            candidates.push(exe_dir.join("..").join(site_dir));
+            candidates.push(exe_dir.join("..").join("..").join(site_dir));
+        }
+    }
+
+    for candidate in candidates {
+        if candidate.is_dir() {
+            return candidate
+                .canonicalize()
+                .map_err(|e| format!("failed to canonicalize site directory: {e}"));
+        }
+    }
+
+    Err(format!(
+        "site directory `{}` not found from current directory or binary location",
+        site_dir.display()
+    ))
 }
 
 fn print_usage() {
