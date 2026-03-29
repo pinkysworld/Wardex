@@ -662,11 +662,11 @@ pub fn status_snapshot() -> String {
 
 pub fn status_manifest() -> StatusManifest {
     StatusManifest {
-        updated_at: "2026-03-30".into(),
-        backlog_completed: 67,
-        backlog_total: 67,
-        completed_phases: 13,
-        total_phases: 13,
+        updated_at: "2026-03-31".into(),
+        backlog_completed: 72,
+        backlog_total: 72,
+        completed_phases: 14,
+        total_phases: 14,
         cli_commands: vec![
             "demo".into(),
             "analyze".into(),
@@ -758,6 +758,8 @@ pub fn status_manifest() -> StatusManifest {
             "Criterion micro-benchmarks: per-sample throughput (~55K/sec), per-stage latency, and scaling benchmarks".into(),
             "Continual learning with Page-Hinkley drift detection and automatic baseline re-learning".into(),
             "Policy composition algebra with MaxSeverity/MinSeverity/Priority operators and conflict detection".into(),
+            "Admin console wired to all API endpoints: security ops, fleet, digital twin, monitoring, compliance, quantum, policy, infrastructure, formal exports".into(),
+            "Full-coverage admin UI panels: enforcement quarantine, threat intel IOC, side-channel, deception deploy, fleet register, twin simulate, harness run, drift reset, privacy budget, quantum key rotate, policy compose, WASM VM, energy harvest, workload offload, patch status, TLA+/Alloy/witness export".into(),
         ],
         partially_wired: vec![],
         not_implemented: vec![],
@@ -819,9 +821,9 @@ mod tests {
     #[test]
     fn status_manifest_reports_backlog_progress() {
         let manifest = status_manifest();
-        assert_eq!(manifest.backlog_completed, 67);
-        assert_eq!(manifest.backlog_total, 67);
-        assert_eq!(manifest.total_phases, 13);
+        assert_eq!(manifest.backlog_completed, 72);
+        assert_eq!(manifest.backlog_total, 72);
+        assert_eq!(manifest.total_phases, 14);
         assert!(manifest.cli_commands.iter().any(|cmd| cmd == "status-json"));
         assert!(manifest.partially_wired.is_empty());
         assert!(manifest.not_implemented.is_empty());

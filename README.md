@@ -2,7 +2,7 @@
 
 SentinelEdge is a Rust edge security runtime for anomaly detection, policy-driven response, and verifiable audit trails on constrained devices.
 
-The research blueprint in [blueprint.md](blueprint.md) sketches 40 research tracks across seven thematic categories. The codebase has completed all 12 phases of the engineering backlog — 61/61 tasks complete:
+The research blueprint in [blueprint.md](blueprint.md) sketches 40 research tracks across seven thematic categories. The codebase has completed all 15 phases of the engineering backlog — 72/72 tasks complete:
 
 - a configurable Rust runtime for multi-signal anomaly scoring across 8 dimensions
 - an energy-aware response policy engine with pluggable device action adapters
@@ -25,6 +25,7 @@ The research blueprint in [blueprint.md](blueprint.md) sketches 40 research trac
 - continual learning with Page-Hinkley drift detection and automatic baseline re-learning (R01)
 - policy composition algebra with conflict detection for multi-rule evaluation (R39)
 - criterion micro-benchmarks: ~55K samples/sec throughput, per-stage latency profiling
+- full admin console integration with 14 interactive panels: security operations, fleet management, digital twin simulation, adversarial testing, monitoring & analysis, compliance, quantum key management, policy composition, infrastructure control, and formal model exports
 - 276 automated tests (255 unit + 21 integration) with 10k-sample benchmark and criterion benchmarks
 - cross-platform CI (Linux, macOS, Windows) with clippy and fmt
 - maintained docs, backlog tracking, test fixtures, and a GitHub Pages site

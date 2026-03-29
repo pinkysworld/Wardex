@@ -381,6 +381,19 @@ const backlogPhases = [
       { id: "T136", title: "Documentation update", desc: "Backlog, changelog, features, status, and README updated for Phase 13.", done: true },
     ],
   },
+  {
+    id: "phase-14",
+    tag: "Phase 14",
+    tagClass: "done",
+    title: "Full Admin Console Integration (complete)",
+    tasks: [
+      { id: "T137", title: "API endpoints", desc: "18 new endpoints for side-channel, quantum, privacy, WASM VM, fingerprint, harness, monitor, deception, policy compose, drift, causal, patches, offload, swarm, energy harvest.", done: true },
+      { id: "T138", title: "Security Operations panel", desc: "Enforcement quarantine, threat intel IOC, side-channel risk, deception deploy.", done: true },
+      { id: "T139", title: "Fleet, Twin & Testing panels", desc: "Device registration, swarm posture, twin simulation, adversarial harness.", done: true },
+      { id: "T140", title: "Monitoring & Analysis panel", desc: "Monitor status/violations, correlation, drift reset, fingerprint, causal graph.", done: true },
+      { id: "T141", title: "Compliance, Quantum, Policy, Infra & Exports", desc: "Compliance, attestation, privacy, quantum key rotate, policy compose, WASM VM, energy, patches, offload, TLA+/Alloy/witness export.", done: true },
+    ],
+  },
 ];
 
 // Research track data is loaded from the canonical source at

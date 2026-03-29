@@ -6,22 +6,28 @@ use tiny_http::{Header, Method, Request, Response, Server};
 
 use crate::actions::DeviceController;
 use crate::checkpoint::CheckpointStore;
-use crate::compliance::ComplianceManager;
+use crate::compliance::{ComplianceManager, CausalGraph};
 use crate::correlation;
-use crate::detector::{AdaptationMode, AnomalyDetector};
+use crate::detector::{AdaptationMode, AnomalyDetector, DriftDetector};
 use crate::digital_twin::DigitalTwinEngine;
-use crate::edge_cloud::PlatformCapabilities;
+use crate::edge_cloud::{PlatformCapabilities, PatchManager};
 use crate::enforcement::EnforcementEngine;
 use crate::energy::EnergyBudget;
+use crate::fingerprint::DeviceFingerprint;
+use crate::monitor::Monitor;
 use crate::multi_tenant::MultiTenantManager;
+use crate::privacy::PrivacyAccountant;
 use crate::proof::{DigestBackend, ProofRegistry};
+use crate::quantum::KeyRotationManager;
 use crate::replay::ReplayBuffer;
 use crate::report::JsonReport;
 use crate::runtime;
+use crate::side_channel::SideChannelDetector;
 use crate::state_machine::PolicyStateMachine;
 use crate::swarm::{DeviceRecord, DeviceStatus, SwarmNode};
 use crate::telemetry::TelemetrySample;
-use crate::threat_intel::ThreatIntelStore;
+use crate::threat_intel::{DeceptionEngine, ThreatIntelStore};
+use crate::wasm_engine::PolicyVm;
 
 struct AppState {
     detector: AnomalyDetector,
@@ -38,6 +44,16 @@ struct AppState {
     compliance: ComplianceManager,
     multi_tenant: MultiTenantManager,
     energy: EnergyBudget,
+    side_channel: SideChannelDetector,
+    key_rotation: KeyRotationManager,
+    privacy: PrivacyAccountant,
+    policy_vm: PolicyVm,
+    fingerprint: Option<DeviceFingerprint>,
+    monitor: Monitor,
+    drift: DriftDetector,
+    deception: DeceptionEngine,
+    patches: PatchManager,
+    causal: CausalGraph,
 }
 
 pub fn run_server(port: u16, site_dir: &Path) -> Result<(), String> {
@@ -66,6 +82,16 @@ pub fn run_server(port: u16, site_dir: &Path) -> Result<(), String> {
         compliance: ComplianceManager::new(),
         multi_tenant: MultiTenantManager::new(),
         energy: EnergyBudget::new(500.0),
+        side_channel: SideChannelDetector::new(),
+        key_rotation: KeyRotationManager::new(3600),
+        privacy: PrivacyAccountant::new(10.0),
+        policy_vm: PolicyVm::default(),
+        fingerprint: None,
+        monitor: Monitor::new(),
+        drift: DriftDetector::new(0.005, 50.0),
+        deception: DeceptionEngine::new(),
+        patches: PatchManager::new(),
+        causal: CausalGraph::new(),
     }));
 
     let site_dir = site_dir.to_path_buf();
@@ -97,6 +123,16 @@ pub fn spawn_test_server() -> (u16, String) {
         compliance: ComplianceManager::new(),
         multi_tenant: MultiTenantManager::new(),
         energy: EnergyBudget::new(500.0),
+        side_channel: SideChannelDetector::new(),
+        key_rotation: KeyRotationManager::new(3600),
+        privacy: PrivacyAccountant::new(10.0),
+        policy_vm: PolicyVm::default(),
+        fingerprint: None,
+        monitor: Monitor::new(),
+        drift: DriftDetector::new(0.005, 50.0),
+        deception: DeceptionEngine::new(),
+        patches: PatchManager::new(),
+        causal: CausalGraph::new(),
     }));
     let site_dir = PathBuf::from("site");
     std::thread::spawn(move || {
@@ -198,6 +234,14 @@ fn handle_api(mut request: Request, state: &Arc<Mutex<AppState>>, _site_dir: &Pa
             | (Method::Post, "/api/threat-intel/ioc")
             | (Method::Post, "/api/digital-twin/simulate")
             | (Method::Post, "/api/energy/consume")
+            | (Method::Post, "/api/quantum/rotate")
+            | (Method::Post, "/api/policy-vm/execute")
+            | (Method::Post, "/api/harness/run")
+            | (Method::Post, "/api/deception/deploy")
+            | (Method::Post, "/api/policy/compose")
+            | (Method::Post, "/api/drift/reset")
+            | (Method::Post, "/api/offload/decide")
+            | (Method::Post, "/api/energy/harvest")
     );
 
     if needs_auth && !check_auth(&request, state) {
@@ -456,6 +500,202 @@ fn handle_api(mut request: Request, state: &Arc<Mutex<AppState>>, _site_dir: &Pa
                 "has_ebpf": caps.has_ebpf,
                 "has_firewall": caps.has_firewall,
                 "max_threads": caps.max_threads,
+            });
+            json_response(&info.to_string(), 200)
+        }
+
+        // ── Side-Channel Detection ────────────────────────────────
+        (Method::Get, "/api/side-channel/status") => {
+            let s = state.lock().unwrap();
+            let report = s.side_channel.report();
+            let info = serde_json::json!({
+                "timing_anomalies": report.timing_anomalies,
+                "cache_alerts": report.cache_alerts,
+                "covert_channels": report.covert_channels,
+                "overall_risk": report.overall_risk,
+            });
+            json_response(&info.to_string(), 200)
+        }
+
+        // ── Quantum / Post-Quantum ────────────────────────────────
+        (Method::Get, "/api/quantum/key-status") => {
+            let s = state.lock().unwrap();
+            let info = serde_json::json!({
+                "current_epoch": s.key_rotation.current_epoch(),
+                "total_epochs": s.key_rotation.epochs().len(),
+            });
+            json_response(&info.to_string(), 200)
+        }
+        (Method::Post, "/api/quantum/rotate") => {
+            let mut s = state.lock().unwrap();
+            s.key_rotation.rotate();
+            let info = serde_json::json!({
+                "status": "rotated",
+                "new_epoch": s.key_rotation.current_epoch(),
+            });
+            json_response(&info.to_string(), 200)
+        }
+
+        // ── Privacy ───────────────────────────────────────────────
+        (Method::Get, "/api/privacy/budget") => {
+            let s = state.lock().unwrap();
+            let info = serde_json::json!({
+                "budget_remaining": s.privacy.budget_remaining(),
+                "is_exhausted": s.privacy.is_exhausted(),
+            });
+            json_response(&info.to_string(), 200)
+        }
+
+        // ── Policy VM ─────────────────────────────────────────────
+        (Method::Post, "/api/policy-vm/execute") => {
+            handle_policy_vm_execute(&mut request, state)
+        }
+
+        // ── Fingerprint ───────────────────────────────────────────
+        (Method::Get, "/api/fingerprint/status") => {
+            let s = state.lock().unwrap();
+            let info = serde_json::json!({
+                "trained": s.fingerprint.is_some(),
+                "replay_samples": s.replay.len(),
+            });
+            json_response(&info.to_string(), 200)
+        }
+
+        // ── Adversarial Harness ───────────────────────────────────
+        (Method::Post, "/api/harness/run") => {
+            let config = crate::harness::HarnessConfig::default();
+            let result = crate::harness::run(&config);
+            let info = serde_json::json!({
+                "evasion_rate": result.evasion_rate,
+                "coverage_ratio": result.coverage.coverage_ratio(),
+                "total_count": result.total_count,
+                "evasion_count": result.evasion_count,
+            });
+            json_response(&info.to_string(), 200)
+        }
+
+        // ── Temporal-Logic Monitor ────────────────────────────────
+        (Method::Get, "/api/monitor/status") => {
+            let s = state.lock().unwrap();
+            let statuses: Vec<_> = s.monitor.statuses().iter().map(|(name, status)| {
+                serde_json::json!({ "name": name, "status": format!("{:?}", status) })
+            }).collect();
+            let info = serde_json::json!({
+                "properties": statuses,
+                "violation_count": s.monitor.violations().len(),
+            });
+            json_response(&info.to_string(), 200)
+        }
+        (Method::Get, "/api/monitor/violations") => {
+            let s = state.lock().unwrap();
+            let violations: Vec<_> = s.monitor.violations().iter().map(|v| {
+                serde_json::json!({
+                    "property": v.property_name,
+                    "event_index": v.event_index,
+                })
+            }).collect();
+            json_response(&serde_json::json!({ "violations": violations }).to_string(), 200)
+        }
+
+        // ── Deception Engine ──────────────────────────────────────
+        (Method::Get, "/api/deception/status") => {
+            let s = state.lock().unwrap();
+            let report = s.deception.report();
+            let info = serde_json::json!({
+                "total_decoys": report.total_decoys,
+                "active_decoys": report.active_decoys,
+                "total_interactions": report.total_interactions,
+                "attacker_profiles": report.attacker_profiles,
+            });
+            json_response(&info.to_string(), 200)
+        }
+        (Method::Post, "/api/deception/deploy") => {
+            handle_deception_deploy(&mut request, state)
+        }
+
+        // ── Policy Composition ────────────────────────────────────
+        (Method::Post, "/api/policy/compose") => {
+            handle_policy_compose(&mut request, state)
+        }
+
+        // ── Drift Detection ───────────────────────────────────────
+        (Method::Get, "/api/drift/status") => {
+            let s = state.lock().unwrap();
+            let info = serde_json::json!({
+                "sample_count": s.drift.sample_count(),
+            });
+            json_response(&info.to_string(), 200)
+        }
+        (Method::Post, "/api/drift/reset") => {
+            let mut s = state.lock().unwrap();
+            s.drift.reset();
+            json_response(r#"{"status":"drift detector reset"}"#, 200)
+        }
+
+        // ── Causal Analysis ───────────────────────────────────────
+        (Method::Get, "/api/causal/graph") => {
+            let s = state.lock().unwrap();
+            let info = serde_json::json!({
+                "node_count": s.causal.node_count(),
+                "edge_count": s.causal.edge_count(),
+            });
+            json_response(&info.to_string(), 200)
+        }
+
+        // ── Patch Management ──────────────────────────────────────
+        (Method::Get, "/api/patches") => {
+            let s = state.lock().unwrap();
+            let plan = s.patches.plan();
+            let info = serde_json::json!({
+                "total_patches": s.patches.patch_count(),
+                "installed": s.patches.installed_count(),
+                "patches_in_plan": plan.patches.len(),
+                "estimated_downtime_secs": plan.estimated_downtime_secs,
+            });
+            json_response(&info.to_string(), 200)
+        }
+
+        // ── Workload Offload ──────────────────────────────────────
+        (Method::Post, "/api/offload/decide") => {
+            let caps = PlatformCapabilities::detect_current();
+            let edge_cap = crate::edge_cloud::EdgeCapacity {
+                cpu_available: 60.0,
+                memory_available_mb: 512,
+                bandwidth_kbps: 1000,
+                latency_to_cloud_ms: 50,
+            };
+            let workloads = vec![
+                crate::edge_cloud::Workload { id: "w1".into(), name: "detection".into(), cpu_cost: 20.0, memory_mb: 64, latency_sensitive: true, data_size_kb: 100, tier: crate::edge_cloud::ProcessingTier::EdgePreferred },
+                crate::edge_cloud::Workload { id: "w2".into(), name: "reporting".into(), cpu_cost: 10.0, memory_mb: 32, latency_sensitive: false, data_size_kb: 200, tier: crate::edge_cloud::ProcessingTier::CloudPreferred },
+            ];
+            let decisions = crate::edge_cloud::decide_offload(&workloads, &edge_cap);
+            let info: Vec<_> = decisions.iter().map(|d| serde_json::json!({
+                "workload": d.workload_id,
+                "run_on": d.run_on,
+                "reason": d.reason,
+                "estimated_latency_ms": d.estimated_latency_ms,
+            })).collect();
+            json_response(&serde_json::json!({ "decisions": info, "platform": format!("{:?}", caps.platform) }).to_string(), 200)
+        }
+
+        // ── Swarm Posture ─────────────────────────────────────────
+        (Method::Get, "/api/swarm/posture") => {
+            let info = serde_json::json!({
+                "current_posture": "standard",
+                "negotiation_available": true,
+            });
+            json_response(&info.to_string(), 200)
+        }
+
+        // ── Energy Harvesting ─────────────────────────────────────
+        (Method::Post, "/api/energy/harvest") => {
+            let mut s = state.lock().unwrap();
+            let recharged = s.energy.capacity_mwh * 0.05;
+            s.energy.current_mwh = (s.energy.current_mwh + recharged).min(s.energy.capacity_mwh);
+            let info = serde_json::json!({
+                "status": "harvested",
+                "recharged_mwh": recharged,
+                "remaining_pct": s.energy.remaining_pct(),
             });
             json_response(&info.to_string(), 200)
         }
@@ -809,6 +1049,146 @@ fn handle_energy_consume(
     let info = serde_json::json!({
         "remaining_pct": s.energy.remaining_pct(),
         "power_state": format!("{new_state:?}"),
+    });
+    json_response(&info.to_string(), 200)
+}
+
+fn handle_policy_vm_execute(
+    request: &mut Request,
+    state: &Arc<Mutex<AppState>>,
+) -> Response<std::io::Cursor<Vec<u8>>> {
+    let mut body = String::new();
+    if std::io::Read::read_to_string(request.as_reader(), &mut body).is_err() {
+        return error_json("failed to read request body", 400);
+    }
+    #[derive(serde::Deserialize)]
+    struct VmReq {
+        #[serde(default)]
+        env: std::collections::HashMap<String, f64>,
+    }
+    let req: VmReq = match serde_json::from_str(&body) {
+        Ok(r) => r,
+        Err(e) => return error_json(&format!("invalid JSON: {e}"), 400),
+    };
+    let s = state.lock().unwrap();
+    // Build a simple program that loads env values and computes a risk composite
+    let program = crate::wasm_engine::PolicyProgram::new("api-eval", vec![
+        crate::wasm_engine::Opcode::LoadVar("score".into()),
+        crate::wasm_engine::Opcode::LoadVar("battery".into()),
+        crate::wasm_engine::Opcode::Mul,
+        crate::wasm_engine::Opcode::StoreResult("risk_composite".into()),
+        crate::wasm_engine::Opcode::Halt,
+    ]);
+    let result = s.policy_vm.execute(&program, &req.env);
+    let info = serde_json::json!({
+        "success": result.success,
+        "outputs": result.outputs,
+        "steps_executed": result.steps_executed,
+        "error": result.error,
+    });
+    json_response(&info.to_string(), 200)
+}
+
+fn handle_deception_deploy(
+    request: &mut Request,
+    state: &Arc<Mutex<AppState>>,
+) -> Response<std::io::Cursor<Vec<u8>>> {
+    let mut body = String::new();
+    if std::io::Read::read_to_string(request.as_reader(), &mut body).is_err() {
+        return error_json("failed to read request body", 400);
+    }
+    #[derive(serde::Deserialize)]
+    struct DeployReq {
+        decoy_type: String,
+        name: String,
+        #[serde(default)]
+        description: Option<String>,
+    }
+    let req: DeployReq = match serde_json::from_str(&body) {
+        Ok(r) => r,
+        Err(e) => return error_json(&format!("invalid JSON: {e}"), 400),
+    };
+    let decoy_type = match req.decoy_type.as_str() {
+        "honeypot" => crate::threat_intel::DecoyType::Honeypot,
+        "honeyfile" => crate::threat_intel::DecoyType::HoneyFile,
+        "honeycredential" => crate::threat_intel::DecoyType::HoneyCredential,
+        "honeyservice" => crate::threat_intel::DecoyType::HoneyService,
+        "canary" => crate::threat_intel::DecoyType::Canary,
+        _ => crate::threat_intel::DecoyType::Honeypot,
+    };
+    let mut s = state.lock().unwrap();
+    let id = s.deception.deploy(
+        decoy_type,
+        &req.name,
+        req.description.as_deref().unwrap_or("Deployed via API"),
+    );
+    json_response(
+        &serde_json::json!({ "status": "deployed", "decoy_id": id }).to_string(),
+        200,
+    )
+}
+
+fn handle_policy_compose(
+    request: &mut Request,
+    _state: &Arc<Mutex<AppState>>,
+) -> Response<std::io::Cursor<Vec<u8>>> {
+    let mut body = String::new();
+    if std::io::Read::read_to_string(request.as_reader(), &mut body).is_err() {
+        return error_json("failed to read request body", 400);
+    }
+    #[derive(serde::Deserialize)]
+    struct ComposeReq {
+        operator: String,
+        score_a: f32,
+        battery_a: f32,
+        score_b: f32,
+        battery_b: f32,
+    }
+    let req: ComposeReq = match serde_json::from_str(&body) {
+        Ok(r) => r,
+        Err(e) => return error_json(&format!("invalid JSON: {e}"), 400),
+    };
+    let op = match req.operator.as_str() {
+        "max" => crate::policy::CompositionOp::MaxSeverity,
+        "min" => crate::policy::CompositionOp::MinSeverity,
+        "left" => crate::policy::CompositionOp::LeftPriority,
+        "right" => crate::policy::CompositionOp::RightPriority,
+        _ => return error_json("unknown operator: use max, min, left, or right", 400),
+    };
+    let engine = crate::policy::PolicyEngine;
+    let signal_a = crate::detector::AnomalySignal {
+        score: req.score_a, confidence: 0.9, suspicious_axes: 0,
+        reasons: vec!["composed-a".into()], contributions: Vec::new(),
+    };
+    let sample_a = TelemetrySample {
+        timestamp_ms: 0, cpu_load_pct: 0.0, memory_load_pct: 0.0,
+        temperature_c: 0.0, network_kbps: 0.0, auth_failures: 0,
+        battery_pct: req.battery_a, integrity_drift: 0.0,
+        process_count: 0, disk_pressure_pct: 0.0,
+    };
+    let decision_a = engine.evaluate(&signal_a, &sample_a);
+    let signal_b = crate::detector::AnomalySignal {
+        score: req.score_b, confidence: 0.9, suspicious_axes: 0,
+        reasons: vec!["composed-b".into()], contributions: Vec::new(),
+    };
+    let sample_b = TelemetrySample {
+        timestamp_ms: 0, cpu_load_pct: 0.0, memory_load_pct: 0.0,
+        temperature_c: 0.0, network_kbps: 0.0, auth_failures: 0,
+        battery_pct: req.battery_b, integrity_drift: 0.0,
+        process_count: 0, disk_pressure_pct: 0.0,
+    };
+    let decision_b = engine.evaluate(&signal_b, &sample_b);
+    let (result, conflict) = crate::policy::compose_decisions(Some(decision_a), Some(decision_b), op);
+    let info = serde_json::json!({
+        "result": result.as_ref().map(|d| serde_json::json!({
+            "level": format!("{:?}", d.level),
+            "action": format!("{:?}", d.action),
+        })),
+        "conflict": conflict.as_ref().map(|c| serde_json::json!({
+            "left_level": format!("{:?}", c.left_level),
+            "right_level": format!("{:?}", c.right_level),
+            "resolution": c.resolution,
+        })),
     });
     json_response(&info.to_string(), 200)
 }

@@ -41,7 +41,7 @@ pub struct Property {
 }
 
 /// Trait for predicates evaluated against monitor events.
-pub trait Predicate: std::fmt::Debug {
+pub trait Predicate: std::fmt::Debug + Send {
     fn check(&self, event: &MonitorEvent) -> bool;
 }
 

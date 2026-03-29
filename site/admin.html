@@ -501,6 +501,288 @@
             </div>
           </div>
 
+          <!-- ═══════════════════════════════════════════════════════════ -->
+          <!-- Security Operations Panel                                   -->
+          <!-- ═══════════════════════════════════════════════════════════ -->
+          <div class="panel full-width auth-required">
+            <h2><span class="dot dot-orange"></span> Security Operations</h2>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:1.2rem;">
+              <div>
+                <h3 style="font-size:.88rem;margin-bottom:.5rem;">Enforcement</h3>
+                <dl class="kv-grid" id="enforcement-grid">
+                  <dt>Policies</dt><dd id="enf-policies">—</dd>
+                  <dt>Actions Taken</dt><dd id="enf-actions">—</dd>
+                </dl>
+                <div class="btn-row" style="margin-top:.5rem;">
+                  <input type="text" id="quarantine-target" placeholder="Target ID" style="font-size:.82rem;padding:.3rem .5rem;border:1px solid var(--border);border-radius:4px;width:120px;">
+                  <button class="btn-sm danger" id="btn-quarantine">Quarantine</button>
+                </div>
+              </div>
+              <div>
+                <h3 style="font-size:.88rem;margin-bottom:.5rem;">Threat Intelligence</h3>
+                <dl class="kv-grid" id="threat-intel-grid">
+                  <dt>IOC Count</dt><dd id="ti-ioc-count">—</dd>
+                  <dt>Match Count</dt><dd id="ti-match-count">—</dd>
+                </dl>
+                <div class="btn-row" style="margin-top:.5rem;">
+                  <input type="text" id="ioc-value" placeholder="IOC value" style="font-size:.82rem;padding:.3rem .5rem;border:1px solid var(--border);border-radius:4px;width:120px;">
+                  <select id="ioc-type" style="font-size:.82rem;padding:.3rem;border:1px solid var(--border);border-radius:4px;">
+                    <option value="ip">IP</option><option value="domain">Domain</option>
+                    <option value="hash">Hash</option><option value="process">Process</option>
+                  </select>
+                  <button class="btn-sm primary" id="btn-add-ioc">Add IOC</button>
+                </div>
+              </div>
+              <div>
+                <h3 style="font-size:.88rem;margin-bottom:.5rem;">Side-Channel Detection</h3>
+                <dl class="kv-grid" id="side-channel-grid">
+                  <dt>Risk Score</dt><dd id="sc-risk">—</dd>
+                  <dt>Timing Samples</dt><dd id="sc-samples">—</dd>
+                </dl>
+              </div>
+              <div>
+                <h3 style="font-size:.88rem;margin-bottom:.5rem;">Deception Engine</h3>
+                <dl class="kv-grid" id="deception-grid">
+                  <dt>Total Decoys</dt><dd id="dec-total">—</dd>
+                  <dt>Active</dt><dd id="dec-active">—</dd>
+                  <dt>Interactions</dt><dd id="dec-interactions">—</dd>
+                </dl>
+                <div class="btn-row" style="margin-top:.5rem;">
+                  <input type="text" id="decoy-name" placeholder="Decoy name" style="font-size:.82rem;padding:.3rem .5rem;border:1px solid var(--border);border-radius:4px;width:110px;">
+                  <select id="decoy-type" style="font-size:.82rem;padding:.3rem;border:1px solid var(--border);border-radius:4px;">
+                    <option value="honeypot">Honeypot</option><option value="honeyfile">HoneyFile</option>
+                    <option value="honeycredential">HoneyCred</option><option value="canary">Canary</option>
+                  </select>
+                  <button class="btn-sm primary" id="btn-deploy-decoy">Deploy</button>
+                </div>
+              </div>
+            </div>
+            <div style="margin-top:.75rem;">
+              <button class="btn-sm" id="btn-refresh-security">Refresh Security</button>
+            </div>
+          </div>
+
+          <!-- ═══════════════════════════════════════════════════════════ -->
+          <!-- Fleet & Swarm Panel                                         -->
+          <!-- ═══════════════════════════════════════════════════════════ -->
+          <div class="panel auth-required">
+            <h2><span class="dot dot-blue"></span> Fleet &amp; Swarm</h2>
+            <dl class="kv-grid" id="fleet-grid">
+              <dt>Fleet Devices</dt><dd id="fl-devices">—</dd>
+              <dt>Online</dt><dd id="fl-online">—</dd>
+              <dt>Swarm Posture</dt><dd id="fl-posture">—</dd>
+              <dt>Platform</dt><dd id="fl-platform">—</dd>
+            </dl>
+            <div style="margin-top:.75rem;">
+              <h3 style="font-size:.88rem;margin-bottom:.4rem;">Register Device</h3>
+              <div class="btn-row">
+                <input type="text" id="reg-device-id" placeholder="Device ID" style="font-size:.82rem;padding:.3rem .5rem;border:1px solid var(--border);border-radius:4px;width:140px;">
+                <button class="btn-sm primary" id="btn-register-device">Register</button>
+              </div>
+            </div>
+            <div style="margin-top:.75rem;">
+              <button class="btn-sm" id="btn-refresh-fleet">Refresh Fleet</button>
+            </div>
+          </div>
+
+          <!-- ═══════════════════════════════════════════════════════════ -->
+          <!-- Digital Twin & Testing Panel                                -->
+          <!-- ═══════════════════════════════════════════════════════════ -->
+          <div class="panel auth-required">
+            <h2><span class="dot dot-green"></span> Digital Twin &amp; Testing</h2>
+            <dl class="kv-grid" id="twin-grid">
+              <dt>Twin Devices</dt><dd id="tw-devices">—</dd>
+              <dt>Simulations Run</dt><dd id="tw-sims">—</dd>
+            </dl>
+            <div style="margin-top:.75rem;">
+              <h3 style="font-size:.88rem;margin-bottom:.4rem;">Simulate Event</h3>
+              <div class="btn-row">
+                <input type="text" id="sim-device" placeholder="Device ID" style="font-size:.82rem;padding:.3rem .5rem;border:1px solid var(--border);border-radius:4px;width:110px;">
+                <select id="sim-event" style="font-size:.82rem;padding:.3rem;border:1px solid var(--border);border-radius:4px;">
+                  <option value="cpu_spike">CPU Spike</option>
+                  <option value="memory_exhaust">Memory Exhaust</option>
+                  <option value="network_flood">Network Flood</option>
+                  <option value="malware_inject">Malware Inject</option>
+                </select>
+                <button class="btn-sm primary" id="btn-simulate">Simulate</button>
+              </div>
+            </div>
+            <div style="margin-top:.75rem;">
+              <h3 style="font-size:.88rem;margin-bottom:.4rem;">Adversarial Harness</h3>
+              <dl class="kv-grid" id="harness-grid">
+                <dt>Last Evasion Rate</dt><dd id="ha-evasion">—</dd>
+                <dt>Coverage</dt><dd id="ha-coverage">—</dd>
+              </dl>
+              <div class="btn-row" style="margin-top:.4rem;">
+                <button class="btn-sm primary" id="btn-run-harness">Run Harness</button>
+              </div>
+            </div>
+            <div style="margin-top:.75rem;">
+              <button class="btn-sm" id="btn-refresh-twin">Refresh Twin</button>
+            </div>
+          </div>
+
+          <!-- ═══════════════════════════════════════════════════════════ -->
+          <!-- Monitoring & Analysis Panel                                 -->
+          <!-- ═══════════════════════════════════════════════════════════ -->
+          <div class="panel full-width auth-required">
+            <h2><span class="dot dot-green"></span> Monitoring &amp; Analysis</h2>
+            <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:1.2rem;">
+              <div>
+                <h3 style="font-size:.88rem;margin-bottom:.5rem;">Temporal Monitor</h3>
+                <dl class="kv-grid" id="monitor-grid">
+                  <dt>Properties</dt><dd id="mon-props">—</dd>
+                  <dt>Violations</dt><dd id="mon-violations">—</dd>
+                </dl>
+              </div>
+              <div>
+                <h3 style="font-size:.88rem;margin-bottom:.5rem;">Correlation</h3>
+                <dl class="kv-grid" id="correlation-grid">
+                  <dt>Pairs Tracked</dt><dd id="corr-pairs">—</dd>
+                  <dt>Max Correlation</dt><dd id="corr-max">—</dd>
+                </dl>
+              </div>
+              <div>
+                <h3 style="font-size:.88rem;margin-bottom:.5rem;">Drift Detection</h3>
+                <dl class="kv-grid" id="drift-grid">
+                  <dt>Sample Count</dt><dd id="dr-samples">—</dd>
+                </dl>
+                <div class="btn-row" style="margin-top:.4rem;">
+                  <button class="btn-sm danger" id="btn-reset-drift">Reset Drift</button>
+                </div>
+              </div>
+              <div>
+                <h3 style="font-size:.88rem;margin-bottom:.5rem;">Fingerprint</h3>
+                <dl class="kv-grid" id="fingerprint-grid">
+                  <dt>Trained</dt><dd id="fp-trained">—</dd>
+                  <dt>Replay Samples</dt><dd id="fp-replay">—</dd>
+                </dl>
+              </div>
+              <div>
+                <h3 style="font-size:.88rem;margin-bottom:.5rem;">Causal Graph</h3>
+                <dl class="kv-grid" id="causal-grid">
+                  <dt>Nodes</dt><dd id="cg-nodes">—</dd>
+                  <dt>Edges</dt><dd id="cg-edges">—</dd>
+                </dl>
+              </div>
+            </div>
+            <div style="margin-top:.75rem;">
+              <button class="btn-sm" id="btn-refresh-analysis">Refresh Analysis</button>
+            </div>
+          </div>
+
+          <!-- ═══════════════════════════════════════════════════════════ -->
+          <!-- Compliance & Privacy Panel                                  -->
+          <!-- ═══════════════════════════════════════════════════════════ -->
+          <div class="panel auth-required">
+            <h2><span class="dot dot-green"></span> Compliance &amp; Privacy</h2>
+            <dl class="kv-grid" id="compliance-grid">
+              <dt>Compliance Score</dt><dd id="comp-score">—</dd>
+              <dt>Controls Passed</dt><dd id="comp-controls">—</dd>
+              <dt>Attestation</dt><dd id="comp-attest">—</dd>
+              <dt>Privacy Budget</dt><dd id="comp-privacy">—</dd>
+              <dt>Budget Exhausted</dt><dd id="comp-exhausted">—</dd>
+            </dl>
+            <div style="margin-top:.75rem;">
+              <button class="btn-sm" id="btn-refresh-compliance">Refresh Compliance</button>
+            </div>
+          </div>
+
+          <!-- ═══════════════════════════════════════════════════════════ -->
+          <!-- Quantum & Policy Panel                                      -->
+          <!-- ═══════════════════════════════════════════════════════════ -->
+          <div class="panel auth-required">
+            <h2><span class="dot dot-blue"></span> Quantum &amp; Policy</h2>
+            <div>
+              <h3 style="font-size:.88rem;margin-bottom:.5rem;">Quantum Key Management</h3>
+              <dl class="kv-grid" id="quantum-grid">
+                <dt>Algorithm</dt><dd id="q-algo">—</dd>
+                <dt>Rotations</dt><dd id="q-rotations">—</dd>
+              </dl>
+              <div class="btn-row" style="margin-top:.4rem;">
+                <button class="btn-sm primary" id="btn-rotate-key">Rotate Key</button>
+              </div>
+            </div>
+            <div style="margin-top:.75rem;">
+              <h3 style="font-size:.88rem;margin-bottom:.5rem;">Policy Composition</h3>
+              <div class="btn-row">
+                <select id="compose-op" style="font-size:.82rem;padding:.3rem;border:1px solid var(--border);border-radius:4px;">
+                  <option value="max">Max Severity</option><option value="min">Min Severity</option>
+                  <option value="left">Left Priority</option><option value="right">Right Priority</option>
+                </select>
+                <button class="btn-sm primary" id="btn-compose">Compose</button>
+              </div>
+              <div id="compose-result" style="font-size:.82rem;color:var(--ink-2);margin-top:.4rem;"></div>
+            </div>
+            <div style="margin-top:.75rem;">
+              <h3 style="font-size:.88rem;margin-bottom:.5rem;">WASM Policy VM</h3>
+              <div class="btn-row">
+                <button class="btn-sm primary" id="btn-run-vm">Execute Policy</button>
+              </div>
+              <div id="vm-result" style="font-size:.82rem;color:var(--ink-2);margin-top:.4rem;"></div>
+            </div>
+            <div style="margin-top:.75rem;">
+              <button class="btn-sm" id="btn-refresh-quantum">Refresh</button>
+            </div>
+          </div>
+
+          <!-- ═══════════════════════════════════════════════════════════ -->
+          <!-- Infrastructure Panel                                        -->
+          <!-- ═══════════════════════════════════════════════════════════ -->
+          <div class="panel full-width auth-required">
+            <h2><span class="dot dot-orange"></span> Infrastructure</h2>
+            <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:1.2rem;">
+              <div>
+                <h3 style="font-size:.88rem;margin-bottom:.5rem;">Energy Budget</h3>
+                <dl class="kv-grid" id="energy-grid">
+                  <dt>Remaining</dt><dd id="nrg-remaining">—</dd>
+                  <dt>Power State</dt><dd id="nrg-state">—</dd>
+                </dl>
+                <div class="btn-row" style="margin-top:.4rem;">
+                  <button class="btn-sm" id="btn-energy-harvest">Harvest</button>
+                  <button class="btn-sm danger" id="btn-energy-consume">Consume</button>
+                </div>
+              </div>
+              <div>
+                <h3 style="font-size:.88rem;margin-bottom:.5rem;">Multi-Tenant</h3>
+                <dl class="kv-grid" id="tenant-grid">
+                  <dt>Tenants</dt><dd id="mt-count">—</dd>
+                </dl>
+              </div>
+              <div>
+                <h3 style="font-size:.88rem;margin-bottom:.5rem;">Patch Management</h3>
+                <dl class="kv-grid" id="patch-grid">
+                  <dt>Total Patches</dt><dd id="pm-total">—</dd>
+                  <dt>Installed</dt><dd id="pm-installed">—</dd>
+                  <dt>In Plan</dt><dd id="pm-plan">—</dd>
+                </dl>
+              </div>
+              <div>
+                <h3 style="font-size:.88rem;margin-bottom:.5rem;">Workload Offload</h3>
+                <div class="btn-row">
+                  <button class="btn-sm primary" id="btn-offload">Decide Offload</button>
+                </div>
+                <div id="offload-result" style="font-size:.82rem;color:var(--ink-2);margin-top:.4rem;"></div>
+              </div>
+            </div>
+            <div style="margin-top:.75rem;">
+              <button class="btn-sm" id="btn-refresh-infra">Refresh Infrastructure</button>
+            </div>
+          </div>
+
+          <!-- ═══════════════════════════════════════════════════════════ -->
+          <!-- Formal Exports Panel                                        -->
+          <!-- ═══════════════════════════════════════════════════════════ -->
+          <div class="panel auth-required">
+            <h2><span class="dot dot-blue"></span> Formal Exports</h2>
+            <p style="font-size:.85rem;color:var(--ink-3);margin-bottom:.6rem;">Download TLA+ modules, Alloy specifications, and proof witnesses.</p>
+            <div class="btn-row">
+              <button class="btn-sm" id="btn-export-tla">TLA+ Module</button>
+              <button class="btn-sm" id="btn-export-alloy">Alloy Spec</button>
+              <button class="btn-sm" id="btn-export-witnesses">Witnesses</button>
+            </div>
+          </div>
+
           <!-- Report Panel -->
           <div class="panel full-width auth-required">
             <h2><span class="dot dot-green"></span> Latest Report</h2>
@@ -972,6 +1254,410 @@
         } catch(e) { /* ignore */ }
       }
 
+      // ── Security Operations ──
+
+      async function refreshSecurity() {
+        try {
+          const [enfRes, tiRes, scRes, decRes] = await Promise.all([
+            fetch(API + '/api/enforcement/status', { headers: authHeaders() }),
+            fetch(API + '/api/threat-intel/status', { headers: authHeaders() }),
+            fetch(API + '/api/side-channel/status', { headers: authHeaders() }),
+            fetch(API + '/api/deception/status', { headers: authHeaders() }),
+          ]);
+          if (enfRes.ok) {
+            const d = await enfRes.json();
+            $('#enf-policies').textContent = d.policy_count ?? d.policies ?? '—';
+            $('#enf-actions').textContent = d.history_len ?? d.actions ?? '—';
+          }
+          if (tiRes.ok) {
+            const d = await tiRes.json();
+            $('#ti-ioc-count').textContent = d.ioc_count ?? '—';
+            $('#ti-match-count').textContent = d.match_count ?? '—';
+          }
+          if (scRes.ok) {
+            const d = await scRes.json();
+            $('#sc-risk').textContent = typeof d.risk_score === 'number' ? d.risk_score.toFixed(3) : '—';
+            $('#sc-samples').textContent = d.timing_samples ?? '—';
+          }
+          if (decRes.ok) {
+            const d = await decRes.json();
+            $('#dec-total').textContent = d.total_decoys ?? '—';
+            $('#dec-active').textContent = d.active_decoys ?? '—';
+            $('#dec-interactions').textContent = d.total_interactions ?? '—';
+          }
+          log('Security data refreshed');
+        } catch(e) { log('Security refresh failed: ' + e.message); }
+      }
+
+      async function quarantineTarget() {
+        const target = $('#quarantine-target').value.trim();
+        if (!target) { flash('Enter a target ID', 'error'); return; }
+        try {
+          const res = await fetch(API + '/api/enforcement/quarantine', {
+            method: 'POST', headers: authHeaders('application/json'),
+            body: JSON.stringify({ target }),
+          });
+          if (!res.ok) throw new Error('HTTP ' + res.status);
+          const d = await res.json();
+          flash('Quarantined: ' + target + ' (' + d.actions + ' actions)', 'success');
+          log('Quarantine target: ' + target);
+          refreshSecurity();
+        } catch(e) { flash('Quarantine failed: ' + e.message, 'error'); }
+      }
+
+      async function addIoc() {
+        const value = $('#ioc-value').value.trim();
+        const iocType = $('#ioc-type').value;
+        if (!value) { flash('Enter an IOC value', 'error'); return; }
+        try {
+          const res = await fetch(API + '/api/threat-intel/ioc', {
+            method: 'POST', headers: authHeaders('application/json'),
+            body: JSON.stringify({ value, ioc_type: iocType }),
+          });
+          if (!res.ok) throw new Error('HTTP ' + res.status);
+          flash('IOC added: ' + value, 'success');
+          log('Added IOC: ' + value);
+          $('#ioc-value').value = '';
+          refreshSecurity();
+        } catch(e) { flash('Add IOC failed: ' + e.message, 'error'); }
+      }
+
+      async function deployDecoy() {
+        const name = $('#decoy-name').value.trim();
+        const decoyType = $('#decoy-type').value;
+        if (!name) { flash('Enter a decoy name', 'error'); return; }
+        try {
+          const res = await fetch(API + '/api/deception/deploy', {
+            method: 'POST', headers: authHeaders('application/json'),
+            body: JSON.stringify({ decoy_type: decoyType, name }),
+          });
+          if (!res.ok) throw new Error('HTTP ' + res.status);
+          const d = await res.json();
+          flash('Decoy deployed: ' + d.decoy_id, 'success');
+          log('Deployed decoy: ' + name + ' (' + decoyType + ')');
+          $('#decoy-name').value = '';
+          refreshSecurity();
+        } catch(e) { flash('Deploy failed: ' + e.message, 'error'); }
+      }
+
+      // ── Fleet & Swarm ──
+
+      async function refreshFleet() {
+        try {
+          const [flRes, posRes, platRes] = await Promise.all([
+            fetch(API + '/api/fleet/status', { headers: authHeaders() }),
+            fetch(API + '/api/swarm/posture', { headers: authHeaders() }),
+            fetch(API + '/api/platform', { headers: authHeaders() }),
+          ]);
+          if (flRes.ok) {
+            const d = await flRes.json();
+            $('#fl-devices').textContent = d.total_devices ?? '—';
+            $('#fl-online').textContent = d.online ?? '—';
+          }
+          if (posRes.ok) {
+            const d = await posRes.json();
+            $('#fl-posture').textContent = d.current_posture ?? '—';
+          }
+          if (platRes.ok) {
+            const d = await platRes.json();
+            $('#fl-platform').textContent = d.platform ?? '—';
+          }
+          log('Fleet data refreshed');
+        } catch(e) { log('Fleet refresh failed: ' + e.message); }
+      }
+
+      async function registerDevice() {
+        const deviceId = $('#reg-device-id').value.trim();
+        if (!deviceId) { flash('Enter a device ID', 'error'); return; }
+        try {
+          const res = await fetch(API + '/api/fleet/register', {
+            method: 'POST', headers: authHeaders('application/json'),
+            body: JSON.stringify({ device_id: deviceId }),
+          });
+          if (!res.ok) throw new Error('HTTP ' + res.status);
+          flash('Device registered: ' + deviceId, 'success');
+          log('Registered device: ' + deviceId);
+          $('#reg-device-id').value = '';
+          refreshFleet();
+        } catch(e) { flash('Register failed: ' + e.message, 'error'); }
+      }
+
+      // ── Digital Twin & Testing ──
+
+      async function refreshTwin() {
+        try {
+          const res = await fetch(API + '/api/digital-twin/status', { headers: authHeaders() });
+          if (res.ok) {
+            const d = await res.json();
+            $('#tw-devices').textContent = d.twin_count ?? '—';
+            $('#tw-sims').textContent = d.total_simulations ?? '—';
+          }
+          log('Twin data refreshed');
+        } catch(e) { log('Twin refresh failed: ' + e.message); }
+      }
+
+      async function simulateEvent() {
+        const deviceId = $('#sim-device').value.trim() || 'device-0';
+        const eventType = $('#sim-event').value;
+        try {
+          const res = await fetch(API + '/api/digital-twin/simulate', {
+            method: 'POST', headers: authHeaders('application/json'),
+            body: JSON.stringify({ device_id: deviceId, event_type: eventType }),
+          });
+          if (!res.ok) throw new Error('HTTP ' + res.status);
+          const d = await res.json();
+          flash('Simulated: ' + d.ticks_simulated + ' ticks, ' + d.alerts + ' alerts', 'success');
+          log('Simulated ' + eventType + ' on ' + deviceId);
+          refreshTwin();
+        } catch(e) { flash('Simulation failed: ' + e.message, 'error'); }
+      }
+
+      async function runHarness() {
+        const btn = $('#btn-run-harness');
+        btn.disabled = true;
+        try {
+          const res = await fetch(API + '/api/harness/run', {
+            method: 'POST', headers: authHeaders('application/json'),
+          });
+          if (!res.ok) throw new Error('HTTP ' + res.status);
+          const d = await res.json();
+          $('#ha-evasion').textContent = (d.evasion_rate * 100).toFixed(1) + '%';
+          $('#ha-coverage').textContent = (d.coverage_ratio * 100).toFixed(1) + '%';
+          flash('Harness: ' + d.evasion_count + '/' + d.total_count + ' evasions', 'success');
+          log('Adversarial harness: evasion rate ' + (d.evasion_rate * 100).toFixed(1) + '%');
+        } catch(e) { flash('Harness failed: ' + e.message, 'error'); }
+        finally { btn.disabled = false; }
+      }
+
+      // ── Monitoring & Analysis ──
+
+      async function refreshAnalysis() {
+        try {
+          const [monRes, corrRes, driftRes, fpRes, cgRes] = await Promise.all([
+            fetch(API + '/api/monitor/status', { headers: authHeaders() }),
+            fetch(API + '/api/correlation', { headers: authHeaders() }),
+            fetch(API + '/api/drift/status', { headers: authHeaders() }),
+            fetch(API + '/api/fingerprint/status', { headers: authHeaders() }),
+            fetch(API + '/api/causal/graph', { headers: authHeaders() }),
+          ]);
+          if (monRes.ok) {
+            const d = await monRes.json();
+            $('#mon-props').textContent = d.properties ? d.properties.length : '—';
+            $('#mon-violations').textContent = d.violation_count ?? '—';
+          }
+          if (corrRes.ok) {
+            const d = await corrRes.json();
+            const pairs = d.correlations ?? d.pairs ?? [];
+            $('#corr-pairs').textContent = pairs.length;
+            const maxC = pairs.reduce((m, p) => Math.max(m, Math.abs(p.value ?? p.correlation ?? 0)), 0);
+            $('#corr-max').textContent = maxC.toFixed(3);
+          }
+          if (driftRes.ok) {
+            const d = await driftRes.json();
+            $('#dr-samples').textContent = d.sample_count ?? '—';
+          }
+          if (fpRes.ok) {
+            const d = await fpRes.json();
+            $('#fp-trained').textContent = d.trained ? 'Yes' : 'No';
+            $('#fp-replay').textContent = d.replay_samples ?? '—';
+          }
+          if (cgRes.ok) {
+            const d = await cgRes.json();
+            $('#cg-nodes').textContent = d.node_count ?? '—';
+            $('#cg-edges').textContent = d.edge_count ?? '—';
+          }
+          log('Analysis data refreshed');
+        } catch(e) { log('Analysis refresh failed: ' + e.message); }
+      }
+
+      async function resetDrift() {
+        try {
+          const res = await fetch(API + '/api/drift/reset', {
+            method: 'POST', headers: authHeaders('application/json'),
+          });
+          if (!res.ok) throw new Error('HTTP ' + res.status);
+          flash('Drift detector reset', 'success');
+          log('Drift detector reset');
+          refreshAnalysis();
+        } catch(e) { flash('Drift reset failed: ' + e.message, 'error'); }
+      }
+
+      // ── Compliance & Privacy ──
+
+      async function refreshCompliance() {
+        try {
+          const [compRes, attRes, privRes] = await Promise.all([
+            fetch(API + '/api/compliance/status', { headers: authHeaders() }),
+            fetch(API + '/api/attestation/status', { headers: authHeaders() }),
+            fetch(API + '/api/privacy/budget', { headers: authHeaders() }),
+          ]);
+          if (compRes.ok) {
+            const d = await compRes.json();
+            $('#comp-score').textContent = typeof d.score === 'number' ? d.score.toFixed(1) + '%' : '—';
+            $('#comp-controls').textContent = (d.controls_passed ?? '—') + '/' + (d.controls_total ?? '—');
+          }
+          if (attRes.ok) {
+            const d = await attRes.json();
+            $('#comp-attest').textContent = d.verified ? 'Verified' : 'Unverified';
+          }
+          if (privRes.ok) {
+            const d = await privRes.json();
+            $('#comp-privacy').textContent = typeof d.budget_remaining === 'number' ? d.budget_remaining.toFixed(2) : '—';
+            $('#comp-exhausted').textContent = d.is_exhausted ? 'Yes' : 'No';
+          }
+          log('Compliance data refreshed');
+        } catch(e) { log('Compliance refresh failed: ' + e.message); }
+      }
+
+      // ── Quantum & Policy ──
+
+      async function refreshQuantum() {
+        try {
+          const res = await fetch(API + '/api/quantum/key-status', { headers: authHeaders() });
+          if (res.ok) {
+            const d = await res.json();
+            $('#q-algo').textContent = d.algorithm ?? '—';
+            $('#q-rotations').textContent = d.rotation_count ?? '—';
+          }
+          log('Quantum data refreshed');
+        } catch(e) { log('Quantum refresh failed: ' + e.message); }
+      }
+
+      async function rotateKey() {
+        try {
+          const res = await fetch(API + '/api/quantum/rotate', {
+            method: 'POST', headers: authHeaders('application/json'),
+          });
+          if (!res.ok) throw new Error('HTTP ' + res.status);
+          flash('Key rotated', 'success');
+          log('Quantum key rotated');
+          refreshQuantum();
+        } catch(e) { flash('Key rotation failed: ' + e.message, 'error'); }
+      }
+
+      async function composePolicy() {
+        const op = $('#compose-op').value;
+        try {
+          const res = await fetch(API + '/api/policy/compose', {
+            method: 'POST', headers: authHeaders('application/json'),
+            body: JSON.stringify({ operator: op, score_a: 3.5, battery_a: 80.0, score_b: 1.2, battery_b: 50.0 }),
+          });
+          if (!res.ok) throw new Error('HTTP ' + res.status);
+          const d = await res.json();
+          let txt = 'Result: ';
+          if (d.result) txt += d.result.level + ' / ' + d.result.action;
+          else txt += 'none';
+          if (d.conflict) txt += ' | Conflict: ' + d.conflict.resolution;
+          $('#compose-result').textContent = txt;
+          log('Policy composed with ' + op);
+        } catch(e) { flash('Compose failed: ' + e.message, 'error'); }
+      }
+
+      async function runPolicyVm() {
+        try {
+          const res = await fetch(API + '/api/policy-vm/execute', {
+            method: 'POST', headers: authHeaders('application/json'),
+            body: JSON.stringify({ env: { score: 3.0, battery: 0.8 } }),
+          });
+          if (!res.ok) throw new Error('HTTP ' + res.status);
+          const d = await res.json();
+          let txt = d.success ? 'OK' : 'Failed';
+          if (d.outputs) {
+            const entries = Object.entries(d.outputs).map(([k,v]) => k + '=' + v.toFixed(3));
+            txt += ' | ' + entries.join(', ');
+          }
+          if (d.error) txt += ' | Error: ' + d.error;
+          $('#vm-result').textContent = txt;
+          log('Policy VM executed: ' + d.steps_executed + ' steps');
+        } catch(e) { flash('VM execute failed: ' + e.message, 'error'); }
+      }
+
+      // ── Infrastructure ──
+
+      async function refreshInfra() {
+        try {
+          const [nrgRes, tenRes, patchRes] = await Promise.all([
+            fetch(API + '/api/energy/status', { headers: authHeaders() }),
+            fetch(API + '/api/tenants/count', { headers: authHeaders() }),
+            fetch(API + '/api/patches', { headers: authHeaders() }),
+          ]);
+          if (nrgRes.ok) {
+            const d = await nrgRes.json();
+            $('#nrg-remaining').textContent = typeof d.remaining_pct === 'number' ? d.remaining_pct.toFixed(1) + '%' : '—';
+            $('#nrg-state').textContent = d.power_state ?? '—';
+          }
+          if (tenRes.ok) {
+            const d = await tenRes.json();
+            $('#mt-count').textContent = d.count ?? '—';
+          }
+          if (patchRes.ok) {
+            const d = await patchRes.json();
+            $('#pm-total').textContent = d.total_patches ?? '—';
+            $('#pm-installed').textContent = d.installed ?? '—';
+            $('#pm-plan').textContent = d.patches_in_plan ?? '—';
+          }
+          log('Infrastructure data refreshed');
+        } catch(e) { log('Infra refresh failed: ' + e.message); }
+      }
+
+      async function energyHarvest() {
+        try {
+          const res = await fetch(API + '/api/energy/harvest', {
+            method: 'POST', headers: authHeaders('application/json'),
+          });
+          if (!res.ok) throw new Error('HTTP ' + res.status);
+          const d = await res.json();
+          flash('Harvested ' + d.recharged_mwh.toFixed(1) + ' mWh', 'success');
+          log('Energy harvested');
+          refreshInfra();
+        } catch(e) { flash('Harvest failed: ' + e.message, 'error'); }
+      }
+
+      async function energyConsume() {
+        try {
+          const res = await fetch(API + '/api/energy/consume', {
+            method: 'POST', headers: authHeaders('application/json'),
+            body: JSON.stringify({ drain_rate_mw: 10.0 }),
+          });
+          if (!res.ok) throw new Error('HTTP ' + res.status);
+          const d = await res.json();
+          flash('Energy consumed — ' + d.remaining_pct.toFixed(1) + '% remaining', 'success');
+          log('Energy consumed — power state: ' + d.power_state);
+          refreshInfra();
+        } catch(e) { flash('Consume failed: ' + e.message, 'error'); }
+      }
+
+      async function offloadDecide() {
+        try {
+          const res = await fetch(API + '/api/offload/decide', {
+            method: 'POST', headers: authHeaders('application/json'),
+          });
+          if (!res.ok) throw new Error('HTTP ' + res.status);
+          const d = await res.json();
+          const lines = (d.decisions || []).map(
+            dec => dec.workload + ' → ' + dec.run_on + ' (' + dec.reason + ')'
+          );
+          $('#offload-result').textContent = lines.join(' | ') || 'No decisions';
+          log('Offload decision: ' + lines.length + ' workloads');
+        } catch(e) { flash('Offload failed: ' + e.message, 'error'); }
+      }
+
+      // ── Formal Exports ──
+
+      async function downloadExport(endpoint, filename) {
+        try {
+          const res = await fetch(API + '/api/export/' + endpoint, { headers: authHeaders() });
+          if (!res.ok) throw new Error('HTTP ' + res.status);
+          const text = await res.text();
+          const blob = new Blob([text], { type: 'text/plain' });
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url; a.download = filename; a.click();
+          URL.revokeObjectURL(url);
+          log('Exported ' + filename);
+        } catch(e) { flash('Export failed: ' + e.message, 'error'); }
+      }
+
       // ── File upload ──
 
       async function uploadFile(file) {
@@ -1107,6 +1793,45 @@
       $$('[data-mode]').forEach(btn => {
         btn.addEventListener('click', () => setMode(btn.dataset.mode));
       });
+
+      // Security Operations
+      $('#btn-refresh-security').addEventListener('click', refreshSecurity);
+      $('#btn-quarantine').addEventListener('click', quarantineTarget);
+      $('#btn-add-ioc').addEventListener('click', addIoc);
+      $('#btn-deploy-decoy').addEventListener('click', deployDecoy);
+
+      // Fleet & Swarm
+      $('#btn-refresh-fleet').addEventListener('click', refreshFleet);
+      $('#btn-register-device').addEventListener('click', registerDevice);
+
+      // Digital Twin & Testing
+      $('#btn-refresh-twin').addEventListener('click', refreshTwin);
+      $('#btn-simulate').addEventListener('click', simulateEvent);
+      $('#btn-run-harness').addEventListener('click', runHarness);
+
+      // Monitoring & Analysis
+      $('#btn-refresh-analysis').addEventListener('click', refreshAnalysis);
+      $('#btn-reset-drift').addEventListener('click', resetDrift);
+
+      // Compliance & Privacy
+      $('#btn-refresh-compliance').addEventListener('click', refreshCompliance);
+
+      // Quantum & Policy
+      $('#btn-refresh-quantum').addEventListener('click', refreshQuantum);
+      $('#btn-rotate-key').addEventListener('click', rotateKey);
+      $('#btn-compose').addEventListener('click', composePolicy);
+      $('#btn-run-vm').addEventListener('click', runPolicyVm);
+
+      // Infrastructure
+      $('#btn-refresh-infra').addEventListener('click', refreshInfra);
+      $('#btn-energy-harvest').addEventListener('click', energyHarvest);
+      $('#btn-energy-consume').addEventListener('click', energyConsume);
+      $('#btn-offload').addEventListener('click', offloadDecide);
+
+      // Formal Exports
+      $('#btn-export-tla').addEventListener('click', () => downloadExport('tla', 'sentineledge.tla'));
+      $('#btn-export-alloy').addEventListener('click', () => downloadExport('alloy', 'sentineledge.als'));
+      $('#btn-export-witnesses').addEventListener('click', () => downloadExport('witnesses', 'witnesses.json'));
 
       // ── Initial load ──
       const savedToken = localStorage.getItem('sentineledge.adminToken');

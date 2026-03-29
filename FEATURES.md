@@ -13,7 +13,7 @@ Lightweight Rust edge security runtime that detects anomalies, enforces adaptive
 - **Policy composition algebra** — composable multi-rule policies with MaxSeverity/MinSeverity/Priority operators and conflict detection
 - **Rollback checkpoints** — bounded ring buffer captures and restores detector state via API
 - **Adapter-backed restore** — checkpoint rollback now reapplies abstract device isolation/quarantine state through the action layer
-- **Live admin console** — browser-based control plane with token auth, auto-refresh with exponential backoff, file upload (CSV/JSONL), CSV export, threat-level filtering, dark mode
+- **Live admin console** — browser-based control plane with token auth, auto-refresh with exponential backoff, file upload (CSV/JSONL), CSV export, threat-level filtering, dark mode, and 14 interactive panels covering all features (security ops, fleet, digital twin, monitoring, compliance, quantum, policy, infrastructure, formal exports)
 - **Multi-format ingestion** — auto-detects CSV (8 or 10 columns) and JSONL telemetry; file extension or content-type driven
 - **Benchmark harness** — precision, recall, F1, and accuracy metrics on labeled datasets for FP/FN trade-off analysis
 - **Forensic export** — evidence bundles combining audit log, run summary, and checkpoint history
@@ -35,7 +35,7 @@ A 16-stage enriched pipeline — ingest → parse → detect → decide → thre
 | Poisoning heuristics (4 detectors) | Differential privacy guarantees |
 | Proof backend interface with witness export | Zero-knowledge proof integration (Halo2) |
 | Bounded replay buffer with statistics | Swarm/cross-device coordination |
-| Token-authenticated HTTP API (25+ endpoints) | Wasm-based extensible policies |
+| Token-authenticated HTTP API (40+ endpoints) | Wasm-based extensible policies |
 | Supply-chain attestation foundations | Full attestation with Ed25519 signing |
 | Criterion micro-benchmarks (55K samples/sec) | ARM cross-compilation profiling |
 | 276 automated tests (255 unit + 21 integration) | Digital-twin fleet simulation |

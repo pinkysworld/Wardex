@@ -122,9 +122,17 @@ This backlog lists the next concrete tasks in build order.
 - [x] T135: Implement policy composition algebra — `CompositePolicy` with `MaxSeverity`/`MinSeverity`/`LeftPriority`/`RightPriority` operators and conflict detection (R39, Paper 2 enabler).
 - [x] T136: Update documentation — CHANGELOG, FEATURES, STATUS, README, and PROJECT_BACKLOG for Phase 13.
 
+## Phase 14 — Full admin console integration (completed)
+
+- [x] T137: Add 18 new API endpoints for all un-exposed feature modules — side-channel, quantum key rotation, privacy budget, WASM policy VM, fingerprint, adversarial harness, temporal monitor, deception engine, policy composition, drift detection, causal graph, patch management, workload offload, swarm posture, energy harvest.
+- [x] T138: Wire Security Operations admin panel — enforcement quarantine, threat intel IOC management, side-channel risk display, deception engine deploy UI.
+- [x] T139: Wire Fleet, Digital Twin & Testing admin panels — fleet device registration, swarm posture, digital twin simulation, adversarial harness execution.
+- [x] T140: Wire Monitoring & Analysis admin panel — temporal monitor status/violations, correlation analysis, drift detection reset, fingerprint status, causal graph display.
+- [x] T141: Wire Compliance, Quantum, Policy, Infrastructure & Formal Exports admin panels — compliance scoring, attestation, privacy budget, quantum key rotate, policy composition, WASM VM execute, energy harvest/consume, patch status, workload offload, TLA+/Alloy/witness download.
+
 ## Recommended next build order
 
-67 of 67 backlog items are complete. Phases 0–13 are complete.
+72 of 72 backlog items are complete. Phases 0–14 are complete.
 
 All tasks are done.
 
