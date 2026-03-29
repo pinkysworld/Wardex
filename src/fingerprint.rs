@@ -1,10 +1,10 @@
-/// Behavioural device fingerprinting (T094 / R38).
-///
-/// Builds a statistical profile from observed telemetry and detects
-/// anomalous deviations that may indicate device impersonation or
-/// tampering. The fingerprint captures per-signal mean and standard
-/// deviation from a training window, then scores new samples against
-/// the learned profile using Mahalanobis-inspired distance.
+//! Behavioural device fingerprinting (T094 / R38).
+//!
+//! Builds a statistical profile from observed telemetry and detects
+//! anomalous deviations that may indicate device impersonation or
+//! tampering. The fingerprint captures per-signal mean and standard
+//! deviation from a training window, then scores new samples against
+//! the learned profile using Mahalanobis-inspired distance.
 
 use serde::{Deserialize, Serialize};
 

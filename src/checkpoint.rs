@@ -38,7 +38,11 @@ impl CheckpointStore {
     }
 
     /// Push a pre-extracted baseline snapshot into the checkpoint store.
-    pub fn push_snapshot(&mut self, baseline: PersistedBaseline, device_state: DeviceStateSnapshot) {
+    pub fn push_snapshot(
+        &mut self,
+        baseline: PersistedBaseline,
+        device_state: DeviceStateSnapshot,
+    ) {
         if self.capacity == 0 {
             return;
         }
@@ -186,7 +190,9 @@ mod tests {
 
         detector.reset_baseline();
         let mut device = DeviceController::default();
-        let restored = store.restore_latest_with_device(&mut detector, &mut device).unwrap();
+        let restored = store
+            .restore_latest_with_device(&mut detector, &mut device)
+            .unwrap();
 
         assert!(restored.baseline_restored);
         assert_eq!(restored.device_state.isolation_pct, 85);

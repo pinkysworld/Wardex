@@ -1,28 +1,17 @@
-/// Temporal-logic runtime monitor (T083 / R29 / T074).
-///
-/// Implements a lightweight property checking engine for SentinelTL
-/// properties as described in DESIGN_TEMPORAL_LOGIC.md. Supports
-/// safety properties ("always P") and bounded liveness
-/// ("within N samples P").
+//! Temporal-logic runtime monitor (T083 / R29 / T074).
+//!
+//! Implements a lightweight property checking engine for SentinelTL
+//! properties as described in DESIGN_TEMPORAL_LOGIC.md. Supports
+//! safety properties ("always P") and bounded liveness
+//! ("within N samples P").
 
 /// A single runtime event fed to the monitor.
 #[derive(Debug, Clone)]
 pub enum MonitorEvent {
-    Sample {
-        score: f32,
-        battery_pct: f32,
-    },
-    Alert {
-        severity: String,
-    },
-    Action {
-        kind: String,
-        battery_pct: f32,
-    },
-    Transition {
-        from: String,
-        to: String,
-    },
+    Sample { score: f32, battery_pct: f32 },
+    Alert { severity: String },
+    Action { kind: String, battery_pct: f32 },
+    Transition { from: String, to: String },
 }
 
 /// The stream type a property listens on.
@@ -170,6 +159,7 @@ pub struct Violation {
 }
 
 /// The runtime monitor that tracks a set of temporal properties.
+#[derive(Default)]
 pub struct Monitor {
     properties: Vec<Property>,
     states: Vec<PropertyState>,
@@ -179,12 +169,7 @@ pub struct Monitor {
 
 impl Monitor {
     pub fn new() -> Self {
-        Self {
-            properties: Vec::new(),
-            states: Vec::new(),
-            event_count: 0,
-            violations: Vec::new(),
-        }
+        Self::default()
     }
 
     /// Register a property to be monitored.
@@ -250,45 +235,29 @@ impl Monitor {
                                         event_index: self.event_count,
                                     });
                                 } else {
-                                    state.status = PropertyStatus::Tracking {
-                                        remaining: *n - 1,
-                                    };
+                                    state.status = PropertyStatus::Tracking { remaining: *n - 1 };
                                 }
                             }
                         }
                     }
                 }
-                PropertyStatus::Tracking { remaining } => {
-                    match &prop.obligation {
-                        Obligation::Within(_, pred) => {
-                            if pred.check(event) {
-                                state.status = PropertyStatus::Satisfied;
-                            } else if remaining == 0 {
-                                state.status = PropertyStatus::Violated;
-                                self.violations.push(Violation {
-                                    property_name: prop.name.clone(),
-                                    event_index: self.event_count,
-                                });
-                            } else {
-                                state.status = PropertyStatus::Tracking {
-                                    remaining: remaining - 1,
-                                };
-                            }
-                        }
-                        Obligation::Always(pred) => {
-                            if !pred.check(event) {
-                                state.status = PropertyStatus::Violated;
-                                self.violations.push(Violation {
-                                    property_name: prop.name.clone(),
-                                    event_index: self.event_count,
-                                });
-                            }
+                PropertyStatus::Tracking { remaining } => match &prop.obligation {
+                    Obligation::Within(_, pred) => {
+                        if pred.check(event) {
+                            state.status = PropertyStatus::Satisfied;
+                        } else if remaining == 0 {
+                            state.status = PropertyStatus::Violated;
+                            self.violations.push(Violation {
+                                property_name: prop.name.clone(),
+                                event_index: self.event_count,
+                            });
+                        } else {
+                            state.status = PropertyStatus::Tracking {
+                                remaining: remaining - 1,
+                            };
                         }
                     }
-                }
-                PropertyStatus::Satisfied => {
-                    // For safety properties, keep checking.
-                    if let Obligation::Always(pred) = &prop.obligation {
+                    Obligation::Always(pred) => {
                         if !pred.check(event) {
                             state.status = PropertyStatus::Violated;
                             self.violations.push(Violation {
@@ -296,6 +265,18 @@ impl Monitor {
                                 event_index: self.event_count,
                             });
                         }
+                    }
+                },
+                PropertyStatus::Satisfied => {
+                    // For safety properties, keep checking.
+                    if let Obligation::Always(pred) = &prop.obligation
+                        && !pred.check(event)
+                    {
+                        state.status = PropertyStatus::Violated;
+                        self.violations.push(Violation {
+                            property_name: prop.name.clone(),
+                            event_index: self.event_count,
+                        });
                     }
                 }
                 PropertyStatus::Violated => {

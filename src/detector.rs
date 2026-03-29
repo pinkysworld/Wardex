@@ -87,9 +87,10 @@ pub struct AnomalySignal {
 }
 
 /// Controls how the detector updates its learned baseline (T041).
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Default)]
 pub enum AdaptationMode {
     /// Normal EWMA-based learning (default).
+    #[default]
     Normal,
     /// Freeze the baseline — evaluate but never update.
     Frozen,
@@ -97,12 +98,6 @@ pub enum AdaptationMode {
     /// per sample. Useful for slowly "forgetting" to detect gradual
     /// poisoning.
     Decay(f32),
-}
-
-impl Default for AdaptationMode {
-    fn default() -> Self {
-        Self::Normal
-    }
 }
 
 pub struct AnomalyDetector {
@@ -198,7 +193,9 @@ impl AnomalyDetector {
                     &mut reasons,
                     &mut suspicious_axes,
                 );
-                if c > 0.0 { contributions.push(("cpu_load_pct", c)); }
+                if c > 0.0 {
+                    contributions.push(("cpu_load_pct", c));
+                }
                 score += c;
                 let c = weighted_positive_delta(
                     sample.memory_load_pct - baseline.memory_load_pct,
@@ -208,7 +205,9 @@ impl AnomalyDetector {
                     &mut reasons,
                     &mut suspicious_axes,
                 );
-                if c > 0.0 { contributions.push(("memory_load_pct", c)); }
+                if c > 0.0 {
+                    contributions.push(("memory_load_pct", c));
+                }
                 score += c;
                 let c = weighted_positive_delta(
                     sample.temperature_c - baseline.temperature_c,
@@ -218,7 +217,9 @@ impl AnomalyDetector {
                     &mut reasons,
                     &mut suspicious_axes,
                 );
-                if c > 0.0 { contributions.push(("temperature_c", c)); }
+                if c > 0.0 {
+                    contributions.push(("temperature_c", c));
+                }
                 score += c;
                 let c = weighted_positive_delta(
                     sample.network_kbps - baseline.network_kbps,
@@ -228,7 +229,9 @@ impl AnomalyDetector {
                     &mut reasons,
                     &mut suspicious_axes,
                 );
-                if c > 0.0 { contributions.push(("network_kbps", c)); }
+                if c > 0.0 {
+                    contributions.push(("network_kbps", c));
+                }
                 score += c;
                 let c = weighted_positive_delta(
                     sample.auth_failures as f32 - baseline.auth_failures,
@@ -238,7 +241,9 @@ impl AnomalyDetector {
                     &mut reasons,
                     &mut suspicious_axes,
                 );
-                if c > 0.0 { contributions.push(("auth_failures", c)); }
+                if c > 0.0 {
+                    contributions.push(("auth_failures", c));
+                }
                 score += c;
                 let c = weighted_positive_delta(
                     sample.integrity_drift - baseline.integrity_drift,
@@ -248,7 +253,9 @@ impl AnomalyDetector {
                     &mut reasons,
                     &mut suspicious_axes,
                 );
-                if c > 0.0 { contributions.push(("integrity_drift", c)); }
+                if c > 0.0 {
+                    contributions.push(("integrity_drift", c));
+                }
                 score += c;
 
                 // T014: process count anomaly
@@ -260,7 +267,9 @@ impl AnomalyDetector {
                     &mut reasons,
                     &mut suspicious_axes,
                 );
-                if c > 0.0 { contributions.push(("process_count", c)); }
+                if c > 0.0 {
+                    contributions.push(("process_count", c));
+                }
                 score += c;
 
                 // T014: disk pressure anomaly
@@ -272,7 +281,9 @@ impl AnomalyDetector {
                     &mut reasons,
                     &mut suspicious_axes,
                 );
-                if c > 0.0 { contributions.push(("disk_pressure_pct", c)); }
+                if c > 0.0 {
+                    contributions.push(("disk_pressure_pct", c));
+                }
                 score += c;
 
                 if sample.battery_pct < baseline.battery_pct - 18.0 {
@@ -307,15 +318,23 @@ impl AnomalyDetector {
                             process_count: 50.0,
                             disk_pressure_pct: 50.0,
                         };
-                        baseline.cpu_load_pct = blend(baseline.cpu_load_pct, mid.cpu_load_pct, rate);
-                        baseline.memory_load_pct = blend(baseline.memory_load_pct, mid.memory_load_pct, rate);
-                        baseline.temperature_c = blend(baseline.temperature_c, mid.temperature_c, rate);
-                        baseline.network_kbps = blend(baseline.network_kbps, mid.network_kbps, rate);
-                        baseline.auth_failures = blend(baseline.auth_failures, mid.auth_failures, rate);
+                        baseline.cpu_load_pct =
+                            blend(baseline.cpu_load_pct, mid.cpu_load_pct, rate);
+                        baseline.memory_load_pct =
+                            blend(baseline.memory_load_pct, mid.memory_load_pct, rate);
+                        baseline.temperature_c =
+                            blend(baseline.temperature_c, mid.temperature_c, rate);
+                        baseline.network_kbps =
+                            blend(baseline.network_kbps, mid.network_kbps, rate);
+                        baseline.auth_failures =
+                            blend(baseline.auth_failures, mid.auth_failures, rate);
                         baseline.battery_pct = blend(baseline.battery_pct, mid.battery_pct, rate);
-                        baseline.integrity_drift = blend(baseline.integrity_drift, mid.integrity_drift, rate);
-                        baseline.process_count = blend(baseline.process_count, mid.process_count, rate);
-                        baseline.disk_pressure_pct = blend(baseline.disk_pressure_pct, mid.disk_pressure_pct, rate);
+                        baseline.integrity_drift =
+                            blend(baseline.integrity_drift, mid.integrity_drift, rate);
+                        baseline.process_count =
+                            blend(baseline.process_count, mid.process_count, rate);
+                        baseline.disk_pressure_pct =
+                            blend(baseline.disk_pressure_pct, mid.disk_pressure_pct, rate);
                     }
                 }
 
@@ -550,7 +569,10 @@ mod tests {
             disk_pressure_pct: 65.0,
         });
 
-        assert!(!signal.contributions.is_empty(), "anomaly should have contributions");
+        assert!(
+            !signal.contributions.is_empty(),
+            "anomaly should have contributions"
+        );
         let sum: f32 = signal.contributions.iter().map(|(_, v)| v).sum();
         assert!(
             (sum - signal.score).abs() < 0.01,
@@ -559,7 +581,10 @@ mod tests {
         );
         // Verify that CPU contribution is present and labelled
         assert!(
-            signal.contributions.iter().any(|(name, _)| *name == "cpu_load_pct"),
+            signal
+                .contributions
+                .iter()
+                .any(|(name, _)| *name == "cpu_load_pct"),
             "expected cpu_load_pct in contributions"
         );
     }
@@ -579,6 +604,9 @@ mod tests {
             process_count: 40,
             disk_pressure_pct: 5.0,
         });
-        assert!(signal.contributions.is_empty(), "first sample (baseline init) should have no contributions");
+        assert!(
+            signal.contributions.is_empty(),
+            "first sample (baseline init) should have no contributions"
+        );
     }
 }

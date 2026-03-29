@@ -101,13 +101,14 @@ impl ProofBackend for ZkStubBackend {
     }
 }
 
+#[derive(Default)]
 pub struct ProofRegistry {
     proofs: Vec<ProofEntry>,
 }
 
 impl ProofRegistry {
     pub fn new() -> Self {
-        Self { proofs: Vec::new() }
+        Self::default()
     }
 
     pub fn record(&mut self, label: &str, pre: &[u8], post: &[u8]) {
@@ -129,7 +130,10 @@ impl ProofRegistry {
 
     /// Export all proof entries as witness bundles using the given backend.
     pub fn export_witnesses(&self, backend: &dyn ProofBackend) -> Vec<WitnessBundle> {
-        self.proofs.iter().map(|e| backend.generate_witness(e)).collect()
+        self.proofs
+            .iter()
+            .map(|e| backend.generate_witness(e))
+            .collect()
     }
 
     /// Export all proof entries as a JSON string using the given backend.
@@ -150,7 +154,10 @@ mod tests {
 
         assert_eq!(registry.proofs().len(), 1);
         assert_eq!(registry.proofs()[0].label, "baseline_update");
-        assert_ne!(registry.proofs()[0].pre_digest, registry.proofs()[0].post_digest);
+        assert_ne!(
+            registry.proofs()[0].pre_digest,
+            registry.proofs()[0].post_digest
+        );
     }
 
     #[test]

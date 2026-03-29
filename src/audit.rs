@@ -72,7 +72,7 @@ impl AuditLog {
         self.records.push(record);
 
         if self.checkpoint_interval > 0
-            && self.records.len() % self.checkpoint_interval == 0
+            && self.records.len().is_multiple_of(self.checkpoint_interval)
         {
             self.insert_checkpoint();
         }

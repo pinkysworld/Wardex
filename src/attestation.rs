@@ -101,8 +101,7 @@ impl BuildManifest {
     }
 
     pub fn to_json(&self) -> Result<String, String> {
-        serde_json::to_string_pretty(self)
-            .map_err(|e| format!("failed to serialize manifest: {e}"))
+        serde_json::to_string_pretty(self).map_err(|e| format!("failed to serialize manifest: {e}"))
     }
 
     pub fn from_json(json: &str) -> Result<Self, String> {
@@ -112,15 +111,13 @@ impl BuildManifest {
     pub fn write_to_path(&self, path: &Path) -> Result<(), String> {
         let json = self.to_json()?;
         if let Some(parent) = path.parent() {
-            fs::create_dir_all(parent)
-                .map_err(|e| format!("failed to create directory: {e}"))?;
+            fs::create_dir_all(parent).map_err(|e| format!("failed to create directory: {e}"))?;
         }
         fs::write(path, json).map_err(|e| format!("failed to write manifest: {e}"))
     }
 
     pub fn load(path: &Path) -> Result<Self, String> {
-        let data =
-            fs::read_to_string(path).map_err(|e| format!("failed to read manifest: {e}"))?;
+        let data = fs::read_to_string(path).map_err(|e| format!("failed to read manifest: {e}"))?;
         Self::from_json(&data)
     }
 }
@@ -129,8 +126,8 @@ impl BuildManifest {
 
 impl TrustStore {
     pub fn load(path: &Path) -> Result<Self, String> {
-        let data = fs::read_to_string(path)
-            .map_err(|e| format!("failed to read trust store: {e}"))?;
+        let data =
+            fs::read_to_string(path).map_err(|e| format!("failed to read trust store: {e}"))?;
         serde_json::from_str(&data).map_err(|e| format!("failed to parse trust store: {e}"))
     }
 
@@ -142,8 +139,7 @@ impl TrustStore {
     pub fn write_to_path(&self, path: &Path) -> Result<(), String> {
         let json = self.to_json()?;
         if let Some(parent) = path.parent() {
-            fs::create_dir_all(parent)
-                .map_err(|e| format!("failed to create directory: {e}"))?;
+            fs::create_dir_all(parent).map_err(|e| format!("failed to create directory: {e}"))?;
         }
         fs::write(path, json).map_err(|e| format!("failed to write trust store: {e}"))
     }
@@ -170,7 +166,10 @@ pub fn verify_manifest(manifest: &BuildManifest, trust_store: &TrustStore) -> Ve
         checks.push(CheckResult {
             name: "signer_key".into(),
             passed: true,
-            detail: format!("signer key {} is trusted", &manifest.signer_pubkey[..8.min(manifest.signer_pubkey.len())]),
+            detail: format!(
+                "signer key {} is trusted",
+                &manifest.signer_pubkey[..8.min(manifest.signer_pubkey.len())]
+            ),
         });
         true
     } else {
@@ -201,7 +200,10 @@ pub fn verify_manifest(manifest: &BuildManifest, trust_store: &TrustStore) -> Ve
         name: "binary_hash_present".into(),
         passed: hash_ok,
         detail: if hash_ok {
-            format!("binary hash: {}…", &manifest.binary_hash[..16.min(manifest.binary_hash.len())])
+            format!(
+                "binary hash: {}…",
+                &manifest.binary_hash[..16.min(manifest.binary_hash.len())]
+            )
         } else {
             "manifest has no binary hash".into()
         },

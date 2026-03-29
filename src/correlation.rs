@@ -184,13 +184,19 @@ mod tests {
 
         let result = analyze(&buf, 0.8);
         assert!(
-            result.correlated_pairs.iter().any(|p|
-                (p.signal_a == "cpu_load_pct" && p.signal_b == "memory_load_pct")
-                || (p.signal_a == "memory_load_pct" && p.signal_b == "cpu_load_pct")
-            ),
+            result
+                .correlated_pairs
+                .iter()
+                .any(
+                    |p| (p.signal_a == "cpu_load_pct" && p.signal_b == "memory_load_pct")
+                        || (p.signal_a == "memory_load_pct" && p.signal_b == "cpu_load_pct")
+                ),
             "expected cpu-memory correlation"
         );
-        assert!(result.co_rising_count >= 3, "expected at least 3 co-rising signals");
+        assert!(
+            result.co_rising_count >= 3,
+            "expected at least 3 co-rising signals"
+        );
         assert!(result.co_rising_signals.iter().any(|s| s == "cpu_load_pct"));
     }
 
@@ -203,7 +209,10 @@ mod tests {
         }
 
         let result = analyze(&buf, 0.8);
-        assert!(result.correlated_pairs.is_empty(), "flat signals should not appear correlated");
+        assert!(
+            result.correlated_pairs.is_empty(),
+            "flat signals should not appear correlated"
+        );
         assert_eq!(result.co_rising_count, 0);
     }
 
@@ -220,7 +229,10 @@ mod tests {
         let a = vec![1.0, 2.0, 3.0, 4.0, 5.0];
         let b = vec![2.0, 4.0, 6.0, 8.0, 10.0];
         let r = pearson(&a, &b);
-        assert!((r - 1.0).abs() < 0.001, "perfect positive correlation, got {r}");
+        assert!(
+            (r - 1.0).abs() < 0.001,
+            "perfect positive correlation, got {r}"
+        );
     }
 
     #[test]
@@ -228,6 +240,9 @@ mod tests {
         let a = vec![1.0, 2.0, 3.0, 4.0, 5.0];
         let b = vec![10.0, 8.0, 6.0, 4.0, 2.0];
         let r = pearson(&a, &b);
-        assert!((r - (-1.0)).abs() < 0.001, "perfect negative correlation, got {r}");
+        assert!(
+            (r - (-1.0)).abs() < 0.001,
+            "perfect negative correlation, got {r}"
+        );
     }
 }

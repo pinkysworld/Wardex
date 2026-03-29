@@ -39,10 +39,7 @@ impl DeviceAction for ThrottleAdapter {
     fn restore(&self, snapshot: &DeviceStateSnapshot) -> ActionResult {
         ActionResult {
             success: true,
-            message: format!(
-                "throttle restored to {}% isolation",
-                snapshot.isolation_pct
-            ),
+            message: format!("throttle restored to {}% isolation", snapshot.isolation_pct),
         }
     }
 
@@ -97,10 +94,7 @@ impl DeviceAction for IsolateAdapter {
     fn restore(&self, snapshot: &DeviceStateSnapshot) -> ActionResult {
         ActionResult {
             success: true,
-            message: format!(
-                "network isolation restored at {}%",
-                snapshot.isolation_pct
-            ),
+            message: format!("network isolation restored at {}%", snapshot.isolation_pct),
         }
     }
 

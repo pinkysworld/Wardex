@@ -1,9 +1,9 @@
-/// Adversarial testing harness (T084 / R28 / T073).
-///
-/// Implements grammar-based evasion strategies from
-/// DESIGN_ADVERSARIAL_HARNESS.md. Generates adversarial telemetry
-/// sequences that attempt to evade the anomaly detector, and measures
-/// evasion rates and decision-surface coverage.
+//! Adversarial testing harness (T084 / R28 / T073).
+//!
+//! Implements grammar-based evasion strategies from
+//! DESIGN_ADVERSARIAL_HARNESS.md. Generates adversarial telemetry
+//! sequences that attempt to evade the anomaly detector, and measures
+//! evasion rates and decision-surface coverage.
 
 use crate::detector::AnomalyDetector;
 use crate::telemetry::TelemetrySample;
@@ -214,9 +214,18 @@ pub fn run(config: &HarnessConfig) -> HarnessResult {
     let mut coverage = CoverageMap::new();
 
     let strategies = [
-        (Strategy::SlowDrip, vec![10.0, 20.0, 30.0, 40.0, 50.0, 60.0, 70.0, 80.0, 90.0, 100.0]),
-        (Strategy::BurstMask, vec![10.0, 20.0, 30.0, 40.0, 50.0, 60.0, 70.0, 80.0, 90.0, 100.0]),
-        (Strategy::DriftInject, vec![0.1, 0.2, 0.3, 0.5, 0.7, 1.0, 1.5, 2.0, 3.0, 5.0]),
+        (
+            Strategy::SlowDrip,
+            vec![10.0, 20.0, 30.0, 40.0, 50.0, 60.0, 70.0, 80.0, 90.0, 100.0],
+        ),
+        (
+            Strategy::BurstMask,
+            vec![10.0, 20.0, 30.0, 40.0, 50.0, 60.0, 70.0, 80.0, 90.0, 100.0],
+        ),
+        (
+            Strategy::DriftInject,
+            vec![0.1, 0.2, 0.3, 0.5, 0.7, 1.0, 1.5, 2.0, 3.0, 5.0],
+        ),
     ];
 
     for (strategy, intensities) in &strategies {

@@ -96,19 +96,14 @@ impl TelemetrySample {
                 continue;
             }
             let sample: Self = serde_json::from_str(trimmed).map_err(|error| {
-                ParseTelemetryError::new(format!(
-                    "line {}: invalid JSON: {error}",
-                    line_num + 1,
-                ))
+                ParseTelemetryError::new(format!("line {}: invalid JSON: {error}", line_num + 1,))
             })?;
             sample.validate(line_num + 1)?;
             samples.push(sample);
         }
 
         if samples.is_empty() {
-            return Err(ParseTelemetryError::new(
-                "JSONL file contained no samples",
-            ));
+            return Err(ParseTelemetryError::new("JSONL file contained no samples"));
         }
 
         Ok(samples)
@@ -188,7 +183,8 @@ impl TelemetrySample {
             "disk_pressure_pct",
         )?;
 
-        if self.network_kbps.is_nan() || self.network_kbps.is_infinite() || self.network_kbps < 0.0 {
+        if self.network_kbps.is_nan() || self.network_kbps.is_infinite() || self.network_kbps < 0.0
+        {
             return Err(ParseTelemetryError::new(format!(
                 "line {line_number}: network_kbps must be a finite non-negative value"
             )));
@@ -250,8 +246,7 @@ mod tests {
     #[test]
     fn parses_line_10_cols() {
         let sample =
-            TelemetrySample::parse_line_cols("42,10,20,35,1200,2,80,0.15,120,45.5", 3, 10)
-                .unwrap();
+            TelemetrySample::parse_line_cols("42,10,20,35,1200,2,80,0.15,120,45.5", 3, 10).unwrap();
         assert_eq!(sample.process_count, 120);
         assert!((sample.disk_pressure_pct - 45.5).abs() < 0.01);
     }
@@ -314,10 +309,9 @@ mod tests {
 
     #[test]
     fn parse_low_battery_extended_fixture() {
-        let samples = TelemetrySample::parse_csv(std::path::Path::new(
-            "examples/low_battery_extended.csv",
-        ))
-        .unwrap();
+        let samples =
+            TelemetrySample::parse_csv(std::path::Path::new("examples/low_battery_extended.csv"))
+                .unwrap();
         assert_eq!(samples.len(), 120);
         // starts with low battery, degrades further
         assert!(samples.first().unwrap().battery_pct < 20.0);

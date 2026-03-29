@@ -65,7 +65,10 @@ impl JsonReport {
                 isolation_pct: r.decision.isolation_pct,
                 reasons: r.signal.reasons.clone(),
                 rationale: r.decision.rationale.clone(),
-                contributions: r.signal.contributions.iter()
+                contributions: r
+                    .signal
+                    .contributions
+                    .iter()
                     .map(|(name, val)| (name.to_string(), *val))
                     .collect(),
             })

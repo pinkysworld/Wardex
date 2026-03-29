@@ -57,28 +57,17 @@ impl Default for OutputSettings {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct Config {
     pub detector: DetectorSettings,
     pub policy: PolicySettings,
     pub output: OutputSettings,
 }
 
-impl Default for Config {
-    fn default() -> Self {
-        Self {
-            detector: DetectorSettings::default(),
-            policy: PolicySettings::default(),
-            output: OutputSettings::default(),
-        }
-    }
-}
-
 impl Config {
     pub fn write_default_toml(path: &Path) -> Result<(), String> {
         if let Some(parent) = path.parent() {
-            fs::create_dir_all(parent)
-                .map_err(|e| format!("failed to create directory: {e}"))?;
+            fs::create_dir_all(parent).map_err(|e| format!("failed to create directory: {e}"))?;
         }
         let config = Self::default();
         let toml_str =

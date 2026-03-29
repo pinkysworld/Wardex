@@ -363,24 +363,24 @@ pub fn render_console_report(result: &RunResult, audit_path: Option<&Path>) -> S
     }
 
     // Correlation summary (T090)
-    if let Some(ref corr) = result.correlation {
-        if !corr.correlated_pairs.is_empty() || corr.co_rising_count > 0 {
-            let _ = writeln!(output, "\ncorrelation analysis:");
-            for pair in &corr.correlated_pairs {
-                let _ = writeln!(
-                    output,
-                    "  {} ~ {} (r={:.2})",
-                    pair.signal_a, pair.signal_b, pair.coefficient
-                );
-            }
-            if corr.co_rising_count > 0 {
-                let _ = writeln!(
-                    output,
-                    "  co-rising signals ({}): {}",
-                    corr.co_rising_count,
-                    corr.co_rising_signals.join(", ")
-                );
-            }
+    if let Some(ref corr) = result.correlation
+        && (!corr.correlated_pairs.is_empty() || corr.co_rising_count > 0)
+    {
+        let _ = writeln!(output, "\ncorrelation analysis:");
+        for pair in &corr.correlated_pairs {
+            let _ = writeln!(
+                output,
+                "  {} ~ {} (r={:.2})",
+                pair.signal_a, pair.signal_b, pair.coefficient
+            );
+        }
+        if corr.co_rising_count > 0 {
+            let _ = writeln!(
+                output,
+                "  co-rising signals ({}): {}",
+                corr.co_rising_count,
+                corr.co_rising_signals.join(", ")
+            );
         }
     }
 

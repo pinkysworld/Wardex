@@ -27,8 +27,7 @@ struct AppState {
 
 pub fn run_server(port: u16, site_dir: &Path) -> Result<(), String> {
     let addr = format!("0.0.0.0:{port}");
-    let server =
-        Server::http(&addr).map_err(|e| format!("failed to start server: {e}"))?;
+    let server = Server::http(&addr).map_err(|e| format!("failed to start server: {e}"))?;
 
     let token = generate_token();
     println!("SentinelEdge admin console");
@@ -99,7 +98,7 @@ fn generate_token() -> String {
 fn json_response(body: &str, status: u16) -> Response<std::io::Cursor<Vec<u8>>> {
     let data = body.as_bytes().to_vec();
     let len = data.len();
-    let response = Response::new(
+    Response::new(
         tiny_http::StatusCode(status),
         vec![
             Header::from_bytes(b"Content-Type", b"application/json").unwrap(),
@@ -109,8 +108,7 @@ fn json_response(body: &str, status: u16) -> Response<std::io::Cursor<Vec<u8>>> 
         std::io::Cursor::new(data),
         Some(len),
         None,
-    );
-    response
+    )
 }
 
 fn error_json(message: &str, status: u16) -> Response<std::io::Cursor<Vec<u8>>> {
@@ -195,12 +193,8 @@ fn handle_api(mut request: Request, state: &Arc<Mutex<AppState>>, _site_dir: &Pa
                 }
             }
         }
-        (Method::Post, "/api/analyze") => {
-            handle_analyze(&mut request, state)
-        }
-        (Method::Post, "/api/control/mode") => {
-            handle_mode(&mut request, state)
-        }
+        (Method::Post, "/api/analyze") => handle_analyze(&mut request, state),
+        (Method::Post, "/api/control/mode") => handle_mode(&mut request, state),
         (Method::Post, "/api/control/reset-baseline") => {
             let mut s = state.lock().unwrap();
             s.detector.reset_baseline();
@@ -299,11 +293,15 @@ fn handle_api(mut request: Request, state: &Arc<Mutex<AppState>>, _site_dir: &Pa
                 Ok(json) => {
                     let mut s = state.lock().unwrap();
                     for (sample, report) in demo.iter().zip(result.reports.iter()) {
-                        let pre = s.detector.snapshot()
+                        let pre = s
+                            .detector
+                            .snapshot()
                             .map(|snap| serde_json::to_vec(&snap).unwrap_or_default())
                             .unwrap_or_default();
                         s.detector.evaluate(sample);
-                        let post = s.detector.snapshot()
+                        let post = s
+                            .detector
+                            .snapshot()
                             .map(|snap| serde_json::to_vec(&snap).unwrap_or_default())
                             .unwrap_or_default();
                         s.proofs.record("baseline_update", &pre, &post);
@@ -322,7 +320,8 @@ fn handle_api(mut request: Request, state: &Arc<Mutex<AppState>>, _site_dir: &Pa
             Response::new(
                 tiny_http::StatusCode(204),
                 vec![
-                    Header::from_bytes(b"Access-Control-Allow-Origin", b"http://localhost").unwrap(),
+                    Header::from_bytes(b"Access-Control-Allow-Origin", b"http://localhost")
+                        .unwrap(),
                     Header::from_bytes(b"Vary", b"Origin").unwrap(),
                     Header::from_bytes(b"Access-Control-Allow-Methods", b"GET, POST, OPTIONS")
                         .unwrap(),
@@ -343,7 +342,10 @@ fn handle_api(mut request: Request, state: &Arc<Mutex<AppState>>, _site_dir: &Pa
     let _ = request.respond(response);
 }
 
-fn handle_analyze(request: &mut Request, state: &Arc<Mutex<AppState>>) -> Response<std::io::Cursor<Vec<u8>>> {
+fn handle_analyze(
+    request: &mut Request,
+    state: &Arc<Mutex<AppState>>,
+) -> Response<std::io::Cursor<Vec<u8>>> {
     let mut body = String::new();
     if std::io::Read::read_to_string(request.as_reader(), &mut body).is_err() {
         return error_json("failed to read request body", 400);
@@ -351,8 +353,7 @@ fn handle_analyze(request: &mut Request, state: &Arc<Mutex<AppState>>) -> Respon
 
     // Detect format: if the content-type says CSV or the body looks like CSV, parse as CSV
     let is_csv = request.headers().iter().any(|h| {
-        h.field.as_str().to_ascii_lowercase() == "content-type"
-            && h.value.as_str().contains("csv")
+        h.field.as_str().to_ascii_lowercase() == "content-type" && h.value.as_str().contains("csv")
     }) || (!body.trim_start().starts_with('{') && body.contains(','));
 
     let samples: Result<Vec<TelemetrySample>, String> = if is_csv {
@@ -366,8 +367,7 @@ fn handle_analyze(request: &mut Request, state: &Arc<Mutex<AppState>>) -> Respon
                 trimmed != CSV_HEADER && trimmed != CSV_HEADER_LEGACY
             })
             .map(|(line_num, line)| {
-                TelemetrySample::parse_line(line, line_num + 1)
-                    .map_err(|e| format!("{e}"))
+                TelemetrySample::parse_line(line, line_num + 1).map_err(|e| format!("{e}"))
             })
             .collect()
     } else if body.trim_start().starts_with('{') {
@@ -375,10 +375,7 @@ fn handle_analyze(request: &mut Request, state: &Arc<Mutex<AppState>>) -> Respon
         body.lines()
             .enumerate()
             .filter(|(_, l)| !l.trim().is_empty())
-            .map(|(i, line)| {
-                serde_json::from_str(line)
-                    .map_err(|e| format!("line {}: {e}", i + 1))
-            })
+            .map(|(i, line)| serde_json::from_str(line).map_err(|e| format!("line {}: {e}", i + 1)))
             .collect()
     } else {
         Err("Unsupported format. POST body must be JSONL or CSV.".into())
@@ -395,11 +392,15 @@ fn handle_analyze(request: &mut Request, state: &Arc<Mutex<AppState>>) -> Respon
             let mut s = state.lock().unwrap();
             // Update the live detector baseline with the analyzed samples
             for (sample, report) in samples.iter().zip(result.reports.iter()) {
-                let pre = s.detector.snapshot()
+                let pre = s
+                    .detector
+                    .snapshot()
                     .map(|snap| serde_json::to_vec(&snap).unwrap_or_default())
                     .unwrap_or_default();
                 s.detector.evaluate(sample);
-                let post = s.detector.snapshot()
+                let post = s
+                    .detector
+                    .snapshot()
                     .map(|snap| serde_json::to_vec(&snap).unwrap_or_default())
                     .unwrap_or_default();
                 s.proofs.record("baseline_update", &pre, &post);
@@ -415,7 +416,10 @@ fn handle_analyze(request: &mut Request, state: &Arc<Mutex<AppState>>) -> Respon
     }
 }
 
-fn handle_mode(request: &mut Request, state: &Arc<Mutex<AppState>>) -> Response<std::io::Cursor<Vec<u8>>> {
+fn handle_mode(
+    request: &mut Request,
+    state: &Arc<Mutex<AppState>>,
+) -> Response<std::io::Cursor<Vec<u8>>> {
     let mut body = String::new();
     if std::io::Read::read_to_string(request.as_reader(), &mut body).is_err() {
         return error_json("failed to read request body", 400);
@@ -488,11 +492,7 @@ fn serve_static(request: Request, site_dir: &Path) {
                 let len = data.len();
                 let response = Response::new(
                     tiny_http::StatusCode(200),
-                    vec![Header::from_bytes(
-                        b"Content-Type",
-                        content_type.as_bytes(),
-                    )
-                    .unwrap()],
+                    vec![Header::from_bytes(b"Content-Type", content_type.as_bytes()).unwrap()],
                     std::io::Cursor::new(data),
                     Some(len),
                     None,

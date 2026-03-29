@@ -20,24 +20,25 @@ pub struct PolicyStateMachine {
     trace: Vec<Transition>,
 }
 
-impl PolicyStateMachine {
-    pub fn new() -> Self {
+impl Default for PolicyStateMachine {
+    fn default() -> Self {
         Self {
             state: ThreatLevel::Nominal,
             trace: Vec::new(),
         }
+    }
+}
+
+impl PolicyStateMachine {
+    pub fn new() -> Self {
+        Self::default()
     }
 
     pub fn state(&self) -> ThreatLevel {
         self.state
     }
 
-    pub fn step(
-        &mut self,
-        level: ThreatLevel,
-        action: ResponseAction,
-        trigger: TransitionTrigger,
-    ) {
+    pub fn step(&mut self, level: ThreatLevel, action: ResponseAction, trigger: TransitionTrigger) {
         if !Self::is_legal(self.state, level) {
             // Clamp illegal de-escalations: stay at current level.
             return;
@@ -61,12 +62,12 @@ impl PolicyStateMachine {
             return true;
         }
         // De-escalation is only legal one level at a time
-        match (from, to) {
-            (ThreatLevel::Critical, ThreatLevel::Severe) => true,
-            (ThreatLevel::Severe, ThreatLevel::Elevated) => true,
-            (ThreatLevel::Elevated, ThreatLevel::Nominal) => true,
-            _ => false,
-        }
+        matches!(
+            (from, to),
+            (ThreatLevel::Critical, ThreatLevel::Severe)
+                | (ThreatLevel::Severe, ThreatLevel::Elevated)
+                | (ThreatLevel::Elevated, ThreatLevel::Nominal)
+        )
     }
 
     /// Export the state machine definition and recorded trace as a TLA+ module.
@@ -80,9 +81,15 @@ impl PolicyStateMachine {
         let _ = writeln!(out);
         let _ = writeln!(out, "States == {{Nominal, Elevated, Severe, Critical}}");
         let _ = writeln!(out);
-        let _ = writeln!(out, "Actions == {{\"observe\", \"rate-limit\", \"quarantine\", \"rollback-and-escalate\"}}");
+        let _ = writeln!(
+            out,
+            "Actions == {{\"observe\", \"rate-limit\", \"quarantine\", \"rollback-and-escalate\"}}"
+        );
         let _ = writeln!(out);
-        let _ = writeln!(out, "(* Escalation is always legal; de-escalation only one step at a time *)");
+        let _ = writeln!(
+            out,
+            "(* Escalation is always legal; de-escalation only one step at a time *)"
+        );
         let _ = writeln!(out, "LegalTransition(from, to) ==");
         let _ = writeln!(out, "    \\/ to >= from");
         let _ = writeln!(out, "    \\/ (from = Critical /\\ to = Severe)");
@@ -102,7 +109,10 @@ impl PolicyStateMachine {
         let _ = writeln!(out, "Spec == Init /\\ [][Next]_state");
         let _ = writeln!(out);
         let _ = writeln!(out, "(* Safety: no multi-step de-escalation *)");
-        let _ = writeln!(out, "NoSkipDeescalation == [][LegalTransition(state, state')]_state");
+        let _ = writeln!(
+            out,
+            "NoSkipDeescalation == [][LegalTransition(state, state')]_state"
+        );
         let _ = writeln!(out);
 
         // Recorded trace as a witness sequence
@@ -138,10 +148,16 @@ impl PolicyStateMachine {
         let _ = writeln!(out, "open util/ordering[State]");
         let _ = writeln!(out);
         let _ = writeln!(out, "abstract sig ThreatLevel {{}}");
-        let _ = writeln!(out, "one sig Nominal, Elevated, Severe, Critical extends ThreatLevel {{}}");
+        let _ = writeln!(
+            out,
+            "one sig Nominal, Elevated, Severe, Critical extends ThreatLevel {{}}"
+        );
         let _ = writeln!(out);
         let _ = writeln!(out, "abstract sig Action {{}}");
-        let _ = writeln!(out, "one sig Observe, RateLimit, Quarantine, RollbackAndEscalate extends Action {{}}");
+        let _ = writeln!(
+            out,
+            "one sig Observe, RateLimit, Quarantine, RollbackAndEscalate extends Action {{}}"
+        );
         let _ = writeln!(out);
         let _ = writeln!(out, "sig State {{");
         let _ = writeln!(out, "    level: one ThreatLevel,");
@@ -184,27 +200,24 @@ impl PolicyStateMachine {
         if !self.trace.is_empty() {
             let _ = writeln!(out, "// Recorded trace witness");
             let _ = writeln!(out, "fact traceWitness {{");
-            let _ = writeln!(out, "    #{} = add[#Transition, 1]", "State");
+            let _ = writeln!(out, "    #State = add[#Transition, 1]");
             for (i, t) in self.trace.iter().enumerate() {
                 let _ = writeln!(
                     out,
-                    "    (first{}){}.level = {}",
+                    "    (first{}).level = {}",
                     ".next".repeat(i),
-                    "",
                     alloy_state(t.from),
                 );
                 let _ = writeln!(
                     out,
-                    "    (first{}){}.level = {}",
+                    "    (first{}).level = {}",
                     ".next".repeat(i + 1),
-                    "",
                     alloy_state(t.to),
                 );
                 let _ = writeln!(
                     out,
-                    "    (first{}){}.action = {}",
+                    "    (first{}).action = {}",
                     ".next".repeat(i + 1),
-                    "",
                     alloy_action(t.action),
                 );
             }
@@ -212,7 +225,11 @@ impl PolicyStateMachine {
             let _ = writeln!(out);
         }
 
-        let _ = writeln!(out, "check noSkipDeescalation for {} State", std::cmp::max(4, self.trace.len() + 1));
+        let _ = writeln!(
+            out,
+            "check noSkipDeescalation for {} State",
+            std::cmp::max(4, self.trace.len() + 1)
+        );
         out
     }
 }

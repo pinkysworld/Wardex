@@ -33,8 +33,17 @@ pub fn mean_shift_detected(buffer: &ReplayBuffer) -> bool {
     }
 
     let mid = samples.len() / 2;
-    let first_half_mean: f32 = samples.iter().take(mid).map(|s| s.cpu_load_pct).sum::<f32>() / mid as f32;
-    let second_half_mean: f32 = samples.iter().skip(mid).map(|s| s.cpu_load_pct).sum::<f32>()
+    let first_half_mean: f32 = samples
+        .iter()
+        .take(mid)
+        .map(|s| s.cpu_load_pct)
+        .sum::<f32>()
+        / mid as f32;
+    let second_half_mean: f32 = samples
+        .iter()
+        .skip(mid)
+        .map(|s| s.cpu_load_pct)
+        .sum::<f32>()
         / (samples.len() - mid) as f32;
 
     (second_half_mean - first_half_mean).abs() > 20.0
@@ -48,8 +57,11 @@ pub fn variance_spike_detected(buffer: &ReplayBuffer) -> bool {
 
     let n = samples.len() as f32;
     let mean: f32 = samples.iter().map(|s| s.network_kbps).sum::<f32>() / n;
-    let variance: f32 =
-        samples.iter().map(|s| (s.network_kbps - mean).powi(2)).sum::<f32>() / n;
+    let variance: f32 = samples
+        .iter()
+        .map(|s| (s.network_kbps - mean).powi(2))
+        .sum::<f32>()
+        / n;
 
     variance.sqrt() > mean * 0.8
 }
@@ -85,7 +97,11 @@ pub fn auth_burst_detected(buffer: &ReplayBuffer) -> bool {
     let burst_window = 3;
     let mut burst_count = 0usize;
 
-    for window in samples.iter().collect::<Vec<_>>().windows(burst_window.min(samples.len())) {
+    for window in samples
+        .iter()
+        .collect::<Vec<_>>()
+        .windows(burst_window.min(samples.len()))
+    {
         let total_auth: u64 = window.iter().map(|s| s.auth_failures as u64).sum();
         if total_auth >= burst_threshold {
             burst_count += 1;

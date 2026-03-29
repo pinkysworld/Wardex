@@ -19,8 +19,7 @@ pub struct PersistedBaseline {
 impl PersistedBaseline {
     pub fn save_to_path(&self, path: &Path) -> Result<(), String> {
         if let Some(parent) = path.parent() {
-            fs::create_dir_all(parent)
-                .map_err(|e| format!("failed to create directory: {e}"))?;
+            fs::create_dir_all(parent).map_err(|e| format!("failed to create directory: {e}"))?;
         }
         let json = serde_json::to_string_pretty(self)
             .map_err(|e| format!("failed to serialize baseline: {e}"))?;
@@ -28,8 +27,7 @@ impl PersistedBaseline {
     }
 
     pub fn load_from_path(path: &Path) -> Result<Self, String> {
-        let raw =
-            fs::read_to_string(path).map_err(|e| format!("failed to read baseline: {e}"))?;
+        let raw = fs::read_to_string(path).map_err(|e| format!("failed to read baseline: {e}"))?;
         serde_json::from_str(&raw).map_err(|e| format!("failed to parse baseline: {e}"))
     }
 }

@@ -18,6 +18,7 @@ pub struct BenchmarkResult {
     pub signal_contributions: Vec<(String, f32)>,
 }
 
+#[derive(Default)]
 pub struct BenchmarkHarness {
     true_positives: usize,
     false_positives: usize,
@@ -29,14 +30,7 @@ pub struct BenchmarkHarness {
 
 impl BenchmarkHarness {
     pub fn new() -> Self {
-        Self {
-            true_positives: 0,
-            false_positives: 0,
-            true_negatives: 0,
-            false_negatives: 0,
-            contribution_sums: BTreeMap::new(),
-            sample_count: 0,
-        }
+        Self::default()
     }
 
     pub fn record(&mut self, predicted: bool, actual: bool) {
@@ -67,21 +61,13 @@ impl BenchmarkHarness {
         let total = tp + fp + tn + fn_;
 
         let precision = if tp + fp > 0.0 { tp / (tp + fp) } else { 0.0 };
-        let recall = if tp + fn_ > 0.0 {
-            tp / (tp + fn_)
-        } else {
-            0.0
-        };
+        let recall = if tp + fn_ > 0.0 { tp / (tp + fn_) } else { 0.0 };
         let f1 = if precision + recall > 0.0 {
             2.0 * precision * recall / (precision + recall)
         } else {
             0.0
         };
-        let accuracy = if total > 0.0 {
-            (tp + tn) / total
-        } else {
-            0.0
-        };
+        let accuracy = if total > 0.0 { (tp + tn) / total } else { 0.0 };
 
         let signal_contributions: Vec<(String, f32)> = if self.sample_count > 0 {
             self.contribution_sums
@@ -156,9 +142,9 @@ mod tests {
     #[test]
     fn mixed_results() {
         let mut harness = BenchmarkHarness::new();
-        harness.record(true, true);   // TP
-        harness.record(true, false);  // FP
-        harness.record(false, true);  // FN
+        harness.record(true, true); // TP
+        harness.record(true, false); // FP
+        harness.record(false, true); // FN
         harness.record(false, false); // TN
 
         let result = harness.result();
@@ -259,15 +245,24 @@ mod tests {
         assert!(elapsed.as_secs() < 1, "10k benchmark took {:?}", elapsed);
 
         // Sanity: we should have some of each category
-        let total = result.true_positives + result.false_positives
-            + result.true_negatives + result.false_negatives;
+        let total = result.true_positives
+            + result.false_positives
+            + result.true_negatives
+            + result.false_negatives;
         assert_eq!(total, n);
 
         // The detector should achieve > 50% accuracy on this well-separated dataset
-        assert!(result.accuracy > 0.5, "accuracy {} too low", result.accuracy);
+        assert!(
+            result.accuracy > 0.5,
+            "accuracy {} too low",
+            result.accuracy
+        );
 
         // F1 should be non-trivial on a 5% anomaly rate with clear separation
-        assert!(result.f1 > 0.0, "F1 score is zero — detector not detecting anomalies");
+        assert!(
+            result.f1 > 0.0,
+            "F1 score is zero — detector not detecting anomalies"
+        );
     }
 
     #[test]

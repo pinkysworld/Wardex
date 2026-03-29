@@ -3,10 +3,10 @@ use std::path::{Path, PathBuf};
 use std::process;
 
 use sentineledge::attestation::BuildManifest;
-use sentineledge::benchmark::{run_benchmark, BenchmarkResult};
+use sentineledge::benchmark::{BenchmarkResult, run_benchmark};
 use sentineledge::config::Config;
 use sentineledge::detector::AnomalyDetector;
-use sentineledge::fixed_threshold::{run_fixed_benchmark, FixedThresholdDetector};
+use sentineledge::fixed_threshold::{FixedThresholdDetector, run_fixed_benchmark};
 use sentineledge::harness::{self, HarnessConfig};
 use sentineledge::report::JsonReport;
 use sentineledge::runtime;
@@ -188,7 +188,11 @@ fn run() -> Result<(), String> {
             let content = match format.as_str() {
                 "tla" => sm.export_tla(),
                 "alloy" => sm.export_alloy(),
-                other => return Err(format!("unknown format `{other}`, expected `tla` or `alloy`")),
+                other => {
+                    return Err(format!(
+                        "unknown format `{other}`, expected `tla` or `alloy`"
+                    ));
+                }
             };
 
             if let Some(path) = output_path {
@@ -214,8 +218,7 @@ fn run() -> Result<(), String> {
                 .unwrap_or_else(|| PathBuf::from("var/manifest.json"));
 
             let artifact_paths: Vec<PathBuf> = args.map(PathBuf::from).collect();
-            let artifact_refs: Vec<&Path> =
-                artifact_paths.iter().map(|p| p.as_path()).collect();
+            let artifact_refs: Vec<&Path> = artifact_paths.iter().map(|p| p.as_path()).collect();
 
             let manifest = BuildManifest::generate(&binary_path, &artifact_refs)?;
             manifest.write_to_path(&output_path)?;
@@ -223,7 +226,11 @@ fn run() -> Result<(), String> {
                 "Build manifest written to {} ({} artifact{})",
                 output_path.display(),
                 manifest.artifact_hashes.len(),
-                if manifest.artifact_hashes.len() == 1 { "" } else { "s" }
+                if manifest.artifact_hashes.len() == 1 {
+                    ""
+                } else {
+                    "s"
+                }
             );
         }
         "bench" => {
@@ -235,7 +242,10 @@ fn run() -> Result<(), String> {
                 .ok_or_else(|| "missing attack CSV path for `bench`".to_string())?;
             let threshold: f32 = args
                 .next()
-                .map(|t| t.parse::<f32>().map_err(|_| "invalid threshold".to_string()))
+                .map(|t| {
+                    t.parse::<f32>()
+                        .map_err(|_| "invalid threshold".to_string())
+                })
                 .transpose()?
                 .unwrap_or(2.0);
 
@@ -320,8 +330,16 @@ fn run_bench(benign_path: &str, attack_path: &str, threshold: f32) -> Result<(),
     let elapsed_fixed = start_fixed.elapsed();
 
     println!("SentinelEdge benchmark comparison");
-    println!("  benign: {} ({} samples)", benign_path, benign_samples.len());
-    println!("  attack: {} ({} samples)", attack_path, attack_samples.len());
+    println!(
+        "  benign: {} ({} samples)",
+        benign_path,
+        benign_samples.len()
+    );
+    println!(
+        "  attack: {} ({} samples)",
+        attack_path,
+        attack_samples.len()
+    );
     println!("  threshold: {threshold:.1}");
     println!("  total samples: {total}");
     println!();
@@ -330,8 +348,14 @@ fn run_bench(benign_path: &str, attack_path: &str, threshold: f32) -> Result<(),
         let throughput = total as f64 / elapsed.as_secs_f64();
         println!(
             "  {label:<16} P={:.3}  R={:.3}  F1={:.3}  Acc={:.3}  TP={:<4} FP={:<4} FN={:<4} TN={:<4}  {:.0} samples/s",
-            r.precision, r.recall, r.f1, r.accuracy,
-            r.true_positives, r.false_positives, r.false_negatives, r.true_negatives,
+            r.precision,
+            r.recall,
+            r.f1,
+            r.accuracy,
+            r.true_positives,
+            r.false_positives,
+            r.false_negatives,
+            r.true_negatives,
             throughput,
         );
     }
@@ -372,9 +396,7 @@ fn run_bench(benign_path: &str, attack_path: &str, threshold: f32) -> Result<(),
                 .find(|(n, _)| n == signal)
                 .map(|(_, v)| *v)
                 .unwrap_or(0.0);
-            println!(
-                "    {signal:<22} EWMA={ewma_val:.4}  Fixed={fixed_val:.4}"
-            );
+            println!("    {signal:<22} EWMA={ewma_val:.4}  Fixed={fixed_val:.4}");
         }
     }
 
