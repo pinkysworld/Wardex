@@ -2,7 +2,7 @@
 
 SentinelEdge is a Rust edge security runtime for anomaly detection, policy-driven response, and verifiable audit trails on constrained devices.
 
-The research blueprint in [blueprint.md](/Users/michelpicker/Library/Mobile Documents/com~apple~CloudDocs/Projekte/SentinelEdge/blueprint.md) sketches 40 research tracks across seven thematic categories. The codebase has completed all 12 phases of the engineering backlog — 61/61 tasks complete:
+The research blueprint in [blueprint.md](blueprint.md) sketches 40 research tracks across seven thematic categories. The codebase has completed all 12 phases of the engineering backlog — 61/61 tasks complete:
 
 - a configurable Rust runtime for multi-signal anomaly scoring across 8 dimensions
 - an energy-aware response policy engine with pluggable device action adapters
@@ -45,7 +45,7 @@ See [FEATURES.md](FEATURES.md) for a one-page capability summary and [CHANGELOG.
 - **Poisoning heuristics:** four statistical heuristics analyze replay buffers for data manipulation attempts.
 - **Benchmark harness:** labeled datasets can be scored for true/false positive/negative rates, precision, recall, and F1.
 - **Browser admin console:** a live web UI backed by a token-authenticated HTTP server with auto-refresh polling, connection status indicator, JSONL/CSV file upload via drag-and-drop, decay rate slider, checkpoint save/restore, CSV report export, threat-level filtering, dark mode support, and responsive report tables.
-- **Operator-facing docs:** architecture, getting-started, backlog, and track-by-track implementation status in [`docs/`](/Users/michelpicker/Library/Mobile Documents/com~apple~CloudDocs/Projekte/SentinelEdge/docs/README.md).
+- **Operator-facing docs:** architecture, getting-started, backlog, and track-by-track implementation status in [`docs/`](docs/README.md).
 
 ## Quick start
 
@@ -116,15 +116,15 @@ blueprint.md          Original research track ideation
 
 ## Documentation
 
-Start with [`docs/README.md`](/Users/michelpicker/Library/Mobile Documents/com~apple~CloudDocs/Projekte/SentinelEdge/docs/README.md).
+Start with [`docs/README.md`](docs/README.md).
 
 Key documents:
 
-- [`docs/GETTING_STARTED.md`](/Users/michelpicker/Library/Mobile Documents/com~apple~CloudDocs/Projekte/SentinelEdge/docs/GETTING_STARTED.md)
-- [`docs/ARCHITECTURE.md`](/Users/michelpicker/Library/Mobile Documents/com~apple~CloudDocs/Projekte/SentinelEdge/docs/ARCHITECTURE.md)
-- [`docs/STATUS.md`](/Users/michelpicker/Library/Mobile Documents/com~apple~CloudDocs/Projekte/SentinelEdge/docs/STATUS.md)
-- [`docs/PROJECT_BACKLOG.md`](/Users/michelpicker/Library/Mobile Documents/com~apple~CloudDocs/Projekte/SentinelEdge/docs/PROJECT_BACKLOG.md)
-- [`docs/RESEARCH_TRACKS.md`](/Users/michelpicker/Library/Mobile Documents/com~apple~CloudDocs/Projekte/SentinelEdge/docs/RESEARCH_TRACKS.md)
+- [`docs/GETTING_STARTED.md`](docs/GETTING_STARTED.md)
+- [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)
+- [`docs/STATUS.md`](docs/STATUS.md)
+- [`docs/PROJECT_BACKLOG.md`](docs/PROJECT_BACKLOG.md)
+- [`docs/RESEARCH_TRACKS.md`](docs/RESEARCH_TRACKS.md)
 
 ## GitHub Pages
 

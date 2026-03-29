@@ -1,6 +1,6 @@
 # Research Tracks Status Map
 
-This document translates the raw ideas in [`blueprint.md`](/Users/michelpicker/Library/Mobile Documents/com~apple~CloudDocs/Projekte/SentinelEdge/blueprint.md) into an implementation-aware status map.
+This document translates the raw ideas in [`blueprint.md`](../blueprint.md) into an implementation-aware status map.
 
 Legend:
 
