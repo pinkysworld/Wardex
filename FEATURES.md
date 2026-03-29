@@ -8,6 +8,7 @@ Lightweight Rust edge security runtime that detects anomalies, enforces adaptive
 - **Policy-driven response** — threat-level engine adapts mitigation strength to device battery state with pluggable action adapters (throttle, quarantine, isolate)
 - **Cryptographic audit trail** — SHA-256 digest chain with signed checkpoints and programmatic verification for tamper-evident logging
 - **Poisoning defence** — four heuristics (mean-shift, variance spike, drift accumulation, auth-burst) detect data manipulation; adaptation can be frozen or decayed
+- **Proof backend interface** — pluggable proof backends (`DigestBackend`, `ZkStubBackend`) with witness export for future Halo2/SNARK integration
 - **Rollback checkpoints** — bounded ring buffer captures and restores detector state via API
 - **Adapter-backed restore** — checkpoint rollback now reapplies abstract device isolation/quarantine state through the action layer
 - **Live admin console** — browser-based control plane with token auth, auto-refresh with exponential backoff, file upload (CSV/JSONL), CSV export, threat-level filtering, dark mode
@@ -28,10 +29,10 @@ A 10-stage pipeline — ingest → parse → detect → decide → act → audit
 | Policy state machine with TLA+/Alloy export | Full model-checking integration |
 | SHA-256 audit chain with signed checkpoints | Post-quantum signatures (hybrid lattice) |
 | Poisoning heuristics (4 detectors) | Differential privacy guarantees |
-| Proof-carrying update metadata | Zero-knowledge proof integration (Halo2) |
+| Proof backend interface with witness export | Zero-knowledge proof integration (Halo2) |
 | Bounded replay buffer with statistics | Swarm/cross-device coordination |
 | Token-authenticated HTTP API (10 endpoints) | Wasm-based extensible policies |
-| 117 automated tests (100 unit + 17 integration) | Supply-chain attestation |
+| 124 automated tests (105 unit + 19 integration) | Supply-chain attestation |
 | Browser admin console with dark mode | Digital-twin fleet simulation |
 | CSV + JSONL multi-format ingestion | Quantum-walk anomaly propagation |
 

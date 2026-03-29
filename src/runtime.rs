@@ -475,6 +475,7 @@ pub fn status_snapshot() -> String {
         "Phase 10 — Integration Closure (in progress):",
         "  - adapter-backed checkpoint restore (T100)",
         "  - TLA+/Alloy model export for offline verification (T101)",
+        "  - proof backend interface with witness export (T102)",
         "",
         "Foundation (complete):",
         "  - adaptive multi-signal anomaly scoring (8 dimensions)",
@@ -496,7 +497,7 @@ pub fn status_snapshot() -> String {
 pub fn status_manifest() -> StatusManifest {
     StatusManifest {
         updated_at: "2026-03-29".into(),
-        backlog_completed: 53,
+        backlog_completed: 54,
         backlog_total: 56,
         completed_phases: 10,
         total_phases: 11,
@@ -549,9 +550,10 @@ pub fn status_manifest() -> StatusManifest {
             "Behavioural device fingerprinting with impersonation detection".into(),
             "Adapter-backed checkpoint restore for abstract device state".into(),
             "TLA+ and Alloy model export for offline formal verification".into(),
+            "Proof backend interface with witness export for ZK integration".into(),
         ],
         partially_wired: vec![
-            "ZK proof placeholder in proof metadata".into(),
+            "ZK proof circuit implementation (backend interface and witness export exist)".into(),
         ],
         not_implemented: vec![
             "Continual learning and privacy-preserving updates".into(),
@@ -631,7 +633,7 @@ mod tests {
     #[test]
     fn status_manifest_reports_backlog_progress() {
         let manifest = status_manifest();
-        assert_eq!(manifest.backlog_completed, 53);
+        assert_eq!(manifest.backlog_completed, 54);
         assert_eq!(manifest.backlog_total, 56);
         assert_eq!(manifest.total_phases, 11);
         assert!(manifest.cli_commands.iter().any(|cmd| cmd == "status-json"));

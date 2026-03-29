@@ -8,6 +8,7 @@ use crate::actions::DeviceController;
 use crate::checkpoint::CheckpointStore;
 use crate::correlation;
 use crate::detector::{AdaptationMode, AnomalyDetector};
+use crate::proof::{DigestBackend, ProofRegistry};
 use crate::replay::ReplayBuffer;
 use crate::report::JsonReport;
 use crate::runtime;
@@ -19,6 +20,7 @@ struct AppState {
     checkpoints: CheckpointStore,
     device: DeviceController,
     replay: ReplayBuffer,
+    proofs: ProofRegistry,
     last_report: Option<JsonReport>,
     token: String,
 }
@@ -40,6 +42,7 @@ pub fn run_server(port: u16, site_dir: &Path) -> Result<(), String> {
         checkpoints: CheckpointStore::new(10),
         device: DeviceController::default(),
         replay: ReplayBuffer::new(200),
+        proofs: ProofRegistry::new(),
         last_report: None,
         token: token.clone(),
     }));
@@ -63,6 +66,7 @@ pub fn spawn_test_server() -> (u16, String) {
         checkpoints: CheckpointStore::new(10),
         device: DeviceController::default(),
         replay: ReplayBuffer::new(200),
+        proofs: ProofRegistry::new(),
         last_report: None,
         token: token.clone(),
     }));
@@ -261,6 +265,11 @@ fn handle_api(mut request: Request, state: &Arc<Mutex<AppState>>, _site_dir: &Pa
             let sm = PolicyStateMachine::new();
             text_response(&sm.export_alloy(), 200)
         }
+        (Method::Get, "/api/export/witnesses") => {
+            let s = state.lock().unwrap();
+            let json = s.proofs.export_witnesses_json(&DigestBackend);
+            json_response(&json, 200)
+        }
         (Method::Post, "/api/control/run-demo") => {
             let demo = runtime::demo_samples();
             let result = runtime::execute(&demo);
@@ -269,7 +278,14 @@ fn handle_api(mut request: Request, state: &Arc<Mutex<AppState>>, _site_dir: &Pa
                 Ok(json) => {
                     let mut s = state.lock().unwrap();
                     for (sample, report) in demo.iter().zip(result.reports.iter()) {
+                        let pre = s.detector.snapshot()
+                            .map(|snap| serde_json::to_vec(&snap).unwrap_or_default())
+                            .unwrap_or_default();
                         s.detector.evaluate(sample);
+                        let post = s.detector.snapshot()
+                            .map(|snap| serde_json::to_vec(&snap).unwrap_or_default())
+                            .unwrap_or_default();
+                        s.proofs.record("baseline_update", &pre, &post);
                         s.device.apply_decision(&report.decision);
                         s.replay.push(*sample);
                     }
@@ -358,7 +374,14 @@ fn handle_analyze(request: &mut Request, state: &Arc<Mutex<AppState>>) -> Respon
             let mut s = state.lock().unwrap();
             // Update the live detector baseline with the analyzed samples
             for (sample, report) in samples.iter().zip(result.reports.iter()) {
+                let pre = s.detector.snapshot()
+                    .map(|snap| serde_json::to_vec(&snap).unwrap_or_default())
+                    .unwrap_or_default();
                 s.detector.evaluate(sample);
+                let post = s.detector.snapshot()
+                    .map(|snap| serde_json::to_vec(&snap).unwrap_or_default())
+                    .unwrap_or_default();
+                s.proofs.record("baseline_update", &pre, &post);
                 s.device.apply_decision(&report.decision);
                 s.replay.push(*sample);
             }

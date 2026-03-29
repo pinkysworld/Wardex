@@ -87,13 +87,13 @@ This backlog lists the next concrete tasks in build order.
 
 - [x] T100: Add a device-state restore abstraction so checkpoint restore can drive adapter-backed rollback beyond detector baseline state.
 - [x] T101: Export the policy state machine to TLA+/Alloy-friendly artifacts for offline verification workflows.
-- [ ] T102: Introduce a proof backend interface and witness export path for future Halo2 / SNARK integration.
+- [x] T102: Introduce a proof backend interface and witness export path for future Halo2 / SNARK integration.
 - [ ] T103: Replace static research-track status duplication with a single generated source consumed by docs, runtime status, and the admin console.
 - [ ] T104: Implement supply-chain attestation foundations: build manifest generation, trust-store loading, and verification hooks.
 
 ## Recommended next build order
 
-53 of 56 backlog items are complete. Phases 0–9 are complete, and Phase 10 has started.
+54 of 56 backlog items are complete. Phases 0–9 are complete, and Phase 10 has started.
 
 Recommended next work: T101–T104, in order.
 

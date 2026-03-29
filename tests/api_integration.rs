@@ -306,3 +306,41 @@ fn export_alloy_returns_valid_module() {
     assert!(body.contains("noSkipDeescalation"));
     assert!(body.contains("check noSkipDeescalation"));
 }
+
+// ── GET /api/export/witnesses ──────────────────────────────────
+
+#[test]
+fn export_witnesses_returns_empty_array_initially() {
+    let (port, _token) = spawn_test_server();
+    let resp = ureq::get(&format!("{}/api/export/witnesses", base(port)))
+        .call()
+        .expect("export witnesses request");
+    assert_eq!(resp.status(), 200);
+
+    let body: serde_json::Value = resp.into_json().unwrap();
+    assert!(body.as_array().unwrap().is_empty());
+}
+
+#[test]
+fn export_witnesses_populated_after_run_demo() {
+    let (port, token) = spawn_test_server();
+
+    // Run demo to populate proof registry
+    let _resp = ureq::post(&format!("{}/api/control/run-demo", base(port)))
+        .set("Authorization", &auth_header(&token))
+        .call()
+        .expect("run-demo request");
+
+    // Now fetch witnesses
+    let resp = ureq::get(&format!("{}/api/export/witnesses", base(port)))
+        .call()
+        .expect("export witnesses after demo");
+    assert_eq!(resp.status(), 200);
+
+    let body: serde_json::Value = resp.into_json().unwrap();
+    let witnesses = body.as_array().unwrap();
+    assert!(!witnesses.is_empty());
+    assert_eq!(witnesses[0]["backend"], "sha256-digest");
+    assert_eq!(witnesses[0]["label"], "baseline_update");
+    assert!(witnesses[0]["verified"].as_bool().unwrap());
+}
