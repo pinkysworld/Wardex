@@ -130,9 +130,17 @@ This backlog lists the next concrete tasks in build order.
 - [x] T140: Wire Monitoring & Analysis admin panel — temporal monitor status/violations, correlation analysis, drift detection reset, fingerprint status, causal graph display.
 - [x] T141: Wire Compliance, Quantum, Policy, Infrastructure & Formal Exports admin panels — compliance scoring, attestation, privacy budget, quantum key rotate, policy composition, WASM VM execute, energy harvest/consume, patch status, workload offload, TLA+/Alloy/witness download.
 
+## Phase 15 — Integration test coverage & paper evaluation harnesses (completed)
+
+- [x] T142: Add 49 new HTTP integration tests covering all API endpoints — auth, fleet, enforcement, threat-intel, digital-twin, compliance, energy, tenants, platform, correlation, side-channel, quantum, privacy, policy-vm, fingerprint, harness, monitor, deception, policy compose, drift, causal, patches, offload, swarm, energy harvest — with 401 auth rejection tests for every POST endpoint.
+- [x] T143: Paper evaluation harnesses — per-sample latency benchmark (`run_latency_benchmark` with LatencyStats struct), audit chain scaling benchmark (`run_audit_scaling_benchmark` at 10–100K record sizes), with 4 new unit tests.
+- [x] T144: Rewrite RESEARCH_TRACKS.md — update all 40 tracks from stale "Future"/"Planned"/"Scaffolded" to accurate "Implemented foundation" status with current repo-state descriptions.
+- [x] T145: Update PAPER_TARGETS.md — close 5 Paper 1 gaps (latency benchmark, audit scaling, contribution aggregation, fixed-threshold comparator, criterion benchmarks), update Papers 2 and 3 prerequisites from "not started" to "met".
+- [x] T146: Documentation and version updates — bump version 0.13.0, update all counts (77/77 tasks, 329 tests, 16 phases), update STATUS.md, CHANGELOG.md, README.md, site pages.
+
 ## Recommended next build order
 
-72 of 72 backlog items are complete. Phases 0–14 are complete.
+77 of 77 backlog items are complete. Phases 0–15 are complete.
 
 All tasks are done.
 

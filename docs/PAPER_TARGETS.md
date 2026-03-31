@@ -51,33 +51,37 @@ This document identifies the subset of blueprint tracks closest to publication-r
 
 ### Gap analysis — what must be added before submission
 
-| Gap | Effort | Blocker? |
-|-----|--------|----------|
-| ARM cross-compilation and profiling | Medium | No — evaluation can use QEMU or real Pi |
-| Additional test fixtures (>=100 samples each) | Low | No |
-| Per-dimension contribution breakdown in anomaly explanations | Low | Already partially there in `AnomalySignal.reasons` |
-| Formal comparison against a baseline detector (e.g., fixed-threshold, IsolationForest) | Medium | No — can generate from same fixtures |
-| Latency micro-benchmarks with `criterion` | Medium | No |
+| Gap | Effort | Status |
+|-----|--------|--------|
+| ARM cross-compilation and profiling | Medium | Open — evaluation can use QEMU or real Pi |
+| Additional test fixtures (>=100 samples each) | Low | **Done** (T110) |
+| Per-dimension contribution breakdown in anomaly explanations | Low | **Done** (T113) — signal contributions tracked in benchmark harness |
+| Formal comparison against a baseline detector (e.g., fixed-threshold) | Medium | **Done** (T111) — fixed-threshold comparator in `src/fixed_threshold.rs` |
+| Latency micro-benchmarks with `criterion` | Medium | **Done** (T133) — criterion benchmarks in `benches/` |
+| Per-sample ingestion-to-decision latency measurement | Low | **Done** (Phase 15) — `run_latency_benchmark()` in `src/benchmark.rs` |
+| Audit chain scaling test (10³–10⁵ records) | Low | **Done** (Phase 15) — `run_audit_scaling_benchmark()` in `src/benchmark.rs` |
+| Paper-ready figure generation from admin console | Medium | Partially done — admin console visualises reports |
+| Energy overhead per-sample (CPU/memory profiling) | Medium | Open — requires ARM target for realistic numbers |
 
 ---
 
-## Paper 2 — Formal Policy Verification (future)
+## Paper 2 — Formal Policy Verification
 
 **Working title:** *Runtime-Verified Response Policies for Edge Security: From State Machine Models to TLA+ Proofs*
 
-**Primary tracks:** R02 (formal verification), R09 (adaptive response), R10 (verifiable rollback)
+**Primary tracks:** R02 (formal verification), R09 (adaptive response), R10 (verifiable rollback), R39 (policy composition)
 
-**Prerequisite:** TLA+/Alloy integration (T033 completion). Currently scaffolded — export stubs exist, formal checker integration deferred.
+**Status:** Prerequisites met. TLA+ and Alloy export operational (`/api/export/tla`, `/api/export/alloy`). Explicit-state BFS model checker implemented. Policy composition with four operators and conflict resolution implemented. Admin console panels wired for interactive model checking and policy composition.
 
 ---
 
-## Paper 3 — Privacy-Preserving Fleet Security (future)
+## Paper 3 — Privacy-Preserving Fleet Security
 
 **Working title:** *Privacy-Preserving Swarm Defense for Edge Fleets: Protocol Design and Zero-Knowledge Coordination*
 
-**Primary tracks:** R03 (swarm intelligence), R08 (coordinated response), R15 (threat intelligence sharing), R23 (swarm defense coordination)
+**Primary tracks:** R03 (swarm intelligence), R08 (coordinated response), R15 (threat intelligence sharing), R23 (swarm defense coordination), R27 (federated distillation)
 
-**Prerequisite:** Swarm coordination protocol (T051). Currently no cross-device code exists.
+**Status:** Prerequisites met. Swarm protocol with gossip-based coordination, fleet device registry, and posture negotiation implemented. Privacy accountant with differential privacy budget tracking, secure aggregation stubs, and threat intelligence store with typed IoCs operational. Admin console panels for fleet management and privacy budget monitoring wired.
 
 ---
 
@@ -85,8 +89,8 @@ This document identifies the subset of blueprint tracks closest to publication-r
 
 Paper 1 is prioritized because:
 - All six core tracks have implemented foundations — no new subsystems required.
-- The benchmark harness already produces publishable metrics.
+- The benchmark harness already produces publishable metrics with per-sample latency and audit chain scaling.
 - The evaluation plan uses only existing CLI commands and fixtures.
-- The gap analysis shows only low-to-medium effort items remain.
+- Most gaps are closed; only ARM profiling and figure generation remain.
 
-Papers 2 and 3 depend on subsystems that are currently scaffolded or unimplemented. They are documented here to guide the next implementation phases.
+Papers 2 and 3 now have their prerequisites met. Paper 2 can proceed with formal verification evaluation using the existing model checker and TLA+/Alloy export. Paper 3 can proceed with protocol evaluation using the swarm and privacy modules.

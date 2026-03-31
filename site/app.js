@@ -394,6 +394,19 @@ const backlogPhases = [
       { id: "T141", title: "Compliance, Quantum, Policy, Infra & Exports", desc: "Compliance, attestation, privacy, quantum key rotate, policy compose, WASM VM, energy, patches, offload, TLA+/Alloy/witness export.", done: true },
     ],
   },
+  {
+    id: "phase-15",
+    tag: "Phase 15",
+    tagClass: "done",
+    title: "Integration Test Coverage & Paper Evaluation (complete)",
+    tasks: [
+      { id: "T142", title: "API integration tests", desc: "49 new HTTP integration tests covering all 40+ API endpoints with auth rejection tests for every POST endpoint.", done: true },
+      { id: "T143", title: "Paper evaluation harnesses", desc: "Per-sample latency benchmark (LatencyStats) and audit chain scaling benchmark (10–100K records) with 4 new unit tests.", done: true },
+      { id: "T144", title: "RESEARCH_TRACKS.md rewrite", desc: "All 40 tracks updated to accurate 'Implemented foundation' status with current repo-state descriptions.", done: true },
+      { id: "T145", title: "PAPER_TARGETS.md update", desc: "Paper 1 gaps closed (latency, audit scaling). Papers 2 and 3 prerequisites marked as met.", done: true },
+      { id: "T146", title: "Documentation & version update", desc: "Version 0.13.0, updated counts (77/77 tasks, 329 tests, 16 phases), backlog, changelog, status, README.", done: true },
+    ],
+  },
 ];
 
 // Research track data is loaded from the canonical source at

@@ -107,6 +107,110 @@ pub fn run_benchmark(
     harness.result()
 }
 
+// ── Paper-grade evaluation harnesses (Phase 15) ───────────────
+
+/// Per-sample latency statistics for paper tables.
+#[derive(Debug, Clone)]
+pub struct LatencyStats {
+    pub count: usize,
+    pub mean_us: f64,
+    pub median_us: f64,
+    pub p95_us: f64,
+    pub p99_us: f64,
+    pub min_us: f64,
+    pub max_us: f64,
+}
+
+impl LatencyStats {
+    fn from_durations(durations: &mut [f64]) -> Self {
+        let count = durations.len();
+        if count == 0 {
+            return Self {
+                count: 0,
+                mean_us: 0.0,
+                median_us: 0.0,
+                p95_us: 0.0,
+                p99_us: 0.0,
+                min_us: 0.0,
+                max_us: 0.0,
+            };
+        }
+        durations.sort_by(|a, b| a.partial_cmp(b).unwrap());
+        let sum: f64 = durations.iter().sum();
+        let mean_us = sum / count as f64;
+        let median_us = durations[count / 2];
+        let p95_us = durations[(count as f64 * 0.95) as usize];
+        let p99_us = durations[(count as f64 * 0.99).min((count - 1) as f64) as usize];
+        let min_us = durations[0];
+        let max_us = durations[count - 1];
+        Self {
+            count,
+            mean_us,
+            median_us,
+            p95_us,
+            p99_us,
+            min_us,
+            max_us,
+        }
+    }
+}
+
+/// Measure per-sample ingestion-to-decision latency.
+pub fn run_latency_benchmark(
+    detector: &mut AnomalyDetector,
+    samples: &[TelemetrySample],
+) -> LatencyStats {
+    use std::time::Instant;
+    let mut durations: Vec<f64> = Vec::with_capacity(samples.len());
+    for sample in samples {
+        let start = Instant::now();
+        let _ = detector.evaluate(sample);
+        let elapsed = start.elapsed();
+        durations.push(elapsed.as_secs_f64() * 1_000_000.0); // microseconds
+    }
+    LatencyStats::from_durations(&mut durations)
+}
+
+/// Audit-chain append + verify throughput at a given chain length.
+#[derive(Debug, Clone)]
+pub struct AuditScalingResult {
+    pub chain_length: usize,
+    pub append_total_us: f64,
+    pub append_per_record_us: f64,
+    pub verify_total_us: f64,
+    pub verify_per_record_us: f64,
+}
+
+/// Benchmark audit-chain scaling at multiple sizes.
+pub fn run_audit_scaling_benchmark(sizes: &[usize]) -> Vec<AuditScalingResult> {
+    use crate::audit::AuditLog;
+    use std::time::Instant;
+
+    sizes
+        .iter()
+        .map(|&n| {
+            let mut log = AuditLog::new();
+            let start = Instant::now();
+            for i in 0..n {
+                log.record("bench", format!("record-{i}"));
+            }
+            let append_us = start.elapsed().as_secs_f64() * 1_000_000.0;
+
+            let start = Instant::now();
+            log.verify_chain().expect("chain verification failed");
+            let verify_us = start.elapsed().as_secs_f64() * 1_000_000.0;
+
+            AuditScalingResult {
+                chain_length: n,
+                append_total_us: append_us,
+                append_per_record_us: if n > 0 { append_us / n as f64 } else { 0.0 },
+                verify_total_us: verify_us,
+                verify_per_record_us: if n > 0 { verify_us / n as f64 } else { 0.0 },
+            }
+        })
+        .collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::{BenchmarkHarness, run_benchmark};
@@ -308,5 +412,91 @@ mod tests {
         for (name, val) in &result.signal_contributions {
             assert!(*val >= 0.0, "{name} had negative contribution {val}");
         }
+    }
+
+    // ── Paper evaluation tests (Phase 15) ─────────────────────
+
+    #[test]
+    fn latency_benchmark_measures_microseconds() {
+        let mut detector = AnomalyDetector::default();
+        let samples: Vec<TelemetrySample> = (0..100)
+            .map(|i| TelemetrySample {
+                timestamp_ms: i,
+                cpu_load_pct: 20.0,
+                memory_load_pct: 30.0,
+                temperature_c: 40.0,
+                network_kbps: 500.0,
+                auth_failures: 0,
+                battery_pct: 90.0,
+                integrity_drift: 0.01,
+                process_count: 42,
+                disk_pressure_pct: 10.0,
+            })
+            .collect();
+        let stats = super::run_latency_benchmark(&mut detector, &samples);
+        assert_eq!(stats.count, 100);
+        assert!(stats.mean_us > 0.0, "mean latency should be positive");
+        assert!(stats.median_us > 0.0);
+        assert!(stats.p95_us >= stats.median_us);
+        assert!(stats.p99_us >= stats.p95_us);
+        assert!(stats.min_us <= stats.median_us);
+        assert!(stats.max_us >= stats.p99_us);
+    }
+
+    #[test]
+    fn audit_scaling_benchmark_runs() {
+        let sizes = vec![10, 100, 1_000];
+        let results = super::run_audit_scaling_benchmark(&sizes);
+        assert_eq!(results.len(), 3);
+        for r in &results {
+            assert!(r.append_total_us > 0.0);
+            assert!(r.verify_total_us > 0.0);
+            assert!(
+                r.append_per_record_us > 0.0,
+                "per-record append latency should be positive"
+            );
+        }
+        // Verify time should scale — larger chains take longer to verify
+        assert!(results[2].verify_total_us > results[0].verify_total_us);
+    }
+
+    #[test]
+    fn audit_scaling_10k_records() {
+        let results = super::run_audit_scaling_benchmark(&[10_000]);
+        let r = &results[0];
+        assert_eq!(r.chain_length, 10_000);
+        // 10k records should verify in under 5 seconds even on slow machines
+        assert!(
+            r.verify_total_us < 5_000_000.0,
+            "10k chain verify took {:.1}ms",
+            r.verify_total_us / 1000.0
+        );
+    }
+
+    #[test]
+    fn latency_1k_samples_under_100ms() {
+        let mut detector = AnomalyDetector::default();
+        let samples: Vec<TelemetrySample> = (0..1000)
+            .map(|i| TelemetrySample {
+                timestamp_ms: i,
+                cpu_load_pct: 15.0 + (i % 50) as f32,
+                memory_load_pct: 20.0 + (i % 40) as f32,
+                temperature_c: 35.0 + (i % 20) as f32,
+                network_kbps: 300.0 + (i % 100) as f32 * 10.0,
+                auth_failures: (i % 5) as u32,
+                battery_pct: 80.0 - (i % 30) as f32,
+                integrity_drift: 0.01 + (i % 10) as f32 * 0.005,
+                process_count: 30 + (i % 40) as u32,
+                disk_pressure_pct: 5.0 + (i % 20) as f32,
+            })
+            .collect();
+        let stats = super::run_latency_benchmark(&mut detector, &samples);
+        assert_eq!(stats.count, 1000);
+        // Total time (mean * count) should be under 100ms
+        let total_ms = stats.mean_us * stats.count as f64 / 1000.0;
+        assert!(
+            total_ms < 100.0,
+            "1k samples took {total_ms:.1}ms (target: <100ms)"
+        );
     }
 }

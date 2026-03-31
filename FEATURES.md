@@ -38,7 +38,7 @@ A 16-stage enriched pipeline — ingest → parse → detect → decide → thre
 | Token-authenticated HTTP API (40+ endpoints) | Wasm-based extensible policies |
 | Supply-chain attestation foundations | Full attestation with Ed25519 signing |
 | Criterion micro-benchmarks (55K samples/sec) | ARM cross-compilation profiling |
-| 276 automated tests (255 unit + 21 integration) | Digital-twin fleet simulation |
+| 329 automated tests (259 unit + 70 integration) | Digital-twin fleet simulation |
 | Browser admin console with dark mode | Quantum-walk anomaly propagation |
 | CSV + JSONL multi-format ingestion | |
 

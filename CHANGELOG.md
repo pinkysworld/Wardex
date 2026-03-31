@@ -2,6 +2,22 @@
 
 All notable changes to SentinelEdge are documented in this file.
 
+## [0.13.0] — 2026-03-31
+
+### Added
+- **Phase 15 — Integration test coverage & paper evaluation harnesses** (T142–T146).
+- **49 new HTTP integration tests** (T142): covers all 40+ API endpoints including auth checks for every POST endpoint, bringing integration test count from 21 to 70.
+- **Per-sample latency benchmark** (T143): `run_latency_benchmark()` in `src/benchmark.rs` with `LatencyStats` struct (mean, median, p95, p99, min, max in microseconds).
+- **Audit chain scaling benchmark** (T143): `run_audit_scaling_benchmark()` measuring append + verify throughput at configurable chain lengths (10–100K records).
+- **4 new benchmark unit tests**: latency measurement, audit scaling at 3 sizes, 10K-record audit chain, and 1K-sample latency target.
+- **RESEARCH_TRACKS.md rewrite** (T144): all 40 tracks updated from stale (many marked "Future"/"Planned") to accurate "Implemented foundation" status with current repo state descriptions.
+- **PAPER_TARGETS.md update** (T145): Paper 1 gap analysis updated (5 of 9 gaps now closed), Papers 2 and 3 prerequisites marked as met.
+
+### Changed
+- Version bumped to 0.13.0.
+- Status manifest: 77/77 tasks, 15 phases (was 72/72, 14 phases).
+- Total test count: 329 (259 unit + 70 integration), up from 276.
+
 ## [0.12.0] — 2026-03-31
 
 ### Added

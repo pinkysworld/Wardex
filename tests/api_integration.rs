@@ -387,3 +387,667 @@ fn attestation_status_returns_verification_result() {
     let checks = body["checks"].as_array().unwrap();
     assert!(!checks.is_empty());
 }
+
+// ── GET /api/auth/check ────────────────────────────────────────
+
+#[test]
+fn auth_check_without_token_returns_401() {
+    let (port, _token) = spawn_test_server();
+    let err = ureq::get(&format!("{}/api/auth/check", base(port))).call();
+    match err {
+        Err(ureq::Error::Status(401, _)) => {}
+        other => panic!("expected 401, got {other:?}"),
+    }
+}
+
+#[test]
+fn auth_check_with_valid_token_returns_ok() {
+    let (port, token) = spawn_test_server();
+    let resp = ureq::get(&format!("{}/api/auth/check", base(port)))
+        .set("Authorization", &auth_header(&token))
+        .call()
+        .expect("auth check");
+    assert_eq!(resp.status(), 200);
+    let body: serde_json::Value = resp.into_json().unwrap();
+    assert_eq!(body["status"], "ok");
+}
+
+// ── GET /api/fleet/status ──────────────────────────────────────
+
+#[test]
+fn fleet_status_returns_health_report() {
+    let (port, _token) = spawn_test_server();
+    let resp = ureq::get(&format!("{}/api/fleet/status", base(port)))
+        .call()
+        .expect("fleet status");
+    assert_eq!(resp.status(), 200);
+    let _body: serde_json::Value = resp.into_json().unwrap();
+}
+
+// ── POST /api/fleet/register ───────────────────────────────────
+
+#[test]
+fn fleet_register_creates_device() {
+    let (port, token) = spawn_test_server();
+    let resp = ureq::post(&format!("{}/api/fleet/register", base(port)))
+        .set("Authorization", &auth_header(&token))
+        .send_json(serde_json::json!({"device_id": "dev-001", "name": "Sensor A"}))
+        .expect("fleet register");
+    assert_eq!(resp.status(), 200);
+    let body: serde_json::Value = resp.into_json().unwrap();
+    assert_eq!(body["status"], "registered");
+    assert_eq!(body["device"], "dev-001");
+}
+
+#[test]
+fn fleet_register_without_auth_returns_401() {
+    let (port, _token) = spawn_test_server();
+    let err = ureq::post(&format!("{}/api/fleet/register", base(port)))
+        .send_json(serde_json::json!({"device_id": "dev-x"}));
+    match err {
+        Err(ureq::Error::Status(401, _)) => {}
+        other => panic!("expected 401, got {other:?}"),
+    }
+}
+
+// ── GET /api/enforcement/status ────────────────────────────────
+
+#[test]
+fn enforcement_status_returns_enforcer_info() {
+    let (port, _token) = spawn_test_server();
+    let resp = ureq::get(&format!("{}/api/enforcement/status", base(port)))
+        .call()
+        .expect("enforcement status");
+    assert_eq!(resp.status(), 200);
+    let body: serde_json::Value = resp.into_json().unwrap();
+    assert!(body.get("process_enforcer").is_some());
+    assert!(body.get("tpm").is_some());
+}
+
+// ── POST /api/enforcement/quarantine ───────────────────────────
+
+#[test]
+fn enforcement_quarantine_returns_results() {
+    let (port, token) = spawn_test_server();
+    let resp = ureq::post(&format!("{}/api/enforcement/quarantine", base(port)))
+        .set("Authorization", &auth_header(&token))
+        .send_json(serde_json::json!({"target": "192.168.1.100"}))
+        .expect("quarantine");
+    assert_eq!(resp.status(), 200);
+    let body: serde_json::Value = resp.into_json().unwrap();
+    assert_eq!(body["target"], "192.168.1.100");
+    assert!(body.get("actions").is_some());
+}
+
+#[test]
+fn enforcement_quarantine_without_auth_returns_401() {
+    let (port, _token) = spawn_test_server();
+    let err = ureq::post(&format!("{}/api/enforcement/quarantine", base(port)))
+        .send_json(serde_json::json!({"target": "x"}));
+    match err {
+        Err(ureq::Error::Status(401, _)) => {}
+        other => panic!("expected 401, got {other:?}"),
+    }
+}
+
+// ── GET /api/threat-intel/status ───────────────────────────────
+
+#[test]
+fn threat_intel_status_returns_ioc_count() {
+    let (port, _token) = spawn_test_server();
+    let resp = ureq::get(&format!("{}/api/threat-intel/status", base(port)))
+        .call()
+        .expect("threat intel status");
+    assert_eq!(resp.status(), 200);
+    let body: serde_json::Value = resp.into_json().unwrap();
+    assert!(body.get("ioc_count").is_some());
+}
+
+// ── POST /api/threat-intel/ioc ─────────────────────────────────
+
+#[test]
+fn threat_intel_add_ioc() {
+    let (port, token) = spawn_test_server();
+    let resp = ureq::post(&format!("{}/api/threat-intel/ioc", base(port)))
+        .set("Authorization", &auth_header(&token))
+        .send_json(serde_json::json!({"value": "10.0.0.1", "ioc_type": "ip", "confidence": 0.95}))
+        .expect("add ioc");
+    assert_eq!(resp.status(), 200);
+    let body: serde_json::Value = resp.into_json().unwrap();
+    assert_eq!(body["status"], "added");
+    assert_eq!(body["value"], "10.0.0.1");
+}
+
+#[test]
+fn threat_intel_ioc_without_auth_returns_401() {
+    let (port, _token) = spawn_test_server();
+    let err = ureq::post(&format!("{}/api/threat-intel/ioc", base(port)))
+        .send_json(serde_json::json!({"value": "x", "ioc_type": "ip"}));
+    match err {
+        Err(ureq::Error::Status(401, _)) => {}
+        other => panic!("expected 401, got {other:?}"),
+    }
+}
+
+// ── GET /api/digital-twin/status ───────────────────────────────
+
+#[test]
+fn digital_twin_status_returns_twin_count() {
+    let (port, _token) = spawn_test_server();
+    let resp = ureq::get(&format!("{}/api/digital-twin/status", base(port)))
+        .call()
+        .expect("digital twin status");
+    assert_eq!(resp.status(), 200);
+    let body: serde_json::Value = resp.into_json().unwrap();
+    assert!(body.get("twin_count").is_some());
+}
+
+// ── POST /api/digital-twin/simulate ────────────────────────────
+
+#[test]
+fn digital_twin_simulate_returns_result() {
+    let (port, token) = spawn_test_server();
+    let resp = ureq::post(&format!("{}/api/digital-twin/simulate", base(port)))
+        .set("Authorization", &auth_header(&token))
+        .send_json(serde_json::json!({"device_id": "twin-1", "event_type": "cpu_spike"}))
+        .expect("simulate");
+    assert_eq!(resp.status(), 200);
+    let body: serde_json::Value = resp.into_json().unwrap();
+    assert_eq!(body["device_id"], "twin-1");
+    assert!(body.get("ticks_simulated").is_some());
+}
+
+#[test]
+fn digital_twin_simulate_without_auth_returns_401() {
+    let (port, _token) = spawn_test_server();
+    let err = ureq::post(&format!("{}/api/digital-twin/simulate", base(port)))
+        .send_json(serde_json::json!({"device_id": "x", "event_type": "cpu_spike"}));
+    match err {
+        Err(ureq::Error::Status(401, _)) => {}
+        other => panic!("expected 401, got {other:?}"),
+    }
+}
+
+// ── GET /api/compliance/status ─────────────────────────────────
+
+#[test]
+fn compliance_status_returns_report() {
+    let (port, _token) = spawn_test_server();
+    let resp = ureq::get(&format!("{}/api/compliance/status", base(port)))
+        .call()
+        .expect("compliance status");
+    assert_eq!(resp.status(), 200);
+    let _body: serde_json::Value = resp.into_json().unwrap();
+}
+
+// ── GET /api/energy/status ─────────────────────────────────────
+
+#[test]
+fn energy_status_returns_budget_info() {
+    let (port, _token) = spawn_test_server();
+    let resp = ureq::get(&format!("{}/api/energy/status", base(port)))
+        .call()
+        .expect("energy status");
+    assert_eq!(resp.status(), 200);
+    let body: serde_json::Value = resp.into_json().unwrap();
+    assert!(body.get("remaining_pct").is_some());
+    assert!(body.get("power_state").is_some());
+}
+
+// ── POST /api/energy/consume ───────────────────────────────────
+
+#[test]
+fn energy_consume_updates_budget() {
+    let (port, token) = spawn_test_server();
+    let resp = ureq::post(&format!("{}/api/energy/consume", base(port)))
+        .set("Authorization", &auth_header(&token))
+        .send_json(serde_json::json!({"drain_rate_mw": 50.0}))
+        .expect("energy consume");
+    assert_eq!(resp.status(), 200);
+    let body: serde_json::Value = resp.into_json().unwrap();
+    assert!(body.get("remaining_pct").is_some());
+}
+
+#[test]
+fn energy_consume_without_auth_returns_401() {
+    let (port, _token) = spawn_test_server();
+    let err = ureq::post(&format!("{}/api/energy/consume", base(port)))
+        .send_json(serde_json::json!({"drain_rate_mw": 50.0}));
+    match err {
+        Err(ureq::Error::Status(401, _)) => {}
+        other => panic!("expected 401, got {other:?}"),
+    }
+}
+
+// ── GET /api/tenants/count ─────────────────────────────────────
+
+#[test]
+fn tenants_count_returns_count() {
+    let (port, _token) = spawn_test_server();
+    let resp = ureq::get(&format!("{}/api/tenants/count", base(port)))
+        .call()
+        .expect("tenants count");
+    assert_eq!(resp.status(), 200);
+    let body: serde_json::Value = resp.into_json().unwrap();
+    assert!(body.get("tenant_count").is_some());
+}
+
+// ── GET /api/platform ──────────────────────────────────────────
+
+#[test]
+fn platform_returns_capabilities() {
+    let (port, _token) = spawn_test_server();
+    let resp = ureq::get(&format!("{}/api/platform", base(port)))
+        .call()
+        .expect("platform");
+    assert_eq!(resp.status(), 200);
+    let body: serde_json::Value = resp.into_json().unwrap();
+    assert!(body.get("platform").is_some());
+    assert!(body.get("has_tpm").is_some());
+    assert!(body.get("max_threads").is_some());
+}
+
+// ── GET /api/correlation ───────────────────────────────────────
+
+#[test]
+fn correlation_returns_analysis() {
+    let (port, _token) = spawn_test_server();
+    let resp = ureq::get(&format!("{}/api/correlation", base(port)))
+        .call()
+        .expect("correlation");
+    assert_eq!(resp.status(), 200);
+    let _body: serde_json::Value = resp.into_json().unwrap();
+}
+
+// ── GET /api/side-channel/status ───────────────────────────────
+
+#[test]
+fn side_channel_status_returns_report() {
+    let (port, _token) = spawn_test_server();
+    let resp = ureq::get(&format!("{}/api/side-channel/status", base(port)))
+        .call()
+        .expect("side channel status");
+    assert_eq!(resp.status(), 200);
+    let body: serde_json::Value = resp.into_json().unwrap();
+    assert!(body.get("timing_anomalies").is_some());
+    assert!(body.get("cache_alerts").is_some());
+    assert!(body.get("overall_risk").is_some());
+}
+
+// ── GET /api/quantum/key-status ────────────────────────────────
+
+#[test]
+fn quantum_key_status_returns_epochs() {
+    let (port, _token) = spawn_test_server();
+    let resp = ureq::get(&format!("{}/api/quantum/key-status", base(port)))
+        .call()
+        .expect("quantum key status");
+    assert_eq!(resp.status(), 200);
+    let body: serde_json::Value = resp.into_json().unwrap();
+    assert!(body.get("current_epoch").is_some());
+    assert!(body.get("total_epochs").is_some());
+}
+
+// ── POST /api/quantum/rotate ───────────────────────────────────
+
+#[test]
+fn quantum_rotate_increments_epoch() {
+    let (port, token) = spawn_test_server();
+    let before = ureq::get(&format!("{}/api/quantum/key-status", base(port)))
+        .call()
+        .unwrap()
+        .into_json::<serde_json::Value>()
+        .unwrap();
+    let epoch_before = before["current_epoch"].as_u64().unwrap();
+
+    let resp = ureq::post(&format!("{}/api/quantum/rotate", base(port)))
+        .set("Authorization", &auth_header(&token))
+        .send_string("")
+        .expect("rotate");
+    assert_eq!(resp.status(), 200);
+    let body: serde_json::Value = resp.into_json().unwrap();
+    assert_eq!(body["status"], "rotated");
+    assert!(body["new_epoch"].as_u64().unwrap() > epoch_before);
+}
+
+#[test]
+fn quantum_rotate_without_auth_returns_401() {
+    let (port, _token) = spawn_test_server();
+    let err = ureq::post(&format!("{}/api/quantum/rotate", base(port)))
+        .send_string("");
+    match err {
+        Err(ureq::Error::Status(401, _)) => {}
+        other => panic!("expected 401, got {other:?}"),
+    }
+}
+
+// ── GET /api/privacy/budget ────────────────────────────────────
+
+#[test]
+fn privacy_budget_returns_remaining() {
+    let (port, _token) = spawn_test_server();
+    let resp = ureq::get(&format!("{}/api/privacy/budget", base(port)))
+        .call()
+        .expect("privacy budget");
+    assert_eq!(resp.status(), 200);
+    let body: serde_json::Value = resp.into_json().unwrap();
+    assert!(body.get("budget_remaining").is_some());
+    assert!(body.get("is_exhausted").is_some());
+}
+
+// ── POST /api/policy-vm/execute ────────────────────────────────
+
+#[test]
+fn policy_vm_execute_returns_result() {
+    let (port, token) = spawn_test_server();
+    let resp = ureq::post(&format!("{}/api/policy-vm/execute", base(port)))
+        .set("Authorization", &auth_header(&token))
+        .send_json(serde_json::json!({"env": {"score": 0.8, "battery": 0.5}}))
+        .expect("policy vm execute");
+    assert_eq!(resp.status(), 200);
+    let body: serde_json::Value = resp.into_json().unwrap();
+    assert!(body.get("success").is_some());
+    assert!(body.get("steps_executed").is_some());
+}
+
+#[test]
+fn policy_vm_execute_without_auth_returns_401() {
+    let (port, _token) = spawn_test_server();
+    let err = ureq::post(&format!("{}/api/policy-vm/execute", base(port)))
+        .send_json(serde_json::json!({"env": {}}));
+    match err {
+        Err(ureq::Error::Status(401, _)) => {}
+        other => panic!("expected 401, got {other:?}"),
+    }
+}
+
+// ── GET /api/fingerprint/status ────────────────────────────────
+
+#[test]
+fn fingerprint_status_returns_info() {
+    let (port, _token) = spawn_test_server();
+    let resp = ureq::get(&format!("{}/api/fingerprint/status", base(port)))
+        .call()
+        .expect("fingerprint status");
+    assert_eq!(resp.status(), 200);
+    let body: serde_json::Value = resp.into_json().unwrap();
+    assert!(body.get("trained").is_some());
+}
+
+// ── POST /api/harness/run ──────────────────────────────────────
+
+#[test]
+fn harness_run_returns_evasion_metrics() {
+    let (port, token) = spawn_test_server();
+    let resp = ureq::post(&format!("{}/api/harness/run", base(port)))
+        .set("Authorization", &auth_header(&token))
+        .send_string("")
+        .expect("harness run");
+    assert_eq!(resp.status(), 200);
+    let body: serde_json::Value = resp.into_json().unwrap();
+    assert!(body.get("evasion_rate").is_some());
+    assert!(body.get("coverage_ratio").is_some());
+    assert!(body.get("total_count").is_some());
+}
+
+#[test]
+fn harness_run_without_auth_returns_401() {
+    let (port, _token) = spawn_test_server();
+    let err = ureq::post(&format!("{}/api/harness/run", base(port)))
+        .send_string("");
+    match err {
+        Err(ureq::Error::Status(401, _)) => {}
+        other => panic!("expected 401, got {other:?}"),
+    }
+}
+
+// ── GET /api/monitor/status ────────────────────────────────────
+
+#[test]
+fn monitor_status_returns_properties() {
+    let (port, _token) = spawn_test_server();
+    let resp = ureq::get(&format!("{}/api/monitor/status", base(port)))
+        .call()
+        .expect("monitor status");
+    assert_eq!(resp.status(), 200);
+    let body: serde_json::Value = resp.into_json().unwrap();
+    assert!(body.get("properties").is_some());
+    assert!(body.get("violation_count").is_some());
+}
+
+// ── GET /api/monitor/violations ────────────────────────────────
+
+#[test]
+fn monitor_violations_returns_list() {
+    let (port, _token) = spawn_test_server();
+    let resp = ureq::get(&format!("{}/api/monitor/violations", base(port)))
+        .call()
+        .expect("monitor violations");
+    assert_eq!(resp.status(), 200);
+    let body: serde_json::Value = resp.into_json().unwrap();
+    assert!(body.get("violations").is_some());
+    assert!(body["violations"].as_array().is_some());
+}
+
+// ── GET /api/deception/status ──────────────────────────────────
+
+#[test]
+fn deception_status_returns_report() {
+    let (port, _token) = spawn_test_server();
+    let resp = ureq::get(&format!("{}/api/deception/status", base(port)))
+        .call()
+        .expect("deception status");
+    assert_eq!(resp.status(), 200);
+    let body: serde_json::Value = resp.into_json().unwrap();
+    assert!(body.get("total_decoys").is_some());
+    assert!(body.get("active_decoys").is_some());
+}
+
+// ── POST /api/deception/deploy ─────────────────────────────────
+
+#[test]
+fn deception_deploy_creates_decoy() {
+    let (port, token) = spawn_test_server();
+    let resp = ureq::post(&format!("{}/api/deception/deploy", base(port)))
+        .set("Authorization", &auth_header(&token))
+        .send_json(serde_json::json!({"decoy_type": "honeypot", "name": "trap-1"}))
+        .expect("deception deploy");
+    assert_eq!(resp.status(), 200);
+    let body: serde_json::Value = resp.into_json().unwrap();
+    assert_eq!(body["status"], "deployed");
+    assert!(body.get("decoy_id").is_some());
+}
+
+#[test]
+fn deception_deploy_without_auth_returns_401() {
+    let (port, _token) = spawn_test_server();
+    let err = ureq::post(&format!("{}/api/deception/deploy", base(port)))
+        .send_json(serde_json::json!({"decoy_type": "honeypot", "name": "x"}));
+    match err {
+        Err(ureq::Error::Status(401, _)) => {}
+        other => panic!("expected 401, got {other:?}"),
+    }
+}
+
+// ── POST /api/policy/compose ───────────────────────────────────
+
+#[test]
+fn policy_compose_returns_result() {
+    let (port, token) = spawn_test_server();
+    let resp = ureq::post(&format!("{}/api/policy/compose", base(port)))
+        .set("Authorization", &auth_header(&token))
+        .send_json(serde_json::json!({
+            "operator": "max",
+            "score_a": 0.8, "battery_a": 50.0,
+            "score_b": 0.3, "battery_b": 90.0
+        }))
+        .expect("policy compose");
+    assert_eq!(resp.status(), 200);
+    let body: serde_json::Value = resp.into_json().unwrap();
+    assert!(body.get("result").is_some());
+}
+
+#[test]
+fn policy_compose_unknown_operator_returns_400() {
+    let (port, token) = spawn_test_server();
+    let err = ureq::post(&format!("{}/api/policy/compose", base(port)))
+        .set("Authorization", &auth_header(&token))
+        .send_json(serde_json::json!({
+            "operator": "xor",
+            "score_a": 0.5, "battery_a": 50.0,
+            "score_b": 0.5, "battery_b": 50.0
+        }));
+    match err {
+        Err(ureq::Error::Status(400, _)) => {}
+        other => panic!("expected 400, got {other:?}"),
+    }
+}
+
+#[test]
+fn policy_compose_without_auth_returns_401() {
+    let (port, _token) = spawn_test_server();
+    let err = ureq::post(&format!("{}/api/policy/compose", base(port)))
+        .send_json(serde_json::json!({
+            "operator": "max",
+            "score_a": 0.5, "battery_a": 50.0,
+            "score_b": 0.5, "battery_b": 50.0
+        }));
+    match err {
+        Err(ureq::Error::Status(401, _)) => {}
+        other => panic!("expected 401, got {other:?}"),
+    }
+}
+
+// ── GET /api/drift/status ──────────────────────────────────────
+
+#[test]
+fn drift_status_returns_sample_count() {
+    let (port, _token) = spawn_test_server();
+    let resp = ureq::get(&format!("{}/api/drift/status", base(port)))
+        .call()
+        .expect("drift status");
+    assert_eq!(resp.status(), 200);
+    let body: serde_json::Value = resp.into_json().unwrap();
+    assert!(body.get("sample_count").is_some());
+}
+
+// ── POST /api/drift/reset ──────────────────────────────────────
+
+#[test]
+fn drift_reset_clears_detector() {
+    let (port, token) = spawn_test_server();
+    let resp = ureq::post(&format!("{}/api/drift/reset", base(port)))
+        .set("Authorization", &auth_header(&token))
+        .send_string("")
+        .expect("drift reset");
+    assert_eq!(resp.status(), 200);
+    let body: serde_json::Value = resp.into_json().unwrap();
+    assert_eq!(body["status"], "drift detector reset");
+}
+
+#[test]
+fn drift_reset_without_auth_returns_401() {
+    let (port, _token) = spawn_test_server();
+    let err = ureq::post(&format!("{}/api/drift/reset", base(port)))
+        .send_string("");
+    match err {
+        Err(ureq::Error::Status(401, _)) => {}
+        other => panic!("expected 401, got {other:?}"),
+    }
+}
+
+// ── GET /api/causal/graph ──────────────────────────────────────
+
+#[test]
+fn causal_graph_returns_counts() {
+    let (port, _token) = spawn_test_server();
+    let resp = ureq::get(&format!("{}/api/causal/graph", base(port)))
+        .call()
+        .expect("causal graph");
+    assert_eq!(resp.status(), 200);
+    let body: serde_json::Value = resp.into_json().unwrap();
+    assert!(body.get("node_count").is_some());
+    assert!(body.get("edge_count").is_some());
+}
+
+// ── GET /api/patches ───────────────────────────────────────────
+
+#[test]
+fn patches_returns_plan_info() {
+    let (port, _token) = spawn_test_server();
+    let resp = ureq::get(&format!("{}/api/patches", base(port)))
+        .call()
+        .expect("patches");
+    assert_eq!(resp.status(), 200);
+    let body: serde_json::Value = resp.into_json().unwrap();
+    assert!(body.get("total_patches").is_some());
+    assert!(body.get("installed").is_some());
+}
+
+// ── POST /api/offload/decide ───────────────────────────────────
+
+#[test]
+fn offload_decide_returns_decisions() {
+    let (port, token) = spawn_test_server();
+    let resp = ureq::post(&format!("{}/api/offload/decide", base(port)))
+        .set("Authorization", &auth_header(&token))
+        .send_string("")
+        .expect("offload decide");
+    assert_eq!(resp.status(), 200);
+    let body: serde_json::Value = resp.into_json().unwrap();
+    let decisions = body["decisions"].as_array().unwrap();
+    assert!(!decisions.is_empty());
+    assert!(decisions[0].get("workload").is_some());
+    assert!(decisions[0].get("run_on").is_some());
+}
+
+#[test]
+fn offload_decide_without_auth_returns_401() {
+    let (port, _token) = spawn_test_server();
+    let err = ureq::post(&format!("{}/api/offload/decide", base(port)))
+        .send_string("");
+    match err {
+        Err(ureq::Error::Status(401, _)) => {}
+        other => panic!("expected 401, got {other:?}"),
+    }
+}
+
+// ── GET /api/swarm/posture ─────────────────────────────────────
+
+#[test]
+fn swarm_posture_returns_posture() {
+    let (port, _token) = spawn_test_server();
+    let resp = ureq::get(&format!("{}/api/swarm/posture", base(port)))
+        .call()
+        .expect("swarm posture");
+    assert_eq!(resp.status(), 200);
+    let body: serde_json::Value = resp.into_json().unwrap();
+    assert!(body.get("current_posture").is_some());
+}
+
+// ── POST /api/energy/harvest ───────────────────────────────────
+
+#[test]
+fn energy_harvest_recharges_budget() {
+    let (port, token) = spawn_test_server();
+    let resp = ureq::post(&format!("{}/api/energy/harvest", base(port)))
+        .set("Authorization", &auth_header(&token))
+        .send_string("")
+        .expect("energy harvest");
+    assert_eq!(resp.status(), 200);
+    let body: serde_json::Value = resp.into_json().unwrap();
+    assert_eq!(body["status"], "harvested");
+    assert!(body.get("recharged_mwh").is_some());
+    assert!(body.get("remaining_pct").is_some());
+}
+
+#[test]
+fn energy_harvest_without_auth_returns_401() {
+    let (port, _token) = spawn_test_server();
+    let err = ureq::post(&format!("{}/api/energy/harvest", base(port)))
+        .send_string("");
+    match err {
+        Err(ureq::Error::Status(401, _)) => {}
+        other => panic!("expected 401, got {other:?}"),
+    }
+}
