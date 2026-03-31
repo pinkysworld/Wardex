@@ -241,17 +241,78 @@ code{font-family:var(--mono);font-size:.88em;background:var(--bg-alt);padding:.1
 .health-bar span{display:flex;align-items:center;gap:.3rem;}
 .health-bar strong{color:var(--ink);font-family:var(--mono);font-size:.76rem;}
 
+/* ── Global Activity Log Panel ───────────── */
+#global-log-panel{
+  background:var(--bg-alt);border-top:1px solid var(--border);
+  transition:max-height .25s ease;overflow:hidden;
+}
+#global-log-panel.collapsed{max-height:36px;}
+#global-log-panel:not(.collapsed){max-height:180px;}
+.global-log-header{
+  display:flex;align-items:center;justify-content:space-between;
+  padding:.35rem .9rem;cursor:pointer;user-select:none;
+  font-size:.75rem;color:var(--ink-3);font-weight:600;letter-spacing:.04em;text-transform:uppercase;
+  background:var(--surface);border-bottom:1px solid var(--border);
+}
+.global-log-header:hover{background:var(--surface-hover);}
+.global-log-header .log-toggle-arrow{transition:transform .2s;font-size:.7rem;}
+#global-log-panel:not(.collapsed) .log-toggle-arrow{transform:rotate(180deg);}
+#global-log-clear{background:none;border:none;color:var(--ink-3);cursor:pointer;
+  font-size:.72rem;padding:0 .4rem;line-height:1;}
+#global-log-clear:hover{color:var(--red);}
+#global-log-body{
+  font-family:var(--mono);font-size:.73rem;color:var(--accent);
+  padding:.5rem .9rem;max-height:140px;overflow-y:auto;
+  line-height:1.65;white-space:pre-wrap;
+}
+#global-log-panel.collapsed #global-log-body{display:none;}
+
 /* ── Responsive ──────────────────────────── */
+@media(min-width:1025px){
+  .sidebar-toggle{display:none;}
+}
 @media(max-width:1024px){
-  .sidebar{transform:translateX(-100%);}
-  .sidebar.open{transform:translateX(0);}
+  .sidebar{
+    width:52px;overflow:hidden;
+  }
+  .sidebar-brand .sidebar-title,
+  .sidebar-brand .sidebar-version,
+  .sidebar-footer{display:none;}
+  .sidebar-logo{margin:0 auto;}
+  .sidebar-brand{justify-content:center;padding:.6rem .3rem;}
+  .sidebar-nav{padding:.5rem 0;}
+  .nav-item{justify-content:center;padding:.55rem 0;position:relative;}
+  .nav-item .nav-label{display:none;}
+  .nav-item .nav-badge{display:none;}
+  .nav-item .nav-icon{font-size:1.1rem;margin:0;}
+  .nav-item:hover::after{
+    content:attr(data-label);
+    position:absolute;left:56px;top:50%;transform:translateY(-50%);
+    background:var(--surface);border:1px solid var(--border);border-radius:6px;
+    padding:.25rem .6rem;font-size:.78rem;white-space:nowrap;z-index:200;
+    color:var(--ink);pointer-events:none;box-shadow:0 4px 12px rgba(0,0,0,.3);
+  }
   .sidebar-toggle{display:block;}
-  .topbar{left:0;}
-  .main{margin-left:0;}
+  .topbar{left:52px;}
+  .main{margin-left:52px;}
   .metric-strip{grid-template-columns:repeat(2,1fr);}
   .card-grid.cols-2,.card-grid.cols-3,.card-grid.cols-4{grid-template-columns:1fr;}
   .gauge-grid{grid-template-columns:repeat(2,1fr);}
   .settings-grid{grid-template-columns:1fr;}
+}
+@media(max-width:680px){
+  .sidebar{transform:translateX(-100%);width:240px;}
+  .sidebar.open{transform:translateX(0);width:240px;}
+  .sidebar-brand .sidebar-title,
+  .sidebar-brand .sidebar-version,
+  .sidebar-footer{display:block;}
+  .sidebar-brand{justify-content:flex-start;padding:.9rem 1.1rem;}
+  .sidebar-nav{padding:.5rem 0;}
+  .nav-item{justify-content:flex-start;padding:.6rem 1.1rem;}
+  .nav-item .nav-label{display:inline;}
+  .nav-item:hover::after{display:none;}
+  .topbar{left:0;}
+  .main{margin-left:0;}
 }
 @media(max-width:600px){
   .metric-strip{grid-template-columns:1fr;}
@@ -289,20 +350,21 @@ input::placeholder{color:var(--ink-3);}
     </div>
   </div>
   <nav class="sidebar-nav">
-    <div class="nav-item active" data-section="dashboard"><span class="nav-icon">&#9632;</span> Dashboard</div>
-    <div class="nav-item" data-section="live-monitor"><span class="nav-icon">&#9656;</span> Live Monitor <span class="nav-badge hidden" id="nav-alert-badge">0</span></div>
-    <div class="nav-item" data-section="threat-detection"><span class="nav-icon">&#9888;</span> Threat Detection</div>
-    <div class="nav-item" data-section="fleet-agents"><span class="nav-icon">&#8861;</span> Fleet &amp; Agents</div>
-    <div class="nav-item" data-section="security-policy"><span class="nav-icon">&#9881;</span> Security Policy</div>
-    <div class="nav-item" data-section="incident-response"><span class="nav-icon">&#9889;</span> Incident Response</div>
-    <div class="nav-item" data-section="infrastructure"><span class="nav-icon">&#9955;</span> Infrastructure</div>
-    <div class="nav-item" data-section="reports-exports"><span class="nav-icon">&#9776;</span> Reports &amp; Exports</div>
-    <div class="nav-item" data-section="settings"><span class="nav-icon">&#9881;</span> Settings</div>
-    <div class="nav-item" data-section="help-docs"><span class="nav-icon">&#9432;</span> Help &amp; Docs</div>
+    <div class="nav-item active" data-section="dashboard" data-label="Dashboard"><span class="nav-icon">&#9632;</span><span class="nav-label"> Dashboard</span></div>
+    <div class="nav-item" data-section="live-monitor" data-label="Live Monitor"><span class="nav-icon">&#9656;</span><span class="nav-label"> Live Monitor</span> <span class="nav-badge hidden" id="nav-alert-badge">0</span></div>
+    <div class="nav-item" data-section="threat-detection" data-label="Threat Detection"><span class="nav-icon">&#9888;</span><span class="nav-label"> Threat Detection</span></div>
+    <div class="nav-item" data-section="fleet-agents" data-label="Fleet &amp; Agents"><span class="nav-icon">&#8861;</span><span class="nav-label"> Fleet &amp; Agents</span></div>
+    <div class="nav-item" data-section="security-policy" data-label="Security Policy"><span class="nav-icon">&#9881;</span><span class="nav-label"> Security Policy</span></div>
+    <div class="nav-item" data-section="incident-response" data-label="Incident Response"><span class="nav-icon">&#9889;</span><span class="nav-label"> Incident Response</span></div>
+    <div class="nav-item" data-section="infrastructure" data-label="Infrastructure"><span class="nav-icon">&#9955;</span><span class="nav-label"> Infrastructure</span></div>
+    <div class="nav-item" data-section="reports-exports" data-label="Reports &amp; Exports"><span class="nav-icon">&#9776;</span><span class="nav-label"> Reports &amp; Exports</span></div>
+    <div class="nav-item" data-section="settings" data-label="Settings"><span class="nav-icon">&#9881;</span><span class="nav-label"> Settings</span></div>
+    <div class="nav-item" data-section="help-docs" data-label="Help &amp; Docs"><span class="nav-icon">&#9432;</span><span class="nav-label"> Help &amp; Docs</span></div>
   </nav>
   <div class="sidebar-footer">
     <div>&copy; 2025 Wardex XDR</div>
     <div style="margin-top:.2rem;">Local Runtime Console</div>
+    <div style="margin-top:.3rem;font-size:.68rem;color:var(--ink-3);">BSL 1.1 &bull; <a href="../LICENSE" style="color:var(--accent);text-decoration:none;">License</a></div>
   </div>
 </aside>
 
@@ -880,11 +942,6 @@ input::placeholder{color:var(--ink-3);}
           </div>
         </div>
       </div>
-
-      <div class="card mt-1">
-        <h2><span class="dot dot-green"></span> Activity Log</h2>
-        <div class="log-area" id="activity-log">Ready. Connect to the runtime with `cargo run -- serve`.</div>
-      </div>
     </div>
 
     <!-- ═══════════════════════════════════════════════════════════ -->
@@ -1166,6 +1223,18 @@ input::placeholder{color:var(--ink-3);}
     </div>
 
   </div><!-- .content -->
+
+  <!-- ═══ Global Activity Log Panel ═══ -->
+  <div id="global-log-panel" class="collapsed">
+    <div class="global-log-header" id="global-log-toggle">
+      <span>&#128221; Activity Log</span>
+      <span style="display:flex;align-items:center;gap:.6rem;">
+        <button id="global-log-clear" title="Clear log">&#10005; Clear</button>
+        <span class="log-toggle-arrow">&#9650;</span>
+      </span>
+    </div>
+    <div id="global-log-body">Ready.</div>
+  </div>
 </div><!-- .main -->
 
 <!-- ═══ Toast ═══ -->
@@ -1222,10 +1291,15 @@ input::placeholder{color:var(--ink-3);}
   }
 
   function log(msg) {
-    const el = $('#activity-log');
+    const el = $('#global-log-body');
     const ts = new Date().toLocaleTimeString();
     el.textContent += '\n[' + ts + '] ' + msg;
     el.scrollTop = el.scrollHeight;
+    // Auto-expand the panel when new entries arrive
+    const panel = $('#global-log-panel');
+    if (panel.classList.contains('collapsed')) {
+      panel.classList.remove('collapsed');
+    }
   }
 
   function flash(msg, type) {
@@ -2296,6 +2370,32 @@ input::placeholder{color:var(--ink-3);}
   }
 
   // ── Event Listeners ──
+  // ── Global Log Panel ──
+  $('#global-log-toggle').addEventListener('click', () => {
+    $('#global-log-panel').classList.toggle('collapsed');
+  });
+  $('#global-log-clear').addEventListener('click', (e) => {
+    e.stopPropagation();
+    $('#global-log-body').textContent = 'Log cleared.';
+  });
+
+  // ── Ctrl+K / ⌘+K Quick Filter ──
+  document.addEventListener('keydown', (e) => {
+    if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
+      e.preventDefault();
+      // Focus filter-level in Reports, otherwise focus auth token as fallback
+      const filterEl = $('#filter-level');
+      const activeSection = document.querySelector('.section.active');
+      if (activeSection && activeSection.id === 'sec-reports-exports') {
+        filterEl.focus();
+      } else {
+        $('#auth-token').focus();
+      }
+      // Expand the log panel as a visual cue
+      $('#global-log-panel').classList.remove('collapsed');
+    }
+  });
+
   $('#auth-token').addEventListener('input', function() {
     const el = $('#auth-status');
     if (this.value.trim()) { el.textContent = 'Token set'; el.className = 'auth-status ok'; setAuthenticated(false); }

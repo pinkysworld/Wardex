@@ -142,4 +142,10 @@ The static landing page lives in `site/`, and the Pages workflow publishes it on
 
 ## License
 
-TBD (recommended next step: MIT or Apache-2.0).
+Wardex is released under the **Business Source License 1.1** (BSL 1.1).
+
+- **Free for**: development, testing, evaluation, research, and non-commercial use.
+- **Production commercial use** requires a separate commercial license from the author.
+- **Converts to Apache 2.0** on 2029-04-01.
+
+See [LICENSE](LICENSE) for the full terms.
