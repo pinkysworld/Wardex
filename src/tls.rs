@@ -11,7 +11,7 @@
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 
-/// TLS configuration for the SentinelEdge server.
+/// TLS configuration for the Wardex server.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TlsConfig {
     /// Path to the PEM-encoded server certificate.

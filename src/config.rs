@@ -1,3 +1,5 @@
+use crate::siem::SiemConfig;
+
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::Path;
@@ -57,11 +59,79 @@ impl Default for OutputSettings {
     }
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MonitorSettings {
+    pub interval_secs: u64,
+    pub alert_threshold: f32,
+    pub alert_log: String,
+    pub dry_run: bool,
+    pub duration_secs: u64,
+    pub webhook_url: Option<String>,
+    pub syslog: bool,
+    pub cef: bool,
+    pub watch_paths: Vec<String>,
+}
+
+impl Default for MonitorSettings {
+    fn default() -> Self {
+        Self {
+            interval_secs: 5,
+            alert_threshold: 3.5,
+            alert_log: "var/alerts.jsonl".into(),
+            dry_run: false,
+            duration_secs: 0,
+            webhook_url: None,
+            syslog: false,
+            cef: false,
+            watch_paths: Vec::new(),
+        }
+    }
+}
+
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct Config {
     pub detector: DetectorSettings,
     pub policy: PolicySettings,
     pub output: OutputSettings,
+    #[serde(default)]
+    pub monitor: MonitorSettings,
+    #[serde(default)]
+    pub siem: SiemConfig,
+    #[serde(default)]
+    pub agent: AgentSettings,
+}
+
+/// Agent-mode settings (for `wardex agent`).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AgentSettings {
+    /// Server URL to connect to.
+    pub server_url: String,
+    /// Enrollment token for initial registration.
+    pub enrollment_token: String,
+    /// Enable auto-update checking.
+    #[serde(default = "default_auto_update")]
+    pub auto_update: bool,
+    /// Update check interval in seconds.
+    #[serde(default = "default_update_interval")]
+    pub update_check_interval_secs: u64,
+}
+
+fn default_auto_update() -> bool {
+    true
+}
+fn default_update_interval() -> u64 {
+    300
+}
+
+impl Default for AgentSettings {
+    fn default() -> Self {
+        Self {
+            server_url: "http://localhost:8080".into(),
+            enrollment_token: String::new(),
+            auto_update: true,
+            update_check_interval_secs: 300,
+        }
+    }
 }
 
 impl Config {
@@ -161,8 +231,10 @@ pub struct HotReloadResult {
 
 /// A partial config update for hot-reloading.
 /// Only fields that are `Some` will be applied.
+/// Accepts both flat fields (legacy) and nested objects.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct ConfigPatch {
+    // Flat fields (legacy / backward compat)
     #[serde(default)]
     pub warmup_samples: Option<usize>,
     #[serde(default)]
@@ -179,6 +251,14 @@ pub struct ConfigPatch {
     pub critical_integrity_drift: Option<f32>,
     #[serde(default)]
     pub low_battery_threshold: Option<f32>,
+
+    // Nested objects (from admin console settings panel)
+    #[serde(default)]
+    pub detector: Option<DetectorSettings>,
+    #[serde(default)]
+    pub policy: Option<PolicySettings>,
+    #[serde(default)]
+    pub monitor: Option<MonitorSettings>,
 }
 
 impl ConfigPatch {
@@ -232,6 +312,23 @@ impl ConfigPatch {
             applied.push("low_battery_threshold".into());
         }
 
+        // Nested objects (from admin console settings panel)
+        if let Some(ref d) = self.detector {
+            previous.insert("detector".into(), format!("{:?}", config.detector));
+            config.detector = d.clone();
+            applied.push("detector".into());
+        }
+        if let Some(ref p) = self.policy {
+            previous.insert("policy".into(), format!("{:?}", config.policy));
+            config.policy = p.clone();
+            applied.push("policy".into());
+        }
+        if let Some(ref m) = self.monitor {
+            previous.insert("monitor".into(), format!("{:?}", config.monitor));
+            config.monitor = m.clone();
+            applied.push("monitor".into());
+        }
+
         // Validate the patched config
         if let Err(e) = config.validate() {
             // Rollback
@@ -276,7 +373,7 @@ mod tests {
 
     #[test]
     fn write_and_load() {
-        let dir = std::env::temp_dir().join("sentineledge_test_config");
+        let dir = std::env::temp_dir().join("wardex_test_config");
         let path = dir.join("config.toml");
 
         Config::write_default_toml(&path).unwrap();

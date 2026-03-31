@@ -1,4 +1,4 @@
-# SentinelEdge Documentation
+# Wardex Documentation
 
 This folder keeps the runtime, research blueprint, and public documentation in sync.
 

@@ -325,7 +325,7 @@ impl FilesystemEnforcer {
 
     /// Move a suspicious file/directory to a quarantine zone.
     pub fn quarantine_path(&mut self, path: &Path) -> EnforcementResult {
-        let quarantine_dir = PathBuf::from("/var/sentineledge/quarantine");
+        let quarantine_dir = PathBuf::from("/var/wardex/quarantine");
         let dest = quarantine_dir.join(
             path.file_name()
                 .unwrap_or_else(|| std::ffi::OsStr::new("unknown")),
@@ -430,7 +430,7 @@ impl SoftwareTpm {
             pcrs.insert(i, vec![0u8; 32]);
         }
         // Generate a deterministic endorsement key
-        let ek = sha256_hex(b"sentineledge-software-tpm-ek")
+        let ek = sha256_hex(b"wardex-software-tpm-ek")
             .as_bytes()
             .to_vec();
         Self {
@@ -517,7 +517,7 @@ impl SoftwareTpm {
     pub fn status(&self) -> TpmStatus {
         TpmStatus {
             available: true,
-            manufacturer: "SentinelEdge SoftTPM".into(),
+            manufacturer: "Wardex SoftTPM".into(),
             firmware_version: "1.0.0".into(),
             pcr_banks: vec!["SHA-256".into()],
         }
@@ -870,7 +870,7 @@ mod tests {
     #[test]
     fn filesystem_read_only() {
         let mut enforcer = FilesystemEnforcer::new();
-        let result = enforcer.make_read_only(Path::new("/etc/sentineledge.conf"));
+        let result = enforcer.make_read_only(Path::new("/etc/wardex.conf"));
         assert!(result.success);
     }
 

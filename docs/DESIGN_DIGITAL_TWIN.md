@@ -1,7 +1,7 @@
 # Design: Digital-Twin Simulation Architecture (R31)
 
 This document specifies the architecture of a deterministic fleet-scale
-simulation harness for SentinelEdge, covering T075 from Phase 7.
+simulation harness for Wardex, covering T075 from Phase 7.
 
 ---
 
@@ -34,7 +34,7 @@ ID order.
 ### 3.2 Node model
 
 Each simulated node wraps a real `DetectorState` and `PolicyEngine` instance
-from the sentineledge library, augmented with simulated hardware state:
+from the wardex library, augmented with simulated hardware state:
 
 ```rust
 struct SimNode {

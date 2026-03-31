@@ -662,22 +662,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "sentineledge"
-version = "0.14.0"
-dependencies = [
- "chrono",
- "criterion",
- "hex",
- "rand",
- "serde",
- "serde_json",
- "sha2",
- "tiny_http",
- "toml",
- "ureq",
-]
-
-[[package]]
 name = "serde"
 version = "1.0.228"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -911,6 +895,22 @@ checksum = "29790946404f91d9c5d06f9874efddea1dc06c5efe94541a7d6863108e3a5e4b"
 dependencies = [
  "same-file",
  "winapi-util",
+]
+
+[[package]]
+name = "wardex"
+version = "0.17.0"
+dependencies = [
+ "chrono",
+ "criterion",
+ "hex",
+ "rand",
+ "serde",
+ "serde_json",
+ "sha2",
+ "tiny_http",
+ "toml",
+ "ureq",
 ]
 
 [[package]]

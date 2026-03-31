@@ -60,7 +60,7 @@ mod tests {
 
     #[test]
     fn save_and_load() {
-        let dir = std::env::temp_dir().join("sentineledge_test_baseline");
+        let dir = std::env::temp_dir().join("wardex_test_baseline");
         let path = dir.join("baseline.json");
 
         let baseline = PersistedBaseline {

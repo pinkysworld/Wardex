@@ -254,7 +254,7 @@ mod tests {
     use std::io::Write;
 
     fn temp_file(name: &str, content: &[u8]) -> std::path::PathBuf {
-        let dir = std::env::temp_dir().join("sentineledge_attest_test");
+        let dir = std::env::temp_dir().join("wardex_attest_test");
         fs::create_dir_all(&dir).unwrap();
         let path = dir.join(name);
         let mut f = fs::File::create(&path).unwrap();
@@ -305,7 +305,7 @@ mod tests {
             require_attestation_at_boot: true,
         };
         let json = store.to_json().unwrap();
-        let dir = std::env::temp_dir().join("sentineledge_attest_test");
+        let dir = std::env::temp_dir().join("wardex_attest_test");
         let path = dir.join("trust_store.json");
         store.write_to_path(&path).unwrap();
         let loaded = TrustStore::load(&path).unwrap();
@@ -333,7 +333,7 @@ mod tests {
         let manifest = BuildManifest {
             version: "0.2.0".into(),
             commit: "abc123".into(),
-            build_time: "2026-01-01T00:00:00Z".into(),
+            build_time: "T0".into(),
             target: "x86_64".into(),
             binary_hash: "deadbeef".into(),
             source_merkle_root: String::new(),

@@ -229,7 +229,7 @@ verify the composed result is deadlock-free and contradiction-free in
 ### Sub-questions
 
 1. What formal model (lattice, semiring, process algebra) is most natural
-   for representing the priority relationships between SentinelEdge policy
+   for representing the priority relationships between Wardex policy
    sources (vendor ≻ operator ≻ default)?
 2. How should conflicting response actions (e.g., one policy says isolate,
    another says throttle) be resolved: strict priority, escalation merge,

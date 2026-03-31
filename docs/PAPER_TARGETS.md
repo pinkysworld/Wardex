@@ -4,7 +4,7 @@ This document identifies the subset of blueprint tracks closest to publication-r
 
 ## Paper 1 — Adaptive Edge Security with Verifiable Audit
 
-**Working title:** *SentinelEdge: An Adaptive Edge Security Runtime with Verifiable Audit Trails and Poisoning-Resilient Detection*
+**Working title:** *Wardex: An Adaptive Edge Security Runtime with Verifiable Audit Trails and Poisoning-Resilient Detection*
 
 **Thesis:** A single-binary Rust runtime can provide meaningful anomaly detection, policy-driven response, and tamper-evident forensic logging on resource-constrained edge devices — without cloud dependency and with cryptographic guarantees that every decision is auditable.
 

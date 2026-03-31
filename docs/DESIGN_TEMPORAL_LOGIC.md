@@ -1,14 +1,14 @@
 # Design: Temporal-Logic Property Specification Format (R29)
 
 This document specifies the property specification language and runtime monitor
-architecture for SentinelEdge, covering T074 from Phase 7.
+architecture for Wardex, covering T074 from Phase 7.
 
 ---
 
 ## 1. Purpose
 
 Define a lightweight temporal-logic language that operators and researchers can
-use to express safety and bounded-liveness properties over SentinelEdge's
+use to express safety and bounded-liveness properties over Wardex's
 telemetry and alert streams. Properties are compiled into small automata and
 monitored at runtime with minimal overhead.
 

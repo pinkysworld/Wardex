@@ -162,7 +162,7 @@ pub fn execute(samples: &[TelemetrySample]) -> RunResult {
     // Register a digital twin device for the local node
     twin.register(TwinSnapshot::new("local-node"));
 
-    audit.record("boot", "SentinelEdge runtime started in prototype mode");
+    audit.record("boot", "Wardex runtime started in prototype mode");
 
     for (index, sample) in samples.iter().enumerate() {
         // Capture pre-evaluation state for proof binding
@@ -452,7 +452,7 @@ pub fn execute(samples: &[TelemetrySample]) -> RunResult {
 
 pub fn render_console_report(result: &RunResult, audit_path: Option<&Path>) -> String {
     let mut output = String::new();
-    let _ = writeln!(output, "SentinelEdge prototype analysis");
+    let _ = writeln!(output, "Wardex prototype analysis");
     let _ = writeln!(
         output,
         "samples: {} | alerts: {} | critical: {} | avg score: {:.2} | max score: {:.2}",
@@ -567,7 +567,7 @@ pub fn status_snapshot() -> String {
     let status = status_manifest();
 
     [
-        &format!("SentinelEdge status snapshot ({})", status.updated_at),
+        &format!("Wardex status snapshot ({})", status.updated_at),
         "",
         "Phase 1 — Runtime Hardening (complete):",
         "  - TOML/JSON configuration loading",
@@ -662,11 +662,11 @@ pub fn status_snapshot() -> String {
 
 pub fn status_manifest() -> StatusManifest {
     StatusManifest {
-        updated_at: "2026-04-01".into(),
-        backlog_completed: 81,
-        backlog_total: 81,
-        completed_phases: 16,
-        total_phases: 16,
+        updated_at: "current".into(),
+        backlog_completed: 96,
+        backlog_total: 96,
+        completed_phases: 19,
+        total_phases: 19,
         cli_commands: vec![
             "demo".into(),
             "analyze".into(),
@@ -679,6 +679,8 @@ pub fn status_manifest() -> StatusManifest {
             "attest".into(),
             "bench".into(),
             "serve".into(),
+            "monitor".into(),
+            "start".into(),
             "help".into(),
         ],
         implemented: vec![
@@ -767,6 +769,25 @@ pub fn status_manifest() -> StatusManifest {
             "TLS server configuration module with mTLS, version enforcement, and certificate validation".into(),
             "Zero-downtime configuration hot-reload with validation and automatic rollback".into(),
             "Mesh self-healing topology: BFS spanning tree, partition detection, repair proposal and application".into(),
+            "Cross-platform host telemetry collector with OS-specific metric collection".into(),
+            "File-integrity monitoring with SHA-256 baselines".into(),
+            "Webhook, syslog, and CEF alert output".into(),
+            "Simplified startup: cargo run defaults to combined serve+monitor mode".into(),
+            "Server alert API: health, alerts, alerts/count, endpoints, config/save".into(),
+            "Admin console Live Monitoring panel with auto-polling alert table".into(),
+            "Admin console Settings panel with MonitorSettings and nested ConfigPatch".into(),
+            "Toast notification system and token show/hide toggle".into(),
+            "Agent enrollment with token-based authentication and heartbeat staleness detection".into(),
+            "Agent client for endpoint telemetry forwarding and policy reception".into(),
+            "Cross-agent event forwarding with correlation".into(),
+            "Versioned policy distribution with agent-targeted delivery".into(),
+            "Cross-platform service installation (systemd/launchd/sc.exe)".into(),
+            "SIEM integration: Splunk HEC, Elasticsearch bulk, generic JSON with pull-based threat intel".into(),
+            "Agent auto-update with SHA-256 binary verification".into(),
+            "Local system auto-monitoring with background telemetry collection thread".into(),
+            "Professional dark-themed admin console with sidebar navigation and 10 sections".into(),
+            "Telemetry sparklines with canvas-based real-time visualization".into(),
+            "Demo mode with simulated escalating attack scenario (client-side only)".into(),
         ],
         partially_wired: vec![],
         not_implemented: vec![],
@@ -828,9 +849,9 @@ mod tests {
     #[test]
     fn status_manifest_reports_backlog_progress() {
         let manifest = status_manifest();
-        assert_eq!(manifest.backlog_completed, 81);
-        assert_eq!(manifest.backlog_total, 81);
-        assert_eq!(manifest.total_phases, 16);
+        assert_eq!(manifest.backlog_completed, 96);
+        assert_eq!(manifest.backlog_total, 96);
+        assert_eq!(manifest.total_phases, 19);
         assert!(manifest.cli_commands.iter().any(|cmd| cmd == "status-json"));
         assert!(manifest.partially_wired.is_empty());
         assert!(manifest.not_implemented.is_empty());

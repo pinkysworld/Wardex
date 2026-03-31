@@ -32,7 +32,7 @@
         "title": "Quantum-Walk Propagation Modeling",
         "summary": "Use classical simulation of quantum walks to predict how anomalies spread through mesh topologies.",
         "idea": "Discrete-time quantum walk simulation on device topology graphs with learned damping factors.",
-        "matters": "Would shift SentinelEdge from purely reactive detection toward predictive isolation planning.",
+        "matters": "Would shift Wardex from purely reactive detection toward predictive isolation planning.",
         "state": "Quantum-walk engine with Grover-like coin operator on arbitrary graph topologies. Discrete-time simulation with amplitude tracking and threat propagation probability extraction."
       },
       {

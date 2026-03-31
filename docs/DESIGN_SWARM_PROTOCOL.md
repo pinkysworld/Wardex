@@ -13,7 +13,7 @@ Design document for cross-device coordination, covering R03 (swarm intelligence)
 
 - Real-time sub-millisecond coordination (edge devices tolerate seconds-scale latency).
 - Full Byzantine fault tolerance against >1/3 compromised nodes.
-- Cross-vendor interoperability (initial protocol targets SentinelEdge-to-SentinelEdge).
+- Cross-vendor interoperability (initial protocol targets Wardex-to-Wardex).
 
 ## Architecture overview
 

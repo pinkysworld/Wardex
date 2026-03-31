@@ -1,8 +1,8 @@
 use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion};
-use sentineledge::detector::AnomalyDetector;
-use sentineledge::policy::PolicyEngine;
-use sentineledge::runtime::{demo_samples, execute};
-use sentineledge::telemetry::TelemetrySample;
+use wardex::detector::AnomalyDetector;
+use wardex::policy::PolicyEngine;
+use wardex::runtime::{demo_samples, execute};
+use wardex::telemetry::TelemetrySample;
 
 fn make_samples(n: usize) -> Vec<TelemetrySample> {
     let base = demo_samples();

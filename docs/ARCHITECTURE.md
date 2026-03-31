@@ -2,7 +2,7 @@
 
 ## Runtime pipeline
 
-SentinelEdge follows an edge-first control loop:
+Wardex follows an edge-first control loop:
 
 1. **Telemetry ingestion**
    - CSV or JSONL samples are parsed into typed `TelemetrySample` records.

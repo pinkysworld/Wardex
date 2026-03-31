@@ -47,7 +47,7 @@ Default output is `var/last-run.report.json`.
 cargo run -- init-config
 ```
 
-Creates `sentineledge.toml` with all default thresholds, battery policies, and output paths. Edit this file to customize the runtime.
+Creates `wardex.toml` with all default thresholds, battery policies, and output paths. Edit this file to customize the runtime.
 
 ## Inspect the project status snapshot
 

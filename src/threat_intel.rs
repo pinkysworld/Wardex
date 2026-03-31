@@ -389,8 +389,8 @@ mod tests {
             confidence: 0.95,
             severity: "critical".into(),
             source: "internal".into(),
-            first_seen: "2026-01-01".into(),
-            last_seen: "2026-03-01".into(),
+            first_seen: "T0".into(),
+            last_seen: "T1".into(),
             tags: vec!["c2".into()],
             related_iocs: vec![],
         });
@@ -416,8 +416,8 @@ mod tests {
             confidence: 0.8,
             severity: "elevated".into(),
             source: "research".into(),
-            first_seen: "2026-01-01".into(),
-            last_seen: "2026-03-01".into(),
+            first_seen: "T0".into(),
+            last_seen: "T1".into(),
             tags: vec![],
             related_iocs: vec![],
         });
@@ -533,8 +533,8 @@ mod tests {
             confidence: 0.7,
             severity: "elevated".into(),
             source: "ml-model".into(),
-            first_seen: "2026-01-01".into(),
-            last_seen: "2026-03-01".into(),
+            first_seen: "T0".into(),
+            last_seen: "T1".into(),
             tags: vec!["crypto-mining".into()],
             related_iocs: vec![],
         });

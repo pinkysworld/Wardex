@@ -1,9 +1,9 @@
 {
-  "updated_at": "2026-03-30",
-  "backlog_completed": 67,
-  "backlog_total": 67,
-  "completed_phases": 13,
-  "total_phases": 13,
+  "updated_at": "current",
+  "backlog_completed": 85,
+  "backlog_total": 85,
+  "completed_phases": 17,
+  "total_phases": 17,
   "cli_commands": [
     "demo",
     "analyze",

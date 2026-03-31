@@ -636,7 +636,7 @@ mod tests {
     fn lamport_sign_and_verify() {
         let mut private = LamportPrivateKey::generate();
         let public = private.public_key();
-        let message = b"SentinelEdge audit checkpoint #42";
+        let message = b"Wardex audit checkpoint #42";
 
         let signature = private.sign(message);
         assert!(private.used);
@@ -762,7 +762,7 @@ mod tests {
     #[test]
     fn mldsa_keygen_and_sign_verify() {
         let kp = MlDsaKeyPair::generate();
-        let msg = b"SentinelEdge ML-DSA test message";
+        let msg = b"Wardex ML-DSA test message";
         let sig = kp.sign(msg);
         assert!(kp.verify(msg, &sig));
         assert_eq!(sig.algorithm, PqAlgorithm::MlDsa65);

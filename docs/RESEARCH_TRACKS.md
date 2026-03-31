@@ -34,7 +34,7 @@ Each track should be read through three lenses:
   - Current repo state: gossip-based swarm protocol with threat alert propagation, fleet device registry, posture negotiation, and policy distribution. Admin console panels for fleet management and swarm posture.
 - **R04 Quantum-Walk Propagation Modeling** — **Implemented foundation**
   - Research idea: use quantum-walk-inspired propagation models to predict how suspicious behavior may spread through a mesh or dependency graph.
-  - Why it matters: it would turn SentinelEdge from purely reactive detection toward predictive isolation planning.
+  - Why it matters: it would turn Wardex from purely reactive detection toward predictive isolation planning.
   - Current repo state: quantum-walk engine with Grover-like coin operator on arbitrary graph topologies. Discrete-time simulation with amplitude tracking and threat propagation probability extraction.
 - **R05 On-Device Model Poisoning Detection and Self-Recovery** — **Implemented foundation**
   - Research idea: detect when the local model or policy has been tampered with and recover to a known-good state.

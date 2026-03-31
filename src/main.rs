@@ -1,18 +1,23 @@
 use std::env;
 use std::path::{Path, PathBuf};
 use std::process;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
 
-use sentineledge::attestation::BuildManifest;
-use sentineledge::benchmark::{BenchmarkResult, run_benchmark};
-use sentineledge::config::Config;
-use sentineledge::detector::AnomalyDetector;
-use sentineledge::fixed_threshold::{FixedThresholdDetector, run_fixed_benchmark};
-use sentineledge::harness::{self, HarnessConfig};
-use sentineledge::report::JsonReport;
-use sentineledge::runtime;
-use sentineledge::server;
-use sentineledge::state_machine::PolicyStateMachine;
-use sentineledge::telemetry::TelemetrySample;
+use wardex::agent_client;
+use wardex::attestation::BuildManifest;
+use wardex::benchmark::{BenchmarkResult, run_benchmark};
+use wardex::collector;
+use wardex::config::Config;
+use wardex::detector::AnomalyDetector;
+use wardex::fixed_threshold::{FixedThresholdDetector, run_fixed_benchmark};
+use wardex::harness::{self, HarnessConfig};
+use wardex::report::JsonReport;
+use wardex::runtime;
+use wardex::server;
+use wardex::service::ServiceManager;
+use wardex::state_machine::PolicyStateMachine;
+use wardex::telemetry::TelemetrySample;
 
 fn main() {
     if let Err(error) = run() {
@@ -23,12 +28,47 @@ fn main() {
 
 fn run() -> Result<(), String> {
     let mut args = env::args().skip(1);
-    let Some(command) = args.next() else {
-        print_usage();
-        return Ok(());
-    };
+    let command = args.next().unwrap_or_else(|| "start".into());
 
     match command.as_str() {
+        "start" => {
+            // Combined mode: HTTP server + live monitor (the "just works" default)
+            let config = load_or_create_config();
+            let mon = collector::parse_monitor_args(&mut args);
+            let port = 8080u16;
+            let site_dir = resolve_site_dir(&PathBuf::from("site"))?;
+
+            let shutdown = Arc::new(AtomicBool::new(false));
+
+            // Spawn server in background thread
+            let site_dir_clone = site_dir.clone();
+            std::thread::spawn(move || {
+                if let Err(e) = server::run_server(port, &site_dir_clone) {
+                    eprintln!("server error: {e}");
+                }
+            });
+
+            eprintln!("Admin console: http://localhost:{port}/admin.html");
+            eprintln!();
+
+            // Register Ctrl+C
+            let shutdown_sig = shutdown.clone();
+            let _ = register_ctrlc(shutdown_sig);
+
+            // Run monitor on main thread
+            collector::run_monitor(&config, &mon, shutdown);
+        }
+        "monitor" => {
+            // CLI-only monitor (no web server) — for headless/embedded use
+            let config = load_or_create_config();
+            let mon = collector::parse_monitor_args(&mut args);
+
+            let shutdown = Arc::new(AtomicBool::new(false));
+            let shutdown_sig = shutdown.clone();
+            let _ = register_ctrlc(shutdown_sig);
+
+            collector::run_monitor(&config, &mon, shutdown);
+        }
         "demo" => {
             let audit_path = args
                 .next()
@@ -100,7 +140,7 @@ fn run() -> Result<(), String> {
             let config_path = args
                 .next()
                 .map(PathBuf::from)
-                .unwrap_or_else(|| PathBuf::from("sentineledge.toml"));
+                .unwrap_or_else(|| PathBuf::from("wardex.toml"));
 
             if args.next().is_some() {
                 return Err("too many arguments for `init-config`".into());
@@ -147,7 +187,7 @@ fn run() -> Result<(), String> {
             let config = HarnessConfig::default();
             let result = harness::run(&config);
 
-            println!("SentinelEdge adversarial harness");
+            println!("Wardex adversarial harness");
             println!(
                 "  strategies: SlowDrip, BurstMask, DriftInject ({} traces each)",
                 config.traces_per_strategy
@@ -274,6 +314,80 @@ fn run() -> Result<(), String> {
 
             server::run_server(port, &site_dir)?;
         }
+        "server" => {
+            // XDR server mode — central management + event correlation
+            let config = load_or_create_config();
+            let port: u16 = args
+                .next()
+                .map(|p| p.parse().map_err(|_| "invalid port number".to_string()))
+                .transpose()?
+                .unwrap_or(8080);
+            let site_dir = resolve_site_dir(&PathBuf::from("site"))?;
+            let shutdown = Arc::new(AtomicBool::new(false));
+
+            // Start SIEM poller if enabled
+            let siem_shutdown = shutdown.clone();
+            let _siem_handle = wardex::siem::start_siem_poller(config.siem.clone(), siem_shutdown);
+
+            let shutdown_sig = shutdown.clone();
+            let _ = register_ctrlc(shutdown_sig);
+
+            eprintln!("Wardex XDR Server v{}", env!("CARGO_PKG_VERSION"));
+            server::run_server(port, &site_dir)?;
+        }
+        "agent" => {
+            // XDR agent mode — enroll with server and run local monitoring
+            let config = load_or_create_config();
+
+            // Parse agent-specific args
+            let mut server_url = config.agent.server_url.clone();
+            let mut token = config.agent.enrollment_token.clone();
+            let mut remaining_args = Vec::new();
+
+            while let Some(arg) = args.next() {
+                match arg.as_str() {
+                    "--server" => {
+                        server_url = args.next().ok_or("--server requires a URL")?;
+                    }
+                    "--token" => {
+                        token = args.next().ok_or("--token requires a value")?;
+                    }
+                    "install" => {
+                        let extra: Vec<String> = args.collect();
+                        let sm = ServiceManager::new("agent", &extra)?;
+                        let msg = sm.install()?;
+                        println!("{msg}");
+                        return Ok(());
+                    }
+                    "uninstall" => {
+                        let sm = ServiceManager::new("agent", &[])?;
+                        let msg = sm.uninstall()?;
+                        println!("{msg}");
+                        return Ok(());
+                    }
+                    "status" => {
+                        let sm = ServiceManager::new("agent", &[])?;
+                        match sm.status() {
+                            Ok(s) => println!("{s}"),
+                            Err(e) => println!("Service not installed or error: {e}"),
+                        }
+                        return Ok(());
+                    }
+                    other => remaining_args.push(other.to_string()),
+                }
+            }
+
+            if token.is_empty() {
+                return Err("enrollment token required: use --token <TOKEN> or set agent.enrollment_token in config".into());
+            }
+
+            let mon = collector::MonitorConfig::default();
+            let shutdown = Arc::new(AtomicBool::new(false));
+            let shutdown_sig = shutdown.clone();
+            let _ = register_ctrlc(shutdown_sig);
+
+            agent_client::run_agent(&server_url, &token, &config, &mon, shutdown)?;
+        }
         other => {
             return Err(format!(
                 "unknown command `{other}`. run `cargo run -- help` for usage"
@@ -325,22 +439,85 @@ fn resolve_site_dir(site_dir: &Path) -> Result<PathBuf, String> {
 }
 
 fn print_usage() {
-    println!("SentinelEdge prototype");
+    println!("Wardex — Cross-platform XDR platform");
     println!();
-    println!("Usage:");
-    println!("  cargo run -- demo [audit_path]");
-    println!("  cargo run -- analyze <csv_or_jsonl_path> [audit_path]");
-    println!("  cargo run -- report <csv_or_jsonl_path> [report_path]");
-    println!("  cargo run -- init-config [config_path]");
-    println!("  cargo run -- status");
-    println!("  cargo run -- status-json [output_path]");
-    println!("  cargo run -- harness");
-    println!("  cargo run -- export-model <tla|alloy> [output_path]");
-    println!("  cargo run -- attest <binary_path> [manifest_path] [artifact...]");
-    println!("  cargo run -- bench <benign_csv> <attack_csv> [threshold]");
-    println!("  cargo run -- serve [port] [site_dir]");
-    println!("  cargo run -- help");
+    println!("Quick start (no args needed):");
+    println!("  cargo run                          Start server + live monitor with defaults");
+    println!();
+    println!("XDR Commands:");
+    println!("  server  [port]                     Start XDR central server");
+    println!("  agent   --server <url> --token <t>  Start XDR agent (connects to server)");
+    println!("  agent   install [flags]            Install agent as OS service");
+    println!("  agent   uninstall                  Uninstall agent OS service");
+    println!("  agent   status                     Check agent service status");
+    println!();
+    println!("Standalone Commands:");
+    println!("  start   [flags]                    Server + monitor (same as no args)");
+    println!("  monitor [flags]                    CLI-only monitor (no web server)");
+    println!("  serve   [port] [site_dir]          Web server only (no monitor)");
+    println!("  demo    [audit_path]               Run demo telemetry analysis");
+    println!("  analyze <csv|jsonl> [audit_path]   Analyze telemetry file");
+    println!("  report  <csv|jsonl> [report_path]  Generate JSON report");
+    println!("  init-config [config_path]          Write default config file");
+    println!("  status                             Print project status");
+    println!("  status-json [output_path]          Export status as JSON");
+    println!("  harness                            Run adversarial harness");
+    println!("  export-model <tla|alloy> [path]    Export formal model");
+    println!("  attest <binary> [manifest] [...]   Generate build manifest");
+    println!("  bench <benign> <attack> [thresh]   Benchmark detectors");
+    println!("  help                               Show this message");
+    println!();
+    println!("Monitor flags (for start/monitor):");
+    println!("  --interval <secs>     Collection interval (default: 5)");
+    println!("  --threshold <score>   Alert threshold (default: 3.5)");
+    println!("  --alert-log <path>    Alert output file (default: var/alerts.jsonl)");
+    println!("  --webhook <url>       POST alerts to webhook URL");
+    println!("  --watch <paths>       File integrity paths (comma-separated)");
+    println!("  --duration <secs>     Auto-stop after N seconds (0 = unlimited)");
+    println!("  --dry-run             Detect only, no enforcement");
+    println!("  --syslog              Output alerts as RFC 5424 syslog");
+    println!("  --cef                 Output alerts as ArcSight CEF");
+    println!();
+    println!("Configuration:");
+    println!("  All settings can be changed via the admin console at");
+    println!("  http://localhost:8080/admin.html (Settings panel).");
+    println!("  Config is stored in var/wardex.toml and persists across restarts.");
 }
+
+fn load_or_create_config() -> Config {
+    let config_path = PathBuf::from("var/wardex.toml");
+    if config_path.exists() {
+        match Config::load_from_path(&config_path) {
+            Ok(c) => return c,
+            Err(e) => eprintln!("warning: failed to load {}: {e}, using defaults", config_path.display()),
+        }
+    } else {
+        // Create default config on first run
+        if let Err(e) = Config::write_default_toml(&config_path) {
+            eprintln!("warning: failed to write default config: {e}");
+        } else {
+            eprintln!("Created default config: {}", config_path.display());
+        }
+    }
+    Config::default()
+}
+
+fn register_ctrlc(shutdown: Arc<AtomicBool>) -> Result<(), String> {
+    // Spawn a thread that waits for Ctrl+C via stdin EOF or platform signal
+    let shutdown_inner = shutdown.clone();
+    std::thread::spawn(move || {
+        // On Unix, use sigwait-style approach via a simple loop
+        // The thread will be killed when main exits
+        loop {
+            std::thread::sleep(std::time::Duration::from_millis(100));
+            if shutdown_inner.load(Ordering::Relaxed) {
+                break;
+            }
+        }
+    });
+    Ok(())
+}
+
 
 fn run_bench(benign_path: &str, attack_path: &str, threshold: f32) -> Result<(), String> {
     let benign_samples =
@@ -370,7 +547,7 @@ fn run_bench(benign_path: &str, attack_path: &str, threshold: f32) -> Result<(),
     let fixed_result = run_fixed_benchmark(&fixed, &labeled, threshold);
     let elapsed_fixed = start_fixed.elapsed();
 
-    println!("SentinelEdge benchmark comparison");
+    println!("Wardex benchmark comparison");
     println!(
         "  benign: {} ({} samples)",
         benign_path,

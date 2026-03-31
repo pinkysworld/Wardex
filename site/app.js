@@ -1,15 +1,15 @@
 /* ═══════════════════════════════════════════════════════════════════════════
-   SentinelEdge — Site Logic v5
+   Wardex — Site Logic v5
    Data-driven rendering. Researcher tone. No marketing fluff.
    ═══════════════════════════════════════════════════════════════════════════ */
 
 // ── Project Data ──────────────────────────────────────────────────────────────
 
 const stats = [
-  { value: "35", label: "core runtime modules" },
+  { value: "37", label: "core runtime modules" },
   { value: "8",  label: "telemetry dimensions" },
   { value: "40", label: "research tracks mapped" },
-  { value: "276", label: "automated tests" },
+  { value: "387", label: "automated tests" },
 ];
 
 const pipelineDetails = [
@@ -417,6 +417,20 @@ const backlogPhases = [
       { id: "T148", title: "TLS server configuration", desc: "TlsConfig with mTLS, version enforcement, cipher suite selection, ListenerMode abstraction, /api/tls/status.", done: true },
       { id: "T149", title: "Config hot-reload", desc: "ConfigPatch partial update with validation and automatic rollback, /api/config/current and /api/config/reload.", done: true },
       { id: "T150", title: "Mesh self-healing topology", desc: "BFS spanning tree, partition detection, repair proposals (AddEdge/PromoteRelay/Reroute), /api/mesh/health and /api/mesh/heal.", done: true },
+    ],
+  },
+  {
+    id: "phase-17",
+    tag: "Phase 17",
+    tagClass: "done",
+    title: "Cross-platform XDR Agent with Live Monitoring (complete)",
+    tasks: [
+      { id: "T151", title: "Host telemetry collector", desc: "collector.rs (~680 lines): cross-platform OS detection, live metric collection (CPU/mem/temp/net/auth/battery/proc/disk), FileIntegrityMonitor, AlertRecord with syslog/CEF.", done: true },
+      { id: "T152", title: "Simplified startup", desc: "cargo run defaults to combined serve+monitor. Auto-creates var/wardex.toml. Ctrl+C graceful shutdown.", done: true },
+      { id: "T153", title: "Webhook & alert output", desc: "send_webhook() via ureq, --syslog and --cef CLI flags for standard alert formats.", done: true },
+      { id: "T154", title: "Server alert API & health", desc: "GET /api/health, GET /api/alerts, GET /api/alerts/count, DELETE /api/alerts, GET /api/endpoints, POST /api/config/save. Configurable CORS. 7 integration tests.", done: true },
+      { id: "T155", title: "Admin console panels", desc: "Live Monitoring panel with auto-polling alert table (3s), Settings panel with 6 config sections, toast notifications, token toggle, MonitorSettings.", done: true },
+      { id: "T156", title: "Docs & version bump", desc: "Version 0.15.0, CHANGELOG, STATUS, README, FEATURES, PROJECT_BACKLOG, site, and runtime manifest updated. 387 tests, 85/85 tasks.", done: true },
     ],
   },
 ];

@@ -1,5 +1,5 @@
 
-### **SentinelEdge 
+### **Wardex 
 
 **Core Detection & Fusion Tracks**  
 **R01 Learned Multi-Modal Anomaly Detection with On-Device Continual Learning**  

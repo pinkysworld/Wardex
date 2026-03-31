@@ -1,5 +1,5 @@
 /* ═══════════════════════════════════════════════════════════════════════════
-   SentinelEdge — Admin Console v2
+   Wardex — Admin Console v2
    Sidebar dashboard with overview, status, and report views.
    ═══════════════════════════════════════════════════════════════════════════ */
 

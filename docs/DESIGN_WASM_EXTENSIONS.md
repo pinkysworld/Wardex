@@ -19,7 +19,7 @@ Design document for R17 (Wasm-Based Extensible Detection and Response Policies).
 
 ```
 ┌──────────────────────────────────────────────┐
-│                SentinelEdge Host              │
+│                Wardex Host              │
 │                                              │
 │  telemetry ─▶ detector ─▶ policy ─▶ actions  │
 │                  │           │                │
@@ -59,14 +59,14 @@ Receives a telemetry sample and returns a supplementary anomaly signal. The host
 
 ```wat
 ;; Log a message to the host audit log (severity: 0=debug, 1=info, 2=warn).
-(func (import "sentineledge" "log") (param $severity i32) (param $msg_ptr i32) (param $msg_len i32))
+(func (import "wardex" "log") (param $severity i32) (param $msg_ptr i32) (param $msg_len i32))
 
 ;; Read the current baseline mean for a given dimension (0–7).
-(func (import "sentineledge" "baseline_mean") (param $dim i32) (result f32))
+(func (import "wardex" "baseline_mean") (param $dim i32) (result f32))
 
 ;; Read the current replay buffer statistics for a dimension.
-(func (import "sentineledge" "replay_stat_mean") (param $dim i32) (result f32))
-(func (import "sentineledge" "replay_stat_variance") (param $dim i32) (result f32))
+(func (import "wardex" "replay_stat_mean") (param $dim i32) (result f32))
+(func (import "wardex" "replay_stat_variance") (param $dim i32) (result f32))
 ```
 
 ### 2. Response plugin
@@ -89,9 +89,9 @@ Receives an anomaly signal and the current policy decision, then optionally adju
 **Imported host functions:**
 
 ```wat
-(func (import "sentineledge" "log") (param $severity i32) (param $msg_ptr i32) (param $msg_len i32))
-(func (import "sentineledge" "battery_pct") (result f32))
-(func (import "sentineledge" "alert_count_window") (result i32))
+(func (import "wardex" "log") (param $severity i32) (param $msg_ptr i32) (param $msg_len i32))
+(func (import "wardex" "battery_pct") (result f32))
+(func (import "wardex" "alert_count_window") (result i32))
 ```
 
 ## Data exchange format

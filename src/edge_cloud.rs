@@ -478,10 +478,10 @@ mod tests {
     fn patch_lifecycle() {
         let mut pm = PatchManager::new();
         pm.register_patch(Patch {
-            id: "CVE-2026-001".into(),
+            id: "CVE-0000-0001".into(),
             version: "1.0.1".into(),
             severity: "critical".into(),
-            cve_ids: vec!["CVE-2026-001".into()],
+            cve_ids: vec!["CVE-0000-0001".into()],
             description: "Buffer overflow fix".into(),
             status: PatchStatus::Available,
             staged_at: None,
@@ -489,10 +489,10 @@ mod tests {
             rollback_available: true,
         });
 
-        assert!(pm.stage("CVE-2026-001").is_ok());
-        assert!(pm.install("CVE-2026-001").is_ok());
+        assert!(pm.stage("CVE-0000-0001").is_ok());
+        assert!(pm.install("CVE-0000-0001").is_ok());
         assert_eq!(pm.installed_count(), 1);
-        assert!(pm.rollback("CVE-2026-001").is_ok());
+        assert!(pm.rollback("CVE-0000-0001").is_ok());
     }
 
     #[test]

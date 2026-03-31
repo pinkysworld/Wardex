@@ -1,8 +1,8 @@
-# SentinelEdge
+# Wardex
 
-SentinelEdge is a Rust edge security runtime for anomaly detection, policy-driven response, and verifiable audit trails on constrained devices.
+Wardex is a Rust edge security runtime for anomaly detection, policy-driven response, and verifiable audit trails on constrained devices.
 
-The research blueprint in [blueprint.md](blueprint.md) sketches 40 research tracks across seven thematic categories. The codebase has completed all 17 phases of the engineering backlog — 81/81 tasks complete:
+The research blueprint in [blueprint.md](blueprint.md) sketches 40 research tracks across seven thematic categories. The codebase has completed all 18 phases of the engineering backlog — 92/92 tasks complete:
 
 - a configurable Rust runtime for multi-signal anomaly scoring across 8 dimensions
 - an energy-aware response policy engine with pluggable device action adapters
@@ -26,9 +26,12 @@ The research blueprint in [blueprint.md](blueprint.md) sketches 40 research trac
 - policy composition algebra with conflict detection for multi-rule evaluation (R39)
 - criterion micro-benchmarks: ~55K samples/sec throughput, per-stage latency profiling
 - full admin console integration with 14 interactive panels: security operations, fleet management, digital twin simulation, adversarial testing, monitoring & analysis, compliance, quantum key management, policy composition, infrastructure control, and formal model exports
-- full integration test coverage: 70 HTTP tests covering all 40+ API endpoints with auth rejection validation
+- full integration test coverage: 84 HTTP tests covering all 45+ API endpoints with auth rejection validation
 - paper evaluation harnesses: per-sample latency benchmarking and audit chain scaling tests (10–100K records)
-- 369 automated tests (292 unit + 77 integration) with 10k-sample benchmark and criterion benchmarks
+- cross-platform host telemetry collector with live monitoring, webhook alerts, syslog/CEF output, and file-integrity monitoring
+- admin console Live Monitoring panel with auto-polling alert table, settings editor, and toast notifications
+- XDR fleet management: central server + lightweight agent architecture, enrollment, event forwarding with cross-agent correlation, policy distribution, SIEM integration (Splunk HEC/Elasticsearch/generic JSON), agent auto-update with SHA-256 verification, cross-platform service installation
+- 434 automated tests (342 unit + 92 integration) with 10k-sample benchmark and criterion benchmarks
 - cross-platform CI (Linux, macOS, Windows) with clippy and fmt
 - maintained docs, backlog tracking, test fixtures, and a GitHub Pages site
 
@@ -113,7 +116,7 @@ cargo test
 ## Repository layout
 
 ```text
-src/                  Rust runtime (35 modules)
+src/                  Rust runtime (44 modules)
 examples/             Sample telemetry traces (CSV + JSONL)
 docs/                 Design notes, backlog, and status documentation
 site/                 Static GitHub Pages site

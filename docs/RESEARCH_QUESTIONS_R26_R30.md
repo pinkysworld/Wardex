@@ -196,7 +196,7 @@ a Cortex-M4 class device.
 ### Sub-questions
 
 1. What subset of LTL (safety + bounded liveness) is sufficient to express the
-   properties operators actually care about in SentinelEdge deployments?
+   properties operators actually care about in Wardex deployments?
 2. What is the per-sample monitoring overhead for 5, 10, and 20 simultaneous
    properties on representative hardware?
 3. Can property violations be integrated into the anomaly score to create a

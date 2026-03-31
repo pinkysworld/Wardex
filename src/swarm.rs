@@ -816,7 +816,7 @@ mod tests {
             name: format!("Device {id}"),
             platform: "linux-arm64".into(),
             firmware_version: "1.0.0".into(),
-            enrolled_at: "2026-01-01T00:00:00Z".into(),
+            enrolled_at: "T0".into(),
             last_seen_ms: 0,
             status: DeviceStatus::Online,
             tags: vec!["sensor".into()],

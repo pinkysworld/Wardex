@@ -1,4 +1,4 @@
-# SentinelEdge Project Backlog
+# Wardex Project Backlog
 
 This backlog lists the next concrete tasks in build order.
 
@@ -145,9 +145,18 @@ This backlog lists the next concrete tasks in build order.
 - [x] T149: Zero-downtime config hot-reload — `ConfigPatch` partial-update struct with validation and automatic rollback, `HotReloadResult`. `GET /api/config/current` and `POST /api/config/reload` endpoints. 3 unit + 4 integration tests.
 - [x] T150: Mesh self-healing topology — BFS spanning-tree computation, connected-component partition detection, repair proposal algorithm (AddEdge, PromoteRelay, Reroute), `SwarmNode::self_heal()` and `apply_repair()`. `GET /api/mesh/health` and `POST /api/mesh/heal` endpoints. 12 unit + 2 integration tests.
 
+## Phase 17 — Cross-platform XDR agent with live monitoring (completed)
+
+- [x] T151: Cross-platform host telemetry collector — `collector.rs` (~680 lines) with `HostPlatform` enum, `detect_platform()`, `collect_sample()` dispatching per-OS metric collection (CPU, memory, temperature, network, auth, battery, processes, disk), `FileIntegrityMonitor` with SHA-256, `AlertRecord` with syslog/CEF, `run_monitor()` loop, `send_webhook()`, `parse_monitor_args()`. 12 unit tests.
+- [x] T152: Simplified startup — `cargo run` (no args) defaults to combined serve+monitor, `cargo run -- start` for explicit combined mode, `cargo run -- monitor` for CLI-only headless monitor. Auto-creates `var/wardex.toml` on first run. Ctrl+C graceful shutdown via `register_ctrlc()`.
+- [x] T153: Webhook & alert output — `send_webhook()` via ureq, `--syslog` and `--cef` CLI flags, `AlertRecord::to_syslog()` and `to_cef()` formatters.
+- [x] T154: Server alert API & health — `GET /api/health`, `GET /api/alerts`, `GET /api/alerts/count`, `DELETE /api/alerts`, `GET /api/endpoints`, `POST /api/config/save`. Configurable CORS via `SENTINEL_CORS_ORIGIN`. 7 new integration tests.
+- [x] T155: Admin console panels — Live Monitoring panel (auto-polling alert table at 3s, metric summary strip, health bar, CSV export), Settings panel (6 config sections), toast notification system, token show/hide toggle, `MonitorSettings` struct with nested `ConfigPatch` support.
+- [x] T156: Documentation and version update — bump to v0.15.0, CHANGELOG, STATUS, README, FEATURES, PROJECT_BACKLOG, site, and runtime manifest updated. 387 tests (303 unit + 84 integration), 85/85 tasks, 17 phases.
+
 ## Recommended next build order
 
-81 of 81 backlog items are complete. Phases 0–16 are complete.
+85 of 85 backlog items are complete. Phases 0–17 are complete.
 
 All tasks are done.
 

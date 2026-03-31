@@ -1,4 +1,4 @@
-use sentineledge::server::spawn_test_server;
+use wardex::server::spawn_test_server;
 
 fn base(port: u16) -> String {
     format!("http://127.0.0.1:{port}")
@@ -1146,4 +1146,370 @@ fn mesh_heal_on_empty_mesh_is_noop() {
     assert_eq!(body["repairs_applied"], 0);
     assert_eq!(body["was_connected"], true);
     assert_eq!(body["now_connected"], true);
+}
+
+// ── GET /api/health ────────────────────────────────────────────
+
+#[test]
+fn health_returns_version_and_platform() {
+    let (port, _token) = spawn_test_server();
+    let resp = ureq::get(&format!("{}/api/health", base(port)))
+        .call()
+        .expect("health request");
+    assert_eq!(resp.status(), 200);
+    let body: serde_json::Value = resp.into_json().unwrap();
+    assert!(body.get("version").is_some());
+    assert!(body.get("uptime_secs").is_some());
+    assert!(body.get("platform").is_some());
+    assert!(body.get("hostname").is_some());
+}
+
+// ── GET /api/alerts ────────────────────────────────────────────
+
+#[test]
+fn alerts_returns_empty_list_initially() {
+    let (port, _token) = spawn_test_server();
+    let resp = ureq::get(&format!("{}/api/alerts", base(port)))
+        .call()
+        .expect("alerts request");
+    assert_eq!(resp.status(), 200);
+    let body: serde_json::Value = resp.into_json().unwrap();
+    let arr = body.as_array().unwrap();
+    assert!(arr.is_empty());
+}
+
+// ── GET /api/alerts/count ──────────────────────────────────────
+
+#[test]
+fn alerts_count_returns_zero_initially() {
+    let (port, _token) = spawn_test_server();
+    let resp = ureq::get(&format!("{}/api/alerts/count", base(port)))
+        .call()
+        .expect("alerts count request");
+    assert_eq!(resp.status(), 200);
+    let body: serde_json::Value = resp.into_json().unwrap();
+    assert_eq!(body["total"], 0);
+    assert_eq!(body["critical"], 0);
+    assert_eq!(body["severe"], 0);
+    assert_eq!(body["elevated"], 0);
+}
+
+// ── DELETE /api/alerts — auth required ─────────────────────────
+
+#[test]
+fn delete_alerts_without_auth_returns_401() {
+    let (port, _token) = spawn_test_server();
+    let resp = ureq::delete(&format!("{}/api/alerts", base(port))).call();
+    assert!(resp.is_err());
+    let err = resp.unwrap_err();
+    if let ureq::Error::Status(code, _) = err {
+        assert_eq!(code, 401);
+    } else {
+        panic!("expected HTTP error");
+    }
+}
+
+#[test]
+fn delete_alerts_with_auth_clears() {
+    let (port, token) = spawn_test_server();
+    let resp = ureq::delete(&format!("{}/api/alerts", base(port)))
+        .set("Authorization", &auth_header(&token))
+        .call()
+        .unwrap();
+    assert_eq!(resp.status(), 200);
+    let body: serde_json::Value = resp.into_json().unwrap();
+    assert_eq!(body["status"], "cleared");
+}
+
+// ── GET /api/endpoints ─────────────────────────────────────────
+
+#[test]
+fn endpoints_returns_array() {
+    let (port, _token) = spawn_test_server();
+    let resp = ureq::get(&format!("{}/api/endpoints", base(port)))
+        .call()
+        .expect("endpoints request");
+    assert_eq!(resp.status(), 200);
+    let body: serde_json::Value = resp.into_json().unwrap();
+    let arr = body.as_array().unwrap();
+    assert!(arr.len() >= 10);
+}
+
+// ── POST /api/config/save — auth required ──────────────────────
+
+#[test]
+fn config_save_without_auth_returns_401() {
+    let (port, _token) = spawn_test_server();
+    let resp = ureq::post(&format!("{}/api/config/save", base(port)))
+        .send_string("");
+    assert!(resp.is_err());
+    let err = resp.unwrap_err();
+    if let ureq::Error::Status(code, _) = err {
+        assert_eq!(code, 401);
+    } else {
+        panic!("expected HTTP error");
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// XDR Agent Management
+// ═══════════════════════════════════════════════════════════════════
+
+// ── POST /api/agents/token ─────────────────────────────────────
+
+#[test]
+fn create_enrollment_token_requires_auth() {
+    let (port, _token) = spawn_test_server();
+    let resp = ureq::post(&format!("{}/api/agents/token", base(port)))
+        .set("Content-Type", "application/json")
+        .send_string(r#"{"max_uses":5}"#);
+    assert!(resp.is_err());
+    if let Err(ureq::Error::Status(code, _)) = resp {
+        assert_eq!(code, 401);
+    }
+}
+
+#[test]
+fn create_enrollment_token_and_enroll_agent() {
+    let (port, token) = spawn_test_server();
+
+    // Create token
+    let resp = ureq::post(&format!("{}/api/agents/token", base(port)))
+        .set("Authorization", &auth_header(&token))
+        .set("Content-Type", "application/json")
+        .send_string(r#"{"max_uses":5}"#)
+        .expect("create token");
+    assert_eq!(resp.status(), 200);
+    let tok: serde_json::Value = resp.into_json().unwrap();
+    let enrollment_token = tok["token"].as_str().unwrap();
+    assert!(!enrollment_token.is_empty());
+    assert_eq!(tok["max_uses"].as_u64().unwrap(), 5);
+
+    // Enroll agent
+    let body = serde_json::json!({
+        "enrollment_token": enrollment_token,
+        "hostname": "test-agent-1",
+        "platform": "linux",
+        "version": "0.15.0",
+    });
+    let resp = ureq::post(&format!("{}/api/agents/enroll", base(port)))
+        .set("Content-Type", "application/json")
+        .send_string(&body.to_string())
+        .expect("enroll agent");
+    assert_eq!(resp.status(), 200);
+    let enroll: serde_json::Value = resp.into_json().unwrap();
+    let agent_id = enroll["agent_id"].as_str().unwrap();
+    assert!(!agent_id.is_empty());
+    assert!(enroll.get("heartbeat_interval_secs").is_some());
+
+    // Heartbeat
+    let resp = ureq::post(&format!("{}/api/agents/{}/heartbeat", base(port), agent_id))
+        .set("Content-Type", "application/json")
+        .send_string(r#"{"version":"0.15.0"}"#)
+        .expect("heartbeat");
+    assert_eq!(resp.status(), 200);
+    let hb: serde_json::Value = resp.into_json().unwrap();
+    assert_eq!(hb["status"].as_str().unwrap(), "ok");
+
+    // Get agent status
+    let resp = ureq::get(&format!("{}/api/agents/{}/status", base(port), agent_id))
+        .call()
+        .expect("agent status");
+    assert_eq!(resp.status(), 200);
+    let status: serde_json::Value = resp.into_json().unwrap();
+    assert_eq!(status["hostname"].as_str().unwrap(), "test-agent-1");
+    assert_eq!(status["status"].as_str().unwrap(), "online");
+
+    // List agents (requires auth)
+    let resp = ureq::get(&format!("{}/api/agents", base(port)))
+        .set("Authorization", &auth_header(&token))
+        .call()
+        .expect("list agents");
+    assert_eq!(resp.status(), 200);
+    let agents: serde_json::Value = resp.into_json().unwrap();
+    assert_eq!(agents.as_array().unwrap().len(), 1);
+
+    // Deregister agent (requires auth)
+    let resp = ureq::request("DELETE", &format!("{}/api/agents/{}", base(port), agent_id))
+        .set("Authorization", &auth_header(&token))
+        .call()
+        .expect("deregister");
+    assert_eq!(resp.status(), 200);
+    let dr: serde_json::Value = resp.into_json().unwrap();
+    assert_eq!(dr["status"].as_str().unwrap(), "deregistered");
+}
+
+#[test]
+fn enroll_with_invalid_token_returns_403() {
+    let (port, _token) = spawn_test_server();
+    let body = serde_json::json!({
+        "enrollment_token": "invalid-token-abc123",
+        "hostname": "bad-agent",
+        "platform": "linux",
+        "version": "0.15.0",
+    });
+    let resp = ureq::post(&format!("{}/api/agents/enroll", base(port)))
+        .set("Content-Type", "application/json")
+        .send_string(&body.to_string());
+    assert!(resp.is_err());
+    if let Err(ureq::Error::Status(code, _)) = resp {
+        assert_eq!(code, 403);
+    }
+}
+
+// ── POST /api/events ──────────────────────────────────────────
+
+#[test]
+fn event_ingest_and_list() {
+    let (port, token) = spawn_test_server();
+
+    // Create token + enroll
+    let resp = ureq::post(&format!("{}/api/agents/token", base(port)))
+        .set("Authorization", &auth_header(&token))
+        .set("Content-Type", "application/json")
+        .send_string(r#"{"max_uses":1}"#)
+        .unwrap();
+    let tok: serde_json::Value = resp.into_json().unwrap();
+    let enrollment_token = tok["token"].as_str().unwrap();
+
+    let body = serde_json::json!({
+        "enrollment_token": enrollment_token,
+        "hostname": "event-agent",
+        "platform": "linux",
+        "version": "0.15.0",
+    });
+    let resp = ureq::post(&format!("{}/api/agents/enroll", base(port)))
+        .set("Content-Type", "application/json")
+        .send_string(&body.to_string())
+        .unwrap();
+    let enroll: serde_json::Value = resp.into_json().unwrap();
+    let agent_id = enroll["agent_id"].as_str().unwrap();
+
+    // Ingest events
+    let batch = serde_json::json!({
+        "agent_id": agent_id,
+        "events": [{
+            "timestamp": "2025-01-01T00:00:00Z",
+            "hostname": "event-agent",
+            "platform": "linux",
+            "score": 7.5,
+            "confidence": 0.95,
+            "level": "Critical",
+            "action": "isolate",
+            "reasons": ["high_cpu"],
+            "sample": {
+                "timestamp_ms": 0, "cpu_load_pct": 95.0, "memory_load_pct": 50.0,
+                "temperature_c": 60.0, "network_kbps": 100.0, "auth_failures": 0,
+                "battery_pct": 80.0, "integrity_drift": 0.1,
+                "process_count": 50, "disk_pressure_pct": 10.0
+            },
+            "enforced": false
+        }]
+    });
+    let resp = ureq::post(&format!("{}/api/events", base(port)))
+        .set("Content-Type", "application/json")
+        .send_string(&batch.to_string())
+        .expect("ingest events");
+    assert_eq!(resp.status(), 200);
+    let result: serde_json::Value = resp.into_json().unwrap();
+    assert_eq!(result["ingested"].as_u64().unwrap(), 1);
+
+    // List events
+    let resp = ureq::get(&format!("{}/api/events", base(port)))
+        .call()
+        .expect("list events");
+    assert_eq!(resp.status(), 200);
+    let events: serde_json::Value = resp.into_json().unwrap();
+    assert!(!events.as_array().unwrap().is_empty());
+}
+
+// ── Policy distribution ────────────────────────────────────────
+
+#[test]
+fn policy_publish_and_current() {
+    let (port, token) = spawn_test_server();
+
+    // No policy initially
+    let resp = ureq::get(&format!("{}/api/policy/current", base(port)))
+        .call()
+        .expect("get current policy");
+    assert_eq!(resp.status(), 200);
+    let body: serde_json::Value = resp.into_json().unwrap();
+    assert_eq!(body["version"].as_u64().unwrap(), 0);
+
+    // Publish policy (requires auth)
+    let policy = serde_json::json!({
+        "version": 0,
+        "published_at": "",
+        "alert_threshold": 4.5,
+        "interval_secs": 15,
+        "watch_paths": ["/etc", "/var/log"],
+        "dry_run": false,
+        "syslog": true,
+        "cef": false
+    });
+    let resp = ureq::post(&format!("{}/api/policy/publish", base(port)))
+        .set("Authorization", &auth_header(&token))
+        .set("Content-Type", "application/json")
+        .send_string(&policy.to_string())
+        .expect("publish policy");
+    assert_eq!(resp.status(), 200);
+    let result: serde_json::Value = resp.into_json().unwrap();
+    assert_eq!(result["version"].as_u64().unwrap(), 1);
+
+    // Fetch current policy
+    let resp = ureq::get(&format!("{}/api/policy/current", base(port)))
+        .call()
+        .expect("get current policy after publish");
+    assert_eq!(resp.status(), 200);
+    let body: serde_json::Value = resp.into_json().unwrap();
+    assert_eq!(body["version"].as_u64().unwrap(), 1);
+    assert_eq!(body["alert_threshold"].as_f64().unwrap(), 4.5);
+}
+
+// ── SIEM status ────────────────────────────────────────────────
+
+#[test]
+fn siem_status_returns_disabled_by_default() {
+    let (port, token) = spawn_test_server();
+    let resp = ureq::get(&format!("{}/api/siem/status", base(port)))
+        .set("Authorization", &auth_header(&token))
+        .call()
+        .expect("siem status");
+    assert_eq!(resp.status(), 200);
+    let body: serde_json::Value = resp.into_json().unwrap();
+    assert_eq!(body["enabled"].as_bool().unwrap(), false);
+    assert_eq!(body["total_pushed"].as_u64().unwrap(), 0);
+}
+
+// ── Fleet dashboard ────────────────────────────────────────────
+
+#[test]
+fn fleet_dashboard_returns_summary() {
+    let (port, token) = spawn_test_server();
+    let resp = ureq::get(&format!("{}/api/fleet/dashboard", base(port)))
+        .set("Authorization", &auth_header(&token))
+        .call()
+        .expect("fleet dashboard");
+    assert_eq!(resp.status(), 200);
+    let body: serde_json::Value = resp.into_json().unwrap();
+    assert!(body.get("fleet").is_some());
+    assert!(body.get("events").is_some());
+    assert!(body.get("policy").is_some());
+    assert!(body.get("updates").is_some());
+    assert!(body.get("siem").is_some());
+    assert_eq!(body["fleet"]["total_agents"].as_u64().unwrap(), 0);
+}
+
+// ── Update check ──────────────────────────────────────────────
+
+#[test]
+fn update_check_no_updates_available() {
+    let (port, _token) = spawn_test_server();
+    let resp = ureq::get(&format!("{}/api/agents/update?current_version=0.15.0&platform=linux", base(port)))
+        .call()
+        .expect("update check");
+    assert_eq!(resp.status(), 200);
+    let body: serde_json::Value = resp.into_json().unwrap();
+    assert_eq!(body["update_available"].as_bool().unwrap(), false);
 }

@@ -1,7 +1,7 @@
 # Design: Adversarial Robustness Testing Harness (R28)
 
 This document specifies the architecture of an automated adversarial testing
-framework for SentinelEdge's anomaly detector, covering T073 from Phase 7.
+framework for Wardex's anomaly detector, covering T073 from Phase 7.
 
 ---
 

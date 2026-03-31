@@ -1,4 +1,4 @@
-# SentinelEdge — Features
+# Wardex — Features
 
 Lightweight Rust edge security runtime that detects anomalies, enforces adaptive policy, and produces cryptographic audit trails — designed for constrained IoT/edge devices.
 
@@ -17,11 +17,14 @@ Lightweight Rust edge security runtime that detects anomalies, enforces adaptive
 - **Multi-format ingestion** — auto-detects CSV (8 or 10 columns) and JSONL telemetry; file extension or content-type driven
 - **Benchmark harness** — precision, recall, F1, and accuracy metrics on labeled datasets for FP/FN trade-off analysis
 - **Forensic export** — evidence bundles combining audit log, run summary, and checkpoint history
-- **SIEM integration** — structured JSON reports and JSONL streaming output
+- **SIEM integration** — Splunk HEC, Elasticsearch bulk API, and generic JSON output with pull-based threat intel feed ingestion
+- **XDR fleet management** — central server + lightweight agent architecture with enrollment, heartbeat tracking, event forwarding, and cross-agent correlation
+- **Agent auto-update** — binary distribution with SHA-256 verification and semver comparison
+- **Cross-platform service installation** — systemd (Linux), launchd (macOS), sc.exe (Windows) service registration
 
 ## Architecture at a Glance
 
-A 16-stage enriched pipeline — ingest → parse → detect → decide → threat-intel → enforce → digital-twin → energy → side-channel → compliance → act → audit → checkpoint → replay → benchmark → report — runs as a single-binary Rust process. An embedded HTTP server (`tiny_http`) exposes authenticated REST endpoints for live monitoring, analysis, and control. All state lives in-memory; baselines persist to disk between runs.
+A 16-stage enriched pipeline — ingest → parse → detect → decide → threat-intel → enforce → digital-twin → energy → side-channel → compliance → act → audit → checkpoint → replay → benchmark → report — runs as a single-binary Rust process. The binary operates in two modes: **server** (central management with admin console) or **agent** (lightweight endpoint that enrolls with a server, forwards events, and receives policy updates). An embedded HTTP server (`tiny_http`) exposes authenticated REST endpoints for live monitoring, analysis, and control. All state lives in-memory; baselines persist to disk between runs.
 
 ## What's Built vs. Roadmap
 
@@ -35,11 +38,12 @@ A 16-stage enriched pipeline — ingest → parse → detect → decide → thre
 | Poisoning heuristics (4 detectors) | Differential privacy guarantees |
 | Proof backend interface with witness export | Zero-knowledge proof integration (Halo2) |
 | Bounded replay buffer with statistics | Swarm/cross-device coordination |
-| Token-authenticated HTTP API (40+ endpoints) | Wasm-based extensible policies |
+| Token-authenticated HTTP API (60+ endpoints) | Wasm-based extensible policies |
 | Supply-chain attestation foundations | Full attestation with Ed25519 signing |
 | Criterion micro-benchmarks (55K samples/sec) | ARM cross-compilation profiling |
-| 369 automated tests (292 unit + 77 integration) | Digital-twin fleet simulation |
+| 434 automated tests (342 unit + 92 integration) | Digital-twin fleet simulation |
 | Browser admin console with dark mode | Quantum-walk anomaly propagation |
+| XDR fleet management with SIEM integration | |
 | CSV + JSONL multi-format ingestion | |
 
 ## Quick Start

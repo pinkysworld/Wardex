@@ -1,6 +1,6 @@
 [package]
-name = "sentineledge"
-version = "0.14.0"
+name = "wardex"
+version = "0.17.0"
 edition = "2024"
 description = "Edge security runtime scaffold for anomaly detection, adaptive response, and verifiable audit trails"
 license = "MIT"
@@ -14,9 +14,9 @@ hex = "0.4"
 chrono = { version = "0.4", features = ["serde"] }
 tiny_http = "0.12"
 rand = "0.8"
+ureq = { version = "2", default-features = false, features = ["json"] }
 
 [dev-dependencies]
-ureq = { version = "2", default-features = false, features = ["json"] }
 criterion = { version = "0.5", default-features = false, features = ["cargo_bench_support"] }
 
 [[bench]]
