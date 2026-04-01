@@ -2,6 +2,22 @@
 
 All notable changes to Wardex are documented in this file.
 
+## [0.28.0] — Research tracks UI, monitoring UX, and code review hardening
+
+### Added
+- **Research Tracks panel** — new admin console section displaying all 40 research tracks (R01–R40) grouped into 8 thematic categories, with expandable detail cards showing approach, rationale, and current state. Includes filter-by-status controls (Foundation/Scaffolded/Planned/Future) and live track count.
+- **Research Tracks nav item** — dedicated navigation entry between Reports & Exports and Settings.
+
+### Improved
+- **Monitoring scope UX (Settings)** — the "Monitoring Scope" header now clearly indicates it applies to the **Main Server & Default for Agents**, with guidance text explaining that per-agent overrides are available in Fleet & Agents.
+- **Per-agent monitoring scope layout (Fleet)** — replaced inline flex-wrap with a proper responsive grid layout (`grid-template-columns: repeat(auto-fill, minmax(170px, 1fr))`) for cleaner alignment of the 13 monitoring toggles. Improved description text to reference Settings → Monitoring Scope.
+
+### Fixed
+- **Critical: IIFE scope bug** — 11 inline `onclick` handlers referenced functions defined inside the IIFE closure, causing `ReferenceError` at runtime for Sigma Rules refresh, Case Management (refresh/new/submit/cancel), Alert Queue refresh, RBAC (add/refresh), and Feature Flags refresh. Replaced all inline `onclick` attributes with `addEventListener` wiring inside the IIFE.
+- **XSS vulnerability** — dynamically generated `onclick` attributes for Alert Queue "Ack" and RBAC "Remove" buttons used single-quoted string literals that could be broken by crafted IDs/usernames. Replaced with `data-*` attribute event delegation pattern.
+- **Missing CSS variables** — `--danger`, `--green`, and `--teal` were used but never defined in `:root`. Added definitions: `--danger: #ef4444`, `--green: #22c55e`, `--teal: #14b8a6`.
+- **Missing CSS class** — `.dot-teal` was used in Case Management and Process Tree section headers but never defined. Added definition.
+
 ## [0.27.1] — Bug-fix: network burst false positives & RBAC admin bypass
 
 ### Fixed

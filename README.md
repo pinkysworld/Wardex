@@ -2,7 +2,7 @@
 
 Wardex is a Rust edge security runtime for anomaly detection, policy-driven response, and verifiable audit trails on constrained devices.
 
-The research blueprint in [blueprint.md](blueprint.md) sketches 40 research tracks across seven thematic categories. The codebase has completed all 27 phases of the engineering backlog, with 160 of 160 tracked tasks complete:
+The research blueprint in [blueprint.md](blueprint.md) sketches 40 research tracks across eight thematic categories. The codebase has completed all 27 phases of the engineering backlog, with 160 of 160 tracked tasks complete:
 
 - a configurable Rust runtime for multi-signal anomaly scoring across 8 dimensions
 - an energy-aware response policy engine with pluggable device action adapters
@@ -25,7 +25,7 @@ The research blueprint in [blueprint.md](blueprint.md) sketches 40 research trac
 - continual learning with Page-Hinkley drift detection and automatic baseline re-learning (R01)
 - policy composition algebra with conflict detection for multi-rule evaluation (R39)
 - criterion micro-benchmarks: ~55K samples/sec throughput, per-stage latency profiling
-- full admin console integration with 14 interactive panels: security operations, fleet management, digital twin simulation, adversarial testing, monitoring & analysis, compliance, quantum key management, policy composition, infrastructure control, and formal model exports
+- full admin console integration with 15 interactive panels across 11 sections: dashboard overview, live monitoring, security operations, threat detection, fleet management with per-agent monitoring scope, digital twin simulation, adversarial testing, research tracks browser (40 track cards with status filters), monitoring & analysis, compliance, quantum key management, policy composition, infrastructure control, formal model exports, and RBAC/feature flag management
 - full integration test coverage: 84 HTTP tests covering all 45+ API endpoints with auth rejection validation
 - paper evaluation harnesses: per-sample latency benchmarking and audit chain scaling tests (10–100K records)
 - cross-platform host telemetry collector with live monitoring, webhook alerts, syslog/CEF output, and file-integrity monitoring
@@ -109,9 +109,11 @@ cargo run -- serve
 
 Then open `http://localhost:8080/admin.html` in a browser. The token printed to the terminal is required for authenticated console operations, including settings, alerts, reports, and control actions.
 
-The Settings view includes an OS-aware Monitoring Scope section that shows recommended monitoring points for the current host platform, explains why specific signals are recommended or unavailable, lets you control supported collectors including auth events and platform-specific persistence baselines, and previews the exact active monitoring paths.
+The Settings view includes an OS-aware Monitoring Scope section — labeled **"Main Server & Default for Agents"** — that shows recommended monitoring points for the current host platform, explains why specific signals are recommended or unavailable, lets you control supported collectors including auth events and platform-specific persistence baselines, and previews the exact active monitoring paths. Changes here apply to the server itself and serve as defaults for all agents unless overridden per-agent.
 
-The Fleet & Agents view now includes fleet-wide XDR analytics, per-agent drilldowns, filtered event export, monitoring-path health feedback, persistent event history, inline event triage, bulk event triage for multiple events at once, per-agent monitoring scope configuration (13 toggles: CPU, memory, network, disk, processes, auth events, thermal, battery, file integrity, services, LaunchAgents, systemd units, scheduled tasks), deployment rollback and cancellation buttons, and automatic staged rollout progression from canary through ring-1 and ring-2 with configurable soak times and auto-rollback on failure.
+The Fleet & Agents view now includes fleet-wide XDR analytics, per-agent drilldowns, filtered event export, monitoring-path health feedback, persistent event history, inline event triage, bulk event triage for multiple events at once, per-agent monitoring scope configuration (13 toggles in a responsive grid: CPU, memory, network, disk, processes, auth events, thermal, battery, file integrity, services, LaunchAgents, systemd units, scheduled tasks), deployment rollback and cancellation buttons, and automatic staged rollout progression from canary through ring-1 and ring-2 with configurable soak times and auto-rollback on failure.
+
+The Research Tracks view displays all 40 research tracks (R01–R40) across 8 groups with expandable detail cards showing the approach, rationale, and current implementation state for each track. Filter toggles let you focus on tracks by status (Foundation, Scaffolded, Planned, Future).
 
 Run tests:
 

@@ -1,6 +1,6 @@
 [package]
 name = "wardex"
-version = "0.27.1"
+version = "0.28.0"
 edition = "2024"
 description = "Edge security runtime scaffold for anomaly detection, adaptive response, and verifiable audit trails"
 license-file = "LICENSE"

@@ -16,6 +16,9 @@
   --accent:#00d4aa;--accent-hover:#00eabb;--accent-light:rgba(0,212,170,0.12);
   --orange:#f59e0b;--orange-light:rgba(245,158,11,0.12);
   --red:#ef4444;--red-light:rgba(239,68,68,0.12);
+  --green:#22c55e;--green-light:rgba(34,197,94,0.12);
+  --danger:#ef4444;
+  --teal:#14b8a6;
   --blue:#3b82f6;--blue-light:rgba(59,130,246,0.12);
   --purple:#8b5cf6;--purple-light:rgba(139,92,246,0.12);
   --mono:'JetBrains Mono',monospace;--sans:'Inter',system-ui,sans-serif;
@@ -156,6 +159,7 @@ code{font-family:var(--mono);font-size:.88em;background:var(--bg-alt);padding:.1
 .dot-red{background:var(--red);}
 .dot-blue{background:var(--blue);}
 .dot-purple{background:var(--purple);}
+.dot-teal{background:var(--teal);}
 
 /* ── Flash & Toast ───────────────────────── */
 .flash{padding:.6rem 1rem;border-radius:var(--radius);font-size:.85rem;margin-bottom:1rem;display:none;}
@@ -279,6 +283,22 @@ code{font-family:var(--mono);font-size:.88em;background:var(--bg-alt);padding:.1
 .track-badge.scaffolded{background:#422006;color:#fbbf24;}
 .track-badge.planned{background:#172554;color:#93c5fd;}
 .track-badge.future{background:#1f2937;color:#9ca3af;}
+
+/* ── Research tracks section ─────────────── */
+.rt-group{margin-bottom:1.4rem;}
+.rt-group-title{font-size:1rem;font-weight:700;color:var(--accent);margin:0 0 .5rem;padding-bottom:.3rem;border-bottom:1px solid var(--border);}
+.rt-track{background:var(--bg-alt);border:1px solid var(--border);border-radius:var(--radius);padding:.75rem 1rem;margin-bottom:.6rem;cursor:pointer;transition:border-color .15s;}
+.rt-track:hover{border-color:var(--accent);}
+.rt-track.open .rt-details{display:block;}
+.rt-track-header{display:flex;align-items:center;gap:.6rem;flex-wrap:wrap;}
+.rt-track-code{font-family:var(--mono);font-weight:700;font-size:.85rem;color:var(--ink-2);min-width:2.5rem;}
+.rt-track-title{font-size:.88rem;font-weight:600;color:var(--ink);flex:1;}
+.rt-track-arrow{font-size:.7rem;color:var(--ink-3);transition:transform .15s;}
+.rt-track.open .rt-track-arrow{transform:rotate(90deg);}
+.rt-details{display:none;margin-top:.6rem;font-size:.82rem;color:var(--ink-2);line-height:1.55;}
+.rt-details dt{color:var(--ink-3);font-weight:700;font-size:.75rem;text-transform:uppercase;letter-spacing:.04em;margin-top:.5rem;}
+.rt-details dd{margin:0 0 .3rem .5rem;}
+.rt-track.hidden{display:none;}
 
 /* ── Auto refresh ────────────────────────── */
 .auto-refresh-toggle{display:flex;align-items:center;gap:.4rem;font-size:.78rem;color:var(--ink-3);}
@@ -426,6 +446,7 @@ input::placeholder{color:var(--ink-3);}
     <div class="nav-item" data-section="incident-response" data-label="Incident Response" tabindex="0" role="button"><span class="nav-icon" aria-hidden="true">&#9889;</span><span class="nav-label"> Incident Response</span></div>
     <div class="nav-item" data-section="infrastructure" data-label="Infrastructure" tabindex="0" role="button"><span class="nav-icon" aria-hidden="true">&#9955;</span><span class="nav-label"> Infrastructure</span></div>
     <div class="nav-item" data-section="reports-exports" data-label="Reports &amp; Exports" tabindex="0" role="button"><span class="nav-icon" aria-hidden="true">&#9776;</span><span class="nav-label"> Reports &amp; Exports</span></div>
+    <div class="nav-item" data-section="research-tracks" data-label="Research Tracks" tabindex="0" role="button"><span class="nav-icon" aria-hidden="true">&#9670;</span><span class="nav-label"> Research Tracks</span></div>
     <div class="nav-item" data-section="settings" data-label="Settings" tabindex="0" role="button"><span class="nav-icon" aria-hidden="true">&#9881;</span><span class="nav-label"> Settings</span></div>
     <div class="nav-item" data-section="help-docs" data-label="Help &amp; Docs" tabindex="0" role="button"><span class="nav-icon" aria-hidden="true">&#9432;</span><span class="nav-label"> Help &amp; Docs</span></div>
   </nav>
@@ -773,7 +794,7 @@ input::placeholder{color:var(--ink-3);}
           </table>
         </div>
         <div class="btn-row mt-1">
-          <button class="btn btn-sm" id="btn-sigma-refresh" onclick="refreshSigma()">Refresh Rules</button>
+          <button class="btn btn-sm" id="btn-sigma-refresh">Refresh Rules</button>
         </div>
       </div>
     </div>
@@ -888,9 +909,9 @@ input::placeholder{color:var(--ink-3);}
         </div>
         <div style="margin-top:.9rem;padding-top:.85rem;border-top:1px solid var(--border);">
           <h3>Agent Monitoring Scope</h3>
-          <p class="text-muted" style="font-size:.8rem;margin-bottom:.5rem;">Override which signals this agent monitors. Leave unchecked to use server defaults.</p>
+          <p class="text-muted" style="font-size:.8rem;margin-bottom:.5rem;">Override which signals this agent monitors. Unchecked signals fall back to the server-wide defaults configured in <strong>Settings → Monitoring Scope</strong>.</p>
           <div id="xdr-agent-scope-panel" style="display:none;">
-            <div class="btn-row" style="flex-wrap:wrap;gap:.4rem;">
+            <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:.35rem .6rem;">
               <label style="font-size:.82rem;"><input type="checkbox" data-agent-scope="cpu_load" checked> CPU load</label>
               <label style="font-size:.82rem;"><input type="checkbox" data-agent-scope="memory_pressure" checked> Memory</label>
               <label style="font-size:.82rem;"><input type="checkbox" data-agent-scope="network_activity" checked> Network</label>
@@ -1114,8 +1135,8 @@ input::placeholder{color:var(--ink-3);}
             <option value="medium">Medium</option>
             <option value="low">Low</option>
           </select>
-          <button class="btn btn-sm primary" onclick="refreshCases()">Refresh</button>
-          <button class="btn btn-sm" onclick="toggleNewCaseForm()">+ New Case</button>
+          <button class="btn btn-sm primary" id="btn-cases-refresh">Refresh</button>
+          <button class="btn btn-sm" id="btn-new-case">+ New Case</button>
         </div>
         <!-- Inline New Case Form -->
         <div id="new-case-form" class="card" style="display:none;margin-bottom:.75rem;padding:.75rem 1rem;background:var(--bg-alt);border:1px solid var(--border);border-radius:8px;">
@@ -1144,8 +1165,8 @@ input::placeholder{color:var(--ink-3);}
             <input type="text" id="new-case-tags" placeholder="malware, phishing, insider" style="width:100%;padding:.4rem .55rem;background:var(--bg);color:var(--ink);border:1px solid var(--border);border-radius:6px;">
           </div>
           <div class="btn-row">
-            <button class="btn btn-sm primary" onclick="submitNewCase()">Create Case</button>
-            <button class="btn btn-sm" onclick="toggleNewCaseForm()">Cancel</button>
+            <button class="btn btn-sm primary" id="btn-submit-case">Create Case</button>
+            <button class="btn btn-sm" id="btn-cancel-case">Cancel</button>
           </div>
         </div>
         <div class="metric-strip" style="margin-bottom:.75rem;">
@@ -1177,7 +1198,7 @@ input::placeholder{color:var(--ink-3);}
           </table>
         </div>
         <div class="btn-row mt-1">
-          <button class="btn btn-sm" onclick="refreshAlertQueue()">Refresh Queue</button>
+          <button class="btn btn-sm" id="btn-alert-queue-refresh">Refresh Queue</button>
         </div>
       </div>
 
@@ -1530,7 +1551,8 @@ input::placeholder{color:var(--ink-3);}
             <p class="text-muted" style="margin-top:.3rem;">Set via <code>SENTINEL_CORS_ORIGIN</code> env var.</p>
           </div>
           <div class="settings-section settings-section-wide">
-            <h3>Monitoring Scope</h3>
+            <h3>Monitoring Scope <span style="font-size:.78rem;font-weight:400;color:var(--ink-3);">(Main Server &amp; Default for Agents)</span></h3>
+            <p class="text-muted" style="font-size:.8rem;margin-bottom:.5rem;">Select which signals the server monitors locally. These defaults also apply to agents unless overridden per-agent in <strong>Fleet &amp; Agents → Agent Monitoring Scope</strong>.</p>
             <div class="monitor-summary" id="monitoring-summary">Loading host-aware monitoring recommendations…</div>
             <div id="monitoring-groups"></div>
             <div class="monitor-note" id="monitoring-path-preview" style="margin-top:.75rem;">Loading active monitoring paths…</div>
@@ -1560,8 +1582,8 @@ input::placeholder{color:var(--ink-3);}
             <option value="analyst">Analyst</option>
             <option value="viewer" selected>Viewer</option>
           </select>
-          <button class="btn btn-sm primary" onclick="addRbacUser()">Add User</button>
-          <button class="btn btn-sm" onclick="refreshRbac()">Refresh</button>
+          <button class="btn btn-sm primary" id="btn-add-rbac">Add User</button>
+          <button class="btn btn-sm" id="btn-refresh-rbac">Refresh</button>
         </div>
       </div>
 
@@ -1575,7 +1597,7 @@ input::placeholder{color:var(--ink-3);}
           </table>
         </div>
         <div class="btn-row mt-1">
-          <button class="btn btn-sm" onclick="refreshFeatureFlags()">Refresh Flags</button>
+          <button class="btn btn-sm" id="btn-refresh-ff">Refresh Flags</button>
         </div>
       </div>
 
@@ -1589,7 +1611,28 @@ input::placeholder{color:var(--ink-3);}
     </div>
 
     <!-- ═══════════════════════════════════════════════════════════ -->
-    <!-- SECTION 10: Help & Docs                                     -->
+    <!-- SECTION: Research Tracks                                    -->
+    <!-- ═══════════════════════════════════════════════════════════ -->
+    <div class="section" id="sec-research-tracks">
+      <div class="section-header">
+        <h1>Research Tracks</h1>
+        <p>40 research tracks (R01–R40) across 8 groups define the scientific roadmap behind Wardex. Each track progresses from <span class="track-badge foundation">Foundation</span> through <span class="track-badge scaffolded">Scaffolded</span> and <span class="track-badge planned">Planned</span> to <span class="track-badge future">Future</span>.</p>
+      </div>
+      <div class="card">
+        <div style="display:flex;align-items:center;gap:1rem;flex-wrap:wrap;margin-bottom:.75rem;">
+          <span class="text-muted" style="font-size:.82rem;">Filter by status:</span>
+          <label style="font-size:.82rem;cursor:pointer;"><input type="checkbox" class="rt-filter" value="foundation" checked> <span class="track-badge foundation">Foundation</span></label>
+          <label style="font-size:.82rem;cursor:pointer;"><input type="checkbox" class="rt-filter" value="scaffolded" checked> <span class="track-badge scaffolded">Scaffolded</span></label>
+          <label style="font-size:.82rem;cursor:pointer;"><input type="checkbox" class="rt-filter" value="planned" checked> <span class="track-badge planned">Planned</span></label>
+          <label style="font-size:.82rem;cursor:pointer;"><input type="checkbox" class="rt-filter" value="future" checked> <span class="track-badge future">Future</span></label>
+          <span class="text-muted" style="font-size:.78rem;margin-left:auto;" id="rt-count"></span>
+        </div>
+        <div id="research-tracks-container"><em class="text-muted">Loading research tracks…</em></div>
+      </div>
+    </div>
+
+    <!-- ═══════════════════════════════════════════════════════════ -->
+    <!-- SECTION: Help & Docs                                        -->
     <!-- ═══════════════════════════════════════════════════════════ -->
     <div class="section" id="sec-help-docs">
       <div class="section-header">
@@ -2075,6 +2118,7 @@ input::placeholder{color:var(--ink-3);}
     else if (sectionId === 'infrastructure') { refreshInfra(); }
     else if (sectionId === 'reports-exports') { refreshReport(); }
     else if (sectionId === 'settings') { loadSettings(); }
+    else if (sectionId === 'research-tracks') { loadResearchTracks(); }
     else if (sectionId === 'help-docs') { loadApiEndpoints(); }
     else if (sectionId === 'dashboard') { refreshDashboard(); }
   }
@@ -3436,6 +3480,68 @@ input::placeholder{color:var(--ink-3);}
     } catch(e) { /* ignore */ }
   }
 
+  // ── Research Tracks ──
+  let researchTracksData = null;
+
+  async function loadResearchTracks() {
+    const container = $('#research-tracks-container');
+    if (researchTracksData) { renderResearchTracks(researchTracksData); return; }
+    try {
+      const res = await fetch(API + '/api/research-tracks', { headers: authHeaders() });
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      researchTracksData = await res.json();
+      renderResearchTracks(researchTracksData);
+      log('Loaded ' + researchTracksData.reduce((n, g) => n + (g.tracks || []).length, 0) + ' research tracks');
+    } catch(e) {
+      container.innerHTML = '<em class="text-muted">Failed to load research tracks: ' + esc(e.message) + '</em>';
+    }
+  }
+
+  function renderResearchTracks(groups) {
+    const container = $('#research-tracks-container');
+    const activeFilters = new Set();
+    $$('.rt-filter').forEach(el => { if (el.checked) activeFilters.add(el.value); });
+
+    let totalTracks = 0;
+    let visibleTracks = 0;
+
+    let html = '';
+    (groups || []).forEach(group => {
+      const tracks = (group.tracks || []);
+      const trackHtml = tracks.map(t => {
+        totalTracks++;
+        const visible = activeFilters.has(t.status);
+        if (visible) visibleTracks++;
+        return '<div class="rt-track' + (visible ? '' : ' hidden') + '" data-status="' + esc(t.status) + '" onclick="this.classList.toggle(\'open\')">' +
+          '<div class="rt-track-header">' +
+            '<span class="rt-track-code">' + esc(t.code) + '</span>' +
+            '<span class="rt-track-title">' + esc(t.title) + '</span>' +
+            '<span class="track-badge ' + esc(t.status) + '">' + esc(t.status) + '</span>' +
+            '<span class="rt-track-arrow">&#9654;</span>' +
+          '</div>' +
+          '<div class="rt-details">' +
+            '<p>' + esc(t.summary) + '</p>' +
+            '<dl>' +
+              '<dt>Approach</dt><dd>' + esc(t.idea) + '</dd>' +
+              '<dt>Why It Matters</dt><dd>' + esc(t.matters) + '</dd>' +
+              '<dt>Current State</dt><dd>' + esc(t.state) + '</dd>' +
+            '</dl>' +
+          '</div>' +
+        '</div>';
+      }).join('');
+      html += '<div class="rt-group"><div class="rt-group-title">' + esc(group.label) + '</div>' + trackHtml + '</div>';
+    });
+    container.innerHTML = html;
+    $('#rt-count').textContent = visibleTracks + ' of ' + totalTracks + ' tracks shown';
+  }
+
+  // Wire filter checkboxes
+  document.addEventListener('change', function(e) {
+    if (e.target.classList.contains('rt-filter') && researchTracksData) {
+      renderResearchTracks(researchTracksData);
+    }
+  });
+
   // ── Settings ──
   async function loadSettings() {
     try {
@@ -4203,6 +4309,25 @@ input::placeholder{color:var(--ink-3);}
   $('#btn-test-webhook').addEventListener('click', testWebhook);
   $('#btn-shutdown-server').addEventListener('click', shutdownServer);
 
+  // Sigma / Cases / Alert Queue / RBAC / Feature Flags
+  $('#btn-sigma-refresh').addEventListener('click', refreshSigma);
+  if ($('#btn-cases-refresh')) $('#btn-cases-refresh').addEventListener('click', refreshCases);
+  if ($('#btn-new-case')) $('#btn-new-case').addEventListener('click', toggleNewCaseForm);
+  if ($('#btn-submit-case')) $('#btn-submit-case').addEventListener('click', submitNewCase);
+  if ($('#btn-cancel-case')) $('#btn-cancel-case').addEventListener('click', toggleNewCaseForm);
+  if ($('#btn-alert-queue-refresh')) $('#btn-alert-queue-refresh').addEventListener('click', refreshAlertQueue);
+  if ($('#btn-add-rbac')) $('#btn-add-rbac').addEventListener('click', addRbacUser);
+  if ($('#btn-refresh-rbac')) $('#btn-refresh-rbac').addEventListener('click', refreshRbac);
+  if ($('#btn-refresh-ff')) $('#btn-refresh-ff').addEventListener('click', refreshFeatureFlags);
+
+  // Event delegation for dynamically generated buttons
+  document.addEventListener('click', function(e) {
+    const ackBtn = e.target.closest('[data-ack-alert]');
+    if (ackBtn) { ackAlert(ackBtn.dataset.ackAlert); return; }
+    const removeBtn = e.target.closest('[data-remove-rbac]');
+    if (removeBtn) { removeRbacUser(removeBtn.dataset.removeRbac); return; }
+  });
+
   // ── Sigma Rules ──
   async function refreshSigma() {
     try {
@@ -4278,7 +4403,7 @@ input::placeholder{color:var(--ink-3);}
         const alerts = await queueRes.json();
         const tb = $('#queue-tbody');
         if (tb && Array.isArray(alerts)) {
-          tb.innerHTML = alerts.length ? alerts.map(a => '<tr><td>' + esc(a.id || '') + '</td><td>' + esc(a.severity || '') + '</td><td>' + esc(a.source || '') + '</td><td>' + esc(a.status || '') + '</td><td>' + esc(a.assignee || '—') + '</td><td>' + esc(a.timestamp || '') + '</td><td><button class="btn btn-sm" onclick="ackAlert(\'' + esc(a.id || '') + '\')">Ack</button></td></tr>').join('') : '<tr><td colspan="7" class="text-muted">No queued alerts.</td></tr>';
+          tb.innerHTML = alerts.length ? alerts.map(a => '<tr><td>' + esc(a.id || '') + '</td><td>' + esc(a.severity || '') + '</td><td>' + esc(a.source || '') + '</td><td>' + esc(a.status || '') + '</td><td>' + esc(a.assignee || '—') + '</td><td>' + esc(a.timestamp || '') + '</td><td><button class="btn btn-sm" data-ack-alert="' + esc(a.id || '') + '">Ack</button></td></tr>').join('') : '<tr><td colspan="7" class="text-muted">No queued alerts.</td></tr>';
         }
       }
       if (statsRes.ok) {
@@ -4305,7 +4430,7 @@ input::placeholder{color:var(--ink-3);}
         const users = Array.isArray(data) ? data : (data.users || []);
         const tb = $('#rbac-tbody');
         if (tb) {
-          tb.innerHTML = users.length ? users.map(u => '<tr><td>' + esc(u.username || u.name || '') + '</td><td>' + esc(u.role || '') + '</td><td>' + esc(u.created || u.created_at || '—') + '</td><td><button class="btn btn-sm danger" onclick="removeRbacUser(\'' + esc(u.username || u.name || '') + '\')">Remove</button></td></tr>').join('') : '<tr><td colspan="4" class="text-muted">No RBAC users configured.</td></tr>';
+          tb.innerHTML = users.length ? users.map(u => '<tr><td>' + esc(u.username || u.name || '') + '</td><td>' + esc(u.role || '') + '</td><td>' + esc(u.created || u.created_at || '—') + '</td><td><button class="btn btn-sm danger" data-remove-rbac="' + esc(u.username || u.name || '') + '">Remove</button></td></tr>').join('') : '<tr><td colspan="4" class="text-muted">No RBAC users configured.</td></tr>';
         }
       }
     } catch(e) { log('RBAC refresh error: ' + e.message); }

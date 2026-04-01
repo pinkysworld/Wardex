@@ -13,7 +13,7 @@ Lightweight Rust edge security runtime that detects anomalies, enforces adaptive
 - **Policy composition algebra** — composable multi-rule policies with MaxSeverity/MinSeverity/Priority operators and conflict detection
 - **Rollback checkpoints** — bounded ring buffer captures and restores detector state via API
 - **Adapter-backed restore** — checkpoint rollback now reapplies abstract device isolation/quarantine state through the action layer
-- **Live admin console** — browser-based control plane with token auth, auto-refresh with exponential backoff, file upload (CSV/JSONL), CSV export, threat-level filtering, dark mode, and 14 interactive panels covering all features (security ops, fleet, digital twin, monitoring, compliance, quantum, policy, infrastructure, formal exports)
+- **Live admin console** — browser-based control plane with token auth, auto-refresh with exponential backoff, file upload (CSV/JSONL), CSV export, threat-level filtering, dark mode, and 15 interactive panels across 11 sections covering all features (dashboard, live monitoring, security ops, fleet with per-agent monitoring scope, research tracks browser, digital twin, monitoring, compliance, quantum, policy, infrastructure, formal exports, RBAC, feature flags)
 - **Multi-format ingestion** — auto-detects CSV (8 or 10 columns) and JSONL telemetry; file extension or content-type driven
 - **Benchmark harness** — precision, recall, F1, and accuracy metrics on labeled datasets for FP/FN trade-off analysis
 - **Forensic export** — evidence bundles combining audit log, run summary, and checkpoint history
