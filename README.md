@@ -107,7 +107,9 @@ Start the admin console HTTP server:
 cargo run -- serve
 ```
 
-Then open `http://localhost:8080/admin.html` in a browser. The token printed to the terminal is required for control actions.
+Then open `http://localhost:8080/admin.html` in a browser. The token printed to the terminal is required for authenticated console operations, including settings, alerts, reports, and control actions.
+
+The Settings view includes an OS-aware Monitoring Scope section that shows recommended monitoring points for the current host platform and lets you control which supported signals are enabled.
 
 Run tests:
 

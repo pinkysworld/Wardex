@@ -9,7 +9,7 @@ use crate::actions::DeviceController;
 use crate::auto_update::UpdateManager;
 use crate::checkpoint::CheckpointStore;
 use crate::compliance::{ComplianceManager, CausalGraph};
-use crate::collector::{AlertRecord, CollectorState, FileIntegrityMonitor, HostInfo, detect_platform};
+use crate::collector::{AlertRecord, CollectorState, FileIntegrityMonitor, HostInfo, HostPlatform, detect_platform};
 use crate::config::Config;
 use crate::correlation;
 use crate::detector::{AdaptationMode, AnomalyDetector, CompoundThreatDetector, DriftDetector, EntropyDetector, VelocityDetector};
@@ -142,15 +142,20 @@ pub fn run_server(port: u16, site_dir: &Path, shutdown: Arc<AtomicBool>) -> Resu
         let monitor_state = Arc::clone(&state);
         std::thread::spawn(move || {
             let mut cs = CollectorState::default();
-            let watch_paths = {
-                let s = monitor_state.lock().unwrap();
-                s.config.monitor.watch_paths.clone()
-            };
-            let fim = FileIntegrityMonitor::new(&watch_paths);
             let mut consecutive_elevated: u32 = 0;
             const CONFIRM_SAMPLES: u32 = 2; // require N consecutive elevated before alerting
             loop {
-                let sample = crate::collector::collect_sample(&mut cs, Some(&fim));
+                let fim = {
+                    let s = monitor_state.lock().unwrap();
+                    if s.config.monitor.scope.file_integrity
+                        && !s.config.monitor.watch_paths.is_empty()
+                    {
+                        Some(FileIntegrityMonitor::new(&s.config.monitor.watch_paths))
+                    } else {
+                        None
+                    }
+                };
+                let sample = crate::collector::collect_sample(&mut cs, fim.as_ref());
                 {
                     let mut s = monitor_state.lock().unwrap();
                     if s.local_telemetry.len() >= 300 {
@@ -380,6 +385,252 @@ fn check_auth(request: &Request, state: &Arc<Mutex<AppState>>) -> bool {
     false
 }
 
+fn host_platform_key(platform: HostPlatform) -> &'static str {
+    match platform {
+        HostPlatform::Linux => "linux",
+        HostPlatform::MacOS => "macos",
+        HostPlatform::Windows | HostPlatform::WindowsServer => "windows",
+        HostPlatform::Unknown => "unknown",
+    }
+}
+
+fn monitoring_option(
+    id: &str,
+    label: &str,
+    description: &str,
+    selected: bool,
+    supported: bool,
+    recommended: bool,
+    mode: &str,
+    reason: Option<&str>,
+) -> serde_json::Value {
+    serde_json::json!({
+        "id": id,
+        "label": label,
+        "description": description,
+        "selected": selected,
+        "supported": supported,
+        "recommended": recommended,
+        "mode": mode,
+        "reason": reason,
+    })
+}
+
+fn monitoring_options_payload(host: &HostInfo, config: &Config) -> serde_json::Value {
+    let platform_key = host_platform_key(host.platform);
+    let caps = PlatformCapabilities::detect_current();
+    let scope = &config.monitor.scope;
+
+    let core = vec![
+        monitoring_option(
+            "cpu_load",
+            "CPU load",
+            "Monitors sustained or sudden CPU pressure to catch miners, brute-force spikes, and runaway workloads.",
+            scope.cpu_load,
+            true,
+            true,
+            "always_on",
+            Some("Core telemetry is always collected in the current release."),
+        ),
+        monitoring_option(
+            "memory_pressure",
+            "Memory pressure",
+            "Tracks RAM consumption trends to surface exhaustion, injection, and staging behavior.",
+            scope.memory_pressure,
+            true,
+            true,
+            "always_on",
+            Some("Core telemetry is always collected in the current release."),
+        ),
+        monitoring_option(
+            "network_activity",
+            "Network activity",
+            "Flags bursts or sustained traffic shifts associated with exfiltration, C2, or floods.",
+            scope.network_activity,
+            true,
+            true,
+            "always_on",
+            Some("Core telemetry is always collected in the current release."),
+        ),
+        monitoring_option(
+            "disk_pressure",
+            "Disk pressure",
+            "Watches disk utilization changes that can indicate ransomware, log stuffing, or resource starvation.",
+            scope.disk_pressure,
+            true,
+            true,
+            "always_on",
+            Some("Core telemetry is always collected in the current release."),
+        ),
+        monitoring_option(
+            "process_activity",
+            "Process activity",
+            "Uses process-count anomalies to highlight fork storms, lateral tooling, and persistence bursts.",
+            scope.process_activity,
+            true,
+            true,
+            "always_on",
+            Some("Core telemetry is always collected in the current release."),
+        ),
+    ];
+
+    let security = vec![
+        monitoring_option(
+            "auth_events",
+            "Authentication events",
+            "Tracks failed-logon spikes to detect brute-force and credential-stuffing behavior.",
+            scope.auth_events,
+            true,
+            true,
+            "always_on",
+            Some("Core telemetry is always collected in the current release."),
+        ),
+        monitoring_option(
+            "file_integrity",
+            "File integrity",
+            "Hashes configured paths and alerts on unexpected changes. This is the scope item that directly changes collector behavior now.",
+            scope.file_integrity,
+            true,
+            true,
+            "configurable",
+            None,
+        ),
+        monitoring_option(
+            "service_persistence",
+            "Service persistence",
+            "Covers startup services and persistence footholds. Visible now for planning, collector support follows in a later phase.",
+            scope.service_persistence,
+            false,
+            true,
+            "planned",
+            Some("Planned collector support; not enforced yet."),
+        ),
+    ];
+
+    let host_specific = vec![
+        monitoring_option(
+            "thermal_state",
+            "Thermal state",
+            "Adds device-heat context to CPU and workload anomalies.",
+            scope.thermal_state,
+            true,
+            platform_key != "unknown",
+            "always_on",
+            Some("Collected as part of the current host telemetry pipeline."),
+        ),
+        monitoring_option(
+            "battery_state",
+            "Battery state",
+            "Useful on mobile or battery-backed devices where power drain can be part of the attack path.",
+            scope.battery_state,
+            true,
+            matches!(host.platform, HostPlatform::MacOS | HostPlatform::Windows | HostPlatform::WindowsServer),
+            "always_on",
+            Some("Collected when the host exposes battery data."),
+        ),
+        monitoring_option(
+            "launch_agents",
+            "Launch agents",
+            "macOS persistence points such as LaunchAgents and LaunchDaemons.",
+            scope.launch_agents,
+            false,
+            platform_key == "macos",
+            "planned",
+            Some(if platform_key == "macos" {
+                "Recommended for macOS, but collector support is still planned."
+            } else {
+                "macOS-specific monitoring point."
+            }),
+        ),
+        monitoring_option(
+            "systemd_units",
+            "systemd units",
+            "Linux startup services and unit-file persistence.",
+            scope.systemd_units,
+            false,
+            platform_key == "linux",
+            "planned",
+            Some(if platform_key == "linux" {
+                "Recommended for Linux, but collector support is still planned."
+            } else {
+                "Linux-specific monitoring point."
+            }),
+        ),
+        monitoring_option(
+            "scheduled_tasks",
+            "Scheduled tasks",
+            "Windows task-scheduler persistence and delayed execution.",
+            scope.scheduled_tasks,
+            false,
+            platform_key == "windows",
+            "planned",
+            Some(if platform_key == "windows" {
+                "Recommended for Windows, but collector support is still planned."
+            } else {
+                "Windows-specific monitoring point."
+            }),
+        ),
+    ];
+
+    let selected_now = vec![
+        (scope.cpu_load, "CPU load"),
+        (scope.memory_pressure, "Memory pressure"),
+        (scope.network_activity, "Network activity"),
+        (scope.disk_pressure, "Disk pressure"),
+        (scope.process_activity, "Process activity"),
+        (scope.auth_events, "Authentication events"),
+        (scope.thermal_state, "Thermal state"),
+        (scope.battery_state, "Battery state"),
+        (scope.file_integrity, "File integrity"),
+    ]
+    .into_iter()
+    .filter_map(|(enabled, label)| enabled.then_some(label))
+    .collect::<Vec<_>>();
+
+    serde_json::json!({
+        "host": {
+            "platform": host.platform.to_string(),
+            "platform_key": platform_key,
+            "hostname": host.hostname,
+            "os_version": host.os_version,
+            "arch": host.arch,
+            "has_tpm": caps.has_tpm,
+            "has_seccomp": caps.has_seccomp,
+            "has_ebpf": caps.has_ebpf,
+            "has_firewall": caps.has_firewall,
+            "process_control": caps.process_control,
+        },
+        "summary": {
+            "selected_now": selected_now,
+            "watch_path_count": config.monitor.watch_paths.len(),
+            "notes": [
+                "Core telemetry remains always-on in the current release.",
+                "File integrity monitoring is configurable now; other host-specific checkboxes are stored for planned collector expansion."
+            ]
+        },
+        "groups": [
+            {
+                "id": "core_system",
+                "label": "Core System",
+                "description": "Signals already collected on every sample.",
+                "options": core,
+            },
+            {
+                "id": "security_signals",
+                "label": "Security Signals",
+                "description": "Signals tied to attack behavior and integrity checks.",
+                "options": security,
+            },
+            {
+                "id": "host_specific",
+                "label": "Host-Specific",
+                "description": "OS-aware recommendations and planned collectors for this platform.",
+                "options": host_specific,
+            }
+        ]
+    })
+}
+
 fn handle_api(mut request: Request, state: &Arc<Mutex<AppState>>, _site_dir: &Path, server: &Server) {
     let url = request.url().to_string();
     let method = request.method().clone();
@@ -441,12 +692,15 @@ fn handle_api(mut request: Request, state: &Arc<Mutex<AppState>>, _site_dir: &Pa
         || (method == Method::Get && url == "/api/telemetry/history")
         || (method == Method::Get && url == "/api/host/info")
         || (method == Method::Get && url == "/api/config/current")
+        || (method == Method::Get && url == "/api/checkpoints")
+        || (method == Method::Get && url == "/api/correlation")
         || (method == Method::Get && url == "/api/alerts")
         || (method == Method::Get && url == "/api/alerts/count")
         || (method == Method::Get && url.starts_with("/api/alerts/") && url != "/api/alerts/count")
         || (method == Method::Get && url == "/api/report")
         || (method == Method::Get && url == "/api/threads/status")
         || (method == Method::Get && url == "/api/detection/summary")
+        || (method == Method::Get && url == "/api/monitoring/options")
         || (method == Method::Get && url == "/api/endpoints")
         || (method == Method::Get && url == "/api/status")
         || (method == Method::Delete && url.starts_with("/api/agents/"))
@@ -478,7 +732,6 @@ fn handle_api(mut request: Request, state: &Arc<Mutex<AppState>>, _site_dir: &Pa
                 let alerts = &s.alerts;
                 let total = alerts.len();
                 let critical = alerts.iter().filter(|a| a.level == "Critical").count();
-                let severe = alerts.iter().filter(|a| a.level == "Severe").count();
                 let avg_score = if total > 0 { alerts.iter().map(|a| a.score).sum::<f32>() / total as f32 } else { 0.0 };
                 let max_score = alerts.iter().map(|a| a.score).fold(0.0f32, f32::max);
                 let samples: Vec<serde_json::Value> = alerts.iter().enumerate().map(|(i, a)| {
@@ -501,7 +754,7 @@ fn handle_api(mut request: Request, state: &Arc<Mutex<AppState>>, _site_dir: &Pa
                     "summary": {
                         "total_samples": total,
                         "alert_count": total,
-                        "critical_count": critical + severe,
+                        "critical_count": critical,
                         "average_score": avg_score,
                         "max_score": max_score,
                     },
@@ -1085,15 +1338,24 @@ fn handle_api(mut request: Request, state: &Arc<Mutex<AppState>>, _site_dir: &Pa
             let s = state.lock().unwrap();
             let host = &s.local_host_info;
             let uptime = s.server_start.elapsed().as_secs();
+            let cpu_cores = std::thread::available_parallelism()
+                .map(|n| n.get())
+                .unwrap_or(1);
+            let capabilities = PlatformCapabilities::detect_current();
             let body = serde_json::json!({
                 "hostname": host.hostname,
                 "platform": host.platform.to_string(),
                 "os_version": host.os_version,
                 "arch": host.arch,
+                "cpu_cores": cpu_cores,
                 "uptime_secs": uptime,
                 "version": env!("CARGO_PKG_VERSION"),
                 "local_monitoring": true,
                 "telemetry_samples": s.local_telemetry.len(),
+                "has_tpm": capabilities.has_tpm,
+                "has_seccomp": capabilities.has_seccomp,
+                "has_ebpf": capabilities.has_ebpf,
+                "has_firewall": capabilities.has_firewall,
             });
             json_response(&body.to_string(), 200)
         }
@@ -1109,12 +1371,19 @@ fn handle_api(mut request: Request, state: &Arc<Mutex<AppState>>, _site_dir: &Pa
             });
             json_response(&body.to_string(), 200)
         }
+        (Method::Get, "/api/monitoring/options") => {
+            let s = state.lock().unwrap();
+            let body = monitoring_options_payload(&s.local_host_info, &s.config);
+            json_response(&body.to_string(), 200)
+        }
         (Method::Get, "/api/endpoints") => {
             let endpoints = serde_json::json!([
                 {"method": "GET", "path": "/api/health", "auth": false, "description": "Server health, version, uptime, platform"},
-                {"method": "GET", "path": "/api/host/info", "auth": false, "description": "Detailed host info + monitoring status"},
+                {"method": "GET", "path": "/api/host/info", "auth": true, "description": "Detailed host info + monitoring status"},
                 {"method": "GET", "path": "/api/telemetry/current", "auth": true, "description": "Latest local telemetry sample"},
                 {"method": "GET", "path": "/api/telemetry/history", "auth": true, "description": "Last 120 local telemetry samples"},
+                {"method": "GET", "path": "/api/checkpoints", "auth": true, "description": "Saved checkpoint metadata"},
+                {"method": "GET", "path": "/api/correlation", "auth": true, "description": "Replay-buffer correlation analysis"},
                 {"method": "GET", "path": "/api/alerts", "auth": true, "description": "Last 100 alerts"},
                 {"method": "GET", "path": "/api/alerts/count", "auth": true, "description": "Alert count by severity"},
                 {"method": "DELETE", "path": "/api/alerts", "auth": true, "description": "Clear all alerts"},
@@ -1122,6 +1391,7 @@ fn handle_api(mut request: Request, state: &Arc<Mutex<AppState>>, _site_dir: &Pa
                 {"method": "GET", "path": "/api/report", "auth": true, "description": "Latest analysis report"},
                 {"method": "POST", "path": "/api/analyze", "auth": true, "description": "Analyze CSV/JSONL telemetry"},
                 {"method": "GET", "path": "/api/config/current", "auth": true, "description": "Current configuration"},
+                {"method": "GET", "path": "/api/monitoring/options", "auth": true, "description": "OS-aware monitoring points and recommendations"},
                 {"method": "POST", "path": "/api/config/reload", "auth": true, "description": "Hot-reload config patch"},
                 {"method": "POST", "path": "/api/config/save", "auth": true, "description": "Persist config to disk"},
                 {"method": "GET", "path": "/api/endpoints", "auth": true, "description": "This endpoint listing"},

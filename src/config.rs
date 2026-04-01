@@ -60,6 +60,43 @@ impl Default for OutputSettings {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MonitorScopeSettings {
+    pub cpu_load: bool,
+    pub memory_pressure: bool,
+    pub network_activity: bool,
+    pub disk_pressure: bool,
+    pub process_activity: bool,
+    pub auth_events: bool,
+    pub thermal_state: bool,
+    pub battery_state: bool,
+    pub file_integrity: bool,
+    pub service_persistence: bool,
+    pub launch_agents: bool,
+    pub systemd_units: bool,
+    pub scheduled_tasks: bool,
+}
+
+impl Default for MonitorScopeSettings {
+    fn default() -> Self {
+        Self {
+            cpu_load: true,
+            memory_pressure: true,
+            network_activity: true,
+            disk_pressure: true,
+            process_activity: true,
+            auth_events: true,
+            thermal_state: true,
+            battery_state: true,
+            file_integrity: true,
+            service_persistence: false,
+            launch_agents: false,
+            systemd_units: false,
+            scheduled_tasks: false,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MonitorSettings {
     pub interval_secs: u64,
     pub alert_threshold: f32,
@@ -70,6 +107,8 @@ pub struct MonitorSettings {
     pub syslog: bool,
     pub cef: bool,
     pub watch_paths: Vec<String>,
+    #[serde(default)]
+    pub scope: MonitorScopeSettings,
 }
 
 impl Default for MonitorSettings {
@@ -84,6 +123,7 @@ impl Default for MonitorSettings {
             syslog: false,
             cef: false,
             watch_paths: Vec::new(),
+            scope: MonitorScopeSettings::default(),
         }
     }
 }
@@ -160,9 +200,25 @@ impl Config {
 
     /// Validate invariants: threshold ordering, non-negative values, ranges.
     pub fn validate(&self) -> Result<(), String> {
+        fn finite_non_negative(name: &str, value: f32) -> Result<(), String> {
+            if !value.is_finite() {
+                return Err(format!("{name} must be finite, got {value}"));
+            }
+            if value < 0.0 {
+                return Err(format!("{name} must be >= 0.0, got {value}"));
+            }
+            Ok(())
+        }
+
         let d = &self.detector;
         if d.warmup_samples == 0 {
             return Err("detector.warmup_samples must be >= 1".into());
+        }
+        if !d.smoothing.is_finite() {
+            return Err(format!(
+                "detector.smoothing must be finite, got {}",
+                d.smoothing
+            ));
         }
         if !(0.0..=1.0).contains(&d.smoothing) {
             return Err(format!(
@@ -170,14 +226,12 @@ impl Config {
                 d.smoothing
             ));
         }
-        if d.learn_threshold < 0.0 {
-            return Err(format!(
-                "detector.learn_threshold must be >= 0.0, got {}",
-                d.learn_threshold
-            ));
-        }
+        finite_non_negative("detector.learn_threshold", d.learn_threshold)?;
 
         let p = &self.policy;
+        finite_non_negative("policy.critical_score", p.critical_score)?;
+        finite_non_negative("policy.severe_score", p.severe_score)?;
+        finite_non_negative("policy.elevated_score", p.elevated_score)?;
         if p.critical_score <= p.severe_score {
             return Err(format!(
                 "policy.critical_score ({}) must be > severe_score ({})",
@@ -190,10 +244,10 @@ impl Config {
                 p.severe_score, p.elevated_score
             ));
         }
-        if p.elevated_score < 0.0 {
+        if !p.critical_integrity_drift.is_finite() {
             return Err(format!(
-                "policy.elevated_score must be >= 0.0, got {}",
-                p.elevated_score
+                "policy.critical_integrity_drift must be finite, got {}",
+                p.critical_integrity_drift
             ));
         }
         if p.critical_integrity_drift < 0.0 || p.critical_integrity_drift > 1.0 {
@@ -202,12 +256,24 @@ impl Config {
                 p.critical_integrity_drift
             ));
         }
+        if !p.low_battery_threshold.is_finite() {
+            return Err(format!(
+                "policy.low_battery_threshold must be finite, got {}",
+                p.low_battery_threshold
+            ));
+        }
         if p.low_battery_threshold < 0.0 || p.low_battery_threshold > 100.0 {
             return Err(format!(
                 "policy.low_battery_threshold must be in [0.0, 100.0], got {}",
                 p.low_battery_threshold
             ));
         }
+
+        let m = &self.monitor;
+        if m.interval_secs == 0 {
+            return Err("monitor.interval_secs must be >= 1".into());
+        }
+        finite_non_negative("monitor.alert_threshold", m.alert_threshold)?;
 
         let o = &self.output;
         if o.checkpoint_interval == 0 {
@@ -271,6 +337,23 @@ impl ConfigPatch {
         // Snapshot the original config for rollback on validation failure
         let original = config.clone();
 
+        // Nested objects (from admin console settings panel)
+        if let Some(ref d) = self.detector {
+            previous.insert("detector".into(), format!("{:?}", config.detector));
+            config.detector = d.clone();
+            applied.push("detector".into());
+        }
+        if let Some(ref p) = self.policy {
+            previous.insert("policy".into(), format!("{:?}", config.policy));
+            config.policy = p.clone();
+            applied.push("policy".into());
+        }
+        if let Some(ref m) = self.monitor {
+            previous.insert("monitor".into(), format!("{:?}", config.monitor));
+            config.monitor = m.clone();
+            applied.push("monitor".into());
+        }
+
         if let Some(v) = self.warmup_samples {
             previous.insert("warmup_samples".into(), config.detector.warmup_samples.to_string());
             config.detector.warmup_samples = v;
@@ -312,23 +395,6 @@ impl ConfigPatch {
             applied.push("low_battery_threshold".into());
         }
 
-        // Nested objects (from admin console settings panel)
-        if let Some(ref d) = self.detector {
-            previous.insert("detector".into(), format!("{:?}", config.detector));
-            config.detector = d.clone();
-            applied.push("detector".into());
-        }
-        if let Some(ref p) = self.policy {
-            previous.insert("policy".into(), format!("{:?}", config.policy));
-            config.policy = p.clone();
-            applied.push("policy".into());
-        }
-        if let Some(ref m) = self.monitor {
-            previous.insert("monitor".into(), format!("{:?}", config.monitor));
-            config.monitor = m.clone();
-            applied.push("monitor".into());
-        }
-
         // Validate the patched config
         if let Err(e) = config.validate() {
             // Rollback
@@ -352,7 +418,7 @@ impl ConfigPatch {
 
 #[cfg(test)]
 mod tests {
-    use super::{Config, ConfigPatch};
+    use super::{Config, ConfigPatch, MonitorSettings, MonitorScopeSettings, PolicySettings};
 
     #[test]
     fn default_round_trip_toml() {
@@ -461,5 +527,68 @@ mod tests {
         let result = patch.apply(&mut config);
         assert!(result.success);
         assert!(result.applied_fields.is_empty());
+    }
+
+    #[test]
+    fn rejects_negative_severe_score() {
+        let mut config = Config::default();
+        config.policy.severe_score = -1.0;
+        let err = config.validate().unwrap_err();
+        assert!(err.contains("policy.severe_score"), "error: {err}");
+    }
+
+    #[test]
+    fn rejects_zero_monitor_interval() {
+        let mut config = Config::default();
+        config.monitor.interval_secs = 0;
+        let err = config.validate().unwrap_err();
+        assert!(err.contains("monitor.interval_secs"), "error: {err}");
+    }
+
+    #[test]
+    fn hot_reload_nested_then_flat_fields_preserve_flat_override() {
+        let mut config = Config::default();
+        let patch = ConfigPatch {
+            critical_score: Some(6.4),
+            policy: Some(PolicySettings {
+                critical_score: 5.8,
+                ..PolicySettings::default()
+            }),
+            ..Default::default()
+        };
+
+        let result = patch.apply(&mut config);
+        assert!(result.success);
+        assert!((config.policy.critical_score - 6.4).abs() < 0.001);
+    }
+
+    #[test]
+    fn monitor_scope_round_trips_through_json() {
+        let config = Config::default();
+        let json = serde_json::to_string(&config).unwrap();
+        let parsed: Config = serde_json::from_str(&json).unwrap();
+        assert!(parsed.monitor.scope.cpu_load);
+        assert!(parsed.monitor.scope.file_integrity);
+        assert!(!parsed.monitor.scope.systemd_units);
+    }
+
+    #[test]
+    fn monitor_patch_updates_scope() {
+        let mut config = Config::default();
+        let mut monitor = MonitorSettings::default();
+        monitor.scope = MonitorScopeSettings {
+            file_integrity: false,
+            systemd_units: true,
+            ..MonitorScopeSettings::default()
+        };
+        let patch = ConfigPatch {
+            monitor: Some(monitor),
+            ..Default::default()
+        };
+
+        let result = patch.apply(&mut config);
+        assert!(result.success);
+        assert!(!config.monitor.scope.file_integrity);
+        assert!(config.monitor.scope.systemd_units);
     }
 }

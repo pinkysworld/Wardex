@@ -43,8 +43,8 @@ fn report_returns_200_with_summary_and_samples() {
     assert!(body.get("summary").is_some());
     assert!(body.get("samples").is_some());
     let samples = body["samples"].as_array().unwrap();
-    // Fresh server with no alerts returns empty samples
-    assert!(samples.len() >= 0);
+    // Fresh server with no alerts returns an empty or populated live sample list without error.
+    let _ = samples.len();
 }
 
 // ── POST /api/analyze — auth required ──────────────────────────
@@ -185,6 +185,7 @@ fn checkpoint_save_and_restore_round_trip() {
 
     // List checkpoints
     let resp = ureq::get(&format!("{}/api/checkpoints", base(port)))
+        .set("Authorization", &auth)
         .call()
         .expect("list checkpoints");
     assert_eq!(resp.status(), 200);
@@ -236,6 +237,7 @@ fn checkpoint_restore_reapplies_saved_device_state() {
         .expect("checkpoint save");
 
     let checkpoint_state = ureq::get(&format!("{}/api/checkpoints", base(port)))
+        .set("Authorization", &auth)
         .call()
         .expect("list checkpoints")
         .into_json::<serde_json::Value>()
@@ -654,12 +656,23 @@ fn platform_returns_capabilities() {
 
 #[test]
 fn correlation_returns_analysis() {
-    let (port, _token) = spawn_test_server();
+    let (port, token) = spawn_test_server();
     let resp = ureq::get(&format!("{}/api/correlation", base(port)))
+        .set("Authorization", &auth_header(&token))
         .call()
         .expect("correlation");
     assert_eq!(resp.status(), 200);
     let _body: serde_json::Value = resp.into_json().unwrap();
+}
+
+#[test]
+fn correlation_without_auth_returns_401() {
+    let (port, _token) = spawn_test_server();
+    let err = ureq::get(&format!("{}/api/correlation", base(port))).call();
+    match err {
+        Err(ureq::Error::Status(401, _)) => {}
+        other => panic!("expected 401, got {other:?}"),
+    }
 }
 
 // ── GET /api/side-channel/status ───────────────────────────────
@@ -1240,6 +1253,35 @@ fn endpoints_returns_array() {
     let body: serde_json::Value = resp.into_json().unwrap();
     let arr = body.as_array().unwrap();
     assert!(arr.len() >= 10);
+    assert!(arr.iter().any(|entry| entry["path"] == "/api/monitoring/options" && entry["auth"] == true));
+    assert!(arr.iter().any(|entry| entry["path"] == "/api/host/info" && entry["auth"] == true));
+}
+
+#[test]
+fn monitoring_options_without_auth_returns_401() {
+    let (port, _token) = spawn_test_server();
+    let err = ureq::get(&format!("{}/api/monitoring/options", base(port))).call();
+    match err {
+        Err(ureq::Error::Status(401, _)) => {}
+        other => panic!("expected 401, got {other:?}"),
+    }
+}
+
+#[test]
+fn monitoring_options_returns_grouped_payload() {
+    let (port, token) = spawn_test_server();
+    let resp = ureq::get(&format!("{}/api/monitoring/options", base(port)))
+        .set("Authorization", &auth_header(&token))
+        .call()
+        .expect("monitoring options");
+    assert_eq!(resp.status(), 200);
+
+    let body: serde_json::Value = resp.into_json().unwrap();
+    assert!(body["host"].is_object());
+    assert!(body["groups"].as_array().unwrap().len() >= 2);
+    let first_group = &body["groups"].as_array().unwrap()[0];
+    assert!(first_group["label"].is_string());
+    assert!(first_group["options"].as_array().unwrap().iter().all(|option| option["id"].is_string()));
 }
 
 // ── POST /api/config/save — auth required ──────────────────────

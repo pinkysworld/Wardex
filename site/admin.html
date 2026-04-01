@@ -193,6 +193,26 @@ code{font-family:var(--mono);font-size:.88em;background:var(--bg-alt);padding:.1
 .toggle-row{display:flex;align-items:center;gap:.5rem;margin-top:.5rem;font-size:.82rem;color:var(--ink-2);}
 .toggle-row input[type="checkbox"]{accent-color:var(--accent);}
 .settings-actions{display:flex;gap:.5rem;align-items:center;flex-wrap:wrap;margin-top:1rem;}
+.settings-section-wide{grid-column:1/-1;}
+.monitor-summary{padding:.8rem .95rem;border:1px solid var(--border);border-radius:10px;background:var(--bg);font-size:.8rem;color:var(--ink-2);line-height:1.6;}
+.monitor-summary strong{color:var(--ink);}
+.monitor-summary ul{margin:.45rem 0 0 1.1rem;}
+.monitor-group{margin-top:.85rem;padding:.8rem .95rem;border:1px solid var(--border);border-radius:10px;background:var(--bg);}
+.monitor-group h4{margin:0 0 .2rem;font-size:.84rem;color:var(--ink);}
+.monitor-group p{margin:0 0 .65rem;font-size:.76rem;color:var(--ink-3);}
+.monitor-option{display:flex;align-items:flex-start;gap:.65rem;padding:.45rem 0;border-top:1px solid rgba(255,255,255,.04);}
+.monitor-option:first-of-type{border-top:none;padding-top:0;}
+.monitor-option input[type="checkbox"]{margin-top:.15rem;accent-color:var(--accent);}
+.monitor-option.disabled{opacity:.62;}
+.monitor-option-body{flex:1;min-width:0;}
+.monitor-option-title{display:flex;align-items:center;gap:.4rem;flex-wrap:wrap;font-size:.8rem;color:var(--ink);}
+.monitor-option-desc{margin-top:.15rem;font-size:.75rem;color:var(--ink-3);line-height:1.5;}
+.monitor-badge{display:inline-flex;align-items:center;padding:.05rem .4rem;border-radius:999px;font-size:.65rem;border:1px solid var(--border);background:var(--surface);color:var(--ink-2);}
+.monitor-badge.recommended{border-color:rgba(0,212,170,.35);color:var(--accent);}
+.monitor-badge.planned{border-color:rgba(245,158,11,.35);color:var(--orange);}
+.monitor-badge.always-on{border-color:rgba(59,130,246,.35);color:#60a5fa;}
+.monitor-note{margin-top:.3rem;font-size:.72rem;color:var(--ink-3);}
+.watch-paths-disabled{opacity:.55;pointer-events:none;}
 
 /* ── Help Accordion ──────────────────────── */
 .accordion{border:1px solid var(--border);border-radius:var(--radius-lg);overflow:hidden;margin-bottom:.75rem;}
@@ -1053,6 +1073,7 @@ input::placeholder{color:var(--ink-3);}
             <h3>File Integrity</h3>
             <label for="set-watch-paths">Watch paths (one per line)</label>
             <textarea id="set-watch-paths" placeholder="/etc&#10;/usr/bin"></textarea>
+            <div class="monitor-note" id="watch-paths-note">Only used when File integrity monitoring is enabled.</div>
           </div>
           <div class="settings-section">
             <h3>Detection Tuning</h3>
@@ -1079,6 +1100,11 @@ input::placeholder{color:var(--ink-3);}
             <label for="set-cors">CORS origin</label>
             <input type="text" id="set-cors" value="*" placeholder="* or http://localhost:3000">
             <p class="text-muted" style="margin-top:.3rem;">Set via <code>SENTINEL_CORS_ORIGIN</code> env var.</p>
+          </div>
+          <div class="settings-section settings-section-wide">
+            <h3>Monitoring Scope</h3>
+            <div class="monitor-summary" id="monitoring-summary">Loading host-aware monitoring recommendations…</div>
+            <div id="monitoring-groups"></div>
           </div>
         </div>
         <div class="settings-actions">
@@ -1341,6 +1367,7 @@ input::placeholder{color:var(--ink-3);}
   let lastReportData = null;
   let lastAlertCount = 0;
   let alertPollTimer = null;
+  let monitoringOptionsData = null;
   let demoMode = false;
   let demoTimer = null;
   const AUTO_REFRESH_BASE = 5000;
@@ -1371,6 +1398,82 @@ input::placeholder{color:var(--ink-3);}
     const t = getToken();
     if (t) h['Authorization'] = 'Bearer ' + t;
     return h;
+  }
+
+  function defaultMonitorScope() {
+    return {
+      cpu_load: true,
+      memory_pressure: true,
+      network_activity: true,
+      disk_pressure: true,
+      process_activity: true,
+      auth_events: true,
+      thermal_state: true,
+      battery_state: true,
+      file_integrity: true,
+      service_persistence: false,
+      launch_agents: false,
+      systemd_units: false,
+      scheduled_tasks: false,
+    };
+  }
+
+  function monitorScopeState() {
+    const scope = defaultMonitorScope();
+    $$('[data-monitor-scope]').forEach(el => {
+      scope[el.dataset.monitorScope] = !!el.checked;
+    });
+    return scope;
+  }
+
+  function syncWatchPathsState() {
+    const wrap = $('#set-watch-paths').closest('.settings-section');
+    const enabled = !!monitorScopeState().file_integrity;
+    $('#set-watch-paths').disabled = !enabled;
+    if (wrap) wrap.classList.toggle('watch-paths-disabled', !enabled);
+  }
+
+  function monitorBadge(label, cls) {
+    return '<span class="monitor-badge ' + cls + '">' + esc(label) + '</span>';
+  }
+
+  function renderMonitoringOptions(data) {
+    monitoringOptionsData = data;
+    const summary = $('#monitoring-summary');
+    const groupsEl = $('#monitoring-groups');
+    const selected = (data.summary?.selected_now || []).map(esc).join(', ') || 'No monitoring points selected.';
+    const notes = (data.summary?.notes || []).map(n => '<li>' + esc(n) + '</li>').join('');
+    summary.innerHTML =
+      '<strong>Host:</strong> ' + esc(data.host?.hostname || '—') + ' (' + esc(data.host?.platform || 'Unknown') + ', ' + esc(data.host?.arch || '—') + ')' +
+      '<br><strong>Selected now:</strong> ' + selected +
+      '<br><strong>Configured watch paths:</strong> ' + (data.summary?.watch_path_count ?? 0) +
+      (notes ? '<ul>' + notes + '</ul>' : '');
+
+    const groups = data.groups || [];
+    groupsEl.innerHTML = groups.map(group => {
+      const options = (group.options || []).map(option => {
+        const isAlwaysOn = option.mode === 'always_on';
+        const isDisabled = !option.supported || isAlwaysOn || option.mode === 'planned';
+        const badges = [];
+        if (isAlwaysOn) badges.push(monitorBadge('Always on', 'always-on'));
+        if (option.recommended) badges.push(monitorBadge('Recommended', 'recommended'));
+        if (option.mode === 'planned') badges.push(monitorBadge('Planned', 'planned'));
+        return '<label class="monitor-option' + (isDisabled ? ' disabled' : '') + '">' +
+          '<input type="checkbox" data-monitor-scope="' + esc(option.id) + '" ' + (option.selected ? 'checked ' : '') + (isDisabled ? 'disabled ' : '') + '>' +
+          '<div class="monitor-option-body">' +
+            '<div class="monitor-option-title">' + esc(option.label) + ' ' + badges.join(' ') + '</div>' +
+            '<div class="monitor-option-desc">' + esc(option.description || '') + '</div>' +
+            (option.reason ? '<div class="monitor-note">' + esc(option.reason) + '</div>' : '') +
+          '</div>' +
+        '</label>';
+      }).join('');
+      return '<div class="monitor-group"><h4>' + esc(group.label || '') + '</h4><p>' + esc(group.description || '') + '</p>' + options + '</div>';
+    }).join('');
+
+    $$('[data-monitor-scope="file_integrity"]').forEach(el => {
+      el.addEventListener('change', syncWatchPathsState);
+    });
+    syncWatchPathsState();
   }
 
   function log(msg) {
@@ -1750,7 +1853,7 @@ input::placeholder{color:var(--ink-3);}
 
   async function refreshCheckpointCount() {
     try {
-      const res = await fetch(API + '/api/checkpoints');
+      const res = await fetch(API + '/api/checkpoints', { headers: authHeaders() });
       if (!res.ok) return;
       const d = await res.json();
       $('#checkpoint-count').textContent = d.count + ' stored';
@@ -1765,7 +1868,7 @@ input::placeholder{color:var(--ink-3);}
         fetch(API + '/api/threat-intel/status', { headers: authHeaders() }),
         fetch(API + '/api/side-channel/status', { headers: authHeaders() }),
         fetch(API + '/api/deception/status', { headers: authHeaders() }),
-        fetch(API + '/api/detection/summary'),
+        fetch(API + '/api/detection/summary', { headers: authHeaders() }),
       ]);
       if (enfRes.ok) { const d = await enfRes.json(); $('#enf-policies').textContent = d.policy_count ?? d.policies ?? '—'; $('#enf-actions').textContent = d.history_len ?? d.actions ?? '—'; }
       if (tiRes.ok) { const d = await tiRes.json(); $('#ti-ioc-count').textContent = d.ioc_count ?? '—'; $('#ti-match-count').textContent = d.match_count ?? '—'; }
@@ -1954,7 +2057,7 @@ input::placeholder{color:var(--ink-3);}
 
     // Thread status
     try {
-      const res = await fetch(API + '/api/threads/status');
+      const res = await fetch(API + '/api/threads/status', { headers: authHeaders() });
       if (res.ok) {
         const d = await res.json();
         $('#th-monitor').textContent = d.monitoring_thread ?? '—';
@@ -2163,9 +2266,14 @@ input::placeholder{color:var(--ink-3);}
     if (openRow) {
       openAlertDetailId = openRow.id;
       openAlertDetailHtml = openRow.querySelector('.alert-detail-inner')?.innerHTML || null;
+    } else {
+      openAlertDetailId = null;
+      openAlertDetailHtml = null;
     }
     tbody.innerHTML = '';
     if (!alerts.length) {
+      openAlertDetailId = null;
+      openAlertDetailHtml = null;
       tbody.innerHTML = '<tr><td colspan="5" class="text-muted">No alerts yet.</td></tr>';
       lastAlertCount = 0; return;
     }
@@ -2205,7 +2313,12 @@ input::placeholder{color:var(--ink-3);}
     const isOpen = row.classList.contains('open');
     // Close all other detail rows
     document.querySelectorAll('.alert-detail-row.open').forEach(r => r.classList.remove('open'));
-    if (isOpen) return;
+    if (isOpen) {
+      openAlertDetailId = null;
+      openAlertDetailHtml = null;
+      return;
+    }
+    openAlertDetailId = detailId;
     row.classList.add('open');
     const inner = row.querySelector('.alert-detail-inner');
     if (alertIndex == null) {
@@ -2248,8 +2361,10 @@ input::placeholder{color:var(--ink-3);}
         '<div class="alert-recommendation ' + recClass + '">' +
         '<strong>Recommendation:</strong> ' + esc(a.recommendation || '') + '</div>' +
         '</div></div>';
+      openAlertDetailHtml = inner.innerHTML;
     } catch(e) {
       inner.innerHTML = '<div class="text-muted">Failed to load: ' + esc(e.message) + '</div>';
+      openAlertDetailHtml = inner.innerHTML;
     }
   }
 
@@ -2331,10 +2446,11 @@ input::placeholder{color:var(--ink-3);}
       const res = await fetch(API + '/api/endpoints', { headers: authHeaders() });
       if (!res.ok) return;
       const d = await res.json();
+      const endpoints = Array.isArray(d) ? d : (d.endpoints || []);
       const el = $('#api-endpoint-list');
-      if (d.endpoints && d.endpoints.length) {
+      if (endpoints.length) {
         let html = '<table class="data-table"><tr><th>Method</th><th>Path</th><th>Auth</th></tr>';
-        d.endpoints.forEach(ep => {
+        endpoints.forEach(ep => {
           const m = esc(ep.method || 'GET');
           const p = esc(ep.path || '');
           const auth = ep.auth ? '<span style="color:var(--orange);">Required</span>' : '<span style="color:var(--ink-3);">Public</span>';
@@ -2349,7 +2465,10 @@ input::placeholder{color:var(--ink-3);}
   // ── Settings ──
   async function loadSettings() {
     try {
-      const res = await fetch(API + '/api/config/current');
+      const [res, monitoringRes] = await Promise.all([
+        fetch(API + '/api/config/current', { headers: authHeaders() }),
+        fetch(API + '/api/monitoring/options', { headers: authHeaders() }),
+      ]);
       if (!res.ok) throw new Error('HTTP ' + res.status);
       const cfg = await res.json();
       if (cfg.detector) {
@@ -2375,6 +2494,10 @@ input::placeholder{color:var(--ink-3);}
         const paths = cfg.monitor.watch_paths ?? [];
         $('#set-watch-paths').value = paths.join('\n');
       }
+      if (monitoringRes.ok) {
+        renderMonitoringOptions(await monitoringRes.json());
+      }
+      syncWatchPathsState();
       log('Settings loaded from server');
     } catch(e) { log('Settings load failed: ' + e.message); }
   }
@@ -2390,7 +2513,7 @@ input::placeholder{color:var(--ink-3);}
     return {
       detector: { warmup_samples: parseInt($('#set-warmup').value) || 4, smoothing: parseFloat($('#set-smoothing').value) || 0.22, learn_threshold: parseFloat($('#set-learn').value) || 2.5 },
       policy: { critical_score: critical, severe_score: severe, elevated_score: elevated, low_battery_threshold: parseFloat($('#set-battery').value) || 20.0 },
-      monitor: { interval_secs: interval, alert_threshold: threshold, alert_log: $('#set-alert-log').value || 'var/alerts.jsonl', dry_run: $('#set-dry-run').checked, duration_secs: parseInt($('#set-duration').value) || 0, webhook_url: $('#set-webhook').value || null, syslog: $('#set-syslog').checked, cef: $('#set-cef').checked, watch_paths: $('#set-watch-paths').value.split('\n').map(s => s.trim()).filter(Boolean) },
+      monitor: { interval_secs: interval, alert_threshold: threshold, alert_log: $('#set-alert-log').value || 'var/alerts.jsonl', dry_run: $('#set-dry-run').checked, duration_secs: parseInt($('#set-duration').value) || 0, webhook_url: $('#set-webhook').value || null, syslog: $('#set-syslog').checked, cef: $('#set-cef').checked, watch_paths: $('#set-watch-paths').value.split('\n').map(s => s.trim()).filter(Boolean), scope: monitorScopeState() },
     };
   }
 
@@ -2413,6 +2536,14 @@ input::placeholder{color:var(--ink-3);}
     $('#set-syslog').checked = false; $('#set-cef').checked = false; $('#set-watch-paths').value = '';
     $('#set-warmup').value = 4; $('#set-smoothing').value = 0.22; $('#set-learn').value = 2.5;
     $('#set-critical').value = 5.2; $('#set-severe').value = 3.0; $('#set-elevated').value = 2.8; $('#set-battery').value = 20;
+    const defaults = defaultMonitorScope();
+    $$('[data-monitor-scope]').forEach(el => {
+      const key = el.dataset.monitorScope;
+      if (Object.prototype.hasOwnProperty.call(defaults, key)) {
+        el.checked = !!defaults[key];
+      }
+    });
+    syncWatchPathsState();
     toast('Reset to defaults — click Save to apply', 'success');
   }
 

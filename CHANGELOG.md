@@ -2,6 +2,22 @@
 
 All notable changes to Wardex are documented in this file.
 
+## [0.21.0] — Phase 24
+
+### Added
+- **OS-aware monitoring scope settings**: Settings now expose a Monitoring Scope section driven by host platform and capability data. Operators can see what is monitored, what is recommended on the current OS, and which signals are planned but not yet available.
+- **`GET /api/monitoring/options`**: New authenticated endpoint returns grouped monitoring options, support status, recommendations, and host metadata for the admin console.
+
+### Fixed
+- **Frontend auth regressions**: Settings loading, checkpoint counts, detection summary, and thread status requests now consistently send Bearer auth headers after Phase 23 hardening.
+- **Alert detail stale reopen**: Manually closed alert detail rows no longer re-open on the next refresh because stale cached detail state is cleared correctly.
+- **Live report summary counts**: `/api/report` now reports `critical_count` accurately instead of folding severe alerts into the critical total.
+- **Config validation and hot reload semantics**: Negative severity thresholds are rejected, monitor intervals must be positive, numeric fields must be finite, and flat legacy patch fields now override nested objects predictably.
+- **File-integrity scope control**: Local file-integrity monitoring now respects the configured monitoring scope instead of running whenever watch paths exist.
+
+### Security
+- **Additional sensitive GET endpoints now require auth**: `/api/checkpoints`, `/api/correlation`, `/api/monitoring/options`, and `/api/host/info` metadata are aligned with the authenticated admin-console contract.
+
 ## [0.20.0] — Phase 23
 
 ### Added
