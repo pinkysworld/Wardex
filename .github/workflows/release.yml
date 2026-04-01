@@ -10,7 +10,7 @@ permissions:
 
 jobs:
   build:
-    name: Build — ${{ matrix.artifact }}
+    name: Build & Package — ${{ matrix.platform }}
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -19,23 +19,27 @@ jobs:
           # ── Linux (static musl binary — runs on any distro) ─────────────
           - os: ubuntu-latest
             target: x86_64-unknown-linux-musl
-            artifact: wardex-linux-x86_64
+            platform: linux-x86_64
+            archive: wardex-linux-x86_64.tar.gz
             extra_packages: musl-tools
 
           # ── macOS Intel ─────────────────────────────────────────────────
           - os: macos-13
             target: x86_64-apple-darwin
-            artifact: wardex-macos-x86_64
+            platform: macos-x86_64
+            archive: wardex-macos-x86_64.tar.gz
 
           # ── macOS Apple Silicon ──────────────────────────────────────────
           - os: macos-latest
             target: aarch64-apple-darwin
-            artifact: wardex-macos-aarch64
+            platform: macos-aarch64
+            archive: wardex-macos-aarch64.tar.gz
 
           # ── Windows ─────────────────────────────────────────────────────
           - os: windows-latest
             target: x86_64-pc-windows-msvc
-            artifact: wardex-windows-x86_64.exe
+            platform: windows-x86_64
+            archive: wardex-windows-x86_64.zip
 
     steps:
       - name: Checkout
@@ -53,22 +57,41 @@ jobs:
       - name: Build
         run: cargo build --release --target ${{ matrix.target }}
 
-      # Copy + rename (Unix)
-      - name: Stage artifact (Unix)
+      # ── Package (Linux / macOS) ──────────────────────────────────────────
+      - name: Create package (Unix)
         if: runner.os != 'Windows'
-        run: cp "target/${{ matrix.target }}/release/wardex" "${{ matrix.artifact }}"
+        run: |
+          PKG="wardex-${{ matrix.platform }}"
+          mkdir -p "$PKG"
+          cp "target/${{ matrix.target }}/release/wardex" "$PKG/wardex"
+          chmod +x "$PKG/wardex"
+          cp -r site "$PKG/site"
+          cp -r examples "$PKG/examples"
+          cp README.md LICENSE "$PKG/"
+          tar -czf "${{ matrix.archive }}" "$PKG"
+          echo "Package contents:"
+          tar -tzf "${{ matrix.archive }}"
 
-      # Copy + rename (Windows — shell uses backslash)
-      - name: Stage artifact (Windows)
+      # ── Package (Windows) ────────────────────────────────────────────────
+      - name: Create package (Windows)
         if: runner.os == 'Windows'
         shell: pwsh
-        run: Copy-Item "target\${{ matrix.target }}\release\wardex.exe" "${{ matrix.artifact }}"
+        run: |
+          $pkg = "wardex-${{ matrix.platform }}"
+          New-Item -ItemType Directory -Path $pkg | Out-Null
+          Copy-Item "target\${{ matrix.target }}\release\wardex.exe" "$pkg\wardex.exe"
+          Copy-Item -Recurse site "$pkg\site"
+          Copy-Item -Recurse examples "$pkg\examples"
+          Copy-Item README.md, LICENSE "$pkg\"
+          Compress-Archive -Path "$pkg\*" -DestinationPath "${{ matrix.archive }}"
+          Write-Host "Package contents:"
+          (Get-ChildItem -Recurse $pkg).FullName
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ matrix.artifact }}
-          path: ${{ matrix.artifact }}
+          name: ${{ matrix.archive }}
+          path: ${{ matrix.archive }}
           if-no-files-found: error
 
   release:
@@ -77,10 +100,8 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout (for release notes)
+      - name: Checkout
         uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
 
       - name: Download all build artifacts
         uses: actions/download-artifact@v4
@@ -93,11 +114,10 @@ jobs:
 
       # Extract the first ## section from CHANGELOG.md as the release body
       - name: Extract release notes
-        id: notes
         run: |
           awk '/^## \[/{found++} found==1{print} found==2{exit}' CHANGELOG.md \
             | tail -n +2 > release_notes.md
-          echo "Release notes extracted:"
+          echo "=== Release notes ==="
           cat release_notes.md
 
       - name: Create GitHub Release
