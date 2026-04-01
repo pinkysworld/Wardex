@@ -1,5 +1,6 @@
 target/
 var/
 .DS_Store
+*.code-workspace
 site/admin.html.bak
 site/generate_admin.py

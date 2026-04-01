@@ -1,5 +1,6 @@
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 
 use tiny_http::{Header, Method, Request, Response, Server};
@@ -79,9 +80,11 @@ struct AppState {
     velocity: VelocityDetector,
     entropy: EntropyDetector,
     compound: CompoundThreatDetector,
+    // Phase 22: shutdown support
+    shutdown: Arc<AtomicBool>,
 }
 
-pub fn run_server(port: u16, site_dir: &Path) -> Result<(), String> {
+pub fn run_server(port: u16, site_dir: &Path, shutdown: Arc<AtomicBool>) -> Result<(), String> {
     let addr = format!("0.0.0.0:{port}");
     let server = Server::http(&addr).map_err(|e| format!("failed to start server: {e}"))?;
 
@@ -131,6 +134,7 @@ pub fn run_server(port: u16, site_dir: &Path) -> Result<(), String> {
         velocity: VelocityDetector::new(60, 2.5),
         entropy: EntropyDetector::new(60, 8),
         compound: CompoundThreatDetector::default(),
+        shutdown: shutdown.clone(),
     }));
 
     // ── Spawn local host monitoring thread ──────────────────────────
@@ -260,6 +264,7 @@ pub fn spawn_test_server() -> (u16, String) {
         velocity: VelocityDetector::new(60, 2.5),
         entropy: EntropyDetector::new(60, 8),
         compound: CompoundThreatDetector::default(),
+        shutdown: Arc::new(AtomicBool::new(false)),
     }));
     let site_dir = PathBuf::from("site");
     std::thread::spawn(move || {
@@ -269,13 +274,24 @@ pub fn spawn_test_server() -> (u16, String) {
 }
 
 fn serve_loop(server: &Server, state: &Arc<Mutex<AppState>>, site_dir: &Path) {
-    for request in server.incoming_requests() {
-        let url = request.url().to_string();
-
-        if url.starts_with("/api/") {
-            handle_api(request, state, site_dir);
-        } else {
-            serve_static(request, site_dir);
+    loop {
+        match server.recv_timeout(std::time::Duration::from_millis(500)) {
+            Ok(Some(request)) => {
+                let url = request.url().to_string();
+                if url.starts_with("/api/") {
+                    handle_api(request, state, site_dir, server);
+                } else {
+                    serve_static(request, site_dir);
+                }
+            }
+            Ok(None) => {} // timeout, check shutdown
+            Err(_) => break,
+        }
+        let s = state.lock().unwrap();
+        if s.shutdown.load(Ordering::Relaxed) {
+            drop(s);
+            eprintln!("Server shutting down…");
+            break;
         }
     }
 }
@@ -326,6 +342,9 @@ fn text_response(body: &str, status: u16) -> Response<std::io::Cursor<Vec<u8>>> 
             Header::from_bytes(b"Content-Type", b"text/plain; charset=utf-8").unwrap(),
             Header::from_bytes(b"Access-Control-Allow-Origin", origin.as_bytes()).unwrap(),
             Header::from_bytes(b"Vary", b"Origin").unwrap(),
+            Header::from_bytes(b"X-Content-Type-Options", b"nosniff").unwrap(),
+            Header::from_bytes(b"X-Frame-Options", b"DENY").unwrap(),
+            Header::from_bytes(b"Cache-Control", b"no-store").unwrap(),
         ],
         std::io::Cursor::new(data),
         Some(len),
@@ -351,7 +370,7 @@ fn check_auth(request: &Request, state: &Arc<Mutex<AppState>>) -> bool {
     false
 }
 
-fn handle_api(mut request: Request, state: &Arc<Mutex<AppState>>, _site_dir: &Path) {
+fn handle_api(mut request: Request, state: &Arc<Mutex<AppState>>, _site_dir: &Path, server: &Server) {
     let url = request.url().to_string();
     let method = request.method().clone();
 
@@ -363,6 +382,7 @@ fn handle_api(mut request: Request, state: &Arc<Mutex<AppState>>, _site_dir: &Pa
             return;
         }
     }
+    // Body limit enforced in read_body_limited()
 
     // Check auth for mutating endpoints before consuming the request body
     // XDR agent endpoints that do NOT require admin auth (agents use enrollment tokens)
@@ -400,11 +420,17 @@ fn handle_api(mut request: Request, state: &Arc<Mutex<AppState>>, _site_dir: &Pa
             | (Method::Post, "/api/agents/token")
             | (Method::Post, "/api/policy/publish")
             | (Method::Post, "/api/updates/publish")
+            | (Method::Post, "/api/shutdown")
+            | (Method::Post, "/api/mesh/heal")
             | (Method::Delete, "/api/alerts")
     ) || (!is_agent_endpoint && (
         (method == Method::Get && url == "/api/fleet/dashboard")
         || (method == Method::Get && url == "/api/siem/status")
         || (method == Method::Get && url == "/api/agents")
+        || (method == Method::Get && url == "/api/telemetry/current")
+        || (method == Method::Get && url == "/api/telemetry/history")
+        || (method == Method::Get && url == "/api/host/info")
+        || (method == Method::Get && url == "/api/config/current")
         || (method == Method::Delete && url.starts_with("/api/agents/"))
     ));
 
@@ -954,7 +980,15 @@ fn handle_api(mut request: Request, state: &Arc<Mutex<AppState>>, _site_dir: &Pa
         }
         (Method::Get, "/api/alerts") => {
             let s = state.lock().unwrap();
-            let recent: Vec<_> = s.alerts.iter().rev().take(100).collect();
+            let recent: Vec<_> = s.alerts.iter().enumerate().rev().take(100)
+                .map(|(i, a)| {
+                    let mut obj = serde_json::to_value(a).unwrap_or_default();
+                    if let Some(map) = obj.as_object_mut() {
+                        map.insert("_index".to_string(), serde_json::json!(i));
+                    }
+                    obj
+                })
+                .collect();
             match serde_json::to_string(&recent) {
                 Ok(json) => json_response(&json, 200),
                 Err(e) => error_json(&format!("serialization error: {e}"), 500),
@@ -1171,6 +1205,14 @@ fn handle_api(mut request: Request, state: &Arc<Mutex<AppState>>, _site_dir: &Pa
             json_response(&info.to_string(), 200)
         }
 
+        (Method::Post, "/api/shutdown") => {
+            let s = state.lock().unwrap();
+            s.shutdown.store(true, Ordering::SeqCst);
+            drop(s);
+            server.unblock();
+            json_response(r#"{"status":"shutting_down"}"#, 200)
+        }
+
         (Method::Options, _) => {
             let data: Vec<u8> = Vec::new();
             Response::new(
@@ -1221,10 +1263,10 @@ fn handle_api(mut request: Request, state: &Arc<Mutex<AppState>>, _site_dir: &Pa
                 let agent_id = url.strip_prefix("/api/agents/").unwrap_or("");
                 let mut s = state.lock().unwrap();
                 match s.agent_registry.deregister(agent_id) {
-                    Ok(()) => json_response(
-                        &format!(r#"{{"status":"deregistered","agent_id":"{agent_id}"}}"#),
-                        200,
-                    ),
+                    Ok(()) => {
+                        let body = serde_json::json!({"status": "deregistered", "agent_id": agent_id});
+                        json_response(&body.to_string(), 200)
+                    }
                     Err(e) => error_json(&e, 404),
                 }
             } else if method == Method::Get && url.starts_with("/api/updates/download/") {
@@ -1265,6 +1307,59 @@ fn handle_api(mut request: Request, state: &Arc<Mutex<AppState>>, _site_dir: &Pa
                     Ok(json) => json_response(&json, 200),
                     Err(e) => error_json(&format!("serialization error: {e}"), 500),
                 }
+            } else if method == Method::Get && url.starts_with("/api/alerts/") && url != "/api/alerts/count" {
+                // GET /api/alerts/{index} — detailed alert view
+                let idx_str = url.strip_prefix("/api/alerts/").unwrap_or("");
+                match idx_str.parse::<usize>() {
+                    Ok(idx) => {
+                        let s = state.lock().unwrap();
+                        if idx < s.alerts.len() {
+                            let alert = &s.alerts[idx];
+                            let detail = serde_json::json!({
+                                "index": idx,
+                                "timestamp": alert.timestamp,
+                                "hostname": alert.hostname,
+                                "platform": alert.platform,
+                                "score": alert.score,
+                                "confidence": alert.confidence,
+                                "level": alert.level,
+                                "action": alert.action,
+                                "reasons": alert.reasons,
+                                "enforced": alert.enforced,
+                                "sample": {
+                                    "timestamp_ms": alert.sample.timestamp_ms,
+                                    "cpu_load_pct": alert.sample.cpu_load_pct,
+                                    "memory_load_pct": alert.sample.memory_load_pct,
+                                    "temperature_c": alert.sample.temperature_c,
+                                    "network_kbps": alert.sample.network_kbps,
+                                    "auth_failures": alert.sample.auth_failures,
+                                    "battery_pct": alert.sample.battery_pct,
+                                    "integrity_drift": alert.sample.integrity_drift,
+                                    "process_count": alert.sample.process_count,
+                                    "disk_pressure_pct": alert.sample.disk_pressure_pct,
+                                },
+                                "analysis": {
+                                    "severity_class": if alert.score >= 5.2 { "critical" }
+                                        else if alert.score >= 3.0 { "severe" }
+                                        else { "elevated" },
+                                    "multi_axis": alert.reasons.len() > 1,
+                                    "axis_count": alert.reasons.len(),
+                                    "recommendation": if alert.score >= 5.2 {
+                                        "Immediate isolation recommended. Investigate all flagged axes and correlate with SIEM events."
+                                    } else if alert.score >= 3.0 {
+                                        "Elevated investigation priority. Review flagged telemetry and check for lateral movement."
+                                    } else {
+                                        "Monitor closely. Consider tightening thresholds if pattern persists."
+                                    },
+                                },
+                            });
+                            json_response(&detail.to_string(), 200)
+                        } else {
+                            error_json("alert index out of range", 404)
+                        }
+                    }
+                    Err(_) => error_json("invalid alert index", 400),
+                }
             } else {
                 error_json("not found", 404)
             }
@@ -1274,14 +1369,25 @@ fn handle_api(mut request: Request, state: &Arc<Mutex<AppState>>, _site_dir: &Pa
     let _ = request.respond(response);
 }
 
+/// Read the request body with a size limit to prevent OOM from chunked requests.
+fn read_body_limited(request: &mut Request, limit: usize) -> Result<String, String> {
+    let mut buf = Vec::new();
+    let mut reader = std::io::Read::take(request.as_reader(), limit as u64 + 1);
+    match std::io::Read::read_to_end(&mut reader, &mut buf) {
+        Ok(n) if n > limit => Err("request body too large".to_string()),
+        Ok(_) => String::from_utf8(buf).map_err(|_| "invalid UTF-8 in request body".to_string()),
+        Err(e) => Err(format!("failed to read request body: {e}")),
+    }
+}
+
 fn handle_analyze(
     request: &mut Request,
     state: &Arc<Mutex<AppState>>,
 ) -> Response<std::io::Cursor<Vec<u8>>> {
-    let mut body = String::new();
-    if std::io::Read::read_to_string(request.as_reader(), &mut body).is_err() {
-        return error_json("failed to read request body", 400);
-    }
+    let body = match read_body_limited(request, 10 * 1024 * 1024) {
+        Ok(b) => b,
+        Err(e) => return error_json(&e, 400),
+    };
 
     // Detect format: if the content-type says CSV or the body looks like CSV, parse as CSV
     let is_csv = request.headers().iter().any(|h| {
@@ -1360,10 +1466,10 @@ fn handle_mode(
     request: &mut Request,
     state: &Arc<Mutex<AppState>>,
 ) -> Response<std::io::Cursor<Vec<u8>>> {
-    let mut body = String::new();
-    if std::io::Read::read_to_string(request.as_reader(), &mut body).is_err() {
-        return error_json("failed to read request body", 400);
-    }
+    let body = match read_body_limited(request, 10 * 1024 * 1024) {
+        Ok(b) => b,
+        Err(e) => return error_json(&e, 400),
+    };
 
     #[derive(serde::Deserialize)]
     struct ModeRequest {
@@ -1392,20 +1498,18 @@ fn handle_mode(
 
     let mut s = state.lock().unwrap();
     s.detector.set_adaptation(mode);
-    json_response(
-        &format!(r#"{{"status":"mode set to {}"}}"#, mode_req.mode),
-        200,
-    )
+    let body = serde_json::json!({"status": format!("mode set to {}", mode_req.mode)});
+    json_response(&body.to_string(), 200)
 }
 
 fn handle_fleet_register(
     request: &mut Request,
     state: &Arc<Mutex<AppState>>,
 ) -> Response<std::io::Cursor<Vec<u8>>> {
-    let mut body = String::new();
-    if std::io::Read::read_to_string(request.as_reader(), &mut body).is_err() {
-        return error_json("failed to read request body", 400);
-    }
+    let body = match read_body_limited(request, 10 * 1024 * 1024) {
+        Ok(b) => b,
+        Err(e) => return error_json(&e, 400),
+    };
     #[derive(serde::Deserialize)]
     struct Reg {
         device_id: String,
@@ -1430,20 +1534,18 @@ fn handle_fleet_register(
     };
     let mut s = state.lock().unwrap();
     s.swarm.register_device(record);
-    json_response(
-        &format!(r#"{{"status":"registered","device":"{}"}}"#, req.device_id),
-        200,
-    )
+    let body = serde_json::json!({"status": "registered", "device": req.device_id});
+    json_response(&body.to_string(), 200)
 }
 
 fn handle_enforcement_quarantine(
     request: &mut Request,
     state: &Arc<Mutex<AppState>>,
 ) -> Response<std::io::Cursor<Vec<u8>>> {
-    let mut body = String::new();
-    if std::io::Read::read_to_string(request.as_reader(), &mut body).is_err() {
-        return error_json("failed to read request body", 400);
-    }
+    let body = match read_body_limited(request, 10 * 1024 * 1024) {
+        Ok(b) => b,
+        Err(e) => return error_json(&e, 400),
+    };
     #[derive(serde::Deserialize)]
     struct QuarantineReq {
         target: String,
@@ -1472,10 +1574,10 @@ fn handle_threat_intel_ioc(
     request: &mut Request,
     state: &Arc<Mutex<AppState>>,
 ) -> Response<std::io::Cursor<Vec<u8>>> {
-    let mut body = String::new();
-    if std::io::Read::read_to_string(request.as_reader(), &mut body).is_err() {
-        return error_json("failed to read request body", 400);
-    }
+    let body = match read_body_limited(request, 10 * 1024 * 1024) {
+        Ok(b) => b,
+        Err(e) => return error_json(&e, 400),
+    };
     #[derive(serde::Deserialize)]
     struct IocReq {
         value: String,
@@ -1512,20 +1614,18 @@ fn handle_threat_intel_ioc(
         tags: Vec::new(),
         related_iocs: Vec::new(),
     });
-    json_response(
-        &format!(r#"{{"status":"added","value":"{}"}}"#, req.value),
-        200,
-    )
+    let body = serde_json::json!({"status": "added", "value": req.value});
+    json_response(&body.to_string(), 200)
 }
 
 fn handle_digital_twin_simulate(
     request: &mut Request,
     state: &Arc<Mutex<AppState>>,
 ) -> Response<std::io::Cursor<Vec<u8>>> {
-    let mut body = String::new();
-    if std::io::Read::read_to_string(request.as_reader(), &mut body).is_err() {
-        return error_json("failed to read request body", 400);
-    }
+    let body = match read_body_limited(request, 10 * 1024 * 1024) {
+        Ok(b) => b,
+        Err(e) => return error_json(&e, 400),
+    };
     #[derive(serde::Deserialize)]
     struct SimReq {
         device_id: String,
@@ -1579,10 +1679,10 @@ fn handle_energy_consume(
     request: &mut Request,
     state: &Arc<Mutex<AppState>>,
 ) -> Response<std::io::Cursor<Vec<u8>>> {
-    let mut body = String::new();
-    if std::io::Read::read_to_string(request.as_reader(), &mut body).is_err() {
-        return error_json("failed to read request body", 400);
-    }
+    let body = match read_body_limited(request, 10 * 1024 * 1024) {
+        Ok(b) => b,
+        Err(e) => return error_json(&e, 400),
+    };
     #[derive(serde::Deserialize)]
     struct ConsumeReq {
         drain_rate_mw: f64,
@@ -1605,10 +1705,10 @@ fn handle_policy_vm_execute(
     request: &mut Request,
     state: &Arc<Mutex<AppState>>,
 ) -> Response<std::io::Cursor<Vec<u8>>> {
-    let mut body = String::new();
-    if std::io::Read::read_to_string(request.as_reader(), &mut body).is_err() {
-        return error_json("failed to read request body", 400);
-    }
+    let body = match read_body_limited(request, 10 * 1024 * 1024) {
+        Ok(b) => b,
+        Err(e) => return error_json(&e, 400),
+    };
     #[derive(serde::Deserialize)]
     struct VmReq {
         #[serde(default)]
@@ -1641,10 +1741,10 @@ fn handle_deception_deploy(
     request: &mut Request,
     state: &Arc<Mutex<AppState>>,
 ) -> Response<std::io::Cursor<Vec<u8>>> {
-    let mut body = String::new();
-    if std::io::Read::read_to_string(request.as_reader(), &mut body).is_err() {
-        return error_json("failed to read request body", 400);
-    }
+    let body = match read_body_limited(request, 10 * 1024 * 1024) {
+        Ok(b) => b,
+        Err(e) => return error_json(&e, 400),
+    };
     #[derive(serde::Deserialize)]
     struct DeployReq {
         decoy_type: String,
@@ -1680,10 +1780,10 @@ fn handle_policy_compose(
     request: &mut Request,
     _state: &Arc<Mutex<AppState>>,
 ) -> Response<std::io::Cursor<Vec<u8>>> {
-    let mut body = String::new();
-    if std::io::Read::read_to_string(request.as_reader(), &mut body).is_err() {
-        return error_json("failed to read request body", 400);
-    }
+    let body = match read_body_limited(request, 10 * 1024 * 1024) {
+        Ok(b) => b,
+        Err(e) => return error_json(&e, 400),
+    };
     #[derive(serde::Deserialize)]
     struct ComposeReq {
         operator: String,
@@ -1745,10 +1845,10 @@ fn handle_config_reload(
     request: &mut Request,
     state: &Arc<Mutex<AppState>>,
 ) -> Response<std::io::Cursor<Vec<u8>>> {
-    let mut body = String::new();
-    if std::io::Read::read_to_string(request.as_reader(), &mut body).is_err() {
-        return error_json("failed to read request body", 400);
-    }
+    let body = match read_body_limited(request, 10 * 1024 * 1024) {
+        Ok(b) => b,
+        Err(e) => return error_json(&e, 400),
+    };
     let patch: crate::config::ConfigPatch = match serde_json::from_str(&body) {
         Ok(p) => p,
         Err(e) => return error_json(&format!("invalid JSON: {e}"), 400),
@@ -1770,10 +1870,10 @@ fn handle_agent_enroll(
     request: &mut Request,
     state: &Arc<Mutex<AppState>>,
 ) -> Response<std::io::Cursor<Vec<u8>>> {
-    let mut body = String::new();
-    if std::io::Read::read_to_string(request.as_reader(), &mut body).is_err() {
-        return error_json("failed to read request body", 400);
-    }
+    let body = match read_body_limited(request, 10 * 1024 * 1024) {
+        Ok(b) => b,
+        Err(e) => return error_json(&e, 400),
+    };
     let req: crate::enrollment::EnrollRequest = match serde_json::from_str(&body) {
         Ok(r) => r,
         Err(e) => return error_json(&format!("invalid JSON: {e}"), 400),
@@ -1792,10 +1892,10 @@ fn handle_agent_create_token(
     request: &mut Request,
     state: &Arc<Mutex<AppState>>,
 ) -> Response<std::io::Cursor<Vec<u8>>> {
-    let mut body = String::new();
-    if std::io::Read::read_to_string(request.as_reader(), &mut body).is_err() {
-        return error_json("failed to read request body", 400);
-    }
+    let body = match read_body_limited(request, 10 * 1024 * 1024) {
+        Ok(b) => b,
+        Err(e) => return error_json(&e, 400),
+    };
     #[derive(serde::Deserialize)]
     struct TokenReq {
         #[serde(default = "default_max_uses")]
@@ -1821,10 +1921,10 @@ fn handle_agent_heartbeat(
     state: &Arc<Mutex<AppState>>,
     agent_id: &str,
 ) -> Response<std::io::Cursor<Vec<u8>>> {
-    let mut body = String::new();
-    if std::io::Read::read_to_string(request.as_reader(), &mut body).is_err() {
-        return error_json("failed to read request body", 400);
-    }
+    let body = match read_body_limited(request, 10 * 1024 * 1024) {
+        Ok(b) => b,
+        Err(e) => return error_json(&e, 400),
+    };
     #[derive(serde::Deserialize)]
     struct HeartbeatReq {
         #[serde(default)]
@@ -1874,10 +1974,10 @@ fn handle_event_ingest(
     request: &mut Request,
     state: &Arc<Mutex<AppState>>,
 ) -> Response<std::io::Cursor<Vec<u8>>> {
-    let mut body = String::new();
-    if std::io::Read::read_to_string(request.as_reader(), &mut body).is_err() {
-        return error_json("failed to read request body", 400);
-    }
+    let body = match read_body_limited(request, 10 * 1024 * 1024) {
+        Ok(b) => b,
+        Err(e) => return error_json(&e, 400),
+    };
     let batch: crate::event_forward::EventBatch = match serde_json::from_str(&body) {
         Ok(b) => b,
         Err(e) => return error_json(&format!("invalid JSON: {e}"), 400),
@@ -1900,10 +2000,10 @@ fn handle_policy_publish(
     request: &mut Request,
     state: &Arc<Mutex<AppState>>,
 ) -> Response<std::io::Cursor<Vec<u8>>> {
-    let mut body = String::new();
-    if std::io::Read::read_to_string(request.as_reader(), &mut body).is_err() {
-        return error_json("failed to read request body", 400);
-    }
+    let body = match read_body_limited(request, 10 * 1024 * 1024) {
+        Ok(b) => b,
+        Err(e) => return error_json(&e, 400),
+    };
     let policy: crate::policy_dist::Policy = match serde_json::from_str(&body) {
         Ok(p) => p,
         Err(e) => return error_json(&format!("invalid JSON: {e}"), 400),
@@ -1921,10 +2021,10 @@ fn handle_update_publish(
     request: &mut Request,
     state: &Arc<Mutex<AppState>>,
 ) -> Response<std::io::Cursor<Vec<u8>>> {
-    let mut body = String::new();
-    if std::io::Read::read_to_string(request.as_reader(), &mut body).is_err() {
-        return error_json("failed to read request body", 400);
-    }
+    let body = match read_body_limited(request, 10 * 1024 * 1024) {
+        Ok(b) => b,
+        Err(e) => return error_json(&e, 400),
+    };
     #[derive(serde::Deserialize)]
     struct PublishReq {
         version: String,
@@ -2042,7 +2142,8 @@ fn serve_static(request: Request, site_dir: &Path) {
                         Header::from_bytes(b"Content-Type", content_type.as_bytes()).unwrap(),
                         Header::from_bytes(b"Access-Control-Allow-Origin", origin.as_bytes()).unwrap(),
                         Header::from_bytes(b"X-Content-Type-Options", b"nosniff").unwrap(),
-                        Header::from_bytes(b"X-Frame-Options", b"SAMEORIGIN").unwrap(),
+                        Header::from_bytes(b"X-Frame-Options", b"DENY").unwrap(),
+                        Header::from_bytes(b"Cache-Control", b"no-store").unwrap(),
                     ],
                     std::io::Cursor::new(data),
                     Some(len),

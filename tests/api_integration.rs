@@ -1070,8 +1070,9 @@ fn tls_status_returns_plain_mode() {
 
 #[test]
 fn config_current_returns_defaults() {
-    let (port, _token) = spawn_test_server();
+    let (port, token) = spawn_test_server();
     let body: serde_json::Value = ureq::get(&format!("{}/api/config/current", base(port)))
+        .set("Authorization", &format!("Bearer {token}"))
         .call()
         .unwrap()
         .into_json()

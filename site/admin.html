@@ -202,13 +202,50 @@ code{font-family:var(--mono);font-size:.88em;background:var(--bg-alt);padding:.1
 .accordion-header:hover{background:var(--surface-hover);}
 .accordion-header .arrow{transition:transform .2s;font-size:.75rem;color:var(--ink-3);}
 .accordion.open .accordion-header .arrow{transform:rotate(90deg);}
-.accordion-body{display:none;padding:1rem;border-top:1px solid var(--border);font-size:.88rem;
-  line-height:1.65;color:var(--ink-2);}
+.accordion-body{display:none;padding:1.25rem 1.5rem;border-top:1px solid var(--border);font-size:.88rem;
+  line-height:1.75;color:var(--ink-2);}
 .accordion.open .accordion-body{display:block;}
-.accordion-body h4{color:var(--ink);margin:1rem 0 .4rem;font-size:.88rem;}
+.accordion-body h4{color:var(--ink);margin:1.2rem 0 .5rem;font-size:.92rem;font-weight:600;}
 .accordion-body h4:first-child{margin-top:0;}
-.accordion-body ul{margin:.3rem 0 .5rem 1.2rem;}
-.accordion-body li{margin-bottom:.25rem;}
+.accordion-body ul{margin:.4rem 0 .7rem 1.2rem;}
+.accordion-body li{margin-bottom:.35rem;}
+.accordion-body p{margin:.4rem 0 .6rem;}
+.accordion-body ol{margin:.4rem 0 .7rem 1.2rem;}
+.accordion-body ol li{margin-bottom:.35rem;}
+.accordion-body code{background:var(--surface);padding:1px 5px;border-radius:4px;font-size:.82rem;}
+
+/* ── Help Categories ─────────────────────── */
+.help-category{margin-bottom:1.5rem;}
+.help-category-title{font-size:.75rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase;
+  color:var(--accent);margin-bottom:.6rem;padding-left:.25rem;}
+
+/* ── Alert Detail Row ────────────────────── */
+.alert-row{cursor:pointer;transition:background .15s;}
+.alert-row:hover{background:var(--surface-hover);}
+.alert-detail-row{display:none;}
+.alert-detail-row.open{display:table-row;}
+.alert-detail-cell{padding:0 !important;border-top:none !important;}
+.alert-detail-inner{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);
+  margin:.25rem .5rem .75rem;padding:1rem 1.25rem;animation:detailSlide .2s ease-out;}
+@keyframes detailSlide{from{opacity:0;transform:translateY(-6px)}to{opacity:1;transform:translateY(0)}}
+.alert-detail-grid{display:grid;grid-template-columns:1fr 1fr;gap:1rem;}
+@media(max-width:700px){.alert-detail-grid{grid-template-columns:1fr;}}
+.alert-detail-section h4{font-size:.8rem;font-weight:700;color:var(--accent);text-transform:uppercase;
+  letter-spacing:.04em;margin:0 0 .5rem;}
+.alert-detail-section{margin-bottom:.5rem;}
+.alert-metric{display:flex;justify-content:space-between;padding:.25rem 0;font-size:.82rem;
+  border-bottom:1px solid var(--border);}
+.alert-metric:last-child{border-bottom:none;}
+.alert-metric .label{color:var(--ink-3);}
+.alert-metric .value{font-family:var(--mono);font-weight:600;color:var(--ink);}
+.alert-reason-list{list-style:none;margin:0;padding:0;}
+.alert-reason-list li{padding:.3rem .5rem;margin-bottom:.3rem;background:var(--bg);
+  border-radius:4px;font-size:.82rem;font-family:var(--mono);border-left:3px solid var(--accent);}
+.alert-recommendation{margin-top:.5rem;padding:.6rem .75rem;background:var(--bg);
+  border-radius:var(--radius);border-left:3px solid var(--warning);font-size:.82rem;
+  line-height:1.5;color:var(--ink-2);}
+.alert-recommendation.critical{border-left-color:var(--danger);}
+.alert-recommendation.elevated{border-left-color:var(--accent);}
 
 /* ── Decay Slider ────────────────────────── */
 .decay-slider{display:none;align-items:center;gap:.5rem;margin-top:.5rem;font-size:.8rem;color:var(--ink-3);}
@@ -1044,6 +1081,14 @@ input::placeholder{color:var(--ink-3);}
           <button class="btn" id="btn-load-settings" type="button">Load from Server</button>
         </div>
       </div>
+
+      <div class="card" style="margin-top:1rem;border-left:3px solid var(--danger);">
+        <h3 style="color:var(--danger);margin:0 0 .5rem;">Danger Zone</h3>
+        <p class="text-muted" style="margin-bottom:.75rem;font-size:.82rem;">These actions are destructive and cannot be undone.</p>
+        <div style="display:flex;gap:.5rem;flex-wrap:wrap;">
+          <button class="btn" id="btn-shutdown-server" type="button" style="border-color:var(--danger);color:var(--danger);">Shutdown Server</button>
+        </div>
+      </div>
     </div>
 
     <!-- ═══════════════════════════════════════════════════════════ -->
@@ -1055,208 +1100,224 @@ input::placeholder{color:var(--ink-3);}
         <p>Comprehensive documentation for the Wardex XDR platform — what is monitored, how detection works, and how to use every feature.</p>
       </div>
 
-      <div class="accordion open">
-        <div class="accordion-header" onclick="this.parentElement.classList.toggle('open')">
-          What Is Monitored <span class="arrow">&#9654;</span>
-        </div>
-        <div class="accordion-body">
-          <p>The Wardex monitor collects the following telemetry from each host in real-time:</p>
-          <h4>CPU Usage</h4>
-          <p>Percentage of CPU time in use. On macOS, collected via <code>sysctl kern.cp_time</code>; on Linux via <code>/proc/stat</code>; on Windows via performance counters. Spikes may indicate cryptomining, brute-force attacks, or runaway processes.</p>
-          <h4>Memory Pressure</h4>
-          <p>Percentage of physical RAM in use. On macOS, collected via <code>vm_stat</code>; on Linux via <code>/proc/meminfo</code>. Sudden increases can signal memory exhaustion attacks or malware injection.</p>
-          <h4>Network Activity</h4>
-          <p>Total packets transmitted across all interfaces. On macOS via <code>netstat -ib</code>; on Linux via <code>/proc/net/dev</code>. Anomalous spikes may indicate data exfiltration, C2 beacons, or DDoS activity.</p>
-          <h4>Disk Pressure</h4>
-          <p>Percentage of disk space used on the root filesystem. Monitored via <code>statvfs</code>. Rapid consumption can indicate ransomware encryption or log bombing.</p>
-          <h4>Temperature</h4>
-          <p>CPU or SoC temperature in degrees Celsius. On macOS via IOKit <code>SMC</code>; on Linux via <code>/sys/class/thermal</code>. Elevated temperatures may indicate cryptojacking or hardware tampering.</p>
-          <h4>Authentication Failures</h4>
-          <p>Count of failed login attempts. On macOS via <code>log show --predicate 'eventMessage contains "authentication failure"'</code>; on Linux via <code>/var/log/auth.log</code>. Spikes indicate brute-force or credential-stuffing attacks.</p>
-          <h4>Battery Level</h4>
-          <p>Current battery percentage (for portable/IoT devices). On macOS via <code>pmset -g batt</code>; on Linux via <code>/sys/class/power_supply</code>. Low battery can be weaponized to disable monitoring in battery-aware attacks.</p>
-          <h4>Process Count</h4>
-          <p>Number of running processes. Sudden increases may indicate fork bombs, lateral movement, or persistence mechanisms establishing new processes.</p>
-          <h4>File Integrity Monitoring (FIM)</h4>
-          <p>SHA-256 hashes of critical system files and directories. Configurable watch paths (e.g., <code>/etc</code>, <code>/usr/bin</code>). Any hash change generates an immediate alert — detects unauthorized modifications, rootkits, and supply-chain tampering.</p>
-          <h4>Drift Detection</h4>
-          <p>Statistical tracking of how telemetry distributions change over time using the Kolmogorov-Smirnov test. Detects slow, stealthy attacks that gradually shift system behavior below per-sample thresholds.</p>
-        </div>
-      </div>
+      <!-- ── Getting Started ───────────────────────────── -->
+      <div class="help-category">
+        <div class="help-category-title">Getting Started</div>
 
-      <div class="accordion">
-        <div class="accordion-header" onclick="this.parentElement.classList.toggle('open')">
-          How Detection Works <span class="arrow">&#9654;</span>
-        </div>
-        <div class="accordion-body">
-          <h4>EWMA Anomaly Detection</h4>
-          <p>The core detection engine uses an Exponentially Weighted Moving Average (EWMA) to establish dynamic baselines for each telemetry dimension. Each sample is scored as the sum of normalized deviations across all dimensions — a single numeric anomaly score.</p>
-          <h4>Multi-Axis Scoring</h4>
-          <p>The detector evaluates 10 independent axes: CPU, memory, network, disk, temperature, auth failures, battery, process count, file integrity changes, and custom metrics. Each axis maintains its own mean and variance, making the detector resistant to single-axis evasion.</p>
-          <h4>Detection Modes</h4>
-          <ul>
-            <li><strong>Normal</strong> — Continuously learns and updates baselines from incoming telemetry.</li>
-            <li><strong>Frozen</strong> — Uses the current baseline without updating. Useful for known-good snapshots.</li>
-            <li><strong>Decay</strong> — Gradually forgets old baselines at a configurable rate. Useful for environments with expected drift.</li>
-          </ul>
-          <h4>Threat Levels</h4>
-          <ul>
-            <li><strong>Nominal</strong> — Score below elevated threshold (default: 1.4). Normal operations.</li>
-            <li><strong>Elevated</strong> — Score between 1.4 and 3.0. Possible anomaly, increased logging.</li>
-            <li><strong>Severe</strong> — Score between 3.0 and 5.2. Likely attack, automated response triggered.</li>
-            <li><strong>Critical</strong> — Score above 5.2. Active incident, maximum isolation and alerting.</li>
-          </ul>
-          <h4>Policy Engine</h4>
-          <p>The policy engine maps anomaly scores to enforcement actions: logging, rate-limiting, network isolation, process quarantine, or full lockdown. Policies can be composed (max, min, left/right priority) and executed in a sandboxed WASM VM for safe extensibility.</p>
-          <h4>Correlation Engine</h4>
-          <p>Cross-agent event correlation detects coordinated attacks spanning multiple endpoints. Uses temporal proximity, shared IOCs, and behavioral similarity to group related events across the fleet.</p>
-          <h4>Velocity Detection</h4>
-          <p>The velocity detector tracks the <em>rate of change</em> (first derivative) and <em>acceleration</em> (second derivative) of each telemetry axis over a sliding window. When the latest velocity exceeds the historical mean by more than &sigma; standard deviations, it flags a velocity spike — detecting rapid ramp-ups characteristic of attack escalation, even when the absolute values remain below static thresholds. Configurable parameters: window size (default 60 samples) and sigma threshold (default 2.5&sigma;).</p>
-          <h4>Entropy Analysis</h4>
-          <p>The entropy detector computes Shannon entropy (<em>H = &minus;&sum; p&middot;log&#8322;p</em>) over a sliding window for each telemetry axis. Values are binned and the entropy is normalised against the maximum possible entropy. <strong>Low entropy</strong> (&lt;15% of max) indicates suspiciously constant traffic — common in cryptominers, DDoS floods, and persistent C2 beacons. <strong>High entropy</strong> on the auth-failures axis (&gt;90% of max) indicates randomised credential stuffing or evasion through password spraying. Configurable parameters: window size (default 60) and bin count (default 8).</p>
-          <h4>Compound Threat Detection</h4>
-          <p>The compound threat detector identifies coordinated multi-axis attacks. It counts how many telemetry axes have a per-axis contribution exceeding a threshold (default &tau;=0.3). When &ge;40% of all axes are simultaneously elevated, the attack is classified as a <em>compound threat</em> and receives a score multiplier: <code>score &times; (1 + fraction &times; 0.5)</code>. This catches sophisticated attacks that spread activity across CPU, network, auth, disk, and temperature to stay below single-axis thresholds.</p>
-        </div>
-      </div>
-
-      <div class="accordion">
-        <div class="accordion-header" onclick="this.parentElement.classList.toggle('open')">
-          XDR Agent Architecture <span class="arrow">&#9654;</span>
-        </div>
-        <div class="accordion-body">
-          <h4>Server + Agent Model</h4>
-          <p>The Wardex server automatically monitors the local system without requiring a separate agent. Remote hosts run lightweight agents that report telemetry to the central server.</p>
-          <h4>Agent Enrollment</h4>
-          <p>Agents enroll using one-time tokens generated from the admin console (Fleet &amp; Agents &rarr; Create Enrollment Token). Each token has configurable max-uses. Agents authenticate with their enrollment credentials on each heartbeat.</p>
-          <h4>Heartbeat &amp; Telemetry</h4>
-          <p>Agents send heartbeats at configurable intervals (default: 5 seconds). Each heartbeat includes a full telemetry sample. The server evaluates each sample through the anomaly detector and generates alerts when thresholds are exceeded.</p>
-          <h4>SIEM Integration</h4>
-          <p>Events can be forwarded to external SIEM platforms via webhook, syslog, or CEF format. The server maintains an event store for correlation and historical analysis.</p>
-          <h4>Policy Distribution</h4>
-          <p>Security policies are versioned and distributed to agents via the policy store. Agents receive policy updates on each heartbeat check-in.</p>
-        </div>
-      </div>
-
-      <div class="accordion">
-        <div class="accordion-header" onclick="this.parentElement.classList.toggle('open')">
-          API Reference <span class="arrow">&#9654;</span>
-        </div>
-        <div class="accordion-body">
-          <p>The Wardex server exposes a comprehensive REST API. All mutating operations require Bearer token authentication.</p>
-          <div id="api-endpoint-list" class="text-muted">Loading API endpoints...</div>
-        </div>
-      </div>
-
-      <div class="accordion">
-        <div class="accordion-header" onclick="this.parentElement.classList.toggle('open')">
-          CLI Commands <span class="arrow">&#9654;</span>
-        </div>
-        <div class="accordion-body">
-          <p>Available commands when running <code>wardex</code>:</p>
-          <ul>
-            <li><code>serve</code> — Start the HTTP API server with admin console</li>
-            <li><code>monitor</code> — Run continuous host monitoring</li>
-            <li><code>analyze &lt;file&gt;</code> — Analyze a CSV/JSONL telemetry file</li>
-            <li><code>report</code> — Generate a JSON detection report</li>
-            <li><code>benchmark</code> — Run detection engine benchmarks</li>
-            <li><code>status</code> — Show runtime status manifest</li>
-            <li><code>fingerprint</code> — Generate device fingerprint</li>
-            <li><code>forensics &lt;file&gt;</code> — Run forensic analysis on telemetry</li>
-            <li><code>replay &lt;file&gt;</code> — Replay historical telemetry through detector</li>
-            <li><code>audit &lt;file&gt;</code> — Generate audit trail for telemetry</li>
-            <li><code>config</code> — Show current configuration</li>
-            <li><code>install-service</code> — Install as system service (systemd/launchd/sc.exe)</li>
-            <li><code>uninstall-service</code> — Remove system service</li>
-            <li><code>help</code> — Show help message</li>
-          </ul>
-        </div>
-      </div>
-
-      <div class="accordion">
-        <div class="accordion-header" onclick="this.parentElement.classList.toggle('open')">
-          Platform Support <span class="arrow">&#9654;</span>
-        </div>
-        <div class="accordion-body">
-          <h4>Supported Platforms</h4>
-          <ul>
-            <li><strong>macOS</strong> — Full support. Telemetry via sysctl, vm_stat, netstat, IOKit, pmset, log show.</li>
-            <li><strong>Linux</strong> — Full support. Telemetry via /proc filesystem, /sys/class, journalctl.</li>
-            <li><strong>Windows</strong> — Partial support. Telemetry via performance counters, WMI, Event Log.</li>
-          </ul>
-          <h4>Service Installation</h4>
-          <ul>
-            <li><strong>macOS</strong> — LaunchDaemon plist in /Library/LaunchDaemons/</li>
-            <li><strong>Linux</strong> — systemd unit file in /etc/systemd/system/</li>
-            <li><strong>Windows</strong> — Windows Service via sc.exe</li>
-          </ul>
-        </div>
-      </div>
-
-      <div class="accordion">
-        <div class="accordion-header" onclick="this.parentElement.classList.toggle('open')">
-          Getting Started <span class="arrow">&#9654;</span>
-        </div>
-        <div class="accordion-body">
-          <h4>Quick Start</h4>
-          <ol>
-            <li>Build the project: <code>cargo build --release</code></li>
-            <li>Start the server: <code>./target/release/wardex serve</code></li>
-            <li>Copy the API token printed in the terminal</li>
-            <li>Open the admin console in your browser (default: <code>http://localhost:8080/admin.html</code>)</li>
-            <li>Paste the token and click Connect</li>
-          </ol>
-          <h4>Configuration</h4>
-          <p>Settings are stored in <code>var/wardex.toml</code>. You can edit them via the Settings panel or directly edit the TOML file. The server picks up changes on next <code>config reload</code> API call.</p>
-          <h4>Monitoring Your First Host</h4>
-          <p>The server automatically monitors the local machine. Once connected, the Dashboard will show real-time CPU, memory, network, and other telemetry. Alerts appear when anomaly scores exceed the configured thresholds.</p>
-        </div>
-      </div>
-
-      <div class="accordion">
-        <div class="accordion-header" onclick="this.parentElement.classList.toggle('open')">
-          Research Blueprint Coverage <span class="arrow">&#9654;</span>
-        </div>
-        <div class="accordion-body">
-          <p>These tracks belong to the broader research blueprint. Planned and future items are not missing product features; they are unimplemented research directions.</p>
-          <div class="btn-row mb-1">
-            <div id="track-summary" style="display:flex;gap:.4rem;flex-wrap:wrap;"></div>
-            <button class="btn btn-sm" id="btn-toggle-future" type="button" style="margin-left:auto;">Show Future Tracks</button>
+        <div class="accordion open">
+          <div class="accordion-header" onclick="this.parentElement.classList.toggle('open')">
+            Quick Start Guide <span class="arrow">&#9654;</span>
           </div>
-          <div class="text-muted mb-1" id="track-note">Showing only foundation and scaffolded tracks.</div>
-          <div class="table-wrap">
-            <table class="data-table">
-              <thead><tr><th>Code</th><th>Track</th><th>Status</th></tr></thead>
-              <tbody id="track-tbody"></tbody>
-            </table>
+          <div class="accordion-body">
+            <h4>Installation</h4>
+            <ol>
+              <li>Build the project: <code>cargo build --release</code></li>
+              <li>Start the server: <code>./target/release/wardex serve</code></li>
+              <li>Copy the API token printed in the terminal</li>
+              <li>Open the admin console at <code>http://localhost:8080/admin.html</code></li>
+              <li>Paste the token and click <strong>Connect</strong></li>
+            </ol>
+            <h4>Configuration</h4>
+            <p>Settings are stored in <code>var/wardex.toml</code>. Edit via the Settings panel or the TOML file directly. The server picks up changes on <code>config reload</code>.</p>
+            <h4>Your First Host</h4>
+            <p>The server automatically monitors the local machine. Once connected, the Dashboard shows real-time CPU, memory, network, and other telemetry. Alerts appear when anomaly scores exceed the configured thresholds.</p>
+          </div>
+        </div>
+
+        <div class="accordion">
+          <div class="accordion-header" onclick="this.parentElement.classList.toggle('open')">
+            Demo Mode <span class="arrow">&#9654;</span>
+          </div>
+          <div class="accordion-body">
+            <h4>What Is Demo Mode?</h4>
+            <p>Demo mode simulates a realistic XDR detection scenario entirely in the browser. It generates synthetic telemetry showing a normal baseline followed by an escalating attack.</p>
+            <h4>How To Use</h4>
+            <ol>
+              <li>Toggle the &ldquo;Demo Mode&rdquo; switch in the top bar</li>
+              <li>Navigate to the Dashboard to see synthetic gauges and sparklines</li>
+              <li>Watch the Live Monitor for simulated alerts</li>
+              <li>Toggle off to return to real data</li>
+            </ol>
+            <h4>What Gets Simulated</h4>
+            <ul>
+              <li>CPU ramp from 15% to 95% (simulated cryptominer)</li>
+              <li>Memory climbing from 40% to 88%</li>
+              <li>Network spike to 50,000 packets (data exfiltration)</li>
+              <li>Authentication failure burst (credential stuffing)</li>
+              <li>Alerts escalating from Elevated through Severe to Critical</li>
+            </ul>
+            <p><strong>Note:</strong> Demo mode runs entirely client-side. No data is sent to the server and no state is modified.</p>
+          </div>
+        </div>
+
+        <div class="accordion">
+          <div class="accordion-header" onclick="this.parentElement.classList.toggle('open')">
+            Platform Support <span class="arrow">&#9654;</span>
+          </div>
+          <div class="accordion-body">
+            <h4>Supported Platforms</h4>
+            <ul>
+              <li><strong>macOS</strong> — Full support. Telemetry via sysctl, vm_stat, netstat, IOKit, pmset, log show.</li>
+              <li><strong>Linux</strong> — Full support. Telemetry via /proc filesystem, /sys/class, journalctl.</li>
+              <li><strong>Windows</strong> — Partial support. Telemetry via performance counters, WMI, Event Log.</li>
+            </ul>
+            <h4>Service Installation</h4>
+            <ul>
+              <li><strong>macOS</strong> — LaunchDaemon plist in /Library/LaunchDaemons/</li>
+              <li><strong>Linux</strong> — systemd unit file in /etc/systemd/system/</li>
+              <li><strong>Windows</strong> — Windows Service via sc.exe</li>
+            </ul>
           </div>
         </div>
       </div>
 
-      <div class="accordion">
-        <div class="accordion-header" onclick="this.parentElement.classList.toggle('open')">
-          Demo Mode <span class="arrow">&#9654;</span>
+      <!-- ── Detection & Architecture ──────────────────── -->
+      <div class="help-category">
+        <div class="help-category-title">Detection &amp; Architecture</div>
+
+        <div class="accordion">
+          <div class="accordion-header" onclick="this.parentElement.classList.toggle('open')">
+            What Is Monitored <span class="arrow">&#9654;</span>
+          </div>
+          <div class="accordion-body">
+            <p>The Wardex monitor collects the following telemetry from each host in real-time:</p>
+            <h4>CPU Usage</h4>
+            <p>Percentage of CPU time in use. On macOS via <code>sysctl kern.cp_time</code>; on Linux via <code>/proc/stat</code>. Spikes may indicate cryptomining, brute-force attacks, or runaway processes.</p>
+            <h4>Memory Pressure</h4>
+            <p>Percentage of physical RAM in use. On macOS via <code>vm_stat</code>; on Linux via <code>/proc/meminfo</code>. Sudden increases can signal memory exhaustion attacks or malware injection.</p>
+            <h4>Network Activity</h4>
+            <p>Total packets transmitted across all interfaces. Anomalous spikes may indicate data exfiltration, C2 beacons, or DDoS activity.</p>
+            <h4>Disk Pressure</h4>
+            <p>Percentage of disk space used on the root filesystem. Rapid consumption can indicate ransomware encryption or log bombing.</p>
+            <h4>Temperature</h4>
+            <p>CPU or SoC temperature in degrees Celsius. Elevated temperatures may indicate cryptojacking or hardware tampering.</p>
+            <h4>Authentication Failures</h4>
+            <p>Count of failed login attempts. Spikes indicate brute-force or credential-stuffing attacks.</p>
+            <h4>Battery Level</h4>
+            <p>Current battery percentage (portable/IoT devices). Low battery can be weaponized to disable monitoring.</p>
+            <h4>Process Count</h4>
+            <p>Number of running processes. Sudden increases may indicate fork bombs, lateral movement, or persistence mechanisms.</p>
+            <h4>File Integrity Monitoring (FIM)</h4>
+            <p>SHA-256 hashes of critical system files. Any hash change generates an immediate alert — detects rootkits and supply-chain tampering.</p>
+            <h4>Drift Detection</h4>
+            <p>Kolmogorov-Smirnov test tracks how telemetry distributions change over time, detecting slow stealthy attacks.</p>
+          </div>
         </div>
-        <div class="accordion-body">
-          <h4>What Is Demo Mode?</h4>
-          <p>Demo mode simulates a realistic XDR detection scenario entirely in the browser. It generates synthetic telemetry showing a normal baseline followed by an escalating attack, allowing you to see how the detection engine responds.</p>
-          <h4>How To Use</h4>
-          <ol>
-            <li>Toggle the &ldquo;Demo Mode&rdquo; switch in the top bar</li>
-            <li>Navigate to the Dashboard to see synthetic gauges and sparklines</li>
-            <li>Watch the Live Monitor for simulated alerts</li>
-            <li>Toggle off to return to real data</li>
-          </ol>
-          <h4>What Gets Simulated</h4>
-          <ul>
-            <li>CPU ramp from 15% to 95% (simulated cryptominer)</li>
-            <li>Memory climbing from 40% to 88%</li>
-            <li>Network spike to 50,000 packets (data exfiltration)</li>
-            <li>Authentication failure burst (credential stuffing)</li>
-            <li>Alerts escalating from Elevated through Severe to Critical</li>
-          </ul>
-          <p><strong>Note:</strong> Demo mode does not send any data to the server or modify any state. Everything runs client-side only.</p>
+
+        <div class="accordion">
+          <div class="accordion-header" onclick="this.parentElement.classList.toggle('open')">
+            How Detection Works <span class="arrow">&#9654;</span>
+          </div>
+          <div class="accordion-body">
+            <h4>EWMA Anomaly Detection</h4>
+            <p>The core engine uses an Exponentially Weighted Moving Average (EWMA) to establish dynamic baselines for each telemetry dimension. Each sample produces a single numeric anomaly score as the sum of normalized deviations.</p>
+            <h4>Multi-Axis Scoring</h4>
+            <p>10 independent axes are evaluated: CPU, memory, network, disk, temperature, auth failures, battery, process count, file integrity, and custom metrics. Each axis maintains its own mean and variance.</p>
+            <h4>Detection Modes</h4>
+            <ul>
+              <li><strong>Normal</strong> — Continuously learns and updates baselines.</li>
+              <li><strong>Frozen</strong> — Uses the current baseline without updating.</li>
+              <li><strong>Decay</strong> — Gradually forgets old baselines at a configurable rate.</li>
+            </ul>
+            <h4>Threat Levels</h4>
+            <ul>
+              <li><strong>Nominal</strong> — Score below elevated threshold (default: 1.4)</li>
+              <li><strong>Elevated</strong> — Score between 1.4 and 3.0</li>
+              <li><strong>Severe</strong> — Score between 3.0 and 5.2</li>
+              <li><strong>Critical</strong> — Score above 5.2</li>
+            </ul>
+            <h4>Velocity Detection</h4>
+            <p>Tracks the rate of change and acceleration of each telemetry axis over a sliding window. When velocity exceeds the historical mean by &gt;&sigma; standard deviations, it flags a velocity spike — detecting rapid ramp-ups even when absolute values remain below static thresholds.</p>
+            <h4>Entropy Analysis</h4>
+            <p>Computes Shannon entropy (<em>H = &minus;&sum; p&middot;log&#8322;p</em>) over a sliding window. Low entropy indicates suspiciously constant traffic (cryptominers, DDoS floods). High entropy on auth-failures indicates randomised credential stuffing.</p>
+            <h4>Compound Threat Detection</h4>
+            <p>Identifies coordinated multi-axis attacks. When &ge;40% of axes are simultaneously elevated, the attack is classified as a compound threat and receives a score multiplier.</p>
+            <h4>Policy &amp; Correlation</h4>
+            <p>The policy engine maps scores to enforcement actions. Policies can be composed and executed in a sandboxed WASM VM. Cross-agent correlation detects coordinated attacks spanning multiple endpoints.</p>
+          </div>
+        </div>
+
+        <div class="accordion">
+          <div class="accordion-header" onclick="this.parentElement.classList.toggle('open')">
+            XDR Agent Architecture <span class="arrow">&#9654;</span>
+          </div>
+          <div class="accordion-body">
+            <h4>Server + Agent Model</h4>
+            <p>The server monitors the local system automatically. Remote hosts run lightweight agents that report telemetry to the central server.</p>
+            <h4>Agent Enrollment</h4>
+            <p>Agents enroll using one-time tokens generated from Fleet &amp; Agents &rarr; Create Enrollment Token. Each token has configurable max-uses. Agents authenticate on each heartbeat.</p>
+            <h4>Heartbeat &amp; Telemetry</h4>
+            <p>Agents send heartbeats at configurable intervals (default: 5s). Each heartbeat includes a full telemetry sample evaluated through the anomaly detector.</p>
+            <h4>SIEM Integration</h4>
+            <p>Events can be forwarded to external SIEM platforms via webhook, syslog, or CEF format.</p>
+            <h4>Policy Distribution</h4>
+            <p>Security policies are versioned and distributed to agents via the policy store on each heartbeat check-in.</p>
+          </div>
         </div>
       </div>
+
+      <!-- ── Reference ─────────────────────────────────── -->
+      <div class="help-category">
+        <div class="help-category-title">Reference</div>
+
+        <div class="accordion">
+          <div class="accordion-header" onclick="this.parentElement.classList.toggle('open')">
+            CLI Commands <span class="arrow">&#9654;</span>
+          </div>
+          <div class="accordion-body">
+            <p>Available commands when running <code>wardex</code>:</p>
+            <ul>
+              <li><code>start</code> — Server + live monitor (default, no args needed)</li>
+              <li><code>serve [port] [site_dir]</code> — HTTP API server with admin console</li>
+              <li><code>server [port]</code> — XDR central server mode</li>
+              <li><code>monitor [flags]</code> — CLI-only host monitoring</li>
+              <li><code>agent --server &lt;url&gt; --token &lt;t&gt;</code> — XDR agent mode</li>
+              <li><code>analyze &lt;file&gt;</code> — Analyze a CSV/JSONL telemetry file</li>
+              <li><code>report &lt;file&gt;</code> — Generate a JSON detection report</li>
+              <li><code>bench &lt;benign&gt; &lt;attack&gt; [thresh]</code> — Benchmark detectors</li>
+              <li><code>demo [audit]</code> — Run demo telemetry analysis</li>
+              <li><code>status</code> — Print runtime status manifest</li>
+              <li><code>status-json [path]</code> — Export status as JSON</li>
+              <li><code>init-config [path]</code> — Write default config file</li>
+              <li><code>attest &lt;binary&gt;</code> — Generate build manifest</li>
+              <li><code>harness</code> — Run adversarial harness</li>
+              <li><code>export-model &lt;tla|alloy&gt;</code> — Export formal model</li>
+              <li><code>help</code> — Show usage</li>
+            </ul>
+          </div>
+        </div>
+
+        <div class="accordion">
+          <div class="accordion-header" onclick="this.parentElement.classList.toggle('open')">
+            API Reference <span class="arrow">&#9654;</span>
+          </div>
+          <div class="accordion-body">
+            <p>The server exposes a comprehensive REST API. All mutating operations require Bearer token authentication.</p>
+            <div id="api-endpoint-list" class="text-muted">Loading API endpoints...</div>
+          </div>
+        </div>
+
+        <div class="accordion">
+          <div class="accordion-header" onclick="this.parentElement.classList.toggle('open')">
+            Research Blueprint Coverage <span class="arrow">&#9654;</span>
+          </div>
+          <div class="accordion-body">
+            <p>These tracks belong to the broader research blueprint. Planned items are unimplemented research directions, not missing product features.</p>
+            <div class="btn-row mb-1">
+              <div id="track-summary" style="display:flex;gap:.4rem;flex-wrap:wrap;"></div>
+              <button class="btn btn-sm" id="btn-toggle-future" type="button" style="margin-left:auto;">Show Future Tracks</button>
+            </div>
+            <div class="text-muted mb-1" id="track-note">Showing only foundation and scaffolded tracks.</div>
+            <div class="table-wrap">
+              <table class="data-table">
+                <thead><tr><th>Code</th><th>Track</th><th>Status</th></tr></thead>
+                <tbody id="track-tbody"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+
     </div>
 
   </div><!-- .content -->
@@ -2128,16 +2189,87 @@ input::placeholder{color:var(--ink-3);}
     }
     const isNew = alerts.length > lastAlertCount;
     lastAlertCount = alerts.length;
-    const reversed = alerts.slice().reverse().slice(0, 100);
+    const reversed = alerts.slice(0, 100);
     reversed.forEach((a, idx) => {
       const tr = document.createElement('tr');
-      if (isNew && idx === 0) tr.className = 'alert-new';
+      tr.className = 'alert-row';
+      if (isNew && idx === 0) tr.className += ' alert-new';
       const lvl = esc(a.level || '');
-      const reason = a.reasons && a.reasons.length ? esc(a.reasons[0]) : '—';
-      tr.innerHTML = '<td>' + esc(a.timestamp || '') + '</td><td>' + (typeof a.score === 'number' ? a.score.toFixed(2) : '—') + '</td><td class="level-' + lvl + '">' + lvl + '</td><td>' + esc(a.action || '') + '</td><td>' + reason + '</td>';
+      const reasonCount = (a.reasons && a.reasons.length) || 0;
+      const reason = reasonCount ? esc(a.reasons[0]) : '—';
+      const badge = reasonCount > 1 ? ' <span style="opacity:.6;font-size:.75rem;">+' + (reasonCount - 1) + ' more</span>' : '';
+      tr.innerHTML = '<td>' + esc(a.timestamp || '') + '</td><td>' + (typeof a.score === 'number' ? a.score.toFixed(2) : '—') + '</td><td class="level-' + lvl + '">' + lvl + '</td><td>' + esc(a.action || '') + '</td><td>' + reason + badge + '</td>';
+      const detailId = 'alert-detail-' + (a._index != null ? a._index : idx);
+      tr.addEventListener('click', () => toggleAlertDetail(detailId, a._index != null ? a._index : null));
       tbody.appendChild(tr);
+      // Detail row (hidden by default)
+      const detailTr = document.createElement('tr');
+      detailTr.className = 'alert-detail-row';
+      detailTr.id = detailId;
+      detailTr.innerHTML = '<td colspan="5" class="alert-detail-cell"><div class="alert-detail-inner"><div class="text-muted" style="font-size:.82rem;">Click to load detailed analysis…</div></div></td>';
+      tbody.appendChild(detailTr);
     });
   }
+
+  async function toggleAlertDetail(detailId, alertIndex) {
+    const row = document.getElementById(detailId);
+    if (!row) return;
+    const isOpen = row.classList.contains('open');
+    // Close all other detail rows
+    document.querySelectorAll('.alert-detail-row.open').forEach(r => r.classList.remove('open'));
+    if (isOpen) return;
+    row.classList.add('open');
+    const inner = row.querySelector('.alert-detail-inner');
+    if (alertIndex == null) {
+      inner.innerHTML = '<div class="text-muted">Detail not available (no index)</div>';
+      return;
+    }
+    inner.innerHTML = '<div class="text-muted" style="font-size:.82rem;">Loading…</div>';
+    try {
+      const res = await fetch(API + '/api/alerts/' + alertIndex, { headers: authHeaders() });
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      const d = await res.json();
+      const s = d.sample || {};
+      const a = d.analysis || {};
+      const recClass = a.severity_class === 'critical' ? 'critical' : (a.severity_class === 'elevated' ? 'elevated' : '');
+      let reasonsHtml = '';
+      if (d.reasons && d.reasons.length) {
+        reasonsHtml = '<ul class="alert-reason-list">' + d.reasons.map(r => '<li>' + esc(r) + '</li>').join('') + '</ul>';
+      }
+      inner.innerHTML = '<div class="alert-detail-grid">' +
+        '<div class="alert-detail-section"><h4>Telemetry Snapshot</h4>' +
+        metric('CPU', fmt(s.cpu_load_pct) + '%') +
+        metric('Memory', fmt(s.memory_load_pct) + '%') +
+        metric('Network', fmt(s.network_kbps) + ' kbps') +
+        metric('Disk Pressure', fmt(s.disk_pressure_pct) + '%') +
+        metric('Temperature', fmt(s.temperature_c) + ' °C') +
+        metric('Auth Failures', s.auth_failures) +
+        metric('Battery', fmt(s.battery_pct) + '%') +
+        metric('Process Count', s.process_count) +
+        metric('Integrity Drift', fmt(s.integrity_drift)) +
+        '</div>' +
+        '<div class="alert-detail-section"><h4>Detection Analysis</h4>' +
+        metric('Anomaly Score', fmt(d.score)) +
+        metric('Confidence', fmt(d.confidence)) +
+        metric('Severity', d.level) +
+        metric('Multi-Axis', a.multi_axis ? 'Yes (' + a.axis_count + ' axes)' : 'No (single axis)') +
+        metric('Enforced', d.enforced ? 'Yes' : 'No') +
+        metric('Host', esc(d.hostname || '')) +
+        metric('Platform', esc(d.platform || '')) +
+        '<h4 style="margin-top:.75rem;">Flagged Reasons</h4>' + reasonsHtml +
+        '<div class="alert-recommendation ' + recClass + '">' +
+        '<strong>Recommendation:</strong> ' + esc(a.recommendation || '') + '</div>' +
+        '</div></div>';
+    } catch(e) {
+      inner.innerHTML = '<div class="text-muted">Failed to load: ' + esc(e.message) + '</div>';
+    }
+  }
+
+  function metric(label, value) {
+    return '<div class="alert-metric"><span class="label">' + label + '</span><span class="value">' + value + '</span></div>';
+  }
+
+  function fmt(v) { return typeof v === 'number' ? v.toFixed(2) : (v || '—'); }
 
   function renderDashAlertTable(alerts) {
     const tbody = $('#dash-alert-tbody');
@@ -2146,12 +2278,14 @@ input::placeholder{color:var(--ink-3);}
       tbody.innerHTML = '<tr><td colspan="5" class="text-muted">No alerts recorded yet.</td></tr>';
       return;
     }
-    const recent = alerts.slice().reverse().slice(0, 10);
+    const recent = alerts.slice(0, 10);
     recent.forEach(a => {
       const tr = document.createElement('tr');
       const lvl = esc(a.level || '');
-      const reason = a.reasons && a.reasons.length ? esc(a.reasons[0]) : '—';
-      tr.innerHTML = '<td>' + esc(a.timestamp || '') + '</td><td>' + (typeof a.score === 'number' ? a.score.toFixed(2) : '—') + '</td><td class="level-' + lvl + '">' + lvl + '</td><td>' + esc(a.action || '') + '</td><td>' + reason + '</td>';
+      const reasonCount = (a.reasons && a.reasons.length) || 0;
+      const reason = reasonCount ? esc(a.reasons[0]) : '—';
+      const badge = reasonCount > 1 ? ' <span style="opacity:.6;font-size:.75rem;">+' + (reasonCount - 1) + '</span>' : '';
+      tr.innerHTML = '<td>' + esc(a.timestamp || '') + '</td><td>' + (typeof a.score === 'number' ? a.score.toFixed(2) : '—') + '</td><td class="level-' + lvl + '">' + lvl + '</td><td>' + esc(a.action || '') + '</td><td>' + reason + badge + '</td>';
       tbody.appendChild(tr);
     });
   }
@@ -2302,6 +2436,21 @@ input::placeholder{color:var(--ink-3);}
         body: JSON.stringify({ text: 'Wardex test alert — webhook is working', timestamp: new Date().toISOString(), level: 'info', source: 'admin-console' }) });
       if (res.ok) { toast('Webhook test sent', 'success'); } else { toast('Webhook returned ' + res.status, 'error'); }
     } catch(e) { toast('Webhook failed: ' + e.message, 'error'); }
+  }
+
+  // ── Shutdown ──
+  async function shutdownServer() {
+    if (!confirm('Are you sure you want to shutdown the Wardex server? This will stop all monitoring and disconnect all agents.')) return;
+    if (!confirm('This action cannot be undone remotely. You will need terminal access to restart. Continue?')) return;
+    try {
+      const res = await fetch(API + '/api/shutdown', { method: 'POST', headers: authHeaders() });
+      if (res.status === 401) { flash('Unauthorized', 'error'); return; }
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      toast('Server is shutting down…', 'success');
+      log('Shutdown command sent');
+      if (refreshTimer) { clearInterval(refreshTimer); refreshTimer = null; }
+      setTimeout(() => { flash('Server has shut down. Refresh to reconnect if restarted.', 'error'); }, 2000);
+    } catch(e) { flash('Shutdown failed: ' + e.message, 'error'); }
   }
 
   // ── Demo Mode ──
@@ -2528,6 +2677,7 @@ input::placeholder{color:var(--ink-3);}
   $('#btn-reset-settings').addEventListener('click', resetSettings);
   $('#btn-load-settings').addEventListener('click', loadSettings);
   $('#btn-test-webhook').addEventListener('click', testWebhook);
+  $('#btn-shutdown-server').addEventListener('click', shutdownServer);
 
   // Research tracks
   $('#btn-toggle-future').addEventListener('click', () => { showFutureTracks = !showFutureTracks; if (lastTracks.length) renderTracks(lastTracks); });

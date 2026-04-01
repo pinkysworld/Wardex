@@ -42,8 +42,9 @@ fn run() -> Result<(), String> {
 
             // Spawn server in background thread
             let site_dir_clone = site_dir.clone();
+            let shutdown_clone = shutdown.clone();
             std::thread::spawn(move || {
-                if let Err(e) = server::run_server(port, &site_dir_clone) {
+                if let Err(e) = server::run_server(port, &site_dir_clone, shutdown_clone) {
                     eprintln!("server error: {e}");
                 }
             });
@@ -312,7 +313,11 @@ fn run() -> Result<(), String> {
                 return Err("too many arguments for `serve`".into());
             }
 
-            server::run_server(port, &site_dir)?;
+            let shutdown = Arc::new(AtomicBool::new(false));
+            let shutdown_sig = shutdown.clone();
+            let _ = register_ctrlc(shutdown_sig);
+
+            server::run_server(port, &site_dir, shutdown)?;
         }
         "server" => {
             // XDR server mode — central management + event correlation
@@ -333,7 +338,7 @@ fn run() -> Result<(), String> {
             let _ = register_ctrlc(shutdown_sig);
 
             eprintln!("Wardex XDR Server v{}", env!("CARGO_PKG_VERSION"));
-            server::run_server(port, &site_dir)?;
+            server::run_server(port, &site_dir, shutdown)?;
         }
         "agent" => {
             // XDR agent mode — enroll with server and run local monitoring
@@ -503,19 +508,11 @@ fn load_or_create_config() -> Config {
 }
 
 fn register_ctrlc(shutdown: Arc<AtomicBool>) -> Result<(), String> {
-    // Spawn a thread that waits for Ctrl+C via stdin EOF or platform signal
-    let shutdown_inner = shutdown.clone();
-    std::thread::spawn(move || {
-        // On Unix, use sigwait-style approach via a simple loop
-        // The thread will be killed when main exits
-        loop {
-            std::thread::sleep(std::time::Duration::from_millis(100));
-            if shutdown_inner.load(Ordering::Relaxed) {
-                break;
-            }
-        }
-    });
-    Ok(())
+    ctrlc::set_handler(move || {
+        eprintln!("\nShutting down gracefully…");
+        shutdown.store(true, Ordering::SeqCst);
+    })
+    .map_err(|e| format!("failed to register Ctrl+C handler: {e}"))
 }
 
 
