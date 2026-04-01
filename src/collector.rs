@@ -934,6 +934,8 @@ pub struct AlertRecord {
     pub reasons: Vec<String>,
     pub sample: TelemetrySample,
     pub enforced: bool,
+    #[serde(default)]
+    pub mitre: Vec<crate::telemetry::MitreAttack>,
 }
 
 impl AlertRecord {
@@ -1103,6 +1105,7 @@ pub fn run_monitor(
 
         // Alert if threshold exceeded
         if signal.score >= mon.alert_threshold {
+            let mitre = crate::telemetry::map_alert_to_mitre(&signal.reasons);
             let alert = AlertRecord {
                 timestamp: chrono::Utc::now().to_rfc3339(),
                 hostname: host.hostname.clone(),
@@ -1114,6 +1117,7 @@ pub fn run_monitor(
                 reasons: signal.reasons.clone(),
                 sample,
                 enforced: !mon.dry_run && decision.level >= ThreatLevel::Severe,
+                mitre,
             };
 
             summary.alerts += 1;
@@ -1369,6 +1373,7 @@ mod tests {
                 disk_pressure_pct: 45.0,
             },
             enforced: false,
+            mitre: vec![],
         };
         let syslog = alert.to_syslog();
         assert!(syslog.contains("Wardex"));
@@ -1400,6 +1405,7 @@ mod tests {
                 disk_pressure_pct: 30.0,
             },
             enforced: true,
+            mitre: vec![],
         };
         let cef = alert.to_cef();
         assert!(cef.starts_with("CEF:0|Wardex"));

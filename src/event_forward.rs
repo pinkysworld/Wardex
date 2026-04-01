@@ -286,6 +286,17 @@ impl EventStore {
         self.store_path.as_deref()
     }
 
+    /// Return the N most recent events.
+    pub fn recent_events(&self, n: usize) -> Vec<StoredEvent> {
+        let start = self.events.len().saturating_sub(n);
+        self.events[start..].to_vec()
+    }
+
+    /// Get event by ID.
+    pub fn get_event(&self, id: u64) -> Option<&StoredEvent> {
+        self.events.iter().find(|e| e.id == id)
+    }
+
     /// Ingest a batch of events from an agent.
     pub fn ingest(&mut self, batch: &EventBatch) -> IngestResult {
         let received_at = chrono::Utc::now().to_rfc3339();
@@ -389,6 +400,11 @@ impl EventStore {
         }
 
         matches
+    }
+
+    /// Get a reference to all stored events.
+    pub fn all_events(&self) -> &[StoredEvent] {
+        &self.events
     }
 
     /// Get all stored events, optionally filtered by agent_id.
@@ -635,6 +651,7 @@ mod tests {
                 disk_pressure_pct: 0.0,
             },
             enforced: false,
+            mitre: vec![],
         }
     }
 

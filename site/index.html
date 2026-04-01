@@ -472,7 +472,7 @@
             <p class="label">Implementation</p>
             <h2>Current Status</h2>
             <p class="section-desc">
-              The project has completed all sixteen phases (0–15) of the engineering backlog. It provides a
+              The project has completed all twenty-five phases (0–25) of the engineering backlog. It provides a
               working edge security runtime with configurable detection, pluggable response actions,
               cryptographic audit trails, proof-carrying update metadata, a checkable policy state machine,
               poisoning heuristics, replay buffering, benchmark tooling, a live browser admin console
@@ -480,19 +480,15 @@
               artifacts. Phases 8–9 added runtime intelligence: explainable anomaly attribution,
               correlation analysis, temporal-logic monitoring, adversarial testing, and device fingerprinting —
               all wired into the execution pipeline with audit logging and API endpoints.
-              Phase 10 unified the research-track data pipeline and added supply-chain attestation.
-              Phase 11 added extended 120-sample test fixtures, a fixed-threshold baseline detector
-              for paper comparison, a side-by-side bench CLI, and per-signal contribution aggregation.
-              Phase 12 expanded the research frontier with twelve new modules: enforcement, quantum signatures,
-              swarm coordination, privacy-preserving forensics, Wasm extension engine, threat intelligence,
-              side-channel detection, digital-twin simulation, compliance scoring, multi-tenancy, edge-cloud
-              offload, and energy budget tracking — bringing all 40 research tracks to foundation status.
-              Phase 13 wired threat-intel, enforcement, digital-twin, energy, side-channel, and compliance
-              into the live pipeline, added criterion micro-benchmarks, continual learning with drift
-              detection, and a policy composition algebra.
-              Phase 14 wired all features to the admin console with 14 interactive panels.
-              Phase 15 added full integration test coverage (70 HTTP tests) and paper evaluation harnesses.
-              Three categories below — no ambiguity about what is real versus what is planned.
+              Phases 10–15 added criterion benchmarks, paper evaluation, and admin console integration.
+              Phases 16–22 delivered production hardening, XDR fleet management, SIEM integration,
+              the professional admin console, graceful shutdown, and detection engine expansion.
+              Phases 23–24 added OCSF normalization, 25 Sigma rules, automated response, feature flags,
+              process tree analysis, encrypted spool, RBAC, platform collectors (Windows/Linux/macOS),
+              analyst console with case management, and Elastic ECS/QRadar SIEM formats.
+              Phase 25 hardened the codebase with SHA-256 CTR spool encryption, API audit logging,
+              and RBAC endpoint enforcement.
+              58 modules, 635 tests (521 unit + 114 integration). Three categories below — no ambiguity about what is real versus what is planned.
             </p>
           </div>
 
@@ -526,11 +522,10 @@
             <p class="label">Completed</p>
             <h2>Engineering Log</h2>
             <p class="section-desc">
-              Concrete tasks grouped by phase. All seventeen phases (0–16) and all 81 tasks are
+              Concrete tasks grouped by phase. All twenty-five phases (0–25) and all 120 tasks are
               complete, encompassing the full detect–respond–audit pipeline, runtime intelligence
-              features, extended benchmark fixtures, twelve new research-frontier modules, criterion
-              micro-benchmarks, continual learning, policy composition algebra, full admin console integration,
-              comprehensive integration test coverage, and paper evaluation harnesses.
+              features, platform collectors, analyst console, OCSF/Sigma/RBAC modules, SIEM formats,
+              code review hardening, and professional admin console with 15+ interactive panels.
             </p>
           </div>
           <div id="backlog-phases"></div>
@@ -601,7 +596,7 @@
             <div class="start-card">
               <h3>Run tests</h3>
               <div class="code-block"><code>cargo test</code></div>
-              <p>434 automated tests (342 unit + 92 integration) covering all 44 modules.</p>
+              <p>635 automated tests (521 unit + 114 integration) covering all 58 modules.</p>
             </div>
             <div class="start-card">
               <h3>SIEM report</h3>
@@ -675,7 +670,7 @@
             </div>
           </div>
           <div class="footer-bottom">
-            <p>Wardex · v0.19.0 · Phase 0–22 complete · 437+ tests · <a href="../LICENSE" style="color:inherit;">BSL 1.1</a></p>
+            <p>Wardex · v0.25.0 · Phase 0–25 complete · 635 tests · <a href="../LICENSE" style="color:inherit;">BSL 1.1</a></p>
           </div>
         </div>
       </footer>

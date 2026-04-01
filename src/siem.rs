@@ -100,6 +100,7 @@ impl SiemConfig {
 pub struct SiemConnector {
     config: SiemConfig,
     pending: Vec<AlertRecord>,
+    pending_logs: Vec<crate::log_collector::LogRecord>,
     push_count: u64,
     pull_count: u64,
     last_error: Option<String>,
@@ -110,6 +111,7 @@ impl SiemConnector {
         Self {
             config,
             pending: Vec::new(),
+            pending_logs: Vec::new(),
             push_count: 0,
             pull_count: 0,
             last_error: None,
@@ -124,6 +126,75 @@ impl SiemConnector {
                 self.last_error = Some(e);
             }
         }
+    }
+
+    /// Queue a log record for batch pushing to SIEM.
+    pub fn queue_log(&mut self, log: &crate::log_collector::LogRecord) {
+        self.pending_logs.push(log.clone());
+        if self.pending_logs.len() >= self.config.batch_size {
+            let _ = self.flush_logs();
+        }
+    }
+
+    /// Push inventory to SIEM as an event.
+    pub fn push_inventory(&mut self, inventory: &crate::inventory::SystemInventory, agent_id: &str) {
+        if !self.config.enabled {
+            return;
+        }
+        let payload = match self.config.siem_type.as_str() {
+            "splunk" => {
+                let event = serde_json::json!({
+                    "event": { "type": "inventory", "agent_id": agent_id, "inventory": inventory },
+                    "sourcetype": "wardex:inventory",
+                    "index": self.config.index,
+                });
+                serde_json::to_string(&event).unwrap_or_default()
+            }
+            _ => {
+                serde_json::json!({
+                    "type": "inventory",
+                    "agent_id": agent_id,
+                    "inventory": inventory,
+                }).to_string()
+            }
+        };
+        let _ = self.send_to_siem(&payload);
+    }
+
+    fn flush_logs(&mut self) -> Result<usize, String> {
+        if self.pending_logs.is_empty() || !self.config.enabled {
+            self.pending_logs.clear();
+            return Ok(0);
+        }
+        let count = self.pending_logs.len();
+        let payload = match self.config.siem_type.as_str() {
+            "splunk" => {
+                let lines: Vec<String> = self.pending_logs.iter().map(|log| {
+                    serde_json::json!({
+                        "event": log,
+                        "sourcetype": "wardex:logs",
+                        "index": self.config.index,
+                    }).to_string()
+                }).collect();
+                lines.join("\n")
+            }
+            "elastic" => {
+                let mut lines = Vec::new();
+                for log in &self.pending_logs {
+                    let action = serde_json::json!({"index": {"_index": format!("{}-logs", self.config.index)}});
+                    lines.push(serde_json::to_string(&action).unwrap_or_default());
+                    lines.push(serde_json::to_string(log).unwrap_or_default());
+                }
+                let mut result = lines.join("\n");
+                result.push('\n');
+                result
+            }
+            _ => serde_json::to_string(&self.pending_logs).unwrap_or_default(),
+        };
+        self.send_to_siem(&payload)?;
+        self.push_count += count as u64;
+        self.pending_logs.clear();
+        Ok(count)
     }
 
     /// Flush all pending alerts to the SIEM.
@@ -205,6 +276,10 @@ impl SiemConnector {
         match self.config.siem_type.as_str() {
             "splunk" => self.format_splunk_hec(alerts),
             "elastic" => self.format_elastic_bulk(alerts),
+            "sentinel" => Ok(Self::format_sentinel_asim(alerts)),
+            "google" | "secops" | "udm" => Ok(Self::format_google_udm(alerts)),
+            "ecs" | "elastic-ecs" => Ok(Self::format_elastic_ecs(alerts)),
+            "qradar" | "ibm" => Ok(Self::format_qradar(alerts)),
             _ => self.format_generic_json(alerts),
         }
     }
@@ -247,6 +322,260 @@ impl SiemConnector {
     fn format_generic_json(&self, alerts: &[AlertRecord]) -> Result<String, String> {
         serde_json::to_string(alerts)
             .map_err(|e| format!("JSON error: {e}"))
+    }
+
+    /// Format alerts in ArcSight Common Event Format (CEF).
+    pub fn format_cef(alerts: &[AlertRecord]) -> String {
+        alerts.iter().map(|a| {
+            let severity = match a.level.as_str() {
+                "critical" => "10",
+                "severe" => "8",
+                "elevated" => "5",
+                _ => "3",
+            };
+            let mitre_str = a.mitre.iter()
+                .map(|m| format!("{}:{}", m.technique_id, m.tactic))
+                .collect::<Vec<_>>().join(",");
+            format!(
+                "CEF:0|Wardex|SentinelEdge|1.0|alert|{}|{}|src={} dst={} cs1={} cs1Label=reasons cs2={} cs2Label=mitre cfp1={:.2} cfp1Label=score",
+                a.action,
+                severity,
+                a.hostname,
+                a.hostname,
+                a.reasons.join("; "),
+                mitre_str,
+                a.score,
+            )
+        }).collect::<Vec<_>>().join("\n")
+    }
+
+    /// Format alerts in IBM QRadar Log Event Extended Format (LEEF).
+    pub fn format_leef(alerts: &[AlertRecord]) -> String {
+        alerts.iter().map(|a| {
+            let mitre_str = a.mitre.iter()
+                .map(|m| format!("{}:{}", m.technique_id, m.tactic))
+                .collect::<Vec<_>>().join(",");
+            format!(
+                "LEEF:2.0|Wardex|SentinelEdge|1.0|alert|\tdevTime={}\tsrc={}\tsev={}\taction={}\treasons={}\tmitre={}\tscore={:.2}",
+                a.timestamp,
+                a.hostname,
+                a.level,
+                a.action,
+                a.reasons.join("; "),
+                mitre_str,
+                a.score,
+            )
+        }).collect::<Vec<_>>().join("\n")
+    }
+
+    /// Format alerts in Microsoft Sentinel ASIM (Advanced Security Information Model) format.
+    /// Follows SecurityEvent / ASIMProcessEvent normalized schema.
+    pub fn format_sentinel_asim(alerts: &[AlertRecord]) -> String {
+        let events: Vec<serde_json::Value> = alerts.iter().map(|a| {
+            let severity = match a.level.as_str() {
+                "critical" => "High",
+                "severe" => "High",
+                "elevated" => "Medium",
+                _ => "Low",
+            };
+            let mitre_techniques: Vec<String> = a.mitre.iter()
+                .map(|m| m.technique_id.clone())
+                .collect();
+            let mitre_tactics: Vec<String> = a.mitre.iter()
+                .map(|m| m.tactic.clone())
+                .collect();
+            serde_json::json!({
+                "TimeGenerated": a.timestamp,
+                "EventProduct": "SentinelEdge",
+                "EventVendor": "Wardex",
+                "EventSchemaVersion": "0.1",
+                "EventType": "Alert",
+                "EventSeverity": severity,
+                "EventResult": if a.enforced { "Success" } else { "NA" },
+                "DvcHostname": a.hostname,
+                "DvcOs": a.platform,
+                "EventOriginalUid": format!("{}-{:.0}", a.hostname, a.score * 1000.0),
+                "ThreatConfidence": (a.confidence * 100.0) as u32,
+                "ThreatCategory": a.reasons.first().cloned().unwrap_or_default(),
+                "ThreatName": a.reasons.join("; "),
+                "AdditionalFields": {
+                    "score": a.score,
+                    "action": &a.action,
+                    "mitre_techniques": mitre_techniques,
+                    "mitre_tactics": mitre_tactics,
+                },
+            })
+        }).collect();
+        serde_json::to_string(&events).unwrap_or_else(|_| "[]".into())
+    }
+
+    /// Format alerts in Google SecOps Unified Data Model (UDM) format.
+    /// Follows chronicle.googleapis.com/v1alpha UDM event schema.
+    pub fn format_google_udm(alerts: &[AlertRecord]) -> String {
+        let events: Vec<serde_json::Value> = alerts.iter().map(|a| {
+            let severity_enum = match a.level.as_str() {
+                "critical" => "CRITICAL",
+                "severe" => "HIGH",
+                "elevated" => "MEDIUM",
+                _ => "LOW",
+            };
+            let security_result_category = if a.mitre.is_empty() {
+                "UNKNOWN_CATEGORY"
+            } else {
+                "SOFTWARE_MALICIOUS"
+            };
+            let attacks: Vec<serde_json::Value> = a.mitre.iter().map(|m| {
+                serde_json::json!({
+                    "attack": {
+                        "tactic": m.tactic,
+                        "technique": m.technique_id,
+                        "technique_label": m.technique_name,
+                    }
+                })
+            }).collect();
+
+            serde_json::json!({
+                "metadata": {
+                    "event_timestamp": a.timestamp,
+                    "event_type": "GENERIC_EVENT",
+                    "vendor_name": "Wardex",
+                    "product_name": "SentinelEdge",
+                    "product_event_type": "alert",
+                    "product_log_id": format!("{}-{:.0}", a.hostname, a.score * 1000.0),
+                },
+                "principal": {
+                    "hostname": a.hostname,
+                    "platform": match a.platform.as_str() {
+                        "linux" => "LINUX",
+                        "macos" => "MAC",
+                        "windows" => "WINDOWS",
+                        _ => "UNKNOWN_PLATFORM",
+                    },
+                },
+                "securityResult": [{
+                    "severity": severity_enum,
+                    "confidence_score": (a.confidence * 100.0) as u32,
+                    "summary": a.reasons.join("; "),
+                    "category": security_result_category,
+                    "action": [if a.enforced { "BLOCK" } else { "ALLOW" }],
+                    "attack_details": attacks,
+                }],
+                "additional": {
+                    "score": a.score,
+                    "action_taken": &a.action,
+                    "reasons": &a.reasons,
+                },
+            })
+        }).collect();
+        serde_json::to_string(&events).unwrap_or_else(|_| "[]".into())
+    }
+
+    /// Format alerts in Elastic Common Schema (ECS) format for Elasticsearch.
+    pub fn format_elastic_ecs(alerts: &[AlertRecord]) -> String {
+        let events: Vec<serde_json::Value> = alerts.iter().map(|a| {
+            let severity_num: u8 = match a.level.as_str() {
+                "critical" => 4,
+                "severe" => 3,
+                "elevated" => 2,
+                _ => 1,
+            };
+            let mitre_ids: Vec<String> = a.mitre.iter()
+                .map(|m| m.technique_id.clone())
+                .collect();
+            let mitre_names: Vec<String> = a.mitre.iter()
+                .map(|m| m.technique_name.clone())
+                .collect();
+            let mitre_tactics: Vec<String> = a.mitre.iter()
+                .map(|m| m.tactic.clone())
+                .collect();
+            serde_json::json!({
+                "@timestamp": a.timestamp,
+                "event": {
+                    "kind": "alert",
+                    "category": ["threat"],
+                    "type": ["indicator"],
+                    "severity": severity_num,
+                    "risk_score": a.score,
+                    "module": "sentineledge",
+                    "dataset": "sentineledge.alert",
+                    "outcome": if a.enforced { "success" } else { "unknown" },
+                },
+                "host": {
+                    "hostname": a.hostname,
+                    "os": {
+                        "platform": a.platform.to_lowercase(),
+                    },
+                },
+                "rule": {
+                    "name": a.reasons.first().cloned().unwrap_or_default(),
+                    "description": a.reasons.join("; "),
+                },
+                "threat": {
+                    "framework": "MITRE ATT&CK",
+                    "technique": {
+                        "id": mitre_ids,
+                        "name": mitre_names,
+                    },
+                    "tactic": {
+                        "name": mitre_tactics,
+                    },
+                },
+                "observer": {
+                    "vendor": "Wardex",
+                    "product": "SentinelEdge",
+                    "type": "ids",
+                },
+                "sentineledge": {
+                    "score": a.score,
+                    "confidence": a.confidence,
+                    "action": &a.action,
+                    "level": &a.level,
+                },
+            })
+        }).collect();
+        serde_json::to_string(&events).unwrap_or_else(|_| "[]".into())
+    }
+
+    /// Format alerts in IBM QRadar Log Source format (JSON payload).
+    pub fn format_qradar(alerts: &[AlertRecord]) -> String {
+        let events: Vec<serde_json::Value> = alerts.iter().map(|a| {
+            let severity: u8 = match a.level.as_str() {
+                "critical" => 10,
+                "severe" => 7,
+                "elevated" => 4,
+                _ => 1,
+            };
+            let mitre_str: String = a.mitre.iter()
+                .map(|m| format!("{}/{}", m.tactic, m.technique_id))
+                .collect::<Vec<_>>()
+                .join(",");
+            serde_json::json!({
+                "HEADER": {
+                    "logSourceTypeName": "SentinelEdge XDR",
+                    "logSourceName": format!("sentineledge-{}", a.hostname),
+                },
+                "EventName": a.reasons.first().cloned().unwrap_or("alert".into()),
+                "EventTime": a.timestamp,
+                "Severity": severity,
+                "SourceHostName": a.hostname,
+                "Platform": a.platform,
+                "AnomalyScore": a.score,
+                "Confidence": (a.confidence * 100.0) as u32,
+                "RiskLevel": &a.level,
+                "ResponseAction": &a.action,
+                "Enforced": a.enforced,
+                "Description": a.reasons.join("; "),
+                "MitreAttack": mitre_str,
+                "CustomFields": {
+                    "reasons": &a.reasons,
+                    "cpu_load_pct": a.sample.cpu_load_pct,
+                    "memory_load_pct": a.sample.memory_load_pct,
+                    "network_kbps": a.sample.network_kbps,
+                    "auth_failures": a.sample.auth_failures,
+                },
+            })
+        }).collect();
+        serde_json::to_string(&events).unwrap_or_else(|_| "[]".into())
     }
 
     fn send_to_siem(&self, payload: &str) -> Result<(), String> {
@@ -420,6 +749,7 @@ mod tests {
                 process_count: 0, disk_pressure_pct: 0.0,
             },
             enforced: false,
+            mitre: vec![],
         }
     }
 
@@ -543,5 +873,113 @@ mod tests {
         let shutdown = Arc::new(AtomicBool::new(false));
         let handle = start_siem_poller(config, shutdown);
         assert!(handle.is_none());
+    }
+
+    #[test]
+    fn sentinel_asim_format() {
+        let alert = make_alert();
+        let output = SiemConnector::format_sentinel_asim(&[alert]);
+        let parsed: Vec<serde_json::Value> = serde_json::from_str(&output).unwrap();
+        assert_eq!(parsed.len(), 1);
+        assert_eq!(parsed[0]["EventProduct"], "SentinelEdge");
+        assert_eq!(parsed[0]["EventVendor"], "Wardex");
+        assert_eq!(parsed[0]["DvcHostname"], "test-host");
+        assert!(parsed[0]["ThreatConfidence"].as_u64().unwrap() > 0);
+    }
+
+    #[test]
+    fn sentinel_asim_severity_mapping() {
+        let mut alert = make_alert();
+        alert.level = "critical".into();
+        let output = SiemConnector::format_sentinel_asim(&[alert]);
+        let parsed: Vec<serde_json::Value> = serde_json::from_str(&output).unwrap();
+        assert_eq!(parsed[0]["EventSeverity"], "High");
+    }
+
+    #[test]
+    fn google_udm_format() {
+        let alert = make_alert();
+        let output = SiemConnector::format_google_udm(&[alert]);
+        let parsed: Vec<serde_json::Value> = serde_json::from_str(&output).unwrap();
+        assert_eq!(parsed.len(), 1);
+        assert_eq!(parsed[0]["metadata"]["vendor_name"], "Wardex");
+        assert_eq!(parsed[0]["metadata"]["product_name"], "SentinelEdge");
+        assert_eq!(parsed[0]["principal"]["hostname"], "test-host");
+        assert_eq!(parsed[0]["principal"]["platform"], "LINUX");
+    }
+
+    #[test]
+    fn google_udm_severity_and_mitre() {
+        let mut alert = make_alert();
+        alert.level = "severe".into();
+        alert.mitre = vec![crate::telemetry::MitreAttack {
+            tactic: "Execution".into(),
+            technique_id: "T1059".into(),
+            technique_name: "Command and Scripting Interpreter".into(),
+        }];
+        let output = SiemConnector::format_google_udm(&[alert]);
+        let parsed: Vec<serde_json::Value> = serde_json::from_str(&output).unwrap();
+        assert_eq!(parsed[0]["securityResult"][0]["severity"], "HIGH");
+        assert_eq!(parsed[0]["securityResult"][0]["category"], "SOFTWARE_MALICIOUS");
+        assert!(!parsed[0]["securityResult"][0]["attack_details"].as_array().unwrap().is_empty());
+    }
+
+    #[test]
+    fn cef_format_output() {
+        let alerts = vec![make_alert()];
+        let output = SiemConnector::format_cef(&alerts);
+        assert!(output.starts_with("CEF:0|Wardex|SentinelEdge|"));
+        assert!(output.contains("src=test-host"));
+    }
+
+    #[test]
+    fn leef_format_output() {
+        let alerts = vec![make_alert()];
+        let output = SiemConnector::format_leef(&alerts);
+        assert!(output.starts_with("LEEF:2.0|Wardex|SentinelEdge|"));
+        assert!(output.contains("src=test-host"));
+    }
+
+    #[test]
+    fn elastic_ecs_format() {
+        let alerts = vec![make_alert()];
+        let output = SiemConnector::format_elastic_ecs(&alerts);
+        let parsed: Vec<serde_json::Value> = serde_json::from_str(&output).unwrap();
+        assert_eq!(parsed.len(), 1);
+        let ev = &parsed[0];
+        assert_eq!(ev["event"]["kind"], "alert");
+        assert_eq!(ev["observer"]["vendor"], "Wardex");
+        assert_eq!(ev["host"]["hostname"], "test-host");
+        assert!(ev["sentineledge"]["score"].as_f64().unwrap() > 0.0);
+    }
+
+    #[test]
+    fn elastic_ecs_severity_mapping() {
+        let mut a = make_alert();
+        a.level = "critical".into();
+        let output = SiemConnector::format_elastic_ecs(&[a]);
+        let parsed: Vec<serde_json::Value> = serde_json::from_str(&output).unwrap();
+        assert_eq!(parsed[0]["event"]["severity"], 4);
+    }
+
+    #[test]
+    fn qradar_format() {
+        let alerts = vec![make_alert()];
+        let output = SiemConnector::format_qradar(&alerts);
+        let parsed: Vec<serde_json::Value> = serde_json::from_str(&output).unwrap();
+        assert_eq!(parsed.len(), 1);
+        let ev = &parsed[0];
+        assert_eq!(ev["HEADER"]["logSourceTypeName"], "SentinelEdge XDR");
+        assert_eq!(ev["SourceHostName"], "test-host");
+        assert!(ev["Severity"].as_u64().unwrap() > 0);
+    }
+
+    #[test]
+    fn qradar_severity_critical() {
+        let mut a = make_alert();
+        a.level = "critical".into();
+        let output = SiemConnector::format_qradar(&[a]);
+        let parsed: Vec<serde_json::Value> = serde_json::from_str(&output).unwrap();
+        assert_eq!(parsed[0]["Severity"], 10);
     }
 }

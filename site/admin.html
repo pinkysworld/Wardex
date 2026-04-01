@@ -489,6 +489,17 @@ input::placeholder{color:var(--ink-3);}
         </div>
       </div>
 
+      <div class="card-grid cols-2" style="margin-bottom:1.25rem;">
+        <div class="card">
+          <h2><span class="dot dot-blue"></span> Threat Score Timeline</h2>
+          <canvas id="chart-threat-timeline" height="180"></canvas>
+        </div>
+        <div class="card">
+          <h2><span class="dot dot-orange"></span> Alert Severity Distribution</h2>
+          <canvas id="chart-severity-dist" height="180"></canvas>
+        </div>
+      </div>
+
       <div class="card-grid cols-2">
         <div class="card">
           <h2><span class="dot dot-green"></span> Host Information</h2>
@@ -731,6 +742,27 @@ input::placeholder{color:var(--ink-3);}
               <dt>Per-Axis &tau;</dt><dd id="det-cmp-threshold">—</dd>
             </dl>
           </div>
+        </div>
+      </div>
+
+      <!-- Sigma Detection Rules -->
+      <div class="card mt-1">
+        <h2><span class="dot dot-purple"></span> Sigma Detection Rules</h2>
+        <p class="text-muted" style="margin-bottom:.75rem;font-size:.82rem;">25 built-in Sigma rules covering credential attacks, lateral movement, data exfiltration, cryptomining, privilege escalation, DNS tunneling, and reverse shells.</p>
+        <div class="metric-strip">
+          <div class="metric-card teal"><div class="metric-label">Total Rules</div><div class="metric-value" id="sigma-total">—</div></div>
+          <div class="metric-card green"><div class="metric-label">Enabled</div><div class="metric-value" id="sigma-enabled">—</div></div>
+          <div class="metric-card orange"><div class="metric-label">Matches</div><div class="metric-value" id="sigma-matches">—</div></div>
+          <div class="metric-card red"><div class="metric-label">Critical Rules</div><div class="metric-value" id="sigma-critical">—</div></div>
+        </div>
+        <div class="table-wrap" style="max-height:300px;overflow-y:auto;margin-top:.75rem;">
+          <table class="data-table" id="sigma-table">
+            <thead><tr><th>ID</th><th>Name</th><th>Severity</th><th>Category</th><th>Status</th></tr></thead>
+            <tbody id="sigma-tbody"><tr><td colspan="5" class="text-muted">Loading Sigma rules...</td></tr></tbody>
+          </table>
+        </div>
+        <div class="btn-row mt-1">
+          <button class="btn btn-sm" id="btn-sigma-refresh" onclick="refreshSigma()">Refresh Rules</button>
         </div>
       </div>
     </div>
@@ -1041,7 +1073,115 @@ input::placeholder{color:var(--ink-3);}
     <div class="section" id="sec-incident-response">
       <div class="section-header">
         <h1>Incident Response</h1>
-        <p>Digital twin simulation, adversarial harness testing, and monitoring &amp; analysis tools.</p>
+        <p>Manage incidents, digital twin simulation, adversarial harness testing, and monitoring &amp; analysis tools.</p>
+      </div>
+
+      <div class="metric-strip">
+        <div class="metric-card red"><div class="metric-label">Open Incidents</div><div class="metric-value" id="inc-open">0</div></div>
+        <div class="metric-card orange"><div class="metric-label">Investigating</div><div class="metric-value" id="inc-investigating">0</div></div>
+        <div class="metric-card teal"><div class="metric-label">Resolved</div><div class="metric-value" id="inc-resolved">0</div></div>
+        <div class="metric-card purple"><div class="metric-label">MITRE Techniques</div><div class="metric-value" id="inc-mitre-count">0</div></div>
+      </div>
+
+      <!-- Analyst Case Management -->
+      <div class="card mb-1">
+        <h2><span class="dot dot-teal"></span> Case Management</h2>
+        <p class="text-muted" style="margin-bottom:.75rem;font-size:.82rem;">Track investigations with case lifecycle, priority, assignee, tags, and timeline entries.</p>
+        <div class="btn-row" style="margin-bottom:.75rem;">
+          <select id="case-filter-status" style="min-width:130px;background:var(--bg-alt);color:var(--ink);border:1px solid var(--border);border-radius:6px;padding:.4rem .55rem;">
+            <option value="">All statuses</option>
+            <option value="open">Open</option>
+            <option value="in_progress">In Progress</option>
+            <option value="pending">Pending</option>
+            <option value="resolved">Resolved</option>
+            <option value="closed">Closed</option>
+          </select>
+          <select id="case-filter-priority" style="min-width:110px;background:var(--bg-alt);color:var(--ink);border:1px solid var(--border);border-radius:6px;padding:.4rem .55rem;">
+            <option value="">All priorities</option>
+            <option value="critical">Critical</option>
+            <option value="high">High</option>
+            <option value="medium">Medium</option>
+            <option value="low">Low</option>
+          </select>
+          <button class="btn btn-sm primary" onclick="refreshCases()">Refresh</button>
+          <button class="btn btn-sm" onclick="createCase()">+ New Case</button>
+        </div>
+        <div class="metric-strip" style="margin-bottom:.75rem;">
+          <div class="metric-card teal"><div class="metric-label">Total Cases</div><div class="metric-value" id="cases-total">0</div></div>
+          <div class="metric-card orange"><div class="metric-label">Open</div><div class="metric-value" id="cases-open">0</div></div>
+          <div class="metric-card green"><div class="metric-label">Resolved</div><div class="metric-value" id="cases-resolved">0</div></div>
+        </div>
+        <div class="table-wrap" style="max-height:300px;overflow-y:auto;">
+          <table class="data-table" id="cases-table">
+            <thead><tr><th>ID</th><th>Title</th><th>Priority</th><th>Status</th><th>Assignee</th><th>Created</th></tr></thead>
+            <tbody id="cases-tbody"><tr><td colspan="6" class="text-muted">No cases yet.</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Alert Queue -->
+      <div class="card mb-1">
+        <h2><span class="dot dot-orange"></span> Alert Queue</h2>
+        <p class="text-muted" style="margin-bottom:.75rem;font-size:.82rem;">Triage, acknowledge, and assign queued alerts to analysts for investigation.</p>
+        <div class="metric-strip" style="margin-bottom:.75rem;">
+          <div class="metric-card red"><div class="metric-label">Pending</div><div class="metric-value" id="queue-pending">0</div></div>
+          <div class="metric-card teal"><div class="metric-label">Acknowledged</div><div class="metric-value" id="queue-acked">0</div></div>
+          <div class="metric-card green"><div class="metric-label">Assigned</div><div class="metric-value" id="queue-assigned">0</div></div>
+        </div>
+        <div class="table-wrap" style="max-height:250px;overflow-y:auto;">
+          <table class="data-table" id="queue-table">
+            <thead><tr><th>ID</th><th>Severity</th><th>Source</th><th>Status</th><th>Assignee</th><th>Time</th><th>Actions</th></tr></thead>
+            <tbody id="queue-tbody"><tr><td colspan="7" class="text-muted">No queued alerts.</td></tr></tbody>
+          </table>
+        </div>
+        <div class="btn-row mt-1">
+          <button class="btn btn-sm" onclick="refreshAlertQueue()">Refresh Queue</button>
+        </div>
+      </div>
+
+      <div class="card mb-1">
+        <h2><span class="dot dot-red"></span> Incident Timeline</h2>
+        <canvas id="chart-incident-timeline" height="120" style="margin-bottom:.75rem;"></canvas>
+        <div class="btn-row" style="margin-bottom:.75rem;">
+          <select id="inc-filter-status" style="min-width:140px;background:var(--bg-alt);color:var(--ink);border:1px solid var(--border);border-radius:6px;padding:.4rem .55rem;">
+            <option value="">All statuses</option>
+            <option value="Open">Open</option>
+            <option value="Investigating">Investigating</option>
+            <option value="Contained">Contained</option>
+            <option value="Resolved">Resolved</option>
+            <option value="FalsePositive">False Positive</option>
+          </select>
+          <select id="inc-filter-severity" style="min-width:120px;background:var(--bg-alt);color:var(--ink);border:1px solid var(--border);border-radius:6px;padding:.4rem .55rem;">
+            <option value="">All severities</option>
+            <option value="Critical">Critical</option>
+            <option value="Severe">Severe</option>
+            <option value="Elevated">Elevated</option>
+          </select>
+          <button class="btn btn-sm primary" id="btn-refresh-incidents">Refresh</button>
+        </div>
+        <div class="table-wrap" style="max-height:300px;overflow-y:auto;">
+          <table class="data-table" id="inc-table">
+            <thead><tr><th>ID</th><th>Title</th><th>Severity</th><th>Status</th><th>MITRE</th><th>Agents</th><th>Created</th><th>Actions</th></tr></thead>
+            <tbody id="inc-tbody"><tr><td colspan="8" class="text-muted">No incidents yet.</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="card mb-1" id="inc-detail-card" style="display:none;">
+        <h2><span class="dot dot-orange"></span> Incident Detail — <span id="inc-detail-title">—</span></h2>
+        <dl class="kv-grid" id="inc-detail-grid"></dl>
+        <div class="btn-row mt-1">
+          <select id="inc-update-status" style="min-width:140px;background:var(--bg-alt);color:var(--ink);border:1px solid var(--border);border-radius:6px;padding:.4rem .55rem;">
+            <option value="Investigating">Investigating</option>
+            <option value="Contained">Contained</option>
+            <option value="Resolved">Resolved</option>
+            <option value="FalsePositive">False Positive</option>
+          </select>
+          <input type="text" id="inc-update-assignee" placeholder="Assignee" style="width:140px;background:var(--bg-alt);color:var(--ink);border:1px solid var(--border);border-radius:6px;padding:.4rem .55rem;">
+          <input type="text" id="inc-update-note" placeholder="Add note..." style="flex:1;min-width:200px;background:var(--bg-alt);color:var(--ink);border:1px solid var(--border);border-radius:6px;padding:.4rem .55rem;">
+          <button class="btn btn-sm primary" id="btn-update-incident">Update</button>
+          <button class="btn btn-sm" id="btn-gen-inc-report">Generate Report</button>
+        </div>
       </div>
 
       <div class="card-grid cols-2">
@@ -1072,6 +1212,66 @@ input::placeholder{color:var(--ink-3);}
           <div class="btn-row mt-1">
             <button class="btn btn-sm primary" id="btn-run-harness">Run Harness</button>
           </div>
+        </div>
+      </div>
+
+      <!-- Process Tree Visualization -->
+      <div class="card mt-1">
+        <h2><span class="dot dot-teal"></span> Process Tree</h2>
+        <p style="color:var(--ink-2);font-size:.85rem;margin-bottom:.75rem;">Inspect parent-child process relationships and lineage chains for investigation.</p>
+        <div class="btn-row" style="margin-bottom:.75rem;">
+          <input type="text" id="ptree-search" placeholder="Search by process name or PID..." style="flex:1;min-width:200px;background:var(--bg-alt);color:var(--ink);border:1px solid var(--border);border-radius:6px;padding:.4rem .55rem;">
+          <button class="btn btn-sm primary" id="btn-ptree-search">Search</button>
+          <button class="btn btn-sm" id="btn-ptree-refresh">Refresh Tree</button>
+        </div>
+        <div id="ptree-container" style="background:var(--bg-alt);border:1px solid var(--border);border-radius:8px;padding:1rem;min-height:200px;max-height:500px;overflow:auto;font-family:'SF Mono',Monaco,Consolas,monospace;font-size:.82rem;line-height:1.6;">
+          <div class="text-muted">No process tree data loaded. Click Refresh to load.</div>
+        </div>
+        <div id="ptree-detail" style="display:none;margin-top:.75rem;background:var(--bg-alt);border:1px solid var(--border);border-radius:8px;padding:.75rem;">
+          <h3 style="margin:0 0 .5rem;">Process Detail</h3>
+          <dl class="kv-grid" id="ptree-detail-grid"></dl>
+          <div class="btn-row mt-1">
+            <button class="btn btn-sm" id="btn-ptree-lineage">Show Lineage</button>
+            <button class="btn btn-sm" id="btn-ptree-children">Show Children</button>
+            <button class="btn btn-sm danger" id="btn-ptree-kill">Kill Process</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Investigation Timeline -->
+      <div class="card mt-1">
+        <h2><span class="dot dot-purple"></span> Investigation Timeline</h2>
+        <p style="color:var(--ink-2);font-size:.85rem;margin-bottom:.75rem;">Chronological storyline of security events for the selected incident.</p>
+        <div class="btn-row" style="margin-bottom:.75rem;">
+          <input type="text" id="timeline-incident-id" placeholder="Incident ID..." style="width:160px;background:var(--bg-alt);color:var(--ink);border:1px solid var(--border);border-radius:6px;padding:.4rem .55rem;">
+          <button class="btn btn-sm primary" id="btn-timeline-load">Load Timeline</button>
+          <button class="btn btn-sm" id="btn-timeline-export">Export Evidence</button>
+        </div>
+        <div id="timeline-container" style="position:relative;min-height:120px;">
+          <div id="timeline-entries" style="border-left:3px solid var(--accent);margin-left:1rem;padding-left:1.5rem;">
+            <div class="text-muted" style="padding:.5rem 0;">Select an incident to view its investigation timeline.</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Response Orchestration -->
+      <div class="card mt-1">
+        <h2><span class="dot dot-orange"></span> Response Orchestration</h2>
+        <p style="color:var(--ink-2);font-size:.85rem;margin-bottom:.75rem;">Approval-gated response actions with blast-radius assessment.</p>
+        <div class="metric-strip">
+          <div class="metric-card teal"><div class="metric-label">Auto Actions</div><div class="metric-value" id="resp-auto">0</div></div>
+          <div class="metric-card orange"><div class="metric-label">Pending Approval</div><div class="metric-value" id="resp-pending">0</div></div>
+          <div class="metric-card red"><div class="metric-label">Denied</div><div class="metric-value" id="resp-denied">0</div></div>
+          <div class="metric-card purple"><div class="metric-label">Protected Assets</div><div class="metric-value" id="resp-protected">0</div></div>
+        </div>
+        <div class="table-wrap" style="max-height:280px;overflow-y:auto;margin-top:.75rem;">
+          <table class="data-table" id="resp-table">
+            <thead><tr><th>ID</th><th>Action</th><th>Target</th><th>Tier</th><th>Status</th><th>Blast Radius</th><th>Actions</th></tr></thead>
+            <tbody id="resp-tbody"><tr><td colspan="7" class="text-muted">No response requests.</td></tr></tbody>
+          </table>
+        </div>
+        <div class="btn-row mt-1">
+          <button class="btn btn-sm" id="btn-resp-refresh">Refresh</button>
         </div>
       </div>
 
@@ -1153,7 +1353,30 @@ input::placeholder{color:var(--ink-3);}
     <div class="section" id="sec-reports-exports">
       <div class="section-header">
         <h1>Reports &amp; Exports</h1>
-        <p>View detection reports, analyze custom data files, and export formal verification artifacts.</p>
+        <p>View detection reports, executive summary, analyze custom data files, and export formal verification artifacts.</p>
+      </div>
+
+      <div class="card mb-1">
+        <h2><span class="dot dot-purple"></span> Executive Summary</h2>
+        <div class="card-grid cols-4" style="margin-bottom:1rem;" id="exec-summary-strip">
+          <div class="metric-card teal"><div class="metric-label">Total Reports</div><div class="metric-value" id="exec-reports">0</div></div>
+          <div class="metric-card red"><div class="metric-label">Total Alerts</div><div class="metric-value" id="exec-alerts">0</div></div>
+          <div class="metric-card orange"><div class="metric-label">Critical Alerts</div><div class="metric-value" id="exec-critical">0</div></div>
+          <div class="metric-card blue"><div class="metric-label">Avg Score</div><div class="metric-value" id="exec-avg-score">—</div></div>
+        </div>
+        <div class="card-grid cols-2">
+          <div>
+            <h3>Detection Method Breakdown</h3>
+            <canvas id="chart-detection-methods" height="160"></canvas>
+          </div>
+          <div>
+            <h3>Top MITRE Techniques</h3>
+            <div id="exec-mitre-list" class="text-muted">No data</div>
+          </div>
+        </div>
+        <div class="btn-row mt-1">
+          <button class="btn btn-sm primary" id="btn-refresh-exec-summary">Refresh Summary</button>
+        </div>
       </div>
 
       <div class="card mb-1">
@@ -1275,6 +1498,42 @@ input::placeholder{color:var(--ink-3);}
           <button class="btn primary" id="btn-save-settings" type="button">Save Settings</button>
           <button class="btn" id="btn-reset-settings" type="button">Reset to Defaults</button>
           <button class="btn" id="btn-load-settings" type="button">Load from Server</button>
+        </div>
+      </div>
+
+      <div class="card" style="margin-top:1rem;">
+        <h2><span class="dot dot-purple"></span> Role-Based Access Control</h2>
+        <p class="text-muted" style="margin-bottom:.75rem;font-size:.82rem;">Manage user roles (Admin, Operator, Analyst, Viewer) and access permissions for API endpoints.</p>
+        <div class="table-wrap" style="max-height:250px;overflow-y:auto;">
+          <table class="data-table" id="rbac-table">
+            <thead><tr><th>Username</th><th>Role</th><th>Created</th><th>Actions</th></tr></thead>
+            <tbody id="rbac-tbody"><tr><td colspan="4" class="text-muted">No RBAC users configured.</td></tr></tbody>
+          </table>
+        </div>
+        <div class="btn-row mt-1">
+          <input type="text" id="rbac-username" placeholder="Username" style="width:120px;background:var(--bg-alt);color:var(--ink);border:1px solid var(--border);border-radius:6px;padding:.4rem .55rem;">
+          <select id="rbac-role" style="min-width:110px;background:var(--bg-alt);color:var(--ink);border:1px solid var(--border);border-radius:6px;padding:.4rem .55rem;">
+            <option value="admin">Admin</option>
+            <option value="operator">Operator</option>
+            <option value="analyst">Analyst</option>
+            <option value="viewer" selected>Viewer</option>
+          </select>
+          <button class="btn btn-sm primary" onclick="addRbacUser()">Add User</button>
+          <button class="btn btn-sm" onclick="refreshRbac()">Refresh</button>
+        </div>
+      </div>
+
+      <div class="card" style="margin-top:1rem;">
+        <h2><span class="dot dot-green"></span> Feature Flags</h2>
+        <p class="text-muted" style="margin-bottom:.75rem;font-size:.82rem;">Toggle features, configure rollout percentages, and manage A/B experiments.</p>
+        <div class="table-wrap" style="max-height:250px;overflow-y:auto;">
+          <table class="data-table" id="ff-table">
+            <thead><tr><th>Flag</th><th>Status</th><th>Rollout %</th><th>Description</th></tr></thead>
+            <tbody id="ff-tbody"><tr><td colspan="4" class="text-muted">No feature flags configured.</td></tr></tbody>
+          </table>
+        </div>
+        <div class="btn-row mt-1">
+          <button class="btn btn-sm" onclick="refreshFeatureFlags()">Refresh Flags</button>
         </div>
       </div>
 
@@ -1518,6 +1777,7 @@ input::placeholder{color:var(--ink-3);}
 <!-- ═══════════════════════════════════════════════════════════════ -->
 <!-- JavaScript                                                      -->
 <!-- ═══════════════════════════════════════════════════════════════ -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js"></script>
 <script>
 (function() {
   const API = '';
@@ -1760,7 +2020,7 @@ input::placeholder{color:var(--ink-3);}
     else if (sectionId === 'threat-detection') { refreshSecurity(); refreshCheckpointCount(); }
     else if (sectionId === 'fleet-agents') { refreshFleet(); refreshXdr(); loadRolloutConfig(); }
     else if (sectionId === 'security-policy') { refreshCompliance(); refreshQuantum(); }
-    else if (sectionId === 'incident-response') { refreshTwin(); refreshAnalysis(); }
+    else if (sectionId === 'incident-response') { refreshTwin(); refreshAnalysis(); refreshProcessTree(); refreshResponseOrchestration(); }
     else if (sectionId === 'infrastructure') { refreshInfra(); }
     else if (sectionId === 'reports-exports') { refreshReport(); }
     else if (sectionId === 'settings') { loadSettings(); }
@@ -2868,7 +3128,7 @@ input::placeholder{color:var(--ink-3);}
         fetch(API + '/api/alerts', { headers: authHeaders() }),
         fetch(API + '/api/alerts/count', { headers: authHeaders() }),
       ]);
-      if (alertsRes.ok) { const alerts = await alertsRes.json(); renderAlertTable(alerts); renderDashAlertTable(alerts); }
+      if (alertsRes.ok) { const alerts = await alertsRes.json(); renderAlertTable(alerts); renderDashAlertTable(alerts); updateDashboardCharts(alerts); }
       if (countRes.ok) {
         const c = await countRes.json();
         $('#lm-total').textContent = c.total;
@@ -3357,6 +3617,392 @@ input::placeholder{color:var(--ink-3);}
     demoTick();
   }
 
+  // ── Chart.js Instances ──
+  let chartThreatTimeline = null;
+  let chartSeverityDist = null;
+  let chartIncidentTimeline = null;
+  let chartDetectionMethods = null;
+  let incidentCache = [];
+  let selectedIncidentId = null;
+
+  const CHART_COLORS = {
+    critical: '#ef4444', severe: '#f97316', elevated: '#f59e0b',
+    nominal: '#6b6f82', accent: '#00d4aa', blue: '#3b82f6', purple: '#8b5cf6'
+  };
+  const CHART_DEFAULTS = {
+    responsive: true,
+    plugins: { legend: { labels: { color: '#9fa3b4', font: { family: "'Inter',sans-serif", size: 11 } } } },
+    scales: { x: { ticks: { color: '#6b6f82', font: { size: 10 } }, grid: { color: 'rgba(42,45,62,.5)' } },
+              y: { ticks: { color: '#6b6f82', font: { size: 10 } }, grid: { color: 'rgba(42,45,62,.5)' } } }
+  };
+
+  function initCharts() {
+    if (typeof Chart === 'undefined') return;
+    Chart.defaults.color = '#9fa3b4';
+    Chart.defaults.borderColor = 'rgba(42,45,62,.5)';
+
+    const tlCtx = document.getElementById('chart-threat-timeline');
+    if (tlCtx) {
+      chartThreatTimeline = new Chart(tlCtx, {
+        type: 'line',
+        data: { labels: [], datasets: [{ label: 'Threat Score', data: [], borderColor: CHART_COLORS.accent,
+          backgroundColor: 'rgba(0,212,170,.1)', fill: true, tension: .3, pointRadius: 2 }] },
+        options: { ...CHART_DEFAULTS, plugins: { ...CHART_DEFAULTS.plugins, legend: { display: false } },
+          scales: { ...CHART_DEFAULTS.scales, y: { ...CHART_DEFAULTS.scales.y, suggestedMin: 0 } } }
+      });
+    }
+    const sdCtx = document.getElementById('chart-severity-dist');
+    if (sdCtx) {
+      chartSeverityDist = new Chart(sdCtx, {
+        type: 'doughnut',
+        data: { labels: ['Critical','Severe','Elevated','Nominal'], datasets: [{ data: [0,0,0,0],
+          backgroundColor: [CHART_COLORS.critical, CHART_COLORS.severe, CHART_COLORS.elevated, CHART_COLORS.nominal] }] },
+        options: { responsive: true, plugins: { legend: { position: 'right', labels: { color: '#9fa3b4', font: { size: 11 } } } } }
+      });
+    }
+    const itCtx = document.getElementById('chart-incident-timeline');
+    if (itCtx) {
+      chartIncidentTimeline = new Chart(itCtx, {
+        type: 'bar',
+        data: { labels: [], datasets: [
+          { label: 'Critical', data: [], backgroundColor: CHART_COLORS.critical },
+          { label: 'Severe', data: [], backgroundColor: CHART_COLORS.severe },
+          { label: 'Elevated', data: [], backgroundColor: CHART_COLORS.elevated }
+        ] },
+        options: { ...CHART_DEFAULTS, responsive: true, scales: { ...CHART_DEFAULTS.scales, x: { ...CHART_DEFAULTS.scales.x, stacked: true }, y: { ...CHART_DEFAULTS.scales.y, stacked: true, beginAtZero: true } } }
+      });
+    }
+    const dmCtx = document.getElementById('chart-detection-methods');
+    if (dmCtx) {
+      chartDetectionMethods = new Chart(dmCtx, {
+        type: 'bar',
+        data: { labels: [], datasets: [{ label: 'Count', data: [], backgroundColor: CHART_COLORS.blue }] },
+        options: { ...CHART_DEFAULTS, indexAxis: 'y', plugins: { legend: { display: false } } }
+      });
+    }
+  }
+
+  function updateDashboardCharts(alertsData) {
+    if (!alertsData || !Array.isArray(alertsData)) return;
+    // Threat score timeline from recent alerts
+    if (chartThreatTimeline) {
+      const recent = alertsData.slice(-60);
+      chartThreatTimeline.data.labels = recent.map((a, i) => {
+        const t = a.timestamp || '';
+        return t.length > 16 ? t.substring(11, 19) : '' + (i + 1);
+      });
+      chartThreatTimeline.data.datasets[0].data = recent.map(a => a.score || 0);
+      chartThreatTimeline.update('none');
+    }
+    // Severity distribution
+    if (chartSeverityDist) {
+      let c = 0, s = 0, e = 0, n = 0;
+      alertsData.forEach(a => {
+        const lv = (a.level || '').toLowerCase();
+        if (lv === 'critical') c++;
+        else if (lv === 'severe') s++;
+        else if (lv === 'elevated') e++;
+        else n++;
+      });
+      chartSeverityDist.data.datasets[0].data = [c, s, e, n];
+      chartSeverityDist.update('none');
+    }
+  }
+
+  // ── Process Tree ──
+  async function refreshProcessTree() {
+    try {
+      const r = await apiFetch('/api/process-tree');
+      const data = await r.json();
+      const container = $('#ptree-container');
+      if (!container) return;
+      const procs = data.processes || [];
+      if (procs.length === 0) {
+        container.innerHTML = '<div class="text-muted">No process tree data available.</div>';
+        return;
+      }
+      // Build tree structure
+      const byPid = {};
+      procs.forEach(p => { byPid[p.pid] = p; });
+      const roots = procs.filter(p => !byPid[p.ppid] || p.ppid === 0);
+      function renderNode(proc, depth) {
+        const indent = '\u00A0'.repeat(depth * 4);
+        const prefix = depth > 0 ? '├── ' : '';
+        const line = document.createElement('div');
+        line.className = 'ptree-node';
+        line.style.cursor = 'pointer';
+        line.dataset.pid = proc.pid;
+        line.innerHTML = `${indent}${prefix}<strong>${proc.name}</strong> <span style="color:var(--ink-2)">(PID ${proc.pid}) ${proc.cmd_line || ''}</span>`;
+        line.addEventListener('click', () => showProcessDetail(proc));
+        container.appendChild(line);
+        const children = procs.filter(c => c.ppid === proc.pid && c.pid !== proc.pid);
+        children.forEach(c => renderNode(c, depth + 1));
+      }
+      container.innerHTML = '';
+      roots.forEach(r => renderNode(r, 0));
+    } catch (e) {
+      const c = $('#ptree-container');
+      if (c) c.innerHTML = `<div class="text-muted">Error loading process tree: ${e.message}</div>`;
+    }
+  }
+
+  function showProcessDetail(proc) {
+    const detail = $('#ptree-detail');
+    const grid = $('#ptree-detail-grid');
+    if (!detail || !grid) return;
+    detail.style.display = '';
+    grid.innerHTML = `
+      <div class="kv-item"><span class="kv-key">PID</span><span class="kv-val">${proc.pid}</span></div>
+      <div class="kv-item"><span class="kv-key">PPID</span><span class="kv-val">${proc.ppid}</span></div>
+      <div class="kv-item"><span class="kv-key">Name</span><span class="kv-val">${proc.name}</span></div>
+      <div class="kv-item"><span class="kv-key">Command</span><span class="kv-val">${proc.cmd_line || '—'}</span></div>
+      <div class="kv-item"><span class="kv-key">User</span><span class="kv-val">${proc.user || '—'}</span></div>
+      <div class="kv-item"><span class="kv-key">Executable</span><span class="kv-val">${proc.exe_path || '—'}</span></div>
+      <div class="kv-item"><span class="kv-key">Host</span><span class="kv-val">${proc.hostname || '—'}</span></div>
+      <div class="kv-item"><span class="kv-key">Alive</span><span class="kv-val">${proc.alive ? 'Yes' : 'No'}</span></div>
+    `;
+  }
+
+  // ── Response Orchestration ──
+  async function refreshResponseOrchestration() {
+    try {
+      const r = await apiFetch('/api/response/stats');
+      const data = await r.json();
+      if ($('#resp-auto')) $('#resp-auto').textContent = data.auto_executed || 0;
+      if ($('#resp-pending')) $('#resp-pending').textContent = data.pending_approval || 0;
+      if ($('#resp-denied')) $('#resp-denied').textContent = data.denied || 0;
+      if ($('#resp-protected')) $('#resp-protected').textContent = data.protected_assets || 0;
+    } catch (_) {}
+    try {
+      const r = await apiFetch('/api/response/pending');
+      const data = await r.json();
+      const tbody = $('#resp-tbody');
+      if (!tbody) return;
+      const pending = data.pending || [];
+      if (pending.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="7" class="text-muted">No pending response requests.</td></tr>';
+        return;
+      }
+      tbody.innerHTML = pending.map(req => `
+        <tr>
+          <td>${req.id}</td>
+          <td>${req.action}</td>
+          <td>${req.target_hostname || req.target || '—'}</td>
+          <td><span class="tag">${req.tier}</span></td>
+          <td>${req.status}</td>
+          <td>${req.blast_radius || '—'}</td>
+          <td><button class="btn btn-sm" disabled>Review</button></td>
+        </tr>
+      `).join('');
+    } catch (_) {}
+  }
+
+  // ── Investigation Timeline ──
+  async function loadTimeline() {
+    const incidentId = $('#timeline-incident-id')?.value?.trim();
+    if (!incidentId) { setBanner('Enter an incident ID', 'error'); return; }
+    try {
+      const r = await apiFetch('/api/incidents/' + encodeURIComponent(incidentId));
+      const data = await r.json();
+      const container = $('#timeline-entries');
+      if (!container) return;
+      const events = data.events || data.timeline || [];
+      if (events.length === 0) {
+        container.innerHTML = '<div class="text-muted" style="padding:.5rem 0;">No timeline events for this incident.</div>';
+        return;
+      }
+      container.innerHTML = events.map(ev => `
+        <div style="position:relative;padding:.6rem 0;">
+          <div style="position:absolute;left:-1.85rem;top:.85rem;width:10px;height:10px;border-radius:50%;background:var(--accent);"></div>
+          <div style="font-size:.78rem;color:var(--ink-2);">${ev.timestamp || ev.time || ''}</div>
+          <div style="font-weight:600;">${ev.action || ev.type || ev.description || 'Event'}</div>
+          ${ev.detail ? `<div style="font-size:.85rem;color:var(--ink-2);">${ev.detail}</div>` : ''}
+        </div>
+      `).join('');
+    } catch (e) {
+      const c = $('#timeline-entries');
+      if (c) c.innerHTML = `<div class="text-muted" style="padding:.5rem 0;">Could not load timeline: ${e.message}</div>`;
+    }
+  }
+
+  // ── Incident Management ──
+  function refreshIncidents() {
+    const status = ($('#inc-filter-status') || {}).value || '';
+    const severity = ($('#inc-filter-severity') || {}).value || '';
+    let url = API + '/api/incidents';
+    const params = [];
+    if (status) params.push('status=' + encodeURIComponent(status));
+    if (severity) params.push('severity=' + encodeURIComponent(severity));
+    if (params.length) url += '?' + params.join('&');
+
+    fetch(url, { headers: authHeaders() }).then(r => r.json()).then(data => {
+      incidentCache = Array.isArray(data) ? data : (data.incidents || []);
+      renderIncidentTable(incidentCache);
+      updateIncidentMetrics(incidentCache);
+      updateIncidentTimeline(incidentCache);
+    }).catch(e => log('Incidents: ' + e));
+  }
+
+  function renderIncidentTable(incidents) {
+    const tbody = $('#inc-tbody');
+    if (!tbody) return;
+    if (!incidents.length) { tbody.innerHTML = '<tr><td colspan="8" class="text-muted">No incidents.</td></tr>'; return; }
+    tbody.innerHTML = incidents.map(inc => {
+      const sevClass = (inc.severity || '').toLowerCase();
+      const mitreTags = (inc.mitre_techniques || []).map(m =>
+        '<span style="background:var(--purple-light);color:var(--purple);padding:1px 5px;border-radius:4px;font-size:.7rem;margin-right:2px;">' + esc(m.technique_id || '') + '</span>'
+      ).join('');
+      const agents = (inc.agent_ids || []).length;
+      const created = (inc.created_at || '').substring(0, 19).replace('T', ' ');
+      return '<tr class="alert-row" data-inc-id="' + esc(inc.id || '') + '">' +
+        '<td><code>' + esc((inc.id || '').substring(0, 8)) + '</code></td>' +
+        '<td>' + esc(inc.title || '') + '</td>' +
+        '<td class="level-' + sevClass + '">' + esc(inc.severity || '') + '</td>' +
+        '<td>' + esc(inc.status || '') + '</td>' +
+        '<td>' + (mitreTags || '—') + '</td>' +
+        '<td>' + agents + '</td>' +
+        '<td>' + esc(created) + '</td>' +
+        '<td><button class="btn btn-sm" onclick="event.stopPropagation();" data-view-inc="' + esc(inc.id || '') + '">View</button></td>' +
+        '</tr>';
+    }).join('');
+
+    tbody.querySelectorAll('[data-view-inc]').forEach(btn => {
+      btn.addEventListener('click', function() { showIncidentDetail(this.dataset.viewInc); });
+    });
+    tbody.querySelectorAll('.alert-row').forEach(row => {
+      row.addEventListener('click', function() { showIncidentDetail(this.dataset.incId); });
+    });
+  }
+
+  function updateIncidentMetrics(incidents) {
+    let open = 0, investigating = 0, resolved = 0, techniques = new Set();
+    incidents.forEach(inc => {
+      if (inc.status === 'Open') open++;
+      else if (inc.status === 'Investigating') investigating++;
+      else if (inc.status === 'Resolved') resolved++;
+      (inc.mitre_techniques || []).forEach(m => techniques.add(m.technique_id));
+    });
+    if ($('#inc-open')) $('#inc-open').textContent = open;
+    if ($('#inc-investigating')) $('#inc-investigating').textContent = investigating;
+    if ($('#inc-resolved')) $('#inc-resolved').textContent = resolved;
+    if ($('#inc-mitre-count')) $('#inc-mitre-count').textContent = techniques.size;
+  }
+
+  function updateIncidentTimeline(incidents) {
+    if (!chartIncidentTimeline) return;
+    const byDay = {};
+    incidents.forEach(inc => {
+      const day = (inc.created_at || '').substring(0, 10);
+      if (!day) return;
+      if (!byDay[day]) byDay[day] = { Critical: 0, Severe: 0, Elevated: 0 };
+      const sev = inc.severity || 'Elevated';
+      if (byDay[day][sev] !== undefined) byDay[day][sev]++;
+    });
+    const days = Object.keys(byDay).sort().slice(-14);
+    chartIncidentTimeline.data.labels = days;
+    chartIncidentTimeline.data.datasets[0].data = days.map(d => byDay[d]?.Critical || 0);
+    chartIncidentTimeline.data.datasets[1].data = days.map(d => byDay[d]?.Severe || 0);
+    chartIncidentTimeline.data.datasets[2].data = days.map(d => byDay[d]?.Elevated || 0);
+    chartIncidentTimeline.update('none');
+  }
+
+  function showIncidentDetail(id) {
+    selectedIncidentId = id;
+    const card = $('#inc-detail-card');
+    if (!card) return;
+    const inc = incidentCache.find(i => i.id === id);
+    if (!inc) { card.style.display = 'none'; return; }
+    card.style.display = 'block';
+    $('#inc-detail-title').textContent = inc.title || id;
+    const grid = $('#inc-detail-grid');
+    const mitreStr = (inc.mitre_techniques || []).map(m =>
+      '<span style="background:var(--purple-light);color:var(--purple);padding:2px 6px;border-radius:4px;font-size:.75rem;margin-right:3px;">' +
+      esc(m.technique_id) + ' ' + esc(m.technique_name || '') + '</span>'
+    ).join(' ');
+    grid.innerHTML =
+      '<dt>ID</dt><dd><code>' + esc(inc.id) + '</code></dd>' +
+      '<dt>Severity</dt><dd class="level-' + (inc.severity || '').toLowerCase() + '">' + esc(inc.severity || '') + '</dd>' +
+      '<dt>Status</dt><dd>' + esc(inc.status || '') + '</dd>' +
+      '<dt>Assignee</dt><dd>' + esc(inc.assignee || '—') + '</dd>' +
+      '<dt>Created</dt><dd>' + esc(inc.created_at || '') + '</dd>' +
+      '<dt>Updated</dt><dd>' + esc(inc.updated_at || '') + '</dd>' +
+      '<dt>Events</dt><dd>' + (inc.event_ids || []).length + '</dd>' +
+      '<dt>Agents</dt><dd>' + (inc.agent_ids || []).join(', ') + '</dd>' +
+      '<dt>MITRE</dt><dd>' + (mitreStr || '—') + '</dd>' +
+      '<dt>Summary</dt><dd>' + esc(inc.summary || '') + '</dd>' +
+      '<dt>Notes</dt><dd>' + (inc.notes || []).map(n => esc(n)).join('<br>') + '</dd>';
+    card.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }
+
+  function updateIncident() {
+    if (!selectedIncidentId) return;
+    const body = {};
+    const status = ($('#inc-update-status') || {}).value;
+    const assignee = ($('#inc-update-assignee') || {}).value.trim();
+    const note = ($('#inc-update-note') || {}).value.trim();
+    if (status) body.status = status;
+    if (assignee) body.assignee = assignee;
+    if (note) body.note = note;
+    fetch(API + '/api/incidents/' + selectedIncidentId + '/update', {
+      method: 'POST',
+      headers: authHeaders('application/json'),
+      body: JSON.stringify(body)
+    }).then(r => r.json()).then(d => {
+      toast('Incident updated', 'success');
+      if ($('#inc-update-note')) $('#inc-update-note').value = '';
+      refreshIncidents();
+    }).catch(e => toast('Update failed: ' + e, 'error'));
+  }
+
+  function generateIncidentReport() {
+    if (!selectedIncidentId) return;
+    fetch(API + '/api/incidents/' + selectedIncidentId + '/report', {
+      headers: authHeaders()
+    }).then(r => r.json()).then(report => {
+      const blob = new Blob([JSON.stringify(report, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url; a.download = 'incident-' + selectedIncidentId.substring(0, 8) + '-report.json';
+      document.body.appendChild(a); a.click(); a.remove();
+      URL.revokeObjectURL(url);
+      toast('Report generated', 'success');
+    }).catch(e => toast('Report generation failed: ' + e, 'error'));
+  }
+
+  // ── Executive Summary ──
+  function refreshExecutiveSummary() {
+    fetch(API + '/api/reports/executive-summary', { headers: authHeaders() })
+      .then(r => r.json()).then(data => {
+        if ($('#exec-reports')) $('#exec-reports').textContent = data.total_reports || 0;
+        if ($('#exec-alerts')) $('#exec-alerts').textContent = data.total_alerts || 0;
+        if ($('#exec-critical')) $('#exec-critical').textContent = data.critical_alerts || 0;
+        const avg = data.avg_score;
+        if ($('#exec-avg-score')) $('#exec-avg-score').textContent = avg != null ? avg.toFixed(2) : '—';
+
+        // Top MITRE techniques
+        const mitreEl = $('#exec-mitre-list');
+        const techniques = data.top_mitre_techniques || [];
+        if (mitreEl) {
+          if (!techniques.length) { mitreEl.innerHTML = '<em class="text-muted">No techniques detected</em>'; }
+          else {
+            mitreEl.innerHTML = techniques.map(t =>
+              '<div style="display:flex;align-items:center;gap:.5rem;padding:.3rem 0;">' +
+              '<span style="background:var(--purple-light);color:var(--purple);padding:2px 8px;border-radius:4px;font-size:.78rem;font-weight:600;">' + esc(t[0] || '') + '</span>' +
+              '<span style="font-size:.82rem;color:var(--ink-2);">' + (t[1] || 0) + ' occurrences</span></div>'
+            ).join('');
+          }
+        }
+
+        // Detection method breakdown
+        if (chartDetectionMethods) {
+          const reasons = data.top_reasons || [];
+          chartDetectionMethods.data.labels = reasons.map(r => r[0] || '');
+          chartDetectionMethods.data.datasets[0].data = reasons.map(r => r[1] || 0);
+          chartDetectionMethods.update('none');
+        }
+      }).catch(e => log('Executive summary: ' + e));
+  }
+
   // ── Event Listeners ──
   // ── Global Log Panel ──
   $('#global-log-toggle').addEventListener('click', () => {
@@ -3456,6 +4102,15 @@ input::placeholder{color:var(--ink-3);}
   $('#btn-rotate-key').addEventListener('click', rotateKey);
 
   // Incident Response
+  $('#btn-refresh-incidents').addEventListener('click', refreshIncidents);
+  $('#btn-update-incident').addEventListener('click', updateIncident);
+  $('#btn-gen-inc-report').addEventListener('click', generateIncidentReport);
+  if ($('#btn-ptree-refresh')) $('#btn-ptree-refresh').addEventListener('click', refreshProcessTree);
+  if ($('#btn-ptree-search')) $('#btn-ptree-search').addEventListener('click', refreshProcessTree);
+  if ($('#btn-resp-refresh')) $('#btn-resp-refresh').addEventListener('click', refreshResponseOrchestration);
+  if ($('#btn-timeline-load')) $('#btn-timeline-load').addEventListener('click', loadTimeline);
+  if ($('#inc-filter-status')) $('#inc-filter-status').addEventListener('change', refreshIncidents);
+  if ($('#inc-filter-severity')) $('#inc-filter-severity').addEventListener('change', refreshIncidents);
   $('#btn-refresh-twin').addEventListener('click', refreshTwin);
   $('#btn-simulate').addEventListener('click', simulateEvent);
   $('#btn-run-harness').addEventListener('click', runHarness);
@@ -3470,6 +4125,7 @@ input::placeholder{color:var(--ink-3);}
 
   // Reports
   $('#btn-refresh-report').addEventListener('click', refreshReport);
+  $('#btn-refresh-exec-summary').addEventListener('click', refreshExecutiveSummary);
   $('#btn-export-csv').addEventListener('click', exportCsv);
   $('#filter-level').addEventListener('change', function() { if (lastReportData) renderSamples(lastReportData.samples); });
   $('#btn-export-tla').addEventListener('click', () => downloadExport('tla', 'wardex.tla'));
@@ -3489,6 +4145,133 @@ input::placeholder{color:var(--ink-3);}
   $('#btn-test-webhook').addEventListener('click', testWebhook);
   $('#btn-shutdown-server').addEventListener('click', shutdownServer);
 
+  // ── Sigma Rules ──
+  async function refreshSigma() {
+    try {
+      const [rulesRes, statsRes] = await Promise.all([
+        apiFetch('/api/sigma/rules'),
+        apiFetch('/api/sigma/stats')
+      ]);
+      if (rulesRes.ok) {
+        const rules = await rulesRes.json();
+        const tb = $('#sigma-tbody');
+        if (tb && Array.isArray(rules)) {
+          $('#sigma-total').textContent = rules.length;
+          $('#sigma-enabled').textContent = rules.filter(r => r.enabled !== false).length;
+          $('#sigma-critical').textContent = rules.filter(r => r.severity === 'critical' || r.severity === 'high').length;
+          tb.innerHTML = rules.map(r => '<tr><td>' + esc(r.id || '') + '</td><td>' + esc(r.name || r.title || '') + '</td><td>' + esc(r.severity || r.level || '') + '</td><td>' + esc(r.category || '') + '</td><td>' + (r.enabled !== false ? '<span style="color:var(--green);">Active</span>' : 'Disabled') + '</td></tr>').join('');
+        }
+      }
+      if (statsRes.ok) {
+        const stats = await statsRes.json();
+        if (stats.total_matches !== undefined) $('#sigma-matches').textContent = stats.total_matches;
+      }
+    } catch(e) { log('Sigma refresh error: ' + e.message); }
+  }
+
+  // ── Cases & Alert Queue ──
+  async function refreshCases() {
+    try {
+      const [casesRes, statsRes] = await Promise.all([
+        apiFetch('/api/cases'),
+        apiFetch('/api/cases/stats')
+      ]);
+      if (casesRes.ok) {
+        const cases = await casesRes.json();
+        const tb = $('#cases-tbody');
+        if (tb && Array.isArray(cases)) {
+          tb.innerHTML = cases.length ? cases.map(c => '<tr><td>' + esc(c.id || '') + '</td><td>' + esc(c.title || '') + '</td><td>' + esc(c.priority || '') + '</td><td>' + esc(c.status || '') + '</td><td>' + esc(c.assignee || '—') + '</td><td>' + esc(c.created || '') + '</td></tr>').join('') : '<tr><td colspan="6" class="text-muted">No cases yet.</td></tr>';
+        }
+      }
+      if (statsRes.ok) {
+        const st = await statsRes.json();
+        if (st.total !== undefined) $('#cases-total').textContent = st.total;
+        if (st.open !== undefined) $('#cases-open').textContent = st.open;
+        if (st.resolved !== undefined) $('#cases-resolved').textContent = st.resolved;
+      }
+    } catch(e) { log('Cases refresh error: ' + e.message); }
+  }
+  async function createCase() {
+    const title = prompt('Case title:');
+    if (!title) return;
+    try {
+      const res = await apiFetch('/api/cases', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({title: title, priority: 'medium'}) });
+      if (res.ok) { log('Case created'); refreshCases(); } else { log('Case creation failed: ' + res.status); }
+    } catch(e) { log('Error: ' + e.message); }
+  }
+  async function refreshAlertQueue() {
+    try {
+      const [queueRes, statsRes] = await Promise.all([
+        apiFetch('/api/queue/alerts'),
+        apiFetch('/api/queue/stats')
+      ]);
+      if (queueRes.ok) {
+        const alerts = await queueRes.json();
+        const tb = $('#queue-tbody');
+        if (tb && Array.isArray(alerts)) {
+          tb.innerHTML = alerts.length ? alerts.map(a => '<tr><td>' + esc(a.id || '') + '</td><td>' + esc(a.severity || '') + '</td><td>' + esc(a.source || '') + '</td><td>' + esc(a.status || '') + '</td><td>' + esc(a.assignee || '—') + '</td><td>' + esc(a.timestamp || '') + '</td><td><button class="btn btn-sm" onclick="ackAlert(\'' + esc(a.id || '') + '\')">Ack</button></td></tr>').join('') : '<tr><td colspan="7" class="text-muted">No queued alerts.</td></tr>';
+        }
+      }
+      if (statsRes.ok) {
+        const st = await statsRes.json();
+        if (st.pending !== undefined) $('#queue-pending').textContent = st.pending;
+        if (st.acknowledged !== undefined) $('#queue-acked').textContent = st.acknowledged;
+        if (st.assigned !== undefined) $('#queue-assigned').textContent = st.assigned;
+      }
+    } catch(e) { log('Alert queue refresh error: ' + e.message); }
+  }
+  async function ackAlert(id) {
+    try {
+      const res = await apiFetch('/api/queue/acknowledge', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({alert_id: id}) });
+      if (res.ok) { log('Alert acknowledged'); refreshAlertQueue(); }
+    } catch(e) { log('Error: ' + e.message); }
+  }
+
+  // ── RBAC Management ──
+  async function refreshRbac() {
+    try {
+      const res = await apiFetch('/api/rbac/users');
+      if (res.ok) {
+        const users = await res.json();
+        const tb = $('#rbac-tbody');
+        if (tb && Array.isArray(users)) {
+          tb.innerHTML = users.length ? users.map(u => '<tr><td>' + esc(u.username || u.name || '') + '</td><td>' + esc(u.role || '') + '</td><td>' + esc(u.created || '—') + '</td><td><button class="btn btn-sm danger" onclick="removeRbacUser(\'' + esc(u.username || u.name || '') + '\')">Remove</button></td></tr>').join('') : '<tr><td colspan="4" class="text-muted">No RBAC users configured.</td></tr>';
+        }
+      }
+    } catch(e) { log('RBAC refresh error: ' + e.message); }
+  }
+  async function addRbacUser() {
+    const username = ($('#rbac-username') || {}).value;
+    const role = ($('#rbac-role') || {}).value;
+    if (!username) { log('Username required'); return; }
+    try {
+      const res = await apiFetch('/api/rbac/users', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({username: username, role: role}) });
+      if (res.ok) { log('User added: ' + username); $('#rbac-username').value = ''; refreshRbac(); } else { log('Add user failed: ' + res.status); }
+    } catch(e) { log('Error: ' + e.message); }
+  }
+  async function removeRbacUser(username) {
+    if (!confirm('Remove user ' + username + '?')) return;
+    try {
+      const res = await apiFetch('/api/rbac/users/' + encodeURIComponent(username), { method: 'DELETE' });
+      if (res.ok) { log('User removed: ' + username); refreshRbac(); }
+    } catch(e) { log('Error: ' + e.message); }
+  }
+
+  // ── Feature Flags ──
+  async function refreshFeatureFlags() {
+    try {
+      const res = await apiFetch('/api/feature-flags');
+      if (res.ok) {
+        const flags = await res.json();
+        const tb = $('#ff-tbody');
+        if (tb) {
+          const items = Array.isArray(flags) ? flags : (flags.flags || []);
+          tb.innerHTML = items.length ? items.map(f => '<tr><td>' + esc(f.name || f.key || '') + '</td><td>' + (f.enabled ? '<span style="color:var(--green);">On</span>' : '<span style="color:var(--ink-3);">Off</span>') + '</td><td>' + (f.rollout_pct !== undefined ? f.rollout_pct + '%' : '100%') + '</td><td>' + esc(f.description || '—') + '</td></tr>').join('') : '<tr><td colspan="4" class="text-muted">No feature flags configured.</td></tr>';
+        }
+      }
+    } catch(e) { log('Feature flags refresh error: ' + e.message); }
+  }
+
   // ── Initial Load ──
   const savedToken = localStorage.getItem('wardex.adminToken');
   if (savedToken) { $('#auth-token').value = savedToken; $('#auth-status').textContent = 'Token set'; $('#auth-status').className = 'auth-status ok'; }
@@ -3501,6 +4284,9 @@ input::placeholder{color:var(--ink-3);}
   refreshHostInfo();
   startAlertPolling();
   loadSettings();
+  initCharts();
+  refreshIncidents();
+  refreshExecutiveSummary();
 
 })();
 </script>

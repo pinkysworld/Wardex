@@ -331,6 +331,41 @@ impl AgentClient {
     pub fn agent_id(&self) -> Option<&str> {
         self.agent_id.as_deref()
     }
+
+    /// Forward collected logs to the server.
+    pub fn forward_logs(&self, logs: &[crate::log_collector::LogRecord]) -> Result<(), String> {
+        let agent_id = self.agent_id.as_ref().ok_or("not enrolled")?;
+        if logs.is_empty() {
+            return Ok(());
+        }
+        let body = serde_json::to_string(logs)
+            .map_err(|e| format!("failed to serialize logs: {e}"))?;
+        let url = format!("{}/api/agents/{}/logs", self.server_url, agent_id);
+        let resp = ureq::post(&url)
+            .set("Content-Type", "application/json")
+            .send_string(&body)
+            .map_err(|e| format!("log forward failed: {e}"))?;
+        if resp.status() != 200 {
+            return Err(format!("log forward rejected: status {}", resp.status()));
+        }
+        Ok(())
+    }
+
+    /// Report system inventory to the server.
+    pub fn report_inventory(&self, inventory: &crate::inventory::SystemInventory) -> Result<(), String> {
+        let agent_id = self.agent_id.as_ref().ok_or("not enrolled")?;
+        let body = serde_json::to_string(inventory)
+            .map_err(|e| format!("failed to serialize inventory: {e}"))?;
+        let url = format!("{}/api/agents/{}/inventory", self.server_url, agent_id);
+        let resp = ureq::post(&url)
+            .set("Content-Type", "application/json")
+            .send_string(&body)
+            .map_err(|e| format!("inventory report failed: {e}"))?;
+        if resp.status() != 200 {
+            return Err(format!("inventory report rejected: status {}", resp.status()));
+        }
+        Ok(())
+    }
 }
 
 /// Policy payload received from the server.
@@ -458,6 +493,18 @@ pub fn run_agent(
 
     let mut pending_alerts: Vec<AlertRecord> = Vec::new();
     let mut sample_count = 0u64;
+    let mut last_inventory_at = 0u64;
+    let inventory_interval = 900u64; // every 15 minutes
+
+    // Report initial inventory on enrollment
+    {
+        let inv = crate::inventory::collect_inventory();
+        if let Err(e) = client.report_inventory(&inv) {
+            eprintln!("[agent] Initial inventory report failed: {e}");
+        } else {
+            eprintln!("[agent] Initial inventory reported");
+        }
+    }
 
     loop {
         if shutdown.load(Ordering::Relaxed) {
@@ -471,6 +518,7 @@ pub fn run_agent(
         if signal.score >= alert_threshold {
             let decision = policy.evaluate(&signal, &sample);
             let level_str = format!("{:?}", decision.level);
+            let mitre = crate::telemetry::map_alert_to_mitre(&signal.reasons);
             let alert = AlertRecord {
                 timestamp: chrono::Utc::now().to_rfc3339(),
                 hostname: host_info.hostname.clone(),
@@ -482,6 +530,7 @@ pub fn run_agent(
                 reasons: signal.reasons.clone(),
                 sample,
                 enforced: false,
+                mitre,
             };
             pending_alerts.push(alert.clone());
             client.set_queue_depth(pending_alerts.len());
@@ -503,6 +552,35 @@ pub fn run_agent(
                     }
                     Err(e) => eprintln!("[agent] Forward failed (will retry): {e}"),
                 }
+            }
+        }
+
+        // Collect and forward logs every heartbeat cycle
+        if sample_count % 10 == 0 {
+            let logs = crate::log_collector::collect_recent_logs(50);
+            if !logs.is_empty() {
+                match client.forward_logs(&logs) {
+                    Ok(()) => eprintln!("[agent] Forwarded {} log records", logs.len()),
+                    Err(e) => eprintln!("[agent] Log forward failed: {e}"),
+                }
+                if let Some(ref mut siem) = siem_connector {
+                    for log in &logs {
+                        siem.queue_log(log);
+                    }
+                }
+            }
+        }
+
+        // Re-report inventory periodically
+        let elapsed = sample_count * config.monitor.interval_secs;
+        if elapsed - last_inventory_at >= inventory_interval {
+            last_inventory_at = elapsed;
+            let inv = crate::inventory::collect_inventory();
+            if let Err(e) = client.report_inventory(&inv) {
+                eprintln!("[agent] Inventory report failed: {e}");
+            }
+            if let Some(ref mut siem) = siem_connector {
+                siem.push_inventory(&inv, client.agent_id().unwrap_or("unknown"));
             }
         }
 

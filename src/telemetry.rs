@@ -6,6 +6,80 @@ use std::path::Path;
 
 pub const CSV_HEADER: &str = "timestamp_ms,cpu_load_pct,memory_load_pct,temperature_c,network_kbps,auth_failures,battery_pct,integrity_drift,process_count,disk_pressure_pct";
 
+// ── MITRE ATT&CK Mapping ──────────────────────────────────────
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct MitreAttack {
+    pub tactic: String,
+    pub technique_id: String,
+    pub technique_name: String,
+}
+
+/// Map alert reasons to MITRE ATT&CK techniques.
+pub fn map_alert_to_mitre(reasons: &[String]) -> Vec<MitreAttack> {
+    let mut result = Vec::new();
+    let joined = reasons.join(" ");
+    let j = joined.to_lowercase();
+
+    if j.contains("auth") || j.contains("brute") || j.contains("credential") {
+        result.push(MitreAttack {
+            tactic: "Credential Access (TA0006)".into(),
+            technique_id: "T1110".into(),
+            technique_name: "Brute Force".into(),
+        });
+    }
+    if (j.contains("cpu") && j.contains("network")) || j.contains("mining") || j.contains("hijack") {
+        result.push(MitreAttack {
+            tactic: "Impact (TA0040)".into(),
+            technique_id: "T1496".into(),
+            technique_name: "Resource Hijacking".into(),
+        });
+    }
+    if j.contains("integrity") || j.contains("drift") || j.contains("tamper") {
+        result.push(MitreAttack {
+            tactic: "Impact (TA0040)".into(),
+            technique_id: "T1565".into(),
+            technique_name: "Data Manipulation".into(),
+        });
+    }
+    if j.contains("network") && !j.contains("cpu") {
+        result.push(MitreAttack {
+            tactic: "Command and Control (TA0011)".into(),
+            technique_id: "T1071".into(),
+            technique_name: "Application Layer Protocol".into(),
+        });
+    }
+    if j.contains("process") || j.contains("injection") {
+        result.push(MitreAttack {
+            tactic: "Defense Evasion (TA0005)".into(),
+            technique_id: "T1055".into(),
+            technique_name: "Process Injection".into(),
+        });
+    }
+    if j.contains("compound") || j.contains("multi") {
+        result.push(MitreAttack {
+            tactic: "Execution (TA0002)".into(),
+            technique_id: "T1059".into(),
+            technique_name: "Command and Scripting Interpreter".into(),
+        });
+    }
+    if j.contains("exfil") || j.contains("data_transfer") {
+        result.push(MitreAttack {
+            tactic: "Exfiltration (TA0010)".into(),
+            technique_id: "T1041".into(),
+            technique_name: "Exfiltration Over C2 Channel".into(),
+        });
+    }
+    if j.contains("persist") || j.contains("launch_agent") || j.contains("systemd") || j.contains("scheduled") {
+        result.push(MitreAttack {
+            tactic: "Persistence (TA0003)".into(),
+            technique_id: "T1053".into(),
+            technique_name: "Scheduled Task/Job".into(),
+        });
+    }
+    result
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub struct TelemetrySample {
     pub timestamp_ms: u64,

@@ -4,6 +4,37 @@ All notable changes to Wardex are documented in this file.
 
 ## [Unreleased]
 
+## [0.25.0] — Phase 25: Code review hardening, platform collectors, analyst console
+
+### Added
+- **Phase 23 — OCSF, Sigma, Response, Feature Flags, Process Tree, Spool, RBAC** (T188–T194):
+  - `ocsf.rs`: OCSF event normalization with dead-letter queue for parse-rejected events, schema registry endpoint (`/api/ocsf/schema`, `/api/ocsf/schema/version`).
+  - `sigma.rs`: 25 Sigma detection rules (SE-001 through SE-025) covering credential attacks, lateral movement, data exfiltration, cryptomining, privilege escalation, DNS tunneling, reverse shells, and more. `/api/sigma/rules` and `/api/sigma/stats` endpoints.
+  - `response.rs`: Automated response engine with approval workflow, configurable playbooks, pending/audit/stats endpoints.
+  - `feature_flags.rs`: Feature flag system with user/group/percentage targeting and A/B experiment support. `/api/feature-flags` endpoint.
+  - `process_tree.rs`: Process tree analysis with deep-chain detection (depth ≥5), orphan tracking, and injection heuristics. `/api/process-tree` and `/api/process-tree/deep-chains` endpoints.
+  - `spool.rs`: Encrypted local event spool with retry/dead-letter semantics. `/api/spool/stats` endpoint.
+  - `rbac.rs`: Role-based access control with Admin/Operator/Analyst/Viewer roles and user management. `/api/rbac/users` endpoint.
+- **Phase 24 — Platform collectors, analyst console, SIEM formats, DLQ wiring** (T195–T203):
+  - `collector_windows.rs`: Windows collector with WMI queries, registry enumeration, and Windows Event Log parsing (13 tests).
+  - `collector_linux.rs`: Linux collector with /proc filesystem, journalctl log parsing, and systemd service enumeration (19 tests).
+  - `collector_macos.rs`: macOS collector with sysctl, IOKit power metrics, and unified log parsing (15 tests).
+  - `siem.rs`: Added Elastic ECS (`format_elastic_ecs()`) and QRadar LEEF (`format_qradar()`) SIEM output formats alongside existing Splunk HEC.
+  - `analyst.rs`: Full analyst console — case management (CRUD, status workflow, priority, assignee, timeline, tags), alert queue with acknowledgement and assignment, full-text event search with faceted filtering, investigation timeline builder, investigation graph with entity relationships, remediation approval workflow with audit trail. 20+ API endpoints.
+  - Dead-letter queue wired into server API: `GET /api/dlq` (list), `GET /api/dlq/stats`, `DELETE /api/dlq` (drain).
+  - 5 operational runbooks in `docs/runbooks/` (incident response, deployment, monitoring, troubleshooting, disaster recovery).
+- **Phase 25 — Code review hardening** (T204–T207):
+  - Replaced insecure XOR spool cipher with SHA-256 CTR mode (`spool_cipher`) for semantic security without additional dependencies.
+  - Wired `AuditLog::record()` into HTTP request handler — every API call now records method, URL, source IP, status code, and auth flag.
+  - Activated `check_rbac()` enforcement on sensitive write endpoints (`/api/config/`, `/api/shutdown`, `/api/updates/`, `/api/enforcement/`, `/api/rbac/`).
+  - Removed all `#[allow(dead_code)]` suppressions from `AuditLog`, `AuditLog::record()`, and `check_rbac()`.
+
+### Changed
+- Total modules: 58 (was 44).
+- Total tests: 635 (521 unit + 114 integration), up from 437.
+- Runtime manifest: 120/120 tasks, 25 phases.
+- Version bumped to 0.25.0.
+
 ### Added
 - **Per-agent monitoring scope**: Each enrolled agent can now have a custom monitoring scope override (CPU, memory, network, disk, processes, auth events, thermal, battery, file integrity, services, LaunchAgents, systemd units, scheduled tasks). `GET/POST /api/agents/{id}/scope` manages overrides; heartbeat responses now include the effective scope so agents can dynamically adjust collection.
 - **Cross-platform scope gating**: All 13 monitoring signals in the collector are now individually gated by their respective scope toggle. Previously only 3 of 13 signals respected scope settings.

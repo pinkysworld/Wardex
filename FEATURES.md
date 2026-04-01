@@ -17,14 +17,22 @@ Lightweight Rust edge security runtime that detects anomalies, enforces adaptive
 - **Multi-format ingestion** — auto-detects CSV (8 or 10 columns) and JSONL telemetry; file extension or content-type driven
 - **Benchmark harness** — precision, recall, F1, and accuracy metrics on labeled datasets for FP/FN trade-off analysis
 - **Forensic export** — evidence bundles combining audit log, run summary, and checkpoint history
-- **SIEM integration** — Splunk HEC, Elasticsearch bulk API, and generic JSON output with pull-based threat intel feed ingestion
+- **SIEM integration** — Splunk HEC, Elasticsearch bulk API, Elastic ECS, QRadar LEEF, and generic JSON output with pull-based threat intel feed ingestion
 - **XDR fleet management** — central server + lightweight agent architecture with enrollment, heartbeat tracking, event forwarding, and cross-agent correlation
+- **Analyst console** — case management with status workflows, alert queue with acknowledgement and assignment, event search, investigation graph, and remediation approval
+- **Sigma detection rules** — 25 built-in rules (SE-001 through SE-025) covering credential attacks, lateral movement, exfiltration, cryptomining, and privilege escalation
+- **OCSF normalization** — event normalization to Open Cybersecurity Schema Framework with dead-letter queue for rejected events
+- **Feature flags** — user/group/percentage targeting with A/B experiment support
+- **Process tree analysis** — deep-chain detection, orphan tracking, and injection heuristics
+- **Encrypted event spool** — SHA-256 CTR mode encrypted local buffer with retry and dead-letter semantics
+- **Role-based access control** — Admin/Operator/Analyst/Viewer roles with endpoint-level RBAC enforcement
+- **Platform collectors** — Windows (WMI/registry/event-log), Linux (/proc/journalctl), macOS (sysctl/IOKit/unified-log)
 - **Agent auto-update** — binary distribution with SHA-256 verification and semver comparison
 - **Cross-platform service installation** — systemd (Linux), launchd (macOS), sc.exe (Windows) service registration
 
 ## Architecture at a Glance
 
-A 16-stage enriched pipeline — ingest → parse → detect → decide → threat-intel → enforce → digital-twin → energy → side-channel → compliance → act → audit → checkpoint → replay → benchmark → report — runs as a single-binary Rust process. The binary operates in two modes: **server** (central management with admin console) or **agent** (lightweight endpoint that enrolls with a server, forwards events, and receives policy updates). An embedded HTTP server (`tiny_http`) exposes authenticated REST endpoints for live monitoring, analysis, and control. All state lives in-memory; baselines persist to disk between runs.
+A 16-stage enriched pipeline — ingest → parse → detect → decide → threat-intel → enforce → digital-twin → energy → side-channel → compliance → act → audit → checkpoint → replay → benchmark → report — runs as a single-binary Rust process. The binary operates in two modes: **server** (central management with admin console) or **agent** (lightweight endpoint that enrolls with a server, forwards events, and receives policy updates). An embedded HTTP server (`tiny_http`) exposes authenticated REST endpoints for live monitoring, analysis, and control. All state lives in-memory; baselines persist to disk between runs. 58 modules, 635 automated tests.
 
 ## What's Built vs. Roadmap
 
@@ -38,12 +46,15 @@ A 16-stage enriched pipeline — ingest → parse → detect → decide → thre
 | Poisoning heuristics (4 detectors) | Differential privacy guarantees |
 | Proof backend interface with witness export | Zero-knowledge proof integration (Halo2) |
 | Bounded replay buffer with statistics | Swarm/cross-device coordination |
-| Token-authenticated HTTP API (60+ endpoints) | Wasm-based extensible policies |
+| Token-authenticated HTTP API (100+ endpoints) | Wasm-based extensible policies |
 | Supply-chain attestation foundations | Full attestation with Ed25519 signing |
 | Criterion micro-benchmarks (55K samples/sec) | ARM cross-compilation profiling |
-| 434 automated tests (342 unit + 92 integration) | Digital-twin fleet simulation |
+| 635 automated tests (521 unit + 114 integration) | Digital-twin fleet simulation |
 | Browser admin console with dark mode | Quantum-walk anomaly propagation |
 | XDR fleet management with SIEM integration | |
+| Analyst console with case management | |
+| 25 Sigma detection rules | |
+| Platform collectors (Windows/Linux/macOS) | |
 | CSV + JSONL multi-format ingestion | |
 
 ## Quick Start

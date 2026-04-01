@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use crate::baseline::PersistedBaseline;
 use crate::telemetry::TelemetrySample;
 
@@ -105,6 +107,7 @@ pub struct AnomalyDetector {
     baseline: Option<TelemetryBaseline>,
     observed_samples: usize,
     adaptation: AdaptationMode,
+    custom_weights: Option<HashMap<String, f32>>,
 }
 
 impl Default for AnomalyDetector {
@@ -120,7 +123,35 @@ impl AnomalyDetector {
             baseline: None,
             observed_samples: 0,
             adaptation: AdaptationMode::Normal,
+            custom_weights: None,
         }
+    }
+
+    pub fn set_signal_weights(&mut self, weights: HashMap<String, f32>) {
+        self.custom_weights = Some(weights);
+    }
+
+    pub fn signal_weights(&self) -> HashMap<String, f32> {
+        if let Some(ref w) = self.custom_weights {
+            return w.clone();
+        }
+        let mut defaults = HashMap::new();
+        defaults.insert("cpu_load_pct".into(), 0.85);
+        defaults.insert("memory_load_pct".into(), 0.7);
+        defaults.insert("temperature_c".into(), 0.8);
+        defaults.insert("network_kbps".into(), 1.1);
+        defaults.insert("auth_failures".into(), 1.6);
+        defaults.insert("integrity_drift".into(), 1.9);
+        defaults.insert("process_count".into(), 0.65);
+        defaults.insert("disk_pressure_pct".into(), 0.6);
+        defaults.insert("battery_pct".into(), 0.35);
+        defaults
+    }
+
+    fn weight_for(&self, axis: &str, default: f32) -> f32 {
+        self.custom_weights.as_ref()
+            .and_then(|w| w.get(axis).copied())
+            .unwrap_or(default)
     }
 
     /// Set the baseline adaptation mode (T041).
@@ -188,7 +219,7 @@ impl AnomalyDetector {
                 let c = weighted_positive_delta(
                     sample.cpu_load_pct - baseline.cpu_load_pct,
                     18.0,
-                    0.85,
+                    self.weight_for("cpu_load_pct", 0.85),
                     "cpu load spike",
                     &mut reasons,
                     &mut suspicious_axes,
@@ -200,7 +231,7 @@ impl AnomalyDetector {
                 let c = weighted_positive_delta(
                     sample.memory_load_pct - baseline.memory_load_pct,
                     14.0,
-                    0.7,
+                    self.weight_for("memory_load_pct", 0.7),
                     "memory pressure increase",
                     &mut reasons,
                     &mut suspicious_axes,
@@ -212,7 +243,7 @@ impl AnomalyDetector {
                 let c = weighted_positive_delta(
                     sample.temperature_c - baseline.temperature_c,
                     7.0,
-                    0.8,
+                    self.weight_for("temperature_c", 0.8),
                     "thermal deviation",
                     &mut reasons,
                     &mut suspicious_axes,
@@ -224,7 +255,7 @@ impl AnomalyDetector {
                 let c = weighted_positive_delta(
                     sample.network_kbps - baseline.network_kbps,
                     1800.0,
-                    1.1,
+                    self.weight_for("network_kbps", 1.1),
                     "network burst",
                     &mut reasons,
                     &mut suspicious_axes,
@@ -236,7 +267,7 @@ impl AnomalyDetector {
                 let c = weighted_positive_delta(
                     sample.auth_failures as f32 - baseline.auth_failures,
                     3.0,
-                    1.6,
+                    self.weight_for("auth_failures", 1.6),
                     "auth failures surge",
                     &mut reasons,
                     &mut suspicious_axes,
@@ -248,7 +279,7 @@ impl AnomalyDetector {
                 let c = weighted_positive_delta(
                     sample.integrity_drift - baseline.integrity_drift,
                     0.06,
-                    1.9,
+                    self.weight_for("integrity_drift", 1.9),
                     "integrity drift increase",
                     &mut reasons,
                     &mut suspicious_axes,
@@ -262,7 +293,7 @@ impl AnomalyDetector {
                 let c = weighted_positive_delta(
                     sample.process_count as f32 - baseline.process_count,
                     20.0,
-                    0.65,
+                    self.weight_for("process_count", 0.65),
                     "process count spike",
                     &mut reasons,
                     &mut suspicious_axes,
@@ -276,7 +307,7 @@ impl AnomalyDetector {
                 let c = weighted_positive_delta(
                     sample.disk_pressure_pct - baseline.disk_pressure_pct,
                     25.0,
-                    0.6,
+                    self.weight_for("disk_pressure_pct", 0.6),
                     "disk pressure increase",
                     &mut reasons,
                     &mut suspicious_axes,
@@ -287,8 +318,9 @@ impl AnomalyDetector {
                 score += c;
 
                 if sample.battery_pct < baseline.battery_pct - 18.0 {
-                    score += 0.35;
-                    contributions.push(("battery_pct", 0.35));
+                    let bw = self.weight_for("battery_pct", 0.35);
+                    score += bw;
+                    contributions.push(("battery_pct", bw));
                     reasons.push("battery dropped sharply under load".to_string());
                     suspicious_axes += 1;
                 }
