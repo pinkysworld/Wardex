@@ -3,6 +3,8 @@ use std::collections::HashMap;
 use std::fs;
 use std::path::Path;
 
+use crate::config::MonitorScopeSettings;
+
 /// Unique agent identity assigned during enrollment.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AgentIdentity {
@@ -14,6 +16,27 @@ pub struct AgentIdentity {
     pub last_seen: String,
     pub status: AgentStatus,
     pub labels: HashMap<String, String>,
+    #[serde(default)]
+    pub health: AgentHealth,
+    /// Per-agent monitoring scope override. When `None`, the server-global scope applies.
+    #[serde(default)]
+    pub monitor_scope: Option<MonitorScopeSettings>,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct AgentHealth {
+    #[serde(default)]
+    pub pending_alerts: usize,
+    #[serde(default)]
+    pub telemetry_queue_depth: usize,
+    #[serde(default)]
+    pub update_state: Option<String>,
+    #[serde(default)]
+    pub update_target_version: Option<String>,
+    #[serde(default)]
+    pub last_update_error: Option<String>,
+    #[serde(default)]
+    pub last_update_at: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -140,6 +163,8 @@ impl AgentRegistry {
             last_seen: now,
             status: AgentStatus::Online,
             labels: req.labels.clone().unwrap_or_default(),
+            health: AgentHealth::default(),
+            monitor_scope: None,
         };
 
         self.agents.insert(agent_id.clone(), identity);
@@ -154,7 +179,7 @@ impl AgentRegistry {
     }
 
     /// Process a heartbeat from an agent.
-    pub fn heartbeat(&mut self, agent_id: &str, version: &str) -> Result<(), String> {
+    pub fn heartbeat(&mut self, agent_id: &str, version: &str, health: Option<AgentHealth>) -> Result<(), String> {
         let agent = self
             .agents
             .get_mut(agent_id)
@@ -162,6 +187,9 @@ impl AgentRegistry {
         agent.last_seen = chrono::Utc::now().to_rfc3339();
         agent.version = version.to_string();
         agent.status = AgentStatus::Online;
+        if let Some(health) = health {
+            agent.health = health;
+        }
         self.save();
         Ok(())
     }
@@ -222,6 +250,22 @@ impl AgentRegistry {
     /// List active enrollment tokens.
     pub fn list_tokens(&self) -> &[EnrollmentToken] {
         &self.tokens
+    }
+
+    /// Set the monitoring scope override for a specific agent.
+    pub fn set_monitor_scope(&mut self, agent_id: &str, scope: Option<MonitorScopeSettings>) -> Result<(), String> {
+        let agent = self
+            .agents
+            .get_mut(agent_id)
+            .ok_or_else(|| "unknown agent".to_string())?;
+        agent.monitor_scope = scope;
+        self.save();
+        Ok(())
+    }
+
+    /// Get the monitoring scope for a specific agent (returns the override or None).
+    pub fn get_monitor_scope(&self, agent_id: &str) -> Option<&MonitorScopeSettings> {
+        self.agents.get(agent_id).and_then(|a| a.monitor_scope.as_ref())
     }
 
     fn save(&self) {
@@ -302,7 +346,7 @@ mod tests {
         assert_eq!(resp.heartbeat_interval_secs, 30);
 
         // Heartbeat
-        reg.heartbeat(&resp.agent_id, "0.15.0")
+        reg.heartbeat(&resp.agent_id, "0.15.0", None)
             .expect("heartbeat should succeed");
 
         // List

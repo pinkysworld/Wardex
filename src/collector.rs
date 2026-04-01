@@ -197,15 +197,15 @@ pub fn collect_sample_scoped(
 
     TelemetrySample {
         timestamp_ms,
-        cpu_load_pct: collect_cpu(state),
-        memory_load_pct: collect_memory(),
-        temperature_c: collect_temperature(),
-        network_kbps: collect_network(state),
+        cpu_load_pct: if scope.cpu_load { collect_cpu(state) } else { 0.0 },
+        memory_load_pct: if scope.memory_pressure { collect_memory() } else { 0.0 },
+        temperature_c: if scope.thermal_state { collect_temperature() } else { 0.0 },
+        network_kbps: if scope.network_activity { collect_network(state) } else { 0.0 },
         auth_failures: if scope.auth_events { collect_auth_failures() } else { 0 },
-        battery_pct: collect_battery(),
+        battery_pct: if scope.battery_state { collect_battery() } else { 100.0 },
         integrity_drift: file_integrity_drift.max(persistence_drift),
-        process_count: collect_process_count(),
-        disk_pressure_pct: collect_disk_pressure(),
+        process_count: if scope.process_activity { collect_process_count() } else { 0 },
+        disk_pressure_pct: if scope.disk_pressure { collect_disk_pressure() } else { 0.0 },
     }
 }
 

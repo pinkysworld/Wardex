@@ -1681,20 +1681,34 @@ fn remote_update_assignment_flows_through_heartbeat_and_update_check() {
             "agent_id": agent_id,
             "version": "0.16.0",
             "platform": "linux",
+            "rollout_group": "canary",
         }).to_string())
         .expect("assign deployment")
         .into_json::<serde_json::Value>()
         .unwrap();
     assert_eq!(deployed["status"].as_str().unwrap(), "assigned");
+    assert_eq!(deployed["deployment"]["rollout_group"].as_str().unwrap(), "canary");
+    assert_eq!(deployed["deployment"]["allow_downgrade"].as_bool().unwrap(), false);
 
     let heartbeat = ureq::post(&format!("{}/api/agents/{}/heartbeat", base(port), agent_id))
         .set("Content-Type", "application/json")
-        .send_string(r#"{"version":"0.15.0"}"#)
+        .send_string(r#"{"version":"0.15.0","health":{"pending_alerts":2,"telemetry_queue_depth":2,"update_state":"downloading","update_target_version":"0.16.0"}}"#)
         .expect("heartbeat")
         .into_json::<serde_json::Value>()
         .unwrap();
     assert_eq!(heartbeat["update_assigned"].as_bool().unwrap(), true);
     assert_eq!(heartbeat["target_version"].as_str().unwrap(), "0.16.0");
+
+    let details = ureq::get(&format!("{}/api/agents/{}/details", base(port), agent_id))
+        .set("Authorization", &auth_header(&token))
+        .call()
+        .expect("agent details after heartbeat")
+        .into_json::<serde_json::Value>()
+        .unwrap();
+    assert_eq!(details["health"]["pending_alerts"].as_u64().unwrap(), 2);
+    assert_eq!(details["deployment"]["status"].as_str().unwrap(), "downloading");
+    assert_eq!(details["deployment"]["rollout_group"].as_str().unwrap(), "canary");
+    assert!(details["deployment"]["acknowledged_at"].is_string());
 
     let update = ureq::get(&format!("{}/api/agents/update?agent_id={}&current_version=0.15.0", base(port), agent_id))
         .call()
@@ -1773,6 +1787,21 @@ fn event_filters_export_and_agent_details_return_expected_data() {
         }).to_string())
         .expect("ingest events");
 
+    let triaged = ureq::post(&format!("{}/api/events/2/triage", base(port)))
+        .set("Authorization", &auth_header(&token))
+        .set("Content-Type", "application/json")
+        .send_string(&serde_json::json!({
+            "status": "investigating",
+            "assignee": "alice",
+            "tags": ["cpu", "urgent"],
+            "note": "SOC opened an investigation"
+        }).to_string())
+        .expect("triage event")
+        .into_json::<serde_json::Value>()
+        .unwrap();
+    assert_eq!(triaged["event"]["triage"]["status"].as_str().unwrap(), "investigating");
+    assert_eq!(triaged["event"]["triage"]["assignee"].as_str().unwrap(), "alice");
+
     let filtered = ureq::get(&format!("{}/api/events?agent_id={}&severity=Critical&reason=high_cpu", base(port), agent_id))
         .set("Authorization", &auth_header(&token))
         .call()
@@ -1781,6 +1810,15 @@ fn event_filters_export_and_agent_details_return_expected_data() {
         .unwrap();
     assert_eq!(filtered.as_array().unwrap().len(), 1);
 
+    let triage_filtered = ureq::get(&format!("{}/api/events?agent_id={}&triage_status=investigating", base(port), agent_id))
+        .set("Authorization", &auth_header(&token))
+        .call()
+        .expect("triage filtered events")
+        .into_json::<serde_json::Value>()
+        .unwrap();
+    assert_eq!(triage_filtered.as_array().unwrap().len(), 1);
+    assert_eq!(triage_filtered[0]["triage"]["status"].as_str().unwrap(), "investigating");
+
     let csv = ureq::get(&format!("{}/api/events/export?agent_id={}&reason=high_cpu", base(port), agent_id))
         .set("Authorization", &auth_header(&token))
         .call()
@@ -1788,6 +1826,7 @@ fn event_filters_export_and_agent_details_return_expected_data() {
         .into_string()
         .unwrap();
     assert!(csv.contains("id,agent_id,received_at"));
+    assert!(csv.contains("triage_status"));
     assert!(csv.contains("high_cpu"));
 
     let details = ureq::get(&format!("{}/api/agents/{}/details", base(port), agent_id))
@@ -1798,7 +1837,161 @@ fn event_filters_export_and_agent_details_return_expected_data() {
         .unwrap();
     assert_eq!(details["agent"]["hostname"].as_str().unwrap(), "detail-agent");
     assert_eq!(details["analytics"]["event_count"].as_u64().unwrap(), 2);
+    assert_eq!(details["timeline"][0]["triage"]["status"].as_str().unwrap(), "investigating");
     assert!(!details["risk_transitions"].as_array().unwrap().is_empty());
+}
+
+#[test]
+fn remote_update_deploy_blocks_downgrades_without_override() {
+    let (port, token) = spawn_test_server();
+
+    let created = ureq::post(&format!("{}/api/agents/token", base(port)))
+        .set("Authorization", &auth_header(&token))
+        .set("Content-Type", "application/json")
+        .send_string(r#"{"max_uses":1}"#)
+        .expect("create token")
+        .into_json::<serde_json::Value>()
+        .unwrap();
+    let enrollment_token = created["token"].as_str().unwrap();
+
+    let enrolled = ureq::post(&format!("{}/api/agents/enroll", base(port)))
+        .set("Content-Type", "application/json")
+        .send_string(&serde_json::json!({
+            "enrollment_token": enrollment_token,
+            "hostname": "stable-agent",
+            "platform": "linux",
+            "version": "0.16.0",
+        }).to_string())
+        .expect("enroll agent")
+        .into_json::<serde_json::Value>()
+        .unwrap();
+    let agent_id = enrolled["agent_id"].as_str().unwrap();
+
+    ureq::post(&format!("{}/api/updates/publish", base(port)))
+        .set("Authorization", &auth_header(&token))
+        .set("Content-Type", "application/json")
+        .send_string(&serde_json::json!({
+            "version": "0.15.5",
+            "platform": "linux",
+            "binary_base64": "aGVsbG8=",
+            "release_notes": "rollback build",
+            "mandatory": false,
+        }).to_string())
+        .expect("publish release");
+
+    let err = ureq::post(&format!("{}/api/updates/deploy", base(port)))
+        .set("Authorization", &auth_header(&token))
+        .set("Content-Type", "application/json")
+        .send_string(&serde_json::json!({
+            "agent_id": agent_id,
+            "version": "0.15.5",
+            "platform": "linux"
+        }).to_string());
+    match err {
+        Err(ureq::Error::Status(409, _)) => {}
+        other => panic!("expected 409, got {other:?}"),
+    }
+}
+
+#[test]
+fn remote_update_deploy_allows_downgrades_when_explicitly_enabled() {
+    let (port, token) = spawn_test_server();
+
+    let created = ureq::post(&format!("{}/api/agents/token", base(port)))
+        .set("Authorization", &auth_header(&token))
+        .set("Content-Type", "application/json")
+        .send_string(r#"{"max_uses":1}"#)
+        .expect("create token")
+        .into_json::<serde_json::Value>()
+        .unwrap();
+    let enrollment_token = created["token"].as_str().unwrap();
+
+    let enrolled = ureq::post(&format!("{}/api/agents/enroll", base(port)))
+        .set("Content-Type", "application/json")
+        .send_string(&serde_json::json!({
+            "enrollment_token": enrollment_token,
+            "hostname": "rollback-agent",
+            "platform": "linux",
+            "version": "0.16.0",
+        }).to_string())
+        .expect("enroll agent")
+        .into_json::<serde_json::Value>()
+        .unwrap();
+    let agent_id = enrolled["agent_id"].as_str().unwrap();
+
+    ureq::post(&format!("{}/api/updates/publish", base(port)))
+        .set("Authorization", &auth_header(&token))
+        .set("Content-Type", "application/json")
+        .send_string(&serde_json::json!({
+            "version": "0.15.5",
+            "platform": "linux",
+            "binary_base64": "aGVsbG8=",
+            "release_notes": "rollback build",
+            "mandatory": false,
+        }).to_string())
+        .expect("publish release");
+
+    let deployed = ureq::post(&format!("{}/api/updates/deploy", base(port)))
+        .set("Authorization", &auth_header(&token))
+        .set("Content-Type", "application/json")
+        .send_string(&serde_json::json!({
+            "agent_id": agent_id,
+            "version": "0.15.5",
+            "platform": "linux",
+            "allow_downgrade": true
+        }).to_string())
+        .expect("assign rollback deployment")
+        .into_json::<serde_json::Value>()
+        .unwrap();
+    assert_eq!(deployed["deployment"]["allow_downgrade"].as_bool().unwrap(), true);
+
+    let update = ureq::get(&format!("{}/api/agents/update?agent_id={}&current_version=0.16.0", base(port), agent_id))
+        .call()
+        .expect("rollback update check")
+        .into_json::<serde_json::Value>()
+        .unwrap();
+    assert_eq!(update["update_available"].as_bool().unwrap(), true);
+    assert_eq!(update["version"].as_str().unwrap(), "0.15.5");
+}
+
+#[test]
+fn event_triage_rejects_invalid_status() {
+    let (port, token) = spawn_test_server();
+
+    ureq::post(&format!("{}/api/events", base(port)))
+        .set("Content-Type", "application/json")
+        .send_string(&serde_json::json!({
+            "agent_id": "triage-agent",
+            "events": [{
+                "timestamp": "2025-01-01T00:00:00Z",
+                "hostname": "triage-agent",
+                "platform": "linux",
+                "score": 5.4,
+                "confidence": 0.95,
+                "level": "Critical",
+                "action": "isolate",
+                "reasons": ["high_cpu"],
+                "sample": {
+                    "timestamp_ms": 2, "cpu_load_pct": 98.0, "memory_load_pct": 75.0,
+                    "temperature_c": 63.0, "network_kbps": 500.0, "auth_failures": 0,
+                    "battery_pct": 68.0, "integrity_drift": 0.05, "process_count": 90, "disk_pressure_pct": 15.0
+                },
+                "enforced": false
+            }]
+        }).to_string())
+        .expect("ingest event");
+
+    let err = ureq::post(&format!("{}/api/events/1/triage", base(port)))
+        .set("Authorization", &auth_header(&token))
+        .set("Content-Type", "application/json")
+        .send_string(&serde_json::json!({
+            "status": "queued"
+        }).to_string());
+
+    match err {
+        Err(ureq::Error::Status(400, _)) => {}
+        other => panic!("expected 400, got {other:?}"),
+    }
 }
 
 #[test]
@@ -1813,4 +2006,335 @@ fn monitoring_paths_include_health_summary() {
     assert!(body["file_integrity_health"].is_array());
     assert!(body["persistence_health"].is_array());
     assert!(body["summary"]["unhealthy_paths"].is_u64());
+}
+
+// ── Helper: create token + enroll agent + ingest events ────────
+
+fn setup_agent_with_events(port: u16, token: &str, agent_name: &str, count: u32) -> (String, Vec<u64>) {
+    // Create enrollment token
+    let resp = ureq::post(&format!("{}/api/agents/token", base(port)))
+        .set("Authorization", &auth_header(token))
+        .set("Content-Type", "application/json")
+        .send_string(r#"{"max_uses":1}"#)
+        .unwrap();
+    let tok: serde_json::Value = resp.into_json().unwrap();
+    let enrollment_token = tok["token"].as_str().unwrap().to_string();
+
+    // Enroll
+    let body = serde_json::json!({
+        "enrollment_token": enrollment_token,
+        "hostname": agent_name,
+        "platform": "linux",
+        "version": "0.23.0",
+    });
+    let resp = ureq::post(&format!("{}/api/agents/enroll", base(port)))
+        .set("Content-Type", "application/json")
+        .send_string(&body.to_string())
+        .unwrap();
+    let enroll: serde_json::Value = resp.into_json().unwrap();
+    let agent_id = enroll["agent_id"].as_str().unwrap().to_string();
+
+    // Ingest events
+    let mut events = Vec::new();
+    for i in 0..count {
+        events.push(serde_json::json!({
+            "timestamp": format!("2025-01-01T00:{:02}:00Z", i),
+            "hostname": agent_name,
+            "platform": "linux",
+            "score": 5.0 + (i as f64),
+            "confidence": 0.9,
+            "level": if i % 2 == 0 { "Critical" } else { "Elevated" },
+            "action": "alert",
+            "reasons": ["test_reason"],
+            "sample": {
+                "timestamp_ms": 0, "cpu_load_pct": 80.0, "memory_load_pct": 50.0,
+                "temperature_c": 55.0, "network_kbps": 10.0, "auth_failures": 0,
+                "battery_pct": 99.0, "integrity_drift": 0.0,
+                "process_count": 30, "disk_pressure_pct": 5.0
+            },
+            "enforced": false
+        }));
+    }
+    let batch = serde_json::json!({ "agent_id": agent_id, "events": events });
+    ureq::post(&format!("{}/api/events", base(port)))
+        .set("Content-Type", "application/json")
+        .send_string(&batch.to_string())
+        .expect("ingest events");
+
+    // Get event IDs
+    let resp = ureq::get(&format!("{}/api/events", base(port)))
+        .set("Authorization", &auth_header(token))
+        .call()
+        .unwrap();
+    let all_events: Vec<serde_json::Value> = resp.into_json().unwrap();
+    let ids: Vec<u64> = all_events.iter()
+        .filter(|e| e["agent_id"].as_str() == Some(&agent_id))
+        .filter_map(|e| e["id"].as_u64())
+        .collect();
+    (agent_id, ids)
+}
+
+// ── POST /api/events/bulk-triage ───────────────────────────────
+
+#[test]
+fn bulk_triage_updates_multiple_events() {
+    let (port, token) = spawn_test_server();
+    let (_agent_id, event_ids) = setup_agent_with_events(port, &token, "bulk-host", 3);
+    assert!(event_ids.len() >= 3);
+
+    let body = serde_json::json!({
+        "event_ids": event_ids,
+        "status": "investigating",
+        "assignee": "analyst-1",
+        "tags": ["bulk", "test"],
+        "note": "bulk triage test",
+        "author": "integration-test"
+    });
+    let resp = ureq::post(&format!("{}/api/events/bulk-triage", base(port)))
+        .set("Authorization", &auth_header(&token))
+        .set("Content-Type", "application/json")
+        .send_string(&body.to_string())
+        .expect("bulk triage");
+    assert_eq!(resp.status(), 200);
+    let result: serde_json::Value = resp.into_json().unwrap();
+    assert_eq!(result["updated"].as_u64().unwrap(), event_ids.len() as u64);
+}
+
+#[test]
+fn bulk_triage_without_auth_returns_401() {
+    let (port, _token) = spawn_test_server();
+    let err = ureq::post(&format!("{}/api/events/bulk-triage", base(port)))
+        .set("Content-Type", "application/json")
+        .send_string(r#"{"event_ids":[1],"status":"acknowledged"}"#);
+    match err {
+        Err(ureq::Error::Status(401, _)) => {}
+        other => panic!("expected 401, got {other:?}"),
+    }
+}
+
+#[test]
+fn bulk_triage_empty_ids_returns_400() {
+    let (port, token) = spawn_test_server();
+    let resp = ureq::post(&format!("{}/api/events/bulk-triage", base(port)))
+        .set("Authorization", &auth_header(&token))
+        .set("Content-Type", "application/json")
+        .send_string(r#"{"event_ids":[],"status":"acknowledged"}"#);
+    match resp {
+        Err(ureq::Error::Status(400, _)) => {}
+        other => panic!("expected 400, got {other:?}"),
+    }
+}
+
+// ── POST /api/updates/cancel ───────────────────────────────────
+
+#[test]
+fn cancel_deployment_works() {
+    let (port, token) = spawn_test_server();
+    let (agent_id, _) = setup_agent_with_events(port, &token, "cancel-host", 0);
+
+    // Publish a release
+    ureq::post(&format!("{}/api/updates/publish", base(port)))
+        .set("Authorization", &auth_header(&token))
+        .set("Content-Type", "application/json")
+        .send_string(&serde_json::json!({
+            "version": "1.0.0", "platform": "linux",
+            "sha256": "abc123", "url": "http://example.com/v1",
+            "release_notes": "test release"
+        }).to_string())
+        .expect("publish release");
+
+    // Deploy
+    ureq::post(&format!("{}/api/updates/deploy", base(port)))
+        .set("Authorization", &auth_header(&token))
+        .set("Content-Type", "application/json")
+        .send_string(&serde_json::json!({
+            "agent_id": agent_id, "version": "1.0.0", "platform": "linux",
+            "rollout_group": "direct"
+        }).to_string())
+        .expect("deploy update");
+
+    // Cancel
+    let resp = ureq::post(&format!("{}/api/updates/cancel", base(port)))
+        .set("Authorization", &auth_header(&token))
+        .set("Content-Type", "application/json")
+        .send_string(&serde_json::json!({"agent_id": agent_id}).to_string())
+        .expect("cancel deployment");
+    assert_eq!(resp.status(), 200);
+    let body: serde_json::Value = resp.into_json().unwrap();
+    assert_eq!(body["status"].as_str().unwrap(), "cancelled");
+}
+
+#[test]
+fn cancel_nonexistent_deployment_returns_404() {
+    let (port, token) = spawn_test_server();
+    let resp = ureq::post(&format!("{}/api/updates/cancel", base(port)))
+        .set("Authorization", &auth_header(&token))
+        .set("Content-Type", "application/json")
+        .send_string(r#"{"agent_id":"nonexistent-agent"}"#);
+    match resp {
+        Err(ureq::Error::Status(404, _)) => {}
+        other => panic!("expected 404, got {other:?}"),
+    }
+}
+
+// ── POST /api/updates/rollback ─────────────────────────────────
+
+#[test]
+fn rollback_deployment_works() {
+    let (port, token) = spawn_test_server();
+    let (agent_id, _) = setup_agent_with_events(port, &token, "rollback-host", 0);
+
+    // Publish two releases
+    for v in ["1.0.0", "2.0.0"] {
+        ureq::post(&format!("{}/api/updates/publish", base(port)))
+            .set("Authorization", &auth_header(&token))
+            .set("Content-Type", "application/json")
+            .send_string(&serde_json::json!({
+                "version": v, "platform": "linux",
+                "sha256": "abc123", "url": "http://example.com/v",
+                "release_notes": format!("v{v}")
+            }).to_string())
+            .expect("publish release");
+    }
+
+    // Deploy v2
+    ureq::post(&format!("{}/api/updates/deploy", base(port)))
+        .set("Authorization", &auth_header(&token))
+        .set("Content-Type", "application/json")
+        .send_string(&serde_json::json!({
+            "agent_id": agent_id, "version": "2.0.0", "platform": "linux",
+            "rollout_group": "direct"
+        }).to_string())
+        .expect("deploy v2");
+
+    // Rollback to v1
+    let resp = ureq::post(&format!("{}/api/updates/rollback", base(port)))
+        .set("Authorization", &auth_header(&token))
+        .set("Content-Type", "application/json")
+        .send_string(&serde_json::json!({
+            "agent_id": agent_id, "target_version": "1.0.0"
+        }).to_string())
+        .expect("rollback");
+    assert_eq!(resp.status(), 200);
+    let body: serde_json::Value = resp.into_json().unwrap();
+    assert_eq!(body["status"].as_str().unwrap(), "rollback_assigned");
+    assert_eq!(body["deployment"]["version"].as_str().unwrap(), "1.0.0");
+    assert_eq!(body["deployment"]["allow_downgrade"].as_bool().unwrap(), true);
+}
+
+// ── Agent Monitoring Scope ─────────────────────────────────────
+
+#[test]
+fn agent_scope_set_and_get() {
+    let (port, token) = spawn_test_server();
+    let (agent_id, _) = setup_agent_with_events(port, &token, "scope-host", 0);
+
+    // Get scope (should be server default)
+    let resp = ureq::get(&format!("{}/api/agents/{}/scope", base(port), agent_id))
+        .set("Authorization", &auth_header(&token))
+        .call()
+        .expect("get scope");
+    assert_eq!(resp.status(), 200);
+    let body: serde_json::Value = resp.into_json().unwrap();
+    assert_eq!(body["override"].as_bool().unwrap(), false);
+
+    // Set custom scope
+    let scope = serde_json::json!({
+        "cpu_load": true, "memory_pressure": true, "network_activity": false,
+        "disk_pressure": true, "process_activity": true, "auth_events": true,
+        "thermal_state": false, "battery_state": false, "file_integrity": true,
+        "service_persistence": true, "launch_agents": false, "systemd_units": true,
+        "scheduled_tasks": false
+    });
+    let resp = ureq::post(&format!("{}/api/agents/{}/scope", base(port), agent_id))
+        .set("Authorization", &auth_header(&token))
+        .set("Content-Type", "application/json")
+        .send_string(&scope.to_string())
+        .expect("set scope");
+    assert_eq!(resp.status(), 200);
+
+    // Verify it was saved
+    let resp = ureq::get(&format!("{}/api/agents/{}/scope", base(port), agent_id))
+        .set("Authorization", &auth_header(&token))
+        .call()
+        .expect("get scope again");
+    let body: serde_json::Value = resp.into_json().unwrap();
+    assert_eq!(body["override"].as_bool().unwrap(), true);
+    assert_eq!(body["scope"]["network_activity"].as_bool().unwrap(), false);
+    assert_eq!(body["scope"]["battery_state"].as_bool().unwrap(), false);
+
+    // Clear scope
+    let resp = ureq::post(&format!("{}/api/agents/{}/scope", base(port), agent_id))
+        .set("Authorization", &auth_header(&token))
+        .set("Content-Type", "application/json")
+        .send_string(r#"{"clear":true}"#)
+        .expect("clear scope");
+    assert_eq!(resp.status(), 200);
+    let body: serde_json::Value = resp.into_json().unwrap();
+    assert_eq!(body["status"].as_str().unwrap(), "scope_cleared");
+}
+
+// ── Rollout Config ─────────────────────────────────────────────
+
+#[test]
+fn rollout_config_readable() {
+    let (port, token) = spawn_test_server();
+    let resp = ureq::get(&format!("{}/api/rollout/config", base(port)))
+        .set("Authorization", &auth_header(&token))
+        .call()
+        .expect("get rollout config");
+    assert_eq!(resp.status(), 200);
+    let body: serde_json::Value = resp.into_json().unwrap();
+    assert!(body.get("auto_progress").is_some());
+    assert!(body.get("canary_soak_secs").is_some());
+    assert!(body.get("ring1_soak_secs").is_some());
+    assert!(body.get("auto_rollback").is_some());
+    assert!(body.get("max_failures").is_some());
+}
+
+#[test]
+fn rollout_config_updatable_via_config_patch() {
+    let (port, token) = spawn_test_server();
+    let patch = serde_json::json!({
+        "rollout": {
+            "auto_progress": true,
+            "canary_soak_secs": 120,
+            "ring1_soak_secs": 240,
+            "auto_rollback": true,
+            "max_failures": 3
+        }
+    });
+    let resp = ureq::post(&format!("{}/api/config/reload", base(port)))
+        .set("Authorization", &auth_header(&token))
+        .set("Content-Type", "application/json")
+        .send_string(&patch.to_string())
+        .expect("patch config");
+    assert_eq!(resp.status(), 200);
+
+    // Verify
+    let resp = ureq::get(&format!("{}/api/rollout/config", base(port)))
+        .set("Authorization", &auth_header(&token))
+        .call()
+        .expect("get rollout config");
+    let body: serde_json::Value = resp.into_json().unwrap();
+    assert_eq!(body["auto_progress"].as_bool().unwrap(), true);
+    assert_eq!(body["canary_soak_secs"].as_u64().unwrap(), 120);
+    assert_eq!(body["max_failures"].as_u64().unwrap(), 3);
+}
+
+// ── Heartbeat includes agent scope ─────────────────────────────
+
+#[test]
+fn heartbeat_returns_monitor_scope() {
+    let (port, token) = spawn_test_server();
+    let (agent_id, _) = setup_agent_with_events(port, &token, "hb-scope-host", 0);
+
+    let resp = ureq::post(&format!("{}/api/agents/{}/heartbeat", base(port), agent_id))
+        .set("Content-Type", "application/json")
+        .send_string(&serde_json::json!({"version":"0.23.0"}).to_string())
+        .expect("heartbeat");
+    assert_eq!(resp.status(), 200);
+    let body: serde_json::Value = resp.into_json().unwrap();
+    assert!(body.get("monitor_scope").is_some());
+    assert!(body["monitor_scope"]["cpu_load"].is_boolean());
 }

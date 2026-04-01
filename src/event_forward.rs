@@ -1,5 +1,7 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use std::fs;
+use std::path::Path;
 
 use crate::collector::AlertRecord;
 
@@ -10,6 +12,48 @@ pub struct EventBatch {
     pub events: Vec<AlertRecord>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct EventNote {
+    pub author: String,
+    pub note: String,
+    pub created_at: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EventTriage {
+    pub status: String,
+    pub assignee: Option<String>,
+    pub tags: Vec<String>,
+    pub notes: Vec<EventNote>,
+    pub acknowledged_at: Option<String>,
+    pub resolved_at: Option<String>,
+    pub last_updated_at: String,
+}
+
+impl Default for EventTriage {
+    fn default() -> Self {
+        let now = chrono::Utc::now().to_rfc3339();
+        Self {
+            status: "new".to_string(),
+            assignee: None,
+            tags: Vec::new(),
+            notes: Vec::new(),
+            acknowledged_at: None,
+            resolved_at: None,
+            last_updated_at: now,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct EventTriageUpdate {
+    pub status: Option<String>,
+    pub assignee: Option<String>,
+    pub tags: Option<Vec<String>>,
+    pub note: Option<String>,
+    pub author: Option<String>,
+}
+
 /// A stored event with server-side metadata.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct StoredEvent {
@@ -18,6 +62,14 @@ pub struct StoredEvent {
     pub received_at: String,
     pub alert: AlertRecord,
     pub correlated: bool,
+    #[serde(default)]
+    pub triage: EventTriage,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct EventStoreSnapshot {
+    events: Vec<StoredEvent>,
+    next_id: u64,
 }
 
 /// Server-side event store that receives, stores, and correlates events from multiple agents.
@@ -25,18 +77,213 @@ pub struct EventStore {
     events: Vec<StoredEvent>,
     next_id: u64,
     max_events: usize,
+    store_path: Option<String>,
     /// Correlation windows: group events by (reason, time_window) across agents
     correlation_window_secs: i64,
 }
 
 impl EventStore {
     pub fn new(max_events: usize) -> Self {
-        Self {
+        Self::new_with_path(max_events, None)
+    }
+
+    pub fn with_persistence(max_events: usize, path: impl Into<String>) -> Self {
+        Self::new_with_path(max_events, Some(path.into()))
+    }
+
+    fn new_with_path(max_events: usize, store_path: Option<String>) -> Self {
+        let mut store = Self {
             events: Vec::new(),
             next_id: 1,
             max_events,
+            store_path,
             correlation_window_secs: 60,
+        };
+        store.load();
+        store.trim_to_limit();
+        store
+    }
+
+    fn load(&mut self) {
+        let Some(path) = self.store_path.as_deref() else {
+            return;
+        };
+        let Ok(raw) = fs::read_to_string(path) else {
+            return;
+        };
+        let Ok(snapshot) = serde_json::from_str::<EventStoreSnapshot>(&raw) else {
+            return;
+        };
+        self.events = snapshot.events;
+        self.next_id = snapshot
+            .next_id
+            .max(self.events.iter().map(|event| event.id).max().unwrap_or(0) + 1);
+    }
+
+    fn persist(&self) {
+        let Some(path) = self.store_path.as_deref() else {
+            return;
+        };
+        let snapshot = EventStoreSnapshot {
+            events: self.events.clone(),
+            next_id: self.next_id,
+        };
+        if let Ok(json) = serde_json::to_string_pretty(&snapshot) {
+            let path_ref = Path::new(path);
+            if let Some(parent) = path_ref.parent() {
+                let _ = fs::create_dir_all(parent);
+            }
+            let _ = fs::write(path_ref, json);
         }
+    }
+
+    fn trim_to_limit(&mut self) {
+        while self.events.len() > self.max_events {
+            self.events.remove(0);
+        }
+    }
+
+    fn normalize_status(status: &str) -> Option<String> {
+        match status.trim().to_ascii_lowercase().as_str() {
+            "new" => Some("new".to_string()),
+            "acknowledged" => Some("acknowledged".to_string()),
+            "investigating" => Some("investigating".to_string()),
+            "contained" => Some("contained".to_string()),
+            "resolved" => Some("resolved".to_string()),
+            _ => None,
+        }
+    }
+
+    pub fn update_triage(&mut self, event_id: u64, update: EventTriageUpdate) -> Result<StoredEvent, String> {
+        let event = self
+            .events
+            .iter_mut()
+            .find(|event| event.id == event_id)
+            .ok_or_else(|| "event not found".to_string())?;
+
+        let now = chrono::Utc::now().to_rfc3339();
+        if let Some(status) = update.status {
+            let normalized = Self::normalize_status(&status)
+                .ok_or_else(|| format!("invalid triage status: {status}"))?;
+            event.triage.status = normalized.clone();
+            if matches!(normalized.as_str(), "acknowledged" | "investigating" | "contained" | "resolved")
+                && event.triage.acknowledged_at.is_none()
+            {
+                event.triage.acknowledged_at = Some(now.clone());
+            }
+            if normalized == "resolved" {
+                event.triage.resolved_at = Some(now.clone());
+            } else {
+                event.triage.resolved_at = None;
+            }
+        }
+        if let Some(assignee) = update.assignee {
+            let trimmed = assignee.trim();
+            event.triage.assignee = (!trimmed.is_empty()).then_some(trimmed.to_string());
+        }
+        if let Some(tags) = update.tags {
+            event.triage.tags = tags
+                .into_iter()
+                .map(|tag| tag.trim().to_ascii_lowercase())
+                .filter(|tag| !tag.is_empty())
+                .collect();
+            event.triage.tags.sort();
+            event.triage.tags.dedup();
+        }
+        if let Some(note) = update.note {
+            let trimmed = note.trim();
+            if !trimmed.is_empty() {
+                event.triage.notes.push(EventNote {
+                    author: update.author.unwrap_or_else(|| "analyst".to_string()),
+                    note: trimmed.to_string(),
+                    created_at: now.clone(),
+                });
+            }
+        }
+        event.triage.last_updated_at = now;
+        let updated = event.clone();
+        self.persist();
+        Ok(updated)
+    }
+
+    pub fn triage_summary(&self) -> HashMap<String, usize> {
+        let mut counts = HashMap::new();
+        for event in &self.events {
+            *counts.entry(event.triage.status.clone()).or_insert(0) += 1;
+        }
+        counts
+    }
+
+    /// Bulk update triage on multiple events at once.
+    pub fn bulk_update_triage(&mut self, event_ids: &[u64], update: &EventTriageUpdate) -> BulkTriageResult {
+        let now = chrono::Utc::now().to_rfc3339();
+        let mut updated = 0u64;
+        let mut failed = Vec::new();
+
+        for &event_id in event_ids {
+            let event = match self.events.iter_mut().find(|e| e.id == event_id) {
+                Some(e) => e,
+                None => {
+                    failed.push((event_id, "event not found".to_string()));
+                    continue;
+                }
+            };
+            if let Some(ref status) = update.status {
+                match Self::normalize_status(status) {
+                    Some(normalized) => {
+                        event.triage.status = normalized.clone();
+                        if matches!(normalized.as_str(), "acknowledged" | "investigating" | "contained" | "resolved")
+                            && event.triage.acknowledged_at.is_none()
+                        {
+                            event.triage.acknowledged_at = Some(now.clone());
+                        }
+                        if normalized == "resolved" {
+                            event.triage.resolved_at = Some(now.clone());
+                        } else {
+                            event.triage.resolved_at = None;
+                        }
+                    }
+                    None => {
+                        failed.push((event_id, format!("invalid triage status: {status}")));
+                        continue;
+                    }
+                }
+            }
+            if let Some(ref assignee) = update.assignee {
+                let trimmed = assignee.trim();
+                event.triage.assignee = (!trimmed.is_empty()).then_some(trimmed.to_string());
+            }
+            if let Some(ref tags) = update.tags {
+                event.triage.tags = tags.iter()
+                    .map(|t| t.trim().to_ascii_lowercase())
+                    .filter(|t| !t.is_empty())
+                    .collect();
+                event.triage.tags.sort();
+                event.triage.tags.dedup();
+            }
+            if let Some(ref note) = update.note {
+                let trimmed = note.trim();
+                if !trimmed.is_empty() {
+                    event.triage.notes.push(EventNote {
+                        author: update.author.clone().unwrap_or_else(|| "analyst".to_string()),
+                        note: trimmed.to_string(),
+                        created_at: now.clone(),
+                    });
+                }
+            }
+            event.triage.last_updated_at = now.clone();
+            updated += 1;
+        }
+        self.persist();
+        BulkTriageResult { updated, failed }
+    }
+
+    pub fn has_persistence(&self) -> bool {
+        self.store_path.is_some()
+    }
+
+    pub fn storage_path(&self) -> Option<&str> {
+        self.store_path.as_deref()
     }
 
     /// Ingest a batch of events from an agent.
@@ -51,19 +298,17 @@ impl EventStore {
                 received_at: received_at.clone(),
                 alert: alert.clone(),
                 correlated: false,
+                triage: EventTriage::default(),
             };
             self.next_id += 1;
             self.events.push(event);
             ingested += 1;
         }
 
-        // Trim oldest if over limit
-        while self.events.len() > self.max_events {
-            self.events.remove(0);
-        }
+        self.trim_to_limit();
 
-        // Run cross-agent correlation
         let correlations = self.correlate();
+        self.persist();
 
         IngestResult {
             ingested,
@@ -78,27 +323,17 @@ impl EventStore {
         let mut matches = Vec::new();
         let window = self.correlation_window_secs;
 
-        // Group uncorrelated events by primary reason
         let mut by_reason: HashMap<String, Vec<usize>> = HashMap::new();
         for (idx, event) in self.events.iter().enumerate() {
             if event.correlated {
                 continue;
             }
-            let primary_reason = event
-                .alert
-                .reasons
-                .first()
-                .cloned()
-                .unwrap_or_default();
+            let primary_reason = event.alert.reasons.first().cloned().unwrap_or_default();
             if !primary_reason.is_empty() {
-                by_reason
-                    .entry(primary_reason)
-                    .or_default()
-                    .push(idx);
+                by_reason.entry(primary_reason).or_default().push(idx);
             }
         }
 
-        // For each reason group, find events from different agents within the time window
         for (reason, indices) in &by_reason {
             if indices.len() < 2 {
                 continue;
@@ -107,18 +342,13 @@ impl EventStore {
             let mut agent_groups: HashMap<String, Vec<usize>> = HashMap::new();
             for &idx in indices {
                 let event = &self.events[idx];
-                agent_groups
-                    .entry(event.agent_id.clone())
-                    .or_default()
-                    .push(idx);
+                agent_groups.entry(event.agent_id.clone()).or_default().push(idx);
             }
 
-            // Need events from at least 2 different agents
             if agent_groups.len() < 2 {
                 continue;
             }
 
-            // Check time proximity
             let timestamps: Vec<(usize, i64)> = indices
                 .iter()
                 .filter_map(|&idx| {
@@ -137,10 +367,7 @@ impl EventStore {
 
             if max_ts - min_ts <= window {
                 let correlated_agents: Vec<String> = agent_groups.keys().cloned().collect();
-                let event_ids: Vec<u64> = indices
-                    .iter()
-                    .map(|&idx| self.events[idx].id)
-                    .collect();
+                let event_ids: Vec<u64> = indices.iter().map(|&idx| self.events[idx].id).collect();
 
                 matches.push(CorrelationMatch {
                     reason: reason.clone(),
@@ -155,7 +382,6 @@ impl EventStore {
                     ),
                 });
 
-                // Mark events as correlated
                 for &idx in indices {
                     self.events[idx].correlated = true;
                 }
@@ -169,14 +395,13 @@ impl EventStore {
     pub fn list(&self, agent_id: Option<&str>, limit: usize) -> Vec<&StoredEvent> {
         let iter = self.events.iter().rev();
         match agent_id {
-            Some(id) => iter.filter(|e| e.agent_id == id).take(limit).collect(),
+            Some(id) => iter.filter(|event| event.agent_id == id).take(limit).collect(),
             None => iter.take(limit).collect(),
         }
     }
 
     /// Get correlation matches from the most recent correlation pass.
     pub fn recent_correlations(&self) -> Vec<CorrelationMatch> {
-        // Re-run correlation on current data without modifying state
         let mut by_reason: HashMap<String, Vec<&StoredEvent>> = HashMap::new();
         for event in &self.events {
             if event.correlated {
@@ -187,14 +412,14 @@ impl EventStore {
 
         let mut matches = Vec::new();
         for (reason, events) in &by_reason {
-            let mut agents: Vec<String> = events.iter().map(|e| e.agent_id.clone()).collect();
+            let mut agents: Vec<String> = events.iter().map(|event| event.agent_id.clone()).collect();
             agents.sort();
             agents.dedup();
             if agents.len() >= 2 {
                 matches.push(CorrelationMatch {
                     reason: reason.clone(),
                     agents,
-                    event_ids: events.iter().map(|e| e.id).collect(),
+                    event_ids: events.iter().map(|event| event.id).collect(),
                     severity: "high".into(),
                     description: format!("Cross-agent pattern: '{}'", reason),
                 });
@@ -212,12 +437,14 @@ impl EventStore {
         let correlated_events = self.events.iter().filter(|event| event.correlated).count();
 
         let mut severity_counts: HashMap<String, usize> = HashMap::new();
+        let mut triage_counts: HashMap<String, usize> = HashMap::new();
         let mut reason_counts: HashMap<String, usize> = HashMap::new();
         let mut per_agent: HashMap<String, Vec<&StoredEvent>> = HashMap::new();
 
         for event in &self.events {
             let level = event.alert.level.to_ascii_lowercase();
             *severity_counts.entry(level).or_insert(0) += 1;
+            *triage_counts.entry(event.triage.status.clone()).or_insert(0) += 1;
 
             for reason in &event.alert.reasons {
                 *reason_counts.entry(reason.clone()).or_insert(0) += 1;
@@ -286,6 +513,7 @@ impl EventStore {
                 0.0
             },
             severity_counts,
+            triage_counts,
             top_reasons,
             hot_agents,
         }
@@ -293,6 +521,8 @@ impl EventStore {
 
     pub fn clear(&mut self) {
         self.events.clear();
+        self.next_id = 1;
+        self.persist();
     }
 }
 
@@ -301,6 +531,12 @@ pub struct IngestResult {
     pub ingested: usize,
     pub total: usize,
     pub correlations: Vec<CorrelationMatch>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BulkTriageResult {
+    pub updated: u64,
+    pub failed: Vec<(u64, String)>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -336,6 +572,7 @@ pub struct EventAnalytics {
     pub correlated_events: usize,
     pub correlation_rate: f32,
     pub severity_counts: HashMap<String, usize>,
+    pub triage_counts: HashMap<String, usize>,
     pub top_reasons: Vec<TopReason>,
     pub hot_agents: Vec<AgentRiskSummary>,
 }
@@ -370,8 +607,6 @@ fn risk_label(max_rank: u8, average_score: f32, correlated_count: usize) -> &'st
     }
 }
 
-// ── Tests ────────────────────────────────────────────────────────────
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -386,12 +621,18 @@ mod tests {
             confidence: 0.9,
             level: "critical".into(),
             action: "isolate".into(),
-            reasons: reasons.iter().map(|s| s.to_string()).collect(),
+            reasons: reasons.iter().map(|reason| reason.to_string()).collect(),
             sample: TelemetrySample {
-                timestamp_ms: 0, cpu_load_pct: 0.0, memory_load_pct: 0.0,
-                temperature_c: 0.0, network_kbps: 0.0, auth_failures: 0,
-                battery_pct: 100.0, integrity_drift: 0.0,
-                process_count: 0, disk_pressure_pct: 0.0,
+                timestamp_ms: 0,
+                cpu_load_pct: 0.0,
+                memory_load_pct: 0.0,
+                temperature_c: 0.0,
+                network_kbps: 0.0,
+                auth_failures: 0,
+                battery_pct: 100.0,
+                integrity_drift: 0.0,
+                process_count: 0,
+                disk_pressure_pct: 0.0,
             },
             enforced: false,
         }
@@ -413,14 +654,12 @@ mod tests {
     fn cross_agent_correlation() {
         let mut store = EventStore::new(100);
 
-        // Agent 1 reports high_cpu
         let batch1 = EventBatch {
             agent_id: "agent-1".into(),
             events: vec![make_alert(&["high_cpu"])],
         };
         store.ingest(&batch1);
 
-        // Agent 2 reports same reason within window
         let batch2 = EventBatch {
             agent_id: "agent-2".into(),
             events: vec![make_alert(&["high_cpu"])],
@@ -464,6 +703,54 @@ mod tests {
     }
 
     #[test]
+    fn triage_updates_status_and_notes() {
+        let mut store = EventStore::new(100);
+        store.ingest(&EventBatch {
+            agent_id: "agent-1".into(),
+            events: vec![make_alert(&["high_cpu"])],
+        });
+
+        let updated = store
+            .update_triage(
+                1,
+                EventTriageUpdate {
+                    status: Some("investigating".into()),
+                    assignee: Some("alice".into()),
+                    tags: Some(vec!["cpu".into(), "urgent".into()]),
+                    note: Some("Escalated to SOC".into()),
+                    author: Some("ops".into()),
+                },
+            )
+            .expect("update triage");
+
+        assert_eq!(updated.triage.status, "investigating");
+        assert_eq!(updated.triage.assignee.as_deref(), Some("alice"));
+        assert_eq!(updated.triage.notes.len(), 1);
+        assert!(updated.triage.acknowledged_at.is_some());
+    }
+
+    #[test]
+    fn triage_rejects_unknown_status() {
+        let mut store = EventStore::new(100);
+        store.ingest(&EventBatch {
+            agent_id: "agent-1".into(),
+            events: vec![make_alert(&["high_cpu"])],
+        });
+
+        let err = store
+            .update_triage(
+                1,
+                EventTriageUpdate {
+                    status: Some("queued".into()),
+                    ..EventTriageUpdate::default()
+                },
+            )
+            .expect_err("unknown triage status should fail");
+
+        assert!(err.contains("invalid triage status"));
+    }
+
+    #[test]
     fn analytics_summarizes_reasons_and_hot_agents() {
         let mut store = EventStore::new(100);
         store.ingest(&EventBatch {
@@ -480,5 +767,6 @@ mod tests {
         assert!(!analytics.top_reasons.is_empty());
         assert_eq!(analytics.top_reasons[0].reason, "high_cpu");
         assert!(analytics.hot_agents.iter().any(|agent| agent.agent_id == "agent-1"));
+        assert_eq!(analytics.triage_counts.get("new").copied().unwrap_or(0), 4);
     }
 }

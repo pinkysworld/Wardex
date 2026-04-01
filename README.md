@@ -111,7 +111,7 @@ Then open `http://localhost:8080/admin.html` in a browser. The token printed to 
 
 The Settings view includes an OS-aware Monitoring Scope section that shows recommended monitoring points for the current host platform, explains why specific signals are recommended or unavailable, lets you control supported collectors including auth events and platform-specific persistence baselines, and previews the exact active monitoring paths.
 
-The Fleet & Agents view now includes fleet-wide XDR analytics, per-agent drilldowns, filtered event export, monitoring-path health feedback, and remote update deployment controls for enrolled agents.
+The Fleet & Agents view now includes fleet-wide XDR analytics, per-agent drilldowns, filtered event export, monitoring-path health feedback, persistent event history, inline event triage, bulk event triage for multiple events at once, per-agent monitoring scope configuration (13 toggles: CPU, memory, network, disk, processes, auth events, thermal, battery, file integrity, services, LaunchAgents, systemd units, scheduled tasks), deployment rollback and cancellation buttons, and automatic staged rollout progression from canary through ring-1 and ring-2 with configurable soak times and auto-rollback on failure.
 
 Run tests:
 

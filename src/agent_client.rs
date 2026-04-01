@@ -1,13 +1,13 @@
 use serde::{Deserialize, Serialize};
 use std::io::Read;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::Duration;
-use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::Arc;
 
 use crate::collector::{self, AlertRecord, MonitorConfig};
 use crate::config::Config;
-use crate::enrollment::{EnrollRequest, EnrollResponse};
+use crate::enrollment::{AgentHealth, EnrollRequest, EnrollResponse};
 
 /// Agent-side client that communicates with the Wardex central server.
 pub struct AgentClient {
@@ -15,11 +15,24 @@ pub struct AgentClient {
     agent_id: Option<String>,
     heartbeat_interval: u64,
     policy_poll_interval: u64,
+    runtime_status: Option<Arc<Mutex<AgentRuntimeStatus>>>,
+}
+
+#[derive(Debug, Clone, Default)]
+struct AgentRuntimeStatus {
+    pending_alerts: usize,
+    telemetry_queue_depth: usize,
+    update_state: Option<String>,
+    update_target_version: Option<String>,
+    last_update_error: Option<String>,
+    last_update_at: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct HeartbeatPayload {
     version: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    health: Option<AgentHealth>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -44,7 +57,12 @@ impl AgentClient {
             agent_id: None,
             heartbeat_interval: 30,
             policy_poll_interval: 60,
+            runtime_status: None,
         }
+    }
+
+    fn attach_runtime_status(&mut self, runtime_status: Arc<Mutex<AgentRuntimeStatus>>) {
+        self.runtime_status = Some(runtime_status);
     }
 
     /// Enroll this agent with the server.
@@ -85,6 +103,7 @@ impl AgentClient {
         let agent_id = self.agent_id.as_ref().ok_or("not enrolled")?;
         let payload = HeartbeatPayload {
             version: env!("CARGO_PKG_VERSION").to_string(),
+            health: self.runtime_health_snapshot(),
         };
         let body = serde_json::to_string(&payload)
             .map_err(|e| format!("failed to serialize heartbeat: {e}"))?;
@@ -161,10 +180,16 @@ impl AgentClient {
     }
 
     fn process_update(&self, target_version: Option<&str>) {
+        self.set_update_state("checking", target_version, None);
         match self.check_update() {
             Ok(Some(info)) => {
                 if let Some(expected) = target_version {
                     if info.version != expected {
+                        self.set_update_state(
+                            "mismatch",
+                            Some(expected),
+                            Some(format!("server returned {} instead of assigned target", info.version)),
+                        );
                         eprintln!("[update] Assigned target {expected}, but server returned {}", info.version);
                         return;
                     }
@@ -173,21 +198,75 @@ impl AgentClient {
                 if info.mandatory {
                     eprintln!("[update] Mandatory update - downloading...");
                 }
+                self.set_update_state("downloading", Some(&info.version), None);
                 match self.download_update(&info) {
                     Ok(binary) => {
+                        self.set_update_state("downloaded", Some(&info.version), None);
                         eprintln!("[update] Downloaded {} bytes, checksum verified", binary.len());
+                        self.set_update_state("applying", Some(&info.version), None);
                         if let Err(e) = apply_update(&binary, &info.version) {
+                            self.set_update_state("failed", Some(&info.version), Some(e.clone()));
                             eprintln!("[update] Failed to apply: {e}");
                         } else {
+                            self.set_update_state("restart_pending", Some(&info.version), None);
                             eprintln!("[update] Update applied — restart required");
                         }
                     }
-                    Err(e) => eprintln!("[update] Download failed: {e}"),
+                    Err(e) => {
+                        self.set_update_state("failed", Some(&info.version), Some(e.clone()));
+                        eprintln!("[update] Download failed: {e}");
+                    }
                 }
             }
-            Ok(None) => {}
-            Err(e) => eprintln!("[update] Check failed: {e}"),
+            Ok(None) => {
+                self.set_update_state("idle", None, None);
+            }
+            Err(e) => {
+                self.set_update_state("failed", target_version, Some(e.clone()));
+                eprintln!("[update] Check failed: {e}");
+            }
         }
+    }
+
+    fn runtime_health_snapshot(&self) -> Option<AgentHealth> {
+        let runtime_status = self.runtime_status.as_ref()?;
+        let status = runtime_status.lock().ok()?;
+        Some(AgentHealth {
+            pending_alerts: status.pending_alerts,
+            telemetry_queue_depth: status.telemetry_queue_depth,
+            update_state: status.update_state.clone(),
+            update_target_version: status.update_target_version.clone(),
+            last_update_error: status.last_update_error.clone(),
+            last_update_at: status.last_update_at.clone(),
+        })
+    }
+
+    fn update_runtime_status<F>(&self, mutate: F)
+    where
+        F: FnOnce(&mut AgentRuntimeStatus),
+    {
+        if let Some(runtime_status) = &self.runtime_status {
+            if let Ok(mut status) = runtime_status.lock() {
+                mutate(&mut status);
+            }
+        }
+    }
+
+    fn set_queue_depth(&self, queue_depth: usize) {
+        self.update_runtime_status(|status| {
+            status.telemetry_queue_depth = queue_depth;
+            status.pending_alerts = queue_depth;
+        });
+    }
+
+    fn set_update_state(&self, state: &str, target_version: Option<&str>, error: Option<String>) {
+        let timestamp = chrono::Utc::now().to_rfc3339();
+        self.update_runtime_status(|status| {
+            status.update_state = Some(state.to_string());
+            status.update_target_version = target_version.map(|value| value.to_string());
+            status.last_update_error = error;
+            status.last_update_at = Some(timestamp);
+        });
     }
 
     /// Check for available updates from the server.
@@ -293,6 +372,8 @@ pub fn run_agent(
 
     // Enroll
     let mut client = AgentClient::new(server_url);
+    let runtime_status = Arc::new(Mutex::new(AgentRuntimeStatus::default()));
+    client.attach_runtime_status(runtime_status.clone());
     let resp = client.enroll(enrollment_token, &host_info.hostname, &host_info.platform.to_string())?;
     eprintln!("  Enrolled as: {}", resp.agent_id);
     eprintln!("  Heartbeat interval: {}s", resp.heartbeat_interval_secs);
@@ -303,9 +384,11 @@ pub fn run_agent(
     let heartbeat_shutdown = shutdown.clone();
     let heartbeat_server = server_url.to_string();
     let heartbeat_agent_id = resp.agent_id.clone();
+    let heartbeat_runtime_status = runtime_status.clone();
     thread::spawn(move || {
         let mut hb_client = AgentClient::new(&heartbeat_server);
         hb_client.agent_id = Some(heartbeat_agent_id);
+        hb_client.attach_runtime_status(heartbeat_runtime_status);
         loop {
             if heartbeat_shutdown.load(Ordering::Relaxed) {
                 break;
@@ -329,9 +412,11 @@ pub fn run_agent(
     let update_shutdown = shutdown.clone();
     let update_server = server_url.to_string();
     let update_agent_id = resp.agent_id.clone();
+    let update_runtime_status = runtime_status.clone();
     thread::spawn(move || {
         let mut upd_client = AgentClient::new(&update_server);
         upd_client.agent_id = Some(update_agent_id);
+        upd_client.attach_runtime_status(update_runtime_status);
         loop {
             if update_shutdown.load(Ordering::Relaxed) {
                 break;
@@ -399,6 +484,7 @@ pub fn run_agent(
                 enforced: false,
             };
             pending_alerts.push(alert.clone());
+            client.set_queue_depth(pending_alerts.len());
 
             // Push to SIEM if configured
             if let Some(ref mut siem) = siem_connector {
@@ -413,6 +499,7 @@ pub fn run_agent(
                     Ok(()) => {
                         eprintln!("[agent] Forwarded {} alerts to server", pending_alerts.len());
                         pending_alerts.clear();
+                        client.set_queue_depth(0);
                     }
                     Err(e) => eprintln!("[agent] Forward failed (will retry): {e}"),
                 }

@@ -74,6 +74,7 @@ struct AppState {
     policy_store: PolicyStore,
     update_manager: UpdateManager,
     remote_deployments: HashMap<String, AgentDeployment>,
+    deployment_store_path: String,
     siem_connector: SiemConnector,
     // Local host telemetry (ring buffer, last 300 samples)
     local_telemetry: Vec<TelemetrySample>,
@@ -93,7 +94,17 @@ struct AgentDeployment {
     platform: String,
     mandatory: bool,
     release_notes: String,
+    #[serde(default = "default_deployment_status")]
+    status: String,
+    status_reason: Option<String>,
+    #[serde(default = "default_rollout_group")]
+    rollout_group: String,
+    #[serde(default)]
+    allow_downgrade: bool,
     assigned_at: String,
+    acknowledged_at: Option<String>,
+    completed_at: Option<String>,
+    last_heartbeat_at: Option<String>,
 }
 
 #[derive(Debug, Default)]
@@ -102,6 +113,9 @@ struct EventQuery {
     severity: Option<String>,
     reason: Option<String>,
     correlated: Option<bool>,
+    triage_status: Option<String>,
+    assignee: Option<String>,
+    tag: Option<String>,
     limit: usize,
 }
 
@@ -146,10 +160,11 @@ pub fn run_server(port: u16, site_dir: &Path, shutdown: Arc<AtomicBool>) -> Resu
         alerts: Vec::new(),
         server_start: std::time::Instant::now(),
         agent_registry: AgentRegistry::new("var/agents.json"),
-        event_store: EventStore::new(10_000),
+        event_store: EventStore::with_persistence(10_000, "var/events.json"),
         policy_store: PolicyStore::new(),
         update_manager: UpdateManager::new("var/updates"),
-        remote_deployments: HashMap::new(),
+        remote_deployments: load_remote_deployments("var/deployments.json"),
+        deployment_store_path: "var/deployments.json".to_string(),
         siem_connector: SiemConnector::new(crate::siem::SiemConfig::default()),
         local_telemetry: Vec::new(),
         local_host_info: detect_platform(),
@@ -324,10 +339,11 @@ pub fn spawn_test_server() -> (u16, String) {
         alerts: Vec::new(),
         server_start: std::time::Instant::now(),
         agent_registry: AgentRegistry::new(&format!("/tmp/wardex_test_{port}/agents.json")),
-        event_store: EventStore::new(1000),
+        event_store: EventStore::with_persistence(1000, format!("/tmp/wardex_test_{port}/events.json")),
         policy_store: PolicyStore::new(),
         update_manager: UpdateManager::new(&format!("/tmp/wardex_test_{port}/updates")),
-        remote_deployments: HashMap::new(),
+        remote_deployments: load_remote_deployments(&format!("/tmp/wardex_test_{port}/deployments.json")),
+        deployment_store_path: format!("/tmp/wardex_test_{port}/deployments.json"),
         siem_connector: SiemConnector::new(crate::siem::SiemConfig::default()),
         local_telemetry: Vec::new(),
         local_host_info: detect_platform(),
@@ -496,6 +512,46 @@ fn compare_versions(a: &str, b: &str) -> std::cmp::Ordering {
     parse(a).cmp(&parse(b))
 }
 
+fn default_deployment_status() -> String {
+    "assigned".to_string()
+}
+
+fn default_rollout_group() -> String {
+    "direct".to_string()
+}
+
+fn normalize_rollout_group(value: Option<&str>) -> String {
+    match value.unwrap_or("direct").trim().to_ascii_lowercase().as_str() {
+        "canary" => "canary".to_string(),
+        "ring-1" | "ring1" => "ring-1".to_string(),
+        "ring-2" | "ring2" => "ring-2".to_string(),
+        "direct" | "immediate" | "" => "direct".to_string(),
+        other => other.to_string(),
+    }
+}
+
+fn deployment_requires_action(deployment: &AgentDeployment, current_version: &str) -> bool {
+    match compare_versions(&deployment.version, current_version) {
+        std::cmp::Ordering::Greater => true,
+        std::cmp::Ordering::Less => deployment.allow_downgrade,
+        std::cmp::Ordering::Equal => false,
+    }
+}
+
+fn is_terminal_deployment_status(status: &str) -> bool {
+    matches!(
+        status.trim().to_ascii_lowercase().as_str(),
+        "applied" | "completed" | "cancelled"
+    )
+}
+
+fn deployment_is_pending(deployment: &AgentDeployment, registry: &AgentRegistry) -> bool {
+    match registry.get(&deployment.agent_id) {
+        Some(agent) => deployment_requires_action(deployment, &agent.version),
+        None => !is_terminal_deployment_status(&deployment.status),
+    }
+}
+
 fn severity_rank(level: &str) -> u8 {
     match level.to_ascii_lowercase().as_str() {
         "critical" => 3,
@@ -557,6 +613,9 @@ fn parse_event_query(url: &str) -> EventQuery {
             "false" | "0" => Some(false),
             _ => None,
         }),
+        triage_status: params.get("triage_status").cloned().filter(|value| !value.is_empty()),
+        assignee: params.get("assignee").cloned().filter(|value| !value.is_empty()),
+        tag: params.get("tag").cloned().filter(|value| !value.is_empty()),
         limit,
     }
 }
@@ -587,6 +646,31 @@ fn event_matches_query(event: &crate::event_forward::StoredEvent, query: &EventQ
             return false;
         }
     }
+    if let Some(triage_status) = &query.triage_status {
+        if !event.triage.status.eq_ignore_ascii_case(triage_status) {
+            return false;
+        }
+    }
+    if let Some(assignee) = &query.assignee {
+        if !event
+            .triage
+            .assignee
+            .as_deref()
+            .is_some_and(|value| value.eq_ignore_ascii_case(assignee))
+        {
+            return false;
+        }
+    }
+    if let Some(tag) = &query.tag {
+        if !event
+            .triage
+            .tags
+            .iter()
+            .any(|candidate| candidate.eq_ignore_ascii_case(tag))
+        {
+            return false;
+        }
+    }
     true
 }
 
@@ -604,7 +688,7 @@ fn csv_escape(value: &str) -> String {
 }
 
 fn events_to_csv(events: &[&crate::event_forward::StoredEvent]) -> String {
-    let mut out = String::from("id,agent_id,received_at,level,score,confidence,correlated,reasons,hostname,platform,action\n");
+    let mut out = String::from("id,agent_id,received_at,level,score,confidence,correlated,triage_status,assignee,tags,reasons,hostname,platform,action\n");
     for event in events {
         let row = [
             event.id.to_string(),
@@ -614,6 +698,9 @@ fn events_to_csv(events: &[&crate::event_forward::StoredEvent]) -> String {
             event.alert.score.to_string(),
             event.alert.confidence.to_string(),
             event.correlated.to_string(),
+            csv_escape(&event.triage.status),
+            csv_escape(event.triage.assignee.as_deref().unwrap_or("")),
+            csv_escape(&event.triage.tags.join("|")),
             csv_escape(&event.alert.reasons.join("|")),
             csv_escape(&event.alert.hostname),
             csv_escape(&event.alert.platform),
@@ -623,6 +710,23 @@ fn events_to_csv(events: &[&crate::event_forward::StoredEvent]) -> String {
         out.push('\n');
     }
     out
+}
+
+fn load_remote_deployments(path: &str) -> HashMap<String, AgentDeployment> {
+    match fs::read_to_string(path) {
+        Ok(raw) => serde_json::from_str(&raw).unwrap_or_default(),
+        Err(_) => HashMap::new(),
+    }
+}
+
+fn save_remote_deployments(path: &str, deployments: &HashMap<String, AgentDeployment>) {
+    if let Ok(json) = serde_json::to_string_pretty(deployments) {
+        let path_ref = Path::new(path);
+        if let Some(parent) = path_ref.parent() {
+            let _ = fs::create_dir_all(parent);
+        }
+        let _ = fs::write(path_ref, json);
+    }
 }
 
 fn monitoring_option(
@@ -977,6 +1081,9 @@ fn handle_api(mut request: Request, state: &Arc<Mutex<AppState>>, _site_dir: &Pa
             | (Method::Post, "/api/policy/publish")
             | (Method::Post, "/api/updates/publish")
             | (Method::Post, "/api/updates/deploy")
+            | (Method::Post, "/api/updates/rollback")
+            | (Method::Post, "/api/updates/cancel")
+            | (Method::Post, "/api/events/bulk-triage")
             | (Method::Post, "/api/shutdown")
             | (Method::Post, "/api/mesh/heal")
             | (Method::Delete, "/api/alerts")
@@ -1007,6 +1114,9 @@ fn handle_api(mut request: Request, state: &Arc<Mutex<AppState>>, _site_dir: &Pa
         || (method == Method::Get && url == "/api/endpoints")
         || (method == Method::Get && url == "/api/status")
         || (method == Method::Get && url.starts_with("/api/agents/") && url.ends_with("/details"))
+        || (method == Method::Post && url.starts_with("/api/events/") && url.ends_with("/triage"))
+        || (method == Method::Post && url.starts_with("/api/agents/") && url.ends_with("/scope"))
+        || (method == Method::Get && url.starts_with("/api/agents/") && url.ends_with("/scope"))
         || (method == Method::Delete && url.starts_with("/api/agents/"))
     ));
 
@@ -1685,6 +1795,13 @@ fn handle_api(mut request: Request, state: &Arc<Mutex<AppState>>, _site_dir: &Pa
             let body = monitoring_paths_payload(&s.local_host_info, &s.config);
             json_response(&body.to_string(), 200)
         }
+        (Method::Get, "/api/rollout/config") => {
+            let s = state.lock().unwrap();
+            match serde_json::to_string(&s.config.rollout) {
+                Ok(json) => json_response(&json, 200),
+                Err(e) => error_json(&format!("serialization error: {e}"), 500),
+            }
+        }
         (Method::Get, "/api/endpoints") => {
             let endpoints = serde_json::json!([
                 {"method": "GET", "path": "/api/health", "auth": false, "description": "Server health, version, uptime, platform"},
@@ -1709,6 +1826,7 @@ fn handle_api(mut request: Request, state: &Arc<Mutex<AppState>>, _site_dir: &Pa
                 {"method": "GET", "path": "/api/detection/summary", "auth": true, "description": "Velocity, entropy, compound detector state"},
                 {"method": "GET", "path": "/api/events/summary", "auth": true, "description": "XDR fleet event analytics summary"},
                 {"method": "GET", "path": "/api/events/export", "auth": true, "description": "Export filtered XDR events as CSV"},
+                {"method": "POST", "path": "/api/events/{id}/triage", "auth": true, "description": "Update event triage state, assignee, tags, and analyst notes"},
                 {"method": "GET", "path": "/api/policy/history", "auth": true, "description": "Published policy history"},
                 {"method": "POST", "path": "/api/updates/deploy", "auth": true, "description": "Assign a published release to a specific agent"},
             ]);
@@ -1789,6 +1907,15 @@ fn handle_api(mut request: Request, state: &Arc<Mutex<AppState>>, _site_dir: &Pa
         (Method::Post, "/api/updates/deploy") => {
             handle_update_deploy(&mut request, state)
         }
+        (Method::Post, "/api/updates/rollback") => {
+            handle_update_rollback(&mut request, state)
+        }
+        (Method::Post, "/api/updates/cancel") => {
+            handle_update_cancel(&mut request, state)
+        }
+        (Method::Post, "/api/events/bulk-triage") => {
+            handle_bulk_triage(&mut request, state)
+        }
 
         // ── Detection Analysis ─────────────────────────────────
         (Method::Get, "/api/detection/summary") => {
@@ -1835,6 +1962,12 @@ fn handle_api(mut request: Request, state: &Arc<Mutex<AppState>>, _site_dir: &Pa
             let policy_version = s.policy_store.current_version();
             let siem_status = s.siem_connector.status();
             let releases = s.update_manager.list_releases();
+            let deployments = s.remote_deployments.values().cloned().collect::<Vec<_>>();
+            let active_deployments = deployments
+                .iter()
+                .filter(|deployment| deployment_is_pending(deployment, &s.agent_registry))
+                .cloned()
+                .collect::<Vec<_>>();
             let info = serde_json::json!({
                 "fleet": {
                     "total_agents": agents.len(),
@@ -1845,6 +1978,11 @@ fn handle_api(mut request: Request, state: &Arc<Mutex<AppState>>, _site_dir: &Pa
                     "recent_correlations": correlations.len(),
                     "correlations": correlations,
                     "analytics": analytics,
+                    "triage": {
+                        "counts": s.event_store.triage_summary(),
+                        "persistent": s.event_store.has_persistence(),
+                        "storage_path": s.event_store.storage_path(),
+                    },
                 },
                 "policy": {
                     "current_version": policy_version,
@@ -1852,8 +1990,14 @@ fn handle_api(mut request: Request, state: &Arc<Mutex<AppState>>, _site_dir: &Pa
                 },
                 "updates": {
                     "available_releases": releases.len(),
-                    "pending_deployments": s.remote_deployments.len(),
+                    "pending_deployments": active_deployments.len(),
                     "release_catalog": releases.iter().rev().take(10).cloned().collect::<Vec<_>>(),
+                    "deployments": deployments,
+                    "active_deployments": active_deployments,
+                    "rollout_groups": s.remote_deployments.values().filter(|deployment| deployment_is_pending(deployment, &s.agent_registry)).fold(HashMap::new(), |mut acc, deployment| {
+                        *acc.entry(deployment.rollout_group.clone()).or_insert(0usize) += 1;
+                        acc
+                    }),
                 },
                 "siem": {
                     "enabled": siem_status.enabled,
@@ -1923,6 +2067,25 @@ fn handle_api(mut request: Request, state: &Arc<Mutex<AppState>>, _site_dir: &Pa
                     .and_then(|rest| rest.strip_suffix("/details"))
                     .unwrap_or("");
                 handle_agent_details(state, agent_id)
+            } else if method == Method::Post && url.starts_with("/api/events/") && url.ends_with("/triage") {
+                let event_id = url
+                    .strip_prefix("/api/events/")
+                    .and_then(|rest| rest.strip_suffix("/triage"))
+                    .unwrap_or("")
+                    .trim_end_matches('/');
+                handle_event_triage(&mut request, state, event_id)
+            } else if method == Method::Post && url.starts_with("/api/agents/") && url.ends_with("/scope") {
+                let agent_id = url
+                    .strip_prefix("/api/agents/")
+                    .and_then(|rest| rest.strip_suffix("/scope"))
+                    .unwrap_or("");
+                handle_agent_set_scope(&mut request, state, agent_id)
+            } else if method == Method::Get && url.starts_with("/api/agents/") && url.ends_with("/scope") {
+                let agent_id = url
+                    .strip_prefix("/api/agents/")
+                    .and_then(|rest| rest.strip_suffix("/scope"))
+                    .unwrap_or("");
+                handle_agent_get_scope(state, agent_id)
             } else if method == Method::Get && url.starts_with("/api/agents/") && url.ends_with("/status") {
                 // GET /api/agents/{id}/status
                 let agent_id = url.strip_prefix("/api/agents/")
@@ -2607,28 +2770,136 @@ fn handle_agent_heartbeat(
     struct HeartbeatReq {
         #[serde(default)]
         version: String,
+        #[serde(default)]
+        health: Option<crate::enrollment::AgentHealth>,
     }
     let req: HeartbeatReq = serde_json::from_str(&body).unwrap_or(HeartbeatReq {
         version: env!("CARGO_PKG_VERSION").to_string(),
+        health: None,
     });
     let mut s = state.lock().unwrap();
-    match s.agent_registry.heartbeat(agent_id, &req.version) {
+    match s.agent_registry.heartbeat(agent_id, &req.version, req.health.clone()) {
         Ok(()) => {
             let mut target_version = None;
-            if let Some(deployment) = s.remote_deployments.get(agent_id) {
+            let now = chrono::Utc::now().to_rfc3339();
+            if let Some(deployment) = s.remote_deployments.get_mut(agent_id) {
+                deployment.last_heartbeat_at = Some(now.clone());
+                if let Some(health) = &req.health {
+                    if let Some(update_state) = &health.update_state {
+                        deployment.status = update_state.clone();
+                        deployment.status_reason = health.last_update_error.clone();
+                        if matches!(update_state.as_str(), "checking" | "downloading" | "downloaded" | "applying") {
+                            if deployment.acknowledged_at.is_none() {
+                                deployment.acknowledged_at = Some(now.clone());
+                            }
+                        }
+                        if matches!(update_state.as_str(), "restart_pending" | "applied") {
+                            deployment.completed_at = Some(now.clone());
+                        }
+                    }
+                }
                 if deployment.version == req.version {
-                    s.remote_deployments.remove(agent_id);
+                    deployment.status = "applied".to_string();
+                    deployment.completed_at = Some(now);
                 } else {
                     target_version = Some(deployment.version.clone());
                 }
             }
+            // Auto-rollout progression: if a canary/ring-1 deployment just completed,
+            // check if soak time elapsed and auto-progress to next ring.
+            let rollout_cfg = s.config.rollout.clone();
+            if rollout_cfg.auto_progress {
+                // Collect completed deployments that may trigger progression
+                let mut progress_candidates: Vec<(String, String, String)> = Vec::new(); // (version, platform, rollout_group)
+                for dep in s.remote_deployments.values() {
+                    if dep.status == "applied" {
+                        if let Some(ref completed) = dep.completed_at {
+                            if let Ok(completed_time) = chrono::DateTime::parse_from_rfc3339(completed) {
+                                let elapsed = chrono::Utc::now().signed_duration_since(completed_time);
+                                let soak = match dep.rollout_group.as_str() {
+                                    "canary" => rollout_cfg.canary_soak_secs as i64,
+                                    "ring-1" => rollout_cfg.ring1_soak_secs as i64,
+                                    _ => continue,
+                                };
+                                if elapsed.num_seconds() >= soak {
+                                    let next_ring = match dep.rollout_group.as_str() {
+                                        "canary" => "ring-1",
+                                        "ring-1" => "ring-2",
+                                        _ => continue,
+                                    };
+                                    progress_candidates.push((dep.version.clone(), dep.platform.clone(), next_ring.to_string()));
+                                }
+                            }
+                        }
+                    }
+                }
+                // Check for failures -> auto-rollback
+                if rollout_cfg.auto_rollback {
+                    let mut rollback_agents: Vec<(String, String)> = Vec::new(); // (agent_id, version_before)
+                    for dep in s.remote_deployments.values() {
+                        if dep.status == "failed" || dep.status == "error" {
+                            // Count failures for this version
+                            let fail_count = s.remote_deployments.values()
+                                .filter(|d| d.version == dep.version && (d.status == "failed" || d.status == "error"))
+                                .count() as u32;
+                            if fail_count >= rollout_cfg.max_failures && dep.status_reason.as_deref() != Some("auto_rollback_scheduled") {
+                                rollback_agents.push((dep.agent_id.clone(), dep.version.clone()));
+                            }
+                        }
+                    }
+                    for (aid, _ver) in &rollback_agents {
+                        if let Some(dep) = s.remote_deployments.get_mut(aid) {
+                            dep.status = "rollback_pending".to_string();
+                            dep.status_reason = Some("auto_rollback_scheduled".to_string());
+                        }
+                    }
+                }
+                // Auto-progress: deploy same version to next ring agents that don't already have a deployment
+                for (version, platform, next_ring) in progress_candidates {
+                    // Find agents enrolled with matching platform that are in the next ring's eligible set
+                    let enrolled: Vec<String> = s.agent_registry.list()
+                        .iter()
+                        .filter(|a| a.platform == platform && a.status == crate::enrollment::AgentStatus::Online)
+                        .map(|a| a.id.clone())
+                        .collect();
+                    for eid in enrolled {
+                        let already_deployed = s.remote_deployments.get(&eid)
+                            .map(|d| d.version == version)
+                            .unwrap_or(false);
+                        if !already_deployed {
+                            let new_dep = AgentDeployment {
+                                agent_id: eid.clone(),
+                                version: version.clone(),
+                                platform: platform.clone(),
+                                mandatory: false,
+                                release_notes: format!("Auto-progressed from previous ring to {next_ring}"),
+                                status: "assigned".to_string(),
+                                status_reason: Some(format!("auto_progress_{next_ring}")),
+                                rollout_group: next_ring.clone(),
+                                allow_downgrade: false,
+                                assigned_at: chrono::Utc::now().to_rfc3339(),
+                                acknowledged_at: None,
+                                completed_at: None,
+                                last_heartbeat_at: None,
+                            };
+                            s.remote_deployments.insert(eid, new_dep);
+                        }
+                    }
+                }
+            }
+            save_remote_deployments(&s.deployment_store_path, &s.remote_deployments);
             let heartbeat_interval = s.agent_registry.heartbeat_interval();
+            // Include agent-specific monitoring scope in heartbeat response
+            let agent_scope = s.agent_registry.get_monitor_scope(agent_id)
+                .cloned()
+                .unwrap_or_else(|| s.config.monitor.scope.clone());
             let payload = serde_json::json!({
                 "status": "ok",
                 "interval_secs": heartbeat_interval,
                 "heartbeat_interval_secs": heartbeat_interval,
                 "update_assigned": target_version.is_some(),
                 "target_version": target_version,
+                "monitor_scope": agent_scope,
             });
             json_response(&payload.to_string(), 200)
         }
@@ -2677,6 +2948,7 @@ fn handle_agent_details(
                 "correlated": event.correlated,
                 "reasons": event.alert.reasons,
                 "action": event.alert.action,
+                "triage": event.triage,
             })
         })
         .collect::<Vec<_>>();
@@ -2702,6 +2974,7 @@ fn handle_agent_details(
     let payload = serde_json::json!({
         "agent": agent,
         "deployment": s.remote_deployments.get(agent_id),
+        "health": agent.health,
         "analytics": {
             "event_count": total_events,
             "correlated_count": correlated_count,
@@ -2750,7 +3023,7 @@ fn handle_agent_update_check(
             }
         }
         if let Some(deployment) = s.remote_deployments.get(agent_id) {
-            if compare_versions(&deployment.version, &current_version) == std::cmp::Ordering::Greater {
+            if deployment_requires_action(deployment, &current_version) {
                 if let Some(release) = s.update_manager.get_release(&deployment.version, &platform) {
                     let resp = crate::auto_update::UpdateCheckResponse {
                         update_available: true,
@@ -2789,6 +3062,10 @@ fn handle_update_deploy(
         version: String,
         #[serde(default)]
         platform: Option<String>,
+        #[serde(default)]
+        rollout_group: Option<String>,
+        #[serde(default)]
+        allow_downgrade: bool,
     }
 
     let req: DeployReq = match serde_json::from_str(&body) {
@@ -2801,11 +3078,22 @@ fn handle_update_deploy(
         Some(agent) => agent,
         None => return error_json("agent not found", 404),
     };
+    if !req.allow_downgrade && compare_versions(&req.version, &agent.version) == std::cmp::Ordering::Less {
+        return error_json("downgrade blocked without allow_downgrade=true", 409);
+    }
+    if let Some(existing) = s.remote_deployments.get(&req.agent_id) {
+        if !req.allow_downgrade
+            && compare_versions(&req.version, &existing.version) == std::cmp::Ordering::Less
+        {
+            return error_json("deployment would roll back an already assigned version", 409);
+        }
+    }
     let platform = req.platform.unwrap_or_else(|| agent.platform.clone());
     let release = match s.update_manager.get_release(&req.version, &platform) {
         Some(release) => release.clone(),
         None => return error_json("release not found for agent platform", 404),
     };
+    let rollout_group = normalize_rollout_group(req.rollout_group.as_deref());
 
     let deployment = AgentDeployment {
         agent_id: req.agent_id.clone(),
@@ -2813,9 +3101,17 @@ fn handle_update_deploy(
         platform: platform.clone(),
         mandatory: release.mandatory,
         release_notes: release.release_notes.clone(),
+        status: "assigned".to_string(),
+        status_reason: None,
+        rollout_group,
+        allow_downgrade: req.allow_downgrade,
         assigned_at: chrono::Utc::now().to_rfc3339(),
+        acknowledged_at: None,
+        completed_at: None,
+        last_heartbeat_at: None,
     };
     s.remote_deployments.insert(req.agent_id.clone(), deployment.clone());
+    save_remote_deployments(&s.deployment_store_path, &s.remote_deployments);
 
     let payload = serde_json::json!({
         "status": "assigned",
@@ -2823,6 +3119,67 @@ fn handle_update_deploy(
         "deployment": deployment,
     });
     json_response(&payload.to_string(), 200)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn load_remote_deployments_accepts_legacy_records() {
+        let path = format!(
+            "/tmp/wardex_test_deployments_{}_legacy.json",
+            chrono::Utc::now().timestamp_nanos_opt().unwrap_or_default()
+        );
+        fs::write(
+            &path,
+            r#"{
+  "agent-1": {
+    "agent_id": "agent-1",
+    "version": "0.16.0",
+    "platform": "linux",
+    "mandatory": true,
+    "release_notes": "legacy deployment",
+    "assigned_at": "2026-01-01T00:00:00Z"
+  }
+}"#,
+        )
+        .expect("write legacy deployment fixture");
+
+        let deployments = load_remote_deployments(&path);
+        let deployment = deployments.get("agent-1").expect("deployment loaded");
+        assert_eq!(deployment.status, "assigned");
+        assert_eq!(deployment.rollout_group, "direct");
+        assert!(!deployment.allow_downgrade);
+
+        let _ = fs::remove_file(path);
+    }
+}
+
+fn handle_event_triage(
+    request: &mut Request,
+    state: &Arc<Mutex<AppState>>,
+    event_id: &str,
+) -> Response<std::io::Cursor<Vec<u8>>> {
+    let body = match read_body_limited(request, 10 * 1024 * 1024) {
+        Ok(b) => b,
+        Err(e) => return error_json(&e, 400),
+    };
+    let event_id = match event_id.parse::<u64>() {
+        Ok(id) => id,
+        Err(_) => return error_json("invalid event id", 400),
+    };
+    let update: crate::event_forward::EventTriageUpdate = match serde_json::from_str(&body) {
+        Ok(update) => update,
+        Err(e) => return error_json(&format!("invalid JSON: {e}"), 400),
+    };
+
+    let mut s = state.lock().unwrap();
+    match s.event_store.update_triage(event_id, update) {
+        Ok(event) => json_response(&serde_json::json!({ "status": "updated", "event": event }).to_string(), 200),
+        Err(e) if e == "event not found" => error_json(&e, 404),
+        Err(e) => error_json(&e, 400),
+    }
 }
 
 fn handle_event_ingest(
@@ -2848,6 +3205,185 @@ fn handle_event_ingest(
     match serde_json::to_string(&result) {
         Ok(json) => json_response(&json, 200),
         Err(e) => error_json(&format!("serialization error: {e}"), 500),
+    }
+}
+
+fn handle_bulk_triage(
+    request: &mut Request,
+    state: &Arc<Mutex<AppState>>,
+) -> Response<std::io::Cursor<Vec<u8>>> {
+    let body = match read_body_limited(request, 10 * 1024 * 1024) {
+        Ok(b) => b,
+        Err(e) => return error_json(&e, 400),
+    };
+    #[derive(serde::Deserialize)]
+    struct BulkTriageReq {
+        event_ids: Vec<u64>,
+        #[serde(flatten)]
+        update: crate::event_forward::EventTriageUpdate,
+    }
+    let req: BulkTriageReq = match serde_json::from_str(&body) {
+        Ok(r) => r,
+        Err(e) => return error_json(&format!("invalid JSON: {e}"), 400),
+    };
+    if req.event_ids.is_empty() {
+        return error_json("event_ids must not be empty", 400);
+    }
+    if req.event_ids.len() > 500 {
+        return error_json("too many event_ids (max 500)", 400);
+    }
+    let mut s = state.lock().unwrap();
+    let result = s.event_store.bulk_update_triage(&req.event_ids, &req.update);
+    let payload = serde_json::json!({
+        "updated": result.updated,
+        "failed": result.failed.iter().map(|(id, msg)| serde_json::json!({"event_id": id, "error": msg})).collect::<Vec<_>>(),
+    });
+    json_response(&payload.to_string(), 200)
+}
+
+fn handle_update_rollback(
+    request: &mut Request,
+    state: &Arc<Mutex<AppState>>,
+) -> Response<std::io::Cursor<Vec<u8>>> {
+    let body = match read_body_limited(request, 10 * 1024 * 1024) {
+        Ok(b) => b,
+        Err(e) => return error_json(&e, 400),
+    };
+    #[derive(serde::Deserialize)]
+    struct RollbackReq {
+        agent_id: String,
+        target_version: String,
+    }
+    let req: RollbackReq = match serde_json::from_str(&body) {
+        Ok(r) => r,
+        Err(e) => return error_json(&format!("invalid JSON: {e}"), 400),
+    };
+    let mut s = state.lock().unwrap();
+    let agent = match s.agent_registry.get(&req.agent_id) {
+        Some(a) => a.clone(),
+        None => return error_json("agent not found", 404),
+    };
+    let platform = agent.platform.clone();
+    let release = match s.update_manager.get_release(&req.target_version, &platform) {
+        Some(r) => r.clone(),
+        None => return error_json("release not found for agent platform", 404),
+    };
+    // Cancel any existing deployment
+    if let Some(existing) = s.remote_deployments.get(&req.agent_id) {
+        if !is_terminal_deployment_status(&existing.status) {
+            // Mark the old deployment as cancelled before replacing
+        }
+    }
+    let deployment = AgentDeployment {
+        agent_id: req.agent_id.clone(),
+        version: release.version.clone(),
+        platform,
+        mandatory: true,
+        release_notes: format!("Rollback to v{}", release.version),
+        status: "assigned".to_string(),
+        status_reason: Some("rollback".to_string()),
+        rollout_group: "direct".to_string(),
+        allow_downgrade: true,
+        assigned_at: chrono::Utc::now().to_rfc3339(),
+        acknowledged_at: None,
+        completed_at: None,
+        last_heartbeat_at: None,
+    };
+    s.remote_deployments.insert(req.agent_id.clone(), deployment.clone());
+    save_remote_deployments(&s.deployment_store_path, &s.remote_deployments);
+    let payload = serde_json::json!({
+        "status": "rollback_assigned",
+        "agent_id": req.agent_id,
+        "deployment": deployment,
+    });
+    json_response(&payload.to_string(), 200)
+}
+
+fn handle_update_cancel(
+    request: &mut Request,
+    state: &Arc<Mutex<AppState>>,
+) -> Response<std::io::Cursor<Vec<u8>>> {
+    let body = match read_body_limited(request, 10 * 1024 * 1024) {
+        Ok(b) => b,
+        Err(e) => return error_json(&e, 400),
+    };
+    #[derive(serde::Deserialize)]
+    struct CancelReq {
+        agent_id: String,
+    }
+    let req: CancelReq = match serde_json::from_str(&body) {
+        Ok(r) => r,
+        Err(e) => return error_json(&format!("invalid JSON: {e}"), 400),
+    };
+    let mut s = state.lock().unwrap();
+    match s.remote_deployments.get_mut(&req.agent_id) {
+        Some(deployment) => {
+            if is_terminal_deployment_status(&deployment.status) {
+                return error_json("deployment already in terminal state", 409);
+            }
+            deployment.status = "cancelled".to_string();
+            deployment.status_reason = Some("cancelled by admin".to_string());
+            deployment.completed_at = Some(chrono::Utc::now().to_rfc3339());
+            save_remote_deployments(&s.deployment_store_path, &s.remote_deployments);
+            json_response(&serde_json::json!({"status": "cancelled", "agent_id": req.agent_id}).to_string(), 200)
+        }
+        None => error_json("no deployment found for agent", 404),
+    }
+}
+
+fn handle_agent_set_scope(
+    request: &mut Request,
+    state: &Arc<Mutex<AppState>>,
+    agent_id: &str,
+) -> Response<std::io::Cursor<Vec<u8>>> {
+    let body = match read_body_limited(request, 10 * 1024 * 1024) {
+        Ok(b) => b,
+        Err(e) => return error_json(&e, 400),
+    };
+    // Accept either a full MonitorScopeSettings or {"clear": true} to remove override
+    // Try parsing as clear command first
+    let clear_check: Result<serde_json::Value, _> = serde_json::from_str(&body);
+    let is_clear = clear_check.as_ref().ok().and_then(|v| v.get("clear")).and_then(|v| v.as_bool()).unwrap_or(false);
+
+    let mut s = state.lock().unwrap();
+    if is_clear {
+        match s.agent_registry.set_monitor_scope(agent_id, None) {
+            Ok(()) => json_response(&serde_json::json!({"status": "scope_cleared", "agent_id": agent_id}).to_string(), 200),
+            Err(e) => error_json(&e, 404),
+        }
+    } else {
+        let scope: crate::config::MonitorScopeSettings = match serde_json::from_str(&body) {
+            Ok(s) => s,
+            Err(e) => return error_json(&format!("invalid JSON: {e}"), 400),
+        };
+        match s.agent_registry.set_monitor_scope(agent_id, Some(scope.clone())) {
+            Ok(()) => {
+                let payload = serde_json::json!({"status": "scope_set", "agent_id": agent_id, "scope": scope});
+                json_response(&payload.to_string(), 200)
+            }
+            Err(e) => error_json(&e, 404),
+        }
+    }
+}
+
+fn handle_agent_get_scope(
+    state: &Arc<Mutex<AppState>>,
+    agent_id: &str,
+) -> Response<std::io::Cursor<Vec<u8>>> {
+    let s = state.lock().unwrap();
+    match s.agent_registry.get(agent_id) {
+        Some(agent) => {
+            let effective_scope = agent.monitor_scope.as_ref()
+                .unwrap_or(&s.config.monitor.scope);
+            let payload = serde_json::json!({
+                "agent_id": agent_id,
+                "override": agent.monitor_scope.is_some(),
+                "scope": effective_scope,
+                "server_default": s.config.monitor.scope,
+            });
+            json_response(&payload.to_string(), 200)
+        }
+        None => error_json("agent not found", 404),
     }
 }
 

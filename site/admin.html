@@ -789,8 +789,10 @@ input::placeholder{color:var(--ink-3);}
           <dl class="kv-grid">
             <dt>Total Events</dt><dd id="xdr-events">0</dd>
             <dt>Correlations</dt><dd id="xdr-correlations">0</dd>
+            <dt>Open Triage</dt><dd id="xdr-open-triage">0</dd>
             <dt>Policy Version</dt><dd id="xdr-policy">0</dd>
             <dt>Available Updates</dt><dd id="xdr-updates">0</dd>
+            <dt>History</dt><dd id="xdr-history">Ephemeral</dd>
             <dt>SIEM Status</dt><dd id="xdr-siem">—</dd>
             <dt>SIEM Pushed</dt><dd id="xdr-pushed">0</dd>
             <dt>SIEM Pulled</dt><dd id="xdr-pulled">0</dd>
@@ -815,10 +817,76 @@ input::placeholder{color:var(--ink-3);}
             <select id="xdr-release-select" style="min-width:220px;background:var(--bg-alt);color:var(--ink);border:1px solid var(--border);border-radius:6px;padding:.4rem .55rem;">
               <option value="">No published releases</option>
             </select>
+            <select id="xdr-rollout-group" style="min-width:150px;background:var(--bg-alt);color:var(--ink);border:1px solid var(--border);border-radius:6px;padding:.4rem .55rem;">
+              <option value="direct">Direct rollout</option>
+              <option value="canary">Canary</option>
+              <option value="ring-1">Ring 1</option>
+              <option value="ring-2">Ring 2</option>
+            </select>
             <button class="btn btn-sm primary" id="btn-deploy-update">Deploy Update</button>
           </div>
+          <label class="toggle-row" style="margin-top:.5rem;">
+            <input type="checkbox" id="xdr-allow-downgrade">
+            Allow downgrade / rollback for this deployment
+          </label>
           <div id="xdr-selected-agent" class="monitor-note" style="margin-top:.45rem;">Select an agent row to inspect or deploy.</div>
           <div id="xdr-deploy-status" class="monitor-note" style="margin-top:.2rem;"></div>
+          <div class="btn-row" style="margin-top:.5rem;">
+            <button class="btn btn-sm" id="btn-rollback-update" title="Rollback agent to a previous version" style="display:none;">Rollback</button>
+            <button class="btn btn-sm" id="btn-cancel-update" title="Cancel pending deployment" style="display:none;">Cancel Deployment</button>
+          </div>
+          <div id="xdr-rollback-version" style="display:none;margin-top:.4rem;">
+            <label style="font-size:.85rem;">Rollback target version:</label>
+            <select id="xdr-rollback-target" style="min-width:180px;background:var(--bg-alt);color:var(--ink);border:1px solid var(--border);border-radius:6px;padding:.4rem .55rem;">
+              <option value="">Select version</option>
+            </select>
+            <button class="btn btn-sm primary" id="btn-confirm-rollback">Confirm Rollback</button>
+          </div>
+        </div>
+        <div style="margin-top:.9rem;padding-top:.85rem;border-top:1px solid var(--border);">
+          <h3>Agent Monitoring Scope</h3>
+          <p class="text-muted" style="font-size:.8rem;margin-bottom:.5rem;">Override which signals this agent monitors. Leave unchecked to use server defaults.</p>
+          <div id="xdr-agent-scope-panel" style="display:none;">
+            <div class="btn-row" style="flex-wrap:wrap;gap:.4rem;">
+              <label style="font-size:.82rem;"><input type="checkbox" data-agent-scope="cpu_load" checked> CPU load</label>
+              <label style="font-size:.82rem;"><input type="checkbox" data-agent-scope="memory_pressure" checked> Memory</label>
+              <label style="font-size:.82rem;"><input type="checkbox" data-agent-scope="network_activity" checked> Network</label>
+              <label style="font-size:.82rem;"><input type="checkbox" data-agent-scope="disk_pressure" checked> Disk</label>
+              <label style="font-size:.82rem;"><input type="checkbox" data-agent-scope="process_activity" checked> Processes</label>
+              <label style="font-size:.82rem;"><input type="checkbox" data-agent-scope="auth_events" checked> Auth events</label>
+              <label style="font-size:.82rem;"><input type="checkbox" data-agent-scope="thermal_state" checked> Thermal</label>
+              <label style="font-size:.82rem;"><input type="checkbox" data-agent-scope="battery_state" checked> Battery</label>
+              <label style="font-size:.82rem;"><input type="checkbox" data-agent-scope="file_integrity" checked> File integrity</label>
+              <label style="font-size:.82rem;"><input type="checkbox" data-agent-scope="service_persistence" checked> Services</label>
+              <label style="font-size:.82rem;"><input type="checkbox" data-agent-scope="launch_agents" checked> LaunchAgents</label>
+              <label style="font-size:.82rem;"><input type="checkbox" data-agent-scope="systemd_units" checked> Systemd</label>
+              <label style="font-size:.82rem;"><input type="checkbox" data-agent-scope="scheduled_tasks" checked> Scheduled Tasks</label>
+            </div>
+            <div class="btn-row" style="margin-top:.5rem;">
+              <button class="btn btn-sm primary" id="btn-save-agent-scope">Save Scope</button>
+              <button class="btn btn-sm" id="btn-clear-agent-scope">Reset to Server Default</button>
+              <span id="xdr-scope-status" class="text-muted" style="font-size:.8rem;"></span>
+            </div>
+          </div>
+          <div id="xdr-agent-scope-placeholder" class="text-muted" style="font-size:.85rem;">Select an agent to configure monitoring scope.</div>
+        </div>
+        <div style="margin-top:.9rem;padding-top:.85rem;border-top:1px solid var(--border);">
+          <h3>Auto-Rollout Settings</h3>
+          <div class="btn-row" style="flex-wrap:wrap;gap:.6rem;align-items:center;">
+            <label class="toggle-row">
+              <input type="checkbox" id="xdr-auto-progress"> Enable auto-progression (canary → ring-1 → ring-2)
+            </label>
+            <label style="font-size:.85rem;">Canary soak (s): <input type="number" id="xdr-canary-soak" value="300" style="width:80px;background:var(--bg-alt);color:var(--ink);border:1px solid var(--border);border-radius:6px;padding:.3rem .4rem;"></label>
+            <label style="font-size:.85rem;">Ring-1 soak (s): <input type="number" id="xdr-ring1-soak" value="600" style="width:80px;background:var(--bg-alt);color:var(--ink);border:1px solid var(--border);border-radius:6px;padding:.3rem .4rem;"></label>
+            <label class="toggle-row">
+              <input type="checkbox" id="xdr-auto-rollback" checked> Auto-rollback on failure
+            </label>
+            <label style="font-size:.85rem;">Max failures: <input type="number" id="xdr-max-failures" value="1" min="1" style="width:60px;background:var(--bg-alt);color:var(--ink);border:1px solid var(--border);border-radius:6px;padding:.3rem .4rem;"></label>
+          </div>
+          <div class="btn-row" style="margin-top:.5rem;">
+            <button class="btn btn-sm primary" id="btn-save-rollout-config">Save Rollout Config</button>
+            <span id="xdr-rollout-config-status" class="text-muted" style="font-size:.8rem;"></span>
+          </div>
         </div>
       </div>
 
@@ -874,9 +942,41 @@ input::placeholder{color:var(--ink-3);}
               <option value="true">Correlated</option>
               <option value="false">Not correlated</option>
             </select>
+            <select id="xdr-filter-triage" style="min-width:140px;background:var(--bg-alt);color:var(--ink);border:1px solid var(--border);border-radius:6px;padding:.4rem .55rem;">
+              <option value="">Any triage state</option>
+              <option value="new">New</option>
+              <option value="acknowledged">Acknowledged</option>
+              <option value="investigating">Investigating</option>
+              <option value="contained">Contained</option>
+              <option value="resolved">Resolved</option>
+            </select>
             <input type="text" id="xdr-filter-reason" placeholder="Reason filter" style="min-width:140px;background:var(--bg-alt);color:var(--ink);border:1px solid var(--border);border-radius:6px;padding:.4rem .55rem;">
             <button class="btn btn-sm" id="btn-refresh-xdr-events">Apply</button>
             <button class="btn btn-sm" id="btn-export-xdr-events">Export CSV</button>
+          </div>
+          <div class="sub-grid cols-2" style="margin-bottom:.75rem;">
+            <div style="padding:.75rem;border:1px solid var(--border);border-radius:10px;background:var(--bg-alt);">
+              <h3 style="margin-bottom:.5rem;">Selected Event</h3>
+              <div id="xdr-selected-event" class="text-muted">Select an event row to triage.</div>
+            </div>
+            <div style="padding:.75rem;border:1px solid var(--border);border-radius:10px;background:var(--bg-alt);">
+              <h3 style="margin-bottom:.5rem;">Update Triage</h3>
+              <div class="btn-row" style="align-items:flex-start;">
+                <select id="xdr-triage-status" style="min-width:140px;background:var(--bg);color:var(--ink);border:1px solid var(--border);border-radius:6px;padding:.4rem .55rem;">
+                  <option value="acknowledged">Acknowledge</option>
+                  <option value="investigating">Investigating</option>
+                  <option value="contained">Contained</option>
+                  <option value="resolved">Resolved</option>
+                </select>
+                <input type="text" id="xdr-triage-assignee" placeholder="Assignee" style="min-width:120px;background:var(--bg);color:var(--ink);border:1px solid var(--border);border-radius:6px;padding:.4rem .55rem;">
+                <input type="text" id="xdr-triage-tags" placeholder="Tags: cpu, urgent" style="min-width:160px;background:var(--bg);color:var(--ink);border:1px solid var(--border);border-radius:6px;padding:.4rem .55rem;">
+              </div>
+              <div class="btn-row" style="margin-top:.5rem;">
+                <input type="text" id="xdr-triage-note" placeholder="Analyst note" style="flex:1;min-width:220px;background:var(--bg);color:var(--ink);border:1px solid var(--border);border-radius:6px;padding:.4rem .55rem;">
+                <button class="btn btn-sm primary" id="btn-apply-xdr-triage">Apply Triage</button>
+                <button class="btn btn-sm" id="btn-bulk-triage" title="Apply triage to all checked events">Bulk Triage</button>
+              </div>
+            </div>
           </div>
           <div id="xdr-event-table"><em class="text-muted">No events loaded</em></div>
         </div>
@@ -1433,6 +1533,7 @@ input::placeholder{color:var(--ink-3);}
   let alertPollTimer = null;
   let monitoringOptionsData = null;
   let selectedAgentId = null;
+  let selectedEventId = null;
   let fleetAgentsCache = [];
   let xdrReleaseCatalog = [];
   let demoMode = false;
@@ -1456,10 +1557,12 @@ input::placeholder{color:var(--ink-3);}
     const agentId = $('#xdr-filter-agent') ? $('#xdr-filter-agent').value : '';
     const severity = $('#xdr-filter-severity') ? $('#xdr-filter-severity').value : '';
     const correlated = $('#xdr-filter-correlated') ? $('#xdr-filter-correlated').value : '';
+    const triage = $('#xdr-filter-triage') ? $('#xdr-filter-triage').value : '';
     const reason = $('#xdr-filter-reason') ? $('#xdr-filter-reason').value.trim() : '';
     if (agentId) params.set('agent_id', agentId);
     if (severity) params.set('severity', severity);
     if (correlated) params.set('correlated', correlated);
+    if (triage) params.set('triage_status', triage);
     if (reason) params.set('reason', reason);
     params.set('limit', '100');
     return params.toString();
@@ -1655,7 +1758,7 @@ input::placeholder{color:var(--ink-3);}
     // Auto-load data for each section
     if (sectionId === 'live-monitor') { refreshAlerts(); refreshHealth(); }
     else if (sectionId === 'threat-detection') { refreshSecurity(); refreshCheckpointCount(); }
-    else if (sectionId === 'fleet-agents') { refreshFleet(); refreshXdr(); }
+    else if (sectionId === 'fleet-agents') { refreshFleet(); refreshXdr(); loadRolloutConfig(); }
     else if (sectionId === 'security-policy') { refreshCompliance(); refreshQuantum(); }
     else if (sectionId === 'incident-response') { refreshTwin(); refreshAnalysis(); }
     else if (sectionId === 'infrastructure') { refreshInfra(); }
@@ -2061,8 +2164,11 @@ input::placeholder{color:var(--ink-3);}
         $('#xdr-offline').textContent = d.fleet?.status_counts?.offline ?? '0';
         $('#xdr-events').textContent = d.events?.total ?? '0';
         $('#xdr-correlations').textContent = d.events?.recent_correlations ?? '0';
+        const triageCounts = d.events?.triage?.counts || analytics.triage_counts || {};
+        $('#xdr-open-triage').textContent = (triageCounts.new || 0) + (triageCounts.acknowledged || 0) + (triageCounts.investigating || 0);
         $('#xdr-policy').textContent = d.policy?.current_version ?? '0';
         $('#xdr-updates').textContent = d.updates?.available_releases ?? '0';
+        $('#xdr-history').textContent = d.events?.triage?.persistent ? 'Persistent' : 'Ephemeral';
         $('#xdr-siem').textContent = d.siem?.enabled ? 'Enabled' : 'Disabled';
         $('#xdr-pushed').textContent = d.siem?.total_pushed ?? '0';
         $('#xdr-pulled').textContent = d.siem?.total_pulled ?? '0';
@@ -2075,7 +2181,14 @@ input::placeholder{color:var(--ink-3);}
         } else {
           releaseSelect.innerHTML = '<option value="">No published releases</option>';
         }
-        $('#xdr-deploy-status').textContent = 'Pending deployments: ' + (d.updates?.pending_deployments ?? 0);
+        const deployments = d.updates?.active_deployments || d.updates?.deployments || [];
+        if (deployments.length > 0) {
+          $('#xdr-deploy-status').innerHTML = deployments.slice(0, 3).map(item =>
+            'Agent ' + esc(item.agent_id) + ': v' + esc(item.version) + ' [' + esc(item.status || 'assigned') + '] · ' + esc(item.rollout_group || 'direct')
+          ).join('<br>');
+        } else {
+          $('#xdr-deploy-status').textContent = 'Pending deployments: ' + (d.updates?.pending_deployments ?? 0);
+        }
         $('#xdr-correlation-rate').textContent = typeof analytics.correlation_rate === 'number' ? (analytics.correlation_rate * 100).toFixed(1) + '%' : '0%';
         $('#xdr-critical-events').textContent = analytics.severity_counts?.critical ?? '0';
         $('#xdr-severe-events').textContent = analytics.severity_counts?.severe ?? '0';
@@ -2180,7 +2293,8 @@ input::placeholder{color:var(--ink-3);}
         '<div style="padding:.35rem 0;border-bottom:1px solid var(--border);">' +
         '<strong>' + esc(item.level) + '</strong> score ' + Number(item.score || 0).toFixed(2) +
         ' at ' + esc(item.received_at) +
-        '<br><span style="color:var(--ink-3);">' + esc((item.reasons || []).join(', ') || 'no reasons') + '</span></div>'
+        '<br><span style="color:var(--ink-3);">' + esc((item.reasons || []).join(', ') || 'no reasons') + '</span>' +
+        '<br><span class="text-muted">Triage: ' + esc(item.triage?.status || 'new') + (item.triage?.assignee ? (' · ' + esc(item.triage.assignee)) : '') + '</span></div>'
       ).join('') : '<em class="text-muted">No recent events for this agent</em>';
       const transitions = data.risk_transitions?.length ? data.risk_transitions.map(item =>
         '<div style="padding:.25rem 0;border-bottom:1px solid var(--border);">' + esc(item.from) + ' → ' + esc(item.to) + ' at ' + esc(item.received_at) + '</div>'
@@ -2195,13 +2309,30 @@ input::placeholder{color:var(--ink-3);}
           '<dt>Last Seen</dt><dd>' + esc(data.agent?.last_seen || '—') + '</dd>' +
           '<dt>Events</dt><dd>' + esc(data.analytics?.event_count ?? 0) + '</dd>' +
           '<dt>Correlated</dt><dd>' + esc(data.analytics?.correlated_count ?? 0) + '</dd>' +
+          '<dt>Queued Alerts</dt><dd>' + esc(data.health?.pending_alerts ?? 0) + '</dd>' +
+          '<dt>Queue Depth</dt><dd>' + esc(data.health?.telemetry_queue_depth ?? 0) + '</dd>' +
+          '<dt>Update State</dt><dd>' + esc(data.health?.update_state || 'idle') + '</dd>' +
         '</dl>' +
         '<h3 style="margin-top:.9rem;">Deployment</h3>' +
         (data.deployment ?
-          '<div style="padding:.45rem 0;border-bottom:1px solid var(--border);">Assigned v' + esc(data.deployment.version) + ' (' + esc(data.deployment.platform) + ') at ' + esc(data.deployment.assigned_at) + '</div>' :
+          '<div style="padding:.45rem 0;border-bottom:1px solid var(--border);">Assigned v' + esc(data.deployment.version) + ' (' + esc(data.deployment.platform) + ') at ' + esc(data.deployment.assigned_at) +
+          '<br>Status: <strong>' + esc(data.deployment.status || 'assigned') + '</strong>' +
+          '<br>Rollout: ' + esc(data.deployment.rollout_group || 'direct') +
+          (data.deployment.allow_downgrade ? '<br>Rollback allowed' : '<br>Rollback blocked') +
+          (data.deployment.status_reason ? '<br>Reason: ' + esc(data.deployment.status_reason) : '') +
+          (data.deployment.acknowledged_at ? '<br>Acknowledged: ' + esc(data.deployment.acknowledged_at) : '') +
+          (data.deployment.completed_at ? '<br>Completed: ' + esc(data.deployment.completed_at) : '') +
+          '</div>' :
           '<div class="text-muted">No pending deployment</div>') +
         '<h3 style="margin-top:.9rem;">Risk Transitions</h3>' + transitions +
         '<h3 style="margin-top:.9rem;">Recent Timeline</h3>' + timeline;
+      // Show/hide rollback & cancel buttons based on deployment status
+      const hasDeployment = !!data.deployment;
+      const isTerminal = hasDeployment && ['applied', 'cancelled', 'failed', 'error', 'rollback_pending'].includes(data.deployment.status);
+      $('#btn-rollback-update').style.display = hasDeployment ? '' : 'none';
+      $('#btn-cancel-update').style.display = (hasDeployment && !isTerminal) ? '' : 'none';
+      // Load agent monitoring scope
+      loadAgentScope();
     } catch(e) {
       detailEl.innerHTML = '<em class="text-muted">Failed to load agent detail: ' + esc(e.message) + '</em>';
     }
@@ -2215,15 +2346,56 @@ input::placeholder{color:var(--ink-3);}
       if (!res.ok) throw new Error('HTTP ' + res.status);
       const events = await res.json();
       if (!events.length) {
+        selectedEventId = null;
         tableEl.innerHTML = '<em class="text-muted">No events match the current filters</em>';
+        $('#xdr-selected-event').textContent = 'Select an event row to triage.';
         return;
       }
-      let html = '<table class="data-table"><tr><th>Agent</th><th>Level</th><th>Score</th><th>Correlated</th><th>Reason</th><th>Received</th></tr>';
+      let selectedEvent = null;
+      let html = '<table class="data-table"><tr><th><input type="checkbox" id="xdr-select-all-events" title="Select all"></th><th>Agent</th><th>Level</th><th>Score</th><th>Triage</th><th>Correlated</th><th>Reason</th><th>Received</th></tr>';
       events.forEach(event => {
-        html += '<tr><td>' + esc(event.agent_id || '') + '</td><td>' + esc(event.alert?.level || '') + '</td><td>' + Number(event.alert?.score || 0).toFixed(2) + '</td><td>' + (event.correlated ? 'Yes' : 'No') + '</td><td>' + esc((event.alert?.reasons || []).join(', ')) + '</td><td>' + esc(event.received_at || '') + '</td></tr>';
+        if (!selectedEventId) selectedEventId = event.id;
+        if (String(event.id) === String(selectedEventId)) selectedEvent = event;
+        const rowStyle = String(event.id) === String(selectedEventId) ? ' style="background:var(--accent-light);"' : '';
+        html += '<tr class="alert-row" data-event-row="' + esc(event.id) + '"' + rowStyle + '>' +
+          '<td><input type="checkbox" class="xdr-event-check" data-event-id="' + esc(event.id) + '" onclick="event.stopPropagation()"></td>' +
+          '<td>' + esc(event.agent_id || '') + '</td>' +
+          '<td>' + esc(event.alert?.level || '') + '</td>' +
+          '<td>' + Number(event.alert?.score || 0).toFixed(2) + '</td>' +
+          '<td>' + esc(event.triage?.status || 'new') + (event.triage?.assignee ? (' · ' + esc(event.triage.assignee)) : '') + '</td>' +
+          '<td>' + (event.correlated ? 'Yes' : 'No') + '</td>' +
+          '<td>' + esc((event.alert?.reasons || []).join(', ')) + '</td>' +
+          '<td>' + esc(event.received_at || '') + '</td></tr>';
       });
       html += '</table>';
       tableEl.innerHTML = html;
+      if (!selectedEvent && events.length) {
+        selectedEvent = events[0];
+        selectedEventId = events[0].id;
+      }
+      if (selectedEvent) {
+        $('#xdr-selected-event').innerHTML =
+          '<strong>Event #' + esc(selectedEvent.id) + '</strong> · ' + esc(selectedEvent.alert?.level || 'Unknown') +
+          ' · ' + esc(selectedEvent.agent_id || '') +
+          '<br><span class="text-muted">' + esc((selectedEvent.alert?.reasons || []).join(', ') || 'No reasons') + '</span>' +
+          '<br><span class="text-muted">Current triage: ' + esc(selectedEvent.triage?.status || 'new') + (selectedEvent.triage?.assignee ? (' · ' + esc(selectedEvent.triage.assignee)) : '') + '</span>';
+        $('#xdr-triage-status').value = selectedEvent.triage?.status && selectedEvent.triage.status !== 'new' ? selectedEvent.triage.status : 'acknowledged';
+        $('#xdr-triage-assignee').value = selectedEvent.triage?.assignee || '';
+        $('#xdr-triage-tags').value = (selectedEvent.triage?.tags || []).join(', ');
+      }
+      $$('[data-event-row]').forEach(row => {
+        row.addEventListener('click', () => {
+          selectedEventId = row.dataset.eventRow;
+          refreshXdrEvents();
+        });
+      });
+      // Select-all checkbox
+      const selectAll = $('#xdr-select-all-events');
+      if (selectAll) {
+        selectAll.addEventListener('change', () => {
+          $$('.xdr-event-check').forEach(cb => { cb.checked = selectAll.checked; });
+        });
+      }
     } catch(e) {
       tableEl.innerHTML = '<em class="text-muted">Failed to load events: ' + esc(e.message) + '</em>';
     }
@@ -2235,6 +2407,8 @@ input::placeholder{color:var(--ink-3);}
       return;
     }
     const releaseValue = $('#xdr-release-select').value;
+    const rolloutGroup = $('#xdr-rollout-group').value;
+    const allowDowngrade = $('#xdr-allow-downgrade').checked;
     if (!releaseValue) {
       flash('Publish a release before assigning updates', 'error');
       return;
@@ -2244,15 +2418,39 @@ input::placeholder{color:var(--ink-3);}
       const res = await fetch(API + '/api/updates/deploy', {
         method: 'POST',
         headers: authHeaders('application/json'),
-        body: JSON.stringify({ agent_id: selectedAgentId, version, platform })
+        body: JSON.stringify({ agent_id: selectedAgentId, version, platform, rollout_group: rolloutGroup, allow_downgrade: allowDowngrade })
       });
       if (!res.ok) throw new Error('HTTP ' + res.status);
       const data = await res.json();
       flash('Deployment assigned to ' + selectedAgentId, 'success');
-      $('#xdr-deploy-status').textContent = 'Assigned v' + data.deployment.version + ' to ' + data.agent_id;
+      $('#xdr-deploy-status').textContent = 'Assigned v' + data.deployment.version + ' to ' + data.agent_id + ' · ' + (data.deployment.rollout_group || 'direct');
       await Promise.all([refreshXdr(), refreshAgentDetail()]);
     } catch(e) {
       flash('Deployment failed: ' + e.message, 'error');
+    }
+  }
+
+  async function applyXdrTriage() {
+    if (!selectedEventId) {
+      flash('Select an event first', 'error');
+      return;
+    }
+    const status = $('#xdr-triage-status').value;
+    const assignee = $('#xdr-triage-assignee').value.trim();
+    const tags = $('#xdr-triage-tags').value.split(',').map(v => v.trim()).filter(Boolean);
+    const note = $('#xdr-triage-note').value.trim();
+    try {
+      const res = await fetch(API + '/api/events/' + encodeURIComponent(selectedEventId) + '/triage', {
+        method: 'POST',
+        headers: authHeaders('application/json'),
+        body: JSON.stringify({ status, assignee, tags, note, author: 'admin-console' })
+      });
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      $('#xdr-triage-note').value = '';
+      flash('Event triage updated', 'success');
+      await Promise.all([refreshXdr(), refreshXdrEvents(), refreshAgentDetail()]);
+    } catch(e) {
+      flash('Triage update failed: ' + e.message, 'error');
     }
   }
 
@@ -2266,6 +2464,197 @@ input::placeholder{color:var(--ink-3);}
       log('Exported filtered XDR events');
     } catch(e) {
       flash('Export failed: ' + e.message, 'error');
+    }
+  }
+
+  // ── Bulk Triage ──
+  async function applyBulkTriage() {
+    const checked = $$('.xdr-event-check:checked');
+    if (!checked.length) {
+      flash('Select at least one event checkbox for bulk triage', 'error');
+      return;
+    }
+    const eventIds = Array.from(checked).map(cb => Number(cb.dataset.eventId));
+    const status = $('#xdr-triage-status').value;
+    const assignee = $('#xdr-triage-assignee').value.trim();
+    const tags = $('#xdr-triage-tags').value.split(',').map(v => v.trim()).filter(Boolean);
+    const note = $('#xdr-triage-note').value.trim();
+    try {
+      const res = await fetch(API + '/api/events/bulk-triage', {
+        method: 'POST',
+        headers: authHeaders('application/json'),
+        body: JSON.stringify({ event_ids: eventIds, status, assignee, tags, note, author: 'admin-console' })
+      });
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      const data = await res.json();
+      const failCount = data.failed?.length || 0;
+      flash('Bulk triage: ' + data.updated + ' updated' + (failCount ? ', ' + failCount + ' failed' : ''), failCount ? 'warning' : 'success');
+      $('#xdr-triage-note').value = '';
+      await Promise.all([refreshXdr(), refreshXdrEvents(), refreshAgentDetail()]);
+    } catch(e) {
+      flash('Bulk triage failed: ' + e.message, 'error');
+    }
+  }
+
+  // ── Rollback & Cancel ──
+  function showRollbackPanel() {
+    const panel = $('#xdr-rollback-version');
+    panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
+    if (panel.style.display !== 'none') refreshRollbackVersions();
+  }
+
+  async function refreshRollbackVersions() {
+    const select = $('#xdr-rollback-target');
+    try {
+      const res = await fetch(API + '/api/updates/releases', { headers: authHeaders() });
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      const releases = await res.json();
+      select.innerHTML = '<option value="">Select version</option>';
+      releases.forEach(r => {
+        const opt = document.createElement('option');
+        opt.value = r.version + '|' + r.platform;
+        opt.textContent = 'v' + r.version + ' (' + r.platform + ')';
+        select.appendChild(opt);
+      });
+    } catch(e) {
+      select.innerHTML = '<option value="">Failed to load</option>';
+    }
+  }
+
+  async function confirmRollback() {
+    if (!selectedAgentId) { flash('Select an agent first', 'error'); return; }
+    const val = $('#xdr-rollback-target').value;
+    if (!val) { flash('Select a target version', 'error'); return; }
+    const [version] = val.split('|');
+    try {
+      const res = await fetch(API + '/api/updates/rollback', {
+        method: 'POST',
+        headers: authHeaders('application/json'),
+        body: JSON.stringify({ agent_id: selectedAgentId, target_version: version })
+      });
+      if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error(e.error || 'HTTP ' + res.status); }
+      flash('Rollback assigned to ' + selectedAgentId, 'success');
+      $('#xdr-rollback-version').style.display = 'none';
+      await Promise.all([refreshXdr(), refreshAgentDetail()]);
+    } catch(e) {
+      flash('Rollback failed: ' + e.message, 'error');
+    }
+  }
+
+  async function cancelDeployment() {
+    if (!selectedAgentId) { flash('Select an agent first', 'error'); return; }
+    try {
+      const res = await fetch(API + '/api/updates/cancel', {
+        method: 'POST',
+        headers: authHeaders('application/json'),
+        body: JSON.stringify({ agent_id: selectedAgentId })
+      });
+      if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error(e.error || 'HTTP ' + res.status); }
+      flash('Deployment cancelled for ' + selectedAgentId, 'success');
+      await Promise.all([refreshXdr(), refreshAgentDetail()]);
+    } catch(e) {
+      flash('Cancel failed: ' + e.message, 'error');
+    }
+  }
+
+  // ── Agent Monitoring Scope ──
+  async function loadAgentScope() {
+    const panel = $('#xdr-agent-scope-panel');
+    const placeholder = $('#xdr-agent-scope-placeholder');
+    if (!selectedAgentId) {
+      panel.style.display = 'none';
+      placeholder.style.display = 'block';
+      return;
+    }
+    try {
+      const res = await fetch(API + '/api/agents/' + encodeURIComponent(selectedAgentId) + '/scope', { headers: authHeaders() });
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      const data = await res.json();
+      const scope = data.scope || {};
+      $$('[data-agent-scope]').forEach(el => {
+        const key = el.dataset.agentScope;
+        el.checked = scope[key] !== false;
+      });
+      panel.style.display = 'block';
+      placeholder.style.display = 'none';
+      $('#xdr-scope-status').textContent = data.override ? 'Custom scope active' : 'Using server defaults';
+    } catch(e) {
+      panel.style.display = 'none';
+      placeholder.textContent = 'Failed to load scope: ' + e.message;
+      placeholder.style.display = 'block';
+    }
+  }
+
+  async function saveAgentScope() {
+    if (!selectedAgentId) { flash('Select an agent first', 'error'); return; }
+    const scope = {};
+    $$('[data-agent-scope]').forEach(el => { scope[el.dataset.agentScope] = el.checked; });
+    try {
+      const res = await fetch(API + '/api/agents/' + encodeURIComponent(selectedAgentId) + '/scope', {
+        method: 'POST',
+        headers: authHeaders('application/json'),
+        body: JSON.stringify(scope)
+      });
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      flash('Monitoring scope saved for ' + selectedAgentId, 'success');
+      $('#xdr-scope-status').textContent = 'Custom scope active';
+    } catch(e) {
+      flash('Save scope failed: ' + e.message, 'error');
+    }
+  }
+
+  async function clearAgentScope() {
+    if (!selectedAgentId) { flash('Select an agent first', 'error'); return; }
+    try {
+      const res = await fetch(API + '/api/agents/' + encodeURIComponent(selectedAgentId) + '/scope', {
+        method: 'POST',
+        headers: authHeaders('application/json'),
+        body: JSON.stringify({ clear: true })
+      });
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      flash('Scope reset to server defaults for ' + selectedAgentId, 'success');
+      await loadAgentScope();
+    } catch(e) {
+      flash('Reset scope failed: ' + e.message, 'error');
+    }
+  }
+
+  // ── Auto-Rollout Config ──
+  async function loadRolloutConfig() {
+    try {
+      const res = await fetch(API + '/api/rollout/config', { headers: authHeaders() });
+      if (res.ok) {
+        const cfg = await res.json();
+        $('#xdr-auto-progress').checked = cfg.auto_progress || false;
+        $('#xdr-canary-soak').value = cfg.canary_soak_secs || 300;
+        $('#xdr-ring1-soak').value = cfg.ring1_soak_secs || 600;
+        $('#xdr-auto-rollback').checked = cfg.auto_rollback !== false;
+        $('#xdr-max-failures').value = cfg.max_failures || 1;
+      }
+    } catch(e) { /* ignore */ }
+  }
+
+  async function saveRolloutConfig() {
+    const patch = {
+      rollout: {
+        auto_progress: $('#xdr-auto-progress').checked,
+        canary_soak_secs: parseInt($('#xdr-canary-soak').value) || 300,
+        ring1_soak_secs: parseInt($('#xdr-ring1-soak').value) || 600,
+        auto_rollback: $('#xdr-auto-rollback').checked,
+        max_failures: parseInt($('#xdr-max-failures').value) || 1,
+      }
+    };
+    try {
+      const res = await fetch(API + '/api/config/reload', {
+        method: 'POST',
+        headers: authHeaders('application/json'),
+        body: JSON.stringify(patch)
+      });
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      flash('Rollout config saved', 'success');
+      $('#xdr-rollout-config-status').textContent = 'Saved';
+    } catch(e) {
+      flash('Save rollout config failed: ' + e.message, 'error');
     }
   }
 
@@ -3044,10 +3433,20 @@ input::placeholder{color:var(--ink-3);}
   $('#btn-deploy-update').addEventListener('click', deployRemoteUpdate);
   $('#btn-refresh-xdr-events').addEventListener('click', refreshXdrEvents);
   $('#btn-export-xdr-events').addEventListener('click', exportXdrEvents);
+  $('#btn-apply-xdr-triage').addEventListener('click', applyXdrTriage);
+  $('#btn-bulk-triage').addEventListener('click', applyBulkTriage);
+  $('#btn-rollback-update').addEventListener('click', showRollbackPanel);
+  $('#btn-cancel-update').addEventListener('click', cancelDeployment);
+  $('#btn-confirm-rollback').addEventListener('click', confirmRollback);
+  $('#btn-save-agent-scope').addEventListener('click', saveAgentScope);
+  $('#btn-clear-agent-scope').addEventListener('click', clearAgentScope);
+  $('#btn-save-rollout-config').addEventListener('click', saveRolloutConfig);
   $('#xdr-filter-agent').addEventListener('change', refreshXdrEvents);
   $('#xdr-filter-severity').addEventListener('change', refreshXdrEvents);
   $('#xdr-filter-correlated').addEventListener('change', refreshXdrEvents);
+  $('#xdr-filter-triage').addEventListener('change', refreshXdrEvents);
   $('#xdr-filter-reason').addEventListener('keydown', (e) => { if (e.key === 'Enter') refreshXdrEvents(); });
+  $('#xdr-triage-note').addEventListener('keydown', (e) => { if (e.key === 'Enter') applyXdrTriage(); });
 
   // Security Policy
   $('#btn-compose').addEventListener('click', composePolicy);

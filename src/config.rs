@@ -139,6 +139,8 @@ pub struct Config {
     pub siem: SiemConfig,
     #[serde(default)]
     pub agent: AgentSettings,
+    #[serde(default)]
+    pub rollout: RolloutSettings,
 }
 
 /// Agent-mode settings (for `wardex agent`).
@@ -154,6 +156,51 @@ pub struct AgentSettings {
     /// Update check interval in seconds.
     #[serde(default = "default_update_interval")]
     pub update_check_interval_secs: u64,
+}
+
+/// Rollout progression settings for staged deployments.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RolloutSettings {
+    /// Enable automatic staged rollout progression (canary → ring-1 → ring-2).
+    #[serde(default)]
+    pub auto_progress: bool,
+    /// Minimum time in seconds a canary deployment must stay healthy before promoting.
+    #[serde(default = "default_canary_soak_secs")]
+    pub canary_soak_secs: u64,
+    /// Minimum time in seconds ring-1 must stay healthy before promoting to ring-2.
+    #[serde(default = "default_ring1_soak_secs")]
+    pub ring1_soak_secs: u64,
+    /// Auto-rollback on deployment failure.
+    #[serde(default = "default_auto_rollback")]
+    pub auto_rollback: bool,
+    /// Maximum allowed failure count before blocking progression.
+    #[serde(default = "default_max_failures")]
+    pub max_failures: u32,
+}
+
+fn default_canary_soak_secs() -> u64 {
+    300
+}
+fn default_ring1_soak_secs() -> u64 {
+    600
+}
+fn default_auto_rollback() -> bool {
+    true
+}
+fn default_max_failures() -> u32 {
+    1
+}
+
+impl Default for RolloutSettings {
+    fn default() -> Self {
+        Self {
+            auto_progress: false,
+            canary_soak_secs: default_canary_soak_secs(),
+            ring1_soak_secs: default_ring1_soak_secs(),
+            auto_rollback: default_auto_rollback(),
+            max_failures: default_max_failures(),
+        }
+    }
 }
 
 fn default_auto_update() -> bool {
@@ -325,6 +372,8 @@ pub struct ConfigPatch {
     pub policy: Option<PolicySettings>,
     #[serde(default)]
     pub monitor: Option<MonitorSettings>,
+    #[serde(default)]
+    pub rollout: Option<RolloutSettings>,
 }
 
 impl ConfigPatch {
@@ -352,6 +401,11 @@ impl ConfigPatch {
             previous.insert("monitor".into(), format!("{:?}", config.monitor));
             config.monitor = m.clone();
             applied.push("monitor".into());
+        }
+        if let Some(ref r) = self.rollout {
+            previous.insert("rollout".into(), format!("{:?}", config.rollout));
+            config.rollout = r.clone();
+            applied.push("rollout".into());
         }
 
         if let Some(v) = self.warmup_samples {

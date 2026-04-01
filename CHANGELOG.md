@@ -2,6 +2,28 @@
 
 All notable changes to Wardex are documented in this file.
 
+## [Unreleased]
+
+### Added
+- **Per-agent monitoring scope**: Each enrolled agent can now have a custom monitoring scope override (CPU, memory, network, disk, processes, auth events, thermal, battery, file integrity, services, LaunchAgents, systemd units, scheduled tasks). `GET/POST /api/agents/{id}/scope` manages overrides; heartbeat responses now include the effective scope so agents can dynamically adjust collection.
+- **Cross-platform scope gating**: All 13 monitoring signals in the collector are now individually gated by their respective scope toggle. Previously only 3 of 13 signals respected scope settings.
+- **Bulk event triage**: `POST /api/events/bulk-triage` accepts an array of event IDs and applies status, assignee, tags, and notes to all in one call (max 500 events). The event table now has checkboxes for multi-select with a "Bulk Triage" button.
+- **Deployment rollback**: `POST /api/updates/rollback` creates a new downgrade deployment targeting a previous release version with `allow_downgrade: true`. Rollback and Cancel buttons appear in the Agent Drilldown when a deployment is active.
+- **Deployment cancellation**: `POST /api/updates/cancel` moves a pending deployment to `cancelled` status immediately.
+- **Automatic staged rollout progression**: When `auto_progress` is enabled in rollout settings, completed canary deployments auto-progress to ring-1 after the configured soak period, and ring-1 auto-progresses to ring-2. Failed deployments trigger automatic rollback when `auto_rollback` is enabled.
+- **Rollout configuration API**: `GET /api/rollout/config` returns current rollout settings; settings are patchable via the config reload endpoint with `{ "rollout": { ... } }`.
+- **Admin UI rollout panel**: Auto-rollout settings (progression toggle, soak times, auto-rollback, max failures) are now configurable directly from the Fleet section.
+- **Agent monitoring scope panel**: The Fleet section now includes a per-agent monitoring scope configuration panel with 13 toggles and server-default reset functionality.
+- **Durable XDR event history**: Fleet events are now persisted to JSON on disk so analyst workflow and fleet history survive server restarts.
+- **Event triage workflow**: `POST /api/events/{id}/triage` lets operators assign analysts, attach tags, add notes, and move events through `new`, `acknowledged`, `investigating`, `contained`, and `resolved` states.
+- **Rollout controls for remote updates**: Remote deployments now support rollout groups (`direct`, `canary`, `ring-1`, `ring-2`) and explicit downgrade opt-in for controlled rollback scenarios.
+
+### Changed
+- **Fleet dashboard payload**: Dashboard analytics now include triage counts, event-history persistence status, and rollout-group summaries for deployments.
+- **Admin console Fleet view**: Event Explorer now supports triage-state filtering, inline triage updates, bulk operations, and remote deployments expose rollout-group, rollback, and cancellation controls.
+- **Heartbeat protocol**: Heartbeat responses now include `monitor_scope` with the effective monitoring scope for the agent (custom override or server default) and auto-rollout progression checks.
+- **Public architecture section**: The GitHub Pages landing page now renders the pipeline stages as a responsive architecture board instead of a cramped horizontal strip.
+
 ## [0.23.0] — Fleet drilldowns and remote deployments
 
 ### Added
