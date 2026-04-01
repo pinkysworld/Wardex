@@ -109,7 +109,9 @@ cargo run -- serve
 
 Then open `http://localhost:8080/admin.html` in a browser. The token printed to the terminal is required for authenticated console operations, including settings, alerts, reports, and control actions.
 
-The Settings view includes an OS-aware Monitoring Scope section that shows recommended monitoring points for the current host platform, explains why specific signals are recommended or unavailable, and lets you control supported collectors including auth events and platform-specific persistence baselines.
+The Settings view includes an OS-aware Monitoring Scope section that shows recommended monitoring points for the current host platform, explains why specific signals are recommended or unavailable, lets you control supported collectors including auth events and platform-specific persistence baselines, and previews the exact active monitoring paths.
+
+The Fleet & Agents view now includes fleet-wide XDR analytics: top attack reasons, severity mix, hot-agent risk summaries, correlation rate, and policy history.
 
 Run tests:
 

@@ -1472,11 +1472,37 @@ fn event_ingest_and_list() {
 
     // List events
     let resp = ureq::get(&format!("{}/api/events", base(port)))
+        .set("Authorization", &auth_header(&token))
         .call()
         .expect("list events");
     assert_eq!(resp.status(), 200);
     let events: serde_json::Value = resp.into_json().unwrap();
     assert!(!events.as_array().unwrap().is_empty());
+
+    let summary = ureq::get(&format!("{}/api/events/summary", base(port)))
+        .set("Authorization", &auth_header(&token))
+        .call()
+        .expect("event summary")
+        .into_json::<serde_json::Value>()
+        .unwrap();
+    assert_eq!(summary["total_events"].as_u64().unwrap(), 1);
+    assert!(summary["top_reasons"].as_array().unwrap().len() >= 1);
+}
+
+#[test]
+fn event_reads_without_auth_return_401() {
+    let (port, _token) = spawn_test_server();
+    let err = ureq::get(&format!("{}/api/events", base(port))).call();
+    match err {
+        Err(ureq::Error::Status(401, _)) => {}
+        other => panic!("expected 401, got {other:?}"),
+    }
+
+    let err = ureq::get(&format!("{}/api/events/summary", base(port))).call();
+    match err {
+        Err(ureq::Error::Status(401, _)) => {}
+        other => panic!("expected 401, got {other:?}"),
+    }
 }
 
 // ── Policy distribution ────────────────────────────────────────
@@ -1521,6 +1547,24 @@ fn policy_publish_and_current() {
     let body: serde_json::Value = resp.into_json().unwrap();
     assert_eq!(body["version"].as_u64().unwrap(), 1);
     assert_eq!(body["alert_threshold"].as_f64().unwrap(), 4.5);
+
+    let history = ureq::get(&format!("{}/api/policy/history", base(port)))
+        .set("Authorization", &auth_header(&token))
+        .call()
+        .expect("get policy history")
+        .into_json::<serde_json::Value>()
+        .unwrap();
+    assert_eq!(history.as_array().unwrap().len(), 0);
+}
+
+#[test]
+fn policy_history_without_auth_returns_401() {
+    let (port, _token) = spawn_test_server();
+    let err = ureq::get(&format!("{}/api/policy/history", base(port))).call();
+    match err {
+        Err(ureq::Error::Status(401, _)) => {}
+        other => panic!("expected 401, got {other:?}"),
+    }
 }
 
 // ── SIEM status ────────────────────────────────────────────────
@@ -1555,6 +1599,28 @@ fn fleet_dashboard_returns_summary() {
     assert!(body.get("updates").is_some());
     assert!(body.get("siem").is_some());
     assert_eq!(body["fleet"]["total_agents"].as_u64().unwrap(), 0);
+    assert!(body["events"]["analytics"].is_object());
+    assert!(body["policy"]["history_depth"].is_u64());
+}
+
+#[test]
+fn monitoring_paths_requires_auth_and_returns_payload() {
+    let (port, token) = spawn_test_server();
+    let err = ureq::get(&format!("{}/api/monitoring/paths", base(port))).call();
+    match err {
+        Err(ureq::Error::Status(401, _)) => {}
+        other => panic!("expected 401, got {other:?}"),
+    }
+
+    let body: serde_json::Value = ureq::get(&format!("{}/api/monitoring/paths", base(port)))
+        .set("Authorization", &auth_header(&token))
+        .call()
+        .expect("monitoring paths")
+        .into_json()
+        .unwrap();
+    assert!(body["file_integrity_paths"].is_array());
+    assert!(body["persistence_paths"].is_array());
+    assert!(body["scope"].is_object());
 }
 
 // ── Update check ──────────────────────────────────────────────

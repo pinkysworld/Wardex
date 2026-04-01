@@ -2,6 +2,17 @@
 
 All notable changes to Wardex are documented in this file.
 
+## [0.22.0] — XDR analytics and monitoring visibility
+
+### Added
+- **Fleet event analytics**: XDR now computes top attack reasons, severity mix, hot-agent risk summaries, and fleet-wide correlation rate from agent event traffic.
+- **Policy history visibility**: Admin console can now inspect published policy history instead of only the current active version.
+- **Monitoring path visibility**: Settings now show the active file-integrity and persistence baseline paths derived from the current monitoring scope.
+
+### Changed
+- **Authenticated event reads**: `GET /api/events` and the new `GET /api/events/summary` now require admin auth while agent-side event ingestion remains tokenless for enrolled agents.
+- **Fleet posture freshness**: Agent staleness is refreshed before agent-list and fleet-dashboard reads so XDR analytics use current status rather than stale cached values.
+
 ## [0.21.1] — Phase 24 follow-up
 
 ### Added

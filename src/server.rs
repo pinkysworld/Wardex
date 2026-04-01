@@ -695,6 +695,26 @@ fn monitoring_options_payload(host: &HostInfo, config: &Config) -> serde_json::V
     })
 }
 
+fn monitoring_paths_payload(host: &HostInfo, config: &Config) -> serde_json::Value {
+    let file_paths = if config.monitor.scope.file_integrity {
+        config.monitor.watch_paths.clone()
+    } else {
+        Vec::new()
+    };
+    let persistence_paths = crate::collector::persistence_watch_paths(host.platform, &config.monitor.scope);
+    serde_json::json!({
+        "file_integrity_paths": file_paths,
+        "persistence_paths": persistence_paths,
+        "scope": {
+            "file_integrity": config.monitor.scope.file_integrity,
+            "service_persistence": config.monitor.scope.service_persistence,
+            "launch_agents": config.monitor.scope.launch_agents,
+            "systemd_units": config.monitor.scope.systemd_units,
+            "scheduled_tasks": config.monitor.scope.scheduled_tasks,
+        }
+    })
+}
+
 fn handle_api(mut request: Request, state: &Arc<Mutex<AppState>>, _site_dir: &Path, server: &Server) {
     let url = request.url().to_string();
     let method = request.method().clone();
@@ -714,7 +734,7 @@ fn handle_api(mut request: Request, state: &Arc<Mutex<AppState>>, _site_dir: &Pa
     let is_agent_endpoint = url.starts_with("/api/agents/enroll")
         || url.starts_with("/api/agents/update")
         || (url.contains("/heartbeat") && url.starts_with("/api/agents/"))
-        || url.starts_with("/api/events")
+        || (method == Method::Post && url == "/api/events")
         || url.starts_with("/api/policy/current")
         || url.starts_with("/api/updates/download/");
 
@@ -752,6 +772,10 @@ fn handle_api(mut request: Request, state: &Arc<Mutex<AppState>>, _site_dir: &Pa
         (method == Method::Get && url == "/api/fleet/dashboard")
         || (method == Method::Get && url == "/api/siem/status")
         || (method == Method::Get && url == "/api/agents")
+        || (method == Method::Get && url == "/api/events")
+        || (method == Method::Get && url.starts_with("/api/events?"))
+        || (method == Method::Get && url == "/api/events/summary")
+        || (method == Method::Get && url == "/api/policy/history")
         || (method == Method::Get && url == "/api/telemetry/current")
         || (method == Method::Get && url == "/api/telemetry/history")
         || (method == Method::Get && url == "/api/host/info")
@@ -765,6 +789,7 @@ fn handle_api(mut request: Request, state: &Arc<Mutex<AppState>>, _site_dir: &Pa
         || (method == Method::Get && url == "/api/threads/status")
         || (method == Method::Get && url == "/api/detection/summary")
         || (method == Method::Get && url == "/api/monitoring/options")
+        || (method == Method::Get && url == "/api/monitoring/paths")
         || (method == Method::Get && url == "/api/endpoints")
         || (method == Method::Get && url == "/api/status")
         || (method == Method::Delete && url.starts_with("/api/agents/"))
@@ -1440,6 +1465,11 @@ fn handle_api(mut request: Request, state: &Arc<Mutex<AppState>>, _site_dir: &Pa
             let body = monitoring_options_payload(&s.local_host_info, &s.config);
             json_response(&body.to_string(), 200)
         }
+        (Method::Get, "/api/monitoring/paths") => {
+            let s = state.lock().unwrap();
+            let body = monitoring_paths_payload(&s.local_host_info, &s.config);
+            json_response(&body.to_string(), 200)
+        }
         (Method::Get, "/api/endpoints") => {
             let endpoints = serde_json::json!([
                 {"method": "GET", "path": "/api/health", "auth": false, "description": "Server health, version, uptime, platform"},
@@ -1456,11 +1486,14 @@ fn handle_api(mut request: Request, state: &Arc<Mutex<AppState>>, _site_dir: &Pa
                 {"method": "POST", "path": "/api/analyze", "auth": true, "description": "Analyze CSV/JSONL telemetry"},
                 {"method": "GET", "path": "/api/config/current", "auth": true, "description": "Current configuration"},
                 {"method": "GET", "path": "/api/monitoring/options", "auth": true, "description": "OS-aware monitoring points and recommendations"},
+                {"method": "GET", "path": "/api/monitoring/paths", "auth": true, "description": "Active file-integrity and persistence monitoring paths"},
                 {"method": "POST", "path": "/api/config/reload", "auth": true, "description": "Hot-reload config patch"},
                 {"method": "POST", "path": "/api/config/save", "auth": true, "description": "Persist config to disk"},
                 {"method": "GET", "path": "/api/endpoints", "auth": true, "description": "This endpoint listing"},
                 {"method": "GET", "path": "/api/threads/status", "auth": true, "description": "Background thread status and collection stats"},
                 {"method": "GET", "path": "/api/detection/summary", "auth": true, "description": "Velocity, entropy, compound detector state"},
+                {"method": "GET", "path": "/api/events/summary", "auth": true, "description": "XDR fleet event analytics summary"},
+                {"method": "GET", "path": "/api/policy/history", "auth": true, "description": "Published policy history"},
             ]);
             json_response(&endpoints.to_string(), 200)
         }
@@ -1473,7 +1506,8 @@ fn handle_api(mut request: Request, state: &Arc<Mutex<AppState>>, _site_dir: &Pa
             handle_agent_create_token(&mut request, state)
         }
         (Method::Get, "/api/agents") => {
-            let s = state.lock().unwrap();
+            let mut s = state.lock().unwrap();
+            s.agent_registry.refresh_staleness();
             let agents = s.agent_registry.list();
             match serde_json::to_string(&agents) {
                 Ok(json) => json_response(&json, 200),
@@ -1493,6 +1527,14 @@ fn handle_api(mut request: Request, state: &Arc<Mutex<AppState>>, _site_dir: &Pa
                 Err(e) => error_json(&format!("serialization error: {e}"), 500),
             }
         }
+        (Method::Get, "/api/events/summary") => {
+            let s = state.lock().unwrap();
+            let analytics = s.event_store.analytics();
+            match serde_json::to_string(&analytics) {
+                Ok(json) => json_response(&json, 200),
+                Err(e) => error_json(&format!("serialization error: {e}"), 500),
+            }
+        }
 
         // ── XDR Policy Distribution ──────────────────────────────
         (Method::Get, "/api/policy/current") => {
@@ -1503,6 +1545,13 @@ fn handle_api(mut request: Request, state: &Arc<Mutex<AppState>>, _site_dir: &Pa
                     Err(e) => error_json(&format!("serialization error: {e}"), 500),
                 },
                 None => json_response(r#"{"version":0,"message":"no policy published"}"#, 200),
+            }
+        }
+        (Method::Get, "/api/policy/history") => {
+            let s = state.lock().unwrap();
+            match serde_json::to_string(s.policy_store.history()) {
+                Ok(json) => json_response(&json, 200),
+                Err(e) => error_json(&format!("serialization error: {e}"), 500),
             }
         }
         (Method::Post, "/api/policy/publish") => {
@@ -1549,11 +1598,13 @@ fn handle_api(mut request: Request, state: &Arc<Mutex<AppState>>, _site_dir: &Pa
 
         // ── Fleet Dashboard ──────────────────────────────────────
         (Method::Get, "/api/fleet/dashboard") => {
-            let s = state.lock().unwrap();
+            let mut s = state.lock().unwrap();
+            s.agent_registry.refresh_staleness();
             let agents = s.agent_registry.list();
             let counts = s.agent_registry.counts();
             let total_events = s.event_store.total_events();
             let correlations = s.event_store.recent_correlations();
+            let analytics = s.event_store.analytics();
             let policy_version = s.policy_store.current_version();
             let siem_status = s.siem_connector.status();
             let releases = s.update_manager.list_releases();
@@ -1566,9 +1617,11 @@ fn handle_api(mut request: Request, state: &Arc<Mutex<AppState>>, _site_dir: &Pa
                     "total": total_events,
                     "recent_correlations": correlations.len(),
                     "correlations": correlations,
+                    "analytics": analytics,
                 },
                 "policy": {
                     "current_version": policy_version,
+                    "history_depth": s.policy_store.history().len(),
                 },
                 "updates": {
                     "available_releases": releases.len(),

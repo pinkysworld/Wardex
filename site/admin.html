@@ -818,6 +818,27 @@ input::placeholder{color:var(--ink-3);}
           <button class="btn btn-sm" id="btn-refresh-xdr">Refresh XDR</button>
         </div>
       </div>
+
+      <div class="card-grid cols-2 mt-1">
+        <div class="card">
+          <h2><span class="dot dot-red"></span> Fleet Analytics</h2>
+          <dl class="kv-grid">
+            <dt>Correlation Rate</dt><dd id="xdr-correlation-rate">0%</dd>
+            <dt>Critical Events</dt><dd id="xdr-critical-events">0</dd>
+            <dt>Severe Events</dt><dd id="xdr-severe-events">0</dd>
+            <dt>Elevated Events</dt><dd id="xdr-elevated-events">0</dd>
+          </dl>
+          <h3 style="margin-top:.8rem;">Top Reasons</h3>
+          <div id="xdr-top-reasons" class="text-muted"><em>No event analytics yet</em></div>
+        </div>
+        <div class="card">
+          <h2><span class="dot dot-blue"></span> Hot Agents &amp; Policy History</h2>
+          <h3>Highest Risk Agents</h3>
+          <div id="xdr-hot-agents" class="text-muted"><em>No agent risk data yet</em></div>
+          <h3 style="margin-top:.8rem;">Policy History</h3>
+          <div id="xdr-policy-history" class="text-muted"><em>No published policy history</em></div>
+        </div>
+      </div>
     </div>
 
     <!-- ═══════════════════════════════════════════════════════════ -->
@@ -1105,6 +1126,7 @@ input::placeholder{color:var(--ink-3);}
             <h3>Monitoring Scope</h3>
             <div class="monitor-summary" id="monitoring-summary">Loading host-aware monitoring recommendations…</div>
             <div id="monitoring-groups"></div>
+            <div class="monitor-note" id="monitoring-path-preview" style="margin-top:.75rem;">Loading active monitoring paths…</div>
           </div>
         </div>
         <div class="settings-actions">
@@ -1954,12 +1976,14 @@ input::placeholder{color:var(--ink-3);}
   // ── XDR Dashboard ──
   async function refreshXdr() {
     try {
-      const [dashRes, agentsRes] = await Promise.all([
+      const [dashRes, agentsRes, policyHistoryRes] = await Promise.all([
         fetch(API + '/api/fleet/dashboard', { headers: authHeaders() }),
         fetch(API + '/api/agents', { headers: authHeaders() }),
+        fetch(API + '/api/policy/history', { headers: authHeaders() }),
       ]);
       if (dashRes.ok) {
         const d = await dashRes.json();
+        const analytics = d.events?.analytics || {};
         $('#xdr-agents').textContent = d.fleet?.total_agents ?? '—';
         $('#xdr-online').textContent = d.fleet?.status_counts?.online ?? '0';
         $('#xdr-stale').textContent = d.fleet?.status_counts?.stale ?? '0';
@@ -1971,12 +1995,35 @@ input::placeholder{color:var(--ink-3);}
         $('#xdr-siem').textContent = d.siem?.enabled ? 'Enabled' : 'Disabled';
         $('#xdr-pushed').textContent = d.siem?.total_pushed ?? '0';
         $('#xdr-pulled').textContent = d.siem?.total_pulled ?? '0';
+        $('#xdr-correlation-rate').textContent = typeof analytics.correlation_rate === 'number' ? (analytics.correlation_rate * 100).toFixed(1) + '%' : '0%';
+        $('#xdr-critical-events').textContent = analytics.severity_counts?.critical ?? '0';
+        $('#xdr-severe-events').textContent = analytics.severity_counts?.severe ?? '0';
+        $('#xdr-elevated-events').textContent = analytics.severity_counts?.elevated ?? '0';
         const corrEl = $('#xdr-correlation-list');
         if (d.events?.correlations?.length > 0) {
           corrEl.innerHTML = d.events.correlations.map(c =>
             '<div style="padding:.3rem 0;border-bottom:1px solid var(--border);"><strong>' + esc(c.reason) + '</strong> — ' + c.agents.length + ' agents, severity: ' + esc(c.severity) + '</div>'
           ).join('');
         } else { corrEl.innerHTML = '<em class="text-muted">No correlations detected</em>'; }
+        const topReasonsEl = $('#xdr-top-reasons');
+        if (analytics.top_reasons?.length > 0) {
+          topReasonsEl.innerHTML = analytics.top_reasons.map(item =>
+            '<div style="display:flex;justify-content:space-between;gap:.8rem;padding:.25rem 0;border-bottom:1px solid var(--border);"><span>' + esc(item.reason) + '</span><strong>' + esc(item.count) + '</strong></div>'
+          ).join('');
+        } else {
+          topReasonsEl.innerHTML = '<em class="text-muted">No event analytics yet</em>';
+        }
+        const hotAgentsEl = $('#xdr-hot-agents');
+        if (analytics.hot_agents?.length > 0) {
+          hotAgentsEl.innerHTML = analytics.hot_agents.map(agent =>
+            '<div style="padding:.35rem 0;border-bottom:1px solid var(--border);">' +
+              '<strong>' + esc(agent.agent_id) + '</strong> — ' + esc(agent.risk) +
+              ' (events: ' + esc(agent.event_count) + ', correlated: ' + esc(agent.correlated_count) + ', max score: ' + Number(agent.max_score || 0).toFixed(2) + ')' +
+            '</div>'
+          ).join('');
+        } else {
+          hotAgentsEl.innerHTML = '<em class="text-muted">No agent risk data yet</em>';
+        }
       }
       if (agentsRes.ok) {
         const agents = await agentsRes.json();
@@ -1990,6 +2037,19 @@ input::placeholder{color:var(--ink-3);}
           html += '</table>';
           tblEl.innerHTML = html;
         } else { tblEl.innerHTML = '<em class="text-muted">No agents enrolled</em>'; }
+      }
+      if (policyHistoryRes.ok) {
+        const history = await policyHistoryRes.json();
+        const historyEl = $('#xdr-policy-history');
+        if (history.length > 0) {
+          historyEl.innerHTML = history.slice().reverse().map(policy =>
+            '<div style="padding:.3rem 0;border-bottom:1px solid var(--border);">v' + esc(policy.version) +
+            ' — threshold ' + esc(policy.alert_threshold ?? '—') +
+            ', interval ' + esc(policy.interval_secs ?? '—') + 's</div>'
+          ).join('');
+        } else {
+          historyEl.innerHTML = '<em class="text-muted">No published policy history</em>';
+        }
       }
       log('XDR dashboard refreshed');
     } catch(e) { log('XDR refresh failed: ' + e.message); }
@@ -2469,9 +2529,10 @@ input::placeholder{color:var(--ink-3);}
   // ── Settings ──
   async function loadSettings() {
     try {
-      const [res, monitoringRes] = await Promise.all([
+      const [res, monitoringRes, monitoringPathsRes] = await Promise.all([
         fetch(API + '/api/config/current', { headers: authHeaders() }),
         fetch(API + '/api/monitoring/options', { headers: authHeaders() }),
+        fetch(API + '/api/monitoring/paths', { headers: authHeaders() }),
       ]);
       if (!res.ok) throw new Error('HTTP ' + res.status);
       const cfg = await res.json();
@@ -2500,6 +2561,16 @@ input::placeholder{color:var(--ink-3);}
       }
       if (monitoringRes.ok) {
         renderMonitoringOptions(await monitoringRes.json());
+      }
+      if (monitoringPathsRes.ok) {
+        const paths = await monitoringPathsRes.json();
+        const preview = $('#monitoring-path-preview');
+        const filePaths = paths.file_integrity_paths || [];
+        const persistencePaths = paths.persistence_paths || [];
+        preview.innerHTML =
+          '<strong>Active path preview:</strong>' +
+          '<br>File integrity: ' + (filePaths.length ? filePaths.map(esc).join(', ') : 'disabled or not configured') +
+          '<br>Persistence: ' + (persistencePaths.length ? persistencePaths.map(esc).join(', ') : 'disabled or not supported');
       }
       syncWatchPathsState();
       log('Settings loaded from server');

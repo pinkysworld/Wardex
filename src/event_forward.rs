@@ -207,6 +207,90 @@ impl EventStore {
         self.events.len()
     }
 
+    pub fn analytics(&self) -> EventAnalytics {
+        let total_events = self.events.len();
+        let correlated_events = self.events.iter().filter(|event| event.correlated).count();
+
+        let mut severity_counts: HashMap<String, usize> = HashMap::new();
+        let mut reason_counts: HashMap<String, usize> = HashMap::new();
+        let mut per_agent: HashMap<String, Vec<&StoredEvent>> = HashMap::new();
+
+        for event in &self.events {
+            let level = event.alert.level.to_ascii_lowercase();
+            *severity_counts.entry(level).or_insert(0) += 1;
+
+            for reason in &event.alert.reasons {
+                *reason_counts.entry(reason.clone()).or_insert(0) += 1;
+            }
+
+            per_agent.entry(event.agent_id.clone()).or_default().push(event);
+        }
+
+        let mut top_reasons: Vec<TopReason> = reason_counts
+            .into_iter()
+            .map(|(reason, count)| TopReason { reason, count })
+            .collect();
+        top_reasons.sort_by(|a, b| b.count.cmp(&a.count).then_with(|| a.reason.cmp(&b.reason)));
+        top_reasons.truncate(5);
+
+        let mut hot_agents: Vec<AgentRiskSummary> = per_agent
+            .into_iter()
+            .map(|(agent_id, events)| {
+                let event_count = events.len();
+                let correlated_count = events.iter().filter(|event| event.correlated).count();
+                let critical_count = events
+                    .iter()
+                    .filter(|event| severity_rank(&event.alert.level) >= 3)
+                    .count();
+                let average_score = if event_count > 0 {
+                    events.iter().map(|event| event.alert.score).sum::<f32>() / event_count as f32
+                } else {
+                    0.0
+                };
+                let max_score = events
+                    .iter()
+                    .map(|event| event.alert.score)
+                    .fold(0.0f32, f32::max);
+                let max_rank = events
+                    .iter()
+                    .map(|event| severity_rank(&event.alert.level))
+                    .max()
+                    .unwrap_or(0);
+
+                AgentRiskSummary {
+                    agent_id,
+                    event_count,
+                    correlated_count,
+                    critical_count,
+                    max_score,
+                    average_score,
+                    highest_level: severity_label(max_rank).to_string(),
+                    risk: risk_label(max_rank, average_score, correlated_count).to_string(),
+                }
+            })
+            .collect();
+        hot_agents.sort_by(|a, b| {
+            severity_rank(&b.risk)
+                .cmp(&severity_rank(&a.risk))
+                .then_with(|| b.correlated_count.cmp(&a.correlated_count))
+                .then_with(|| b.max_score.total_cmp(&a.max_score))
+        });
+        hot_agents.truncate(5);
+
+        EventAnalytics {
+            total_events,
+            correlated_events,
+            correlation_rate: if total_events > 0 {
+                correlated_events as f32 / total_events as f32
+            } else {
+                0.0
+            },
+            severity_counts,
+            top_reasons,
+            hot_agents,
+        }
+    }
+
     pub fn clear(&mut self) {
         self.events.clear();
     }
@@ -226,6 +310,64 @@ pub struct CorrelationMatch {
     pub event_ids: Vec<u64>,
     pub severity: String,
     pub description: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TopReason {
+    pub reason: String,
+    pub count: usize,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AgentRiskSummary {
+    pub agent_id: String,
+    pub event_count: usize,
+    pub correlated_count: usize,
+    pub critical_count: usize,
+    pub max_score: f32,
+    pub average_score: f32,
+    pub highest_level: String,
+    pub risk: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EventAnalytics {
+    pub total_events: usize,
+    pub correlated_events: usize,
+    pub correlation_rate: f32,
+    pub severity_counts: HashMap<String, usize>,
+    pub top_reasons: Vec<TopReason>,
+    pub hot_agents: Vec<AgentRiskSummary>,
+}
+
+fn severity_rank(level: &str) -> u8 {
+    match level.to_ascii_lowercase().as_str() {
+        "critical" => 3,
+        "severe" => 2,
+        "elevated" => 1,
+        _ => 0,
+    }
+}
+
+fn severity_label(rank: u8) -> &'static str {
+    match rank {
+        3 => "Critical",
+        2 => "Severe",
+        1 => "Elevated",
+        _ => "Nominal",
+    }
+}
+
+fn risk_label(max_rank: u8, average_score: f32, correlated_count: usize) -> &'static str {
+    if max_rank >= 3 || correlated_count >= 2 {
+        "Critical"
+    } else if max_rank >= 2 || average_score >= 3.0 {
+        "Severe"
+    } else if max_rank >= 1 || average_score >= 1.5 {
+        "Elevated"
+    } else {
+        "Nominal"
+    }
 }
 
 // ── Tests ────────────────────────────────────────────────────────────
@@ -319,5 +461,24 @@ mod tests {
         assert_eq!(store.list(Some("agent-1"), 10).len(), 2);
         assert_eq!(store.list(Some("agent-2"), 10).len(), 1);
         assert_eq!(store.list(None, 10).len(), 3);
+    }
+
+    #[test]
+    fn analytics_summarizes_reasons_and_hot_agents() {
+        let mut store = EventStore::new(100);
+        store.ingest(&EventBatch {
+            agent_id: "agent-1".into(),
+            events: vec![make_alert(&["high_cpu"]), make_alert(&["high_cpu"])],
+        });
+        store.ingest(&EventBatch {
+            agent_id: "agent-2".into(),
+            events: vec![make_alert(&["high_cpu"]), make_alert(&["auth_spike"])],
+        });
+
+        let analytics = store.analytics();
+        assert_eq!(analytics.total_events, 4);
+        assert!(!analytics.top_reasons.is_empty());
+        assert_eq!(analytics.top_reasons[0].reason, "high_cpu");
+        assert!(analytics.hot_agents.iter().any(|agent| agent.agent_id == "agent-1"));
     }
 }
