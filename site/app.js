@@ -6,10 +6,10 @@
 // ── Project Data ──────────────────────────────────────────────────────────────
 
 const stats = [
-  { value: "37", label: "core runtime modules" },
+  { value: "58", label: "runtime modules" },
   { value: "8",  label: "telemetry dimensions" },
   { value: "40", label: "research tracks mapped" },
-  { value: "387", label: "automated tests" },
+  { value: "637", label: "automated tests" },
 ];
 
 const pipelineDetails = [
@@ -111,87 +111,30 @@ const pipelineDetails = [
   },
 ];
 
-const statusData = {
-  implemented: [
-    "Rust project scaffold with runnable CLI (demo, analyze, report, init-config, status)",
-    "Typed telemetry ingestion from CSV and JSONL with auto-detection",
-    "Adaptive EWMA-based anomaly scoring across eight signal dimensions",
-    "Human-readable anomaly explanations per scoring decision",
-    "Threat-level classification and response-action selection",
-    "Battery-aware graceful degradation of mitigation actions",
-    "TOML/JSON configuration loading with write-default support",
-    "Baseline persistence and cross-session restoration",
-    "Pluggable action adapters (logging, throttle, quarantine, isolate)",
-    "Rollback checkpoints with bounded ring buffer",
-    "Forensic evidence bundle exporter",
-    "SHA-256 cryptographic digest chain in audit log",
-    "Signed audit checkpoints at configurable intervals",
-    "Structured JSON reports for SIEM integration",
-    "Proof-carrying update metadata with SHA-256 binding and verification",
-    "Formally checkable policy state machine with legal transition validation",
-    "Bounded replay buffer with windowed statistics",
-    "Baseline adaptation controls (freeze, decay, reset)",
-    "Four poisoning heuristics (mean shift, variance spike, drift accumulation, auth burst)",
-    "FP/FN benchmark harness with precision, recall, F1, and accuracy",
-    "Live browser admin console with authenticated control plane (T063/T064)",
-    "HTTP server with token-authenticated API for status, analysis, and mode control",
-    "Deterministic test fixtures (benign, escalation, low-battery, credential-storm)",
-    "GitHub Pages deployment with CI workflow",
-    "Documentation: architecture, getting started, backlog, research tracks",
-    "Research paper targeting document with evaluation plan",
-    "Swarm coordination protocol design (digest gossip, voting, provenance)",
-    "Wasm extension surface specification (sandboxed detector/response plugins)",
-    "Supply-chain attestation design (build manifests, trust stores)",
-    "Post-quantum logging upgrade path (hybrid signature strategy)",
-    "Research questions for R26-R30 (explainability and edge intelligence)",
-    "Research questions for R31-R35 (infrastructure and hardening)",
-    "Research questions for R36-R40 (resilience and long-horizon)",
-    "Adversarial robustness testing harness design (evasion grammar, coverage metric)",
-    "Temporal-logic property specification format (SentinelTL, runtime monitor)",
-    "Digital-twin fleet simulation architecture (deterministic discrete-event model)",
-    "Formal policy composition algebra (conflict resolution, verification)",
-    "Explainable anomaly attribution with per-signal contribution breakdown (T080)",
-    "Multi-signal correlation analysis with Pearson coefficients and co-rising detection (T081)",
-    "Runtime temporal-logic monitor with safety and liveness property checking (T083)",
-    "Adversarial testing harness with grammar-based evasion strategies (T084)",
-    "Behavioural device fingerprinting with Mahalanobis-inspired distance scoring (T094)",
-    "Single-source research-track data pipeline for website and API (T103)",
-    "Supply-chain attestation module with SBOM generation and build-manifest signing (T104)",
-    "Extended 120-sample test fixtures for all four attack scenarios (T110)",
-    "Fixed-threshold baseline detector for paper comparison (T111)",
-    "Side-by-side bench CLI comparing EWMA vs fixed-threshold detectors (T112)",
-    "Per-signal contribution aggregation in benchmark harness (T113)",
-    "Enforcement module with network blocking and process suspension (T120)",
-    "Post-quantum Lamport one-time signatures (T121)",
-    "Swarm coordination protocol with peer discovery and digest gossip (T122)",
-    "Privacy-preserving forensic evidence handling (T123)",
-    "Wasm extension sandbox for user-defined detection policies (T124)",
-    "Local threat-intelligence store with IOC matching (T125)",
-    "Timing-based side-channel attack detection (T126)",
-    "Digital-twin fleet simulation engine (T127)",
-    "Compliance evidence collection and framework scoring (T128)",
-    "Tenant-isolated security contexts for multi-tenancy (T129)",
-    "Edge-cloud hybrid offload decision engine (T130)",
-    "Energy budget tracking and proportional processing (T131)",
-    "All 40 research tracks at foundation status",
-    "Pipeline wiring: threat-intel, enforcement, digital-twin, energy, side-channel, compliance (Phase 13)",
-    "Criterion micro-benchmarks for paper evaluation (~55K samples/sec throughput) (T132)",
-    "Continual learning with Page-Hinkley drift detection and automatic re-learning (T133)",
-    "Policy composition algebra with conflict resolution operators (T134)",
-  ],
-  scaffolded: [
-    "ZK proof placeholder in proof-carrying metadata — Halo2/SNARK deferred (R12)",
-    "TLA+/Alloy export stubs in state machine — formal checker integration deferred (R02)",
-  ],
-  deferred: [
-    "Differential privacy guarantees",
-    "Zero-knowledge proofs (Halo2, zk-SNARKs)",
-    "Formal rule verification / TLA+ model checking",
-    "Quantum-walk anomaly propagation modeling",
-    "Secure MPC / private set intersection",
-    "Hardware roots of trust integration",
-  ],
+let statusData = {
+  implemented: [],
+  scaffolded: [],
+  deferred: [],
 };
+
+async function loadStatusData() {
+  const sources = ["/api/status", "data/status.json"];
+  for (const source of sources) {
+    try {
+      const resp = await fetch(source);
+      if (!resp.ok) continue;
+      const manifest = await resp.json();
+      return {
+        implemented: manifest.implemented || [],
+        scaffolded: manifest.partially_wired || [],
+        deferred: manifest.not_implemented || [],
+      };
+    } catch (_) {
+      // Try the next source.
+    }
+  }
+  return null;
+}
 
 const backlogPhases = [
   {
@@ -513,6 +456,7 @@ function renderStatus() {
   Object.entries(statusData).forEach(([key, items]) => {
     const ul = lists[key];
     if (!ul) return;
+    ul.innerHTML = "";
     items.forEach(text => {
       const li = document.createElement("li");
       li.textContent = text;
@@ -755,6 +699,8 @@ function initScrollReveal() {
 // ── Init ──────────────────────────────────────────────────────────────────────
 
 document.addEventListener("DOMContentLoaded", async () => {
+  const loadedStatus = await loadStatusData();
+  if (loadedStatus) statusData = loadedStatus;
   renderStats();
   renderPipelineDetails();
   renderStatus();

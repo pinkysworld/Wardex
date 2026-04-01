@@ -154,11 +154,103 @@ This backlog lists the next concrete tasks in build order.
 - [x] T155: Admin console panels — Live Monitoring panel (auto-polling alert table at 3s, metric summary strip, health bar, CSV export), Settings panel (6 config sections), toast notification system, token show/hide toggle, `MonitorSettings` struct with nested `ConfigPatch` support.
 - [x] T156: Documentation and version update — bump to v0.15.0, CHANGELOG, STATUS, README, FEATURES, PROJECT_BACKLOG, site, and runtime manifest updated. 387 tests (303 unit + 84 integration), 85/85 tasks, 17 phases.
 
+## Phase 18 — XDR fleet management with SIEM integration (completed)
+
+- [x] T157: Add token-based agent enrollment with heartbeat staleness tracking and persistent registry storage.
+- [x] T158: Add lightweight agent client mode for enrollment, heartbeat, event forwarding, policy fetch, and update checks.
+- [x] T159: Add cross-agent event forwarding with correlation-aware fleet event storage.
+- [x] T160: Add versioned policy distribution bundles with rollback history.
+- [x] T161: Add cross-platform service installation support for systemd, launchd, and Windows service control.
+- [x] T162: Add SIEM integrations for Splunk HEC, Elasticsearch bulk, and generic JSON export with feed ingestion hooks.
+- [x] T163: Add agent auto-update foundations with SHA-256 verification and path traversal protection.
+
+## Phase 19 — Professional admin console & local auto-monitoring (completed)
+
+- [x] T164: Add background local-host monitoring with telemetry history and thread-status introspection endpoints.
+- [x] T165: Rewrite the admin console as a professional single-file application with dashboard, live monitor, and fleet views.
+- [x] T166: Add browser-side demo mode for synthetic attack simulation without mutating server state.
+- [x] T167: Expand Help & Docs with architecture, detection, API reference, and getting-started guidance.
+
+## Phase 20 — UX hardening & licensing (completed)
+
+- [x] T168: Add a global collapsible activity log panel across all admin views.
+- [x] T169: Add responsive icon-only sidebar behavior for narrow viewports.
+- [x] T170: Add Ctrl+K / Cmd+K keyboard shortcut support for rapid navigation.
+- [x] T171: Replace placeholder licensing with BSL 1.1 and propagate references through docs and site assets.
+
+## Phase 21 — Detection expansion & server security hardening (completed)
+
+- [x] T172: Add a velocity rate-of-change detector for first/second-derivative anomaly analysis.
+- [x] T173: Add a Shannon entropy detector for behavioural randomness and constant-traffic anomalies.
+- [x] T174: Add a compound multi-axis threat detector for coordinated attack scoring.
+- [x] T175: Wire advanced detectors into the local monitoring thread and runtime pipeline.
+- [x] T176: Add `/api/detection/summary` and detection-analysis UI coverage.
+- [x] T177: Harden static-file serving with canonical path traversal protection.
+- [x] T178: Enforce bounded request body sizes for server endpoints.
+- [x] T179: Add consistent security headers and CORS handling on server responses.
+- [x] T180: Update Help & Docs with the expanded detection pipeline and server security behavior.
+
+## Phase 22 — Graceful shutdown, alert details & code review hardening (completed)
+
+- [x] T181: Add real Ctrl+C / SIGTERM graceful shutdown using the `ctrlc` crate.
+- [x] T182: Add `POST /api/shutdown` and admin console shutdown controls with safety confirmation.
+- [x] T183: Add expandable alert detail rows with telemetry snapshots and detection analysis.
+- [x] T184: Add `GET /api/alerts/{index}` for detailed alert inspection.
+- [x] T185: Redesign Help & Docs into categorised sections for operators.
+- [x] T186: Harden JSON construction and bounded body reads in reviewed HTTP paths.
+- [x] T187: Require authentication on sensitive GET endpoints and standardize security headers.
+
+## Phase 23 — OCSF, Sigma, response, feature flags, process tree, spool & RBAC (completed)
+
+- [x] T188: Add OCSF event normalization with schema registry and dead-letter queue support.
+- [x] T189: Add Sigma rule engine coverage with built-in detection content and statistics endpoints.
+- [x] T190: Add automated response orchestration with approval workflow and playbooks.
+- [x] T191: Add feature flags with user/group/percentage targeting.
+- [x] T192: Add process-tree analysis with deep-chain and orphan detection.
+- [x] T193: Add encrypted local event spool with retry and dead-letter semantics.
+- [x] T194: Add role-based access control with user management and endpoint permission mapping.
+
+## Phase 24 — Platform collectors, analyst console, SIEM formats & DLQ wiring (completed)
+
+- [x] T195: Add Windows collector support with WMI, registry, and Event Log parsing.
+- [x] T196: Add Linux collector support with `/proc`, journalctl, and service enumeration.
+- [x] T197: Add macOS collector support with sysctl, IOKit, and unified-log parsing.
+- [x] T198: Add Elastic ECS SIEM output formatting.
+- [x] T199: Add QRadar LEEF SIEM output formatting.
+- [x] T200: Add analyst case management workflows and APIs.
+- [x] T201: Add analyst alert queue acknowledgement and assignment workflows.
+- [x] T202: Add full-text event search, investigation timeline, and graph builder support.
+- [x] T203: Wire dead-letter queue APIs and operational runbooks into the platform and admin console.
+
+## Phase 25 — Code review hardening & security improvements (completed)
+
+- [x] T204: Replace the insecure XOR spool cipher with SHA-256 CTR-style keystream generation.
+- [x] T205: Wire API audit logging into the HTTP request lifecycle.
+- [x] T206: Activate RBAC enforcement on sensitive write endpoints.
+- [x] T207: Remove dead-code suppressions from reviewed server audit/RBAC paths and document the remaining platform-specific exceptions accurately.
+
+## Phase 26 — Security audit fixes (completed)
+
+- [x] T208: Fix endpoint-aware rate limiting so authenticated admin read traffic no longer self-triggers 429 responses under normal polling.
+- [x] T209: Reduce admin console polling pressure by slowing live-monitor cadence and refreshing telemetry history less aggressively.
+- [x] T210: Harden the default CORS origin to `http://localhost` and align runtime behavior with the documented security posture.
+- [x] T211: Correct Phase 25/26 status and changelog claims around dead-code suppressions, audit behavior, and backlog state.
+
+## Phase 27 — Operational contract & production hardening backlog
+
+- [x] T212: Publish OpenAPI coverage for all public HTTP APIs and verify it in CI.
+- [x] T213: Define schema lifecycle policy covering compatibility, migration, and fixture validation.
+- [x] T214: Add backup and restore validation with explicit disaster-recovery verification steps.
+- [x] T215: Define service-level objectives, error budgets, and operator-facing observability acceptance criteria.
+- [x] T216: Document and scaffold regional, single-tenant, and relay deployment models.
+- [x] T217: Promote the threat model into the primary documentation set and release/phase acceptance criteria.
+- [x] T218: Add a production-hardening review checklist derived from `xdr_ai_handoff_pack` guidance.
+
 ## Recommended next build order
 
-85 of 85 backlog items are complete. Phases 0–17 are complete.
+160 of 160 backlog items are complete. Phases 0–27 are complete.
 
-All tasks are done.
+All planned backlog items are done. See `docs/ROADMAP_XDR_PROFESSIONAL.md` for the professional roadmap beyond Phase 27.
 
 ## Code-quality sweep (post-Phase 7)
 

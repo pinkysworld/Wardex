@@ -2,6 +2,36 @@
 
 All notable changes to Wardex are documented in this file.
 
+## [0.27.0] — Phase 27: Operational contract & production hardening
+
+### Added
+- **OpenAPI 3.0 specification** (`docs/openapi.yaml`) covering all 149 API endpoints with schemas, tags, and security annotations.
+- **`GET /api/openapi.json`** — public endpoint serving the OpenAPI spec.
+- **`GET /api/slo/status`** — service-level objective metrics (latency, error rate, availability, budget).
+- **`POST /api/rbac/users`** and **`DELETE /api/rbac/users/{username}`** — RBAC user create/remove endpoints.
+- **Schema lifecycle documentation** (`docs/SCHEMA_LIFECYCLE.md`) — versioning strategy, compatibility rules, migration process, fixture validation.
+- **Disaster recovery plan** (`docs/DISASTER_RECOVERY.md`) — backup/restore procedures, RTO/RPO, key escrow, DR validation tests.
+- **SLO policy** (`docs/SLO_POLICY.md`) — availability, latency, and error budget definitions with alerting rules.
+- **Deployment models guide** (`docs/DEPLOYMENT_MODELS.md`) — standalone, multi-tenant, edge relay, regional federation.
+- **Threat model** (`docs/THREAT_MODEL.md`) — promoted from handoff pack with adversary profiles, abuse cases, trust boundaries.
+- **Production hardening checklist** (`docs/PRODUCTION_HARDENING.md`) — 59-control scorecard (47 implemented, 80%).
+- **XDR professional roadmap** (`docs/ROADMAP_XDR_PROFESSIONAL.md`) — Tier 1–4 feature plan through Phase 36.
+- Request counter (`request_count`, `error_count`) in server state for SLO computation.
+
+### Fixed
+- **Critical: `apiFetch()` undefined in admin console** — 16 call sites used an undefined function, making all newer admin sections non-functional. Defined proper `apiFetch()` helper.
+- **Data-shape bugs in admin console** — `refreshSigma()`, `refreshRbac()`, `refreshCases()` now correctly unwrap server response objects (`.rules`, `.users`, `.cases`).
+- **Sigma stats field name** — `stats.total_matches` → `stats.total_rules`.
+- Separated server rate limiting into read/write/static buckets so authenticated admin polling no longer self-triggers `429 Too Many Requests` under normal use.
+- Hardened the default CORS origin to `http://localhost` when `SENTINEL_CORS_ORIGIN` is unset.
+
+### Changed
+- Admin console `createCase()` upgraded from browser `prompt()` to professional inline form with priority, description, and tags.
+- Admin console ARIA accessibility: skip-to-main link, `role` attributes, `aria-current` navigation, keyboard handlers, focus-visible styles.
+- Copyright updated to 2025–2026.
+- `generate_admin.py` deprecated — edit `site/admin.html` directly.
+- Version bumped to 0.27.0; 160/160 backlog tasks complete; all 27 phases done.
+
 ## [Unreleased]
 
 ## [0.26.0] — Phase 26: Security audit fixes

@@ -1,0 +1,154 @@
+# Production Hardening Checklist
+
+> T218 — Phase 27  
+> Derived from xdr_ai_handoff_pack/docs/production-hardening-review.md
+
+## Overview
+
+This checklist covers the controls required before Wardex is deployed in a
+production environment.  Each item is scored as **Implemented**, **Partial**,
+or **Not started**, with a priority of Critical / High / Medium.
+
+---
+
+## 1. Tenant Isolation
+
+| # | Control | Priority | Status |
+|---|---------|----------|--------|
+| 1.1 | Event store scoped by `tenant_id` | Critical | Implemented |
+| 1.2 | RBAC users bound to tenant | Critical | Implemented |
+| 1.3 | Case store tenant-scoped | High | Implemented |
+| 1.4 | Cross-tenant query prevention (API layer) | Critical | Implemented |
+| 1.5 | Spool partitioned per tenant | Medium | Partial |
+
+## 2. Authentication & Authorisation
+
+| # | Control | Priority | Status |
+|---|---------|----------|--------|
+| 2.1 | Admin token: 256-bit random | Critical | Implemented |
+| 2.2 | Constant-time token comparison | Critical | Implemented |
+| 2.3 | RBAC with four roles | Critical | Implemented |
+| 2.4 | RBAC enforcement on all mutating paths | Critical | Implemented |
+| 2.5 | Enrollment token per agent | High | Implemented |
+| 2.6 | Token rotation mechanism | High | Partial |
+| 2.7 | Session expiry / token TTL | Medium | Not started |
+
+## 3. Transport Security
+
+| # | Control | Priority | Status |
+|---|---------|----------|--------|
+| 3.1 | TLS listener support | Critical | Implemented |
+| 3.2 | HSTS header | High | Implemented |
+| 3.3 | CORS allowlist (no wildcard) | Critical | Implemented |
+| 3.4 | X-Content-Type-Options: nosniff | High | Implemented |
+| 3.5 | Mutual TLS (mTLS) for agents | Medium | Not started |
+
+## 4. Auditability
+
+| # | Control | Priority | Status |
+|---|---------|----------|--------|
+| 4.1 | API audit log (last 1 000 entries) | Critical | Implemented |
+| 4.2 | Audit log includes username (RBAC) | High | Implemented |
+| 4.3 | Approval log for response actions | Critical | Implemented |
+| 4.4 | Tamper-evident audit chain | High | Partial |
+| 4.5 | Remote log forwarding (syslog / CEF) | Medium | Not started |
+
+## 5. Schema & Versioning
+
+| # | Control | Priority | Status |
+|---|---------|----------|--------|
+| 5.1 | OCSF event schema | High | Implemented |
+| 5.2 | Schema version field on all persisted structs | High | Implemented |
+| 5.3 | OpenAPI specification | High | Implemented (Phase 27) |
+| 5.4 | Schema lifecycle documentation | Medium | Implemented (Phase 27) |
+
+## 6. Rollback Safety
+
+| # | Control | Priority | Status |
+|---|---------|----------|--------|
+| 6.1 | Checkpoint save/restore | Critical | Implemented |
+| 6.2 | Checkpoint CRC integrity | High | Implemented |
+| 6.3 | Agent update rollback | High | Implemented |
+| 6.4 | Config hot-reload without restart | Medium | Implemented |
+| 6.5 | Database migration rollback | Medium | Not started |
+
+## 7. Data Retention
+
+| # | Control | Priority | Status |
+|---|---------|----------|--------|
+| 7.1 | Event store size limit | High | Implemented (10 000 events) |
+| 7.2 | Alert ring buffer | High | Implemented (100 alerts) |
+| 7.3 | Spool max size | High | Implemented (10 000 records) |
+| 7.4 | Dead-letter queue with cap | High | Implemented (500 entries) |
+| 7.5 | Configurable retention policies | Medium | Partial |
+
+## 8. Failure Handling
+
+| # | Control | Priority | Status |
+|---|---------|----------|--------|
+| 8.1 | Agent heartbeat staleness detection | Critical | Implemented |
+| 8.2 | Spool store-and-forward on network failure | High | Implemented |
+| 8.3 | Graceful shutdown (`POST /api/shutdown`) | High | Implemented |
+| 8.4 | Rate limiting (per IP, per endpoint class) | Critical | Implemented |
+| 8.5 | Request body size limit (10 MB) | High | Implemented |
+| 8.6 | Thread health monitoring | Medium | Implemented |
+
+## 9. Test Realism
+
+| # | Control | Priority | Status |
+|---|---------|----------|--------|
+| 9.1 | Adversarial harness with attack scenarios | High | Implemented |
+| 9.2 | Integration tests with real HTTP | High | Implemented (114 tests) |
+| 9.3 | Checkpoint round-trip tests | High | Implemented |
+| 9.4 | Spool encryption round-trip | High | Implemented |
+| 9.5 | Multi-tenant isolation tests | Medium | Implemented |
+| 9.6 | Chaos / fault-injection tests | Medium | Partial |
+
+## 10. Packaging & Distribution
+
+| # | Control | Priority | Status |
+|---|---------|----------|--------|
+| 10.1 | Single static binary | High | Implemented |
+| 10.2 | SHA-256 binary attestation | High | Implemented |
+| 10.3 | Container image (Dockerfile) | Medium | Not started |
+| 10.4 | systemd unit / launchd plist | Medium | Not started |
+| 10.5 | Package manager (deb/rpm/brew) | Low | Not started |
+
+## 11. Documentation
+
+| # | Control | Priority | Status |
+|---|---------|----------|--------|
+| 11.1 | Getting Started guide | Critical | Implemented |
+| 11.2 | OpenAPI spec | High | Implemented (Phase 27) |
+| 11.3 | Threat model | High | Implemented (Phase 27) |
+| 11.4 | Disaster recovery plan | High | Implemented (Phase 27) |
+| 11.5 | SLO policy | High | Implemented (Phase 27) |
+| 11.6 | Deployment models guide | Medium | Implemented (Phase 27) |
+
+---
+
+## Summary Scores
+
+| Category | Score |
+|----------|-------|
+| Tenant Isolation | 4/5 |
+| AuthN/AuthZ | 5/7 |
+| Transport | 4/5 |
+| Auditability | 3/5 |
+| Schema | 4/4 |
+| Rollback | 4/5 |
+| Retention | 4/5 |
+| Failure Handling | 6/6 |
+| Test Realism | 5/6 |
+| Packaging | 2/5 |
+| Documentation | 6/6 |
+
+**Overall**: 47/59 controls implemented (80%).
+
+## Remediation Priorities
+
+1. **Token TTL / session expiry** (2.7) — prevents indefinite token reuse.
+2. **Mutual TLS for agents** (3.5) — strongest agent authentication.
+3. **Tamper-evident audit chain** (4.4) — hash-chain the audit log.
+4. **Container image** (10.3) — simplifies deployment.
+5. **Remote log forwarding** (4.5) — enables SIEM integration for audit data.

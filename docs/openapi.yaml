@@ -1,0 +1,1859 @@
+openapi: "3.0.3"
+info:
+  title: Wardex XDR Platform API
+  description: |
+    Comprehensive REST API for the Wardex XDR/SIEM platform.
+    All mutating endpoints and sensitive monitoring endpoints require
+    Bearer token authentication via the `Authorization` header.
+    Agent-facing enrollment and heartbeat endpoints bypass admin auth.
+  version: "0.27.0"
+  contact:
+    name: Wardex Project
+  license:
+    name: BSL 1.1
+
+servers:
+  - url: http://localhost:8080
+    description: Local development server
+
+security:
+  - BearerAuth: []
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      description: API token printed by the server at startup
+
+  schemas:
+    Error:
+      type: object
+      properties:
+        error:
+          type: string
+      required: [error]
+
+    StatusManifest:
+      type: object
+      properties:
+        updated_at: { type: string, format: date-time }
+        backlog_completed: { type: integer }
+        backlog_total: { type: integer }
+        completed_phases: { type: integer }
+        total_phases: { type: integer }
+        cli_commands: { type: array, items: { type: string } }
+        implemented: { type: array, items: { type: string } }
+        not_implemented: { type: array, items: { type: string } }
+
+    TelemetrySample:
+      type: object
+      properties:
+        cpu: { type: number }
+        memory: { type: number }
+        network: { type: integer }
+        disk: { type: number }
+        auth_failures: { type: integer }
+        temperature: { type: number }
+        processes: { type: integer }
+        battery: { type: number }
+        timestamp: { type: string }
+
+    Alert:
+      type: object
+      properties:
+        timestamp: { type: string }
+        score: { type: number }
+        level: { type: string, enum: [nominal, elevated, severe, critical] }
+        action: { type: string }
+        reasons: { type: array, items: { type: string } }
+
+    Agent:
+      type: object
+      properties:
+        agent_id: { type: string }
+        hostname: { type: string }
+        platform: { type: string }
+        version: { type: string }
+        status: { type: string }
+        last_heartbeat: { type: string }
+
+    Case:
+      type: object
+      properties:
+        id: { type: integer }
+        title: { type: string }
+        status: { type: string }
+        priority: { type: string }
+        assignee: { type: string }
+        created_at: { type: string }
+        updated_at: { type: string }
+        incident_count: { type: integer }
+        event_count: { type: integer }
+        tags: { type: array, items: { type: string } }
+
+    RbacUser:
+      type: object
+      properties:
+        username: { type: string }
+        role: { type: string, enum: [Admin, Analyst, Viewer, ServiceAccount] }
+        enabled: { type: boolean }
+
+    SigmaRule:
+      type: object
+      properties:
+        id: { type: string }
+        title: { type: string }
+        status: { type: string }
+        level: { type: string }
+        description: { type: string }
+
+    FeatureFlag:
+      type: object
+      properties:
+        name: { type: string }
+        description: { type: string }
+        enabled: { type: boolean }
+        rollout_pct: { type: integer }
+        kill_switch: { type: boolean }
+
+    Event:
+      type: object
+      properties:
+        id: { type: string }
+        agent_id: { type: string }
+        severity: { type: string }
+        reason: { type: string }
+        timestamp: { type: string }
+        triage_status: { type: string }
+
+    Incident:
+      type: object
+      properties:
+        id: { type: integer }
+        title: { type: string }
+        status: { type: string }
+        severity: { type: string }
+        assignee: { type: string }
+        created_at: { type: string }
+
+    ProcessNode:
+      type: object
+      properties:
+        pid: { type: integer }
+        ppid: { type: integer }
+        name: { type: string }
+        cmd_line: { type: string }
+        user: { type: string }
+        exe_path: { type: string }
+        hostname: { type: string }
+        start_time: { type: string }
+        alive: { type: boolean }
+
+    SloStatus:
+      type: object
+      properties:
+        api_latency_p99_ms: { type: number }
+        error_rate_pct: { type: number }
+        availability_pct: { type: number }
+        budget_remaining_pct: { type: number }
+        uptime_seconds: { type: integer }
+        request_count: { type: integer }
+
+tags:
+  - name: Health
+    description: Server health and status
+  - name: Auth
+    description: Authentication
+  - name: Telemetry
+    description: Host telemetry data
+  - name: Detection
+    description: Threat detection and analysis
+  - name: Control
+    description: Detection mode and baseline control
+  - name: Alerts
+    description: Alert management
+  - name: Agents
+    description: XDR agent fleet management
+  - name: Fleet
+    description: Fleet-wide analytics
+  - name: Events
+    description: Event ingestion and querying
+  - name: Cases
+    description: Analyst case management
+  - name: Incidents
+    description: Incident tracking
+  - name: Queue
+    description: Alert triage queue
+  - name: Policy
+    description: Security policy management
+  - name: RBAC
+    description: Role-based access control
+  - name: Sigma
+    description: Sigma detection rules
+  - name: FeatureFlags
+    description: Feature flag management
+  - name: Config
+    description: Runtime configuration
+  - name: Updates
+    description: Agent update management
+  - name: Enforcement
+    description: Policy enforcement
+  - name: ThreatIntel
+    description: Threat intelligence
+  - name: Deception
+    description: Deception engine
+  - name: ProcessTree
+    description: Process tree tracking
+  - name: Response
+    description: Response orchestration
+  - name: Reports
+    description: Report generation and management
+  - name: Infrastructure
+    description: Platform infrastructure
+  - name: Research
+    description: Research tracks and formal methods
+  - name: SLO
+    description: Service level objectives
+  - name: OpenAPI
+    description: API specification
+
+paths:
+  # ── Health & Status ────────────────────────────────────────
+  /api/health:
+    get:
+      tags: [Health]
+      summary: Server health check
+      security: []
+      responses:
+        "200":
+          description: Server health info
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status: { type: string }
+                  version: { type: string }
+                  uptime: { type: string }
+                  platform: { type: string }
+
+  /api/status:
+    get:
+      tags: [Health]
+      summary: Runtime status manifest
+      responses:
+        "200":
+          description: Full status manifest
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/StatusManifest" }
+
+  /api/endpoints:
+    get:
+      tags: [Health]
+      summary: Self-describing endpoint listing
+      responses:
+        "200":
+          description: List of all API endpoints
+
+  /api/openapi.json:
+    get:
+      tags: [OpenAPI]
+      summary: OpenAPI specification (JSON)
+      security: []
+      responses:
+        "200":
+          description: OpenAPI 3.0 specification
+          content:
+            application/json:
+              schema:
+                type: object
+
+  /api/slo/status:
+    get:
+      tags: [SLO]
+      summary: Service level objective metrics
+      responses:
+        "200":
+          description: Current SLO metrics
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SloStatus" }
+
+  # ── Auth ───────────────────────────────────────────────────
+  /api/auth/check:
+    get:
+      tags: [Auth]
+      summary: Validate auth token
+      responses:
+        "200":
+          description: Token is valid
+        "401":
+          description: Unauthorized
+
+  # ── Telemetry ─────────────────────────────────────────────
+  /api/telemetry/current:
+    get:
+      tags: [Telemetry]
+      summary: Latest telemetry sample
+      responses:
+        "200":
+          description: Current telemetry
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TelemetrySample" }
+
+  /api/telemetry/history:
+    get:
+      tags: [Telemetry]
+      summary: Telemetry history (last 120 samples)
+      responses:
+        "200":
+          description: Array of telemetry samples
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  samples:
+                    type: array
+                    items: { $ref: "#/components/schemas/TelemetrySample" }
+
+  /api/host/info:
+    get:
+      tags: [Telemetry]
+      summary: Host system information
+      responses:
+        "200":
+          description: Host info
+
+  # ── Detection ──────────────────────────────────────────────
+  /api/detection/summary:
+    get:
+      tags: [Detection]
+      summary: Detection engine state
+      responses:
+        "200":
+          description: Velocity, entropy, and compound detector parameters
+
+  /api/detection/weights:
+    get:
+      tags: [Detection]
+      summary: Current detection signal weights
+      responses:
+        "200":
+          description: Per-dimension weight configuration
+    post:
+      tags: [Detection]
+      summary: Set detection signal weights
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                cpu: { type: number }
+                memory: { type: number }
+                network: { type: number }
+                disk: { type: number }
+      responses:
+        "200":
+          description: Weights updated
+
+  /api/report:
+    get:
+      tags: [Detection]
+      summary: Latest analysis report
+      responses:
+        "200":
+          description: Report with summary and alerts
+
+  # ── Control ────────────────────────────────────────────────
+  /api/control/mode:
+    post:
+      tags: [Control]
+      summary: Set detection adaptation mode
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                mode:
+                  type: string
+                  enum: [Normal, Frozen, Decay]
+      responses:
+        "200":
+          description: Mode updated
+
+  /api/control/run-demo:
+    post:
+      tags: [Control]
+      summary: Run demo analysis
+      responses:
+        "200":
+          description: Demo report
+
+  /api/control/reset-baseline:
+    post:
+      tags: [Control]
+      summary: Reset detector baseline
+      responses:
+        "200":
+          description: Baseline reset
+
+  /api/control/checkpoint:
+    post:
+      tags: [Control]
+      summary: Save detector checkpoint
+      responses:
+        "200":
+          description: Checkpoint saved
+
+  /api/control/restore-checkpoint:
+    post:
+      tags: [Control]
+      summary: Restore latest checkpoint
+      responses:
+        "200":
+          description: Checkpoint restored
+
+  /api/checkpoints:
+    get:
+      tags: [Control]
+      summary: List saved checkpoints
+      responses:
+        "200":
+          description: Checkpoint metadata
+
+  # ── Alerts ─────────────────────────────────────────────────
+  /api/alerts:
+    get:
+      tags: [Alerts]
+      summary: Last 100 alerts
+      responses:
+        "200":
+          description: Alert list
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Alert" }
+    delete:
+      tags: [Alerts]
+      summary: Clear all alerts
+      responses:
+        "200":
+          description: Alerts cleared
+
+  /api/alerts/count:
+    get:
+      tags: [Alerts]
+      summary: Alert count by severity
+      responses:
+        "200":
+          description: Severity counts
+
+  "/api/alerts/{index}":
+    get:
+      tags: [Alerts]
+      summary: Alert detail
+      parameters:
+        - name: index
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: Detailed alert with telemetry and recommendation
+
+  # ── Agents ─────────────────────────────────────────────────
+  /api/agents:
+    get:
+      tags: [Agents]
+      summary: List enrolled agents
+      responses:
+        "200":
+          description: Agent list
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Agent" }
+
+  /api/agents/enroll:
+    post:
+      tags: [Agents]
+      summary: Agent enrollment
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                hostname: { type: string }
+                platform: { type: string }
+                version: { type: string }
+      responses:
+        "201":
+          description: Agent enrolled
+
+  /api/agents/token:
+    post:
+      tags: [Agents]
+      summary: Create enrollment token
+      responses:
+        "201":
+          description: Token created
+
+  /api/agents/update:
+    get:
+      tags: [Agents]
+      summary: Check for agent updates
+      parameters:
+        - name: agent_id
+          in: query
+          schema: { type: string }
+        - name: current_version
+          in: query
+          schema: { type: string }
+        - name: platform
+          in: query
+          schema: { type: string }
+      responses:
+        "200":
+          description: Update availability info
+
+  "/api/agents/{id}":
+    delete:
+      tags: [Agents]
+      summary: Deregister agent
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Agent deregistered
+
+  "/api/agents/{id}/details":
+    get:
+      tags: [Agents]
+      summary: Agent detail with timeline
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Agent details
+
+  "/api/agents/{id}/heartbeat":
+    post:
+      tags: [Agents]
+      summary: Agent heartbeat
+      security: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Heartbeat accepted
+
+  "/api/agents/{id}/scope":
+    get:
+      tags: [Agents]
+      summary: Get agent monitoring scope
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Monitoring scope
+    post:
+      tags: [Agents]
+      summary: Set agent monitoring scope
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Scope updated
+
+  "/api/agents/{id}/logs":
+    get:
+      tags: [Agents]
+      summary: Retrieve agent logs
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Agent log entries
+    post:
+      tags: [Agents]
+      summary: Agent log ingestion
+      security: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Logs accepted
+
+  "/api/agents/{id}/inventory":
+    get:
+      tags: [Agents]
+      summary: Agent inventory
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Agent inventory
+    post:
+      tags: [Agents]
+      summary: Agent inventory submission
+      security: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Inventory accepted
+
+  "/api/agents/{id}/status":
+    get:
+      tags: [Agents]
+      summary: Agent status record
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Agent status
+
+  # ── Fleet ──────────────────────────────────────────────────
+  /api/fleet/status:
+    get:
+      tags: [Fleet]
+      summary: Fleet health report
+      responses:
+        "200":
+          description: Fleet overview
+
+  /api/fleet/dashboard:
+    get:
+      tags: [Fleet]
+      summary: Comprehensive fleet dashboard
+      responses:
+        "200":
+          description: Full fleet analytics
+
+  /api/fleet/inventory:
+    get:
+      tags: [Fleet]
+      summary: Fleet-wide inventory
+      responses:
+        "200":
+          description: Aggregated inventory
+
+  /api/fleet/register:
+    post:
+      tags: [Fleet]
+      summary: Register device in fleet
+      responses:
+        "201":
+          description: Device registered
+
+  # ── Events ─────────────────────────────────────────────────
+  /api/events:
+    get:
+      tags: [Events]
+      summary: List events with filters
+      parameters:
+        - name: agent_id
+          in: query
+          schema: { type: string }
+        - name: severity
+          in: query
+          schema: { type: string }
+        - name: reason
+          in: query
+          schema: { type: string }
+        - name: correlated
+          in: query
+          schema: { type: string }
+        - name: triage_status
+          in: query
+          schema: { type: string }
+        - name: limit
+          in: query
+          schema: { type: integer }
+      responses:
+        "200":
+          description: Filtered event list
+    post:
+      tags: [Events]
+      summary: Ingest telemetry event
+      security: []
+      responses:
+        "201":
+          description: Event ingested
+
+  /api/events/summary:
+    get:
+      tags: [Events]
+      summary: Event analytics summary
+      responses:
+        "200":
+          description: Event statistics
+
+  /api/events/export:
+    get:
+      tags: [Events]
+      summary: Export events as CSV
+      responses:
+        "200":
+          description: CSV data
+          content:
+            text/csv:
+              schema: { type: string }
+
+  /api/events/search:
+    post:
+      tags: [Events]
+      summary: Full-text event search
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                query: { type: string }
+      responses:
+        "200":
+          description: Search results
+
+  /api/events/bulk-triage:
+    post:
+      tags: [Events]
+      summary: Bulk triage events (max 500)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                event_ids:
+                  type: array
+                  items: { type: string }
+                  maxItems: 500
+                status: { type: string }
+      responses:
+        "200":
+          description: Triage applied
+
+  "/api/events/{id}/triage":
+    post:
+      tags: [Events]
+      summary: Update event triage state
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                status: { type: string }
+                assignee: { type: string }
+                tags:
+                  type: array
+                  items: { type: string }
+                notes: { type: string }
+      responses:
+        "200":
+          description: Triage updated
+
+  # ── Cases ──────────────────────────────────────────────────
+  /api/cases:
+    get:
+      tags: [Cases]
+      summary: List investigation cases
+      parameters:
+        - name: status
+          in: query
+          schema: { type: string }
+        - name: priority
+          in: query
+          schema: { type: string }
+        - name: assignee
+          in: query
+          schema: { type: string }
+      responses:
+        "200":
+          description: Case list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  cases:
+                    type: array
+                    items: { $ref: "#/components/schemas/Case" }
+                  total: { type: integer }
+    post:
+      tags: [Cases]
+      summary: Create investigation case
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [title]
+              properties:
+                title: { type: string }
+                description: { type: string }
+                priority:
+                  type: string
+                  enum: [critical, high, medium, low, info]
+                tags:
+                  type: array
+                  items: { type: string }
+      responses:
+        "201":
+          description: Case created
+
+  /api/cases/stats:
+    get:
+      tags: [Cases]
+      summary: Case statistics
+      responses:
+        "200":
+          description: Case counts by status
+
+  "/api/cases/{id}":
+    get:
+      tags: [Cases]
+      summary: Case detail
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: Full case detail with comments, evidence, MITRE
+
+  "/api/cases/{id}/comment":
+    post:
+      tags: [Cases]
+      summary: Add case comment
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "201":
+          description: Comment added
+
+  "/api/cases/{id}/evidence":
+    post:
+      tags: [Cases]
+      summary: Add case evidence
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "201":
+          description: Evidence added
+
+  "/api/cases/{id}/update":
+    post:
+      tags: [Cases]
+      summary: Update case status/assignee
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: Case updated
+
+  # ── Incidents ──────────────────────────────────────────────
+  /api/incidents:
+    get:
+      tags: [Incidents]
+      summary: List incidents
+      parameters:
+        - name: status
+          in: query
+          schema: { type: string }
+        - name: severity
+          in: query
+          schema: { type: string }
+      responses:
+        "200":
+          description: Incident list
+    post:
+      tags: [Incidents]
+      summary: Create incident
+      responses:
+        "201":
+          description: Incident created
+
+  "/api/incidents/{id}":
+    get:
+      tags: [Incidents]
+      summary: Incident detail
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: Incident detail with timeline
+
+  "/api/incidents/{id}/report":
+    get:
+      tags: [Incidents]
+      summary: Generate incident report
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: Generated report
+
+  "/api/incidents/{id}/update":
+    post:
+      tags: [Incidents]
+      summary: Update incident
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: Incident updated
+
+  # ── Alert Queue ────────────────────────────────────────────
+  /api/queue/alerts:
+    get:
+      tags: [Queue]
+      summary: Pending alert queue
+      responses:
+        "200":
+          description: Queued alerts
+
+  /api/queue/stats:
+    get:
+      tags: [Queue]
+      summary: Queue statistics
+      responses:
+        "200":
+          description: Queue counts
+
+  /api/queue/acknowledge:
+    post:
+      tags: [Queue]
+      summary: Acknowledge queued alert
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                alert_id: { type: string }
+      responses:
+        "200":
+          description: Alert acknowledged
+
+  /api/queue/assign:
+    post:
+      tags: [Queue]
+      summary: Assign alert to analyst
+      responses:
+        "200":
+          description: Alert assigned
+
+  # ── Policy ─────────────────────────────────────────────────
+  /api/policy/current:
+    get:
+      tags: [Policy]
+      summary: Current active policy
+      security: []
+      responses:
+        "200":
+          description: Active policy
+
+  /api/policy/history:
+    get:
+      tags: [Policy]
+      summary: Policy version history
+      responses:
+        "200":
+          description: Policy versions
+
+  /api/policy/publish:
+    post:
+      tags: [Policy]
+      summary: Publish new policy version
+      responses:
+        "201":
+          description: Policy published
+
+  /api/policy/compose:
+    post:
+      tags: [Policy]
+      summary: Compose policy decisions
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                operator:
+                  type: string
+                  enum: [max, min, left, right]
+                left: { type: object }
+                right: { type: object }
+      responses:
+        "200":
+          description: Composed result
+
+  /api/policy-vm/execute:
+    post:
+      tags: [Policy]
+      summary: Execute policy VM program
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                program: { type: string }
+                env: { type: object }
+      responses:
+        "200":
+          description: Execution result
+
+  # ── RBAC ───────────────────────────────────────────────────
+  /api/rbac/users:
+    get:
+      tags: [RBAC]
+      summary: List RBAC users
+      responses:
+        "200":
+          description: User list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  users:
+                    type: array
+                    items: { $ref: "#/components/schemas/RbacUser" }
+    post:
+      tags: [RBAC]
+      summary: Create RBAC user
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [username]
+              properties:
+                username: { type: string }
+                role:
+                  type: string
+                  enum: [admin, analyst, viewer, service]
+      responses:
+        "201":
+          description: User created with token
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status: { type: string }
+                  username: { type: string }
+                  token: { type: string }
+
+  "/api/rbac/users/{username}":
+    delete:
+      tags: [RBAC]
+      summary: Remove RBAC user
+      parameters:
+        - name: username
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: User removed
+        "404":
+          description: User not found
+
+  # ── Sigma ──────────────────────────────────────────────────
+  /api/sigma/rules:
+    get:
+      tags: [Sigma]
+      summary: List Sigma detection rules
+      responses:
+        "200":
+          description: Sigma rules
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  rules:
+                    type: array
+                    items: { $ref: "#/components/schemas/SigmaRule" }
+                  count: { type: integer }
+
+  /api/sigma/stats:
+    get:
+      tags: [Sigma]
+      summary: Sigma engine statistics
+      responses:
+        "200":
+          description: Engine status and counts
+
+  # ── Feature Flags ──────────────────────────────────────────
+  /api/feature-flags:
+    get:
+      tags: [FeatureFlags]
+      summary: List feature flags
+      responses:
+        "200":
+          description: Flag list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  flags:
+                    type: array
+                    items: { $ref: "#/components/schemas/FeatureFlag" }
+
+  # ── Config ─────────────────────────────────────────────────
+  /api/config/current:
+    get:
+      tags: [Config]
+      summary: Current configuration
+      responses:
+        "200":
+          description: TOML configuration
+
+  /api/config/save:
+    post:
+      tags: [Config]
+      summary: Persist configuration
+      responses:
+        "200":
+          description: Config saved
+
+  /api/config/reload:
+    post:
+      tags: [Config]
+      summary: Hot-reload configuration
+      responses:
+        "200":
+          description: Config reloaded
+
+  # ── Updates ────────────────────────────────────────────────
+  /api/updates/publish:
+    post:
+      tags: [Updates]
+      summary: Publish release
+      responses:
+        "201":
+          description: Release published
+
+  /api/updates/deploy:
+    post:
+      tags: [Updates]
+      summary: Deploy update to agent
+      responses:
+        "200":
+          description: Deployment scheduled
+
+  /api/updates/rollback:
+    post:
+      tags: [Updates]
+      summary: Rollback agent version
+      responses:
+        "200":
+          description: Rollback initiated
+
+  /api/updates/cancel:
+    post:
+      tags: [Updates]
+      summary: Cancel pending deployment
+      responses:
+        "200":
+          description: Deployment cancelled
+
+  "/api/updates/download/{file_name}":
+    get:
+      tags: [Updates]
+      summary: Download update binary
+      security: []
+      parameters:
+        - name: file_name
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Binary download
+          content:
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+
+  /api/rollout/config:
+    get:
+      tags: [Updates]
+      summary: Rollout configuration
+      responses:
+        "200":
+          description: Rollout settings
+
+  # ── Enforcement ────────────────────────────────────────────
+  /api/enforcement/status:
+    get:
+      tags: [Enforcement]
+      summary: Enforcement engine status
+      responses:
+        "200":
+          description: Policy enforcement state
+
+  /api/enforcement/quarantine:
+    post:
+      tags: [Enforcement]
+      summary: Quarantine target
+      responses:
+        "200":
+          description: Target quarantined
+
+  # ── Threat Intelligence ────────────────────────────────────
+  /api/threat-intel/status:
+    get:
+      tags: [ThreatIntel]
+      summary: IoC count and match statistics
+      responses:
+        "200":
+          description: Threat intel status
+
+  /api/threat-intel/ioc:
+    post:
+      tags: [ThreatIntel]
+      summary: Add indicator of compromise
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                type:
+                  type: string
+                  enum: [ip, domain, hash, process]
+                value: { type: string }
+      responses:
+        "201":
+          description: IoC added
+
+  # ── Deception ──────────────────────────────────────────────
+  /api/deception/status:
+    get:
+      tags: [Deception]
+      summary: Deception engine report
+      responses:
+        "200":
+          description: Decoy status
+
+  /api/deception/deploy:
+    post:
+      tags: [Deception]
+      summary: Deploy decoy
+      responses:
+        "201":
+          description: Decoy deployed
+
+  # ── Process Tree ───────────────────────────────────────────
+  /api/process-tree:
+    get:
+      tags: [ProcessTree]
+      summary: Process tree
+      responses:
+        "200":
+          description: Alive processes
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  processes:
+                    type: array
+                    items: { $ref: "#/components/schemas/ProcessNode" }
+                  count: { type: integer }
+
+  /api/process-tree/deep-chains:
+    get:
+      tags: [ProcessTree]
+      summary: Deep process chains
+      responses:
+        "200":
+          description: Chains with depth >= 4
+
+  # ── Response Orchestration ─────────────────────────────────
+  /api/response/stats:
+    get:
+      tags: [Response]
+      summary: Response orchestration statistics
+      responses:
+        "200":
+          description: Response stats
+
+  /api/response/pending:
+    get:
+      tags: [Response]
+      summary: Pending response requests
+      responses:
+        "200":
+          description: Pending requests
+
+  /api/response/approve:
+    post:
+      tags: [Response]
+      summary: Approve or deny remediation
+      responses:
+        "200":
+          description: Decision recorded
+
+  /api/response/approvals:
+    get:
+      tags: [Response]
+      summary: Approval history
+      responses:
+        "200":
+          description: Approval decisions
+
+  /api/response/audit:
+    get:
+      tags: [Response]
+      summary: Response audit ledger
+      responses:
+        "200":
+          description: Audit entries
+
+  # ── Reports ────────────────────────────────────────────────
+  /api/reports:
+    get:
+      tags: [Reports]
+      summary: List stored reports
+      responses:
+        "200":
+          description: Report list
+
+  /api/reports/executive-summary:
+    get:
+      tags: [Reports]
+      summary: Executive summary
+      responses:
+        "200":
+          description: Cross-report summary
+
+  "/api/reports/{id}":
+    get:
+      tags: [Reports]
+      summary: Retrieve report
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Report data
+    delete:
+      tags: [Reports]
+      summary: Delete report
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Report deleted
+
+  "/api/reports/{id}/html":
+    get:
+      tags: [Reports]
+      summary: Download HTML report
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: HTML report
+          content:
+            text/html:
+              schema: { type: string }
+
+  # ── Infrastructure ─────────────────────────────────────────
+  /api/platform:
+    get:
+      tags: [Infrastructure]
+      summary: Platform capabilities
+      responses:
+        "200":
+          description: TPM, seccomp, eBPF, firewall availability
+
+  /api/monitoring/options:
+    get:
+      tags: [Infrastructure]
+      summary: OS-aware monitoring recommendations
+      responses:
+        "200":
+          description: Monitoring options
+
+  /api/monitoring/paths:
+    get:
+      tags: [Infrastructure]
+      summary: File integrity monitoring paths
+      responses:
+        "200":
+          description: Monitored paths
+
+  /api/tls/status:
+    get:
+      tags: [Infrastructure]
+      summary: TLS listener status
+      responses:
+        "200":
+          description: TLS mode and port
+
+  /api/threads/status:
+    get:
+      tags: [Infrastructure]
+      summary: Background thread status
+      responses:
+        "200":
+          description: Thread health
+
+  /api/spool/stats:
+    get:
+      tags: [Infrastructure]
+      summary: Encrypted spool statistics
+      responses:
+        "200":
+          description: Spool metrics
+
+  /api/side-channel/status:
+    get:
+      tags: [Infrastructure]
+      summary: Side-channel detection report
+      responses:
+        "200":
+          description: Timing and cache analysis
+
+  /api/patches:
+    get:
+      tags: [Infrastructure]
+      summary: Patch management status
+      responses:
+        "200":
+          description: Patch plan
+
+  /api/compliance/status:
+    get:
+      tags: [Infrastructure]
+      summary: IEC 62443 compliance report
+      responses:
+        "200":
+          description: Compliance status
+
+  /api/attestation/status:
+    get:
+      tags: [Infrastructure]
+      summary: Attestation verification
+      responses:
+        "200":
+          description: Attestation status
+
+  /api/audit/log:
+    get:
+      tags: [Infrastructure]
+      summary: API audit log
+      responses:
+        "200":
+          description: Recent audit entries
+
+  # ── Research & Formal Methods ──────────────────────────────
+  /api/correlation:
+    get:
+      tags: [Research]
+      summary: Cross-agent correlation analysis
+      responses:
+        "200":
+          description: Correlation pairs
+
+  /api/drift/status:
+    get:
+      tags: [Research]
+      summary: Drift detector status
+      responses:
+        "200":
+          description: KS test sample count
+
+  /api/drift/reset:
+    post:
+      tags: [Research]
+      summary: Reset drift detector
+      responses:
+        "200":
+          description: Drift detector reset
+
+  /api/fingerprint/status:
+    get:
+      tags: [Research]
+      summary: Device fingerprint training status
+      responses:
+        "200":
+          description: Fingerprint status
+
+  /api/causal/graph:
+    get:
+      tags: [Research]
+      summary: Causal analysis graph
+      responses:
+        "200":
+          description: Node and edge counts
+
+  /api/digital-twin/status:
+    get:
+      tags: [Research]
+      summary: Digital twin device count
+      responses:
+        "200":
+          description: Twin status
+
+  /api/digital-twin/simulate:
+    post:
+      tags: [Research]
+      summary: Run digital twin simulation
+      responses:
+        "200":
+          description: Simulation result
+
+  /api/monitor/status:
+    get:
+      tags: [Research]
+      summary: Temporal logic property statuses
+      responses:
+        "200":
+          description: Property status
+
+  /api/monitor/violations:
+    get:
+      tags: [Research]
+      summary: Temporal logic violations
+      responses:
+        "200":
+          description: Violation list
+
+  /api/export/tla:
+    get:
+      tags: [Research]
+      summary: Export TLA+ specification
+      responses:
+        "200":
+          description: TLA+ text
+          content:
+            text/plain:
+              schema: { type: string }
+
+  /api/export/alloy:
+    get:
+      tags: [Research]
+      summary: Export Alloy model
+      responses:
+        "200":
+          description: Alloy text
+          content:
+            text/plain:
+              schema: { type: string }
+
+  /api/export/witnesses:
+    get:
+      tags: [Research]
+      summary: Export proof witnesses
+      responses:
+        "200":
+          description: Witness JSON
+
+  /api/harness/run:
+    post:
+      tags: [Research]
+      summary: Run adversarial harness
+      responses:
+        "200":
+          description: Harness results
+
+  /api/privacy/budget:
+    get:
+      tags: [Research]
+      summary: Differential privacy budget
+      responses:
+        "200":
+          description: Budget remaining
+
+  /api/research-tracks:
+    get:
+      tags: [Research]
+      summary: Research track modules
+      responses:
+        "200":
+          description: Track listing
+
+  # ── Energy & Edge ──────────────────────────────────────────
+  /api/energy/status:
+    get:
+      tags: [Infrastructure]
+      summary: Energy budget status
+      responses:
+        "200":
+          description: Energy remaining
+
+  /api/energy/consume:
+    post:
+      tags: [Infrastructure]
+      summary: Set energy drain rate
+      responses:
+        "200":
+          description: Energy consumed
+
+  /api/energy/harvest:
+    post:
+      tags: [Infrastructure]
+      summary: Simulate energy harvesting
+      responses:
+        "200":
+          description: Energy harvested
+
+  /api/offload/decide:
+    post:
+      tags: [Infrastructure]
+      summary: Edge/cloud offload decision
+      responses:
+        "200":
+          description: Offload decision
+
+  # ── Quantum ────────────────────────────────────────────────
+  /api/quantum/key-status:
+    get:
+      tags: [Infrastructure]
+      summary: Post-quantum key rotation status
+      responses:
+        "200":
+          description: Key epoch info
+
+  /api/quantum/rotate:
+    post:
+      tags: [Infrastructure]
+      summary: Rotate post-quantum key
+      responses:
+        "200":
+          description: Key rotated
+
+  # ── Mesh & Swarm ───────────────────────────────────────────
+  /api/mesh/health:
+    get:
+      tags: [Infrastructure]
+      summary: Mesh connectivity analysis
+      responses:
+        "200":
+          description: Mesh health
+
+  /api/mesh/heal:
+    post:
+      tags: [Infrastructure]
+      summary: Apply mesh self-healing
+      responses:
+        "200":
+          description: Repairs applied
+
+  /api/swarm/posture:
+    get:
+      tags: [Infrastructure]
+      summary: Swarm security posture
+      responses:
+        "200":
+          description: Swarm posture
+
+  # ── OCSF ───────────────────────────────────────────────────
+  /api/ocsf/schema:
+    get:
+      tags: [Events]
+      summary: OCSF schema info
+      responses:
+        "200":
+          description: Supported event classes
+
+  /api/ocsf/schema/version:
+    get:
+      tags: [Events]
+      summary: OCSF schema version
+      responses:
+        "200":
+          description: Version details
+
+  /api/dlq:
+    get:
+      tags: [Events]
+      summary: Dead-letter queue entries
+      responses:
+        "200":
+          description: DLQ entries
+    delete:
+      tags: [Events]
+      summary: Clear dead-letter queue
+      responses:
+        "200":
+          description: DLQ cleared
+
+  /api/dlq/stats:
+    get:
+      tags: [Events]
+      summary: DLQ statistics
+      responses:
+        "200":
+          description: DLQ count
+
+  # ── SIEM Integration ──────────────────────────────────────
+  /api/siem/status:
+    get:
+      tags: [Infrastructure]
+      summary: SIEM connector status
+      responses:
+        "200":
+          description: SIEM status
+
+  # ── Investigation ──────────────────────────────────────────
+  /api/investigation/graph:
+    post:
+      tags: [Cases]
+      summary: Build investigation graph
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                event_ids:
+                  type: array
+                  items: { type: string }
+      responses:
+        "200":
+          description: Investigation graph
+
+  # ── Timeline ───────────────────────────────────────────────
+  /api/timeline/agent:
+    get:
+      tags: [Events]
+      summary: Agent event timeline
+      parameters:
+        - name: agent_id
+          in: query
+          schema: { type: string }
+      responses:
+        "200":
+          description: Timeline entries
+
+  /api/timeline/host:
+    get:
+      tags: [Events]
+      summary: Host event timeline
+      parameters:
+        - name: hostname
+          in: query
+          schema: { type: string }
+      responses:
+        "200":
+          description: Timeline entries
+
+  # ── Analysis ───────────────────────────────────────────────
+  /api/analyze:
+    post:
+      tags: [Detection]
+      summary: Analyze telemetry data
+      requestBody:
+        required: true
+        content:
+          text/csv:
+            schema: { type: string }
+      responses:
+        "200":
+          description: Analysis report
+
+  # ── Shutdown ───────────────────────────────────────────────
+  /api/shutdown:
+    post:
+      tags: [Infrastructure]
+      summary: Graceful server shutdown
+      responses:
+        "200":
+          description: Server shutting down

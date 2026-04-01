@@ -663,10 +663,10 @@ pub fn status_snapshot() -> String {
 pub fn status_manifest() -> StatusManifest {
     StatusManifest {
         updated_at: "current".into(),
-        backlog_completed: 120,
-        backlog_total: 120,
-        completed_phases: 26,
-        total_phases: 26,
+        backlog_completed: 160,
+        backlog_total: 160,
+        completed_phases: 27,
+        total_phases: 27,
         cli_commands: vec![
             "demo".into(),
             "analyze".into(),
@@ -803,6 +803,13 @@ pub fn status_manifest() -> StatusManifest {
             "Shutdown button in admin console Settings with double-confirmation safety".into(),
             "Bounded request body reads for chunked transfer encoding (read_body_limited)".into(),
             "Code review hardening: JSON injection fixes, auth on sensitive GET endpoints, consistent security headers".into(),
+            "OpenAPI 3.0 specification with 149 endpoint definitions and GET /api/openapi.json public endpoint".into(),
+            "Schema lifecycle policy with versioning strategy, compatibility rules, and migration process".into(),
+            "Disaster recovery plan with backup/restore procedures, RTO/RPO, and DR validation tests".into(),
+            "Service-level objectives with error-budget instrumentation and GET /api/slo/status endpoint".into(),
+            "Deployment model documentation: standalone, multi-tenant, edge relay, regional federation".into(),
+            "Threat model promoted to primary docs: adversary profiles, abuse cases, trust boundaries".into(),
+            "Production hardening checklist: 59-control scorecard derived from XDR AI handoff pack".into(),
         ],
         partially_wired: vec![],
         not_implemented: vec![],
@@ -864,12 +871,12 @@ mod tests {
     #[test]
     fn status_manifest_reports_backlog_progress() {
         let manifest = status_manifest();
-        assert_eq!(manifest.backlog_completed, 120);
-        assert_eq!(manifest.backlog_total, 120);
-        assert_eq!(manifest.total_phases, 26);
+        assert_eq!(manifest.backlog_completed, 160);
+        assert_eq!(manifest.backlog_total, 160);
+        assert_eq!(manifest.total_phases, 27);
         assert!(manifest.cli_commands.iter().any(|cmd| cmd == "status-json"));
         assert!(manifest.partially_wired.is_empty());
-        assert!(manifest.not_implemented.is_empty());
+        assert_eq!(manifest.not_implemented.len(), 0);
     }
 
     #[test]

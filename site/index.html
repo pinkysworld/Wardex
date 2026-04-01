@@ -472,7 +472,8 @@
             <p class="label">Implementation</p>
             <h2>Current Status</h2>
             <p class="section-desc">
-              The project has completed all twenty-five phases (0–25) of the engineering backlog. It provides a
+              The project has completed Phases 0–26 of the engineering backlog, with Phase 27 queued for
+              operational contract and production-hardening work. It provides a
               working edge security runtime with configurable detection, pluggable response actions,
               cryptographic audit trails, proof-carrying update metadata, a checkable policy state machine,
               poisoning heuristics, replay buffering, benchmark tooling, a live browser admin console
@@ -487,8 +488,11 @@
               process tree analysis, encrypted spool, RBAC, platform collectors (Windows/Linux/macOS),
               analyst console with case management, and Elastic ECS/QRadar SIEM formats.
               Phase 25 hardened the codebase with SHA-256 CTR spool encryption, API audit logging,
-              and RBAC endpoint enforcement.
-              58 modules, 635 tests (521 unit + 114 integration). Three categories below — no ambiguity about what is real versus what is planned.
+              and RBAC endpoint enforcement. Phase 26 separated read/write/static rate limits for admin traffic,
+              reduced dashboard polling pressure, and aligned the default CORS posture with localhost-only operation.
+              Phase 27 delivers the full operational contract: OpenAPI 3.0 specification, schema lifecycle docs,
+              disaster recovery plan, SLO policy, deployment model guides, threat model, and production hardening checklist.
+              58 modules, 637+ tests (523 unit + 114 integration). Three categories below — no ambiguity about what is real versus what is planned.
             </p>
           </div>
 
@@ -522,10 +526,12 @@
             <p class="label">Completed</p>
             <h2>Engineering Log</h2>
             <p class="section-desc">
-              Concrete tasks grouped by phase. All twenty-five phases (0–25) and all 120 tasks are
-              complete, encompassing the full detect–respond–audit pipeline, runtime intelligence
-              features, platform collectors, analyst console, OCSF/Sigma/RBAC modules, SIEM formats,
-              code review hardening, and professional admin console with 15+ interactive panels.
+              Concrete tasks grouped by phase. This public site preserves the detailed phase cards through
+              Phase 17; the canonical engineering backlog in docs now continues through Phase 27 and records
+              153 of 160 tracked tasks complete. The backlog is now 160/160 with all 27 phases done.
+              The later phases add XDR fleet management, SIEM contracts,
+              platform collectors, analyst workflows, code-review hardening, and the current operational
+              hardening backlog.
             </p>
           </div>
           <div id="backlog-phases"></div>
@@ -596,7 +602,7 @@
             <div class="start-card">
               <h3>Run tests</h3>
               <div class="code-block"><code>cargo test</code></div>
-              <p>635 automated tests (521 unit + 114 integration) covering all 58 modules.</p>
+              <p>637 automated tests (523 unit + 114 integration) covering all 58 modules.</p>
             </div>
             <div class="start-card">
               <h3>SIEM report</h3>
@@ -670,7 +676,7 @@
             </div>
           </div>
           <div class="footer-bottom">
-            <p>Wardex · v0.26.0 · Phase 0–26 complete · 635 tests · <a href="../LICENSE" style="color:inherit;">BSL 1.1</a></p>
+            <p>Wardex · v0.27.0 · Phase 0–27 complete · 160/160 tasks · 637+ tests · <a href="../LICENSE" style="color:inherit;">BSL 1.1</a></p>
           </div>
         </div>
       </footer>

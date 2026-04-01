@@ -32,7 +32,7 @@ Lightweight Rust edge security runtime that detects anomalies, enforces adaptive
 
 ## Architecture at a Glance
 
-A 16-stage enriched pipeline — ingest → parse → detect → decide → threat-intel → enforce → digital-twin → energy → side-channel → compliance → act → audit → checkpoint → replay → benchmark → report — runs as a single-binary Rust process. The binary operates in two modes: **server** (central management with admin console) or **agent** (lightweight endpoint that enrolls with a server, forwards events, and receives policy updates). An embedded HTTP server (`tiny_http`) exposes authenticated REST endpoints for live monitoring, analysis, and control. All state lives in-memory; baselines persist to disk between runs. 58 modules, 635 automated tests.
+A 16-stage enriched pipeline — ingest → parse → detect → decide → threat-intel → enforce → digital-twin → energy → side-channel → compliance → act → audit → checkpoint → replay → benchmark → report — runs as a single-binary Rust process. The binary operates in two modes: **server** (central management with admin console) or **agent** (lightweight endpoint that enrolls with a server, forwards events, and receives policy updates). An embedded HTTP server (`tiny_http`) exposes authenticated REST endpoints for live monitoring, analysis, and control. All state lives in-memory; baselines persist to disk between runs. 58 modules, 637 automated tests.
 
 ## What's Built vs. Roadmap
 
@@ -49,7 +49,7 @@ A 16-stage enriched pipeline — ingest → parse → detect → decide → thre
 | Token-authenticated HTTP API (100+ endpoints) | Wasm-based extensible policies |
 | Supply-chain attestation foundations | Full attestation with Ed25519 signing |
 | Criterion micro-benchmarks (55K samples/sec) | ARM cross-compilation profiling |
-| 635 automated tests (521 unit + 114 integration) | Digital-twin fleet simulation |
+| 637 automated tests (523 unit + 114 integration) | Digital-twin fleet simulation |
 | Browser admin console with dark mode | Quantum-walk anomaly propagation |
 | XDR fleet management with SIEM integration | |
 | Analyst console with case management | |

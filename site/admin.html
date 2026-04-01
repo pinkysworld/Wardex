@@ -390,15 +390,26 @@ input::placeholder{color:var(--ink-3);}
 .sub-grid.cols-2{grid-template-columns:1fr 1fr;}
 .sub-grid.cols-3{grid-template-columns:1fr 1fr 1fr;}
 @media(max-width:768px){.sub-grid.cols-2,.sub-grid.cols-3{grid-template-columns:1fr;}}
+
+/* Accessibility: skip link */
+.skip-link:focus{top:0;}
+/* Accessibility: focus-visible for keyboard users */
+*:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:4px;}
+.nav-item:focus-visible{background:var(--bg-alt);outline:2px solid var(--accent);}
+/* Error state for cards that fail to load */
+.card.card-error{border-color:var(--red,#e74c3c);position:relative;}
+.card.card-error::after{content:'Failed to load — click Refresh';display:block;color:var(--red,#e74c3c);font-size:.78rem;margin-top:.5rem;}
 </style>
 </head>
 
 <body>
+<!-- Skip to main content for keyboard/screen reader users -->
+<a href="#main-content" class="skip-link" style="position:absolute;top:-40px;left:0;background:var(--accent);color:#fff;padding:8px 16px;z-index:10000;font-size:.85rem;border-radius:0 0 6px 0;transition:top .2s;">Skip to main content</a>
 <!-- ═══ Sidebar Toggle (mobile) ═══ -->
 <button class="sidebar-toggle" id="sidebar-toggle" aria-label="Toggle sidebar">&#9776;</button>
 
 <!-- ═══ Sidebar ═══ -->
-<aside class="sidebar" id="sidebar">
+<aside class="sidebar" id="sidebar" role="complementary" aria-label="Main navigation">
   <div class="sidebar-brand">
     <div class="sidebar-logo">W</div>
     <div>
@@ -406,20 +417,20 @@ input::placeholder{color:var(--ink-3);}
       <div class="sidebar-version" id="sidebar-version">XDR Platform</div>
     </div>
   </div>
-  <nav class="sidebar-nav">
-    <div class="nav-item active" data-section="dashboard" data-label="Dashboard"><span class="nav-icon">&#9632;</span><span class="nav-label"> Dashboard</span></div>
-    <div class="nav-item" data-section="live-monitor" data-label="Live Monitor"><span class="nav-icon">&#9656;</span><span class="nav-label"> Live Monitor</span> <span class="nav-badge hidden" id="nav-alert-badge">0</span></div>
-    <div class="nav-item" data-section="threat-detection" data-label="Threat Detection"><span class="nav-icon">&#9888;</span><span class="nav-label"> Threat Detection</span></div>
-    <div class="nav-item" data-section="fleet-agents" data-label="Fleet &amp; Agents"><span class="nav-icon">&#8861;</span><span class="nav-label"> Fleet &amp; Agents</span></div>
-    <div class="nav-item" data-section="security-policy" data-label="Security Policy"><span class="nav-icon">&#9881;</span><span class="nav-label"> Security Policy</span></div>
-    <div class="nav-item" data-section="incident-response" data-label="Incident Response"><span class="nav-icon">&#9889;</span><span class="nav-label"> Incident Response</span></div>
-    <div class="nav-item" data-section="infrastructure" data-label="Infrastructure"><span class="nav-icon">&#9955;</span><span class="nav-label"> Infrastructure</span></div>
-    <div class="nav-item" data-section="reports-exports" data-label="Reports &amp; Exports"><span class="nav-icon">&#9776;</span><span class="nav-label"> Reports &amp; Exports</span></div>
-    <div class="nav-item" data-section="settings" data-label="Settings"><span class="nav-icon">&#9881;</span><span class="nav-label"> Settings</span></div>
-    <div class="nav-item" data-section="help-docs" data-label="Help &amp; Docs"><span class="nav-icon">&#9432;</span><span class="nav-label"> Help &amp; Docs</span></div>
+  <nav class="sidebar-nav" role="navigation" aria-label="Platform sections">
+    <div class="nav-item active" data-section="dashboard" data-label="Dashboard" tabindex="0" role="button" aria-current="true"><span class="nav-icon" aria-hidden="true">&#9632;</span><span class="nav-label"> Dashboard</span></div>
+    <div class="nav-item" data-section="live-monitor" data-label="Live Monitor" tabindex="0" role="button"><span class="nav-icon" aria-hidden="true">&#9656;</span><span class="nav-label"> Live Monitor</span> <span class="nav-badge hidden" id="nav-alert-badge" aria-label="Alert count">0</span></div>
+    <div class="nav-item" data-section="threat-detection" data-label="Threat Detection" tabindex="0" role="button"><span class="nav-icon" aria-hidden="true">&#9888;</span><span class="nav-label"> Threat Detection</span></div>
+    <div class="nav-item" data-section="fleet-agents" data-label="Fleet &amp; Agents" tabindex="0" role="button"><span class="nav-icon" aria-hidden="true">&#8861;</span><span class="nav-label"> Fleet &amp; Agents</span></div>
+    <div class="nav-item" data-section="security-policy" data-label="Security Policy" tabindex="0" role="button"><span class="nav-icon" aria-hidden="true">&#9881;</span><span class="nav-label"> Security Policy</span></div>
+    <div class="nav-item" data-section="incident-response" data-label="Incident Response" tabindex="0" role="button"><span class="nav-icon" aria-hidden="true">&#9889;</span><span class="nav-label"> Incident Response</span></div>
+    <div class="nav-item" data-section="infrastructure" data-label="Infrastructure" tabindex="0" role="button"><span class="nav-icon" aria-hidden="true">&#9955;</span><span class="nav-label"> Infrastructure</span></div>
+    <div class="nav-item" data-section="reports-exports" data-label="Reports &amp; Exports" tabindex="0" role="button"><span class="nav-icon" aria-hidden="true">&#9776;</span><span class="nav-label"> Reports &amp; Exports</span></div>
+    <div class="nav-item" data-section="settings" data-label="Settings" tabindex="0" role="button"><span class="nav-icon" aria-hidden="true">&#9881;</span><span class="nav-label"> Settings</span></div>
+    <div class="nav-item" data-section="help-docs" data-label="Help &amp; Docs" tabindex="0" role="button"><span class="nav-icon" aria-hidden="true">&#9432;</span><span class="nav-label"> Help &amp; Docs</span></div>
   </nav>
   <div class="sidebar-footer">
-    <div>&copy; 2025 Wardex XDR</div>
+    <div>&copy; 2025–2026 Wardex XDR</div>
     <div style="margin-top:.2rem;">Local Runtime Console</div>
     <div style="margin-top:.3rem;font-size:.68rem;color:var(--ink-3);">BSL 1.1 &bull; <a href="../LICENSE" style="color:var(--accent);text-decoration:none;">License</a></div>
   </div>
@@ -453,7 +464,7 @@ input::placeholder{color:var(--ink-3);}
 </header>
 
 <!-- ═══ Main Content ═══ -->
-<div class="main">
+<div class="main" id="main-content" role="main">
   <div class="content">
     <div class="flash" id="flash"></div>
 
@@ -570,7 +581,7 @@ input::placeholder{color:var(--ink-3);}
     <div class="section" id="sec-live-monitor">
       <div class="section-header">
         <h1>Live Monitor</h1>
-        <p>Real-time alert feed from the running monitor. Alerts auto-poll every 3 seconds when connected.</p>
+        <p>Real-time alert feed from the running monitor. Alerts auto-poll every 5 seconds when connected.</p>
       </div>
 
       <div class="metric-strip">
@@ -611,7 +622,7 @@ input::placeholder{color:var(--ink-3);}
           <button class="btn btn-sm danger" id="btn-clear-alerts">Clear All</button>
           <button class="btn btn-sm" id="btn-export-alerts-csv">Export CSV</button>
           <label style="margin-left:auto;display:flex;align-items:center;gap:.3rem;font-size:.78rem;color:var(--ink-3);">
-            <input type="checkbox" id="alert-auto-poll" checked style="accent-color:var(--accent);">Auto-poll (3s)
+            <input type="checkbox" id="alert-auto-poll" checked style="accent-color:var(--accent);">Auto-poll (5s)
           </label>
         </div>
       </div>
@@ -1104,7 +1115,38 @@ input::placeholder{color:var(--ink-3);}
             <option value="low">Low</option>
           </select>
           <button class="btn btn-sm primary" onclick="refreshCases()">Refresh</button>
-          <button class="btn btn-sm" onclick="createCase()">+ New Case</button>
+          <button class="btn btn-sm" onclick="toggleNewCaseForm()">+ New Case</button>
+        </div>
+        <!-- Inline New Case Form -->
+        <div id="new-case-form" class="card" style="display:none;margin-bottom:.75rem;padding:.75rem 1rem;background:var(--bg-alt);border:1px solid var(--border);border-radius:8px;">
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:.5rem;margin-bottom:.5rem;">
+            <div>
+              <label for="new-case-title" style="font-size:.78rem;color:var(--ink-2);display:block;margin-bottom:.2rem;">Title *</label>
+              <input type="text" id="new-case-title" placeholder="Investigation title" style="width:100%;padding:.4rem .55rem;background:var(--bg);color:var(--ink);border:1px solid var(--border);border-radius:6px;">
+            </div>
+            <div>
+              <label for="new-case-priority" style="font-size:.78rem;color:var(--ink-2);display:block;margin-bottom:.2rem;">Priority</label>
+              <select id="new-case-priority" style="width:100%;padding:.4rem .55rem;background:var(--bg);color:var(--ink);border:1px solid var(--border);border-radius:6px;">
+                <option value="medium">Medium</option>
+                <option value="critical">Critical</option>
+                <option value="high">High</option>
+                <option value="low">Low</option>
+                <option value="info">Info</option>
+              </select>
+            </div>
+          </div>
+          <div style="margin-bottom:.5rem;">
+            <label for="new-case-desc" style="font-size:.78rem;color:var(--ink-2);display:block;margin-bottom:.2rem;">Description</label>
+            <textarea id="new-case-desc" rows="2" placeholder="Brief description of the investigation..." style="width:100%;padding:.4rem .55rem;background:var(--bg);color:var(--ink);border:1px solid var(--border);border-radius:6px;resize:vertical;"></textarea>
+          </div>
+          <div style="margin-bottom:.5rem;">
+            <label for="new-case-tags" style="font-size:.78rem;color:var(--ink-2);display:block;margin-bottom:.2rem;">Tags (comma-separated)</label>
+            <input type="text" id="new-case-tags" placeholder="malware, phishing, insider" style="width:100%;padding:.4rem .55rem;background:var(--bg);color:var(--ink);border:1px solid var(--border);border-radius:6px;">
+          </div>
+          <div class="btn-row">
+            <button class="btn btn-sm primary" onclick="submitNewCase()">Create Case</button>
+            <button class="btn btn-sm" onclick="toggleNewCaseForm()">Cancel</button>
+          </div>
         </div>
         <div class="metric-strip" style="margin-bottom:.75rem;">
           <div class="metric-card teal"><div class="metric-label">Total Cases</div><div class="metric-value" id="cases-total">0</div></div>
@@ -1484,7 +1526,7 @@ input::placeholder{color:var(--ink-3);}
           <div class="settings-section">
             <h3>Server</h3>
             <label for="set-cors">CORS origin</label>
-            <input type="text" id="set-cors" value="*" placeholder="* or http://localhost:3000">
+            <input type="text" id="set-cors" value="http://localhost" placeholder="http://localhost or http://localhost:3000">
             <p class="text-muted" style="margin-top:.3rem;">Set via <code>SENTINEL_CORS_ORIGIN</code> env var.</p>
           </div>
           <div class="settings-section settings-section-wide">
@@ -1772,7 +1814,7 @@ input::placeholder{color:var(--ink-3);}
 </div><!-- .main -->
 
 <!-- ═══ Toast ═══ -->
-<div class="toast" id="toast"></div>
+<div class="toast" id="toast" role="alert" aria-live="polite"></div>
 
 <!-- ═══════════════════════════════════════════════════════════════ -->
 <!-- JavaScript                                                      -->
@@ -1791,6 +1833,7 @@ input::placeholder{color:var(--ink-3);}
   let lastReportData = null;
   let lastAlertCount = 0;
   let alertPollTimer = null;
+  let nextTelemetryHistoryAt = 0;
   let monitoringOptionsData = null;
   let selectedAgentId = null;
   let selectedEventId = null;
@@ -1801,6 +1844,7 @@ input::placeholder{color:var(--ink-3);}
   const AUTO_REFRESH_BASE = 5000;
   const AUTO_REFRESH_MAX = 30000;
   const AUTO_REFRESH_PAUSE_AFTER = 6;
+  const TELEMETRY_HISTORY_INTERVAL_MS = 20000;
 
   // ── Helpers ──
   function getToken() { return $('#auth-token').value.trim(); }
@@ -1854,6 +1898,13 @@ input::placeholder{color:var(--ink-3);}
     const t = getToken();
     if (t) h['Authorization'] = 'Bearer ' + t;
     return h;
+  }
+
+  /** Wrapper around fetch that prepends API base and merges auth headers. */
+  function apiFetch(path, opts) {
+    opts = opts || {};
+    const headers = Object.assign({}, authHeaders(opts.headers && opts.headers['Content-Type']), opts.headers || {});
+    return fetch(API + path, Object.assign({}, opts, { headers }));
   }
 
   function defaultMonitorScope() {
@@ -2009,11 +2060,11 @@ input::placeholder{color:var(--ink-3);}
   // ── Navigation ──
   function switchSection(sectionId) {
     $$('.section').forEach(s => s.classList.remove('active'));
-    $$('.nav-item').forEach(n => n.classList.remove('active'));
+    $$('.nav-item').forEach(n => { n.classList.remove('active'); n.removeAttribute('aria-current'); });
     const sec = $('#sec-' + sectionId);
     if (sec) sec.classList.add('active');
     const nav = document.querySelector('[data-section="' + sectionId + '"]');
-    if (nav) nav.classList.add('active');
+    if (nav) { nav.classList.add('active'); nav.setAttribute('aria-current', 'true'); }
 
     // Auto-load data for each section
     if (sectionId === 'live-monitor') { refreshAlerts(); refreshHealth(); }
@@ -2033,6 +2084,10 @@ input::placeholder{color:var(--ink-3);}
       switchSection(item.dataset.section);
       // Close sidebar on mobile
       if (window.innerWidth <= 1024) $('#sidebar').classList.remove('open');
+    });
+    // Keyboard accessibility: Enter/Space activates nav items
+    item.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); item.click(); }
     });
   });
 
@@ -2070,11 +2125,11 @@ input::placeholder{color:var(--ink-3);}
     refreshCheckpointCount();
     refreshAlerts();
     refreshHealth();
-    refreshTelemetry();
+    refreshTelemetry(true);
     refreshHostInfo();
   }
 
-  async function refreshTelemetry() {
+  async function refreshTelemetry(includeHistory) {
     try {
       const res = await fetch(API + '/api/telemetry/current', { headers: authHeaders() });
       if (!res.ok) return;
@@ -2089,7 +2144,10 @@ input::placeholder{color:var(--ink-3);}
       $('#g-batt').textContent = typeof d.battery_pct === 'number' ? d.battery_pct.toFixed(0) : '—';
     } catch(e) { /* ignore */ }
 
-    // Sparklines
+    const shouldRefreshHistory = includeHistory || Date.now() >= nextTelemetryHistoryAt;
+    if (!shouldRefreshHistory) return;
+
+    nextTelemetryHistoryAt = Date.now() + TELEMETRY_HISTORY_INTERVAL_MS;
     try {
       const res = await fetch(API + '/api/telemetry/history', { headers: authHeaders() });
       if (!res.ok) return;
@@ -3352,8 +3410,8 @@ input::placeholder{color:var(--ink-3);}
   function startAlertPolling() {
     if (alertPollTimer) clearInterval(alertPollTimer);
     alertPollTimer = setInterval(() => {
-      if ($('#alert-auto-poll').checked) { refreshAlerts(); refreshHealth(); refreshTelemetry(); }
-    }, 3000);
+      if ($('#alert-auto-poll').checked) { refreshAlerts(); refreshHealth(); refreshTelemetry(false); }
+    }, 5000);
   }
 
   // ── API Endpoints (Help) ──
@@ -4153,18 +4211,20 @@ input::placeholder{color:var(--ink-3);}
         apiFetch('/api/sigma/stats')
       ]);
       if (rulesRes.ok) {
-        const rules = await rulesRes.json();
+        const data = await rulesRes.json();
+        const rules = Array.isArray(data) ? data : (data.rules || []);
         const tb = $('#sigma-tbody');
-        if (tb && Array.isArray(rules)) {
+        if (tb) {
           $('#sigma-total').textContent = rules.length;
           $('#sigma-enabled').textContent = rules.filter(r => r.enabled !== false).length;
-          $('#sigma-critical').textContent = rules.filter(r => r.severity === 'critical' || r.severity === 'high').length;
-          tb.innerHTML = rules.map(r => '<tr><td>' + esc(r.id || '') + '</td><td>' + esc(r.name || r.title || '') + '</td><td>' + esc(r.severity || r.level || '') + '</td><td>' + esc(r.category || '') + '</td><td>' + (r.enabled !== false ? '<span style="color:var(--green);">Active</span>' : 'Disabled') + '</td></tr>').join('');
+          $('#sigma-critical').textContent = rules.filter(r => r.severity === 'critical' || r.severity === 'high' || r.level === 'critical' || r.level === 'high').length;
+          tb.innerHTML = rules.length ? rules.map(r => '<tr><td>' + esc(r.id || '') + '</td><td>' + esc(r.name || r.title || '') + '</td><td>' + esc(r.severity || r.level || '') + '</td><td>' + esc(r.category || r.status || '') + '</td><td>' + (r.enabled !== false ? '<span style="color:var(--green);">Active</span>' : 'Disabled') + '</td></tr>').join('') : '<tr><td colspan="5" class="text-muted">No Sigma rules loaded.</td></tr>';
         }
       }
       if (statsRes.ok) {
         const stats = await statsRes.json();
-        if (stats.total_matches !== undefined) $('#sigma-matches').textContent = stats.total_matches;
+        if (stats.total_rules !== undefined) $('#sigma-matches').textContent = stats.total_rules;
+        else if (stats.total_matches !== undefined) $('#sigma-matches').textContent = stats.total_matches;
       }
     } catch(e) { log('Sigma refresh error: ' + e.message); }
   }
@@ -4177,10 +4237,11 @@ input::placeholder{color:var(--ink-3);}
         apiFetch('/api/cases/stats')
       ]);
       if (casesRes.ok) {
-        const cases = await casesRes.json();
+        const data = await casesRes.json();
+        const cases = Array.isArray(data) ? data : (data.cases || []);
         const tb = $('#cases-tbody');
-        if (tb && Array.isArray(cases)) {
-          tb.innerHTML = cases.length ? cases.map(c => '<tr><td>' + esc(c.id || '') + '</td><td>' + esc(c.title || '') + '</td><td>' + esc(c.priority || '') + '</td><td>' + esc(c.status || '') + '</td><td>' + esc(c.assignee || '—') + '</td><td>' + esc(c.created || '') + '</td></tr>').join('') : '<tr><td colspan="6" class="text-muted">No cases yet.</td></tr>';
+        if (tb) {
+          tb.innerHTML = cases.length ? cases.map(c => '<tr><td>' + esc(c.id || '') + '</td><td>' + esc(c.title || '') + '</td><td>' + esc(c.priority || '') + '</td><td>' + esc(c.status || '') + '</td><td>' + esc(c.assignee || '—') + '</td><td>' + esc(c.created_at || c.created || '') + '</td></tr>').join('') : '<tr><td colspan="6" class="text-muted">No cases yet.</td></tr>';
         }
       }
       if (statsRes.ok) {
@@ -4191,13 +4252,21 @@ input::placeholder{color:var(--ink-3);}
       }
     } catch(e) { log('Cases refresh error: ' + e.message); }
   }
-  async function createCase() {
-    const title = prompt('Case title:');
-    if (!title) return;
+  function toggleNewCaseForm() {
+    const form = $('#new-case-form');
+    if (form) form.style.display = form.style.display === 'none' ? '' : 'none';
+  }
+  async function submitNewCase() {
+    const title = ($('#new-case-title') || {}).value;
+    if (!title) { toast('Case title is required', 'error'); return; }
+    const priority = ($('#new-case-priority') || {}).value || 'medium';
+    const description = ($('#new-case-desc') || {}).value || '';
+    const tagsRaw = ($('#new-case-tags') || {}).value || '';
+    const tags = tagsRaw ? tagsRaw.split(',').map(t => t.trim()).filter(Boolean) : [];
     try {
-      const res = await apiFetch('/api/cases', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({title: title, priority: 'medium'}) });
-      if (res.ok) { log('Case created'); refreshCases(); } else { log('Case creation failed: ' + res.status); }
-    } catch(e) { log('Error: ' + e.message); }
+      const res = await apiFetch('/api/cases', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({title, priority, description, tags}) });
+      if (res.ok) { toast('Case created', 'success'); log('Case created: ' + title); $('#new-case-title').value = ''; $('#new-case-desc').value = ''; $('#new-case-tags').value = ''; toggleNewCaseForm(); refreshCases(); } else { toast('Case creation failed: ' + res.status, 'error'); }
+    } catch(e) { toast('Error: ' + e.message, 'error'); }
   }
   async function refreshAlertQueue() {
     try {
@@ -4232,10 +4301,11 @@ input::placeholder{color:var(--ink-3);}
     try {
       const res = await apiFetch('/api/rbac/users');
       if (res.ok) {
-        const users = await res.json();
+        const data = await res.json();
+        const users = Array.isArray(data) ? data : (data.users || []);
         const tb = $('#rbac-tbody');
-        if (tb && Array.isArray(users)) {
-          tb.innerHTML = users.length ? users.map(u => '<tr><td>' + esc(u.username || u.name || '') + '</td><td>' + esc(u.role || '') + '</td><td>' + esc(u.created || '—') + '</td><td><button class="btn btn-sm danger" onclick="removeRbacUser(\'' + esc(u.username || u.name || '') + '\')">Remove</button></td></tr>').join('') : '<tr><td colspan="4" class="text-muted">No RBAC users configured.</td></tr>';
+        if (tb) {
+          tb.innerHTML = users.length ? users.map(u => '<tr><td>' + esc(u.username || u.name || '') + '</td><td>' + esc(u.role || '') + '</td><td>' + esc(u.created || u.created_at || '—') + '</td><td><button class="btn btn-sm danger" onclick="removeRbacUser(\'' + esc(u.username || u.name || '') + '\')">Remove</button></td></tr>').join('') : '<tr><td colspan="4" class="text-muted">No RBAC users configured.</td></tr>';
         }
       }
     } catch(e) { log('RBAC refresh error: ' + e.message); }
@@ -4280,7 +4350,7 @@ input::placeholder{color:var(--ink-3);}
   refreshCheckpointCount();
   refreshAlerts();
   refreshHealth();
-  refreshTelemetry();
+  refreshTelemetry(true);
   refreshHostInfo();
   startAlertPolling();
   loadSettings();
