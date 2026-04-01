@@ -16,7 +16,7 @@ impl Default for DetectorSettings {
         Self {
             warmup_samples: 4,
             smoothing: 0.22,
-            learn_threshold: 1.35,
+            learn_threshold: 2.5,
         }
     }
 }
@@ -35,7 +35,7 @@ impl Default for PolicySettings {
         Self {
             critical_score: 5.2,
             severe_score: 3.0,
-            elevated_score: 1.4,
+            elevated_score: 2.8,
             critical_integrity_drift: 0.45,
             low_battery_threshold: 20.0,
         }

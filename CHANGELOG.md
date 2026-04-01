@@ -2,6 +2,24 @@
 
 All notable changes to Wardex are documented in this file.
 
+## [0.20.0] — Phase 23
+
+### Added
+- **Alert sort by criticality**: Dropdown to sort alerts by Critical → Elevated or Elevated → Critical, in addition to default time order.
+- **Alert detail survives refresh**: Open detail rows are preserved across auto-refresh cycles instead of being destroyed by table re-render.
+
+### Fixed
+- **False alarm suppression**: Raised `elevated_score` from 1.4 → 2.8 and `learn_threshold` from 1.35 → 2.5 so normal system noise (~2.0 score) no longer triggers constant "Elevated" alerts. Baseline now adapts to normal fluctuations instead of freezing.
+- **Consecutive-sample confirmation**: Monitor thread requires 2 consecutive elevated-score samples before firing an alert. Critical/Severe bypass confirmation for immediate response.
+- **Reports show live data**: `/api/report` now generates report from live monitoring alerts instead of falling back to demo sample data. Empty state returns an empty report rather than synthetic data.
+
+### Security
+- **Auth required on sensitive endpoints**: `GET /api/alerts`, `/api/alerts/count`, `/api/report`, `/api/status`, `/api/endpoints`, `/api/threads/status`, `/api/detection/summary`, and `/api/telemetry/*` now require Bearer token authentication. Only `/api/health` remains public.
+- **Frontend sends auth headers**: All fetch calls (`refreshAlerts`, `refreshReport`, `refreshStatus`, `refreshTelemetry`, `refreshHostInfo`, `loadApiEndpoints`, `refreshHealth`) now include auth headers.
+
+### Removed
+- **Research Blueprint Coverage section** removed from the Help panel along with `renderTracks()` function and related state.
+
 ## [0.19.0] — Phase 22
 
 ### Added

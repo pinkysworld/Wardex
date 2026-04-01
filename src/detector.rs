@@ -68,7 +68,7 @@ impl Default for DetectorConfig {
         Self {
             warmup_samples: 4,
             smoothing: 0.22,
-            learn_threshold: 1.35,
+            learn_threshold: 2.5,
         }
     }
 }

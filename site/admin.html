@@ -562,7 +562,13 @@ input::placeholder{color:var(--ink-3);}
       </div>
 
       <div class="card">
-        <h2><span class="dot dot-green"></span> Alert Feed</h2>
+        <h2 style="display:flex;align-items:center;gap:.6rem;"><span class="dot dot-green"></span> Alert Feed
+          <select id="alert-sort" style="margin-left:auto;font-size:.75rem;padding:.15rem .4rem;border:1px solid var(--border);border-radius:4px;background:var(--bg-card);color:var(--ink);">
+            <option value="time">Sort: Newest first</option>
+            <option value="level-desc">Sort: Critical → Elevated</option>
+            <option value="level-asc">Sort: Elevated → Critical</option>
+          </select>
+        </h2>
         <div class="table-wrap" style="max-height:400px;overflow-y:auto;">
           <table class="data-table" id="alert-table">
             <thead><tr><th>Time</th><th>Score</th><th>Level</th><th>Action</th><th>Reason</th></tr></thead>
@@ -1055,7 +1061,7 @@ input::placeholder{color:var(--ink-3);}
             <label for="set-smoothing">Smoothing factor</label>
             <input type="number" id="set-smoothing" min="0" max="1" step="0.01" value="0.22">
             <label for="set-learn">Learn threshold</label>
-            <input type="number" id="set-learn" min="0" step="0.01" value="1.35">
+            <input type="number" id="set-learn" min="0" step="0.01" value="2.5">
           </div>
           <div class="settings-section">
             <h3>Policy Thresholds</h3>
@@ -1064,7 +1070,7 @@ input::placeholder{color:var(--ink-3);}
             <label for="set-severe">Severe score</label>
             <input type="number" id="set-severe" min="0" step="0.1" value="3.0">
             <label for="set-elevated">Elevated score</label>
-            <input type="number" id="set-elevated" min="0" step="0.1" value="1.4">
+            <input type="number" id="set-elevated" min="0" step="0.1" value="2.8">
             <label for="set-battery">Low battery threshold (%)</label>
             <input type="number" id="set-battery" min="0" max="100" step="1" value="20">
           </div>
@@ -1297,25 +1303,6 @@ input::placeholder{color:var(--ink-3);}
           </div>
         </div>
 
-        <div class="accordion">
-          <div class="accordion-header" onclick="this.parentElement.classList.toggle('open')">
-            Research Blueprint Coverage <span class="arrow">&#9654;</span>
-          </div>
-          <div class="accordion-body">
-            <p>These tracks belong to the broader research blueprint. Planned items are unimplemented research directions, not missing product features.</p>
-            <div class="btn-row mb-1">
-              <div id="track-summary" style="display:flex;gap:.4rem;flex-wrap:wrap;"></div>
-              <button class="btn btn-sm" id="btn-toggle-future" type="button" style="margin-left:auto;">Show Future Tracks</button>
-            </div>
-            <div class="text-muted mb-1" id="track-note">Showing only foundation and scaffolded tracks.</div>
-            <div class="table-wrap">
-              <table class="data-table">
-                <thead><tr><th>Code</th><th>Track</th><th>Status</th></tr></thead>
-                <tbody id="track-tbody"></tbody>
-              </table>
-            </div>
-          </div>
-        </div>
       </div>
 
     </div>
@@ -1351,8 +1338,6 @@ input::placeholder{color:var(--ink-3);}
   let autoRefreshTimer = null;
   let autoRefreshFailures = 0;
   let isAuthenticated = false;
-  let showFutureTracks = false;
-  let lastTracks = [];
   let lastReportData = null;
   let lastAlertCount = 0;
   let alertPollTimer = null;
@@ -1528,7 +1513,7 @@ input::placeholder{color:var(--ink-3);}
 
   async function refreshTelemetry() {
     try {
-      const res = await fetch(API + '/api/telemetry/current');
+      const res = await fetch(API + '/api/telemetry/current', { headers: authHeaders() });
       if (!res.ok) return;
       const d = await res.json();
       $('#g-cpu').textContent = typeof d.cpu_pct === 'number' ? d.cpu_pct.toFixed(1) : '—';
@@ -1543,7 +1528,7 @@ input::placeholder{color:var(--ink-3);}
 
     // Sparklines
     try {
-      const res = await fetch(API + '/api/telemetry/history');
+      const res = await fetch(API + '/api/telemetry/history', { headers: authHeaders() });
       if (!res.ok) return;
       const arr = await res.json();
       if (arr.length > 0) {
@@ -1592,7 +1577,7 @@ input::placeholder{color:var(--ink-3);}
 
   async function refreshHostInfo() {
     try {
-      const res = await fetch(API + '/api/host/info');
+      const res = await fetch(API + '/api/host/info', { headers: authHeaders() });
       if (!res.ok) return;
       const d = await res.json();
       $('#dash-platform').textContent = d.platform ?? '—';
@@ -1614,7 +1599,7 @@ input::placeholder{color:var(--ink-3);}
   // ── Status ──
   async function refreshStatus() {
     try {
-      const res = await fetch(API + '/api/status');
+      const res = await fetch(API + '/api/status', { headers: authHeaders() });
       if (res.status === 401) { flash('Unauthorized', 'error'); setConn('error', 'Auth failed'); return; }
       if (!res.ok) throw new Error('HTTP ' + res.status);
       const d = await res.json();
@@ -1637,9 +1622,6 @@ input::placeholder{color:var(--ink-3);}
           d.not_implemented.map(i => '<li>' + esc(i) + '</li>').join('') + '</ul>';
       } else { notbuiltEl.innerHTML = ''; }
 
-      if (d.research_tracks && d.research_tracks.length) {
-        renderTracks(d.research_tracks);
-      }
       setConn('connected');
     } catch(e) {
       const detail = e.message.includes('Failed to fetch') ? 'Server offline' : e.message;
@@ -1648,35 +1630,10 @@ input::placeholder{color:var(--ink-3);}
     }
   }
 
-  function renderTracks(tracks) {
-    lastTracks = tracks.slice();
-    const counts = { foundation: 0, scaffolded: 0, planned: 0, future: 0 };
-    tracks.forEach(t => { counts[t.status] = (counts[t.status] || 0) + 1; });
-    $('#track-summary').innerHTML =
-      '<span class="track-badge foundation">' + counts.foundation + ' Foundation</span> ' +
-      '<span class="track-badge scaffolded">' + counts.scaffolded + ' Scaffolded</span>' +
-      (showFutureTracks
-        ? ' <span class="track-badge planned">' + counts.planned + ' Planned</span>' +
-          ' <span class="track-badge future">' + counts.future + ' Future</span>'
-        : '');
-    $('#track-note').textContent = showFutureTracks
-      ? 'Showing the full research blueprint, including unimplemented planned and future investigations.'
-      : 'Showing only foundation and scaffolded tracks.';
-    $('#btn-toggle-future').textContent = showFutureTracks ? 'Hide Future Tracks' : 'Show Future Tracks';
-    const visible = showFutureTracks ? tracks : tracks.filter(t => t.status === 'foundation' || t.status === 'scaffolded');
-    const tbody = $('#track-tbody');
-    tbody.innerHTML = '';
-    for (const t of visible) {
-      const tr = document.createElement('tr');
-      tr.innerHTML = '<td><strong>' + esc(t.code) + '</strong></td><td>' + esc(t.title) + '</td><td><span class="track-badge ' + esc(t.status) + '">' + esc(t.status) + '</span></td>';
-      tbody.appendChild(tr);
-    }
-  }
-
   // ── Report ──
   async function refreshReport() {
     try {
-      const res = await fetch(API + '/api/report');
+      const res = await fetch(API + '/api/report', { headers: authHeaders() });
       if (res.status === 401) { flash('Unauthorized', 'error'); return; }
       if (!res.ok) throw new Error(res.statusText);
       const d = await res.json();
@@ -2149,8 +2106,8 @@ input::placeholder{color:var(--ink-3);}
   async function refreshAlerts() {
     try {
       const [alertsRes, countRes] = await Promise.all([
-        fetch(API + '/api/alerts'),
-        fetch(API + '/api/alerts/count'),
+        fetch(API + '/api/alerts', { headers: authHeaders() }),
+        fetch(API + '/api/alerts/count', { headers: authHeaders() }),
       ]);
       if (alertsRes.ok) { const alerts = await alertsRes.json(); renderAlertTable(alerts); renderDashAlertTable(alerts); }
       if (countRes.ok) {
@@ -2180,8 +2137,33 @@ input::placeholder{color:var(--ink-3);}
     else { el.textContent = 'Nominal'; el.className = 'metric-value ok'; sub.textContent = 'All systems normal'; }
   }
 
+  // Track open alert detail state across refreshes
+  let openAlertDetailId = null;
+  let openAlertDetailHtml = null;
+  let alertSortOrder = 'time'; // 'time' | 'level-desc' | 'level-asc'
+
+  const levelPriority = { critical: 3, severe: 2, elevated: 1 };
+
+  function sortAlerts(alerts) {
+    if (alertSortOrder === 'time') return alerts;
+    const sorted = alerts.slice();
+    const dir = alertSortOrder === 'level-desc' ? -1 : 1;
+    sorted.sort((a, b) => {
+      const pa = levelPriority[(a.level || '').toLowerCase()] || 0;
+      const pb = levelPriority[(b.level || '').toLowerCase()] || 0;
+      return dir * (pb - pa);
+    });
+    return sorted;
+  }
+
   function renderAlertTable(alerts) {
     const tbody = $('#alert-tbody');
+    // Save currently open detail row state before re-render
+    const openRow = tbody.querySelector('.alert-detail-row.open');
+    if (openRow) {
+      openAlertDetailId = openRow.id;
+      openAlertDetailHtml = openRow.querySelector('.alert-detail-inner')?.innerHTML || null;
+    }
     tbody.innerHTML = '';
     if (!alerts.length) {
       tbody.innerHTML = '<tr><td colspan="5" class="text-muted">No alerts yet.</td></tr>';
@@ -2189,11 +2171,11 @@ input::placeholder{color:var(--ink-3);}
     }
     const isNew = alerts.length > lastAlertCount;
     lastAlertCount = alerts.length;
-    const reversed = alerts.slice(0, 100);
-    reversed.forEach((a, idx) => {
+    const sorted = sortAlerts(alerts.slice(0, 100));
+    sorted.forEach((a, idx) => {
       const tr = document.createElement('tr');
       tr.className = 'alert-row';
-      if (isNew && idx === 0) tr.className += ' alert-new';
+      if (isNew && idx === 0 && alertSortOrder === 'time') tr.className += ' alert-new';
       const lvl = esc(a.level || '');
       const reasonCount = (a.reasons && a.reasons.length) || 0;
       const reason = reasonCount ? esc(a.reasons[0]) : '—';
@@ -2206,7 +2188,13 @@ input::placeholder{color:var(--ink-3);}
       const detailTr = document.createElement('tr');
       detailTr.className = 'alert-detail-row';
       detailTr.id = detailId;
-      detailTr.innerHTML = '<td colspan="5" class="alert-detail-cell"><div class="alert-detail-inner"><div class="text-muted" style="font-size:.82rem;">Click to load detailed analysis…</div></div></td>';
+      // Restore previously open detail row
+      if (detailId === openAlertDetailId && openAlertDetailHtml) {
+        detailTr.classList.add('open');
+        detailTr.innerHTML = '<td colspan="5" class="alert-detail-cell"><div class="alert-detail-inner">' + openAlertDetailHtml + '</div></td>';
+      } else {
+        detailTr.innerHTML = '<td colspan="5" class="alert-detail-cell"><div class="alert-detail-inner"><div class="text-muted" style="font-size:.82rem;">Click to load detailed analysis…</div></div></td>';
+      }
       tbody.appendChild(detailTr);
     });
   }
@@ -2315,7 +2303,7 @@ input::placeholder{color:var(--ink-3);}
 
   async function refreshHealth() {
     try {
-      const res = await fetch(API + '/api/health');
+      const res = await fetch(API + '/api/health', { headers: authHeaders() });
       if (!res.ok) return;
       const d = await res.json();
       $('#hb-platform').textContent = d.platform || '—';
@@ -2340,7 +2328,7 @@ input::placeholder{color:var(--ink-3);}
   // ── API Endpoints (Help) ──
   async function loadApiEndpoints() {
     try {
-      const res = await fetch(API + '/api/endpoints');
+      const res = await fetch(API + '/api/endpoints', { headers: authHeaders() });
       if (!res.ok) return;
       const d = await res.json();
       const el = $('#api-endpoint-list');
@@ -2367,12 +2355,12 @@ input::placeholder{color:var(--ink-3);}
       if (cfg.detector) {
         $('#set-warmup').value = cfg.detector.warmup_samples ?? 4;
         $('#set-smoothing').value = cfg.detector.smoothing ?? 0.22;
-        $('#set-learn').value = cfg.detector.learn_threshold ?? 1.35;
+        $('#set-learn').value = cfg.detector.learn_threshold ?? 2.5;
       }
       if (cfg.policy) {
         $('#set-critical').value = cfg.policy.critical_score ?? 5.2;
         $('#set-severe').value = cfg.policy.severe_score ?? 3.0;
-        $('#set-elevated').value = cfg.policy.elevated_score ?? 1.4;
+        $('#set-elevated').value = cfg.policy.elevated_score ?? 2.8;
         $('#set-battery').value = cfg.policy.low_battery_threshold ?? 20;
       }
       if (cfg.monitor) {
@@ -2396,11 +2384,11 @@ input::placeholder{color:var(--ink-3);}
     const threshold = parseFloat($('#set-threshold').value) || 3.5;
     const critical = parseFloat($('#set-critical').value) || 5.2;
     const severe = parseFloat($('#set-severe').value) || 3.0;
-    const elevated = parseFloat($('#set-elevated').value) || 1.4;
+    const elevated = parseFloat($('#set-elevated').value) || 2.8;
     if (critical <= severe || severe <= elevated) { flash('Threshold ordering required: critical > severe > elevated', 'error'); return null; }
     if (interval < 1) { flash('Interval must be at least 1 second', 'error'); return null; }
     return {
-      detector: { warmup_samples: parseInt($('#set-warmup').value) || 4, smoothing: parseFloat($('#set-smoothing').value) || 0.22, learn_threshold: parseFloat($('#set-learn').value) || 1.35 },
+      detector: { warmup_samples: parseInt($('#set-warmup').value) || 4, smoothing: parseFloat($('#set-smoothing').value) || 0.22, learn_threshold: parseFloat($('#set-learn').value) || 2.5 },
       policy: { critical_score: critical, severe_score: severe, elevated_score: elevated, low_battery_threshold: parseFloat($('#set-battery').value) || 20.0 },
       monitor: { interval_secs: interval, alert_threshold: threshold, alert_log: $('#set-alert-log').value || 'var/alerts.jsonl', dry_run: $('#set-dry-run').checked, duration_secs: parseInt($('#set-duration').value) || 0, webhook_url: $('#set-webhook').value || null, syslog: $('#set-syslog').checked, cef: $('#set-cef').checked, watch_paths: $('#set-watch-paths').value.split('\n').map(s => s.trim()).filter(Boolean) },
     };
@@ -2423,8 +2411,8 @@ input::placeholder{color:var(--ink-3);}
     $('#set-interval').value = 5; $('#set-threshold').value = 3.5; $('#set-alert-log').value = 'var/alerts.jsonl';
     $('#set-dry-run').checked = false; $('#set-duration').value = 0; $('#set-webhook').value = '';
     $('#set-syslog').checked = false; $('#set-cef').checked = false; $('#set-watch-paths').value = '';
-    $('#set-warmup').value = 4; $('#set-smoothing').value = 0.22; $('#set-learn').value = 1.35;
-    $('#set-critical').value = 5.2; $('#set-severe').value = 3.0; $('#set-elevated').value = 1.4; $('#set-battery').value = 20;
+    $('#set-warmup').value = 4; $('#set-smoothing').value = 0.22; $('#set-learn').value = 2.5;
+    $('#set-critical').value = 5.2; $('#set-severe').value = 3.0; $('#set-elevated').value = 2.8; $('#set-battery').value = 20;
     toast('Reset to defaults — click Save to apply', 'success');
   }
 
@@ -2671,6 +2659,7 @@ input::placeholder{color:var(--ink-3);}
   $('#btn-refresh-alerts').addEventListener('click', refreshAlerts);
   $('#btn-clear-alerts').addEventListener('click', clearAlerts);
   $('#btn-export-alerts-csv').addEventListener('click', exportAlertsCsv);
+  $('#alert-sort').addEventListener('change', function() { alertSortOrder = this.value; refreshAlerts(); });
 
   // Settings
   $('#btn-save-settings').addEventListener('click', saveSettings);
@@ -2678,9 +2667,6 @@ input::placeholder{color:var(--ink-3);}
   $('#btn-load-settings').addEventListener('click', loadSettings);
   $('#btn-test-webhook').addEventListener('click', testWebhook);
   $('#btn-shutdown-server').addEventListener('click', shutdownServer);
-
-  // Research tracks
-  $('#btn-toggle-future').addEventListener('click', () => { showFutureTracks = !showFutureTracks; if (lastTracks.length) renderTracks(lastTracks); });
 
   // ── Initial Load ──
   const savedToken = localStorage.getItem('wardex.adminToken');

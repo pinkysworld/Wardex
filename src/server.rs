@@ -147,6 +147,8 @@ pub fn run_server(port: u16, site_dir: &Path, shutdown: Arc<AtomicBool>) -> Resu
                 s.config.monitor.watch_paths.clone()
             };
             let fim = FileIntegrityMonitor::new(&watch_paths);
+            let mut consecutive_elevated: u32 = 0;
+            const CONFIRM_SAMPLES: u32 = 2; // require N consecutive elevated before alerting
             loop {
                 let sample = crate::collector::collect_sample(&mut cs, Some(&fim));
                 {
@@ -182,26 +184,34 @@ pub fn run_server(port: u16, site_dir: &Path, shutdown: Arc<AtomicBool>) -> Resu
                     let sev = s.config.policy.severe_score;
                     let elev = s.config.policy.elevated_score;
                     if signal.score >= elev {
-                        let level = if signal.score >= crit { "Critical" }
-                            else if signal.score >= sev { "Severe" }
-                            else { "Elevated" };
-                        let host = s.local_host_info.clone();
-                        let alert = AlertRecord {
-                            timestamp: chrono::Utc::now().to_rfc3339(),
-                            hostname: host.hostname,
-                            platform: host.platform.to_string(),
-                            score: signal.score,
-                            confidence: signal.confidence,
-                            level: level.to_string(),
-                            action: "monitor".to_string(),
-                            reasons: signal.reasons,
-                            sample,
-                            enforced: false,
-                        };
-                        if s.alerts.len() >= 10_000 {
-                            s.alerts.remove(0);
+                        consecutive_elevated += 1;
+                        // Critical/Severe bypass confirmation — alert immediately
+                        // Elevated requires consecutive confirmation to suppress noise
+                        let confirmed = signal.score >= sev || consecutive_elevated >= CONFIRM_SAMPLES;
+                        if confirmed {
+                            let level = if signal.score >= crit { "Critical" }
+                                else if signal.score >= sev { "Severe" }
+                                else { "Elevated" };
+                            let host = s.local_host_info.clone();
+                            let alert = AlertRecord {
+                                timestamp: chrono::Utc::now().to_rfc3339(),
+                                hostname: host.hostname,
+                                platform: host.platform.to_string(),
+                                score: signal.score,
+                                confidence: signal.confidence,
+                                level: level.to_string(),
+                                action: "monitor".to_string(),
+                                reasons: signal.reasons,
+                                sample,
+                                enforced: false,
+                            };
+                            if s.alerts.len() >= 10_000 {
+                                s.alerts.remove(0);
+                            }
+                            s.alerts.push(alert);
                         }
-                        s.alerts.push(alert);
+                    } else {
+                        consecutive_elevated = 0;
                     }
                     let interval = s.config.monitor.interval_secs.max(1);
                     drop(s);
@@ -431,6 +441,14 @@ fn handle_api(mut request: Request, state: &Arc<Mutex<AppState>>, _site_dir: &Pa
         || (method == Method::Get && url == "/api/telemetry/history")
         || (method == Method::Get && url == "/api/host/info")
         || (method == Method::Get && url == "/api/config/current")
+        || (method == Method::Get && url == "/api/alerts")
+        || (method == Method::Get && url == "/api/alerts/count")
+        || (method == Method::Get && url.starts_with("/api/alerts/") && url != "/api/alerts/count")
+        || (method == Method::Get && url == "/api/report")
+        || (method == Method::Get && url == "/api/threads/status")
+        || (method == Method::Get && url == "/api/detection/summary")
+        || (method == Method::Get && url == "/api/endpoints")
+        || (method == Method::Get && url == "/api/status")
         || (method == Method::Delete && url.starts_with("/api/agents/"))
     ));
 
@@ -455,17 +473,43 @@ fn handle_api(mut request: Request, state: &Arc<Mutex<AppState>>, _site_dir: &Pa
                     Ok(json) => json_response(&json, 200),
                     Err(e) => error_json(&format!("serialization error: {e}"), 500),
                 }
+            } else if !s.alerts.is_empty() {
+                // Generate a live report from monitoring alerts
+                let alerts = &s.alerts;
+                let total = alerts.len();
+                let critical = alerts.iter().filter(|a| a.level == "Critical").count();
+                let severe = alerts.iter().filter(|a| a.level == "Severe").count();
+                let avg_score = if total > 0 { alerts.iter().map(|a| a.score).sum::<f32>() / total as f32 } else { 0.0 };
+                let max_score = alerts.iter().map(|a| a.score).fold(0.0f32, f32::max);
+                let samples: Vec<serde_json::Value> = alerts.iter().enumerate().map(|(i, a)| {
+                    serde_json::json!({
+                        "index": i,
+                        "timestamp_ms": chrono::DateTime::parse_from_rfc3339(&a.timestamp).map(|dt| dt.timestamp_millis() as u64).unwrap_or(0),
+                        "score": a.score,
+                        "confidence": a.confidence,
+                        "suspicious_axes": a.reasons.len(),
+                        "level": a.level,
+                        "action": a.action,
+                        "isolation_pct": 0,
+                        "reasons": a.reasons,
+                        "rationale": format!("{} alert from live monitor", a.level),
+                        "contributions": []
+                    })
+                }).collect();
+                let report = serde_json::json!({
+                    "generated_at": chrono::Utc::now().to_rfc3339(),
+                    "summary": {
+                        "total_samples": total,
+                        "alert_count": total,
+                        "critical_count": critical + severe,
+                        "average_score": avg_score,
+                        "max_score": max_score,
+                    },
+                    "samples": samples,
+                });
+                json_response(&report.to_string(), 200)
             } else {
-                drop(s);
-                let result = runtime::execute(&runtime::demo_samples());
-                let report = JsonReport::from_run_result(&result);
-                match serde_json::to_string_pretty(&report) {
-                    Ok(json) => {
-                        state.lock().unwrap().last_report = Some(report);
-                        json_response(&json, 200)
-                    }
-                    Err(e) => error_json(&format!("serialization error: {e}"), 500),
-                }
+                json_response(r#"{"generated_at":"","summary":{"total_samples":0,"alert_count":0,"critical_count":0,"average_score":0.0,"max_score":0.0},"samples":[]}"#, 200)
             }
         }
         (Method::Post, "/api/analyze") => handle_analyze(&mut request, state),
@@ -1069,20 +1113,20 @@ fn handle_api(mut request: Request, state: &Arc<Mutex<AppState>>, _site_dir: &Pa
             let endpoints = serde_json::json!([
                 {"method": "GET", "path": "/api/health", "auth": false, "description": "Server health, version, uptime, platform"},
                 {"method": "GET", "path": "/api/host/info", "auth": false, "description": "Detailed host info + monitoring status"},
-                {"method": "GET", "path": "/api/telemetry/current", "auth": false, "description": "Latest local telemetry sample"},
-                {"method": "GET", "path": "/api/telemetry/history", "auth": false, "description": "Last 120 local telemetry samples"},
-                {"method": "GET", "path": "/api/alerts", "auth": false, "description": "Last 100 alerts"},
-                {"method": "GET", "path": "/api/alerts/count", "auth": false, "description": "Alert count by severity"},
+                {"method": "GET", "path": "/api/telemetry/current", "auth": true, "description": "Latest local telemetry sample"},
+                {"method": "GET", "path": "/api/telemetry/history", "auth": true, "description": "Last 120 local telemetry samples"},
+                {"method": "GET", "path": "/api/alerts", "auth": true, "description": "Last 100 alerts"},
+                {"method": "GET", "path": "/api/alerts/count", "auth": true, "description": "Alert count by severity"},
                 {"method": "DELETE", "path": "/api/alerts", "auth": true, "description": "Clear all alerts"},
-                {"method": "GET", "path": "/api/status", "auth": false, "description": "Project status manifest"},
-                {"method": "GET", "path": "/api/report", "auth": false, "description": "Latest analysis report"},
+                {"method": "GET", "path": "/api/status", "auth": true, "description": "Project status manifest"},
+                {"method": "GET", "path": "/api/report", "auth": true, "description": "Latest analysis report"},
                 {"method": "POST", "path": "/api/analyze", "auth": true, "description": "Analyze CSV/JSONL telemetry"},
-                {"method": "GET", "path": "/api/config/current", "auth": false, "description": "Current configuration"},
+                {"method": "GET", "path": "/api/config/current", "auth": true, "description": "Current configuration"},
                 {"method": "POST", "path": "/api/config/reload", "auth": true, "description": "Hot-reload config patch"},
                 {"method": "POST", "path": "/api/config/save", "auth": true, "description": "Persist config to disk"},
-                {"method": "GET", "path": "/api/endpoints", "auth": false, "description": "This endpoint listing"},
-                {"method": "GET", "path": "/api/threads/status", "auth": false, "description": "Background thread status and collection stats"},
-                {"method": "GET", "path": "/api/detection/summary", "auth": false, "description": "Velocity, entropy, compound detector state"},
+                {"method": "GET", "path": "/api/endpoints", "auth": true, "description": "This endpoint listing"},
+                {"method": "GET", "path": "/api/threads/status", "auth": true, "description": "Background thread status and collection stats"},
+                {"method": "GET", "path": "/api/detection/summary", "auth": true, "description": "Velocity, entropy, compound detector state"},
             ]);
             json_response(&endpoints.to_string(), 200)
         }
