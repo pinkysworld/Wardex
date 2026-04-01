@@ -146,7 +146,10 @@
     "Service-level objectives with error-budget instrumentation and GET /api/slo/status endpoint",
     "Deployment model documentation: standalone, multi-tenant, edge relay, regional federation",
     "Threat model promoted to primary docs: adversary profiles, abuse cases, trust boundaries",
-    "Production hardening checklist: 59-control scorecard derived from XDR AI handoff pack"
+    "Production hardening checklist: 59-control scorecard derived from XDR AI handoff pack",
+    "Fix: macOS network byte overcounting — only count Link# rows from netstat -ib to eliminate 9× inflation and false network burst alerts",
+    "Fix: RBAC admin token lockout — admin token holders now bypass RBAC enforcement for sensitive operations",
+    "Live endpoint test harness (77 endpoints) and admin data-shape verification"
   ],
   "partially_wired": [],
   "not_implemented": [],

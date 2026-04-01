@@ -528,15 +528,21 @@ fn collect_network(state: &mut CollectorState) -> f32 {
     let mut total_bytes: u64 = 0;
     for line in text.lines().skip(1) {
         let parts: Vec<&str> = line.split_whitespace().collect();
-        if parts.len() < 7 {
+        if parts.len() < 10 {
             continue;
         }
         let iface = parts[0];
         if iface.starts_with("lo") {
             continue;
         }
-        // netstat -ib: Name Mtu Network Address Ipkts Ibytes Opkts Obytes ...
-        // Columns vary; find numeric byte columns
+        // Only count <Link#N> rows — netstat -ib lists each interface
+        // multiple times (once per address: Link, IPv4, IPv6, etc.)
+        // with identical cumulative byte counters. Counting all rows
+        // inflates the total by the number of addresses per interface.
+        if !parts[2].starts_with("<Link") {
+            continue;
+        }
+        // Columns: Name Mtu Network Address Ipkts Ierrs Ibytes Opkts Oerrs Obytes Coll
         if let (Some(ibytes), Some(obytes)) = (
             parts.get(6).and_then(|v| v.parse::<u64>().ok()),
             parts.get(9).and_then(|v| v.parse::<u64>().ok()),

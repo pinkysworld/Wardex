@@ -924,7 +924,11 @@ fn events_to_csv(events: &[&crate::event_forward::StoredEvent]) -> String {
     out
 }
 
-fn check_rbac(state: &Arc<Mutex<AppState>>, path: &str, method: &Method) -> bool {
+fn check_rbac(state: &Arc<Mutex<AppState>>, path: &str, method: &Method, is_admin_token: bool) -> bool {
+    // Admin token holder always bypasses RBAC — they are the super-admin
+    if is_admin_token {
+        return true;
+    }
     let s = state.lock().unwrap();
     // If no RBAC users are configured, skip enforcement (admin-token-only mode)
     if s.rbac.list_users().is_empty() {
@@ -938,16 +942,11 @@ fn check_rbac(state: &Arc<Mutex<AppState>>, path: &str, method: &Method) -> bool
         Method::Delete => "DELETE",
         _ => "GET",
     };
-    // Check each configured user — if the admin token matches, allow
-    // (backwards compatible: admin-token holders retain full access)
-    // When RBAC users exist, enforce role-based permissions
     let sensitive = ["/api/config/", "/api/shutdown", "/api/updates/",
                      "/api/enforcement/", "/api/rbac/"];
     let is_sensitive_write = !matches!(method, Method::Get)
         && sensitive.iter().any(|p| path.starts_with(p));
     if is_sensitive_write {
-        // Sensitive writes require Admin role — check via RBAC store
-        // Without user identity from token, deny sensitive writes when RBAC is active
         let result = s.rbac.check_api_access("admin-bootstrap", method_str, path);
         return result.is_allowed();
     }
@@ -1416,13 +1415,15 @@ fn handle_api(mut request: Request, state: &Arc<Mutex<AppState>>, _site_dir: &Pa
         || (method == Method::Get && url == "/api/slo/status")
     ));
 
-    if needs_auth && !check_auth(&request, state) {
+    let is_admin_token = check_auth(&request, state);
+    if needs_auth && !is_admin_token {
         let _ = request.respond(error_json("unauthorized", 401));
         return;
     }
 
     // RBAC enforcement for sensitive endpoints
-    if !check_rbac(state, &url, &method) {
+    // Admin token holders bypass RBAC entirely
+    if !check_rbac(state, &url, &method, is_admin_token) {
         let _ = request.respond(error_json("forbidden: insufficient role", 403));
         return;
     }

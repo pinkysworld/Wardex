@@ -2,6 +2,17 @@
 
 All notable changes to Wardex are documented in this file.
 
+## [0.27.1] — Bug-fix: network burst false positives & RBAC admin bypass
+
+### Fixed
+- **Critical: macOS network byte overcounting** — `netstat -ib` lists each interface multiple times (once per address: Link, IPv4, IPv6, etc.) with identical cumulative byte counters. The collector summed all rows, inflating the metric by up to 9× on en0. Now only `<Link#N>` rows are counted, yielding accurate kbps values and eliminating cascading false "network burst" alerts.
+- **RBAC admin token lockout** — after adding the first RBAC user, the admin token holder was denied sensitive operations (DELETE users, config, shutdown) because the RBAC enforcement checked `"admin-bootstrap"` which didn't exist in the user store. Admin token holders now bypass RBAC entirely.
+- **Minimum column check** — macOS `collect_network()` now requires ≥ 10 columns (was 7), matching the actual `netstat -ib` layout.
+
+### Added
+- `tests/live_test.py` — comprehensive 77-endpoint live server test harness.
+- `tests/verify_admin.py` — admin console data-shape verification script.
+
 ## [0.27.0] — Phase 27: Operational contract & production hardening
 
 ### Added
