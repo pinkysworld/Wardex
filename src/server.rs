@@ -143,19 +143,51 @@ pub fn run_server(port: u16, site_dir: &Path, shutdown: Arc<AtomicBool>) -> Resu
         std::thread::spawn(move || {
             let mut cs = CollectorState::default();
             let mut consecutive_elevated: u32 = 0;
+            let mut file_watch_cache: Vec<String> = Vec::new();
+            let mut file_monitor: Option<FileIntegrityMonitor> = None;
+            let mut persistence_watch_cache: Vec<String> = Vec::new();
+            let mut persistence_monitor: Option<FileIntegrityMonitor> = None;
             const CONFIRM_SAMPLES: u32 = 2; // require N consecutive elevated before alerting
             loop {
-                let fim = {
+                let (scope, watch_paths, host_platform) = {
                     let s = monitor_state.lock().unwrap();
-                    if s.config.monitor.scope.file_integrity
-                        && !s.config.monitor.watch_paths.is_empty()
-                    {
-                        Some(FileIntegrityMonitor::new(&s.config.monitor.watch_paths))
-                    } else {
-                        None
-                    }
+                    (
+                        s.config.monitor.scope.clone(),
+                        s.config.monitor.watch_paths.clone(),
+                        s.local_host_info.platform,
+                    )
                 };
-                let sample = crate::collector::collect_sample(&mut cs, fim.as_ref());
+
+                if scope.file_integrity {
+                    if watch_paths != file_watch_cache {
+                        file_monitor = if watch_paths.is_empty() {
+                            None
+                        } else {
+                            Some(FileIntegrityMonitor::new(&watch_paths))
+                        };
+                        file_watch_cache = watch_paths.clone();
+                    }
+                } else {
+                    file_monitor = None;
+                    file_watch_cache.clear();
+                }
+
+                let persistence_paths = crate::collector::persistence_watch_paths(host_platform, &scope);
+                if persistence_paths != persistence_watch_cache {
+                    persistence_monitor = if persistence_paths.is_empty() {
+                        None
+                    } else {
+                        Some(FileIntegrityMonitor::new(&persistence_paths))
+                    };
+                    persistence_watch_cache = persistence_paths;
+                }
+
+                let sample = crate::collector::collect_sample_scoped(
+                    &mut cs,
+                    file_monitor.as_ref(),
+                    persistence_monitor.as_ref(),
+                    &scope,
+                );
                 {
                     let mut s = monitor_state.lock().unwrap();
                     if s.local_telemetry.len() >= 300 {
@@ -416,10 +448,32 @@ fn monitoring_option(
     })
 }
 
+fn monitoring_guidance(platform: HostPlatform) -> Vec<&'static str> {
+    match platform {
+        HostPlatform::Linux => vec![
+            "Linux hosts benefit most from auth-failure monitoring and systemd-unit persistence checks because both map directly to common intrusion paths.",
+            "Battery coverage depends on power-supply telemetry such as BAT0; server-class systems often report no battery data.",
+        ],
+        HostPlatform::MacOS => vec![
+            "macOS hosts should prioritize LaunchAgents and LaunchDaemons because they are common persistence locations for userland malware.",
+            "Thermal telemetry is limited on macOS in the current pure-Rust collector path, so CPU and process signals remain the stronger indicators.",
+        ],
+        HostPlatform::Windows | HostPlatform::WindowsServer => vec![
+            "Windows hosts should prioritize Security-log failures and scheduled-task persistence because both are frequently abused during compromise and re-entry.",
+            "Battery and thermal coverage depends on WMI support and may be absent on desktop or virtualized systems.",
+        ],
+        HostPlatform::Unknown => vec![
+            "This host platform could not be classified cleanly, so Wardex recommends sticking to portable telemetry and file-integrity checks.",
+            "Platform-specific persistence checks remain unavailable until the runtime can map standard service locations for this OS.",
+        ],
+    }
+}
+
 fn monitoring_options_payload(host: &HostInfo, config: &Config) -> serde_json::Value {
     let platform_key = host_platform_key(host.platform);
     let caps = PlatformCapabilities::detect_current();
     let scope = &config.monitor.scope;
+    let persistence_paths = crate::collector::persistence_watch_paths(host.platform, scope);
 
     let core = vec![
         monitoring_option(
@@ -482,8 +536,8 @@ fn monitoring_options_payload(host: &HostInfo, config: &Config) -> serde_json::V
             scope.auth_events,
             true,
             true,
-            "always_on",
-            Some("Core telemetry is always collected in the current release."),
+            "configurable",
+            Some("Disable only if the host cannot expose auth logs or Security-event access is intentionally restricted."),
         ),
         monitoring_option(
             "file_integrity",
@@ -498,12 +552,16 @@ fn monitoring_options_payload(host: &HostInfo, config: &Config) -> serde_json::V
         monitoring_option(
             "service_persistence",
             "Service persistence",
-            "Covers startup services and persistence footholds. Visible now for planning, collector support follows in a later phase.",
+            "Covers startup services and persistence footholds using OS-specific baseline paths.",
             scope.service_persistence,
-            false,
+            platform_key != "unknown",
             true,
-            "planned",
-            Some("Planned collector support; not enforced yet."),
+            "configurable",
+            Some(if platform_key == "unknown" {
+                "Runtime could not determine standard persistence locations for this host."
+            } else {
+                "Enable this together with the host-specific source below; if no source is selected, Wardex uses the recommended source for the current OS."
+            }),
         ),
     ];
 
@@ -533,11 +591,11 @@ fn monitoring_options_payload(host: &HostInfo, config: &Config) -> serde_json::V
             "Launch agents",
             "macOS persistence points such as LaunchAgents and LaunchDaemons.",
             scope.launch_agents,
-            false,
             platform_key == "macos",
-            "planned",
+            platform_key == "macos",
+            "configurable",
             Some(if platform_key == "macos" {
-                "Recommended for macOS, but collector support is still planned."
+                "Recommended on macOS because LaunchAgents and LaunchDaemons are baselined directly when service persistence is enabled."
             } else {
                 "macOS-specific monitoring point."
             }),
@@ -547,11 +605,11 @@ fn monitoring_options_payload(host: &HostInfo, config: &Config) -> serde_json::V
             "systemd units",
             "Linux startup services and unit-file persistence.",
             scope.systemd_units,
-            false,
             platform_key == "linux",
-            "planned",
+            platform_key == "linux",
+            "configurable",
             Some(if platform_key == "linux" {
-                "Recommended for Linux, but collector support is still planned."
+                "Recommended on Linux because systemd unit paths are baselined directly when service persistence is enabled."
             } else {
                 "Linux-specific monitoring point."
             }),
@@ -561,11 +619,11 @@ fn monitoring_options_payload(host: &HostInfo, config: &Config) -> serde_json::V
             "Scheduled tasks",
             "Windows task-scheduler persistence and delayed execution.",
             scope.scheduled_tasks,
-            false,
             platform_key == "windows",
-            "planned",
+            platform_key == "windows",
+            "configurable",
             Some(if platform_key == "windows" {
-                "Recommended for Windows, but collector support is still planned."
+                "Recommended on Windows because Task Scheduler definitions are baselined directly when service persistence is enabled."
             } else {
                 "Windows-specific monitoring point."
             }),
@@ -582,6 +640,10 @@ fn monitoring_options_payload(host: &HostInfo, config: &Config) -> serde_json::V
         (scope.thermal_state, "Thermal state"),
         (scope.battery_state, "Battery state"),
         (scope.file_integrity, "File integrity"),
+        (scope.service_persistence, "Service persistence"),
+        (scope.launch_agents, "Launch agents"),
+        (scope.systemd_units, "systemd units"),
+        (scope.scheduled_tasks, "Scheduled tasks"),
     ]
     .into_iter()
     .filter_map(|(enabled, label)| enabled.then_some(label))
@@ -603,9 +665,11 @@ fn monitoring_options_payload(host: &HostInfo, config: &Config) -> serde_json::V
         "summary": {
             "selected_now": selected_now,
             "watch_path_count": config.monitor.watch_paths.len(),
+            "persistence_path_count": persistence_paths.len(),
+            "platform_guidance": monitoring_guidance(host.platform),
             "notes": [
-                "Core telemetry remains always-on in the current release.",
-                "File integrity monitoring is configurable now; other host-specific checkboxes are stored for planned collector expansion."
+                "Core telemetry remains always-on unless a scope toggle explicitly gates that collector.",
+                "Auth-event collection and persistence baselines now follow the selected monitoring scope in addition to file-integrity paths."
             ]
         },
         "groups": [

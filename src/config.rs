@@ -59,7 +59,7 @@ impl Default for OutputSettings {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct MonitorScopeSettings {
     pub cpu_load: bool,
     pub memory_pressure: bool,

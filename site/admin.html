@@ -1324,7 +1324,7 @@ input::placeholder{color:var(--ink-3);}
             API Reference <span class="arrow">&#9654;</span>
           </div>
           <div class="accordion-body">
-            <p>The server exposes a comprehensive REST API. All mutating operations require Bearer token authentication.</p>
+            <p>The server exposes a comprehensive REST API. All mutating operations and sensitive monitoring endpoints require Bearer token authentication.</p>
             <div id="api-endpoint-list" class="text-muted">Loading API endpoints...</div>
           </div>
         </div>
@@ -1443,10 +1443,13 @@ input::placeholder{color:var(--ink-3);}
     const groupsEl = $('#monitoring-groups');
     const selected = (data.summary?.selected_now || []).map(esc).join(', ') || 'No monitoring points selected.';
     const notes = (data.summary?.notes || []).map(n => '<li>' + esc(n) + '</li>').join('');
+    const guidance = (data.summary?.platform_guidance || []).map(line => '<li>' + esc(line) + '</li>').join('');
     summary.innerHTML =
       '<strong>Host:</strong> ' + esc(data.host?.hostname || '—') + ' (' + esc(data.host?.platform || 'Unknown') + ', ' + esc(data.host?.arch || '—') + ')' +
       '<br><strong>Selected now:</strong> ' + selected +
       '<br><strong>Configured watch paths:</strong> ' + (data.summary?.watch_path_count ?? 0) +
+      '<br><strong>Persistence baseline paths:</strong> ' + (data.summary?.persistence_path_count ?? 0) +
+      (guidance ? '<div class="monitor-note"><strong>Platform guidance:</strong><ul>' + guidance + '</ul></div>' : '') +
       (notes ? '<ul>' + notes + '</ul>' : '');
 
     const groups = data.groups || [];
@@ -1458,6 +1461,7 @@ input::placeholder{color:var(--ink-3);}
         if (isAlwaysOn) badges.push(monitorBadge('Always on', 'always-on'));
         if (option.recommended) badges.push(monitorBadge('Recommended', 'recommended'));
         if (option.mode === 'planned') badges.push(monitorBadge('Planned', 'planned'));
+        if (option.mode === 'configurable' && option.supported) badges.push(monitorBadge('Configurable', 'recommended'));
         return '<label class="monitor-option' + (isDisabled ? ' disabled' : '') + '">' +
           '<input type="checkbox" data-monitor-scope="' + esc(option.id) + '" ' + (option.selected ? 'checked ' : '') + (isDisabled ? 'disabled ' : '') + '>' +
           '<div class="monitor-option-body">' +

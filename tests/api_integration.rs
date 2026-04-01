@@ -1282,6 +1282,13 @@ fn monitoring_options_returns_grouped_payload() {
     let first_group = &body["groups"].as_array().unwrap()[0];
     assert!(first_group["label"].is_string());
     assert!(first_group["options"].as_array().unwrap().iter().all(|option| option["id"].is_string()));
+    assert!(body["summary"]["platform_guidance"].as_array().unwrap().len() >= 1);
+    let auth_option = body["groups"].as_array().unwrap()
+        .iter()
+        .flat_map(|group| group["options"].as_array().unwrap().iter())
+        .find(|option| option["id"] == "auth_events")
+        .expect("auth_events option present");
+    assert_eq!(auth_option["mode"], "configurable");
 }
 
 // ── POST /api/config/save — auth required ──────────────────────

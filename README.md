@@ -109,7 +109,7 @@ cargo run -- serve
 
 Then open `http://localhost:8080/admin.html` in a browser. The token printed to the terminal is required for authenticated console operations, including settings, alerts, reports, and control actions.
 
-The Settings view includes an OS-aware Monitoring Scope section that shows recommended monitoring points for the current host platform and lets you control which supported signals are enabled.
+The Settings view includes an OS-aware Monitoring Scope section that shows recommended monitoring points for the current host platform, explains why specific signals are recommended or unavailable, and lets you control supported collectors including auth events and platform-specific persistence baselines.
 
 Run tests:
 

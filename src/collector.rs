@@ -4,7 +4,7 @@
 //! file integrity monitoring via SHA-256 baselines, and a streaming monitor loop
 //! that feeds samples into the anomaly detection pipeline.
 
-use crate::config::Config;
+use crate::config::{Config, MonitorScopeSettings};
 use crate::detector::AnomalyDetector;
 use crate::policy::{PolicyEngine, ThreatLevel};
 use crate::telemetry::TelemetrySample;
@@ -169,10 +169,31 @@ pub struct CollectorState {
 
 /// Collect a single telemetry sample from the host OS.
 pub fn collect_sample(state: &mut CollectorState, fim: Option<&FileIntegrityMonitor>) -> TelemetrySample {
+    collect_sample_scoped(state, fim, None, &MonitorScopeSettings::default())
+}
+
+/// Collect a single telemetry sample while honoring monitoring scope toggles.
+pub fn collect_sample_scoped(
+    state: &mut CollectorState,
+    fim: Option<&FileIntegrityMonitor>,
+    persistence: Option<&FileIntegrityMonitor>,
+    scope: &MonitorScopeSettings,
+) -> TelemetrySample {
     let timestamp_ms = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .unwrap_or_default()
         .as_millis() as u64;
+
+    let file_integrity_drift = if scope.file_integrity {
+        fim.map_or(0.0, |f| f.check())
+    } else {
+        0.0
+    };
+    let persistence_drift = if scope.service_persistence {
+        persistence.map_or(0.0, |p| p.check())
+    } else {
+        0.0
+    };
 
     TelemetrySample {
         timestamp_ms,
@@ -180,12 +201,53 @@ pub fn collect_sample(state: &mut CollectorState, fim: Option<&FileIntegrityMoni
         memory_load_pct: collect_memory(),
         temperature_c: collect_temperature(),
         network_kbps: collect_network(state),
-        auth_failures: collect_auth_failures(),
+        auth_failures: if scope.auth_events { collect_auth_failures() } else { 0 },
         battery_pct: collect_battery(),
-        integrity_drift: fim.map_or(0.0, |f| f.check()),
+        integrity_drift: file_integrity_drift.max(persistence_drift),
         process_count: collect_process_count(),
         disk_pressure_pct: collect_disk_pressure(),
     }
+}
+
+pub fn persistence_watch_paths(platform: HostPlatform, scope: &MonitorScopeSettings) -> Vec<String> {
+    if !scope.service_persistence {
+        return Vec::new();
+    }
+
+    let specific_selected = scope.launch_agents || scope.systemd_units || scope.scheduled_tasks;
+    let mut paths = Vec::new();
+
+    match platform {
+        HostPlatform::Linux => {
+            if scope.systemd_units || !specific_selected {
+                paths.extend([
+                    "/etc/systemd/system".to_string(),
+                    "/run/systemd/system".to_string(),
+                    "/usr/lib/systemd/system".to_string(),
+                    "/lib/systemd/system".to_string(),
+                ]);
+            }
+        }
+        HostPlatform::MacOS => {
+            if scope.launch_agents || !specific_selected {
+                paths.extend([
+                    "/Library/LaunchAgents".to_string(),
+                    "/Library/LaunchDaemons".to_string(),
+                ]);
+                if let Ok(home) = std::env::var("HOME") {
+                    paths.push(format!("{home}/Library/LaunchAgents"));
+                }
+            }
+        }
+        HostPlatform::Windows | HostPlatform::WindowsServer => {
+            if scope.scheduled_tasks || !specific_selected {
+                paths.push(r"C:\Windows\System32\Tasks".to_string());
+            }
+        }
+        HostPlatform::Unknown => {}
+    }
+
+    paths
 }
 
 // ── CPU ──────────────────────────────────────────────────────────────
@@ -951,7 +1013,7 @@ impl Default for MonitorConfig {
 
 /// Run the live monitoring loop until interrupted or duration expires.
 pub fn run_monitor(
-    _config: &Config,
+    config: &Config,
     mon: &MonitorConfig,
     shutdown: Arc<AtomicBool>,
 ) -> MonitorSummary {
@@ -979,13 +1041,23 @@ pub fn run_monitor(
     let mut detector = AnomalyDetector::default();
     let policy = PolicyEngine::default();
     let mut collector_state = CollectorState::default();
-    let fim = if mon.watch_paths.is_empty() {
+    let fim = if !config.monitor.scope.file_integrity || mon.watch_paths.is_empty() {
         None
     } else {
         let f = FileIntegrityMonitor::new(&mon.watch_paths);
         eprintln!("  File integrity: {} files baselined", f.file_count());
         eprintln!();
         Some(f)
+    };
+    let persistence = {
+        let paths = persistence_watch_paths(host.platform, &config.monitor.scope);
+        if paths.is_empty() {
+            None
+        } else {
+            let monitor = FileIntegrityMonitor::new(&paths);
+            eprintln!("  Persistence scope: {} files baselined", monitor.file_count());
+            Some(monitor)
+        }
     };
 
     // Ensure alert log directory exists
@@ -1005,7 +1077,12 @@ pub fn run_monitor(
         }
 
         // Collect and evaluate
-        let sample = collect_sample(&mut collector_state, fim.as_ref());
+        let sample = collect_sample_scoped(
+            &mut collector_state,
+            fim.as_ref(),
+            persistence.as_ref(),
+            &config.monitor.scope,
+        );
         let signal = detector.evaluate(&sample);
         let decision = policy.evaluate(&signal, &sample);
         summary.samples += 1;
@@ -1228,6 +1305,44 @@ mod tests {
         let fim = FileIntegrityMonitor::new(&["Cargo.toml".into()]);
         assert_eq!(fim.file_count(), 1);
         assert_eq!(fim.check(), 0.0); // no change since baseline
+    }
+
+    #[test]
+    fn persistence_watch_paths_require_master_toggle() {
+        let scope = MonitorScopeSettings {
+            service_persistence: false,
+            systemd_units: true,
+            ..MonitorScopeSettings::default()
+        };
+        assert!(persistence_watch_paths(HostPlatform::Linux, &scope).is_empty());
+    }
+
+    #[test]
+    fn persistence_watch_paths_default_to_platform_recommendation() {
+        let scope = MonitorScopeSettings {
+            service_persistence: true,
+            ..MonitorScopeSettings::default()
+        };
+
+        let linux_paths = persistence_watch_paths(HostPlatform::Linux, &scope);
+        assert!(linux_paths.iter().any(|path| path.contains("systemd")));
+
+        let mac_paths = persistence_watch_paths(HostPlatform::MacOS, &scope);
+        assert!(mac_paths.iter().any(|path| path.contains("Launch")));
+
+        let windows_paths = persistence_watch_paths(HostPlatform::Windows, &scope);
+        assert!(windows_paths.iter().any(|path| path.contains("Tasks")));
+    }
+
+    #[test]
+    fn collect_sample_scoped_can_disable_auth_events() {
+        let mut state = CollectorState::default();
+        let scope = MonitorScopeSettings {
+            auth_events: false,
+            ..MonitorScopeSettings::default()
+        };
+        let sample = collect_sample_scoped(&mut state, None, None, &scope);
+        assert_eq!(sample.auth_failures, 0);
     }
 
     #[test]

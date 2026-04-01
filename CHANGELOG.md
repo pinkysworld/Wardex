@@ -2,6 +2,16 @@
 
 All notable changes to Wardex are documented in this file.
 
+## [0.21.1] — Phase 24 follow-up
+
+### Added
+- **Scoped persistence baselines**: Service-persistence monitoring now baselines OS-specific startup locations for `systemd` units, macOS LaunchAgents/LaunchDaemons, and Windows Scheduled Tasks when enabled in Settings.
+- **Per-platform operator guidance in Settings**: The Monitoring Scope panel now explains which monitoring points are recommended or unavailable on the current host and shows how many persistence baseline paths are active.
+
+### Changed
+- **Auth-event scope toggle is live**: Authentication-event collection is now a real configurable collector toggle instead of a read-only placeholder.
+- **Local monitor baselines persist across samples**: File-integrity and persistence monitors now retain their baselines between server refresh cycles instead of being rebuilt on every sample.
+
 ## [0.21.0] — Phase 24
 
 ### Added
