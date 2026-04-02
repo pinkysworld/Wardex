@@ -361,9 +361,20 @@ impl ResponseOrchestrator {
     /// agents; here we record the execution transition and produce a
     /// human-readable log line for each action.
     pub fn execute_approved(&self) -> Vec<String> {
+        self.execute_approved_matching(None)
+    }
+
+    /// Execute approved requests, optionally narrowing to a specific request id.
+    pub fn execute_approved_matching(&self, request_id: Option<&str>) -> Vec<String> {
         let mut requests = self.requests.lock().unwrap();
         let mut executed = Vec::new();
+        let mut executed_reqs = Vec::new();
         for req in requests.iter_mut() {
+            if let Some(target_id) = request_id {
+                if req.id != target_id {
+                    continue;
+                }
+            }
             if req.status != ApprovalStatus::Approved || req.dry_run {
                 continue;
             }
@@ -389,13 +400,8 @@ impl ResponseOrchestrator {
             };
             req.status = ApprovalStatus::Executed;
             executed.push(description);
+            executed_reqs.push(req.clone());
         }
-        // Record audit entries for executed requests
-        let executed_reqs: Vec<ResponseRequest> = requests
-            .iter()
-            .filter(|r| r.status == ApprovalStatus::Executed)
-            .cloned()
-            .collect();
         drop(requests);
         for req in &executed_reqs {
             self.record_audit(req);

@@ -5,3 +5,5 @@ var/
 site/admin.html.bak
 site/generate_admin.py
 release/
+output/
+test-results/

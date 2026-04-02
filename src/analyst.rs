@@ -124,6 +124,10 @@ impl CaseStore {
         self.cases.iter().find(|c| c.id == id)
     }
 
+    pub fn list(&self) -> &[Case] {
+        &self.cases
+    }
+
     pub fn update_status(&mut self, id: u64, status: CaseStatus) -> bool {
         if let Some(c) = self.cases.iter_mut().find(|c| c.id == id) {
             c.status = status;
@@ -244,7 +248,8 @@ impl AlertQueue {
     }
 
     pub fn enqueue(&mut self, event_id: u64, score: f64, level: String, hostname: String, timestamp: String) {
-        let sla_hours: i64 = match level.as_str() {
+        let normalized_level = level.trim().to_ascii_lowercase();
+        let sla_hours: i64 = match normalized_level.as_str() {
             "critical" => 1,
             "severe" => 4,
             "elevated" => 24,
@@ -254,7 +259,7 @@ impl AlertQueue {
         self.items.push(QueuedAlert {
             event_id,
             score,
-            level,
+            level: normalized_level,
             hostname,
             timestamp,
             assignee: None,
@@ -286,6 +291,10 @@ impl AlertQueue {
         self.items.iter().filter(|i| !i.acknowledged).collect()
     }
 
+    pub fn all(&self) -> &[QueuedAlert] {
+        &self.items
+    }
+
     pub fn by_assignee(&self, assignee: &str) -> Vec<&QueuedAlert> {
         self.items.iter().filter(|i| i.assignee.as_deref() == Some(assignee)).collect()
     }
@@ -299,6 +308,7 @@ impl AlertQueue {
     pub fn stats(&self) -> serde_json::Value {
         let total = self.items.len();
         let pending = self.items.iter().filter(|i| !i.acknowledged).count();
+        let assigned = self.items.iter().filter(|i| i.assignee.is_some()).count();
         let breached = self.items.iter().filter(|i| {
             if let Some(ref deadline) = i.sla_deadline {
                 let now = chrono::Utc::now().to_rfc3339();
@@ -310,7 +320,9 @@ impl AlertQueue {
         serde_json::json!({
             "total": total,
             "pending": pending,
+            "unacknowledged": pending,
             "acknowledged": total - pending,
+            "assigned": assigned,
             "sla_breached": breached,
         })
     }
@@ -318,7 +330,7 @@ impl AlertQueue {
 
 // ── Event Search ───────────────────────────────────────────────────
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SearchQuery {
     pub text: Option<String>,
     pub hostname: Option<String>,
@@ -546,6 +558,10 @@ impl ApprovalLog {
     pub fn recent(&self, limit: usize) -> &[RemediationApproval] {
         let start = self.entries.len().saturating_sub(limit);
         &self.entries[start..]
+    }
+
+    pub fn list(&self) -> &[RemediationApproval] {
+        &self.entries
     }
 
     pub fn for_request(&self, request_id: &str) -> Option<&RemediationApproval> {

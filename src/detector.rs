@@ -163,6 +163,26 @@ impl AnomalyDetector {
         self.adaptation
     }
 
+    pub fn smoothing(&self) -> f32 {
+        self.config.smoothing
+    }
+
+    pub fn warmup_samples(&self) -> usize {
+        self.config.warmup_samples
+    }
+
+    pub fn learn_threshold(&self) -> f32 {
+        self.config.learn_threshold
+    }
+
+    pub fn observed_samples(&self) -> usize {
+        self.observed_samples
+    }
+
+    pub fn baseline_ready(&self) -> bool {
+        self.observed_samples >= self.config.warmup_samples && self.baseline.is_some()
+    }
+
     /// Reset the baseline so the detector re-learns from scratch.
     /// Useful when poisoning is suspected.
     pub fn reset_baseline(&mut self) {

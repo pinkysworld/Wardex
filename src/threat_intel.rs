@@ -165,6 +165,10 @@ impl ThreatIntelStore {
         self.iocs.len()
     }
 
+    pub fn all_iocs(&self) -> Vec<IoC> {
+        self.iocs.values().cloned().collect()
+    }
+
     pub fn match_history(&self) -> &[MatchResult] {
         &self.match_history
     }

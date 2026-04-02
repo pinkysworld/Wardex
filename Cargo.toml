@@ -1,8 +1,8 @@
 [package]
 name = "wardex"
-version = "0.30.0"
+version = "0.31.0"
 edition = "2024"
-description = "Edge security runtime scaffold for anomaly detection, adaptive response, and verifiable audit trails"
+description = "Private-cloud XDR and SIEM platform with enterprise detection, response, and fleet operations"
 license-file = "LICENSE"
 
 [dependencies]

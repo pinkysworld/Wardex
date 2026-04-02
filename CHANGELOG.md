@@ -2,6 +2,29 @@
 
 All notable changes to Wardex are documented in this file.
 
+## [0.31.0] — Enterprise operations, website refresh, and release packaging
+
+### Added
+- **Enterprise domain layer** — new persisted enterprise subsystem for saved hunts, scheduled hunt execution, native content rules, rule test/promote/rollback flows, suppressions, content packs, enrichment connectors, ticket sync, IDP/SCIM configuration, change-control entries, diagnostics metrics, entity pivots, and incident storyline generation.
+- **Enterprise APIs** — new endpoints for hunts, hunt history and execution, content rules, packs, suppressions, MITRE coverage, entity profile and timeline, incident storyline, enrichment connectors, ticket sync, identity providers, SCIM config, admin audit, support diagnostics, and dependency health.
+- **SOC Workbench v2** — investigation pivots, storyline loading, evidence export, enterprise response context, and richer case/incident workflows in the admin console.
+- **Detection Engineering UI** — hunts, suppressions, managed rule controls, MITRE coverage rendering, and refresh flows in the browser console.
+- **Enterprise admin surfaces** — identity and provisioning management, connector management, diagnostics, change-control review, and manager-level overview widgets in the console.
+- **Reusable browser smoke** — repository-tracked Playwright smoke coverage for the enterprise console.
+
+### Improved
+- **Public website refresh** — the landing site now presents Wardex as a product surface centered on platform workflows, enterprise readiness, deployment, and operator resources instead of backlog and implementation-log sections.
+- **Documentation alignment** — refreshed README, feature summary, getting-started guide, status doc, and roadmap so release posture, capabilities, and operator guidance are consistent with the shipping product.
+- **Release metadata** — version bumped to `0.31.0`, product description updated, and release packaging prepared for Linux, macOS, and Windows tagged builds.
+
+### Fixed
+- **Live admin smoke stability** — the enterprise browser smoke now seeds a sample alert before asserting live-monitor content and correctly re-opens the sidebar when validating mobile navigation.
+- **Integration-test warning cleanup** — removed a non-fatal scheduled-hunt polling warning in the enterprise API regression suite.
+
+### Tests
+- `cargo test` passes with **692 automated tests**.
+- Live browser smoke passes for the enterprise admin console.
+
 ## [0.30.0] — XDR/SIEM depth, UI polish & hardening
 
 ### Added — Phase A: Quick Polish

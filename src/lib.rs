@@ -1,3 +1,5 @@
+#![recursion_limit = "256"]
+
 pub mod actions;
 pub mod agent_client;
 pub mod analyst;
@@ -21,6 +23,7 @@ pub mod detector;
 pub mod digital_twin;
 pub mod edge_cloud;
 pub mod enforcement;
+pub mod enterprise;
 pub mod energy;
 pub mod enrollment;
 pub mod event_forward;

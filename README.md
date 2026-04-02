@@ -1,152 +1,88 @@
 # Wardex
 
-Wardex is a Rust edge security runtime for anomaly detection, policy-driven response, and verifiable audit trails on constrained devices.
+Wardex is a Rust-based XDR and SIEM platform for private-cloud and self-hosted security operations. It combines cross-platform telemetry collection, detection engineering, analyst workflows, approval-gated response, agent lifecycle management, SIEM integrations, and tamper-evident evidence handling in a single deployable product.
 
-The research blueprint in [blueprint.md](blueprint.md) sketches 40 research tracks across eight thematic categories. The codebase has completed all 28 phases of the engineering backlog, with 160 of 160 tracked tasks complete:
+## What ships in `v0.31.0`
 
-- a configurable Rust runtime for multi-signal anomaly scoring across 8 dimensions
-- an energy-aware response policy engine with pluggable device action adapters
-- SHA-256 cryptographic audit chain with signed checkpoints and chain verification
-- rollback checkpoints, forensic evidence bundles, and structured JSON/JSONL SIEM output
-- TOML/JSON configuration, JSONL telemetry ingestion, and baseline persistence
-- proof-carrying update metadata with SHA-256 binding and verification
-- formally checkable policy state machine with legal transition validation
-- bounded replay buffer with windowed statistics for continual learning
-- poisoning heuristics (mean shift, variance spike, drift accumulation, auth burst)
-- FP/FN benchmark harness with precision, recall, F1, and accuracy metrics
-- explainable anomaly attribution, multi-signal correlation analysis, temporal-logic runtime monitoring, and behavioural device fingerprinting
-- adapter-backed checkpoint restore that reapplies abstract device state as well as detector baseline state
-- TLA+ and Alloy model export of the policy state machine for offline formal verification
-- proof backend interface with witness export for future Halo2/SNARK integration
-- live browser admin console with token-authenticated HTTP API, auto-refresh, file upload, and dark mode
-- research paper targeting, swarm protocol design, Wasm surface spec, supply-chain attestation, post-quantum upgrade path
-- research questions formalised for R26–R40 plus design documents for adversarial testing, temporal logic, digital twins, and policy composition
-- runtime pipeline enrichment: threat intel, enforcement, digital twin, energy, side-channel, and compliance wired into `execute()`
-- continual learning with Page-Hinkley drift detection and automatic baseline re-learning (R01)
-- policy composition algebra with conflict detection for multi-rule evaluation (R39)
-- criterion micro-benchmarks: ~55K samples/sec throughput, per-stage latency profiling
-- full admin console integration with 15 interactive panels across 11 sections: dashboard overview, live monitoring, security operations, threat detection, fleet management with per-agent monitoring scope, digital twin simulation, adversarial testing, research tracks browser (40 track cards with status filters), monitoring & analysis, compliance, quantum key management, policy composition, infrastructure control, formal model exports, and RBAC/feature flag management
-- full integration test coverage: 84 HTTP tests covering all 45+ API endpoints with auth rejection validation
-- paper evaluation harnesses: per-sample latency benchmarking and audit chain scaling tests (10–100K records)
-- cross-platform host telemetry collector with live monitoring, webhook alerts, syslog/CEF output, and file-integrity monitoring
-- admin console Live Monitoring panel with auto-polling alert table, settings editor, and toast notifications
-- XDR fleet management: central server + lightweight agent architecture, enrollment, event forwarding with cross-agent correlation, policy distribution, SIEM integration (Splunk HEC/Elasticsearch/generic JSON), agent auto-update with SHA-256 verification, cross-platform service installation
-- velocity rate-of-change detector, Shannon entropy analysis, and compound multi-axis threat correlation
-- server security hardening: canonicalize path traversal, body size limits, security headers (X-Content-Type-Options, X-Frame-Options, Cache-Control, CORS)
-- 656 automated tests with 10k-sample benchmark and criterion benchmarks
-- cross-platform CI (Linux, macOS, Windows) with clippy and fmt
-- maintained docs, backlog tracking, test fixtures, and a GitHub Pages site
+- Analyst-facing SOC Workbench with queue, cases, investigation pivots, incident storyline, and approval-gated response execution
+- Detection engineering platform with Sigma and native rules, saved hunts, scheduled runs, suppressions, content packs, and MITRE coverage views
+- Fleet and agent control plane with enrollment, heartbeats, policy distribution, rollout groups, rollback, and agent activity snapshots
+- Enterprise controls for RBAC, session rotation, IDP/SCIM configuration, change control, admin audit export, diagnostics, and dependency health
+- SIEM and operations surfaces including OCSF normalization, Splunk/Elasticsearch style outputs, TAXII pull, ticket sync, evidence packages, and executive reporting
+- Professional browser console and HTTP API backed by 61 Rust source modules, 117 documented OpenAPI paths, and 692 automated tests
 
-See [FEATURES.md](FEATURES.md) for a one-page capability summary and [CHANGELOG.md](CHANGELOG.md) for version history.
-
-## What ships today
-
-- **Adaptive anomaly scoring:** an EWMA-style baseline learns "normal" telemetry and scores deviations across CPU, memory, temperature, network load, authentication failures, integrity drift, process count, and disk pressure.
-- **Configurable runtime:** all thresholds, battery policies, and output paths are externalizable via TOML or JSON configuration.
-- **Multi-format ingestion:** CSV (legacy 8-column and extended 10-column) and JSONL telemetry input, auto-detected by file extension.
-- **Policy-driven mitigation:** response strength adapts to threat score and battery state with pluggable action adapters (throttle, quarantine, isolate).
-- **Cryptographic audit trail:** SHA-256 digest chain with signed checkpoints at configurable intervals and programmatic chain verification.
-- **Rollback checkpoints:** bounded ring buffer captures detector state on severe/critical events for future rollback.
-- **SIEM integration:** structured JSON reports and JSONL streaming output for alert events.
-- **Forensic export:** evidence bundles combining audit log, run summary, and checkpoint history.
-- **Baseline persistence:** learned baselines can be saved and reloaded across runs.
-- **Proof-carrying updates:** every baseline change is bound to a SHA-256 proof linking prior state, transform, and post state.
-- **Policy state machine:** an explicit state machine records and validates all threat-level transitions with formally defined legal rules.
-- **Replay buffer:** bounded ring buffer retains recent telemetry for windowed statistical analysis and poisoning detection.
-- **Adaptation controls:** detector baseline updates can be frozen, decayed, or reset to contain suspected poisoning.
-- **Poisoning heuristics:** four statistical heuristics analyze replay buffers for data manipulation attempts.
-- **Benchmark harness:** labeled datasets can be scored for true/false positive/negative rates, precision, recall, and F1.
-- **Browser admin console:** a live web UI backed by a token-authenticated HTTP server with auto-refresh polling, connection status indicator, JSONL/CSV file upload via drag-and-drop, decay rate slider, checkpoint save/restore, CSV report export, threat-level filtering, dark mode support, and responsive report tables.
-- **Operator-facing docs:** architecture, getting-started, backlog, and track-by-track implementation status in [`docs/`](docs/README.md).
+See [FEATURES.md](FEATURES.md) for the concise capability summary, [CHANGELOG.md](CHANGELOG.md) for release history, and [docs/README.md](docs/README.md) for the full documentation map.
 
 ## Quick start
+
+Build the project:
+
+```bash
+cargo build --release
+```
+
+Run the included demo trace:
 
 ```bash
 cargo run -- demo
 ```
 
-Run the included CSV scenario:
+Analyze a telemetry scenario:
 
 ```bash
 cargo run -- analyze examples/credential_storm.csv
 ```
 
-Run the JSONL variant:
-
-```bash
-cargo run -- analyze examples/credential_storm.jsonl
-```
-
-Generate a JSON report for SIEM:
-
-```bash
-cargo run -- report examples/credential_storm.csv
-```
-
-Generate a default configuration file:
-
-```bash
-cargo run -- init-config
-```
-
-Inspect the current implementation snapshot:
-
-```bash
-cargo run -- status
-```
-
-Export the structured snapshot used by the browser console:
-
-```bash
-cargo run -- status-json site/data/status.json
-```
-
-Start the admin console HTTP server:
+Start the live control plane:
 
 ```bash
 cargo run -- serve
 ```
 
-Then open `http://localhost:8080/admin.html` in a browser. The token printed to the terminal is required for authenticated console operations, including settings, alerts, reports, and control actions.
+Open `http://localhost:8080/admin.html`, paste the token printed in the terminal, and you will have access to the live admin console, SOC Workbench, fleet controls, detection engineering views, and reports.
 
-The Settings view includes an OS-aware Monitoring Scope section — labeled **"Main Server & Default for Agents"** — that shows recommended monitoring points for the current host platform, explains why specific signals are recommended or unavailable, lets you control supported collectors including auth events and platform-specific persistence baselines, and previews the exact active monitoring paths. Changes here apply to the server itself and serve as defaults for all agents unless overridden per-agent.
+## Core capabilities
 
-The Fleet & Agents view now includes fleet-wide XDR analytics, per-agent drilldowns, filtered event export, monitoring-path health feedback, persistent event history, inline event triage, bulk event triage for multiple events at once, per-agent monitoring scope configuration (13 toggles in a responsive grid: CPU, memory, network, disk, processes, auth events, thermal, battery, file integrity, services, LaunchAgents, systemd units, scheduled tasks), deployment rollback and cancellation buttons, and automatic staged rollout progression from canary through ring-1 and ring-2 with configurable soak times and auto-rollback on failure.
+- **Detection engineering**: managed Sigma/native rules, rule testing, promote/rollback lifecycle, suppressions, hunts, scheduled hunt history, and MITRE coverage.
+- **SOC operations**: queued alerts, case management, investigation graph and timelines, entity pivots, storyline generation, evidence export, and response approvals.
+- **Fleet operations**: agent enrollment, policy sync, update rollout groups, release assignment, rollback, cancellation, and per-agent activity snapshots.
+- **Governance and trust**: RBAC, admin session control, tamper-evident audit records, change control entries, diagnostics bundles, dependency health, and IDP/SCIM configuration.
+- **Integrations**: SIEM outputs, threat-intel pull, ticket sync, runbooks, API docs, and release packaging for Linux, macOS, and Windows.
 
-The Research Tracks view displays all 40 research tracks (R01–R40) across 8 groups with expandable detail cards showing the approach, rationale, and current implementation state for each track. Filter toggles let you focus on tracks by status (Foundation, Scaffolded, Planned, Future).
+## Verification
 
-Run tests:
+Run the full automated suite:
 
 ```bash
 cargo test
 ```
 
+The current release passes 692 automated tests across unit and integration coverage. The repo also includes live verification helpers in [`tests/live_test.py`](tests/live_test.py), [`tests/verify_admin.py`](tests/verify_admin.py), and browser smoke coverage in [`tests/playwright/enterprise_console_smoke.spec.js`](tests/playwright/enterprise_console_smoke.spec.js).
+
 ## Repository layout
 
 ```text
-src/                  Rust runtime (44 modules)
-examples/             Sample telemetry traces (CSV + JSONL)
-docs/                 Design notes, backlog, and status documentation
-site/                 Static GitHub Pages site
-.github/workflows/    CI and Pages deployment
-blueprint.md          Original research track ideation
+src/                  Core platform modules (61 Rust source files)
+tests/                Integration tests, live checks, and browser smoke coverage
+docs/                 Product, architecture, deployment, and runbook documentation
+site/                 Static website and browser admin console
+.github/workflows/    CI, Pages, and release automation
+examples/             Sample telemetry traces for demo and regression scenarios
 ```
 
 ## Documentation
 
-Start with [`docs/README.md`](docs/README.md).
-
-Key documents:
+Start with:
 
 - [`docs/GETTING_STARTED.md`](docs/GETTING_STARTED.md)
 - [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)
 - [`docs/STATUS.md`](docs/STATUS.md)
-- [`docs/PROJECT_BACKLOG.md`](docs/PROJECT_BACKLOG.md)
-- [`docs/RESEARCH_TRACKS.md`](docs/RESEARCH_TRACKS.md)
+- [`docs/DEPLOYMENT_MODELS.md`](docs/DEPLOYMENT_MODELS.md)
+- [`docs/runbooks/README.md`](docs/runbooks/README.md)
 
-## GitHub Pages
+## Releases
 
-The static landing page lives in `site/`, and the Pages workflow publishes it on pushes to `main`.
+Tagged releases are packaged by GitHub Actions into Linux, macOS, and Windows archives. Public release notes and artifacts are published on the GitHub Releases page for this repository.
 
 ## License
 

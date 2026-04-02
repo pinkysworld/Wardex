@@ -3,10 +3,10 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Wardex — Edge Security Runtime</title>
+    <title>Wardex — Enterprise XDR &amp; SIEM</title>
     <meta
       name="description"
-      content="Wardex is a Rust-based edge security runtime for adaptive anomaly detection, policy-driven mitigation, and verifiable audit on resource-constrained devices."
+      content="Wardex is a private-cloud XDR and SIEM platform built in Rust for detection engineering, SOC workflows, fleet operations, and enterprise governance."
     >
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -15,16 +15,14 @@
       rel="stylesheet"
     >
     <link rel="icon" href="favicon.svg" type="image/svg+xml">
-    <link rel="stylesheet" href="styles.css?v=5">
-    <script defer src="app.js?v=5"></script>
+    <link rel="stylesheet" href="styles.css?v=6">
+    <script defer src="app.js?v=6"></script>
   </head>
   <body>
-
-    <!-- ── Navigation ──────────────────────────────────────────────── -->
     <nav class="site-nav" id="site-nav">
       <div class="nav-inner">
-        <a class="nav-brand" href="#">
-          <span class="nav-logo">SE</span>
+        <a class="nav-brand" href="#overview">
+          <span class="nav-logo">WX</span>
           <span class="nav-title">Wardex</span>
         </a>
 
@@ -38,29 +36,19 @@
 
           <div class="nav-dropdown">
             <button class="nav-link nav-dropdown-trigger" aria-expanded="false">
-              Technical<svg width="10" height="6" viewBox="0 0 10 6"><path d="M1 1l4 4 4-4" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round"/></svg>
+              Platform<svg width="10" height="6" viewBox="0 0 10 6"><path d="M1 1l4 4 4-4" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round"/></svg>
             </button>
             <div class="nav-dropdown-menu">
               <a href="#architecture" data-section="architecture">Architecture</a>
-              <a href="#pipeline" data-section="pipeline">Runtime Pipeline</a>
+              <a href="#pipeline" data-section="pipeline">Workflows</a>
               <a href="#modules" data-section="modules">Module Map</a>
             </div>
           </div>
 
-          <a href="#status" class="nav-link" data-section="status">Status</a>
-
-          <div class="nav-dropdown">
-            <button class="nav-link nav-dropdown-trigger" aria-expanded="false">
-              Engineering<svg width="10" height="6" viewBox="0 0 10 6"><path d="M1 1l4 4 4-4" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round"/></svg>
-            </button>
-            <div class="nav-dropdown-menu">
-              <a href="#backlog" data-section="backlog">Engineering Log</a>
-              <a href="#tracks" data-section="tracks">Research Tracks</a>
-            </div>
-          </div>
-
-          <a href="#start" class="nav-link" data-section="start">Getting Started</a>
-
+          <a href="#trust" class="nav-link" data-section="trust">Enterprise</a>
+          <a href="#deployment" class="nav-link" data-section="deployment">Deployment</a>
+          <a href="#resources" class="nav-link" data-section="resources">Resources</a>
+          <a href="#start" class="nav-link" data-section="start">Quick Start</a>
           <a href="https://github.com/pinkysworld/Wardex" class="nav-link" target="_blank" rel="noopener">
             <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
           </a>
@@ -69,618 +57,419 @@
     </nav>
 
     <main class="main">
-
-      <!-- ── Hero / Overview ──────────────────────────────────────── -->
       <section id="overview" class="section hero-section">
         <div class="container">
           <div class="hero-grid">
             <div class="hero-text">
-              <p class="label">Edge Security Runtime · Rust</p>
+              <p class="label">Private-Cloud XDR &amp; SIEM · Rust</p>
               <h1>Wardex</h1>
               <p class="hero-subtitle">
-                Adaptive anomaly detection, energy-aware mitigation, and tamper-evident
-                forensics for resource-constrained devices — packaged as a single Rust binary
-                with no cloud dependency.
+                Enterprise detection, investigation, fleet operations, and governance in one deployable control plane.
               </p>
               <p class="hero-description">
-                Wardex runs the full detect–respond–audit loop locally across eight telemetry
-                dimensions. The current codebase includes pluggable action adapters, SHA-256 audit
-                chains, proof-carrying updates, a checkable policy state machine, poisoning
-                heuristics, rollback checkpoints, forensic evidence bundles, and structured SIEM
-                reporting. The larger research agenda — zero-knowledge attestation, swarm
-                coordination, and post-quantum log integrity — is documented separately and left
-                out of the runtime until there is real implementation behind it.
+                Wardex is built for teams that want a professional XDR/SIEM experience without outsourcing their control plane. It combines cross-platform telemetry, managed detection content, analyst workbench workflows, approval-gated response, agent release operations, and enterprise supportability in a single Rust product with a live browser console.
               </p>
               <div class="hero-cta">
-                <a href="#architecture" class="btn btn-primary">Architecture</a>
-                <a href="admin.html" class="btn btn-outline">Admin Console</a>
-                <a href="#tracks" class="btn btn-outline">Research Tracks</a>
-                <a href="#start" class="btn btn-ghost">Quick Start →</a>
+                <a href="admin.html" class="btn btn-primary">Open Admin Console</a>
+                <a href="#deployment" class="btn btn-outline">Deployment Guide</a>
+                <a href="#resources" class="btn btn-outline">Operator Resources</a>
+                <a href="https://github.com/pinkysworld/Wardex/releases" class="btn btn-ghost" target="_blank" rel="noopener">Release Artifacts →</a>
               </div>
               <div class="terminal-snippet">
                 <span class="terminal-prompt">$</span>
-                <code>cargo run -- analyze examples/credential_storm.csv</code>
+                <code>cargo run -- serve</code>
               </div>
             </div>
 
             <aside class="hero-aside">
               <div class="stat-card">
-                <div class="stat-header">Project at a Glance</div>
+                <div class="stat-header">Release Snapshot</div>
                 <div class="stat-grid" id="stats-grid"></div>
               </div>
 
               <div class="console-preview">
                 <div class="console-chrome"><span></span><span></span><span></span></div>
-                <pre class="console-output"><span class="c-dim">$</span> cargo run -- analyze credential_storm.csv
+                <pre class="console-output"><span class="c-dim">$</span> cargo run -- serve
 
-<span class="c-label">ingest</span>    8 samples parsed
-<span class="c-label">detect</span>    rolling baseline updated
-<span class="c-label">respond</span>   battery-aware policy applied
-<span class="c-label">audit</span>     chained log → var/last-run.audit.log
+<span class="c-label">control</span>   admin console online at /admin.html
+<span class="c-label">fleet</span>     agents, rollouts, and activity snapshots available
+<span class="c-label">detect</span>    hunts, rule lifecycle, suppressions, and MITRE coverage
+<span class="c-label">soc</span>       queue, cases, investigation pivots, and approvals
+<span class="c-label">trust</span>     audit, diagnostics, change control, and dependency health
 
-<span class="c-ok">✓</span> pipeline complete — 4 anomalies flagged</pre>
+<span class="c-ok">✓</span> enterprise workflow ready</pre>
               </div>
             </aside>
           </div>
         </div>
       </section>
 
-      <!-- ── Architecture ──────────────────────────────────────────── -->
       <section id="architecture" class="section">
         <div class="container">
           <div class="section-header">
             <p class="label">Architecture</p>
-            <h2>System Design</h2>
+            <h2>Platform Flow</h2>
             <p class="section-desc">
-              The runtime follows a sixteen-stage pipeline. Each stage maps to one or more Rust
-              modules with narrow interfaces. New complexity is added only when there is code to
-              support it.
+              Wardex is organized around operator flow rather than isolated features: collect and score telemetry, work incidents, govern response, and ship managed releases from the same control plane.
             </p>
           </div>
           <div class="arch-flow" id="arch-flow">
             <div class="arch-stage">
               <div class="arch-num">1</div>
-              <h3>Ingest</h3>
-              <p>Parse typed telemetry samples from CSV or JSONL. Validate field ranges. Auto-detect format by extension. Maintain deterministic replay semantics so test scenarios are reproducible.</p>
-              <span class="arch-module">telemetry.rs</span>
+              <h3>Collect</h3>
+              <p>Cross-platform agents and the local server collect telemetry, process context, integrity signals, and fleet health from macOS, Linux, and Windows environments.</p>
+              <span class="arch-module">collector.rs + enrollment.rs</span>
             </div>
-            <div class="arch-connector" aria-hidden="true"><span></span></div>
             <div class="arch-stage">
               <div class="arch-num">2</div>
               <h3>Detect</h3>
-              <p>Maintain a rolling EWMA baseline across eight signal dimensions (CPU, memory, temperature, bandwidth, auth failures, integrity drift, process count, disk pressure). Compute a weighted anomaly score with human-readable explanations. Persist and restore baselines across sessions.</p>
-              <span class="arch-module">detector.rs + baseline.rs</span>
+              <p>Adaptive scoring, Sigma content, native rules, suppressions, and hunt execution work together to turn raw telemetry into actionable security findings.</p>
+              <span class="arch-module">detector.rs + sigma.rs + enterprise.rs</span>
             </div>
-            <div class="arch-connector" aria-hidden="true"><span></span></div>
             <div class="arch-stage">
               <div class="arch-num">3</div>
-              <h3>Respond</h3>
-              <p>Map the anomaly score to one of four threat levels (nominal, elevated, severe, critical) and a corresponding response action. Degrade gracefully when battery state is constrained.</p>
-              <span class="arch-module">policy.rs</span>
+              <h3>Triage</h3>
+              <p>Queued alerts, case management, SLAs, assignees, and analyst context keep the SOC workflow focused on what needs attention right now.</p>
+              <span class="arch-module">analyst.rs + response.rs</span>
             </div>
-            <div class="arch-connector" aria-hidden="true"><span></span></div>
             <div class="arch-stage">
               <div class="arch-num">4</div>
-              <h3>Execute</h3>
-              <p>Dispatch actions through composable adapter chains. Logging, throttle, quarantine, and isolate adapters fire in sequence based on threat level.</p>
-              <span class="arch-module">actions.rs</span>
+              <h3>Investigate</h3>
+              <p>Entity pivots, timelines, process trees, graphs, storylines, and evidence exports preserve continuity from alert intake to incident understanding.</p>
+              <span class="arch-module">server.rs + enterprise.rs</span>
             </div>
-            <div class="arch-connector" aria-hidden="true"><span></span></div>
             <div class="arch-stage">
               <div class="arch-num">5</div>
-              <h3>Checkpoint</h3>
-              <p>Capture detector state snapshots on severe/critical events. A bounded ring buffer retains recent checkpoints for post-incident analysis and forensic exports.</p>
-              <span class="arch-module">checkpoint.rs + forensics.rs</span>
+              <h3>Respond</h3>
+              <p>Approval-gated response requests keep remediation controlled while still supporting execution, audit trails, and operator accountability.</p>
+              <span class="arch-module">response.rs + enforcement.rs</span>
             </div>
-            <div class="arch-connector" aria-hidden="true"><span></span></div>
             <div class="arch-stage">
               <div class="arch-num">6</div>
-              <h3>Audit</h3>
-              <p>Append every decision to a SHA-256-chained audit log with signed checkpoints at configurable intervals. Verify the entire chain end-to-end.</p>
-              <span class="arch-module">audit.rs</span>
+              <h3>Govern</h3>
+              <p>RBAC, session controls, IDP/SCIM configuration, admin audit logs, change control, and diagnostics provide enterprise guardrails around the product itself.</p>
+              <span class="arch-module">rbac.rs + runtime.rs</span>
             </div>
-            <div class="arch-connector" aria-hidden="true"><span></span></div>
             <div class="arch-stage">
               <div class="arch-num">7</div>
-              <h3>Report</h3>
-              <p>Emit structured JSON reports for SIEM ingestion, JSONL alert streams, and human-readable console summaries.</p>
-              <span class="arch-module">report.rs + config.rs</span>
+              <h3>Deploy</h3>
+              <p>Release publishing, rollout groups, rollback, and per-agent activity snapshots give operators a controlled path to keep endpoint software current.</p>
+              <span class="arch-module">auto_update.rs + server.rs</span>
             </div>
-            <div class="arch-connector" aria-hidden="true"><span></span></div>
             <div class="arch-stage">
               <div class="arch-num">8</div>
-              <h3>Proof</h3>
-              <p>Bind every baseline state change to a SHA-256 proof linking prior state, transform, and post state. Accumulate and batch-verify proofs.</p>
-              <span class="arch-module">proof.rs</span>
-            </div>
-            <div class="arch-connector" aria-hidden="true"><span></span></div>
-            <div class="arch-stage">
-              <div class="arch-num">9</div>
-              <h3>State Machine</h3>
-              <p>Record and validate all threat-level transitions against formally defined legal rules. Export transition traces for future TLA+/Alloy verification.</p>
-              <span class="arch-module">state_machine.rs</span>
-            </div>
-            <div class="arch-connector" aria-hidden="true"><span></span></div>
-            <div class="arch-stage">
-              <div class="arch-num">10</div>
-              <h3>Replay &amp; Poisoning</h3>
-              <p>Retain recent telemetry in a bounded ring buffer for windowed statistics. Four poisoning heuristics scan for data manipulation attempts.</p>
-              <span class="arch-module">replay.rs + poisoning.rs</span>
-            </div>
-            <div class="arch-connector" aria-hidden="true"><span></span></div>
-            <div class="arch-stage">
-              <div class="arch-num">11</div>
-              <h3>Threat Intel</h3>
-              <p>Match observed indicators against a local threat-intelligence store. Enrich anomaly signals with known-bad indicator metadata.</p>
-              <span class="arch-module">threat_intel.rs</span>
-            </div>
-            <div class="arch-connector" aria-hidden="true"><span></span></div>
-            <div class="arch-stage">
-              <div class="arch-num">12</div>
-              <h3>Enforcement</h3>
-              <p>Automated network blocking and process suspension driven by threat level. Pluggable enforcers for different OS primitives.</p>
-              <span class="arch-module">enforcement.rs</span>
-            </div>
-            <div class="arch-connector" aria-hidden="true"><span></span></div>
-            <div class="arch-stage">
-              <div class="arch-num">13</div>
-              <h3>Digital Twin</h3>
-              <p>Simulate fleet behaviour under observed conditions. Predict cascading failures and validate response strategies before deployment.</p>
-              <span class="arch-module">digital_twin.rs</span>
-            </div>
-            <div class="arch-connector" aria-hidden="true"><span></span></div>
-            <div class="arch-stage">
-              <div class="arch-num">14</div>
-              <h3>Energy</h3>
-              <p>Track energy budgets and tick consumption per pipeline iteration. Enforce energy-proportional processing on battery-constrained devices.</p>
-              <span class="arch-module">energy.rs</span>
-            </div>
-            <div class="arch-connector" aria-hidden="true"><span></span></div>
-            <div class="arch-stage">
-              <div class="arch-num">15</div>
-              <h3>Side-Channel</h3>
-              <p>Detect timing anomalies indicative of side-channel attacks. Statistical observation of execution timing distributions.</p>
-              <span class="arch-module">side_channel.rs</span>
-            </div>
-            <div class="arch-connector" aria-hidden="true"><span></span></div>
-            <div class="arch-stage">
-              <div class="arch-num">16</div>
-              <h3>Compliance</h3>
-              <p>Collect evidence toward compliance frameworks. Score adherence from accumulated audit, detection, and enforcement records.</p>
-              <span class="arch-module">compliance.rs</span>
+              <h3>Report</h3>
+              <p>SIEM outputs, evidence packages, manager summaries, runbooks, and OpenAPI-backed interfaces keep external systems and stakeholders aligned.</p>
+              <span class="arch-module">report.rs + forensics.rs + docs/</span>
             </div>
           </div>
         </div>
       </section>
 
-      <!-- ── Runtime Pipeline Detail ──────────────────────────────── -->
       <section id="pipeline" class="section section-alt">
         <div class="container">
           <div class="section-header">
-            <p class="label">Runtime Detail</p>
-            <h2>Pipeline Internals</h2>
+            <p class="label">Platform Workflows</p>
+            <h2>Operator-Facing Surfaces</h2>
             <p class="section-desc">
-              Telemetry is processed one sample at a time — this mirrors real-time constraints
-              on edge hardware where batch processing is not always available. Below is a closer
-              look at what each stage does and what it deliberately leaves out.
+              The product is optimized around repeatable operational work: build detection content, triage quickly, move investigations forward, keep releases safe, and expose the evidence and governance trails an enterprise buyer expects.
             </p>
           </div>
           <div class="detail-grid" id="pipeline-details"></div>
         </div>
       </section>
 
-      <!-- ── Module Map ────────────────────────────────────────────── -->
       <section id="modules" class="section">
         <div class="container">
           <div class="section-header">
             <p class="label">Source</p>
-            <h2>Module Map</h2>
+            <h2>Curated Module Map</h2>
             <p class="section-desc">
-              Thirty-five Rust source modules. The prototype is deliberately modular — complexity gets
-              added when the research justifies it, not before.
+              The codebase has 61 Rust source modules. This is the high-signal subset that maps most directly to the enterprise product surface.
             </p>
           </div>
           <div class="module-table">
             <div class="module-row module-header-row">
               <span>Module</span>
               <span>Responsibility</span>
-              <span>Tracks</span>
-            </div>
-            <div class="module-row">
-              <code>telemetry.rs</code>
-              <span>CSV/JSONL input parsing, field validation, auto-detection, typed sample records</span>
-              <span class="module-tracks">—</span>
-            </div>
-            <div class="module-row">
-              <code>detector.rs</code>
-              <span>EWMA baseline, multi-signal anomaly scoring (8 dims), explanation generation</span>
-              <span class="module-tracks">R01, R05</span>
-            </div>
-            <div class="module-row">
-              <code>baseline.rs</code>
-              <span>Baseline persistence and cross-session restoration (JSON)</span>
-              <span class="module-tracks">R01</span>
-            </div>
-            <div class="module-row">
-              <code>policy.rs</code>
-              <span>Threat-level mapping, response selection, battery-aware degradation</span>
-              <span class="module-tracks">R06, R09</span>
-            </div>
-            <div class="module-row">
-              <code>actions.rs</code>
-              <span>Pluggable action adapters: logging, throttle, quarantine, isolate</span>
-              <span class="module-tracks">R06, R09</span>
-            </div>
-            <div class="module-row">
-              <code>checkpoint.rs</code>
-              <span>Rollback checkpoints, bounded ring buffer, state snapshots</span>
-              <span class="module-tracks">R10</span>
-            </div>
-            <div class="module-row">
-              <code>forensics.rs</code>
-              <span>Evidence bundle export for post-incident review</span>
-              <span class="module-tracks">R10, R13</span>
-            </div>
-            <div class="module-row">
-              <code>audit.rs</code>
-              <span>SHA-256 chained audit entries, signed checkpoints, chain verification</span>
-              <span class="module-tracks">R10, R11</span>
-            </div>
-            <div class="module-row">
-              <code>report.rs</code>
-              <span>Structured JSON reports, JSONL alert streams for SIEM integration</span>
-              <span class="module-tracks">—</span>
-            </div>
-            <div class="module-row">
-              <code>config.rs</code>
-              <span>TOML/JSON configuration loading, default template generation</span>
-              <span class="module-tracks">—</span>
-            </div>
-            <div class="module-row">
-              <code>runtime.rs</code>
-              <span>Orchestration, CLI commands, proof registry, state machine, replay buffer</span>
-              <span class="module-tracks">—</span>
-            </div>
-            <div class="module-row">
-              <code>proof.rs</code>
-              <span>Proof-carrying update metadata with SHA-256 binding digests and verification</span>
-              <span class="module-tracks">R10, R12</span>
-            </div>
-            <div class="module-row">
-              <code>state_machine.rs</code>
-              <span>Formally checkable policy state machine with legal transition validation</span>
-              <span class="module-tracks">R02</span>
-            </div>
-            <div class="module-row">
-              <code>replay.rs</code>
-              <span>Bounded ring-buffer replay with windowed statistics for continual learning</span>
-              <span class="module-tracks">R01</span>
-            </div>
-            <div class="module-row">
-              <code>poisoning.rs</code>
-              <span>Four poisoning heuristics: mean shift, variance spike, drift accumulation, auth burst</span>
-              <span class="module-tracks">R05</span>
-            </div>
-            <div class="module-row">
-              <code>benchmark.rs</code>
-              <span>FP/FN benchmark harness with precision, recall, F1, and accuracy metrics</span>
-              <span class="module-tracks">R13</span>
+              <span>Surface</span>
             </div>
             <div class="module-row">
               <code>server.rs</code>
-              <span>HTTP server with token-authenticated API for browser admin console</span>
-              <span class="module-tracks">—</span>
+              <span>HTTP control plane, API routing, auth enforcement, operator workflows, and live runtime orchestration.</span>
+              <span class="module-tracks">API</span>
             </div>
             <div class="module-row">
-              <code>correlation.rs</code>
-              <span>Multi-signal Pearson correlation analysis and co-rising detection</span>
-              <span class="module-tracks">R26</span>
+              <code>enterprise.rs</code>
+              <span>Hunts, rule lifecycle, suppressions, packs, identity config, diagnostics, storylines, and enterprise persistence.</span>
+              <span class="module-tracks">Enterprise</span>
             </div>
             <div class="module-row">
-              <code>monitor.rs</code>
-              <span>Temporal-logic runtime monitor with safety and bounded liveness properties</span>
-              <span class="module-tracks">R29</span>
+              <code>analyst.rs</code>
+              <span>Alert queue, case management, search, incident workflow, and investigation support primitives.</span>
+              <span class="module-tracks">SOC</span>
             </div>
             <div class="module-row">
-              <code>harness.rs</code>
-              <span>Adversarial testing harness with grammar-based evasion strategies</span>
-              <span class="module-tracks">R28</span>
+              <code>response.rs</code>
+              <span>Approval-gated remediation requests, review history, and execution-state tracking.</span>
+              <span class="module-tracks">Response</span>
             </div>
             <div class="module-row">
-              <code>fingerprint.rs</code>
-              <span>Behavioural device fingerprinting with Mahalanobis-inspired distance</span>
-              <span class="module-tracks">R38</span>
+              <code>detector.rs</code>
+              <span>Adaptive anomaly scoring, detection summaries, confidence, and signal-level reasoning.</span>
+              <span class="module-tracks">Detect</span>
             </div>
             <div class="module-row">
-              <code>attestation.rs</code>
-              <span>Supply-chain attestation with SBOM generation and build manifests</span>
-              <span class="module-tracks">R22</span>
+              <code>sigma.rs</code>
+              <span>Sigma content parsing, in-memory rule set management, and managed rule integration.</span>
+              <span class="module-tracks">Content</span>
             </div>
             <div class="module-row">
-              <code>fixed_threshold.rs</code>
-              <span>Static per-signal threshold detector for paper comparison benchmarks</span>
-              <span class="module-tracks">R13</span>
+              <code>collector.rs</code>
+              <span>Cross-platform endpoint telemetry collection, integrity checks, and local monitoring support.</span>
+              <span class="module-tracks">Agent</span>
             </div>
             <div class="module-row">
-              <code>compliance.rs</code>
-              <span>Compliance evidence collection and framework scoring</span>
-              <span class="module-tracks">R13</span>
+              <code>agent_client.rs</code>
+              <span>Agent-to-server communication, heartbeat flows, policy pull, and update participation.</span>
+              <span class="module-tracks">Fleet</span>
             </div>
             <div class="module-row">
-              <code>digital_twin.rs</code>
-              <span>Fleet simulation engine for cascading-failure prediction</span>
-              <span class="module-tracks">R31</span>
+              <code>auto_update.rs</code>
+              <span>Release catalog, update checks, hash verification, deployment assignment, and rollback mechanics.</span>
+              <span class="module-tracks">Release</span>
             </div>
             <div class="module-row">
-              <code>edge_cloud.rs</code>
-              <span>Edge-cloud hybrid offload decision engine</span>
-              <span class="module-tracks">R36</span>
-            </div>
-            <div class="module-row">
-              <code>energy.rs</code>
-              <span>Energy budget tracking and proportional processing control</span>
-              <span class="module-tracks">R06, R14</span>
-            </div>
-            <div class="module-row">
-              <code>enforcement.rs</code>
-              <span>Automated network blocking and process suspension</span>
-              <span class="module-tracks">R09</span>
-            </div>
-            <div class="module-row">
-              <code>multi_tenant.rs</code>
-              <span>Tenant-isolated security contexts for multi-tenancy</span>
-              <span class="module-tracks">R34</span>
-            </div>
-            <div class="module-row">
-              <code>privacy.rs</code>
-              <span>Privacy-preserving forensic evidence handling</span>
-              <span class="module-tracks">R08, R40</span>
-            </div>
-            <div class="module-row">
-              <code>quantum.rs</code>
-              <span>Post-quantum Lamport one-time signatures</span>
-              <span class="module-tracks">R11, R21</span>
-            </div>
-            <div class="module-row">
-              <code>side_channel.rs</code>
-              <span>Timing-based side-channel attack detection</span>
-              <span class="module-tracks">R35</span>
-            </div>
-            <div class="module-row">
-              <code>swarm.rs</code>
-              <span>Swarm coordination protocol with peer discovery</span>
-              <span class="module-tracks">R03, R23</span>
+              <code>rbac.rs</code>
+              <span>Role definitions, permissions, endpoint mapping, and admin/analyst/viewer access boundaries.</span>
+              <span class="module-tracks">Govern</span>
             </div>
             <div class="module-row">
               <code>threat_intel.rs</code>
-              <span>Local threat-intelligence store with IOC matching</span>
-              <span class="module-tracks">R15</span>
+              <span>IOC management, enrichment hooks, indicator matching, and threat context injection.</span>
+              <span class="module-tracks">Intel</span>
             </div>
             <div class="module-row">
-              <code>wasm_engine.rs</code>
-              <span>Wasm extension sandbox for user-defined detection policies</span>
-              <span class="module-tracks">R17</span>
+              <code>runtime.rs</code>
+              <span>Manifest, status export, startup defaults, and release-level product metadata.</span>
+              <span class="module-tracks">Runtime</span>
             </div>
           </div>
         </div>
       </section>
 
-      <!-- ── Implementation Status ──────────────────────────────────── -->
-      <section id="status" class="section section-alt">
+      <section id="trust" class="section section-alt">
         <div class="container">
           <div class="section-header">
-            <p class="label">Implementation</p>
-            <h2>Current Status</h2>
+            <p class="label">Enterprise Readiness</p>
+            <h2>Built for Real Operators</h2>
             <p class="section-desc">
-              The project has completed Phases 0–26 of the engineering backlog, with Phase 27 queued for
-              operational contract and production-hardening work. It provides a
-              working edge security runtime with configurable detection, pluggable response actions,
-              cryptographic audit trails, proof-carrying update metadata, a checkable policy state machine,
-              poisoning heuristics, replay buffering, benchmark tooling, a live browser admin console
-              backed by an authenticated HTTP API, and browser-based inspection of exported status/report
-              artifacts. Phases 8–9 added runtime intelligence: explainable anomaly attribution,
-              correlation analysis, temporal-logic monitoring, adversarial testing, and device fingerprinting —
-              all wired into the execution pipeline with audit logging and API endpoints.
-              Phases 10–15 added criterion benchmarks, paper evaluation, and admin console integration.
-              Phases 16–22 delivered production hardening, XDR fleet management, SIEM integration,
-              the professional admin console, graceful shutdown, and detection engine expansion.
-              Phases 23–24 added OCSF normalization, 25 Sigma rules, automated response, feature flags,
-              process tree analysis, encrypted spool, RBAC, platform collectors (Windows/Linux/macOS),
-              analyst console with case management, and Elastic ECS/QRadar SIEM formats.
-              Phase 25 hardened the codebase with SHA-256 CTR spool encryption, API audit logging,
-              and RBAC endpoint enforcement. Phase 26 separated read/write/static rate limits for admin traffic,
-              reduced dashboard polling pressure, and aligned the default CORS posture with localhost-only operation.
-              Phase 27 delivers the full operational contract: OpenAPI 3.0 specification, schema lifecycle docs,
-              disaster recovery plan, SLO policy, deployment model guides, threat model, and production hardening checklist.
-              58 modules, 637+ tests (523 unit + 114 integration). Three categories below — no ambiguity about what is real versus what is planned.
+              The public site now reflects the shipping product: concrete operations, governance, and deployment posture instead of backlog diaries or scaffold labels.
             </p>
           </div>
 
           <div class="status-columns">
             <div class="status-col">
               <div class="status-col-header implemented">
-                <span class="status-dot"></span>Implemented
+                <span class="status-dot"></span>SOC Operations
               </div>
-              <ul class="status-list" id="status-implemented"></ul>
+              <ul class="status-list">
+                <li>Analyst queue with SLA context, acknowledgement, assignment, escalation, and case creation.</li>
+                <li>Investigation pivots for host, agent, event, process tree, timeline, and storyline views.</li>
+                <li>Response approvals and execution history surfaced directly inside the workbench.</li>
+              </ul>
             </div>
             <div class="status-col">
               <div class="status-col-header scaffolded">
-                <span class="status-dot"></span>Scaffolded
+                <span class="status-dot"></span>Governance &amp; Trust
               </div>
-              <ul class="status-list" id="status-scaffolded"></ul>
+              <ul class="status-list">
+                <li>RBAC, token rotation, retention controls, admin audit views, diagnostics, and dependency health endpoints.</li>
+                <li>IDP and SCIM configuration surfaces plus change-control records for sensitive product actions.</li>
+                <li>Tamper-evident audit chain, evidence export, and operator-facing runbooks for production use.</li>
+              </ul>
             </div>
             <div class="status-col">
               <div class="status-col-header deferred">
-                <span class="status-dot"></span>Not Yet Implemented
+                <span class="status-dot"></span>Deployment &amp; Release
               </div>
-              <ul class="status-list" id="status-deferred"></ul>
+              <ul class="status-list">
+                <li>Release publishing, rollout groups, rollback, cancellation, and per-agent deployment visibility.</li>
+                <li>GitHub Actions packaging for Linux, macOS, and Windows tagged releases.</li>
+                <li>Deployment guides, disaster recovery guidance, and production-hardening documentation in the repo.</li>
+              </ul>
             </div>
           </div>
         </div>
       </section>
 
-      <!-- ── Engineering Backlog ────────────────────────────────────── -->
-      <section id="backlog" class="section">
+      <section id="deployment" class="section">
         <div class="container">
           <div class="section-header">
-            <p class="label">Completed</p>
-            <h2>Engineering Log</h2>
+            <p class="label">Deployment</p>
+            <h2>Release and Operate</h2>
             <p class="section-desc">
-              Concrete tasks grouped by phase. This public site preserves the detailed phase cards through
-              Phase 17; the canonical engineering backlog in docs now continues through Phase 27 and records
-              153 of 160 tracked tasks complete. The backlog is now 160/160 with all 27 phases done.
-              The later phases add XDR fleet management, SIEM contracts,
-              platform collectors, analyst workflows, code-review hardening, and the current operational
-              hardening backlog.
-            </p>
-          </div>
-          <div id="backlog-phases"></div>
-        </div>
-      </section>
-
-      <!-- ── Research Tracks ───────────────────────────────────────── -->
-      <section id="tracks" class="section section-alt">
-        <div class="container">
-          <div class="section-header">
-            <p class="label">Research Agenda</p>
-            <h2>Blueprint Tracks</h2>
-            <p class="section-desc">
-              Forty research directions, grouped by theme. Each track states the research
-              question, its practical relevance, and what — if anything — the current prototype
-              covers. Status labels are meant literally: "foundation" = runnable code;
-              "scaffolded" = hooks exist, mechanism does not; "planned" and "future" = exactly
-              what they sound like.
+              Wardex is designed for self-hosted deployment. Build locally for development, tag and ship packaged releases for production, and use the browser console for day-to-day operations.
             </p>
           </div>
 
-          <div class="track-legend">
-            <span class="track-badge foundation">Foundation</span>
-            <span class="track-badge scaffolded">Scaffolded</span>
-            <span class="track-badge planned">Planned</span>
-            <span class="track-badge future">Future</span>
+          <div class="start-grid">
+            <div class="start-card">
+              <h3>Build the platform</h3>
+              <div class="code-block"><code>cargo build --release</code></div>
+              <p>Build the Rust binary locally for development and validation before packaging or tagging a release.</p>
+            </div>
+            <div class="start-card">
+              <h3>Launch the control plane</h3>
+              <div class="code-block"><code>cargo run -- serve</code></div>
+              <p>Run the live HTTP server and browser console locally on port <code>8080</code>.</p>
+            </div>
+            <div class="start-card">
+              <h3>Package releases</h3>
+              <div class="code-block"><code>git tag v0.31.0</code></div>
+              <p>Tagged releases trigger GitHub Actions packaging for Linux, macOS, and Windows archives.</p>
+            </div>
+            <div class="start-card">
+              <h3>Validate the product</h3>
+              <div class="code-block"><code>cargo test</code></div>
+              <p>Run the 692-test suite, then use the live checks and browser smoke for a release-quality verification pass.</p>
+            </div>
+            <div class="start-card">
+              <h3>Run as a service</h3>
+              <div class="code-block"><code>deploy/wardex.service</code></div>
+              <p>Service packaging is included for systemd and launchd, with release archives bundling the site and examples.</p>
+            </div>
+            <div class="start-card">
+              <h3>Documented operations</h3>
+              <div class="code-block"><code>docs/runbooks/</code></div>
+              <p>Operators get runbooks for response, SIEM integration, and platform-specific agent handling.</p>
+            </div>
           </div>
-
-          <div class="track-filter">
-            <button class="filter-btn active" data-filter="all">All&nbsp;(40)</button>
-            <button class="filter-btn" data-filter="foundation">Foundation</button>
-            <button class="filter-btn" data-filter="scaffolded">Scaffolded</button>
-            <button class="filter-btn" data-filter="planned">Planned</button>
-            <button class="filter-btn" data-filter="future">Future</button>
-          </div>
-
-          <div id="tracks-container"></div>
         </div>
       </section>
 
-      <!-- ── Getting Started ───────────────────────────────────────── -->
+      <section id="resources" class="section section-alt">
+        <div class="container">
+          <div class="section-header">
+            <p class="label">Resources</p>
+            <h2>Operator and Engineering References</h2>
+            <p class="section-desc">
+              Everything needed to evaluate, operate, or extend the platform is kept versioned with the product.
+            </p>
+          </div>
+
+          <div class="start-grid">
+            <div class="start-card">
+              <h3>Admin Console</h3>
+              <p>Live browser console for Dashboard, SOC Workbench, Fleet &amp; Agents, Detection Engineering, Reports, and Settings.</p>
+              <p><a href="admin.html" class="btn btn-outline">Open Console</a></p>
+            </div>
+            <div class="start-card">
+              <h3>Documentation Index</h3>
+              <p>Start with the main documentation map for architecture, deployment, status, and runbooks.</p>
+              <p><a href="https://github.com/pinkysworld/Wardex/blob/main/docs/README.md" class="btn btn-outline" target="_blank" rel="noopener">Open Docs</a></p>
+            </div>
+            <div class="start-card">
+              <h3>OpenAPI Contract</h3>
+              <p>Use the versioned HTTP contract for integrations, SDK work, and operator automation.</p>
+              <p><a href="https://github.com/pinkysworld/Wardex/blob/main/docs/openapi.yaml" class="btn btn-outline" target="_blank" rel="noopener">View OpenAPI</a></p>
+            </div>
+            <div class="start-card">
+              <h3>Deployment Models</h3>
+              <p>Review the standalone, relay, and enterprise-oriented deployment approaches before rollout.</p>
+              <p><a href="https://github.com/pinkysworld/Wardex/blob/main/docs/DEPLOYMENT_MODELS.md" class="btn btn-outline" target="_blank" rel="noopener">Read Guide</a></p>
+            </div>
+            <div class="start-card">
+              <h3>Runbooks</h3>
+              <p>Operational guidance for agents, incident response, and SIEM integrations is bundled in the repository.</p>
+              <p><a href="https://github.com/pinkysworld/Wardex/tree/main/docs/runbooks" class="btn btn-outline" target="_blank" rel="noopener">Open Runbooks</a></p>
+            </div>
+            <div class="start-card">
+              <h3>Roadmap</h3>
+              <p>See the post-`0.31.0` roadmap for storage, HA, cloud collectors, and deeper content operations.</p>
+              <p><a href="https://github.com/pinkysworld/Wardex/blob/main/docs/ROADMAP_XDR_PROFESSIONAL.md" class="btn btn-outline" target="_blank" rel="noopener">View Roadmap</a></p>
+            </div>
+          </div>
+        </div>
+      </section>
+
       <section id="start" class="section">
         <div class="container">
           <div class="section-header">
-            <p class="label">Setup</p>
-            <h2>Getting Started</h2>
+            <p class="label">Quick Start</p>
+            <h2>Get Running Fast</h2>
             <p class="section-desc">
-              Requirements: a stable Rust toolchain (1.85+). No external services, no database,
-              no cloud account.
+              Wardex stays easy to evaluate locally: build the binary, run the server, open the console, and inspect the same product surfaces that ship in release archives.
             </p>
           </div>
 
           <div class="start-grid">
             <div class="start-card">
               <h3>Build</h3>
-              <div class="code-block"><code>cargo build</code></div>
+              <div class="code-block"><code>cargo build --release</code></div>
             </div>
             <div class="start-card">
-              <h3>Run the demo trace</h3>
+              <h3>Run demo telemetry</h3>
               <div class="code-block"><code>cargo run -- demo</code></div>
-              <p>Runs a short built-in telemetry sequence. Audit output goes to <code>var/demo.audit.log</code>.</p>
             </div>
             <div class="start-card">
               <h3>Analyze a scenario</h3>
               <div class="code-block"><code>cargo run -- analyze examples/credential_storm.csv</code></div>
-              <p>Full ingest → detect → respond → audit pipeline. Supports CSV and JSONL formats.</p>
             </div>
             <div class="start-card">
-              <h3>Run tests</h3>
-              <div class="code-block"><code>cargo test</code></div>
-              <p>637 automated tests (523 unit + 114 integration) covering all 58 modules.</p>
-            </div>
-            <div class="start-card">
-              <h3>SIEM report</h3>
+              <h3>Generate a report</h3>
               <div class="code-block"><code>cargo run -- report examples/credential_storm.csv</code></div>
-              <p>Generates a structured JSON report for SIEM integration.</p>
             </div>
             <div class="start-card">
-              <h3>Generate config</h3>
-              <div class="code-block"><code>cargo run -- init-config</code></div>
-              <p>Writes a default TOML configuration template.</p>
-            </div>
-            <div class="start-card">
-              <h3>Implementation snapshot</h3>
-              <div class="code-block"><code>cargo run -- status</code></div>
-            </div>
-            <div class="start-card">
-              <h3>Browser console snapshot</h3>
-              <div class="code-block"><code>cargo run -- status-json site/data/status.json</code></div>
-              <p>Exports the structured status file consumed by <code>admin.html</code>.</p>
-            </div>
-            <div class="start-card">
-              <h3>Live admin console</h3>
+              <h3>Launch the console</h3>
               <div class="code-block"><code>cargo run -- serve</code></div>
-              <p>Starts the HTTP server on port 8080. Open <code>localhost:8080/admin.html</code> for the live control plane.</p>
             </div>
             <div class="start-card">
-              <h3>Benchmark detectors</h3>
-              <div class="code-block"><code>cargo run -- bench examples/benign_extended.csv examples/credential_storm_extended.csv</code></div>
-              <p>Side-by-side comparison of EWMA vs fixed-threshold detectors with P/R/F1/accuracy and per-signal attribution.</p>
+              <h3>Run the test suite</h3>
+              <div class="code-block"><code>cargo test</code></div>
+              <p>Current release verification includes 692 automated tests.</p>
             </div>
           </div>
 
           <div class="csv-format">
-            <h3>Telemetry Formats</h3>
-            <p>The telemetry parser supports CSV (8-column legacy or 10-column extended) and JSONL. Format is auto-detected by file extension. CSV header:</p>
-            <div class="code-block code-block-wide">
-              <code>timestamp_ms,cpu_load_pct,memory_load_pct,temperature_c,network_kbps,auth_failures,battery_pct,integrity_drift[,process_count,disk_pressure_pct]</code>
-            </div>
+            <h3>Primary Interfaces</h3>
+            <p>Wardex ships as a single binary, a static and live browser console, a documented HTTP API, and release automation for packaged builds.</p>
             <div class="field-grid" id="field-grid"></div>
           </div>
         </div>
       </section>
 
-      <!-- ── Footer ────────────────────────────────────────────────── -->
       <footer class="site-footer">
         <div class="container">
           <div class="footer-grid">
             <div class="footer-col footer-about">
-              <span class="nav-logo footer-logo">SE</span>
+              <span class="nav-logo footer-logo">WX</span>
               <p>
-                Wardex is an open research project. Working documentation lives in
-                <code>docs/</code> inside the repository. This site is a public-facing snapshot
-                of the current milestone.
+                Wardex is a release-oriented XDR and SIEM platform for private-cloud operations. The repository includes the runtime, live console, docs, runbooks, and release automation in one place.
               </p>
             </div>
             <div class="footer-col">
               <h4>Sections</h4>
               <a href="#overview">Overview</a>
               <a href="#architecture">Architecture</a>
-              <a href="#status">Status</a>
-              <a href="admin.html">Admin Console</a>
-              <a href="#backlog">Engineering Log</a>
-              <a href="#tracks">Research Tracks</a>
-              <a href="#start">Getting Started</a>
+              <a href="#trust">Enterprise</a>
+              <a href="#deployment">Deployment</a>
+              <a href="#resources">Resources</a>
+              <a href="#start">Quick Start</a>
             </div>
             <div class="footer-col">
-              <h4>Resources</h4>
-              <a href="#modules">Module Map</a>
-              <a href="#pipeline">Pipeline Detail</a>
+              <h4>Links</h4>
+              <a href="admin.html">Admin Console</a>
               <a href="https://github.com/pinkysworld/Wardex" target="_blank" rel="noopener">GitHub Repository</a>
+              <a href="https://github.com/pinkysworld/Wardex/releases" target="_blank" rel="noopener">Releases</a>
+              <a href="https://github.com/pinkysworld/Wardex/blob/main/docs/README.md" target="_blank" rel="noopener">Documentation</a>
             </div>
           </div>
           <div class="footer-bottom">
-            <p>Wardex · v0.27.1 · Phase 0–27 complete · 160/160 tasks · 637+ tests · <a href="../LICENSE" style="color:inherit;">BSL 1.1</a></p>
+            <p>Wardex · v0.31.0 · Enterprise XDR &amp; SIEM · 692 tests · 61 modules · <a href="../LICENSE" style="color:inherit;">BSL 1.1</a></p>
           </div>
         </div>
       </footer>
-
     </main>
   </body>
 </html>

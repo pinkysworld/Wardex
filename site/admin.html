@@ -374,6 +374,8 @@ code{font-family:var(--mono);font-size:.88em;background:var(--bg-alt);padding:.1
   .main{margin-left:52px;}
   .metric-strip{grid-template-columns:repeat(2,1fr);}
   .card-grid.cols-2,.card-grid.cols-3,.card-grid.cols-4{grid-template-columns:1fr;}
+  .metric-cluster,.workspace-shell{grid-template-columns:1fr;}
+  .workspace-detail{position:static;}
   .gauge-grid{grid-template-columns:repeat(2,1fr);}
   .settings-grid{grid-template-columns:1fr;}
 }
@@ -466,6 +468,45 @@ input::placeholder{color:var(--ink-3);}
 .tab-btn.active{color:var(--accent);border-bottom-color:var(--accent);}
 .tab-panel{display:none;}
 .tab-panel.active{display:block;}
+.sticky-tabs{position:sticky;top:0;z-index:20;background:linear-gradient(180deg,var(--bg) 88%,rgba(0,0,0,0));padding-top:.15rem;}
+.summary-card{display:flex;flex-direction:column;gap:.8rem;}
+.summary-list{display:flex;flex-direction:column;gap:.5rem;}
+.summary-row{display:flex;justify-content:space-between;gap:1rem;padding:.45rem .55rem;border:1px solid var(--border);border-radius:10px;background:var(--bg-alt);}
+.summary-row strong{color:var(--ink);}
+.metric-cluster{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:.75rem;}
+.metric-tile{padding:.8rem .9rem;border:1px solid var(--border);border-radius:12px;background:var(--bg-alt);}
+.metric-tile .label{font-size:.72rem;color:var(--ink-3);text-transform:uppercase;letter-spacing:.05em;}
+.metric-tile .value{font-size:1.3rem;font-weight:700;color:var(--ink);margin-top:.2rem;}
+.metric-tile .sub{font-size:.76rem;color:var(--ink-3);margin-top:.2rem;}
+.status-pill{display:inline-flex;align-items:center;gap:.35rem;padding:.18rem .55rem;border-radius:999px;border:1px solid var(--border);background:var(--bg-alt);font-size:.74rem;font-weight:600;}
+.status-pill.critical{color:var(--danger);border-color:color-mix(in srgb,var(--danger) 40%,var(--border) 60%);}
+.status-pill.severe{color:#f97316;}
+.status-pill.elevated{color:#f59e0b;}
+.status-pill.nominal{color:var(--green);}
+.status-pill.pending{color:#f59e0b;}
+.status-pill.approved{color:var(--accent);}
+.status-pill.executed{color:var(--green);}
+.status-pill.denied,.status-pill.expired{color:var(--danger);}
+.workspace-shell{display:grid;grid-template-columns:minmax(320px,1.15fr) minmax(340px,.85fr);gap:1rem;align-items:start;}
+.workspace-detail{position:sticky;top:1rem;}
+.workspace-panel{padding:.95rem;border:1px solid var(--border);border-radius:12px;background:var(--surface);}
+.workspace-toolbar{display:flex;flex-wrap:wrap;gap:.5rem;align-items:center;margin-bottom:.75rem;}
+.workspace-empty{padding:1rem;border:1px dashed var(--border);border-radius:10px;color:var(--ink-3);background:var(--bg-alt);}
+.dense-table td,.dense-table th{padding:.5rem .55rem;font-size:.8rem;vertical-align:top;}
+.drawer-backdrop{position:fixed;inset:0;background:rgba(5,12,22,.42);opacity:0;pointer-events:none;transition:opacity .2s;z-index:220;}
+.drawer-backdrop.open{opacity:1;pointer-events:auto;}
+.detail-drawer{position:fixed;top:0;right:0;width:min(440px,92vw);height:100vh;background:var(--surface);border-left:1px solid var(--border);box-shadow:-12px 0 32px rgba(0,0,0,.28);transform:translateX(100%);transition:transform .22s ease;z-index:230;display:flex;flex-direction:column;}
+.detail-drawer.open{transform:translateX(0);}
+.drawer-header{display:flex;justify-content:space-between;align-items:flex-start;gap:1rem;padding:1rem 1.1rem;border-bottom:1px solid var(--border);}
+.drawer-header h2{margin:0;font-size:1rem;}
+.drawer-sub{font-size:.78rem;color:var(--ink-3);margin-top:.2rem;}
+.drawer-close{background:none;border:1px solid var(--border);color:var(--ink-3);border-radius:8px;padding:.25rem .55rem;cursor:pointer;}
+.drawer-body{padding:1rem 1.1rem;overflow:auto;display:flex;flex-direction:column;gap:1rem;}
+.drawer-actions{display:flex;flex-wrap:wrap;gap:.5rem;}
+.kv-grid.compact dt,.kv-grid.compact dd{padding:.2rem 0;}
+.timeline-list{display:flex;flex-direction:column;gap:.55rem;}
+.timeline-item{padding:.55rem .65rem;border:1px solid var(--border);border-radius:10px;background:var(--bg-alt);}
+.code-box{font-family:var(--mono);font-size:.76rem;padding:.55rem .65rem;border-radius:10px;background:var(--bg-alt);border:1px solid var(--border);word-break:break-word;}
 
 /* ── Theme toggle ── */
 .theme-toggle{cursor:pointer;font-size:1.1rem;padding:4px 8px;border:1px solid var(--border);
@@ -526,7 +567,7 @@ body.light .modal-box{background:#ffffff;}
     <div class="nav-item" data-section="threat-detection" data-label="Threat Detection" tabindex="0" role="button"><span class="nav-icon" aria-hidden="true">&#9888;</span><span class="nav-label"> Threat Detection</span></div>
     <div class="nav-item" data-section="fleet-agents" data-label="Fleet &amp; Agents" tabindex="0" role="button"><span class="nav-icon" aria-hidden="true">&#8861;</span><span class="nav-label"> Fleet &amp; Agents</span></div>
     <div class="nav-item" data-section="security-policy" data-label="Security Policy" tabindex="0" role="button"><span class="nav-icon" aria-hidden="true">&#9881;</span><span class="nav-label"> Security Policy</span></div>
-    <div class="nav-item" data-section="incident-response" data-label="Incident Response" tabindex="0" role="button"><span class="nav-icon" aria-hidden="true">&#9889;</span><span class="nav-label"> Incident Response</span></div>
+    <div class="nav-item" data-section="incident-response" data-label="SOC Workbench" tabindex="0" role="button"><span class="nav-icon" aria-hidden="true">&#9889;</span><span class="nav-label"> SOC Workbench</span></div>
     <div class="nav-item" data-section="infrastructure" data-label="Infrastructure" tabindex="0" role="button"><span class="nav-icon" aria-hidden="true">&#9955;</span><span class="nav-label"> Infrastructure</span></div>
     <div class="nav-item" data-section="reports-exports" data-label="Reports &amp; Exports" tabindex="0" role="button"><span class="nav-icon" aria-hidden="true">&#9776;</span><span class="nav-label"> Reports &amp; Exports</span></div>
     <div class="nav-item" data-section="settings" data-label="Settings" tabindex="0" role="button"><span class="nav-icon" aria-hidden="true">&#9881;</span><span class="nav-label"> Settings</span></div>
@@ -579,7 +620,7 @@ body.light .modal-box{background:#ffffff;}
     <div class="section active" id="sec-dashboard">
       <div class="section-header">
         <h1>Dashboard</h1>
-        <p>Real-time overview of your Wardex XDR platform — host telemetry, detection status, and alert summary.</p>
+        <p>Shared command overview for SOC operators and security leads, combining live detections, backlog pressure, fleet health, and rollout posture.</p>
       </div>
 
       <div class="metric-strip">
@@ -591,7 +632,7 @@ body.light .modal-box{background:#ffffff;}
         <div class="metric-card blue">
           <div class="metric-label">Active Agents</div>
           <div class="metric-value" id="dash-agents">1</div>
-          <div class="metric-sub">Local + enrolled</div>
+          <div class="metric-sub" id="dash-agents-sub">1 local + 0 enrolled</div>
         </div>
         <div class="metric-card orange">
           <div class="metric-label">Threat Level</div>
@@ -602,6 +643,47 @@ body.light .modal-box{background:#ffffff;}
           <div class="metric-label">System Health</div>
           <div class="metric-value ok" id="dash-health">OK</div>
           <div class="metric-sub" id="dash-uptime">—</div>
+        </div>
+      </div>
+
+      <div class="card-grid cols-2" style="margin-bottom:1.25rem;">
+        <div class="card summary-card">
+          <div style="display:flex;justify-content:space-between;gap:1rem;align-items:flex-start;">
+            <div>
+              <h2><span class="dot dot-orange"></span> SOC Now</h2>
+              <p class="text-muted" style="font-size:.82rem;margin-top:.25rem;">What needs analyst attention right now across queue, response, cases, and high-risk agents.</p>
+            </div>
+            <button class="btn btn-sm" id="btn-open-workbench">Open Workbench</button>
+          </div>
+          <div class="metric-cluster">
+            <div class="metric-tile"><div class="label">Critical Queue</div><div class="value" id="soc-now-critical">0</div><div class="sub" id="soc-now-critical-sub">Pending triage</div></div>
+            <div class="metric-tile"><div class="label">SLA Breaches</div><div class="value" id="soc-now-breached">0</div><div class="sub">Queue items past target</div></div>
+            <div class="metric-tile"><div class="label">Ready Response</div><div class="value" id="soc-now-ready">0</div><div class="sub">Approved actions waiting</div></div>
+            <div class="metric-tile"><div class="label">Active Cases</div><div class="value" id="soc-now-cases">0</div><div class="sub">Open or investigating</div></div>
+          </div>
+          <div>
+            <h3 style="margin-bottom:.45rem;">Urgent Work</h3>
+            <div id="soc-now-urgent-list" class="summary-list"><div class="workspace-empty">Urgent work will appear here as queue pressure, incident escalation, and response actions build.</div></div>
+          </div>
+        </div>
+        <div class="card summary-card">
+          <div style="display:flex;justify-content:space-between;gap:1rem;align-items:flex-start;">
+            <div>
+              <h2><span class="dot dot-blue"></span> Operations Overview</h2>
+              <p class="text-muted" style="font-size:.82rem;margin-top:.25rem;">Fleet coverage, rollout health, reporting, and posture signals for leads and managers.</p>
+            </div>
+            <button class="btn btn-sm" id="btn-open-reports-summary">Manager Summary</button>
+          </div>
+          <div class="metric-cluster">
+            <div class="metric-tile"><div class="label">Fleet Coverage</div><div class="value" id="mgr-fleet-coverage">0%</div><div class="sub" id="mgr-fleet-coverage-sub">0 online</div></div>
+            <div class="metric-tile"><div class="label">Stale / Offline</div><div class="value" id="mgr-stale-offline">0</div><div class="sub">Endpoints needing follow-up</div></div>
+            <div class="metric-tile"><div class="label">Pending Deployments</div><div class="value" id="mgr-deployments">0</div><div class="sub">Active rollout pressure</div></div>
+            <div class="metric-tile"><div class="label">Compliance</div><div class="value" id="mgr-compliance">—</div><div class="sub" id="mgr-compliance-sub">Platform posture</div></div>
+          </div>
+          <div>
+            <h3 style="margin-bottom:.45rem;">Manager Highlights</h3>
+            <div id="dash-operations-list" class="summary-list"><div class="workspace-empty">Operational highlights will populate after the manager overview is loaded.</div></div>
+          </div>
         </div>
       </div>
 
@@ -727,15 +809,15 @@ body.light .modal-box{background:#ffffff;}
         <h2><span class="dot dot-green"></span> Runtime Status</h2>
         <dl class="kv-grid" id="status-grid">
           <dt>Updated</dt><dd id="s-updated">—</dd>
-          <dt>Engineering Log</dt><dd id="s-backlog">—</dd>
-          <dt>Phases</dt><dd id="s-phases">—</dd>
+          <dt>Version</dt><dd id="s-version">—</dd>
+          <dt>Delivery Scope</dt><dd id="s-backlog">—</dd>
+          <dt>Release Phases</dt><dd id="s-phases">—</dd>
           <dt>CLI Commands</dt><dd id="s-commands">—</dd>
-          <dt>Implemented</dt><dd id="s-implemented">—</dd>
-          <dt>Partial</dt><dd id="s-partial">—</dd>
-          <dt>Not Built</dt><dd id="s-not-built">—</dd>
+          <dt>Shipping Features</dt><dd id="s-implemented">—</dd>
+          <dt>Roadmap Watchlist</dt><dd id="s-roadmap">—</dd>
         </dl>
         <details style="margin-top:.5rem;font-size:.85rem;">
-          <summary style="cursor:pointer;color:var(--ink-3);">Show feature details...</summary>
+          <summary style="cursor:pointer;color:var(--ink-3);">Show capability summary...</summary>
           <div id="status-partial-list" style="margin-top:.4rem;"></div>
           <div id="status-notbuilt-list" style="margin-top:.4rem;"></div>
         </details>
@@ -946,6 +1028,74 @@ body.light .modal-box{background:#ffffff;}
           <button class="btn btn-sm" id="btn-sigma-refresh">Refresh Rules</button>
         </div>
       </div>
+
+      <div class="card mt-1">
+        <h2><span class="dot dot-teal"></span> Detection Engineering Platform</h2>
+        <p class="text-muted" style="margin-bottom:.75rem;font-size:.82rem;">Run saved hunts, manage rule lifecycle, close coverage gaps, and control suppressions from the commercial content workflow.</p>
+        <div class="metric-strip">
+          <div class="metric-card teal"><div class="metric-label">Saved Hunts</div><div class="metric-value" id="det-hunts-total">0</div></div>
+          <div class="metric-card blue"><div class="metric-label">Managed Rules</div><div class="metric-value" id="det-managed-rules">0</div></div>
+          <div class="metric-card orange"><div class="metric-label">Canary / Test</div><div class="metric-value" id="det-canary-rules">0</div></div>
+          <div class="metric-card purple"><div class="metric-label">Suppressions</div><div class="metric-value" id="det-suppressions-total">0</div></div>
+        </div>
+        <div class="card-grid cols-2" style="margin-top:.75rem;">
+          <div class="card" style="background:var(--bg-alt);">
+            <h3>Saved Hunts &amp; Schedules</h3>
+            <div class="workspace-toolbar">
+              <input type="text" id="hunt-name" placeholder="Hunt name" style="flex:1;min-width:160px;background:var(--bg);color:var(--ink);border:1px solid var(--border);border-radius:6px;padding:.4rem .55rem;">
+              <input type="text" id="hunt-host" placeholder="Hostname (optional)" style="width:150px;background:var(--bg);color:var(--ink);border:1px solid var(--border);border-radius:6px;padding:.4rem .55rem;">
+              <input type="text" id="hunt-text" placeholder="Search text" style="flex:1;min-width:180px;background:var(--bg);color:var(--ink);border:1px solid var(--border);border-radius:6px;padding:.4rem .55rem;">
+            </div>
+            <div class="workspace-toolbar">
+              <select id="hunt-severity" style="min-width:120px;background:var(--bg);color:var(--ink);border:1px solid var(--border);border-radius:6px;padding:.4rem .55rem;">
+                <option value="high">High</option>
+                <option value="critical">Critical</option>
+                <option value="medium" selected>Medium</option>
+                <option value="low">Low</option>
+              </select>
+              <input type="number" id="hunt-threshold" min="1" value="1" style="width:90px;background:var(--bg);color:var(--ink);border:1px solid var(--border);border-radius:6px;padding:.4rem .55rem;">
+              <input type="number" id="hunt-schedule" min="0" value="300" style="width:110px;background:var(--bg);color:var(--ink);border:1px solid var(--border);border-radius:6px;padding:.4rem .55rem;">
+              <button class="btn btn-sm primary" id="btn-save-hunt">Save Hunt</button>
+            </div>
+            <div class="text-muted" style="font-size:.75rem;margin-bottom:.6rem;">Schedule is in seconds. Set to <code>0</code> for manual-only hunts.</div>
+            <div id="hunt-list" class="summary-list"><div class="workspace-empty">Saved hunts will appear here.</div></div>
+          </div>
+          <div class="card" style="background:var(--bg-alt);">
+            <h3>Suppressions &amp; Exception Handling</h3>
+            <div class="workspace-toolbar">
+              <input type="text" id="suppression-name" placeholder="Suppression name" style="flex:1;min-width:160px;background:var(--bg);color:var(--ink);border:1px solid var(--border);border-radius:6px;padding:.4rem .55rem;">
+              <select id="suppression-rule" style="min-width:180px;background:var(--bg);color:var(--ink);border:1px solid var(--border);border-radius:6px;padding:.4rem .55rem;">
+                <option value="">Any rule</option>
+              </select>
+            </div>
+            <div class="workspace-toolbar">
+              <input type="text" id="suppression-host" placeholder="Hostname (optional)" style="width:150px;background:var(--bg);color:var(--ink);border:1px solid var(--border);border-radius:6px;padding:.4rem .55rem;">
+              <input type="text" id="suppression-text" placeholder="Match text (optional)" style="flex:1;min-width:180px;background:var(--bg);color:var(--ink);border:1px solid var(--border);border-radius:6px;padding:.4rem .55rem;">
+              <input type="text" id="suppression-justification" placeholder="Justification" style="flex:1;min-width:180px;background:var(--bg);color:var(--ink);border:1px solid var(--border);border-radius:6px;padding:.4rem .55rem;">
+              <button class="btn btn-sm" id="btn-save-suppression">Save Suppression</button>
+            </div>
+            <div id="suppression-list" class="summary-list"><div class="workspace-empty">Suppressions will appear here.</div></div>
+          </div>
+        </div>
+        <div class="card-grid cols-2" style="margin-top:.75rem;">
+          <div class="card" style="background:var(--bg-alt);">
+            <h3>Managed Content Rules</h3>
+            <div class="table-wrap" style="max-height:320px;overflow-y:auto;">
+              <table class="data-table dense-table">
+                <thead><tr><th>Rule</th><th>Kind</th><th>Lifecycle</th><th>Coverage</th><th>Actions</th></tr></thead>
+                <tbody id="managed-rule-tbody"><tr><td colspan="5" class="text-muted">Managed rules will appear here.</td></tr></tbody>
+              </table>
+            </div>
+          </div>
+          <div class="card" style="background:var(--bg-alt);">
+            <h3>MITRE Coverage &amp; Packs</h3>
+            <div id="mitre-coverage-list" class="summary-list"><div class="workspace-empty">Coverage data will appear here.</div></div>
+            <div class="btn-row mt-1">
+              <button class="btn btn-sm" id="btn-refresh-detection-engineering">Refresh Detection Engineering</button>
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
 
     <!-- ═══════════════════════════════════════════════════════════ -->
@@ -1110,6 +1260,10 @@ body.light .modal-box{background:#ffffff;}
             <span id="xdr-rollout-config-status" class="text-muted" style="font-size:.8rem;"></span>
           </div>
         </div>
+        <div style="margin-top:.9rem;padding-top:.85rem;border-top:1px solid var(--border);">
+          <h3>Agent Activity Snapshot</h3>
+          <div id="xdr-agent-activity-inline" class="text-muted">Select an agent to view heartbeat freshness, deployment state, log summary, and inventory coverage.</div>
+        </div>
       </div>
       </div><!-- end panel-fleet-agents -->
 
@@ -1265,12 +1419,13 @@ body.light .modal-box{background:#ffffff;}
     <!-- ═══════════════════════════════════════════════════════════ -->
     <div class="section" id="sec-incident-response">
       <div class="section-header">
-        <h1>Incident Response</h1>
-        <p>Manage incidents, digital twin simulation, adversarial harness testing, and monitoring &amp; analysis tools.</p>
+        <h1>SOC Workbench</h1>
+        <p>Analyst-first workspace for triage, case management, investigation, and approval-gated response with less context switching.</p>
       </div>
 
-      <div class="tab-bar" id="ir-tabs" role="tablist">
-        <button class="tab-btn active" data-tab="ir-incidents">Incidents</button>
+      <div class="tab-bar sticky-tabs" id="ir-tabs" role="tablist">
+        <button class="tab-btn active" data-tab="ir-incidents">Queue</button>
+        <button class="tab-btn" data-tab="ir-cases">Cases</button>
         <button class="tab-btn" data-tab="ir-investigation">Investigation</button>
         <button class="tab-btn" data-tab="ir-response">Response</button>
       </div>
@@ -1282,71 +1437,11 @@ body.light .modal-box{background:#ffffff;}
         <div class="metric-card teal"><div class="metric-label">Resolved</div><div class="metric-value" id="inc-resolved">0</div></div>
         <div class="metric-card purple"><div class="metric-label">MITRE Techniques</div><div class="metric-value" id="inc-mitre-count">0</div></div>
       </div>
-
-      <!-- Analyst Case Management -->
       <div class="card mb-1">
-        <h2><span class="dot dot-teal"></span> Case Management</h2>
-        <p class="text-muted" style="margin-bottom:.75rem;font-size:.82rem;">Track investigations with case lifecycle, priority, assignee, tags, and timeline entries.</p>
-        <div class="btn-row" style="margin-bottom:.75rem;">
-          <select id="case-filter-status" style="min-width:130px;background:var(--bg-alt);color:var(--ink);border:1px solid var(--border);border-radius:6px;padding:.4rem .55rem;">
-            <option value="">All statuses</option>
-            <option value="open">Open</option>
-            <option value="in_progress">In Progress</option>
-            <option value="pending">Pending</option>
-            <option value="resolved">Resolved</option>
-            <option value="closed">Closed</option>
-          </select>
-          <select id="case-filter-priority" style="min-width:110px;background:var(--bg-alt);color:var(--ink);border:1px solid var(--border);border-radius:6px;padding:.4rem .55rem;">
-            <option value="">All priorities</option>
-            <option value="critical">Critical</option>
-            <option value="high">High</option>
-            <option value="medium">Medium</option>
-            <option value="low">Low</option>
-          </select>
-          <button class="btn btn-sm primary" id="btn-cases-refresh">Refresh</button>
-          <button class="btn btn-sm" id="btn-new-case">+ New Case</button>
-        </div>
-        <!-- Inline New Case Form -->
-        <div id="new-case-form" class="card" style="display:none;margin-bottom:.75rem;padding:.75rem 1rem;background:var(--bg-alt);border:1px solid var(--border);border-radius:8px;">
-          <div style="display:grid;grid-template-columns:1fr 1fr;gap:.5rem;margin-bottom:.5rem;">
-            <div>
-              <label for="new-case-title" style="font-size:.78rem;color:var(--ink-2);display:block;margin-bottom:.2rem;">Title *</label>
-              <input type="text" id="new-case-title" placeholder="Investigation title" style="width:100%;padding:.4rem .55rem;background:var(--bg);color:var(--ink);border:1px solid var(--border);border-radius:6px;">
-            </div>
-            <div>
-              <label for="new-case-priority" style="font-size:.78rem;color:var(--ink-2);display:block;margin-bottom:.2rem;">Priority</label>
-              <select id="new-case-priority" style="width:100%;padding:.4rem .55rem;background:var(--bg);color:var(--ink);border:1px solid var(--border);border-radius:6px;">
-                <option value="medium">Medium</option>
-                <option value="critical">Critical</option>
-                <option value="high">High</option>
-                <option value="low">Low</option>
-                <option value="info">Info</option>
-              </select>
-            </div>
-          </div>
-          <div style="margin-bottom:.5rem;">
-            <label for="new-case-desc" style="font-size:.78rem;color:var(--ink-2);display:block;margin-bottom:.2rem;">Description</label>
-            <textarea id="new-case-desc" rows="2" placeholder="Brief description of the investigation..." style="width:100%;padding:.4rem .55rem;background:var(--bg);color:var(--ink);border:1px solid var(--border);border-radius:6px;resize:vertical;"></textarea>
-          </div>
-          <div style="margin-bottom:.5rem;">
-            <label for="new-case-tags" style="font-size:.78rem;color:var(--ink-2);display:block;margin-bottom:.2rem;">Tags (comma-separated)</label>
-            <input type="text" id="new-case-tags" placeholder="malware, phishing, insider" style="width:100%;padding:.4rem .55rem;background:var(--bg);color:var(--ink);border:1px solid var(--border);border-radius:6px;">
-          </div>
-          <div class="btn-row">
-            <button class="btn btn-sm primary" id="btn-submit-case">Create Case</button>
-            <button class="btn btn-sm" id="btn-cancel-case">Cancel</button>
-          </div>
-        </div>
-        <div class="metric-strip" style="margin-bottom:.75rem;">
-          <div class="metric-card teal"><div class="metric-label">Total Cases</div><div class="metric-value" id="cases-total">0</div></div>
-          <div class="metric-card orange"><div class="metric-label">Open</div><div class="metric-value" id="cases-open">0</div></div>
-          <div class="metric-card green"><div class="metric-label">Resolved</div><div class="metric-value" id="cases-resolved">0</div></div>
-        </div>
-        <div class="table-wrap" style="max-height:300px;overflow-y:auto;">
-          <table class="data-table" id="cases-table" aria-label="Investigation cases">
-            <thead><tr><th>ID</th><th>Title</th><th>Priority</th><th>Status</th><th>Assignee</th><th>Created</th></tr></thead>
-            <tbody id="cases-tbody"><tr><td colspan="6" class="text-muted">No cases yet.</td></tr></tbody>
-          </table>
+        <h2><span class="dot dot-blue"></span> Queue Pressure</h2>
+        <p class="text-muted" style="margin-bottom:.75rem;font-size:.82rem;">Prioritize breach-risk work first, spin up cases directly from queue items, and jump from a signal to its agent or incident context.</p>
+        <div id="queue-pressure-summary" class="summary-list">
+          <div class="workspace-empty">Queue pressure and urgent work will populate when the workbench overview is refreshed.</div>
         </div>
       </div>
 
@@ -1354,6 +1449,14 @@ body.light .modal-box{background:#ffffff;}
       <div class="card mb-1">
         <h2><span class="dot dot-orange"></span> Alert Queue</h2>
         <p class="text-muted" style="margin-bottom:.75rem;font-size:.82rem;">Triage, acknowledge, and assign queued alerts to analysts for investigation.</p>
+        <div class="workspace-toolbar">
+          <label style="font-size:.8rem;color:var(--ink-3);">Sort</label>
+          <select id="queue-sort" style="min-width:170px;background:var(--bg-alt);color:var(--ink);border:1px solid var(--border);border-radius:6px;padding:.4rem .55rem;">
+            <option value="sla">SLA Risk First</option>
+            <option value="severity">Highest Severity</option>
+            <option value="age">Oldest First</option>
+          </select>
+        </div>
         <div class="metric-strip" style="margin-bottom:.75rem;">
           <div class="metric-card red"><div class="metric-label">Pending</div><div class="metric-value" id="queue-pending">0</div></div>
           <div class="metric-card teal"><div class="metric-label">Acknowledged</div><div class="metric-value" id="queue-acked">0</div></div>
@@ -1361,7 +1464,7 @@ body.light .modal-box{background:#ffffff;}
         </div>
         <div class="table-wrap" style="max-height:250px;overflow-y:auto;">
           <table class="data-table" id="queue-table" aria-label="Alert triage queue">
-            <thead><tr><th>ID</th><th>Severity</th><th>Source</th><th>Status</th><th>Assignee</th><th>Time</th><th>Actions</th></tr></thead>
+            <thead><tr><th>ID</th><th>Severity</th><th>Source</th><th>Status</th><th>Age</th><th>SLA</th><th>Assignee</th><th>Actions</th></tr></thead>
             <tbody id="queue-tbody"><tr><td colspan="7" class="text-muted">No queued alerts.</td></tr></tbody>
           </table>
         </div>
@@ -1416,6 +1519,84 @@ body.light .modal-box{background:#ffffff;}
       </div>
       </div><!-- end panel-ir-incidents -->
 
+      <div class="tab-panel" id="panel-ir-cases" role="tabpanel">
+      <div class="card mb-1">
+        <h2><span class="dot dot-teal"></span> Case Workspace</h2>
+        <p class="text-muted" style="margin-bottom:.75rem;font-size:.82rem;">Review case load, open a case with full linked evidence, and update ownership without leaving the workbench.</p>
+        <div class="workspace-toolbar">
+          <select id="case-filter-status" style="min-width:130px;background:var(--bg-alt);color:var(--ink);border:1px solid var(--border);border-radius:6px;padding:.4rem .55rem;">
+            <option value="">All statuses</option>
+            <option value="New">New</option>
+            <option value="Triaging">Triaging</option>
+            <option value="Investigating">Investigating</option>
+            <option value="Escalated">Escalated</option>
+            <option value="Resolved">Resolved</option>
+            <option value="Closed">Closed</option>
+          </select>
+          <select id="case-filter-priority" style="min-width:110px;background:var(--bg-alt);color:var(--ink);border:1px solid var(--border);border-radius:6px;padding:.4rem .55rem;">
+            <option value="">All priorities</option>
+            <option value="Critical">Critical</option>
+            <option value="High">High</option>
+            <option value="Medium">Medium</option>
+            <option value="Low">Low</option>
+            <option value="Info">Info</option>
+          </select>
+          <button class="btn btn-sm primary" id="btn-cases-refresh">Refresh</button>
+          <button class="btn btn-sm" id="btn-new-case">+ New Case</button>
+        </div>
+        <div id="new-case-form" class="card" style="display:none;margin-bottom:.75rem;padding:.75rem 1rem;background:var(--bg-alt);border:1px solid var(--border);border-radius:8px;">
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:.5rem;margin-bottom:.5rem;">
+            <div>
+              <label for="new-case-title" style="font-size:.78rem;color:var(--ink-2);display:block;margin-bottom:.2rem;">Title *</label>
+              <input type="text" id="new-case-title" placeholder="Investigation title" style="width:100%;padding:.4rem .55rem;background:var(--bg);color:var(--ink);border:1px solid var(--border);border-radius:6px;">
+            </div>
+            <div>
+              <label for="new-case-priority" style="font-size:.78rem;color:var(--ink-2);display:block;margin-bottom:.2rem;">Priority</label>
+              <select id="new-case-priority" style="width:100%;padding:.4rem .55rem;background:var(--bg);color:var(--ink);border:1px solid var(--border);border-radius:6px;">
+                <option value="medium">Medium</option>
+                <option value="critical">Critical</option>
+                <option value="high">High</option>
+                <option value="low">Low</option>
+                <option value="info">Info</option>
+              </select>
+            </div>
+          </div>
+          <div style="margin-bottom:.5rem;">
+            <label for="new-case-desc" style="font-size:.78rem;color:var(--ink-2);display:block;margin-bottom:.2rem;">Description</label>
+            <textarea id="new-case-desc" rows="2" placeholder="Brief description of the investigation..." style="width:100%;padding:.4rem .55rem;background:var(--bg);color:var(--ink);border:1px solid var(--border);border-radius:6px;resize:vertical;"></textarea>
+          </div>
+          <div style="margin-bottom:.5rem;">
+            <label for="new-case-tags" style="font-size:.78rem;color:var(--ink-2);display:block;margin-bottom:.2rem;">Tags (comma-separated)</label>
+            <input type="text" id="new-case-tags" placeholder="malware, phishing, insider" style="width:100%;padding:.4rem .55rem;background:var(--bg);color:var(--ink);border:1px solid var(--border);border-radius:6px;">
+          </div>
+          <div class="btn-row">
+            <button class="btn btn-sm primary" id="btn-submit-case">Create Case</button>
+            <button class="btn btn-sm" id="btn-cancel-case">Cancel</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="metric-strip" style="margin-bottom:.75rem;">
+        <div class="metric-card teal"><div class="metric-label">Total Cases</div><div class="metric-value" id="cases-total">0</div></div>
+        <div class="metric-card orange"><div class="metric-label">Open</div><div class="metric-value" id="cases-open">0</div></div>
+        <div class="metric-card green"><div class="metric-label">Resolved</div><div class="metric-value" id="cases-resolved">0</div></div>
+      </div>
+
+      <div class="workspace-shell">
+        <div class="workspace-panel workspace-list">
+          <div class="table-wrap" style="max-height:520px;overflow-y:auto;">
+            <table class="data-table dense-table" id="cases-table" aria-label="Investigation cases">
+              <thead><tr><th>ID</th><th>Title</th><th>Priority</th><th>Status</th><th>Assignee</th><th>Updated</th></tr></thead>
+              <tbody id="cases-tbody"><tr><td colspan="6" class="text-muted">No cases yet.</td></tr></tbody>
+            </table>
+          </div>
+        </div>
+        <div class="workspace-panel workspace-detail" id="case-detail-panel">
+          <div class="workspace-empty">Select a case to view linked incidents, linked events, comments, evidence, and ownership actions.</div>
+        </div>
+      </div>
+      </div><!-- end panel-ir-cases -->
+
       <div class="tab-panel" id="panel-ir-investigation" role="tabpanel">
       <div class="card-grid cols-2">
         <div class="card">
@@ -1448,6 +1629,42 @@ body.light .modal-box{background:#ffffff;}
         </div>
       </div>
 
+      <div class="card-grid cols-2 mt-1">
+        <div class="card">
+          <h2><span class="dot dot-blue"></span> Event Search</h2>
+          <p class="text-muted" style="margin-bottom:.75rem;font-size:.82rem;">Run focused analyst searches across ingested events and jump into cases, incidents, and agent context.</p>
+          <div class="workspace-toolbar">
+            <input type="text" id="inv-search-text" placeholder="Reason or free text" style="flex:1;min-width:180px;background:var(--bg-alt);color:var(--ink);border:1px solid var(--border);border-radius:6px;padding:.4rem .55rem;">
+            <input type="text" id="inv-search-host" placeholder="Hostname" style="width:140px;background:var(--bg-alt);color:var(--ink);border:1px solid var(--border);border-radius:6px;padding:.4rem .55rem;">
+            <input type="text" id="inv-search-agent" placeholder="Agent ID" style="width:140px;background:var(--bg-alt);color:var(--ink);border:1px solid var(--border);border-radius:6px;padding:.4rem .55rem;">
+            <select id="inv-search-level" style="min-width:130px;background:var(--bg-alt);color:var(--ink);border:1px solid var(--border);border-radius:6px;padding:.4rem .55rem;">
+              <option value="">All levels</option>
+              <option value="critical">Critical</option>
+              <option value="severe">Severe</option>
+              <option value="elevated">Elevated</option>
+            </select>
+            <button class="btn btn-sm primary" id="btn-inv-search">Search</button>
+          </div>
+          <div id="inv-search-results" class="summary-list"><div class="workspace-empty">Search results will appear here.</div></div>
+        </div>
+        <div class="card">
+          <h2><span class="dot dot-purple"></span> Asset Timeline &amp; Graph</h2>
+          <p class="text-muted" style="margin-bottom:.75rem;font-size:.82rem;">Investigate by host or agent timeline, then build a relationship view from selected event IDs.</p>
+          <div class="workspace-toolbar">
+            <input type="text" id="asset-timeline-host" placeholder="Hostname" style="width:150px;background:var(--bg-alt);color:var(--ink);border:1px solid var(--border);border-radius:6px;padding:.4rem .55rem;">
+            <button class="btn btn-sm" id="btn-host-timeline">Host Timeline</button>
+            <input type="text" id="asset-timeline-agent" placeholder="Agent ID" style="width:150px;background:var(--bg-alt);color:var(--ink);border:1px solid var(--border);border-radius:6px;padding:.4rem .55rem;">
+            <button class="btn btn-sm" id="btn-agent-timeline">Agent Timeline</button>
+          </div>
+          <div id="asset-timeline-results" class="summary-list" style="margin-bottom:.75rem;"><div class="workspace-empty">Load a host or agent timeline to review event progression.</div></div>
+          <div class="workspace-toolbar">
+            <input type="text" id="investigation-event-ids" placeholder="Event IDs (comma-separated)" style="flex:1;min-width:220px;background:var(--bg-alt);color:var(--ink);border:1px solid var(--border);border-radius:6px;padding:.4rem .55rem;">
+            <button class="btn btn-sm primary" id="btn-investigation-graph">Build Graph</button>
+          </div>
+          <div id="investigation-graph-results" class="summary-list"><div class="workspace-empty">The investigation graph summary will describe linked nodes and edges here.</div></div>
+        </div>
+      </div>
+
       <!-- Process Tree Visualization -->
       <div class="card mt-1">
         <h2><span class="dot dot-teal"></span> Process Tree</h2>
@@ -1476,7 +1693,7 @@ body.light .modal-box{background:#ffffff;}
         <h2><span class="dot dot-purple"></span> Investigation Timeline</h2>
         <p style="color:var(--ink-2);font-size:.85rem;margin-bottom:.75rem;">Chronological storyline of security events for the selected incident.</p>
         <div class="btn-row" style="margin-bottom:.75rem;">
-          <input type="text" id="timeline-incident-id" placeholder="Incident ID..." style="width:160px;background:var(--bg-alt);color:var(--ink);border:1px solid var(--border);border-radius:6px;padding:.4rem .55rem;">
+          <input type="text" id="timeline-incident-id" inputmode="numeric" pattern="[0-9]+" placeholder="Incident ID..." style="width:160px;background:var(--bg-alt);color:var(--ink);border:1px solid var(--border);border-radius:6px;padding:.4rem .55rem;">
           <button class="btn btn-sm primary" id="btn-timeline-load">Load Timeline</button>
           <button class="btn btn-sm" id="btn-timeline-export">Export Evidence</button>
         </div>
@@ -1484,6 +1701,46 @@ body.light .modal-box{background:#ffffff;}
           <div id="timeline-entries" style="border-left:3px solid var(--accent);margin-left:1rem;padding-left:1.5rem;">
             <div class="text-muted" style="padding:.5rem 0;">Select an incident to view its investigation timeline.</div>
           </div>
+        </div>
+      </div>
+
+      <div class="card-grid cols-2 mt-1">
+        <div class="card">
+          <h2><span class="dot dot-green"></span> Entity Pivot &amp; Enrichment</h2>
+          <p class="text-muted" style="margin-bottom:.75rem;font-size:.82rem;">Pivot across host, user, process, IP, domain, or hash entities and review linked events, tickets, response actions, and enrichment sources.</p>
+          <div class="workspace-toolbar">
+            <select id="entity-kind" style="min-width:120px;background:var(--bg-alt);color:var(--ink);border:1px solid var(--border);border-radius:6px;padding:.4rem .55rem;">
+              <option value="host">Host</option>
+              <option value="user">User</option>
+              <option value="account">Account</option>
+              <option value="process">Process</option>
+              <option value="ip">IP</option>
+              <option value="domain">Domain</option>
+              <option value="hash">Hash</option>
+            </select>
+            <input type="text" id="entity-id" placeholder="Entity value" style="flex:1;min-width:180px;background:var(--bg-alt);color:var(--ink);border:1px solid var(--border);border-radius:6px;padding:.4rem .55rem;">
+            <button class="btn btn-sm primary" id="btn-load-entity">Load Entity</button>
+          </div>
+          <div id="entity-profile-summary" class="summary-list"><div class="workspace-empty">Load an entity to review related events, cases, incidents, enrichments, and synced tickets.</div></div>
+          <div id="entity-timeline-summary" class="timeline-list" style="margin-top:.75rem;"><div class="workspace-empty">Entity timeline entries will appear here.</div></div>
+        </div>
+        <div class="card">
+          <h2><span class="dot dot-blue"></span> Storyline &amp; External Coordination</h2>
+          <p class="text-muted" style="margin-bottom:.75rem;font-size:.82rem;">Turn incidents into readable narratives, evidence packages, and external tickets without leaving the workbench.</p>
+          <div class="workspace-toolbar">
+            <select id="ticket-provider" style="min-width:120px;background:var(--bg-alt);color:var(--ink);border:1px solid var(--border);border-radius:6px;padding:.4rem .55rem;">
+              <option value="jira">Jira</option>
+              <option value="servicenow">ServiceNow</option>
+            </select>
+            <input type="text" id="ticket-project" placeholder="Project / Queue" style="width:150px;background:var(--bg-alt);color:var(--ink);border:1px solid var(--border);border-radius:6px;padding:.4rem .55rem;">
+            <input type="text" id="ticket-summary" placeholder="Ticket summary" style="flex:1;min-width:180px;background:var(--bg-alt);color:var(--ink);border:1px solid var(--border);border-radius:6px;padding:.4rem .55rem;">
+          </div>
+          <div class="btn-row">
+            <button class="btn btn-sm primary" id="btn-load-storyline">Load Storyline</button>
+            <button class="btn btn-sm" id="btn-sync-ticket">Sync Ticket</button>
+            <button class="btn btn-sm" id="btn-export-evidence">Export Evidence</button>
+          </div>
+          <div id="storyline-summary" class="summary-list" style="margin-top:.75rem;"><div class="workspace-empty">Storyline summary and evidence package will appear here when you load an incident.</div></div>
         </div>
       </div>
       </div><!-- end panel-ir-investigation -->
@@ -1496,6 +1753,7 @@ body.light .modal-box{background:#ffffff;}
         <div class="metric-strip">
           <div class="metric-card teal"><div class="metric-label">Auto Actions</div><div class="metric-value" id="resp-auto">0</div></div>
           <div class="metric-card orange"><div class="metric-label">Pending Approval</div><div class="metric-value" id="resp-pending">0</div></div>
+          <div class="metric-card blue"><div class="metric-label">Ready To Execute</div><div class="metric-value" id="resp-ready">0</div></div>
           <div class="metric-card red"><div class="metric-label">Denied</div><div class="metric-value" id="resp-denied">0</div></div>
           <div class="metric-card purple"><div class="metric-label">Protected Assets</div><div class="metric-value" id="resp-protected">0</div></div>
         </div>
@@ -1507,7 +1765,14 @@ body.light .modal-box{background:#ffffff;}
         </div>
         <div class="btn-row mt-1">
           <button class="btn btn-sm" id="btn-resp-refresh">Refresh</button>
+          <button class="btn btn-sm primary" id="btn-resp-execute">Execute Approved</button>
         </div>
+      </div>
+
+      <div class="card mt-1">
+        <h2><span class="dot dot-purple"></span> Approval History</h2>
+        <p class="text-muted" style="margin-bottom:.75rem;font-size:.82rem;">Track who approved or denied actions, spot expired requests, and keep dry-run output visibly separate from executable actions.</p>
+        <div id="resp-approval-history" class="summary-list"><div class="workspace-empty">Approval history will appear after response data is loaded.</div></div>
       </div>
 
       <div class="card mt-1">
@@ -1589,7 +1854,30 @@ body.light .modal-box{background:#ffffff;}
     <div class="section" id="sec-reports-exports">
       <div class="section-header">
         <h1>Reports &amp; Exports</h1>
-        <p>View detection reports, executive summary, analyze custom data files, and export formal verification artifacts.</p>
+        <p>Manager-facing operational summaries, detection reporting, custom analysis, and export-ready artifacts.</p>
+      </div>
+
+      <div class="card mb-1">
+        <h2><span class="dot dot-blue"></span> Manager Operational Summary</h2>
+        <div class="metric-strip" style="margin-bottom:1rem;">
+          <div class="metric-card teal"><div class="metric-label">Fleet Coverage</div><div class="metric-value" id="mgr-report-coverage">0%</div></div>
+          <div class="metric-card red"><div class="metric-label">SLA Breaches</div><div class="metric-value" id="mgr-report-sla">0</div></div>
+          <div class="metric-card orange"><div class="metric-label">Pending Deployments</div><div class="metric-value" id="mgr-report-deployments">0</div></div>
+          <div class="metric-card purple"><div class="metric-label">Tenants</div><div class="metric-value" id="mgr-report-tenants">0</div></div>
+        </div>
+        <div class="card-grid cols-2">
+          <div>
+            <h3>Incident Backlog</h3>
+            <div id="mgr-incident-breakdown" class="summary-list"><div class="workspace-empty">Incident backlog breakdown will appear here.</div></div>
+          </div>
+          <div>
+            <h3>Deployment &amp; SIEM Health</h3>
+            <div id="mgr-deployment-breakdown" class="summary-list"><div class="workspace-empty">Deployment and SIEM status will appear here.</div></div>
+          </div>
+        </div>
+        <div class="btn-row mt-1">
+          <button class="btn btn-sm primary" id="btn-refresh-manager-summary">Refresh Summary</button>
+        </div>
       </div>
 
       <div class="card mb-1">
@@ -1887,6 +2175,83 @@ body.light .modal-box{background:#ffffff;}
         </div>
       </div>
 
+      <div class="card" style="margin-top:1rem;">
+        <h2><span class="dot dot-teal"></span> Enterprise Identity &amp; Provisioning</h2>
+        <p class="text-muted" style="margin-bottom:.75rem;font-size:.82rem;">Configure OIDC/SAML providers, SCIM provisioning, and group-to-role mappings for enterprise access control.</p>
+        <div class="card-grid cols-2">
+          <div style="padding:.75rem;border:1px solid var(--border);border-radius:10px;background:var(--bg-alt);">
+            <h3 style="margin-bottom:.5rem;">Identity Provider</h3>
+            <div class="workspace-toolbar">
+              <select id="idp-kind" style="min-width:110px;background:var(--bg);color:var(--ink);border:1px solid var(--border);border-radius:6px;padding:.4rem .55rem;">
+                <option value="oidc">OIDC</option>
+                <option value="saml">SAML</option>
+              </select>
+              <input type="text" id="idp-display-name" placeholder="Display name" style="flex:1;min-width:160px;background:var(--bg);color:var(--ink);border:1px solid var(--border);border-radius:6px;padding:.4rem .55rem;">
+            </div>
+            <div class="workspace-toolbar">
+              <input type="text" id="idp-issuer-url" placeholder="Issuer / Metadata URL" style="flex:1;min-width:200px;background:var(--bg);color:var(--ink);border:1px solid var(--border);border-radius:6px;padding:.4rem .55rem;">
+              <input type="text" id="idp-client-id" placeholder="Client ID / Entity ID" style="flex:1;min-width:160px;background:var(--bg);color:var(--ink);border:1px solid var(--border);border-radius:6px;padding:.4rem .55rem;">
+            </div>
+            <label for="idp-group-mappings" style="font-size:.78rem;color:var(--ink-2);display:block;margin-bottom:.2rem;">Group mappings (<code>group=role</code>)</label>
+            <textarea id="idp-group-mappings" rows="4" placeholder="soc-admins=admin&#10;soc-analysts=analyst" style="width:100%;padding:.4rem .55rem;background:var(--bg);color:var(--ink);border:1px solid var(--border);border-radius:6px;resize:vertical;"></textarea>
+            <div class="btn-row mt-1">
+              <button class="btn btn-sm primary" id="btn-save-idp">Save Provider</button>
+            </div>
+            <div id="idp-provider-list" class="summary-list" style="margin-top:.75rem;"><div class="workspace-empty">Configured identity providers will appear here.</div></div>
+          </div>
+          <div style="padding:.75rem;border:1px solid var(--border);border-radius:10px;background:var(--bg-alt);">
+            <h3 style="margin-bottom:.5rem;">SCIM Provisioning</h3>
+            <div class="toggle-row" style="margin-bottom:.5rem;"><input type="checkbox" id="scim-enabled"><span>Enable SCIM provisioning</span></div>
+            <input type="text" id="scim-base-url" placeholder="SCIM base URL" style="width:100%;margin-bottom:.5rem;padding:.4rem .55rem;background:var(--bg);color:var(--ink);border:1px solid var(--border);border-radius:6px;">
+            <div class="workspace-toolbar">
+              <select id="scim-mode" style="min-width:140px;background:var(--bg);color:var(--ink);border:1px solid var(--border);border-radius:6px;padding:.4rem .55rem;">
+                <option value="automatic">Automatic</option>
+                <option value="manual">Manual</option>
+              </select>
+              <select id="scim-default-role" style="min-width:120px;background:var(--bg);color:var(--ink);border:1px solid var(--border);border-radius:6px;padding:.4rem .55rem;">
+                <option value="viewer">Viewer</option>
+                <option value="analyst">Analyst</option>
+                <option value="admin">Admin</option>
+              </select>
+            </div>
+            <label for="scim-group-mappings" style="font-size:.78rem;color:var(--ink-2);display:block;margin:.5rem 0 .2rem;">Group mappings (<code>group=role</code>)</label>
+            <textarea id="scim-group-mappings" rows="4" placeholder="soc-admins=admin" style="width:100%;padding:.4rem .55rem;background:var(--bg);color:var(--ink);border:1px solid var(--border);border-radius:6px;resize:vertical;"></textarea>
+            <div class="btn-row mt-1">
+              <button class="btn btn-sm" id="btn-save-scim">Save SCIM</button>
+            </div>
+            <div id="scim-status-summary" class="summary-list" style="margin-top:.75rem;"><div class="workspace-empty">SCIM status will appear here.</div></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card" style="margin-top:1rem;">
+        <h2><span class="dot dot-purple"></span> Enterprise Integrations &amp; Supportability</h2>
+        <p class="text-muted" style="margin-bottom:.75rem;font-size:.82rem;">Manage enrichment connectors, inspect change control, and review diagnostics and dependency health before production rollout.</p>
+        <div class="card-grid cols-2">
+          <div style="padding:.75rem;border:1px solid var(--border);border-radius:10px;background:var(--bg-alt);">
+            <h3 style="margin-bottom:.5rem;">Enrichment Connectors</h3>
+            <div class="workspace-toolbar">
+              <input type="text" id="connector-kind" placeholder="Kind (geoip, vuln, asset)" style="flex:1;min-width:150px;background:var(--bg);color:var(--ink);border:1px solid var(--border);border-radius:6px;padding:.4rem .55rem;">
+              <input type="text" id="connector-name" placeholder="Display name" style="flex:1;min-width:160px;background:var(--bg);color:var(--ink);border:1px solid var(--border);border-radius:6px;padding:.4rem .55rem;">
+            </div>
+            <div class="workspace-toolbar">
+              <input type="text" id="connector-endpoint" placeholder="Endpoint URL (optional)" style="flex:1;min-width:220px;background:var(--bg);color:var(--ink);border:1px solid var(--border);border-radius:6px;padding:.4rem .55rem;">
+              <input type="number" id="connector-timeout" min="1" value="10" style="width:90px;background:var(--bg);color:var(--ink);border:1px solid var(--border);border-radius:6px;padding:.4rem .55rem;">
+              <button class="btn btn-sm primary" id="btn-save-connector">Save Connector</button>
+            </div>
+            <div id="connector-list" class="summary-list"><div class="workspace-empty">Connectors will appear here.</div></div>
+          </div>
+          <div style="padding:.75rem;border:1px solid var(--border);border-radius:10px;background:var(--bg-alt);">
+            <h3 style="margin-bottom:.5rem;">Diagnostics, Health &amp; Change Control</h3>
+            <div id="support-diag-summary" class="summary-list"><div class="workspace-empty">Diagnostics and dependency health will appear here.</div></div>
+            <div id="admin-change-control-list" class="timeline-list" style="margin-top:.75rem;"><div class="workspace-empty">Recent change-control events will appear here.</div></div>
+            <div class="btn-row mt-1">
+              <button class="btn btn-sm" id="btn-refresh-enterprise-admin">Refresh Enterprise Admin</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
       <div class="card" style="margin-top:1rem;border-left:3px solid var(--danger);">
         <h3 style="color:var(--danger);margin:0 0 .5rem;">Danger Zone</h3>
         <p class="text-muted" style="margin-bottom:.75rem;font-size:.82rem;">These actions are destructive and cannot be undone.</p>
@@ -2147,6 +2512,19 @@ body.light .modal-box{background:#ffffff;}
 
 <!-- ═══ Toast ═══ -->
 <div class="toast" id="toast" role="alert" aria-live="polite"></div>
+<div class="drawer-backdrop" id="workbench-drawer-backdrop"></div>
+<aside class="detail-drawer" id="workbench-drawer" aria-hidden="true">
+  <div class="drawer-header">
+    <div>
+      <h2 id="workbench-drawer-title">Workbench Detail</h2>
+      <div class="drawer-sub" id="workbench-drawer-subtitle">Select a queue item, case, event, incident, or agent to inspect context here.</div>
+    </div>
+    <button class="drawer-close" id="btn-close-workbench-drawer" type="button">Close</button>
+  </div>
+  <div class="drawer-body" id="workbench-drawer-body">
+    <div class="workspace-empty">Detail context will appear here as you move through the workbench.</div>
+  </div>
+</aside>
 
 <!-- ═══════════════════════════════════════════════════════════════ -->
 <!-- JavaScript                                                      -->
@@ -2169,8 +2547,21 @@ body.light .modal-box{background:#ffffff;}
   let monitoringOptionsData = null;
   let selectedAgentId = null;
   let selectedEventId = null;
+  let selectedCaseId = null;
+  let processTreeCache = [];
+  let selectedProcess = null;
   let fleetAgentsCache = [];
   let xdrReleaseCatalog = [];
+  let workbenchOverviewCache = null;
+  let managerOverviewCache = null;
+  let enterpriseHuntsCache = [];
+  let enterpriseRulesCache = [];
+  let enterpriseSuppressionsCache = [];
+  let enterpriseConnectorsCache = [];
+  let enterpriseStorylineCache = new Map();
+  let caseDetailCache = new Map();
+  let lastQueueData = [];
+  let investigationSearchResults = [];
   let demoMode = false;
   let demoTimer = null;
   const AUTO_REFRESH_BASE = 5000;
@@ -2187,6 +2578,225 @@ body.light .modal-box{background:#ffffff;}
     return div.innerHTML;
   }
   const esc = escapeHtml;
+
+  function safeArray(value) {
+    return Array.isArray(value) ? value : [];
+  }
+
+  function parseMappingLines(raw) {
+    const mappings = {};
+    String(raw || '')
+      .split('\n')
+      .map(line => line.trim())
+      .filter(Boolean)
+      .forEach(line => {
+        const parts = line.split('=');
+        const key = (parts.shift() || '').trim();
+        const value = parts.join('=').trim();
+        if (key && value) mappings[key] = value;
+      });
+    return mappings;
+  }
+
+  function formatMappingLines(value) {
+    if (!value || typeof value !== 'object') return '';
+    return Object.entries(value).map(([key, mapped]) => key + '=' + mapped).join('\n');
+  }
+
+  function titleCaseStatus(value) {
+    return String(value || '')
+      .replace(/_/g, ' ')
+      .replace(/\b\w/g, ch => ch.toUpperCase());
+  }
+
+  function fmtAgeSecs(secs) {
+    if (secs == null || !Number.isFinite(Number(secs))) return '—';
+    const total = Math.max(Number(secs), 0);
+    if (total < 60) return Math.round(total) + 's';
+    if (total < 3600) return Math.floor(total / 60) + 'm';
+    if (total < 86400) return Math.floor(total / 3600) + 'h';
+    return Math.floor(total / 86400) + 'd';
+  }
+
+  function statusPill(label, cls) {
+    return '<span class="status-pill ' + esc(cls || 'nominal') + '">' + esc(label) + '</span>';
+  }
+
+  function activateTab(tabBarId, tabId) {
+    const bar = $('#' + tabBarId);
+    if (!bar) return;
+    const btn = bar.querySelector('[data-tab="' + tabId + '"]');
+    if (btn) btn.click();
+  }
+
+  function openWorkbenchDrawer(title, subtitle, html) {
+    const drawer = $('#workbench-drawer');
+    const backdrop = $('#workbench-drawer-backdrop');
+    $('#workbench-drawer-title').textContent = title || 'Workbench Detail';
+    $('#workbench-drawer-subtitle').textContent = subtitle || '';
+    $('#workbench-drawer-body').innerHTML = html || '<div class="workspace-empty">No detail available.</div>';
+    drawer.classList.add('open');
+    drawer.setAttribute('aria-hidden', 'false');
+    backdrop.classList.add('open');
+  }
+
+  function closeWorkbenchDrawer() {
+    const drawer = $('#workbench-drawer');
+    const backdrop = $('#workbench-drawer-backdrop');
+    drawer.classList.remove('open');
+    drawer.setAttribute('aria-hidden', 'true');
+    backdrop.classList.remove('open');
+  }
+
+  function scopeEnabledCount(scope) {
+    if (!scope || typeof scope !== 'object') return 0;
+    return Object.values(scope).filter(Boolean).length;
+  }
+
+  function responseStatusClass(status) {
+    const value = String(status || '').toLowerCase();
+    if (value === 'pending') return 'elevated';
+    if (value === 'approved') return 'severe';
+    if (value === 'executed') return 'nominal';
+    if (value === 'denied' || value === 'expired') return 'critical';
+    if (value === 'dryruncompleted') return 'nominal';
+    return 'nominal';
+  }
+
+  function renderTimelineSummary(entries, emptyText) {
+    const items = safeArray(entries);
+    if (!items.length) {
+      return '<div class="workspace-empty">' + esc(emptyText || 'No entries available.') + '</div>';
+    }
+    return items.map(item =>
+      '<div class="timeline-item">' +
+        '<div style="display:flex;justify-content:space-between;gap:1rem;align-items:flex-start;">' +
+          '<div><strong>' + esc(item.event_type || item.kind || ('Event #' + (item.event_id || item.id || ''))) + '</strong><div class="text-muted" style="font-size:.74rem;margin-top:.18rem;">' + esc(item.description || item.label || '') + '</div></div>' +
+          '<div>' + statusPill(item.severity || item.level || 'Nominal', String(item.severity || item.level || 'nominal').toLowerCase()) + '</div>' +
+        '</div>' +
+        '<div class="text-muted" style="font-size:.72rem;margin-top:.35rem;">' +
+          esc(item.timestamp || item.received_at || '') +
+          (item.agent_id ? (' • ' + esc(item.agent_id)) : '') +
+          (item.event_id != null ? (' • Event #' + esc(item.event_id)) : '') +
+        '</div>' +
+      '</div>'
+    ).join('');
+  }
+
+  function updateSelectedAgentLabel() {
+    const selected = safeArray(fleetAgentsCache).find(agent => agent.id === selectedAgentId);
+    $('#xdr-selected-agent').textContent = selected
+      ? ('Selected: ' + (selected.hostname || selected.id) + ' (' + selected.id + ')')
+      : 'Select an agent row to inspect or deploy.';
+  }
+
+  function renderAgentActivityInline(snapshot) {
+    const deployment = snapshot.deployment || null;
+    const analytics = snapshot.analytics || {};
+    const health = snapshot.health || {};
+    const inventory = snapshot.inventory || null;
+    const logSummary = snapshot.log_summary || {};
+    const scopeCount = scopeEnabledCount(snapshot.effective_scope);
+    return '<div class="metric-cluster">' +
+      '<div class="metric-tile"><span class="metric-label">Freshness</span><strong>' + esc(fmtAgeSecs(snapshot.heartbeat_age_secs)) + '</strong><span class="text-muted">' + esc(titleCaseStatus(snapshot.computed_status || 'online')) + '</span></div>' +
+      '<div class="metric-tile"><span class="metric-label">Risk</span><strong>' + esc(analytics.risk || 'Nominal') + '</strong><span class="text-muted">' + esc(analytics.event_count || 0) + ' events • ' + esc(analytics.correlated_count || 0) + ' correlated</span></div>' +
+      '<div class="metric-tile"><span class="metric-label">Deployment</span><strong>' + esc((deployment && deployment.status) || (health.update_state || 'idle')) + '</strong><span class="text-muted">' + esc((deployment && deployment.version) || snapshot.agent.version || '—') + '</span></div>' +
+      '<div class="metric-tile"><span class="metric-label">Coverage</span><strong>' + esc(scopeCount) + '</strong><span class="text-muted">signals enabled</span></div>' +
+    '</div>' +
+    '<div class="summary-list" style="margin-top:.75rem;">' +
+      '<div class="summary-row"><div><strong>Queue Pressure</strong><div class="text-muted" style="font-size:.74rem;margin-top:.18rem;">' + esc(health.pending_alerts || 0) + ' pending alerts • queue depth ' + esc(health.telemetry_queue_depth || 0) + '</div></div><div>' + statusPill(titleCaseStatus(snapshot.computed_status || 'online'), String(snapshot.computed_status || 'online').toLowerCase()) + '</div></div>' +
+      '<div class="summary-row"><div><strong>Logs &amp; Inventory</strong><div class="text-muted" style="font-size:.74rem;margin-top:.18rem;">' + esc(logSummary.total_records || 0) + ' logs • ' + esc(inventory ? inventory.software_count : 0) + ' packages • ' + esc(inventory ? inventory.services_count : 0) + ' services</div></div><div>' + esc(inventory && inventory.collected_at ? inventory.collected_at : 'No inventory') + '</div></div>' +
+    '</div>';
+  }
+
+  function renderAgentActivityDetail(snapshot) {
+    const deployment = snapshot.deployment || null;
+    const analytics = snapshot.analytics || {};
+    const health = snapshot.health || {};
+    const inventory = snapshot.inventory || null;
+    const logSummary = snapshot.log_summary || {};
+    return renderAgentActivityInline(snapshot) +
+      '<dl class="kv-grid compact" style="margin-top:.8rem;">' +
+        '<dt>Host</dt><dd>' + esc(snapshot.agent.hostname || '—') + '</dd>' +
+        '<dt>Platform</dt><dd>' + esc(snapshot.agent.platform || '—') + '</dd>' +
+        '<dt>Current Version</dt><dd>' + esc(snapshot.agent.version || '—') + '</dd>' +
+        '<dt>Target Version</dt><dd>' + esc((deployment && deployment.version) || health.update_target_version || '—') + '</dd>' +
+        '<dt>Rollout Group</dt><dd>' + esc((deployment && deployment.rollout_group) || 'direct') + '</dd>' +
+        '<dt>Scope Override</dt><dd>' + esc(snapshot.scope_override ? 'Custom' : 'Server Default') + '</dd>' +
+        '<dt>Critical Events</dt><dd>' + esc(analytics.critical_count || 0) + '</dd>' +
+        '<dt>Average Score</dt><dd>' + Number(analytics.average_score || 0).toFixed(2) + '</dd>' +
+        '<dt>Max Score</dt><dd>' + Number(analytics.max_score || 0).toFixed(2) + '</dd>' +
+        '<dt>Last Log</dt><dd>' + esc(logSummary.last_timestamp || '—') + '</dd>' +
+      '</dl>' +
+      '<div class="card-grid cols-2" style="margin-top:.75rem;">' +
+        '<div><h3 style="margin-bottom:.45rem;">Top Reasons</h3><div class="summary-list">' + (safeArray(analytics.top_reasons).length ? safeArray(analytics.top_reasons).map(reason => '<div class="summary-row"><div><strong>' + esc(reason) + '</strong></div><div>' + statusPill(analytics.risk || 'Nominal', String(analytics.risk || 'nominal').toLowerCase()) + '</div></div>').join('') : '<div class="workspace-empty">No reason distribution available.</div>') + '</div></div>' +
+        '<div><h3 style="margin-bottom:.45rem;">Inventory &amp; Logs</h3><div class="summary-list">' +
+          '<div class="summary-row"><div><strong>Inventory</strong><div class="text-muted" style="font-size:.74rem;margin-top:.18rem;">' + esc(inventory ? inventory.hardware : 'No hardware inventory') + '</div></div><div>' + esc(inventory ? inventory.network_ports : 0) + ' ports</div></div>' +
+          '<div class="summary-row"><div><strong>Log Levels</strong><div class="text-muted" style="font-size:.74rem;margin-top:.18rem;">' + esc(JSON.stringify(logSummary.by_level || {})) + '</div></div><div>' + esc(logSummary.total_records || 0) + '</div></div>' +
+        '</div></div>' +
+      '</div>' +
+      '<h3 style="margin-top:.9rem;">Risk Transitions</h3><div class="timeline-list">' + (safeArray(snapshot.risk_transitions).length ? safeArray(snapshot.risk_transitions).map(item => '<div class="timeline-item"><strong>' + esc(item.from || 'Unknown') + ' → ' + esc(item.to || 'Unknown') + '</strong><div class="text-muted" style="font-size:.72rem;margin-top:.18rem;">' + esc(item.received_at || '') + '</div></div>').join('') : '<div class="workspace-empty">No risk transitions recorded yet.</div>') + '</div>' +
+      '<h3 style="margin-top:.9rem;">Recent Timeline</h3><div class="timeline-list">' + renderTimelineSummary(snapshot.timeline, 'No recent event timeline is available for this agent.') + '</div>';
+  }
+
+  function focusAgentContext(agentId) {
+    if (!agentId) return;
+    selectedAgentId = agentId;
+    switchSection('fleet-agents');
+    activateTab('fleet-tabs', 'fleet-agents');
+    if ($('#xdr-filter-agent')) $('#xdr-filter-agent').value = agentId;
+    updateSelectedAgentLabel();
+    Promise.all([refreshXdr(), refreshAgentDetail(), refreshXdrEvents()]).catch(e => log('Agent context error: ' + e.message));
+  }
+
+  function focusCaseContext(caseId, openDrawer) {
+    if (!caseId) return;
+    selectedCaseId = caseId;
+    switchSection('incident-response');
+    activateTab('ir-tabs', 'ir-cases');
+    refreshCases().then(() => showCaseDetail(caseId, openDrawer !== false)).catch(e => log('Case context error: ' + e.message));
+  }
+
+  function focusIncidentContext(incidentId) {
+    if (!incidentId) return;
+    selectedIncidentId = String(incidentId);
+    switchSection('incident-response');
+    activateTab('ir-tabs', 'ir-incidents');
+    $('#timeline-incident-id').value = String(incidentId);
+    Promise.all([refreshIncidents(), loadTimeline()]).catch(e => log('Incident context error: ' + e.message));
+  }
+
+  function focusResponseContext(requestId) {
+    switchSection('incident-response');
+    activateTab('ir-tabs', 'ir-response');
+    refreshResponseOrchestration().then(() => {
+      if (!requestId) return;
+      const row = document.querySelector('[data-response-row="' + CSS.escape(String(requestId)) + '"]');
+      if (row) row.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    }).catch(e => log('Response context error: ' + e.message));
+  }
+
+  function setInvestigationContextFromEvent(item) {
+    if (!item) return;
+    if (item.hostname) {
+      $('#inv-search-host').value = item.hostname;
+      $('#asset-timeline-host').value = item.hostname;
+      if ($('#entity-kind')) $('#entity-kind').value = 'host';
+      if ($('#entity-id')) $('#entity-id').value = item.hostname;
+    }
+    if (item.agent_id) {
+      $('#inv-search-agent').value = item.agent_id;
+      $('#asset-timeline-agent').value = item.agent_id;
+    }
+    if (item.level) $('#inv-search-level').value = String(item.level).toLowerCase();
+    const graphInput = $('#investigation-event-ids');
+    const current = (graphInput.value || '').split(',').map(part => part.trim()).filter(Boolean);
+    const eventId = String(item.id || item.event_id || '').trim();
+    if (eventId && !current.includes(eventId)) {
+      current.push(eventId);
+      graphInput.value = current.join(', ');
+    }
+  }
 
   function xdrEventQuery() {
     const params = new URLSearchParams();
@@ -2403,11 +3013,25 @@ body.light .modal-box{background:#ffffff;}
 
   // ── Loading Skeleton Helpers (Phase A) ──
   function showSkeleton(container, rows) {
+    if (typeof container === 'string') container = $(container);
+    if (!container) return;
     const n = rows || 3;
+    const tag = container.tagName ? container.tagName.toLowerCase() : '';
+    if (tag === 'table') {
+      let tbody = container.tBodies && container.tBodies[0];
+      if (!tbody) {
+        tbody = document.createElement('tbody');
+        container.appendChild(tbody);
+      }
+      const cols = Math.max(container.querySelectorAll('thead th').length, 1);
+      tbody.innerHTML = Array.from({ length: n }, () =>
+        '<tr><td colspan="' + cols + '"><div class="skeleton skeleton-row"></div></td></tr>'
+      ).join('');
+      return;
+    }
     let html = '';
     for (let i = 0; i < n; i++) html += '<div class="skeleton skeleton-row"></div>';
-    if (typeof container === 'string') container = $(container);
-    if (container) container.innerHTML = html;
+    container.innerHTML = html;
   }
   function showEmptyState(container, icon, title, subtitle, actionText, actionSection) {
     if (typeof container === 'string') container = $(container);
@@ -2472,7 +3096,10 @@ body.light .modal-box{background:#ffffff;}
     if (autoRefreshFailures > 0) { label.textContent = 'Retrying in ' + Math.round(delay / 1000) + 's...'; }
     else { label.textContent = 'Auto-refresh (5s)'; }
     autoRefreshTimer = setTimeout(() => {
-      refreshStatus(); refreshReport();
+      if (isAuthenticated) {
+        refreshStatus();
+        refreshReport();
+      }
       if ($('#auto-refresh').checked) rescheduleAutoRefresh();
     }, delay);
   }
@@ -2480,6 +3107,12 @@ body.light .modal-box{background:#ffffff;}
   function showResumeButton(show) {
     const btn = $('#btn-resume');
     if (btn) btn.style.display = show ? 'inline-block' : 'none';
+  }
+
+  function setDashAgentCount(totalAgents) {
+    const enrolled = Math.max(Number(totalAgents || 0), 0);
+    $('#dash-agents').textContent = String(enrolled + 1);
+    if ($('#dash-agents-sub')) $('#dash-agents-sub').textContent = '1 local + ' + enrolled + ' enrolled';
   }
 
   // ── Navigation ──
@@ -2493,13 +3126,13 @@ body.light .modal-box{background:#ffffff;}
 
     // Auto-load data for each section
     if (sectionId === 'live-monitor') { refreshAlerts(); refreshHealth(); }
-    else if (sectionId === 'threat-detection') { refreshSecurity(); refreshCheckpointCount(); }
+    else if (sectionId === 'threat-detection') { refreshSecurity(); refreshCheckpointCount(); refreshSigma(); refreshDetectionEngineering(); }
     else if (sectionId === 'fleet-agents') { refreshFleet(); refreshXdr(); loadRolloutConfig(); }
     else if (sectionId === 'security-policy') { refreshCompliance(); refreshQuantum(); }
-    else if (sectionId === 'incident-response') { refreshTwin(); refreshAnalysis(); refreshProcessTree(); refreshResponseOrchestration(); }
+    else if (sectionId === 'incident-response') { refreshWorkbenchOverview(); refreshAlertQueue(); refreshCases(); refreshIncidents(); refreshTwin(); refreshAnalysis(); refreshProcessTree(); refreshResponseOrchestration(); }
     else if (sectionId === 'infrastructure') { refreshInfra(); }
-    else if (sectionId === 'reports-exports') { refreshReport(); refreshExecutiveSummary(); }
-    else if (sectionId === 'settings') { loadSettings(); refreshSessionInfo(); refreshRetention(); loadSiemConfig(); }
+    else if (sectionId === 'reports-exports') { refreshReport(); refreshExecutiveSummary(); refreshManagerOverview(); }
+    else if (sectionId === 'settings') { loadSettings(); refreshSessionInfo(); refreshRetention(); loadSiemConfig(); refreshEnterpriseAdmin(); }
     else if (sectionId === 'help-docs') { loadApiEndpoints(); loadResearchTracks(); }
     else if (sectionId === 'dashboard') { refreshDashboard(); }
 
@@ -2557,7 +3190,20 @@ body.light .modal-box{background:#ffffff;}
     refreshHealth();
     refreshTelemetry(true);
     refreshHostInfo();
+    refreshDashAgents();
     refreshDashThreatSummary();
+    refreshWorkbenchOverview();
+    refreshManagerOverview();
+    startAlertPolling();
+  }
+
+  async function refreshDashAgents() {
+    try {
+      const res = await fetch(API + '/api/fleet/dashboard', { headers: authHeaders() });
+      if (!res.ok) return;
+      const data = await res.json();
+      setDashAgentCount(data.fleet?.total_agents ?? 0);
+    } catch(e) { log('Background refresh: ' + e.message); }
   }
 
   async function refreshTelemetry(includeHistory) {
@@ -2656,21 +3302,21 @@ body.light .modal-box{background:#ffffff;}
       if (!res.ok) throw new Error('HTTP ' + res.status);
       const d = await res.json();
       $('#s-updated').textContent = d.updated_at;
+      $('#s-version').textContent = d.version || '—';
       $('#s-backlog').textContent = d.backlog_completed + '/' + d.backlog_total;
       $('#s-phases').textContent = d.completed_phases + '/' + d.total_phases;
       $('#s-commands').textContent = d.cli_commands.length;
       $('#s-implemented').textContent = d.implemented.length;
-      $('#s-partial').textContent = d.partially_wired.length;
-      $('#s-not-built').textContent = d.not_implemented.length;
+      $('#s-roadmap').textContent = (d.partially_wired.length + d.not_implemented.length) + ' tracked';
 
       const partialEl = $('#status-partial-list');
       const notbuiltEl = $('#status-notbuilt-list');
       if (d.partially_wired.length) {
-        partialEl.innerHTML = '<strong style="color:var(--orange);">Partially wired:</strong><ul style="margin:.2rem 0 .5rem 1.2rem;">' +
+        partialEl.innerHTML = '<strong style="color:var(--orange);">Roadmap in progress:</strong><ul style="margin:.2rem 0 .5rem 1.2rem;">' +
           d.partially_wired.map(i => '<li>' + esc(i) + '</li>').join('') + '</ul>';
       } else { partialEl.innerHTML = ''; }
       if (d.not_implemented.length) {
-        notbuiltEl.innerHTML = '<strong style="color:var(--ink-3);">Not implemented:</strong><ul style="margin:.2rem 0 .5rem 1.2rem;">' +
+        notbuiltEl.innerHTML = '<strong style="color:var(--ink-3);">Planned roadmap items:</strong><ul style="margin:.2rem 0 .5rem 1.2rem;">' +
           d.not_implemented.map(i => '<li>' + esc(i) + '</li>').join('') + '</ul>';
       } else { notbuiltEl.innerHTML = ''; }
 
@@ -2894,11 +3540,54 @@ body.light .modal-box{background:#ffffff;}
     try {
       const res = await fetch(API + '/api/fleet/register', { method: 'POST', headers: authHeaders('application/json'), body: JSON.stringify({ device_id: deviceId }) });
       if (!res.ok) throw new Error('HTTP ' + res.status);
-      flash('Device registered: ' + deviceId, 'success'); log('Registered device: ' + deviceId); $('#reg-device-id').value = ''; refreshFleet();
+      flash('Device registered: ' + deviceId, 'success');
+      log('Registered device: ' + deviceId);
+      $('#reg-device-id').value = '';
+      await Promise.all([refreshFleet(), refreshXdr()]);
     } catch(e) { flash('Register failed: ' + e.message, 'error'); }
   }
 
   // ── XDR Dashboard ──
+  function renderXdrAgentTable(agents) {
+    const tblEl = $('#xdr-agent-table');
+    const filterSelect = $('#xdr-filter-agent');
+    const items = safeArray(agents);
+    filterSelect.innerHTML = '<option value="">All agents</option>' + items.map(agent =>
+      '<option value="' + esc(agent.id) + '"' + (selectedAgentId === agent.id ? ' selected' : '') + '>' + esc(agent.hostname || agent.id) + '</option>'
+    ).join('');
+    if (!items.length) {
+      tblEl.innerHTML = '<em class="text-muted">No agents enrolled</em>';
+      selectedAgentId = null;
+      updateSelectedAgentLabel();
+      return;
+    }
+    if (!selectedAgentId || !items.some(agent => agent.id === selectedAgentId)) {
+      selectedAgentId = items[0].id;
+    }
+    tblEl.innerHTML = '<table class="data-table dense-table"><tr><th>Endpoint</th><th>Status</th><th>Freshness</th><th>Version</th><th>Rollout</th><th>Deployment</th></tr>' +
+      items.map(agent => {
+        const selected = selectedAgentId === agent.id;
+        return '<tr class="alert-row" data-agent-row="' + esc(agent.id) + '"' + (selected ? ' style="background:var(--accent-light);"' : '') + '>' +
+          '<td><strong>' + esc(agent.hostname || agent.id) + '</strong><div class="text-muted" style="font-size:.72rem;margin-top:.18rem;">' + esc(agent.id || '') + ' • ' + esc(agent.platform || 'unknown') + '</div></td>' +
+          '<td>' + statusPill(titleCaseStatus(agent.status || 'unknown'), String(agent.status || 'unknown').toLowerCase()) + '<div class="text-muted" style="font-size:.72rem;margin-top:.18rem;">' + esc(agent.pending_alerts || 0) + ' pending alerts</div></td>' +
+          '<td>' + esc(fmtAgeSecs(agent.last_seen_age_secs)) + '<div class="text-muted" style="font-size:.72rem;margin-top:.18rem;">telemetry queue ' + esc(agent.telemetry_queue_depth || 0) + '</div></td>' +
+          '<td><strong>' + esc(agent.current_version || agent.version || '—') + '</strong><div class="text-muted" style="font-size:.72rem;margin-top:.18rem;">target ' + esc(agent.target_version || '—') + '</div></td>' +
+          '<td>' + esc(agent.rollout_group || 'direct') + '<div class="text-muted" style="font-size:.72rem;margin-top:.18rem;">scope ' + (agent.scope_override ? 'override' : 'default') + '</div></td>' +
+          '<td>' + statusPill(titleCaseStatus(agent.deployment_status || 'idle'), String(agent.deployment_status || 'nominal').toLowerCase()) + '</td>' +
+        '</tr>';
+      }).join('') +
+    '</table>';
+    tblEl.querySelectorAll('[data-agent-row]').forEach(row => {
+      row.addEventListener('click', () => {
+        selectedAgentId = row.dataset.agentRow;
+        updateSelectedAgentLabel();
+        refreshAgentDetail();
+        refreshXdrEvents();
+      });
+    });
+    updateSelectedAgentLabel();
+  }
+
   async function refreshXdr() {
     try {
       const [dashRes, agentsRes, policyHistoryRes] = await Promise.all([
@@ -2909,6 +3598,7 @@ body.light .modal-box{background:#ffffff;}
       if (dashRes.ok) {
         const d = await dashRes.json();
         const analytics = d.events?.analytics || {};
+        setDashAgentCount(d.fleet?.total_agents ?? 0);
         $('#xdr-agents').textContent = d.fleet?.total_agents ?? '—';
         $('#xdr-online').textContent = d.fleet?.status_counts?.online ?? '0';
         $('#xdr-stale').textContent = d.fleet?.status_counts?.stale ?? '0';
@@ -2925,94 +3615,49 @@ body.light .modal-box{background:#ffffff;}
         $('#xdr-pulled').textContent = d.siem?.total_pulled ?? '0';
         xdrReleaseCatalog = d.updates?.release_catalog || [];
         const releaseSelect = $('#xdr-release-select');
-        if (xdrReleaseCatalog.length > 0) {
-          releaseSelect.innerHTML = xdrReleaseCatalog.map(release =>
+        releaseSelect.innerHTML = xdrReleaseCatalog.length > 0
+          ? xdrReleaseCatalog.map(release =>
             '<option value="' + esc(release.version) + '|' + esc(release.platform) + '">v' + esc(release.version) + ' (' + esc(release.platform) + ')</option>'
-          ).join('');
-        } else {
-          releaseSelect.innerHTML = '<option value="">No published releases</option>';
-        }
+          ).join('')
+          : '<option value="">No published releases</option>';
         const deployments = d.updates?.active_deployments || d.updates?.deployments || [];
-        if (deployments.length > 0) {
-          $('#xdr-deploy-status').innerHTML = deployments.slice(0, 3).map(item =>
-            'Agent ' + esc(item.agent_id) + ': v' + esc(item.version) + ' [' + esc(item.status || 'assigned') + '] · ' + esc(item.rollout_group || 'direct')
-          ).join('<br>');
-        } else {
-          $('#xdr-deploy-status').textContent = 'Pending deployments: ' + (d.updates?.pending_deployments ?? 0);
-        }
+        $('#xdr-deploy-status').innerHTML = deployments.length > 0
+          ? deployments.slice(0, 4).map(item =>
+            '<div class="summary-row"><div><strong>' + esc(item.agent_id) + '</strong><div class="text-muted" style="font-size:.72rem;margin-top:.18rem;">v' + esc(item.version) + ' • ' + esc(item.rollout_group || 'direct') + '</div></div><div>' + statusPill(titleCaseStatus(item.status || 'assigned'), String(item.status || 'assigned').toLowerCase()) + '</div></div>'
+          ).join('')
+          : 'Pending deployments: ' + (d.updates?.pending_deployments ?? 0);
         $('#xdr-correlation-rate').textContent = typeof analytics.correlation_rate === 'number' ? (analytics.correlation_rate * 100).toFixed(1) + '%' : '0%';
         $('#xdr-critical-events').textContent = analytics.severity_counts?.critical ?? '0';
         $('#xdr-severe-events').textContent = analytics.severity_counts?.severe ?? '0';
         $('#xdr-elevated-events').textContent = analytics.severity_counts?.elevated ?? '0';
-        const corrEl = $('#xdr-correlation-list');
-        if (d.events?.correlations?.length > 0) {
-          corrEl.innerHTML = d.events.correlations.map(c =>
+        $('#xdr-correlation-list').innerHTML = d.events?.correlations?.length
+          ? d.events.correlations.map(c =>
             '<div style="padding:.3rem 0;border-bottom:1px solid var(--border);"><strong>' + esc(c.reason) + '</strong> — ' + c.agents.length + ' agents, severity: ' + esc(c.severity) + '</div>'
-          ).join('');
-        } else { corrEl.innerHTML = '<em class="text-muted">No correlations detected</em>'; }
-        const topReasonsEl = $('#xdr-top-reasons');
-        if (analytics.top_reasons?.length > 0) {
-          topReasonsEl.innerHTML = analytics.top_reasons.map(item =>
+          ).join('')
+          : '<em class="text-muted">No correlations detected</em>';
+        $('#xdr-top-reasons').innerHTML = analytics.top_reasons?.length
+          ? analytics.top_reasons.map(item =>
             '<div style="display:flex;justify-content:space-between;gap:.8rem;padding:.25rem 0;border-bottom:1px solid var(--border);"><span>' + esc(item.reason) + '</span><strong>' + esc(item.count) + '</strong></div>'
-          ).join('');
-        } else {
-          topReasonsEl.innerHTML = '<em class="text-muted">No event analytics yet</em>';
-        }
-        const hotAgentsEl = $('#xdr-hot-agents');
-        if (analytics.hot_agents?.length > 0) {
-          hotAgentsEl.innerHTML = analytics.hot_agents.map(agent =>
-            '<div style="padding:.35rem 0;border-bottom:1px solid var(--border);">' +
-              '<strong>' + esc(agent.agent_id) + '</strong> — ' + esc(agent.risk) +
-              ' (events: ' + esc(agent.event_count) + ', correlated: ' + esc(agent.correlated_count) + ', max score: ' + Number(agent.max_score || 0).toFixed(2) + ')' +
-            '</div>'
-          ).join('');
-        } else {
-          hotAgentsEl.innerHTML = '<em class="text-muted">No agent risk data yet</em>';
-        }
+          ).join('')
+          : '<em class="text-muted">No event analytics yet</em>';
+        $('#xdr-hot-agents').innerHTML = analytics.hot_agents?.length
+          ? analytics.hot_agents.map(agent =>
+            '<div class="summary-row"><div><strong>' + esc(agent.hostname || agent.agent_id) + '</strong><div class="text-muted" style="font-size:.74rem;margin-top:.18rem;">' + esc(agent.agent_id) + ' • ' + esc(agent.event_count) + ' events • ' + esc(agent.correlated_count) + ' correlated</div></div><div>' + statusPill(agent.risk || 'Nominal', String(agent.risk || 'nominal').toLowerCase()) + '</div></div>'
+          ).join('')
+          : '<em class="text-muted">No agent risk data yet</em>';
       }
       if (agentsRes.ok) {
         const agents = await agentsRes.json();
-        fleetAgentsCache = agents;
-        const tblEl = $('#xdr-agent-table');
-        const filterSelect = $('#xdr-filter-agent');
-        filterSelect.innerHTML = '<option value="">All agents</option>' + agents.map(a =>
-          '<option value="' + esc(a.id) + '" ' + (selectedAgentId === a.id ? 'selected' : '') + '>' + esc(a.hostname || a.id) + '</option>'
-        ).join('');
-        if (agents.length > 0) {
-          if (!selectedAgentId || !agents.some(agent => agent.id === selectedAgentId)) selectedAgentId = agents[0].id;
-          let html = '<table class="data-table"><tr><th>ID</th><th>Host</th><th>Platform</th><th>Status</th><th>Version</th></tr>';
-          agents.forEach(a => {
-            const sc = a.status === 'online' ? 'var(--accent)' : a.status === 'stale' ? 'var(--orange)' : 'var(--red)';
-            const rowStyle = selectedAgentId === a.id ? ' style="background:var(--accent-light);"' : '';
-            html += '<tr class="alert-row" data-agent-row="' + esc(a.id) + '"' + rowStyle + '><td style="font-family:var(--mono);">' + esc(a.id?.substring(0,8) ?? '') + '...</td><td>' + esc(a.hostname ?? '') + '</td><td>' + esc(a.platform ?? '') + '</td><td><span style="color:' + sc + ';">&#9679;</span> ' + esc(a.status ?? '') + '</td><td>' + esc(a.version ?? '') + '</td></tr>';
-          });
-          html += '</table>';
-          tblEl.innerHTML = html;
-          $$('[data-agent-row]').forEach(row => {
-            row.addEventListener('click', () => {
-              selectedAgentId = row.dataset.agentRow;
-              const selected = fleetAgentsCache.find(agent => agent.id === selectedAgentId);
-              $('#xdr-selected-agent').textContent = selected ? ('Selected: ' + selected.hostname + ' (' + selected.id + ')') : 'Select an agent row to inspect or deploy.';
-              refreshXdr();
-              refreshAgentDetail();
-            });
-          });
-          const selected = fleetAgentsCache.find(agent => agent.id === selectedAgentId);
-          $('#xdr-selected-agent').textContent = selected ? ('Selected: ' + selected.hostname + ' (' + selected.id + ')') : 'Select an agent row to inspect or deploy.';
-        } else { tblEl.innerHTML = '<em class="text-muted">No agents enrolled</em>'; }
+        fleetAgentsCache = Array.isArray(agents) ? agents : [];
+        renderXdrAgentTable(fleetAgentsCache);
       }
       if (policyHistoryRes.ok) {
         const history = await policyHistoryRes.json();
-        const historyEl = $('#xdr-policy-history');
-        if (history.length > 0) {
-          historyEl.innerHTML = history.slice().reverse().map(policy =>
-            '<div style="padding:.3rem 0;border-bottom:1px solid var(--border);">v' + esc(policy.version) +
-            ' — threshold ' + esc(policy.alert_threshold ?? '—') +
-            ', interval ' + esc(policy.interval_secs ?? '—') + 's</div>'
-          ).join('');
-        } else {
-          historyEl.innerHTML = '<em class="text-muted">No published policy history</em>';
-        }
+        $('#xdr-policy-history').innerHTML = history.length > 0
+          ? history.slice().reverse().map(policy =>
+            '<div style="padding:.3rem 0;border-bottom:1px solid var(--border);">v' + esc(policy.version) + ' — threshold ' + esc(policy.alert_threshold ?? '—') + ', interval ' + esc(policy.interval_secs ?? '—') + 's</div>'
+          ).join('')
+          : '<em class="text-muted">No published policy history</em>';
       }
       await Promise.all([refreshAgentDetail(), refreshXdrEvents()]);
       log('XDR dashboard refreshed');
@@ -3035,60 +3680,29 @@ body.light .modal-box{background:#ffffff;}
 
   async function refreshAgentDetail() {
     const detailEl = $('#xdr-agent-detail');
+    const inlineEl = $('#xdr-agent-activity-inline');
     if (!selectedAgentId) {
-      detailEl.innerHTML = '<em class="text-muted">Select an agent to inspect recent risk transitions and event history.</em>';
+      const empty = '<em class="text-muted">Select an agent to inspect heartbeat freshness, deployment state, and recent telemetry.</em>';
+      detailEl.innerHTML = empty;
+      inlineEl.innerHTML = empty;
+      loadAgentScope();
       return;
     }
     try {
-      const res = await fetch(API + '/api/agents/' + encodeURIComponent(selectedAgentId) + '/details', { headers: authHeaders() });
+      const res = await fetch(API + '/api/agents/' + encodeURIComponent(selectedAgentId) + '/activity', { headers: authHeaders() });
       if (!res.ok) throw new Error('HTTP ' + res.status);
       const data = await res.json();
-      const timeline = data.timeline?.length ? data.timeline.map(item =>
-        '<div style="padding:.35rem 0;border-bottom:1px solid var(--border);">' +
-        '<strong>' + esc(item.level) + '</strong> score ' + Number(item.score || 0).toFixed(2) +
-        ' at ' + esc(item.received_at) +
-        '<br><span style="color:var(--ink-3);">' + esc((item.reasons || []).join(', ') || 'no reasons') + '</span>' +
-        '<br><span class="text-muted">Triage: ' + esc(item.triage?.status || 'new') + (item.triage?.assignee ? (' · ' + esc(item.triage.assignee)) : '') + '</span></div>'
-      ).join('') : '<em class="text-muted">No recent events for this agent</em>';
-      const transitions = data.risk_transitions?.length ? data.risk_transitions.map(item =>
-        '<div style="padding:.25rem 0;border-bottom:1px solid var(--border);">' + esc(item.from) + ' → ' + esc(item.to) + ' at ' + esc(item.received_at) + '</div>'
-      ).join('') : '<em class="text-muted">No risk transitions recorded yet</em>';
-      detailEl.innerHTML =
-        '<dl class="kv-grid">' +
-          '<dt>Host</dt><dd>' + esc(data.agent?.hostname || '—') + '</dd>' +
-          '<dt>Status</dt><dd>' + esc(data.agent?.status || '—') + '</dd>' +
-          '<dt>Platform</dt><dd>' + esc(data.agent?.platform || '—') + '</dd>' +
-          '<dt>Version</dt><dd>' + esc(data.agent?.version || '—') + '</dd>' +
-          '<dt>Risk</dt><dd>' + esc(data.analytics?.risk || 'Nominal') + '</dd>' +
-          '<dt>Last Seen</dt><dd>' + esc(data.agent?.last_seen || '—') + '</dd>' +
-          '<dt>Events</dt><dd>' + esc(data.analytics?.event_count ?? 0) + '</dd>' +
-          '<dt>Correlated</dt><dd>' + esc(data.analytics?.correlated_count ?? 0) + '</dd>' +
-          '<dt>Queued Alerts</dt><dd>' + esc(data.health?.pending_alerts ?? 0) + '</dd>' +
-          '<dt>Queue Depth</dt><dd>' + esc(data.health?.telemetry_queue_depth ?? 0) + '</dd>' +
-          '<dt>Update State</dt><dd>' + esc(data.health?.update_state || 'idle') + '</dd>' +
-        '</dl>' +
-        '<h3 style="margin-top:.9rem;">Deployment</h3>' +
-        (data.deployment ?
-          '<div style="padding:.45rem 0;border-bottom:1px solid var(--border);">Assigned v' + esc(data.deployment.version) + ' (' + esc(data.deployment.platform) + ') at ' + esc(data.deployment.assigned_at) +
-          '<br>Status: <strong>' + esc(data.deployment.status || 'assigned') + '</strong>' +
-          '<br>Rollout: ' + esc(data.deployment.rollout_group || 'direct') +
-          (data.deployment.allow_downgrade ? '<br>Rollback allowed' : '<br>Rollback blocked') +
-          (data.deployment.status_reason ? '<br>Reason: ' + esc(data.deployment.status_reason) : '') +
-          (data.deployment.acknowledged_at ? '<br>Acknowledged: ' + esc(data.deployment.acknowledged_at) : '') +
-          (data.deployment.completed_at ? '<br>Completed: ' + esc(data.deployment.completed_at) : '') +
-          '</div>' :
-          '<div class="text-muted">No pending deployment</div>') +
-        '<h3 style="margin-top:.9rem;">Risk Transitions</h3>' + transitions +
-        '<h3 style="margin-top:.9rem;">Recent Timeline</h3>' + timeline;
-      // Show/hide rollback & cancel buttons based on deployment status
+      detailEl.innerHTML = renderAgentActivityDetail(data);
+      inlineEl.innerHTML = renderAgentActivityInline(data);
       const hasDeployment = !!data.deployment;
-      const isTerminal = hasDeployment && ['applied', 'cancelled', 'failed', 'error', 'rollback_pending'].includes(data.deployment.status);
+      const isTerminal = hasDeployment && ['applied', 'cancelled', 'failed', 'error', 'rollback_pending'].includes(String(data.deployment.status || ''));
       $('#btn-rollback-update').style.display = hasDeployment ? '' : 'none';
       $('#btn-cancel-update').style.display = (hasDeployment && !isTerminal) ? '' : 'none';
-      // Load agent monitoring scope
       loadAgentScope();
     } catch(e) {
-      detailEl.innerHTML = '<em class="text-muted">Failed to load agent detail: ' + esc(e.message) + '</em>';
+      const error = '<em class="text-muted">Failed to load agent detail: ' + esc(e.message) + '</em>';
+      detailEl.innerHTML = error;
+      inlineEl.innerHTML = error;
     }
   }
 
@@ -3619,8 +4233,6 @@ body.light .modal-box{background:#ffffff;}
 
   // ── Alerts ──
   async function refreshAlerts() {
-    const alertTable = $('#alert-table');
-    if (alertTable && !alertTable.querySelector('.data-table')) showSkeleton(alertTable, 4);
     try {
       const [alertsRes, countRes] = await Promise.all([
         fetch(API + '/api/alerts', { headers: authHeaders() }),
@@ -3910,7 +4522,7 @@ body.light .modal-box{background:#ffffff;}
       if (queueRes && queueRes.ok) {
         const st = await queueRes.json();
         $('#dash-queue-pending').textContent = st.pending ?? '—';
-        $('#dash-queue-unacked').textContent = (st.pending ?? 0) - (st.acknowledged ?? 0);
+        $('#dash-queue-unacked').textContent = st.unacknowledged ?? st.pending ?? '—';
       }
       if (incRes && incRes.ok) {
         const incs = await incRes.json();
@@ -3920,7 +4532,7 @@ body.light .modal-box{background:#ffffff;}
       }
       if (respRes && respRes.ok) {
         const rs = await respRes.json();
-        $('#dash-pending-response').textContent = rs.pending ?? '—';
+        $('#dash-pending-response').textContent = rs.pending_approval ?? rs.pending ?? '—';
       }
       if (detRes && detRes.ok) {
         const det = await detRes.json();
@@ -3931,6 +4543,95 @@ body.light .modal-box{background:#ffffff;}
         $('#dash-ioc-count').textContent = ti.ioc_count ?? ti.total ?? '—';
       }
     } catch(e) { log('Threat summary refresh error: ' + e.message); }
+  }
+
+  function renderSummaryList(container, items, emptyText, renderer) {
+    if (!container) return;
+    const list = safeArray(items);
+    if (!list.length) {
+      container.innerHTML = '<div class="workspace-empty">' + esc(emptyText) + '</div>';
+      return;
+    }
+    container.innerHTML = list.map(renderer).join('');
+  }
+
+  async function refreshWorkbenchOverview() {
+    try {
+      const res = await apiFetch('/api/workbench/overview');
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      const data = await res.json();
+      workbenchOverviewCache = data;
+      const queueItems = safeArray(data.queue?.items);
+      const criticalQueue = queueItems.filter(item => String(item.severity || '').toLowerCase() === 'critical').length;
+      $('#soc-now-critical').textContent = String(criticalQueue);
+      $('#soc-now-critical-sub').textContent = queueItems[0] ? (queueItems[0].hostname + ' • ' + (queueItems[0].reasons || []).join(', ')) : 'Pending triage';
+      $('#soc-now-breached').textContent = String(data.queue?.sla_breached || 0);
+      $('#soc-now-ready').textContent = String(data.response?.ready_to_execute || 0);
+      $('#soc-now-cases').textContent = String(data.cases?.active || data.cases?.open || 0);
+
+      renderSummaryList($('#soc-now-urgent-list'), data.urgent_items, 'Urgent work will appear here as queue pressure, incident escalation, and response actions build.', item =>
+        '<div class="summary-row">' +
+          '<div><strong>' + esc(item.title || item.kind || 'Work item') + '</strong><div class="text-muted" style="font-size:.75rem;margin-top:.18rem;">' + esc(item.subtitle || '') + '</div></div>' +
+          '<div>' + statusPill(item.severity || 'Nominal', String(item.severity || 'nominal').toLowerCase()) + '</div>' +
+        '</div>'
+      );
+
+      renderSummaryList($('#queue-pressure-summary'), data.urgent_items, 'Queue pressure and urgent work will populate when the workbench overview is refreshed.', item =>
+        '<div class="summary-row">' +
+          '<div><strong>' + esc(item.title || item.kind || 'Work item') + '</strong><div class="text-muted" style="font-size:.75rem;margin-top:.18rem;">' + esc(item.subtitle || '') + '</div></div>' +
+          '<div>' + statusPill(item.severity || 'Nominal', String(item.severity || 'nominal').toLowerCase()) + '</div>' +
+        '</div>'
+      );
+    } catch (e) {
+      log('Workbench overview refresh error: ' + e.message);
+    }
+  }
+
+  async function refreshManagerOverview() {
+    try {
+      const res = await apiFetch('/api/manager/overview');
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      const data = await res.json();
+      managerOverviewCache = data;
+      $('#mgr-fleet-coverage').textContent = (Number(data.fleet?.coverage_pct || 0)).toFixed(1) + '%';
+      $('#mgr-fleet-coverage-sub').textContent = String(data.fleet?.online || 0) + ' online of ' + String(data.fleet?.total_agents || 0);
+      $('#mgr-stale-offline').textContent = String((data.fleet?.stale || 0) + (data.fleet?.offline || 0));
+      $('#mgr-deployments').textContent = String(data.deployments?.pending || 0);
+      $('#mgr-compliance').textContent = data.compliance?.score != null ? Number(data.compliance.score).toFixed(1) + '%' : '—';
+      $('#mgr-compliance-sub').textContent = data.siem?.enabled ? 'SIEM connected' : 'SIEM disabled';
+
+      renderSummaryList($('#dash-operations-list'), [
+        { title: 'Queue SLA', subtitle: String(data.queue?.sla_breached || 0) + ' breached • ' + String(data.queue?.pending || 0) + ' pending', severity: (data.queue?.sla_breached || 0) > 0 ? 'Critical' : 'Nominal' },
+        { title: 'Incident Backlog', subtitle: String(data.incidents?.open || 0) + ' open • ' + String(data.incidents?.investigating || 0) + ' investigating', severity: (data.incidents?.open || 0) > 0 ? 'Severe' : 'Nominal' },
+        { title: 'Deployment Health', subtitle: String(data.deployments?.pending || 0) + ' pending • ' + String(data.siem?.pending_events || 0) + ' SIEM queued', severity: (data.deployments?.pending || 0) > 0 ? 'Elevated' : 'Nominal' },
+      ], 'Operational highlights will populate after the manager overview is loaded.', item =>
+        '<div class="summary-row"><div><strong>' + esc(item.title) + '</strong><div class="text-muted" style="font-size:.75rem;margin-top:.18rem;">' + esc(item.subtitle) + '</div></div><div>' + statusPill(item.severity, String(item.severity).toLowerCase()) + '</div></div>'
+      );
+
+      $('#mgr-report-coverage').textContent = (Number(data.fleet?.coverage_pct || 0)).toFixed(1) + '%';
+      $('#mgr-report-sla').textContent = String(data.queue?.sla_breached || 0);
+      $('#mgr-report-deployments').textContent = String(data.deployments?.pending || 0);
+      $('#mgr-report-tenants').textContent = String(data.tenants || 0);
+
+      renderSummaryList($('#mgr-incident-breakdown'), [
+        { title: 'Open', subtitle: String(data.incidents?.open || 0) + ' incidents', severity: (data.incidents?.open || 0) > 0 ? 'Severe' : 'Nominal' },
+        { title: 'Investigating', subtitle: String(data.incidents?.investigating || 0) + ' in analyst flow', severity: (data.incidents?.investigating || 0) > 0 ? 'Elevated' : 'Nominal' },
+        { title: 'Contained', subtitle: String(data.incidents?.contained || 0) + ' contained', severity: 'Nominal' },
+        { title: 'Resolved', subtitle: String(data.incidents?.resolved || 0) + ' resolved', severity: 'Nominal' },
+      ], 'Incident backlog breakdown will appear here.', item =>
+        '<div class="summary-row"><div><strong>' + esc(item.title) + '</strong><div class="text-muted" style="font-size:.75rem;margin-top:.18rem;">' + esc(item.subtitle) + '</div></div><div>' + statusPill(item.severity, String(item.severity).toLowerCase()) + '</div></div>'
+      );
+
+      renderSummaryList($('#mgr-deployment-breakdown'), [
+        { title: 'Deployments', subtitle: String(data.deployments?.pending || 0) + ' pending • ' + String(data.operations?.ready_to_execute || 0) + ' ready response actions', severity: (data.deployments?.pending || 0) > 0 ? 'Elevated' : 'Nominal' },
+        { title: 'SIEM', subtitle: (data.siem?.enabled ? 'Enabled' : 'Disabled') + ' • pushed ' + String(data.siem?.total_pushed || 0) + ' • pulled ' + String(data.siem?.total_pulled || 0), severity: data.siem?.enabled ? 'Nominal' : 'Elevated' },
+        { title: 'Reports', subtitle: String(data.reports?.total_reports || 0) + ' total • ' + String(data.reports?.critical_alerts || 0) + ' critical alerts', severity: (data.reports?.critical_alerts || 0) > 0 ? 'Severe' : 'Nominal' },
+      ], 'Deployment and SIEM status will appear here.', item =>
+        '<div class="summary-row"><div><strong>' + esc(item.title) + '</strong><div class="text-muted" style="font-size:.75rem;margin-top:.18rem;">' + esc(item.subtitle) + '</div></div><div>' + statusPill(item.severity, String(item.severity).toLowerCase()) + '</div></div>'
+      );
+    } catch (e) {
+      log('Manager overview refresh error: ' + e.message);
+    }
   }
 
   async function clearAlerts() {
@@ -3976,7 +4677,7 @@ body.light .modal-box{background:#ffffff;}
   function startAlertPolling() {
     if (alertPollTimer) clearInterval(alertPollTimer);
     alertPollTimer = setInterval(() => {
-      if ($('#alert-auto-poll').checked) { refreshAlerts(); refreshHealth(); refreshTelemetry(false); }
+      if (isAuthenticated && $('#alert-auto-poll').checked) { refreshAlerts(); refreshHealth(); refreshTelemetry(false); }
     }, 5000);
   }
 
@@ -4069,7 +4770,10 @@ body.light .modal-box{background:#ffffff;}
     try {
       let monitorScope = defaultMonitorScope();
       const [res, monitoringRes, monitoringPathsRes] = await Promise.all([
-      const saveRes = await fetch(API + '/api/config/save', { method: 'POST', headers: authHeaders('application/json'), body: JSON.stringify(patch) });
+        fetch(API + '/api/config/current', { headers: authHeaders() }),
+        fetch(API + '/api/monitoring/options', { headers: authHeaders() }),
+        fetch(API + '/api/monitoring/paths', { headers: authHeaders() }),
+      ]);
       if (!res.ok) throw new Error('HTTP ' + res.status);
       const cfg = await res.json();
       if (cfg.detector) {
@@ -4478,36 +5182,158 @@ body.light .modal-box{background:#ffffff;}
   }
 
   // ── Process Tree ──
+  function escapeProcessField(value) {
+    return value === null || value === undefined || value === '' ? '—' : esc(value);
+  }
+
+  function buildProcessLookup(processes) {
+    const byPid = {};
+    (processes || []).forEach(proc => { byPid[proc.pid] = proc; });
+    return byPid;
+  }
+
+  function collectProcessLineage(processes, pid) {
+    const byPid = buildProcessLookup(processes);
+    const lineage = [];
+    const visited = new Set();
+    let current = byPid[pid];
+    while (current && !visited.has(current.pid)) {
+      lineage.push(current);
+      visited.add(current.pid);
+      if (!current.ppid || current.ppid === current.pid) break;
+      current = byPid[current.ppid];
+    }
+    return lineage.reverse();
+  }
+
+  function collectProcessChildren(processes, pid) {
+    return (processes || []).filter(proc => proc.ppid === pid && proc.pid !== pid);
+  }
+
+  function filterProcessTree(processes, query) {
+    const term = (query || '').trim().toLowerCase();
+    if (!term) return processes.slice();
+    const byPid = buildProcessLookup(processes);
+    const include = new Set();
+    const matches = processes.filter(proc => {
+      const pidText = String(proc.pid || '');
+      const ppidText = String(proc.ppid || '');
+      return pidText.includes(term)
+        || ppidText.includes(term)
+        || (proc.name || '').toLowerCase().includes(term)
+        || (proc.cmd_line || '').toLowerCase().includes(term);
+    });
+    matches.forEach(proc => {
+      include.add(proc.pid);
+      collectProcessLineage(processes, proc.pid).forEach(node => include.add(node.pid));
+      const stack = [proc.pid];
+      while (stack.length) {
+        const currentPid = stack.pop();
+        collectProcessChildren(processes, currentPid).forEach(child => {
+          if (!include.has(child.pid)) {
+            include.add(child.pid);
+            stack.push(child.pid);
+          }
+        });
+      }
+    });
+    return processes.filter(proc => include.has(proc.pid));
+  }
+
+  function renderProcessTree(processes, options = {}) {
+    const container = $('#ptree-container');
+    if (!container) return;
+    const byPid = buildProcessLookup(processes);
+    const roots = processes
+      .filter(proc => !byPid[proc.ppid] || proc.ppid === 0)
+      .sort((left, right) => Number(left.pid) - Number(right.pid));
+
+    const activePid = options.activePid ? String(options.activePid) : null;
+    container.innerHTML = '';
+
+    function renderNode(proc, depth) {
+      const children = processes
+        .filter(candidate => candidate.ppid === proc.pid && candidate.pid !== proc.pid)
+        .sort((left, right) => Number(left.pid) - Number(right.pid));
+      const line = document.createElement('div');
+      line.className = 'ptree-node';
+      line.style.cursor = 'pointer';
+      line.style.padding = '.15rem .35rem';
+      line.style.borderRadius = '6px';
+      line.style.marginBottom = '.15rem';
+      if (String(proc.pid) === activePid) {
+        line.style.background = 'var(--accent-light)';
+      }
+      line.dataset.pid = proc.pid;
+      line.style.marginLeft = (depth * 1.1) + 'rem';
+      line.innerHTML =
+        (depth > 0 ? '<span style="color:var(--ink-3);">├─ </span>' : '') +
+        '<strong>' + esc(proc.name || 'unknown') + '</strong> ' +
+        '<span style="color:var(--ink-2)">(PID ' + esc(proc.pid) + ' / PPID ' + esc(proc.ppid) + ')</span>' +
+        (proc.cmd_line ? '<div style="font-size:.75rem;color:var(--ink-3);margin-top:.1rem;">' + esc(proc.cmd_line) + '</div>' : '');
+      line.addEventListener('click', () => showProcessDetail(proc));
+      container.appendChild(line);
+      children.forEach(child => renderNode(child, depth + 1));
+    }
+
+    if (!roots.length && processes.length) {
+      processes
+        .slice()
+        .sort((left, right) => Number(left.pid) - Number(right.pid))
+        .forEach(proc => renderNode(proc, 0));
+      return;
+    }
+    roots.forEach(root => renderNode(root, 0));
+  }
+
+  function renderProcessSubset(title, processes, emptyMessage) {
+    const container = $('#ptree-container');
+    if (!container) return;
+    if (!processes.length) {
+      container.innerHTML = '<div class="text-muted">' + esc(emptyMessage) + '</div>';
+      return;
+    }
+    container.innerHTML =
+      '<div style="margin-bottom:.75rem;font-weight:600;">' + esc(title) + '</div>' +
+      processes.map(proc =>
+        '<div class="ptree-node" data-process-subset="' + esc(proc.pid) + '" style="padding:.35rem .45rem;border:1px solid var(--border);border-radius:6px;margin-bottom:.35rem;cursor:pointer;">' +
+          '<strong>' + esc(proc.name || 'unknown') + '</strong> ' +
+          '<span style="color:var(--ink-2)">(PID ' + esc(proc.pid) + ' / PPID ' + esc(proc.ppid) + ')</span>' +
+          (proc.cmd_line ? '<div style="font-size:.75rem;color:var(--ink-3);margin-top:.15rem;">' + esc(proc.cmd_line) + '</div>' : '') +
+        '</div>'
+      ).join('');
+    $$('#ptree-container [data-process-subset]').forEach(node => {
+      node.addEventListener('click', () => {
+        const pid = Number(node.dataset.processSubset);
+        const proc = processTreeCache.find(item => Number(item.pid) === pid);
+        if (proc) showProcessDetail(proc);
+      });
+    });
+  }
+
   async function refreshProcessTree() {
     try {
       const r = await apiFetch('/api/process-tree');
       const data = await r.json();
       const container = $('#ptree-container');
       if (!container) return;
-      const procs = data.processes || [];
-      if (procs.length === 0) {
+      processTreeCache = data.processes || [];
+      selectedProcess = selectedProcess
+        ? processTreeCache.find(proc => Number(proc.pid) === Number(selectedProcess.pid)) || null
+        : null;
+      if (processTreeCache.length === 0) {
         container.innerHTML = '<div class="text-muted">No process tree data available.</div>';
+        const detail = $('#ptree-detail');
+        if (detail) detail.style.display = 'none';
         return;
       }
-      // Build tree structure
-      const byPid = {};
-      procs.forEach(p => { byPid[p.pid] = p; });
-      const roots = procs.filter(p => !byPid[p.ppid] || p.ppid === 0);
-      function renderNode(proc, depth) {
-        const indent = '\u00A0'.repeat(depth * 4);
-        const prefix = depth > 0 ? '├── ' : '';
-        const line = document.createElement('div');
-        line.className = 'ptree-node';
-        line.style.cursor = 'pointer';
-        line.dataset.pid = proc.pid;
-        line.innerHTML = `${indent}${prefix}<strong>${proc.name}</strong> <span style="color:var(--ink-2)">(PID ${proc.pid}) ${proc.cmd_line || ''}</span>`;
-        line.addEventListener('click', () => showProcessDetail(proc));
-        container.appendChild(line);
-        const children = procs.filter(c => c.ppid === proc.pid && c.pid !== proc.pid);
-        children.forEach(c => renderNode(c, depth + 1));
+      const filtered = filterProcessTree(processTreeCache, ($('#ptree-search') || {}).value || '');
+      if (!filtered.length) {
+        container.innerHTML = '<div class="text-muted">No processes match the current search.</div>';
+        return;
       }
-      container.innerHTML = '';
-      roots.forEach(r => renderNode(r, 0));
+      renderProcessTree(filtered, { activePid: selectedProcess ? selectedProcess.pid : null });
+      if (selectedProcess) showProcessDetail(selectedProcess);
     } catch (e) {
       const c = $('#ptree-container');
       if (c) c.innerHTML = `<div class="text-muted">Error loading process tree: ${e.message}</div>`;
@@ -4515,82 +5341,439 @@ body.light .modal-box{background:#ffffff;}
   }
 
   function showProcessDetail(proc) {
+    selectedProcess = proc;
     const detail = $('#ptree-detail');
     const grid = $('#ptree-detail-grid');
     if (!detail || !grid) return;
     detail.style.display = '';
     grid.innerHTML = `
-      <div class="kv-item"><span class="kv-key">PID</span><span class="kv-val">${proc.pid}</span></div>
-      <div class="kv-item"><span class="kv-key">PPID</span><span class="kv-val">${proc.ppid}</span></div>
-      <div class="kv-item"><span class="kv-key">Name</span><span class="kv-val">${proc.name}</span></div>
-      <div class="kv-item"><span class="kv-key">Command</span><span class="kv-val">${proc.cmd_line || '—'}</span></div>
-      <div class="kv-item"><span class="kv-key">User</span><span class="kv-val">${proc.user || '—'}</span></div>
-      <div class="kv-item"><span class="kv-key">Executable</span><span class="kv-val">${proc.exe_path || '—'}</span></div>
-      <div class="kv-item"><span class="kv-key">Host</span><span class="kv-val">${proc.hostname || '—'}</span></div>
+      <div class="kv-item"><span class="kv-key">PID</span><span class="kv-val">${esc(proc.pid)}</span></div>
+      <div class="kv-item"><span class="kv-key">PPID</span><span class="kv-val">${esc(proc.ppid)}</span></div>
+      <div class="kv-item"><span class="kv-key">Name</span><span class="kv-val">${escapeProcessField(proc.name)}</span></div>
+      <div class="kv-item"><span class="kv-key">Command</span><span class="kv-val">${escapeProcessField(proc.cmd_line)}</span></div>
+      <div class="kv-item"><span class="kv-key">User</span><span class="kv-val">${escapeProcessField(proc.user)}</span></div>
+      <div class="kv-item"><span class="kv-key">Executable</span><span class="kv-val">${escapeProcessField(proc.exe_path)}</span></div>
+      <div class="kv-item"><span class="kv-key">Host</span><span class="kv-val">${escapeProcessField(proc.hostname)}</span></div>
       <div class="kv-item"><span class="kv-key">Alive</span><span class="kv-val">${proc.alive ? 'Yes' : 'No'}</span></div>
     `;
+    renderProcessTree(filterProcessTree(processTreeCache, ($('#ptree-search') || {}).value || ''), { activePid: proc.pid });
+  }
+
+  function showSelectedProcessLineage() {
+    if (!selectedProcess) {
+      flash('Select a process first', 'error');
+      return;
+    }
+    const lineage = collectProcessLineage(processTreeCache, Number(selectedProcess.pid));
+    renderProcessSubset('Lineage for PID ' + selectedProcess.pid, lineage, 'No lineage available for the selected process.');
+  }
+
+  function showSelectedProcessChildren() {
+    if (!selectedProcess) {
+      flash('Select a process first', 'error');
+      return;
+    }
+    const children = collectProcessChildren(processTreeCache, Number(selectedProcess.pid));
+    renderProcessSubset('Children of PID ' + selectedProcess.pid, children, 'No direct children for the selected process.');
+  }
+
+  async function submitProcessKillRequest() {
+    if (!selectedProcess) {
+      flash('Select a process first', 'error');
+      return;
+    }
+    if (!selectedProcess.alive) {
+      flash('This process is already marked as terminated', 'error');
+      return;
+    }
+    const label = (selectedProcess.name || 'unknown process') + ' (PID ' + selectedProcess.pid + ')';
+    const confirmed = await showConfirm(
+      'Queue Kill Request',
+      'Submit an approval-gated kill request for ' + label + ' on ' + (selectedProcess.hostname || 'this host') + '?',
+      'Queue Request'
+    );
+    if (!confirmed) return;
+    try {
+      const res = await apiFetch('/api/response/request', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'kill_process',
+          pid: selectedProcess.pid,
+          process_name: selectedProcess.name || '',
+          hostname: selectedProcess.hostname || 'localhost',
+          reason: 'Operator-requested termination from process tree',
+          severity: 'high',
+          requested_by: 'admin-console'
+        })
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || ('HTTP ' + res.status));
+      flash('Kill request queued as ' + data.request.id, 'success');
+      await refreshResponseOrchestration();
+    } catch (e) {
+      flash('Kill request failed: ' + e.message, 'error');
+    }
   }
 
   // ── Response Orchestration ──
+  function responseActionButtons(req) {
+    if (req.status === 'Pending') {
+      return '<button class="btn btn-sm primary" data-resp-approve="' + esc(req.id) + '">Approve</button> ' +
+        '<button class="btn btn-sm danger" data-resp-deny="' + esc(req.id) + '">Deny</button>';
+    }
+    if (req.status === 'Approved') {
+      return '<button class="btn btn-sm primary" data-resp-execute="' + esc(req.id) + '">Execute</button>';
+    }
+    if (req.status === 'DryRunCompleted') return '<span class="text-muted">Dry-run only</span>';
+    if (req.status === 'Executed') return '<span class="text-muted">Executed</span>';
+    if (req.status === 'Denied') return '<span class="text-muted">Denied</span>';
+    if (req.status === 'Expired') return '<span class="text-muted">Expired</span>';
+    return '<span class="text-muted">Closed</span>';
+  }
+
   async function refreshResponseOrchestration() {
     try {
       const r = await apiFetch('/api/response/stats');
       const data = await r.json();
       if ($('#resp-auto')) $('#resp-auto').textContent = data.auto_executed || 0;
       if ($('#resp-pending')) $('#resp-pending').textContent = data.pending_approval || 0;
+      if ($('#resp-ready')) $('#resp-ready').textContent = data.ready_to_execute || 0;
       if ($('#resp-denied')) $('#resp-denied').textContent = data.denied || 0;
       if ($('#resp-protected')) $('#resp-protected').textContent = data.protected_assets || 0;
     } catch(_) { log('Background refresh: ' + _.message); }
     try {
-      const r = await apiFetch('/api/response/pending');
-      const data = await r.json();
+      const [requestRes, approvalRes] = await Promise.all([
+        apiFetch('/api/response/requests'),
+        apiFetch('/api/response/approvals')
+      ]);
+      const data = await requestRes.json();
       const tbody = $('#resp-tbody');
       if (!tbody) return;
-      const pending = data.pending || [];
-      if (pending.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="7" class="text-muted">No pending response requests.</td></tr>';
-        return;
-      }
-      tbody.innerHTML = pending.map(req => `
-        <tr>
-          <td>${req.id}</td>
-          <td>${req.action}</td>
-          <td>${req.target_hostname || req.target || '—'}</td>
-          <td><span class="tag">${req.tier}</span></td>
-          <td>${req.status}</td>
-          <td>${req.blast_radius || '—'}</td>
-          <td><button class="btn btn-sm" disabled>Review</button></td>
+      const requests = safeArray(data.requests).sort((left, right) => {
+        const order = { Pending: 0, Approved: 1, Executed: 2, DryRunCompleted: 3, Denied: 4, Expired: 5 };
+        return (order[left.status] ?? 99) - (order[right.status] ?? 99) || String(right.requested_at || '').localeCompare(String(left.requested_at || ''));
+      });
+      if (requests.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="7" class="text-muted">No open response requests.</td></tr>';
+      } else {
+        tbody.innerHTML = requests.map(req => `
+        <tr data-response-row="${esc(req.id)}">
+          <td><code>${esc(req.id)}</code><div class="text-muted" style="font-size:.72rem;">${esc(req.severity || 'medium')}</div></td>
+          <td><strong>${esc(req.action_label || req.action)}</strong><div class="text-muted" style="font-size:.72rem;">${esc(req.reason || 'No reason provided')}</div><div class="text-muted" style="font-size:.72rem;margin-top:.18rem;">${esc(req.requested_by || 'unknown')} ${req.dry_run ? '• dry-run' : ''}</div></td>
+          <td>${esc(req.target_hostname || req.target || '—')}<div class="text-muted" style="font-size:.72rem;">${req.is_protected_asset ? 'Protected asset' : 'Standard endpoint'}</div></td>
+          <td>${statusPill(req.tier || 'Auto', String(req.tier || 'auto').toLowerCase())}</td>
+          <td>${statusPill(titleCaseStatus(req.status || 'Pending'), responseStatusClass(req.status))}<div class="text-muted" style="font-size:.72rem;">${Number(req.approval_count || 0)}/${Number(req.approvals_required || 0)} approvals</div></td>
+          <td>${esc((req.blast_radius && req.blast_radius.impact_summary) || req.blast_radius_summary || '—')}<div class="text-muted" style="font-size:.72rem;margin-top:.18rem;">risk ${(req.blast_radius && req.blast_radius.risk_level) || 'unknown'}</div></td>
+          <td>${responseActionButtons(req)}</td>
         </tr>
       `).join('');
+      }
+      if (approvalRes.ok) {
+        const approvalData = await approvalRes.json();
+        const approvals = safeArray(approvalData.approvals);
+        const history = approvals.map(entry => ({
+          title: 'Request ' + entry.request_id,
+          subtitle: (entry.reason || 'No reason') + ' • ' + (entry.approver || 'unknown') + ' • ' + (entry.decided_at || ''),
+          severity: entry.decision === 'Denied' ? 'Critical' : 'Nominal',
+          badge: entry.decision || 'Approved',
+        }));
+        const closedRequests = requests
+          .filter(req => ['Executed', 'Expired', 'DryRunCompleted'].includes(req.status))
+          .slice(0, 8)
+          .map(req => ({
+            title: req.action_label || req.action || req.id,
+            subtitle: (req.target_hostname || 'endpoint') + ' • ' + (req.requested_at || '') + ' • ' + (req.blast_radius_summary || 'no blast radius'),
+            severity: req.status === 'Expired' ? 'Critical' : 'Nominal',
+            badge: req.status === 'DryRunCompleted' ? 'Dry Run' : req.status,
+          }));
+        renderSummaryList($('#resp-approval-history'), history.concat(closedRequests), 'Approval history will appear after response data is loaded.', item =>
+          '<div class="summary-row"><div><strong>' + esc(item.title) + '</strong><div class="text-muted" style="font-size:.75rem;margin-top:.18rem;">' + esc(item.subtitle) + '</div></div><div>' + statusPill(item.badge, String(item.severity || 'nominal').toLowerCase()) + '</div></div>'
+        );
+      }
     } catch(_) { log('Background refresh: ' + _.message); }
+  }
+
+  async function decideResponseRequest(requestId, decision) {
+    const verb = decision === 'approved' ? 'approve' : 'deny';
+    const confirmed = await showConfirm(
+      decision === 'approved' ? 'Approve Request' : 'Deny Request',
+      'Are you sure you want to ' + verb + ' response request ' + requestId + '?',
+      decision === 'approved' ? 'Approve' : 'Deny'
+    );
+    if (!confirmed) return;
+    try {
+      const res = await apiFetch('/api/response/approve', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          request_id: requestId,
+          decision,
+          approver: 'admin-console',
+          reason: decision === 'approved' ? 'Approved from admin console' : 'Denied from admin console'
+        })
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || ('HTTP ' + res.status));
+      flash('Request ' + requestId + ' is now ' + (data.status || decision), 'success');
+      await refreshResponseOrchestration();
+    } catch (e) {
+      flash('Decision failed: ' + e.message, 'error');
+    }
+  }
+
+  async function executeApprovedResponses(requestId) {
+    const confirmed = await showConfirm(
+      'Execute Approved Responses',
+      requestId
+        ? ('Execute approved response request ' + requestId + '?')
+        : 'Execute all approved response requests?',
+      'Execute'
+    );
+    if (!confirmed) return;
+    try {
+      const res = await apiFetch('/api/response/execute', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(requestId ? { request_id: requestId } : {})
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || ('HTTP ' + res.status));
+      flash('Executed ' + Number(data.executed_count || 0) + ' approved response(s)', 'success');
+      await refreshResponseOrchestration();
+    } catch (e) {
+      flash('Execution failed: ' + e.message, 'error');
+    }
+  }
+
+  // ── Investigation Search & Context ──
+  function openInvestigationEventDetail(eventId) {
+    const item = investigationSearchResults.find(entry => String(entry.id) === String(eventId));
+    if (!item) return;
+    openWorkbenchDrawer(
+      'Event #' + item.id,
+      (item.hostname || item.agent_id || 'Endpoint') + ' · ' + (item.level || 'Nominal'),
+      '<div class="summary-list">' +
+        '<div class="summary-row"><div><strong>Reasons</strong><div class="text-muted" style="font-size:.75rem;margin-top:.18rem;">' + esc(safeArray(item.reasons).join(', ') || 'No reasons') + '</div></div><div>' + statusPill(item.level || 'Nominal', String(item.level || 'nominal').toLowerCase()) + '</div></div>' +
+        '<div class="summary-row"><div><strong>Action</strong><div class="text-muted" style="font-size:.75rem;margin-top:.18rem;">' + esc(item.action || 'alert') + '</div></div><div>score ' + Number(item.score || 0).toFixed(2) + '</div></div>' +
+      '</div>' +
+      '<div class="drawer-actions"><button class="btn btn-sm" data-inv-agent-context="' + esc(item.agent_id || '') + '">Open Agent</button><button class="btn btn-sm primary" data-inv-fill-graph="' + esc(item.id || '') + '">Add to Graph</button></div>'
+    );
+  }
+
+  async function runEventSearch() {
+    try {
+      const body = {
+        text: ($('#inv-search-text') || {}).value || '',
+        hostname: ($('#inv-search-host') || {}).value || '',
+        agent_id: ($('#inv-search-agent') || {}).value || '',
+        level: ($('#inv-search-level') || {}).value || '',
+        limit: 25
+      };
+      const res = await apiFetch('/api/events/search', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body)
+      });
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      const data = await res.json();
+      investigationSearchResults = safeArray(data.results);
+      renderSummaryList($('#inv-search-results'), investigationSearchResults, 'Search results will appear here.', item =>
+        '<div class="summary-row" data-inv-open-event="' + esc(item.id || '') + '">' +
+          '<div><strong>Event #' + esc(item.id || '') + '</strong><div class="text-muted" style="font-size:.75rem;margin-top:.18rem;">' + esc(item.hostname || item.agent_id || 'unknown') + ' • ' + esc(safeArray(item.reasons).join(', ') || 'No reasons') + '</div></div>' +
+          '<div style="display:flex;gap:.35rem;align-items:center;flex-wrap:wrap;justify-content:flex-end;">' +
+            statusPill(item.level || 'Nominal', String(item.level || 'nominal').toLowerCase()) +
+            '<button class="btn btn-sm" data-inv-host-timeline="' + esc(item.hostname || '') + '">Host</button>' +
+            '<button class="btn btn-sm" data-inv-agent-context="' + esc(item.agent_id || '') + '">Agent</button>' +
+            '<button class="btn btn-sm primary" data-inv-fill-graph="' + esc(item.id || '') + '">Graph</button>' +
+          '</div>' +
+        '</div>'
+      );
+    } catch (e) {
+      $('#inv-search-results').innerHTML = '<div class="workspace-empty">Search failed: ' + esc(e.message) + '</div>';
+    }
+  }
+
+  async function loadHostTimeline(hostname) {
+    const host = (hostname || ($('#asset-timeline-host') || {}).value || '').trim();
+    if (!host) { toast('Enter a hostname first', 'error'); return; }
+    $('#asset-timeline-host').value = host;
+    try {
+      const res = await apiFetch('/api/timeline/host?hostname=' + encodeURIComponent(host));
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      const data = await res.json();
+      const timeline = safeArray(data.timeline);
+      $('#asset-timeline-results').innerHTML = renderTimelineSummary(timeline, 'No host timeline is available for this endpoint.');
+      if (timeline.length) {
+        $('#investigation-event-ids').value = timeline.slice(0, 6).map(item => item.event_id).join(', ');
+      }
+    } catch (e) {
+      $('#asset-timeline-results').innerHTML = '<div class="workspace-empty">Host timeline failed: ' + esc(e.message) + '</div>';
+    }
+  }
+
+  async function loadAgentTimeline(agentId) {
+    const agent = (agentId || ($('#asset-timeline-agent') || {}).value || '').trim();
+    if (!agent) { toast('Enter an agent ID first', 'error'); return; }
+    $('#asset-timeline-agent').value = agent;
+    try {
+      const res = await apiFetch('/api/timeline/agent?agent_id=' + encodeURIComponent(agent));
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      const data = await res.json();
+      const timeline = safeArray(data.timeline);
+      $('#asset-timeline-results').innerHTML = renderTimelineSummary(timeline, 'No agent timeline is available for this endpoint.');
+      if (timeline.length) {
+        $('#investigation-event-ids').value = timeline.slice(0, 6).map(item => item.event_id).join(', ');
+      }
+    } catch (e) {
+      $('#asset-timeline-results').innerHTML = '<div class="workspace-empty">Agent timeline failed: ' + esc(e.message) + '</div>';
+    }
+  }
+
+  async function buildInvestigationGraphView() {
+    const ids = ($('#investigation-event-ids') || {}).value || '';
+    const eventIds = ids.split(',').map(part => part.trim()).filter(Boolean).map(Number).filter(Number.isFinite);
+    if (!eventIds.length) { toast('Enter one or more event IDs to build the graph', 'error'); return; }
+    try {
+      const res = await apiFetch('/api/investigation/graph', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ event_ids: eventIds })
+      });
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      const data = await res.json();
+      const nodes = safeArray(data.nodes);
+      const edges = safeArray(data.edges);
+      $('#investigation-graph-results').innerHTML =
+        '<div class="metric-cluster">' +
+          '<div class="metric-tile"><span class="metric-label">Nodes</span><strong>' + esc(data.node_count || nodes.length) + '</strong><span class="text-muted">entities linked</span></div>' +
+          '<div class="metric-tile"><span class="metric-label">Edges</span><strong>' + esc(data.edge_count || edges.length) + '</strong><span class="text-muted">relationships</span></div>' +
+          '<div class="metric-tile"><span class="metric-label">Seed Events</span><strong>' + esc(eventIds.length) + '</strong><span class="text-muted">requested</span></div>' +
+        '</div>' +
+        '<div class="summary-list" style="margin-top:.75rem;">' +
+          (nodes.length ? nodes.slice(0, 10).map(node => '<div class="summary-row"><div><strong>' + esc(node.label || node.id || '') + '</strong><div class="text-muted" style="font-size:.75rem;margin-top:.18rem;">' + esc(node.kind || 'node') + '</div></div><div>' + statusPill(titleCaseStatus(node.kind || 'node'), 'nominal') + '</div></div>').join('') : '<div class="workspace-empty">No nodes were returned.</div>') +
+        '</div>';
+    } catch (e) {
+      $('#investigation-graph-results').innerHTML = '<div class="workspace-empty">Graph build failed: ' + esc(e.message) + '</div>';
+    }
+  }
+
+  async function loadEntityProfile(kindOverride, idOverride) {
+    const kind = (kindOverride || ($('#entity-kind') || {}).value || 'host').trim().toLowerCase();
+    const id = (idOverride || ($('#entity-id') || {}).value || '').trim();
+    if (!id) { toast('Enter an entity value first', 'error'); return; }
+    if ($('#entity-kind')) $('#entity-kind').value = kind;
+    if ($('#entity-id')) $('#entity-id').value = id;
+    try {
+      const [profileRes, timelineRes] = await Promise.all([
+        apiFetch('/api/entities/' + encodeURIComponent(kind) + '/' + encodeURIComponent(id)),
+        apiFetch('/api/entities/' + encodeURIComponent(kind) + '/' + encodeURIComponent(id) + '/timeline')
+      ]);
+      if (!profileRes.ok) throw new Error('HTTP ' + profileRes.status);
+      const profile = await profileRes.json();
+      const timelinePayload = timelineRes.ok ? await timelineRes.json() : {};
+      renderSummaryList($('#entity-profile-summary'), [
+        { title: profile.label || profile.id || id, subtitle: (profile.risk || 'low').toUpperCase() + ' risk • ' + Number(profile.related_event_count || 0) + ' related events', severity: profile.risk || 'low' },
+        { title: 'Incidents & Cases', subtitle: Number(profile.related_incident_count || 0) + ' incidents • ' + Number(profile.related_case_count || 0) + ' cases', severity: Number(profile.related_incident_count || 0) > 0 ? 'severe' : 'nominal' },
+        { title: 'Enrichment', subtitle: safeArray(profile.enrichments).map(item => item.source || item.summary).join(', ') || 'No enrichments configured', severity: safeArray(profile.enrichments).length ? 'nominal' : 'elevated' },
+        { title: 'Synced Tickets', subtitle: safeArray(profile.ticket_syncs).map(item => item.external_key || item.provider).join(', ') || 'None', severity: safeArray(profile.ticket_syncs).length ? 'nominal' : 'low' }
+      ], 'Load an entity to review related events, cases, incidents, enrichments, and synced tickets.', item =>
+        '<div class="summary-row"><div><strong>' + esc(item.title) + '</strong><div class="text-muted" style="font-size:.75rem;margin-top:.18rem;">' + esc(item.subtitle) + '</div></div><div>' + statusPill(titleCaseStatus(item.severity), String(item.severity).toLowerCase()) + '</div></div>'
+      );
+      $('#entity-timeline-summary').innerHTML = renderTimelineSummary(timelinePayload.timeline || [], 'Entity timeline entries will appear here.');
+    } catch (e) {
+      $('#entity-profile-summary').innerHTML = '<div class="workspace-empty">Entity lookup failed: ' + esc(e.message) + '</div>';
+      $('#entity-timeline-summary').innerHTML = '<div class="workspace-empty">Entity timeline could not be loaded.</div>';
+    }
+  }
+
+  function renderIncidentStoryline(data) {
+    const timeline = safeArray(data.timeline);
+    const entries = timeline.length ? timeline.map(item => `
+      <div style="position:relative;padding:.6rem 0;">
+        <div style="position:absolute;left:-1.85rem;top:.85rem;width:10px;height:10px;border-radius:50%;background:var(--accent);"></div>
+        <div style="font-size:.78rem;color:var(--ink-2);">${esc(item.timestamp || '')}</div>
+        <div style="font-weight:600;">${esc(item.summary || item.stage || 'Event')}</div>
+        <div style="font-size:.82rem;color:var(--ink-2);margin-top:.15rem;">${esc(item.stage || 'timeline')} • ${esc(item.severity || 'nominal')}</div>
+      </div>
+    `).join('') : '<div class="text-muted" style="padding:.5rem 0;">No timeline events for this incident.</div>';
+    if ($('#timeline-entries')) $('#timeline-entries').innerHTML = entries;
+
+    renderSummaryList($('#storyline-summary'), [
+      { title: 'Narrative', subtitle: data.narrative || 'No storyline narrative available', severity: safeArray(data.linked_cases).length ? 'nominal' : 'elevated' },
+      { title: 'Evidence Package', subtitle: 'Cases ' + Number(data.evidence_package?.case_count || 0) + ' • responses ' + Number(data.evidence_package?.response_count || 0) + ' • tickets ' + Number(data.evidence_package?.ticket_count || 0), severity: Number(data.evidence_package?.case_count || 0) > 0 ? 'nominal' : 'elevated' },
+      { title: 'Recommendations', subtitle: safeArray(data.recommendations).join(' ') || 'No recommendations', severity: 'low' },
+      { title: 'Tickets & Actions', subtitle: safeArray(data.ticket_syncs).length + ' tickets • ' + safeArray(data.response_actions).length + ' response actions', severity: safeArray(data.response_actions).length ? 'severe' : 'nominal' }
+    ], 'Storyline summary and evidence package will appear here when you load an incident.', item =>
+      '<div class="summary-row"><div><strong>' + esc(item.title) + '</strong><div class="text-muted" style="font-size:.75rem;margin-top:.18rem;">' + esc(item.subtitle) + '</div></div><div>' + statusPill(titleCaseStatus(item.severity), String(item.severity).toLowerCase()) + '</div></div>'
+    );
   }
 
   // ── Investigation Timeline ──
   async function loadTimeline() {
     const incidentId = $('#timeline-incident-id')?.value?.trim();
-    if (!incidentId) { setBanner('Enter an incident ID', 'error'); return; }
+    if (!incidentId) { flash('Enter an incident ID', 'error'); return; }
+    if (!/^\d+$/.test(incidentId)) {
+      flash('Enter a numeric incident ID', 'error');
+      const c = $('#timeline-entries');
+      if (c) c.innerHTML = '<div class="text-muted" style="padding:.5rem 0;">Enter a numeric incident ID to load a timeline.</div>';
+      return;
+    }
+    selectedIncidentId = String(incidentId);
     try {
-      const r = await apiFetch('/api/incidents/' + encodeURIComponent(incidentId));
-      const data = await r.json();
-      const container = $('#timeline-entries');
-      if (!container) return;
-      const events = data.events || data.timeline || [];
-      if (events.length === 0) {
-        container.innerHTML = '<div class="text-muted" style="padding:.5rem 0;">No timeline events for this incident.</div>';
-        return;
+      const cacheKey = String(incidentId);
+      let data = enterpriseStorylineCache.get(cacheKey);
+      if (!data) {
+        const r = await apiFetch('/api/incidents/' + encodeURIComponent(incidentId) + '/storyline');
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        data = await r.json();
+        enterpriseStorylineCache.set(cacheKey, data);
       }
-      container.innerHTML = events.map(ev => `
-        <div style="position:relative;padding:.6rem 0;">
-          <div style="position:absolute;left:-1.85rem;top:.85rem;width:10px;height:10px;border-radius:50%;background:var(--accent);"></div>
-          <div style="font-size:.78rem;color:var(--ink-2);">${ev.timestamp || ev.time || ''}</div>
-          <div style="font-weight:600;">${ev.action || ev.type || ev.description || 'Event'}</div>
-          ${ev.detail ? `<div style="font-size:.85rem;color:var(--ink-2);">${ev.detail}</div>` : ''}
-        </div>
-      `).join('');
+      renderIncidentStoryline(data);
+      if (!($('#ticket-summary') || {}).value) {
+        $('#ticket-summary').value = 'Incident ' + incidentId + ' investigation storyline';
+      }
     } catch (e) {
       const c = $('#timeline-entries');
       if (c) c.innerHTML = `<div class="text-muted" style="padding:.5rem 0;">Could not load timeline: ${e.message}</div>`;
+      if ($('#storyline-summary')) $('#storyline-summary').innerHTML = '<div class="workspace-empty">Storyline could not be loaded.</div>';
     }
+  }
+
+  async function syncIncidentTicket() {
+    const incidentId = ($('#timeline-incident-id') || {}).value || '';
+    if (!/^\d+$/.test(String(incidentId).trim())) {
+      toast('Load a numeric incident ID before syncing a ticket', 'error');
+      return;
+    }
+    try {
+      const res = await apiFetch('/api/tickets/sync', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          provider: ($('#ticket-provider') || {}).value || 'jira',
+          object_kind: 'incident',
+          object_id: String(incidentId).trim(),
+          queue_or_project: ($('#ticket-project') || {}).value || '',
+          summary: ($('#ticket-summary') || {}).value || ('Incident ' + incidentId + ' investigation')
+        })
+      });
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      toast('Incident synced to external ticketing', 'success');
+      enterpriseStorylineCache.delete(String(incidentId).trim());
+      loadTimeline();
+    } catch (e) {
+      toast('Ticket sync failed: ' + e.message, 'error');
+    }
+  }
+
+  function exportIncidentEvidence() {
+    if (!($('#timeline-incident-id') || {}).value) {
+      toast('Load an incident first', 'error');
+      return;
+    }
+    selectedIncidentId = String(($('#timeline-incident-id') || {}).value || '').trim();
+    generateIncidentReport();
   }
 
   // ── Incident Management ──
@@ -4836,6 +6019,8 @@ body.light .modal-box{background:#ffffff;}
   $('#btn-dash-create-incident').addEventListener('click', dashCreateIncident);
   $('#btn-send-sample-alert').addEventListener('click', dashSendSampleAlert);
   $('#btn-dash-refresh-threats').addEventListener('click', refreshDashThreatSummary);
+  if ($('#btn-open-workbench')) $('#btn-open-workbench').addEventListener('click', () => { switchSection('incident-response'); activateTab('ir-tabs', 'ir-incidents'); refreshWorkbenchOverview(); });
+  if ($('#btn-open-reports-summary')) $('#btn-open-reports-summary').addEventListener('click', () => { switchSection('reports-exports'); refreshManagerOverview(); });
   $$('[data-dash-mode]').forEach(btn => { btn.addEventListener('click', () => dashSetMode(btn.dataset.dashMode)); });
   // Dashboard alert table: delegate Ack / Escalate clicks
   $('#dash-alert-tbody').addEventListener('click', (e) => {
@@ -4852,12 +6037,15 @@ body.light .modal-box{background:#ffffff;}
   $('#btn-checkpoint').addEventListener('click', saveCheckpoint);
   $('#btn-restore').addEventListener('click', restoreCheckpoint);
   $('#btn-refresh-security').addEventListener('click', refreshSecurity);
+  if ($('#btn-refresh-detection-engineering')) $('#btn-refresh-detection-engineering').addEventListener('click', refreshDetectionEngineering);
+  if ($('#btn-save-hunt')) $('#btn-save-hunt').addEventListener('click', saveEnterpriseHunt);
+  if ($('#btn-save-suppression')) $('#btn-save-suppression').addEventListener('click', saveSuppression);
   $('#btn-quarantine').addEventListener('click', quarantineTarget);
   $('#btn-add-ioc').addEventListener('click', addIoc);
   $('#btn-deploy-decoy').addEventListener('click', deployDecoy);
 
   // Fleet
-  $('#btn-refresh-fleet').addEventListener('click', refreshFleet);
+  $('#btn-refresh-fleet').addEventListener('click', () => Promise.all([refreshFleet(), refreshXdr()]));
   $('#btn-register-device').addEventListener('click', registerDevice);
   $('#btn-refresh-xdr').addEventListener('click', refreshXdr);
   $('#btn-create-token').addEventListener('click', createEnrollmentToken);
@@ -4892,8 +6080,21 @@ body.light .modal-box{background:#ffffff;}
   $('#btn-gen-inc-report').addEventListener('click', generateIncidentReport);
   if ($('#btn-ptree-refresh')) $('#btn-ptree-refresh').addEventListener('click', refreshProcessTree);
   if ($('#btn-ptree-search')) $('#btn-ptree-search').addEventListener('click', refreshProcessTree);
+  if ($('#btn-ptree-lineage')) $('#btn-ptree-lineage').addEventListener('click', showSelectedProcessLineage);
+  if ($('#btn-ptree-children')) $('#btn-ptree-children').addEventListener('click', showSelectedProcessChildren);
+  if ($('#btn-ptree-kill')) $('#btn-ptree-kill').addEventListener('click', submitProcessKillRequest);
   if ($('#btn-resp-refresh')) $('#btn-resp-refresh').addEventListener('click', refreshResponseOrchestration);
+  if ($('#btn-resp-execute')) $('#btn-resp-execute').addEventListener('click', () => executeApprovedResponses());
+  if ($('#btn-inv-search')) $('#btn-inv-search').addEventListener('click', runEventSearch);
+  if ($('#btn-host-timeline')) $('#btn-host-timeline').addEventListener('click', () => loadHostTimeline());
+  if ($('#btn-agent-timeline')) $('#btn-agent-timeline').addEventListener('click', () => loadAgentTimeline());
+  if ($('#btn-investigation-graph')) $('#btn-investigation-graph').addEventListener('click', buildInvestigationGraphView);
   if ($('#btn-timeline-load')) $('#btn-timeline-load').addEventListener('click', loadTimeline);
+  if ($('#btn-timeline-export')) $('#btn-timeline-export').addEventListener('click', exportIncidentEvidence);
+  if ($('#btn-load-entity')) $('#btn-load-entity').addEventListener('click', () => loadEntityProfile());
+  if ($('#btn-load-storyline')) $('#btn-load-storyline').addEventListener('click', loadTimeline);
+  if ($('#btn-sync-ticket')) $('#btn-sync-ticket').addEventListener('click', syncIncidentTicket);
+  if ($('#btn-export-evidence')) $('#btn-export-evidence').addEventListener('click', exportIncidentEvidence);
   if ($('#inc-filter-status')) $('#inc-filter-status').addEventListener('change', refreshIncidents);
   if ($('#inc-filter-severity')) $('#inc-filter-severity').addEventListener('change', refreshIncidents);
   $('#btn-refresh-twin').addEventListener('click', refreshTwin);
@@ -4911,6 +6112,7 @@ body.light .modal-box{background:#ffffff;}
   // Reports
   $('#btn-refresh-report').addEventListener('click', refreshReport);
   $('#btn-refresh-exec-summary').addEventListener('click', refreshExecutiveSummary);
+  if ($('#btn-refresh-manager-summary')) $('#btn-refresh-manager-summary').addEventListener('click', refreshManagerOverview);
   $('#btn-export-csv').addEventListener('click', exportCsv);
   $('#filter-level').addEventListener('change', function() { if (lastReportData) renderSamples(lastReportData.samples); });
   $('#btn-export-tla').addEventListener('click', () => downloadExport('tla', 'wardex.tla'));
@@ -4931,6 +6133,10 @@ body.light .modal-box{background:#ffffff;}
   $('#btn-save-siem').addEventListener('click', saveSiemConfig);
   $('#btn-load-siem').addEventListener('click', loadSiemConfig);
   $('#btn-taxii-pull').addEventListener('click', taxiiPullNow);
+  if ($('#btn-save-idp')) $('#btn-save-idp').addEventListener('click', saveIdentityProvider);
+  if ($('#btn-save-scim')) $('#btn-save-scim').addEventListener('click', saveScimConfig);
+  if ($('#btn-save-connector')) $('#btn-save-connector').addEventListener('click', saveEnrichmentConnector);
+  if ($('#btn-refresh-enterprise-admin')) $('#btn-refresh-enterprise-admin').addEventListener('click', refreshEnterpriseAdmin);
   $('#btn-shutdown-server').addEventListener('click', shutdownServer);
 
   // Session Management
@@ -4946,18 +6152,67 @@ body.light .modal-box{background:#ffffff;}
   if ($('#btn-new-case')) $('#btn-new-case').addEventListener('click', toggleNewCaseForm);
   if ($('#btn-submit-case')) $('#btn-submit-case').addEventListener('click', submitNewCase);
   if ($('#btn-cancel-case')) $('#btn-cancel-case').addEventListener('click', toggleNewCaseForm);
+  if ($('#case-filter-status')) $('#case-filter-status').addEventListener('change', refreshCases);
+  if ($('#case-filter-priority')) $('#case-filter-priority').addEventListener('change', refreshCases);
   if ($('#btn-alert-queue-refresh')) $('#btn-alert-queue-refresh').addEventListener('click', refreshAlertQueue);
+  if ($('#queue-sort')) $('#queue-sort').addEventListener('change', refreshAlertQueue);
   if ($('#btn-add-rbac')) $('#btn-add-rbac').addEventListener('click', addRbacUser);
   if ($('#btn-refresh-rbac')) $('#btn-refresh-rbac').addEventListener('click', refreshRbac);
   if ($('#btn-refresh-ff')) $('#btn-refresh-ff').addEventListener('click', refreshFeatureFlags);
+  if ($('#btn-close-workbench-drawer')) $('#btn-close-workbench-drawer').addEventListener('click', closeWorkbenchDrawer);
+  if ($('#workbench-drawer-backdrop')) $('#workbench-drawer-backdrop').addEventListener('click', closeWorkbenchDrawer);
 
   // Event delegation for dynamically generated buttons
   document.addEventListener('click', function(e) {
     const ackBtn = e.target.closest('[data-ack-alert]');
     if (ackBtn) { ackAlert(ackBtn.dataset.ackAlert); return; }
+    const assignAlertBtn = e.target.closest('[data-assign-alert]');
+    if (assignAlertBtn) { assignQueueAlert(assignAlertBtn.dataset.assignAlert); return; }
+    const escalateAlertBtn = e.target.closest('[data-escalate-alert]');
+    if (escalateAlertBtn) { escalateQueueAlert(escalateAlertBtn.dataset.escalateAlert); return; }
+    const openCaseBtn = e.target.closest('[data-open-case-from-alert]');
+    if (openCaseBtn) { createCaseFromQueueAlert(openCaseBtn.dataset.openCaseFromAlert); return; }
+    const openAgentBtn = e.target.closest('[data-open-agent-context]');
+    if (openAgentBtn) { focusAgentContext(openAgentBtn.dataset.openAgentContext); return; }
+    const runHuntBtn = e.target.closest('[data-run-hunt]');
+    if (runHuntBtn) { runSavedHunt(runHuntBtn.dataset.runHunt); return; }
+    const ruleTestBtn = e.target.closest('[data-rule-test]');
+    if (ruleTestBtn) { testManagedRule(ruleTestBtn.dataset.ruleTest); return; }
+    const rulePromoteBtn = e.target.closest('[data-rule-promote]');
+    if (rulePromoteBtn) { promoteManagedRule(rulePromoteBtn.dataset.rulePromote, rulePromoteBtn.dataset.ruleTarget); return; }
+    const ruleRollbackBtn = e.target.closest('[data-rule-rollback]');
+    if (ruleRollbackBtn) { rollbackManagedRule(ruleRollbackBtn.dataset.ruleRollback); return; }
+    const approveBtn = e.target.closest('[data-resp-approve]');
+    if (approveBtn) { decideResponseRequest(approveBtn.dataset.respApprove, 'approved'); return; }
+    const denyBtn = e.target.closest('[data-resp-deny]');
+    if (denyBtn) { decideResponseRequest(denyBtn.dataset.respDeny, 'denied'); return; }
+    const execBtn = e.target.closest('[data-resp-execute]');
+    if (execBtn) { executeApprovedResponses(execBtn.dataset.respExecute); return; }
+    const openInvEvent = e.target.closest('[data-inv-open-event]');
+    if (openInvEvent && !e.target.closest('button')) { openInvestigationEventDetail(openInvEvent.dataset.invOpenEvent); return; }
+    const invHostBtn = e.target.closest('[data-inv-host-timeline]');
+    if (invHostBtn) { loadHostTimeline(invHostBtn.dataset.invHostTimeline); return; }
+    const invFillGraphBtn = e.target.closest('[data-inv-fill-graph]');
+    if (invFillGraphBtn) {
+      const graphInput = $('#investigation-event-ids');
+      const existing = (graphInput.value || '').split(',').map(part => part.trim()).filter(Boolean);
+      const nextId = String(invFillGraphBtn.dataset.invFillGraph || '').trim();
+      if (nextId && !existing.includes(nextId)) {
+        existing.push(nextId);
+        graphInput.value = existing.join(', ');
+      }
+      return;
+    }
+    const invAgentContextBtn = e.target.closest('[data-inv-agent-context]');
+    if (invAgentContextBtn) { focusAgentContext(invAgentContextBtn.dataset.invAgentContext); return; }
     const removeBtn = e.target.closest('[data-remove-rbac]');
     if (removeBtn) { removeRbacUser(removeBtn.dataset.removeRbac); return; }
   });
+  document.addEventListener('keydown', function(e) { if (e.key === 'Escape') closeWorkbenchDrawer(); });
+  window.__workbenchAgentContext = focusAgentContext;
+  window.__workbenchCaseFromAlert = createCaseFromQueueAlert;
+  window.__workbenchAssignAlert = assignQueueAlert;
+  window.__workbenchEscalateAlert = escalateQueueAlert;
 
   // ── Sigma Rules ──
   async function refreshSigma() {
@@ -4985,11 +6240,230 @@ body.light .modal-box{background:#ffffff;}
     } catch(e) { log('Sigma refresh error: ' + e.message); }
   }
 
+  async function refreshDetectionEngineering() {
+    try {
+      const [huntsRes, rulesRes, coverageRes, suppressionsRes] = await Promise.all([
+        apiFetch('/api/hunts'),
+        apiFetch('/api/content/rules'),
+        apiFetch('/api/coverage/mitre'),
+        apiFetch('/api/suppressions')
+      ]);
+      const huntsData = huntsRes.ok ? await huntsRes.json() : {};
+      const rulesData = rulesRes.ok ? await rulesRes.json() : {};
+      const coverageData = coverageRes.ok ? await coverageRes.json() : {};
+      const suppressionsData = suppressionsRes.ok ? await suppressionsRes.json() : {};
+      enterpriseHuntsCache = safeArray(huntsData.hunts);
+      enterpriseRulesCache = safeArray(rulesData.rules);
+      enterpriseSuppressionsCache = safeArray(suppressionsData.suppressions);
+
+      if ($('#det-hunts-total')) $('#det-hunts-total').textContent = enterpriseHuntsCache.length;
+      if ($('#det-managed-rules')) $('#det-managed-rules').textContent = enterpriseRulesCache.length;
+      if ($('#det-canary-rules')) $('#det-canary-rules').textContent = enterpriseRulesCache.filter(rule => ['canary', 'test'].includes(String(rule.lifecycle || '').toLowerCase())).length;
+      if ($('#det-suppressions-total')) $('#det-suppressions-total').textContent = enterpriseSuppressionsCache.length;
+
+      const suppressionRuleSelect = $('#suppression-rule');
+      if (suppressionRuleSelect) {
+        const current = suppressionRuleSelect.value;
+        suppressionRuleSelect.innerHTML = '<option value="">Any rule</option>' +
+          enterpriseRulesCache.map(rule => '<option value="' + esc(rule.id || '') + '">' + esc(rule.title || rule.id || 'Rule') + '</option>').join('');
+        if (current) suppressionRuleSelect.value = current;
+      }
+
+      renderSummaryList($('#hunt-list'), enterpriseHuntsCache, 'Saved hunts will appear here.', hunt =>
+        '<div class="summary-row">' +
+          '<div><strong>' + esc(hunt.name || 'Untitled Hunt') + '</strong><div class="text-muted" style="font-size:.75rem;margin-top:.18rem;">' +
+            esc((hunt.severity || 'medium').toUpperCase()) + ' • threshold ' + esc(hunt.threshold || 1) +
+            ' • next ' + esc(hunt.next_run_at || 'manual') +
+          '</div></div>' +
+          '<div style="display:flex;gap:.35rem;align-items:center;flex-wrap:wrap;justify-content:flex-end;">' +
+            statusPill(titleCaseStatus(hunt.severity || 'medium'), String(hunt.severity || 'medium').toLowerCase()) +
+            '<button class="btn btn-sm primary" data-run-hunt="' + esc(hunt.id || '') + '">Run</button>' +
+          '</div>' +
+        '</div>'
+      );
+
+      const rulesBody = $('#managed-rule-tbody');
+      if (rulesBody) {
+        rulesBody.innerHTML = enterpriseRulesCache.length ? enterpriseRulesCache.map(rule => {
+          const lifecycle = String(rule.lifecycle || 'draft').toLowerCase();
+          const attack = safeArray(rule.attack).map(item => item.technique_id || item.technique_name).slice(0, 2).join(', ') || '—';
+          return '<tr>' +
+            '<td><strong>' + esc(rule.title || rule.id || 'Rule') + '</strong><div class="text-muted" style="font-size:.72rem;">' + esc(rule.owner || 'system') + '</div></td>' +
+            '<td>' + esc(rule.kind || 'rule') + '</td>' +
+            '<td>' + statusPill(titleCaseStatus(lifecycle), lifecycle) + '</td>' +
+            '<td>' + esc(attack) + '</td>' +
+            '<td><div class="btn-row" style="gap:.35rem;flex-wrap:wrap;">' +
+              '<button class="btn btn-sm" data-rule-test="' + esc(rule.id || '') + '">Test</button>' +
+              '<button class="btn btn-sm" data-rule-promote="' + esc(rule.id || '') + '" data-rule-target="canary">Canary</button>' +
+              '<button class="btn btn-sm primary" data-rule-promote="' + esc(rule.id || '') + '" data-rule-target="active">Activate</button>' +
+              '<button class="btn btn-sm" data-rule-rollback="' + esc(rule.id || '') + '">Rollback</button>' +
+            '</div></td>' +
+          '</tr>';
+        }).join('') : '<tr><td colspan="5" class="text-muted">Managed rules will appear here.</td></tr>';
+      }
+
+      renderSummaryList($('#suppression-list'), enterpriseSuppressionsCache, 'Suppressions will appear here.', suppression =>
+        '<div class="summary-row">' +
+          '<div><strong>' + esc(suppression.name || 'Suppression') + '</strong><div class="text-muted" style="font-size:.75rem;margin-top:.18rem;">' +
+            esc(suppression.hostname || suppression.rule_id || 'Global scope') + ' • ' + esc(suppression.justification || 'No justification') +
+          '</div></div>' +
+          '<div>' + statusPill(suppression.active ? 'Active' : 'Disabled', suppression.active ? 'nominal' : 'critical') + '</div>' +
+        '</div>'
+      );
+
+      const techniques = safeArray(coverageData.techniques).slice(0, 6);
+      const gaps = safeArray(coverageData.coverage_gap).slice(0, 4);
+      const packs = safeArray(coverageData.packs).filter(pack => pack && pack.enabled !== false);
+      renderSummaryList(
+        $('#mitre-coverage-list'),
+        techniques.length ? techniques : gaps,
+        'Coverage data will appear here.',
+        item => '<div class="summary-row">' +
+          '<div><strong>' + esc(item.technique_id || item.id || 'Coverage') + '</strong><div class="text-muted" style="font-size:.75rem;margin-top:.18rem;">' +
+            esc(item.technique_name || item.reason || 'Coverage item') +
+            (packs.length ? (' • packs ' + esc(packs.slice(0, 3).map(pack => pack.name || pack.id).join(', '))) : '') +
+          '</div></div>' +
+          '<div>' + statusPill(item.enabled === false ? 'Gap' : 'Covered', item.enabled === false ? 'critical' : 'nominal') + '</div>' +
+        '</div>'
+      );
+    } catch (e) {
+      log('Detection engineering refresh error: ' + e.message);
+    }
+  }
+
+  async function saveEnterpriseHunt() {
+    const name = ($('#hunt-name') || {}).value || '';
+    const hostname = ($('#hunt-host') || {}).value || '';
+    const text = ($('#hunt-text') || {}).value || '';
+    if (!name.trim()) { toast('Hunt name is required', 'error'); return; }
+    if (!hostname.trim() && !text.trim()) { toast('Add a hostname or search text for the hunt', 'error'); return; }
+    const threshold = Number(($('#hunt-threshold') || {}).value || 1);
+    const scheduleSecs = Number(($('#hunt-schedule') || {}).value || 0);
+    try {
+      const res = await apiFetch('/api/hunts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: name.trim(),
+          severity: ($('#hunt-severity') || {}).value || 'medium',
+          threshold: Math.max(1, threshold || 1),
+          schedule_interval_secs: scheduleSecs > 0 ? scheduleSecs : null,
+          query: {
+            hostname: hostname.trim() || null,
+            text: text.trim() || null,
+            limit: 250
+          }
+        })
+      });
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      toast('Saved hunt ' + name.trim(), 'success');
+      refreshDetectionEngineering();
+      refreshWorkbenchOverview();
+    } catch (e) {
+      toast('Save hunt failed: ' + e.message, 'error');
+    }
+  }
+
+  async function runSavedHunt(huntId) {
+    if (!huntId) return;
+    try {
+      const res = await apiFetch('/api/hunts/' + encodeURIComponent(huntId) + '/run', { method: 'POST' });
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      const data = await res.json();
+      toast((data.run && data.run.summary) ? data.run.summary : ('Ran hunt ' + huntId), 'success');
+      refreshDetectionEngineering();
+      refreshWorkbenchOverview();
+    } catch (e) {
+      toast('Run hunt failed: ' + e.message, 'error');
+    }
+  }
+
+  async function testManagedRule(ruleId) {
+    if (!ruleId) return;
+    try {
+      const res = await apiFetch('/api/content/rules/' + encodeURIComponent(ruleId) + '/test', { method: 'POST' });
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      const data = await res.json();
+      const result = data.result || {};
+      toast('Rule test complete: ' + Number(result.match_count || 0) + ' matches, ' + Number(result.suppressed_count || 0) + ' suppressed', 'success');
+      refreshDetectionEngineering();
+    } catch (e) {
+      toast('Rule test failed: ' + e.message, 'error');
+    }
+  }
+
+  async function promoteManagedRule(ruleId, targetStatus) {
+    if (!ruleId || !targetStatus) return;
+    try {
+      const res = await apiFetch('/api/content/rules/' + encodeURIComponent(ruleId) + '/promote', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ target_status: targetStatus, reason: 'console promotion' })
+      });
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      toast('Rule moved to ' + titleCaseStatus(targetStatus), 'success');
+      refreshDetectionEngineering();
+      refreshSigma();
+    } catch (e) {
+      toast('Rule promotion failed: ' + e.message, 'error');
+    }
+  }
+
+  async function rollbackManagedRule(ruleId) {
+    if (!ruleId) return;
+    try {
+      const res = await apiFetch('/api/content/rules/' + encodeURIComponent(ruleId) + '/rollback', { method: 'POST' });
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      toast('Rule rolled back', 'success');
+      refreshDetectionEngineering();
+      refreshSigma();
+    } catch (e) {
+      toast('Rule rollback failed: ' + e.message, 'error');
+    }
+  }
+
+  async function saveSuppression() {
+    const name = ($('#suppression-name') || {}).value || '';
+    const justification = ($('#suppression-justification') || {}).value || '';
+    if (!name.trim() || !justification.trim()) {
+      toast('Suppression name and justification are required', 'error');
+      return;
+    }
+    const payload = {
+      name: name.trim(),
+      justification: justification.trim(),
+      active: true
+    };
+    const ruleId = ($('#suppression-rule') || {}).value || '';
+    const hostname = ($('#suppression-host') || {}).value || '';
+    const text = ($('#suppression-text') || {}).value || '';
+    if (ruleId) payload.rule_id = ruleId;
+    if (hostname.trim()) payload.hostname = hostname.trim();
+    if (text.trim()) payload.text = text.trim();
+    try {
+      const res = await apiFetch('/api/suppressions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      toast('Suppression saved', 'success');
+      refreshDetectionEngineering();
+    } catch (e) {
+      toast('Suppression save failed: ' + e.message, 'error');
+    }
+  }
+
   // ── Cases & Alert Queue ──
   async function refreshCases() {
+    const params = new URLSearchParams();
+    const status = ($('#case-filter-status') || {}).value || '';
+    const priority = ($('#case-filter-priority') || {}).value || '';
+    if (status) params.set('status', status);
+    if (priority) params.set('priority', priority);
     try {
       const [casesRes, statsRes] = await Promise.all([
-        apiFetch('/api/cases'),
+        apiFetch('/api/cases' + (params.toString() ? ('?' + params.toString()) : '')),
         apiFetch('/api/cases/stats')
       ]);
       if (casesRes.ok) {
@@ -4997,8 +6471,16 @@ body.light .modal-box{background:#ffffff;}
         const cases = Array.isArray(data) ? data : (data.cases || []);
         const tb = $('#cases-tbody');
         if (tb) {
-          tb.innerHTML = cases.length ? cases.map(c => '<tr><td>' + esc(c.id || '') + '</td><td>' + esc(c.title || '') + '</td><td>' + esc(c.priority || '') + '</td><td>' + esc(c.status || '') + '</td><td>' + esc(c.assignee || '—') + '</td><td>' + esc(c.created_at || c.created || '') + '</td></tr>').join('') : '<tr><td colspan="6" class="text-muted">No cases yet.</td></tr>';
+          tb.innerHTML = cases.length ? cases.map(c => {
+            const selected = String(c.id) === String(selectedCaseId) ? ' style="background:var(--accent-light);"' : '';
+            return '<tr class="alert-row" data-case-row="' + esc(c.id || '') + '"' + selected + '><td><code>' + esc(c.id || '') + '</code></td><td><strong>' + esc(c.title || '') + '</strong><div class="text-muted" style="font-size:.72rem;">' + (safeArray(c.tags).slice(0, 3).map(esc).join(', ') || 'No tags') + '</div></td><td>' + statusPill(c.priority || 'Medium', String(c.priority || 'medium').toLowerCase()) + '</td><td>' + statusPill(titleCaseStatus(c.status || 'New'), String(c.status || 'new').toLowerCase()) + '</td><td>' + esc(c.assignee || '—') + '</td><td>' + esc(c.updated_at || c.created_at || c.created || '') + '</td></tr>';
+          }).join('') : '<tr><td colspan="6" class="text-muted">No cases yet.</td></tr>';
+          tb.querySelectorAll('[data-case-row]').forEach(row => {
+            row.addEventListener('click', function() { showCaseDetail(this.dataset.caseRow, true); });
+          });
         }
+        if (!selectedCaseId && cases[0]) selectedCaseId = cases[0].id;
+        if (selectedCaseId) showCaseDetail(selectedCaseId, false);
       }
       if (statsRes.ok) {
         const st = await statsRes.json();
@@ -5008,6 +6490,153 @@ body.light .modal-box{background:#ffffff;}
       }
     } catch(e) { log('Cases refresh error: ' + e.message); }
   }
+
+  async function showCaseDetail(caseId, openDrawer) {
+    if (!caseId) return;
+    selectedCaseId = caseId;
+    try {
+      let detail = caseDetailCache.get(String(caseId));
+      if (!detail) {
+        const res = await apiFetch('/api/cases/' + encodeURIComponent(caseId));
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        detail = await res.json();
+        caseDetailCache.set(String(caseId), detail);
+      }
+      renderCaseDetail(detail);
+      if (openDrawer !== false) {
+        openWorkbenchDrawer(
+          'Case #' + detail.id + ' · ' + (detail.title || 'Untitled'),
+          titleCaseStatus(detail.status || 'New') + ' · ' + titleCaseStatus(detail.priority || 'Medium'),
+          renderCaseDrawer(detail)
+        );
+      }
+    } catch (e) {
+      const panel = $('#case-detail-panel');
+      if (panel) panel.innerHTML = '<div class="workspace-empty">Failed to load case detail: ' + esc(e.message) + '</div>';
+    }
+  }
+
+  function renderCaseDrawer(detail) {
+    return '<div class="summary-list">' +
+      '<div class="summary-row"><div><strong>Owner</strong><div class="text-muted" style="font-size:.75rem;">' + esc(detail.assignee || 'Unassigned') + '</div></div><div>' + statusPill(titleCaseStatus(detail.status || 'New'), String(detail.status || 'new').toLowerCase()) + '</div></div>' +
+      '<div class="summary-row"><div><strong>Linked Incidents</strong><div class="text-muted" style="font-size:.75rem;">' + (safeArray(detail.linked_incidents).map(inc => inc.title || ('Incident #' + inc.id)).join(', ') || 'None linked') + '</div></div><div>' + esc(safeArray(detail.linked_incidents).length) + '</div></div>' +
+      '<div class="summary-row"><div><strong>Linked Events</strong><div class="text-muted" style="font-size:.75rem;">' + (safeArray(detail.linked_events).map(evt => '#' + evt.id + ' ' + (evt.hostname || evt.agent_id || '')).join(', ') || 'None linked') + '</div></div><div>' + esc(safeArray(detail.linked_events).length) + '</div></div>' +
+      '</div><div><h3 style="margin-bottom:.45rem;">Description</h3><div class="code-box">' + esc(detail.description || 'No description') + '</div></div>' +
+      '<div><h3 style="margin-bottom:.45rem;">Comments</h3><div class="timeline-list">' + (safeArray(detail.comments).length ? safeArray(detail.comments).map(comment => '<div class="timeline-item"><strong>' + esc(comment.author || 'analyst') + '</strong><div class="text-muted" style="font-size:.72rem;margin-top:.15rem;">' + esc(comment.timestamp || '') + '</div><div style="margin-top:.35rem;">' + esc(comment.text || '') + '</div></div>').join('') : '<div class="workspace-empty">No comments yet.</div>') + '</div></div>';
+  }
+
+  function renderCaseDetail(detail) {
+    const panel = $('#case-detail-panel');
+    if (!panel) return;
+    panel.innerHTML = '<div style="display:flex;justify-content:space-between;gap:1rem;align-items:flex-start;margin-bottom:.75rem;">' +
+        '<div><h2 style="margin:0;">' + esc(detail.title || 'Untitled Case') + '</h2><div class="text-muted" style="font-size:.76rem;margin-top:.2rem;">Case #' + esc(detail.id) + ' · ' + esc(detail.created_at || '') + '</div></div>' +
+        '<div>' + statusPill(titleCaseStatus(detail.status || 'New'), String(detail.status || 'new').toLowerCase()) + '</div>' +
+      '</div>' +
+      '<dl class="kv-grid compact">' +
+        '<dt>Priority</dt><dd>' + statusPill(titleCaseStatus(detail.priority || 'Medium'), String(detail.priority || 'medium').toLowerCase()) + '</dd>' +
+        '<dt>Assignee</dt><dd>' + esc(detail.assignee || 'Unassigned') + '</dd>' +
+        '<dt>Incidents</dt><dd>' + esc(safeArray(detail.linked_incidents).length) + '</dd>' +
+        '<dt>Events</dt><dd>' + esc(safeArray(detail.linked_events).length) + '</dd>' +
+        '<dt>Tags</dt><dd>' + (safeArray(detail.tags).map(esc).join(', ') || '—') + '</dd>' +
+      '</dl>' +
+      '<div class="code-box">' + esc(detail.description || 'No description') + '</div>' +
+      '<div class="workspace-toolbar">' +
+        '<select id="case-detail-status" style="min-width:150px;background:var(--bg-alt);color:var(--ink);border:1px solid var(--border);border-radius:6px;padding:.4rem .55rem;">' +
+          ['New','Triaging','Investigating','Escalated','Resolved','Closed'].map(status => '<option value="' + status.toLowerCase() + '"' + (String(detail.status).toLowerCase() === status.toLowerCase() ? ' selected' : '') + '>' + status + '</option>').join('') +
+        '</select>' +
+        '<input type="text" id="case-detail-assignee" value="' + esc(detail.assignee || '') + '" placeholder="Assignee" style="min-width:140px;background:var(--bg-alt);color:var(--ink);border:1px solid var(--border);border-radius:6px;padding:.4rem .55rem;">' +
+        '<button class="btn btn-sm primary" id="btn-case-save">Save</button>' +
+        '<button class="btn btn-sm" id="btn-case-open-investigation">Investigation</button>' +
+      '</div>' +
+      '<div class="card-grid cols-2" style="margin-top:.5rem;">' +
+        '<div><h3 style="margin-bottom:.45rem;">Linked Incidents</h3><div class="summary-list">' + (safeArray(detail.linked_incidents).length ? safeArray(detail.linked_incidents).map(inc => '<div class="summary-row"><div><strong>' + esc(inc.title || ('Incident #' + inc.id)) + '</strong><div class="text-muted" style="font-size:.74rem;margin-top:.18rem;">' + esc(inc.updated_at || '') + '</div></div><div>' + statusPill(titleCaseStatus(inc.status || 'Open'), String(inc.status || 'open').toLowerCase()) + '</div></div>').join('') : '<div class="workspace-empty">No linked incidents.</div>') + '</div></div>' +
+        '<div><h3 style="margin-bottom:.45rem;">Linked Events</h3><div class="summary-list">' + (safeArray(detail.linked_events).length ? safeArray(detail.linked_events).map(evt => '<div class="summary-row"><div><strong>Event #' + esc(evt.id) + '</strong><div class="text-muted" style="font-size:.74rem;margin-top:.18rem;">' + esc(evt.hostname || evt.agent_id || '') + ' · ' + esc(evt.received_at || '') + '</div></div><div>' + statusPill(evt.level || 'Nominal', String(evt.level || 'nominal').toLowerCase()) + '</div></div>').join('') : '<div class="workspace-empty">No linked events.</div>') + '</div></div>' +
+      '</div>' +
+      '<div class="card-grid cols-2" style="margin-top:.75rem;">' +
+        '<div><h3 style="margin-bottom:.45rem;">Comments</h3><div class="timeline-list" id="case-comment-list">' + (safeArray(detail.comments).length ? safeArray(detail.comments).map(comment => '<div class="timeline-item"><strong>' + esc(comment.author || 'analyst') + '</strong><div class="text-muted" style="font-size:.72rem;margin-top:.15rem;">' + esc(comment.timestamp || '') + '</div><div style="margin-top:.35rem;">' + esc(comment.text || '') + '</div></div>').join('') : '<div class="workspace-empty">No comments yet.</div>') + '</div><div class="workspace-toolbar" style="margin-top:.5rem;"><input type="text" id="case-comment-author" value="admin-console" style="width:140px;background:var(--bg-alt);color:var(--ink);border:1px solid var(--border);border-radius:6px;padding:.4rem .55rem;"><input type="text" id="case-comment-text" placeholder="Add comment" style="flex:1;min-width:180px;background:var(--bg-alt);color:var(--ink);border:1px solid var(--border);border-radius:6px;padding:.4rem .55rem;"><button class="btn btn-sm" id="btn-case-comment">Add</button></div></div>' +
+        '<div><h3 style="margin-bottom:.45rem;">Evidence</h3><div class="timeline-list">' + (safeArray(detail.evidence).length ? safeArray(detail.evidence).map(ev => '<div class="timeline-item"><strong>' + esc(ev.kind || 'evidence') + '</strong><div class="text-muted" style="font-size:.72rem;margin-top:.15rem;">' + esc(ev.reference_id || '') + ' · ' + esc(ev.added_at || '') + '</div><div style="margin-top:.35rem;">' + esc(ev.description || '') + '</div></div>').join('') : '<div class="workspace-empty">No evidence recorded.</div>') + '</div><div class="workspace-toolbar" style="margin-top:.5rem;"><input type="text" id="case-evidence-kind" placeholder="Kind" style="width:120px;background:var(--bg-alt);color:var(--ink);border:1px solid var(--border);border-radius:6px;padding:.4rem .55rem;"><input type="text" id="case-evidence-ref" placeholder="Reference ID" style="width:140px;background:var(--bg-alt);color:var(--ink);border:1px solid var(--border);border-radius:6px;padding:.4rem .55rem;"><input type="text" id="case-evidence-desc" placeholder="Description" style="flex:1;min-width:180px;background:var(--bg-alt);color:var(--ink);border:1px solid var(--border);border-radius:6px;padding:.4rem .55rem;"><button class="btn btn-sm" id="btn-case-evidence">Add</button></div></div>' +
+      '</div>';
+
+    $('#btn-case-save').addEventListener('click', saveCaseDetail);
+    $('#btn-case-comment').addEventListener('click', addCaseComment);
+    $('#btn-case-evidence').addEventListener('click', addCaseEvidence);
+    $('#btn-case-open-investigation').addEventListener('click', function() {
+      activateTab('ir-tabs', 'ir-investigation');
+      const firstEvent = safeArray(detail.linked_events)[0];
+      if (firstEvent) {
+        setInvestigationContextFromEvent(firstEvent);
+      }
+      if (safeArray(detail.linked_events).length) {
+        $('#investigation-event-ids').value = safeArray(detail.linked_events).map(evt => evt.id).join(', ');
+      }
+      const firstIncident = safeArray(detail.linked_incidents)[0];
+      if (firstIncident) {
+        $('#timeline-incident-id').value = firstIncident.id;
+        loadTimeline();
+      }
+    });
+  }
+
+  async function saveCaseDetail() {
+    if (!selectedCaseId) return;
+    try {
+      const res = await apiFetch('/api/cases/' + encodeURIComponent(selectedCaseId) + '/update', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          status: ($('#case-detail-status') || {}).value || '',
+          assignee: ($('#case-detail-assignee') || {}).value || '',
+        })
+      });
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      caseDetailCache.delete(String(selectedCaseId));
+      toast('Case updated', 'success');
+      refreshCases();
+      refreshWorkbenchOverview();
+    } catch (e) {
+      toast('Case update failed: ' + e.message, 'error');
+    }
+  }
+
+  async function addCaseComment() {
+    if (!selectedCaseId) return;
+    const author = ($('#case-comment-author') || {}).value || 'admin-console';
+    const text = ($('#case-comment-text') || {}).value || '';
+    if (!text.trim()) return;
+    try {
+      const res = await apiFetch('/api/cases/' + encodeURIComponent(selectedCaseId) + '/comment', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ author, text })
+      });
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      caseDetailCache.delete(String(selectedCaseId));
+      refreshCases();
+    } catch (e) {
+      toast('Comment failed: ' + e.message, 'error');
+    }
+  }
+
+  async function addCaseEvidence() {
+    if (!selectedCaseId) return;
+    const kind = ($('#case-evidence-kind') || {}).value || 'artifact';
+    const reference_id = ($('#case-evidence-ref') || {}).value || '';
+    const description = ($('#case-evidence-desc') || {}).value || '';
+    if (!reference_id.trim()) { toast('Evidence reference is required', 'error'); return; }
+    try {
+      const res = await apiFetch('/api/cases/' + encodeURIComponent(selectedCaseId) + '/evidence', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ kind, reference_id, description })
+      });
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      caseDetailCache.delete(String(selectedCaseId));
+      refreshCases();
+    } catch (e) {
+      toast('Evidence update failed: ' + e.message, 'error');
+    }
+  }
+
   function toggleNewCaseForm() {
     const form = $('#new-case-form');
     if (form) form.style.display = form.style.display === 'none' ? '' : 'none';
@@ -5024,6 +6653,82 @@ body.light .modal-box{background:#ffffff;}
       if (res.ok) { toast('Case created', 'success'); log('Case created: ' + title); $('#new-case-title').value = ''; $('#new-case-desc').value = ''; $('#new-case-tags').value = ''; toggleNewCaseForm(); refreshCases(); } else { toast('Case creation failed: ' + res.status, 'error'); }
     } catch(e) { toast('Error: ' + e.message, 'error'); }
   }
+
+  async function createCaseFromQueueAlert(eventId) {
+    const item = lastQueueData.find(entry => String(entry.event_id) === String(eventId));
+    if (!item) return;
+    try {
+      const res = await apiFetch('/api/cases', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          title: 'Investigate ' + (item.hostname || 'endpoint') + ' alert #' + item.event_id,
+          priority: String(item.severity || '').toLowerCase() === 'critical' ? 'critical' : 'high',
+          description: 'Created from queue item #' + item.event_id + ' · ' + safeArray(item.reasons).join(', '),
+          event_ids: [item.event_id],
+          tags: safeArray(item.reasons).slice(0, 4),
+        })
+      });
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      const created = await res.json().catch(() => ({}));
+      selectedCaseId = created.id || selectedCaseId;
+      toast('Case created from queue item #' + item.event_id, 'success');
+      switchSection('incident-response');
+      activateTab('ir-tabs', 'ir-cases');
+      caseDetailCache.clear();
+      refreshCases();
+    } catch (e) {
+      toast('Case creation failed: ' + e.message, 'error');
+    }
+  }
+
+  async function assignQueueAlert(eventId) {
+    const item = lastQueueData.find(entry => String(entry.event_id) === String(eventId));
+    if (!item) return;
+    const assignee = window.prompt('Assign queue item #' + eventId + ' to analyst:', item.assignee || 'soc-analyst');
+    if (assignee == null) return;
+    if (!assignee.trim()) { toast('Assignee is required', 'error'); return; }
+    try {
+      const res = await apiFetch('/api/queue/assign', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ event_id: Number(eventId), assignee: assignee.trim() })
+      });
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      toast('Queue item assigned to ' + assignee.trim(), 'success');
+      refreshAlertQueue();
+      refreshWorkbenchOverview();
+    } catch (e) {
+      toast('Assign failed: ' + e.message, 'error');
+    }
+  }
+
+  async function escalateQueueAlert(eventId) {
+    const item = lastQueueData.find(entry => String(entry.event_id) === String(eventId));
+    if (!item) return;
+    try {
+      const res = await apiFetch('/api/incidents', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          title: 'Escalated queue item #' + item.event_id + ' on ' + (item.hostname || item.agent_id || 'endpoint'),
+          severity: item.severity || 'Elevated',
+          summary: 'Escalated from SOC workbench queue • ' + safeArray(item.reasons).join(', '),
+          event_ids: [item.event_id],
+          agent_ids: item.agent_id ? [item.agent_id] : []
+        })
+      });
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      const created = await res.json().catch(() => ({}));
+      toast('Incident created from queue item #' + item.event_id, 'success');
+      refreshIncidents();
+      refreshWorkbenchOverview();
+      if (created.id != null) focusIncidentContext(created.id);
+    } catch (e) {
+      toast('Escalation failed: ' + e.message, 'error');
+    }
+  }
+
   async function refreshAlertQueue() {
     try {
       const [queueRes, statsRes] = await Promise.all([
@@ -5031,10 +6736,37 @@ body.light .modal-box{background:#ffffff;}
         apiFetch('/api/queue/stats')
       ]);
       if (queueRes.ok) {
-        const alerts = await queueRes.json();
+        const payload = await queueRes.json();
+        const alerts = Array.isArray(payload) ? payload : (payload.queue || []);
+        const sortMode = ($('#queue-sort') || {}).value || 'sla';
+        const sortedAlerts = alerts.slice().sort((left, right) => {
+          if (sortMode === 'severity') {
+            return (String(right.severity || '').toLowerCase() === 'critical' ? 3 : String(right.severity || '').toLowerCase() === 'severe' ? 2 : 1) - (String(left.severity || '').toLowerCase() === 'critical' ? 3 : String(left.severity || '').toLowerCase() === 'severe' ? 2 : 1);
+          }
+          if (sortMode === 'age') {
+            return Number(right.age_secs || 0) - Number(left.age_secs || 0);
+          }
+          return Number(Boolean(right.sla_breached)) - Number(Boolean(left.sla_breached)) || (Number(right.age_secs || 0) - Number(left.age_secs || 0));
+        });
+        lastQueueData = sortedAlerts;
         const tb = $('#queue-tbody');
-        if (tb && Array.isArray(alerts)) {
-          tb.innerHTML = alerts.length ? alerts.map(a => '<tr><td>' + esc(a.id || '') + '</td><td>' + esc(a.severity || '') + '</td><td>' + esc(a.source || '') + '</td><td>' + esc(a.status || '') + '</td><td>' + esc(a.assignee || '—') + '</td><td>' + esc(a.timestamp || '') + '</td><td><button class="btn btn-sm" data-ack-alert="' + esc(a.id || '') + '">Ack</button></td></tr>').join('') : '<tr><td colspan="7" class="text-muted">No queued alerts.</td></tr>';
+        if (tb) {
+          tb.innerHTML = sortedAlerts.length ? sortedAlerts.map(a => '<tr class="alert-row" data-queue-row="' + esc(a.event_id || '') + '"><td><code>' + esc(a.event_id || '') + '</code></td><td>' + statusPill(a.severity || 'Nominal', String(a.severity || 'nominal').toLowerCase()) + '<div class="text-muted" style="font-size:.72rem;margin-top:.18rem;">score ' + Number(a.score || 0).toFixed(2) + '</div></td><td><strong>' + esc(a.hostname || a.agent_id || 'unknown') + '</strong><div class="text-muted" style="font-size:.72rem;margin-top:.18rem;">' + esc(a.agent_id || 'local') + '</div></td><td>' + statusPill(titleCaseStatus(a.status || 'pending'), String(a.status || 'pending').toLowerCase()) + '</td><td>' + esc(fmtAgeSecs(a.age_secs)) + '</td><td>' + (a.sla_breached ? statusPill('Breached', 'critical') : statusPill('Within SLA', 'nominal')) + '</td><td>' + esc(a.assignee || '—') + '</td><td><div class="btn-row" style="gap:.35rem;flex-wrap:wrap;"><button class="btn btn-sm" data-ack-alert="' + esc(a.event_id || '') + '">Ack</button><button class="btn btn-sm" data-assign-alert="' + esc(a.event_id || '') + '">Assign</button><button class="btn btn-sm" data-escalate-alert="' + esc(a.event_id || '') + '">Escalate</button><button class="btn btn-sm" data-open-case-from-alert="' + esc(a.event_id || '') + '">Case</button><button class="btn btn-sm" data-open-agent-context="' + esc(a.agent_id || '') + '">Agent</button></div></td></tr>').join('') : '<tr><td colspan="8" class="text-muted">No queued alerts.</td></tr>';
+          tb.querySelectorAll('[data-queue-row]').forEach(row => {
+            row.addEventListener('click', function(e) {
+              if (e.target.closest('button')) return;
+              const item = lastQueueData.find(entry => String(entry.event_id) === String(this.dataset.queueRow));
+              if (!item) return;
+              openWorkbenchDrawer(
+                'Queue Item #' + item.event_id,
+                (item.hostname || item.agent_id || 'Endpoint') + ' · ' + (item.severity || 'Nominal'),
+                '<div class="summary-list">' +
+                '<div class="summary-row"><div><strong>Status</strong><div class="text-muted" style="font-size:.75rem;margin-top:.18rem;">' + esc(item.assignee || 'Unassigned') + '</div></div><div>' + statusPill(titleCaseStatus(item.status || 'pending'), String(item.status || 'pending').toLowerCase()) + '</div></div>' +
+                '<div class="summary-row"><div><strong>Reasons</strong><div class="text-muted" style="font-size:.75rem;margin-top:.18rem;">' + esc(safeArray(item.reasons).join(', ') || 'No reasons') + '</div></div><div>' + statusPill(item.sla_breached ? 'Breached' : 'Within SLA', item.sla_breached ? 'critical' : 'nominal') + '</div></div>' +
+                '</div><div class="drawer-actions"><button class="btn btn-sm" onclick="window.__workbenchAgentContext && window.__workbenchAgentContext(\'' + esc(item.agent_id || '') + '\')">Open Agent</button><button class="btn btn-sm" onclick="window.__workbenchAssignAlert && window.__workbenchAssignAlert(\'' + esc(item.event_id || '') + '\')">Assign</button><button class="btn btn-sm" onclick="window.__workbenchEscalateAlert && window.__workbenchEscalateAlert(\'' + esc(item.event_id || '') + '\')">Escalate</button><button class="btn btn-sm primary" onclick="window.__workbenchCaseFromAlert && window.__workbenchCaseFromAlert(\'' + esc(item.event_id || '') + '\')">Create Case</button></div>'
+              );
+            });
+          });
         }
       }
       if (statsRes.ok) {
@@ -5047,8 +6779,8 @@ body.light .modal-box{background:#ffffff;}
   }
   async function ackAlert(id) {
     try {
-      const res = await apiFetch('/api/queue/acknowledge', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({alert_id: id}) });
-      if (res.ok) { log('Alert acknowledged'); refreshAlertQueue(); }
+      const res = await apiFetch('/api/queue/acknowledge', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({event_id: Number(id)}) });
+      if (res.ok) { log('Alert acknowledged'); refreshAlertQueue(); refreshWorkbenchOverview(); }
     } catch(e) { log('Error: ' + e.message); }
   }
 
@@ -5081,6 +6813,138 @@ body.light .modal-box{background:#ffffff;}
       const res = await apiFetch('/api/rbac/users/' + encodeURIComponent(username), { method: 'DELETE' });
       if (res.ok) { log('User removed: ' + username); refreshRbac(); }
     } catch(e) { log('Error: ' + e.message); }
+  }
+
+  async function refreshEnterpriseAdmin() {
+    try {
+      const [idpRes, scimRes, connectorsRes, auditRes, diagnosticsRes, dependenciesRes] = await Promise.all([
+        apiFetch('/api/idp/providers'),
+        apiFetch('/api/scim/config'),
+        apiFetch('/api/enrichments/connectors'),
+        apiFetch('/api/audit/admin'),
+        apiFetch('/api/support/diagnostics'),
+        apiFetch('/api/system/health/dependencies')
+      ]);
+      const idpData = idpRes.ok ? await idpRes.json() : {};
+      const scimData = scimRes.ok ? await scimRes.json() : {};
+      const connectorsData = connectorsRes.ok ? await connectorsRes.json() : {};
+      const auditData = auditRes.ok ? await auditRes.json() : {};
+      const diagnosticsData = diagnosticsRes.ok ? await diagnosticsRes.json() : {};
+      const dependenciesData = dependenciesRes.ok ? await dependenciesRes.json() : {};
+
+      const providers = safeArray(idpData.providers);
+      enterpriseConnectorsCache = safeArray(connectorsData.connectors);
+      renderSummaryList($('#idp-provider-list'), providers, 'Configured identity providers will appear here.', provider =>
+        '<div class="summary-row"><div><strong>' + esc(provider.display_name || provider.id || 'Provider') + '</strong><div class="text-muted" style="font-size:.75rem;margin-top:.18rem;">' +
+          esc(provider.kind || 'idp') + ' • ' + esc(provider.issuer_url || provider.sso_url || 'No endpoint') +
+        '</div></div><div>' + statusPill(provider.enabled ? 'Enabled' : 'Disabled', provider.enabled ? 'nominal' : 'critical') + '</div></div>'
+      );
+
+      const scim = scimData.config || {};
+      if ($('#scim-enabled')) $('#scim-enabled').checked = !!scim.enabled;
+      if ($('#scim-base-url')) $('#scim-base-url').value = scim.base_url || '';
+      if ($('#scim-mode')) $('#scim-mode').value = scim.provisioning_mode || 'automatic';
+      if ($('#scim-default-role')) $('#scim-default-role').value = scim.default_role || 'viewer';
+      if ($('#scim-group-mappings')) $('#scim-group-mappings').value = formatMappingLines(scim.group_role_mappings);
+      renderSummaryList($('#scim-status-summary'), [
+        { title: scim.enabled ? 'Provisioning Enabled' : 'Provisioning Disabled', subtitle: (scim.base_url || 'No SCIM URL configured') + ' • default role ' + (scim.default_role || 'viewer'), severity: scim.enabled ? 'nominal' : 'elevated' }
+      ], 'SCIM status will appear here.', item =>
+        '<div class="summary-row"><div><strong>' + esc(item.title) + '</strong><div class="text-muted" style="font-size:.75rem;margin-top:.18rem;">' + esc(item.subtitle) + '</div></div><div>' + statusPill(titleCaseStatus(item.severity), String(item.severity).toLowerCase()) + '</div></div>'
+      );
+
+      renderSummaryList($('#connector-list'), enterpriseConnectorsCache, 'Connectors will appear here.', connector =>
+        '<div class="summary-row"><div><strong>' + esc(connector.display_name || connector.kind || 'Connector') + '</strong><div class="text-muted" style="font-size:.75rem;margin-top:.18rem;">' +
+          esc(connector.kind || 'connector') + ' • ' + esc(connector.endpoint || 'local/no endpoint') +
+        '</div></div><div>' + statusPill(titleCaseStatus(connector.status || (connector.enabled ? 'ready' : 'disabled')), String(connector.status || (connector.enabled ? 'ready' : 'disabled')).toLowerCase()) + '</div></div>'
+      );
+
+      const bundle = diagnosticsData.bundle || {};
+      renderSummaryList($('#support-diag-summary'), [
+        { title: 'Diagnostics Digest', subtitle: diagnosticsData.digest || 'No digest', severity: 'nominal' },
+        { title: 'Operations', subtitle: 'events ' + Number(bundle.operations?.event_count || 0) + ' • queue ' + Number(bundle.operations?.queue_depth || 0) + ' • errors ' + Number(bundle.operations?.error_count || 0), severity: Number(bundle.operations?.error_count || 0) > 0 ? 'elevated' : 'nominal' },
+        { title: 'Dependencies', subtitle: 'storage ' + (dependenciesData.storage?.backend || 'unknown') + ' • connectors ' + Number(dependenciesData.connectors?.enabled || 0) + ' • stale agents ' + Number(dependenciesData.deployments?.stale_agents || 0), severity: Number(dependenciesData.deployments?.stale_agents || 0) > 0 ? 'severe' : 'nominal' },
+        { title: 'Identity', subtitle: Number(dependenciesData.identity?.providers_enabled || 0) + ' providers • SCIM ' + (dependenciesData.identity?.scim_enabled ? 'enabled' : 'disabled'), severity: dependenciesData.identity?.status === 'configured' ? 'nominal' : 'elevated' }
+      ], 'Diagnostics and dependency health will appear here.', item =>
+        '<div class="summary-row"><div><strong>' + esc(item.title) + '</strong><div class="text-muted" style="font-size:.75rem;margin-top:.18rem;">' + esc(item.subtitle) + '</div></div><div>' + statusPill(titleCaseStatus(item.severity), String(item.severity).toLowerCase()) + '</div></div>'
+      );
+
+      renderSummaryList($('#admin-change-control-list'), safeArray(auditData.change_control).slice(0, 8), 'Recent change-control events will appear here.', entry =>
+        '<div class="timeline-item"><strong>' + esc(entry.summary || entry.target || 'Change') + '</strong><div class="text-muted" style="font-size:.72rem;margin-top:.18rem;">' +
+          esc(entry.category || 'change') + ' • ' + esc(entry.requested_by || 'system') + ' • ' + esc(entry.created_at || '') +
+        '</div></div>'
+      );
+    } catch (e) {
+      log('Enterprise admin refresh error: ' + e.message);
+    }
+  }
+
+  async function saveIdentityProvider() {
+    const displayName = ($('#idp-display-name') || {}).value || '';
+    if (!displayName.trim()) { toast('Identity provider name is required', 'error'); return; }
+    try {
+      const res = await apiFetch('/api/idp/providers', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          kind: ($('#idp-kind') || {}).value || 'oidc',
+          display_name: displayName.trim(),
+          issuer_url: ($('#idp-issuer-url') || {}).value || '',
+          client_id: ($('#idp-client-id') || {}).value || '',
+          enabled: true,
+          group_role_mappings: parseMappingLines(($('#idp-group-mappings') || {}).value || '')
+        })
+      });
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      toast('Identity provider saved', 'success');
+      refreshEnterpriseAdmin();
+    } catch (e) {
+      toast('Identity provider save failed: ' + e.message, 'error');
+    }
+  }
+
+  async function saveScimConfig() {
+    try {
+      const res = await apiFetch('/api/scim/config', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          enabled: !!($('#scim-enabled') || {}).checked,
+          base_url: ($('#scim-base-url') || {}).value || '',
+          provisioning_mode: ($('#scim-mode') || {}).value || 'automatic',
+          default_role: ($('#scim-default-role') || {}).value || 'viewer',
+          group_role_mappings: parseMappingLines(($('#scim-group-mappings') || {}).value || '')
+        })
+      });
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      toast('SCIM configuration saved', 'success');
+      refreshEnterpriseAdmin();
+    } catch (e) {
+      toast('SCIM save failed: ' + e.message, 'error');
+    }
+  }
+
+  async function saveEnrichmentConnector() {
+    const kind = ($('#connector-kind') || {}).value || '';
+    const name = ($('#connector-name') || {}).value || '';
+    if (!kind.trim() || !name.trim()) { toast('Connector kind and display name are required', 'error'); return; }
+    try {
+      const res = await apiFetch('/api/enrichments/connectors', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          kind: kind.trim(),
+          display_name: name.trim(),
+          endpoint: ($('#connector-endpoint') || {}).value || '',
+          timeout_secs: Number(($('#connector-timeout') || {}).value || 10),
+          enabled: true
+        })
+      });
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      toast('Connector saved', 'success');
+      refreshEnterpriseAdmin();
+    } catch (e) {
+      toast('Connector save failed: ' + e.message, 'error');
+    }
   }
 
   // ── Session Management ──
@@ -5200,18 +7064,9 @@ body.light .modal-box{background:#ffffff;}
   $('#btn-theme-toggle').addEventListener('click', toggleTheme);
   const savedToken = localStorage.getItem('wardex.adminToken');
   if (savedToken) { $('#auth-token').value = savedToken; $('#auth-status').textContent = 'Token set'; $('#auth-status').className = 'auth-status ok'; }
-  refreshStatus();
-  refreshReport();
-  refreshCheckpointCount();
-  refreshAlerts();
   refreshHealth();
-  refreshTelemetry(true);
-  refreshHostInfo();
-  startAlertPolling();
-  loadSettings();
   initCharts();
-  refreshIncidents();
-  refreshExecutiveSummary();
+  if (savedToken) connect();
 
 })();
 </script>

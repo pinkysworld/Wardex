@@ -39,6 +39,15 @@ pub enum Permission {
     ExecuteResponses,
     ViewAuditLog,
     ManageRules,
+    PromoteRules,
+    ManageHunts,
+    ManageSuppressions,
+    ManageConnectors,
+    SyncTickets,
+    ManageIdentityProviders,
+    ManageScim,
+    ViewSupport,
+    ViewCoverage,
     ViewReports,
     ExportData,
     ManageFeatureFlags,
@@ -53,19 +62,24 @@ pub fn role_permissions(role: Role) -> Vec<Permission> {
             Permission::ViewAgents, Permission::ManageAgents, Permission::SubmitTelemetry,
             Permission::ViewConfig, Permission::ManageConfig, Permission::ManageUsers,
             Permission::ApproveResponses, Permission::ExecuteResponses, Permission::ViewAuditLog,
-            Permission::ManageRules, Permission::ViewReports, Permission::ExportData,
+            Permission::ManageRules, Permission::PromoteRules, Permission::ManageHunts,
+            Permission::ManageSuppressions, Permission::ManageConnectors, Permission::SyncTickets,
+            Permission::ManageIdentityProviders, Permission::ManageScim, Permission::ViewSupport,
+            Permission::ViewCoverage, Permission::ViewReports, Permission::ExportData,
             Permission::ManageFeatureFlags,
         ],
         Role::Analyst => vec![
             Permission::ViewDashboard, Permission::ViewEvents, Permission::ViewIncidents,
             Permission::ManageIncidents, Permission::ViewAlerts, Permission::ManageAlerts,
             Permission::ViewAgents, Permission::ApproveResponses, Permission::ViewAuditLog,
+            Permission::ManageRules, Permission::ManageHunts, Permission::ManageSuppressions,
+            Permission::SyncTickets, Permission::ViewCoverage, Permission::ViewSupport,
             Permission::ViewReports, Permission::ExportData, Permission::ViewConfig,
         ],
         Role::Viewer => vec![
             Permission::ViewDashboard, Permission::ViewEvents, Permission::ViewIncidents,
             Permission::ViewAlerts, Permission::ViewAgents, Permission::ViewReports,
-            Permission::ViewConfig,
+            Permission::ViewConfig, Permission::ViewCoverage, Permission::ViewSupport,
         ],
         Role::ServiceAccount => vec![
             Permission::SubmitTelemetry, Permission::ViewConfig,
@@ -213,7 +227,8 @@ impl AccessResult {
 /// Map API endpoint to required permission.
 pub fn endpoint_permission(method: &str, path: &str) -> Permission {
     let m = method.to_uppercase();
-    match (m.as_str(), path) {
+    let normalized = path.split('?').next().unwrap_or(path);
+    match (m.as_str(), normalized) {
         // Dashboard
         (_, p) if p.starts_with("/api/dashboard") => Permission::ViewDashboard,
 
@@ -241,7 +256,7 @@ pub fn endpoint_permission(method: &str, path: &str) -> Permission {
         (_, p) if p.starts_with("/api/config") => Permission::ManageConfig,
 
         // Users
-        (_, p) if p.starts_with("/api/users") => Permission::ManageUsers,
+        (_, p) if p.starts_with("/api/users") || p.starts_with("/api/rbac/users") => Permission::ManageUsers,
 
         // Response orchestration
         ("GET", p) if p.starts_with("/api/response") => Permission::ViewIncidents,
@@ -251,9 +266,33 @@ pub fn endpoint_permission(method: &str, path: &str) -> Permission {
         // Audit
         (_, p) if p.starts_with("/api/audit") => Permission::ViewAuditLog,
 
-        // Rules
-        ("GET", p) if p.starts_with("/api/rules") || p.starts_with("/api/sigma") => Permission::ViewEvents,
-        (_, p) if p.starts_with("/api/rules") || p.starts_with("/api/sigma") => Permission::ManageRules,
+        // Rules / Detection Content
+        ("GET", p) if p.starts_with("/api/rules")
+            || p.starts_with("/api/sigma")
+            || p.starts_with("/api/content/rules")
+            || p.starts_with("/api/hunts")
+            || p.starts_with("/api/coverage/mitre")
+            || p.starts_with("/api/suppressions")
+            || p.starts_with("/api/entities/")
+            || p.ends_with("/storyline") => Permission::ViewCoverage,
+        ("POST", p) if p.starts_with("/api/content/rules/") && (p.ends_with("/promote") || p.ends_with("/rollback")) => Permission::PromoteRules,
+        (_, p) if p.starts_with("/api/rules") || p.starts_with("/api/sigma") || p.starts_with("/api/content/rules") => Permission::ManageRules,
+        (_, p) if p.starts_with("/api/hunts") => Permission::ManageHunts,
+        (_, p) if p.starts_with("/api/suppressions") => Permission::ManageSuppressions,
+
+        // Integrations
+        ("GET", p) if p.starts_with("/api/enrichments/connectors") => Permission::ViewSupport,
+        (_, p) if p.starts_with("/api/enrichments/connectors") => Permission::ManageConnectors,
+        (_, p) if p.starts_with("/api/tickets/sync") => Permission::SyncTickets,
+
+        // Identity & provisioning
+        ("GET", p) if p.starts_with("/api/idp/providers") => Permission::ViewSupport,
+        (_, p) if p.starts_with("/api/idp/providers") => Permission::ManageIdentityProviders,
+        ("GET", p) if p.starts_with("/api/scim/config") => Permission::ViewSupport,
+        (_, p) if p.starts_with("/api/scim/config") => Permission::ManageScim,
+
+        // Support
+        (_, p) if p.starts_with("/api/support/") || p.starts_with("/api/system/health/") || p == "/api/audit/admin" => Permission::ViewSupport,
 
         // Reports
         (_, p) if p.starts_with("/api/reports") => Permission::ViewReports,
@@ -291,6 +330,7 @@ mod tests {
         assert!(store.has_permission("admin-token", Permission::ManageUsers));
         assert!(store.has_permission("admin-token", Permission::ExecuteResponses));
         assert!(store.has_permission("admin-token", Permission::ManageFeatureFlags));
+        assert!(store.has_permission("admin-token", Permission::PromoteRules));
     }
 
     #[test]
@@ -299,8 +339,11 @@ mod tests {
         assert!(store.has_permission("analyst-token", Permission::ViewEvents));
         assert!(store.has_permission("analyst-token", Permission::ManageIncidents));
         assert!(store.has_permission("analyst-token", Permission::ApproveResponses));
+        assert!(store.has_permission("analyst-token", Permission::ManageHunts));
+        assert!(store.has_permission("analyst-token", Permission::ManageRules));
         assert!(!store.has_permission("analyst-token", Permission::ManageUsers));
         assert!(!store.has_permission("analyst-token", Permission::ManageFeatureFlags));
+        assert!(!store.has_permission("analyst-token", Permission::PromoteRules));
     }
 
     #[test]
@@ -308,6 +351,7 @@ mod tests {
         let store = setup_store();
         assert!(store.has_permission("viewer-token", Permission::ViewDashboard));
         assert!(store.has_permission("viewer-token", Permission::ViewEvents));
+        assert!(store.has_permission("viewer-token", Permission::ViewSupport));
         assert!(!store.has_permission("viewer-token", Permission::ManageIncidents));
         assert!(!store.has_permission("viewer-token", Permission::ExecuteResponses));
     }
@@ -395,6 +439,8 @@ mod tests {
         assert_eq!(endpoint_permission("GET", "/api/events"), Permission::ViewEvents);
         assert_eq!(endpoint_permission("POST", "/api/telemetry"), Permission::SubmitTelemetry);
         assert_eq!(endpoint_permission("POST", "/api/users"), Permission::ManageUsers);
+        assert_eq!(endpoint_permission("POST", "/api/rbac/users"), Permission::ManageUsers);
         assert_eq!(endpoint_permission("GET", "/api/dashboard"), Permission::ViewDashboard);
+        assert_eq!(endpoint_permission("POST", "/api/content/rules/SE-001/promote"), Permission::PromoteRules);
     }
 }

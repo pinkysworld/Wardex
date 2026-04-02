@@ -147,6 +147,11 @@ impl SigmaEngine {
         self.rules.push(rule);
     }
 
+    pub fn replace_rules(&mut self, rules: Vec<SigmaRule>) {
+        self.rules = rules;
+        self.suppression.clear();
+    }
+
     pub fn rule_count(&self) -> usize {
         self.rules.len()
     }

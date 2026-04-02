@@ -61,10 +61,14 @@ pub struct TrackStatus {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct StatusManifest {
     pub updated_at: String,
+    pub version: String,
     pub backlog_completed: usize,
     pub backlog_total: usize,
     pub completed_phases: usize,
+    pub phases_completed: usize,
     pub total_phases: usize,
+    pub tasks_completed: usize,
+    pub total_tasks: usize,
     pub cli_commands: Vec<String>,
     pub implemented: Vec<String>,
     pub partially_wired: Vec<String>,
@@ -663,10 +667,14 @@ pub fn status_snapshot() -> String {
 pub fn status_manifest() -> StatusManifest {
     StatusManifest {
         updated_at: "current".into(),
+        version: env!("CARGO_PKG_VERSION").into(),
         backlog_completed: 160,
         backlog_total: 160,
         completed_phases: 28,
+        phases_completed: 28,
         total_phases: 28,
+        tasks_completed: 160,
+        total_tasks: 160,
         cli_commands: vec![
             "demo".into(),
             "analyze".into(),
@@ -871,9 +879,13 @@ mod tests {
     #[test]
     fn status_manifest_reports_backlog_progress() {
         let manifest = status_manifest();
+        assert_eq!(manifest.version, env!("CARGO_PKG_VERSION"));
         assert_eq!(manifest.backlog_completed, 160);
         assert_eq!(manifest.backlog_total, 160);
         assert_eq!(manifest.total_phases, 28);
+        assert_eq!(manifest.phases_completed, 28);
+        assert_eq!(manifest.tasks_completed, 160);
+        assert_eq!(manifest.total_tasks, 160);
         assert!(manifest.cli_commands.iter().any(|cmd| cmd == "status-json"));
         assert!(manifest.partially_wired.is_empty());
         assert_eq!(manifest.not_implemented.len(), 0);

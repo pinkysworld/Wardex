@@ -2,38 +2,41 @@
 
 ## Requirements
 
-- Rust toolchain (`cargo`)
-- A recent macOS, Linux, or Windows environment capable of running a single Rust binary
+- Rust toolchain with `cargo`
+- macOS, Linux, or Windows for local development
+- a modern browser for the admin console
 
 ## Build
 
 ```bash
-cargo build
+cargo build --release
 ```
 
-## Run the built-in demo
+## Run the demo
 
 ```bash
 cargo run -- demo
 ```
 
-This executes a short internal telemetry sequence and writes an audit trail to `var/demo.audit.log`.
+This executes the built-in telemetry sequence and writes audit output to `var/demo.audit.log`.
 
 ## Analyze a telemetry trace
 
-CSV format:
+CSV:
+
 ```bash
 cargo run -- analyze examples/credential_storm.csv
 ```
 
-JSONL format (auto-detected by `.jsonl` extension):
+JSONL:
+
 ```bash
 cargo run -- analyze examples/credential_storm.jsonl
 ```
 
 Default audit output for `analyze` is `var/last-run.audit.log`.
 
-## Generate a JSON report for SIEM
+## Generate a structured report
 
 ```bash
 cargo run -- report examples/credential_storm.csv
@@ -41,27 +44,27 @@ cargo run -- report examples/credential_storm.csv
 
 Default output is `var/last-run.report.json`.
 
-## Generate a default configuration file
+## Start the live control plane
 
 ```bash
-cargo run -- init-config
+cargo run -- serve
 ```
 
-Creates `wardex.toml` with all default thresholds, battery policies, and output paths. Edit this file to customize the runtime.
+This starts the HTTP server on port `8080` and prints a one-time admin token to the terminal. Open `http://localhost:8080/admin.html`, paste the token, and use the console to:
 
-## Inspect the project status snapshot
+- inspect the Dashboard, Fleet & Agents, Threat Detection, Reports, and Settings surfaces
+- work cases and alerts in the SOC Workbench
+- manage hunts, rules, suppressions, and MITRE coverage in Detection Engineering
+- review per-agent activity, deployment health, rollout targets, and rollback controls
+- inspect diagnostics, dependency health, audit posture, and identity/provisioning configuration
 
-```bash
-cargo run -- status
-```
-
-## Export structured status JSON for the browser console
+## Export the static status snapshot
 
 ```bash
 cargo run -- status-json site/data/status.json
 ```
 
-This writes the structured status snapshot consumed by the read-only browser console.
+This refreshes the structured status payload consumed by the static site and offline views.
 
 ## Run tests
 
@@ -69,96 +72,34 @@ This writes the structured status snapshot consumed by the read-only browser con
 cargo test
 ```
 
-The test suite currently includes 276 tests (255 unit + 21 integration) covering telemetry parsing, anomaly detection, policy evaluation, audit chains, checkpoints (including save and restore), forensics, proof verification, state machine transitions, replay buffers, poisoning heuristics, benchmark scoring (including a 10,000-sample performance benchmark), correlation analysis, temporal-logic monitoring, adversarial testing, device fingerprinting, supply-chain attestation, fixed-threshold detection, extended fixtures, enforcement, quantum signatures, swarm coordination, privacy-preserving forensics, Wasm extensions, threat intelligence, side-channel detection, digital-twin simulation, compliance scoring, multi-tenancy, edge-cloud offload, energy tracking, continual learning with drift detection, policy composition algebra, status export, and end-to-end HTTP API endpoints.
+The current release passes 692 automated tests across unit and integration coverage, including API regression coverage for hunts, content lifecycle, suppressions, entity pivots, incident storyline, governance, and supportability.
 
-## Open the read-only browser admin console
+## Live validation helpers
 
-1. Generate a report JSON file:
+- `python3 tests/live_test.py` exercises the live HTTP server paths.
+- `python3 tests/verify_admin.py` validates key admin-console data surfaces.
+- `tests/playwright/enterprise_console_smoke.spec.js` provides a reusable browser smoke flow for the enterprise console.
 
-```bash
-cargo run -- report examples/credential_storm.csv site/data/demo-report.json
-```
+## Release packages
 
-2. Generate a structured status snapshot:
+Tagged releases are built by GitHub Actions for:
 
-```bash
-cargo run -- status-json site/data/status.json
-```
+- Linux `x86_64-unknown-linux-musl`
+- macOS `aarch64-apple-darwin`
+- Windows `x86_64-pc-windows-msvc`
 
-3. Open `site/admin.html` in a browser.
+## Telemetry format
 
-The static console can inspect exported JSON artifacts without a running server.
+The parser supports CSV (legacy 8-column and extended 10-column) and JSONL.
 
-## Live admin console
+CSV header:
 
-Start the HTTP server:
-
-```bash
-cargo run -- serve
-```
-
-This starts a server on port 8080 and prints a one-time authentication token to the terminal. Open `http://localhost:8080/admin.html` in a browser, paste the token, and use the control panel to:
-
-- refresh runtime status and reports live
-- enable auto-refresh (5-second polling toggle)
-- monitor connection status (connected/disconnected/error indicator)
-- run demo analysis
-- switch detection mode (normal / frozen / decay) with decay rate slider
-- reset the detector baseline
-- upload custom JSONL or CSV files for analysis via drag-and-drop
-- save and restore detector checkpoints
-- filter report samples by threat level
-- export the current report as a CSV file
-- view responsive report tables on any screen size
-
-The console respects the system dark mode preference via `prefers-color-scheme: dark`.
-
-Custom port and site directory:
-
-```bash
-cargo run -- serve 9090 site
-```
-
-## Telemetry CSV format
-
-The parser supports both the legacy 8-column format and the extended 10-column format.
-
-Legacy header (8 columns):
 ```text
-timestamp_ms,cpu_load_pct,memory_load_pct,temperature_c,network_kbps,auth_failures,battery_pct,integrity_drift
+timestamp_ms,cpu_load_pct,memory_load_pct,temperature_c,network_kbps,auth_failures,battery_pct,integrity_drift[,process_count,disk_pressure_pct]
 ```
 
-Extended header (10 columns):
-```text
-timestamp_ms,cpu_load_pct,memory_load_pct,temperature_c,network_kbps,auth_failures,battery_pct,integrity_drift,process_count,disk_pressure_pct
-```
+JSONL line example:
 
-## Telemetry JSONL format
-
-Each line is a JSON object with the same fields:
 ```json
 {"timestamp_ms":1000,"cpu_load_pct":18,"memory_load_pct":32,"temperature_c":41,"network_kbps":500,"auth_failures":0,"battery_pct":94,"integrity_drift":0.01,"process_count":42,"disk_pressure_pct":8}
 ```
-
-## Example scenarios
-
-| File | Description |
-|------|-------------|
-| `examples/credential_storm.csv` | Rapid auth failure escalation |
-| `examples/credential_storm.jsonl` | Same scenario in JSONL format |
-| `examples/benign_baseline.csv` | Normal operation with no anomalies |
-| `examples/slow_escalation.csv` | Gradual threat buildup across 15 samples |
-| `examples/low_battery_attack.csv` | Attack during low battery conditions |
-
-## Field notes
-
-- `timestamp_ms`: monotonically increasing sample timestamp
-- `cpu_load_pct`: 0-100
-- `memory_load_pct`: 0-100
-- `temperature_c`: operating temperature in Celsius
-- `network_kbps`: observed network throughput
-- `auth_failures`: failed authentication attempts in the sampling window
-- `battery_pct`: 0-100
-- `integrity_drift`: normalized 0-1 signal for model/config drift
-- `process_count`: number of active processes (optional, defaults to 0)
-- `disk_pressure_pct`: disk I/O pressure 0-100 (optional, defaults to 0)

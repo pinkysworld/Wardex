@@ -1,44 +1,26 @@
 # Wardex Documentation
 
-This folder keeps the runtime, research blueprint, and public documentation in sync.
+This folder tracks the current shipping product, not just the historical implementation journey.
 
 Read it in this order:
 
-1. [`GETTING_STARTED.md`](GETTING_STARTED.md) for build, run, and sample telemetry input.
-2. [`ARCHITECTURE.md`](ARCHITECTURE.md) for the runtime pipeline and design decisions.
-3. [`STATUS.md`](STATUS.md) for what is implemented, partially wired, and still unbuilt.
-4. [`PROJECT_BACKLOG.md`](PROJECT_BACKLOG.md) for small, buildable tasks.
-5. [`RESEARCH_TRACKS.md`](RESEARCH_TRACKS.md) for the full 40-track blueprint translated into an implementation status map.
-6. [`../site/admin.html`](../site/admin.html) for the read-only browser console backed by exported JSON artifacts.
+1. [`GETTING_STARTED.md`](GETTING_STARTED.md) for local build, test, and control-plane startup.
+2. [`ARCHITECTURE.md`](ARCHITECTURE.md) for the platform pipeline and major subsystems.
+3. [`STATUS.md`](STATUS.md) for the current release posture, verification snapshot, and shipped enterprise capabilities.
+4. [`DEPLOYMENT_MODELS.md`](DEPLOYMENT_MODELS.md) and [`PRODUCTION_HARDENING.md`](PRODUCTION_HARDENING.md) for deployment and operational readiness.
+5. [`runbooks/README.md`](runbooks/README.md) for operator playbooks and integration guidance.
+6. [`ROADMAP_XDR_PROFESSIONAL.md`](ROADMAP_XDR_PROFESSIONAL.md) for post-release priorities.
 
-## Design documents (Phase 5)
+Reference material:
 
-- [`PAPER_TARGETS.md`](PAPER_TARGETS.md) — research paper targeting and evaluation plan.
-- [`DESIGN_SWARM_PROTOCOL.md`](DESIGN_SWARM_PROTOCOL.md) — swarm coordination protocol sketch (R03/R08/R15/R23).
-- [`DESIGN_WASM_EXTENSIONS.md`](DESIGN_WASM_EXTENSIONS.md) — Wasm extension surface specification (R17).
-- [`DESIGN_SUPPLY_CHAIN.md`](DESIGN_SUPPLY_CHAIN.md) — supply-chain attestation inputs (R20).
-- [`DESIGN_POST_QUANTUM.md`](DESIGN_POST_QUANTUM.md) — post-quantum logging upgrade path (R11/R21).
+- [`openapi.yaml`](openapi.yaml) — HTTP API contract
+- [`THREAT_MODEL.md`](THREAT_MODEL.md) — trust boundaries and abuse cases
+- [`DISASTER_RECOVERY.md`](DISASTER_RECOVERY.md) — backup and restore planning
+- [`SLO_POLICY.md`](SLO_POLICY.md) — service-level objectives and error budget guidance
+- [`SCHEMA_LIFECYCLE.md`](SCHEMA_LIFECYCLE.md) — compatibility and schema evolution policy
 
-## Research questions & design documents (Phase 7)
+Working rule:
 
-- [`RESEARCH_QUESTIONS_R26_R30.md`](RESEARCH_QUESTIONS_R26_R30.md) — edge intelligence & explainability (R26–R30).
-- [`RESEARCH_QUESTIONS_R31_R35.md`](RESEARCH_QUESTIONS_R31_R35.md) — edge infrastructure & hardening (R31–R35).
-- [`RESEARCH_QUESTIONS_R36_R40.md`](RESEARCH_QUESTIONS_R36_R40.md) — resilience & long-horizon (R36–R40).
-- [`DESIGN_ADVERSARIAL_HARNESS.md`](DESIGN_ADVERSARIAL_HARNESS.md) — adversarial robustness testing harness (R28).
-- [`DESIGN_TEMPORAL_LOGIC.md`](DESIGN_TEMPORAL_LOGIC.md) — temporal-logic property specification format (R29).
-- [`DESIGN_DIGITAL_TWIN.md`](DESIGN_DIGITAL_TWIN.md) — digital-twin fleet simulation architecture (R31).
-- [`DESIGN_POLICY_COMPOSITION.md`](DESIGN_POLICY_COMPOSITION.md) — formal policy composition algebra (R39).
-
-## Current philosophy
-
-- Build a useful runtime slice first.
-- Keep the research agenda visible, but separate implemented code from planned work.
-- Update the docs whenever behavior changes so the repository stays accurate.
-
-## Working rule
-
-When a new feature lands, update:
-
-- the code in `src/`
-- the implementation snapshot in [`STATUS.md`](STATUS.md)
-- the task state in [`PROJECT_BACKLOG.md`](PROJECT_BACKLOG.md)
+- update docs when operator-visible behavior changes
+- keep counts, versions, and release posture accurate
+- treat the website, README, and docs as one release surface
