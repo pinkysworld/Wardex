@@ -395,6 +395,20 @@ impl EventStore {
 
                 for &idx in indices {
                     self.events[idx].correlated = true;
+                    // Escalate score for cross-agent correlation
+                    let score = &mut self.events[idx].alert.score;
+                    *score = (*score + 0.15).min(1.0);
+                    // Re-evaluate severity level based on boosted score
+                    let new_level = if *score >= 0.85 {
+                        "Critical"
+                    } else if *score >= 0.6 {
+                        "Severe"
+                    } else if *score >= 0.3 {
+                        "Elevated"
+                    } else {
+                        "Nominal"
+                    };
+                    self.events[idx].alert.level = new_level.to_string();
                 }
             }
         }

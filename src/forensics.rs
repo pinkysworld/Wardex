@@ -4,6 +4,9 @@ use std::path::Path;
 
 use crate::runtime::RunResult;
 
+use aes_gcm::{Aes256Gcm, KeyInit, aead::Aead};
+use aes_gcm::aead::generic_array::GenericArray;
+
 #[derive(Debug, Clone, Serialize)]
 pub struct ForensicBundle {
     pub generated_at: String,
@@ -77,6 +80,51 @@ impl ForensicBundle {
             .map_err(|e| format!("failed to serialize forensic bundle: {e}"))?;
         fs::write(path, json).map_err(|e| format!("failed to write forensic bundle: {e}"))
     }
+
+    /// Write the forensic bundle encrypted with AES-256-GCM.
+    /// `key` must be exactly 32 bytes. The output file contains: 12-byte nonce ∥ ciphertext.
+    pub fn write_encrypted(&self, path: &Path, key: &[u8; 32]) -> Result<(), String> {
+        if let Some(parent) = path.parent() {
+            fs::create_dir_all(parent)
+                .map_err(|e| format!("failed to create bundle directory: {e}"))?;
+        }
+        let json = serde_json::to_string_pretty(self)
+            .map_err(|e| format!("failed to serialize forensic bundle: {e}"))?;
+
+        let cipher = Aes256Gcm::new(GenericArray::from_slice(key));
+        let nonce_bytes: [u8; 12] = rand::random();
+        let nonce = GenericArray::from_slice(&nonce_bytes);
+
+        let ciphertext = cipher
+            .encrypt(nonce, json.as_bytes())
+            .map_err(|e| format!("AES-GCM encryption failed: {e}"))?;
+
+        let mut output = Vec::with_capacity(12 + ciphertext.len());
+        output.extend_from_slice(&nonce_bytes);
+        output.extend_from_slice(&ciphertext);
+
+        fs::write(path, output)
+            .map_err(|e| format!("failed to write encrypted forensic bundle: {e}"))
+    }
+
+    /// Read and decrypt an AES-256-GCM encrypted forensic bundle.
+    pub fn read_encrypted(path: &Path, key: &[u8; 32]) -> Result<String, String> {
+        let data = fs::read(path)
+            .map_err(|e| format!("failed to read encrypted bundle: {e}"))?;
+        if data.len() < 12 {
+            return Err("encrypted bundle too short".into());
+        }
+        let (nonce_bytes, ciphertext) = data.split_at(12);
+        let cipher = Aes256Gcm::new(GenericArray::from_slice(key));
+        let nonce = GenericArray::from_slice(nonce_bytes);
+
+        let plaintext = cipher
+            .decrypt(nonce, ciphertext)
+            .map_err(|e| format!("AES-GCM decryption failed: {e}"))?;
+
+        String::from_utf8(plaintext)
+            .map_err(|e| format!("decrypted bundle is not valid UTF-8: {e}"))
+    }
 }
 
 #[cfg(test)]
@@ -103,5 +151,38 @@ mod tests {
         assert!(json.contains("audit_records"));
         assert!(json.contains("checkpoints"));
         assert!(json.contains("generated_at"));
+    }
+
+    #[test]
+    fn bundle_encrypt_decrypt_round_trip() {
+        let result = execute(&demo_samples());
+        let bundle = ForensicBundle::from_run_result(&result);
+        let key: [u8; 32] = [0x42; 32];
+        let dir = std::env::temp_dir().join("wardex_test_forensic_enc");
+        let _ = std::fs::create_dir_all(&dir);
+        let path = dir.join("bundle.enc");
+
+        bundle.write_encrypted(&path, &key).unwrap();
+        let decrypted = ForensicBundle::read_encrypted(&path, &key).unwrap();
+        assert!(decrypted.contains("audit_records"));
+        assert!(decrypted.contains("generated_at"));
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn bundle_decrypt_wrong_key_fails() {
+        let result = execute(&demo_samples());
+        let bundle = ForensicBundle::from_run_result(&result);
+        let key: [u8; 32] = [0x42; 32];
+        let wrong_key: [u8; 32] = [0x99; 32];
+        let dir = std::env::temp_dir().join("wardex_test_forensic_wrong_key");
+        let _ = std::fs::create_dir_all(&dir);
+        let path = dir.join("bundle.enc");
+
+        bundle.write_encrypted(&path, &key).unwrap();
+        assert!(ForensicBundle::read_encrypted(&path, &wrong_key).is_err());
+
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }

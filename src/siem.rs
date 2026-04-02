@@ -258,6 +258,17 @@ impl SiemConnector {
         Ok(records)
     }
 
+    /// Return a reference to the current SIEM configuration.
+    pub fn config(&self) -> &SiemConfig {
+        &self.config
+    }
+
+    /// Replace the SIEM configuration at runtime.
+    pub fn update_config(&mut self, new_config: SiemConfig) {
+        self.config = new_config;
+        self.last_error = None;
+    }
+
     /// Get connector status.
     pub fn status(&self) -> SiemStatus {
         SiemStatus {
@@ -589,17 +600,28 @@ impl SiemConnector {
             _ => format!("Bearer {}", self.config.auth_token),
         };
 
-        let resp = ureq::post(&self.config.endpoint)
-            .set("Content-Type", content_type)
-            .set("Authorization", &auth_header)
-            .send_string(payload)
-            .map_err(|e| format!("SIEM send failed: {e}"))?;
-
-        if resp.status() >= 400 {
-            return Err(format!("SIEM returned error status: {}", resp.status()));
+        let max_retries = 3u32;
+        let mut last_err = String::new();
+        for attempt in 0..max_retries {
+            if attempt > 0 {
+                let backoff = Duration::from_millis(500 * 2u64.pow(attempt - 1));
+                thread::sleep(backoff);
+            }
+            match ureq::post(&self.config.endpoint)
+                .set("Content-Type", content_type)
+                .set("Authorization", &auth_header)
+                .send_string(payload)
+            {
+                Ok(resp) if resp.status() >= 400 => {
+                    last_err = format!("SIEM returned error status: {}", resp.status());
+                }
+                Ok(_) => return Ok(()),
+                Err(e) => {
+                    last_err = format!("SIEM send failed: {e}");
+                }
+            }
         }
-
-        Ok(())
+        Err(last_err)
     }
 
     fn parse_intel_response(&self, body: &str) -> Result<Vec<SiemIntelRecord>, String> {
@@ -723,6 +745,172 @@ fn urlencoding(s: &str) -> String {
             _ => format!("%{:02X}", b),
         })
         .collect()
+}
+
+// ── STIX/TAXII 2.1 Client ────────────────────────────────────────────
+
+/// Configuration for a TAXII 2.1 threat intel source.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TaxiiConfig {
+    /// TAXII discovery/collection URL (e.g., https://taxii.example.com/api/collections/abc/objects/).
+    #[serde(default)]
+    pub url: String,
+    /// Bearer or basic auth token.
+    #[serde(default)]
+    pub auth_token: String,
+    /// Only pull indicators newer than this timestamp (RFC 3339).
+    #[serde(default)]
+    pub added_after: String,
+    /// Poll interval in seconds.
+    #[serde(default = "default_taxii_poll")]
+    pub poll_interval_secs: u64,
+    #[serde(default)]
+    pub enabled: bool,
+}
+
+fn default_taxii_poll() -> u64 {
+    300
+}
+
+impl Default for TaxiiConfig {
+    fn default() -> Self {
+        Self {
+            url: String::new(),
+            auth_token: String::new(),
+            added_after: String::new(),
+            poll_interval_secs: default_taxii_poll(),
+            enabled: false,
+        }
+    }
+}
+
+/// Pulls STIX 2.1 indicators from a TAXII server and converts them to `SiemIntelRecord`.
+pub struct TaxiiClient {
+    config: TaxiiConfig,
+    pull_count: u64,
+    last_error: Option<String>,
+}
+
+impl TaxiiClient {
+    pub fn new(config: TaxiiConfig) -> Self {
+        Self { config, pull_count: 0, last_error: None }
+    }
+
+    pub fn config(&self) -> &TaxiiConfig {
+        &self.config
+    }
+
+    pub fn update_config(&mut self, cfg: TaxiiConfig) {
+        self.config = cfg;
+        self.last_error = None;
+    }
+
+    /// Pull STIX indicator objects from the TAXII collection endpoint.
+    pub fn pull_indicators(&mut self) -> Result<Vec<SiemIntelRecord>, String> {
+        if !self.config.enabled || self.config.url.is_empty() {
+            return Ok(Vec::new());
+        }
+
+        let mut url = self.config.url.clone();
+        if !self.config.added_after.is_empty() {
+            let sep = if url.contains('?') { '&' } else { '?' };
+            url = format!("{url}{sep}added_after={}", urlencoding(&self.config.added_after));
+        }
+
+        let resp = ureq::get(&url)
+            .set("Accept", "application/taxii+json;version=2.1")
+            .set("Authorization", &format!("Bearer {}", self.config.auth_token))
+            .call()
+            .map_err(|e| {
+                let msg = format!("TAXII fetch failed: {e}");
+                self.last_error = Some(msg.clone());
+                msg
+            })?;
+
+        if resp.status() != 200 {
+            let msg = format!("TAXII returned status {}", resp.status());
+            self.last_error = Some(msg.clone());
+            return Err(msg);
+        }
+
+        let body = resp.into_string()
+            .map_err(|e| format!("Failed to read TAXII response: {e}"))?;
+
+        let records = Self::parse_stix_bundle(&body);
+        self.pull_count += records.len() as u64;
+        self.last_error = None;
+        Ok(records)
+    }
+
+    /// Parse a STIX 2.1 bundle envelope and extract indicator objects.
+    fn parse_stix_bundle(body: &str) -> Vec<SiemIntelRecord> {
+        let parsed: serde_json::Value = match serde_json::from_str(body) {
+            Ok(v) => v,
+            Err(_) => return Vec::new(),
+        };
+
+        // STIX bundle: { "type": "bundle", "objects": [...] }
+        // Or TAXII envelope: { "objects": [...] }
+        let objects = parsed.get("objects").and_then(|o| o.as_array());
+        let Some(objects) = objects else { return Vec::new() };
+
+        objects.iter().filter_map(|obj| {
+            let obj_type = obj.get("type")?.as_str()?;
+            if obj_type != "indicator" {
+                return None;
+            }
+            let pattern = obj.get("pattern").and_then(|p| p.as_str()).unwrap_or("");
+            let (ind_type, ind_value) = Self::parse_stix_pattern(pattern);
+            let name = obj.get("name").and_then(|n| n.as_str()).unwrap_or("");
+            let desc = obj.get("description").and_then(|d| d.as_str()).unwrap_or(name);
+
+            // Map confidence (0-100) to severity
+            let confidence = obj.get("confidence").and_then(|c| c.as_u64()).unwrap_or(50);
+            let severity = if confidence >= 80 { "critical" }
+                else if confidence >= 60 { "high" }
+                else if confidence >= 40 { "medium" }
+                else { "low" };
+
+            Some(SiemIntelRecord {
+                indicator_type: ind_type,
+                indicator_value: ind_value,
+                severity: severity.into(),
+                source: obj.get("created_by_ref").and_then(|c| c.as_str()).unwrap_or("taxii").into(),
+                description: desc.into(),
+            })
+        }).collect()
+    }
+
+    /// Extract indicator type and value from a STIX 2.1 pattern string.
+    /// Example: "[ipv4-addr:value = '198.51.100.1']" → ("ipv4-addr", "198.51.100.1")
+    fn parse_stix_pattern(pattern: &str) -> (String, String) {
+        // Simplified parser: extract `object-type:property = 'value'`
+        let trimmed = pattern.trim_start_matches('[').trim_end_matches(']').trim();
+        if let Some((lhs, rhs)) = trimmed.split_once('=') {
+            let ind_type = lhs.split(':').next().unwrap_or("unknown").trim().to_string();
+            let ind_value = rhs.trim().trim_matches('\'').trim().to_string();
+            (ind_type, ind_value)
+        } else {
+            ("unknown".into(), pattern.into())
+        }
+    }
+
+    pub fn status(&self) -> TaxiiStatus {
+        TaxiiStatus {
+            enabled: self.config.enabled,
+            url: self.config.url.clone(),
+            pull_count: self.pull_count,
+            last_error: self.last_error.clone(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TaxiiStatus {
+    pub enabled: bool,
+    pub url: String,
+    pub pull_count: u64,
+    pub last_error: Option<String>,
 }
 
 // ── Tests ────────────────────────────────────────────────────────────
@@ -981,5 +1169,76 @@ mod tests {
         let output = SiemConnector::format_qradar(&[a]);
         let parsed: Vec<serde_json::Value> = serde_json::from_str(&output).unwrap();
         assert_eq!(parsed[0]["Severity"], 10);
+    }
+
+    #[test]
+    fn stix_pattern_parsing() {
+        let (t, v) = TaxiiClient::parse_stix_pattern("[ipv4-addr:value = '198.51.100.1']");
+        assert_eq!(t, "ipv4-addr");
+        assert_eq!(v, "198.51.100.1");
+    }
+
+    #[test]
+    fn stix_bundle_parsing() {
+        let bundle = r#"{
+            "type": "bundle",
+            "id": "bundle--1",
+            "objects": [
+                {
+                    "type": "indicator",
+                    "id": "indicator--1",
+                    "name": "Malicious IP",
+                    "pattern": "[ipv4-addr:value = '10.0.0.1']",
+                    "confidence": 85,
+                    "created_by_ref": "identity--test"
+                },
+                {
+                    "type": "malware",
+                    "id": "malware--1",
+                    "name": "ignored"
+                },
+                {
+                    "type": "indicator",
+                    "id": "indicator--2",
+                    "name": "Bad domain",
+                    "pattern": "[domain-name:value = 'evil.example.com']",
+                    "confidence": 30
+                }
+            ]
+        }"#;
+        let records = TaxiiClient::parse_stix_bundle(bundle);
+        assert_eq!(records.len(), 2);
+        assert_eq!(records[0].indicator_type, "ipv4-addr");
+        assert_eq!(records[0].indicator_value, "10.0.0.1");
+        assert_eq!(records[0].severity, "critical");
+        assert_eq!(records[0].source, "identity--test");
+        assert_eq!(records[1].indicator_type, "domain-name");
+        assert_eq!(records[1].indicator_value, "evil.example.com");
+        assert_eq!(records[1].severity, "low");
+    }
+
+    #[test]
+    fn taxii_disabled_returns_empty() {
+        let mut client = TaxiiClient::new(TaxiiConfig::default());
+        assert!(client.pull_indicators().unwrap().is_empty());
+    }
+
+    #[test]
+    fn siem_config_getter() {
+        let cfg = SiemConfig { enabled: true, siem_type: "splunk".into(), ..Default::default() };
+        let conn = SiemConnector::new(cfg);
+        assert_eq!(conn.config().siem_type, "splunk");
+        assert!(conn.config().enabled);
+    }
+
+    #[test]
+    fn siem_update_config() {
+        let cfg = SiemConfig::default();
+        let mut conn = SiemConnector::new(cfg);
+        assert!(!conn.config().enabled);
+        let new_cfg = SiemConfig { enabled: true, siem_type: "elastic".into(), ..Default::default() };
+        conn.update_config(new_cfg);
+        assert!(conn.config().enabled);
+        assert_eq!(conn.config().siem_type, "elastic");
     }
 }

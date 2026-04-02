@@ -355,6 +355,53 @@ impl ResponseOrchestrator {
             approvals: req.approvals.clone(),
         });
     }
+
+    /// Execute all approved (non-dry-run) requests. Returns a summary of
+    /// executed actions.  In production this would call out to enforcement
+    /// agents; here we record the execution transition and produce a
+    /// human-readable log line for each action.
+    pub fn execute_approved(&self) -> Vec<String> {
+        let mut requests = self.requests.lock().unwrap();
+        let mut executed = Vec::new();
+        for req in requests.iter_mut() {
+            if req.status != ApprovalStatus::Approved || req.dry_run {
+                continue;
+            }
+            let description = match &req.action {
+                ResponseAction::KillProcess { pid, process_name } =>
+                    format!("Killed process {} (PID {}) on {}", process_name, pid, req.target.hostname),
+                ResponseAction::Isolate =>
+                    format!("Isolated host {}", req.target.hostname),
+                ResponseAction::BlockIp { ip } =>
+                    format!("Blocked IP {} via {}", ip, req.target.hostname),
+                ResponseAction::QuarantineFile { path } =>
+                    format!("Quarantined file {} on {}", path, req.target.hostname),
+                ResponseAction::DisableAccount { username } =>
+                    format!("Disabled account {} on {}", username, req.target.hostname),
+                ResponseAction::Throttle { rate_limit_kbps } =>
+                    format!("Throttled {} to {} kbps", req.target.hostname, rate_limit_kbps),
+                ResponseAction::RollbackConfig { config_name } =>
+                    format!("Rolled back config {} on {}", config_name, req.target.hostname),
+                ResponseAction::Alert =>
+                    format!("Alert notification sent for {}", req.target.hostname),
+                ResponseAction::Custom { name, .. } =>
+                    format!("Custom action '{}' executed on {}", name, req.target.hostname),
+            };
+            req.status = ApprovalStatus::Executed;
+            executed.push(description);
+        }
+        // Record audit entries for executed requests
+        let executed_reqs: Vec<ResponseRequest> = requests
+            .iter()
+            .filter(|r| r.status == ApprovalStatus::Executed)
+            .cloned()
+            .collect();
+        drop(requests);
+        for req in &executed_reqs {
+            self.record_audit(req);
+        }
+        executed
+    }
 }
 
 impl Default for ResponseOrchestrator {

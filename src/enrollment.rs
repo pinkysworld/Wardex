@@ -55,6 +55,9 @@ pub struct EnrollmentToken {
     pub created_at: String,
     pub uses_remaining: u32,
     pub max_uses: u32,
+    /// Optional expiration timestamp (RFC 3339). `None` means no expiry.
+    #[serde(default)]
+    pub expires_at: Option<String>,
 }
 
 impl EnrollmentToken {
@@ -67,11 +70,28 @@ impl EnrollmentToken {
             created_at: chrono::Utc::now().to_rfc3339(),
             uses_remaining: max_uses,
             max_uses,
+            expires_at: None,
         }
     }
 
+    /// Create a token with a TTL in seconds.
+    pub fn new_with_ttl(max_uses: u32, ttl_secs: u64) -> Self {
+        let mut token = Self::new(max_uses);
+        let expires = chrono::Utc::now() + chrono::Duration::seconds(ttl_secs as i64);
+        token.expires_at = Some(expires.to_rfc3339());
+        token
+    }
+
     pub fn is_valid(&self) -> bool {
-        self.uses_remaining > 0
+        if self.uses_remaining == 0 {
+            return false;
+        }
+        if let Some(ref exp) = self.expires_at {
+            if let Ok(dt) = chrono::DateTime::parse_from_rfc3339(exp) {
+                return chrono::Utc::now() < dt;
+            }
+        }
+        true
     }
 
     pub fn consume(&mut self) -> bool {
@@ -132,6 +152,14 @@ impl AgentRegistry {
     /// Create a new enrollment token.
     pub fn create_token(&mut self, max_uses: u32) -> EnrollmentToken {
         let token = EnrollmentToken::new(max_uses);
+        self.tokens.push(token.clone());
+        self.save();
+        token
+    }
+
+    /// Create a new enrollment token with a TTL.
+    pub fn create_token_with_ttl(&mut self, max_uses: u32, ttl_secs: u64) -> EnrollmentToken {
+        let token = EnrollmentToken::new_with_ttl(max_uses, ttl_secs);
         self.tokens.push(token.clone());
         self.save();
         token
@@ -447,5 +475,37 @@ mod tests {
         assert_eq!(*counts.get("online").unwrap_or(&0), 3);
 
         let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn token_ttl_valid() {
+        let token = EnrollmentToken::new_with_ttl(5, 3600);
+        assert!(token.is_valid());
+        assert!(token.expires_at.is_some());
+    }
+
+    #[test]
+    fn token_ttl_expired() {
+        let mut token = EnrollmentToken::new_with_ttl(5, 1);
+        // Force expiration to the past
+        let past = chrono::Utc::now() - chrono::Duration::seconds(10);
+        token.expires_at = Some(past.to_rfc3339());
+        assert!(!token.is_valid());
+    }
+
+    #[test]
+    fn token_no_ttl_valid() {
+        let token = EnrollmentToken::new(3);
+        assert!(token.is_valid());
+        assert!(token.expires_at.is_none());
+    }
+
+    #[test]
+    fn token_serialize_round_trip() {
+        let token = EnrollmentToken::new_with_ttl(2, 600);
+        let json = serde_json::to_string(&token).unwrap();
+        let restored: EnrollmentToken = serde_json::from_str(&json).unwrap();
+        assert_eq!(restored.expires_at, token.expires_at);
+        assert_eq!(restored.max_uses, 2);
     }
 }

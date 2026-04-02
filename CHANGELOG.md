@@ -2,6 +2,43 @@
 
 All notable changes to Wardex are documented in this file.
 
+## [0.30.0] — XDR/SIEM depth, UI polish & hardening
+
+### Added — Phase A: Quick Polish
+- **Loading skeletons** — shimmer animations for alerts and XDR event tables during data fetch.
+- **Rich empty states** — icon + title + subtitle + action button shown when alerts, events, or incidents tables are empty.
+- **Confirm modal** — all destructive `confirm()` calls replaced with a styled async modal dialog (`showConfirm()`).
+- **Copy-to-clipboard** — one-click copy buttons for enrollment tokens and admin session tokens.
+- **Theme toggle** — light/dark theme switch with full CSS variable overrides and persistent `localStorage` preference.
+- **Severity-colored metric cards** — threat level cards dynamically styled by severity class.
+- **Error handling** — all silent `catch` blocks replaced with `log()` calls for visibility.
+
+### Added — Phase B: UI Restructure
+- **Fleet tab split** — Fleet & Agents section split into 3 tabs: Fleet Overview, Agent Registry, Events & Triage.
+- **Incident Response tab split** — IR section split into 3 tabs: Incidents, Investigation, Response.
+- **Chart.js theme awareness** — charts adapt grid/tick/label colors to light or dark theme; resize on section switch.
+- **ARIA accessibility** — `role="tablist"`, `role="tab"`, `role="tabpanel"` on all tab systems; `aria-label` on 7 data tables.
+
+### Added — Phase C: XDR Wiring
+- **Correlation score escalation** — cross-agent correlated alerts receive a +0.15 score boost (capped at 1.0) with level re-evaluation.
+- **Response execution** — `execute_approved()` method transitions Approved→Executed with descriptive action logs; new `POST /api/response/execute` endpoint.
+- **Agent policy enforcement** — background policy poll thread applies server-pushed `alert_threshold` and `interval_secs` to the agent monitoring loop via `Arc<Mutex<>>`.
+
+### Added — Phase D: SIEM Depth
+- **SIEM config API** — `GET/POST /api/siem/config` endpoints for runtime SIEM configuration; `config()` and `update_config()` methods on `SiemConnector`.
+- **SIEM retry with backoff** — `send_to_siem()` retries up to 3 times with exponential backoff (500ms, 1s, 2s).
+- **STIX/TAXII 2.1 client** — `TaxiiClient` pulls STIX indicator objects from TAXII collection endpoints, parses patterns and confidence into `SiemIntelRecord`; new `GET /api/taxii/status`, `GET/POST /api/taxii/config`, `POST /api/taxii/pull` endpoints.
+- **SIEM/TAXII configuration UI** — Settings card with SIEM push config (type, endpoint, token, index) and TAXII 2.1 threat intel config (URL, auth, poll interval, manual pull button).
+
+### Added — Phase E: Hardening
+- **Enrollment token TTL** — `expires_at` field on `EnrollmentToken` with `new_with_ttl()` constructor; `is_valid()` checks both uses and expiry; `POST /api/agents/token` accepts optional `ttl_secs`.
+- **Forensic bundle encryption** — `write_encrypted()` / `read_encrypted()` using AES-256-GCM (12-byte nonce ∥ ciphertext); `aes-gcm` dependency added.
+- **CSS transitions** — smooth transitions on buttons, cards, and interactive elements; touch target sizing (44px minimum on coarse pointer devices).
+
+### Tests
+- 667 tests (542 unit + 125 integration), all passing.
+- New tests: STIX pattern parsing, STIX bundle parsing, TAXII disabled client, SIEM config getter/setter, token TTL valid/expired/round-trip, forensic encryption round-trip + wrong-key rejection.
+
 ## [0.29.1] — Code review hardening & admin panel improvements
 
 ### Fixed

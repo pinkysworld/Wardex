@@ -419,6 +419,89 @@ input::placeholder{color:var(--ink-3);}
 /* Error state for cards that fail to load */
 .card.card-error{border-color:var(--red,#e74c3c);position:relative;}
 .card.card-error::after{content:'Failed to load — click Refresh';display:block;color:var(--red,#e74c3c);font-size:.78rem;margin-top:.5rem;}
+
+/* ── Phase A: Loading skeletons ── */
+.skeleton{background:linear-gradient(90deg,var(--bg-alt) 25%,var(--surface) 50%,var(--bg-alt) 75%);
+  background-size:200% 100%;animation:shimmer 1.5s infinite;border-radius:6px;min-height:1.2rem;}
+@keyframes shimmer{0%{background-position:200% 0}100%{background-position:-200% 0}}
+.skeleton-row{height:2rem;margin-bottom:.5rem;}
+.skeleton-metric{height:2.8rem;border-radius:8px;}
+.skeleton-chart{height:180px;border-radius:8px;}
+
+/* ── Empty states ── */
+.empty-state{display:flex;flex-direction:column;align-items:center;padding:2rem 1rem;color:var(--ink-3);}
+.empty-state .empty-icon{font-size:2.2rem;margin-bottom:.5rem;opacity:.5;}
+.empty-state h3{margin:0 0 .25rem;font-size:.95rem;color:var(--ink-2);font-weight:500;}
+.empty-state p{margin:0 0 .75rem;font-size:.82rem;text-align:center;max-width:300px;}
+
+/* ── Confirm modal ── */
+.modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:9000;display:flex;
+  align-items:center;justify-content:center;opacity:0;pointer-events:none;transition:opacity .2s;}
+.modal-overlay.active{opacity:1;pointer-events:auto;}
+.modal-box{background:var(--surface);border:1px solid var(--border);border-radius:12px;
+  padding:1.5rem;max-width:420px;width:90%;box-shadow:0 12px 40px rgba(0,0,0,.4);
+  transform:scale(.95);transition:transform .2s;}
+.modal-overlay.active .modal-box{transform:scale(1);}
+.modal-title{font-size:1rem;font-weight:600;margin:0 0 .5rem;color:var(--ink);}
+.modal-body{font-size:.88rem;color:var(--ink-2);margin-bottom:1.25rem;line-height:1.5;}
+.modal-actions{display:flex;gap:.5rem;justify-content:flex-end;}
+
+/* ── Copy button ── */
+.btn-copy{background:none;border:1px solid var(--border);border-radius:4px;padding:2px 6px;
+  font-size:.72rem;color:var(--ink-3);cursor:pointer;transition:all .15s;}
+.btn-copy:hover{border-color:var(--accent);color:var(--accent);}
+.btn-copy.copied{border-color:var(--green);color:var(--green);}
+
+/* ── Dynamic severity color coding ── */
+.metric-card.severity-nominal{border-left:3px solid var(--green);}
+.metric-card.severity-elevated{border-left:3px solid #f59e0b;}
+.metric-card.severity-severe{border-left:3px solid #f97316;}
+.metric-card.severity-critical{border-left:3px solid var(--danger);animation:alertPulse 2s infinite;}
+
+/* ── Tabbed sections ── */
+.tab-bar{display:flex;gap:0;border-bottom:2px solid var(--border);margin-bottom:1rem;}
+.tab-btn{padding:.55rem 1rem;font-size:.82rem;font-weight:500;color:var(--ink-3);cursor:pointer;
+  border:none;background:none;border-bottom:2px solid transparent;margin-bottom:-2px;transition:all .15s;}
+.tab-btn:hover{color:var(--ink);}
+.tab-btn.active{color:var(--accent);border-bottom-color:var(--accent);}
+.tab-panel{display:none;}
+.tab-panel.active{display:block;}
+
+/* ── Theme toggle ── */
+.theme-toggle{cursor:pointer;font-size:1.1rem;padding:4px 8px;border:1px solid var(--border);
+  border-radius:6px;background:var(--bg-alt);color:var(--ink);transition:all .15s;}
+.theme-toggle:hover{border-color:var(--accent);}
+
+/* ── Transitions & Micro-interactions (Phase E) ── */
+.btn{transition:all .15s ease;}
+.card{transition:border-color .2s,box-shadow .2s;}
+.card:hover{border-color:color-mix(in srgb,var(--border) 50%,var(--accent) 50%);}
+.metric-value{transition:color .3s;}
+.nav-item{transition:background .15s,color .15s;}
+select,input[type="text"],input[type="number"]{transition:border-color .15s;}
+select:focus,input[type="text"]:focus,input[type="number"]:focus{border-color:var(--accent);}
+.conn-dot{transition:background .3s;}
+.data-table tbody tr{transition:background .1s;}
+
+/* ── Touch targets (Phase E) ── */
+@media(pointer:coarse){
+  .btn,.btn-sm{min-height:44px;min-width:44px;}
+  .nav-item{min-height:44px;}
+  select,input[type="text"],input[type="number"]{min-height:44px;}
+  .tab-btn{min-height:44px;padding:.55rem 1.2rem;}
+}
+
+/* Light theme */
+body.light{
+  --bg:#f8fafc;--bg-alt:#f1f5f9;--surface:#ffffff;--border:#e2e8f0;
+  --ink:#1e293b;--ink-2:#475569;--ink-3:#94a3b8;--accent:#0d9488;
+  --green:#16a34a;--teal:#0d9488;--danger:#dc2626;--red:#dc2626;
+}
+body.light .sidebar{background:#ffffff;border-color:#e2e8f0;}
+body.light .topbar{background:#ffffff;border-color:#e2e8f0;}
+body.light .card{background:#ffffff;border-color:#e2e8f0;}
+body.light .data-table thead{background:#f1f5f9;}
+body.light .modal-box{background:#ffffff;}
 </style>
 </head>
 
@@ -471,6 +554,7 @@ input::placeholder{color:var(--ink-3);}
     </div>
   </div>
   <div class="topbar-right">
+    <button class="theme-toggle" id="btn-theme-toggle" title="Toggle light/dark theme">&#9790;</button>
     <div class="demo-toggle" id="demo-toggle-wrap">
       <input type="checkbox" id="demo-mode-toggle">
       <label for="demo-mode-toggle">Demo Mode</label>
@@ -478,6 +562,7 @@ input::placeholder{color:var(--ink-3);}
     <div class="auth-bar">
       <input type="password" id="auth-token" placeholder="Paste API token" autocomplete="off" spellcheck="false">
       <button class="btn btn-sm" id="btn-toggle-token" type="button" title="Show/hide token">&#128065;</button>
+      <button class="btn-copy" id="btn-copy-token" type="button" title="Copy token">Copy</button>
       <button class="btn btn-sm primary" id="btn-connect" type="button">Connect</button>
       <span class="auth-status none" id="auth-status">No token</span>
     </div>
@@ -621,7 +706,7 @@ input::placeholder{color:var(--ink-3);}
       <div class="card mt-1">
         <h2><span class="dot dot-orange"></span> Recent Alerts</h2>
         <div class="table-wrap" style="max-height:300px;overflow-y:auto;">
-          <table class="data-table" id="dash-alert-table">
+          <table class="data-table" id="dash-alert-table" aria-label="Dashboard alerts">
             <thead><tr><th>Time</th><th>Score</th><th>Level</th><th>Action</th><th>Reason</th><th style="width:120px;">Actions</th></tr></thead>
             <tbody id="dash-alert-tbody"><tr><td colspan="6" class="text-muted">No alerts recorded yet.</td></tr></tbody>
           </table>
@@ -687,7 +772,7 @@ input::placeholder{color:var(--ink-3);}
           </select>
         </h2>
         <div class="table-wrap" style="max-height:400px;overflow-y:auto;">
-          <table class="data-table" id="alert-table">
+          <table class="data-table" id="alert-table" aria-label="Alert log">
             <thead><tr><th>Time</th><th>Score</th><th>Level</th><th>Action</th><th>Reason</th></tr></thead>
             <tbody id="alert-tbody"><tr><td colspan="5" class="text-muted">No alerts yet. Start the monitor with <code>cargo run -- serve</code>.</td></tr></tbody>
           </table>
@@ -862,6 +947,13 @@ input::placeholder{color:var(--ink-3);}
         <p>Manage your XDR agent fleet, enrollment tokens, SIEM integration, and cross-agent event correlation.</p>
       </div>
 
+      <div class="tab-bar" id="fleet-tabs" role="tablist">
+        <button class="tab-btn active" data-tab="fleet-overview">Fleet Overview</button>
+        <button class="tab-btn" data-tab="fleet-agents">Agent Registry</button>
+        <button class="tab-btn" data-tab="fleet-events">Events &amp; Triage</button>
+      </div>
+
+      <div class="tab-panel active" id="panel-fleet-overview" role="tabpanel">
       <div class="metric-strip">
         <div class="metric-card teal">
           <div class="metric-label">Enrolled Agents</div>
@@ -917,7 +1009,9 @@ input::placeholder{color:var(--ink-3);}
           </dl>
         </div>
       </div>
+      </div><!-- end panel-fleet-overview -->
 
+      <div class="tab-panel" id="panel-fleet-agents" role="tabpanel">
       <div class="card mt-1">
         <h2><span class="dot dot-blue"></span> Agent Registry</h2>
         <div id="xdr-agent-table" style="max-height:200px;overflow-y:auto;"><em class="text-muted">No agents enrolled</em></div>
@@ -1007,7 +1101,9 @@ input::placeholder{color:var(--ink-3);}
           </div>
         </div>
       </div>
+      </div><!-- end panel-fleet-agents -->
 
+      <div class="tab-panel" id="panel-fleet-events" role="tabpanel">
       <div class="card mt-1">
         <h2><span class="dot dot-orange"></span> Correlation Alerts</h2>
         <div id="xdr-correlation-list" style="max-height:150px;overflow-y:auto;"><em class="text-muted">No correlations detected</em></div>
@@ -1099,6 +1195,7 @@ input::placeholder{color:var(--ink-3);}
           <div id="xdr-event-table"><em class="text-muted">No events loaded</em></div>
         </div>
       </div>
+      </div><!-- end panel-fleet-events -->
     </div>
 
     <!-- ═══════════════════════════════════════════════════════════ -->
@@ -1162,6 +1259,13 @@ input::placeholder{color:var(--ink-3);}
         <p>Manage incidents, digital twin simulation, adversarial harness testing, and monitoring &amp; analysis tools.</p>
       </div>
 
+      <div class="tab-bar" id="ir-tabs" role="tablist">
+        <button class="tab-btn active" data-tab="ir-incidents">Incidents</button>
+        <button class="tab-btn" data-tab="ir-investigation">Investigation</button>
+        <button class="tab-btn" data-tab="ir-response">Response</button>
+      </div>
+
+      <div class="tab-panel active" id="panel-ir-incidents" role="tabpanel">
       <div class="metric-strip">
         <div class="metric-card red"><div class="metric-label">Open Incidents</div><div class="metric-value" id="inc-open">0</div></div>
         <div class="metric-card orange"><div class="metric-label">Investigating</div><div class="metric-value" id="inc-investigating">0</div></div>
@@ -1229,7 +1333,7 @@ input::placeholder{color:var(--ink-3);}
           <div class="metric-card green"><div class="metric-label">Resolved</div><div class="metric-value" id="cases-resolved">0</div></div>
         </div>
         <div class="table-wrap" style="max-height:300px;overflow-y:auto;">
-          <table class="data-table" id="cases-table">
+          <table class="data-table" id="cases-table" aria-label="Investigation cases">
             <thead><tr><th>ID</th><th>Title</th><th>Priority</th><th>Status</th><th>Assignee</th><th>Created</th></tr></thead>
             <tbody id="cases-tbody"><tr><td colspan="6" class="text-muted">No cases yet.</td></tr></tbody>
           </table>
@@ -1246,7 +1350,7 @@ input::placeholder{color:var(--ink-3);}
           <div class="metric-card green"><div class="metric-label">Assigned</div><div class="metric-value" id="queue-assigned">0</div></div>
         </div>
         <div class="table-wrap" style="max-height:250px;overflow-y:auto;">
-          <table class="data-table" id="queue-table">
+          <table class="data-table" id="queue-table" aria-label="Alert triage queue">
             <thead><tr><th>ID</th><th>Severity</th><th>Source</th><th>Status</th><th>Assignee</th><th>Time</th><th>Actions</th></tr></thead>
             <tbody id="queue-tbody"><tr><td colspan="7" class="text-muted">No queued alerts.</td></tr></tbody>
           </table>
@@ -1277,7 +1381,7 @@ input::placeholder{color:var(--ink-3);}
           <button class="btn btn-sm primary" id="btn-refresh-incidents">Refresh</button>
         </div>
         <div class="table-wrap" style="max-height:300px;overflow-y:auto;">
-          <table class="data-table" id="inc-table">
+          <table class="data-table" id="inc-table" aria-label="Incident list">
             <thead><tr><th>ID</th><th>Title</th><th>Severity</th><th>Status</th><th>MITRE</th><th>Agents</th><th>Created</th><th>Actions</th></tr></thead>
             <tbody id="inc-tbody"><tr><td colspan="8" class="text-muted">No incidents yet.</td></tr></tbody>
           </table>
@@ -1300,7 +1404,9 @@ input::placeholder{color:var(--ink-3);}
           <button class="btn btn-sm" id="btn-gen-inc-report">Generate Report</button>
         </div>
       </div>
+      </div><!-- end panel-ir-incidents -->
 
+      <div class="tab-panel" id="panel-ir-investigation" role="tabpanel">
       <div class="card-grid cols-2">
         <div class="card">
           <h2><span class="dot dot-green"></span> Digital Twin</h2>
@@ -1370,7 +1476,9 @@ input::placeholder{color:var(--ink-3);}
           </div>
         </div>
       </div>
+      </div><!-- end panel-ir-investigation -->
 
+      <div class="tab-panel" id="panel-ir-response" role="tabpanel">
       <!-- Response Orchestration -->
       <div class="card mt-1">
         <h2><span class="dot dot-orange"></span> Response Orchestration</h2>
@@ -1382,7 +1490,7 @@ input::placeholder{color:var(--ink-3);}
           <div class="metric-card purple"><div class="metric-label">Protected Assets</div><div class="metric-value" id="resp-protected">0</div></div>
         </div>
         <div class="table-wrap" style="max-height:280px;overflow-y:auto;margin-top:.75rem;">
-          <table class="data-table" id="resp-table">
+          <table class="data-table" id="resp-table" aria-label="Response actions">
             <thead><tr><th>ID</th><th>Action</th><th>Target</th><th>Tier</th><th>Status</th><th>Blast Radius</th><th>Actions</th></tr></thead>
             <tbody id="resp-tbody"><tr><td colspan="7" class="text-muted">No response requests.</td></tr></tbody>
           </table>
@@ -1425,6 +1533,7 @@ input::placeholder{color:var(--ink-3);}
           <button class="btn btn-sm" id="btn-refresh-analysis">Refresh Analysis</button>
         </div>
       </div>
+      </div><!-- end panel-ir-response -->
     </div>
 
     <!-- ═══════════════════════════════════════════════════════════ -->
@@ -1623,7 +1732,7 @@ input::placeholder{color:var(--ink-3);}
         <h2><span class="dot dot-purple"></span> Role-Based Access Control</h2>
         <p class="text-muted" style="margin-bottom:.75rem;font-size:.82rem;">Manage user roles (Admin, Operator, Analyst, Viewer) and access permissions for API endpoints.</p>
         <div class="table-wrap" style="max-height:250px;overflow-y:auto;">
-          <table class="data-table" id="rbac-table">
+          <table class="data-table" id="rbac-table" aria-label="User access control">
             <thead><tr><th>Username</th><th>Role</th><th>Created</th><th>Actions</th></tr></thead>
             <tbody id="rbac-tbody"><tr><td colspan="4" class="text-muted">No RBAC users configured.</td></tr></tbody>
           </table>
@@ -1652,6 +1761,52 @@ input::placeholder{color:var(--ink-3);}
         </div>
         <div class="btn-row mt-1">
           <button class="btn btn-sm" id="btn-refresh-ff">Refresh Flags</button>
+        </div>
+      </div>
+
+      <div class="card" style="margin-top:1rem;">
+        <h2><span class="dot dot-cyan"></span> SIEM Integration</h2>
+        <p class="text-muted" style="margin-bottom:.75rem;font-size:.82rem;">Configure the SIEM backend for event push and threat-intel pull.</p>
+        <div class="card-grid cols-2" style="margin-bottom:.75rem;">
+          <div style="padding:.75rem;border:1px solid var(--border);border-radius:10px;background:var(--bg-alt);">
+            <h3 style="margin-bottom:.5rem;">SIEM Push Configuration</h3>
+            <div class="toggle-row" style="margin-bottom:.5rem;"><input type="checkbox" id="siem-enabled"><span>Enabled</span></div>
+            <label for="siem-type">SIEM Type</label>
+            <select id="siem-type" style="width:100%;background:var(--bg-alt);color:var(--ink);border:1px solid var(--border);border-radius:6px;padding:.4rem .55rem;margin-bottom:.5rem;">
+              <option value="splunk">Splunk HEC</option>
+              <option value="elastic">Elasticsearch</option>
+              <option value="sentinel">Azure Sentinel (ASIM)</option>
+              <option value="qradar">QRadar (LEEF)</option>
+              <option value="google">Google SecOps (UDM)</option>
+              <option value="generic" selected>Generic JSON</option>
+            </select>
+            <label for="siem-endpoint">Endpoint URL</label>
+            <input type="text" id="siem-endpoint" placeholder="https://siem.example.com/api/events" style="width:100%;background:var(--bg-alt);color:var(--ink);border:1px solid var(--border);border-radius:6px;padding:.4rem .55rem;margin-bottom:.5rem;">
+            <label for="siem-auth-token">Auth Token</label>
+            <input type="password" id="siem-auth-token" placeholder="Bearer token or API key" style="width:100%;background:var(--bg-alt);color:var(--ink);border:1px solid var(--border);border-radius:6px;padding:.4rem .55rem;margin-bottom:.5rem;">
+            <label for="siem-index">Index / Data Stream</label>
+            <input type="text" id="siem-index" value="wardex" style="width:100%;background:var(--bg-alt);color:var(--ink);border:1px solid var(--border);border-radius:6px;padding:.4rem .55rem;margin-bottom:.5rem;">
+            <div class="toggle-row" style="margin-bottom:.5rem;"><input type="checkbox" id="siem-pull-enabled"><span>Enable Intel Pull</span></div>
+          </div>
+          <div style="padding:.75rem;border:1px solid var(--border);border-radius:10px;background:var(--bg-alt);">
+            <h3 style="margin-bottom:.5rem;">TAXII 2.1 Threat Intel</h3>
+            <div class="toggle-row" style="margin-bottom:.5rem;"><input type="checkbox" id="taxii-enabled"><span>Enabled</span></div>
+            <label for="taxii-url">Collection URL</label>
+            <input type="text" id="taxii-url" placeholder="https://taxii.example.com/api/collections/.../objects/" style="width:100%;background:var(--bg-alt);color:var(--ink);border:1px solid var(--border);border-radius:6px;padding:.4rem .55rem;margin-bottom:.5rem;">
+            <label for="taxii-auth">Auth Token</label>
+            <input type="password" id="taxii-auth" placeholder="Bearer token" style="width:100%;background:var(--bg-alt);color:var(--ink);border:1px solid var(--border);border-radius:6px;padding:.4rem .55rem;margin-bottom:.5rem;">
+            <label for="taxii-poll">Poll Interval (seconds)</label>
+            <input type="number" id="taxii-poll" min="30" value="300" style="width:100%;background:var(--bg-alt);color:var(--ink);border:1px solid var(--border);border-radius:6px;padding:.4rem .55rem;margin-bottom:.5rem;">
+            <div class="btn-row mt-1">
+              <button class="btn btn-sm" id="btn-taxii-pull">Pull Now</button>
+            </div>
+            <div id="taxii-pull-result" style="margin-top:.5rem;font-size:.78rem;color:var(--ink-3);"></div>
+          </div>
+        </div>
+        <div class="btn-row">
+          <button class="btn btn-sm primary" id="btn-save-siem">Save SIEM Config</button>
+          <button class="btn btn-sm" id="btn-load-siem">Load from Server</button>
+          <span id="siem-status-badge" style="margin-left:.5rem;font-size:.78rem;color:var(--ink-3);"></span>
         </div>
       </div>
 
@@ -2172,6 +2327,88 @@ input::placeholder{color:var(--ink-3);}
     toast._t = setTimeout(() => { el.className = 'toast'; }, 3500);
   }
 
+  // ── Centralized Error Handler (Phase A) ──
+  function handleApiError(e, context) {
+    const msg = context ? context + ': ' + e.message : e.message;
+    log(msg);
+    toast(msg, 'error');
+  }
+
+  // ── Confirm Modal (Phase A) ──
+  function showConfirm(title, message, confirmLabel) {
+    return new Promise((resolve) => {
+      const overlay = $('#confirm-modal');
+      $('#modal-title').textContent = title;
+      $('#modal-body').textContent = message;
+      const confirmBtn = $('#modal-confirm');
+      confirmBtn.textContent = confirmLabel || 'Confirm';
+      overlay.classList.add('active');
+      function cleanup() { overlay.classList.remove('active'); }
+      const onConfirm = () => { cleanup(); confirmBtn.removeEventListener('click', onConfirm); $('#modal-cancel').removeEventListener('click', onCancel); resolve(true); };
+      const onCancel = () => { cleanup(); confirmBtn.removeEventListener('click', onConfirm); $('#modal-cancel').removeEventListener('click', onCancel); resolve(false); };
+      confirmBtn.addEventListener('click', onConfirm);
+      $('#modal-cancel').addEventListener('click', onCancel);
+      overlay.addEventListener('click', (e) => { if (e.target === overlay) onCancel(); }, { once: true });
+    });
+  }
+
+  // ── Copy to Clipboard (Phase A) ──
+  function copyToClipboard(text, btn) {
+    navigator.clipboard.writeText(text).then(() => {
+      if (btn) { btn.classList.add('copied'); btn.textContent = 'Copied!'; setTimeout(() => { btn.classList.remove('copied'); btn.textContent = 'Copy'; }, 1500); }
+      toast('Copied to clipboard', 'success');
+    }).catch(() => { toast('Copy failed', 'error'); });
+  }
+
+  // ── Severity Color Coding (Phase A) ──
+  function updateSeverityColors(counts) {
+    const card = $('#dash-threat').closest('.metric-card');
+    if (!card) return;
+    card.classList.remove('severity-nominal','severity-elevated','severity-severe','severity-critical');
+    if (counts.critical > 0) card.classList.add('severity-critical');
+    else if (counts.severe > 0) card.classList.add('severity-severe');
+    else if (counts.elevated > 0) card.classList.add('severity-elevated');
+    else card.classList.add('severity-nominal');
+  }
+
+  // ── Loading Skeleton Helpers (Phase A) ──
+  function showSkeleton(container, rows) {
+    const n = rows || 3;
+    let html = '';
+    for (let i = 0; i < n; i++) html += '<div class="skeleton skeleton-row"></div>';
+    if (typeof container === 'string') container = $(container);
+    if (container) container.innerHTML = html;
+  }
+  function showEmptyState(container, icon, title, subtitle, actionText, actionSection) {
+    if (typeof container === 'string') container = $(container);
+    if (!container) return;
+    let html = '<div class="empty-state"><div class="empty-icon">' + (icon || '📭') + '</div><h3>' + esc(title || 'No Data') + '</h3>';
+    if (subtitle) html += '<p>' + esc(subtitle) + '</p>';
+    if (actionText && actionSection) html += '<button class="btn btn-sm" onclick="document.querySelector(\'[data-section=' + actionSection + ']\').click()">' + esc(actionText) + '</button>';
+    html += '</div>';
+    container.innerHTML = html;
+  }
+
+  // ── Theme Toggle (Phase B) ──
+  function initTheme() {
+    const saved = localStorage.getItem('wardex-theme');
+    if (saved === 'light') document.body.classList.add('light');
+    updateThemeIcon();
+  }
+  function toggleTheme() {
+    document.body.classList.toggle('light');
+    localStorage.setItem('wardex-theme', document.body.classList.contains('light') ? 'light' : 'dark');
+    updateThemeIcon();
+    // Re-init charts with correct theme colors
+    [chartThreatTimeline, chartSeverityDist, chartIncidentTimeline, chartDetectionMethods].forEach(c => { if (c) { c.destroy(); } });
+    chartThreatTimeline = null; chartSeverityDist = null; chartIncidentTimeline = null; chartDetectionMethods = null;
+    initCharts();
+  }
+  function updateThemeIcon() {
+    const btn = $('#btn-theme-toggle');
+    if (btn) btn.innerHTML = document.body.classList.contains('light') ? '&#9728;' : '&#9790;';
+  }
+
   function setConn(state, detail) {
     const dot = $('#conn-dot');
     const label = $('#conn-label');
@@ -2232,10 +2469,15 @@ input::placeholder{color:var(--ink-3);}
     else if (sectionId === 'incident-response') { refreshTwin(); refreshAnalysis(); refreshProcessTree(); refreshResponseOrchestration(); }
     else if (sectionId === 'infrastructure') { refreshInfra(); }
     else if (sectionId === 'reports-exports') { refreshReport(); }
-    else if (sectionId === 'settings') { loadSettings(); refreshSessionInfo(); refreshRetention(); }
+    else if (sectionId === 'settings') { loadSettings(); refreshSessionInfo(); refreshRetention(); loadSiemConfig(); }
     else if (sectionId === 'research-tracks') { loadResearchTracks(); }
     else if (sectionId === 'help-docs') { loadApiEndpoints(); }
     else if (sectionId === 'dashboard') { refreshDashboard(); }
+
+    // Trigger chart resize after section becomes visible
+    setTimeout(() => {
+      [chartThreatTimeline, chartSeverityDist, chartIncidentTimeline, chartDetectionMethods].forEach(c => { if (c) c.resize(); });
+    }, 50);
   }
 
   $$('.nav-item').forEach(item => {
@@ -2302,7 +2544,7 @@ input::placeholder{color:var(--ink-3);}
       $('#g-temp').textContent = typeof d.temp_celsius === 'number' ? d.temp_celsius.toFixed(1) : '—';
       $('#g-auth').textContent = typeof d.auth_failures === 'number' ? d.auth_failures : '—';
       $('#g-batt').textContent = typeof d.battery_pct === 'number' ? d.battery_pct.toFixed(0) : '—';
-    } catch(e) { /* ignore */ }
+    } catch(e) { log('Background refresh: ' + e.message); }
 
     const shouldRefreshHistory = includeHistory || Date.now() >= nextTelemetryHistoryAt;
     if (!shouldRefreshHistory) return;
@@ -2316,7 +2558,7 @@ input::placeholder{color:var(--ink-3);}
         drawSparkline('spark-cpu', arr.map(s => s.cpu_pct ?? 0), var_accent);
         drawSparkline('spark-mem', arr.map(s => s.mem_pct ?? 0), '#3b82f6');
       }
-    } catch(e) { /* ignore */ }
+    } catch(e) { log('Background refresh: ' + e.message); }
   }
 
   const var_accent = '#00d4aa';
@@ -2367,7 +2609,7 @@ input::placeholder{color:var(--ink-3);}
       $('#dash-memory').textContent = d.total_memory_mb ? Math.round(d.total_memory_mb) + ' MB' : '—';
       $('#dash-osver').textContent = d.os_version ?? '—';
       $('#dash-host-uptime').textContent = d.uptime_secs ? formatUptime(d.uptime_secs) : '—';
-    } catch(e) { /* ignore */ }
+    } catch(e) { log('Background refresh: ' + e.message); }
   }
 
   function formatUptime(secs) {
@@ -2497,7 +2739,7 @@ input::placeholder{color:var(--ink-3);}
   }
 
   async function resetBaseline() {
-    if (!confirm('Reset the detector baseline? This cannot be undone.')) return;
+    if (!(await showConfirm('Reset Baseline', 'Reset the detector baseline? This cannot be undone.', 'Reset'))) return;
     try {
       const res = await fetch(API + '/api/control/reset-baseline', { method: 'POST', headers: authHeaders('application/json') });
       if (res.status === 401) { flash('Unauthorized', 'error'); return; }
@@ -2519,7 +2761,7 @@ input::placeholder{color:var(--ink-3);}
   }
 
   async function restoreCheckpoint() {
-    if (!confirm('Restore detector to the latest checkpoint?')) return;
+    if (!(await showConfirm('Restore Checkpoint', 'Restore detector to the latest checkpoint?', 'Restore'))) return;
     try {
       const res = await fetch(API + '/api/control/restore-checkpoint', { method: 'POST', headers: authHeaders('application/json') });
       if (res.status === 401) { flash('Unauthorized', 'error'); return; }
@@ -2535,7 +2777,7 @@ input::placeholder{color:var(--ink-3);}
       if (!res.ok) return;
       const d = await res.json();
       $('#checkpoint-count').textContent = d.count + ' stored';
-    } catch(e) { /* ignore */ }
+    } catch(e) { log('Background refresh: ' + e.message); }
   }
 
   // ── Security Operations ──
@@ -2752,7 +2994,7 @@ input::placeholder{color:var(--ink-3);}
       const res = await fetch(API + '/api/agents/token', { method: 'POST', headers: authHeaders('application/json'), body: JSON.stringify({ max_uses: maxUses }) });
       if (!res.ok) throw new Error('HTTP ' + res.status);
       const data = await res.json();
-      $('#xdr-token-display').innerHTML = '<strong style="color:var(--accent);">' + esc(data.token) + '</strong> (uses: ' + data.max_uses + ')';
+      $('#xdr-token-display').innerHTML = '<strong style="color:var(--accent);">' + esc(data.token) + '</strong> (uses: ' + data.max_uses + ') <button class="btn-copy" onclick="copyToClipboard(\'' + esc(data.token) + '\', this)">Copy</button>';
       flash('Enrollment token created', 'success'); log('Created enrollment token: ' + data.token.substring(0, 8) + '...');
     } catch(e) { flash('Token creation failed: ' + e.message, 'error'); }
   }
@@ -2818,6 +3060,7 @@ input::placeholder{color:var(--ink-3);}
 
   async function refreshXdrEvents() {
     const tableEl = $('#xdr-event-table');
+    if (tableEl && !tableEl.querySelector('.data-table')) showSkeleton(tableEl, 4);
     try {
       const query = xdrEventQuery();
       const res = await fetch(API + '/api/events' + (query ? ('?' + query) : ''), { headers: authHeaders() });
@@ -2825,7 +3068,8 @@ input::placeholder{color:var(--ink-3);}
       const events = await res.json();
       if (!events.length) {
         selectedEventId = null;
-        tableEl.innerHTML = '<em class="text-muted">No events match the current filters</em>';
+        tableEl.innerHTML = '';
+        showEmptyState(tableEl, '🔍', 'No Events', 'No events match the current filters. Try adjusting your search criteria.', null, null);
         $('#xdr-selected-event').textContent = 'Select an event row to triage.';
         return;
       }
@@ -3109,7 +3353,7 @@ input::placeholder{color:var(--ink-3);}
         $('#xdr-auto-rollback').checked = cfg.auto_rollback !== false;
         $('#xdr-max-failures').value = cfg.max_failures || 1;
       }
-    } catch(e) { /* ignore */ }
+    } catch(e) { log('Background refresh: ' + e.message); }
   }
 
   async function saveRolloutConfig() {
@@ -3198,7 +3442,7 @@ input::placeholder{color:var(--ink-3);}
         $('#th-samples').textContent = d.sample_count ?? '—';
         $('#th-rate').textContent = d.collection_rate_hz ? d.collection_rate_hz + ' Hz' : '—';
       }
-    } catch(e) { /* ignore */ }
+    } catch(e) { log('Background refresh: ' + e.message); }
   }
 
   async function resetDrift() {
@@ -3341,6 +3585,8 @@ input::placeholder{color:var(--ink-3);}
 
   // ── Alerts ──
   async function refreshAlerts() {
+    const alertTable = $('#alert-table');
+    if (alertTable && !alertTable.querySelector('.data-table')) showSkeleton(alertTable, 4);
     try {
       const [alertsRes, countRes] = await Promise.all([
         fetch(API + '/api/alerts', { headers: authHeaders() }),
@@ -3372,6 +3618,7 @@ input::placeholder{color:var(--ink-3);}
     else if (c.severe > 0) { el.textContent = 'Severe'; el.className = 'metric-value warning'; sub.textContent = c.severe + ' severe alerts'; }
     else if (c.elevated > 0) { el.textContent = 'Elevated'; el.className = 'metric-value warning'; sub.textContent = c.elevated + ' elevated alerts'; }
     else { el.textContent = 'Nominal'; el.className = 'metric-value ok'; sub.textContent = 'All systems normal'; }
+    updateSeverityColors(c);
   }
 
   // Track open alert detail state across refreshes
@@ -3408,7 +3655,8 @@ input::placeholder{color:var(--ink-3);}
     if (!alerts.length) {
       openAlertDetailId = null;
       openAlertDetailHtml = null;
-      tbody.innerHTML = '<tr><td colspan="5" class="text-muted">No alerts yet.</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="5"></td></tr>';
+      showEmptyState(tbody.querySelector('td'), '🛡️', 'No Alerts', 'Alerts will appear here when the detector identifies anomalous behavior.', null, null);
       lastAlertCount = 0; return;
     }
     const isNew = alerts.length > lastAlertCount;
@@ -3632,7 +3880,7 @@ input::placeholder{color:var(--ink-3);}
   }
 
   async function clearAlerts() {
-    if (!confirm('Clear all alerts?')) return;
+    if (!(await showConfirm('Clear Alerts', 'Clear all alerts? This cannot be undone.', 'Clear'))) return;
     try {
       const res = await fetch(API + '/api/alerts', { method: 'DELETE', headers: authHeaders() });
       if (res.status === 401) { flash('Unauthorized', 'error'); return; }
@@ -3668,7 +3916,7 @@ input::placeholder{color:var(--ink-3);}
       // Health indicator
       const healthEl = $('#dash-health');
       if (secs > 0) { healthEl.textContent = 'Online'; healthEl.className = 'metric-value ok'; }
-    } catch(e) { /* ignore */ }
+    } catch(e) { log('Background refresh: ' + e.message); }
   }
 
   function startAlertPolling() {
@@ -3697,7 +3945,7 @@ input::placeholder{color:var(--ink-3);}
         html += '</table>';
         el.innerHTML = html;
       }
-    } catch(e) { /* ignore */ }
+    } catch(e) { log('Background refresh: ' + e.message); }
   }
 
   // ── Research Tracks ──
@@ -3864,6 +4112,83 @@ input::placeholder{color:var(--ink-3);}
     toast('Reset to defaults — click Save to apply', 'success');
   }
 
+  // ── SIEM / TAXII Config ──
+  async function loadSiemConfig() {
+    try {
+      const [siemRes, taxiiRes] = await Promise.all([
+        fetch('/api/siem/config', { headers: authHeaders() }),
+        fetch('/api/taxii/config', { headers: authHeaders() })
+      ]);
+      if (siemRes.ok) {
+        const c = await siemRes.json();
+        $('#siem-enabled').checked = !!c.enabled;
+        $('#siem-type').value = c.siem_type || 'generic';
+        $('#siem-endpoint').value = c.endpoint || '';
+        $('#siem-auth-token').value = c.auth_token || '';
+        $('#siem-index').value = c.index || 'wardex';
+        $('#siem-pull-enabled').checked = !!c.pull_enabled;
+      }
+      if (taxiiRes.ok) {
+        const t = await taxiiRes.json();
+        $('#taxii-enabled').checked = !!t.enabled;
+        $('#taxii-url').value = t.url || '';
+        $('#taxii-auth').value = t.auth_token || '';
+        $('#taxii-poll').value = t.poll_interval_secs || 300;
+      }
+      const statusRes = await fetch('/api/siem/status', { headers: authHeaders() });
+      if (statusRes.ok) {
+        const st = await statusRes.json();
+        const badge = $('#siem-status-badge');
+        badge.textContent = st.enabled
+          ? `✓ Connected · ${st.total_pushed} pushed · ${st.total_pulled} pulled`
+          : '○ Disabled';
+        badge.style.color = st.enabled ? 'var(--green)' : 'var(--ink-3)';
+      }
+      log('SIEM/TAXII config loaded');
+    } catch(e) { log('SIEM config load: ' + e.message); }
+  }
+
+  async function saveSiemConfig() {
+    try {
+      const siemCfg = {
+        enabled: $('#siem-enabled').checked,
+        siem_type: $('#siem-type').value,
+        endpoint: $('#siem-endpoint').value.trim(),
+        auth_token: $('#siem-auth-token').value.trim(),
+        index: $('#siem-index').value.trim(),
+        pull_enabled: $('#siem-pull-enabled').checked
+      };
+      const taxiiCfg = {
+        enabled: $('#taxii-enabled').checked,
+        url: $('#taxii-url').value.trim(),
+        auth_token: $('#taxii-auth').value.trim(),
+        poll_interval_secs: parseInt($('#taxii-poll').value) || 300
+      };
+      const [r1, r2] = await Promise.all([
+        fetch('/api/siem/config', { method: 'POST', headers: authHeaders(), body: JSON.stringify(siemCfg) }),
+        fetch('/api/taxii/config', { method: 'POST', headers: authHeaders(), body: JSON.stringify(taxiiCfg) })
+      ]);
+      if (r1.ok && r2.ok) { toast('SIEM & TAXII configuration saved', 'success'); loadSiemConfig(); }
+      else { flash('Save failed: ' + (await r1.text()) + ' ' + (await r2.text()), 'error'); }
+    } catch(e) { flash('SIEM save error: ' + e.message, 'error'); }
+  }
+
+  async function taxiiPullNow() {
+    const el = $('#taxii-pull-result');
+    el.textContent = 'Pulling…';
+    try {
+      const res = await fetch('/api/taxii/pull', { method: 'POST', headers: authHeaders() });
+      const data = await res.json();
+      if (res.ok) {
+        el.textContent = `✓ Pulled ${data.pulled} indicator(s)`;
+        el.style.color = 'var(--green)';
+      } else {
+        el.textContent = `✗ ${data.error || 'Pull failed'}`;
+        el.style.color = 'var(--red)';
+      }
+    } catch(e) { el.textContent = '✗ ' + e.message; el.style.color = 'var(--red)'; }
+  }
+
   async function testWebhook() {
     const url = $('#set-webhook').value.trim();
     if (!url) { flash('Enter a webhook URL first', 'error'); return; }
@@ -3876,8 +4201,7 @@ input::placeholder{color:var(--ink-3);}
 
   // ── Shutdown ──
   async function shutdownServer() {
-    if (!confirm('Are you sure you want to shutdown the Wardex server? This will stop all monitoring and disconnect all agents.')) return;
-    if (!confirm('This action cannot be undone remotely. You will need terminal access to restart. Continue?')) return;
+    if (!(await showConfirm('Shutdown Server', 'Are you sure you want to shutdown the Wardex server? This will stop all monitoring and disconnect all agents.\n\nThis action cannot be undone remotely. You will need terminal access to restart.', 'Shutdown'))) return;
     try {
       const res = await fetch(API + '/api/shutdown', { method: 'POST', headers: authHeaders() });
       if (res.status === 401) { flash('Unauthorized', 'error'); return; }
@@ -4022,8 +4346,16 @@ input::placeholder{color:var(--ink-3);}
 
   function initCharts() {
     if (typeof Chart === 'undefined') return;
-    Chart.defaults.color = '#9fa3b4';
-    Chart.defaults.borderColor = 'rgba(42,45,62,.5)';
+    const isLight = document.body.classList.contains('light');
+    const gridColor = isLight ? 'rgba(0,0,0,.08)' : 'rgba(42,45,62,.5)';
+    const tickColor = isLight ? '#555' : '#6b6f82';
+    const labelColor = isLight ? '#444' : '#9fa3b4';
+    Chart.defaults.color = labelColor;
+    Chart.defaults.borderColor = gridColor;
+    CHART_DEFAULTS.scales.x.ticks.color = tickColor;
+    CHART_DEFAULTS.scales.x.grid.color = gridColor;
+    CHART_DEFAULTS.scales.y.ticks.color = tickColor;
+    CHART_DEFAULTS.scales.y.grid.color = gridColor;
 
     const tlCtx = document.getElementById('chart-threat-timeline');
     if (tlCtx) {
@@ -4156,7 +4488,7 @@ input::placeholder{color:var(--ink-3);}
       if ($('#resp-pending')) $('#resp-pending').textContent = data.pending_approval || 0;
       if ($('#resp-denied')) $('#resp-denied').textContent = data.denied || 0;
       if ($('#resp-protected')) $('#resp-protected').textContent = data.protected_assets || 0;
-    } catch (_) {}
+    } catch(_) { log('Background refresh: ' + _.message); }
     try {
       const r = await apiFetch('/api/response/pending');
       const data = await r.json();
@@ -4178,7 +4510,7 @@ input::placeholder{color:var(--ink-3);}
           <td><button class="btn btn-sm" disabled>Review</button></td>
         </tr>
       `).join('');
-    } catch (_) {}
+    } catch(_) { log('Background refresh: ' + _.message); }
   }
 
   // ── Investigation Timeline ──
@@ -4230,7 +4562,7 @@ input::placeholder{color:var(--ink-3);}
   function renderIncidentTable(incidents) {
     const tbody = $('#inc-tbody');
     if (!tbody) return;
-    if (!incidents.length) { tbody.innerHTML = '<tr><td colspan="8" class="text-muted">No incidents.</td></tr>'; return; }
+    if (!incidents.length) { tbody.innerHTML = '<tr><td colspan="8"></td></tr>'; showEmptyState(tbody.querySelector('td'), '📋', 'No Incidents', 'Incidents will appear when correlated alerts trigger escalation.', null, null); return; }
     tbody.innerHTML = incidents.map(inc => {
       const sevClass = (inc.severity || '').toLowerCase();
       const mitreTags = (inc.mitre_techniques || []).map(m =>
@@ -4422,6 +4754,7 @@ input::placeholder{color:var(--ink-3);}
   $('#auth-token').addEventListener('keydown', function(e) { if (e.key === 'Enter') { e.preventDefault(); connect(); } });
   $('#btn-connect').addEventListener('click', connect);
   $('#btn-toggle-token').addEventListener('click', () => { const inp = $('#auth-token'); inp.type = inp.type === 'password' ? 'text' : 'password'; });
+  $('#btn-copy-token').addEventListener('click', function() { copyToClipboard($('#auth-token').value, this); });
   $('#decay-range').addEventListener('input', function() { $('#decay-val').textContent = this.value + '%'; });
   $('#demo-mode-toggle').addEventListener('change', function() { toggleDemoMode(this.checked); });
 
@@ -4538,6 +4871,9 @@ input::placeholder{color:var(--ink-3);}
   $('#btn-reset-settings').addEventListener('click', resetSettings);
   $('#btn-load-settings').addEventListener('click', loadSettings);
   $('#btn-test-webhook').addEventListener('click', testWebhook);
+  $('#btn-save-siem').addEventListener('click', saveSiemConfig);
+  $('#btn-load-siem').addEventListener('click', loadSiemConfig);
+  $('#btn-taxii-pull').addEventListener('click', taxiiPullNow);
   $('#btn-shutdown-server').addEventListener('click', shutdownServer);
 
   // Session Management
@@ -4683,7 +5019,7 @@ input::placeholder{color:var(--ink-3);}
     } catch(e) { log('Error: ' + e.message); }
   }
   async function removeRbacUser(username) {
-    if (!confirm('Remove user ' + username + '?')) return;
+    if (!(await showConfirm('Remove User', 'Remove user ' + username + '?', 'Remove'))) return;
     try {
       const res = await apiFetch('/api/rbac/users/' + encodeURIComponent(username), { method: 'DELETE' });
       if (res.ok) { log('User removed: ' + username); refreshRbac(); }
@@ -4710,7 +5046,7 @@ input::placeholder{color:var(--ink-3);}
   }
 
   async function rotateAdminToken() {
-    if (!confirm('Rotate the admin token? The current token will be immediately invalidated.')) return;
+    if (!(await showConfirm('Rotate Token', 'Rotate the admin token? The current token will be immediately invalidated.', 'Rotate'))) return;
     try {
       const res = await apiFetch('/api/auth/rotate', { method: 'POST', headers: {'Content-Type': 'application/json'} });
       if (!res.ok) throw new Error('HTTP ' + res.status);
@@ -4718,7 +5054,7 @@ input::placeholder{color:var(--ink-3);}
       if (d.token) {
         $('#auth-token').value = d.token;
         localStorage.setItem('wardex.adminToken', d.token);
-        $('#session-rotate-result').innerHTML = '<span style="color:var(--accent);">New token:</span> ' + esc(d.token);
+        $('#session-rotate-result').innerHTML = '<span style="color:var(--accent);">New token:</span> ' + esc(d.token) + ' <button class="btn-copy" onclick="copyToClipboard(\'' + esc(d.token) + '\', this)">Copy</button>';
         toast('Token rotated — new token applied', 'success');
         log('Admin token rotated');
         refreshSessionInfo();
@@ -4757,7 +5093,7 @@ input::placeholder{color:var(--ink-3);}
   }
 
   async function applyRetention() {
-    if (!confirm('Apply retention policies? This will trim data exceeding configured limits.')) return;
+    if (!(await showConfirm('Apply Retention', 'Apply retention policies? This will trim data exceeding configured limits.', 'Apply'))) return;
     try {
       const res = await apiFetch('/api/retention/apply', { method: 'POST', headers: {'Content-Type': 'application/json'} });
       if (!res.ok) throw new Error('HTTP ' + res.status);
@@ -4784,7 +5120,25 @@ input::placeholder{color:var(--ink-3);}
     } catch(e) { log('Feature flags refresh error: ' + e.message); }
   }
 
+  // ── Tab Switching ──
+  $$('.tab-bar').forEach(bar => {
+    bar.querySelectorAll('.tab-btn').forEach(b => b.setAttribute('role', 'tab'));
+    bar.addEventListener('click', e => {
+      const btn = e.target.closest('.tab-btn');
+      if (!btn) return;
+      bar.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      const panel = btn.dataset.tab;
+      const section = bar.closest('.section');
+      section.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+      const target = section.querySelector('#panel-' + panel);
+      if (target) target.classList.add('active');
+    });
+  });
+
   // ── Initial Load ──
+  initTheme();
+  $('#btn-theme-toggle').addEventListener('click', toggleTheme);
   const savedToken = localStorage.getItem('wardex.adminToken');
   if (savedToken) { $('#auth-token').value = savedToken; $('#auth-status').textContent = 'Token set'; $('#auth-status').className = 'auth-status ok'; }
   refreshStatus();
@@ -4802,5 +5156,16 @@ input::placeholder{color:var(--ink-3);}
 
 })();
 </script>
+<!-- ═══ Confirm Modal ═══ -->
+<div class="modal-overlay" id="confirm-modal">
+  <div class="modal-box" role="dialog" aria-modal="true" aria-labelledby="modal-title">
+    <div class="modal-title" id="modal-title">Confirm</div>
+    <div class="modal-body" id="modal-body">Are you sure?</div>
+    <div class="modal-actions">
+      <button class="btn btn-sm" id="modal-cancel">Cancel</button>
+      <button class="btn btn-sm danger" id="modal-confirm">Confirm</button>
+    </div>
+  </div>
+</div>
 </body>
 </html>

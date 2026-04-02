@@ -465,13 +465,56 @@ pub fn run_agent(
         }
     });
 
+    // Active alert threshold and interval — may be updated by policy enforcement
+    let active_threshold = Arc::new(Mutex::new(
+        if monitor_args.alert_threshold != MonitorConfig::default().alert_threshold {
+            monitor_args.alert_threshold
+        } else {
+            config.monitor.alert_threshold
+        },
+    ));
+    let active_interval = Arc::new(Mutex::new(config.monitor.interval_secs));
+
+    // Background policy enforcement thread
+    let policy_shutdown = shutdown.clone();
+    let policy_server = server_url.to_string();
+    let policy_agent_id = resp.agent_id.clone();
+    let policy_threshold = active_threshold.clone();
+    let policy_interval_secs = active_interval.clone();
+    let policy_poll = resp.policy_poll_interval_secs;
+    thread::spawn(move || {
+        let mut pol_client = AgentClient::new(&policy_server);
+        pol_client.agent_id = Some(policy_agent_id);
+        let mut current_version: u64 = 0;
+        loop {
+            if policy_shutdown.load(Ordering::Relaxed) {
+                break;
+            }
+            thread::sleep(Duration::from_secs(policy_poll));
+            if policy_shutdown.load(Ordering::Relaxed) {
+                break;
+            }
+            match pol_client.fetch_policy() {
+                Ok(Some(p)) if p.version > current_version => {
+                    current_version = p.version;
+                    eprintln!("[policy] Applying policy v{}", p.version);
+                    if let Some(t) = p.alert_threshold {
+                        *policy_threshold.lock().unwrap() = t;
+                        eprintln!("[policy]   alert_threshold = {t}");
+                    }
+                    if let Some(i) = p.interval_secs {
+                        *policy_interval_secs.lock().unwrap() = i;
+                        eprintln!("[policy]   interval_secs = {i}");
+                    }
+                }
+                Ok(_) => {} // no change or no policy
+                Err(e) => eprintln!("[policy] fetch error: {e}"),
+            }
+        }
+    });
+
     // Run local monitor, collecting alerts for forwarding
     let interval = Duration::from_secs(config.monitor.interval_secs);
-    let alert_threshold = if monitor_args.alert_threshold != MonitorConfig::default().alert_threshold {
-        monitor_args.alert_threshold
-    } else {
-        config.monitor.alert_threshold
-    };
 
     let mut detector = crate::detector::AnomalyDetector::default();
     let policy = crate::policy::PolicyEngine::default();
@@ -515,7 +558,9 @@ pub fn run_agent(
         let signal = detector.evaluate(&sample);
         sample_count += 1;
 
-        if signal.score >= alert_threshold {
+        // Use policy-enforced threshold (may change via server policy push)
+        let current_threshold = *active_threshold.lock().unwrap();
+        if signal.score >= current_threshold {
             let decision = policy.evaluate(&signal, &sample);
             let level_str = format!("{:?}", decision.level);
             let mitre = crate::telemetry::map_alert_to_mitre(&signal.reasons);

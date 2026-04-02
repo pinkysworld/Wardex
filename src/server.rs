@@ -199,6 +199,7 @@ struct AppState {
     remote_deployments: HashMap<String, AgentDeployment>,
     deployment_store_path: String,
     siem_connector: SiemConnector,
+    taxii_client: crate::siem::TaxiiClient,
     // Local host telemetry (ring buffer, last 300 samples)
     local_telemetry: Vec<TelemetrySample>,
     local_host_info: HostInfo,
@@ -313,6 +314,7 @@ pub fn run_server(port: u16, site_dir: &Path, shutdown: Arc<AtomicBool>) -> Resu
         remote_deployments: load_remote_deployments("var/deployments.json"),
         deployment_store_path: "var/deployments.json".to_string(),
         siem_connector: SiemConnector::new(crate::siem::SiemConfig::default()),
+        taxii_client: crate::siem::TaxiiClient::new(crate::siem::TaxiiConfig::default()),
         local_telemetry: Vec::new(),
         local_host_info: detect_platform(),
         velocity: VelocityDetector::new(60, 2.5),
@@ -513,6 +515,7 @@ pub fn spawn_test_server() -> (u16, String) {
         remote_deployments: load_remote_deployments(&format!("/tmp/wardex_test_{port}/deployments.json")),
         deployment_store_path: format!("/tmp/wardex_test_{port}/deployments.json"),
         siem_connector: SiemConnector::new(crate::siem::SiemConfig::default()),
+        taxii_client: crate::siem::TaxiiClient::new(crate::siem::TaxiiConfig::default()),
         local_telemetry: Vec::new(),
         local_host_info: detect_platform(),
         velocity: VelocityDetector::new(60, 2.5),
@@ -1375,6 +1378,7 @@ fn handle_api(mut request: Request, state: &Arc<Mutex<AppState>>, _site_dir: &Pa
     ) || (!is_agent_endpoint && (
         (method == Method::Get && url == "/api/fleet/dashboard")
         || (method == Method::Get && url == "/api/siem/status")
+        || (method == Method::Get && url == "/api/taxii/status")
         || (method == Method::Get && url == "/api/agents")
         || (method == Method::Get && url == "/api/events")
         || (method == Method::Get && url.starts_with("/api/events?"))
@@ -2524,6 +2528,70 @@ fn handle_api(mut request: Request, state: &Arc<Mutex<AppState>>, _site_dir: &Pa
                 Err(e) => error_json(&format!("serialization error: {e}"), 500),
             }
         }
+        (Method::Get, "/api/siem/config") => {
+            let s = state.lock().unwrap();
+            let cfg = s.siem_connector.config();
+            match serde_json::to_string(&cfg) {
+                Ok(json) => json_response(&json, 200),
+                Err(e) => error_json(&format!("serialization error: {e}"), 500),
+            }
+        }
+        (Method::Post, "/api/siem/config") => {
+            let body = read_body_limited(&mut request, 4096);
+            match body {
+                Ok(b) => match serde_json::from_str::<crate::siem::SiemConfig>(&b) {
+                    Ok(new_cfg) => {
+                        let mut s = state.lock().unwrap();
+                        s.siem_connector.update_config(new_cfg);
+                        json_response(r#"{"status":"ok","message":"SIEM configuration updated"}"#, 200)
+                    }
+                    Err(e) => error_json(&format!("invalid SIEM config: {e}"), 400),
+                },
+                Err(e) => error_json(&e, 400),
+            }
+        }
+        (Method::Get, "/api/taxii/status") => {
+            let s = state.lock().unwrap();
+            let status = s.taxii_client.status();
+            match serde_json::to_string(&status) {
+                Ok(j) => json_response(&j, 200),
+                Err(e) => error_json(&format!("serialization error: {e}"), 500),
+            }
+        }
+        (Method::Get, "/api/taxii/config") => {
+            let s = state.lock().unwrap();
+            match serde_json::to_string(s.taxii_client.config()) {
+                Ok(j) => json_response(&j, 200),
+                Err(e) => error_json(&format!("serialization error: {e}"), 500),
+            }
+        }
+        (Method::Post, "/api/taxii/config") => {
+            let body = read_body_limited(&mut request, 4096);
+            match body {
+                Ok(b) => match serde_json::from_str::<crate::siem::TaxiiConfig>(&b) {
+                    Ok(new_cfg) => {
+                        let mut s = state.lock().unwrap();
+                        s.taxii_client.update_config(new_cfg);
+                        json_response(r#"{"status":"ok","message":"TAXII configuration updated"}"#, 200)
+                    }
+                    Err(e) => error_json(&format!("invalid TAXII config: {e}"), 400),
+                },
+                Err(e) => error_json(&e, 400),
+            }
+        }
+        (Method::Post, "/api/taxii/pull") => {
+            let mut s = state.lock().unwrap();
+            match s.taxii_client.pull_indicators() {
+                Ok(records) => {
+                    let count = records.len();
+                    match serde_json::to_string(&serde_json::json!({"pulled": count, "records": records})) {
+                        Ok(j) => json_response(&j, 200),
+                        Err(e) => error_json(&format!("serialization error: {e}"), 500),
+                    }
+                }
+                Err(e) => error_json(&format!("TAXII pull failed: {e}"), 502),
+            }
+        }
 
         // ── Fleet Dashboard ──────────────────────────────────────
         (Method::Get, "/api/fleet/dashboard") => {
@@ -3091,6 +3159,16 @@ fn handle_api(mut request: Request, state: &Arc<Mutex<AppState>>, _site_dir: &Pa
                 })
             }).collect();
             json_response(&serde_json::json!({"approvals": items}).to_string(), 200)
+        }
+
+        // ── Execute approved response actions ──────────────────
+        (Method::Post, "/api/response/execute") => {
+            let s = state.lock().unwrap();
+            let executed = s.response_orchestrator.execute_approved();
+            json_response(&serde_json::json!({
+                "executed_count": executed.len(),
+                "actions": executed,
+            }).to_string(), 200)
         }
 
         _ => {
@@ -4120,16 +4198,23 @@ fn handle_agent_create_token(
     struct TokenReq {
         #[serde(default = "default_max_uses")]
         max_uses: u32,
+        /// Optional TTL in seconds. If set, the token expires after this duration.
+        #[serde(default)]
+        ttl_secs: Option<u64>,
     }
     fn default_max_uses() -> u32 {
         10
     }
     let req: TokenReq = match serde_json::from_str(&body) {
         Ok(r) => r,
-        Err(_) => TokenReq { max_uses: 10 },
+        Err(_) => TokenReq { max_uses: 10, ttl_secs: None },
     };
     let mut s = state.lock().unwrap();
-    let token = s.agent_registry.create_token(req.max_uses);
+    let token = if let Some(ttl) = req.ttl_secs {
+        s.agent_registry.create_token_with_ttl(req.max_uses, ttl)
+    } else {
+        s.agent_registry.create_token(req.max_uses)
+    };
     match serde_json::to_string(&token) {
         Ok(json) => json_response(&json, 200),
         Err(e) => error_json(&format!("serialization error: {e}"), 500),
