@@ -612,8 +612,12 @@ impl SiemConnector {
                 .set("Authorization", &auth_header)
                 .send_string(payload)
             {
-                Ok(resp) if resp.status() >= 400 => {
-                    last_err = format!("SIEM returned error status: {}", resp.status());
+                Ok(resp) if resp.status() >= 400 && resp.status() < 500 => {
+                    // Client errors (4xx) are not retryable
+                    return Err(format!("SIEM returned client error: {}", resp.status()));
+                }
+                Ok(resp) if resp.status() >= 500 => {
+                    last_err = format!("SIEM returned server error: {}", resp.status());
                 }
                 Ok(_) => return Ok(()),
                 Err(e) => {

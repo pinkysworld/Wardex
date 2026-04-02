@@ -87,8 +87,9 @@ impl EnrollmentToken {
             return false;
         }
         if let Some(ref exp) = self.expires_at {
-            if let Ok(dt) = chrono::DateTime::parse_from_rfc3339(exp) {
-                return chrono::Utc::now() < dt;
+            match chrono::DateTime::parse_from_rfc3339(exp) {
+                Ok(dt) => return chrono::Utc::now() < dt,
+                Err(_) => return false, // malformed timestamp → treat as expired
             }
         }
         true

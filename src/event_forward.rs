@@ -645,9 +645,9 @@ fn severity_label(rank: u8) -> &'static str {
 fn risk_label(max_rank: u8, average_score: f32, correlated_count: usize) -> &'static str {
     if max_rank >= 3 || correlated_count >= 2 {
         "Critical"
-    } else if max_rank >= 2 || average_score >= 3.0 {
+    } else if max_rank >= 2 || average_score >= 0.8 {
         "Severe"
-    } else if max_rank >= 1 || average_score >= 1.5 {
+    } else if max_rank >= 1 || average_score >= 0.4 {
         "Elevated"
     } else {
         "Nominal"

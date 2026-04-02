@@ -6,6 +6,7 @@ use crate::runtime::RunResult;
 
 use aes_gcm::{Aes256Gcm, KeyInit, aead::Aead};
 use aes_gcm::aead::generic_array::GenericArray;
+use rand::RngCore;
 
 #[derive(Debug, Clone, Serialize)]
 pub struct ForensicBundle {
@@ -92,7 +93,8 @@ impl ForensicBundle {
             .map_err(|e| format!("failed to serialize forensic bundle: {e}"))?;
 
         let cipher = Aes256Gcm::new(GenericArray::from_slice(key));
-        let nonce_bytes: [u8; 12] = rand::random();
+        let mut nonce_bytes = [0u8; 12];
+        rand::rngs::OsRng.fill_bytes(&mut nonce_bytes);
         let nonce = GenericArray::from_slice(&nonce_bytes);
 
         let ciphertext = cipher

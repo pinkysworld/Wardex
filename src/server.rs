@@ -2541,9 +2541,18 @@ fn handle_api(mut request: Request, state: &Arc<Mutex<AppState>>, _site_dir: &Pa
             match body {
                 Ok(b) => match serde_json::from_str::<crate::siem::SiemConfig>(&b) {
                     Ok(new_cfg) => {
-                        let mut s = state.lock().unwrap();
-                        s.siem_connector.update_config(new_cfg);
-                        json_response(r#"{"status":"ok","message":"SIEM configuration updated"}"#, 200)
+                        if new_cfg.enabled && !new_cfg.endpoint.is_empty()
+                            && !new_cfg.endpoint.starts_with("https://")
+                            && !new_cfg.endpoint.starts_with("http://")
+                        {
+                            error_json("SIEM endpoint must use http:// or https://", 400)
+                        } else if let Err(e) = new_cfg.validate() {
+                            error_json(&e, 400)
+                        } else {
+                            let mut s = state.lock().unwrap();
+                            s.siem_connector.update_config(new_cfg);
+                            json_response(r#"{"status":"ok","message":"SIEM configuration updated"}"#, 200)
+                        }
                     }
                     Err(e) => error_json(&format!("invalid SIEM config: {e}"), 400),
                 },
@@ -2570,9 +2579,16 @@ fn handle_api(mut request: Request, state: &Arc<Mutex<AppState>>, _site_dir: &Pa
             match body {
                 Ok(b) => match serde_json::from_str::<crate::siem::TaxiiConfig>(&b) {
                     Ok(new_cfg) => {
-                        let mut s = state.lock().unwrap();
-                        s.taxii_client.update_config(new_cfg);
-                        json_response(r#"{"status":"ok","message":"TAXII configuration updated"}"#, 200)
+                        if new_cfg.enabled && !new_cfg.url.is_empty()
+                            && !new_cfg.url.starts_with("https://")
+                            && !new_cfg.url.starts_with("http://")
+                        {
+                            error_json("TAXII URL must use http:// or https://", 400)
+                        } else {
+                            let mut s = state.lock().unwrap();
+                            s.taxii_client.update_config(new_cfg);
+                            json_response(r#"{"status":"ok","message":"TAXII configuration updated"}"#, 200)
+                        }
                     }
                     Err(e) => error_json(&format!("invalid TAXII config: {e}"), 400),
                 },

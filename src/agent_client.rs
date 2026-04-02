@@ -499,12 +499,16 @@ pub fn run_agent(
                     current_version = p.version;
                     eprintln!("[policy] Applying policy v{}", p.version);
                     if let Some(t) = p.alert_threshold {
-                        *policy_threshold.lock().unwrap() = t;
-                        eprintln!("[policy]   alert_threshold = {t}");
+                        if let Ok(mut th) = policy_threshold.lock() {
+                            *th = t;
+                            eprintln!("[policy]   alert_threshold = {t}");
+                        }
                     }
                     if let Some(i) = p.interval_secs {
-                        *policy_interval_secs.lock().unwrap() = i;
-                        eprintln!("[policy]   interval_secs = {i}");
+                        if let Ok(mut iv) = policy_interval_secs.lock() {
+                            *iv = i;
+                            eprintln!("[policy]   interval_secs = {i}");
+                        }
                     }
                 }
                 Ok(_) => {} // no change or no policy
@@ -559,7 +563,9 @@ pub fn run_agent(
         sample_count += 1;
 
         // Use policy-enforced threshold (may change via server policy push)
-        let current_threshold = *active_threshold.lock().unwrap();
+        let current_threshold = active_threshold.lock()
+            .map(|t| *t)
+            .unwrap_or(config.monitor.alert_threshold);
         if signal.score >= current_threshold {
             let decision = policy.evaluate(&signal, &sample);
             let level_str = format!("{:?}", decision.level);

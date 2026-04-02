@@ -2994,7 +2994,10 @@ body.light .modal-box{background:#ffffff;}
       const res = await fetch(API + '/api/agents/token', { method: 'POST', headers: authHeaders('application/json'), body: JSON.stringify({ max_uses: maxUses }) });
       if (!res.ok) throw new Error('HTTP ' + res.status);
       const data = await res.json();
-      $('#xdr-token-display').innerHTML = '<strong style="color:var(--accent);">' + esc(data.token) + '</strong> (uses: ' + data.max_uses + ') <button class="btn-copy" onclick="copyToClipboard(\'' + esc(data.token) + '\', this)">Copy</button>';
+      const tokenVal = data.token;
+      const display = $('#xdr-token-display');
+      display.innerHTML = '<strong style="color:var(--accent);">' + esc(tokenVal) + '</strong> (uses: ' + data.max_uses + ') <button class="btn-copy" id="btn-copy-enroll-token">Copy</button>';
+      display.querySelector('#btn-copy-enroll-token').addEventListener('click', function() { copyToClipboard(tokenVal, this); });
       flash('Enrollment token created', 'success'); log('Created enrollment token: ' + data.token.substring(0, 8) + '...');
     } catch(e) { flash('Token creation failed: ' + e.message, 'error'); }
   }
@@ -5054,7 +5057,9 @@ body.light .modal-box{background:#ffffff;}
       if (d.token) {
         $('#auth-token').value = d.token;
         localStorage.setItem('wardex.adminToken', d.token);
-        $('#session-rotate-result').innerHTML = '<span style="color:var(--accent);">New token:</span> ' + esc(d.token) + ' <button class="btn-copy" onclick="copyToClipboard(\'' + esc(d.token) + '\', this)">Copy</button>';
+        const container = $('#session-rotate-result');
+        container.innerHTML = '<span style="color:var(--accent);">New token:</span> ' + esc(d.token) + ' <button class="btn-copy">Copy</button>';
+        container.querySelector('.btn-copy').addEventListener('click', function() { copyToClipboard(d.token, this); });
         toast('Token rotated — new token applied', 'success');
         log('Admin token rotated');
         refreshSessionInfo();
