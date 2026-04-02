@@ -1,4 +1,5 @@
 use wardex::server::spawn_test_server;
+use wardex::config::Config;
 
 fn base(port: u16) -> String {
     format!("http://127.0.0.1:{port}")
@@ -1162,6 +1163,84 @@ fn config_reload_updates_monitor_scope_and_current_config() {
     assert_eq!(current["monitor"]["scope"]["auth_events"], false);
     assert_eq!(current["monitor"]["scope"]["file_integrity"], false);
     assert_eq!(current["monitor"]["scope"]["service_persistence"], true);
+}
+
+#[test]
+fn config_save_persists_reloaded_config_to_disk() {
+    let (port, token) = spawn_test_server();
+    let config_path = format!("/tmp/wardex_test_{port}/wardex.toml");
+
+    let patch = serde_json::json!({
+        "monitor": {
+            "interval_secs": 13,
+            "alert_threshold": 4.8,
+            "alert_log": "var/alerts.jsonl",
+            "dry_run": true,
+            "duration_secs": 0,
+            "webhook_url": null,
+            "syslog": true,
+            "cef": false,
+            "watch_paths": ["/tmp/wardex-save-roundtrip"],
+            "scope": {
+                "cpu_load": true,
+                "memory_pressure": true,
+                "network_activity": true,
+                "disk_pressure": true,
+                "process_activity": true,
+                "auth_events": true,
+                "thermal_state": true,
+                "battery_state": true,
+                "file_integrity": true,
+                "service_persistence": true,
+                "launch_agents": false,
+                "systemd_units": false,
+                "scheduled_tasks": false
+            }
+        }
+    });
+
+    let save_body: serde_json::Value = ureq::post(&format!("{}/api/config/save", base(port)))
+        .set("Authorization", &format!("Bearer {token}"))
+        .send_json(patch)
+        .unwrap()
+        .into_json()
+        .unwrap();
+    assert_eq!(save_body["status"], "saved");
+    assert_eq!(save_body["path"], config_path);
+
+    let persisted = std::fs::read_to_string(&config_path).expect("config persisted to disk");
+    let parsed: Config = toml::from_str(&persisted).expect("persisted config parses as TOML");
+    assert_eq!(parsed.monitor.interval_secs, 13);
+    assert!((parsed.monitor.alert_threshold - 4.8).abs() < 0.001);
+    assert!(parsed.monitor.dry_run);
+    assert!(parsed.monitor.syslog);
+    assert!(parsed.monitor.scope.service_persistence);
+}
+
+#[test]
+fn taxii_config_persists_to_disk() {
+    let (port, token) = spawn_test_server();
+    let config_path = format!("/tmp/wardex_test_{port}/wardex.toml");
+
+    let resp: serde_json::Value = ureq::post(&format!("{}/api/taxii/config", base(port)))
+        .set("Authorization", &format!("Bearer {token}"))
+        .send_json(serde_json::json!({
+            "enabled": true,
+            "url": "https://taxii.example.test/collections/alpha/objects/",
+            "auth_token": "taxii-token",
+            "poll_interval_secs": 180
+        }))
+        .unwrap()
+        .into_json()
+        .unwrap();
+    assert_eq!(resp["status"], "ok");
+
+    let persisted = std::fs::read_to_string(&config_path).expect("config persisted to disk");
+    let parsed: Config = toml::from_str(&persisted).expect("persisted config parses as TOML");
+    assert!(parsed.taxii.enabled);
+    assert_eq!(parsed.taxii.url, "https://taxii.example.test/collections/alpha/objects/");
+    assert_eq!(parsed.taxii.auth_token, "taxii-token");
+    assert_eq!(parsed.taxii.poll_interval_secs, 180);
 }
 
 #[test]

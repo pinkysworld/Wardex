@@ -1,4 +1,4 @@
-use crate::siem::SiemConfig;
+use crate::siem::{SiemConfig, TaxiiConfig};
 
 use serde::{Deserialize, Serialize};
 use std::env;
@@ -170,6 +170,8 @@ pub struct Config {
     pub monitor: MonitorSettings,
     #[serde(default)]
     pub siem: SiemConfig,
+    #[serde(default)]
+    pub taxii: TaxiiConfig,
     #[serde(default)]
     pub agent: AgentSettings,
     #[serde(default)]

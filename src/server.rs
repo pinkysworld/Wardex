@@ -189,6 +189,7 @@ struct AppState {
     causal: CausalGraph,
     listener_mode: ListenerMode,
     config: Config,
+    config_path: PathBuf,
     alerts: Vec<AlertRecord>,
     server_start: std::time::Instant,
     // XDR fleet management
@@ -269,6 +270,7 @@ struct EventQuery {
 pub fn run_server(port: u16, site_dir: &Path, shutdown: Arc<AtomicBool>, initial_config: Config) -> Result<(), String> {
     let addr = format!("0.0.0.0:{port}");
     let server = Server::http(&addr).map_err(|e| format!("failed to start server: {e}"))?;
+    let config_path = crate::config::runtime_config_path();
 
     let token = generate_token();
     println!("Wardex admin console");
@@ -305,6 +307,7 @@ pub fn run_server(port: u16, site_dir: &Path, shutdown: Arc<AtomicBool>, initial
         causal: CausalGraph::new(),
         listener_mode: ListenerMode::Plain { port },
         config: Config::default(),
+        config_path,
         alerts: Vec::new(),
         server_start: std::time::Instant::now(),
         agent_registry: AgentRegistry::new("var/agents.json"),
@@ -314,7 +317,7 @@ pub fn run_server(port: u16, site_dir: &Path, shutdown: Arc<AtomicBool>, initial
         remote_deployments: load_remote_deployments("var/deployments.json"),
         deployment_store_path: "var/deployments.json".to_string(),
         siem_connector: SiemConnector::new(initial_config.siem.clone()),
-        taxii_client: crate::siem::TaxiiClient::new(crate::siem::TaxiiConfig::default()),
+        taxii_client: crate::siem::TaxiiClient::new(initial_config.taxii.clone()),
         local_telemetry: Vec::new(),
         local_host_info: detect_platform(),
         velocity: VelocityDetector::new(60, 2.5),
@@ -484,6 +487,7 @@ pub fn spawn_test_server() -> (u16, String) {
     let server = Server::http("127.0.0.1:0").expect("bind test server");
     let port = server.server_addr().to_ip().expect("ip addr").port();
     let token = generate_token();
+    let config_path = PathBuf::from(format!("/tmp/wardex_test_{port}/wardex.toml"));
     let state = Arc::new(Mutex::new(AppState {
         detector: AnomalyDetector::default(),
         checkpoints: CheckpointStore::new(10),
@@ -512,6 +516,7 @@ pub fn spawn_test_server() -> (u16, String) {
         causal: CausalGraph::new(),
         listener_mode: ListenerMode::Plain { port },
         config: Config::default(),
+        config_path,
         alerts: Vec::new(),
         server_start: std::time::Instant::now(),
         agent_registry: AgentRegistry::new(&format!("/tmp/wardex_test_{port}/agents.json")),
@@ -1016,6 +1021,16 @@ fn save_remote_deployments(path: &str, deployments: &HashMap<String, AgentDeploy
         }
         let _ = fs::write(path_ref, json);
     }
+}
+
+fn persist_config_to_path(config: &Config, path: &Path) -> Result<(), String> {
+    let toml_str = toml::to_string_pretty(config)
+        .map_err(|e| format!("failed to serialize config: {e}"))?;
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent)
+            .map_err(|e| format!("failed to create config directory: {e}"))?;
+    }
+    fs::write(path, toml_str).map_err(|e| format!("failed to write config: {e}"))
 }
 
 fn monitoring_option(
@@ -2039,22 +2054,33 @@ fn handle_api(mut request: Request, state: &Arc<Mutex<AppState>>, _site_dir: &Pa
             handle_config_reload(&mut request, state)
         }
         (Method::Post, "/api/config/save") => {
-            let s = state.lock().unwrap();
-            let config_path = crate::config::runtime_config_path();
-            match toml::to_string_pretty(&s.config) {
-                Ok(toml_str) => {
-                    if let Some(parent) = config_path.parent() {
-                        let _ = std::fs::create_dir_all(parent);
-                    }
-                    match std::fs::write(&config_path, &toml_str) {
-                        Ok(()) => json_response(
-                            &format!(r#"{{"status":"saved","path":"{}"}}"#, config_path.display()),
-                            200,
-                        ),
-                        Err(e) => error_json(&format!("failed to write config: {e}"), 500),
+            match read_body_limited(&mut request, 10 * 1024 * 1024) {
+                Ok(body) => {
+                    let mut s = state.lock().unwrap();
+                    let config_path = s.config_path.clone();
+                    match config_save_target(&s.config, &body) {
+                        Ok((next_config, applied_fields)) => {
+                            if let Err(e) = persist_config_to_path(&next_config, &config_path) {
+                                error_json(&e, 500)
+                            } else {
+                                s.config = next_config.clone();
+                                s.siem_connector.update_config(next_config.siem.clone());
+                                s.taxii_client.update_config(next_config.taxii.clone());
+
+                                json_response(
+                                    &serde_json::json!({
+                                        "status": "saved",
+                                        "path": config_path.display().to_string(),
+                                        "applied_fields": applied_fields,
+                                    }).to_string(),
+                                    200,
+                                )
+                            }
+                        }
+                        Err(response) => response,
                     }
                 }
-                Err(e) => error_json(&format!("failed to serialize config: {e}"), 500),
+                Err(e) => error_json(&e, 400),
             }
         }
 
@@ -2620,9 +2646,15 @@ fn handle_api(mut request: Request, state: &Arc<Mutex<AppState>>, _site_dir: &Pa
                             error_json(&e, 400)
                         } else {
                             let mut s = state.lock().unwrap();
-                            s.config.siem = new_cfg.clone();
-                            s.siem_connector.update_config(new_cfg);
-                            json_response(r#"{"status":"ok","message":"SIEM configuration updated"}"#, 200)
+                            let mut next_config = s.config.clone();
+                            next_config.siem = new_cfg.clone();
+                            if let Err(e) = persist_config_to_path(&next_config, &s.config_path) {
+                                error_json(&e, 500)
+                            } else {
+                                s.config = next_config;
+                                s.siem_connector.update_config(new_cfg);
+                                json_response(r#"{"status":"ok","message":"SIEM configuration updated"}"#, 200)
+                            }
                         }
                     }
                     Err(e) => error_json(&format!("invalid SIEM config: {e}"), 400),
@@ -2657,8 +2689,15 @@ fn handle_api(mut request: Request, state: &Arc<Mutex<AppState>>, _site_dir: &Pa
                             error_json("TAXII URL must use http:// or https://", 400)
                         } else {
                             let mut s = state.lock().unwrap();
-                            s.taxii_client.update_config(new_cfg);
-                            json_response(r#"{"status":"ok","message":"TAXII configuration updated"}"#, 200)
+                            let mut next_config = s.config.clone();
+                            next_config.taxii = new_cfg.clone();
+                            if let Err(e) = persist_config_to_path(&next_config, &s.config_path) {
+                                error_json(&e, 500)
+                            } else {
+                                s.config = next_config;
+                                s.taxii_client.update_config(new_cfg);
+                                json_response(r#"{"status":"ok","message":"TAXII configuration updated"}"#, 200)
+                            }
                         }
                     }
                     Err(e) => error_json(&format!("invalid TAXII config: {e}"), 400),
@@ -4247,6 +4286,31 @@ fn handle_config_reload(
         }
         Err(e) => error_json(&format!("serialization error: {e}"), 500),
     }
+}
+
+fn config_save_target(
+    current: &Config,
+    body: &str,
+) -> Result<(Config, Vec<String>), Response<std::io::Cursor<Vec<u8>>>> {
+    if body.trim().is_empty() {
+        return Ok((current.clone(), Vec::new()));
+    }
+
+    let patch: crate::config::ConfigPatch = match serde_json::from_str(body) {
+        Ok(p) => p,
+        Err(e) => return Err(error_json(&format!("invalid JSON: {e}"), 400)),
+    };
+
+    let mut next_config = current.clone();
+    let result = patch.apply(&mut next_config);
+    if !result.success {
+        return match serde_json::to_string_pretty(&result) {
+            Ok(json) => Err(json_response(&json, 400)),
+            Err(e) => Err(error_json(&format!("serialization error: {e}"), 500)),
+        };
+    }
+
+    Ok((next_config, result.applied_fields))
 }
 
 // ── XDR Handler Functions ────────────────────────────────────────────

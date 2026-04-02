@@ -4069,10 +4069,7 @@ body.light .modal-box{background:#ffffff;}
     try {
       let monitorScope = defaultMonitorScope();
       const [res, monitoringRes, monitoringPathsRes] = await Promise.all([
-        fetch(API + '/api/config/current', { headers: authHeaders() }),
-        fetch(API + '/api/monitoring/options', { headers: authHeaders() }),
-        fetch(API + '/api/monitoring/paths', { headers: authHeaders() }),
-      ]);
+      const saveRes = await fetch(API + '/api/config/save', { method: 'POST', headers: authHeaders('application/json'), body: JSON.stringify(patch) });
       if (!res.ok) throw new Error('HTTP ' + res.status);
       const cfg = await res.json();
       if (cfg.detector) {
@@ -4143,12 +4140,10 @@ body.light .modal-box{background:#ffffff;}
     const patch = collectSettings();
     if (!patch) return;
     try {
-      const reloadRes = await fetch(API + '/api/config/reload', { method: 'POST', headers: authHeaders('application/json'), body: JSON.stringify(patch) });
-      if (reloadRes.status === 401) { flash('Unauthorized', 'error'); return; }
-      if (!reloadRes.ok) { const err = await reloadRes.json().catch(() => ({})); flash('Save failed: ' + (err.error || reloadRes.statusText), 'error'); return; }
-      const saveRes = await fetch(API + '/api/config/save', { method: 'POST', headers: authHeaders('application/json') });
+      const saveRes = await fetch(API + '/api/config/save', { method: 'POST', headers: authHeaders('application/json'), body: JSON.stringify(patch) });
+      if (saveRes.status === 401) { flash('Unauthorized', 'error'); return; }
+      if (!saveRes.ok) { const err = await saveRes.json().catch(() => ({})); flash('Save failed: ' + (err.error || saveRes.statusText), 'error'); return; }
       if (saveRes.ok) { await loadSettings(); toast('Settings saved', 'success'); log('Settings saved to disk'); }
-      else { toast('Applied but not persisted', 'error'); log('Config applied but disk save failed'); }
     } catch(e) { flash('Save failed: ' + e.message, 'error'); }
   }
 
