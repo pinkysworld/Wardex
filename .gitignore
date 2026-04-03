@@ -2,7 +2,7 @@ target/
 var/
 .DS_Store
 *.code-workspace
-admin-console/admin.html.bak
+admin-console/
 xdr_ai_handoff_pack/
 xdr_ai_handoff_pack.zip
 release/
