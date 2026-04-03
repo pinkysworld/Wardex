@@ -205,6 +205,108 @@ impl Default for SigmaEngine {
     fn default() -> Self { Self::new() }
 }
 
+/// Bridge: convert a `KernelEvent` into OCSF fields for Sigma evaluation.
+/// Returns the extracted field map and the inferred logsource category.
+pub fn kernel_event_to_sigma_fields(
+    event: &crate::kernel_events::KernelEvent,
+) -> (HashMap<String, String>, &'static str) {
+    use crate::kernel_events::KernelEventKind;
+    let mut f = HashMap::new();
+    f.insert("device.hostname".into(), event.hostname.clone());
+
+    let category = match &event.kind {
+        KernelEventKind::ProcessExec { pid, ppid, exe, args, cwd, .. } => {
+            f.insert("process.pid".into(), pid.to_string());
+            f.insert("process.ppid".into(), ppid.to_string());
+            // Derive process name from exe path
+            let name = exe.rsplit('/').next()
+                .or_else(|| exe.rsplit('\\').next())
+                .unwrap_or(exe);
+            f.insert("process.name".into(), name.to_string());
+            f.insert("process.file.path".into(), exe.clone());
+            f.insert("process.file.name".into(), name.to_string());
+            let cmd_line = if args.is_empty() {
+                exe.clone()
+            } else {
+                format!("{} {}", exe, args.join(" "))
+            };
+            f.insert("process.cmd_line".into(), cmd_line);
+            f.insert("actor.process.name".into(), "unknown".into());
+            let _ = cwd; // available but not used in current rules
+            "process_creation"
+        }
+        KernelEventKind::FileWrite { pid, path, bytes_written } => {
+            let name = path.rsplit('/').next()
+                .or_else(|| path.rsplit('\\').next())
+                .unwrap_or(path);
+            f.insert("file.path".into(), path.clone());
+            f.insert("file.name".into(), name.to_string());
+            f.insert("file.size".into(), bytes_written.to_string());
+            f.insert("actor.process.name".into(), pid.to_string());
+            "file_event"
+        }
+        KernelEventKind::FileDelete { path, .. }
+        | KernelEventKind::FileRename { old_path: path, .. } => {
+            let name = path.rsplit('/').next()
+                .or_else(|| path.rsplit('\\').next())
+                .unwrap_or(path);
+            f.insert("file.path".into(), path.clone());
+            f.insert("file.name".into(), name.to_string());
+            "file_event"
+        }
+        KernelEventKind::NetworkConnect { src_addr, src_port, dst_addr, dst_port, protocol, .. } => {
+            f.insert("src.ip".into(), src_addr.clone());
+            f.insert("src.port".into(), src_port.to_string());
+            f.insert("dst.ip".into(), dst_addr.clone());
+            f.insert("dst.port".into(), dst_port.to_string());
+            f.insert("protocol".into(), protocol.clone());
+            "network_connection"
+        }
+        KernelEventKind::DnsQuery { domain, query_type, .. } => {
+            f.insert("query.hostname".into(), domain.clone());
+            f.insert("query.type".into(), query_type.clone());
+            "dns_query"
+        }
+        KernelEventKind::RegistryMutate { key, value_name, value_data, .. } => {
+            f.insert("config_name".into(), key.clone());
+            f.insert("config_type".into(), "registry".into());
+            f.insert("new_value".into(), format!("{value_name}={value_data}"));
+            "config_change"
+        }
+        _ => "detection",
+    };
+    (f, category)
+}
+
+/// Evaluate a `KernelEvent` directly against all loaded Sigma rules
+/// without requiring an intermediate OCSF conversion.
+pub fn evaluate_kernel_event(
+    engine: &SigmaEngine,
+    event: &crate::kernel_events::KernelEvent,
+    now_epoch: u64,
+) -> Vec<RuleMatch> {
+    let (fields, category) = kernel_event_to_sigma_fields(event);
+    let hostname = fields.get("device.hostname").cloned().unwrap_or_default();
+
+    let mut matches = Vec::new();
+    for rule in engine.rules() {
+        if !rule.enabled { continue; }
+        if rule.logsource.category != category { continue; }
+
+        if let Some(matched_fields) = evaluate_rule(rule, &fields) {
+            let _ = (&hostname, now_epoch); // suppression skipped for bridge
+            matches.push(RuleMatch {
+                rule_id: rule.id.clone(),
+                rule_title: rule.title.clone(),
+                level: rule.level.clone(),
+                matched_fields,
+                attack: rule.attack.clone(),
+            });
+        }
+    }
+    matches
+}
+
 /// Evaluate a single rule against extracted fields.
 /// Returns Some(matched_fields) if rule fires, None otherwise.
 fn evaluate_rule(rule: &SigmaRule, fields: &HashMap<String, String>) -> Option<Vec<(String, String)>> {
@@ -1301,5 +1403,68 @@ mod tests {
         // bash from sshd = filtered out
         let e2 = make_process_event("bash", "/bin/bash", "sshd");
         assert!(engine.evaluate(&e2, 1000).is_empty());
+    }
+
+    #[test]
+    fn sigma_kernel_bridge_process_exec() {
+        use crate::kernel_events::*;
+
+        let mut engine = SigmaEngine::new();
+        engine.load_rules(builtin_rules());
+
+        let ke = KernelEvent {
+            id: 1,
+            timestamp_ms: 1000,
+            source: EventSource::EbpfLinux,
+            hostname: "test-host".into(),
+            agent_uid: None,
+            kind: KernelEventKind::ProcessExec {
+                pid: 100,
+                ppid: 1,
+                uid: 0,
+                exe: "/usr/bin/mimikatz.exe".into(),
+                args: vec![],
+                cwd: "/tmp".into(),
+                container_id: None,
+            },
+            severity: KernelEventSeverity::High,
+            mitre_techniques: vec![],
+        };
+
+        let matches = evaluate_kernel_event(&engine, &ke, 1000);
+        assert!(
+            matches.iter().any(|m| m.rule_id == "SE-002"),
+            "Should detect credential dumping tool via kernel event bridge"
+        );
+    }
+
+    #[test]
+    fn sigma_kernel_bridge_dns() {
+        use crate::kernel_events::*;
+
+        let mut engine = SigmaEngine::new();
+        engine.load_rules(builtin_rules());
+
+        let ke = KernelEvent {
+            id: 2,
+            timestamp_ms: 2000,
+            source: EventSource::EbpfLinux,
+            hostname: "h".into(),
+            agent_uid: None,
+            kind: KernelEventKind::DnsQuery {
+                pid: 50,
+                domain: "evil.xyz".into(),
+                query_type: "A".into(),
+                response_addrs: vec!["1.2.3.4".into()],
+            },
+            severity: KernelEventSeverity::Medium,
+            mitre_techniques: vec![],
+        };
+
+        let matches = evaluate_kernel_event(&engine, &ke, 2000);
+        assert!(
+            matches.iter().any(|m| m.rule_id == "SE-005"),
+            "Should detect suspicious TLD via kernel event bridge"
+        );
     }
 }

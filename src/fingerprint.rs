@@ -113,6 +113,22 @@ impl DeviceFingerprint {
         })
     }
 
+    /// Update the fingerprint with EWMA drift tracking.
+    /// Smoothly adjusts means and stddevs toward the new sample,
+    /// allowing the fingerprint to adapt to gradual device changes
+    /// while still detecting abrupt shifts.
+    pub fn update_ewma(&mut self, sample: &TelemetrySample, alpha: f32) {
+        let features = to_features(sample);
+        for i in 0..DIM {
+            let old_mean = self.means[i];
+            self.means[i] = (1.0 - alpha) * self.means[i] + alpha * features[i];
+            let diff = features[i] - old_mean;
+            let new_var = (1.0 - alpha) * (self.stddevs[i] * self.stddevs[i]) + alpha * diff * diff;
+            self.stddevs[i] = new_var.sqrt();
+        }
+        self.trained_samples += 1;
+    }
+
     /// Match a single sample against this fingerprint.
     ///
     /// `threshold` is the maximum acceptable aggregate z-score distance.
@@ -249,5 +265,30 @@ mod tests {
             (result.z_scores[2] - 10.0).abs() < 0.01,
             "zero-variance dimension should get sentinel z-score of 10.0"
         );
+    }
+
+    #[test]
+    fn ewma_drift_adapts() {
+        let training: Vec<_> = (0..20).map(|i| benign_sample(i)).collect();
+        let mut fp = DeviceFingerprint::train(&training).unwrap();
+        let old_mean = fp.means[0];
+
+        // Feed many samples with higher CPU
+        for _ in 0..50 {
+            let s = TelemetrySample {
+                timestamp_ms: 100,
+                cpu_load_pct: 60.0,
+                memory_load_pct: 30.0,
+                temperature_c: 40.0,
+                network_kbps: 500.0,
+                auth_failures: 0,
+                battery_pct: 90.0,
+                integrity_drift: 0.01,
+                process_count: 42,
+                disk_pressure_pct: 10.0,
+            };
+            fp.update_ewma(&s, 0.1);
+        }
+        assert!(fp.means[0] > old_mean + 5.0, "EWMA should shift mean toward 60.0");
     }
 }

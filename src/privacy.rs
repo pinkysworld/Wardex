@@ -202,6 +202,39 @@ impl FederatedCoordinator {
     pub fn global_weights(&self) -> &[f64] {
         &self.global_weights
     }
+
+    /// Run a multi-round convergence loop until the convergence delta
+    /// drops below `target_delta` or `max_rounds` is reached.
+    /// `generate_updates` is called each round to produce fresh local
+    /// updates (simulating device training).
+    pub fn convergence_loop<F>(
+        &mut self,
+        max_rounds: usize,
+        target_delta: f64,
+        mut generate_updates: F,
+    ) -> Vec<GlobalModel>
+    where
+        F: FnMut(u64, &[f64]) -> Vec<ModelUpdate>,
+    {
+        let mut history = Vec::new();
+        for _ in 0..max_rounds {
+            let round = self.current_round + 1;
+            let updates = generate_updates(round, &self.global_weights);
+            for u in updates {
+                self.submit_update(u);
+            }
+            if let Some(model) = self.aggregate() {
+                let converged = model.convergence_delta < target_delta;
+                history.push(model);
+                if converged {
+                    break;
+                }
+            } else {
+                break; // insufficient participants
+            }
+        }
+        history
+    }
 }
 
 // ── Secure Aggregation ───────────────────────────────────────────────────────
@@ -585,5 +618,35 @@ mod tests {
         let redacted = regex_lite_replace_ips(input);
         assert!(redacted.contains("[REDACTED-IP]"));
         assert!(!redacted.contains("192.168"));
+    }
+
+    #[test]
+    fn convergence_loop_converges() {
+        let initial = vec![0.0, 0.0];
+        let mut coord = FederatedCoordinator::new(initial, 2);
+
+        let target = vec![5.0, 10.0];
+        let history = coord.convergence_loop(20, 0.01, |_round, current| {
+            // Two devices both push toward target
+            vec![
+                ModelUpdate {
+                    device_id: "d1".into(),
+                    round: _round,
+                    weights: target.iter().zip(current).map(|(t, c)| c + (t - c) * 0.5).collect(),
+                    sample_count: 100,
+                    loss: 0.1,
+                },
+                ModelUpdate {
+                    device_id: "d2".into(),
+                    round: _round,
+                    weights: target.iter().zip(current).map(|(t, c)| c + (t - c) * 0.5).collect(),
+                    sample_count: 100,
+                    loss: 0.1,
+                },
+            ]
+        });
+        assert!(!history.is_empty());
+        let last = history.last().unwrap();
+        assert!(last.convergence_delta < 0.1, "should converge toward target");
     }
 }

@@ -32,23 +32,34 @@
 
         <div class="nav-links" id="nav-links">
           <a href="#overview" class="nav-link active" data-section="overview">Overview</a>
-          <a href="admin.html" class="nav-link">Admin Console</a>
 
           <div class="nav-dropdown">
             <button class="nav-link nav-dropdown-trigger" aria-expanded="false">
-              Platform<svg width="10" height="6" viewBox="0 0 10 6"><path d="M1 1l4 4 4-4" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round"/></svg>
+              Product<svg width="10" height="6" viewBox="0 0 10 6"><path d="M1 1l4 4 4-4" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round"/></svg>
             </button>
             <div class="nav-dropdown-menu">
+              <a href="#capabilities" data-section="capabilities">Capabilities</a>
               <a href="#architecture" data-section="architecture">Architecture</a>
               <a href="#pipeline" data-section="pipeline">Workflows</a>
               <a href="#modules" data-section="modules">Module Map</a>
             </div>
           </div>
 
-          <a href="#trust" class="nav-link" data-section="trust">Enterprise</a>
+          <div class="nav-dropdown">
+            <button class="nav-link nav-dropdown-trigger" aria-expanded="false">
+              Solutions<svg width="10" height="6" viewBox="0 0 10 6"><path d="M1 1l4 4 4-4" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round"/></svg>
+            </button>
+            <div class="nav-dropdown-menu">
+              <a href="#trust" data-section="trust">Enterprise Security</a>
+              <a href="#threat-hunting" data-section="threat-hunting">Threat Hunting</a>
+              <a href="#advanced-analytics" data-section="advanced-analytics">Advanced Analytics</a>
+            </div>
+          </div>
+
           <a href="#deployment" class="nav-link" data-section="deployment">Deployment</a>
           <a href="#resources" class="nav-link" data-section="resources">Resources</a>
-          <a href="#start" class="nav-link" data-section="start">Quick Start</a>
+          <a href="#licensing" class="nav-link" data-section="licensing">Licensing</a>
+          <a href="admin.html" class="nav-link">Console</a>
           <a href="https://github.com/pinkysworld/Wardex" class="nav-link" target="_blank" rel="noopener">
             <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
           </a>
@@ -64,10 +75,10 @@
               <p class="label">Private-Cloud XDR &amp; SIEM · Rust</p>
               <h1>Wardex</h1>
               <p class="hero-subtitle">
-                Enterprise detection, investigation, fleet operations, and governance in one deployable control plane.
+                The private-cloud XDR platform that puts detection, investigation, fleet operations, threat hunting, and governance under your control.
               </p>
               <p class="hero-description">
-                Wardex is built for teams that want a professional XDR/SIEM experience without outsourcing their control plane. It combines cross-platform telemetry, managed detection content, analyst workbench workflows, approval-gated response, agent release operations, and enterprise supportability in a single Rust product with a live browser console.
+                Wardex delivers a professional-grade security operations platform without cloud dependencies or vendor lock-in. 75 Rust modules cover cross-platform telemetry, Sigma and kernel-level detection, campaign clustering, memory forensics, deception engines, UEBA with geo-validation, file integrity monitoring, digital twin calibration, and privacy-preserving federated learning — all in a single deployable binary with a live browser console.
               </p>
               <div class="hero-cta">
                 <a href="admin.html" class="btn btn-primary">Open Admin Console</a>
@@ -100,6 +111,62 @@
 <span class="c-ok">✓</span> enterprise workflow ready</pre>
               </div>
             </aside>
+          </div>
+        </div>
+      </section>
+
+      <section id="capabilities" class="section section-alt">
+        <div class="container">
+          <div class="section-header">
+            <p class="label">Product Capabilities</p>
+            <h2>Everything You Need in One Platform</h2>
+            <p class="section-desc">
+              Wardex consolidates detection, investigation, response, fleet management, and advanced threat hunting into a single Rust binary — no cloud dependencies, no vendor lock-in.
+            </p>
+          </div>
+          <div class="capability-grid">
+            <div class="capability-card">
+              <div class="capability-icon">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+              </div>
+              <h3>Real-Time Detection</h3>
+              <p>Adaptive anomaly scoring, Sigma rules, side-channel fusion, and compound threat detection catch attacks as they unfold.</p>
+            </div>
+            <div class="capability-card">
+              <div class="capability-icon">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+              </div>
+              <h3>Threat Hunting</h3>
+              <p>Campaign clustering, deception engines, attacker profiling, entity extraction, and memory forensics for proactive investigations.</p>
+            </div>
+            <div class="capability-card">
+              <div class="capability-icon">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+              </div>
+              <h3>File Integrity Monitoring</h3>
+              <p>Continuous SHA-256 verification of critical system files with baseline management and change detection across your fleet.</p>
+            </div>
+            <div class="capability-card">
+              <div class="capability-icon">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/></svg>
+              </div>
+              <h3>UEBA &amp; Geo-Validation</h3>
+              <p>User and entity behavior analytics with impossible-travel detection and geo-IP validation to catch compromised credentials.</p>
+            </div>
+            <div class="capability-card">
+              <div class="capability-icon">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+              </div>
+              <h3>Digital Twin &amp; Calibration</h3>
+              <p>Virtual device replicas track drift between expected and observed behavior for early anomaly identification.</p>
+            </div>
+            <div class="capability-card">
+              <div class="capability-icon">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
+              </div>
+              <h3>Federated Privacy</h3>
+              <p>Privacy-preserving federated learning with convergence loops lets you train models without centralizing sensitive data.</p>
+            </div>
           </div>
         </div>
       </section>
@@ -185,7 +252,7 @@
             <p class="label">Source</p>
             <h2>Curated Module Map</h2>
             <p class="section-desc">
-              The codebase has 61 Rust source modules. This is the high-signal subset that maps most directly to the enterprise product surface.
+              The codebase has 75 Rust source modules. This is the high-signal subset that maps most directly to the enterprise product surface.
             </p>
           </div>
           <div class="module-table">
@@ -303,6 +370,102 @@
         </div>
       </section>
 
+      <section id="threat-hunting" class="section">
+        <div class="container">
+          <div class="section-header">
+            <p class="label">Threat Hunting</p>
+            <h2>Proactive Defense at Scale</h2>
+            <p class="section-desc">
+              Go beyond reactive alerting. Wardex gives your team purpose-built tools for proactive threat hunting, campaign analysis, and adversary tracking across your entire fleet.
+            </p>
+          </div>
+
+          <div class="hunting-grid">
+            <div class="hunting-card hunting-card-featured">
+              <span class="hunting-badge">Fleet-Wide</span>
+              <h3>Campaign Clustering</h3>
+              <p>Automatically detect coordinated attacks across your fleet. Jaccard-similarity analysis correlates alerts by technique, target, and timing to surface multi-host campaigns that individual detections miss.</p>
+              <span class="arch-module">campaign.rs</span>
+            </div>
+            <div class="hunting-card">
+              <span class="hunting-badge">Deception</span>
+              <h3>Canary Deployment</h3>
+              <p>Deploy randomized honeypots, honey files, honey credentials, and canary services. Track attacker interactions to build detailed behavior profiles and attack-path reconstructions.</p>
+              <span class="arch-module">threat_intel.rs</span>
+            </div>
+            <div class="hunting-card">
+              <span class="hunting-badge">Forensics</span>
+              <h3>Memory Analysis</h3>
+              <p>Detect code injection, process hollowing, RWX regions, and unbacked executable memory. Platform-specific collection plans for Linux, macOS, and Windows guide your response.</p>
+              <span class="arch-module">memory_forensics.rs</span>
+            </div>
+            <div class="hunting-card">
+              <span class="hunting-badge">Extraction</span>
+              <h3>Named Entity Recognition</h3>
+              <p>Automatically extract IPs, domains, file paths, MITRE techniques, SHA-256/MD5 hashes, usernames, and hostnames from alert reasons and investigation notes.</p>
+              <span class="arch-module">entity_extract.rs</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section id="advanced-analytics" class="section section-alt">
+        <div class="container">
+          <div class="section-header">
+            <p class="label">Advanced Analytics</p>
+            <h2>Intelligence-Driven Security</h2>
+            <p class="section-desc">
+              Multi-signal fusion, behavioral baselines, and privacy-preserving machine learning bring advanced analytics to your private cloud — without sending data to third parties.
+            </p>
+          </div>
+
+          <div class="analytics-grid">
+            <div class="analytics-item">
+              <div class="analytics-num">01</div>
+              <div>
+                <h3>Side-Channel Score Fusion</h3>
+                <p>Combine traditional detection signals with hardware side-channel analysis. Critical findings boost compound threat scores by up to +1.5 for higher-confidence alerting.</p>
+              </div>
+            </div>
+            <div class="analytics-item">
+              <div class="analytics-num">02</div>
+              <div>
+                <h3>EWMA Drift Tracking</h3>
+                <p>Exponentially weighted moving average adaptation of device fingerprints catches gradual behavioral drift that static baselines miss entirely.</p>
+              </div>
+            </div>
+            <div class="analytics-item">
+              <div class="analytics-num">03</div>
+              <div>
+                <h3>Impossible Travel Detection</h3>
+                <p>Geo-IP validation flags authentication events that imply travel speeds exceeding 900 km/h, catching credential sharing and account compromise.</p>
+              </div>
+            </div>
+            <div class="analytics-item">
+              <div class="analytics-num">04</div>
+              <div>
+                <h3>Digital Twin Calibration</h3>
+                <p>Snap virtual device replicas to real-world telemetry snapshots and quantify per-parameter drift for continuous accuracy validation.</p>
+              </div>
+            </div>
+            <div class="analytics-item">
+              <div class="analytics-num">05</div>
+              <div>
+                <h3>Sigma–Kernel Bridge</h3>
+                <p>Map raw kernel events — process creation, file writes, DNS queries, network connections — directly into Sigma field schemas for unified rule evaluation.</p>
+              </div>
+            </div>
+            <div class="analytics-item">
+              <div class="analytics-num">06</div>
+              <div>
+                <h3>Federated Convergence</h3>
+                <p>Train global detection models across distributed agents without centralizing sensitive data. Multi-round averaging converges to target accuracy thresholds automatically.</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
       <section id="deployment" class="section">
         <div class="container">
           <div class="section-header">
@@ -326,13 +489,13 @@
             </div>
             <div class="start-card">
               <h3>Package releases</h3>
-              <div class="code-block"><code>git tag v0.31.0</code></div>
+              <div class="code-block"><code>git tag v0.33.0</code></div>
               <p>Tagged releases trigger GitHub Actions packaging for Linux, macOS, and Windows archives.</p>
             </div>
             <div class="start-card">
               <h3>Validate the product</h3>
               <div class="code-block"><code>cargo test</code></div>
-              <p>Run the 692-test suite, then use the live checks and browser smoke for a release-quality verification pass.</p>
+              <p>Run the 832-test suite, then use the live checks and browser smoke for a release-quality verification pass.</p>
             </div>
             <div class="start-card">
               <h3>Run as a service</h3>
@@ -427,7 +590,7 @@
             <div class="start-card">
               <h3>Run the test suite</h3>
               <div class="code-block"><code>cargo test</code></div>
-              <p>Current release verification includes 692 automated tests.</p>
+              <p>Current release verification includes 832 automated tests.</p>
             </div>
           </div>
 
@@ -439,34 +602,84 @@
         </div>
       </section>
 
+      <section id="licensing" class="section section-alt">
+        <div class="container">
+          <div class="section-header">
+            <p class="label">Licensing</p>
+            <h2>Business Source License 1.1</h2>
+            <p class="section-desc">
+              Wardex is distributed under the Business Source License 1.1 (BSL 1.1). The source code is available for inspection, development, testing, and non-commercial use.
+            </p>
+          </div>
+
+          <div class="license-grid">
+            <div class="license-card license-free">
+              <div class="license-card-header">
+                <h3>Community &amp; Research</h3>
+                <span class="license-price">Free</span>
+              </div>
+              <ul class="license-features">
+                <li><span class="license-check">&#10003;</span> Full source code access</li>
+                <li><span class="license-check">&#10003;</span> Local development and testing</li>
+                <li><span class="license-check">&#10003;</span> Academic and research use</li>
+                <li><span class="license-check">&#10003;</span> Personal and non-commercial use</li>
+                <li><span class="license-check">&#10003;</span> Internal evaluation and proof-of-concept</li>
+                <li><span class="license-check">&#10003;</span> Contributing to the open-source project</li>
+              </ul>
+            </div>
+            <div class="license-card license-commercial">
+              <div class="license-ribbon">Required for Production</div>
+              <div class="license-card-header">
+                <h3>Commercial License</h3>
+                <span class="license-price">Contact Us</span>
+              </div>
+              <ul class="license-features">
+                <li><span class="license-check">&#10003;</span> Production deployment</li>
+                <li><span class="license-check">&#10003;</span> Commercial use in any environment</li>
+                <li><span class="license-check">&#10003;</span> Offering as a managed service</li>
+                <li><span class="license-check">&#10003;</span> Embedding in commercial products</li>
+                <li><span class="license-check">&#10003;</span> Priority support and updates</li>
+                <li><span class="license-check">&#10003;</span> Custom deployment assistance</li>
+              </ul>
+              <a href="mailto:info@wardex.dev" class="btn btn-primary license-cta">Request Commercial License</a>
+            </div>
+          </div>
+
+          <div class="license-notice">
+            <p><strong>Change Date:</strong> The BSL 1.1 license converts to Apache 2.0 on April 1, 2029. After this date, all usage — including commercial — is permitted under Apache 2.0 terms.</p>
+            <p>For questions about licensing, commercial use, or partnership opportunities, please <a href="mailto:info@wardex.dev">contact us</a>.</p>
+          </div>
+        </div>
+      </section>
+
       <footer class="site-footer">
         <div class="container">
           <div class="footer-grid">
             <div class="footer-col footer-about">
               <span class="nav-logo footer-logo">WX</span>
               <p>
-                Wardex is a release-oriented XDR and SIEM platform for private-cloud operations. The repository includes the runtime, live console, docs, runbooks, and release automation in one place.
+                Wardex is a release-oriented XDR and SIEM platform for private-cloud operations. 75 Rust modules, 155+ API endpoints, 832 automated tests.
               </p>
             </div>
             <div class="footer-col">
-              <h4>Sections</h4>
+              <h4>Product</h4>
               <a href="#overview">Overview</a>
+              <a href="#capabilities">Capabilities</a>
               <a href="#architecture">Architecture</a>
-              <a href="#trust">Enterprise</a>
-              <a href="#deployment">Deployment</a>
-              <a href="#resources">Resources</a>
-              <a href="#start">Quick Start</a>
+              <a href="#threat-hunting">Threat Hunting</a>
+              <a href="#advanced-analytics">Analytics</a>
             </div>
             <div class="footer-col">
-              <h4>Links</h4>
+              <h4>Resources</h4>
               <a href="admin.html">Admin Console</a>
-              <a href="https://github.com/pinkysworld/Wardex" target="_blank" rel="noopener">GitHub Repository</a>
+              <a href="#deployment">Deployment</a>
+              <a href="#licensing">Licensing</a>
+              <a href="https://github.com/pinkysworld/Wardex" target="_blank" rel="noopener">GitHub</a>
               <a href="https://github.com/pinkysworld/Wardex/releases" target="_blank" rel="noopener">Releases</a>
-              <a href="https://github.com/pinkysworld/Wardex/blob/main/docs/README.md" target="_blank" rel="noopener">Documentation</a>
             </div>
           </div>
           <div class="footer-bottom">
-            <p>Wardex · v0.31.0 · Enterprise XDR &amp; SIEM · 692 tests · 61 modules · <a href="../LICENSE" style="color:inherit;">BSL 1.1</a></p>
+            <p>Wardex · v0.33.0 · Enterprise XDR &amp; SIEM · 832 tests · 75 modules · <a href="../LICENSE" style="color:inherit;">BSL 1.1</a> · Commercial use requires a <a href="#licensing" style="color: var(--nav-accent);">separate license</a></p>
           </div>
         </div>
       </footer>

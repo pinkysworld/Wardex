@@ -873,9 +873,19 @@ body.light .modal-box{background:#ffffff;}
           <button class="btn btn-sm" id="btn-refresh-alerts">Refresh Alerts</button>
           <button class="btn btn-sm danger" id="btn-clear-alerts">Clear All</button>
           <button class="btn btn-sm" id="btn-export-alerts-csv">Export CSV</button>
+          <button class="btn btn-sm" id="btn-group-alerts" title="Group similar repeated alerts">Group Similar</button>
+          <button class="btn btn-sm" id="btn-analyze-alerts" title="Run pattern analysis on current alerts">Analyze</button>
           <label style="margin-left:auto;display:flex;align-items:center;gap:.3rem;font-size:.78rem;color:var(--ink-3);">
             <input type="checkbox" id="alert-auto-poll" checked style="accent-color:var(--accent);">Auto-poll (5s)
           </label>
+        </div>
+      </div>
+
+      <!-- Alert Analysis Card -->
+      <div class="card mt-1" id="alert-analysis-card" style="display:none;">
+        <h2><span class="dot dot-orange"></span> Alert Analysis</h2>
+        <div id="alert-analysis-content" style="font-size:.85rem;line-height:1.6;">
+          <div class="text-muted">Click "Analyze" to run pattern analysis on current alerts.</div>
         </div>
       </div>
 
@@ -1268,6 +1278,20 @@ body.light .modal-box{background:#ffffff;}
       </div><!-- end panel-fleet-agents -->
 
       <div class="tab-panel" id="panel-fleet-events" role="tabpanel">
+
+      <!-- Shared Intelligence Card -->
+      <div class="card mt-1">
+        <h2><span class="dot dot-purple"></span> Shared Intelligence
+          <span id="intel-badge" style="margin-left:.5rem;font-size:.68rem;padding:1px 8px;border-radius:10px;background:var(--purple-light);color:var(--purple);font-weight:600;display:none;">0</span>
+        </h2>
+        <p style="font-size:.82rem;color:var(--ink-3);margin-bottom:.75rem;">Threat intelligence shared across connected agents via the swarm gossip protocol.</p>
+        <div id="intel-stats" style="display:flex;gap:.75rem;flex-wrap:wrap;margin-bottom:.75rem;"></div>
+        <div id="intel-entries" style="max-height:200px;overflow-y:auto;"><em class="text-muted">No shared intelligence entries</em></div>
+        <div class="btn-row mt-1">
+          <button class="btn btn-sm" id="btn-refresh-intel">Refresh Intel</button>
+        </div>
+      </div>
+
       <div class="card mt-1">
         <h2><span class="dot dot-orange"></span> Correlation Alerts</h2>
         <div id="xdr-correlation-list" style="max-height:150px;overflow-y:auto;"><em class="text-muted">No correlations detected</em></div>
@@ -2542,9 +2566,12 @@ body.light .modal-box{background:#ffffff;}
   let isAuthenticated = false;
   let lastReportData = null;
   let lastAlertCount = 0;
+  let _lastAlertsData = [];
+  let _alertGroupMode = false;
   let alertPollTimer = null;
   let nextTelemetryHistoryAt = 0;
   let monitoringOptionsData = null;
+  let currentConfigData = null;
   let selectedAgentId = null;
   let selectedEventId = null;
   let selectedCaseId = null;
@@ -2867,12 +2894,45 @@ body.light .modal-box{background:#ffffff;}
     };
   }
 
+  function monitorScopeCheckbox(key) {
+    return document.querySelector('[data-monitor-scope="' + key + '"]');
+  }
+
+  function persistenceSourceScopeKeys() {
+    return ['launch_agents', 'systemd_units', 'scheduled_tasks'];
+  }
+
+  function normalizeMonitorScope(scope) {
+    const normalized = Object.assign(defaultMonitorScope(), scope || {});
+    const sourceKeys = persistenceSourceScopeKeys();
+    if (sourceKeys.some(key => !!normalized[key])) {
+      normalized.service_persistence = true;
+    }
+    if (!normalized.service_persistence) {
+      sourceKeys.forEach(key => { normalized[key] = false; });
+    }
+    return normalized;
+  }
+
   function monitorScopeState() {
     const scope = defaultMonitorScope();
     $$('[data-monitor-scope]').forEach(el => {
       scope[el.dataset.monitorScope] = !!el.checked;
     });
-    return scope;
+    return normalizeMonitorScope(scope);
+  }
+
+  function syncPersistenceScopeState(changedKey) {
+    const serviceToggle = monitorScopeCheckbox('service_persistence');
+    if (!serviceToggle) return;
+    const sourceToggles = persistenceSourceScopeKeys().map(monitorScopeCheckbox).filter(Boolean);
+    if (changedKey === 'service_persistence' && !serviceToggle.checked) {
+      sourceToggles.forEach(el => { el.checked = false; });
+      return;
+    }
+    if (changedKey !== 'service_persistence' && sourceToggles.some(el => el.checked)) {
+      serviceToggle.checked = true;
+    }
   }
 
   function syncWatchPathsState() {
@@ -2883,7 +2943,7 @@ body.light .modal-box{background:#ffffff;}
   }
 
   function applyMonitorScope(scope) {
-    const nextScope = scope || defaultMonitorScope();
+    const nextScope = normalizeMonitorScope(scope);
     $$('[data-monitor-scope]').forEach(el => {
       const key = el.dataset.monitorScope;
       if (Object.prototype.hasOwnProperty.call(nextScope, key)) {
@@ -2909,6 +2969,7 @@ body.light .modal-box{background:#ffffff;}
       '<br><strong>Selected now:</strong> ' + selected +
       '<br><strong>Configured watch paths:</strong> ' + (data.summary?.watch_path_count ?? 0) +
       '<br><strong>Persistence baseline paths:</strong> ' + (data.summary?.persistence_path_count ?? 0) +
+      '<br><strong>Persistence dependency:</strong> Host-specific persistence sources automatically enable service persistence.' +
       (guidance ? '<div class="monitor-note"><strong>Platform guidance:</strong><ul>' + guidance + '</ul></div>' : '') +
       (notes ? '<ul>' + notes + '</ul>' : '');
 
@@ -2937,7 +2998,16 @@ body.light .modal-box{background:#ffffff;}
     $$('[data-monitor-scope="file_integrity"]').forEach(el => {
       el.addEventListener('change', syncWatchPathsState);
     });
+    ['service_persistence'].concat(persistenceSourceScopeKeys()).forEach(key => {
+      $$('.monitor-option [data-monitor-scope="' + key + '"]').forEach(el => {
+        el.addEventListener('change', () => syncPersistenceScopeState(key));
+      });
+    });
     syncWatchPathsState();
+  }
+
+  function incidentIdText(id) {
+    return String(id == null ? '' : id);
   }
 
   function log(msg) {
@@ -3127,7 +3197,7 @@ body.light .modal-box{background:#ffffff;}
     // Auto-load data for each section
     if (sectionId === 'live-monitor') { refreshAlerts(); refreshHealth(); }
     else if (sectionId === 'threat-detection') { refreshSecurity(); refreshCheckpointCount(); refreshSigma(); refreshDetectionEngineering(); }
-    else if (sectionId === 'fleet-agents') { refreshFleet(); refreshXdr(); loadRolloutConfig(); }
+    else if (sectionId === 'fleet-agents') { refreshFleet(); refreshXdr(); refreshIntel(); loadRolloutConfig(); }
     else if (sectionId === 'security-policy') { refreshCompliance(); refreshQuantum(); }
     else if (sectionId === 'incident-response') { refreshWorkbenchOverview(); refreshAlertQueue(); refreshCases(); refreshIncidents(); refreshTwin(); refreshAnalysis(); refreshProcessTree(); refreshResponseOrchestration(); }
     else if (sectionId === 'infrastructure') { refreshInfra(); }
@@ -3517,6 +3587,39 @@ body.light .modal-box{background:#ffffff;}
       const d = await res.json();
       flash('Decoy deployed: ' + d.decoy_id, 'success'); log('Deployed decoy: ' + name + ' (' + decoyType + ')'); $('#decoy-name').value = ''; refreshSecurity();
     } catch(e) { flash('Deploy failed: ' + e.message, 'error'); }
+  }
+
+  // ── Shared Intelligence ──
+  async function refreshIntel() {
+    try {
+      const [entriesRes, statsRes] = await Promise.all([
+        fetch(API + '/api/swarm/intel', { headers: authHeaders() }),
+        fetch(API + '/api/swarm/intel/stats', { headers: authHeaders() }),
+      ]);
+      if (statsRes.ok) {
+        const stats = await statsRes.json();
+        const badge = $('#intel-badge');
+        if (stats.total > 0) { badge.textContent = stats.total; badge.style.display = 'inline'; }
+        else { badge.style.display = 'none'; }
+        const statsEl = $('#intel-stats');
+        let sh = '';
+        if (stats.by_type) Object.entries(stats.by_type).forEach(([t, c]) => {
+          sh += '<div style="padding:.2rem .5rem;border-radius:4px;background:var(--bg-alt);font-size:.78rem;"><strong>' + esc(t) + '</strong>: ' + c + '</div>';
+        });
+        statsEl.innerHTML = sh || '<span class="text-muted" style="font-size:.78rem;">No entries</span>';
+      }
+      if (entriesRes.ok) {
+        const entries = await entriesRes.json();
+        const el = $('#intel-entries');
+        if (!entries.length) { el.innerHTML = '<em class="text-muted">No shared intelligence entries</em>'; return; }
+        let html = '<table class="data-table" style="font-size:.82rem;"><thead><tr><th>Type</th><th>Indicator</th><th>Confidence</th><th>Source</th><th>Received</th></tr></thead><tbody>';
+        entries.slice(0, 50).forEach(e => {
+          html += '<tr><td>' + esc(e.ioc_type) + '</td><td><code>' + esc(e.indicator) + '</code></td><td>' + (e.confidence || 0).toFixed(2) + '</td><td>' + esc(e.source_agent) + '</td><td>' + esc((e.received_at || '').substring(11, 19)) + '</td></tr>';
+        });
+        html += '</tbody></table>';
+        el.innerHTML = html;
+      }
+    } catch(e) { log('Intel refresh failed: ' + e.message); }
   }
 
   // ── Fleet & Swarm ──
@@ -4238,7 +4341,7 @@ body.light .modal-box{background:#ffffff;}
         fetch(API + '/api/alerts', { headers: authHeaders() }),
         fetch(API + '/api/alerts/count', { headers: authHeaders() }),
       ]);
-      if (alertsRes.ok) { const alerts = await alertsRes.json(); renderAlertTable(alerts); renderDashAlertTable(alerts); updateDashboardCharts(alerts); }
+      if (alertsRes.ok) { const alerts = await alertsRes.json(); _lastAlertsData = alerts; renderAlertTable(alerts); renderDashAlertTable(alerts); updateDashboardCharts(alerts); }
       if (countRes.ok) {
         const c = await countRes.json();
         $('#lm-total').textContent = c.total;
@@ -4319,7 +4422,7 @@ body.light .modal-box{background:#ffffff;}
       const lvl = esc(a.level || '');
       const reasonCount = (a.reasons && a.reasons.length) || 0;
       const reason = reasonCount ? esc(a.reasons[0]) : '—';
-      const badge = reasonCount > 1 ? ' <span style="opacity:.6;font-size:.75rem;">+' + (reasonCount - 1) + ' more</span>' : '';
+      const badge = reasonCount > 1 ? ' <span class="reason-expand-badge" onclick="event.stopPropagation();this.parentNode.innerHTML=\'' + a.reasons.map(r => esc(r)).join('<br>') + '\'" style="opacity:.6;font-size:.75rem;cursor:pointer;text-decoration:underline dotted;" title="Click to expand all reasons">+' + (reasonCount - 1) + ' more</span>' : '';
       tr.innerHTML = '<td>' + esc(a.timestamp || '') + '</td><td>' + (typeof a.score === 'number' ? a.score.toFixed(2) : '—') + '</td><td class="level-' + lvl + '">' + lvl + '</td><td>' + esc(a.action || '') + '</td><td>' + reason + badge + '</td>';
       const detailId = 'alert-detail-' + (a._index != null ? a._index : idx);
       tr.addEventListener('click', () => toggleAlertDetail(detailId, a._index != null ? a._index : null));
@@ -4645,16 +4748,153 @@ body.light .modal-box{background:#ffffff;}
   }
 
   function exportAlertsCsv() {
-    const trs = $$('#alert-table tbody tr');
-    if (!trs.length) { flash('No alerts to export', 'error'); return; }
+    if (!_lastAlertsData || !_lastAlertsData.length) { flash('No alerts to export', 'error'); return; }
     const rows = ['Time,Score,Level,Action,Reason'];
-    trs.forEach(tr => {
-      const cells = tr.querySelectorAll('td');
-      if (cells.length >= 5) {
-        rows.push([cells[0].textContent, cells[1].textContent, cells[2].textContent, cells[3].textContent, '"' + cells[4].textContent.replace(/"/g, '""') + '"'].join(','));
-      }
+    _lastAlertsData.forEach(a => {
+      const allReasons = (a.reasons && a.reasons.length) ? a.reasons.join('; ') : '';
+      rows.push([
+        '"' + (a.timestamp || '').replace(/"/g, '""') + '"',
+        typeof a.score === 'number' ? a.score.toFixed(2) : '',
+        a.level || '',
+        a.action || '',
+        '"' + allReasons.replace(/"/g, '""') + '"'
+      ].join(','));
     });
-    downloadBlob(rows.join('\n'), 'wardex-alerts.csv', 'text/csv'); log('Alerts exported as CSV');
+    downloadBlob(rows.join('\n'), 'wardex-alerts.csv', 'text/csv'); log('Alerts exported as CSV (full reasons)');
+  }
+
+  // ── Alert Grouping ──
+  async function toggleAlertGrouping() {
+    _alertGroupMode = !_alertGroupMode;
+    const btn = $('#btn-group-alerts');
+    if (_alertGroupMode) {
+      btn.classList.add('active');
+      try {
+        const res = await fetch(API + '/api/alerts/grouped', { headers: authHeaders() });
+        if (res.ok) { const groups = await res.json(); renderGroupedAlerts(groups); }
+        else { flash('Failed to load grouped alerts', 'error'); _alertGroupMode = false; btn.classList.remove('active'); }
+      } catch(e) { flash('Grouping error: ' + e.message, 'error'); _alertGroupMode = false; btn.classList.remove('active'); }
+    } else {
+      btn.classList.remove('active');
+      refreshAlerts();
+    }
+  }
+
+  function renderGroupedAlerts(groups) {
+    const tbody = $('#alert-tbody');
+    if (!tbody) return;
+    tbody.innerHTML = '';
+    if (!groups.length) {
+      tbody.innerHTML = '<tr><td colspan="5" class="text-muted">No alert groups found.</td></tr>';
+      return;
+    }
+    groups.forEach(g => {
+      const tr = document.createElement('tr');
+      tr.className = 'alert-row';
+      tr.style.cursor = 'pointer';
+      const lvl = esc(g.level || '');
+      const reasons = g.representative_reasons.map(r => esc(r)).join('; ');
+      const timeRange = (g.first_seen || '').substring(11, 19) + ' – ' + (g.last_seen || '').substring(11, 19);
+      tr.innerHTML = '<td><span style="font-weight:600;">' + g.count + '×</span> <span style="opacity:.6;font-size:.78rem;">' + timeRange + '</span></td>'
+        + '<td>' + (typeof g.avg_score === 'number' ? g.avg_score.toFixed(2) : '—') + ' <span style="opacity:.5;font-size:.75rem;">avg</span> / ' + (typeof g.max_score === 'number' ? g.max_score.toFixed(2) : '') + ' <span style="opacity:.5;font-size:.75rem;">max</span></td>'
+        + '<td class="level-' + lvl + '">' + lvl + '</td>'
+        + '<td>' + g.count + ' alerts</td>'
+        + '<td>' + reasons + '</td>';
+      const gid = 'group-detail-' + g.id;
+      tr.addEventListener('click', () => {
+        const detail = document.getElementById(gid);
+        if (detail) detail.classList.toggle('open');
+      });
+      tbody.appendChild(tr);
+      // Expandable indices row
+      const detailTr = document.createElement('tr');
+      detailTr.className = 'alert-detail-row';
+      detailTr.id = gid;
+      detailTr.innerHTML = '<td colspan="5" class="alert-detail-cell"><div class="alert-detail-inner" style="font-size:.82rem;">'
+        + '<strong>Fingerprint:</strong> <code>' + esc(g.reason_fingerprint) + '</code><br>'
+        + '<strong>First:</strong> ' + esc(g.first_seen) + '&emsp;<strong>Last:</strong> ' + esc(g.last_seen) + '<br>'
+        + '<strong>Alert indices:</strong> ' + g.indices.join(', ')
+        + '</div></td>';
+      tbody.appendChild(detailTr);
+    });
+  }
+
+  // ── Alert Analysis ──
+  async function runAlertAnalysis() {
+    const btn = $('#btn-analyze-alerts');
+    btn.disabled = true;
+    btn.textContent = 'Analyzing…';
+    try {
+      const res = await fetch(API + '/api/alerts/analysis', { method: 'POST', headers: { ...authHeaders(), 'Content-Type': 'application/json' }, body: JSON.stringify({ window_minutes: 0 }) });
+      if (res.ok) {
+        const analysis = await res.json();
+        renderAlertAnalysis(analysis);
+        flash('Analysis complete: ' + analysis.pattern?.toLowerCase?.() || 'done', 'ok');
+      } else {
+        flash('Analysis failed: ' + res.status, 'error');
+      }
+    } catch(e) { flash('Analysis error: ' + e.message, 'error'); }
+    btn.disabled = false;
+    btn.textContent = 'Analyze';
+  }
+
+  function renderAlertAnalysis(a) {
+    const card = $('#alert-analysis-card');
+    const c = $('#alert-analysis-content');
+    if (!card || !c) return;
+    card.style.display = 'block';
+    let html = '';
+    // Pattern badge
+    const patternName = typeof a.pattern === 'string' ? a.pattern : (a.pattern && typeof a.pattern === 'object' ? Object.keys(a.pattern)[0] : 'Unknown');
+    const patternClass = patternName === 'Baseline' ? 'ok' : (patternName === 'Escalating' || patternName === 'Sustained' ? 'critical' : 'warning');
+    html += '<div style="display:flex;gap:1rem;flex-wrap:wrap;margin-bottom:.75rem;">';
+    html += '<div style="padding:.3rem .7rem;border-radius:6px;font-weight:600;font-size:.82rem;" class="metric-value ' + patternClass + '">Pattern: ' + esc(patternName) + '</div>';
+    // Trend
+    const trendName = typeof a.score_trend === 'string' ? a.score_trend : (a.score_trend && typeof a.score_trend === 'object' ? Object.keys(a.score_trend)[0] : 'Stable');
+    html += '<div style="padding:.3rem .7rem;border-radius:6px;font-size:.82rem;background:var(--bg-alt);">Trend: ' + esc(trendName) + '</div>';
+    // Counts
+    html += '<div style="padding:.3rem .7rem;border-radius:6px;font-size:.82rem;background:var(--bg-alt);">' + a.total_alerts + ' alerts</div>';
+    if (a.severity_breakdown) {
+      const sb = a.severity_breakdown;
+      if (sb.critical) html += '<div style="padding:.3rem .7rem;border-radius:6px;font-size:.82rem;background:var(--red-light);color:var(--red);">' + sb.critical + ' critical</div>';
+      if (sb.severe) html += '<div style="padding:.3rem .7rem;border-radius:6px;font-size:.82rem;background:var(--orange-light);color:var(--orange);">' + sb.severe + ' severe</div>';
+    }
+    html += '</div>';
+    // Summary
+    html += '<p style="margin-bottom:.75rem;">' + esc(a.summary || '') + '</p>';
+    // Top reasons
+    if (a.dominant_reasons && a.dominant_reasons.length) {
+      html += '<div style="margin-bottom:.75rem;"><strong>Top Detection Reasons:</strong><ul style="margin:.3rem 0 0 1.2rem;">';
+      a.dominant_reasons.slice(0, 5).forEach(r => {
+        const name = Array.isArray(r) ? r[0] : r;
+        const cnt = Array.isArray(r) ? r[1] : '';
+        html += '<li><code>' + esc(String(name)) + '</code> <span style="opacity:.6;">(' + cnt + '×)</span></li>';
+      });
+      html += '</ul></div>';
+    }
+    // Clusters
+    if (a.clusters && a.clusters.length) {
+      html += '<div style="margin-bottom:.75rem;"><strong>Temporal Clusters (' + a.clusters.length + '):</strong>';
+      html += '<div style="display:flex;gap:.5rem;flex-wrap:wrap;margin-top:.3rem;">';
+      a.clusters.forEach((cl, i) => {
+        html += '<div style="padding:.3rem .6rem;border-radius:6px;background:var(--bg-alt);font-size:.78rem;">'
+          + 'C' + (i + 1) + ': ' + cl.count + ' alerts, avg ' + (cl.avg_score || 0).toFixed(2)
+          + ', max ' + (cl.max_score || 0).toFixed(2) + ' (' + esc(cl.level) + ')</div>';
+      });
+      html += '</div></div>';
+    }
+    // Anomalies
+    if (a.anomalies && a.anomalies.length) {
+      html += '<div><strong>Outlier Alerts (' + a.anomalies.length + '):</strong>';
+      html += '<div style="display:flex;gap:.5rem;flex-wrap:wrap;margin-top:.3rem;">';
+      a.anomalies.slice(0, 5).forEach(an => {
+        html += '<div style="padding:.3rem .6rem;border-radius:6px;background:var(--red-light);font-size:.78rem;">'
+          + 'Score ' + (an.score || 0).toFixed(2) + ' (' + (an.deviation_from_mean > 0 ? '+' : '') + an.deviation_from_mean + 'σ) — '
+          + esc((an.reasons || [])[0] || '') + '</div>';
+      });
+      html += '</div></div>';
+    }
+    c.innerHTML = html;
   }
 
   async function refreshHealth() {
@@ -4776,6 +5016,7 @@ body.light .modal-box{background:#ffffff;}
       ]);
       if (!res.ok) throw new Error('HTTP ' + res.status);
       const cfg = await res.json();
+      currentConfigData = cfg;
       if (cfg.detector) {
         $('#set-warmup').value = cfg.detector.warmup_samples ?? 4;
         $('#set-smoothing').value = cfg.detector.smoothing ?? 0.22;
@@ -4833,10 +5074,33 @@ body.light .modal-box{background:#ffffff;}
     const elevated = parseFloat($('#set-elevated').value) || 2.8;
     if (critical <= severe || severe <= elevated) { flash('Threshold ordering required: critical > severe > elevated', 'error'); return null; }
     if (interval < 1) { flash('Interval must be at least 1 second', 'error'); return null; }
+    const detector = Object.assign({}, currentConfigData?.detector || {}, {
+      warmup_samples: parseInt($('#set-warmup').value) || 4,
+      smoothing: parseFloat($('#set-smoothing').value) || 0.22,
+      learn_threshold: parseFloat($('#set-learn').value) || 2.5,
+    });
+    const policy = Object.assign({}, currentConfigData?.policy || {}, {
+      critical_score: critical,
+      severe_score: severe,
+      elevated_score: elevated,
+      low_battery_threshold: parseFloat($('#set-battery').value) || 20.0,
+    });
+    const monitor = Object.assign({}, currentConfigData?.monitor || {}, {
+      interval_secs: interval,
+      alert_threshold: threshold,
+      alert_log: $('#set-alert-log').value || 'var/alerts.jsonl',
+      dry_run: $('#set-dry-run').checked,
+      duration_secs: parseInt($('#set-duration').value) || 0,
+      webhook_url: $('#set-webhook').value || null,
+      syslog: $('#set-syslog').checked,
+      cef: $('#set-cef').checked,
+      watch_paths: $('#set-watch-paths').value.split('\n').map(s => s.trim()).filter(Boolean),
+      scope: monitorScopeState(),
+    });
     return {
-      detector: { warmup_samples: parseInt($('#set-warmup').value) || 4, smoothing: parseFloat($('#set-smoothing').value) || 0.22, learn_threshold: parseFloat($('#set-learn').value) || 2.5 },
-      policy: { critical_score: critical, severe_score: severe, elevated_score: elevated, low_battery_threshold: parseFloat($('#set-battery').value) || 20.0 },
-      monitor: { interval_secs: interval, alert_threshold: threshold, alert_log: $('#set-alert-log').value || 'var/alerts.jsonl', dry_run: $('#set-dry-run').checked, duration_secs: parseInt($('#set-duration').value) || 0, webhook_url: $('#set-webhook').value || null, syslog: $('#set-syslog').checked, cef: $('#set-cef').checked, watch_paths: $('#set-watch-paths').value.split('\n').map(s => s.trim()).filter(Boolean), scope: monitorScopeState() },
+      detector,
+      policy,
+      monitor,
     };
   }
 
@@ -5799,21 +6063,22 @@ body.light .modal-box{background:#ffffff;}
     if (!tbody) return;
     if (!incidents.length) { tbody.innerHTML = '<tr><td colspan="8"></td></tr>'; showEmptyState(tbody.querySelector('td'), '📋', 'No Incidents', 'Incidents will appear when correlated alerts trigger escalation.', null, null); return; }
     tbody.innerHTML = incidents.map(inc => {
+      const incidentId = incidentIdText(inc.id);
       const sevClass = (inc.severity || '').toLowerCase();
       const mitreTags = (inc.mitre_techniques || []).map(m =>
         '<span style="background:var(--purple-light);color:var(--purple);padding:1px 5px;border-radius:4px;font-size:.7rem;margin-right:2px;">' + esc(m.technique_id || '') + '</span>'
       ).join('');
       const agents = (inc.agent_ids || []).length;
       const created = (inc.created_at || '').substring(0, 19).replace('T', ' ');
-      return '<tr class="alert-row" data-inc-id="' + esc(inc.id || '') + '">' +
-        '<td><code>' + esc((inc.id || '').substring(0, 8)) + '</code></td>' +
+      return '<tr class="alert-row" data-inc-id="' + esc(incidentId) + '">' +
+        '<td><code>' + esc(incidentId.substring(0, 8)) + '</code></td>' +
         '<td>' + esc(inc.title || '') + '</td>' +
         '<td class="level-' + sevClass + '">' + esc(inc.severity || '') + '</td>' +
         '<td>' + esc(inc.status || '') + '</td>' +
         '<td>' + (mitreTags || '—') + '</td>' +
         '<td>' + agents + '</td>' +
         '<td>' + esc(created) + '</td>' +
-        '<td><button class="btn btn-sm" onclick="event.stopPropagation();" data-view-inc="' + esc(inc.id || '') + '">View</button></td>' +
+        '<td><button class="btn btn-sm" onclick="event.stopPropagation();" data-view-inc="' + esc(incidentId) + '">View</button></td>' +
         '</tr>';
     }).join('');
 
@@ -5858,13 +6123,13 @@ body.light .modal-box{background:#ffffff;}
   }
 
   function showIncidentDetail(id) {
-    selectedIncidentId = id;
+    selectedIncidentId = incidentIdText(id);
     const card = $('#inc-detail-card');
     if (!card) return;
-    const inc = incidentCache.find(i => i.id === id);
+    const inc = incidentCache.find(i => incidentIdText(i.id) === selectedIncidentId);
     if (!inc) { card.style.display = 'none'; return; }
     card.style.display = 'block';
-    $('#inc-detail-title').textContent = inc.title || id;
+    $('#inc-detail-title').textContent = inc.title || selectedIncidentId;
     const grid = $('#inc-detail-grid');
     const mitreStr = (inc.mitre_techniques || []).map(m =>
       '<span style="background:var(--purple-light);color:var(--purple);padding:2px 6px;border-radius:4px;font-size:.75rem;margin-right:3px;">' +
@@ -5913,7 +6178,7 @@ body.light .modal-box{background:#ffffff;}
       const blob = new Blob([JSON.stringify(report, null, 2)], { type: 'application/json' });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
-      a.href = url; a.download = 'incident-' + selectedIncidentId.substring(0, 8) + '-report.json';
+      a.href = url; a.download = 'incident-' + incidentIdText(selectedIncidentId).substring(0, 8) + '-report.json';
       document.body.appendChild(a); a.click(); a.remove();
       URL.revokeObjectURL(url);
       toast('Report generated', 'success');
@@ -6046,6 +6311,7 @@ body.light .modal-box{background:#ffffff;}
 
   // Fleet
   $('#btn-refresh-fleet').addEventListener('click', () => Promise.all([refreshFleet(), refreshXdr()]));
+  $('#btn-refresh-intel').addEventListener('click', refreshIntel);
   $('#btn-register-device').addEventListener('click', registerDevice);
   $('#btn-refresh-xdr').addEventListener('click', refreshXdr);
   $('#btn-create-token').addEventListener('click', createEnrollmentToken);
@@ -6123,6 +6389,8 @@ body.light .modal-box{background:#ffffff;}
   $('#btn-refresh-alerts').addEventListener('click', refreshAlerts);
   $('#btn-clear-alerts').addEventListener('click', clearAlerts);
   $('#btn-export-alerts-csv').addEventListener('click', exportAlertsCsv);
+  $('#btn-group-alerts').addEventListener('click', toggleAlertGrouping);
+  $('#btn-analyze-alerts').addEventListener('click', runAlertAnalysis);
   $('#alert-sort').addEventListener('change', function() { alertSortOrder = this.value; refreshAlerts(); });
 
   // Settings

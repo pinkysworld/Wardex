@@ -376,6 +376,52 @@ impl DeceptionEngine {
             false
         }
     }
+
+    /// Deploy a randomised canary set: one of each decoy type with
+    /// generated names. Returns the IDs of the deployed decoys.
+    pub fn deploy_random_canary_set(&mut self) -> Vec<String> {
+        use rand::Rng;
+        let mut rng = rand::thread_rng();
+        let suffix: u32 = rng.r#gen::<u32>() % 10000;
+        let configs = [
+            (DecoyType::Honeypot, format!("ssh-{suffix}"), "Auto-deployed SSH honeypot".to_string()),
+            (DecoyType::HoneyFile, format!("credentials-{suffix}.txt"), "Auto-deployed honey file".to_string()),
+            (DecoyType::HoneyCredential, format!("api-key-{suffix}"), "Auto-deployed honey credential".to_string()),
+            (DecoyType::HoneyService, format!("svc-internal-{suffix}"), "Auto-deployed honey service".to_string()),
+            (DecoyType::Canary, format!("canary-token-{suffix}"), "Auto-deployed canary token".to_string()),
+        ];
+        configs.into_iter().map(|(dt, name, desc)| self.deploy(dt, &name, &desc)).collect()
+    }
+
+    /// Build an attacker behavior profile from interaction history,
+    /// reconstructing the likely attack path across decoys.
+    pub fn attacker_behavior_profile(&self, source_id: &str) -> Option<AttackerProfile> {
+        let indices = self.attacker_map.get(source_id)?;
+        let interactions: Vec<&DecoyInteraction> = indices
+            .iter()
+            .filter_map(|&i| self.decoys.get(i))
+            .flat_map(|d| d.interactions.iter().filter(|int| int.source_info == source_id))
+            .collect();
+        if interactions.is_empty() {
+            return None;
+        }
+        let decoys_touched: Vec<String> = indices
+            .iter()
+            .filter_map(|&i| self.decoys.get(i).map(|d| d.name.clone()))
+            .collect();
+        let max_score = interactions
+            .iter()
+            .map(|i| i.threat_score)
+            .fold(0.0_f32, f32::max);
+        Some(AttackerProfile {
+            source_id: source_id.to_string(),
+            interaction_count: interactions.len(),
+            decoys_touched,
+            first_seen: interactions.first().map(|i| i.timestamp.clone()).unwrap_or_default(),
+            last_seen: interactions.last().map(|i| i.timestamp.clone()).unwrap_or_default(),
+            threat_score: max_score,
+        })
+    }
 }
 
 // ── Tests ─────────────────────────────────────────────────────────────────────
@@ -547,5 +593,47 @@ mod tests {
         let matches = store.correlate_signals(&signals);
         assert_eq!(matches.len(), 1);
         assert!(matches[0].matched);
+    }
+
+    #[test]
+    fn random_canary_set_deploys_five() {
+        let mut engine = DeceptionEngine::new();
+        let ids = engine.deploy_random_canary_set();
+        assert_eq!(ids.len(), 5);
+        assert_eq!(engine.decoys().len(), 5);
+    }
+
+    #[test]
+    fn attacker_behavior_profile_works() {
+        let mut engine = DeceptionEngine::new();
+        let hp = engine.deploy(DecoyType::Honeypot, "ssh", "SSH");
+        let hf = engine.deploy(DecoyType::HoneyFile, "secrets.txt", "File");
+        engine.record_interaction(&hp, "apt-1", "ssh_login", "root login attempt");
+        engine.record_interaction(&hf, "apt-1", "file_read", "read secrets.txt");
+
+        let profile = engine.attacker_behavior_profile("apt-1").unwrap();
+        assert_eq!(profile.interaction_count, 2);
+        assert_eq!(profile.decoys_touched.len(), 2);
+        assert!(profile.threat_score > 0.0);
+    }
+
+    #[test]
+    fn feed_polling_roundtrip() {
+        let mut store = ThreatIntelStore::new();
+        store.register_feed(ThreatFeed {
+            feed_id: "test-feed".into(),
+            name: "Test".into(),
+            url: "https://example.com".into(),
+            format: "jsonl".into(),
+            last_updated: String::new(),
+            ioc_count: 0,
+            active: true,
+        });
+        // Simulate polling with inline data
+        let data = r#"{"ioc_type":"IpAddress","value":"203.0.113.50","confidence":0.9,"severity":"critical","source":"feed","first_seen":"T0","last_seen":"T1","tags":[],"related_iocs":[]}"#;
+        let count = store.ingest_feed("test-feed", data);
+        assert_eq!(count, 1);
+        let m = store.check(&IoCType::IpAddress, "203.0.113.50");
+        assert!(m.matched);
     }
 }

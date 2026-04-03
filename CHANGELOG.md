@@ -2,6 +2,44 @@
 
 All notable changes to Wardex are documented in this file.
 
+## [0.33.0] — Advanced Threat Hunting, Analytics, and Detection Fusion
+
+### Added
+- **Playbook condition DSL** (`playbook`) — `evaluate_condition()` function supporting numeric operators (`>`, `<`, `>=`, `<=`, `!=`), string equality (`==`), `CONTAINS` operator, and `AND`/`OR` compound expressions with variable substitution.
+- **Named entity extraction** (`entity_extract`) — new module extracting IPs, domains, file paths, SHA-256/MD5 hashes, MITRE technique IDs, port numbers, and suspicious process names from alert reason text with deduplication.
+- **File integrity monitoring** (`fim`) — `FimEngine` with policy-based watched paths, SHA-256 baseline checksums, scan/check operations detecting modified/new/deleted files, and platform-specific default critical paths.
+- **Fleet campaign clustering** (`campaign`) — `CampaignDetector` using Jaccard similarity on MITRE technique + reason sets, time-windowed adjacency (1h default), connected-component extraction, and multi-host campaign reports.
+- **Memory forensics** (`memory_forensics`) — `MemoryForensics` engine detecting RWX regions, unbacked executable sections, and process hollowing (image-base mismatch + high entropy). Platform-specific collection plans for Linux (6 artifacts), macOS (4), and Windows (4).
+- **Side-channel score fusion** (`detector`) — `CompoundThreatDetector.evaluate_with_side_channel()` integrates `SideChannelReport` risk level into compound threat scores (critical +1.5, elevated +0.8).
+- **Device fingerprint EWMA drift** (`fingerprint`) — `update_ewma()` method for online fingerprint adaptation, allowing gradual device profile evolution while detecting abrupt impersonation.
+- **Deception engine enhancements** (`threat_intel`) — `deploy_random_canary_set()` auto-deploys one of each decoy type with randomised names; `attacker_behavior_profile()` reconstructs multi-decoy attack paths per source.
+- **Digital twin calibration** (`digital_twin`) — `calibrate_from_real()` snaps twin state to real-world telemetry and returns per-parameter drift report.
+- **Federated convergence loop** (`privacy`) — `convergence_loop()` runs multi-round federated averaging until convergence delta drops below target threshold, with pluggable update generation.
+- **UEBA geo-validation** (`ueba`) — `GeoIpResolver` with prefix-matching IP→location lookup and `validate_geo()` impossible-travel check integrated into UEBA observations.
+- **Sigma-KernelEvent bridge** (`sigma`) — `kernel_event_to_sigma_fields()` converts `KernelEvent` into Sigma-compatible field maps; `evaluate_kernel_event()` evaluates all loaded Sigma rules against kernel events without OCSF conversion.
+
+### Tests
+- `cargo test` passes with **832 automated tests** (685 unit + 147 integration).
+
+## [0.32.0] — Enterprise XDR: kernel monitoring, behavioral analytics, and incident automation
+
+### Added
+- **Kernel event abstraction** (`kernel_events`) — unified `KernelEvent` enum normalising eBPF (Linux), Endpoint Security Framework (macOS), and ETW (Windows) telemetry into a single stream with thread-safe ring buffer, MITRE ATT&CK auto-tagging (`suggest_mitre`), and 22 event kinds (process exec/exit, file ops, network, registry, AMSI, WMI persistence, TCC, Gatekeeper, SELinux/AppArmor denials, container events).
+- **UEBA engine** (`ueba`) — per-entity behavioural profiling with login-time anomalies, impossible-travel detection (haversine), process/port/data-volume deviation scoring, peer-group comparison, risk decay, and warm-up suppression.
+- **Kill-chain reconstruction** (`kill_chain`) — maps alert sequences through Reconnaissance → Weaponisation → Delivery → Exploitation → Installation → C2 → Actions-on-Objectives with phase scoring and gap analysis.
+- **Lateral movement detection** (`lateral`) — graph-based tracking of host-to-host connections with fan-out analysis, depth scoring, and credential-reuse correlation.
+- **Beacon / DGA / DNS-tunnelling detection** (`beacon`) — C2 beacon detection via inter-arrival jitter analysis, DGA domain flagging (Shannon entropy + consonant ratio), and DNS-tunnelling indicators (query length, TXT ratio).
+- **SOAR playbook engine** (`playbook`) — declarative playbook definitions with trigger matching (severity, MITRE techniques, host patterns), 11 step types (RunAction, Notify, Enrich, Conditional, Parallel, Escalate, Contain, etc.), execution tracking, and approval gates.
+- **Live response sessions** (`live_response`) — interactive forensic sessions with per-platform command whitelists (Linux 17, macOS 20, Windows 17 commands), audit logging, file retrieval tracking, and session timeouts.
+- **Automated remediation** (`remediation`) — 14 remediation actions (KillProcess, QuarantineFile, BlockIp, DisableAccount, etc.) with platform-specific command generation for Linux/macOS/Windows, rollback snapshots, and approval gating.
+- **Escalation engine** (`escalation`) — SLA-driven auto-escalation with multi-level policies, 7 notification channels (Email, Slack, PagerDuty, Teams, Webhook, SMS, Syslog), on-call rotation, and acknowledgement tracking.
+- **Evidence collection plans** (`forensics`) — per-platform artifact catalogues: Linux 20 artifacts, macOS 18 artifacts, Windows 17 artifacts, with volatile/persistent filtering.
+- **OS-specific containment commands** (`enforcement`) — Linux (cgroup, nftables, seccomp, namespace isolation), macOS (sandbox-exec, pfctl, ESF muting), Windows (Job objects, netsh, AppLocker, WFP).
+- **30+ new API endpoints** — full REST coverage for all new engines: UEBA observe/risky/entity, beacon connection/dns/analyze, kill-chain reconstruct, lateral connection/analyze, kernel event push/recent, playbook CRUD/execute/executions, live-response sessions/commands/audit, remediation plan/results/stats, escalation policies/start/acknowledge/SLA-check, evidence plans, containment commands.
+
+### Tests
+- `cargo test` passes with **786 automated tests** (639 unit + 147 integration).
+
 ## [0.31.0] — Enterprise operations, website refresh, and release packaging
 
 ### Added

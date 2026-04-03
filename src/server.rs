@@ -242,6 +242,18 @@ struct AppState {
     // Phase 27: SLO counters
     request_count: u64,
     error_count: u64,
+    // Phase 32: advanced XDR engines
+    beacon_detector: crate::beacon::BeaconDetector,
+    ueba_engine: crate::ueba::UebaEngine,
+    kill_chain_analyzer: crate::kill_chain::KillChainAnalyzer,
+    lateral_detector: crate::lateral::LateralMovementDetector,
+    playbook_engine: crate::playbook::PlaybookEngine,
+    live_response_engine: crate::live_response::LiveResponseEngine,
+    remediation_engine: crate::remediation::RemediationEngine,
+    escalation_engine: crate::escalation::EscalationEngine,
+    kernel_event_stream: crate::kernel_events::KernelEventStream,
+    // Phase 33: alert analysis & cross-agent intel
+    last_alert_analysis: Option<crate::alert_analysis::AlertAnalysis>,
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
@@ -584,6 +596,16 @@ pub fn run_server(port: u16, site_dir: &Path, shutdown: Arc<AtomicBool>, initial
         enterprise: EnterpriseStore::new("var/enterprise.json"),
         request_count: 0,
         error_count: 0,
+        beacon_detector: crate::beacon::BeaconDetector::default(),
+        ueba_engine: crate::ueba::UebaEngine::default(),
+        kill_chain_analyzer: crate::kill_chain::KillChainAnalyzer::new(),
+        lateral_detector: crate::lateral::LateralMovementDetector::default(),
+        playbook_engine: crate::playbook::PlaybookEngine::new(),
+        live_response_engine: crate::live_response::LiveResponseEngine::default(),
+        remediation_engine: crate::remediation::RemediationEngine::new(),
+        escalation_engine: crate::escalation::EscalationEngine::new(),
+        kernel_event_stream: crate::kernel_events::KernelEventStream::new(10_000),
+        last_alert_analysis: None,
     }));
 
     // Apply loaded config
@@ -705,7 +727,25 @@ pub fn run_server(port: u16, site_dir: &Path, shutdown: Arc<AtomicBool>, initial
                             if s.alerts.len() >= 10_000 {
                                 s.alerts.remove(0);
                             }
-                            s.alerts.push(alert);
+                            s.alerts.push(alert.clone());
+
+                            // Phase 33: broadcast high-severity intel to swarm
+                            if alert.score >= sev {
+                                let swarm_id = s.swarm.id.clone();
+                                for reason in &alert.reasons {
+                                    if reason.contains("network burst") || reason.contains("velocity-spike") {
+                                        let _msg = s.swarm.broadcast_threat_intel(
+                                            crate::swarm::GossipPayload::ThreatIntelUpdate {
+                                                ioc_type: "network_anomaly".into(),
+                                                indicator: format!("{}:{}", alert.hostname, reason),
+                                                confidence: alert.confidence,
+                                                source_agent: swarm_id.clone(),
+                                                ttl_hours: 24,
+                                            },
+                                        );
+                                    }
+                                }
+                            }
                         }
                     } else {
                         consecutive_elevated = 0;
@@ -714,6 +754,19 @@ pub fn run_server(port: u16, site_dir: &Path, shutdown: Arc<AtomicBool>, initial
                     drop(s);
                     std::thread::sleep(std::time::Duration::from_secs(interval));
                 }
+            }
+        });
+    }
+
+    // ── Spawn background alert analysis thread (every 5 minutes) ────
+    {
+        let analysis_state = Arc::clone(&state);
+        std::thread::spawn(move || {
+            loop {
+                std::thread::sleep(std::time::Duration::from_secs(300));
+                let mut s = analysis_state.lock().unwrap();
+                let analysis = crate::alert_analysis::analyze_alerts(&s.alerts, 5);
+                s.last_alert_analysis = Some(analysis);
             }
         });
     }
@@ -800,6 +853,16 @@ pub fn spawn_test_server() -> (u16, String) {
         enterprise: EnterpriseStore::new(&state_root.join("enterprise.json").to_string_lossy()),
         request_count: 0,
         error_count: 0,
+        beacon_detector: crate::beacon::BeaconDetector::default(),
+        ueba_engine: crate::ueba::UebaEngine::default(),
+        kill_chain_analyzer: crate::kill_chain::KillChainAnalyzer::new(),
+        lateral_detector: crate::lateral::LateralMovementDetector::default(),
+        playbook_engine: crate::playbook::PlaybookEngine::new(),
+        live_response_engine: crate::live_response::LiveResponseEngine::default(),
+        remediation_engine: crate::remediation::RemediationEngine::new(),
+        escalation_engine: crate::escalation::EscalationEngine::new(),
+        kernel_event_stream: crate::kernel_events::KernelEventStream::new(10_000),
+        last_alert_analysis: None,
     }));
     {
         let mut s = state.lock().unwrap();
@@ -2209,7 +2272,7 @@ fn monitoring_options_payload(host: &HostInfo, config: &Config) -> serde_json::V
             Some(if platform_key == "unknown" {
                 "Runtime could not determine standard persistence locations for this host."
             } else {
-                "Enable this together with the host-specific source below; if no source is selected, Wardex uses the recommended source for the current OS."
+                "Enable this together with the host-specific source below. In the admin console, selecting a host-specific source automatically enables service persistence."
             }),
         ),
     ];
@@ -2449,6 +2512,7 @@ fn handle_api(mut request: Request, state: &Arc<Mutex<AppState>>, _site_dir: &Pa
             | (Method::Post, "/api/mesh/heal")
             | (Method::Delete, "/api/alerts")
             | (Method::Post, "/api/alerts/sample")
+            | (Method::Post, "/api/alerts/analysis")
     ) || (!is_agent_endpoint && (
         (method == Method::Get && url == "/api/fleet/dashboard")
         || (method == Method::Get && url == "/api/workbench/overview")
@@ -2494,7 +2558,11 @@ fn handle_api(mut request: Request, state: &Arc<Mutex<AppState>>, _site_dir: &Pa
         || (method == Method::Get && url == "/api/correlation")
         || (method == Method::Get && url == "/api/alerts")
         || (method == Method::Get && url == "/api/alerts/count")
-        || (method == Method::Get && url.starts_with("/api/alerts/") && url != "/api/alerts/count")
+        || (method == Method::Get && url == "/api/alerts/analysis")
+        || (method == Method::Get && url == "/api/alerts/grouped")
+        || (method == Method::Get && url.starts_with("/api/alerts/") && url != "/api/alerts/count" && url != "/api/alerts/analysis" && url != "/api/alerts/grouped")
+        || (method == Method::Get && url == "/api/swarm/intel")
+        || (method == Method::Get && url == "/api/swarm/intel/stats")
         || (method == Method::Get && url == "/api/report")
         || (method == Method::Get && url == "/api/threads/status")
         || (method == Method::Get && url == "/api/detection/summary")
@@ -3383,6 +3451,68 @@ fn handle_api(mut request: Request, state: &Arc<Mutex<AppState>>, _site_dir: &Pa
                 200,
             )
         }
+        // ── Alert Analysis & Grouping ────────────────────────────
+        (Method::Get, "/api/alerts/analysis") => {
+            let s = state.lock().unwrap();
+            if let Some(ref analysis) = s.last_alert_analysis {
+                match serde_json::to_string(analysis) {
+                    Ok(json) => json_response(&json, 200),
+                    Err(e) => error_json(&format!("serialization error: {e}"), 500),
+                }
+            } else {
+                // Run on-the-fly if no background result yet
+                let analysis = crate::alert_analysis::analyze_alerts(&s.alerts, 5);
+                match serde_json::to_string(&analysis) {
+                    Ok(json) => json_response(&json, 200),
+                    Err(e) => error_json(&format!("serialization error: {e}"), 500),
+                }
+            }
+        }
+        (Method::Post, "/api/alerts/analysis") => {
+            let body = read_body_limited(&mut request, 4096);
+            let window = match body {
+                Ok(b) => {
+                    #[derive(serde::Deserialize)]
+                    struct AnalysisReq { #[serde(default = "default_window")] window_minutes: u64 }
+                    fn default_window() -> u64 { 5 }
+                    let req: AnalysisReq = serde_json::from_str(&b).unwrap_or(AnalysisReq { window_minutes: default_window() });
+                    req.window_minutes
+                }
+                Err(_) => 5,
+            };
+            let mut s = state.lock().unwrap();
+            let analysis = crate::alert_analysis::analyze_alerts(&s.alerts, window);
+            s.last_alert_analysis = Some(analysis.clone());
+            match serde_json::to_string(&analysis) {
+                Ok(json) => json_response(&json, 200),
+                Err(e) => error_json(&format!("serialization error: {e}"), 500),
+            }
+        }
+        (Method::Get, "/api/alerts/grouped") => {
+            let s = state.lock().unwrap();
+            let groups = crate::alert_analysis::group_alerts(&s.alerts);
+            match serde_json::to_string(&groups) {
+                Ok(json) => json_response(&json, 200),
+                Err(e) => error_json(&format!("serialization error: {e}"), 500),
+            }
+        }
+        // ── Swarm Intelligence ──────────────────────────────────
+        (Method::Get, "/api/swarm/intel") => {
+            let s = state.lock().unwrap();
+            let entries = s.swarm.intel_cache.all();
+            match serde_json::to_string(entries) {
+                Ok(json) => json_response(&json, 200),
+                Err(e) => error_json(&format!("serialization error: {e}"), 500),
+            }
+        }
+        (Method::Get, "/api/swarm/intel/stats") => {
+            let s = state.lock().unwrap();
+            let stats = s.swarm.intel_cache.stats();
+            match serde_json::to_string(&stats) {
+                Ok(json) => json_response(&json, 200),
+                Err(e) => error_json(&format!("serialization error: {e}"), 500),
+            }
+        }
         // ── Local Telemetry ──────────────────────────────────────
         (Method::Get, "/api/telemetry/current") => {
             let s = state.lock().unwrap();
@@ -3468,6 +3598,11 @@ fn handle_api(mut request: Request, state: &Arc<Mutex<AppState>>, _site_dir: &Pa
                 {"method": "GET", "path": "/api/alerts", "auth": true, "description": "Last 100 alerts"},
                 {"method": "GET", "path": "/api/alerts/count", "auth": true, "description": "Alert count by severity"},
                 {"method": "DELETE", "path": "/api/alerts", "auth": true, "description": "Clear all alerts"},
+                {"method": "GET", "path": "/api/alerts/analysis", "auth": true, "description": "Latest alert pattern analysis"},
+                {"method": "POST", "path": "/api/alerts/analysis", "auth": true, "description": "Run on-demand alert analysis with custom window"},
+                {"method": "GET", "path": "/api/alerts/grouped", "auth": true, "description": "Alerts grouped by reason fingerprint"},
+                {"method": "GET", "path": "/api/swarm/intel", "auth": true, "description": "Shared intelligence cache entries"},
+                {"method": "GET", "path": "/api/swarm/intel/stats", "auth": true, "description": "Shared intelligence cache statistics"},
                 {"method": "GET", "path": "/api/status", "auth": true, "description": "Project status manifest"},
                 {"method": "GET", "path": "/api/report", "auth": true, "description": "Latest analysis report"},
                 {"method": "POST", "path": "/api/analyze", "auth": true, "description": "Analyze CSV/JSONL telemetry"},
@@ -5955,6 +6090,319 @@ fn handle_api(mut request: Request, state: &Arc<Mutex<AppState>>, _site_dir: &Pa
                     }
                     Err(_) => error_json("invalid case id", 400),
                 }
+            // ── Phase 32: Advanced XDR endpoints ────────────────────────
+
+            // UEBA
+            } else if method == Method::Post && url == "/api/ueba/observe" {
+                let body = read_body_limited(&mut request, 8192);
+                match body.and_then(|b| serde_json::from_str::<crate::ueba::BehaviorObservation>(&b).map_err(|e| e.to_string())) {
+                    Ok(obs) => {
+                        let mut s = state.lock().unwrap();
+                        let anomalies = s.ueba_engine.observe(&obs);
+                        json_response(&serde_json::to_string(&serde_json::json!({
+                            "anomalies": anomalies,
+                        })).unwrap(), 200)
+                    }
+                    Err(e) => error_json(&e, 400),
+                }
+            } else if method == Method::Get && url == "/api/ueba/risky" {
+                let s = state.lock().unwrap();
+                let risky = s.ueba_engine.risky_entities(10.0);
+                json_response(&serde_json::to_string(&risky).unwrap(), 200)
+            } else if method == Method::Get && url.starts_with("/api/ueba/entity/") {
+                let entity_id = url.trim_start_matches("/api/ueba/entity/");
+                let s = state.lock().unwrap();
+                match s.ueba_engine.entity_risk(&crate::ueba::EntityKind::User, entity_id) {
+                    Some(risk) => json_response(&serde_json::to_string(&risk).unwrap(), 200),
+                    None => error_json("entity not found", 404),
+                }
+
+            // Beacon / DGA
+            } else if method == Method::Post && url == "/api/beacon/connection" {
+                let body = read_body_limited(&mut request, 4096);
+                match body.and_then(|b| serde_json::from_str::<crate::beacon::ConnectionRecord>(&b).map_err(|e| e.to_string())) {
+                    Ok(conn) => {
+                        let mut s = state.lock().unwrap();
+                        s.beacon_detector.record_connection(conn);
+                        json_response(r#"{"status":"recorded"}"#, 200)
+                    }
+                    Err(e) => error_json(&e, 400),
+                }
+            } else if method == Method::Post && url == "/api/beacon/dns" {
+                let body = read_body_limited(&mut request, 4096);
+                match body.and_then(|b| serde_json::from_str::<crate::beacon::DnsRecord>(&b).map_err(|e| e.to_string())) {
+                    Ok(dns) => {
+                        let mut s = state.lock().unwrap();
+                        s.beacon_detector.record_dns(dns);
+                        json_response(r#"{"status":"recorded"}"#, 200)
+                    }
+                    Err(e) => error_json(&e, 400),
+                }
+            } else if method == Method::Get && url == "/api/beacon/analyze" {
+                let s = state.lock().unwrap();
+                let summary = s.beacon_detector.analyze();
+                json_response(&serde_json::to_string(&summary).unwrap(), 200)
+
+            // Kill Chain
+            } else if method == Method::Post && url == "/api/killchain/reconstruct" {
+                let body = read_body_limited(&mut request, 16384);
+                match body.and_then(|b| serde_json::from_str::<Vec<crate::kill_chain::KillChainEvent>>(&b).map_err(|e| e.to_string())) {
+                    Ok(events) => {
+                        let s = state.lock().unwrap();
+                        let chain = s.kill_chain_analyzer.reconstruct("api-request", &events);
+                        json_response(&serde_json::to_string(&chain).unwrap(), 200)
+                    }
+                    Err(e) => error_json(&e, 400),
+                }
+
+            // Lateral Movement
+            } else if method == Method::Post && url == "/api/lateral/connection" {
+                let body = read_body_limited(&mut request, 4096);
+                match body.and_then(|b| serde_json::from_str::<crate::lateral::RemoteConnection>(&b).map_err(|e| e.to_string())) {
+                    Ok(conn) => {
+                        let mut s = state.lock().unwrap();
+                        s.lateral_detector.record(conn);
+                        json_response(r#"{"status":"recorded"}"#, 200)
+                    }
+                    Err(e) => error_json(&e, 400),
+                }
+            } else if method == Method::Get && url == "/api/lateral/analyze" {
+                let s = state.lock().unwrap();
+                let summary = s.lateral_detector.analyze();
+                json_response(&serde_json::to_string(&summary).unwrap(), 200)
+
+            // Kernel Events
+            } else if method == Method::Post && url == "/api/kernel/event" {
+                let body = read_body_limited(&mut request, 8192);
+                match body.and_then(|b| serde_json::from_str::<crate::kernel_events::KernelEvent>(&b).map_err(|e| e.to_string())) {
+                    Ok(event) => {
+                        let mut s = state.lock().unwrap();
+                        s.kernel_event_stream.push(event);
+                        json_response(r#"{"status":"recorded"}"#, 200)
+                    }
+                    Err(e) => error_json(&e, 400),
+                }
+            } else if method == Method::Get && url == "/api/kernel/recent" {
+                let s = state.lock().unwrap();
+                let events = s.kernel_event_stream.recent(100, None);
+                json_response(&serde_json::to_string(&events).unwrap(), 200)
+
+            // Playbooks
+            } else if method == Method::Get && url == "/api/playbooks" {
+                let s = state.lock().unwrap();
+                let pbs = s.playbook_engine.list_playbooks();
+                json_response(&serde_json::to_string(&pbs).unwrap(), 200)
+            } else if method == Method::Post && url == "/api/playbooks" {
+                let body = read_body_limited(&mut request, 16384);
+                match body.and_then(|b| serde_json::from_str::<crate::playbook::Playbook>(&b).map_err(|e| e.to_string())) {
+                    Ok(pb) => {
+                        let mut s = state.lock().unwrap();
+                        s.playbook_engine.register(pb);
+                        json_response(r#"{"status":"registered"}"#, 200)
+                    }
+                    Err(e) => error_json(&e, 400),
+                }
+            } else if method == Method::Post && url == "/api/playbooks/execute" {
+                let body = read_body_limited(&mut request, 4096);
+                match body.and_then(|b| serde_json::from_str::<serde_json::Value>(&b).map_err(|e| e.to_string())) {
+                    Ok(v) => {
+                        let pb_id = v["playbook_id"].as_str().unwrap_or("");
+                        let alert_id = v["alert_id"].as_str();
+                        let now = chrono::Utc::now().timestamp_millis() as u64;
+                        let mut s = state.lock().unwrap();
+                        match s.playbook_engine.start_execution(pb_id, alert_id, now) {
+                            Some(eid) => json_response(&serde_json::json!({"execution_id": eid}).to_string(), 200),
+                            None => error_json("playbook not found or disabled", 404),
+                        }
+                    }
+                    Err(e) => error_json(&e, 400),
+                }
+            } else if method == Method::Get && url == "/api/playbooks/executions" {
+                let s = state.lock().unwrap();
+                let execs = s.playbook_engine.recent_executions(50);
+                json_response(&serde_json::to_string(&execs).unwrap(), 200)
+
+            // Live Response
+            } else if method == Method::Post && url == "/api/live-response/session" {
+                let body = read_body_limited(&mut request, 4096);
+                match body.and_then(|b| serde_json::from_str::<serde_json::Value>(&b).map_err(|e| e.to_string())) {
+                    Ok(v) => {
+                        let agent_id = v["agent_id"].as_str().unwrap_or("unknown");
+                        let hostname = v["hostname"].as_str().unwrap_or("unknown");
+                        let op = v["operator"].as_str().unwrap_or("api");
+                        let platform = match v["platform"].as_str().unwrap_or("linux") {
+                            "macos" => crate::live_response::LiveResponsePlatform::MacOs,
+                            "windows" => crate::live_response::LiveResponsePlatform::Windows,
+                            _ => crate::live_response::LiveResponsePlatform::Linux,
+                        };
+                        let now = chrono::Utc::now().timestamp_millis() as u64;
+                        let mut s = state.lock().unwrap();
+                        let sid = s.live_response_engine.open_session(agent_id, hostname, platform, op, now);
+                        json_response(&serde_json::json!({"session_id": sid}).to_string(), 200)
+                    }
+                    Err(e) => error_json(&e, 400),
+                }
+            } else if method == Method::Post && url == "/api/live-response/command" {
+                let body = read_body_limited(&mut request, 4096);
+                match body.and_then(|b| serde_json::from_str::<serde_json::Value>(&b).map_err(|e| e.to_string())) {
+                    Ok(v) => {
+                        let sid = v["session_id"].as_str().unwrap_or("");
+                        let cmd = v["command"].as_str().unwrap_or("");
+                        let args: Vec<String> = v["args"].as_array()
+                            .map(|a| a.iter().filter_map(|x| x.as_str().map(|s| s.to_string())).collect())
+                            .unwrap_or_default();
+                        let now = chrono::Utc::now().timestamp_millis() as u64;
+                        let mut s = state.lock().unwrap();
+                        match s.live_response_engine.submit_command(sid, cmd, args, now) {
+                            Ok(cid) => json_response(&serde_json::json!({"command_id": cid}).to_string(), 200),
+                            Err(e) => error_json(&e, 403),
+                        }
+                    }
+                    Err(e) => error_json(&e, 400),
+                }
+            } else if method == Method::Get && url == "/api/live-response/sessions" {
+                let s = state.lock().unwrap();
+                let sessions = s.live_response_engine.all_sessions();
+                json_response(&serde_json::to_string(&sessions).unwrap(), 200)
+            } else if method == Method::Get && url == "/api/live-response/audit" {
+                let s = state.lock().unwrap();
+                let log: Vec<serde_json::Value> = s.live_response_engine.audit_log()
+                    .iter()
+                    .map(|(sid, cr)| serde_json::json!({"session_id": sid, "record": cr}))
+                    .collect();
+                json_response(&serde_json::to_string(&log).unwrap(), 200)
+
+            // Remediation
+            } else if method == Method::Post && url == "/api/remediation/plan" {
+                let body = read_body_limited(&mut request, 8192);
+                match body.and_then(|b| serde_json::from_str::<serde_json::Value>(&b).map_err(|e| e.to_string())) {
+                    Ok(v) => {
+                        let platform = match v["platform"].as_str().unwrap_or("linux") {
+                            "macos" => crate::remediation::RemediationPlatform::MacOs,
+                            "windows" => crate::remediation::RemediationPlatform::Windows,
+                            _ => crate::remediation::RemediationPlatform::Linux,
+                        };
+                        let action_type = v["action"].as_str().unwrap_or("");
+                        let action = match action_type {
+                            "flush_dns" => crate::remediation::RemediationAction::FlushDns,
+                            "block_ip" => crate::remediation::RemediationAction::BlockIp {
+                                addr: v["addr"].as_str().unwrap_or("").to_string(),
+                            },
+                            "kill_process" => crate::remediation::RemediationAction::KillProcess {
+                                pid: v["pid"].as_u64().unwrap_or(0) as u32,
+                                name: v["name"].as_str().unwrap_or("").to_string(),
+                            },
+                            "disable_account" => crate::remediation::RemediationAction::DisableAccount {
+                                username: v["username"].as_str().unwrap_or("").to_string(),
+                            },
+                            "quarantine_file" => crate::remediation::RemediationAction::QuarantineFile {
+                                path: v["path"].as_str().unwrap_or("").to_string(),
+                            },
+                            _ => return respond_api(request, state, &method, &url, auth_used, error_json("unknown remediation action", 400)),
+                        };
+                        let s = state.lock().unwrap();
+                        let plan = s.remediation_engine.plan(&action, &platform);
+                        json_response(&serde_json::to_string(&plan).unwrap(), 200)
+                    }
+                    Err(e) => error_json(&e, 400),
+                }
+            } else if method == Method::Get && url == "/api/remediation/results" {
+                let s = state.lock().unwrap();
+                let results = s.remediation_engine.recent_results(50);
+                json_response(&serde_json::to_string(&results).unwrap(), 200)
+            } else if method == Method::Get && url == "/api/remediation/stats" {
+                let s = state.lock().unwrap();
+                let stats = s.remediation_engine.stats();
+                json_response(&serde_json::to_string(&stats).unwrap(), 200)
+
+            // Escalation
+            } else if method == Method::Get && url == "/api/escalation/policies" {
+                let s = state.lock().unwrap();
+                let policies = s.escalation_engine.list_policies();
+                json_response(&serde_json::to_string(&policies).unwrap(), 200)
+            } else if method == Method::Post && url == "/api/escalation/policies" {
+                let body = read_body_limited(&mut request, 16384);
+                match body.and_then(|b| serde_json::from_str::<crate::escalation::EscalationPolicy>(&b).map_err(|e| e.to_string())) {
+                    Ok(policy) => {
+                        let mut s = state.lock().unwrap();
+                        s.escalation_engine.add_policy(policy);
+                        json_response(r#"{"status":"added"}"#, 200)
+                    }
+                    Err(e) => error_json(&e, 400),
+                }
+            } else if method == Method::Post && url == "/api/escalation/start" {
+                let body = read_body_limited(&mut request, 4096);
+                match body.and_then(|b| serde_json::from_str::<serde_json::Value>(&b).map_err(|e| e.to_string())) {
+                    Ok(v) => {
+                        let policy_id = v["policy_id"].as_str().unwrap_or("");
+                        let alert_id = v["alert_id"].as_str().unwrap_or("");
+                        let now = chrono::Utc::now().timestamp_millis() as u64;
+                        let mut s = state.lock().unwrap();
+                        match s.escalation_engine.start_escalation(policy_id, alert_id, now) {
+                            Some(eid) => json_response(&serde_json::json!({"escalation_id": eid}).to_string(), 200),
+                            None => error_json("policy not found or disabled", 404),
+                        }
+                    }
+                    Err(e) => error_json(&e, 400),
+                }
+            } else if method == Method::Post && url == "/api/escalation/acknowledge" {
+                let body = read_body_limited(&mut request, 4096);
+                match body.and_then(|b| serde_json::from_str::<serde_json::Value>(&b).map_err(|e| e.to_string())) {
+                    Ok(v) => {
+                        let eid = v["escalation_id"].as_str().unwrap_or("");
+                        let by = v["acknowledged_by"].as_str().unwrap_or("api");
+                        let now = chrono::Utc::now().timestamp_millis() as u64;
+                        let mut s = state.lock().unwrap();
+                        if s.escalation_engine.acknowledge(eid, by, now) {
+                            json_response(r#"{"status":"acknowledged"}"#, 200)
+                        } else {
+                            error_json("escalation not found or not active", 404)
+                        }
+                    }
+                    Err(e) => error_json(&e, 400),
+                }
+            } else if method == Method::Get && url == "/api/escalation/active" {
+                let s = state.lock().unwrap();
+                let active = s.escalation_engine.active_escalations();
+                json_response(&serde_json::to_string(&active).unwrap(), 200)
+            } else if method == Method::Post && url == "/api/escalation/check-sla" {
+                let now = chrono::Utc::now().timestamp_millis() as u64;
+                let mut s = state.lock().unwrap();
+                let escalated = s.escalation_engine.check_sla(now);
+                json_response(&serde_json::json!({"escalated": escalated}).to_string(), 200)
+
+            // Evidence Collection Plans
+            } else if method == Method::Get && url == "/api/evidence/plan/linux" {
+                let plan = crate::forensics::EvidenceCollectionPlan::linux();
+                json_response(&serde_json::to_string(&plan).unwrap(), 200)
+            } else if method == Method::Get && url == "/api/evidence/plan/macos" {
+                let plan = crate::forensics::EvidenceCollectionPlan::macos();
+                json_response(&serde_json::to_string(&plan).unwrap(), 200)
+            } else if method == Method::Get && url == "/api/evidence/plan/windows" {
+                let plan = crate::forensics::EvidenceCollectionPlan::windows();
+                json_response(&serde_json::to_string(&plan).unwrap(), 200)
+
+            // Containment Commands
+            } else if method == Method::Post && url == "/api/containment/commands" {
+                let body = read_body_limited(&mut request, 4096);
+                match body.and_then(|b| serde_json::from_str::<serde_json::Value>(&b).map_err(|e| e.to_string())) {
+                    Ok(v) => {
+                        let level = match v["level"].as_str().unwrap_or("observe") {
+                            "constrain" => crate::enforcement::EnforcementLevel::Constrain,
+                            "quarantine" => crate::enforcement::EnforcementLevel::Quarantine,
+                            "isolate" => crate::enforcement::EnforcementLevel::Isolate,
+                            "eradicate" => crate::enforcement::EnforcementLevel::Eradicate,
+                            _ => crate::enforcement::EnforcementLevel::Observe,
+                        };
+                        let target = v["target"].as_str().unwrap_or("");
+                        let platform = v["platform"].as_str().unwrap_or("linux");
+                        let s = state.lock().unwrap();
+                        let cmds = s.enforcement.containment_commands(&level, target, platform);
+                        json_response(&serde_json::to_string(&cmds).unwrap(), 200)
+                    }
+                    Err(e) => error_json(&e, 400),
+                }
+
             } else {
                 error_json("not found", 404)
             }

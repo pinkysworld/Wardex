@@ -335,6 +335,51 @@ impl DigitalTwinEngine {
     pub fn all_snapshots(&self) -> &HashMap<String, TwinSnapshot> {
         &self.devices
     }
+
+    /// Calibrate a digital twin from real-world telemetry data.
+    /// Adjusts the twin's snapshot to match observed values and returns
+    /// a report of how much each parameter drifted.
+    pub fn calibrate_from_real(
+        &mut self,
+        device_id: &str,
+        real: &TwinSnapshot,
+    ) -> Option<CalibrationReport> {
+        let twin = self.devices.get_mut(device_id)?;
+        let diffs = vec![
+            ("cpu_load".into(), (twin.cpu_load - real.cpu_load).abs()),
+            ("memory_used_mb".into(), (twin.memory_used_mb - real.memory_used_mb).abs()),
+            ("network_tx_kbps".into(), (twin.network_tx_kbps - real.network_tx_kbps).abs()),
+            ("network_rx_kbps".into(), (twin.network_rx_kbps - real.network_rx_kbps).abs()),
+            ("threat_score".into(), (twin.threat_score - real.threat_score).abs()),
+        ];
+        let max_drift = diffs.iter().map(|(_, d)| *d).fold(0.0_f64, f64::max);
+
+        // Apply calibration: snap twin to real values
+        twin.cpu_load = real.cpu_load;
+        twin.memory_used_mb = real.memory_used_mb;
+        twin.network_tx_kbps = real.network_tx_kbps;
+        twin.network_rx_kbps = real.network_rx_kbps;
+        twin.open_connections = real.open_connections;
+        twin.processes = real.processes;
+        twin.threat_score = real.threat_score;
+        twin.state = real.state.clone();
+
+        Some(CalibrationReport {
+            device_id: device_id.to_string(),
+            parameter_drifts: diffs,
+            max_drift,
+            calibrated: true,
+        })
+    }
+}
+
+/// Calibration report showing twin-vs-real drift.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CalibrationReport {
+    pub device_id: String,
+    pub parameter_drifts: Vec<(String, f64)>,
+    pub max_drift: f64,
+    pub calibrated: bool,
 }
 
 // ── Fleet-Scale Simulation ───────────────────────────────────────────────────
@@ -522,5 +567,19 @@ mod tests {
         }];
         let result = engine.simulate(&scenario);
         assert!(result.alerts_generated.iter().any(|a| a.alert_type == "connection_burst"));
+    }
+
+    #[test]
+    fn calibrate_twin_from_real() {
+        let mut engine = setup_engine();
+        let mut real = TwinSnapshot::new("dev-A");
+        real.cpu_load = 42.0;
+        real.memory_used_mb = 512.0;
+        real.threat_score = 2.5;
+
+        let report = engine.calibrate_from_real("dev-A", &real).unwrap();
+        assert!(report.calibrated);
+        assert!((engine.snapshot("dev-A").unwrap().cpu_load - 42.0).abs() < 0.01);
+        assert!((engine.snapshot("dev-A").unwrap().memory_used_mb - 512.0).abs() < 0.01);
     }
 }

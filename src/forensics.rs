@@ -129,9 +129,126 @@ impl ForensicBundle {
     }
 }
 
+// ── Evidence Collection Plans ────────────────────────────────────
+
+/// Per-platform evidence artefact descriptor.
+#[derive(Debug, Clone, Serialize)]
+pub struct EvidenceArtifact {
+    pub name: &'static str,
+    pub path: &'static str,
+    pub description: &'static str,
+    pub volatile: bool,
+}
+
+/// Evidence collection plan with prioritised artefact list.
+#[derive(Debug, Clone, Serialize)]
+pub struct EvidenceCollectionPlan {
+    pub platform: String,
+    pub artifacts: Vec<EvidenceArtifact>,
+}
+
+impl EvidenceCollectionPlan {
+    /// Build a collection plan for Linux hosts.
+    pub fn linux() -> Self {
+        Self {
+            platform: "linux".into(),
+            artifacts: vec![
+                EvidenceArtifact { name: "process_list", path: "/proc", description: "Running processes and open fds", volatile: true },
+                EvidenceArtifact { name: "network_connections", path: "/proc/net/tcp", description: "Active TCP connections", volatile: true },
+                EvidenceArtifact { name: "network_connections6", path: "/proc/net/tcp6", description: "Active IPv6 TCP connections", volatile: true },
+                EvidenceArtifact { name: "loaded_modules", path: "/proc/modules", description: "Loaded kernel modules", volatile: true },
+                EvidenceArtifact { name: "mount_table", path: "/proc/mounts", description: "Mounted filesystems", volatile: true },
+                EvidenceArtifact { name: "auth_log", path: "/var/log/auth.log", description: "Authentication log", volatile: false },
+                EvidenceArtifact { name: "syslog", path: "/var/log/syslog", description: "System log", volatile: false },
+                EvidenceArtifact { name: "journal", path: "/var/log/journal", description: "Systemd journal", volatile: false },
+                EvidenceArtifact { name: "crontabs", path: "/var/spool/cron", description: "Scheduled tasks", volatile: false },
+                EvidenceArtifact { name: "systemd_units", path: "/etc/systemd/system", description: "Custom systemd services", volatile: false },
+                EvidenceArtifact { name: "passwd", path: "/etc/passwd", description: "User accounts", volatile: false },
+                EvidenceArtifact { name: "shadow", path: "/etc/shadow", description: "Password hashes", volatile: false },
+                EvidenceArtifact { name: "sudoers", path: "/etc/sudoers.d", description: "Sudo rules", volatile: false },
+                EvidenceArtifact { name: "ssh_keys", path: "/home/*/.ssh", description: "SSH authorised keys", volatile: false },
+                EvidenceArtifact { name: "bash_history", path: "/home/*/.bash_history", description: "Shell history", volatile: false },
+                EvidenceArtifact { name: "tmp_files", path: "/tmp", description: "Temporary files", volatile: false },
+                EvidenceArtifact { name: "audit_log", path: "/var/log/audit/audit.log", description: "Linux audit log", volatile: false },
+                EvidenceArtifact { name: "dns_resolv", path: "/etc/resolv.conf", description: "DNS configuration", volatile: false },
+                EvidenceArtifact { name: "hosts_file", path: "/etc/hosts", description: "Hosts file", volatile: false },
+                EvidenceArtifact { name: "iptables_rules", path: "/etc/iptables", description: "Firewall rules", volatile: false },
+            ],
+        }
+    }
+
+    /// Build a collection plan for macOS hosts.
+    pub fn macos() -> Self {
+        Self {
+            platform: "macos".into(),
+            artifacts: vec![
+                EvidenceArtifact { name: "process_list", path: "/dev/null", description: "Running processes (ps aux)", volatile: true },
+                EvidenceArtifact { name: "network_connections", path: "/dev/null", description: "Active connections (netstat -an)", volatile: true },
+                EvidenceArtifact { name: "unified_log", path: "/var/db/diagnostics", description: "macOS unified log", volatile: false },
+                EvidenceArtifact { name: "install_log", path: "/var/log/install.log", description: "Install history", volatile: false },
+                EvidenceArtifact { name: "launch_daemons", path: "/Library/LaunchDaemons", description: "System launch daemons", volatile: false },
+                EvidenceArtifact { name: "launch_agents", path: "/Library/LaunchAgents", description: "System launch agents", volatile: false },
+                EvidenceArtifact { name: "user_launch_agents", path: "~/Library/LaunchAgents", description: "User launch agents", volatile: false },
+                EvidenceArtifact { name: "login_items", path: "~/Library/Application Support/com.apple.backgroundtaskmanagementagent", description: "Login items", volatile: false },
+                EvidenceArtifact { name: "tcc_db", path: "/Library/Application Support/com.apple.TCC/TCC.db", description: "TCC permissions database", volatile: false },
+                EvidenceArtifact { name: "keychain_db", path: "~/Library/Keychains", description: "User keychains", volatile: false },
+                EvidenceArtifact { name: "safari_history", path: "~/Library/Safari/History.db", description: "Safari browsing history", volatile: false },
+                EvidenceArtifact { name: "chrome_history", path: "~/Library/Application Support/Google/Chrome/Default/History", description: "Chrome history", volatile: false },
+                EvidenceArtifact { name: "bash_history", path: "~/.bash_history", description: "Bash history", volatile: false },
+                EvidenceArtifact { name: "zsh_history", path: "~/.zsh_history", description: "Zsh history", volatile: false },
+                EvidenceArtifact { name: "profiles", path: "/var/db/ConfigurationProfiles", description: "MDM configuration profiles", volatile: false },
+                EvidenceArtifact { name: "kernel_extensions", path: "/Library/Extensions", description: "Kernel extensions", volatile: false },
+                EvidenceArtifact { name: "system_extensions", path: "/Library/SystemExtensions", description: "System extensions (ESF)", volatile: false },
+                EvidenceArtifact { name: "quarantine_db", path: "~/Library/Preferences/com.apple.LaunchServices.QuarantineEventsV2", description: "Quarantine events", volatile: false },
+            ],
+        }
+    }
+
+    /// Build a collection plan for Windows hosts.
+    pub fn windows() -> Self {
+        Self {
+            platform: "windows".into(),
+            artifacts: vec![
+                EvidenceArtifact { name: "process_list", path: "NUL", description: "Running processes (tasklist /v)", volatile: true },
+                EvidenceArtifact { name: "network_connections", path: "NUL", description: "Active connections (netstat -ano)", volatile: true },
+                EvidenceArtifact { name: "security_evtx", path: r"C:\Windows\System32\winevt\Logs\Security.evtx", description: "Security event log", volatile: false },
+                EvidenceArtifact { name: "system_evtx", path: r"C:\Windows\System32\winevt\Logs\System.evtx", description: "System event log", volatile: false },
+                EvidenceArtifact { name: "powershell_evtx", path: r"C:\Windows\System32\winevt\Logs\Microsoft-Windows-PowerShell%4Operational.evtx", description: "PowerShell log", volatile: false },
+                EvidenceArtifact { name: "sysmon_evtx", path: r"C:\Windows\System32\winevt\Logs\Microsoft-Windows-Sysmon%4Operational.evtx", description: "Sysmon log", volatile: false },
+                EvidenceArtifact { name: "prefetch", path: r"C:\Windows\Prefetch", description: "Prefetch files", volatile: false },
+                EvidenceArtifact { name: "amcache", path: r"C:\Windows\AppCompat\Programs\Amcache.hve", description: "AmCache hive", volatile: false },
+                EvidenceArtifact { name: "shimcache", path: r"C:\Windows\System32\config\SYSTEM", description: "ShimCache in SYSTEM hive", volatile: false },
+                EvidenceArtifact { name: "scheduled_tasks", path: r"C:\Windows\System32\Tasks", description: "Scheduled tasks", volatile: false },
+                EvidenceArtifact { name: "startup_folder", path: r"C:\ProgramData\Microsoft\Windows\Start Menu\Programs\Startup", description: "Startup folder", volatile: false },
+                EvidenceArtifact { name: "registry_run", path: r"HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Run", description: "Registry run keys", volatile: false },
+                EvidenceArtifact { name: "wmi_subscriptions", path: r"C:\Windows\System32\wbem\Repository", description: "WMI repository", volatile: false },
+                EvidenceArtifact { name: "hosts_file", path: r"C:\Windows\System32\drivers\etc\hosts", description: "Hosts file", volatile: false },
+                EvidenceArtifact { name: "ntuser_dat", path: r"C:\Users\*\NTUSER.DAT", description: "User registry hives", volatile: false },
+                EvidenceArtifact { name: "recent_files", path: r"C:\Users\*\AppData\Roaming\Microsoft\Windows\Recent", description: "Recently opened files", volatile: false },
+                EvidenceArtifact { name: "powershell_history", path: r"C:\Users\*\AppData\Roaming\Microsoft\Windows\PowerShell\PSReadLine\ConsoleHost_history.txt", description: "PS history", volatile: false },
+            ],
+        }
+    }
+
+    /// Filter to volatile-only artefacts (collect first for triage).
+    pub fn volatile_only(&self) -> Vec<&EvidenceArtifact> {
+        self.artifacts.iter().filter(|a| a.volatile).collect()
+    }
+
+    /// Filter to non-volatile artefacts.
+    pub fn persistent_only(&self) -> Vec<&EvidenceArtifact> {
+        self.artifacts.iter().filter(|a| !a.volatile).collect()
+    }
+
+    /// Total artefact count.
+    pub fn count(&self) -> usize {
+        self.artifacts.len()
+    }
+}
+
 #[cfg(test)]
 mod tests {
-    use super::ForensicBundle;
+    use super::*;
     use crate::runtime::{demo_samples, execute};
 
     #[test]
@@ -186,5 +303,26 @@ mod tests {
         assert!(ForensicBundle::read_encrypted(&path, &wrong_key).is_err());
 
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn evidence_plan_linux_has_artifacts() {
+        let plan = EvidenceCollectionPlan::linux();
+        assert!(plan.count() > 10);
+        assert!(plan.volatile_only().len() >= 2);
+        assert!(plan.persistent_only().len() > 5);
+    }
+
+    #[test]
+    fn evidence_plan_macos_has_tcc() {
+        let plan = EvidenceCollectionPlan::macos();
+        assert!(plan.artifacts.iter().any(|a| a.name == "tcc_db"));
+    }
+
+    #[test]
+    fn evidence_plan_windows_has_evtx() {
+        let plan = EvidenceCollectionPlan::windows();
+        assert!(plan.artifacts.iter().any(|a| a.name == "security_evtx"));
+        assert!(plan.artifacts.iter().any(|a| a.name == "prefetch"));
     }
 }

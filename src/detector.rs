@@ -774,6 +774,17 @@ impl CompoundThreatDetector {
     /// their baseline contribution. Takes the per-signal contributions
     /// from `AnomalySignal`.
     pub fn evaluate(&self, signal: &AnomalySignal) -> CompoundThreatReport {
+        self.evaluate_with_side_channel(signal, None)
+    }
+
+    /// Evaluate with optional side-channel risk fusion.
+    /// When a `SideChannelReport` is provided and its `overall_risk` is
+    /// "elevated" or "critical", the compound score is boosted.
+    pub fn evaluate_with_side_channel(
+        &self,
+        signal: &AnomalySignal,
+        side_channel: Option<&crate::side_channel::SideChannelReport>,
+    ) -> CompoundThreatReport {
         // Count axes with non-trivial contribution
         let elevated: Vec<String> = signal.contributions.iter()
             .filter(|(_, v)| *v >= self.per_axis_threshold)
@@ -786,11 +797,22 @@ impl CompoundThreatDetector {
 
         // Compound multiplier: the more axes are co-elevated, the greater
         // the effective threat (sophisticated coordinated attack)
-        let compound_score = if is_compound {
+        let mut compound_score = if is_compound {
             signal.score * (1.0 + fraction * 0.5)
         } else {
             signal.score
         };
+
+        // Side-channel score fusion: boost when side-channel risk is elevated
+        if let Some(sc) = side_channel {
+            let sc_boost = match sc.overall_risk.as_str() {
+                "critical" => 1.5,
+                "elevated" => 0.8,
+                "low" => 0.2,
+                _ => 0.0,
+            };
+            compound_score += sc_boost;
+        }
 
         CompoundThreatReport {
             elevated_axes: elevated,
@@ -1268,5 +1290,29 @@ mod tests {
         let report = compound.evaluate(&signal);
         assert!(report.is_compound_attack, "5 of 9 axes elevated should trigger compound");
         assert!(report.compound_score > signal.score, "compound score should be boosted");
+    }
+
+    #[test]
+    fn side_channel_fusion_boosts_score() {
+        use super::CompoundThreatDetector;
+        use crate::side_channel::SideChannelReport;
+
+        let compound = CompoundThreatDetector::default();
+        let signal = super::AnomalySignal {
+            score: 3.0,
+            confidence: 1.0,
+            suspicious_axes: 1,
+            reasons: vec!["cpu".into()],
+            contributions: vec![("cpu_load_pct", 0.5)],
+        };
+        let sc_report = SideChannelReport {
+            timing_anomalies: 12,
+            cache_alerts: 3,
+            covert_channels: 1,
+            overall_risk: "critical".into(),
+        };
+        let without = compound.evaluate(&signal);
+        let with = compound.evaluate_with_side_channel(&signal, Some(&sc_report));
+        assert!(with.compound_score > without.compound_score, "side-channel fusion should boost score");
     }
 }

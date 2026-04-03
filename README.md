@@ -2,14 +2,15 @@
 
 Wardex is a Rust-based XDR and SIEM platform for private-cloud and self-hosted security operations. It combines cross-platform telemetry collection, detection engineering, analyst workflows, approval-gated response, agent lifecycle management, SIEM integrations, and tamper-evident evidence handling in a single deployable product.
 
-## What ships in `v0.31.0`
+## What ships in `v0.33.0`
 
 - Analyst-facing SOC Workbench with queue, cases, investigation pivots, incident storyline, and approval-gated response execution
 - Detection engineering platform with Sigma and native rules, saved hunts, scheduled runs, suppressions, content packs, and MITRE coverage views
 - Fleet and agent control plane with enrollment, heartbeats, policy distribution, rollout groups, rollback, and agent activity snapshots
 - Enterprise controls for RBAC, session rotation, IDP/SCIM configuration, change control, admin audit export, diagnostics, and dependency health
 - SIEM and operations surfaces including OCSF normalization, Splunk/Elasticsearch style outputs, TAXII pull, ticket sync, evidence packages, and executive reporting
-- Professional browser console and HTTP API backed by 61 Rust source modules, 117 documented OpenAPI paths, and 692 automated tests
+- Advanced threat hunting: playbook condition DSL, named entity extraction, file integrity monitoring, fleet campaign clustering, memory forensics, side-channel fusion, deception engine with canary randomisation, Sigma-KernelEvent bridge, UEBA geo-validation, digital twin calibration, federated convergence loop, and EWMA fingerprint drift
+- Professional browser console and HTTP API backed by 75 Rust source modules, 155+ documented API paths, and 832 automated tests
 
 See [FEATURES.md](FEATURES.md) for the concise capability summary, [CHANGELOG.md](CHANGELOG.md) for release history, and [docs/README.md](docs/README.md) for the full documentation map.
 
@@ -57,12 +58,12 @@ Run the full automated suite:
 cargo test
 ```
 
-The current release passes 692 automated tests across unit and integration coverage. The repo also includes live verification helpers in [`tests/live_test.py`](tests/live_test.py), [`tests/verify_admin.py`](tests/verify_admin.py), and browser smoke coverage in [`tests/playwright/enterprise_console_smoke.spec.js`](tests/playwright/enterprise_console_smoke.spec.js).
+The current release passes 832 automated tests across unit and integration coverage. The repo also includes live verification helpers in [`tests/live_test.py`](tests/live_test.py), [`tests/verify_admin.py`](tests/verify_admin.py), and browser smoke coverage in [`tests/playwright/enterprise_console_smoke.spec.js`](tests/playwright/enterprise_console_smoke.spec.js).
 
 ## Repository layout
 
 ```text
-src/                  Core platform modules (61 Rust source files)
+src/                  Core platform modules (75 Rust source files)
 tests/                Integration tests, live checks, and browser smoke coverage
 docs/                 Product, architecture, deployment, and runbook documentation
 site/                 Static website and browser admin console

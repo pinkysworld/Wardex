@@ -4,9 +4,9 @@
    ═══════════════════════════════════════════════════════════════════════════ */
 
 const stats = [
-  { value: "61", label: "Rust modules" },
-  { value: "117", label: "OpenAPI paths" },
-  { value: "692", label: "automated tests" },
+  { value: "75", label: "Rust modules" },
+  { value: "155+", label: "API endpoints" },
+  { value: "832", label: "automated tests" },
   { value: "3", label: "release targets" },
 ];
 
@@ -14,38 +14,38 @@ const pipelineDetails = [
   {
     num: "01",
     title: "Detection Engineering",
-    body: "Operators can manage Sigma and native rules, test them against retained events, promote or roll them back, maintain suppressions, and schedule saved hunts from the same control plane.",
-    note: "The enterprise release adds hunts, content lifecycle, suppressions, packs, and MITRE coverage views."
+    body: "Manage Sigma and native rules, test against retained events, promote or roll back, maintain suppressions, schedule hunts, and bridge kernel-level events directly into your Sigma rule library.",
+    note: "Includes hunts, content lifecycle, suppressions, MITRE coverage, and the new Sigma-KernelEvent bridge."
   },
   {
     num: "02",
     title: "SOC Workbench",
-    body: "Queue, cases, incident pivots, timelines, process trees, and storyline views keep analysts inside one investigation surface instead of bouncing across disconnected pages.",
-    note: "Investigation state carries forward into evidence export and approval-aware response actions."
+    body: "Queue, cases, incident pivots, timelines, process trees, storyline views, and entity extraction keep analysts inside one investigation surface with full context.",
+    note: "Entity extraction automatically surfaces IPs, domains, hashes, MITRE techniques, and usernames from alerts."
   },
   {
     num: "03",
-    title: "Fleet Operations",
-    body: "Enrollment, heartbeat freshness, policy distribution, deployment assignment, rollout groups, rollback, and per-agent activity snapshots give operators concrete control over endpoint lifecycle.",
-    note: "Release operations are exposed in both the API and the browser console."
+    title: "Threat Hunting & Intelligence",
+    body: "Fleet campaign clustering, deception engine with randomized canary deployment, attacker behavior profiling, threat-feed polling, and named entity extraction power proactive threat hunts.",
+    note: "Campaign detection uses Jaccard similarity to correlate fleet-wide attack patterns across agents."
   },
   {
     num: "04",
-    title: "Enterprise Governance",
-    body: "RBAC, session rotation, IDP and SCIM configuration, admin audit export, change control, diagnostics, and dependency health are treated as first-class product surfaces.",
-    note: "The release posture is private-cloud and self-hosted, with documentation and runbooks shipped in-repo."
+    title: "Fleet Operations",
+    body: "Enrollment, heartbeat freshness, policy distribution, deployment assignment, rollout groups, rollback, file integrity monitoring, and per-agent activity snapshots.",
+    note: "FIM continuously monitors critical system paths and detects unauthorized changes with SHA-256 verification."
   },
   {
     num: "05",
-    title: "Integrations & Evidence",
-    body: "SIEM connectors, TAXII pull, threat-intel enrichment, ticket sync, compliance evidence, and forensic exports keep Wardex useful inside broader enterprise tooling and reporting workflows.",
-    note: "Evidence packages and storyline exports make incident handoff far easier."
+    title: "Advanced Analytics & AI",
+    body: "Side-channel score fusion, UEBA geo-validation with impossible-travel detection, EWMA drift tracking, digital twin calibration, federated learning convergence, and memory forensics.",
+    note: "Memory forensics detects code injection, process hollowing, and RWX regions across platforms."
   },
   {
     num: "06",
-    title: "Supportability",
-    body: "Diagnostics bundles, dependency health, operator docs, deployment models, and release packaging reduce the gap between a powerful prototype and a product teams can actually run.",
-    note: "The public site now emphasizes those product surfaces instead of backlog-history sections."
+    title: "Enterprise Governance",
+    body: "RBAC, session rotation, IDP/SCIM configuration, admin audit export, change control, diagnostics, dependency health, and privacy-preserving federated model training.",
+    note: "Private-cloud and self-hosted, with documentation, runbooks, and release automation shipped in-repo."
   },
 ];
 
@@ -152,7 +152,8 @@ function initNav() {
 function initScrollReveal() {
   const targets = document.querySelectorAll(
     ".section-header, .arch-stage, .detail-card, .status-col, .start-card, " +
-    ".stat-card, .console-preview, .module-table, .csv-format"
+    ".stat-card, .console-preview, .module-table, .csv-format, " +
+    ".capability-card, .hunting-card, .analytics-item, .license-card, .license-notice"
   );
 
   const observer = new IntersectionObserver((entries) => {

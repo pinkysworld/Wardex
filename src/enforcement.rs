@@ -807,6 +807,112 @@ impl EnforcementEngine {
     pub fn heal_network(&mut self) -> Vec<HealingAction> {
         self.topology.detect_and_heal()
     }
+
+    /// Generate platform-specific containment commands.
+    pub fn containment_commands(
+        &self,
+        level: &EnforcementLevel,
+        target: &str,
+        platform: &str,
+    ) -> Vec<ContainmentCommand> {
+        match level {
+            EnforcementLevel::Observe => vec![],
+            EnforcementLevel::Constrain => match platform {
+                "linux" => vec![
+                    ContainmentCommand::new("cgroup_cpu_limit", &format!(
+                        "echo {target} > /sys/fs/cgroup/cpu/wardex/tasks && echo 50000 > /sys/fs/cgroup/cpu/wardex/cpu.cfs_quota_us"
+                    ), true),
+                    ContainmentCommand::new("cgroup_mem_limit", &format!(
+                        "echo 512M > /sys/fs/cgroup/memory/wardex/{target}/memory.limit_in_bytes"
+                    ), true),
+                ],
+                "macos" => vec![
+                    ContainmentCommand::new("sandbox_exec", &format!(
+                        "sandbox-exec -p '(deny network*)' {target}"
+                    ), true),
+                ],
+                "windows" => vec![
+                    ContainmentCommand::new("job_object_limit",
+                        "wmic process where ProcessId={target} CALL SetPriority 64", true),
+                ],
+                _ => vec![],
+            },
+            EnforcementLevel::Quarantine => match platform {
+                "linux" => vec![
+                    ContainmentCommand::new("nftables_restrict", &format!(
+                        "nft add rule inet wardex output ip daddr != 127.0.0.1 meta skuid {target} drop"
+                    ), true),
+                    ContainmentCommand::new("seccomp_restrict", &format!(
+                        "Apply seccomp BPF filter to restrict syscalls for pid {target}"
+                    ), true),
+                ],
+                "macos" => vec![
+                    ContainmentCommand::new("pfctl_restrict", &format!(
+                        "echo 'block drop from any to any user {target}' | pfctl -a wardex -f -"
+                    ), true),
+                    ContainmentCommand::new("sandbox_deny_all", &format!(
+                        "sandbox-exec -p '(deny default)' {target}"
+                    ), true),
+                ],
+                "windows" => vec![
+                    ContainmentCommand::new("firewall_block", &format!(
+                        "netsh advfirewall firewall add rule name=WardexBlock_{target} dir=out action=block program={target}"
+                    ), true),
+                    ContainmentCommand::new("applocker_block", &format!(
+                        "Set-AppLockerPolicy -XmlPolicy '<RuleCollection><FilePathRule Action=\"Deny\" Id=\"wardex-{target}\"><Conditions><FilePathCondition Path=\"{target}\"/></Conditions></FilePathRule></RuleCollection>'"
+                    ), true),
+                ],
+                _ => vec![],
+            },
+            EnforcementLevel::Isolate | EnforcementLevel::Eradicate => match platform {
+                "linux" => vec![
+                    ContainmentCommand::new("nftables_block_all", &format!(
+                        "nft add rule inet wardex output meta skuid {target} drop && nft add rule inet wardex input meta skuid {target} drop"
+                    ), true),
+                    ContainmentCommand::new("cgroup_freeze",
+                        "echo FROZEN > /sys/fs/cgroup/freezer/wardex/freezer.state", true),
+                    ContainmentCommand::new("namespace_isolate", &format!(
+                        "unshare --net --pid --mount -f {target}"
+                    ), true),
+                ],
+                "macos" => vec![
+                    ContainmentCommand::new("pfctl_block_all",
+                        "echo 'block drop all' | pfctl -a wardex -f -", true),
+                    ContainmentCommand::new("esf_mute", &format!(
+                        "Mute process {target} via Endpoint Security Framework"
+                    ), true),
+                ],
+                "windows" => vec![
+                    ContainmentCommand::new("firewall_block_all", &format!(
+                        "netsh advfirewall firewall add rule name=WardexIsolate dir=out action=block remoteip=any && \
+                         netsh advfirewall firewall add rule name=WardexIsolateIn dir=in action=block remoteip=any"
+                    ), true),
+                    ContainmentCommand::new("wfp_block", &format!(
+                        "Block all network via Windows Filtering Platform for {target}"
+                    ), true),
+                ],
+                _ => vec![],
+            },
+        }
+    }
+}
+
+/// A platform-specific containment command.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ContainmentCommand {
+    pub name: String,
+    pub command: String,
+    pub requires_elevation: bool,
+}
+
+impl ContainmentCommand {
+    pub fn new(name: &str, command: &str, requires_elevation: bool) -> Self {
+        Self {
+            name: name.into(),
+            command: command.into(),
+            requires_elevation,
+        }
+    }
 }
 
 // ── Tests ─────────────────────────────────────────────────────────────────────
@@ -963,6 +1069,35 @@ mod tests {
         engine.enforce(&EnforcementLevel::Constrain, "dev-1");
         engine.enforce(&EnforcementLevel::Isolate, "dev-2");
         assert!(engine.history().len() >= 2);
+    }
+
+    #[test]
+    fn containment_linux_constrain() {
+        let engine = EnforcementEngine::new();
+        let cmds = engine.containment_commands(&EnforcementLevel::Constrain, "1234", "linux");
+        assert!(cmds.len() >= 2);
+        assert!(cmds.iter().any(|c| c.name.contains("cgroup")));
+    }
+
+    #[test]
+    fn containment_macos_quarantine() {
+        let engine = EnforcementEngine::new();
+        let cmds = engine.containment_commands(&EnforcementLevel::Quarantine, "evil", "macos");
+        assert!(cmds.iter().any(|c| c.name.contains("pfctl")));
+    }
+
+    #[test]
+    fn containment_windows_isolate() {
+        let engine = EnforcementEngine::new();
+        let cmds = engine.containment_commands(&EnforcementLevel::Isolate, "malware.exe", "windows");
+        assert!(cmds.iter().any(|c| c.name.contains("firewall")));
+    }
+
+    #[test]
+    fn containment_observe_empty() {
+        let engine = EnforcementEngine::new();
+        let cmds = engine.containment_commands(&EnforcementLevel::Observe, "x", "linux");
+        assert!(cmds.is_empty());
     }
 
     #[test]

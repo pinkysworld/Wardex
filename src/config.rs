@@ -109,6 +109,21 @@ pub struct MonitorScopeSettings {
     pub scheduled_tasks: bool,
 }
 
+impl MonitorScopeSettings {
+    pub fn normalize(&mut self) {
+        let specific_persistence_selected =
+            self.launch_agents || self.systemd_units || self.scheduled_tasks;
+        if specific_persistence_selected {
+            self.service_persistence = true;
+        }
+        if !self.service_persistence {
+            self.launch_agents = false;
+            self.systemd_units = false;
+            self.scheduled_tasks = false;
+        }
+    }
+}
+
 impl Default for MonitorScopeSettings {
     fn default() -> Self {
         Self {
@@ -331,6 +346,10 @@ impl Default for AgentSettings {
 }
 
 impl Config {
+    pub fn normalize(&mut self) {
+        self.monitor.scope.normalize();
+    }
+
     pub fn write_default_toml(path: &Path) -> Result<(), String> {
         if let Some(parent) = path.parent() {
             fs::create_dir_all(parent).map_err(|e| format!("failed to create directory: {e}"))?;
@@ -344,12 +363,13 @@ impl Config {
     pub fn load_from_path(path: &Path) -> Result<Self, String> {
         let raw = fs::read_to_string(path).map_err(|e| format!("failed to read config: {e}"))?;
 
-        let config: Self = match path.extension().and_then(|e| e.to_str()) {
+        let mut config: Self = match path.extension().and_then(|e| e.to_str()) {
             Some("json") => {
                 serde_json::from_str(&raw).map_err(|e| format!("invalid JSON config: {e}"))?
             }
             _ => toml::from_str(&raw).map_err(|e| format!("invalid TOML config: {e}"))?,
         };
+        config.normalize();
         config.validate()?;
         Ok(config)
     }
@@ -558,6 +578,8 @@ impl ConfigPatch {
             applied.push("low_battery_threshold".into());
         }
 
+        config.normalize();
+
         // Validate the patched config
         if let Err(e) = config.validate() {
             // Rollback
@@ -753,6 +775,78 @@ mod tests {
         assert!(result.success);
         assert!(!config.monitor.scope.file_integrity);
         assert!(config.monitor.scope.systemd_units);
+    }
+
+    #[test]
+    fn monitor_scope_normalization_enables_service_persistence_for_specific_sources() {
+        let mut scope = MonitorScopeSettings {
+            service_persistence: false,
+            launch_agents: true,
+            ..MonitorScopeSettings::default()
+        };
+        scope.normalize();
+        assert!(scope.service_persistence);
+        assert!(scope.launch_agents);
+    }
+
+    #[test]
+    fn config_load_normalizes_inconsistent_monitor_scope() {
+        let dir = std::env::temp_dir().join("wardex_test_config_scope_normalize");
+        let path = dir.join("config.toml");
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(
+            &path,
+            r#"
+[detector]
+warmup_samples = 4
+smoothing = 0.22
+learn_threshold = 2.5
+
+[policy]
+critical_score = 5.2
+severe_score = 3.0
+elevated_score = 2.8
+critical_integrity_drift = 0.5
+low_battery_threshold = 20.0
+
+[output]
+audit_path = "var/last-run.audit.log"
+report_path = "var/last-run.report.json"
+checkpoint_interval = 5
+
+[monitor]
+interval_secs = 5
+alert_threshold = 3.5
+alert_log = "var/alerts.jsonl"
+dry_run = false
+duration_secs = 0
+syslog = false
+cef = false
+watch_paths = []
+
+[monitor.scope]
+cpu_load = true
+memory_pressure = true
+network_activity = true
+disk_pressure = true
+process_activity = true
+auth_events = true
+thermal_state = true
+battery_state = true
+file_integrity = true
+service_persistence = false
+launch_agents = true
+systemd_units = false
+scheduled_tasks = false
+"#,
+        )
+        .unwrap();
+
+        let loaded = Config::load_from_path(&path).unwrap();
+        assert!(loaded.monitor.scope.service_persistence);
+        assert!(loaded.monitor.scope.launch_agents);
+
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]

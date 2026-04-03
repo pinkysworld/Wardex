@@ -49,6 +49,37 @@ pub enum GossipPayload {
         vote: bool,
         reason: String,
     },
+    // ── Phase 33: cross-agent intelligence sharing ────
+    LateralMovementIntel {
+        src_host: String,
+        dst_host: String,
+        protocol: String,
+        pattern: String,
+        risk_score: f32,
+        mitre_ids: Vec<String>,
+    },
+    UebaIntel {
+        entity_kind: String,
+        entity_id: String,
+        anomaly_type: String,
+        risk_score: f32,
+        description: String,
+    },
+    BeaconIntel {
+        target_host: String,
+        dest_ip: String,
+        dest_domain: String,
+        beacon_score: f32,
+        is_dga: bool,
+        mitre_ids: Vec<String>,
+    },
+    ThreatIntelUpdate {
+        ioc_type: String,
+        indicator: String,
+        confidence: f32,
+        source_agent: String,
+        ttl_hours: u32,
+    },
 }
 
 impl GossipMessage {
@@ -65,6 +96,104 @@ impl GossipMessage {
             ttl: 5,
         }
     }
+}
+
+// ── Shared Intelligence Cache ────────────────────────────────────────────────
+
+/// An entry in the shared intelligence cache received from peer agents.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct IntelEntry {
+    pub ioc_type: String,
+    pub indicator: String,
+    pub confidence: f32,
+    pub source_agent: String,
+    pub received_at: String,
+    pub ttl_hours: u32,
+    #[serde(default)]
+    pub metadata: serde_json::Value,
+}
+
+/// Cache of threat intelligence shared across the swarm.
+/// TTL-based eviction with a maximum entry count.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct SharedIntelCache {
+    entries: Vec<IntelEntry>,
+}
+
+impl SharedIntelCache {
+    pub fn new() -> Self {
+        Self { entries: Vec::new() }
+    }
+
+    pub fn insert(&mut self, entry: IntelEntry) {
+        // Dedup by ioc_type + indicator — update if already present
+        if let Some(existing) = self.entries.iter_mut().find(|e| {
+            e.ioc_type == entry.ioc_type && e.indicator == entry.indicator
+        }) {
+            *existing = entry;
+        } else {
+            self.entries.push(entry);
+        }
+        // Cap at 10,000 entries (LRU-style: remove oldest)
+        while self.entries.len() > 10_000 {
+            self.entries.remove(0);
+        }
+    }
+
+    pub fn lookup(&self, indicator: &str) -> Option<&IntelEntry> {
+        self.entries.iter().find(|e| e.indicator == indicator)
+    }
+
+    pub fn lookup_by_type(&self, ioc_type: &str) -> Vec<&IntelEntry> {
+        self.entries.iter().filter(|e| e.ioc_type == ioc_type).collect()
+    }
+
+    /// Remove entries whose TTL has expired.
+    pub fn evict_expired(&mut self) {
+        let now = chrono::Utc::now();
+        self.entries.retain(|e| {
+            if let Ok(received) = chrono::DateTime::parse_from_rfc3339(&e.received_at) {
+                let expiry = received + chrono::Duration::hours(e.ttl_hours as i64);
+                now < expiry
+            } else {
+                false
+            }
+        });
+    }
+
+    pub fn all(&self) -> &[IntelEntry] {
+        &self.entries
+    }
+
+    pub fn len(&self) -> usize {
+        self.entries.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.entries.is_empty()
+    }
+
+    pub fn stats(&self) -> IntelCacheStats {
+        let mut by_type: HashMap<String, usize> = HashMap::new();
+        let mut by_source: HashMap<String, usize> = HashMap::new();
+        for e in &self.entries {
+            *by_type.entry(e.ioc_type.clone()).or_default() += 1;
+            *by_source.entry(e.source_agent.clone()).or_default() += 1;
+        }
+        IntelCacheStats {
+            total: self.entries.len(),
+            by_type,
+            by_source,
+        }
+    }
+}
+
+/// Summary statistics for the shared intel cache.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct IntelCacheStats {
+    pub total: usize,
+    pub by_type: HashMap<String, usize>,
+    pub by_source: HashMap<String, usize>,
 }
 
 // ── Device Registry & Fleet Management ───────────────────────────────────────
@@ -521,6 +650,7 @@ pub struct SwarmNode {
     pub active_votes: HashMap<String, VoteRound>,
     pub mesh: Vec<MeshNode>,
     peer_scores: HashMap<String, f32>,
+    pub intel_cache: SharedIntelCache,
 }
 
 impl SwarmNode {
@@ -534,6 +664,7 @@ impl SwarmNode {
             active_votes: HashMap::new(),
             mesh: Vec::new(),
             peer_scores: HashMap::new(),
+            intel_cache: SharedIntelCache::new(),
         }
     }
 
@@ -607,6 +738,18 @@ impl SwarmNode {
         )
     }
 
+    /// Broadcast a threat-intelligence payload to the swarm.
+    pub fn broadcast_threat_intel(&mut self, payload: GossipPayload) -> GossipMessage {
+        self.gossip_seq += 1;
+        GossipMessage::new(&self.id, self.gossip_seq, payload)
+    }
+
+    /// Check if a given indicator matches any shared intel entry.
+    /// Returns the matching entry's confidence if found.
+    pub fn check_intel(&self, indicator: &str) -> Option<f32> {
+        self.intel_cache.lookup(indicator).map(|e| e.confidence)
+    }
+
     /// Receive and process a gossip message.
     pub fn receive_gossip(&mut self, msg: GossipMessage) -> bool {
         // Dedup by digest
@@ -647,6 +790,75 @@ impl SwarmNode {
                 }
             }
             GossipPayload::PolicyUpdate { .. } => {}
+            GossipPayload::LateralMovementIntel {
+                src_host, dst_host, protocol, pattern, risk_score, mitre_ids,
+            } => {
+                self.intel_cache.insert(IntelEntry {
+                    ioc_type: "lateral_movement".into(),
+                    indicator: format!("{src_host}->{dst_host}:{protocol}"),
+                    confidence: *risk_score,
+                    source_agent: msg.sender_id.clone(),
+                    received_at: chrono::Utc::now().to_rfc3339(),
+                    ttl_hours: 24,
+                    metadata: serde_json::json!({
+                        "src_host": src_host,
+                        "dst_host": dst_host,
+                        "protocol": protocol,
+                        "pattern": pattern,
+                        "mitre_ids": mitre_ids,
+                    }),
+                });
+            }
+            GossipPayload::UebaIntel {
+                entity_kind, entity_id, anomaly_type, risk_score, description,
+            } => {
+                self.intel_cache.insert(IntelEntry {
+                    ioc_type: "ueba_anomaly".into(),
+                    indicator: format!("{entity_kind}:{entity_id}"),
+                    confidence: *risk_score,
+                    source_agent: msg.sender_id.clone(),
+                    received_at: chrono::Utc::now().to_rfc3339(),
+                    ttl_hours: 12,
+                    metadata: serde_json::json!({
+                        "entity_kind": entity_kind,
+                        "entity_id": entity_id,
+                        "anomaly_type": anomaly_type,
+                        "description": description,
+                    }),
+                });
+            }
+            GossipPayload::BeaconIntel {
+                target_host, dest_ip, dest_domain, beacon_score, is_dga, mitre_ids,
+            } => {
+                self.intel_cache.insert(IntelEntry {
+                    ioc_type: if *is_dga { "dga_domain" } else { "beacon_c2" }.into(),
+                    indicator: if dest_domain.is_empty() { dest_ip.clone() } else { dest_domain.clone() },
+                    confidence: *beacon_score,
+                    source_agent: msg.sender_id.clone(),
+                    received_at: chrono::Utc::now().to_rfc3339(),
+                    ttl_hours: 48,
+                    metadata: serde_json::json!({
+                        "target_host": target_host,
+                        "dest_ip": dest_ip,
+                        "dest_domain": dest_domain,
+                        "is_dga": is_dga,
+                        "mitre_ids": mitre_ids,
+                    }),
+                });
+            }
+            GossipPayload::ThreatIntelUpdate {
+                ioc_type, indicator, confidence, source_agent, ttl_hours,
+            } => {
+                self.intel_cache.insert(IntelEntry {
+                    ioc_type: ioc_type.clone(),
+                    indicator: indicator.clone(),
+                    confidence: *confidence,
+                    source_agent: source_agent.clone(),
+                    received_at: chrono::Utc::now().to_rfc3339(),
+                    ttl_hours: *ttl_hours,
+                    metadata: serde_json::Value::Null,
+                });
+            }
         }
 
         self.inbox.push(msg);

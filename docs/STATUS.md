@@ -2,13 +2,39 @@
 
 ## Current release
 
-- **Version:** `0.31.0`
-- **Positioning:** private-cloud XDR and SIEM platform with enterprise detection engineering, analyst workflows, fleet operations, and governance controls
-- **Source footprint:** 61 Rust source modules
-- **API contract:** 117 documented OpenAPI paths
-- **Verification:** 692 automated tests plus live admin-console smoke coverage
+- **Version:** `0.32.0`
+- **Positioning:** private-cloud XDR and SIEM platform with enterprise detection engineering, analyst workflows, fleet operations, behavioural analytics, and automated incident response
+- **Source footprint:** 70 Rust source modules
+- **API contract:** ~150 documented OpenAPI paths
+- **Verification:** 786 automated tests (639 unit + 147 integration) plus live admin-console smoke coverage
 
 ## Shipped in the current platform
+
+### Deep OS-native monitoring
+
+- Unified kernel-event stream normalising eBPF (Linux), ESF (macOS), and ETW (Windows) telemetry
+- 22 event kinds: process lifecycle, file ops, network, registry, AMSI, WMI persistence, TCC, Gatekeeper, SELinux/AppArmor denials, container events
+- Automatic MITRE ATT&CK technique tagging for kernel events
+- Thread-safe ring-buffer with capacity management and type-filtered queries
+
+### Behavioural threat analytics
+
+- UEBA engine with per-entity risk scoring, login-time anomalies, impossible-travel detection, process/port/data-volume baselines, and peer-group comparison
+- Kill-chain reconstruction mapping alert sequences through 7 phases with gap analysis
+- Lateral movement graph with fan-out analysis, depth scoring, and credential-reuse correlation
+- Beacon/C2 detection via inter-arrival jitter, DGA detection (Shannon entropy + consonant ratio), DNS-tunnelling indicators
+
+### SOAR-style incident automation
+
+- Declarative playbook engine with 11 step types, trigger matching, execution tracking, and approval gates
+- Live response sessions with per-platform command whitelists and audit logging
+- Automated remediation with 14 action types, platform-specific commands, rollback snapshots, and approval gating
+- SLA-driven escalation engine with multi-level policies, 7 notification channels, and on-call rotation
+
+### Evidence and containment
+
+- Per-platform evidence collection plans: Linux 20, macOS 18, Windows 17 forensic artifacts
+- OS-specific containment commands: cgroup/nftables/seccomp (Linux), sandbox-exec/pfctl/ESF (macOS), Job objects/netsh/AppLocker/WFP (Windows)
 
 ### SOC operations
 
