@@ -419,7 +419,7 @@ fn evaluate_check(check: &AutoCheck, state: &SystemState) -> (FindingStatus, Str
             }
         }
         CheckType::RetentionDays => {
-            let raw = check.expected.trim_start_matches(">=");
+            let raw = check.expected.trim_start_matches(|c: char| c == '>' || c == '=').trim();
             let required: u32 = match raw.parse() {
                 Ok(n) => n,
                 Err(_) => {

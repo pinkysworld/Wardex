@@ -105,26 +105,34 @@ fn extract_from_text(text: &str) -> Vec<ExtractedEntity> {
     }
 
     // Hex hashes: SHA-256 (64 hex chars) and MD5 (32 hex chars)
-    let mut hash_search_from = 0;
-    for word in text.split(|c: char| !c.is_ascii_hexdigit()) {
-        if word.is_empty() { continue; }
-        let start_pos = text[hash_search_from..].find(word)
-            .map(|p| p + hash_search_from).unwrap_or(hash_search_from);
-        hash_search_from = start_pos + word.len();
-        if word.len() == 64 && word.chars().all(|c| c.is_ascii_hexdigit()) {
-            results.push(ExtractedEntity {
-                entity_type: EntityType::HashSha256,
-                value: word.to_lowercase(),
-                start: start_pos,
-                end: start_pos + 64,
-            });
-        } else if word.len() == 32 && word.chars().all(|c| c.is_ascii_hexdigit()) {
-            results.push(ExtractedEntity {
-                entity_type: EntityType::HashMd5,
-                value: word.to_lowercase(),
-                start: start_pos,
-                end: start_pos + 32,
-            });
+    {
+        let bytes = text.as_bytes();
+        let mut i = 0;
+        while i < bytes.len() {
+            if (bytes[i] as char).is_ascii_hexdigit() {
+                let start = i;
+                while i < bytes.len() && (bytes[i] as char).is_ascii_hexdigit() {
+                    i += 1;
+                }
+                let word = &text[start..i];
+                if word.len() == 64 {
+                    results.push(ExtractedEntity {
+                        entity_type: EntityType::HashSha256,
+                        value: word.to_lowercase(),
+                        start,
+                        end: i,
+                    });
+                } else if word.len() == 32 {
+                    results.push(ExtractedEntity {
+                        entity_type: EntityType::HashMd5,
+                        value: word.to_lowercase(),
+                        start,
+                        end: i,
+                    });
+                }
+            } else {
+                i += 1;
+            }
         }
     }
 

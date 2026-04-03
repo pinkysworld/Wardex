@@ -275,9 +275,7 @@ fn collect_cpu(state: &mut CollectorState) -> f32 {
     if state.prev_cpu_total == 0 {
         state.prev_cpu_idle = idle;
         state.prev_cpu_total = total;
-        // First read — do a short sleep to get a delta
-        std::thread::sleep(Duration::from_millis(100));
-        return collect_cpu(state);
+        return 0.0;
     }
 
     let d_total = total.saturating_sub(state.prev_cpu_total);

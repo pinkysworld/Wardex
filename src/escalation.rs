@@ -294,14 +294,20 @@ impl EscalationEngine {
                 None => continue,
             };
 
-            let current_idx = levels
-                .iter()
-                .position(|l| l.level == esc.current_level)
-                .unwrap_or(0);
-
             if levels.is_empty() {
                 continue;
             }
+
+            let current_idx = match levels
+                .iter()
+                .position(|l| l.level == esc.current_level)
+            {
+                Some(idx) => idx,
+                None => {
+                    esc.status = EscalationStatus::Expired;
+                    continue;
+                }
+            };
 
             let current = &levels[current_idx];
             let elapsed_secs = (now_ms.saturating_sub(esc.last_escalated_at)) / 1000;
