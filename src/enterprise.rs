@@ -1257,9 +1257,11 @@ impl EnterpriseStore {
             .as_ref()
             .map(|result| result.sample_event_ids.iter().copied().collect())
             .unwrap_or_default();
-        let current_ids: HashSet<u64> = match_ids.iter().copied().collect();
-        let new_match_ids: Vec<u64> = current_ids.difference(&previous_ids).copied().collect();
-        let cleared_match_ids: Vec<u64> = previous_ids.difference(&current_ids).copied().collect();
+        let _current_ids: HashSet<u64> = match_ids.iter().copied().collect();
+        // Use only the truncated sample set for diff so both sides are comparable
+        let current_sample: HashSet<u64> = match_ids.iter().copied().take(25).collect();
+        let new_match_ids: Vec<u64> = current_sample.difference(&previous_ids).copied().collect();
+        let cleared_match_ids: Vec<u64> = previous_ids.difference(&current_sample).copied().collect();
 
         let result = RuleTestResult {
             id: self.next_id("rtest"),

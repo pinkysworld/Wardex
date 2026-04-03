@@ -7,6 +7,14 @@ use crate::incident::{Incident, IncidentStore};
 use crate::event_forward::EventStore;
 use crate::telemetry::MitreAttack;
 
+fn html_escape(s: &str) -> String {
+    s.replace('&', "&amp;")
+     .replace('<', "&lt;")
+     .replace('>', "&gt;")
+     .replace('"', "&quot;")
+     .replace('\'', "&#x27;")
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct JsonSampleEntry {
     pub index: usize,
@@ -125,7 +133,7 @@ th{background:#1e293b;color:#93c5fd;}
                 };
                 html.push_str(&format!(
                     "<tr><td>{}</td><td>{:.2}</td><td class='{}'>{}</td><td>{}</td><td>{}</td></tr>",
-                    s.index, s.score, class, s.level, s.action, s.reasons.join(", ")
+                    s.index, s.score, class, html_escape(&s.level), html_escape(&s.action), html_escape(&s.reasons.join(", "))
                 ));
             }
             html.push_str("</table>");

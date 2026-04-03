@@ -278,6 +278,29 @@ impl LiveResponseEngine {
             return Err(format!("Command '{command}' not in allowlist"));
         }
 
+        // Validate args against the command's allowed_args (empty = any args OK)
+        let matched_cmd = allowed.iter().find(|a| a.name == command).unwrap();
+        if !matched_cmd.allowed_args.is_empty() {
+            for arg in &args {
+                if !matched_cmd.allowed_args.iter().any(|allowed_arg| arg == allowed_arg) {
+                    let bad_arg = arg.clone();
+                    let cmd_id = format!("cmd-{}", self.next_cmd_id);
+                    self.next_cmd_id += 1;
+                    session.commands.push(CommandRecord {
+                        command_id: cmd_id.clone(),
+                        command: command.into(),
+                        args,
+                        status: CommandStatus::Denied,
+                        output: None,
+                        error: Some(format!("Argument '{}' not in allowlist", bad_arg)),
+                        submitted_at: now_ms,
+                        completed_at: Some(now_ms),
+                    });
+                    return Err(format!("Argument '{}' not allowed for '{}'", bad_arg, command));
+                }
+            }
+        }
+
         let cmd_id = format!("cmd-{}", self.next_cmd_id);
         self.next_cmd_id += 1;
 

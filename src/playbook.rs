@@ -372,16 +372,16 @@ impl PlaybookEngine {
 /// Variables are resolved from the execution's `variables` map.
 pub fn evaluate_condition(condition: &str, variables: &HashMap<String, String>) -> bool {
     let condition = condition.trim();
-    // Handle AND/OR (split on top-level; no nested parens for now)
-    if let Some(pos) = find_top_level(condition, " AND ") {
-        let left = &condition[..pos];
-        let right = &condition[pos + 5..];
-        return evaluate_condition(left, variables) && evaluate_condition(right, variables);
-    }
+    // Handle OR first (lower precedence = outermost split), then AND
     if let Some(pos) = find_top_level(condition, " OR ") {
         let left = &condition[..pos];
         let right = &condition[pos + 4..];
         return evaluate_condition(left, variables) || evaluate_condition(right, variables);
+    }
+    if let Some(pos) = find_top_level(condition, " AND ") {
+        let left = &condition[..pos];
+        let right = &condition[pos + 5..];
+        return evaluate_condition(left, variables) && evaluate_condition(right, variables);
     }
 
     // Single predicate

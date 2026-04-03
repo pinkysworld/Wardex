@@ -314,8 +314,10 @@ impl VoteRound {
 
         let approval_rate = if weighted_total > 0.0 {
             weighted_approval / weighted_total
-        } else {
+        } else if !self.votes.is_empty() {
             approve_count as f32 / self.votes.len() as f32
+        } else {
+            0.0
         };
 
         if approval_rate >= 0.5 {

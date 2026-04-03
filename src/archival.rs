@@ -338,10 +338,18 @@ fn crc32_simple(data: &[u8]) -> u32 {
 }
 
 fn csv_escape(s: &str) -> String {
-    if s.contains(',') || s.contains('"') || s.contains('\n') {
-        format!("\"{}\"", s.replace('"', "\"\""))
+    // Guard against CSV formula injection (DDE attacks)
+    let s = if s.starts_with('=') || s.starts_with('+') || s.starts_with('-')
+        || s.starts_with('@') || s.starts_with('\t') || s.starts_with('\r')
+    {
+        format!("'{}", s)
     } else {
         s.to_string()
+    };
+    if s.contains(',') || s.contains('"') || s.contains('\n') {
+        format!("\"{}\""  , s.replace('"', "\"\""))
+    } else {
+        s
     }
 }
 

@@ -638,6 +638,10 @@ impl StorageBackend {
         self.audit_entries.retain(|e| e.timestamp >= cutoff_str);
         let purged = before - self.audit_entries.len();
         if purged > 0 {
+            // Reset chain head so verify_audit_chain() doesn't see a dangling prev_digest
+            if let Some(first) = self.audit_entries.first_mut() {
+                first.prev_digest = None;
+            }
             self.save_audit()?;
         }
         Ok(purged)

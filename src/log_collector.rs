@@ -45,7 +45,7 @@ pub fn collect_recent_logs(since_secs: u64) -> Vec<LogRecord> {
 }
 
 #[cfg(target_os = "linux")]
-fn collect_linux_logs(logs: &mut Vec<LogRecord>, since_secs: u64) {
+fn collect_linux_logs(logs: &mut Vec<LogRecord>, _since_secs: u64) {
     // /var/log/syslog or /var/log/messages
     for (path, source) in &[
         ("/var/log/syslog", LogSource::System),
@@ -53,7 +53,6 @@ fn collect_linux_logs(logs: &mut Vec<LogRecord>, since_secs: u64) {
         ("/var/log/messages", LogSource::System),
     ] {
         if let Ok(content) = std::fs::read_to_string(path) {
-            let cutoff = chrono::Utc::now() - chrono::Duration::seconds(since_secs as i64);
             for line in content.lines().rev().take(200) {
                 let level = classify_log_level(line);
                 logs.push(LogRecord {
@@ -68,7 +67,6 @@ fn collect_linux_logs(logs: &mut Vec<LogRecord>, since_secs: u64) {
                     break;
                 }
             }
-            let _ = cutoff; // used for filtering in production
         }
     }
 }

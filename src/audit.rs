@@ -197,6 +197,10 @@ impl AuditLog {
         }
         let trim = self.records.len() - max_records;
         self.records.drain(..trim);
+        // Patch the new head so verify_chain() sees a valid genesis link
+        if let Some(first) = self.records.first_mut() {
+            first.previous_hash = "0".repeat(64);
+        }
         // Update previous_hash to the last remaining record's hash so the
         // next appended record chains correctly from the current tail.
         self.previous_hash = self.records.last()

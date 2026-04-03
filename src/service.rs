@@ -199,10 +199,21 @@ impl ServiceManager {
 
     #[cfg(target_os = "windows")]
     fn install_windows_service(&self) -> Result<String, String> {
+        let quoted_args: Vec<String> = self
+            .args
+            .iter()
+            .map(|a| {
+                if a.contains(' ') || a.contains('"') {
+                    format!("\"{}\"", a.replace('"', "\\\""))
+                } else {
+                    a.clone()
+                }
+            })
+            .collect();
         let binary_with_args = format!(
             "\"{}\" {}",
             self.binary_path,
-            self.args.join(" ")
+            quoted_args.join(" ")
         );
 
         run_command(
