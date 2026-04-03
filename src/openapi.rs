@@ -176,6 +176,14 @@ pub struct SecurityScheme {
     pub description: Option<String>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct EndpointCatalogEntry {
+    pub method: String,
+    pub path: String,
+    pub auth: bool,
+    pub description: String,
+}
+
 // ── Builder ──────────────────────────────────────────────────────────────────
 
 pub struct OpenApiBuilder {
@@ -983,6 +991,16 @@ pub fn wardex_openapi_spec(version: &str) -> OpenApiSpec {
             ),
         )
         .path(
+            "/api/events/search",
+            "post",
+            op_post(
+                "searchEvents",
+                "Search events with structured analyst filters",
+                &["telemetry"],
+                "Event search query",
+            ),
+        )
+        .path(
             "/api/events/{id}/triage",
             "post",
             op_post(
@@ -1068,6 +1086,25 @@ pub fn wardex_openapi_spec(version: &str) -> OpenApiSpec {
                 "Acknowledge a queued alert",
                 &["alerts"],
                 "Queue acknowledgement payload",
+            ),
+        )
+        .path(
+            "/api/queue/stats",
+            "get",
+            op(
+                "getAlertQueueStats",
+                "Alert queue backlog and SLA summary",
+                &["alerts"],
+            ),
+        )
+        .path(
+            "/api/queue/assign",
+            "post",
+            op_post(
+                "assignQueueAlert",
+                "Assign a queued alert to an analyst",
+                &["alerts"],
+                "Queue assignment payload",
             ),
         )
         .path(
@@ -1225,6 +1262,24 @@ pub fn wardex_openapi_spec(version: &str) -> OpenApiSpec {
             ),
         )
         .path(
+            "/api/fleet/dashboard",
+            "get",
+            op(
+                "getFleetDashboard",
+                "Operational fleet dashboard across agents, events, and deployments",
+                &["fleet"],
+            ),
+        )
+        .path(
+            "/api/rollout/config",
+            "get",
+            op(
+                "getRolloutConfig",
+                "Rollout channel and staged deployment configuration",
+                &["updates"],
+            ),
+        )
+        .path(
             "/api/updates/releases",
             "get",
             op("listReleases", "List published releases", &["updates"]),
@@ -1315,6 +1370,44 @@ pub fn wardex_openapi_spec(version: &str) -> OpenApiSpec {
             op(
                 "listResponseApprovals",
                 "Approval history for response actions",
+                &["response"],
+            ),
+        )
+        .path(
+            "/api/playbooks",
+            "get",
+            op(
+                "listPlaybooks",
+                "List registered automated response playbooks",
+                &["response"],
+            ),
+        )
+        .path(
+            "/api/playbooks",
+            "post",
+            op_post(
+                "savePlaybook",
+                "Register or update an automated response playbook",
+                &["response"],
+                "Playbook definition",
+            ),
+        )
+        .path(
+            "/api/playbooks/execute",
+            "post",
+            op_post(
+                "executePlaybook",
+                "Start a playbook execution for a specific alert",
+                &["response"],
+                "Playbook execution request",
+            ),
+        )
+        .path(
+            "/api/playbooks/executions",
+            "get",
+            op(
+                "listPlaybookExecutions",
+                "List recent automated response playbook executions",
                 &["response"],
             ),
         )
@@ -1619,6 +1712,35 @@ pub fn openapi_json(version: &str) -> String {
     serde_json::to_string_pretty(&spec).unwrap_or_else(|_| "{}".into())
 }
 
+fn endpoint_auth_required(op: &Operation) -> bool {
+    op.security.iter().any(|scheme| !scheme.is_empty())
+}
+
+pub fn endpoint_catalog(version: &str) -> Vec<EndpointCatalogEntry> {
+    let spec = wardex_openapi_spec(version);
+    let mut entries = Vec::new();
+    for (path, item) in spec.paths {
+        for (method, operation) in [
+            ("GET", item.get),
+            ("POST", item.post),
+            ("PUT", item.put),
+            ("DELETE", item.delete),
+            ("PATCH", item.patch),
+        ] {
+            if let Some(op) = operation {
+                entries.push(EndpointCatalogEntry {
+                    method: method.to_string(),
+                    path: path.clone(),
+                    auth: endpoint_auth_required(&op),
+                    description: op.summary,
+                });
+            }
+        }
+    }
+    entries.sort_by(|a, b| a.path.cmp(&b.path).then(a.method.cmp(&b.method)));
+    entries
+}
+
 // ── Tests ────────────────────────────────────────────────────────────────────
 
 #[cfg(test)]
@@ -1640,6 +1762,10 @@ mod tests {
         assert!(spec.paths.contains_key("/api/alerts"));
         assert!(spec.paths.contains_key("/api/agents"));
         assert!(spec.paths.contains_key("/api/config/current"));
+        assert!(spec.paths.contains_key("/api/playbooks"));
+        assert!(spec.paths.contains_key("/api/fleet/dashboard"));
+        assert!(spec.paths.contains_key("/api/events/search"));
+        assert!(spec.paths.contains_key("/api/rollout/config"));
     }
 
     #[test]
@@ -1814,5 +1940,25 @@ mod tests {
                 "{path} should not claim 200"
             );
         }
+    }
+
+    #[test]
+    fn endpoint_catalog_uses_spec_auth_and_includes_new_routes() {
+        let catalog = endpoint_catalog("0.35.0");
+        assert!(catalog.iter().any(|entry| {
+            entry.method == "GET"
+                && entry.path == "/api/metrics"
+                && !entry.auth
+                && entry.description == "Prometheus-format metrics"
+        }));
+        assert!(catalog.iter().any(|entry| {
+            entry.method == "GET" && entry.path == "/api/playbooks" && entry.auth
+        }));
+        assert!(catalog.iter().any(|entry| {
+            entry.method == "POST" && entry.path == "/api/events/search" && entry.auth
+        }));
+        assert!(catalog.iter().any(|entry| {
+            entry.method == "GET" && entry.path == "/api/fleet/dashboard" && entry.auth
+        }));
     }
 }

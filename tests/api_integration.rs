@@ -1547,7 +1547,31 @@ fn endpoints_returns_array() {
         .any(|entry| entry["path"] == "/api/playbooks" && entry["auth"] == true));
     assert!(arr
         .iter()
+        .any(|entry| entry["path"] == "/api/fleet/dashboard" && entry["auth"] == true));
+    assert!(arr
+        .iter()
+        .any(|entry| entry["path"] == "/api/agents" && entry["auth"] == true));
+    assert!(arr
+        .iter()
+        .any(|entry| entry["path"] == "/api/cases" && entry["auth"] == true));
+    assert!(arr
+        .iter()
+        .any(|entry| entry["path"] == "/api/events" && entry["auth"] == true));
+    assert!(arr
+        .iter()
+        .any(|entry| entry["path"] == "/api/events/search" && entry["auth"] == true));
+    assert!(arr
+        .iter()
+        .any(|entry| entry["path"] == "/api/response/approvals" && entry["auth"] == true));
+    assert!(arr
+        .iter()
+        .any(|entry| entry["path"] == "/api/rollout/config" && entry["auth"] == true));
+    assert!(arr
+        .iter()
         .any(|entry| entry["path"] == "/api/timeline/host" && entry["auth"] == true));
+    assert!(arr
+        .iter()
+        .any(|entry| entry["path"] == "/api/queue/stats" && entry["auth"] == true));
     assert!(arr
         .iter()
         .any(|entry| entry["path"] == "/api/agents/{id}/status" && entry["auth"] == true));
@@ -1678,6 +1702,103 @@ fn monitoring_options_returns_grouped_payload() {
         .find(|option| option["id"] == "auth_events")
         .expect("auth_events option present");
     assert_eq!(auth_option["mode"], "configurable");
+}
+
+#[test]
+fn viewer_and_analyst_roles_can_access_operator_read_flows() {
+    let (port, token) = spawn_test_server();
+
+    let viewer: serde_json::Value = ureq::post(&format!("{}/api/rbac/users", base(port)))
+        .set("Authorization", &auth_header(&token))
+        .send_json(serde_json::json!({
+            "username": "viewer-ops",
+            "role": "viewer"
+        }))
+        .expect("create viewer")
+        .into_json()
+        .unwrap();
+    let viewer_token = viewer["token"].as_str().unwrap().to_string();
+
+    let analyst: serde_json::Value = ureq::post(&format!("{}/api/rbac/users", base(port)))
+        .set("Authorization", &auth_header(&token))
+        .send_json(serde_json::json!({
+            "username": "analyst-ops",
+            "role": "analyst"
+        }))
+        .expect("create analyst")
+        .into_json()
+        .unwrap();
+    let analyst_token = analyst["token"].as_str().unwrap().to_string();
+
+    for path in [
+        "/api/status",
+        "/api/report",
+        "/api/telemetry/current",
+        "/api/host/info",
+        "/api/monitoring/options",
+        "/api/slo/status",
+        "/api/workbench/overview",
+        "/api/cases",
+        "/api/cases/stats",
+        "/api/queue/alerts",
+        "/api/playbooks",
+        "/api/updates/releases",
+        "/api/threat-intel/status",
+        "/api/timeline/host?hostname=viewer-ops-host",
+    ] {
+        let viewer_resp = ureq::get(&format!("{}{}", base(port), path))
+            .set("Authorization", &auth_header(&viewer_token))
+            .call()
+            .unwrap_or_else(|err| panic!("viewer request failed for {path}: {err}"));
+        assert_eq!(viewer_resp.status(), 200, "viewer should reach {path}");
+
+        let analyst_resp = ureq::get(&format!("{}{}", base(port), path))
+            .set("Authorization", &auth_header(&analyst_token))
+            .call()
+            .unwrap_or_else(|err| panic!("analyst request failed for {path}: {err}"));
+        assert_eq!(analyst_resp.status(), 200, "analyst should reach {path}");
+    }
+
+    let search_resp = ureq::post(&format!("{}/api/events/search", base(port)))
+        .set("Authorization", &auth_header(&viewer_token))
+        .send_json(serde_json::json!({
+            "text": "high_cpu",
+            "limit": 5
+        }))
+        .expect("viewer event search");
+    assert_eq!(search_resp.status(), 200);
+
+    let graph_resp = ureq::post(&format!("{}/api/investigation/graph", base(port)))
+        .set("Authorization", &auth_header(&analyst_token))
+        .send_json(serde_json::json!({
+            "center": "viewer-ops-host",
+            "depth": 1
+        }))
+        .expect("analyst investigation graph");
+    assert_eq!(graph_resp.status(), 200);
+}
+
+#[test]
+fn malformed_dynamic_paths_return_404() {
+    let (port, token) = spawn_test_server();
+    for path in [
+        "/api/reports/executive-summaryy",
+        "/api/alerts/counts",
+        "/api/entities/user",
+        "/api/entities/user/",
+        "/api/entities//timeline",
+        "/api/entities/user/alice/timeline/extra",
+        "/api/incidents/1/storyline/extra",
+        "/api/cases/stats-extra",
+    ] {
+        match ureq::get(&format!("{}{}", base(port), path))
+            .set("Authorization", &auth_header(&token))
+            .call()
+        {
+            Err(ureq::Error::Status(404, _)) => {}
+            other => panic!("expected 404 for {path}, got {other:?}"),
+        }
+    }
 }
 
 // ── POST /api/config/save — auth required ──────────────────────
@@ -4337,6 +4458,11 @@ fn openapi_endpoint_returns_live_json_spec() {
     assert!(paths.contains_key("/api/openapi.json"));
     assert!(paths.contains_key("/api/threat-intel/status"));
     assert!(paths.contains_key("/api/threat-intel/ioc"));
+    assert!(paths.contains_key("/api/playbooks"));
+    assert!(paths.contains_key("/api/fleet/dashboard"));
+    assert!(paths.contains_key("/api/events/search"));
+    assert!(paths.contains_key("/api/queue/stats"));
+    assert!(paths.contains_key("/api/rollout/config"));
 
     let metrics = &paths["/api/metrics"]["get"]["responses"]["200"]["content"];
     assert!(metrics.get("text/plain").is_some());

@@ -232,13 +232,36 @@ pub fn endpoint_permission(method: &str, path: &str) -> Permission {
         // Dashboard
         (_, p) if p.starts_with("/api/dashboard") => Permission::ViewDashboard,
 
+        // Status, reports, and operator overviews
+        ("GET", "/api/auth/check") => Permission::ViewSupport,
+        ("GET", "/api/status") => Permission::ViewDashboard,
+        ("GET", "/api/report") => Permission::ViewReports,
+        ("GET", "/api/workbench/overview") => Permission::ViewIncidents,
+        ("GET", "/api/manager/overview") => Permission::ViewReports,
+
         // Events
+        ("GET", p) if p.starts_with("/api/telemetry/") => Permission::ViewEvents,
         ("GET", p) if p.starts_with("/api/events") => Permission::ViewEvents,
+        ("POST", "/api/events/search") => Permission::ViewEvents,
         (_, p) if p.starts_with("/api/events") => Permission::ManageAlerts,
 
         // Incidents
         ("GET", p) if p.starts_with("/api/incidents") => Permission::ViewIncidents,
         (_, p) if p.starts_with("/api/incidents") => Permission::ManageIncidents,
+        ("GET", p) if p.starts_with("/api/cases") => Permission::ViewIncidents,
+        (_, p) if p.starts_with("/api/cases") => Permission::ManageIncidents,
+
+        // Investigation workspace
+        ("GET", p) if p.starts_with("/api/queue/") => Permission::ViewAlerts,
+        ("POST", "/api/queue/acknowledge") | ("POST", "/api/queue/assign") => {
+            Permission::ManageAlerts
+        }
+        ("GET", p) if p.starts_with("/api/timeline/") || p.starts_with("/api/process-tree") => {
+            Permission::ViewIncidents
+        }
+        ("POST", "/api/investigation/graph") => Permission::ViewIncidents,
+        ("GET", p) if p.starts_with("/api/playbooks") => Permission::ViewIncidents,
+        ("POST", "/api/playbooks/execute") => Permission::ExecuteResponses,
 
         // Alerts
         ("GET", p) if p.starts_with("/api/alerts") => Permission::ViewAlerts,
@@ -247,13 +270,22 @@ pub fn endpoint_permission(method: &str, path: &str) -> Permission {
         // Agents / Fleet
         ("GET", p) if p.starts_with("/api/agents") || p.starts_with("/api/fleet") => Permission::ViewAgents,
         (_, p) if p.starts_with("/api/agents") || p.starts_with("/api/fleet") => Permission::ManageAgents,
+        ("GET", "/api/rollout/config") => Permission::ViewAgents,
 
         // Telemetry ingestion
         ("POST", p) if p.starts_with("/api/telemetry") || p.starts_with("/api/ingest") => Permission::SubmitTelemetry,
 
         // Config
+        ("GET", p)
+            if p == "/api/checkpoints"
+                || p == "/api/feature-flags"
+                || p.starts_with("/api/policy")
+                || p.starts_with("/api/config") => Permission::ViewConfig,
+        ("POST", p) if p.starts_with("/api/policy") => Permission::ManageConfig,
         ("GET", p) if p.starts_with("/api/config") => Permission::ViewConfig,
         (_, p) if p.starts_with("/api/config") => Permission::ManageConfig,
+        ("GET", p) if p.starts_with("/api/retention/") => Permission::ViewSupport,
+        (_, p) if p.starts_with("/api/retention/") => Permission::ManageConfig,
 
         // Users
         (_, p) if p.starts_with("/api/users") || p.starts_with("/api/rbac/users") => Permission::ManageUsers,
@@ -270,13 +302,16 @@ pub fn endpoint_permission(method: &str, path: &str) -> Permission {
         ("GET", p) if p.starts_with("/api/rules")
             || p.starts_with("/api/sigma")
             || p.starts_with("/api/content/rules")
+            || p.starts_with("/api/content/packs")
             || p.starts_with("/api/hunts")
             || p.starts_with("/api/coverage/mitre")
             || p.starts_with("/api/suppressions")
+            || p == "/api/threat-intel/status"
             || p.starts_with("/api/entities/")
             || p.ends_with("/storyline") => Permission::ViewCoverage,
         ("POST", p) if p.starts_with("/api/content/rules/") && (p.ends_with("/promote") || p.ends_with("/rollback")) => Permission::PromoteRules,
         (_, p) if p.starts_with("/api/rules") || p.starts_with("/api/sigma") || p.starts_with("/api/content/rules") => Permission::ManageRules,
+        (_, p) if p.starts_with("/api/content/packs") || p == "/api/threat-intel/ioc" => Permission::ManageHunts,
         (_, p) if p.starts_with("/api/hunts") => Permission::ManageHunts,
         (_, p) if p.starts_with("/api/suppressions") => Permission::ManageSuppressions,
 
@@ -284,6 +319,8 @@ pub fn endpoint_permission(method: &str, path: &str) -> Permission {
         ("GET", p) if p.starts_with("/api/enrichments/connectors") => Permission::ViewSupport,
         (_, p) if p.starts_with("/api/enrichments/connectors") => Permission::ManageConnectors,
         (_, p) if p.starts_with("/api/tickets/sync") => Permission::SyncTickets,
+        ("GET", p) if p.starts_with("/api/siem/") || p.starts_with("/api/taxii/") => Permission::ViewSupport,
+        (_, p) if p.starts_with("/api/siem/") || p.starts_with("/api/taxii/") => Permission::ManageConnectors,
 
         // Identity & provisioning
         ("GET", p) if p.starts_with("/api/idp/providers") => Permission::ViewSupport,
@@ -292,7 +329,49 @@ pub fn endpoint_permission(method: &str, path: &str) -> Permission {
         (_, p) if p.starts_with("/api/scim/config") => Permission::ManageScim,
 
         // Support
-        (_, p) if p.starts_with("/api/support/") || p.starts_with("/api/system/health/") || p == "/api/audit/admin" => Permission::ViewSupport,
+        ("GET", p)
+            if p == "/api/audit/admin"
+                || p == "/api/ocsf/schema"
+                || p == "/api/ocsf/schema/version"
+                || p == "/api/detection/summary"
+                || p == "/api/detection/weights"
+                || p == "/api/dlq"
+                || p == "/api/dlq/stats"
+                || p == "/api/correlation"
+                || p == "/api/endpoints"
+                || p == "/api/host/info"
+                || p == "/api/platform"
+                || p == "/api/privacy/budget"
+                || p == "/api/quantum/key-status"
+                || p == "/api/research-tracks"
+                || p == "/api/session/info"
+                || p == "/api/slo/status"
+                || p == "/api/threads/status"
+                || p == "/api/attestation/status"
+                || p == "/api/compliance/status"
+                || p == "/api/deception/status"
+                || p == "/api/digital-twin/status"
+                || p == "/api/drift/status"
+                || p == "/api/energy/status"
+                || p == "/api/enforcement/status"
+                || p == "/api/fingerprint/status"
+                || p == "/api/mesh/health"
+                || p == "/api/monitor/status"
+                || p == "/api/monitor/violations"
+                || p == "/api/spool/stats"
+                || p == "/api/swarm/intel"
+                || p == "/api/swarm/intel/stats"
+                || p == "/api/side-channel/status"
+                || p == "/api/swarm/posture"
+                || p == "/api/tenants/count"
+                || p == "/api/tls/status"
+                || p == "/api/causal/graph"
+                || p == "/api/patches"
+                || p.starts_with("/api/monitoring/")
+                || p.starts_with("/api/support/")
+                || p.starts_with("/api/system/health/") => Permission::ViewSupport,
+        ("GET", "/api/updates/releases") => Permission::ViewAgents,
+        ("DELETE", "/api/dlq") => Permission::ManageConfig,
 
         // Reports
         (_, p) if p.starts_with("/api/reports") => Permission::ViewReports,
@@ -301,8 +380,8 @@ pub fn endpoint_permission(method: &str, path: &str) -> Permission {
         (_, p) if p.starts_with("/api/export") => Permission::ExportData,
 
         // Feature flags
-        ("GET", p) if p.starts_with("/api/flags") => Permission::ViewConfig,
-        (_, p) if p.starts_with("/api/flags") => Permission::ManageFeatureFlags,
+        ("GET", p) if p.starts_with("/api/flags") || p == "/api/feature-flags" => Permission::ViewConfig,
+        (_, p) if p.starts_with("/api/flags") || p == "/api/feature-flags" => Permission::ManageFeatureFlags,
 
         // Default: require admin
         _ => Permission::ManageConfig,
@@ -437,10 +516,93 @@ mod tests {
     #[test]
     fn endpoint_permission_mapping() {
         assert_eq!(endpoint_permission("GET", "/api/events"), Permission::ViewEvents);
+        assert_eq!(endpoint_permission("POST", "/api/events/search"), Permission::ViewEvents);
         assert_eq!(endpoint_permission("POST", "/api/telemetry"), Permission::SubmitTelemetry);
         assert_eq!(endpoint_permission("POST", "/api/users"), Permission::ManageUsers);
         assert_eq!(endpoint_permission("POST", "/api/rbac/users"), Permission::ManageUsers);
         assert_eq!(endpoint_permission("GET", "/api/dashboard"), Permission::ViewDashboard);
+        assert_eq!(endpoint_permission("GET", "/api/status"), Permission::ViewDashboard);
+        assert_eq!(endpoint_permission("GET", "/api/report"), Permission::ViewReports);
+        assert_eq!(endpoint_permission("GET", "/api/auth/check"), Permission::ViewSupport);
+        assert_eq!(endpoint_permission("GET", "/api/telemetry/current"), Permission::ViewEvents);
+        assert_eq!(endpoint_permission("GET", "/api/cases"), Permission::ViewIncidents);
+        assert_eq!(endpoint_permission("POST", "/api/cases"), Permission::ManageIncidents);
+        assert_eq!(
+            endpoint_permission("GET", "/api/workbench/overview"),
+            Permission::ViewIncidents
+        );
+        assert_eq!(
+            endpoint_permission("GET", "/api/monitoring/options"),
+            Permission::ViewSupport
+        );
+        assert_eq!(endpoint_permission("GET", "/api/queue/alerts"), Permission::ViewAlerts);
+        assert_eq!(
+            endpoint_permission("POST", "/api/queue/assign"),
+            Permission::ManageAlerts
+        );
+        assert_eq!(
+            endpoint_permission("GET", "/api/playbooks"),
+            Permission::ViewIncidents
+        );
+        assert_eq!(
+            endpoint_permission("POST", "/api/playbooks/execute"),
+            Permission::ExecuteResponses
+        );
+        assert_eq!(
+            endpoint_permission("GET", "/api/rollout/config"),
+            Permission::ViewAgents
+        );
+        assert_eq!(
+            endpoint_permission("GET", "/api/updates/releases"),
+            Permission::ViewAgents
+        );
+        assert_eq!(
+            endpoint_permission("GET", "/api/threat-intel/status"),
+            Permission::ViewCoverage
+        );
         assert_eq!(endpoint_permission("POST", "/api/content/rules/SE-001/promote"), Permission::PromoteRules);
+    }
+
+    #[test]
+    fn viewer_and_analyst_can_access_read_only_operator_routes() {
+        let store = setup_store();
+        for path in [
+            "/api/status",
+            "/api/report",
+            "/api/telemetry/current",
+            "/api/host/info",
+            "/api/monitoring/options",
+            "/api/slo/status",
+            "/api/workbench/overview",
+            "/api/cases",
+            "/api/cases/stats",
+            "/api/queue/alerts",
+            "/api/playbooks",
+            "/api/timeline/host?hostname=demo",
+            "/api/updates/releases",
+            "/api/threat-intel/status",
+        ] {
+            assert!(
+                store
+                    .check_api_access("viewer-token", "GET", path)
+                    .is_allowed(),
+                "viewer should access {path}"
+            );
+            assert!(
+                store
+                    .check_api_access("analyst-token", "GET", path)
+                    .is_allowed(),
+                "analyst should access {path}"
+            );
+        }
+        assert!(store
+            .check_api_access("analyst-token", "POST", "/api/queue/assign")
+            .is_allowed());
+        assert!(store
+            .check_api_access("analyst-token", "POST", "/api/events/search")
+            .is_allowed());
+        assert!(store
+            .check_api_access("analyst-token", "POST", "/api/investigation/graph")
+            .is_allowed());
     }
 }

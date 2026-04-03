@@ -1,6 +1,7 @@
-use std::collections::HashMap;
+use std::collections::{BTreeSet, HashMap};
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::str::FromStr;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 
@@ -1317,6 +1318,50 @@ fn url_param(url: &str, key: &str) -> Option<String> {
         .get(key)
         .cloned()
         .filter(|v| !v.is_empty())
+}
+
+fn parse_numeric_segment<T: FromStr>(segment: &str) -> Option<T> {
+    if segment.is_empty()
+        || segment.contains('/')
+        || !segment.chars().all(|ch| ch.is_ascii_digit())
+    {
+        return None;
+    }
+    segment.parse().ok()
+}
+
+fn parse_numeric_path_suffix<T: FromStr>(path: &str, prefix: &str) -> Option<T> {
+    path.strip_prefix(prefix).and_then(parse_numeric_segment)
+}
+
+fn parse_numeric_path_between<T: FromStr>(path: &str, prefix: &str, suffix: &str) -> Option<T> {
+    path.strip_prefix(prefix)
+        .and_then(|rest| rest.strip_suffix(suffix))
+        .map(|segment| segment.trim_end_matches('/'))
+        .and_then(parse_numeric_segment)
+}
+
+fn parse_entity_profile_path(path: &str) -> Option<(&str, &str)> {
+    let rest = path.strip_prefix("/api/entities/")?.trim_matches('/');
+    let mut segments = rest.split('/');
+    let kind = segments.next()?;
+    let id = segments.next()?;
+    if kind.is_empty() || id.is_empty() || segments.next().is_some() {
+        return None;
+    }
+    Some((kind, id))
+}
+
+fn parse_entity_timeline_path(path: &str) -> Option<(&str, &str)> {
+    let rest = path.strip_prefix("/api/entities/")?.trim_matches('/');
+    let mut segments = rest.split('/');
+    let kind = segments.next()?;
+    let id = segments.next()?;
+    let tail = segments.next()?;
+    if kind.is_empty() || id.is_empty() || tail != "timeline" || segments.next().is_some() {
+        return None;
+    }
+    Some((kind, id))
 }
 
 fn compare_versions(a: &str, b: &str) -> std::cmp::Ordering {
@@ -4024,7 +4069,28 @@ fn handle_api(
             }
         }
         (Method::Get, "/api/endpoints") => {
-            let endpoints = serde_json::json!([
+            let mut endpoints: Vec<serde_json::Value> =
+                crate::openapi::endpoint_catalog(env!("CARGO_PKG_VERSION"))
+                    .into_iter()
+                    .map(|entry| {
+                        serde_json::json!({
+                            "method": entry.method,
+                            "path": entry.path,
+                            "auth": entry.auth,
+                            "description": entry.description,
+                        })
+                    })
+                    .collect();
+            let mut seen = endpoints
+                .iter()
+                .filter_map(|entry| {
+                    Some((
+                        entry["method"].as_str()?.to_string(),
+                        entry["path"].as_str()?.to_string(),
+                    ))
+                })
+                .collect::<BTreeSet<_>>();
+            let supplemental = r#"[
                 {"method": "GET", "path": "/api/health", "auth": false, "description": "Server health, version, uptime, platform"},
                 {"method": "GET", "path": "/api/metrics", "auth": false, "description": "Prometheus-format product metrics"},
                 {"method": "GET", "path": "/api/host/info", "auth": true, "description": "Detailed host info + monitoring status"},
@@ -4138,8 +4204,95 @@ fn handle_api(
                 {"method": "POST", "path": "/api/queue/assign", "auth": true, "description": "Assign a queued alert to an analyst"},
                 {"method": "GET", "path": "/api/timeline/host", "auth": true, "description": "Host investigation timeline filtered by hostname query parameter"},
                 {"method": "GET", "path": "/api/timeline/agent", "auth": true, "description": "Agent investigation timeline filtered by agent_id query parameter"},
-            ]);
-            json_response(&endpoints.to_string(), 200)
+                {"method": "GET", "path": "/api/cases/stats", "auth": true, "description": "Case backlog and status summary"},
+                {"method": "GET", "path": "/api/causal/graph", "auth": true, "description": "Causal graph status and model summary"},
+                {"method": "GET", "path": "/api/compliance/status", "auth": true, "description": "Compliance posture and control status"},
+                {"method": "GET", "path": "/api/deception/status", "auth": true, "description": "Deception engine status and artifact coverage"},
+                {"method": "POST", "path": "/api/deception/deploy", "auth": true, "description": "Deploy deception artifacts and decoys"},
+                {"method": "GET", "path": "/api/digital-twin/status", "auth": true, "description": "Digital twin readiness and model status"},
+                {"method": "POST", "path": "/api/digital-twin/simulate", "auth": true, "description": "Run a digital twin simulation"},
+                {"method": "GET", "path": "/api/dlq", "auth": true, "description": "Dead-letter queue entries"},
+                {"method": "GET", "path": "/api/dlq/stats", "auth": true, "description": "Dead-letter queue statistics"},
+                {"method": "DELETE", "path": "/api/dlq", "auth": true, "description": "Clear the dead-letter queue"},
+                {"method": "GET", "path": "/api/drift/status", "auth": true, "description": "Drift detector status and thresholds"},
+                {"method": "POST", "path": "/api/drift/reset", "auth": true, "description": "Reset the drift baseline"},
+                {"method": "GET", "path": "/api/energy/status", "auth": true, "description": "Energy budget and harvesting status"},
+                {"method": "POST", "path": "/api/energy/consume", "auth": true, "description": "Record an energy consumption event"},
+                {"method": "POST", "path": "/api/energy/harvest", "auth": true, "description": "Record an energy harvesting event"},
+                {"method": "GET", "path": "/api/enforcement/status", "auth": true, "description": "Enforcement engine status and topology state"},
+                {"method": "POST", "path": "/api/enforcement/quarantine", "auth": true, "description": "Quarantine a workload or endpoint"},
+                {"method": "GET", "path": "/api/feature-flags", "auth": true, "description": "Current feature flag states"},
+                {"method": "GET", "path": "/api/fingerprint/status", "auth": true, "description": "Device fingerprinting status"},
+                {"method": "POST", "path": "/api/fleet/register", "auth": true, "description": "Register a device with the fleet control plane"},
+                {"method": "POST", "path": "/api/harness/run", "auth": true, "description": "Run the validation harness"},
+                {"method": "POST", "path": "/api/investigation/graph", "auth": true, "description": "Build an investigation relationship graph from selected events"},
+                {"method": "GET", "path": "/api/mesh/health", "auth": true, "description": "Mesh health summary"},
+                {"method": "POST", "path": "/api/mesh/heal", "auth": true, "description": "Trigger mesh healing actions"},
+                {"method": "GET", "path": "/api/monitor/status", "auth": true, "description": "Runtime monitor status"},
+                {"method": "GET", "path": "/api/monitor/violations", "auth": true, "description": "Recent runtime monitor violations"},
+                {"method": "GET", "path": "/api/ocsf/schema", "auth": true, "description": "Current OCSF schema projection"},
+                {"method": "GET", "path": "/api/ocsf/schema/version", "auth": true, "description": "Current OCSF schema version"},
+                {"method": "POST", "path": "/api/offload/decide", "auth": true, "description": "Evaluate an edge offload decision"},
+                {"method": "GET", "path": "/api/patches", "auth": true, "description": "Available platform and policy patches"},
+                {"method": "GET", "path": "/api/privacy/budget", "auth": true, "description": "Privacy budget status"},
+                {"method": "GET", "path": "/api/process-tree", "auth": true, "description": "Current process tree snapshot"},
+                {"method": "GET", "path": "/api/process-tree/deep-chains", "auth": true, "description": "Deep process ancestry chains"},
+                {"method": "POST", "path": "/api/policy-vm/execute", "auth": true, "description": "Execute a policy VM program"},
+                {"method": "POST", "path": "/api/policy/compose", "auth": true, "description": "Compose a policy from weighted inputs"},
+                {"method": "GET", "path": "/api/quantum/key-status", "auth": true, "description": "Quantum key rotation status"},
+                {"method": "POST", "path": "/api/quantum/rotate", "auth": true, "description": "Rotate quantum key material"},
+                {"method": "GET", "path": "/api/rbac/users", "auth": true, "description": "List RBAC users and roles"},
+                {"method": "POST", "path": "/api/rbac/users", "auth": true, "description": "Create an RBAC user and issue a token"},
+                {"method": "GET", "path": "/api/response/pending", "auth": true, "description": "Pending response actions awaiting approval or execution"},
+                {"method": "GET", "path": "/api/response/audit", "auth": true, "description": "Response execution audit ledger"},
+                {"method": "GET", "path": "/api/response/stats", "auth": true, "description": "Response orchestration statistics"},
+                {"method": "POST", "path": "/api/shutdown", "auth": true, "description": "Gracefully shut down the server"},
+                {"method": "GET", "path": "/api/side-channel/status", "auth": true, "description": "Side-channel detector status"},
+                {"method": "GET", "path": "/api/siem/status", "auth": true, "description": "SIEM connector status"},
+                {"method": "GET", "path": "/api/siem/config", "auth": true, "description": "SIEM connector configuration"},
+                {"method": "POST", "path": "/api/siem/config", "auth": true, "description": "Update SIEM connector configuration"},
+                {"method": "GET", "path": "/api/sigma/rules", "auth": true, "description": "Loaded Sigma rules"},
+                {"method": "GET", "path": "/api/sigma/stats", "auth": true, "description": "Sigma engine statistics"},
+                {"method": "GET", "path": "/api/spool/stats", "auth": true, "description": "Encrypted spool statistics"},
+                {"method": "GET", "path": "/api/swarm/posture", "auth": true, "description": "Swarm security posture summary"},
+                {"method": "GET", "path": "/api/taxii/status", "auth": true, "description": "TAXII connector status"},
+                {"method": "GET", "path": "/api/taxii/config", "auth": true, "description": "TAXII connector configuration"},
+                {"method": "POST", "path": "/api/taxii/config", "auth": true, "description": "Update TAXII connector configuration"},
+                {"method": "POST", "path": "/api/taxii/pull", "auth": true, "description": "Pull indicators from TAXII sources"},
+                {"method": "GET", "path": "/api/tenants/count", "auth": true, "description": "Tenant count summary"},
+                {"method": "GET", "path": "/api/tls/status", "auth": true, "description": "TLS listener and certificate status"},
+                {"method": "POST", "path": "/api/agents/token", "auth": true, "description": "Create an agent enrollment token"},
+                {"method": "POST", "path": "/api/agents/enroll", "auth": false, "description": "Enroll an agent with a valid enrollment token"},
+                {"method": "POST", "path": "/api/control/mode", "auth": true, "description": "Set the device control mode"},
+                {"method": "POST", "path": "/api/control/reset-baseline", "auth": true, "description": "Reset the anomaly detection baseline"},
+                {"method": "POST", "path": "/api/control/checkpoint", "auth": true, "description": "Create a control checkpoint"},
+                {"method": "POST", "path": "/api/control/restore-checkpoint", "auth": true, "description": "Restore a control checkpoint"},
+                {"method": "POST", "path": "/api/control/run-demo", "auth": true, "description": "Run the built-in telemetry demo"},
+                {"method": "POST", "path": "/api/events/bulk-triage", "auth": true, "description": "Bulk update event triage state"}
+            ]"#;
+            let supplemental: Vec<serde_json::Value> =
+                serde_json::from_str(supplemental).unwrap_or_default();
+            for entry in &supplemental {
+                if let (Some(method), Some(path)) =
+                    (entry["method"].as_str(), entry["path"].as_str())
+                {
+                    if seen.insert((method.to_string(), path.to_string())) {
+                        endpoints.push(entry.clone());
+                    }
+                }
+            }
+            endpoints.sort_by(|a, b| {
+                let left = (
+                    a["path"].as_str().unwrap_or(""),
+                    a["method"].as_str().unwrap_or(""),
+                );
+                let right = (
+                    b["path"].as_str().unwrap_or(""),
+                    b["method"].as_str().unwrap_or(""),
+                );
+                left.cmp(&right)
+            });
+            json_response(&serde_json::Value::Array(endpoints).to_string(), 200)
         }
 
         // ── XDR Agent Management ──────────────────────────────────
@@ -6423,12 +6576,8 @@ fn handle_api(
                 && url_path.starts_with("/api/incidents/")
                 && url_path.ends_with("/report")
             {
-                let id_str = url_path
-                    .strip_prefix("/api/incidents/")
-                    .and_then(|rest| rest.strip_suffix("/report"))
-                    .unwrap_or("");
-                match id_str.parse::<u64>() {
-                    Ok(id) => {
+                match parse_numeric_path_between::<u64>(url_path, "/api/incidents/", "/report") {
+                    Some(id) => {
                         let s = state.lock().unwrap();
                         match s.incident_store.get(id) {
                             Some(inc) => {
@@ -6490,18 +6639,14 @@ fn handle_api(
                             None => error_json("incident not found", 404),
                         }
                     }
-                    Err(_) => error_json("invalid incident id", 400),
+                    None => error_json("not found", 404),
                 }
             } else if method == Method::Post
                 && url_path.starts_with("/api/incidents/")
                 && url_path.ends_with("/update")
             {
-                let id_str = url_path
-                    .strip_prefix("/api/incidents/")
-                    .and_then(|rest| rest.strip_suffix("/update"))
-                    .unwrap_or("");
-                match id_str.parse::<u64>() {
-                    Ok(id) => {
+                match parse_numeric_path_between::<u64>(url_path, "/api/incidents/", "/update") {
+                    Some(id) => {
                         let body = match read_body_limited(&mut request, 10 * 1024 * 1024) {
                             Ok(b) => b,
                             Err(e) => {
@@ -6563,16 +6708,15 @@ fn handle_api(
                             Err(e) => error_json(&e, 404),
                         }
                     }
-                    Err(_) => error_json("invalid incident id", 400),
+                    None => error_json("not found", 404),
                 }
             } else if method == Method::Get
                 && url_path.starts_with("/api/incidents/")
                 && !url_path.ends_with("/report")
                 && !url_path.ends_with("/storyline")
             {
-                let id_str = url_path.strip_prefix("/api/incidents/").unwrap_or("");
-                match id_str.parse::<u64>() {
-                    Ok(id) => {
+                match parse_numeric_path_suffix::<u64>(url_path, "/api/incidents/") {
+                    Some(id) => {
                         let s = state.lock().unwrap();
                         match s.incident_store.get(id) {
                             Some(inc) => match serde_json::to_string(inc) {
@@ -6582,19 +6726,15 @@ fn handle_api(
                             None => error_json("incident not found", 404),
                         }
                     }
-                    Err(_) => error_json("invalid incident id", 400),
+                    None => error_json("not found", 404),
                 }
             // ── Reports (dynamic) ─────────────────────────────────
             } else if method == Method::Get
                 && url_path.starts_with("/api/reports/")
                 && url_path.ends_with("/html")
             {
-                let id_str = url_path
-                    .strip_prefix("/api/reports/")
-                    .and_then(|rest| rest.strip_suffix("/html"))
-                    .unwrap_or("");
-                match id_str.parse::<u64>() {
-                    Ok(id) => {
+                match parse_numeric_path_between::<u64>(url_path, "/api/reports/", "/html") {
+                    Some(id) => {
                         let s = state.lock().unwrap();
                         match s.report_store.get(id) {
                             Some(report) => {
@@ -6628,12 +6768,11 @@ fn handle_api(
                             None => error_json("report not found", 404),
                         }
                     }
-                    Err(_) => error_json("invalid report id", 400),
+                    None => error_json("not found", 404),
                 }
             } else if method == Method::Delete && url_path.starts_with("/api/reports/") {
-                let id_str = url_path.strip_prefix("/api/reports/").unwrap_or("");
-                match id_str.parse::<u64>() {
-                    Ok(id) => {
+                match parse_numeric_path_suffix::<u64>(url_path, "/api/reports/") {
+                    Some(id) => {
                         let mut s = state.lock().unwrap();
                         if s.report_store.delete(id) {
                             json_response(&serde_json::json!({"status":"deleted"}).to_string(), 200)
@@ -6641,12 +6780,11 @@ fn handle_api(
                             error_json("report not found", 404)
                         }
                     }
-                    Err(_) => error_json("invalid report id", 400),
+                    None => error_json("not found", 404),
                 }
             } else if method == Method::Get && url_path.starts_with("/api/reports/") {
-                let id_str = url_path.strip_prefix("/api/reports/").unwrap_or("");
-                match id_str.parse::<u64>() {
-                    Ok(id) => {
+                match parse_numeric_path_suffix::<u64>(url_path, "/api/reports/") {
+                    Some(id) => {
                         let s = state.lock().unwrap();
                         match s.report_store.get(id) {
                             Some(report) => match serde_json::to_string(report) {
@@ -6656,7 +6794,7 @@ fn handle_api(
                             None => error_json("report not found", 404),
                         }
                     }
-                    Err(_) => error_json("invalid report id", 400),
+                    None => error_json("not found", 404),
                 }
             } else if method == Method::Get && url_path.starts_with("/api/updates/download/") {
                 // GET /api/updates/download/{file_name}
@@ -6692,9 +6830,8 @@ fn handle_api(
                 && url_path != "/api/alerts/grouped"
             {
                 // GET /api/alerts/{index} — detailed alert view
-                let idx_str = url_path.strip_prefix("/api/alerts/").unwrap_or("");
-                match idx_str.parse::<usize>() {
-                    Ok(idx) => {
+                match parse_numeric_path_suffix::<usize>(url_path, "/api/alerts/") {
+                    Some(idx) => {
                         let s = state.lock().unwrap();
                         if idx < s.alerts.len() {
                             let alert = &s.alerts[idx];
@@ -6742,7 +6879,7 @@ fn handle_api(
                             error_json("alert index out of range", 404)
                         }
                     }
-                    Err(_) => error_json("invalid alert index", 400),
+                    None => error_json("not found", 404),
                 }
             // ── Enterprise: Dynamic routes ───────────────────────────
             } else if method == Method::Get
@@ -6888,54 +7025,52 @@ fn handle_api(
                 && url_path.starts_with("/api/entities/")
                 && url_path.ends_with("/timeline")
             {
-                let path = url_path
-                    .trim_start_matches("/api/entities/")
-                    .trim_end_matches("/timeline")
-                    .trim_end_matches('/');
-                let mut parts = path.splitn(2, '/');
-                let kind = parts.next().unwrap_or("");
-                let id = parts.next().unwrap_or("");
-                let s = state.lock().unwrap();
-                let timeline = build_entity_timeline(
-                    kind,
-                    id,
-                    s.event_store.all_events(),
-                    s.incident_store.list(),
-                    s.case_store.list(),
-                    &s.response_orchestrator.audit_ledger(),
-                    s.enterprise.ticket_syncs(),
-                );
-                json_response(&serde_json::json!({"kind": kind, "id": id, "timeline": timeline, "count": timeline.len()}).to_string(), 200)
+                match parse_entity_timeline_path(url_path) {
+                    Some((kind, id)) => {
+                        let s = state.lock().unwrap();
+                        let timeline = build_entity_timeline(
+                            kind,
+                            id,
+                            s.event_store.all_events(),
+                            s.incident_store.list(),
+                            s.case_store.list(),
+                            &s.response_orchestrator.audit_ledger(),
+                            s.enterprise.ticket_syncs(),
+                        );
+                        json_response(
+                            &serde_json::json!({"kind": kind, "id": id, "timeline": timeline, "count": timeline.len()})
+                                .to_string(),
+                            200,
+                        )
+                    }
+                    None => error_json("not found", 404),
+                }
             } else if method == Method::Get && url_path.starts_with("/api/entities/") {
-                let path = url_path
-                    .trim_start_matches("/api/entities/")
-                    .trim_end_matches('/');
-                let mut parts = path.splitn(2, '/');
-                let kind = parts.next().unwrap_or("");
-                let id = parts.next().unwrap_or("");
-                let s = state.lock().unwrap();
-                let profile = build_entity_profile(
-                    kind,
-                    id,
-                    s.event_store.all_events(),
-                    s.incident_store.list(),
-                    s.case_store.list(),
-                    &s.threat_intel.all_iocs(),
-                    &s.response_orchestrator.all_requests(),
-                    &s.rbac.list_users(),
-                    s.enterprise.connectors(),
-                    s.enterprise.ticket_syncs(),
-                );
-                json_response(&profile.to_string(), 200)
+                match parse_entity_profile_path(url_path) {
+                    Some((kind, id)) => {
+                        let s = state.lock().unwrap();
+                        let profile = build_entity_profile(
+                            kind,
+                            id,
+                            s.event_store.all_events(),
+                            s.incident_store.list(),
+                            s.case_store.list(),
+                            &s.threat_intel.all_iocs(),
+                            &s.response_orchestrator.all_requests(),
+                            &s.rbac.list_users(),
+                            s.enterprise.connectors(),
+                            s.enterprise.ticket_syncs(),
+                        );
+                        json_response(&profile.to_string(), 200)
+                    }
+                    None => error_json("not found", 404),
+                }
             } else if method == Method::Get
                 && url_path.starts_with("/api/incidents/")
                 && url_path.ends_with("/storyline")
             {
-                let id_str = url_path
-                    .trim_start_matches("/api/incidents/")
-                    .trim_end_matches("/storyline");
-                match id_str.parse::<u64>() {
-                    Ok(id) => {
+                match parse_numeric_path_between::<u64>(url_path, "/api/incidents/", "/storyline") {
+                    Some(id) => {
                         let s = state.lock().unwrap();
                         match s.incident_store.get(id) {
                             Some(incident) => {
@@ -6955,13 +7090,12 @@ fn handle_api(
                             None => error_json("incident not found", 404),
                         }
                     }
-                    Err(_) => error_json("invalid incident id", 400),
+                    None => error_json("not found", 404),
                 }
             // ── Analyst Console: Dynamic case routes ─────────────────
             } else if method == Method::Get && url_path.starts_with("/api/cases/") {
-                let id_str = url_path.trim_start_matches("/api/cases/");
-                match id_str.parse::<u64>() {
-                    Ok(id) => {
+                match parse_numeric_path_suffix::<u64>(url_path, "/api/cases/") {
+                    Some(id) => {
                         let s = state.lock().unwrap();
                         if let Some(c) = s.case_store.get(id) {
                             json_response(&serde_json::json!({
@@ -6983,17 +7117,14 @@ fn handle_api(
                             error_json("case not found", 404)
                         }
                     }
-                    Err(_) => error_json("invalid case id", 400),
+                    None => error_json("not found", 404),
                 }
             } else if method == Method::Post
                 && url_path.starts_with("/api/cases/")
                 && url_path.ends_with("/comment")
             {
-                let id_str = url_path
-                    .trim_start_matches("/api/cases/")
-                    .trim_end_matches("/comment");
-                match id_str.parse::<u64>() {
-                    Ok(id) => {
+                match parse_numeric_path_between::<u64>(url_path, "/api/cases/", "/comment") {
+                    Some(id) => {
                         let body = read_body_limited(&mut request, 4096);
                         match body.and_then(|b| {
                             serde_json::from_str::<serde_json::Value>(&b).map_err(|e| e.to_string())
@@ -7011,17 +7142,14 @@ fn handle_api(
                             Err(e) => error_json(&e, 400),
                         }
                     }
-                    Err(_) => error_json("invalid case id", 400),
+                    None => error_json("not found", 404),
                 }
             } else if method == Method::Post
                 && url_path.starts_with("/api/cases/")
                 && url_path.ends_with("/update")
             {
-                let id_str = url_path
-                    .trim_start_matches("/api/cases/")
-                    .trim_end_matches("/update");
-                match id_str.parse::<u64>() {
-                    Ok(id) => {
+                match parse_numeric_path_between::<u64>(url_path, "/api/cases/", "/update") {
+                    Some(id) => {
                         let body = read_body_limited(&mut request, 4096);
                         match body.and_then(|b| {
                             serde_json::from_str::<serde_json::Value>(&b).map_err(|e| e.to_string())
@@ -7054,17 +7182,14 @@ fn handle_api(
                             Err(e) => error_json(&e, 400),
                         }
                     }
-                    Err(_) => error_json("invalid case id", 400),
+                    None => error_json("not found", 404),
                 }
             } else if method == Method::Post
                 && url_path.starts_with("/api/cases/")
                 && url_path.ends_with("/evidence")
             {
-                let id_str = url_path
-                    .trim_start_matches("/api/cases/")
-                    .trim_end_matches("/evidence");
-                match id_str.parse::<u64>() {
-                    Ok(id) => {
+                match parse_numeric_path_between::<u64>(url_path, "/api/cases/", "/evidence") {
+                    Some(id) => {
                         let body = read_body_limited(&mut request, 4096);
                         match body.and_then(|b| {
                             serde_json::from_str::<serde_json::Value>(&b).map_err(|e| e.to_string())
@@ -7083,7 +7208,7 @@ fn handle_api(
                             Err(e) => error_json(&e, 400),
                         }
                     }
-                    Err(_) => error_json("invalid case id", 400),
+                    None => error_json("not found", 404),
                 }
             // ── Phase 32: Advanced XDR endpoints ────────────────────────
 
