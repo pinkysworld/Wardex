@@ -49,6 +49,10 @@ Wardex is a self-hosted XDR and SIEM platform built in Rust for teams that want 
   - Outbound notifications to Slack, Teams, PagerDuty, Webhook, and Email with severity filtering and retry
   - CycloneDX 1.5 and SPDX 2.3 SBOM generation from Cargo.lock for supply-chain compliance
   - Runbooks, OpenAPI contract, deployment models, disaster recovery guidance, and production hardening docs
+  - Python SDK with ~30 typed API methods and custom exception hierarchy
+  - GraphQL query layer for threat-hunting with aliases, sub-field selection, and introspection
+  - Prometheus metrics endpoint with 20+ wardex_* counters, gauges, and histograms
+  - OpenAPI 3.0.3 machine-readable spec with 90+ endpoints and full schema definitions
 
 - **Production hardening**
   - Persistent JSON storage backend with atomic writes, schema migrations, and retention purge
@@ -59,12 +63,20 @@ Wardex is a self-hosted XDR and SIEM platform built in Rust for teams that want 
   - Multi-tenancy isolation guards with cross-tenant access control
   - Real mesh networking with checksummed frames, hop limits, and peer state tracking
   - Dashboard deep-linking and timeline visualization
+  - HA clustering with Raft-inspired leader election, log replication, and health monitoring
+  - WebSocket event streaming with RFC 6455 framing and pub/sub channels
+  - Structured JSON logging with pluggable sinks and per-request context
+  - Data archival with JSONL+gzip compression, CSV export, and SHA-256 manifests
+  - 39 Sigma detection rules across 6 categories (auth, network, endpoint, IoT, cloud, supply chain)
+  - Compliance templates for CIS v8, PCI-DSS v4, SOC 2, and NIST CSF 2.0 with auto-evaluation
+  - Kubernetes manifests and Helm chart for production deployment
+  - CI hardening with cargo-audit, code coverage, MSRV checks, and dependency caching
 
 ## Product posture
 
-- 79 Rust source modules
+- 88 Rust source modules
 - 155+ API paths
-- 915 automated tests
+- 1,025 automated tests
 - GitHub Actions release packaging for Linux, macOS, and Windows
 
 ## Operator entry points

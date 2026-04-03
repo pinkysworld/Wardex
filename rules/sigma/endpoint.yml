@@ -1,0 +1,207 @@
+title: Suspicious Process Execution
+id: wardex-endpoint-001
+status: stable
+level: high
+description: Detects execution of known attack tools or LOLBins on monitored endpoints.
+author: Wardex Contributors
+date: 2025/06/01
+tags:
+  - attack.execution
+  - attack.t1059
+  - wardex.endpoint
+logsource:
+  category: process_creation
+  product: wardex
+detection:
+  selection:
+    event_type: process_start
+    process_name:
+      - powershell.exe
+      - cmd.exe
+      - wscript.exe
+      - cscript.exe
+      - mshta.exe
+      - certutil.exe
+      - bitsadmin.exe
+      - regsvr32.exe
+    parent_anomaly: true
+  condition: selection
+falsepositives:
+  - Administrative scripts
+---
+title: Privilege Escalation Attempt
+id: wardex-endpoint-002
+status: stable
+level: critical
+description: Detects process elevation or token manipulation attempts.
+author: Wardex Contributors
+date: 2025/06/01
+tags:
+  - attack.privilege_escalation
+  - attack.t1548
+  - wardex.endpoint
+logsource:
+  category: process_creation
+  product: wardex
+detection:
+  selection:
+    event_type: process_start
+    integrity_level_change: true
+    target_level: system
+  condition: selection
+falsepositives:
+  - Legitimate UAC prompts
+---
+title: Scheduled Task Created
+id: wardex-endpoint-003
+status: stable
+level: medium
+description: Detects creation of new scheduled tasks which may indicate persistence.
+author: Wardex Contributors
+date: 2025/06/01
+tags:
+  - attack.persistence
+  - attack.t1053.005
+  - wardex.endpoint
+logsource:
+  category: process_creation
+  product: wardex
+detection:
+  selection:
+    event_type: process_start
+    process_name:
+      - schtasks.exe
+      - at.exe
+    command_line|contains: /create
+  condition: selection
+falsepositives:
+  - Software installers
+---
+title: Registry Persistence Modification
+id: wardex-endpoint-004
+status: stable
+level: high
+description: Detects modifications to well-known registry autorun keys.
+author: Wardex Contributors
+date: 2025/06/01
+tags:
+  - attack.persistence
+  - attack.t1547.001
+  - wardex.endpoint
+logsource:
+  category: registry_event
+  product: wardex
+detection:
+  selection:
+    event_type: registry_set
+    target_key|contains:
+      - CurrentVersion\Run
+      - CurrentVersion\RunOnce
+      - Winlogon\Shell
+      - Winlogon\Userinit
+  condition: selection
+falsepositives:
+  - Legitimate software registration
+---
+title: File Dropped in Temp Directory
+id: wardex-endpoint-005
+status: stable
+level: medium
+description: Detects executable files written to temp directories.
+author: Wardex Contributors
+date: 2025/06/01
+tags:
+  - attack.defense_evasion
+  - attack.t1036
+  - wardex.endpoint
+logsource:
+  category: file_event
+  product: wardex
+detection:
+  selection:
+    event_type: file_create
+    file_path|contains:
+      - \Temp\
+      - /tmp/
+    file_extension:
+      - exe
+      - dll
+      - scr
+      - bat
+      - ps1
+      - sh
+  condition: selection
+falsepositives:
+  - Software installers using temp staging
+---
+title: Service Installation
+id: wardex-endpoint-006
+status: stable
+level: medium
+description: Detects new service installations that could indicate persistence.
+author: Wardex Contributors
+date: 2025/06/01
+tags:
+  - attack.persistence
+  - attack.t1543.003
+  - wardex.endpoint
+logsource:
+  category: process_creation
+  product: wardex
+detection:
+  selection:
+    event_type: service_install
+    first_seen: true
+  condition: selection
+falsepositives:
+  - Software deployments
+---
+title: Memory Injection Detected
+id: wardex-endpoint-007
+status: stable
+level: critical
+description: Detects process hollowing or remote thread injection.
+author: Wardex Contributors
+date: 2025/06/01
+tags:
+  - attack.defense_evasion
+  - attack.t1055
+  - wardex.endpoint
+logsource:
+  category: process_access
+  product: wardex
+detection:
+  selection:
+    event_type: process_access
+    access_type:
+      - remote_thread
+      - process_hollow
+      - dll_injection
+  condition: selection
+falsepositives:
+  - Debugging tools
+---
+title: Shadow Copy Deletion
+id: wardex-endpoint-008
+status: stable
+level: critical
+description: Detects deletion of volume shadow copies — a common ransomware precursor.
+author: Wardex Contributors
+date: 2025/06/01
+tags:
+  - attack.impact
+  - attack.t1490
+  - wardex.endpoint
+logsource:
+  category: process_creation
+  product: wardex
+detection:
+  selection:
+    event_type: process_start
+    command_line|contains:
+      - vssadmin delete shadows
+      - wmic shadowcopy delete
+      - bcdedit /set {default} recoveryenabled no
+  condition: selection
+falsepositives:
+  - Legitimate disk management

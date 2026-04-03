@@ -1,0 +1,112 @@
+title: Brute Force Login Attempts
+id: wardex-auth-001
+status: stable
+level: high
+description: Detects multiple failed login attempts from a single source within a short time window indicating a brute-force attack.
+author: Wardex Contributors
+date: 2025/06/01
+tags:
+  - attack.credential_access
+  - attack.t1110
+  - wardex.auth
+logsource:
+  category: authentication
+  product: wardex
+detection:
+  selection:
+    event_type: auth_failure
+  condition: selection | count(source_ip) by source_ip > 5
+  timeframe: 5m
+falsepositives:
+  - Misconfigured automation
+  - Shared NAT IP
+---
+title: Credential Stuffing via Known Breach List
+id: wardex-auth-002
+status: stable
+level: critical
+description: Detects login attempts using credentials from known breach databases.
+author: Wardex Contributors
+date: 2025/06/01
+tags:
+  - attack.credential_access
+  - attack.t1110.004
+  - wardex.auth
+logsource:
+  category: authentication
+  product: wardex
+detection:
+  selection:
+    event_type: auth_failure
+    breach_match: true
+  condition: selection
+falsepositives:
+  - Coincidental username overlap
+---
+title: Successful Login After Multiple Failures
+id: wardex-auth-003
+status: stable
+level: medium
+description: Detects a successful authentication following several failed attempts — potential successful brute force.
+author: Wardex Contributors
+date: 2025/06/01
+tags:
+  - attack.credential_access
+  - attack.t1110
+  - wardex.auth
+logsource:
+  category: authentication
+  product: wardex
+detection:
+  failures:
+    event_type: auth_failure
+  success:
+    event_type: auth_success
+  condition: failures | count() by source_ip > 3 | near success
+  timeframe: 10m
+falsepositives:
+  - Password reset followed by login
+---
+title: Login from Unusual Geolocation
+id: wardex-auth-004
+status: experimental
+level: medium
+description: Detects authentication from a geolocation not previously seen for the user.
+author: Wardex Contributors
+date: 2025/06/01
+tags:
+  - attack.initial_access
+  - attack.t1078
+  - wardex.auth
+logsource:
+  category: authentication
+  product: wardex
+detection:
+  selection:
+    event_type: auth_success
+    geo_anomaly: true
+  condition: selection
+falsepositives:
+  - VPN or travel
+---
+title: API Token Used from Multiple IPs
+id: wardex-auth-005
+status: stable
+level: high
+description: Detects a single API token being used from more than 3 distinct IPs in an hour.
+author: Wardex Contributors
+date: 2025/06/01
+tags:
+  - attack.credential_access
+  - attack.t1528
+  - wardex.auth
+logsource:
+  category: authentication
+  product: wardex
+detection:
+  selection:
+    event_type: api_request
+  condition: selection | count(source_ip) by token > 3
+  timeframe: 1h
+falsepositives:
+  - Load balancer health checks

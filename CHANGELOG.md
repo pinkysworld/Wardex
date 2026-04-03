@@ -2,6 +2,25 @@
 
 All notable changes to Wardex are documented in this file.
 
+## [0.35.0] — Ship-Readiness, Operational Maturity, and Competitive Differentiation
+
+### Added
+- **OpenAPI 3.0.3 spec** (`openapi`) — machine-readable API documentation with `OpenApiSpec`, `OpenApiBuilder` fluent API, `wardex_openapi_spec()` factory covering 90+ endpoint definitions, 18 tags, full schema objects (Alert, Incident, Agent, Error), and JSON serving via `/api/openapi.json`.
+- **Prometheus metrics** (`metrics`) — native text exposition format (no external dependency) with `MetricsRegistry`, `SharedMetrics` (Arc<Mutex>), 20+ `wardex_*` prefixed counters/gauges/histograms, thread-safe `record_*()` helpers, and serving via `GET /metrics`.
+- **WebSocket event stream** (`ws_stream`) — RFC 6455 frame encoder/decoder with masking support, `EventBus` pub/sub with ring buffer, per-subscriber channel filtering, `WsConnection` tracking, `compute_accept_key` handshake, and convenience event constructors for alerts, incidents, agents, and heartbeats.
+- **Python SDK** (`sdk/python/`) — `wardex` PyPI package with `WardexClient` providing ~30 typed methods (alerts, incidents, agents, detection, events, policies, IOCs, response, reports, config, metrics, OpenAPI), custom exception hierarchy (`WardexError`, `AuthenticationError`, `NotFoundError`, `RateLimitError`, `ServerError`), and 10 unit tests with `responses` mocks.
+- **Structured logging** (`structured_log`) — JSON-formatted log output with `LogLevel` (Trace→Fatal), `LogEntry` struct, pluggable `LogSink` trait (StdoutSink, BufferSink, FileSink), `Logger` with minimum-level filtering and default fields, `SharedLogger`, and helper functions `request_log()`, `security_log()`, `audit_log()`.
+- **Kubernetes manifests + Helm chart** (`deploy/`) — production-ready k8s manifests (Deployment, Service, ConfigMap, Ingress, PVC) with security contexts, resource limits, and Prometheus annotations, plus a full Helm chart (`deploy/helm/wardex/`) with configurable values, helpers, and conditional resources.
+- **Data archival** (`archival`) — `ArchivalEngine` with JSONL+gzip compression, CSV export with dynamic column detection, SHA-256 checksums, manifest sidecars, retention-based pruning, and S3 upload stubs.
+- **Sigma rule library** (`rules/sigma/`, `sigma_library`) — 39 detection rules across 6 categories (authentication, network, endpoint, IoT/OT, cloud, supply chain), YAML multi-document parser, query API (`find_by_id`, `find_by_tag`, `find_by_level`, `find_by_category`), and simple event matching engine.
+- **Compliance templates** (`compliance_templates`) — pre-built framework mappings for CIS Controls v8 (11 controls), PCI-DSS v4 (11), SOC 2 Type II (9), and NIST CSF 2.0 (10), with `AutoCheck` evaluation engine, `SystemState` input struct, and per-control pass/fail scoring.
+- **CI hardening** (`.github/workflows/ci.yml`) — weekly scheduled runs, `cargo-audit` security scan, `cargo-tarpaulin` code coverage with artifact upload, MSRV check (Rust 1.85.0), and Cargo dependency caching.
+- **GraphQL query layer** (`graphql`) — lightweight execution engine with `GqlSchema`, query parser supporting selections/args/aliases/sub-fields, `GqlExecutor` with resolver registration and sub-field filtering, introspection (`__schema`), and `wardex_schema()` with 12 root query fields and 10 types.
+- **HA clustering** (`cluster`) — Raft-inspired leader election with `ClusterNode`, `NodeRole` (Follower/Candidate/Leader), term-based voting, log replication with `AppendRequest`/`AppendResponse`, majority-based commit advancement, per-peer status tracking, health monitoring, and fencing token support.
+
+### Tests
+- `cargo test` passes with **1,025 automated tests** (878 unit + 147 integration).
+
 ## [0.34.0] — Production Hardening: Persistence, Enforcement, Notifications, and SBOM
 
 ### Added

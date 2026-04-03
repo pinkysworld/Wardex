@@ -1,0 +1,130 @@
+title: Unauthorized Cloud API Call
+id: wardex-cloud-001
+status: stable
+level: high
+description: Detects API calls to cloud management planes that are not in the approved action list.
+author: Wardex Contributors
+date: 2025/06/01
+tags:
+  - attack.execution
+  - attack.t1059.009
+  - wardex.cloud
+logsource:
+  category: cloud
+  product: wardex
+detection:
+  selection:
+    event_type: cloud_api
+    action_authorized: false
+  condition: selection
+falsepositives:
+  - New automation script
+---
+title: Cloud Resource Created in Unusual Region
+id: wardex-cloud-002
+status: stable
+level: high
+description: Detects cloud resources provisioned in regions not previously used by the organization.
+author: Wardex Contributors
+date: 2025/06/01
+tags:
+  - attack.resource_development
+  - wardex.cloud
+logsource:
+  category: cloud
+  product: wardex
+detection:
+  selection:
+    event_type: resource_create
+    region_first_seen: true
+  condition: selection
+falsepositives:
+  - Planned multi-region expansion
+---
+title: IAM Policy Weakened
+id: wardex-cloud-003
+status: stable
+level: critical
+description: Detects IAM policy changes that broaden permissions or add wildcard access.
+author: Wardex Contributors
+date: 2025/06/01
+tags:
+  - attack.privilege_escalation
+  - attack.t1078.004
+  - wardex.cloud
+logsource:
+  category: cloud
+  product: wardex
+detection:
+  selection:
+    event_type: iam_policy_change
+    permission_broadened: true
+  condition: selection
+falsepositives:
+  - Approved policy migration
+---
+title: Cloud Storage Public Access Enabled
+id: wardex-cloud-004
+status: stable
+level: critical
+description: Detects a storage bucket or blob container being made publicly accessible.
+author: Wardex Contributors
+date: 2025/06/01
+tags:
+  - attack.collection
+  - attack.t1530
+  - wardex.cloud
+logsource:
+  category: cloud
+  product: wardex
+detection:
+  selection:
+    event_type: storage_acl_change
+    public_access: true
+  condition: selection
+falsepositives:
+  - Intentional public hosting
+---
+title: Unusual Data Download Volume from Cloud
+id: wardex-cloud-005
+status: stable
+level: high
+description: Detects download of large data volumes from cloud storage or databases.
+author: Wardex Contributors
+date: 2025/06/01
+tags:
+  - attack.exfiltration
+  - attack.t1530
+  - wardex.cloud
+logsource:
+  category: cloud
+  product: wardex
+detection:
+  selection:
+    event_type: data_access
+    bytes_downloaded|gt: baseline_3sigma
+  condition: selection
+falsepositives:
+  - Legitimate data migration
+---
+title: MFA Disabled for User
+id: wardex-cloud-006
+status: stable
+level: critical
+description: Detects MFA being disabled for a user account.
+author: Wardex Contributors
+date: 2025/06/01
+tags:
+  - attack.credential_access
+  - attack.t1556
+  - wardex.cloud
+logsource:
+  category: cloud
+  product: wardex
+detection:
+  selection:
+    event_type: mfa_change
+    mfa_enabled: false
+  condition: selection
+falsepositives:
+  - MFA reset during account recovery

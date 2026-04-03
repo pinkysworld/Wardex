@@ -1,0 +1,167 @@
+title: Anomalous Network Traffic Volume
+id: wardex-net-001
+status: stable
+level: high
+description: Detects a device sending significantly more traffic than its baseline, potential data exfiltration.
+author: Wardex Contributors
+date: 2025/06/01
+tags:
+  - attack.exfiltration
+  - attack.t1048
+  - wardex.network
+logsource:
+  category: network
+  product: wardex
+detection:
+  selection:
+    event_type: telemetry
+    bytes_out|gt: baseline_3sigma
+  condition: selection
+falsepositives:
+  - Large firmware update
+  - Backup window
+---
+title: Connection to Known C2 Infrastructure
+id: wardex-net-002
+status: stable
+level: critical
+description: Detects outbound connections to known command-and-control IP addresses or domains.
+author: Wardex Contributors
+date: 2025/06/01
+tags:
+  - attack.command_and_control
+  - attack.t1071
+  - wardex.network
+logsource:
+  category: network
+  product: wardex
+detection:
+  selection:
+    event_type: connection
+    dest_ioc_match: true
+  condition: selection
+falsepositives:
+  - Stale threat intel
+---
+title: DNS Tunneling Detected
+id: wardex-net-003
+status: stable
+level: high
+description: Detects unusually long or high-entropy DNS queries indicative of DNS tunneling.
+author: Wardex Contributors
+date: 2025/06/01
+tags:
+  - attack.command_and_control
+  - attack.t1071.004
+  - wardex.network
+logsource:
+  category: dns
+  product: wardex
+detection:
+  selection:
+    event_type: dns_query
+    query_entropy|gt: 4.0
+    query_length|gt: 50
+  condition: selection
+falsepositives:
+  - CDN domains with long subdomains
+---
+title: Port Scan Activity
+id: wardex-net-004
+status: stable
+level: medium
+description: Detects a single source connecting to many distinct ports on a target.
+author: Wardex Contributors
+date: 2025/06/01
+tags:
+  - attack.discovery
+  - attack.t1046
+  - wardex.network
+logsource:
+  category: network
+  product: wardex
+detection:
+  selection:
+    event_type: connection
+  condition: selection | count(dest_port) by source_ip,dest_ip > 20
+  timeframe: 5m
+falsepositives:
+  - Vulnerability scanner
+---
+title: Lateral Movement via SMB
+id: wardex-net-005
+status: stable
+level: high
+description: Detects SMB connections between internal hosts that deviate from normal patterns.
+author: Wardex Contributors
+date: 2025/06/01
+tags:
+  - attack.lateral_movement
+  - attack.t1021.002
+  - wardex.network
+logsource:
+  category: network
+  product: wardex
+detection:
+  selection:
+    event_type: connection
+    dest_port: 445
+    internal_to_internal: true
+    baseline_deviation: true
+  condition: selection
+falsepositives:
+  - File server access
+---
+title: Unusual Outbound Port
+id: wardex-net-006
+status: stable
+level: medium
+description: Detects outbound connections on non-standard ports that have not been seen before.
+author: Wardex Contributors
+date: 2025/06/01
+tags:
+  - attack.command_and_control
+  - attack.t1571
+  - wardex.network
+logsource:
+  category: network
+  product: wardex
+detection:
+  selection:
+    event_type: connection
+    direction: outbound
+    dest_port|notin:
+      - 80
+      - 443
+      - 53
+      - 22
+    first_seen: true
+  condition: selection
+falsepositives:
+  - New SaaS service
+---
+title: TLS Certificate Anomaly
+id: wardex-net-007
+status: experimental
+level: medium
+description: Detects TLS connections with self-signed, expired, or recently issued certificates.
+author: Wardex Contributors
+date: 2025/06/01
+tags:
+  - attack.command_and_control
+  - wardex.network
+logsource:
+  category: tls
+  product: wardex
+detection:
+  selection:
+    event_type: tls_handshake
+  filter_selfsigned:
+    cert_self_signed: true
+  filter_expired:
+    cert_expired: true
+  filter_newcert:
+    cert_age_days|lt: 7
+  condition: selection and (filter_selfsigned or filter_expired or filter_newcert)
+falsepositives:
+  - Internal PKI with short-lived certs

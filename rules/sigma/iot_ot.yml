@@ -1,0 +1,173 @@
+title: Firmware Downgrade Detected
+id: wardex-iot-001
+status: stable
+level: critical
+description: Detects a device reporting a firmware version lower than its previous known version.
+author: Wardex Contributors
+date: 2025/06/01
+tags:
+  - attack.persistence
+  - attack.t1601
+  - wardex.iot
+logsource:
+  category: firmware
+  product: wardex
+detection:
+  selection:
+    event_type: firmware_report
+    version_downgrade: true
+  condition: selection
+falsepositives:
+  - Intentional rollback
+---
+title: Device Communication to Unusual External Host
+id: wardex-iot-002
+status: stable
+level: high
+description: Detects IoT/OT devices connecting to external hosts not in the approved allowlist.
+author: Wardex Contributors
+date: 2025/06/01
+tags:
+  - attack.command_and_control
+  - attack.t1071
+  - wardex.iot
+logsource:
+  category: network
+  product: wardex
+detection:
+  selection:
+    event_type: connection
+    device_class: iot
+    dest_external: true
+    dest_whitelisted: false
+  condition: selection
+falsepositives:
+  - New cloud service endpoint
+---
+title: Sensor Value Outside Physical Bounds
+id: wardex-iot-003
+status: stable
+level: high
+description: Detects sensor readings that exceed physically possible ranges, indicating data injection.
+author: Wardex Contributors
+date: 2025/06/01
+tags:
+  - attack.impact
+  - wardex.iot
+logsource:
+  category: telemetry
+  product: wardex
+detection:
+  selection:
+    event_type: telemetry
+    value_out_of_bounds: true
+  condition: selection
+falsepositives:
+  - Sensor malfunction
+---
+title: Mass Device Reboot
+id: wardex-iot-004
+status: stable
+level: high
+description: Detects multiple devices rebooting within a short window — potential attack or widespread failure.
+author: Wardex Contributors
+date: 2025/06/01
+tags:
+  - attack.impact
+  - attack.t1529
+  - wardex.iot
+logsource:
+  category: system
+  product: wardex
+detection:
+  selection:
+    event_type: device_reboot
+  condition: selection | count() > 5
+  timeframe: 10m
+falsepositives:
+  - Scheduled maintenance window
+---
+title: Protocol Anomaly on OT Network
+id: wardex-iot-005
+status: stable
+level: high
+description: Detects unexpected protocol usage on OT/SCADA network segments.
+author: Wardex Contributors
+date: 2025/06/01
+tags:
+  - attack.discovery
+  - wardex.iot
+logsource:
+  category: network
+  product: wardex
+detection:
+  selection:
+    event_type: connection
+    network_zone: ot
+    protocol_unexpected: true
+  condition: selection
+falsepositives:
+  - New legitimate OT device
+---
+title: Device Battery Drain Attack
+id: wardex-iot-006
+status: stable
+level: medium
+description: Detects artificially accelerated battery drain on battery-powered IoT devices.
+author: Wardex Contributors
+date: 2025/06/01
+tags:
+  - attack.impact
+  - wardex.iot
+logsource:
+  category: telemetry
+  product: wardex
+detection:
+  selection:
+    event_type: telemetry
+    battery_drain_rate|gt: baseline_3sigma
+  condition: selection
+falsepositives:
+  - Extreme temperature conditions
+---
+title: Unauthorized Configuration Change
+id: wardex-iot-007
+status: stable
+level: critical
+description: Detects configuration changes on managed devices without a corresponding change request.
+author: Wardex Contributors
+date: 2025/06/01
+tags:
+  - attack.persistence
+  - wardex.iot
+logsource:
+  category: configuration
+  product: wardex
+detection:
+  selection:
+    event_type: config_change
+    authorized: false
+  condition: selection
+falsepositives:
+  - Emergency maintenance
+---
+title: Digital Twin Divergence
+id: wardex-iot-008
+status: stable
+level: high
+description: Detects when a device's actual telemetry diverges significantly from its digital twin prediction.
+author: Wardex Contributors
+date: 2025/06/01
+tags:
+  - wardex.iot
+  - wardex.digital_twin
+logsource:
+  category: telemetry
+  product: wardex
+detection:
+  selection:
+    event_type: twin_divergence
+    divergence_score|gt: 3.0
+  condition: selection
+falsepositives:
+  - Model not yet calibrated

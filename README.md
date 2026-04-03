@@ -2,21 +2,22 @@
 
 Wardex is a Rust-based XDR and SIEM platform for private-cloud and self-hosted security operations. It combines cross-platform telemetry collection, detection engineering, analyst workflows, approval-gated response, agent lifecycle management, SIEM integrations, and tamper-evident evidence handling in a single deployable product.
 
-## What ships in `v0.34.0`
+## What ships in `v0.35.0`
 
-- Everything from v0.33.0 plus 12 production-hardening features
-- Persistent storage backend with atomic JSON writes, schema migrations, and retention purge
-- Real OS enforcement execution with command safety filter and dry-run mode
-- Outbound notifications to Slack, Teams, PagerDuty, Webhook, and Email
-- Alert deduplication with time-window grouping and cross-device merge
-- Atomic agent update with SHA-256 verification and automatic rollback
-- Dashboard deep-linking and alert timeline visualization
-- Operator runbooks for deployment, upgrades, and troubleshooting
-- YARA-style pattern matching engine with built-in threat-detection rules
-- CycloneDX 1.5 and SPDX 2.3 SBOM generation for supply-chain compliance
-- Multi-tenancy isolation guards and cross-tenant access control
-- Real mesh networking with checksummed frames and hop-limited forwarding
-- Professional browser console and HTTP API backed by 79 Rust source modules, 155+ documented API paths, and 915 automated tests
+- Everything from v0.34.0 plus 12 ship-readiness, operational maturity, and competitive differentiation features
+- OpenAPI 3.0.3 machine-readable spec covering 90+ endpoints with full schema definitions
+- Prometheus metrics endpoint with 20+ wardex_* counters, gauges, and histograms
+- WebSocket event streaming with RFC 6455 framing and pub/sub channel filtering
+- Python SDK (`sdk/python/`) with ~30 typed API methods and custom exception hierarchy
+- Structured JSON logging with pluggable sinks (stdout, file, buffer) and per-request context
+- Kubernetes manifests and Helm chart for production deployment
+- Data archival engine with JSONL+gzip compression, CSV export, and SHA-256 manifests
+- 39 Sigma detection rules across 6 categories with YAML loader and event matching
+- Compliance templates for CIS v8, PCI-DSS v4, SOC 2, and NIST CSF 2.0 with auto-evaluation
+- CI hardening with cargo-audit, code coverage, MSRV checks, and dependency caching
+- GraphQL query layer for threat hunting with aliases, sub-fields, and introspection
+- HA clustering with Raft-inspired leader election, log replication, and health monitoring
+- 88 Rust source modules, 155+ documented API paths, and 1,025 automated tests
 
 See [FEATURES.md](FEATURES.md) for the concise capability summary, [CHANGELOG.md](CHANGELOG.md) for release history, and [docs/README.md](docs/README.md) for the full documentation map.
 
@@ -64,12 +65,12 @@ Run the full automated suite:
 cargo test
 ```
 
-The current release passes 915 automated tests across unit and integration coverage. The repo also includes live verification helpers in [`tests/live_test.py`](tests/live_test.py), [`tests/verify_admin.py`](tests/verify_admin.py), and browser smoke coverage in [`tests/playwright/enterprise_console_smoke.spec.js`](tests/playwright/enterprise_console_smoke.spec.js).
+The current release passes 1,025 automated tests across unit and integration coverage. The repo also includes live verification helpers in [`tests/live_test.py`](tests/live_test.py), [`tests/verify_admin.py`](tests/verify_admin.py), and browser smoke coverage in [`tests/playwright/enterprise_console_smoke.spec.js`](tests/playwright/enterprise_console_smoke.spec.js).
 
 ## Repository layout
 
 ```text
-src/                  Core platform modules (79 Rust source files)
+src/                  Core platform modules (88 Rust source files)
 tests/                Integration tests, live checks, and browser smoke coverage
 docs/                 Product, architecture, deployment, and runbook documentation
 site/                 Static website and browser admin console

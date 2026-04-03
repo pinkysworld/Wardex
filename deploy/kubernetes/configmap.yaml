@@ -1,0 +1,23 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: wardex-config
+  labels:
+    app.kubernetes.io/name: wardex
+data:
+  wardex.toml: |
+    [server]
+    bind = "0.0.0.0:9077"
+    workers = 4
+
+    [detection]
+    sensitivity = "balanced"
+    auto_baseline = true
+
+    [storage]
+    data_dir = "/data"
+    retention_days = 90
+
+    [logging]
+    level = "info"
+    format = "json"

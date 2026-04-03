@@ -1,0 +1,105 @@
+title: Supply Chain Package Tampered
+id: wardex-supply-001
+status: stable
+level: critical
+description: Detects SBOM component hash mismatch indicating potential supply chain tampering.
+author: Wardex Contributors
+date: 2025/06/01
+tags:
+  - attack.supply_chain
+  - attack.t1195
+  - wardex.supply_chain
+logsource:
+  category: supply_chain
+  product: wardex
+detection:
+  selection:
+    event_type: sbom_verify
+    hash_mismatch: true
+  condition: selection
+falsepositives:
+  - Build reproducibility issues
+---
+title: Dependency With Known Vulnerability
+id: wardex-supply-002
+status: stable
+level: high
+description: Detects a dependency in the SBOM that has a known CVE with CVSS >= 7.0.
+author: Wardex Contributors
+date: 2025/06/01
+tags:
+  - attack.supply_chain
+  - wardex.supply_chain
+logsource:
+  category: supply_chain
+  product: wardex
+detection:
+  selection:
+    event_type: vulnerability_scan
+    cvss_score|gte: 7.0
+  condition: selection
+falsepositives:
+  - Vulnerability not exploitable in context
+---
+title: Anomalous CI/CD Pipeline Execution
+id: wardex-supply-003
+status: stable
+level: high
+description: Detects CI/CD pipeline runs from unexpected branches or triggered by unknown actors.
+author: Wardex Contributors
+date: 2025/06/01
+tags:
+  - attack.supply_chain
+  - attack.t1195.002
+  - wardex.supply_chain
+logsource:
+  category: ci_cd
+  product: wardex
+detection:
+  selection:
+    event_type: pipeline_run
+    branch_unexpected: true
+  condition: selection
+falsepositives:
+  - Hotfix branch
+---
+title: Container Image from Untrusted Registry
+id: wardex-supply-004
+status: stable
+level: high
+description: Detects container images pulled from registries not in the approved list.
+author: Wardex Contributors
+date: 2025/06/01
+tags:
+  - attack.supply_chain
+  - wardex.supply_chain
+logsource:
+  category: container
+  product: wardex
+detection:
+  selection:
+    event_type: image_pull
+    registry_trusted: false
+  condition: selection
+falsepositives:
+  - New approved registry
+---
+title: SBOM Drift Detected
+id: wardex-supply-005
+status: stable
+level: medium
+description: Detects changes between consecutive SBOM snapshots indicating untracked dependency changes.
+author: Wardex Contributors
+date: 2025/06/01
+tags:
+  - wardex.supply_chain
+logsource:
+  category: supply_chain
+  product: wardex
+detection:
+  selection:
+    event_type: sbom_diff
+    components_added|gt: 0
+  condition: selection
+falsepositives:
+  - Planned dependency update
