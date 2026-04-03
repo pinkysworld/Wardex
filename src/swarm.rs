@@ -917,7 +917,7 @@ impl SwarmNode {
 
         // Detect overloaded nodes and suggest splitting
         for node in &self.mesh {
-            if node.load > node.capacity * 0.9 {
+            if node.capacity > 0.0 && node.load > node.capacity * 0.9 {
                 actions.push(MeshReorgAction {
                     action: "offload".into(),
                     node_id: node.id.clone(),

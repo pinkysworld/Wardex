@@ -511,7 +511,7 @@ fn haversine(lat1: f64, lon1: f64, lat2: f64, lon2: f64) -> f64 {
     let lat2_r = lat2.to_radians();
     let a = (d_lat / 2.0).sin().powi(2)
         + lat1_r.cos() * lat2_r.cos() * (d_lon / 2.0).sin().powi(2);
-    let c = 2.0 * a.sqrt().asin();
+    let c = 2.0 * a.sqrt().atan2((1.0 - a).sqrt());
     r * c
 }
 

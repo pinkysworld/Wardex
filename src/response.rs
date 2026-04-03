@@ -317,14 +317,12 @@ impl ResponseOrchestrator {
             if req.status == ApprovalStatus::Pending {
                 // Try RFC3339 first, then fall back to plain epoch
                 let req_epoch = if let Ok(dt) = chrono::DateTime::parse_from_rfc3339(&req.requested_at) {
-                    Some(dt.timestamp() as u64)
+                    dt.timestamp() as u64
                 } else {
-                    req.requested_at.parse::<u64>().ok()
+                    req.requested_at.parse::<u64>().unwrap_or(0)
                 };
-                if let Some(epoch) = req_epoch {
-                    if now_epoch.saturating_sub(epoch) >= self.approval_sla_secs {
-                        req.status = ApprovalStatus::Expired;
-                    }
+                if now_epoch.saturating_sub(req_epoch) >= self.approval_sla_secs {
+                    req.status = ApprovalStatus::Expired;
                 }
             }
         }

@@ -638,9 +638,20 @@ impl StorageBackend {
         self.audit_entries.retain(|e| e.timestamp >= cutoff_str);
         let purged = before - self.audit_entries.len();
         if purged > 0 {
-            // Reset chain head so verify_audit_chain() doesn't see a dangling prev_digest
-            if let Some(first) = self.audit_entries.first_mut() {
-                first.prev_digest = None;
+            // Recompute entire remaining chain so verify_audit_chain() stays consistent
+            let mut prev = String::new();
+            for entry in self.audit_entries.iter_mut() {
+                entry.prev_digest = if prev.is_empty() { None } else { Some(prev.clone()) };
+                let digest_input = format!(
+                    "{}:{}:{}:{}:{}",
+                    entry.timestamp,
+                    entry.actor,
+                    entry.action,
+                    entry.target.as_deref().unwrap_or(""),
+                    entry.prev_digest.as_deref().unwrap_or("")
+                );
+                entry.digest = sha256_hex(digest_input.as_bytes());
+                prev = entry.digest.clone();
             }
             self.save_audit()?;
         }
