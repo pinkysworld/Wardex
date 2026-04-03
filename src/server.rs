@@ -9091,9 +9091,41 @@ fn base64_decode(input: &str) -> Result<Vec<u8>, String> {
     Ok(out)
 }
 
+// Admin console embedded at compile time — single portable binary
+const EMBEDDED_ADMIN_HTML: &str = include_str!("../admin-console/admin.html");
+const EMBEDDED_ADMIN_CSS: &str = include_str!("../admin-console/admin.css");
+const EMBEDDED_ADMIN_JS: &str = include_str!("../admin-console/admin.js");
+
+fn serve_embedded(request: Request, content: &str, content_type: &str) {
+    let data = content.as_bytes();
+    let origin = cors_origin();
+    let response = Response::new(
+        tiny_http::StatusCode(200),
+        vec![
+            Header::from_bytes(b"Content-Type", content_type.as_bytes()).unwrap(),
+            Header::from_bytes(b"Access-Control-Allow-Origin", origin.as_bytes()).unwrap(),
+            Header::from_bytes(b"X-Content-Type-Options", b"nosniff").unwrap(),
+            Header::from_bytes(b"X-Frame-Options", b"DENY").unwrap(),
+            Header::from_bytes(b"Cache-Control", b"no-store").unwrap(),
+        ],
+        std::io::Cursor::new(data.to_vec()),
+        Some(data.len()),
+        None,
+    );
+    let _ = request.respond(response);
+}
+
 fn serve_static(request: Request, site_dir: &Path) {
     let url = request.url();
     let relative = if url == "/" { "/index.html" } else { url };
+
+    // Serve embedded admin console from the binary itself
+    match relative {
+        "/admin.html" => return serve_embedded(request, EMBEDDED_ADMIN_HTML, "text/html; charset=utf-8"),
+        "/admin.css" => return serve_embedded(request, EMBEDDED_ADMIN_CSS, "text/css; charset=utf-8"),
+        "/admin.js" => return serve_embedded(request, EMBEDDED_ADMIN_JS, "application/javascript; charset=utf-8"),
+        _ => {}
+    }
 
     // Prevent path traversal via components
     let clean = relative.trim_start_matches('/');
