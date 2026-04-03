@@ -1078,7 +1078,7 @@ dependencies = [
 
 [[package]]
 name = "wardex"
-version = "0.32.0"
+version = "0.34.0"
 dependencies = [
  "aes-gcm",
  "chrono",

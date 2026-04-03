@@ -915,6 +915,265 @@ impl ContainmentCommand {
     }
 }
 
+// ── Real Enforcement Execution ────────────────────────────────────────────────
+
+/// Result of executing a real enforcement command on the OS.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ExecutionResult {
+    pub command_name: String,
+    pub executed: bool,
+    pub exit_code: Option<i32>,
+    pub stdout: String,
+    pub stderr: String,
+    pub duration_ms: u64,
+    pub dry_run: bool,
+}
+
+/// Executor that actually runs containment commands on the host OS.
+/// Supports dry-run mode for validation without side-effects.
+#[derive(Debug)]
+pub struct EnforcementExecutor {
+    dry_run: bool,
+    execution_log: Vec<ExecutionResult>,
+    allowed_commands: Vec<String>,
+}
+
+impl Default for EnforcementExecutor {
+    fn default() -> Self {
+        Self::new(false)
+    }
+}
+
+impl EnforcementExecutor {
+    pub fn new(dry_run: bool) -> Self {
+        Self {
+            dry_run,
+            execution_log: Vec::new(),
+            allowed_commands: vec![
+                "kill".into(),
+                "pfctl".into(),
+                "nft".into(),
+                "iptables".into(),
+                "chmod".into(),
+                "mv".into(),
+                "mkdir".into(),
+                "echo".into(),
+            ],
+        }
+    }
+
+    /// Enable or disable dry-run mode.
+    pub fn set_dry_run(&mut self, dry_run: bool) {
+        self.dry_run = dry_run;
+    }
+
+    /// Execute a single containment command.
+    pub fn execute(&mut self, cmd: &ContainmentCommand) -> ExecutionResult {
+        let start = std::time::Instant::now();
+
+        if self.dry_run {
+            let result = ExecutionResult {
+                command_name: cmd.name.clone(),
+                executed: false,
+                exit_code: None,
+                stdout: format!("[DRY RUN] would execute: {}", cmd.command),
+                stderr: String::new(),
+                duration_ms: 0,
+                dry_run: true,
+            };
+            self.execution_log.push(result.clone());
+            return result;
+        }
+
+        // Validate command safety before execution
+        if !self.is_command_allowed(&cmd.command) {
+            let result = ExecutionResult {
+                command_name: cmd.name.clone(),
+                executed: false,
+                exit_code: None,
+                stdout: String::new(),
+                stderr: format!("command blocked by safety filter: {}", cmd.command),
+                duration_ms: start.elapsed().as_millis() as u64,
+                dry_run: false,
+            };
+            self.execution_log.push(result.clone());
+            return result;
+        }
+
+        let output = Self::run_shell_command(&cmd.command);
+        let duration = start.elapsed().as_millis() as u64;
+
+        let result = match output {
+            Ok((code, stdout, stderr)) => ExecutionResult {
+                command_name: cmd.name.clone(),
+                executed: true,
+                exit_code: Some(code),
+                stdout,
+                stderr,
+                duration_ms: duration,
+                dry_run: false,
+            },
+            Err(e) => ExecutionResult {
+                command_name: cmd.name.clone(),
+                executed: false,
+                exit_code: None,
+                stdout: String::new(),
+                stderr: e,
+                duration_ms: duration,
+                dry_run: false,
+            },
+        };
+
+        self.execution_log.push(result.clone());
+        result
+    }
+
+    /// Execute a batch of containment commands, stopping on first failure
+    /// unless `continue_on_failure` is true.
+    pub fn execute_batch(
+        &mut self,
+        commands: &[ContainmentCommand],
+        continue_on_failure: bool,
+    ) -> Vec<ExecutionResult> {
+        let mut results = Vec::new();
+        for cmd in commands {
+            let result = self.execute(cmd);
+            let failed = !result.dry_run && result.exit_code != Some(0);
+            results.push(result);
+            if failed && !continue_on_failure {
+                break;
+            }
+        }
+        results
+    }
+
+    /// Kill a process by PID. Uses `kill -9` on Unix.
+    pub fn kill_process(&mut self, pid: u32) -> ExecutionResult {
+        let cmd = ContainmentCommand::new(
+            "kill_process",
+            &format!("kill -9 {pid}"),
+            true,
+        );
+        self.execute(&cmd)
+    }
+
+    /// Quarantine a file by moving it to a secure vault directory.
+    pub fn quarantine_file(&mut self, path: &str, vault_dir: &str) -> ExecutionResult {
+        let safe_path = path.replace("..","").replace('\0', "");
+        let safe_vault = vault_dir.replace("..","").replace('\0', "");
+        let cmd = ContainmentCommand::new(
+            "quarantine_file",
+            &format!("mkdir -p {safe_vault} && mv {safe_path} {safe_vault}/"),
+            true,
+        );
+        self.execute(&cmd)
+    }
+
+    /// Block network for a host IP using the platform firewall.
+    pub fn block_network(&mut self, ip: &str, platform: &str) -> ExecutionResult {
+        // Validate IP format to prevent injection
+        if !Self::is_valid_ip(ip) {
+            return ExecutionResult {
+                command_name: "block_network".into(),
+                executed: false,
+                exit_code: None,
+                stdout: String::new(),
+                stderr: format!("invalid IP address: {ip}"),
+                duration_ms: 0,
+                dry_run: self.dry_run,
+            };
+        }
+
+        let command = match platform {
+            "linux" => format!(
+                "iptables -A INPUT -s {ip} -j DROP && iptables -A OUTPUT -d {ip} -j DROP"
+            ),
+            "macos" => format!(
+                "echo 'block drop from {ip} to any\nblock drop from any to {ip}' | pfctl -a wardex -f -"
+            ),
+            _ => format!("echo 'block {ip} (platform {platform} not supported)'"),
+        };
+
+        let cmd = ContainmentCommand::new("block_network", &command, true);
+        self.execute(&cmd)
+    }
+
+    /// Unblock network for a host IP.
+    pub fn unblock_network(&mut self, ip: &str, platform: &str) -> ExecutionResult {
+        if !Self::is_valid_ip(ip) {
+            return ExecutionResult {
+                command_name: "unblock_network".into(),
+                executed: false,
+                exit_code: None,
+                stdout: String::new(),
+                stderr: format!("invalid IP address: {ip}"),
+                duration_ms: 0,
+                dry_run: self.dry_run,
+            };
+        }
+
+        let command = match platform {
+            "linux" => format!(
+                "iptables -D INPUT -s {ip} -j DROP && iptables -D OUTPUT -d {ip} -j DROP"
+            ),
+            "macos" => "pfctl -a wardex -F rules".to_string(),
+            _ => format!("echo 'unblock {ip} (platform {platform} not supported)'"),
+        };
+
+        let cmd = ContainmentCommand::new("unblock_network", &command, true);
+        self.execute(&cmd)
+    }
+
+    /// Get the full execution log.
+    pub fn execution_log(&self) -> &[ExecutionResult] {
+        &self.execution_log
+    }
+
+    /// Check if a command's base executable is in the allowed list.
+    fn is_command_allowed(&self, command: &str) -> bool {
+        let base = command
+            .split_whitespace()
+            .next()
+            .unwrap_or("")
+            .rsplit('/')
+            .next()
+            .unwrap_or("");
+        self.allowed_commands.iter().any(|a| a == base)
+    }
+
+    /// Basic IP validation (v4 or v6) to prevent command injection.
+    fn is_valid_ip(ip: &str) -> bool {
+        // IPv4: digits and dots only
+        let is_v4 = ip.split('.').count() == 4
+            && ip.chars().all(|c| c.is_ascii_digit() || c == '.');
+        // IPv6: hex digits, colons, optional dots in mapped form
+        let is_v6 = ip.contains(':')
+            && ip.chars().all(|c| c.is_ascii_hexdigit() || c == ':' || c == '.');
+        is_v4 || is_v6
+    }
+
+    #[cfg(unix)]
+    fn run_shell_command(command: &str) -> Result<(i32, String, String), String> {
+        use std::process::Command;
+        let output = Command::new("sh")
+            .arg("-c")
+            .arg(command)
+            .output()
+            .map_err(|e| format!("failed to execute: {e}"))?;
+        Ok((
+            output.status.code().unwrap_or(-1),
+            String::from_utf8_lossy(&output.stdout).to_string(),
+            String::from_utf8_lossy(&output.stderr).to_string(),
+        ))
+    }
+
+    #[cfg(not(unix))]
+    fn run_shell_command(command: &str) -> Result<(i32, String, String), String> {
+        // On non-Unix platforms, simulate execution
+        Ok((0, format!("[simulated] {command}"), String::new()))
+    }
+}
+
 // ── Tests ─────────────────────────────────────────────────────────────────────
 
 #[cfg(test)]
@@ -1106,5 +1365,78 @@ mod tests {
         let status = tpm.status();
         assert!(status.available);
         assert!(status.pcr_banks.contains(&"SHA-256".to_string()));
+    }
+
+    #[test]
+    fn executor_dry_run_does_not_execute() {
+        let mut exec = EnforcementExecutor::new(true);
+        let cmd = ContainmentCommand::new("test", "echo hello", false);
+        let result = exec.execute(&cmd);
+        assert!(result.dry_run);
+        assert!(!result.executed);
+        assert!(result.stdout.contains("DRY RUN"));
+    }
+
+    #[test]
+    fn executor_real_echo() {
+        let mut exec = EnforcementExecutor::new(false);
+        let cmd = ContainmentCommand::new("echo_test", "echo wardex_ok", false);
+        let result = exec.execute(&cmd);
+        assert!(result.executed);
+        assert_eq!(result.exit_code, Some(0));
+        assert!(result.stdout.contains("wardex_ok"));
+    }
+
+    #[test]
+    fn executor_blocks_disallowed_command() {
+        let mut exec = EnforcementExecutor::new(false);
+        let cmd = ContainmentCommand::new("bad", "rm -rf /", true);
+        let result = exec.execute(&cmd);
+        assert!(!result.executed);
+        assert!(result.stderr.contains("safety filter"));
+    }
+
+    #[test]
+    fn executor_batch_stops_on_failure() {
+        let mut exec = EnforcementExecutor::new(false);
+        let cmds = vec![
+            ContainmentCommand::new("ok", "echo first", false),
+            ContainmentCommand::new("fail", "false", false), // not in allowed list
+            ContainmentCommand::new("skip", "echo third", false),
+        ];
+        let results = exec.execute_batch(&cmds, false);
+        // Should stop at 'false' (not allowed)
+        assert_eq!(results.len(), 2);
+    }
+
+    #[test]
+    fn executor_batch_continue_on_failure() {
+        let mut exec = EnforcementExecutor::new(true); // dry run
+        let cmds = vec![
+            ContainmentCommand::new("a", "echo a", false),
+            ContainmentCommand::new("b", "echo b", false),
+            ContainmentCommand::new("c", "echo c", false),
+        ];
+        let results = exec.execute_batch(&cmds, true);
+        assert_eq!(results.len(), 3);
+    }
+
+    #[test]
+    fn executor_ip_validation() {
+        let mut exec = EnforcementExecutor::new(true);
+        let result = exec.block_network("192.168.1.1", "linux");
+        assert!(result.dry_run);
+        assert!(result.stdout.contains("DRY RUN"));
+
+        let result = exec.block_network("; rm -rf /", "linux");
+        assert!(result.stderr.contains("invalid IP"));
+    }
+
+    #[test]
+    fn executor_log_tracks_all() {
+        let mut exec = EnforcementExecutor::new(true);
+        exec.execute(&ContainmentCommand::new("a", "echo a", false));
+        exec.execute(&ContainmentCommand::new("b", "echo b", false));
+        assert_eq!(exec.execution_log().len(), 2);
     }
 }

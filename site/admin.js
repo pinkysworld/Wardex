@@ -346,6 +346,10 @@ function renderReport(report) {
   // Mini bars in overview
   renderReportMini($("#report-mini"), report);
 
+  // Timeline visualization
+  const tc = $("#timeline-container");
+  if (tc) renderTimeline(tc, report);
+
   // Sample list
   const sl = $("#sample-list");
   clear(sl);
@@ -375,6 +379,103 @@ function switchView(name) {
   const target = $(`#view-${name}`);
   if (target) target.classList.add("active");
   $$(".sidebar-link[data-view]").forEach(l => l.classList.toggle("active", l.dataset.view === name));
+  // Update hash for deep-linking without triggering hashchange
+  const hashVal = buildHash(name);
+  if (window.location.hash !== "#" + hashVal) {
+    history.replaceState(null, "", "#" + hashVal);
+  }
+}
+
+// ── Deep-Linking & Shareable URLs ────────────────────────────────────────────
+
+function buildHash(view, detail) {
+  if (detail) return `${view}/${detail}`;
+  return view;
+}
+
+function parseHash() {
+  const raw = window.location.hash.replace(/^#\/?/, "");
+  if (!raw) return { view: "overview", detail: null };
+  const parts = raw.split("/");
+  return { view: parts[0] || "overview", detail: parts.slice(1).join("/") || null };
+}
+
+function navigateToHash() {
+  const { view, detail } = parseHash();
+  switchView(view);
+
+  if (view === "reports" && detail && currentReport) {
+    // detail might be a sample index, e.g. "sample/3"
+    if (detail.startsWith("sample/")) {
+      const idx = parseInt(detail.replace("sample/", ""), 10);
+      if (!isNaN(idx)) selectSample(idx);
+    }
+  }
+}
+
+function shareableUrl() {
+  return window.location.origin + window.location.pathname + window.location.hash;
+}
+
+// Copy current URL to clipboard
+function copyShareLink() {
+  const url = shareableUrl();
+  if (navigator.clipboard) {
+    navigator.clipboard.writeText(url).then(() => setBanner("Link copied to clipboard", "success"));
+  } else {
+    setBanner(url, "info");
+  }
+}
+
+// ── Timeline Visualization ───────────────────────────────────────────────────
+
+function renderTimeline(container, report) {
+  clear(container);
+  if (!report || !report.samples || !report.samples.length) {
+    container.innerHTML = `<p class="empty-msg">No samples to visualise.</p>`;
+    return;
+  }
+
+  const wrapper = el("div", "timeline-wrapper");
+  const header = el("div", "timeline-header");
+  header.innerHTML = `<h3>Alert Timeline</h3>
+    <span class="timeline-count">${report.samples.length} events</span>`;
+  wrapper.appendChild(header);
+
+  const track = el("div", "timeline-track");
+
+  const maxScore = report.summary?.max_score || 1;
+  const samples = report.samples;
+
+  // Group by severity for stacking
+  samples.forEach((s, i) => {
+    const pct_height = Math.max(8, Math.min(100, (s.anomaly.score / maxScore) * 100));
+    const left = samples.length > 1 ? (i / (samples.length - 1)) * 100 : 50;
+    const dot = el("div", `timeline-dot ${sevClass(s.decision.threat_level)}`);
+    dot.style.left = `${left}%`;
+    dot.style.height = `${pct_height}%`;
+    dot.title = `#${s.index} — ${s.decision.threat_level} (score ${Number(s.anomaly.score).toFixed(2)})`;
+    dot.addEventListener("click", () => {
+      switchView("reports");
+      selectSample(i);
+      history.replaceState(null, "", `#reports/sample/${i}`);
+    });
+    track.appendChild(dot);
+  });
+
+  wrapper.appendChild(track);
+
+  // Legend
+  const legend = el("div", "timeline-legend");
+  legend.innerHTML = `
+    <span class="tl-legend-item"><span class="tl-dot sev-critical"></span> Critical</span>
+    <span class="tl-legend-item"><span class="tl-dot sev-severe"></span> Severe</span>
+    <span class="tl-legend-item"><span class="tl-dot sev-elevated"></span> Elevated</span>
+    <span class="tl-legend-item"><span class="tl-dot sev-nominal"></span> Nominal</span>
+  `;
+  wrapper.appendChild(legend);
+
+  container.appendChild(wrapper);
 }
 
 // ── File Loading ─────────────────────────────────────────────────────────────
@@ -446,13 +547,17 @@ function init() {
     catch (e) { setBanner(`Failed: ${e.message}`, "error"); }
   });
 
-  // Hash-based initial view
-  const hash = window.location.hash.replace("#", "");
-  if (hash === "status") switchView("status");
-  else if (hash === "reports") switchView("reports");
+  // Hash-based initial view (deep-linking)
+  window.addEventListener("hashchange", navigateToHash);
 
-  // Auto-load bundled data
-  loadAll();
+  // Share link button
+  $("#share-link")?.addEventListener("click", (e) => {
+    e.preventDefault();
+    copyShareLink();
+  });
+
+  // Auto-load bundled data, then apply hash
+  loadAll().then(() => navigateToHash());
 }
 
 async function loadAll() {

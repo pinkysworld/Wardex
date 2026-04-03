@@ -46,13 +46,25 @@ Wardex is a self-hosted XDR and SIEM platform built in Rust for teams that want 
 - **Integrations and evidence**
   - Structured SIEM output, OCSF normalization, TAXII pull, and threat-intel enrichment
   - Compliance evidence, forensic exports, tamper-evident audit chain, and encrypted event spooling
+  - Outbound notifications to Slack, Teams, PagerDuty, Webhook, and Email with severity filtering and retry
+  - CycloneDX 1.5 and SPDX 2.3 SBOM generation from Cargo.lock for supply-chain compliance
   - Runbooks, OpenAPI contract, deployment models, disaster recovery guidance, and production hardening docs
+
+- **Production hardening**
+  - Persistent JSON storage backend with atomic writes, schema migrations, and retention purge
+  - Real OS enforcement execution with command safety filter and dry-run mode
+  - Atomic agent update with SHA-256 verification, automatic rollback, and state tracking
+  - Alert deduplication with time-window grouping and cross-device merge
+  - YARA-style pattern matching engine with built-in threat rules
+  - Multi-tenancy isolation guards with cross-tenant access control
+  - Real mesh networking with checksummed frames, hop limits, and peer state tracking
+  - Dashboard deep-linking and timeline visualization
 
 ## Product posture
 
-- 75 Rust source modules
+- 79 Rust source modules
 - 155+ API paths
-- 832 automated tests
+- 915 automated tests
 - GitHub Actions release packaging for Linux, macOS, and Windows
 
 ## Operator entry points

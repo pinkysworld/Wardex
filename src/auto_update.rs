@@ -175,6 +175,202 @@ fn version_cmp(a: &str, b: &str) -> std::cmp::Ordering {
     va.cmp(&vb)
 }
 
+// ── Atomic update with rollback ──────────────────────────────────────
+
+/// State of an atomic update operation.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub enum UpdateState {
+    Idle,
+    Downloading,
+    Verifying,
+    BackingUp,
+    Swapping,
+    Validating,
+    Complete,
+    RolledBack,
+    Failed { reason: String },
+}
+
+/// Record of a completed update attempt.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct UpdateRecord {
+    pub from_version: String,
+    pub to_version: String,
+    pub state: UpdateState,
+    pub started_at: String,
+    pub completed_at: String,
+    pub rollback: bool,
+}
+
+/// Atomic updater that backs up the current binary, swaps in the new
+/// one, validates it, and rolls back on failure.
+#[derive(Debug)]
+pub struct AtomicUpdater {
+    /// Directory for storing backups and staging files.
+    staging_dir: String,
+    /// Current running version.
+    current_version: String,
+    /// Current state machine position.
+    state: UpdateState,
+    /// History of all update attempts.
+    history: Vec<UpdateRecord>,
+}
+
+impl AtomicUpdater {
+    pub fn new(staging_dir: &str, current_version: &str) -> Self {
+        let _ = fs::create_dir_all(staging_dir);
+        Self {
+            staging_dir: staging_dir.to_string(),
+            current_version: current_version.to_string(),
+            state: UpdateState::Idle,
+            history: Vec::new(),
+        }
+    }
+
+    pub fn state(&self) -> &UpdateState {
+        &self.state
+    }
+
+    pub fn history(&self) -> &[UpdateRecord] {
+        &self.history
+    }
+
+    /// Execute a full atomic update cycle.
+    ///
+    /// Steps:
+    /// 1. Download — write `binary` to staging.
+    /// 2. Verify — check SHA-256 matches `expected_sha`.
+    /// 3. Back up — copy current binary to backup location.
+    /// 4. Swap — rename staged binary into place.
+    /// 5. Validate — run basic health check.
+    /// 6. Rollback if validation fails.
+    pub fn apply_update(
+        &mut self,
+        new_version: &str,
+        binary: &[u8],
+        expected_sha: &str,
+        current_binary_path: &str,
+    ) -> Result<(), String> {
+        use sha2::{Sha256, Digest};
+
+        let started = chrono::Utc::now().to_rfc3339();
+        let staged_path = format!("{}/staged-{}", self.staging_dir, new_version);
+        let backup_path = format!("{}/backup-{}", self.staging_dir, self.current_version);
+
+        // 1. Download / write staged.
+        self.state = UpdateState::Downloading;
+        fs::write(&staged_path, binary)
+            .map_err(|e| self.fail(&started, new_version, format!("staging write: {e}")))?;
+
+        // 2. Verify SHA-256.
+        self.state = UpdateState::Verifying;
+        let actual_sha = hex::encode(Sha256::digest(binary));
+        if actual_sha != expected_sha {
+            let _ = fs::remove_file(&staged_path);
+            return Err(self.fail(
+                &started,
+                new_version,
+                format!("SHA mismatch: expected {expected_sha}, got {actual_sha}"),
+            ));
+        }
+
+        // 3. Back up current binary.
+        self.state = UpdateState::BackingUp;
+        if Path::new(current_binary_path).exists() {
+            fs::copy(current_binary_path, &backup_path).map_err(|e| {
+                self.fail(&started, new_version, format!("backup: {e}"))
+            })?;
+        }
+
+        // 4. Swap staged → current.
+        self.state = UpdateState::Swapping;
+        if let Err(e) = fs::rename(&staged_path, current_binary_path) {
+            // Rollback: restore backup.
+            if Path::new(&backup_path).exists() {
+                let _ = fs::rename(&backup_path, current_binary_path);
+            }
+            return Err(self.fail(&started, new_version, format!("swap: {e}")));
+        }
+
+        // 5. Validate (simple: check file size and readability).
+        self.state = UpdateState::Validating;
+        match fs::metadata(current_binary_path) {
+            Ok(m) if m.len() == binary.len() as u64 => {
+                // Validation passed.
+            }
+            Ok(m) => {
+                self.rollback(current_binary_path, &backup_path);
+                return Err(self.fail(
+                    &started,
+                    new_version,
+                    format!("validation: size mismatch ({} vs {})", m.len(), binary.len()),
+                ));
+            }
+            Err(e) => {
+                self.rollback(current_binary_path, &backup_path);
+                return Err(self.fail(
+                    &started,
+                    new_version,
+                    format!("validation: {e}"),
+                ));
+            }
+        }
+
+        // Success.
+        self.state = UpdateState::Complete;
+        self.history.push(UpdateRecord {
+            from_version: self.current_version.clone(),
+            to_version: new_version.to_string(),
+            state: UpdateState::Complete,
+            started_at: started,
+            completed_at: chrono::Utc::now().to_rfc3339(),
+            rollback: false,
+        });
+        self.current_version = new_version.to_string();
+        Ok(())
+    }
+
+    /// Explicitly rollback to the previous version.
+    pub fn rollback_to_previous(&mut self, current_binary_path: &str) -> Result<(), String> {
+        let backup_path = format!("{}/backup-{}", self.staging_dir, self.current_version);
+        // Look for any backup file.
+        let entries = fs::read_dir(&self.staging_dir).map_err(|e| e.to_string())?;
+        for entry in entries.flatten() {
+            let name = entry.file_name().to_string_lossy().to_string();
+            if name.starts_with("backup-") {
+                fs::rename(entry.path(), current_binary_path)
+                    .map_err(|e| format!("rollback: {e}"))?;
+                self.state = UpdateState::RolledBack;
+                return Ok(());
+            }
+        }
+        Err(format!("no backup found in {}", self.staging_dir))
+    }
+
+    fn rollback(&self, current_path: &str, backup_path: &str) {
+        if Path::new(backup_path).exists() {
+            let _ = fs::rename(backup_path, current_path);
+        }
+    }
+
+    fn fail(&mut self, started_at: &str, to_version: &str, reason: String) -> String {
+        self.state = UpdateState::Failed {
+            reason: reason.clone(),
+        };
+        self.history.push(UpdateRecord {
+            from_version: self.current_version.clone(),
+            to_version: to_version.to_string(),
+            state: UpdateState::Failed {
+                reason: reason.clone(),
+            },
+            started_at: started_at.to_string(),
+            completed_at: chrono::Utc::now().to_rfc3339(),
+            rollback: false,
+        });
+        reason
+    }
+}
+
 // ── Tests ────────────────────────────────────────────────────────────
 
 #[cfg(test)]
@@ -268,5 +464,102 @@ mod tests {
         };
         assert!(mgr.get_release_binary("../etc/passwd").is_err());
         assert!(mgr.get_release_binary("foo/../../bar").is_err());
+    }
+
+    #[test]
+    fn atomic_update_success() {
+        use sha2::{Sha256, Digest};
+
+        let dir = std::env::temp_dir().join("wardex_test_atomic");
+        let _ = fs::create_dir_all(&dir);
+        let bin_path = dir.join("wardex");
+        fs::write(&bin_path, b"old binary v1").unwrap();
+
+        let new_binary = b"new binary v2";
+        let expected_sha = hex::encode(Sha256::digest(new_binary));
+
+        let mut updater = AtomicUpdater::new(
+            dir.join("staging").to_str().unwrap(),
+            "1.0.0",
+        );
+
+        let result = updater.apply_update(
+            "2.0.0",
+            new_binary,
+            &expected_sha,
+            bin_path.to_str().unwrap(),
+        );
+        assert!(result.is_ok());
+        assert_eq!(*updater.state(), UpdateState::Complete);
+        assert_eq!(updater.history().len(), 1);
+
+        let content = fs::read(&bin_path).unwrap();
+        assert_eq!(content, new_binary);
+
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn atomic_update_sha_mismatch_fails() {
+        let dir = std::env::temp_dir().join("wardex_test_sha_fail");
+        let _ = fs::create_dir_all(&dir);
+
+        let mut updater = AtomicUpdater::new(
+            dir.join("staging").to_str().unwrap(),
+            "1.0.0",
+        );
+
+        let result = updater.apply_update("2.0.0", b"data", "wrong-sha", "/tmp/nonexistent");
+        assert!(result.is_err());
+        assert!(matches!(updater.state(), UpdateState::Failed { .. }));
+
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn atomic_update_rollback() {
+        use sha2::{Sha256, Digest};
+
+        let dir = std::env::temp_dir().join("wardex_test_rollback");
+        let _ = fs::create_dir_all(&dir);
+        let bin_path = dir.join("wardex-rb");
+        let old = b"version-1-content";
+        fs::write(&bin_path, old).unwrap();
+
+        let new_binary = b"version-2-content";
+        let sha = hex::encode(Sha256::digest(new_binary));
+
+        let mut updater = AtomicUpdater::new(
+            dir.join("staging").to_str().unwrap(),
+            "1.0.0",
+        );
+
+        // First, apply successfully.
+        updater.apply_update("2.0.0", new_binary, &sha, bin_path.to_str().unwrap()).unwrap();
+
+        // Then rollback.
+        let rb = updater.rollback_to_previous(bin_path.to_str().unwrap());
+        assert!(rb.is_ok());
+        assert_eq!(*updater.state(), UpdateState::RolledBack);
+
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn atomic_update_history_tracked() {
+        let dir = std::env::temp_dir().join("wardex_test_history");
+        let _ = fs::create_dir_all(&dir);
+
+        let mut updater = AtomicUpdater::new(
+            dir.join("staging").to_str().unwrap(),
+            "1.0.0",
+        );
+
+        // A failed attempt.
+        let _ = updater.apply_update("2.0.0", b"x", "bad-sha", "/tmp/nope");
+        assert_eq!(updater.history().len(), 1);
+        assert!(matches!(updater.history()[0].state, UpdateState::Failed { .. }));
+
+        let _ = fs::remove_dir_all(&dir);
     }
 }

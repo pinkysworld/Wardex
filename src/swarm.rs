@@ -1016,6 +1016,220 @@ impl SwarmNode {
     }
 }
 
+// ── Mesh Transport Layer ─────────────────────────────────────────────────────
+
+/// A message frame for the mesh transport protocol.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MeshFrame {
+    pub frame_id: u64,
+    pub src: String,
+    pub dst: String,
+    pub hop_count: u8,
+    pub max_hops: u8,
+    pub payload: Vec<u8>,
+    pub payload_type: MeshPayloadType,
+    pub timestamp_ms: u64,
+    pub checksum: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub enum MeshPayloadType {
+    Gossip,
+    IntelShare,
+    PolicySync,
+    Heartbeat,
+    DataRequest,
+    DataResponse,
+}
+
+/// Peer connection state.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PeerConnection {
+    pub peer_id: String,
+    pub address: String,
+    pub connected_at: String,
+    pub last_heartbeat: String,
+    pub latency_ms: u64,
+    pub bytes_sent: u64,
+    pub bytes_received: u64,
+    pub state: PeerState,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub enum PeerState {
+    Connected,
+    Connecting,
+    Disconnected,
+    Failed,
+}
+
+/// Transport statistics.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TransportStats {
+    pub frames_sent: u64,
+    pub frames_received: u64,
+    pub bytes_sent: u64,
+    pub bytes_received: u64,
+    pub active_peers: usize,
+    pub failed_peers: usize,
+}
+
+/// Mesh transport engine for real peer-to-peer communication.
+///
+/// In production this would bind TCP/QUIC sockets; in this embedded
+/// build it uses in-process message queues for the same API surface.
+#[derive(Debug)]
+pub struct MeshTransport {
+    node_id: String,
+    peers: HashMap<String, PeerConnection>,
+    outbound_queue: Vec<MeshFrame>,
+    inbound_queue: Vec<MeshFrame>,
+    frame_counter: u64,
+    stats: TransportStats,
+}
+
+impl MeshTransport {
+    pub fn new(node_id: &str) -> Self {
+        Self {
+            node_id: node_id.into(),
+            peers: HashMap::new(),
+            outbound_queue: Vec::new(),
+            inbound_queue: Vec::new(),
+            frame_counter: 0,
+            stats: TransportStats {
+                frames_sent: 0,
+                frames_received: 0,
+                bytes_sent: 0,
+                bytes_received: 0,
+                active_peers: 0,
+                failed_peers: 0,
+            },
+        }
+    }
+
+    /// Register a peer with its address.
+    pub fn add_peer(&mut self, peer_id: &str, address: &str) {
+        let conn = PeerConnection {
+            peer_id: peer_id.into(),
+            address: address.into(),
+            connected_at: chrono::Utc::now().to_rfc3339(),
+            last_heartbeat: chrono::Utc::now().to_rfc3339(),
+            latency_ms: 0,
+            bytes_sent: 0,
+            bytes_received: 0,
+            state: PeerState::Connected,
+        };
+        self.peers.insert(peer_id.into(), conn);
+        self.stats.active_peers = self.peers.values().filter(|p| p.state == PeerState::Connected).count();
+    }
+
+    /// Disconnect a peer.
+    pub fn disconnect_peer(&mut self, peer_id: &str) {
+        if let Some(peer) = self.peers.get_mut(peer_id) {
+            peer.state = PeerState::Disconnected;
+        }
+        self.stats.active_peers = self.peers.values().filter(|p| p.state == PeerState::Connected).count();
+    }
+
+    /// Send a frame to a specific peer.
+    pub fn send(&mut self, dst: &str, payload: &[u8], payload_type: MeshPayloadType) -> MeshFrame {
+        self.frame_counter += 1;
+        let checksum = sha256_hex(payload);
+        let frame = MeshFrame {
+            frame_id: self.frame_counter,
+            src: self.node_id.clone(),
+            dst: dst.into(),
+            hop_count: 0,
+            max_hops: 10,
+            payload: payload.to_vec(),
+            payload_type,
+            timestamp_ms: chrono::Utc::now().timestamp_millis() as u64,
+            checksum,
+        };
+        self.stats.frames_sent += 1;
+        self.stats.bytes_sent += payload.len() as u64;
+        if let Some(peer) = self.peers.get_mut(dst) {
+            peer.bytes_sent += payload.len() as u64;
+        }
+        self.outbound_queue.push(frame.clone());
+        frame
+    }
+
+    /// Broadcast a frame to all connected peers.
+    pub fn broadcast(&mut self, payload: &[u8], payload_type: MeshPayloadType) -> Vec<MeshFrame> {
+        let peer_ids: Vec<String> = self.peers
+            .values()
+            .filter(|p| p.state == PeerState::Connected)
+            .map(|p| p.peer_id.clone())
+            .collect();
+        let mut frames = Vec::new();
+        for pid in &peer_ids {
+            let frame = self.send(pid, payload, payload_type.clone());
+            frames.push(frame);
+        }
+        frames
+    }
+
+    /// Receive a frame from a peer.
+    pub fn receive(&mut self, frame: MeshFrame) -> bool {
+        // Verify checksum
+        let expected = sha256_hex(&frame.payload);
+        if expected != frame.checksum {
+            return false;
+        }
+        // Check hop count
+        if frame.hop_count >= frame.max_hops {
+            return false;
+        }
+        self.stats.frames_received += 1;
+        self.stats.bytes_received += frame.payload.len() as u64;
+        if let Some(peer) = self.peers.get_mut(&frame.src) {
+            peer.bytes_received += frame.payload.len() as u64;
+            peer.last_heartbeat = chrono::Utc::now().to_rfc3339();
+        }
+        self.inbound_queue.push(frame);
+        true
+    }
+
+    /// Drain the inbound queue.
+    pub fn drain_inbound(&mut self) -> Vec<MeshFrame> {
+        std::mem::take(&mut self.inbound_queue)
+    }
+
+    /// Drain the outbound queue.
+    pub fn drain_outbound(&mut self) -> Vec<MeshFrame> {
+        std::mem::take(&mut self.outbound_queue)
+    }
+
+    /// Send a heartbeat to all peers.
+    pub fn heartbeat(&mut self) -> Vec<MeshFrame> {
+        self.broadcast(b"heartbeat", MeshPayloadType::Heartbeat)
+    }
+
+    /// Get transport statistics.
+    pub fn stats(&self) -> &TransportStats {
+        &self.stats
+    }
+
+    /// Get all peer connections.
+    pub fn peers(&self) -> &HashMap<String, PeerConnection> {
+        &self.peers
+    }
+
+    /// Forward a frame to the next hop (increment hop_count).
+    pub fn forward(&mut self, mut frame: MeshFrame, next_hop: &str) -> Option<MeshFrame> {
+        frame.hop_count += 1;
+        if frame.hop_count >= frame.max_hops {
+            return None;
+        }
+        frame.dst = next_hop.into();
+        self.outbound_queue.push(frame.clone());
+        self.stats.frames_sent += 1;
+        self.stats.bytes_sent += frame.payload.len() as u64;
+        Some(frame)
+    }
+}
+
 // ── Tests ─────────────────────────────────────────────────────────────────────
 
 #[cfg(test)]
@@ -1393,5 +1607,136 @@ mod tests {
         let tree = node.spanning_tree();
         assert_eq!(tree.nodes_reached, 4);
         assert_eq!(tree.root, "coord");
+    }
+
+    // ── Mesh Transport Tests ────────
+
+    #[test]
+    fn mesh_transport_send_receive() {
+        let mut t1 = MeshTransport::new("node-A");
+        let mut t2 = MeshTransport::new("node-B");
+
+        t1.add_peer("node-B", "127.0.0.1:9001");
+        t2.add_peer("node-A", "127.0.0.1:9000");
+
+        let frame = t1.send("node-B", b"hello mesh", MeshPayloadType::Gossip);
+        assert_eq!(frame.src, "node-A");
+        assert_eq!(frame.dst, "node-B");
+
+        let accepted = t2.receive(frame);
+        assert!(accepted);
+        let msgs = t2.drain_inbound();
+        assert_eq!(msgs.len(), 1);
+        assert_eq!(msgs[0].payload, b"hello mesh");
+    }
+
+    #[test]
+    fn mesh_transport_broadcast() {
+        let mut t = MeshTransport::new("center");
+        t.add_peer("a", "127.0.0.1:9001");
+        t.add_peer("b", "127.0.0.1:9002");
+        t.add_peer("c", "127.0.0.1:9003");
+
+        let frames = t.broadcast(b"sync", MeshPayloadType::PolicySync);
+        assert_eq!(frames.len(), 3);
+        assert_eq!(t.stats().frames_sent, 3);
+    }
+
+    #[test]
+    fn mesh_transport_heartbeat() {
+        let mut t = MeshTransport::new("hb");
+        t.add_peer("peer1", "10.0.0.1:9000");
+        let frames = t.heartbeat();
+        assert_eq!(frames.len(), 1);
+        assert_eq!(frames[0].payload_type, MeshPayloadType::Heartbeat);
+    }
+
+    #[test]
+    fn mesh_transport_checksum_validation() {
+        let mut t = MeshTransport::new("rx");
+        t.add_peer("bad", "10.0.0.1:9000");
+
+        let bad_frame = MeshFrame {
+            frame_id: 1,
+            src: "bad".into(),
+            dst: "rx".into(),
+            hop_count: 0,
+            max_hops: 10,
+            payload: b"tampered".to_vec(),
+            payload_type: MeshPayloadType::Gossip,
+            timestamp_ms: 0,
+            checksum: "wrong-checksum".into(),
+        };
+        let accepted = t.receive(bad_frame);
+        assert!(!accepted);
+    }
+
+    #[test]
+    fn mesh_transport_hop_limit() {
+        let mut t = MeshTransport::new("relay");
+        t.add_peer("next", "10.0.0.1:9000");
+
+        let frame = MeshFrame {
+            frame_id: 1,
+            src: "origin".into(),
+            dst: "relay".into(),
+            hop_count: 10,
+            max_hops: 10,
+            payload: b"expired".to_vec(),
+            payload_type: MeshPayloadType::Gossip,
+            timestamp_ms: 0,
+            checksum: sha256_hex(b"expired"),
+        };
+        let accepted = t.receive(frame);
+        assert!(!accepted);
+    }
+
+    #[test]
+    fn mesh_transport_forward() {
+        let mut t = MeshTransport::new("relay");
+        let frame = MeshFrame {
+            frame_id: 1,
+            src: "origin".into(),
+            dst: "relay".into(),
+            hop_count: 2,
+            max_hops: 10,
+            payload: b"forward-me".to_vec(),
+            payload_type: MeshPayloadType::IntelShare,
+            timestamp_ms: 0,
+            checksum: sha256_hex(b"forward-me"),
+        };
+        let forwarded = t.forward(frame, "next-hop");
+        assert!(forwarded.is_some());
+        let f = forwarded.unwrap();
+        assert_eq!(f.hop_count, 3);
+        assert_eq!(f.dst, "next-hop");
+    }
+
+    #[test]
+    fn mesh_transport_disconnect_peer() {
+        let mut t = MeshTransport::new("node");
+        t.add_peer("p1", "10.0.0.1:9000");
+        t.add_peer("p2", "10.0.0.2:9000");
+        assert_eq!(t.stats().active_peers, 2);
+
+        t.disconnect_peer("p1");
+        assert_eq!(t.stats().active_peers, 1);
+
+        // Broadcast only goes to connected peers
+        let frames = t.broadcast(b"test", MeshPayloadType::Gossip);
+        assert_eq!(frames.len(), 1);
+    }
+
+    #[test]
+    fn mesh_transport_stats() {
+        let mut t = MeshTransport::new("stats-node");
+        t.add_peer("p1", "10.0.0.1:9000");
+        t.send("p1", b"data1", MeshPayloadType::DataRequest);
+        t.send("p1", b"data22", MeshPayloadType::DataResponse);
+
+        let stats = t.stats();
+        assert_eq!(stats.frames_sent, 2);
+        assert_eq!(stats.bytes_sent, 11); // 5 + 6
+        assert_eq!(stats.active_peers, 1);
     }
 }

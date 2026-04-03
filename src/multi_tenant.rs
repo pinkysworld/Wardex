@@ -280,6 +280,121 @@ impl MultiTenantManager {
     pub fn tenant_count(&self) -> usize {
         self.tenants.len()
     }
+
+    /// Check whether a device belongs to the given tenant.
+    pub fn device_belongs_to(&self, tenant_id: &str, device_id: &str) -> bool {
+        self.tenants
+            .get(tenant_id)
+            .map(|t| t.device_ids.contains(&device_id.to_string()))
+            .unwrap_or(false)
+    }
+
+    /// Get the tenant that owns a device.
+    pub fn tenant_for_device(&self, device_id: &str) -> Option<&Tenant> {
+        self.tenants
+            .values()
+            .find(|t| t.device_ids.contains(&device_id.to_string()))
+    }
+
+    /// Resolve tenant context from an API-key header value.
+    /// Returns tenant context and tenant_id, or an error message.
+    pub fn resolve_request(&self, api_key: &str) -> Result<TenantContext, String> {
+        self.authenticate(api_key)
+            .ok_or_else(|| "authentication failed".to_string())
+    }
+
+    /// Filter a list of item tenant_ids, keeping only those matching `tenant_id`.
+    pub fn filter_by_tenant<'a>(
+        tenant_id: &str,
+        items: &'a [(String, serde_json::Value)],
+    ) -> Vec<&'a (String, serde_json::Value)> {
+        items
+            .iter()
+            .filter(|(tid, _)| tid == tenant_id)
+            .collect()
+    }
+
+    /// Cross-tenant analytics: aggregate usage across all active tenants.
+    pub fn cross_tenant_summary(&self) -> CrossTenantSummary {
+        let active: Vec<&Tenant> = self.tenants.values().filter(|t| t.active).collect();
+        let total_devices: usize = active
+            .iter()
+            .map(|t| {
+                self.usage
+                    .get(&t.id)
+                    .map(|u| u.devices)
+                    .unwrap_or(0)
+            })
+            .sum();
+        let total_events: u64 = active
+            .iter()
+            .map(|t| {
+                self.usage
+                    .get(&t.id)
+                    .map(|u| u.events_processed)
+                    .unwrap_or(0)
+            })
+            .sum();
+        let tier_counts: HashMap<String, usize> = {
+            let mut m = HashMap::new();
+            for t in &active {
+                *m.entry(format!("{:?}", t.tier)).or_default() += 1;
+            }
+            m
+        };
+
+        CrossTenantSummary {
+            total_tenants: active.len(),
+            total_devices,
+            total_events,
+            tier_distribution: tier_counts,
+        }
+    }
+
+    /// Update a tenant's tier (with quota refresh).
+    pub fn update_tier(&mut self, tenant_id: &str, new_tier: TenantTier) -> Result<(), String> {
+        let tenant = self.tenants.get_mut(tenant_id)
+            .ok_or_else(|| "tenant not found".to_string())?;
+        tenant.tier = new_tier.clone();
+        tenant.resource_quota = ResourceQuota::for_tier(&new_tier);
+        Ok(())
+    }
+}
+
+/// Cross-tenant analytics summary.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CrossTenantSummary {
+    pub total_tenants: usize,
+    pub total_devices: usize,
+    pub total_events: u64,
+    pub tier_distribution: HashMap<String, usize>,
+}
+
+/// Middleware-style request guard for tenant isolation.
+#[derive(Debug, Clone)]
+pub struct TenantGuard {
+    pub tenant_id: String,
+    pub tier: TenantTier,
+}
+
+impl TenantGuard {
+    /// Create from a resolved tenant context.
+    pub fn from_context(ctx: &TenantContext) -> Self {
+        Self {
+            tenant_id: ctx.tenant_id.clone(),
+            tier: ctx.tier.clone(),
+        }
+    }
+
+    /// Check if the guard allows access to a specific tenant's data.
+    pub fn allows_access(&self, target_tenant_id: &str) -> bool {
+        self.tenant_id == target_tenant_id
+    }
+
+    /// Check if the guard allows cross-tenant operations (Enterprise+ only).
+    pub fn allows_cross_tenant(&self) -> bool {
+        matches!(self.tier, TenantTier::Enterprise | TenantTier::Government)
+    }
 }
 
 // ── Tests ─────────────────────────────────────────────────────────────────────
@@ -362,5 +477,100 @@ mod tests {
         let _b = mgr.create_tenant("B", TenantTier::Free, "kb");
         mgr.deactivate(&a);
         assert_eq!(mgr.active_tenant_ids().len(), 1);
+    }
+
+    #[test]
+    fn device_belongs_to_tenant() {
+        let mut mgr = MultiTenantManager::new();
+        let id = mgr.create_tenant("DevCo", TenantTier::Standard, "k");
+        mgr.register_device(&id, "sensor-1").unwrap();
+        assert!(mgr.device_belongs_to(&id, "sensor-1"));
+        assert!(!mgr.device_belongs_to(&id, "sensor-999"));
+    }
+
+    #[test]
+    fn tenant_for_device_lookup() {
+        let mut mgr = MultiTenantManager::new();
+        let id = mgr.create_tenant("FindMe", TenantTier::Enterprise, "k");
+        mgr.register_device(&id, "dev-x").unwrap();
+        let t = mgr.tenant_for_device("dev-x");
+        assert!(t.is_some());
+        assert_eq!(t.unwrap().name, "FindMe");
+        assert!(mgr.tenant_for_device("nonexistent").is_none());
+    }
+
+    #[test]
+    fn resolve_request_ok() {
+        let mut mgr = MultiTenantManager::new();
+        mgr.create_tenant("Req", TenantTier::Standard, "api-key-1");
+        let ctx = mgr.resolve_request("api-key-1");
+        assert!(ctx.is_ok());
+    }
+
+    #[test]
+    fn resolve_request_fail() {
+        let mgr = MultiTenantManager::new();
+        let ctx = mgr.resolve_request("bad-key");
+        assert!(ctx.is_err());
+    }
+
+    #[test]
+    fn tenant_guard_isolates() {
+        let guard = TenantGuard::from_context(&TenantContext {
+            tenant_id: "t1".into(),
+            tier: TenantTier::Standard,
+            quota: ResourceQuota::for_tier(&TenantTier::Standard),
+        });
+        assert!(guard.allows_access("t1"));
+        assert!(!guard.allows_access("t2"));
+        assert!(!guard.allows_cross_tenant());
+    }
+
+    #[test]
+    fn enterprise_allows_cross_tenant() {
+        let guard = TenantGuard::from_context(&TenantContext {
+            tenant_id: "t1".into(),
+            tier: TenantTier::Enterprise,
+            quota: ResourceQuota::for_tier(&TenantTier::Enterprise),
+        });
+        assert!(guard.allows_cross_tenant());
+    }
+
+    #[test]
+    fn cross_tenant_summary() {
+        let mut mgr = MultiTenantManager::new();
+        let a = mgr.create_tenant("A", TenantTier::Free, "ka");
+        let b = mgr.create_tenant("B", TenantTier::Enterprise, "kb");
+        mgr.register_device(&a, "d1").unwrap();
+        mgr.register_device(&b, "d2").unwrap();
+        mgr.register_device(&b, "d3").unwrap();
+        mgr.record_events(&a, 100).unwrap();
+        mgr.record_events(&b, 500).unwrap();
+
+        let summary = mgr.cross_tenant_summary();
+        assert_eq!(summary.total_tenants, 2);
+        assert_eq!(summary.total_devices, 3);
+        assert_eq!(summary.total_events, 600);
+    }
+
+    #[test]
+    fn update_tier() {
+        let mut mgr = MultiTenantManager::new();
+        let id = mgr.create_tenant("Upgrade", TenantTier::Free, "k");
+        assert!(mgr.update_tier(&id, TenantTier::Enterprise).is_ok());
+        let ctx = mgr.authenticate("k").unwrap();
+        assert_eq!(ctx.tier, TenantTier::Enterprise);
+        assert_eq!(ctx.quota.max_devices, 500);
+    }
+
+    #[test]
+    fn filter_by_tenant_works() {
+        let items = vec![
+            ("t1".into(), serde_json::json!({"data": 1})),
+            ("t2".into(), serde_json::json!({"data": 2})),
+            ("t1".into(), serde_json::json!({"data": 3})),
+        ];
+        let filtered = MultiTenantManager::filter_by_tenant("t1", &items);
+        assert_eq!(filtered.len(), 2);
     }
 }

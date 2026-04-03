@@ -11,3 +11,5 @@ This directory contains operational runbooks for deploying, configuring, and ope
 | [macos-agent.md](macos-agent.md) | macOS agent deployment, TCC/SIP considerations, code signing |
 | [siem-integrations.md](siem-integrations.md) | SIEM connector configuration for Splunk, Elastic, Sentinel, QRadar |
 | [response-playbooks.md](response-playbooks.md) | Incident response playbooks and remediation approval workflows |
+| [deployment.md](deployment.md) | Installation, atomic upgrades, rollback, fleet enrollment |
+| [troubleshooting.md](troubleshooting.md) | Diagnostics, common failures, log analysis, escalation |

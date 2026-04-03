@@ -94,6 +94,138 @@ pub struct AlertGroup {
     pub indices: Vec<usize>,
 }
 
+// ── Alert deduplication ──────────────────────────────────────────────
+
+/// A deduplicated incident created by merging related alerts within a
+/// configurable time window.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DedupIncident {
+    pub incident_id: String,
+    pub first_seen: String,
+    pub last_seen: String,
+    pub alert_count: usize,
+    pub merged_alert_ids: Vec<usize>,
+    pub device_ids: Vec<String>,
+    pub level: String,
+    pub representative_reasons: Vec<String>,
+    pub avg_score: f64,
+    pub max_score: f64,
+    pub fingerprint: String,
+}
+
+/// Deduplication configuration.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DedupConfig {
+    /// Time window (seconds) within which similar alerts are merged.
+    pub window_secs: u64,
+    /// Whether to merge across different devices.
+    pub cross_device: bool,
+    /// Maximum number of alerts per incident before splitting.
+    pub max_merge: usize,
+}
+
+impl Default for DedupConfig {
+    fn default() -> Self {
+        Self {
+            window_secs: 300,  // 5 minutes
+            cross_device: false,
+            max_merge: 100,
+        }
+    }
+}
+
+/// Deduplicate and merge related alerts into incidents.
+pub fn deduplicate_alerts(
+    alerts: &[AlertRecord],
+    config: &DedupConfig,
+) -> Vec<DedupIncident> {
+    if alerts.is_empty() {
+        return Vec::new();
+    }
+
+    // Build fingerprint → groups, optionally scoped by device.
+    let mut buckets: HashMap<String, Vec<(usize, &AlertRecord)>> = HashMap::new();
+    for (i, a) in alerts.iter().enumerate() {
+        let fp = reason_fingerprint(a);
+        let key = if config.cross_device {
+            fp
+        } else {
+            format!("{}@{}", fp, a.hostname)
+        };
+        buckets.entry(key).or_default().push((i, a));
+    }
+
+    let mut incidents: Vec<DedupIncident> = Vec::new();
+    let mut incident_counter = 0_usize;
+
+    for (fp, members) in &buckets {
+        // Within each fingerprint bucket, split by time-window gaps.
+        let mut window: Vec<(usize, &AlertRecord)> = Vec::new();
+
+        for &(idx, alert) in members {
+            if let Some(last) = window.last() {
+                let gap = timestamp_gap(&last.1.timestamp, &alert.timestamp);
+                if gap > config.window_secs as f64 || window.len() >= config.max_merge {
+                    // Flush current window as an incident.
+                    incidents.push(build_incident(
+                        incident_counter,
+                        fp,
+                        &window,
+                    ));
+                    incident_counter += 1;
+                    window.clear();
+                }
+            }
+            window.push((idx, alert));
+        }
+        if !window.is_empty() {
+            incidents.push(build_incident(incident_counter, fp, &window));
+            incident_counter += 1;
+        }
+    }
+
+    // Sort most recent first.
+    incidents.sort_by(|a, b| b.last_seen.cmp(&a.last_seen));
+    incidents
+}
+
+fn build_incident(
+    id: usize,
+    fp: &str,
+    members: &[(usize, &AlertRecord)],
+) -> DedupIncident {
+    let scores: Vec<f64> = members.iter().map(|(_, a)| a.score as f64).collect();
+    let avg = scores.iter().sum::<f64>() / scores.len().max(1) as f64;
+    let max = scores.iter().cloned().fold(0.0_f64, f64::max);
+    let levels: Vec<&str> = members.iter().map(|(_, a)| a.level.as_str()).collect();
+    let mut device_ids: Vec<String> = members.iter().map(|(_, a)| a.hostname.clone()).collect();
+    device_ids.sort();
+    device_ids.dedup();
+
+    DedupIncident {
+        incident_id: format!("INC-{id:04}"),
+        first_seen: members.first().map(|(_, a)| a.timestamp.clone()).unwrap_or_default(),
+        last_seen: members.last().map(|(_, a)| a.timestamp.clone()).unwrap_or_default(),
+        alert_count: members.len(),
+        merged_alert_ids: members.iter().map(|(i, _)| *i).collect(),
+        device_ids,
+        level: highest_level(&levels),
+        representative_reasons: members.first().map(|(_, a)| a.reasons.clone()).unwrap_or_default(),
+        avg_score: (avg * 100.0).round() / 100.0,
+        max_score: (max * 100.0).round() / 100.0,
+        fingerprint: fp.to_string(),
+    }
+}
+
+fn timestamp_gap(a: &str, b: &str) -> f64 {
+    let parse = |s: &str| {
+        chrono::DateTime::parse_from_rfc3339(s)
+            .map(|dt| dt.timestamp() as f64)
+            .unwrap_or(0.0)
+    };
+    (parse(b) - parse(a)).abs()
+}
+
 // ── Public API ───────────────────────────────────────────────────────
 
 /// Run analysis over a slice of alerts within a given window (minutes).
@@ -708,5 +840,83 @@ mod tests {
         ];
         let result = analyze_alerts(&alerts, 0);
         assert_eq!(result.clusters.len(), 2);
+    }
+
+    #[test]
+    fn dedup_merges_same_fingerprint() {
+        let alerts = vec![
+            alert("2026-04-02T10:00:00Z", 3.0, "Severe", vec!["network burst"]),
+            alert("2026-04-02T10:00:30Z", 3.5, "Severe", vec!["network burst"]),
+            alert("2026-04-02T10:01:00Z", 3.2, "Severe", vec!["network burst"]),
+        ];
+        let cfg = DedupConfig { window_secs: 300, cross_device: false, max_merge: 100 };
+        let incidents = deduplicate_alerts(&alerts, &cfg);
+        assert_eq!(incidents.len(), 1);
+        assert_eq!(incidents[0].alert_count, 3);
+        assert!(incidents[0].incident_id.starts_with("INC-"));
+    }
+
+    #[test]
+    fn dedup_splits_by_time_gap() {
+        let alerts = vec![
+            alert("2026-04-02T10:00:00Z", 3.0, "Severe", vec!["brute force"]),
+            alert("2026-04-02T10:00:10Z", 3.1, "Severe", vec!["brute force"]),
+            // 10-minute gap exceeds window
+            alert("2026-04-02T10:11:00Z", 3.0, "Severe", vec!["brute force"]),
+        ];
+        let cfg = DedupConfig { window_secs: 300, cross_device: false, max_merge: 100 };
+        let incidents = deduplicate_alerts(&alerts, &cfg);
+        assert_eq!(incidents.len(), 2);
+    }
+
+    #[test]
+    fn dedup_different_fingerprints_separate() {
+        let alerts = vec![
+            alert("2026-04-02T10:00:00Z", 3.0, "Severe", vec!["network burst"]),
+            alert("2026-04-02T10:00:05Z", 4.0, "Severe", vec!["brute force"]),
+        ];
+        let cfg = DedupConfig::default();
+        let incidents = deduplicate_alerts(&alerts, &cfg);
+        assert_eq!(incidents.len(), 2);
+    }
+
+    #[test]
+    fn dedup_cross_device_merge() {
+        let mut a1 = alert("2026-04-02T10:00:00Z", 3.0, "Severe", vec!["network burst"]);
+        a1.hostname = "host-A".into();
+        let mut a2 = alert("2026-04-02T10:00:10Z", 3.5, "Severe", vec!["network burst"]);
+        a2.hostname = "host-B".into();
+
+        // Without cross-device → 2 incidents
+        let cfg = DedupConfig { window_secs: 300, cross_device: false, max_merge: 100 };
+        assert_eq!(deduplicate_alerts(&[a1.clone(), a2.clone()], &cfg).len(), 2);
+
+        // With cross-device → 1 incident
+        let cfg = DedupConfig { window_secs: 300, cross_device: true, max_merge: 100 };
+        let incidents = deduplicate_alerts(&[a1, a2], &cfg);
+        assert_eq!(incidents.len(), 1);
+        assert_eq!(incidents[0].device_ids.len(), 2);
+    }
+
+    #[test]
+    fn dedup_max_merge_limit() {
+        let alerts: Vec<AlertRecord> = (0..10)
+            .map(|i| alert(
+                &format!("2026-04-02T10:00:{:02}Z", i),
+                3.0,
+                "Severe",
+                vec!["same reason"],
+            ))
+            .collect();
+        let cfg = DedupConfig { window_secs: 300, cross_device: false, max_merge: 3 };
+        let incidents = deduplicate_alerts(&alerts, &cfg);
+        // 10 alerts, max 3 per incident → at least 4 incidents
+        assert!(incidents.len() >= 3);
+    }
+
+    #[test]
+    fn dedup_empty_input() {
+        let incidents = deduplicate_alerts(&[], &DedupConfig::default());
+        assert!(incidents.is_empty());
     }
 }

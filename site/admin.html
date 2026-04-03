@@ -543,6 +543,25 @@ body.light .topbar{background:#ffffff;border-color:#e2e8f0;}
 body.light .card{background:#ffffff;border-color:#e2e8f0;}
 body.light .data-table thead{background:#f1f5f9;}
 body.light .modal-box{background:#ffffff;}
+
+/* ── Timeline Visualization (Feature 9) ── */
+.timeline-wrapper{padding:1rem 0;}
+.timeline-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:.75rem;}
+.timeline-header h3{margin:0;font-size:.95rem;}
+.timeline-count{font-size:.78rem;color:var(--ink-3);}
+.timeline-track{position:relative;height:100px;background:var(--bg-alt);border:1px solid var(--border);border-radius:10px;overflow:hidden;}
+.timeline-dot{position:absolute;bottom:0;width:8px;border-radius:4px 4px 0 0;cursor:pointer;transform:translateX(-50%);transition:opacity .15s;min-height:6px;}
+.timeline-dot:hover{opacity:.7;}
+.timeline-dot.sev-critical{background:var(--red);}
+.timeline-dot.sev-severe{background:var(--danger,#e65100);}
+.timeline-dot.sev-elevated{background:#f59e0b;}
+.timeline-dot.sev-nominal{background:var(--green);}
+.timeline-legend{display:flex;gap:1rem;margin-top:.5rem;font-size:.75rem;color:var(--ink-3);}
+.tl-legend-item{display:flex;align-items:center;gap:.3rem;}
+.tl-dot{width:8px;height:8px;border-radius:50%;display:inline-block;}
+/* ── Report Mini Bars (Feature 6) ── */
+.report-mini-bars{display:flex;gap:4px;align-items:flex-end;height:32px;}
+.report-mini-bars .bar{flex:1;border-radius:3px 3px 0 0;min-width:3px;transition:height .2s;}
 </style>
 </head>
 
@@ -594,6 +613,7 @@ body.light .modal-box{background:#ffffff;}
     </div>
   </div>
   <div class="topbar-right">
+    <button class="btn btn-sm" id="share-link" title="Copy shareable deep-link to clipboard" style="font-size:.78rem;">&#128279; Share Link</button>
     <button class="theme-toggle" id="btn-theme-toggle" title="Toggle light/dark theme">&#9790;</button>
     <div class="demo-toggle" id="demo-toggle-wrap">
       <input type="checkbox" id="demo-mode-toggle">
@@ -1934,6 +1954,12 @@ body.light .modal-box{background:#ffffff;}
       </div>
 
       <div class="card mb-1">
+        <h2><span class="dot dot-teal"></span> Alert Timeline <span id="report-tag" class="tag tag-green" style="margin-left:.5rem;font-size:.72rem;">0 alerts</span></h2>
+        <div id="report-mini" class="report-mini-bars" style="margin-bottom:.75rem;"></div>
+        <div id="timeline-container"></div>
+      </div>
+
+      <div class="card mb-1">
         <h2><span class="dot dot-green"></span> Latest Report</h2>
         <dl class="kv-grid" style="margin-bottom:1rem;">
           <dt>Samples</dt><dd id="r-samples">—</dd>
@@ -1952,8 +1978,10 @@ body.light .modal-box{background:#ffffff;}
         <div class="btn-row mt-1">
           <button class="btn btn-sm primary" id="btn-refresh-report">Refresh Report</button>
           <button class="btn btn-sm" id="btn-export-csv">Export CSV</button>
+          <button class="btn btn-sm" id="btn-export-timeline">Export Timeline</button>
           <select id="filter-level"><option value="">All levels</option><option value="nominal">Nominal</option><option value="elevated">Elevated</option><option value="severe">Severe</option><option value="critical">Critical</option></select>
         </div>
+        <div id="sample-list" class="summary-list" style="max-height:260px;overflow-y:auto;margin-top:.75rem;"><div class="workspace-empty">Click samples below to inspect individual events.</div></div>
       </div>
 
       <div class="card-grid cols-2">

@@ -2,6 +2,25 @@
 
 All notable changes to Wardex are documented in this file.
 
+## [0.34.0] — Production Hardening: Persistence, Enforcement, Notifications, and SBOM
+
+### Added
+- **Persistent storage backend** (`storage`) — atomic JSON file persistence with `StorageBackend`, `SharedStorage` (thread-safe), stored alerts/cases/audit entries/agent state, query filters (tenant, level, device, time range, pagination), schema migrations, audit chain integrity via SHA-256, and retention purge.
+- **Real enforcement execution** (`enforcement`) — `EnforcementExecutor` with dry-run mode, command safety filter (whitelisted: kill, pfctl, nft, iptables, chmod, mv, mkdir, echo), `execute()` / `execute_batch()`, `kill_process()`, `quarantine_file()`, `block_network()` / `unblock_network()` with IP validation, platform-conditional shell execution, and execution logging.
+- **Outbound notifications** (`notifications`) — `NotificationEngine` delivering to Slack (blocks API), Microsoft Teams (MessageCard), PagerDuty (Events API v2), generic Webhook, and Email (SMTP stub). Per-channel severity filtering, retry with exponential back-off (3 attempts), and delivery history.
+- **Alert deduplication** (`alert_analysis`) — `deduplicate_alerts()` grouping alerts by fingerprint with configurable time-window splits, optional cross-device merging, max-merge limits, and `DedupIncident` output with aggregated statistics.
+- **Atomic agent update with rollback** (`auto_update`) — `AtomicUpdater` with 5-step pipeline (download → verify SHA-256 → backup → swap → validate), automatic rollback on failure, explicit `rollback_to_previous()`, state machine tracking, and update history.
+- **Dashboard deep-linking** (`site/admin.js`, `site/admin.html`) — URL hash-based deep-links (`#reports/sample/3`), `navigateToHash()` / `shareableUrl()` / `copyShareLink()`, history.replaceState integration, and share-link button in topbar.
+- **Operator runbooks** (`docs/runbooks/`) — new deployment and troubleshooting runbooks covering atomic upgrades, fleet enrollment, diagnostics, common errors, log analysis, and escalation paths.
+- **YARA rule engine** (`yara_engine`) — lightweight YARA-style pattern matching with text/hex/glob patterns, `AllOf`/`AnyOf`/`AtLeast`/`AllOfWithMaxSize` conditions, file scanning, 4 built-in rules (ELF packed, webshell, cryptominer, ransomware note), and JSON rule loading.
+- **Timeline visualization** (`site/admin.js`, `site/admin.html`) — `renderTimeline()` with severity-colored dots, proportional positioning, click-to-navigate, legend, and timeline container in Reports section.
+- **Multi-tenancy hardening** (`multi_tenant`) — `TenantGuard` for access isolation, `cross_tenant_summary()`, `update_tier()`, `resolve_request()` API key lookup, `filter_by_tenant()`, and Enterprise/Government-only cross-tenant access.
+- **Real mesh networking** (`swarm`) — `MeshTransport` with `MeshFrame` (checksum, hop limits), `PeerConnection` state tracking, `send()` / `broadcast()` / `receive()` with integrity validation, heartbeats, frame forwarding, and `TransportStats`.
+- **SBOM generation** (`sbom`) — `SbomGenerator` producing CycloneDX 1.5 and SPDX 2.3 documents from `Cargo.lock`, with dependency tracking, component PURLs, file export, and UUID generation.
+
+### Tests
+- `cargo test` passes with **915 automated tests** (768 unit + 147 integration).
+
 ## [0.33.0] — Advanced Threat Hunting, Analytics, and Detection Fusion
 
 ### Added
