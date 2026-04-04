@@ -17,7 +17,7 @@ Wardex is a Rust-based XDR and SIEM platform for private-cloud and self-hosted s
 - CI hardening with cargo-audit, code coverage, MSRV checks, and dependency caching
 - GraphQL query layer for threat hunting with aliases, sub-fields, and introspection
 - HA clustering with Raft-inspired leader election, log replication, and health monitoring
-- 93 Rust source modules, 160+ documented API paths, and 930 automated tests
+- 93 Rust source modules, 160+ documented API paths, and 941 automated tests
 
 See [FEATURES.md](FEATURES.md) for the concise capability summary, [CHANGELOG.md](CHANGELOG.md) for release history, and [docs/README.md](docs/README.md) for the full documentation map.
 
@@ -65,7 +65,7 @@ Run the full automated suite:
 cargo test
 ```
 
-The current release passes 930 automated tests (920 lib + 10 chaos integration) across unit and integration coverage. The repo also includes live verification helpers in [`tests/live_test.py`](tests/live_test.py), [`tests/verify_admin.py`](tests/verify_admin.py), and browser smoke coverage in [`tests/playwright/enterprise_console_smoke.spec.js`](tests/playwright/enterprise_console_smoke.spec.js).
+The current release passes 941 automated tests (931 lib + 10 chaos integration) across unit and integration coverage. The repo also includes live verification helpers in [`tests/live_test.py`](tests/live_test.py), [`tests/verify_admin.py`](tests/verify_admin.py), and browser smoke coverage in [`tests/playwright/enterprise_console_smoke.spec.js`](tests/playwright/enterprise_console_smoke.spec.js).
 
 ## Repository layout
 

@@ -185,22 +185,17 @@ impl EncryptedSpool {
 
     /// Mark delivery attempt failed; re-enqueue with incremented attempts.
     /// Returns None if max retries exceeded (dead-lettered).
-    pub fn nack(&mut self) -> Option<SpoolEntry> {
-        let encrypted = self.queue.pop_front()?;
-        let decrypted = spool_cipher(&encrypted, &self.key);
-        if let Ok(mut entry) = serde_json::from_slice::<SpoolEntry>(&decrypted) {
-            entry.attempts += 1;
-            if entry.attempts > self.max_retries {
-                self.total_dropped += 1;
-                return None; // Dead-lettered
-            }
-            let json = serde_json::to_vec(&entry).unwrap_or_default();
-            let re_encrypted = spool_cipher(&json, &self.key);
-            self.queue.push_back(re_encrypted); // Re-enqueue at end
-            Some(entry)
-        } else {
-            None
+    /// Accepts the previously dequeued entry that failed delivery.
+    pub fn nack(&mut self, mut entry: SpoolEntry) -> Option<SpoolEntry> {
+        entry.attempts += 1;
+        if entry.attempts > self.max_retries {
+            self.total_dropped += 1;
+            return None; // Dead-lettered
         }
+        let json = serde_json::to_vec(&entry).unwrap_or_default();
+        let re_encrypted = spool_cipher(&json, &self.key);
+        self.queue.push_back(re_encrypted); // Re-enqueue at end
+        Some(entry)
     }
 
     /// Number of entries currently in the spool.
@@ -422,19 +417,47 @@ mod tests {
         spool.max_retries = 2;
         spool.enqueue("retry-me", "dst", "now");
 
-        // First nack
-        let entry = spool.nack().unwrap();
+        // Dequeue, then nack (simulates failed delivery)
+        let entry = spool.dequeue().unwrap();
+        let entry = spool.nack(entry).unwrap();
         assert_eq!(entry.attempts, 1);
         assert_eq!(spool.len(), 1); // Re-enqueued
 
-        // Second nack
-        let entry = spool.nack().unwrap();
+        // Second failed delivery
+        let entry = spool.dequeue().unwrap();
+        let entry = spool.nack(entry).unwrap();
         assert_eq!(entry.attempts, 2);
 
         // Third nack exceeds max_retries
-        let dead = spool.nack();
+        let entry = spool.dequeue().unwrap();
+        let dead = spool.nack(entry);
         assert!(dead.is_none(), "Should be dead-lettered after max retries");
         assert!(spool.is_empty());
+    }
+
+    #[test]
+    fn nack_retries_correct_entry_with_multiple() {
+        let mut spool = EncryptedSpool::new(b"key", 100);
+        spool.max_retries = 3;
+        spool.enqueue("event-a", "dst", "now");
+        spool.enqueue("event-b", "dst", "now");
+        spool.enqueue("event-c", "dst", "now");
+
+        // Dequeue event-a, simulate failed delivery
+        let entry_a = spool.dequeue().unwrap();
+        assert_eq!(entry_a.payload, "event-a");
+
+        // Nack event-a — it should be re-enqueued at the end
+        let retried = spool.nack(entry_a).unwrap();
+        assert_eq!(retried.payload, "event-a");
+        assert_eq!(retried.attempts, 1);
+
+        // Queue should now be: [event-b, event-c, event-a(retry)]
+        assert_eq!(spool.len(), 3);
+
+        // Dequeue should give event-b next, not event-a
+        let entry_b = spool.dequeue().unwrap();
+        assert_eq!(entry_b.payload, "event-b");
     }
 
     #[test]

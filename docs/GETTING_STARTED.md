@@ -72,7 +72,7 @@ This refreshes the structured status payload consumed by the static site and off
 cargo test
 ```
 
-The current release passes 930 automated tests (920 lib + 10 chaos integration) across unit and integration coverage, including API regression coverage for hunts, content lifecycle, suppressions, entity pivots, incident storyline, governance, and supportability.
+The current release passes 941 automated tests (931 lib + 10 chaos integration) across unit and integration coverage, including API regression coverage for hunts, content lifecycle, suppressions, entity pivots, incident storyline, governance, and supportability.
 
 ## Live validation helpers
 

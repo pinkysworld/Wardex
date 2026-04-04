@@ -92,7 +92,7 @@ def test_status(monkeypatch):
         {
             ("GET", f"{BASE}/api/status"): DummyResponse(
                 url=f"{BASE}/api/status",
-                json_data={"status": "ok", "version": "0.35.0"},
+                json_data={"status": "ok", "version": "0.37.0"},
                 headers={"content-type": "application/json"},
             )
         },

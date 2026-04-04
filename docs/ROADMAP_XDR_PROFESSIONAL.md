@@ -42,7 +42,7 @@
 
 | Metric | Current (`v0.37.0`) | Target |
 |---|---|---|
-| Automated tests | 939 | 1,000+ |
+| Automated tests | 941 | 1,000+ |
 | OpenAPI paths | 160+ | maintained on every release |
 | Release targets | Linux, macOS, Windows | maintained on every tagged release |
 | Control-plane posture | single-node private-cloud | HA-ready enterprise deployment |

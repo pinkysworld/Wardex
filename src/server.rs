@@ -2656,7 +2656,10 @@ fn check_rbac(
     }
     let s = state.lock().unwrap_or_else(|e| e.into_inner());
     if s.rbac.list_users().is_empty() {
-        return true;
+        // No RBAC users configured — only admin tokens may proceed.
+        // This prevents any authenticated-but-non-admin token from
+        // bypassing authorization on a fresh or misconfigured deployment.
+        return false;
     }
     let AuthIdentity::UserToken(user) = auth else {
         return false;

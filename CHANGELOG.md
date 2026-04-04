@@ -7,6 +7,10 @@ All notable changes to Wardex are documented in this file.
 ### Fixed
 - **25 unwrap/panic sites eliminated** — `cluster.rs` (15 mutex locks), `feature_flags.rs` (8 mutex locks), `entity_extract.rs` (1 `parts.last().unwrap()`), `storage.rs` (1 `Option::clone().unwrap()`). All mutex locks now use `unwrap_or_else(|e| e.into_inner())` for poison recovery.
 - **Double-unwrap on storage initialisation** fixed in `server.rs` (2 sites, shipped in v0.36.3 hotfix).
+- **Raft log gap vulnerability** — `cluster.rs` `handle_append()` now rejects non-contiguous entries instead of silently creating log gaps that could cause state divergence across cluster nodes.
+- **Spool nack data-loss bug** — `spool.rs` `nack()` was popping a new entry from the front of the queue instead of retrying the failed one. Changed signature to accept the failed entry, ensuring correct retry semantics.
+- **RBAC authorization bypass** — `check_rbac()` in `server.rs` returned `true` when no RBAC users were configured, allowing any authenticated token to bypass authorization. Now correctly denies non-admin access when RBAC is unconfigured.
+- **Version sync** — fixed 10+ stale version references across site, SDK, OpenAPI, Helm values, Kubernetes manifests, and documentation.
 
 ### Changed
 - **Structured logging** — all ~45 `eprintln!` calls in production code converted to `log::info!`/`log::warn!`/`log::error!` via the `log` crate. `env_logger` initialised at startup; set `RUST_LOG=info` (or `debug`/`trace`) to control verbosity.
@@ -15,7 +19,7 @@ All notable changes to Wardex are documented in this file.
 - **Version sync** — Cargo.toml, Helm Chart.yaml, README, STATUS, and ROADMAP all aligned to `0.37.0`.
 
 ### Added
-- **9 new tests** — cluster concurrent-operations safety, cluster commit-index advancement, cluster election check, feature-flags kill-switch override, feature-flags concurrent stress, feature-flags unknown-flag safety, entity-extract edge cases (empty input, domain validation, no-IP verification). Total: 929 lib tests.
+- **11 new tests** — cluster concurrent-operations safety, commit-index advancement, election check, Raft gap rejection, feature-flags kill-switch override, concurrent stress, unknown-flag safety, entity-extract edge cases (empty input, domain validation, no-IP verification), spool multi-entry nack correctness. Total: 931 lib tests.
 - `env_logger = "0.11"` and `log = "0.4"` dependencies.
 
 ## [0.36.3] — TLS/mTLS Listener, Chaos Tests Expansion, Hardening 98%

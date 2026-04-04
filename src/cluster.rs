@@ -393,8 +393,15 @@ impl ClusterNode {
                     inner.log.truncate(idx);
                     inner.log.push(entry.clone());
                 }
-            } else {
+            } else if idx == inner.log.len() {
                 inner.log.push(entry.clone());
+            } else {
+                // Gap detected — reject to force leader to back-fill
+                return AppendResponse {
+                    term: inner.state.term,
+                    success: false,
+                    match_index: inner.log.len() as u64,
+                };
             }
         }
 
@@ -727,5 +734,28 @@ mod tests {
         let node = ClusterNode::new(test_config("n1", vec!["n2"]));
         // A fresh follower should eventually want to start an election
         assert!(node.should_start_election() || !node.should_start_election());
+    }
+
+    #[test]
+    fn rejects_non_contiguous_entries() {
+        let follower = ClusterNode::new(test_config("n2", vec!["n1"]));
+        // Craft an append with a gap: entry at index 3 when log is empty
+        let req = AppendRequest {
+            term: 1,
+            leader_id: NodeId("n1".into()),
+            prev_log_index: 0,
+            prev_log_term: 0,
+            entries: vec![ReplicatedEntry {
+                index: 3, // gap — log is empty, next valid index would be 1
+                term: 1,
+                entry_type: EntryType::AlertCreated,
+                data: serde_json::json!({}),
+                timestamp: Utc::now().to_rfc3339(),
+            }],
+            leader_commit: 0,
+        };
+        let resp = follower.handle_append(&req);
+        assert!(!resp.success, "Should reject non-contiguous entries");
+        assert_eq!(follower.log_len(), 0, "Log should remain empty");
     }
 }

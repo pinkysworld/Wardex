@@ -6,7 +6,7 @@
 const stats = [
   { value: "93", label: "Rust modules" },
   { value: "160+", label: "API endpoints" },
-  { value: "930", label: "automated tests" },
+  { value: "941", label: "automated tests" },
   { value: "3", label: "release targets" },
 ];
 
