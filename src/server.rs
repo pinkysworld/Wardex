@@ -1,4 +1,4 @@
-use std::collections::{BTreeSet, HashMap};
+use std::collections::{BTreeSet, HashMap, VecDeque};
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
@@ -58,6 +58,7 @@ use crate::feature_flags::FeatureFlagRegistry;
 use crate::ocsf::{self, DeadLetterQueue, SchemaVersion};
 use crate::process_tree::ProcessTree;
 use crate::rbac::{RbacStore, Role, User};
+use crate::storage::SharedStorage;
 use crate::response::{
     ActionTier, ApprovalDecision as ResponseApprovalDecision,
     ApprovalRecord as ResponseApprovalRecord, ApprovalStatus, ResponseAction, ResponseOrchestrator,
@@ -152,14 +153,14 @@ struct AuditEntry {
 }
 
 struct AuditLog {
-    entries: Vec<AuditEntry>,
+    entries: VecDeque<AuditEntry>,
     max_entries: usize,
 }
 
 impl AuditLog {
     fn new(max_entries: usize) -> Self {
         Self {
-            entries: Vec::new(),
+            entries: VecDeque::new(),
             max_entries,
         }
     }
@@ -181,14 +182,13 @@ impl AuditLog {
             auth_used,
         };
         if self.entries.len() >= self.max_entries {
-            self.entries.remove(0);
+            self.entries.pop_front();
         }
-        self.entries.push(entry);
+        self.entries.push_back(entry);
     }
 
-    fn recent(&self, limit: usize) -> &[AuditEntry] {
-        let start = self.entries.len().saturating_sub(limit);
-        &self.entries[start..]
+    fn recent(&self, limit: usize) -> Vec<&AuditEntry> {
+        self.entries.iter().rev().take(limit).collect::<Vec<_>>().into_iter().rev().collect()
     }
 }
 
@@ -221,7 +221,7 @@ struct AppState {
     listener_mode: ListenerMode,
     config: Config,
     config_path: PathBuf,
-    alerts: Vec<AlertRecord>,
+    alerts: VecDeque<AlertRecord>,
     server_start: std::time::Instant,
     // XDR fleet management
     agent_registry: AgentRegistry,
@@ -233,7 +233,7 @@ struct AppState {
     siem_connector: SiemConnector,
     taxii_client: crate::siem::TaxiiClient,
     // Local host telemetry (ring buffer, last 300 samples)
-    local_telemetry: Vec<TelemetrySample>,
+    local_telemetry: VecDeque<TelemetrySample>,
     local_host_info: HostInfo,
     // Phase 21: advanced detectors
     velocity: VelocityDetector,
@@ -278,6 +278,11 @@ struct AppState {
     kernel_event_stream: crate::kernel_events::KernelEventStream,
     // Phase 33: alert analysis & cross-agent intel
     last_alert_analysis: Option<crate::alert_analysis::AlertAnalysis>,
+    // Phase 34: durable SQLite storage
+    storage: SharedStorage,
+    // Phase 34: slow-attack & ransomware detectors
+    slow_attack: crate::detector::SlowAttackDetector,
+    ransomware: crate::ransomware::RansomwareDetector,
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
@@ -554,12 +559,23 @@ pub fn run_server(
     let server = Server::http(&addr).map_err(|e| format!("failed to start server: {e}"))?;
     let config_path = crate::config::runtime_config_path();
 
-    let token = generate_token();
-    println!("Wardex admin console");
-    println!("  Listening on http://localhost:{port}");
-    println!("  Site directory: {}", site_dir.display());
-    println!("  Auth token: {token}");
-    println!("  Press Ctrl+C to stop");
+    // Use persistent token from environment if set, otherwise generate a random one
+    let token = std::env::var("WARDEX_ADMIN_TOKEN").unwrap_or_else(|_| generate_token());
+    eprintln!("Wardex admin console");
+    eprintln!("  Listening on http://localhost:{port}");
+    eprintln!("  Site directory: {}", site_dir.display());
+    if std::env::var("WARDEX_ADMIN_TOKEN").is_ok() {
+        eprintln!("  Auth token: (set via WARDEX_ADMIN_TOKEN)");
+    } else {
+        eprintln!("  Auth token: {}", &token[..8]);
+        eprintln!("  (set WARDEX_ADMIN_TOKEN env var for a persistent token)");
+    }
+    eprintln!("  Press Ctrl+C to stop");
+
+    // Derive spool encryption key from env var or fall back to token-derived key
+    let spool_key = std::env::var("WARDEX_SPOOL_KEY")
+        .map(|k| sha2::Sha256::digest(k.as_bytes()))
+        .unwrap_or_else(|_| sha2::Sha256::digest(format!("spool-key-{token}").as_bytes()));
 
     let state = Arc::new(Mutex::new(AppState {
         detector: AnomalyDetector::default(),
@@ -590,7 +606,7 @@ pub fn run_server(
         listener_mode: ListenerMode::Plain { port },
         config: Config::default(),
         config_path,
-        alerts: Vec::new(),
+        alerts: VecDeque::new(),
         server_start: std::time::Instant::now(),
         agent_registry: AgentRegistry::new("var/agents.json"),
         event_store: EventStore::with_persistence(10_000, "var/events.json"),
@@ -600,7 +616,7 @@ pub fn run_server(
         deployment_store_path: "var/deployments.json".to_string(),
         siem_connector: SiemConnector::new(initial_config.siem.clone()),
         taxii_client: crate::siem::TaxiiClient::new(initial_config.taxii.clone()),
-        local_telemetry: Vec::new(),
+        local_telemetry: VecDeque::new(),
         local_host_info: detect_platform(),
         velocity: VelocityDetector::new(60, 2.5),
         entropy: EntropyDetector::new(60, 8),
@@ -616,7 +632,7 @@ pub fn run_server(
         response_orchestrator: ResponseOrchestrator::new(),
         feature_flags: FeatureFlagRegistry::new(),
         process_tree: ProcessTree::new("localhost"),
-        spool: EncryptedSpool::new(&sha2::Sha256::digest(format!("spool-key-{token}").as_bytes()), 10_000),
+        spool: EncryptedSpool::new(&spool_key, 10_000),
         rbac: RbacStore::new(),
         case_store: CaseStore::new("var/cases.json"),
         alert_queue: AlertQueue::new(),
@@ -635,6 +651,9 @@ pub fn run_server(
         escalation_engine: crate::escalation::EscalationEngine::new(),
         kernel_event_stream: crate::kernel_events::KernelEventStream::new(10_000),
         last_alert_analysis: None,
+        storage: SharedStorage::open("var/storage").unwrap_or_else(|_| SharedStorage::open("/tmp/wardex_storage").unwrap()),
+        slow_attack: crate::detector::SlowAttackDetector::default(),
+        ransomware: crate::ransomware::RansomwareDetector::default(),
     }));
 
     // Apply loaded config
@@ -645,6 +664,7 @@ pub fn run_server(
         s.sigma_engine.replace_rules(effective_rules);
     }
     spawn_enterprise_hunt_scheduler(&state);
+    spawn_retention_purge_scheduler(&state);
 
     // ── Spawn local host monitoring thread ──────────────────────────
     {
@@ -699,11 +719,14 @@ pub fn run_server(
                     &scope,
                 );
                 {
-                    let mut s = monitor_state.lock().unwrap();
+                    let mut s = match monitor_state.lock() {
+                        Ok(g) => g,
+                        Err(e) => e.into_inner(),
+                    };
                     if s.local_telemetry.len() >= 300 {
-                        s.local_telemetry.remove(0);
+                        s.local_telemetry.pop_front();
                     }
-                    s.local_telemetry.push(sample);
+                    s.local_telemetry.push_back(sample);
                     let mut signal = s.detector.evaluate(&sample);
 
                     // Phase 21: velocity / entropy / compound enrichment
@@ -760,9 +783,9 @@ pub fn run_server(
                                 mitre,
                             };
                             if s.alerts.len() >= 10_000 {
-                                s.alerts.remove(0);
+                                s.alerts.pop_front();
                             }
-                            s.alerts.push(alert.clone());
+                            s.alerts.push_back(alert.clone());
 
                             // Phase 33: broadcast high-severity intel to swarm
                             if alert.score >= sev {
@@ -800,8 +823,12 @@ pub fn run_server(
         let analysis_state = Arc::clone(&state);
         std::thread::spawn(move || loop {
             std::thread::sleep(std::time::Duration::from_secs(300));
-            let mut s = analysis_state.lock().unwrap();
-            let analysis = crate::alert_analysis::analyze_alerts(&s.alerts, 5);
+            let mut s = match analysis_state.lock() {
+                Ok(g) => g,
+                Err(e) => e.into_inner(),
+            };
+            let alerts_vec: Vec<_> = s.alerts.iter().cloned().collect();
+            let analysis = crate::alert_analysis::analyze_alerts(&alerts_vec, 5);
             s.last_alert_analysis = Some(analysis);
         });
     }
@@ -853,7 +880,7 @@ pub fn spawn_test_server() -> (u16, String) {
         listener_mode: ListenerMode::Plain { port },
         config: Config::default(),
         config_path,
-        alerts: Vec::new(),
+        alerts: VecDeque::new(),
         server_start: std::time::Instant::now(),
         agent_registry: AgentRegistry::new(&state_root.join("agents.json").to_string_lossy()),
         event_store: EventStore::with_persistence(
@@ -871,7 +898,7 @@ pub fn spawn_test_server() -> (u16, String) {
             .to_string(),
         siem_connector: SiemConnector::new(crate::siem::SiemConfig::default()),
         taxii_client: crate::siem::TaxiiClient::new(crate::siem::TaxiiConfig::default()),
-        local_telemetry: Vec::new(),
+        local_telemetry: VecDeque::new(),
         local_host_info: detect_platform(),
         velocity: VelocityDetector::new(60, 2.5),
         entropy: EntropyDetector::new(60, 8),
@@ -908,6 +935,9 @@ pub fn spawn_test_server() -> (u16, String) {
         escalation_engine: crate::escalation::EscalationEngine::new(),
         kernel_event_stream: crate::kernel_events::KernelEventStream::new(10_000),
         last_alert_analysis: None,
+        storage: SharedStorage::open(state_root.join("storage").to_str().unwrap_or("var/storage")).unwrap_or_else(|_| SharedStorage::open("/tmp/wardex_storage").unwrap()),
+        slow_attack: crate::detector::SlowAttackDetector::default(),
+        ransomware: crate::ransomware::RansomwareDetector::default(),
     }));
     {
         let mut s = state.lock().unwrap();
@@ -935,7 +965,10 @@ fn serve_loop(server: &Server, state: &Arc<Mutex<AppState>>, site_dir: &Path) {
 
                 // Rate limiting
                 {
-                    let mut s = state.lock().unwrap();
+                    let mut s = match state.lock() {
+                        Ok(g) => g,
+                        Err(e) => e.into_inner(),
+                    };
                     s.request_count += 1;
                     if !s.rate_limiter.check(&remote_addr, &method, &url) {
                         drop(s);
@@ -955,22 +988,141 @@ fn serve_loop(server: &Server, state: &Arc<Mutex<AppState>>, site_dir: &Path) {
                     }
                 }
 
-                if url.starts_with("/api/") {
-                    handle_api(request, state, site_dir, server);
-                } else {
-                    serve_static(request, site_dir);
+                // Wrap request handling in catch_unwind to prevent a panic
+                // from poisoning the shared mutex — one bad request must not
+                // take down the entire server.
+                let state_clone = Arc::clone(state);
+                let site_dir_buf = site_dir.to_path_buf();
+                let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(move || {
+                    if url.starts_with("/api/") {
+                        handle_api(request, &state_clone, &site_dir_buf, server);
+                    } else {
+                        serve_static(request, &site_dir_buf);
+                    }
+                }));
+                if let Err(panic_info) = result {
+                    let msg = if let Some(s) = panic_info.downcast_ref::<&str>() {
+                        s.to_string()
+                    } else if let Some(s) = panic_info.downcast_ref::<String>() {
+                        s.clone()
+                    } else {
+                        "unknown panic in request handler".to_string()
+                    };
+                    eprintln!("[PANIC-RECOVERED] request handler panic: {msg}");
+                    let mut s = match state.lock() {
+                        Ok(g) => g,
+                        Err(e) => e.into_inner(),
+                    };
+                    s.error_count += 1;
                 }
             }
             Ok(None) => {} // timeout, check shutdown
             Err(_) => break,
         }
-        let s = state.lock().unwrap();
+        let s = match state.lock() {
+            Ok(g) => g,
+            Err(e) => e.into_inner(),
+        };
         if s.shutdown.load(Ordering::Relaxed) {
             drop(s);
             eprintln!("Server shutting down…");
             break;
         }
     }
+
+    // ── Graceful shutdown: flush outstanding data to durable storage ──
+    flush_to_storage(state);
+}
+
+/// Flush in-memory alerts, audit entries, and event store to the SQLite
+/// storage backend so nothing is lost on shutdown.
+fn flush_to_storage(state: &Arc<Mutex<AppState>>) {
+    let s = match state.lock() {
+        Ok(g) => g,
+        Err(e) => e.into_inner(),
+    };
+    let storage = s.storage.clone();
+    let alerts: Vec<_> = s.alerts.iter().cloned().collect();
+    let audit_entries: Vec<_> = s.audit_log.entries.iter().cloned().collect();
+    let events: Vec<_> = s.event_store.all_events().to_vec();
+    let hostname = s.local_host_info.hostname.clone();
+    drop(s);
+
+    let mut stored = 0usize;
+    let mut errors = 0usize;
+
+    // Flush in-memory alerts
+    for (i, alert) in alerts.iter().enumerate() {
+        let stored_alert = crate::storage::StoredAlert {
+            id: format!("mem-{}-{}", hostname, i),
+            timestamp: alert.timestamp.clone(),
+            device_id: hostname.clone(),
+            score: alert.score as f64,
+            level: alert.level.clone(),
+            reasons: alert.reasons.clone(),
+            acknowledged: false,
+            assigned_to: None,
+            case_id: None,
+            tenant_id: "default".into(),
+        };
+        match storage.with(|store| store.insert_alert(stored_alert)) {
+            Ok(()) => stored += 1,
+            Err(e) => {
+                // Conflict (duplicate) is OK — alert was already persisted
+                if e.code != crate::storage::StorageErrorCode::Conflict {
+                    errors += 1;
+                }
+            }
+        }
+    }
+
+    // Flush API audit log entries
+    let mut audit_stored = 0usize;
+    for entry in &audit_entries {
+        let action = format!("{} {}", entry.method, entry.path);
+        match storage.with(|store| {
+            store.append_audit(
+                &entry.source_ip,
+                &action,
+                Some(&entry.path),
+                Some(&format!("status={} auth={}", entry.status_code, entry.auth_used)),
+                "default",
+            )?;
+            Ok(())
+        }) {
+            Ok(()) => audit_stored += 1,
+            Err(_) => {} // best-effort
+        }
+    }
+
+    // Flush forwarded events as stored alerts
+    let mut event_stored = 0usize;
+    for event in &events {
+        let stored_alert = crate::storage::StoredAlert {
+            id: format!("evt-{}", event.id),
+            timestamp: event.received_at.clone(),
+            device_id: event.agent_id.clone(),
+            score: event.alert.score as f64,
+            level: event.alert.level.clone(),
+            reasons: event.alert.reasons.clone(),
+            acknowledged: false,
+            assigned_to: None,
+            case_id: None,
+            tenant_id: "default".into(),
+        };
+        match storage.with(|store| store.insert_alert(stored_alert)) {
+            Ok(()) => event_stored += 1,
+            Err(e) => {
+                if e.code != crate::storage::StorageErrorCode::Conflict {
+                    errors += 1;
+                }
+            }
+        }
+    }
+
+    eprintln!(
+        "Shutdown flush: {stored} alerts, {audit_stored} audit entries, {event_stored} events written to storage ({errors} errors)",
+    );
 }
 
 fn generate_token() -> String {
@@ -978,6 +1130,76 @@ fn generate_token() -> String {
     let mut rng = rand::thread_rng();
     let bytes: Vec<u8> = (0..32).map(|_| rng.r#gen()).collect();
     hex::encode(bytes)
+}
+
+/// Scan text for common PII patterns (email, IPv4, SSN, credit card).
+/// Returns a list of category names found.
+fn scan_pii(text: &str) -> Vec<String> {
+    let mut categories = Vec::new();
+
+    // Email pattern
+    let has_email = text.split_whitespace().any(|w| {
+        let w = w.trim_matches(|c: char| !c.is_alphanumeric() && c != '@' && c != '.' && c != '_' && c != '-');
+        w.contains('@') && w.contains('.') && w.len() > 5
+    });
+    if has_email {
+        categories.push("email".into());
+    }
+
+    // SSN pattern (###-##-####)
+    let has_ssn = text.as_bytes().windows(11).any(|w| {
+        w.len() == 11
+            && w[0].is_ascii_digit() && w[1].is_ascii_digit() && w[2].is_ascii_digit()
+            && w[3] == b'-'
+            && w[4].is_ascii_digit() && w[5].is_ascii_digit()
+            && w[6] == b'-'
+            && w[7].is_ascii_digit() && w[8].is_ascii_digit()
+            && w[9].is_ascii_digit() && w[10].is_ascii_digit()
+    });
+    if has_ssn {
+        categories.push("ssn".into());
+    }
+
+    // Credit card pattern (4 groups of 4 digits separated by spaces or dashes)
+    let digits_only: String = text.chars().filter(|c| c.is_ascii_digit()).collect();
+    if digits_only.len() >= 13 {
+        // Luhn check on first 16-digit sequence
+        let candidate: Vec<u8> = digits_only.bytes().take(16).map(|b| b - b'0').collect();
+        if candidate.len() >= 13 {
+            let mut sum = 0u32;
+            let mut double = false;
+            for &d in candidate.iter().rev() {
+                let mut n = d as u32;
+                if double {
+                    n *= 2;
+                    if n > 9 { n -= 9; }
+                }
+                sum += n;
+                double = !double;
+            }
+            if sum % 10 == 0 {
+                categories.push("credit_card".into());
+            }
+        }
+    }
+
+    // IPv4 addresses (not in RFC 1918 private ranges to reduce false positives)
+    let has_public_ip = text.split_whitespace().any(|w| {
+        let parts: Vec<&str> = w.trim_matches(|c: char| !c.is_ascii_digit() && c != '.').split('.').collect();
+        if parts.len() == 4 && parts.iter().all(|p| p.parse::<u8>().is_ok()) {
+            let first: u8 = parts[0].parse().unwrap_or(0);
+            let second: u8 = parts[1].parse().unwrap_or(0);
+            // Skip private ranges
+            !(first == 10 || first == 127 || (first == 172 && (16..=31).contains(&second)) || (first == 192 && second == 168))
+        } else {
+            false
+        }
+    });
+    if has_public_ip {
+        categories.push("ip_address".into());
+    }
+
+    categories
 }
 
 fn cors_origin() -> String {
@@ -1194,8 +1416,19 @@ fn respond_api(
     method: &Method,
     url: &str,
     auth_used: bool,
-    response: Response<std::io::Cursor<Vec<u8>>>,
+    mut response: Response<std::io::Cursor<Vec<u8>>>,
 ) {
+    // Generate a short request ID for tracing
+    let req_id = {
+        use rand::Rng;
+        let mut rng = rand::thread_rng();
+        let mut buf = [0u8; 8];
+        rng.fill(&mut buf);
+        hex::encode(buf)
+    };
+    response.add_header(
+        Header::from_bytes(b"X-Request-Id", req_id.as_bytes()).unwrap(),
+    );
     let status_code = response.status_code().0;
     let source_ip = request
         .remote_addr()
@@ -2419,7 +2652,10 @@ fn spawn_enterprise_hunt_scheduler(state: &Arc<Mutex<AppState>>) {
     let scheduler_state = Arc::clone(state);
     std::thread::spawn(move || loop {
         std::thread::sleep(std::time::Duration::from_secs(1));
-        let mut s = scheduler_state.lock().unwrap();
+        let mut s = match scheduler_state.lock() {
+            Ok(g) => g,
+            Err(e) => e.into_inner(),
+        };
         if s.shutdown.load(Ordering::Relaxed) {
             break;
         }
@@ -2454,6 +2690,63 @@ fn spawn_enterprise_hunt_scheduler(state: &Arc<Mutex<AppState>>) {
                         Some(&payload_text),
                     );
                 }
+            }
+        }
+    });
+}
+
+/// Background thread that runs retention purges every hour.
+/// Reads the retention_policy table from SQLite and purges expired
+/// alerts, audit entries, metrics, and response actions.
+fn spawn_retention_purge_scheduler(state: &Arc<Mutex<AppState>>) {
+    let scheduler_state = Arc::clone(state);
+    std::thread::spawn(move || {
+        // Default retention days per table (matches the retention_policy inserts in storage.rs)
+        let defaults: &[(&str, u32)] = &[
+            ("alerts", 90),
+            ("audit_log", 365),
+            ("metrics", 30),
+            ("response_actions", 180),
+        ];
+
+        loop {
+            // Run every hour (3600 seconds)
+            std::thread::sleep(std::time::Duration::from_secs(3600));
+
+            let s = match scheduler_state.lock() {
+                Ok(g) => g,
+                Err(e) => e.into_inner(),
+            };
+            if s.shutdown.load(Ordering::Relaxed) {
+                break;
+            }
+            let storage = s.storage.clone();
+            drop(s);
+
+            let mut total_purged = 0usize;
+            for &(table, default_days) in defaults {
+                // Try to read configured retention from the policy table
+                let days = storage
+                    .with(|store| {
+                        let d = store.conn().query_row(
+                            "SELECT retention_days FROM retention_policy WHERE table_name = ?1",
+                            rusqlite::params![table],
+                            |row| row.get::<_, u32>(0),
+                        ).unwrap_or(default_days);
+                        Ok(d)
+                    })
+                    .unwrap_or(default_days);
+
+                let purged = match table {
+                    "alerts" => storage.with(|store| store.purge_old_alerts(days)).unwrap_or(0),
+                    "audit_log" => storage.with(|store| store.purge_old_audit(days)).unwrap_or(0),
+                    _ => 0, // metrics and response_actions purge not yet implemented
+                };
+                total_purged += purged;
+            }
+
+            if total_purged > 0 {
+                eprintln!("[RETENTION] purged {total_purged} expired records");
             }
         }
     });
@@ -2831,6 +3124,36 @@ fn handle_api(
             && route_path.ends_with("/inventory"))
         || (method == Method::Get && route_path == "/api/openapi.json");
 
+    // Agent endpoints still require a valid enrollment token when
+    // WARDEX_AGENT_TOKEN is set. This prevents arbitrary clients from
+    // enrolling rogue agents or submitting forged events.
+    if is_agent_endpoint && !route_path.starts_with("/api/updates/download/")
+        && route_path != "/api/openapi.json"
+    {
+        if let Ok(required_agent_token) = std::env::var("WARDEX_AGENT_TOKEN") {
+            let provided = bearer_token(&request);
+            let valid = provided.as_deref().map_or(false, |t| {
+                let a = t.as_bytes();
+                let b = required_agent_token.as_bytes();
+                if a.len() != b.len() { return false; }
+                let mut diff = 0u8;
+                for (x, y) in a.iter().zip(b.iter()) { diff |= x ^ y; }
+                diff == 0
+            });
+            if !valid {
+                respond_api(
+                    request,
+                    state,
+                    &method,
+                    &url,
+                    false,
+                    error_json("agent token required", 401),
+                );
+                return;
+            }
+        }
+    }
+
     let needs_auth = !is_agent_endpoint
         && matches!(
             (&method, route_path),
@@ -3055,7 +3378,12 @@ fn handle_api(
         || (method == Method::Get && route_path == "/api/audit/verify")
         || (method == Method::Get && route_path == "/api/retention/status")
         || (method == Method::Post && route_path == "/api/retention/apply")
-        || (method == Method::Get && route_path == "/api/session/info")));
+        || (method == Method::Get && route_path == "/api/session/info")
+        // GDPR, backup, SBOM, PII — admin-only
+        || (method == Method::Delete && route_path.starts_with("/api/gdpr/forget/"))
+        || (method == Method::Post && route_path == "/api/admin/backup")
+        || (method == Method::Get && route_path == "/api/sbom")
+        || (method == Method::Post && route_path == "/api/pii/scan")));
 
     let auth_identity = authenticate_request(&request, state);
     if needs_auth && !auth_identity.is_authenticated() {
@@ -3713,18 +4041,43 @@ fn handle_api(
 
         // ── Health & Alerts ──────────────────────────────────────────
         (Method::Get, "/api/health") => {
-            let s = state.lock().unwrap();
+            let s = match state.lock() {
+                Ok(g) => g,
+                Err(e) => e.into_inner(),
+            };
             let host = crate::collector::detect_platform();
             let uptime = s.server_start.elapsed().as_secs();
+
+            // Check storage connectivity
+            let storage_ok = s.storage.with(|store| Ok(store.stats())).is_ok();
+
+            let status = if storage_ok { "ok" } else { "degraded" };
             let body = serde_json::json!({
-                "status": "ok",
+                "status": status,
                 "version": env!("CARGO_PKG_VERSION"),
                 "uptime_secs": uptime,
                 "platform": host.platform.to_string(),
                 "hostname": host.hostname,
                 "os_version": host.os_version,
+                "storage_ok": storage_ok,
             });
             json_response(&body.to_string(), 200)
+        }
+        // ── Kubernetes health probes ──────────────────────────────
+        (Method::Get, "/api/healthz/live") => {
+            json_response(r#"{"status":"alive"}"#, 200)
+        }
+        (Method::Get, "/api/healthz/ready") => {
+            let s = match state.lock() {
+                Ok(g) => g,
+                Err(e) => e.into_inner(),
+            };
+            let storage_ok = s.storage.with(|store| Ok(store.stats())).is_ok();
+            if storage_ok {
+                json_response(r#"{"status":"ready","storage":"ok"}"#, 200)
+            } else {
+                json_response(r#"{"status":"not_ready","storage":"unreachable"}"#, 503)
+            }
         }
         (Method::Get, "/api/openapi.json") => json_response(
             &crate::openapi::openapi_json(env!("CARGO_PKG_VERSION")),
@@ -3766,12 +4119,28 @@ fn handle_api(
         }
         // ── Audit chain verification ──────────────────────────────
         (Method::Get, "/api/audit/verify") => {
-            let s = state.lock().unwrap();
+            let s = match state.lock() {
+                Ok(g) => g,
+                Err(e) => e.into_inner(),
+            };
             let record_count = s.audit_log.recent(usize::MAX).len();
+
+            // Verify the storage-level cryptographic audit chain
+            let storage_result = s.storage.with(|store| {
+                let chain_len = store.verify_audit_chain()?;
+                Ok(chain_len)
+            });
+
+            let (storage_status, storage_chain_len, storage_error) = match storage_result {
+                Ok(len) => ("verified", len, None),
+                Err(e) => ("broken", 0usize, Some(e.message)),
+            };
+
             let body = serde_json::json!({
                 "record_count": record_count,
-                "status": "verified",
-                "message": "Server audit log integrity verified",
+                "storage_chain_length": storage_chain_len,
+                "status": storage_status,
+                "message": storage_error.unwrap_or_else(|| "Audit chain integrity verified".into()),
             });
             json_response(&body.to_string(), 200)
         }
@@ -3826,7 +4195,8 @@ fn handle_api(
                 .and_then(|value| value.parse::<usize>().ok())
                 .unwrap_or(0);
             let s = state.lock().unwrap();
-            match recent_alerts_json(&s.alerts, limit, offset) {
+            let alerts_vec: Vec<_> = s.alerts.iter().cloned().collect();
+            match recent_alerts_json(&alerts_vec, limit, offset) {
                 Ok(json) => json_response(&json, 200),
                 Err(e) => error_json(&e, 500),
             }
@@ -3922,9 +4292,9 @@ fn handle_api(
             };
             let mut s = state.lock().unwrap();
             if s.alerts.len() >= 10_000 {
-                s.alerts.remove(0);
+                s.alerts.pop_front();
             }
-            s.alerts.push(alert);
+            s.alerts.push_back(alert);
             json_response(
                 &format!(r#"{{"status":"injected","severity":"{severity}","score":{score:.2}}}"#),
                 200,
@@ -3940,7 +4310,8 @@ fn handle_api(
                 }
             } else {
                 // Run on-the-fly if no background result yet
-                let analysis = crate::alert_analysis::analyze_alerts(&s.alerts, 5);
+                let alerts_vec: Vec<_> = s.alerts.iter().cloned().collect();
+                let analysis = crate::alert_analysis::analyze_alerts(&alerts_vec, 5);
                 match serde_json::to_string(&analysis) {
                     Ok(json) => json_response(&json, 200),
                     Err(e) => error_json(&format!("serialization error: {e}"), 500),
@@ -3967,7 +4338,8 @@ fn handle_api(
                 Err(_) => 5,
             };
             let mut s = state.lock().unwrap();
-            let analysis = crate::alert_analysis::analyze_alerts(&s.alerts, window);
+            let alerts_vec: Vec<_> = s.alerts.iter().cloned().collect();
+            let analysis = crate::alert_analysis::analyze_alerts(&alerts_vec, window);
             s.last_alert_analysis = Some(analysis.clone());
             match serde_json::to_string(&analysis) {
                 Ok(json) => json_response(&json, 200),
@@ -3976,7 +4348,8 @@ fn handle_api(
         }
         (Method::Get, "/api/alerts/grouped") => {
             let s = state.lock().unwrap();
-            let groups = crate::alert_analysis::group_alerts(&s.alerts);
+            let alerts_vec: Vec<_> = s.alerts.iter().cloned().collect();
+            let groups = crate::alert_analysis::group_alerts(&alerts_vec);
             match serde_json::to_string(&groups) {
                 Ok(json) => json_response(&json, 200),
                 Err(e) => error_json(&format!("serialization error: {e}"), 500),
@@ -4002,7 +4375,7 @@ fn handle_api(
         // ── Local Telemetry ──────────────────────────────────────
         (Method::Get, "/api/telemetry/current") => {
             let s = state.lock().unwrap();
-            if let Some(sample) = s.local_telemetry.last() {
+            if let Some(sample) = s.local_telemetry.back() {
                 match serde_json::to_string(sample) {
                     Ok(json) => json_response(&json, 200),
                     Err(e) => error_json(&format!("serialization error: {e}"), 500),
@@ -4459,7 +4832,7 @@ fn handle_api(
         (Method::Get, "/api/audit/log") => {
             let s = state.lock().unwrap();
             let entries = s.audit_log.recent(200);
-            match serde_json::to_string(entries) {
+            match serde_json::to_string(&entries) {
                 Ok(json) => json_response(&json, 200),
                 Err(e) => error_json(&format!("serialization error: {e}"), 500),
             }
@@ -6313,7 +6686,8 @@ fn handle_api(
                         Err(e) => error_json(&format!("serialization error: {e}"), 500),
                     }
                 } else {
-                    let analysis = crate::alert_analysis::analyze_alerts(&s.alerts, 5);
+                    let alerts_vec: Vec<_> = s.alerts.iter().cloned().collect();
+                    let analysis = crate::alert_analysis::analyze_alerts(&alerts_vec, 5);
                     match serde_json::to_string(&analysis) {
                         Ok(json) => json_response(&json, 200),
                         Err(e) => error_json(&format!("serialization error: {e}"), 500),
@@ -6321,7 +6695,8 @@ fn handle_api(
                 }
             } else if method == Method::Get && url_path == "/api/alerts/grouped" {
                 let s = state.lock().unwrap();
-                let groups = crate::alert_analysis::group_alerts(&s.alerts);
+                let alerts_vec: Vec<_> = s.alerts.iter().cloned().collect();
+                let groups = crate::alert_analysis::group_alerts(&alerts_vec);
                 match serde_json::to_string(&groups) {
                     Ok(json) => json_response(&json, 200),
                     Err(e) => error_json(&format!("serialization error: {e}"), 500),
@@ -6490,10 +6865,17 @@ fn handle_api(
                 };
                 let count = logs.len();
                 let mut s = state.lock().unwrap();
+                // Cap total tracked agents to prevent unbounded memory growth
+                if !s.agent_logs.contains_key(agent_id) && s.agent_logs.len() >= 10_000 {
+                    // Evict a random agent to make room
+                    if let Some(evict_key) = s.agent_logs.keys().next().cloned() {
+                        s.agent_logs.remove(&evict_key);
+                    }
+                }
                 let agent_log_buf = s.agent_logs.entry(agent_id.to_string()).or_default();
                 for log in logs {
                     if agent_log_buf.len() >= 500 {
-                        agent_log_buf.remove(0);
+                        agent_log_buf.drain(..1);
                     }
                     agent_log_buf.push(log);
                 }
@@ -6554,6 +6936,12 @@ fn handle_api(
                     }
                 };
                 let mut s = state.lock().unwrap();
+                // Cap total tracked agents to prevent unbounded memory growth
+                if !s.agent_inventories.contains_key(agent_id) && s.agent_inventories.len() >= 10_000 {
+                    if let Some(evict_key) = s.agent_inventories.keys().next().cloned() {
+                        s.agent_inventories.remove(&evict_key);
+                    }
+                }
                 s.agent_inventories.insert(agent_id.to_string(), inventory);
                 json_response(
                     &serde_json::json!({"status":"inventory_stored","agent_id":agent_id})
@@ -7635,6 +8023,160 @@ fn handle_api(
                     }
                     Err(e) => error_json(&e, 400),
                 }
+            // ── Phase 4B: Historical / durable storage endpoints ───
+            } else if method == Method::Get && url_path == "/api/storage/alerts" {
+                let query = parse_query_string(&url);
+                let filter = crate::storage::QueryFilter {
+                    tenant_id: query.get("tenant_id").cloned(),
+                    level: query.get("level").cloned(),
+                    device_id: query.get("device_id").cloned(),
+                    since: query.get("since").cloned(),
+                    until: query.get("until").cloned(),
+                    limit: query.get("limit").and_then(|v| v.parse().ok()),
+                    offset: query.get("offset").and_then(|v| v.parse().ok()),
+                    ..Default::default()
+                };
+                let s = state.lock().unwrap();
+                match s.storage.with(|store| Ok(store.query_alerts(&filter))) {
+                    Ok(alerts) => json_response(&serde_json::to_string(&alerts).unwrap_or_default(), 200),
+                    Err(e) => error_json(&e.message, 500),
+                }
+            } else if method == Method::Get && url_path == "/api/storage/cases" {
+                let query = parse_query_string(&url);
+                let filter = crate::storage::QueryFilter {
+                    tenant_id: query.get("tenant_id").cloned(),
+                    status: query.get("status").cloned(),
+                    limit: query.get("limit").and_then(|v| v.parse().ok()),
+                    ..Default::default()
+                };
+                let s = state.lock().unwrap();
+                match s.storage.with(|store| Ok(store.list_cases(&filter))) {
+                    Ok(cases) => json_response(&serde_json::to_string(&cases).unwrap_or_default(), 200),
+                    Err(e) => error_json(&e.message, 500),
+                }
+            } else if method == Method::Get && url_path == "/api/storage/audit" {
+                let s = state.lock().unwrap();
+                match s.storage.with(|store| {
+                    let chain_len = store.verify_audit_chain()?;
+                    Ok(serde_json::json!({
+                        "chain_length": chain_len,
+                        "integrity": "verified",
+                    }))
+                }) {
+                    Ok(body) => json_response(&body.to_string(), 200),
+                    Err(e) => error_json(&e.message, 500),
+                }
+            } else if method == Method::Get && url_path == "/api/storage/stats" {
+                let s = state.lock().unwrap();
+                match s.storage.with(|store| Ok(store.stats())) {
+                    Ok(stats) => json_response(&serde_json::to_string(&stats).unwrap_or_default(), 200),
+                    Err(e) => error_json(&e.message, 500),
+                }
+            } else if method == Method::Get && url_path == "/api/storage/agents" {
+                let query = parse_query_string(&url);
+                let tenant = query.get("tenant_id").map(|s| s.as_str());
+                let s = state.lock().unwrap();
+                match s.storage.with(|store| Ok(store.list_agents(tenant))) {
+                    Ok(agents) => json_response(&serde_json::to_string(&agents).unwrap_or_default(), 200),
+                    Err(e) => error_json(&e.message, 500),
+                }
+            } else if method == Method::Post && url_path == "/api/storage/alerts" {
+                match read_body_limited(&mut request, 8192) {
+                    Ok(body) => {
+                        match serde_json::from_str::<crate::storage::StoredAlert>(&body) {
+                            Ok(alert) => {
+                                let s = state.lock().unwrap();
+                                match s.storage.with(|store| store.insert_alert(alert)) {
+                                    Ok(()) => json_response(r#"{"status":"stored"}"#, 201),
+                                    Err(e) => error_json(&e.message, 409),
+                                }
+                            }
+                            Err(e) => error_json(&format!("invalid alert JSON: {e}"), 400),
+                        }
+                    }
+                    Err(e) => error_json(&e, 400),
+                }
+            } else if method == Method::Get && url_path == "/api/detectors/slow-attack" {
+                let s = match state.lock() {
+                    Ok(g) => g,
+                    Err(e) => e.into_inner(),
+                };
+                let report = s.slow_attack.evaluate();
+                json_response(&serde_json::to_string(&report).unwrap_or_default(), 200)
+
+            // ── GDPR right-to-forget ──────────────────────────────
+            } else if method == Method::Delete && url_path.starts_with("/api/gdpr/forget/") {
+                let entity_id = url_path.strip_prefix("/api/gdpr/forget/").unwrap_or("");
+                if entity_id.is_empty() || entity_id.len() > 256 {
+                    error_json("invalid entity_id", 400)
+                } else {
+                    let s = match state.lock() {
+                        Ok(g) => g,
+                        Err(e) => e.into_inner(),
+                    };
+                    match s.storage.with(|store| store.purge_entity(entity_id)) {
+                        Ok(purged) => {
+                            let body = serde_json::json!({
+                                "status": "completed",
+                                "entity_id": entity_id,
+                                "records_purged": purged,
+                                "timestamp": chrono::Utc::now().to_rfc3339(),
+                            });
+                            json_response(&body.to_string(), 200)
+                        }
+                        Err(e) => error_json(&e.message, 500),
+                    }
+                }
+
+            // ── Database backup ───────────────────────────────────
+            } else if method == Method::Post && url_path == "/api/admin/backup" {
+                let backup_dir = "var/backups";
+                let _ = std::fs::create_dir_all(backup_dir);
+                let timestamp = chrono::Utc::now().format("%Y%m%d_%H%M%S");
+                let dest = format!("{}/wardex_backup_{}.db", backup_dir, timestamp);
+                let s = match state.lock() {
+                    Ok(g) => g,
+                    Err(e) => e.into_inner(),
+                };
+                match s.storage.with(|store| store.backup(&dest)) {
+                    Ok(()) => {
+                        let body = serde_json::json!({
+                            "status": "completed",
+                            "path": dest,
+                            "timestamp": chrono::Utc::now().to_rfc3339(),
+                        });
+                        json_response(&body.to_string(), 200)
+                    }
+                    Err(e) => error_json(&e.message, 500),
+                }
+
+            // ── SBOM generation ───────────────────────────────────
+            } else if method == Method::Get && url_path == "/api/sbom" {
+                let lock_content = std::fs::read_to_string("Cargo.lock").unwrap_or_default();
+                let generator = crate::sbom::SbomGenerator::new(
+                    env!("CARGO_PKG_NAME"),
+                    env!("CARGO_PKG_VERSION"),
+                );
+                let components = generator.parse_cargo_lock(&lock_content);
+                let doc = generator.generate(components, vec![], crate::sbom::SbomFormat::CycloneDX);
+                let rendered = generator.to_cyclonedx_json(&doc);
+                json_response(&rendered, 200)
+
+            // ── PII scan (check a text payload for PII patterns) ──
+            } else if method == Method::Post && url_path == "/api/pii/scan" {
+                match read_body_limited(&mut request, 65_536) {
+                    Ok(body) => {
+                        let findings = scan_pii(&body);
+                        let body = serde_json::json!({
+                            "has_pii": !findings.is_empty(),
+                            "finding_count": findings.len(),
+                            "categories": findings,
+                        });
+                        json_response(&body.to_string(), 200)
+                    }
+                    Err(e) => error_json(&e, 400),
+                }
+
             } else {
                 error_json("not found", 404)
             }
@@ -7644,15 +8186,38 @@ fn handle_api(
     respond_api(request, state, &method, &url, auth_used, response);
 }
 
-/// Read the request body with a size limit to prevent OOM from chunked requests.
+/// Read the request body with a size limit and a 30-second timeout to prevent
+/// both OOM from oversized bodies and slowloris-style attacks.
 fn read_body_limited(request: &mut Request, limit: usize) -> Result<String, String> {
+    use std::io::Read;
     let mut buf = Vec::new();
-    let mut reader = std::io::Read::take(request.as_reader(), limit as u64 + 1);
-    match std::io::Read::read_to_end(&mut reader, &mut buf) {
-        Ok(n) if n > limit => Err("request body too large".to_string()),
-        Ok(_) => String::from_utf8(buf).map_err(|_| "invalid UTF-8 in request body".to_string()),
-        Err(e) => Err(format!("failed to read request body: {e}")),
+    let mut reader = Read::take(request.as_reader(), limit as u64 + 1);
+
+    // Apply a 30-second read timeout via a deadline.  We read in chunks
+    // so that a client sending 1 byte/sec cannot tie up the handler forever.
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(30);
+    let mut chunk = [0u8; 8192];
+    loop {
+        if std::time::Instant::now() > deadline {
+            return Err("request body read timed out".to_string());
+        }
+        match reader.read(&mut chunk) {
+            Ok(0) => break,
+            Ok(n) => {
+                buf.extend_from_slice(&chunk[..n]);
+                if buf.len() > limit {
+                    return Err("request body too large".to_string());
+                }
+            }
+            Err(e) if e.kind() == std::io::ErrorKind::WouldBlock
+                    || e.kind() == std::io::ErrorKind::TimedOut => {
+                std::thread::sleep(std::time::Duration::from_millis(10));
+                continue;
+            }
+            Err(e) => return Err(format!("failed to read request body: {e}")),
+        }
     }
+    String::from_utf8(buf).map_err(|_| "invalid UTF-8 in request body".to_string())
 }
 
 fn handle_analyze(
@@ -9129,6 +9694,11 @@ const EMBEDDED_ADMIN_JS: &str = include_str!("../admin-console/admin.js");
 fn serve_embedded(request: Request, content: &str, content_type: &str) {
     let data = content.as_bytes();
     let origin = cors_origin();
+    let cache = if content_type.contains("html") {
+        "no-cache"
+    } else {
+        "public, max-age=3600, immutable"
+    };
     let response = Response::new(
         tiny_http::StatusCode(200),
         vec![
@@ -9136,7 +9706,7 @@ fn serve_embedded(request: Request, content: &str, content_type: &str) {
             Header::from_bytes(b"Access-Control-Allow-Origin", origin.as_bytes()).unwrap(),
             Header::from_bytes(b"X-Content-Type-Options", b"nosniff").unwrap(),
             Header::from_bytes(b"X-Frame-Options", b"DENY").unwrap(),
-            Header::from_bytes(b"Cache-Control", b"no-store").unwrap(),
+            Header::from_bytes(b"Cache-Control", cache.as_bytes()).unwrap(),
         ],
         std::io::Cursor::new(data.to_vec()),
         Some(data.len()),
@@ -9203,6 +9773,11 @@ fn serve_static(request: Request, site_dir: &Path) {
             Ok(data) => {
                 let len = data.len();
                 let origin = cors_origin();
+                let cache = if content_type.contains("html") {
+                    "no-cache"
+                } else {
+                    "public, max-age=3600"
+                };
                 let response = Response::new(
                     tiny_http::StatusCode(200),
                     vec![
@@ -9211,7 +9786,7 @@ fn serve_static(request: Request, site_dir: &Path) {
                             .unwrap(),
                         Header::from_bytes(b"X-Content-Type-Options", b"nosniff").unwrap(),
                         Header::from_bytes(b"X-Frame-Options", b"DENY").unwrap(),
-                        Header::from_bytes(b"Cache-Control", b"no-store").unwrap(),
+                        Header::from_bytes(b"Cache-Control", cache.as_bytes()).unwrap(),
                     ],
                     std::io::Cursor::new(data),
                     Some(len),

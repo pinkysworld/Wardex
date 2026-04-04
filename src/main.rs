@@ -20,6 +20,23 @@ use wardex::state_machine::PolicyStateMachine;
 use wardex::telemetry::TelemetrySample;
 
 fn main() {
+    // Global panic hook: log panics to stderr instead of crashing silently.
+    // Prevents unhandled panics from poisoning shared mutexes without logging.
+    std::panic::set_hook(Box::new(|info| {
+        let location = info
+            .location()
+            .map(|l| format!(" at {}:{}:{}", l.file(), l.line(), l.column()))
+            .unwrap_or_default();
+        let payload = if let Some(s) = info.payload().downcast_ref::<&str>() {
+            s.to_string()
+        } else if let Some(s) = info.payload().downcast_ref::<String>() {
+            s.clone()
+        } else {
+            "unknown panic".to_string()
+        };
+        eprintln!("[PANIC]{location}: {payload}");
+    }));
+
     if let Err(error) = run() {
         eprintln!("error: {error}");
         process::exit(1);

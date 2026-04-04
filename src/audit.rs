@@ -33,6 +33,9 @@ pub struct AuditLog {
     records: Vec<AuditRecord>,
     checkpoints: Vec<AuditCheckpoint>,
     checkpoint_interval: usize,
+    /// HMAC key for checkpoint signatures. When empty, falls back to
+    /// a deterministic SHA-256 derivation (prototype mode).
+    hmac_key: String,
 }
 
 impl AuditLog {
@@ -42,6 +45,7 @@ impl AuditLog {
             records: Vec::new(),
             checkpoints: Vec::new(),
             checkpoint_interval: 0,
+            hmac_key: String::new(),
         }
     }
 
@@ -53,7 +57,13 @@ impl AuditLog {
             records: Vec::new(),
             checkpoints: Vec::new(),
             checkpoint_interval: interval,
+            hmac_key: String::new(),
         }
+    }
+
+    /// Set the HMAC key for signing checkpoints.
+    pub fn set_hmac_key(&mut self, key: &str) {
+        self.hmac_key = key.to_string();
     }
 
     pub fn record(&mut self, category: &str, summary: impl Into<String>) {
@@ -82,9 +92,12 @@ impl AuditLog {
     fn insert_checkpoint(&mut self) {
         let seq = self.records.len();
         let cumulative = self.previous_hash.clone();
-        // Deterministic HMAC-style signature using a fixed key for prototype.
-        // In production this would use a proper signing key (T031 upgrade path).
-        let sig_payload = format!("checkpoint|{}|{}", seq, cumulative);
+        // Use HMAC key if available; otherwise fall back to deterministic derivation.
+        let sig_payload = if self.hmac_key.is_empty() {
+            format!("checkpoint|{}|{}", seq, cumulative)
+        } else {
+            format!("{}|checkpoint|{}|{}", self.hmac_key, seq, cumulative)
+        };
         let signature = sha256_hex(sig_payload.as_bytes());
 
         self.checkpoints.push(AuditCheckpoint {

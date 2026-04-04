@@ -362,6 +362,11 @@ impl StorageBackend {
         self.current_version = version;
     }
 
+    /// Expose the underlying connection for ad-hoc queries (e.g. retention policy lookups).
+    pub fn conn(&self) -> &Connection {
+        &self.conn
+    }
+
     /// Run all pending migrations.
     fn run_migrations(&mut self) -> Result<(), StorageError> {
         let all = migrations();
@@ -980,6 +985,58 @@ impl StorageBackend {
             schema_version: self.current_version,
             storage_path: self.base_dir.display().to_string(),
         }
+    }
+
+    /// GDPR right-to-forget: purge all records associated with a given entity
+    /// (device ID / agent ID) across all tables. Returns total rows deleted.
+    pub fn purge_entity(&mut self, entity_id: &str) -> Result<usize, StorageError> {
+        let tables_columns: &[(&str, &str)] = &[
+            ("alerts", "device_id"),
+            ("cases", "assignee"),
+            ("audit_log", "actor"),
+            ("fleet_state", "agent_id"),
+            ("threat_indicators", "source"),
+            ("response_actions", "target"),
+            ("metrics", "labels"),
+        ];
+
+        let mut total = 0usize;
+        for &(table, column) in tables_columns {
+            // Use LIKE for the metrics labels column (JSON text), exact match for others
+            let sql = if column == "labels" {
+                format!("DELETE FROM {table} WHERE {column} LIKE ?1")
+            } else {
+                format!("DELETE FROM {table} WHERE {column} = ?1")
+            };
+            let param = if column == "labels" {
+                format!("%{entity_id}%")
+            } else {
+                entity_id.to_string()
+            };
+            let deleted = self.conn.execute(&sql, params![param]).unwrap_or(0);
+            total += deleted;
+        }
+
+        // Record the deletion in the audit log
+        self.append_audit(
+            "system:gdpr",
+            "entity-forget",
+            Some(entity_id),
+            Some(&format!("purged {total} records for GDPR right-to-forget")),
+            "default",
+        )?;
+
+        Ok(total)
+    }
+
+    /// Create a full database backup using SQLite's VACUUM INTO.
+    pub fn backup(&self, dest_path: &str) -> Result<(), StorageError> {
+        self.conn
+            .execute_batch(&format!("VACUUM INTO '{}'", dest_path.replace('\'', "''")))
+            .map_err(|e| StorageError {
+                code: StorageErrorCode::QueryFailed,
+                message: format!("backup failed: {e}"),
+            })
     }
 }
 
