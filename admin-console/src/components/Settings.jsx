@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useApi, useToast } from '../hooks.jsx';
 import * as api from '../api.js';
 
@@ -19,12 +19,27 @@ export default function Settings() {
   const { data: sbomData } = useApi(api.sbom);
   const { data: dbVer } = useApi(api.adminDbVersion);
   const { data: dlqData } = useApi(api.dlqStats);
+  const { data: dbSizes, reload: rSizes } = useApi(api.adminDbSizes);
+  const { data: storageStats, reload: rStats } = useApi(api.storageStats);
   const [configEditing, setConfigEditing] = useState(false);
   const [configText, setConfigText] = useState('');
+  const [purgeDays, setPurgeDays] = useState(30);
+  const [compacting, setCompacting] = useState(false);
+  const [purging, setPurging] = useState(false);
+  const [resetting, setResetting] = useState(false);
+  const [cleaning, setCleaning] = useState(false);
 
   const startEdit = () => {
     setConfigText(typeof config === 'string' ? config : JSON.stringify(config, null, 2));
     setConfigEditing(true);
+  };
+
+  const formatBytes = (bytes) => {
+    if (bytes == null) return '—';
+    if (bytes === 0) return '0 B';
+    const units = ['B', 'KB', 'MB', 'GB'];
+    const i = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1);
+    return (bytes / Math.pow(1024, i)).toFixed(i === 0 ? 0 : 1) + ' ' + units[i];
   };
 
   return (
@@ -163,12 +178,104 @@ export default function Settings() {
               <div className="json-block">{JSON.stringify(sbomData, null, 2)}</div>
             </div>
           </div>
+
+          <div className="card" style={{ marginTop: 16 }}>
+            <div className="card-title" style={{ marginBottom: 12 }}>Database Storage</div>
+            {dbSizes && (
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 12, marginBottom: 16 }}>
+                <div className="stat-box">
+                  <div className="stat-label">Main DB</div>
+                  <div className="stat-value">{formatBytes(dbSizes.db_bytes)}</div>
+                </div>
+                <div className="stat-box">
+                  <div className="stat-label">WAL File</div>
+                  <div className="stat-value">{formatBytes(dbSizes.wal_bytes)}</div>
+                </div>
+                <div className="stat-box">
+                  <div className="stat-label">SHM File</div>
+                  <div className="stat-value">{formatBytes(dbSizes.shm_bytes)}</div>
+                </div>
+                <div className="stat-box">
+                  <div className="stat-label">Total</div>
+                  <div className="stat-value">{formatBytes(dbSizes.total_bytes)}</div>
+                </div>
+              </div>
+            )}
+            {storageStats && (
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: 12, marginBottom: 16 }}>
+                <div className="stat-box"><div className="stat-label">Alerts</div><div className="stat-value">{storageStats.total_alerts ?? '—'}</div></div>
+                <div className="stat-box"><div className="stat-label">Cases</div><div className="stat-value">{storageStats.total_cases ?? '—'}</div></div>
+                <div className="stat-box"><div className="stat-label">Audit</div><div className="stat-value">{storageStats.total_audit_entries ?? '—'}</div></div>
+                <div className="stat-box"><div className="stat-label">Agents</div><div className="stat-value">{storageStats.total_agents ?? '—'}</div></div>
+              </div>
+            )}
+          </div>
+
+          <div className="card" style={{ marginTop: 16 }}>
+            <div className="card-title" style={{ marginBottom: 12 }}>Database Maintenance</div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+                <button className="btn" disabled={compacting} onClick={async () => {
+                  setCompacting(true);
+                  try {
+                    const r = await api.adminDbCompact();
+                    toast(`Compacted: ${formatBytes(r.bytes_reclaimed)} reclaimed`, 'success');
+                    rSizes();
+                  } catch { toast('Compact failed', 'error'); }
+                  setCompacting(false);
+                }}>{compacting ? 'Compacting...' : 'Compact Database'}</button>
+                <span style={{ fontSize: '0.85rem', opacity: 0.7 }}>VACUUM + WAL checkpoint — reclaims unused space</span>
+              </div>
+
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+                <label style={{ fontSize: '0.85rem' }}>Purge data older than</label>
+                <input type="number" min="1" max="3650" value={purgeDays} onChange={e => setPurgeDays(Number(e.target.value))}
+                  style={{ width: 70, padding: '4px 8px' }} />
+                <span style={{ fontSize: '0.85rem' }}>days</span>
+                <button className="btn" disabled={purging} onClick={async () => {
+                  if (!confirm(`Purge all records older than ${purgeDays} days?`)) return;
+                  setPurging(true);
+                  try {
+                    const r = await api.adminDbPurge({ retention_days: purgeDays });
+                    toast(`Purged: ${r.alerts_purged} alerts, ${r.audit_purged} audit, ${r.metrics_purged} metrics`, 'success');
+                    rSizes(); rStats();
+                  } catch { toast('Purge failed', 'error'); }
+                  setPurging(false);
+                }}>{purging ? 'Purging...' : 'Purge Old Data'}</button>
+              </div>
+
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+                <button className="btn" disabled={cleaning} onClick={async () => {
+                  setCleaning(true);
+                  try {
+                    const r = await api.adminCleanupLegacy();
+                    if (r.count > 0) toast(`Cleaned ${r.count} legacy files`, 'success');
+                    else toast('No legacy files found', 'info');
+                  } catch { toast('Cleanup failed', 'error'); }
+                  setCleaning(false);
+                }}>{cleaning ? 'Cleaning...' : 'Clean Legacy Files'}</button>
+                <span style={{ fontSize: '0.85rem', opacity: 0.7 }}>Remove old .json/.jsonl flat files from var/</span>
+              </div>
+            </div>
+          </div>
+
           <div className="card" style={{ marginTop: 16 }}>
             <div className="card-title" style={{ marginBottom: 12 }}>Admin Actions</div>
             <div className="btn-group">
               <button className="btn" onClick={async () => {
                 try { await api.adminBackup(); toast('Backup created', 'success'); } catch { toast('Backup failed', 'error'); }
               }}>Create Backup</button>
+              <button className="btn btn-danger" style={{ marginLeft: 8 }} onClick={async () => {
+                const answer = prompt('Type RESET_ALL_DATA to confirm deleting all database records:');
+                if (answer !== 'RESET_ALL_DATA') { toast('Reset cancelled', 'info'); return; }
+                setResetting(true);
+                try {
+                  const r = await api.adminDbReset({ confirm: 'RESET_ALL_DATA' });
+                  toast(`Database reset: ${r.records_purged} records purged`, 'warning');
+                  rSizes(); rStats();
+                } catch { toast('Reset failed', 'error'); }
+                setResetting(false);
+              }}>{resetting ? 'Resetting...' : 'Reset Database'}</button>
               <button className="btn btn-danger" onClick={async () => {
                 if (!confirm('Shutdown the Wardex server?')) return;
                 try { await api.shutdown(); toast('Shutdown initiated', 'warning'); } catch { toast('Shutdown failed', 'error'); }

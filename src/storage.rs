@@ -1137,6 +1137,113 @@ impl StorageBackend {
                 message: format!("backup failed: {e}"),
             })
     }
+
+    /// Compact the database by running VACUUM and WAL checkpoint.
+    /// Returns the size in bytes before and after compaction.
+    pub fn compact(&self) -> Result<(u64, u64), StorageError> {
+        let db_path = self.base_dir.join("wardex.db");
+        let wal_path = self.base_dir.join("wardex.db-wal");
+
+        let size_before = std::fs::metadata(&db_path).map(|m| m.len()).unwrap_or(0)
+            + std::fs::metadata(&wal_path).map(|m| m.len()).unwrap_or(0);
+
+        // Force WAL checkpoint
+        self.conn
+            .execute_batch("PRAGMA wal_checkpoint(TRUNCATE);")
+            .map_err(|e| StorageError {
+                code: StorageErrorCode::QueryFailed,
+                message: format!("WAL checkpoint failed: {e}"),
+            })?;
+
+        // VACUUM to reclaim space
+        self.conn.execute_batch("VACUUM;").map_err(|e| StorageError {
+            code: StorageErrorCode::QueryFailed,
+            message: format!("vacuum failed: {e}"),
+        })?;
+
+        let size_after = std::fs::metadata(&db_path).map(|m| m.len()).unwrap_or(0)
+            + std::fs::metadata(&wal_path).map(|m| m.len()).unwrap_or(0);
+
+        Ok((size_before, size_after))
+    }
+
+    /// Purge all data from all tables but keep the schema intact.
+    /// Returns total rows deleted across all tables.
+    pub fn reset_all_data(&mut self) -> Result<usize, StorageError> {
+        let tables = [
+            "alerts", "cases", "audit_log", "fleet_state",
+            "threat_indicators", "response_actions", "metrics", "config_store",
+        ];
+        let mut total = 0usize;
+        for table in &tables {
+            let deleted = self.conn.execute(&format!("DELETE FROM {table}"), [])
+                .unwrap_or(0);
+            total += deleted;
+        }
+        // Re-initialize with a clean audit entry
+        self.append_audit(
+            "system",
+            "database-reset",
+            None,
+            Some(&format!("purged {total} records across all tables")),
+            "default",
+        )?;
+        Ok(total)
+    }
+
+    /// Return database file sizes for diagnostics.
+    pub fn db_file_sizes(&self) -> DbFileSizes {
+        let db_path = self.base_dir.join("wardex.db");
+        let wal_path = self.base_dir.join("wardex.db-wal");
+        let shm_path = self.base_dir.join("wardex.db-shm");
+        DbFileSizes {
+            db_bytes: std::fs::metadata(&db_path).map(|m| m.len()).unwrap_or(0),
+            wal_bytes: std::fs::metadata(&wal_path).map(|m| m.len()).unwrap_or(0),
+            shm_bytes: std::fs::metadata(&shm_path).map(|m| m.len()).unwrap_or(0),
+        }
+    }
+
+    /// Clean up legacy flat-file data from var/ directory.
+    /// Returns the list of files that were removed.
+    pub fn cleanup_legacy_files(var_dir: &str) -> Vec<String> {
+        let legacy_files = [
+            "agents.json", "alerts.jsonl", "cases.json", "events.json",
+            "incidents.json", "demo.audit.log", "last-run.audit.log",
+            "last-run.report.json", "enterprise.json", "deployments.json",
+            "test-config.toml",
+        ];
+        let var_path = std::path::Path::new(var_dir);
+        let mut removed = Vec::new();
+        for f in &legacy_files {
+            let path = var_path.join(f);
+            if path.exists() {
+                if std::fs::remove_file(&path).is_ok() {
+                    removed.push(f.to_string());
+                }
+            }
+            // Also remove .bak versions
+            let bak_path = var_path.join(format!("{f}.bak"));
+            if bak_path.exists() {
+                if std::fs::remove_file(&bak_path).is_ok() {
+                    removed.push(format!("{f}.bak"));
+                }
+            }
+        }
+        removed
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DbFileSizes {
+    pub db_bytes: u64,
+    pub wal_bytes: u64,
+    pub shm_bytes: u64,
+}
+
+impl DbFileSizes {
+    pub fn total(&self) -> u64 {
+        self.db_bytes + self.wal_bytes + self.shm_bytes
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

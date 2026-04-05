@@ -3515,6 +3515,11 @@ fn handle_api(
         || (method == Method::Post && route_path == "/api/admin/backup")
         || (method == Method::Get && route_path == "/api/admin/db/version")
         || (method == Method::Post && route_path == "/api/admin/db/rollback")
+        || (method == Method::Post && route_path == "/api/admin/db/compact")
+        || (method == Method::Post && route_path == "/api/admin/db/reset")
+        || (method == Method::Get && route_path == "/api/admin/db/sizes")
+        || (method == Method::Post && route_path == "/api/admin/cleanup-legacy")
+        || (method == Method::Post && route_path == "/api/admin/db/purge")
         || (method == Method::Get && route_path == "/api/sbom")
         || (method == Method::Post && route_path == "/api/pii/scan")));
 
@@ -4998,7 +5003,12 @@ fn handle_api(
                 {"method": "POST", "path": "/api/control/checkpoint", "auth": true, "description": "Create a control checkpoint"},
                 {"method": "POST", "path": "/api/control/restore-checkpoint", "auth": true, "description": "Restore a control checkpoint"},
                 {"method": "POST", "path": "/api/control/run-demo", "auth": true, "description": "Run the built-in telemetry demo"},
-                {"method": "POST", "path": "/api/events/bulk-triage", "auth": true, "description": "Bulk update event triage state"}
+                {"method": "POST", "path": "/api/events/bulk-triage", "auth": true, "description": "Bulk update event triage state"},
+                {"method": "POST", "path": "/api/admin/db/compact", "auth": true, "description": "Compact database (VACUUM + WAL checkpoint)"},
+                {"method": "POST", "path": "/api/admin/db/reset", "auth": true, "description": "Reset all database data (requires confirmation)"},
+                {"method": "GET", "path": "/api/admin/db/sizes", "auth": true, "description": "Database file sizes and storage usage"},
+                {"method": "POST", "path": "/api/admin/cleanup-legacy", "auth": true, "description": "Remove legacy flat-file data from var/"},
+                {"method": "POST", "path": "/api/admin/db/purge", "auth": true, "description": "Purge data older than N days across all tables"}
             ]"#;
             let supplemental: Vec<serde_json::Value> =
                 serde_json::from_str(supplemental).unwrap_or_default();
@@ -8571,6 +8581,114 @@ fn handle_api(
                     "migrations": info.unwrap_or_default(),
                 });
                 json_response(&body.to_string(), 200)
+
+            // ── Database compact (VACUUM + WAL checkpoint) ────────
+            } else if method == Method::Post && url_path == "/api/admin/db/compact" {
+                let s = match state.lock() {
+                    Ok(g) => g,
+                    Err(e) => e.into_inner(),
+                };
+                match s.storage.with(|store| store.compact()) {
+                    Ok((before, after)) => {
+                        let saved = if before > after { before - after } else { 0 };
+                        let body = serde_json::json!({
+                            "status": "completed",
+                            "size_before_bytes": before,
+                            "size_after_bytes": after,
+                            "bytes_reclaimed": saved,
+                            "timestamp": chrono::Utc::now().to_rfc3339(),
+                        });
+                        json_response(&body.to_string(), 200)
+                    }
+                    Err(e) => error_json(&e.message, 500),
+                }
+
+            // ── Database reset (purge all data) ───────────────────
+            } else if method == Method::Post && url_path == "/api/admin/db/reset" {
+                match read_body_limited(&mut request, 4096) {
+                    Ok(body_str) => {
+                        // Require confirmation token to prevent accidental reset
+                        let parsed: serde_json::Value = serde_json::from_str(&body_str).unwrap_or_default();
+                        let confirm = parsed["confirm"].as_str().unwrap_or("");
+                        if confirm != "RESET_ALL_DATA" {
+                            error_json("send {\"confirm\":\"RESET_ALL_DATA\"} to confirm", 400)
+                        } else {
+                            let s = match state.lock() {
+                                Ok(g) => g,
+                                Err(e) => e.into_inner(),
+                            };
+                            match s.storage.with(|store| store.reset_all_data()) {
+                                Ok(purged) => {
+                                    let body = serde_json::json!({
+                                        "status": "completed",
+                                        "records_purged": purged,
+                                        "timestamp": chrono::Utc::now().to_rfc3339(),
+                                    });
+                                    json_response(&body.to_string(), 200)
+                                }
+                                Err(e) => error_json(&e.message, 500),
+                            }
+                        }
+                    }
+                    Err(e) => error_json(&e, 400),
+                }
+
+            // ── Database file sizes ───────────────────────────────
+            } else if method == Method::Get && url_path == "/api/admin/db/sizes" {
+                let s = state.lock().unwrap_or_else(|e| e.into_inner());
+                match s.storage.with(|store| Ok(store.db_file_sizes())) {
+                    Ok(sizes) => {
+                        let body = serde_json::json!({
+                            "db_bytes": sizes.db_bytes,
+                            "wal_bytes": sizes.wal_bytes,
+                            "shm_bytes": sizes.shm_bytes,
+                            "total_bytes": sizes.total(),
+                        });
+                        json_response(&body.to_string(), 200)
+                    }
+                    Err(e) => error_json(&e.message, 500),
+                }
+
+            // ── Cleanup legacy flat files ─────────────────────────
+            } else if method == Method::Post && url_path == "/api/admin/cleanup-legacy" {
+                let removed = crate::storage::StorageBackend::cleanup_legacy_files("var");
+                let body = serde_json::json!({
+                    "status": "completed",
+                    "files_removed": removed,
+                    "count": removed.len(),
+                    "timestamp": chrono::Utc::now().to_rfc3339(),
+                });
+                json_response(&body.to_string(), 200)
+
+            // ── Database purge by age ─────────────────────────────
+            } else if method == Method::Post && url_path == "/api/admin/db/purge" {
+                match read_body_limited(&mut request, 4096) {
+                    Ok(body_str) => {
+                        let parsed: serde_json::Value = serde_json::from_str(&body_str).unwrap_or_default();
+                        let days = parsed["retention_days"].as_u64().unwrap_or(0) as u32;
+                        if days == 0 {
+                            error_json("retention_days must be > 0", 400)
+                        } else {
+                            let s = match state.lock() {
+                                Ok(g) => g,
+                                Err(e) => e.into_inner(),
+                            };
+                            let alerts_purged = s.storage.with(|store| store.purge_old_alerts(days)).unwrap_or(0);
+                            let audit_purged = s.storage.with(|store| store.purge_old_audit(days)).unwrap_or(0);
+                            let metrics_purged = s.storage.with(|store| store.purge_old_metrics(days)).unwrap_or(0);
+                            let body = serde_json::json!({
+                                "status": "completed",
+                                "retention_days": days,
+                                "alerts_purged": alerts_purged,
+                                "audit_purged": audit_purged,
+                                "metrics_purged": metrics_purged,
+                                "timestamp": chrono::Utc::now().to_rfc3339(),
+                            });
+                            json_response(&body.to_string(), 200)
+                        }
+                    }
+                    Err(e) => error_json(&e, 400),
+                }
 
             // ── SBOM generation ───────────────────────────────────
             } else if method == Method::Get && url_path == "/api/sbom" {

@@ -302,6 +302,12 @@ export const gdprForget = (entity) => del(`/api/gdpr/forget/${encodeURIComponent
 export const adminBackup = () => post('/api/admin/backup');
 export const adminDbVersion = () => get('/api/admin/db/version');
 export const adminDbRollback = () => post('/api/admin/db/rollback');
+export const adminDbCompact = () => post('/api/admin/db/compact');
+export const adminDbReset = (body) => post('/api/admin/db/reset', body);
+export const adminDbSizes = () => get('/api/admin/db/sizes');
+export const adminCleanupLegacy = () => post('/api/admin/cleanup-legacy');
+export const adminDbPurge = (body) => post('/api/admin/db/purge', body);
+export const storageStats = () => get('/api/storage/stats');
 export const sbom = () => get('/api/sbom');
 export const piiScan = (body) => post('/api/pii/scan', body);
 export const dlq = () => get('/api/dlq');
