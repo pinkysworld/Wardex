@@ -104,7 +104,7 @@ impl SessionStore {
             expires_at: now + Duration::hours(ttl_hours),
         };
 
-        let mut store = self.sessions.lock().expect("session lock poisoned");
+        let mut store = self.sessions.lock().unwrap_or_else(|e| e.into_inner());
         store.insert(session_id.clone(), session);
         session_id
     }
@@ -112,7 +112,7 @@ impl SessionStore {
     /// Retrieve a session by ID. Returns `None` if missing or expired.
     /// Expired sessions are removed on access.
     pub fn get_session(&self, id: &str) -> Option<Session> {
-        let mut store = self.sessions.lock().expect("session lock poisoned");
+        let mut store = self.sessions.lock().unwrap_or_else(|e| e.into_inner());
         if let Some(session) = store.get(id) {
             if Utc::now() < session.expires_at {
                 return Some(session.clone());
@@ -125,13 +125,13 @@ impl SessionStore {
 
     /// Destroy a session. Returns `true` if it existed.
     pub fn destroy_session(&self, id: &str) -> bool {
-        let mut store = self.sessions.lock().expect("session lock poisoned");
+        let mut store = self.sessions.lock().unwrap_or_else(|e| e.into_inner());
         store.remove(id).is_some()
     }
 
     /// Remove all expired sessions.
     pub fn cleanup_expired(&self) {
-        let mut store = self.sessions.lock().expect("session lock poisoned");
+        let mut store = self.sessions.lock().unwrap_or_else(|e| e.into_inner());
         let now = Utc::now();
         store.retain(|_, s| s.expires_at > now);
     }

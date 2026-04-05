@@ -156,14 +156,16 @@ impl MarketplaceManager {
 
     pub fn install_pack(&self, pack_id: &str, tenant_id: &str) -> Result<PackInstallation, String> {
         let mut registry = self.registry.lock().unwrap_or_else(|e| e.into_inner());
-        let pack = registry.get_mut(pack_id).ok_or("Pack not found")?;
-        // Check for dependencies
-        for dep in &pack.dependencies {
+        let pack = registry.get(pack_id).ok_or("Pack not found")?;
+        // Check for dependencies before mutating state
+        let deps = pack.dependencies.clone();
+        for dep in &deps {
             let installed = self.installations.lock().unwrap_or_else(|e| e.into_inner());
             if !installed.iter().any(|i| i.pack_id == *dep && i.tenant_id == tenant_id) {
                 return Err(format!("Missing dependency: {dep}"));
             }
         }
+        let pack = registry.get_mut(pack_id).ok_or("Pack not found")?;
         pack.downloads += 1;
         pack.status = PackStatus::Installed;
         let installation = PackInstallation {

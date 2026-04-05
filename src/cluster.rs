@@ -536,10 +536,12 @@ impl ClusterNode {
         let majority = total_nodes / 2 + 1;
 
         for n in (inner.state.commit_index + 1)..=(inner.log.len() as u64) {
-            if let Some(entry) = inner.log.get((n - 1) as usize)
-                && entry.term != inner.state.term {
-                    continue;
-                }
+            let Some(entry) = inner.log.get((n - 1) as usize) else {
+                break; // Defensive: log truncated or index mismatch
+            };
+            if entry.term != inner.state.term {
+                continue; // Raft: only commit entries from current term
+            }
             let replicated = 1 + inner.peer_status.values()
                 .filter(|s| s.match_index >= n)
                 .count();
@@ -584,13 +586,17 @@ impl ClusterNode {
     /// Create a snapshot of all committed log entries up to commit_index.
     pub fn create_snapshot(&self) -> Option<Snapshot> {
         let inner = self.inner.lock().unwrap_or_else(|e| e.into_inner());
-        if inner.log.is_empty() || inner.state.commit_index == 0 {
+        if inner.state.commit_index == 0 {
             return None;
         }
-        let ci = inner.state.commit_index as usize;
+        // After log compaction, committed entries may no longer be in the log.
+        // Only snapshot if there are committed entries still present.
         let committed: Vec<&ReplicatedEntry> = inner.log.iter()
-            .filter(|e| e.index <= ci as u64)
+            .filter(|e| e.index <= inner.state.commit_index)
             .collect();
+        if committed.is_empty() {
+            return None;
+        }
         let last = committed.last()?;
         let data = serde_json::json!({
             "entries": committed.len(),

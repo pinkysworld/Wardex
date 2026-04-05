@@ -188,6 +188,10 @@ fn collect_files(
     for entry in fs::read_dir(dir)? {
         let entry = entry?;
         let path = entry.path();
+        // Skip symlinks to prevent infinite recursion on cycles
+        if path.is_symlink() {
+            continue;
+        }
         if path.is_dir() {
             collect_files(base, &path, out)?;
         } else {

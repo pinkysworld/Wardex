@@ -70,8 +70,8 @@ impl TriageFeatures {
             self.anomaly_score,
             self.confidence,
             self.suspicious_axes as f64,
-            self.hour_of_day as f64 / 24.0, // normalise
-            self.day_of_week as f64 / 7.0,
+            self.hour_of_day.min(23) as f64 / 24.0, // normalise [0,1)
+            self.day_of_week.min(6) as f64 / 7.0,   // normalise [0,1)
             (self.alert_frequency_1h as f64).ln_1p(), // log-scale
             self.device_risk_score,
         ]
@@ -115,7 +115,7 @@ impl StubEngine {
     /// Run alert triage inference on extracted features.
     /// Returns a triage classification (TP/FP/Review).
     pub fn triage_alert(&self, features: &TriageFeatures) -> TriageResult {
-        // Stub: heuristic triage based on anomaly score + confidence.
+        // Stub: heuristic triage based on anomaly score × confidence.
         let score = features.anomaly_score * features.confidence;
         let (label, conf) = if score > 0.8 {
             (TriageLabel::TruePositive, score)

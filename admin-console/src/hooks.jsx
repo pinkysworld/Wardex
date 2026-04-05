@@ -59,9 +59,9 @@ export function RoleProvider({ children }) {
     if (!authenticated) { setRole('viewer'); return; }
     // Fetch role from session endpoint
     fetch('/api/auth/session', { headers: { 'Authorization': `Bearer ${getToken()}` } })
-      .then(r => r.json())
+      .then(r => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.json(); })
       .then(data => { if (data.role) setRole(data.role); })
-      .catch(() => setRole('admin')); // Default to admin for backwards compat
+      .catch(() => setRole('viewer'));
   }, [authenticated]);
 
   return (

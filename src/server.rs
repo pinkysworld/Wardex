@@ -9066,8 +9066,9 @@ fn handle_api(
                         if key.is_empty() {
                             error_json("license key required", 400)
                         } else {
+                            let valid = crate::license::validate_license(key, &[]).is_ok();
                             let body = serde_json::json!({
-                                "valid": true,
+                                "valid": valid,
                                 "key_prefix": &key[..key.len().min(8)],
                                 "validated_at": chrono::Utc::now().to_rfc3339(),
                             });
@@ -9189,9 +9190,10 @@ fn handle_api(
             } else if method == Method::Get && url_path == "/api/auth/sso/login" {
                 let cfg = crate::auth::OidcConfig::default();
                 let mgr = crate::auth::AuthManager::new(cfg);
-                let (auth_url, _nonce) = mgr.build_auth_url();
+                let (auth_url, nonce) = mgr.build_auth_url();
                 let body = serde_json::json!({
                     "authorization_url": auth_url,
+                    "state": nonce,
                 });
                 json_response(&body.to_string(), 200)
 
@@ -9200,17 +9202,25 @@ fn handle_api(
                     Ok(body_str) => {
                         let parsed: serde_json::Value = serde_json::from_str(&body_str).unwrap_or_default();
                         let code = parsed["code"].as_str().unwrap_or("");
+                        let state = parsed["state"].as_str().unwrap_or("");
                         if code.is_empty() {
                             error_json("authorization code required", 400)
+                        } else if state.is_empty() {
+                            error_json("state parameter required for CSRF protection", 400)
                         } else {
                             let cfg = crate::auth::OidcConfig::default();
                             let mgr = crate::auth::AuthManager::new(cfg);
                             match mgr.exchange_code(code) {
-                                Ok(_token) => {
-                                    let sid = mgr.sessions.create_session("sso-user", "user@sso.local", "analyst", 8);
+                                Ok(token_resp) => {
+                                    // Extract user info from id_token; use defaults if token is opaque
+                                    let claims: serde_json::Value = serde_json::from_str(&token_resp.id_token).unwrap_or_default();
+                                    let user_id = claims["sub"].as_str().unwrap_or("sso-user");
+                                    let email = claims["email"].as_str().unwrap_or("unknown@sso");
+                                    let role = claims["role"].as_str().unwrap_or("analyst");
+                                    let sid = mgr.sessions.create_session(user_id, email, role, 8);
                                     let body = serde_json::json!({
                                         "session_id": sid,
-                                        "role": "analyst",
+                                        "role": role,
                                         "expires_in": 28800,
                                     });
                                     json_response(&body.to_string(), 200)
@@ -9223,11 +9233,17 @@ fn handle_api(
                 }
 
             } else if method == Method::Get && url_path == "/api/auth/session" {
-                // Validate session from cookie/header — placeholder returns guest
+                // Check current authentication state from bearer token
+                let identity = authenticate_request(headers, state);
+                let (user_id, role, authenticated) = match &identity {
+                    AuthIdentity::AdminToken => ("admin".to_string(), "admin".to_string(), true),
+                    AuthIdentity::UserToken(u) => (u.username.clone(), format!("{:?}", u.role).to_lowercase(), true),
+                    AuthIdentity::None => ("anonymous".to_string(), "viewer".to_string(), false),
+                };
                 let body = serde_json::json!({
-                    "user_id": "anonymous",
-                    "role": "viewer",
-                    "authenticated": false,
+                    "user_id": user_id,
+                    "role": role,
+                    "authenticated": authenticated,
                 });
                 json_response(&body.to_string(), 200)
 

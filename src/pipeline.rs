@@ -128,11 +128,13 @@ impl PipelineManager {
 
     pub fn submit(&self, event: PipelineEvent) -> Result<(), String> {
         let mut m = self.metrics.lock().unwrap_or_else(|e| e.into_inner());
-        if m.events_ingested - m.events_stored > self.config.backpressure_threshold as u64 {
+        m.events_ingested += 1;
+        let pending = m.events_ingested - m.events_stored;
+        if pending > self.config.backpressure_threshold as u64 {
             m.backpressure_count += 1;
+            m.events_ingested -= 1; // roll back
             return Err("Pipeline backpressure: too many events queued".into());
         }
-        m.events_ingested += 1;
         // In real async pipeline, this pushes to the ingest channel.
         // For now, synchronously process through stages.
         m.events_normalized += 1;
@@ -144,19 +146,22 @@ impl PipelineManager {
     }
 
     pub fn submit_to_dlq(&self, event: PipelineEvent, stage: PipelineStage, error: String) {
-        let mut dlq = self.dlq.lock().unwrap_or_else(|e| e.into_inner());
-        if dlq.len() >= self.config.dlq_max_size {
-            dlq.pop_front();
-        }
-        dlq.push_back(DlqEntry {
-            event,
-            stage,
-            error,
-            timestamp: Utc::now(),
-            retry_count: 0,
-        });
+        let dlq_len = {
+            let mut dlq = self.dlq.lock().unwrap_or_else(|e| e.into_inner());
+            if dlq.len() >= self.config.dlq_max_size {
+                dlq.pop_front();
+            }
+            dlq.push_back(DlqEntry {
+                event,
+                stage,
+                error,
+                timestamp: Utc::now(),
+                retry_count: 0,
+            });
+            dlq.len() as u64
+        };
         let mut m = self.metrics.lock().unwrap_or_else(|e| e.into_inner());
-        m.dlq_count = dlq.len() as u64;
+        m.dlq_count = dlq_len;
     }
 
     pub fn metrics(&self) -> PipelineMetrics {
@@ -238,8 +243,11 @@ mod tests {
             ..Default::default()
         };
         let pm = PipelineManager::new(config);
-        // First event succeeds (diff is 0 which isn't > 0)
-        assert!(pm.submit(test_event()).is_ok());
+        // With threshold=0, no events can be accepted (pending > 0 triggers backpressure)
+        assert!(pm.submit(test_event()).is_err());
+        let m = pm.metrics();
+        assert_eq!(m.backpressure_count, 1);
+        assert_eq!(m.events_ingested, 0); // rolled back
     }
 
     #[test]

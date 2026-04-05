@@ -287,11 +287,40 @@ impl EventStore for InMemoryEventStore {
         let store = self.events.lock().map_err(|e| e.to_string())?;
         let limit = filter.limit.unwrap_or(100) as usize;
         let offset = filter.offset.unwrap_or(0) as usize;
-        Ok(store.iter().skip(offset).take(limit).cloned().collect())
+        let filtered: Vec<StoredEvent> = store.iter()
+            .filter(|e| {
+                if let Some(ref tid) = filter.tenant_id { if e.tenant_id != *tid { return false; } }
+                if let Some(ref from) = filter.from { if e.timestamp < *from { return false; } }
+                if let Some(ref to) = filter.to { if e.timestamp > *to { return false; } }
+                if let Some(sev) = filter.severity_min { if e.severity < sev { return false; } }
+                if let Some(cls) = filter.event_class { if e.event_class != cls { return false; } }
+                if let Some(ref did) = filter.device_id { if e.device_id != *did { return false; } }
+                if let Some(ref un) = filter.user_name { if e.user_name != *un { return false; } }
+                if let Some(ref ip) = filter.src_ip { if e.src_ip != *ip { return false; } }
+                true
+            })
+            .skip(offset)
+            .take(limit)
+            .cloned()
+            .collect();
+        Ok(filtered)
     }
-    fn count_events(&self, _filter: &EventFilter) -> Result<u64, String> {
+    fn count_events(&self, filter: &EventFilter) -> Result<u64, String> {
         let store = self.events.lock().map_err(|e| e.to_string())?;
-        Ok(store.len() as u64)
+        let count = store.iter()
+            .filter(|e| {
+                if let Some(ref tid) = filter.tenant_id { if e.tenant_id != *tid { return false; } }
+                if let Some(ref from) = filter.from { if e.timestamp < *from { return false; } }
+                if let Some(ref to) = filter.to { if e.timestamp > *to { return false; } }
+                if let Some(sev) = filter.severity_min { if e.severity < sev { return false; } }
+                if let Some(cls) = filter.event_class { if e.event_class != cls { return false; } }
+                if let Some(ref did) = filter.device_id { if e.device_id != *did { return false; } }
+                if let Some(ref un) = filter.user_name { if e.user_name != *un { return false; } }
+                if let Some(ref ip) = filter.src_ip { if e.src_ip != *ip { return false; } }
+                true
+            })
+            .count();
+        Ok(count as u64)
     }
     fn aggregate(&self, _query: &AggregationQuery) -> Result<AggregationResult, String> {
         Ok(AggregationResult { buckets: vec![], total: 0 })
