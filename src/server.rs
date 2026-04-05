@@ -3619,7 +3619,35 @@ fn handle_api(
         || (method == Method::Post && route_path == "/api/admin/cleanup-legacy")
         || (method == Method::Post && route_path == "/api/admin/db/purge")
         || (method == Method::Get && route_path == "/api/sbom")
-        || (method == Method::Post && route_path == "/api/pii/scan")));
+        || (method == Method::Post && route_path == "/api/pii/scan")
+        // License, search, metering, billing
+        || (method == Method::Get && route_path == "/api/license")
+        || (method == Method::Post && route_path == "/api/license/validate")
+        || (method == Method::Post && route_path == "/api/search")
+        || (method == Method::Get && route_path == "/api/metering/usage")
+        || (method == Method::Get && route_path == "/api/billing/subscription")
+        || (method == Method::Get && route_path == "/api/billing/invoices")
+        // Marketplace
+        || (method == Method::Get && route_path == "/api/marketplace/packs")
+        || (method == Method::Get && route_path.starts_with("/api/marketplace/packs/"))
+        // Prevention
+        || (method == Method::Get && route_path == "/api/prevention/policies")
+        || (method == Method::Get && route_path == "/api/prevention/stats")
+        // Pipeline & backup
+        || (method == Method::Get && route_path == "/api/pipeline/status")
+        || (method == Method::Get && route_path == "/api/backup/status")
+        // Auth (session/logout require auth; SSO login/callback are pre-auth)
+        || (method == Method::Get && route_path == "/api/auth/sso/config")
+        || (method == Method::Get && route_path == "/api/auth/session")
+        || (method == Method::Post && route_path == "/api/auth/logout")
+        // Cloud collectors
+        || (method == Method::Get && route_path == "/api/collectors/status")
+        || (method == Method::Get && route_path == "/api/collectors/aws")
+        || (method == Method::Get && route_path == "/api/collectors/azure")
+        || (method == Method::Get && route_path == "/api/collectors/gcp")
+        // ML engine
+        || (method == Method::Get && route_path == "/api/ml/models")
+        || (method == Method::Post && route_path == "/api/ml/triage")));
 
     let auth_identity = authenticate_request(headers, state);
     if needs_auth && !auth_identity.is_authenticated() {
@@ -9086,14 +9114,18 @@ fn handle_api(
                             Ok(q) => q,
                             Err(e) => return respond_api(state, &method, &url, remote_addr, auth_used, error_json(&format!("invalid query: {e}"), 400)),
                         };
-                        let result = crate::search::SearchResult {
-                            total: 0,
-                            hits: vec![],
-                            took_ms: 0.1,
-                            query: query.query,
-                        };
-                        let body = serde_json::to_string(&result).unwrap_or_default();
-                        json_response(&body, 200)
+                        match crate::search::SearchIndex::new("/tmp/wardex-search") {
+                            Ok(idx) => {
+                                match idx.search(&query) {
+                                    Ok(result) => {
+                                        let body = serde_json::to_string(&result).unwrap_or_default();
+                                        json_response(&body, 200)
+                                    }
+                                    Err(e) => error_json(&format!("search failed: {e}"), 500),
+                                }
+                            }
+                            Err(e) => error_json(&format!("search index unavailable: {e}"), 500),
+                        }
                     }
                     Err(e) => error_json(&e, 400),
                 }

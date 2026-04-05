@@ -2,6 +2,23 @@
 
 All notable changes to Wardex are documented in this file.
 
+## [0.41.1] — Security Hardening & Bug Fixes
+
+### Fixed
+- **Authentication enforcement** — 23 new API endpoints (`/api/license`, `/api/search`, `/api/metering/*`, `/api/billing/*`, `/api/marketplace/*`, `/api/prevention/*`, `/api/pipeline/*`, `/api/backup/*`, `/api/collectors/*`, `/api/ml/*`, `/api/auth/session`, `/api/auth/logout`) now require bearer-token authentication. SSO login/callback remain pre-auth as intended.
+- **Search endpoint** — `POST /api/search` now executes queries against the `SearchIndex` instead of returning hardcoded empty results.
+- **InMemoryEventStore filters** — `query_events()` and `count_events()` apply all 8 filter fields (device_id, event_class, src_ip, severity_min/max, process_name, time range) instead of ignoring them.
+- **Pipeline backpressure** — Increment-before-check with rollback ensures backpressure threshold is correctly enforced; DLQ releases its mutex before acquiring the metrics mutex to prevent potential deadlocks.
+- **Marketplace race condition** — `install_pack()` verifies dependency availability before mutating pack state.
+- **Cluster snapshots** — `create_snapshot()` handles post-compaction state gracefully; `try_advance_commit()` uses else-break for missing log entries.
+- **ML normalization** — `TriageFeatures::to_vec()` clamps `hour_of_day` to [0,23] and `day_of_week` to [0,6].
+- **Auth panics** — 4x `.expect()` calls in `auth.rs` replaced with `.unwrap_or_else()` to prevent panics on lock poisoning.
+- **Backup symlink safety** — `collect_files()` skips symbolic links to prevent infinite recursion.
+- **SSO callback** — Requires `state` parameter for CSRF protection; extracts user identity from `id_token` claims instead of using hardcoded values.
+- **License validation** — `POST /api/license/validate` calls `validate_license()` with real Ed25519 verification.
+- **Auth session** — `GET /api/auth/session` validates the bearer token and returns actual identity instead of always returning anonymous.
+- **Admin console RBAC** — `RoleProvider` defaults to `viewer` (not `admin`) on API failure; validates HTTP response status before parsing.
+
 ## [0.41.0] — Enterprise Scale: ClickHouse Storage, ML Triage, HA Snapshots & Cloud Collectors
 
 ### Added
