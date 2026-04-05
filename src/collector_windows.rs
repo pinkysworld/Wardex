@@ -526,6 +526,235 @@ pub fn supported_versions() -> Vec<(&'static str, &'static str)> {
     ]
 }
 
+// ── Cross-platform Process Analysis & App Inventory ─────────────────
+
+/// A suspicious-process finding for Windows.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ProcessFinding {
+    pub pid: u32,
+    pub name: String,
+    pub user: String,
+    pub risk_level: &'static str,
+    pub reason: String,
+    pub cpu_percent: f32,
+    pub mem_percent: f32,
+}
+
+/// An installed application entry.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct InstalledApp {
+    pub name: String,
+    pub path: String,
+    pub version: String,
+    pub bundle_id: String,
+    pub size_mb: f64,
+    pub last_modified: String,
+}
+
+const SUSPICIOUS_NAMES: &[(&str, &str)] = &[
+    ("xmrig", "Crypto-miner (XMRig)"),
+    ("minerd", "Crypto-miner (minerd)"),
+    ("cpuminer", "Crypto-miner (cpuminer)"),
+    ("mimikatz", "Credential theft tool (mimikatz)"),
+    ("procdump", "Process memory dump tool"),
+    ("psexec", "Remote execution tool (PsExec)"),
+    ("cobaltstrike", "Cobalt Strike beacon"),
+    ("meterpreter", "Metasploit Meterpreter payload"),
+    ("nc.exe", "Netcat — potential reverse shell"),
+    ("ncat.exe", "Ncat — potential reverse shell"),
+    ("socat", "Socat — potential tunnel"),
+    ("powershell -enc", "Encoded PowerShell — potential obfuscated payload"),
+    ("powershell -e ", "Encoded PowerShell — potential obfuscated payload"),
+    ("-encodedcommand", "Encoded PowerShell — potential obfuscated payload"),
+    ("iex(", "PowerShell Invoke-Expression — potential code injection"),
+    ("invoke-expression", "PowerShell Invoke-Expression — potential code injection"),
+    ("downloadstring", "PowerShell download cradle — remote code execution"),
+    ("bitsadmin /transfer", "BITS transfer — potential data exfil or download"),
+    ("certutil -urlcache", "Certutil download — LOLBin abuse"),
+    ("regsvr32 /s /n /u /i:", "Regsvr32 proxy execution — LOLBin abuse"),
+    ("mshta ", "MSHTA execution — LOLBin abuse"),
+    ("rundll32 javascript:", "Rundll32 script exec — LOLBin abuse"),
+    ("\\temp\\", "Process in temp folder — suspicious location"),
+    ("\\tmp\\", "Process in tmp folder — suspicious location"),
+    ("appdata\\local\\temp", "Process in user temp — suspicious location"),
+];
+
+const WINDOWS_SYSTEM_PROCS: &[&str] = &[
+    "system", "smss.exe", "csrss.exe", "wininit.exe", "winlogon.exe",
+    "services.exe", "lsass.exe", "svchost.exe", "dwm.exe", "explorer.exe",
+    "spoolsv.exe", "ctfmon.exe", "taskhostw.exe", "runtimebroker.exe",
+    "searchindexer", "securityhealthservice", "msmpeng.exe", "nissrv.exe",
+    "wuauserv", "trustedinstaller", "msiexec.exe", "dllhost.exe",
+    "conhost.exe", "sihost.exe", "fontdrvhost.exe", "lsaiso.exe",
+    "registry", "memcompression", "wmiprvse.exe", "searchprotocolhost",
+    "searchfilterhost", "audiodg.exe", "dashost.exe",
+];
+
+/// Analyse running Windows processes for suspicious behaviour.
+pub fn analyze_processes(procs: &[WinProcessEvent]) -> Vec<ProcessFinding> {
+    let mut findings = Vec::new();
+
+    for p in procs {
+        let name_lower = p.name.to_lowercase();
+        let cmd_lower = p.cmd_line.to_lowercase();
+        let exe_lower = p.exe_path.to_lowercase();
+
+        // Suspicious name/command patterns
+        for &(pattern, desc) in SUSPICIOUS_NAMES {
+            if name_lower.contains(pattern) || cmd_lower.contains(pattern) || exe_lower.contains(pattern) {
+                findings.push(ProcessFinding {
+                    pid: p.pid, name: p.name.clone(),
+                    user: if p.user.is_empty() { "—".into() } else { p.user.clone() },
+                    risk_level: "critical", reason: desc.to_string(),
+                    cpu_percent: 0.0, mem_percent: 0.0,
+                });
+            }
+        }
+
+        // Non-system process with PID < 100 — unusual (potential PID spoofing)
+        if p.pid > 4 && p.pid < 100 && !is_known_windows_system_process(&name_lower) {
+            findings.push(ProcessFinding {
+                pid: p.pid, name: p.name.clone(),
+                user: if p.user.is_empty() { "—".into() } else { p.user.clone() },
+                risk_level: "elevated",
+                reason: "Very low PID for non-system process — unusual".to_string(),
+                cpu_percent: 0.0, mem_percent: 0.0,
+            });
+        }
+
+        // Process from suspicious paths
+        if !exe_lower.is_empty()
+            && !exe_lower.starts_with("c:\\windows\\")
+            && !exe_lower.starts_with("c:\\program files")
+            && !exe_lower.is_empty()
+            && p.pid > 4
+            && !is_known_windows_system_process(&name_lower)
+        {
+            // Check for truly suspicious paths
+            if exe_lower.contains("\\temp\\") || exe_lower.contains("\\tmp\\")
+                || exe_lower.contains("\\downloads\\") || exe_lower.contains("\\appdata\\local\\temp")
+            {
+                findings.push(ProcessFinding {
+                    pid: p.pid, name: p.name.clone(),
+                    user: if p.user.is_empty() { "—".into() } else { p.user.clone() },
+                    risk_level: "elevated",
+                    reason: format!("Process running from suspicious path: {}", p.exe_path),
+                    cpu_percent: 0.0, mem_percent: 0.0,
+                });
+            }
+        }
+    }
+
+    // Sort by risk desc
+    findings.sort_by(|a, b| risk_ord(b.risk_level).cmp(&risk_ord(a.risk_level)));
+    findings
+}
+
+/// Collect installed applications from Windows registry/wmic.
+pub fn collect_installed_apps() -> Vec<InstalledApp> {
+    let mut apps = Vec::new();
+
+    // Try wmic product
+    if let Ok(output) = std::process::Command::new("wmic")
+        .args(["product", "get", "Name,Version,InstallLocation", "/format:csv"])
+        .output()
+    {
+        if output.status.success() {
+            let text = String::from_utf8_lossy(&output.stdout);
+            for line in text.lines().skip(1) {
+                let fields: Vec<&str> = line.split(',').collect();
+                if fields.len() >= 4 {
+                    let install_location = fields.get(1).unwrap_or(&"").to_string();
+                    let name = fields.get(2).unwrap_or(&"").trim().to_string();
+                    let version = fields.get(3).unwrap_or(&"").trim().to_string();
+                    if name.is_empty() { continue; }
+                    apps.push(InstalledApp {
+                        name,
+                        path: install_location,
+                        version,
+                        bundle_id: String::new(),
+                        size_mb: 0.0,
+                        last_modified: String::new(),
+                    });
+                }
+            }
+        }
+    }
+
+    // Fallback: registry query for 64-bit apps
+    if apps.is_empty() {
+        if let Ok(output) = std::process::Command::new("reg")
+            .args(["query", r"HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall", "/s"])
+            .output()
+        {
+            if output.status.success() {
+                let text = String::from_utf8_lossy(&output.stdout);
+                let mut current_name = String::new();
+                let mut current_version = String::new();
+                let mut current_path = String::new();
+
+                for line in text.lines() {
+                    let trimmed = line.trim();
+                    if trimmed.starts_with("DisplayName") {
+                        if let Some(val) = trimmed.split("REG_SZ").nth(1) {
+                            current_name = val.trim().to_string();
+                        }
+                    } else if trimmed.starts_with("DisplayVersion") {
+                        if let Some(val) = trimmed.split("REG_SZ").nth(1) {
+                            current_version = val.trim().to_string();
+                        }
+                    } else if trimmed.starts_with("InstallLocation") {
+                        if let Some(val) = trimmed.split("REG_SZ").nth(1) {
+                            current_path = val.trim().to_string();
+                        }
+                    } else if trimmed.starts_with("HKEY_") || trimmed.is_empty() {
+                        if !current_name.is_empty() {
+                            apps.push(InstalledApp {
+                                name: current_name.clone(),
+                                path: current_path.clone(),
+                                version: current_version.clone(),
+                                bundle_id: String::new(),
+                                size_mb: 0.0,
+                                last_modified: String::new(),
+                            });
+                        }
+                        current_name.clear();
+                        current_version.clear();
+                        current_path.clear();
+                    }
+                }
+                // Flush last entry
+                if !current_name.is_empty() {
+                    apps.push(InstalledApp {
+                        name: current_name,
+                        path: current_path,
+                        version: current_version,
+                        bundle_id: String::new(),
+                        size_mb: 0.0,
+                        last_modified: String::new(),
+                    });
+                }
+            }
+        }
+    }
+
+    apps.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()));
+    apps
+}
+
+fn is_known_windows_system_process(name: &str) -> bool {
+    WINDOWS_SYSTEM_PROCS.iter().any(|sp| name.contains(&sp.to_lowercase()))
+}
+
+fn risk_ord(level: &str) -> u8 {
+    match level {
+        "critical" => 3,
+        "severe" => 2,
+        "elevated" => 1,
+        _ => 0,
+    }
+}
+
 // ── Tests ───────────────────────────────────────────────────────────
 
 #[cfg(test)]

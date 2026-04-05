@@ -922,6 +922,254 @@ pub fn supported_distros() -> Vec<(&'static str, &'static str)> {
 
 // ── Tests ───────────────────────────────────────────────────────────
 
+// ── Cross-platform Process Analysis & App Inventory ─────────────────
+
+/// A suspicious-process finding, analogous to the macOS version.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ProcessFinding {
+    pub pid: u32,
+    pub name: String,
+    pub user: String,
+    pub risk_level: &'static str,
+    pub reason: String,
+    pub cpu_percent: f32,
+    pub mem_percent: f32,
+}
+
+/// An installed software package.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct InstalledApp {
+    pub name: String,
+    pub path: String,
+    pub version: String,
+    pub bundle_id: String,
+    pub size_mb: f64,
+    pub last_modified: String,
+}
+
+const SUSPICIOUS_NAMES: &[(&str, &str)] = &[
+    ("xmrig", "Crypto-miner (XMRig)"),
+    ("minerd", "Crypto-miner (minerd)"),
+    ("cpuminer", "Crypto-miner (cpuminer)"),
+    ("kworker", "Potential rootkit masquerading as kernel worker"),
+    ("kdevtmpfs", "Potential rootkit masquerading as kernel thread"),
+    (".hidden", "Hidden process (dotfile name)"),
+    ("nc ", "Netcat — potential reverse shell"),
+    ("ncat", "Ncat — potential reverse shell"),
+    ("socat", "Socat — potential reverse shell or tunnel"),
+    ("./", "Process run from relative path — unusual for services"),
+    ("/tmp/", "Process running from /tmp — suspicious location"),
+    ("/dev/shm", "Process running from shared memory — malware pattern"),
+    ("base64", "Base64 decode — potential obfuscated payload execution"),
+    ("curl|sh", "Pipe-to-shell — remote code execution pattern"),
+    ("wget|sh", "Pipe-to-shell — remote code execution pattern"),
+    ("python -c", "Inline Python execution — potential obfuscated payload"),
+    ("perl -e", "Inline Perl execution — potential obfuscated payload"),
+    ("ruby -e", "Inline Ruby execution — potential obfuscated payload"),
+];
+
+const LINUX_SYSTEM_PROCS: &[&str] = &[
+    "systemd", "kthreadd", "rcu_gp", "rcu_par_gp", "kworker",
+    "ksoftirqd", "migration", "cpuhp", "watchdog", "kdevtmpfsi",
+    "netns", "kauditd", "khungtaskd", "oom_reaper", "writeback",
+    "kcompactd", "kblockd", "blkcg_punt", "ata_sff", "edac-poller",
+    "devfreq_wq", "kswapd", "ecryptfs", "kthrotld", "irq/", "scsi_",
+    "ext4-rsv-conver", "jbd2/", "loop", "zswap", "cryptd",
+    "journald", "udevd", "dbus-daemon", "polkitd", "NetworkManager",
+    "sshd", "crond", "atd", "rsyslogd", "auditd", "firewalld",
+    "containerd", "dockerd", "snapd", "thermald", "acpid",
+];
+
+/// Analyse running Linux processes for suspicious behaviour.
+pub fn analyze_processes(procs: &[LinuxProcessEvent]) -> Vec<ProcessFinding> {
+    let mut findings = Vec::new();
+
+    // Gather per-process CPU/memory from ps for enrichment
+    let usage = collect_process_usage();
+
+    for p in procs {
+        let name_lower = p.name.to_lowercase();
+        let cmd_lower = p.cmd_line.to_lowercase();
+        let exe_lower = p.exe_path.to_lowercase();
+        let (cpu, mem) = usage.get(&p.pid).copied().unwrap_or((0.0, 0.0));
+
+        // Suspicious name/command patterns
+        for &(pattern, desc) in SUSPICIOUS_NAMES {
+            if name_lower.contains(pattern) || cmd_lower.contains(pattern) || exe_lower.contains(pattern) {
+                findings.push(ProcessFinding {
+                    pid: p.pid, name: p.name.clone(),
+                    user: uid_to_name(p.uid),
+                    risk_level: "critical", reason: desc.to_string(),
+                    cpu_percent: cpu, mem_percent: mem,
+                });
+            }
+        }
+
+        // High CPU (>80%)
+        if cpu > 80.0 && p.pid > 1 {
+            findings.push(ProcessFinding {
+                pid: p.pid, name: p.name.clone(),
+                user: uid_to_name(p.uid),
+                risk_level: "elevated",
+                reason: format!("High CPU usage: {:.1}% — possible crypto-miner or resource abuse", cpu),
+                cpu_percent: cpu, mem_percent: mem,
+            });
+        }
+
+        // High memory (>50%)
+        if mem > 50.0 && p.pid > 1 {
+            findings.push(ProcessFinding {
+                pid: p.pid, name: p.name.clone(),
+                user: uid_to_name(p.uid),
+                risk_level: "elevated",
+                reason: format!("High memory usage: {:.1}% — possible memory-resident malware or DoS", mem),
+                cpu_percent: cpu, mem_percent: mem,
+            });
+        }
+
+        // Root non-system processes
+        if p.uid == 0 && p.ppid > 1 && !is_known_linux_system_process(&name_lower) {
+            findings.push(ProcessFinding {
+                pid: p.pid, name: p.name.clone(),
+                user: "root".into(),
+                risk_level: "severe",
+                reason: "Non-system process running as root".to_string(),
+                cpu_percent: cpu, mem_percent: mem,
+            });
+        }
+
+        // Deleted executable (common malware pattern on Linux)
+        if p.exe_path.contains("(deleted)") {
+            findings.push(ProcessFinding {
+                pid: p.pid, name: p.name.clone(),
+                user: uid_to_name(p.uid),
+                risk_level: "critical",
+                reason: "Running from deleted executable — possible fileless malware".to_string(),
+                cpu_percent: cpu, mem_percent: mem,
+            });
+        }
+    }
+
+    // Deduplicate: sort by risk desc, keep all unique (pid, reason-prefix) pairs
+    findings.sort_by(|a, b| risk_ord(b.risk_level).cmp(&risk_ord(a.risk_level)));
+    findings
+}
+
+/// Collect installed packages via dpkg or rpm.
+pub fn collect_installed_apps() -> Vec<InstalledApp> {
+    let mut apps = Vec::new();
+
+    // Try dpkg (Debian/Ubuntu)
+    if let Ok(output) = std::process::Command::new("dpkg-query")
+        .args(["-W", "-f", "${Package}\t${Version}\t${Installed-Size}\n"])
+        .output()
+    {
+        if output.status.success() {
+            let text = String::from_utf8_lossy(&output.stdout);
+            for line in text.lines() {
+                let fields: Vec<&str> = line.split('\t').collect();
+                if fields.len() >= 2 {
+                    let name = fields[0].to_string();
+                    let version = fields[1].to_string();
+                    let size_kb: f64 = fields.get(2).and_then(|s| s.trim().parse().ok()).unwrap_or(0.0);
+                    apps.push(InstalledApp {
+                        name: name.clone(),
+                        path: format!("/usr/bin/{name}"),
+                        version,
+                        bundle_id: String::new(),
+                        size_mb: size_kb / 1024.0,
+                        last_modified: String::new(),
+                    });
+                }
+            }
+        }
+    }
+
+    // Fallback to rpm if dpkg returned nothing
+    if apps.is_empty() {
+        if let Ok(output) = std::process::Command::new("rpm")
+            .args(["-qa", "--queryformat", "%{NAME}\t%{VERSION}-%{RELEASE}\t%{SIZE}\n"])
+            .output()
+        {
+            if output.status.success() {
+                let text = String::from_utf8_lossy(&output.stdout);
+                for line in text.lines() {
+                    let fields: Vec<&str> = line.split('\t').collect();
+                    if fields.len() >= 2 {
+                        let name = fields[0].to_string();
+                        let version = fields[1].to_string();
+                        let size_bytes: f64 = fields.get(2).and_then(|s| s.trim().parse().ok()).unwrap_or(0.0);
+                        apps.push(InstalledApp {
+                            name: name.clone(),
+                            path: format!("/usr/bin/{name}"),
+                            version,
+                            bundle_id: String::new(),
+                            size_mb: size_bytes / (1024.0 * 1024.0),
+                            last_modified: String::new(),
+                        });
+                    }
+                }
+            }
+        }
+    }
+
+    apps.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()));
+    apps
+}
+
+/// Collect per-process CPU% and mem% using `ps`.
+fn collect_process_usage() -> HashMap<u32, (f32, f32)> {
+    let mut map = HashMap::new();
+    let output = match std::process::Command::new("ps")
+        .args(["-eo", "pid,%cpu,%mem"])
+        .output()
+    {
+        Ok(o) if o.status.success() => o,
+        _ => return map,
+    };
+    let text = String::from_utf8_lossy(&output.stdout);
+    for line in text.lines().skip(1) {
+        let fields: Vec<&str> = line.split_whitespace().collect();
+        if fields.len() >= 3 {
+            if let Ok(pid) = fields[0].parse::<u32>() {
+                let cpu: f32 = fields[1].parse().unwrap_or(0.0);
+                let mem: f32 = fields[2].parse().unwrap_or(0.0);
+                map.insert(pid, (cpu, mem));
+            }
+        }
+    }
+    map
+}
+
+fn uid_to_name(uid: u32) -> String {
+    if uid == 0 { return "root".into(); }
+    // Try to resolve from /etc/passwd
+    if let Ok(passwd) = fs::read_to_string("/etc/passwd") {
+        for line in passwd.lines() {
+            let fields: Vec<&str> = line.split(':').collect();
+            if fields.len() >= 3 {
+                if let Ok(u) = fields[2].parse::<u32>() {
+                    if u == uid { return fields[0].to_string(); }
+                }
+            }
+        }
+    }
+    format!("uid:{uid}")
+}
+
+fn is_known_linux_system_process(name: &str) -> bool {
+    LINUX_SYSTEM_PROCS.iter().any(|sp| name.contains(&sp.to_lowercase()))
+}
+
+fn risk_ord(level: &str) -> u8 {
+    match level {
+        "critical" => 3,
+        "severe" => 2,
+        "elevated" => 1,
+        _ => 0,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

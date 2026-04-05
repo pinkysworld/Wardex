@@ -2,6 +2,20 @@
 
 All notable changes to Wardex are documented in this file.
 
+## [0.39.4] — Cross-Platform Process Monitoring, Enhanced Thread Analysis & Bug Fixes
+
+### Added
+- **Cross-platform process monitoring** — `/api/processes/live`, `/api/processes/analysis`, and `/api/host/apps` now work on all three platforms (macOS, Linux, Windows) instead of returning empty stubs on non-macOS.
+- **Linux process analysis** — Detects suspicious names (crypto-miners, reverse shells, /tmp execution), high CPU/memory, root non-system processes, and **deleted executable detection** (fileless malware pattern unique to Linux). Uses `ps` for CPU/memory enrichment and `/etc/passwd` for UID resolution. ~45 known system processes whitelisted.
+- **Linux app inventory** — Enumerates installed packages via `dpkg-query` (Debian/Ubuntu) with automatic `rpm` fallback (RHEL/Fedora/SUSE).
+- **Windows process analysis** — Detects 25 suspicious patterns including LOLBins (certutil, mshta, regsvr32, rundll32), credential tools (mimikatz, procdump, PsExec), encoded PowerShell, and suspicious execution paths (temp, downloads, AppData). ~33 known system processes whitelisted.
+- **Windows app inventory** — Enumerates installed software via `wmic product` with registry fallback (`HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall`).
+- **Enhanced thread analysis** — `/api/threads/status` now reports: OS thread count, process RSS memory (MB), process ID, human-readable uptime, actual sample collection rate, platform/architecture, and subsystem health status.
+
+### Improved
+- **Process analysis deduplication** — Linux and Windows analyzers no longer discard lower-risk findings for processes with multiple issues; all findings are reported and sorted by risk.
+- **Endpoint responses include `platform` field** — All process/apps endpoints include a `platform` key ("macos", "linux", "windows") so the admin console can display platform-specific context.
+
 ## [0.39.3] — Live Process Monitoring, App Inventory & Admin Console UX
 
 ### Added

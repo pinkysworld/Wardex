@@ -14,6 +14,10 @@ Wardex is a self-hosted XDR and SIEM platform built in Rust for teams that want 
 - **SOC operations**
   - Alert queue with SLA awareness, acknowledgement, assignment, and escalation
   - Case management, incident tracking, investigation pivots, process-tree and timeline views
+  - Live cross-platform process monitoring with CPU/memory usage (macOS, Linux, Windows)
+  - Process security analysis: suspicious name detection, resource abuse, deleted-executable detection, LOLBin abuse
+  - Installed application inventory (macOS .app bundles, Linux dpkg/rpm, Windows registry/wmic)
+  - System inventory: hardware, software packages, services, network ports, users
   - Incident storyline generation, evidence packages, and external ticket sync
   - Approval-gated response workflows with pending, approved, executed, denied, and expired states
   - Playbook condition DSL with numeric, string, CONTAINS, and AND/OR compound expressions

@@ -4772,12 +4772,92 @@ fn handle_api(
         (Method::Get, "/api/threads/status") => {
             let s = state.lock().unwrap_or_else(|e| e.into_inner());
             let uptime = s.server_start.elapsed().as_secs();
+            let uptime_fmt = format!("{}d {}h {}m {}s",
+                uptime / 86400, (uptime % 86400) / 3600,
+                (uptime % 3600) / 60, uptime % 60);
+            // Gather OS-level thread count for this process
+            let thread_count: u32 = {
+                #[cfg(target_os = "macos")]
+                {
+                    std::process::Command::new("ps")
+                        .args(["-M", "-p", &std::process::id().to_string()])
+                        .output()
+                        .map(|o| {
+                            let lines = String::from_utf8_lossy(&o.stdout).lines().count();
+                            if lines > 1 { (lines - 1) as u32 } else { 0 }
+                        })
+                        .unwrap_or(0)
+                }
+                #[cfg(target_os = "linux")]
+                {
+                    std::fs::read_to_string(format!("/proc/{}/status", std::process::id()))
+                        .ok()
+                        .and_then(|s| {
+                            s.lines()
+                                .find(|l| l.starts_with("Threads:"))
+                                .and_then(|l| l.split_whitespace().nth(1))
+                                .and_then(|v| v.parse().ok())
+                        })
+                        .unwrap_or(0)
+                }
+                #[cfg(target_os = "windows")]
+                { 0 }
+                #[cfg(not(any(target_os = "macos", target_os = "linux", target_os = "windows")))]
+                { 0 }
+            };
+            // Process memory (RSS) in MB
+            let rss_mb: f64 = {
+                #[cfg(target_os = "macos")]
+                {
+                    std::process::Command::new("ps")
+                        .args(["-o", "rss=", "-p", &std::process::id().to_string()])
+                        .output()
+                        .map(|o| {
+                            String::from_utf8_lossy(&o.stdout)
+                                .trim()
+                                .parse::<f64>()
+                                .unwrap_or(0.0) / 1024.0
+                        })
+                        .unwrap_or(0.0)
+                }
+                #[cfg(target_os = "linux")]
+                {
+                    std::fs::read_to_string(format!("/proc/{}/status", std::process::id()))
+                        .ok()
+                        .and_then(|s| {
+                            s.lines()
+                                .find(|l| l.starts_with("VmRSS:"))
+                                .and_then(|l| l.split_whitespace().nth(1))
+                                .and_then(|v| v.parse::<f64>().ok())
+                        })
+                        .unwrap_or(0.0) / 1024.0
+                }
+                #[cfg(target_os = "windows")]
+                { 0.0 }
+                #[cfg(not(any(target_os = "macos", target_os = "linux", target_os = "windows")))]
+                { 0.0 }
+            };
+            let sample_rate = if s.local_telemetry.len() > 1 {
+                let span = uptime as f64;
+                if span > 0.0 { s.local_telemetry.len() as f64 / span } else { 0.2 }
+            } else { 0.2 };
             let body = serde_json::json!({
                 "monitoring_thread": "active",
+                "thread_count": thread_count,
+                "process_id": std::process::id(),
                 "sample_count": s.local_telemetry.len(),
-                "collection_rate_hz": 0.2,
+                "collection_rate_hz": (sample_rate * 100.0).round() / 100.0,
                 "uptime_secs": uptime,
+                "uptime_human": uptime_fmt,
                 "alert_count": s.alerts.len(),
+                "rss_mb": (rss_mb * 10.0).round() / 10.0,
+                "platform": std::env::consts::OS,
+                "arch": std::env::consts::ARCH,
+                "subsystems": {
+                    "telemetry_collector": "active",
+                    "alert_engine": "active",
+                    "http_server": "active",
+                },
             });
             json_response(&body.to_string(), 200)
         }
@@ -6411,7 +6491,7 @@ fn handle_api(
             json_response(&serde_json::json!({"deep_chains": items}).to_string(), 200)
         }
 
-        // ── Live Process Collection & Analysis ────────────────────
+        // ── Live Process Collection & Analysis (Cross-Platform) ──────
         (Method::Get, "/api/processes/live") => {
             #[cfg(target_os = "macos")]
             {
@@ -6429,11 +6509,71 @@ fn handle_api(
                     "processes": items, "count": items.len(),
                     "total_cpu_percent": (total_cpu * 10.0).round() / 10.0,
                     "total_mem_percent": (total_mem * 10.0).round() / 10.0,
+                    "platform": "macos",
                 }).to_string(), 200)
             }
-            #[cfg(not(target_os = "macos"))]
+            #[cfg(target_os = "linux")]
             {
-                json_response(r#"{"processes":[],"count":0,"message":"Live process collection only available on macOS"}"#, 200)
+                let procs = crate::collector_linux::collect_processes();
+                let usage = {
+                    let mut map = std::collections::HashMap::new();
+                    if let Ok(output) = std::process::Command::new("ps")
+                        .args(["-eo", "pid,%cpu,%mem"])
+                        .output()
+                    {
+                        let text = String::from_utf8_lossy(&output.stdout);
+                        for line in text.lines().skip(1) {
+                            let f: Vec<&str> = line.split_whitespace().collect();
+                            if f.len() >= 3 {
+                                if let Ok(pid) = f[0].parse::<u32>() {
+                                    let cpu: f32 = f[1].parse().unwrap_or(0.0);
+                                    let mem: f32 = f[2].parse().unwrap_or(0.0);
+                                    map.insert(pid, (cpu, mem));
+                                }
+                            }
+                        }
+                    }
+                    map
+                };
+                let items: Vec<serde_json::Value> = procs.iter().map(|p| {
+                    let (cpu, mem) = usage.get(&p.pid).copied().unwrap_or((0.0, 0.0));
+                    serde_json::json!({
+                        "pid": p.pid, "ppid": p.ppid, "name": p.name,
+                        "user": if p.uid == 0 { "root".to_string() } else { format!("uid:{}", p.uid) },
+                        "group": format!("gid:{}", p.gid),
+                        "cpu_percent": cpu, "mem_percent": mem,
+                    })
+                }).collect();
+                let total_cpu: f32 = items.iter().map(|i| i["cpu_percent"].as_f64().unwrap_or(0.0) as f32).sum();
+                let total_mem: f32 = items.iter().map(|i| i["mem_percent"].as_f64().unwrap_or(0.0) as f32).sum();
+                json_response(&serde_json::json!({
+                    "processes": items, "count": items.len(),
+                    "total_cpu_percent": (total_cpu * 10.0).round() / 10.0,
+                    "total_mem_percent": (total_mem * 10.0).round() / 10.0,
+                    "platform": "linux",
+                }).to_string(), 200)
+            }
+            #[cfg(target_os = "windows")]
+            {
+                let procs = crate::collector_windows::collect_processes();
+                let items: Vec<serde_json::Value> = procs.iter().map(|p| {
+                    serde_json::json!({
+                        "pid": p.pid, "ppid": p.ppid, "name": p.name,
+                        "user": if p.user.is_empty() { "—" } else { &p.user },
+                        "group": "—",
+                        "cpu_percent": 0.0, "mem_percent": 0.0,
+                    })
+                }).collect();
+                json_response(&serde_json::json!({
+                    "processes": items, "count": items.len(),
+                    "total_cpu_percent": 0.0,
+                    "total_mem_percent": 0.0,
+                    "platform": "windows",
+                }).to_string(), 200)
+            }
+            #[cfg(not(any(target_os = "macos", target_os = "linux", target_os = "windows")))]
+            {
+                json_response(r#"{"processes":[],"count":0,"message":"Unsupported platform"}"#, 200)
             }
         }
         (Method::Get, "/api/processes/analysis") => {
@@ -6456,11 +6596,56 @@ fn handle_api(
                     "risk_summary": { "critical": critical, "severe": severe, "elevated": elevated },
                     "process_count": procs.len(),
                     "status": if critical > 0 { "critical" } else if severe > 0 { "warning" } else { "clean" },
+                    "platform": "macos",
                 }).to_string(), 200)
             }
-            #[cfg(not(target_os = "macos"))]
+            #[cfg(target_os = "linux")]
             {
-                json_response(r#"{"findings":[],"total":0,"status":"clean","message":"Process analysis only available on macOS"}"#, 200)
+                let procs = crate::collector_linux::collect_processes();
+                let findings = crate::collector_linux::analyze_processes(&procs);
+                let items: Vec<serde_json::Value> = findings.iter().map(|f| {
+                    serde_json::json!({
+                        "pid": f.pid, "name": f.name, "user": f.user,
+                        "risk_level": f.risk_level, "reason": f.reason,
+                        "cpu_percent": f.cpu_percent, "mem_percent": f.mem_percent,
+                    })
+                }).collect();
+                let critical = findings.iter().filter(|f| f.risk_level == "critical").count();
+                let severe = findings.iter().filter(|f| f.risk_level == "severe").count();
+                let elevated = findings.iter().filter(|f| f.risk_level == "elevated").count();
+                json_response(&serde_json::json!({
+                    "findings": items, "total": items.len(),
+                    "risk_summary": { "critical": critical, "severe": severe, "elevated": elevated },
+                    "process_count": procs.len(),
+                    "status": if critical > 0 { "critical" } else if severe > 0 { "warning" } else { "clean" },
+                    "platform": "linux",
+                }).to_string(), 200)
+            }
+            #[cfg(target_os = "windows")]
+            {
+                let procs = crate::collector_windows::collect_processes();
+                let findings = crate::collector_windows::analyze_processes(&procs);
+                let items: Vec<serde_json::Value> = findings.iter().map(|f| {
+                    serde_json::json!({
+                        "pid": f.pid, "name": f.name, "user": f.user,
+                        "risk_level": f.risk_level, "reason": f.reason,
+                        "cpu_percent": f.cpu_percent, "mem_percent": f.mem_percent,
+                    })
+                }).collect();
+                let critical = findings.iter().filter(|f| f.risk_level == "critical").count();
+                let severe = findings.iter().filter(|f| f.risk_level == "severe").count();
+                let elevated = findings.iter().filter(|f| f.risk_level == "elevated").count();
+                json_response(&serde_json::json!({
+                    "findings": items, "total": items.len(),
+                    "risk_summary": { "critical": critical, "severe": severe, "elevated": elevated },
+                    "process_count": procs.len(),
+                    "status": if critical > 0 { "critical" } else if severe > 0 { "warning" } else { "clean" },
+                    "platform": "windows",
+                }).to_string(), 200)
+            }
+            #[cfg(not(any(target_os = "macos", target_os = "linux", target_os = "windows")))]
+            {
+                json_response(r#"{"findings":[],"total":0,"status":"clean","message":"Unsupported platform"}"#, 200)
             }
         }
         (Method::Get, "/api/host/apps") => {
@@ -6475,12 +6660,40 @@ fn handle_api(
                     })
                 }).collect();
                 json_response(&serde_json::json!({
-                    "apps": items, "count": items.len()
+                    "apps": items, "count": items.len(), "platform": "macos",
                 }).to_string(), 200)
             }
-            #[cfg(not(target_os = "macos"))]
+            #[cfg(target_os = "linux")]
             {
-                json_response(r#"{"apps":[],"count":0,"message":"App inventory only available on macOS"}"#, 200)
+                let apps = crate::collector_linux::collect_installed_apps();
+                let items: Vec<serde_json::Value> = apps.iter().map(|a| {
+                    serde_json::json!({
+                        "name": a.name, "path": a.path, "version": a.version,
+                        "bundle_id": a.bundle_id, "size_mb": (a.size_mb * 10.0).round() / 10.0,
+                        "last_modified": a.last_modified,
+                    })
+                }).collect();
+                json_response(&serde_json::json!({
+                    "apps": items, "count": items.len(), "platform": "linux",
+                }).to_string(), 200)
+            }
+            #[cfg(target_os = "windows")]
+            {
+                let apps = crate::collector_windows::collect_installed_apps();
+                let items: Vec<serde_json::Value> = apps.iter().map(|a| {
+                    serde_json::json!({
+                        "name": a.name, "path": a.path, "version": a.version,
+                        "bundle_id": a.bundle_id, "size_mb": (a.size_mb * 10.0).round() / 10.0,
+                        "last_modified": a.last_modified,
+                    })
+                }).collect();
+                json_response(&serde_json::json!({
+                    "apps": items, "count": items.len(), "platform": "windows",
+                }).to_string(), 200)
+            }
+            #[cfg(not(any(target_os = "macos", target_os = "linux", target_os = "windows")))]
+            {
+                json_response(r#"{"apps":[],"count":0,"message":"Unsupported platform"}"#, 200)
             }
         }
         (Method::Get, "/api/host/inventory") => {
