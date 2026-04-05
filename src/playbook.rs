@@ -148,6 +148,7 @@ pub struct PlaybookExecution {
     pub execution_id: String,
     pub playbook_id: String,
     pub alert_id: Option<String>,
+    pub executed_by: String,
     pub status: ExecutionStatus,
     pub started_at: u64,
     pub finished_at: Option<u64>,
@@ -243,6 +244,7 @@ impl PlaybookEngine {
         &mut self,
         playbook_id: &str,
         alert_id: Option<&str>,
+        executed_by: &str,
         now_ms: u64,
     ) -> Option<String> {
         let pb = self.playbooks.iter().find(|p| p.id == playbook_id)?;
@@ -270,6 +272,7 @@ impl PlaybookEngine {
             execution_id: exec_id.clone(),
             playbook_id: playbook_id.to_string(),
             alert_id: alert_id.map(|s| s.to_string()),
+            executed_by: executed_by.to_string(),
             status: ExecutionStatus::Running,
             started_at: now_ms,
             finished_at: None,
@@ -596,7 +599,7 @@ mod tests {
         engine.register(sample_playbook("pb1"));
 
         let eid = engine
-            .start_execution("pb1", Some("alert-1"), 1000)
+            .start_execution("pb1", Some("alert-1"), "analyst-1", 1000)
             .unwrap();
         assert_eq!(engine.active_count(), 1);
 
@@ -607,6 +610,7 @@ mod tests {
         let exec = engine.get_execution(&eid).unwrap();
         assert_eq!(exec.status, ExecutionStatus::Succeeded);
         assert_eq!(exec.finished_at, Some(3000));
+        assert_eq!(exec.executed_by, "analyst-1");
         assert_eq!(engine.active_count(), 0);
     }
 

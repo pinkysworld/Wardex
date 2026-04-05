@@ -262,6 +262,8 @@ pub fn endpoint_permission(method: &str, path: &str) -> Permission {
         ("POST", "/api/investigation/graph") => Permission::ViewIncidents,
         ("GET", p) if p.starts_with("/api/playbooks") => Permission::ViewIncidents,
         ("POST", "/api/playbooks/execute") => Permission::ExecuteResponses,
+        ("GET", p) if p.starts_with("/api/live-response/") => Permission::ViewAuditLog,
+        ("POST", p) if p.starts_with("/api/live-response/") => Permission::ExecuteResponses,
 
         // Alerts
         ("GET", p) if p.starts_with("/api/alerts") => Permission::ViewAlerts,
@@ -553,6 +555,22 @@ mod tests {
             Permission::ExecuteResponses
         );
         assert_eq!(
+            endpoint_permission("GET", "/api/live-response/sessions"),
+            Permission::ViewAuditLog
+        );
+        assert_eq!(
+            endpoint_permission("GET", "/api/live-response/audit"),
+            Permission::ViewAuditLog
+        );
+        assert_eq!(
+            endpoint_permission("POST", "/api/live-response/session"),
+            Permission::ExecuteResponses
+        );
+        assert_eq!(
+            endpoint_permission("POST", "/api/live-response/command"),
+            Permission::ExecuteResponses
+        );
+        assert_eq!(
             endpoint_permission("GET", "/api/rollout/config"),
             Permission::ViewAgents
         );
@@ -599,6 +617,24 @@ mod tests {
             .is_allowed());
         assert!(!store
             .check_api_access("analyst-token", "POST", "/api/response/execute")
+            .is_allowed());
+    }
+
+    #[test]
+    fn analyst_can_view_live_response_audit_but_not_execute_commands() {
+        let store = setup_store();
+
+        assert!(store
+            .check_api_access("analyst-token", "GET", "/api/live-response/sessions")
+            .is_allowed());
+        assert!(store
+            .check_api_access("analyst-token", "GET", "/api/live-response/audit")
+            .is_allowed());
+        assert!(!store
+            .check_api_access("analyst-token", "POST", "/api/live-response/session")
+            .is_allowed());
+        assert!(!store
+            .check_api_access("analyst-token", "POST", "/api/live-response/command")
             .is_allowed());
     }
 

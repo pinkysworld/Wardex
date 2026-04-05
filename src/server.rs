@@ -1595,6 +1595,14 @@ fn response_approver(auth: &AuthIdentity) -> String {
     auth.actor().to_string()
 }
 
+fn playbook_executor(auth: &AuthIdentity) -> String {
+    auth.actor().to_string()
+}
+
+fn live_response_operator(auth: &AuthIdentity) -> String {
+    auth.actor().to_string()
+}
+
 fn host_platform_key(platform: HostPlatform) -> &'static str {
     match platform {
         HostPlatform::Linux => "linux",
@@ -7991,8 +7999,14 @@ fn handle_api(
                         let pb_id = v["playbook_id"].as_str().unwrap_or("");
                         let alert_id = v["alert_id"].as_str();
                         let now = chrono::Utc::now().timestamp_millis() as u64;
+                        let executed_by = playbook_executor(&auth_identity);
                         let mut s = state.lock().unwrap_or_else(|e| e.into_inner());
-                        match s.playbook_engine.start_execution(pb_id, alert_id, now) {
+                        match s.playbook_engine.start_execution(
+                            pb_id,
+                            alert_id,
+                            &executed_by,
+                            now,
+                        ) {
                             Some(eid) => json_response(
                                 &serde_json::json!({"execution_id": eid}).to_string(),
                                 200,
@@ -8016,7 +8030,7 @@ fn handle_api(
                     Ok(v) => {
                         let agent_id = v["agent_id"].as_str().unwrap_or("unknown");
                         let hostname = v["hostname"].as_str().unwrap_or("unknown");
-                        let op = v["operator"].as_str().unwrap_or("api");
+                        let op = live_response_operator(&auth_identity);
                         let platform = match v["platform"].as_str().unwrap_or("linux") {
                             "macos" => crate::live_response::LiveResponsePlatform::MacOs,
                             "windows" => crate::live_response::LiveResponsePlatform::Windows,
@@ -8026,7 +8040,7 @@ fn handle_api(
                         let mut s = state.lock().unwrap_or_else(|e| e.into_inner());
                         let sid = s
                             .live_response_engine
-                            .open_session(agent_id, hostname, platform, op, now);
+                            .open_session(agent_id, hostname, platform, &op, now);
                         json_response(&serde_json::json!({"session_id": sid}).to_string(), 200)
                     }
                     Err(e) => error_json(&e, 400),
@@ -11174,5 +11188,20 @@ mod tests {
     fn response_request_actor_uses_admin_identity() {
         assert_eq!(response_requested_by(&AuthIdentity::AdminToken), "admin");
         assert_eq!(response_approver(&AuthIdentity::AdminToken), "admin");
+    }
+
+    #[test]
+    fn playbook_and_live_response_actor_helpers_use_authenticated_identity() {
+        let auth = AuthIdentity::UserToken(User {
+            username: "analyst-2".into(),
+            role: Role::Analyst,
+            token_hash: "analyst-token-2".into(),
+            enabled: true,
+            created_at: "now".into(),
+            tenant_id: None,
+        });
+
+        assert_eq!(playbook_executor(&auth), "analyst-2");
+        assert_eq!(live_response_operator(&auth), "analyst-2");
     }
 }
