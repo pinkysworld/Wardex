@@ -34,23 +34,26 @@ impl TimingAnalyzer {
 
     /// Push a new timing sample and return whether jitter exceeds threshold.
     pub fn push(&mut self, sample_ns: u64) -> TimingVerdict {
-        // Welford's online algorithm for variance
         self.count += 1;
-        let delta = sample_ns as f64 - self.mean;
-        self.mean += delta / self.count as f64;
-        let delta2 = sample_ns as f64 - self.mean;
-        self.m2 += delta * delta2;
 
         if self.samples.len() >= self.window {
             self.samples.pop_front();
         }
         self.samples.push_back(sample_ns);
 
-        let variance = if self.count > 1 {
-            self.m2 / (self.samples.len().max(2) - 1) as f64
+        // Recompute mean and variance from the windowed samples only,
+        // so that statistics stay accurate as old samples are evicted.
+        let n = self.samples.len() as f64;
+        self.mean = self.samples.iter().map(|&s| s as f64).sum::<f64>() / n;
+        let variance = if self.samples.len() > 1 {
+            self.samples.iter().map(|&s| {
+                let d = s as f64 - self.mean;
+                d * d
+            }).sum::<f64>() / (n - 1.0)
         } else {
             0.0
         };
+        self.m2 = variance * (n - 1.0); // keep m2 consistent for stddev()
         let stddev = variance.sqrt();
 
         // Z-score of current sample

@@ -8,12 +8,12 @@ use std::collections::VecDeque;
 
 /// Stream cipher using SHA-256 in counter mode for spool-at-rest protection.
 /// Derives a unique keystream block for each 32-byte segment using:
-///   keystream[i] = SHA-256(key || block_counter)
-/// This provides semantic security (identical plaintexts produce different
-/// ciphertexts when keys differ) unlike raw XOR with short key repetition.
+///   keystream[i] = SHA-256(key || nonce || block_counter)
+/// A 16-byte random nonce is prepended to the ciphertext so that identical
+/// plaintexts produce different ciphertexts even with the same key.
 /// For production deployments with regulatory requirements, consider
 /// upgrading to AES-256-GCM via a dedicated crypto crate.
-fn spool_cipher(data: &[u8], key: &[u8]) -> Vec<u8> {
+fn spool_cipher_core(data: &[u8], key: &[u8], nonce: &[u8; 16]) -> Vec<u8> {
     use sha2::{Sha256, Digest};
     let mut result = Vec::with_capacity(data.len());
     let mut offset = 0;
@@ -21,6 +21,7 @@ fn spool_cipher(data: &[u8], key: &[u8]) -> Vec<u8> {
     while offset < data.len() {
         let mut hasher = Sha256::new();
         hasher.update(key);
+        hasher.update(nonce);
         hasher.update(counter.to_le_bytes());
         let block = hasher.finalize();
         let remaining = data.len() - offset;
@@ -32,6 +33,25 @@ fn spool_cipher(data: &[u8], key: &[u8]) -> Vec<u8> {
         counter = counter.wrapping_add(1);
     }
     result
+}
+
+/// Encrypt: generate a random nonce, prepend it, then XOR with keystream.
+fn spool_encrypt(data: &[u8], key: &[u8]) -> Vec<u8> {
+    use rand::Rng;
+    let mut nonce = [0u8; 16];
+    rand::thread_rng().fill(&mut nonce);
+    let mut result = nonce.to_vec();
+    result.extend(spool_cipher_core(data, key, &nonce));
+    result
+}
+
+/// Decrypt: strip the 16-byte nonce prefix, then XOR with keystream.
+fn spool_decrypt(data: &[u8], key: &[u8]) -> Vec<u8> {
+    if data.len() < 16 {
+        return Vec::new();
+    }
+    let nonce: [u8; 16] = data[..16].try_into().unwrap();
+    spool_cipher_core(&data[16..], key, &nonce)
 }
 
 // ── Spool entry ─────────────────────────────────────────────────
@@ -74,9 +94,19 @@ pub struct EncryptedSpool {
 
 impl EncryptedSpool {
     /// Create a new spool with the given encryption key and capacity.
+    ///
+    /// # Panics
+    /// Panics if `key` is empty. Prefer `try_new` for fallible construction.
     pub fn new(key: &[u8], max_entries: usize) -> Self {
-        assert!(!key.is_empty(), "Spool encryption key must not be empty");
-        Self {
+        Self::try_new(key, max_entries).expect("Spool encryption key must not be empty")
+    }
+
+    /// Fallible constructor — returns Err if the key is empty.
+    pub fn try_new(key: &[u8], max_entries: usize) -> Result<Self, String> {
+        if key.is_empty() {
+            return Err("Spool encryption key must not be empty".into());
+        }
+        Ok(Self {
             queue: VecDeque::new(),
             key: key.to_vec(),
             max_entries,
@@ -85,8 +115,9 @@ impl EncryptedSpool {
             total_delivered: 0,
             total_dropped: 0,
             max_retries: 5,
-        }
+        })
     }
+
 
     /// Enqueue an event payload. Encrypts at rest.
     pub fn enqueue(&mut self, payload: &str, destination: &str, timestamp: &str) -> u64 {
@@ -108,7 +139,7 @@ impl EncryptedSpool {
         self.total_enqueued += 1;
 
         let json = serde_json::to_vec(&entry).unwrap_or_default();
-        let encrypted = spool_cipher(&json, &self.key);
+        let encrypted = spool_encrypt(&json, &self.key);
 
         if self.queue.len() >= self.max_entries {
             self.queue.pop_front(); // Drop oldest
@@ -122,7 +153,7 @@ impl EncryptedSpool {
     pub fn entries_for_tenant(&self, tenant_id: &str) -> Vec<SpoolEntry> {
         self.queue.iter()
             .filter_map(|encrypted| {
-                let decrypted = spool_cipher(encrypted, &self.key);
+                let decrypted = spool_decrypt(encrypted, &self.key);
                 serde_json::from_slice::<SpoolEntry>(&decrypted).ok()
             })
             .filter(|e| e.tenant_id.as_deref() == Some(tenant_id))
@@ -133,7 +164,7 @@ impl EncryptedSpool {
     pub fn tenant_counts(&self) -> std::collections::HashMap<String, usize> {
         let mut counts = std::collections::HashMap::new();
         for encrypted in &self.queue {
-            let decrypted = spool_cipher(encrypted, &self.key);
+            let decrypted = spool_decrypt(encrypted, &self.key);
             if let Ok(entry) = serde_json::from_slice::<SpoolEntry>(&decrypted) {
                 let key = entry.tenant_id.unwrap_or_else(|| "default".to_string());
                 *counts.entry(key).or_insert(0) += 1;
@@ -145,14 +176,14 @@ impl EncryptedSpool {
     /// Peek at the next entry without removing it.
     pub fn peek(&self) -> Option<SpoolEntry> {
         let encrypted = self.queue.front()?;
-        let decrypted = spool_cipher(encrypted, &self.key);
+        let decrypted = spool_decrypt(encrypted, &self.key);
         serde_json::from_slice(&decrypted).ok()
     }
 
     /// Peek at the next entry for a specific tenant.
     pub fn peek_for_tenant(&self, tenant_id: &str) -> Option<SpoolEntry> {
         for encrypted in &self.queue {
-            let decrypted = spool_cipher(encrypted, &self.key);
+            let decrypted = spool_decrypt(encrypted, &self.key);
             if let Ok(entry) = serde_json::from_slice::<SpoolEntry>(&decrypted)
                 && entry.tenant_id.as_deref() == Some(tenant_id) {
                     return Some(entry);
@@ -164,7 +195,7 @@ impl EncryptedSpool {
     /// Dequeue the next entry (successful delivery).
     pub fn dequeue(&mut self) -> Option<SpoolEntry> {
         let encrypted = self.queue.pop_front()?;
-        let decrypted = spool_cipher(&encrypted, &self.key);
+        let decrypted = spool_decrypt(&encrypted, &self.key);
         self.total_delivered += 1;
         serde_json::from_slice(&decrypted).ok()
     }
@@ -172,13 +203,13 @@ impl EncryptedSpool {
     /// Dequeue the next entry belonging to a specific tenant.
     pub fn dequeue_for_tenant(&mut self, tenant_id: &str) -> Option<SpoolEntry> {
         let pos = self.queue.iter().position(|encrypted| {
-            let decrypted = spool_cipher(encrypted, &self.key);
+            let decrypted = spool_decrypt(encrypted, &self.key);
             serde_json::from_slice::<SpoolEntry>(&decrypted)
                 .map(|e| e.tenant_id.as_deref() == Some(tenant_id))
                 .unwrap_or(false)
         })?;
         let encrypted = self.queue.remove(pos)?;
-        let decrypted = spool_cipher(&encrypted, &self.key);
+        let decrypted = spool_decrypt(&encrypted, &self.key);
         self.total_delivered += 1;
         serde_json::from_slice(&decrypted).ok()
     }
@@ -193,7 +224,7 @@ impl EncryptedSpool {
             return None; // Dead-lettered
         }
         let json = serde_json::to_vec(&entry).unwrap_or_default();
-        let re_encrypted = spool_cipher(&json, &self.key);
+        let re_encrypted = spool_encrypt(&json, &self.key);
         self.queue.push_back(re_encrypted); // Re-enqueue at end
         Some(entry)
     }
@@ -226,7 +257,7 @@ impl EncryptedSpool {
         let mut results = Vec::new();
         let mut remaining = VecDeque::new();
         while let Some(encrypted) = self.queue.pop_front() {
-            let decrypted = spool_cipher(&encrypted, &self.key);
+            let decrypted = spool_decrypt(&encrypted, &self.key);
             if let Ok(entry) = serde_json::from_slice::<SpoolEntry>(&decrypted) {
                 if entry.tenant_id.as_deref() == Some(tenant_id) {
                     self.total_delivered += 1;

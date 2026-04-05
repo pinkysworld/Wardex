@@ -160,6 +160,16 @@ impl SigmaEngine {
         &self.rules
     }
 
+    /// Access the suppression map (for kernel event bridge).
+    pub fn suppression_map(&self) -> &HashMap<String, u64> {
+        &self.suppression
+    }
+
+    /// Record a suppression entry (for kernel event bridge).
+    pub fn record_suppression(&mut self, key: String, epoch: u64) {
+        self.suppression.insert(key, epoch);
+    }
+
     /// Evaluate all enabled rules against an OCSF event.
     /// Returns all matching rules.
     pub fn evaluate(&mut self, event: &OcsfEvent, now_epoch: u64) -> Vec<RuleMatch> {
@@ -280,20 +290,30 @@ pub fn kernel_event_to_sigma_fields(
 /// Evaluate a `KernelEvent` directly against all loaded Sigma rules
 /// without requiring an intermediate OCSF conversion.
 pub fn evaluate_kernel_event(
-    engine: &SigmaEngine,
+    engine: &mut SigmaEngine,
     event: &crate::kernel_events::KernelEvent,
     now_epoch: u64,
 ) -> Vec<RuleMatch> {
     let (fields, category) = kernel_event_to_sigma_fields(event);
     let hostname = fields.get("device.hostname").cloned().unwrap_or_default();
 
-    let mut matches = Vec::new();
-    for rule in engine.rules() {
-        if !rule.enabled { continue; }
-        if rule.logsource.category != category { continue; }
+    // Collect candidate rules first to avoid borrow conflict with suppression map
+    let candidates: Vec<_> = engine.rules().iter()
+        .filter(|r| r.enabled && r.logsource.category == category)
+        .cloned()
+        .collect();
 
+    let mut matches = Vec::new();
+    for rule in &candidates {
         if let Some(matched_fields) = evaluate_rule(rule, &fields) {
-            let _ = (&hostname, now_epoch); // suppression skipped for bridge
+            // Enforce suppression: skip if this rule fired recently for this host
+            if rule.suppress_for_secs > 0 {
+                let sup_key = format!("{}:{}", rule.id, hostname);
+                if let Some(&last) = engine.suppression_map().get(&sup_key) && now_epoch.saturating_sub(last) < rule.suppress_for_secs {
+                    continue;
+                }
+                engine.record_suppression(sup_key, now_epoch);
+            }
             matches.push(RuleMatch {
                 rule_id: rule.id.clone(),
                 rule_title: rule.title.clone(),
@@ -413,10 +433,26 @@ fn evaluate_selection(matchers: &[FieldMatcher], fields: &HashMap<String, String
             }
             MatchModifier::Re => {
                 field_val.is_some_and(|v| {
-                    m.values.iter().any(|_pat| {
-                        // Basic regex: do substring match for safety (no regex crate dep)
-                        // For production, integrate the `regex` crate.
-                        v.contains(_pat)
+                    m.values.iter().any(|pat| {
+                        // Expand basic regex alternation: \\(a|b|c)\\ → check each alternative
+                        if let Some(inner) = pat.strip_prefix("\\\\(")
+                            .and_then(|s| s.strip_suffix(")\\\\"))
+                        {
+                            inner.split('|').any(|alt| {
+                                let needle = format!("\\{alt}\\");
+                                v.contains(&needle)
+                            })
+                        } else if pat.contains('|')
+                            && pat.starts_with('(')
+                            && pat.ends_with(')')
+                        {
+                            // Bare alternation group: (a|b|c)
+                            let inner = &pat[1..pat.len() - 1];
+                            inner.split('|').any(|alt| v.contains(alt))
+                        } else {
+                            // Plain substring match as fallback
+                            v.contains(pat)
+                        }
                     })
                 })
             }
@@ -1428,7 +1464,7 @@ mod tests {
             mitre_techniques: vec![],
         };
 
-        let matches = evaluate_kernel_event(&engine, &ke, 1000);
+        let matches = evaluate_kernel_event(&mut engine, &ke, 1000);
         assert!(
             matches.iter().any(|m| m.rule_id == "SE-002"),
             "Should detect credential dumping tool via kernel event bridge"
@@ -1458,7 +1494,7 @@ mod tests {
             mitre_techniques: vec![],
         };
 
-        let matches = evaluate_kernel_event(&engine, &ke, 2000);
+        let matches = evaluate_kernel_event(&mut engine, &ke, 2000);
         assert!(
             matches.iter().any(|m| m.rule_id == "SE-005"),
             "Should detect suspicious TLD via kernel event bridge"

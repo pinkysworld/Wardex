@@ -76,7 +76,7 @@ export default function SOCWorkbench() {
                       <td><span className={`sev-${(inc.severity || 'low').toLowerCase()}`}>{inc.severity}</span></td>
                       <td><span className={`badge ${inc.status === 'closed' ? 'badge-ok' : 'badge-warn'}`}>{inc.status || '—'}</span></td>
                       <td>{inc.created || inc.timestamp || '—'}</td>
-                      <td><button className="btn btn-sm" onClick={() => viewInc(inc.id || i)}>View</button></td>
+                      <td>{inc.id ? <button className="btn btn-sm" onClick={() => viewInc(inc.id)}>View</button> : '—'}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -127,7 +127,8 @@ export default function SOCWorkbench() {
                       <td>{a.assigned_to || '—'}</td>
                       <td>
                         <button className="btn btn-sm" onClick={async () => {
-                          try { await api.queueAck({ alert_id: a.id || i }); toast('Acknowledged', 'success'); rQueue(); } catch { toast('Failed', 'error'); }
+                          if (!a.id) { toast('No alert ID', 'error'); return; }
+                          try { await api.queueAck({ alert_id: a.id }); toast('Acknowledged', 'success'); rQueue(); } catch { toast('Failed', 'error'); }
                         }}>Ack</button>
                       </td>
                     </tr>

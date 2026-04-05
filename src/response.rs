@@ -327,6 +327,7 @@ impl ResponseOrchestrator {
                 };
                 if now_epoch.saturating_sub(req_epoch) >= self.approval_sla_secs {
                     req.status = ApprovalStatus::Expired;
+                    self.record_audit_inner(req);
                 }
             }
         }

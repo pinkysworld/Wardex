@@ -1216,17 +1216,13 @@ impl StorageBackend {
         let mut removed = Vec::new();
         for f in &legacy_files {
             let path = var_path.join(f);
-            if path.exists() {
-                if std::fs::remove_file(&path).is_ok() {
-                    removed.push(f.to_string());
-                }
+            if path.exists() && std::fs::remove_file(&path).is_ok() {
+                removed.push(f.to_string());
             }
             // Also remove .bak versions
             let bak_path = var_path.join(format!("{f}.bak"));
-            if bak_path.exists() {
-                if std::fs::remove_file(&bak_path).is_ok() {
-                    removed.push(format!("{f}.bak"));
-                }
+            if bak_path.exists() && std::fs::remove_file(&bak_path).is_ok() {
+                removed.push(format!("{f}.bak"));
             }
         }
         removed

@@ -310,7 +310,9 @@ pub fn group_alerts(alerts: &[AlertRecord]) -> Vec<AlertGroup> {
     let mut groups: Vec<AlertGroup> = map
         .into_iter()
         .enumerate()
-        .map(|(gid, (fp, members))| {
+        .map(|(gid, (fp, mut members))| {
+            // Sort members by timestamp so first_seen/last_seen are accurate
+            members.sort_by(|(_, a), (_, b)| a.timestamp.cmp(&b.timestamp));
             let count = members.len();
             let first_seen = members.first().map(|(_, a)| a.timestamp.clone()).unwrap_or_default();
             let last_seen = members.last().map(|(_, a)| a.timestamp.clone()).unwrap_or_default();

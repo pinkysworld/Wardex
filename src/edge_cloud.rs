@@ -55,11 +55,15 @@ pub fn decide_offload(
 
     for w in workloads {
         let decision = match w.tier {
-            ProcessingTier::EdgeOnly => OffloadDecision {
-                workload_id: w.id.clone(),
-                run_on: "edge".into(),
-                reason: "forced edge-only".into(),
-                estimated_latency_ms: 1,
+            ProcessingTier::EdgeOnly => {
+                remaining_cpu = (remaining_cpu - w.cpu_cost).max(0.0);
+                remaining_mem = remaining_mem.saturating_sub(w.memory_mb);
+                OffloadDecision {
+                    workload_id: w.id.clone(),
+                    run_on: "edge".into(),
+                    reason: "forced edge-only".into(),
+                    estimated_latency_ms: 1,
+                }
             },
             ProcessingTier::CloudOnly => OffloadDecision {
                 workload_id: w.id.clone(),

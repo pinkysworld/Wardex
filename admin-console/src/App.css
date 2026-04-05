@@ -176,6 +176,12 @@ tr:hover td { background: rgba(59,130,246,.03); }
 .section-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px; }
 .section-header h2 { font-size: 20px; font-weight: 700; }
 
+/* ── Stat boxes & metric accent ───────────────────────────── */
+.stat-box { background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px; padding: 16px; text-align: center; }
+.stat-label { font-size: 0.75rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px; }
+.stat-value { font-size: 1.5rem; font-weight: 700; color: var(--text); }
+.metric-accent { border-left: 3px solid var(--accent, #3b82f6); padding-left: 12px; }
+
 /* ── Responsive ───────────────────────────────────────────── */
 @media (max-width: 768px) {
   .sidebar { position: fixed; z-index: 100; }

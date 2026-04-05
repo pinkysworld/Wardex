@@ -138,8 +138,9 @@ impl EventStore {
     }
 
     fn trim_to_limit(&mut self) {
-        while self.events.len() > self.max_events {
-            self.events.remove(0);
+        if self.events.len() > self.max_events {
+            let excess = self.events.len() - self.max_events;
+            self.events.drain(0..excess);
         }
     }
 

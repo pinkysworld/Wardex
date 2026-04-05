@@ -8,7 +8,7 @@ export default function LiveMonitor() {
   const { data: countData, reload: reloadCount } = useApi(api.alertsCount);
   const { data: grouped, reload: reloadGrouped } = useApi(api.alertsGrouped);
   const { data: hp } = useApi(api.health);
-  const [selected, setSelected] = useState(null);
+  const [selectedId, setSelectedId] = useState(null);
   const [analysisResult, setAnalysisResult] = useState(null);
   const [tab, setTab] = useState('stream');
 
@@ -26,7 +26,7 @@ export default function LiveMonitor() {
             {hp?.status === 'ok' ? 'System Healthy' : 'Degraded'}
           </span>
           <span className="badge badge-info">
-            {typeof countData === 'object' ? countData.count : countData} alerts
+            {countData == null ? '…' : (typeof countData === 'object' ? countData.count : countData)} alerts
           </span>
           <button className="btn btn-sm" onClick={reloadAll}>↻ Refresh</button>
         </div>
@@ -47,30 +47,36 @@ export default function LiveMonitor() {
               <table>
                 <thead><tr><th>Time</th><th>Severity</th><th>Source</th><th>Category</th><th>Message</th><th>Actions</th></tr></thead>
                 <tbody>
-                  {alertList.map((a, i) => (
-                    <tr key={i} style={selected === i ? { background: 'rgba(59,130,246,.08)' } : undefined}>
+                  {alertList.map((a, i) => {
+                    const aid = a.id || a.alert_id || `${a.timestamp}-${i}`;
+                    return (
+                    <tr key={aid} style={selectedId === aid ? { background: 'rgba(59,130,246,.08)' } : undefined}>
                       <td style={{ whiteSpace: 'nowrap', fontFamily: 'var(--font-mono)', fontSize: 12 }}>{a.timestamp || a.time || '—'}</td>
                       <td><span className={`sev-${(a.severity || 'low').toLowerCase()}`}>{a.severity}</span></td>
                       <td>{a.source || '—'}</td>
                       <td>{a.category || a.type || '—'}</td>
                       <td>{a.message || a.description || '—'}</td>
                       <td>
-                        <button className="btn btn-sm" onClick={() => setSelected(selected === i ? null : i)}>
-                          {selected === i ? 'Hide' : 'Details'}
+                        <button className="btn btn-sm" onClick={() => setSelectedId(selectedId === aid ? null : aid)}>
+                          {selectedId === aid ? 'Hide' : 'Details'}
                         </button>
                       </td>
                     </tr>
-                  ))}
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
           )}
-          {selected !== null && alertList[selected] && (
+          {selectedId !== null && (() => {
+            const sel = alertList.find((a, i) => (a.id || a.alert_id || `${a.timestamp}-${i}`) === selectedId);
+            return sel ? (
             <div style={{ marginTop: 16 }}>
               <div className="card-title" style={{ marginBottom: 8 }}>Alert Detail</div>
-              <div className="json-block">{JSON.stringify(alertList[selected], null, 2)}</div>
+              <div className="json-block">{JSON.stringify(sel, null, 2)}</div>
             </div>
-          )}
+            ) : null;
+          })()}
         </div>
       )}
 

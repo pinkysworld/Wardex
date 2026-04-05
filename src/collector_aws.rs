@@ -248,7 +248,17 @@ impl AwsCloudTrailCollector {
                 mitre_techniques,
                 raw_json: {
                     let s = raw.to_string();
-                    if s.len() > 4096 { Some(s[..4096].to_string()) } else { Some(s) }
+                    if s.len() > 4096 {
+                        // Truncate at a char boundary to avoid panic on multi-byte UTF-8
+                        let end = s.char_indices()
+                            .take_while(|(i, _)| *i < 4096)
+                            .last()
+                            .map(|(i, c)| i + c.len_utf8())
+                            .unwrap_or(0);
+                        Some(s[..end].to_string())
+                    } else {
+                        Some(s)
+                    }
                 },
             };
 

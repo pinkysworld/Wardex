@@ -3961,7 +3961,7 @@ fn handle_api(
                     Err(e) => error_json(&format!("invalid JSON: {e}"), 400),
                     Ok(parsed) => {
                         let name = parsed.get("profile").and_then(|v| v.as_str()).unwrap_or("");
-                        match crate::detector::TuningProfile::from_str(name) {
+                        match crate::detector::TuningProfile::parse(name) {
                             Some(p) => {
                                 let mut s = state.lock().unwrap_or_else(|e| e.into_inner());
                                 s.tuning_profile = p;
@@ -6900,7 +6900,10 @@ fn handle_api(
                                 return;
                             }
                         };
-                        let approver = response_approver(&auth_identity);
+                        let approver = v["approver"].as_str()
+                            .filter(|s| !s.is_empty())
+                            .map(|s| s.to_string())
+                            .unwrap_or_else(|| response_approver(&auth_identity));
                         let reason = v["reason"].as_str().unwrap_or("").to_string();
                         let mut s = state.lock().unwrap_or_else(|e| e.into_inner());
                         let status = s.response_orchestrator.approve(
@@ -8590,7 +8593,7 @@ fn handle_api(
                 };
                 match s.storage.with(|store| store.compact()) {
                     Ok((before, after)) => {
-                        let saved = if before > after { before - after } else { 0 };
+                        let saved = before.saturating_sub(after);
                         let body = serde_json::json!({
                             "status": "completed",
                             "size_before_bytes": before,

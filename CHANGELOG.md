@@ -2,6 +2,44 @@
 
 All notable changes to Wardex are documented in this file.
 
+## [0.39.1] — Comprehensive Security Hardening, Bug Fixes & Clippy Cleanup
+
+### Security
+- **ZK proof forgery (CRITICAL)** — `proof.rs` Sigma ZK verification accepted any response value. Redesigned to XOR-based nonce masking scheme (`response = H(k) XOR H(c)`) with algebraically verifiable recovery.
+- **Deterministic spool encryption (CRITICAL)** — `spool.rs` used a fixed counter with no IV, making ciphertext deterministic. Added random 16-byte nonce prepended to each encrypted spool, with `spool_encrypt`/`spool_decrypt` split.
+- **Threat-intel fuzzy matching over-reach** — `threat_intel.rs` applied fuzzy/substring matching to all IoC types including hashes and IPs. Restricted to `BehaviorPattern` and `NetworkSignature` only.
+
+### Fixed
+- **Unbounded timing variance** — `side_channel.rs` Welford accumulator grew monotonically and never reflected the sliding window. Recompute mean/variance from windowed samples on each push.
+- **WASM compiler ignored operator precedence** — `wasm_engine.rs` compiled expressions left-to-right with no precedence. Implemented shunting-yard algorithm with correct precedence for `* / + - > < >= <= == && || !`.
+- **Sigma regex alternation** — `sigma.rs` `Re` modifier failed to expand `(a|b|c)` alternation groups, causing silent rule misses.
+- **Sigma kernel event suppression borrow conflict** — `sigma.rs` `evaluate_kernel_event` borrowed engine immutably while needing mutable suppression access. Refactored to collect candidate rules first.
+- **CSV escape corrupted negative numbers** — `archival.rs` quoted any field starting with `-`, breaking numeric exports. Added `parse::<f64>()` guard.
+- **Campaign empty-set Jaccard returned 1.0** — `campaign.rs` treated two empty technique sets as identical. Now returns 0.0.
+- **Benchmark median for even-length arrays** — `benchmark.rs` took wrong index. Fixed to average the two middle elements.
+- **FIM stale baselines for deleted files** — `fim.rs` reported deletions but never cleaned up baseline entries, causing repeated alerts.
+- **Alert analysis unsorted cluster members** — `alert_analysis.rs` computed first/last_seen from unsorted members. Added timestamp sort before window calculation.
+- **WebSocket subscriber ID reuse** — `ws_stream.rs` used `HashMap::len()` as subscriber ID, causing collisions after unsubscribe. Switched to monotonically incrementing counter.
+- **Event forwarder O(n^2) drain** — `event_forward.rs` used `remove(0)` in a loop. Replaced with `drain(0..excess)`.
+- **Edge-cloud scheduler ignored resource limits** — `edge_cloud.rs` placed EdgeOnly workloads without decrementing remaining CPU/memory.
+- **UEBA impossible travel near-zero time** — `ueba.rs` divided by near-zero hours producing infinite speed. Added automatic detection for `hours < 0.001 && dist > 100km`.
+- **Lateral movement NaN panic** — `lateral.rs` `partial_cmp` unwrap panicked on NaN scores. Changed to `unwrap_or(Equal)`.
+- **Kill chain phase misclassification** — `kill_chain.rs` mapped T1021/T1570/T1534/T1080 (lateral movement) to ActionsOnObjectives instead of Installation.
+- **Ransomware low-entropy false positives** — `ransomware.rs` threshold of 1.0 was too permissive. Raised to 2.0.
+- **AWS collector truncation split UTF-8** — `collector_aws.rs` byte-sliced strings, potentially splitting multi-byte characters. Uses `char_indices().take_while()` now.
+- **Response stale-expiry lost audit trail** — `response.rs` `expire_stale` silently expired requests without recording an audit entry.
+- **Response approve endpoint ignored body approver** — `server.rs` always used auth identity as approver, ignoring the `approver` field from the JSON body.
+- **Spool constructor panicked on bad key** — `spool.rs` `new()` used `assert!`. Added `try_new()` returning `Result`, `new()` delegates with `.expect()`.
+- **React useApi stale closure** — `hooks.jsx` fetch callback captured stale state. Used `fnRef` pattern and fixed `loading` initial state for skipped hooks.
+- **React LiveMonitor index-based selection** — `LiveMonitor.jsx` used array index for alert selection, breaking on list reorder. Switched to stable alert IDs.
+- **React SOCWorkbench index fallbacks** — `SOCWorkbench.jsx` used array index `0` as fallback for missing IDs.
+- **React FleetAgents blob URL leak** — `FleetAgents.jsx` created blob URLs for export without revoking them.
+
+### Changed
+- **Zero clippy warnings** — resolved all clippy lints: unnecessary casts, useless `format!`, collapsible `if`, `is_multiple_of()`, and `from_str` trait shadowing.
+- **Verification** — automated test count is now 1145 (982 lib + 163 integration).
+- **Version sync** — Cargo, Helm, Kubernetes, OpenAPI, SDK, admin console, docs, and site metadata aligned to `0.39.1`.
+
 ## [0.39.0] — Detection Engine Improvements, React Admin Console, MITRE Coverage & ML Stub
 
 ### Added

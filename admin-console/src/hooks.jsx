@@ -108,16 +108,18 @@ export function useToast() { return useContext(ToastContext); }
 
 export function useApi(fn, deps = [], opts = {}) {
   const [data, setData] = useState(null);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(!opts.skip);
   const [error, setError] = useState(null);
   const { skip = false } = opts;
+  const fnRef = useRef(fn);
+  useEffect(() => { fnRef.current = fn; });
 
   const load = useCallback(async () => {
-    if (skip) return;
+    if (skip) { setLoading(false); return; }
     setLoading(true);
     setError(null);
     try {
-      const result = await fn();
+      const result = await fnRef.current();
       setData(result);
     } catch (e) {
       setError(e);
@@ -125,7 +127,7 @@ export function useApi(fn, deps = [], opts = {}) {
       setLoading(false);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, deps);
+  }, [...deps, skip]);
 
   useEffect(() => { load(); }, [load]);
 

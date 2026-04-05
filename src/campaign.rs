@@ -231,7 +231,7 @@ fn alert_similarity(a: &FleetAlert, b: &FleetAlert) -> f32 {
         .map(|s| s.as_str())
         .collect();
     if a_set.is_empty() && b_set.is_empty() {
-        return 1.0;
+        return 0.0; // No evidence of similarity when both have empty metadata
     }
     let intersection = a_set.intersection(&b_set).count() as f32;
     let union = a_set.union(&b_set).count() as f32;
@@ -338,7 +338,7 @@ mod tests {
     }
 
     #[test]
-    fn similarity_empty_sets_returns_one() {
+    fn similarity_empty_sets_returns_zero() {
         let a = FleetAlert {
             alert_id: "x".into(), hostname: "h1".into(),
             timestamp_ms: 0, score: 1.0, level: "L".into(),
@@ -350,7 +350,7 @@ mod tests {
             reasons: vec![], mitre_techniques: vec![],
         };
         let sim = alert_similarity(&a, &b);
-        assert!((sim - 1.0).abs() < f32::EPSILON, "empty sets should be identical, got {sim}");
+        assert!((sim - 0.0).abs() < f32::EPSILON, "empty sets should have zero similarity, got {sim}");
     }
 
     #[test]

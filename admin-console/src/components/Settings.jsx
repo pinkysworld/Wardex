@@ -72,7 +72,7 @@ export default function Settings() {
                   <button className="btn btn-primary" onClick={async () => {
                     try {
                       let body;
-                      try { body = JSON.parse(configText); } catch { body = configText; }
+                      try { body = JSON.parse(configText); } catch { toast('Invalid JSON', 'error'); return; }
                       await api.configSave(body);
                       toast('Config saved', 'success');
                       setConfigEditing(false);
@@ -233,6 +233,7 @@ export default function Settings() {
                   style={{ width: 70, padding: '4px 8px' }} />
                 <span style={{ fontSize: '0.85rem' }}>days</span>
                 <button className="btn" disabled={purging} onClick={async () => {
+                  if (isNaN(purgeDays) || purgeDays < 1) { toast('Invalid value — enter 1-3650 days', 'error'); return; }
                   if (!confirm(`Purge all records older than ${purgeDays} days?`)) return;
                   setPurging(true);
                   try {

@@ -894,17 +894,12 @@ impl ContinualLearner {
 /// - **Aggressive**: Low thresholds, catches more threats but may increase FP rate.
 /// - **Balanced**: Default settings, tuned for production use.
 /// - **Quiet**: High thresholds, lower FP rate but may miss subtle attacks.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub enum TuningProfile {
     Aggressive,
+    #[default]
     Balanced,
     Quiet,
-}
-
-impl Default for TuningProfile {
-    fn default() -> Self {
-        Self::Balanced
-    }
 }
 
 impl TuningProfile {
@@ -944,7 +939,7 @@ impl TuningProfile {
         }
     }
 
-    pub fn from_str(s: &str) -> Option<Self> {
+    pub fn parse(s: &str) -> Option<Self> {
         match s.to_lowercase().as_str() {
             "aggressive" => Some(Self::Aggressive),
             "balanced" => Some(Self::Balanced),
@@ -967,7 +962,7 @@ pub struct NormalizedScore {
 /// Uses a sigmoid-like mapping: `100 * (1 - e^(-score/k))`.
 pub fn normalize_score(raw: f32, confidence: f32) -> NormalizedScore {
     let k = 5.0_f32; // Controls curve steepness
-    let normalized = (100.0 * (1.0 - (-raw / k).exp())).round().min(100.0).max(0.0) as u8;
+    let normalized = (100.0 * (1.0 - (-raw / k).exp())).round().clamp(0.0, 100.0) as u8;
     let severity = match normalized {
         0..=20 => "info",
         21..=40 => "low",
@@ -1460,9 +1455,9 @@ mod tests {
         use super::TuningProfile;
         for p in [TuningProfile::Aggressive, TuningProfile::Balanced, TuningProfile::Quiet] {
             let s = p.as_str();
-            assert_eq!(TuningProfile::from_str(s), Some(p));
+            assert_eq!(TuningProfile::parse(s), Some(p));
         }
-        assert_eq!(TuningProfile::from_str("unknown"), None);
+        assert_eq!(TuningProfile::parse("unknown"), None);
     }
 
     #[test]

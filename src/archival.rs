@@ -299,10 +299,12 @@ fn compress_gzip(data: &[u8]) -> Result<Vec<u8>, String> {
 
 
 fn csv_escape(s: &str) -> String {
-    // Guard against CSV formula injection (DDE attacks)
-    let s = if s.starts_with('=') || s.starts_with('+') || s.starts_with('-')
-        || s.starts_with('@') || s.starts_with('\t') || s.starts_with('\r')
-    {
+    // Guard against CSV formula injection (DDE attacks).
+    // Don't flag valid negative numbers (e.g. "-3.5") — only non-numeric strings.
+    let needs_prefix = (s.starts_with('=') || s.starts_with('+')
+        || s.starts_with('@') || s.starts_with('\t') || s.starts_with('\r'))
+        || (s.starts_with('-') && s.parse::<f64>().is_err());
+    let s = if needs_prefix {
         format!("'{}", s)
     } else {
         s.to_string()

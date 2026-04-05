@@ -121,8 +121,16 @@ impl SigmaBackend {
     }
 
     fn response(nonce: &[u8], challenge: &str) -> String {
-        let combined = format!("{}:{challenge}", hex::encode(nonce));
-        sha256_hex(combined.as_bytes())
+        // s = H(k || c) — bind response to both nonce and challenge.
+        // Also store H(k) XOR H(c) as a verifiable link.
+        let nonce_hash = sha256_hex(nonce);
+        let challenge_hash = sha256_hex(challenge.as_bytes());
+        // Combine: the response encodes the nonce via XOR with challenge hash
+        // so the verifier can recover the commitment.
+        let n_bytes = hex::decode(&nonce_hash).unwrap_or_default();
+        let c_bytes = hex::decode(&challenge_hash).unwrap_or_default();
+        let xored: Vec<u8> = n_bytes.iter().zip(c_bytes.iter()).map(|(a, b)| a ^ b).collect();
+        hex::encode(xored)
     }
 
     fn verify_triple(commitment: &str, challenge: &str, response: &str, message: &str) -> bool {
@@ -131,13 +139,18 @@ impl SigmaBackend {
         if expected_challenge != challenge {
             return false;
         }
-        // Verify commitment is consistent (response encodes knowledge of nonce)
-        // In our scheme: H(response || challenge) should be deterministic and
-        // consistent with the commitment chain.
-        let check = sha256_hex(format!("{response}:{challenge}").as_bytes());
-        // The check hash must be non-empty (it always is) and the response
-        // must not be all-zeros (indicates the prover had a real nonce).
-        !check.is_empty() && response != "0".repeat(64)
+        // Recover the commitment from the response:
+        // response = H(k) XOR H(c), so H(k) = response XOR H(c)
+        // Then verify H(k) == commitment (R)
+        let challenge_hash = sha256_hex(challenge.as_bytes());
+        let r_bytes = hex::decode(response).unwrap_or_default();
+        let c_bytes = hex::decode(&challenge_hash).unwrap_or_default();
+        if r_bytes.len() != 32 || c_bytes.len() != 32 {
+            return false;
+        }
+        let recovered: Vec<u8> = r_bytes.iter().zip(c_bytes.iter()).map(|(a, b)| a ^ b).collect();
+        let recovered_commitment = hex::encode(recovered);
+        recovered_commitment == commitment
     }
 }
 

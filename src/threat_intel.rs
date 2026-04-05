@@ -110,11 +110,17 @@ impl ThreatIntelStore {
                 context: format!("matched {ioc_type:?} indicator: {value}"),
             }
         } else {
-            // Fuzzy matching for behavior patterns
-            let partial = self.iocs.values().find(|ioc| {
-                ioc.ioc_type == *ioc_type
-                    && (value.contains(&ioc.value) || ioc.value.contains(value))
-            });
+            // Fuzzy matching only for behavioral IoC types where substring
+            // matching is meaningful. Structured types (IPs, hashes, domains)
+            // require exact matches to avoid false positives.
+            let partial = if matches!(ioc_type, IoCType::BehaviorPattern | IoCType::NetworkSignature) {
+                self.iocs.values().find(|ioc| {
+                    ioc.ioc_type == *ioc_type
+                        && (value.contains(&ioc.value) || ioc.value.contains(value))
+                })
+            } else {
+                None
+            };
             if let Some(ioc) = partial {
                 MatchResult {
                     matched: true,

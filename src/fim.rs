@@ -173,6 +173,11 @@ impl FimEngine {
             .cloned()
             .collect();
 
+        // Remove deleted files from baselines so they are not re-reported
+        for d in &deleted {
+            self.baselines.remove(d);
+        }
+
         let result = FimScanResult {
             timestamp: now,
             files_checked: files.len(),

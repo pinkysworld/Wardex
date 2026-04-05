@@ -277,27 +277,36 @@ impl UebaEngine {
                     let dist_km = haversine(prev_lat, prev_lon, lat, lon);
                     let hours =
                         (obs.timestamp_ms - profile.last_seen_ms) as f64 / 3_600_000.0;
-                    if hours > 0.0 {
-                        let speed_kmh = dist_km / hours;
-                        // Flag if travel speed exceeds 900 km/h (≈ commercial jet)
-                        if speed_kmh > 900.0 && dist_km > 100.0 {
-                            let score = (speed_kmh / 900.0 * 30.0).min(50.0) as f32;
-                            detected.push(UebaAnomaly {
-                                anomaly_type: UebaAnomalyType::ImpossibleTravel,
-                                entity_kind: obs.entity_kind.clone(),
-                                entity_id: obs.entity_id.clone(),
-                                score,
-                                description: format!(
-                                    "Travel of {dist_km:.0} km in {hours:.1}h ({speed_kmh:.0} km/h)"
-                                ),
-                                timestamp_ms: obs.timestamp_ms,
-                                evidence: vec![
-                                    format!("from=({prev_lat:.2},{prev_lon:.2})"),
-                                    format!("to=({lat:.2},{lon:.2})"),
-                                ],
-                                mitre_technique: Some("T1078".into()),
-                            });
-                        }
+                    // Treat near-zero time with large distance as automatic impossible travel
+                    let (speed_kmh, is_impossible) = if hours < 0.001 && dist_km > 100.0 {
+                        (f64::INFINITY, true)
+                    } else if hours > 0.0 {
+                        let s = dist_km / hours;
+                        (s, s > 900.0 && dist_km > 100.0)
+                    } else {
+                        (0.0, false)
+                    };
+                    if is_impossible {
+                        let score = if speed_kmh.is_infinite() {
+                            50.0
+                        } else {
+                            (speed_kmh / 900.0 * 30.0).min(50.0) as f32
+                        };
+                        detected.push(UebaAnomaly {
+                            anomaly_type: UebaAnomalyType::ImpossibleTravel,
+                            entity_kind: obs.entity_kind.clone(),
+                            entity_id: obs.entity_id.clone(),
+                            score,
+                            description: format!(
+                                "Travel of {dist_km:.0} km in {hours:.1}h ({speed_kmh:.0} km/h)"
+                            ),
+                            timestamp_ms: obs.timestamp_ms,
+                            evidence: vec![
+                                format!("from=({prev_lat:.2},{prev_lon:.2})"),
+                                format!("to=({lat:.2},{lon:.2})"),
+                            ],
+                            mitre_technique: Some("T1078".into()),
+                        });
                     }
                 }
             profile.last_geo = Some((lat, lon));

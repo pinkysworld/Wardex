@@ -279,6 +279,7 @@ struct EventBusInner {
     max_buffer: usize,
     sequence: u64,
     subscribers: Vec<Subscriber>,
+    next_subscriber_id: u64,
 }
 
 #[derive(Debug)]
@@ -296,6 +297,7 @@ impl EventBus {
                 max_buffer,
                 sequence: 0,
                 subscribers: Vec::new(),
+                next_subscriber_id: 1,
             })),
         }
     }
@@ -324,7 +326,8 @@ impl EventBus {
 
     pub fn subscribe(&self, channels: Vec<String>) -> u64 {
         if let Ok(mut bus) = self.inner.lock() {
-            let id = bus.subscribers.len() as u64 + 1;
+            let id = bus.next_subscriber_id;
+            bus.next_subscriber_id += 1;
             bus.subscribers.push(Subscriber {
                 id,
                 channels,

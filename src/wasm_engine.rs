@@ -386,43 +386,83 @@ fn tokenize(expr: &str) -> Result<Vec<Token>, String> {
     Ok(tokens)
 }
 
-fn compile_tokens(tokens: &[Token]) -> Result<Vec<Opcode>, String> {
-    let mut instructions = Vec::new();
+/// Operator precedence (higher binds tighter).
+fn precedence(tok: &Token) -> u8 {
+    match tok {
+        Token::Or => 1,
+        Token::And => 2,
+        Token::Not => 3,
+        Token::Gt | Token::Lt | Token::Ge | Token::Le | Token::Eq => 4,
+        Token::Op('+') | Token::Op('-') => 5,
+        Token::Op('*') | Token::Op('/') => 6,
+        _ => 0,
+    }
+}
 
-    // Simple two-pass: emit loads/pushes, then operators
-    // For now, handle infix expressions left-to-right (no precedence)
-    let mut i = 0;
-    while i < tokens.len() {
-        match &tokens[i] {
+fn is_operator(tok: &Token) -> bool {
+    matches!(tok, Token::Op(_) | Token::Gt | Token::Lt | Token::Ge | Token::Le | Token::Eq | Token::And | Token::Or | Token::Not)
+}
+
+fn token_to_opcode(tok: &Token) -> Opcode {
+    match tok {
+        Token::Op('+') => Opcode::Add,
+        Token::Op('-') => Opcode::Sub,
+        Token::Op('*') => Opcode::Mul,
+        Token::Op('/') => Opcode::Div,
+        Token::Gt => Opcode::CmpGt,
+        Token::Lt => Opcode::CmpLt,
+        Token::Ge => Opcode::CmpGe,
+        Token::Le => Opcode::CmpLe,
+        Token::Eq => Opcode::CmpEq,
+        Token::And => Opcode::And,
+        Token::Or => Opcode::Or,
+        Token::Not => Opcode::Not,
+        _ => Opcode::Halt, // unreachable for operators
+    }
+}
+
+/// Compile tokens using the shunting-yard algorithm for correct operator precedence.
+fn compile_tokens(tokens: &[Token]) -> Result<Vec<Opcode>, String> {
+    let mut output: Vec<Opcode> = Vec::new();
+    let mut op_stack: Vec<&Token> = Vec::new();
+
+    for tok in tokens {
+        match tok {
             Token::Number(v) => {
-                instructions.push(Opcode::PushConst(*v));
-                i += 1;
+                output.push(Opcode::PushConst(*v));
             }
             Token::Ident(name) => {
-                instructions.push(Opcode::LoadVar(name.clone()));
-                i += 1;
+                output.push(Opcode::LoadVar(name.clone()));
             }
-            Token::Op('+') => { instructions.push(Opcode::Add); i += 1; }
-            Token::Op('-') => { instructions.push(Opcode::Sub); i += 1; }
-            Token::Op('*') => { instructions.push(Opcode::Mul); i += 1; }
-            Token::Op('/') => { instructions.push(Opcode::Div); i += 1; }
-            Token::Gt => { instructions.push(Opcode::CmpGt); i += 1; }
-            Token::Lt => { instructions.push(Opcode::CmpLt); i += 1; }
-            Token::Ge => { instructions.push(Opcode::CmpGe); i += 1; }
-            Token::Le => { instructions.push(Opcode::CmpLe); i += 1; }
-            Token::Eq => { instructions.push(Opcode::CmpEq); i += 1; }
-            Token::And => { instructions.push(Opcode::And); i += 1; }
-            Token::Or => { instructions.push(Opcode::Or); i += 1; }
-            Token::Not => { instructions.push(Opcode::Not); i += 1; }
+            Token::Not => {
+                // Unary prefix — push to op stack (high precedence)
+                op_stack.push(tok);
+            }
+            _ if is_operator(tok) => {
+                // Pop operators with higher or equal precedence
+                while let Some(&top) = op_stack.last() {
+                    if is_operator(top) && precedence(top) >= precedence(tok) {
+                        output.push(token_to_opcode(op_stack.pop().unwrap()));
+                    } else {
+                        break;
+                    }
+                }
+                op_stack.push(tok);
+            }
             _ => {
-                return Err(format!("unexpected token at position {i}"));
+                return Err("unexpected token in expression".to_string());
             }
         }
     }
 
-    instructions.push(Opcode::StoreResult("result".into()));
-    instructions.push(Opcode::Halt);
-    Ok(instructions)
+    // Flush remaining operators
+    while let Some(op) = op_stack.pop() {
+        output.push(token_to_opcode(op));
+    }
+
+    output.push(Opcode::StoreResult("result".into()));
+    output.push(Opcode::Halt);
+    Ok(output)
 }
 
 // ── Policy Extension Registry ────────────────────────────────────────────────
@@ -625,7 +665,7 @@ mod tests {
 
     #[test]
     fn compile_simple_expression() {
-        let program = compile_rule("test", "cpu_load 80.0 >").unwrap();
+        let program = compile_rule("test", "cpu_load > 80.0").unwrap();
         let mut env = HashMap::new();
         env.insert("cpu_load".into(), 95.0);
 
@@ -633,6 +673,16 @@ mod tests {
         let result = vm.execute(&program, &env);
         assert!(result.success);
         assert!((result.outputs["result"] - 1.0).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn compile_respects_precedence() {
+        // 2 + 3 * 4 should be 14, not 20
+        let program = compile_rule("prec", "2.0 + 3.0 * 4.0").unwrap();
+        let vm = PolicyVm::default();
+        let result = vm.execute(&program, &HashMap::new());
+        assert!(result.success);
+        assert!((result.outputs["result"] - 14.0).abs() < f64::EPSILON);
     }
 
     #[test]

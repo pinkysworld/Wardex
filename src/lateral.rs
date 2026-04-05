@@ -315,7 +315,7 @@ impl LateralMovementDetector {
         }
 
         // Sort paths by risk descending
-        paths.sort_by(|a, b| b.risk_score.partial_cmp(&a.risk_score).unwrap());
+        paths.sort_by(|a, b| b.risk_score.partial_cmp(&a.risk_score).unwrap_or(std::cmp::Ordering::Equal));
 
         let unique_creds: HashSet<_> = successful
             .iter()

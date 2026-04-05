@@ -152,8 +152,8 @@ fn technique_to_phase(technique_id: &str) -> KillChainPhase {
             KillChainPhase::Installation
         }
 
-        // Lateral Movement — maps to Actions on Objectives
-        "T1021" | "T1570" | "T1534" | "T1080" => KillChainPhase::ActionsOnObjectives,
+        // Lateral Movement — maps to Installation (mid-chain, not final objective)
+        "T1021" | "T1570" | "T1534" | "T1080" => KillChainPhase::Installation,
 
         // Credential Access
         "T1003" | "T1558" | "T1552" | "T1539" | "T1528" | "T1649" => {
@@ -428,7 +428,7 @@ mod tests {
         assert_eq!(technique_to_phase("T1053"), KillChainPhase::Installation);
         assert_eq!(technique_to_phase("T1071"), KillChainPhase::CommandAndControl);
         assert_eq!(technique_to_phase("T1041"), KillChainPhase::ActionsOnObjectives);
-        assert_eq!(technique_to_phase("T1021"), KillChainPhase::ActionsOnObjectives);
+        assert_eq!(technique_to_phase("T1021"), KillChainPhase::Installation);
     }
 
     #[test]

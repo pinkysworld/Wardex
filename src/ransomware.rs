@@ -171,8 +171,9 @@ impl ExtensionTracker {
             }
         }
         // Invert: low entropy (uniform extension) = high suspicion
-        if entropy < 1.0 && total > 5.0 {
-            return (1.0 - entropy) * (total / 10.0).min(1.0);
+        // Use threshold of 2.0 to catch mixed-extension ransomware (e.g. .encrypted + .locked)
+        if entropy < 2.0 && total > 5.0 {
+            return (2.0 - entropy) / 2.0 * (total / 10.0).min(1.0);
         }
         0.0
     }

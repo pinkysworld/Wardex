@@ -2,7 +2,7 @@
 
 ## Current release baseline
 
-`v0.39.0` delivers the current enterprise control-plane slice:
+`v0.39.1` delivers the current enterprise control-plane slice:
 
 - SOC Workbench for queue, cases, investigation, and response
 - detection engineering with hunts, rule lifecycle, suppressions, and MITRE coverage
@@ -40,7 +40,7 @@
 
 ## Success criteria
 
-| Metric | Current (`v0.39.0`) | Target |
+| Metric | Current (`v0.39.1`) | Target |
 |---|---|---|
 | Automated tests | 991 | 1,000+ |
 | OpenAPI paths | 160+ | maintained on every release |
