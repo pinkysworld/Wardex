@@ -792,6 +792,259 @@ fn collect_cron_jobs(now: &str) -> Vec<MacosPersistenceItem> {
         .collect()
 }
 
+// ── Installed Applications ───────────────────────────────────────────
+
+/// An installed application found in /Applications.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct InstalledApp {
+    pub name: String,
+    pub path: String,
+    pub version: String,
+    pub bundle_id: String,
+    pub size_mb: f64,
+    pub last_modified: String,
+}
+
+/// Enumerate installed macOS applications from /Applications (and ~/Applications).
+pub fn collect_installed_apps() -> Vec<InstalledApp> {
+    let mut apps = Vec::new();
+    let dirs = [
+        "/Applications".to_string(),
+        format!("{}/Applications", std::env::var("HOME").unwrap_or_default()),
+    ];
+    for dir in &dirs {
+        let entries = match fs::read_dir(dir) {
+            Ok(e) => e,
+            Err(_) => continue,
+        };
+        for entry in entries.flatten() {
+            let path = entry.path();
+            let name = path.file_name()
+                .map(|n| n.to_string_lossy().to_string())
+                .unwrap_or_default();
+            if !name.ends_with(".app") {
+                continue;
+            }
+            let display_name = name.trim_end_matches(".app").to_string();
+            let size_mb = dir_size_mb(&path);
+            let last_modified = entry.metadata()
+                .and_then(|m| m.modified())
+                .map(|t| {
+                    let dt: chrono::DateTime<chrono::Utc> = t.into();
+                    dt.to_rfc3339()
+                })
+                .unwrap_or_default();
+
+            // Read Info.plist for version and bundle ID
+            let plist_path = path.join("Contents/Info.plist");
+            let (version, bundle_id) = read_app_plist(&plist_path);
+
+            apps.push(InstalledApp {
+                name: display_name,
+                path: path.to_string_lossy().to_string(),
+                version,
+                bundle_id,
+                size_mb,
+                last_modified,
+            });
+        }
+    }
+    apps.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()));
+    apps
+}
+
+fn read_app_plist(path: &Path) -> (String, String) {
+    let content = match fs::read_to_string(path) {
+        Ok(c) => c,
+        Err(_) => return (String::new(), String::new()),
+    };
+    let mut version = String::new();
+    let mut bundle_id = String::new();
+    let mut next_is_version = false;
+    let mut next_is_bundle = false;
+
+    for line in content.lines() {
+        let trimmed = line.trim();
+        if trimmed == "<key>CFBundleShortVersionString</key>" {
+            next_is_version = true;
+            continue;
+        }
+        if trimmed == "<key>CFBundleIdentifier</key>" {
+            next_is_bundle = true;
+            continue;
+        }
+        if next_is_version {
+            if let Some(val) = trimmed.strip_prefix("<string>")
+                .and_then(|s| s.strip_suffix("</string>")) {
+                version = val.to_string();
+            }
+            next_is_version = false;
+        }
+        if next_is_bundle {
+            if let Some(val) = trimmed.strip_prefix("<string>")
+                .and_then(|s| s.strip_suffix("</string>")) {
+                bundle_id = val.to_string();
+            }
+            next_is_bundle = false;
+        }
+    }
+    (version, bundle_id)
+}
+
+fn dir_size_mb(path: &Path) -> f64 {
+    let mut total: u64 = 0;
+    if let Ok(entries) = fs::read_dir(path) {
+        for entry in entries.flatten() {
+            if let Ok(meta) = entry.metadata() {
+                if meta.is_file() {
+                    total += meta.len();
+                } else if meta.is_dir() {
+                    // One level deep approximation to avoid long recursion
+                    if let Ok(sub) = fs::read_dir(entry.path()) {
+                        for se in sub.flatten() {
+                            if let Ok(sm) = se.metadata() {
+                                if sm.is_file() { total += sm.len(); }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    total as f64 / (1024.0 * 1024.0)
+}
+
+// ── Process Behaviour Analysis ──────────────────────────────────────
+
+/// Suspicious process finding from behavioural analysis.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ProcessFinding {
+    pub pid: u32,
+    pub name: String,
+    pub user: String,
+    pub risk_level: &'static str,
+    pub reason: String,
+    pub cpu_percent: f32,
+    pub mem_percent: f32,
+}
+
+/// Known-suspicious process name patterns.
+const SUSPICIOUS_NAMES: &[(&str, &str)] = &[
+    ("xmrig", "Crypto-miner (XMRig)"),
+    ("minerd", "Crypto-miner (minerd)"),
+    ("cpuminer", "Crypto-miner (cpuminer)"),
+    ("kworker", "Potential rootkit masquerading as kernel worker"),
+    ("kdevtmpfs", "Potential rootkit masquerading as kernel thread"),
+    (".hidden", "Hidden process (dotfile name)"),
+    ("nc ", "Netcat — potential reverse shell"),
+    ("ncat", "Ncat — potential reverse shell"),
+    ("socat", "Socat — potential reverse shell or tunnel"),
+    ("./", "Process run from relative path — unusual for services"),
+    ("/tmp/", "Process running from /tmp — suspicious location"),
+    ("/dev/shm", "Process running from shared memory — malware pattern"),
+    ("base64", "Base64 decode — potential obfuscated payload execution"),
+    ("curl|sh", "Pipe-to-shell — remote code execution pattern"),
+    ("wget|sh", "Pipe-to-shell — remote code execution pattern"),
+    ("python -c", "Inline Python execution — potential obfuscated payload"),
+    ("perl -e", "Inline Perl execution — potential obfuscated payload"),
+    ("ruby -e", "Inline Ruby execution — potential obfuscated payload"),
+];
+
+/// Analyse running processes for suspicious behaviour.
+pub fn analyze_processes(procs: &[MacosProcessEvent]) -> Vec<ProcessFinding> {
+    let mut findings = Vec::new();
+
+    for p in procs {
+        let name_lower = p.name.to_lowercase();
+        let cmd_lower = p.cmd_line.to_lowercase();
+
+        // Check against known-bad patterns
+        for &(pattern, desc) in SUSPICIOUS_NAMES {
+            if name_lower.contains(pattern) || cmd_lower.contains(pattern) {
+                findings.push(ProcessFinding {
+                    pid: p.pid,
+                    name: p.name.clone(),
+                    user: p.user.clone(),
+                    risk_level: "critical",
+                    reason: desc.to_string(),
+                    cpu_percent: p.cpu_percent,
+                    mem_percent: p.mem_percent,
+                });
+            }
+        }
+
+        // High CPU single process (>80% sustained)
+        if p.cpu_percent > 80.0 && p.pid > 1 {
+            findings.push(ProcessFinding {
+                pid: p.pid,
+                name: p.name.clone(),
+                user: p.user.clone(),
+                risk_level: "elevated",
+                reason: format!("High CPU usage: {:.1}% — possible crypto-miner or resource abuse", p.cpu_percent),
+                cpu_percent: p.cpu_percent,
+                mem_percent: p.mem_percent,
+            });
+        }
+
+        // High memory single process (>50%)
+        if p.mem_percent > 50.0 && p.pid > 1 {
+            findings.push(ProcessFinding {
+                pid: p.pid,
+                name: p.name.clone(),
+                user: p.user.clone(),
+                risk_level: "elevated",
+                reason: format!("High memory usage: {:.1}% — possible memory-resident malware or DoS", p.mem_percent),
+                cpu_percent: p.cpu_percent,
+                mem_percent: p.mem_percent,
+            });
+        }
+
+        // Root processes that aren't system daemons
+        if p.user == "root" && p.ppid > 1 && !is_known_system_process(&name_lower) {
+            findings.push(ProcessFinding {
+                pid: p.pid,
+                name: p.name.clone(),
+                user: p.user.clone(),
+                risk_level: "severe",
+                reason: "Non-system process running as root".to_string(),
+                cpu_percent: p.cpu_percent,
+                mem_percent: p.mem_percent,
+            });
+        }
+    }
+
+    // Deduplicate by pid (keep highest risk)
+    findings.sort_by(|a, b| risk_ord(b.risk_level).cmp(&risk_ord(a.risk_level)));
+    let mut seen = std::collections::HashSet::new();
+    findings.retain(|f| seen.insert(f.pid));
+    findings
+}
+
+fn risk_ord(level: &str) -> u8 {
+    match level {
+        "critical" => 3,
+        "severe" => 2,
+        "elevated" => 1,
+        _ => 0,
+    }
+}
+
+fn is_known_system_process(name: &str) -> bool {
+    const SYSTEM_PROCS: &[&str] = &[
+        "launchd", "kernel_task", "mds", "mdworker", "opendirectoryd",
+        "configd", "syslogd", "securityd", "distnoted", "logd",
+        "coreservicesd", "coreauthd", "WindowServer", "bluetoothd",
+        "airportd", "wifid", "symptomsd", "trustd", "powerd",
+        "diskarbitrationd", "fseventsd", "notifyd", "sandboxd",
+        "cloudd", "networkserviceproxy", "loginwindow", "systemstats",
+        "UserEventAgent", "cfprefsd", "apsd", "nsurlsessiond",
+        "containermanagerd", "lsd", "ReportCrash", "mds_stores",
+        "usermanagerd", "timed", "reversetemplated", "thermalmonitord",
+        "sysmond", "biomed", "locationd", "coreduetd", "rapportd",
+    ];
+    SYSTEM_PROCS.iter().any(|sp| name.contains(&sp.to_lowercase()))
+}
+
 // ── Composite Snapshot ──────────────────────────────────────────────
 
 /// Full macOS telemetry snapshot aggregating all sources.

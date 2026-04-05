@@ -2,6 +2,19 @@
 
 All notable changes to Wardex are documented in this file.
 
+## [0.39.3] — Live Process Monitoring, App Inventory & Admin Console UX
+
+### Added
+- **Live process monitoring** — New `/api/processes/live` endpoint calls macOS `collect_processes()` directly, returning all running processes with CPU/memory usage. Processes tab in Live Monitor with sortable columns (CPU, Memory, Name, PID), text filtering, and security findings display.
+- **Process security analysis** — New `/api/processes/analysis` endpoint scans running processes for suspicious names (crypto-miners, reverse shells, tmp execution, encoded commands), high CPU (>80%), high memory (>50%), and non-system root processes. Known macOS system processes (~40) are whitelisted to reduce false positives.
+- **Installed apps inventory** — New `/api/host/apps` endpoint enumerates `/Applications` and `~/Applications`, reads Info.plist for version and bundle ID, calculates directory size. Displayed in new Infrastructure → Inventory tab.
+- **System inventory tab** — Infrastructure component now has an "Inventory" tab showing hardware info, software packages, services (launchctl), network ports, users, and installed applications in structured tables.
+- **SOC Workbench process-tree overhaul** — Process Tree tab now shows live processes sorted by CPU, security findings with risk-level badges, and deep chain analysis in proper tables instead of raw JSON.
+
+### Improved
+- **Dashboard restructured** — Dashboard now organized into five logical sections (System Health, Threat Overview, Process Security, Detection Engine, Recent Alerts) with `SectionTitle` components instead of raw JSON dumps.
+- **Live Monitor** — Added fourth "Processes" tab with sort controls, filter input, security findings banner, and scrollable process table (top 200 shown with pagination hint).
+
 ## [0.39.2] — Share Links, Alert Grouping UI, Isolation Guidance & Detection Tuning
 
 ### Added

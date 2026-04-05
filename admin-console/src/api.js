@@ -282,6 +282,12 @@ export const entityById = (id) => get(`/api/entities/${encodeURIComponent(id)}`)
 // ── Process Tree ─────────────────────────────────────────────
 export const processTree = () => get('/api/process-tree');
 export const deepChains = () => get('/api/process-tree/deep-chains');
+export const processesLive = () => get('/api/processes/live');
+export const processesAnalysis = () => get('/api/processes/analysis');
+
+// ── Host Info & Inventory ────────────────────────────────────
+export const hostApps = () => get('/api/host/apps');
+export const hostInventory = () => get('/api/host/inventory');
 
 // ── Timelines ────────────────────────────────────────────────
 export const timelineHost = () => get('/api/timeline/host');

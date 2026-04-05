@@ -3447,6 +3447,10 @@ fn handle_api(
         || (method == Method::Get && route_path == "/api/feature-flags")
         || (method == Method::Get && route_path == "/api/process-tree")
         || (method == Method::Get && route_path == "/api/process-tree/deep-chains")
+        || (method == Method::Get && route_path == "/api/processes/live")
+        || (method == Method::Get && route_path == "/api/processes/analysis")
+        || (method == Method::Get && route_path == "/api/host/apps")
+        || (method == Method::Get && route_path == "/api/host/inventory")
         || (method == Method::Get && route_path == "/api/spool/stats")
         || (method == Method::Get && route_path == "/api/rbac/users")
         || (method == Method::Post && route_path == "/api/rbac/users")
@@ -4972,6 +4976,10 @@ fn handle_api(
                 {"method": "GET", "path": "/api/privacy/budget", "auth": true, "description": "Privacy budget status"},
                 {"method": "GET", "path": "/api/process-tree", "auth": true, "description": "Current process tree snapshot"},
                 {"method": "GET", "path": "/api/process-tree/deep-chains", "auth": true, "description": "Deep process ancestry chains"},
+                {"method": "GET", "path": "/api/processes/live", "auth": true, "description": "Live process list from local host"},
+                {"method": "GET", "path": "/api/processes/analysis", "auth": true, "description": "Analyse running processes for suspicious behaviour"},
+                {"method": "GET", "path": "/api/host/apps", "auth": true, "description": "Enumerate installed applications"},
+                {"method": "GET", "path": "/api/host/inventory", "auth": true, "description": "Full system inventory (hardware, software, services, users)"},
                 {"method": "POST", "path": "/api/policy-vm/execute", "auth": true, "description": "Execute a policy VM program"},
                 {"method": "POST", "path": "/api/policy/compose", "auth": true, "description": "Compose a policy from weighted inputs"},
                 {"method": "GET", "path": "/api/quantum/key-status", "auth": true, "description": "Quantum key rotation status"},
@@ -6401,6 +6409,86 @@ fn handle_api(
                 })
                 .collect();
             json_response(&serde_json::json!({"deep_chains": items}).to_string(), 200)
+        }
+
+        // ── Live Process Collection & Analysis ────────────────────
+        (Method::Get, "/api/processes/live") => {
+            #[cfg(target_os = "macos")]
+            {
+                let procs = crate::collector_macos::collect_processes();
+                let items: Vec<serde_json::Value> = procs.iter().map(|p| {
+                    serde_json::json!({
+                        "pid": p.pid, "ppid": p.ppid, "name": p.name,
+                        "user": p.user, "group": p.group,
+                        "cpu_percent": p.cpu_percent, "mem_percent": p.mem_percent,
+                    })
+                }).collect();
+                let total_cpu: f32 = procs.iter().map(|p| p.cpu_percent).sum();
+                let total_mem: f32 = procs.iter().map(|p| p.mem_percent).sum();
+                json_response(&serde_json::json!({
+                    "processes": items, "count": items.len(),
+                    "total_cpu_percent": (total_cpu * 10.0).round() / 10.0,
+                    "total_mem_percent": (total_mem * 10.0).round() / 10.0,
+                }).to_string(), 200)
+            }
+            #[cfg(not(target_os = "macos"))]
+            {
+                json_response(r#"{"processes":[],"count":0,"message":"Live process collection only available on macOS"}"#, 200)
+            }
+        }
+        (Method::Get, "/api/processes/analysis") => {
+            #[cfg(target_os = "macos")]
+            {
+                let procs = crate::collector_macos::collect_processes();
+                let findings = crate::collector_macos::analyze_processes(&procs);
+                let items: Vec<serde_json::Value> = findings.iter().map(|f| {
+                    serde_json::json!({
+                        "pid": f.pid, "name": f.name, "user": f.user,
+                        "risk_level": f.risk_level, "reason": f.reason,
+                        "cpu_percent": f.cpu_percent, "mem_percent": f.mem_percent,
+                    })
+                }).collect();
+                let critical = findings.iter().filter(|f| f.risk_level == "critical").count();
+                let severe = findings.iter().filter(|f| f.risk_level == "severe").count();
+                let elevated = findings.iter().filter(|f| f.risk_level == "elevated").count();
+                json_response(&serde_json::json!({
+                    "findings": items, "total": items.len(),
+                    "risk_summary": { "critical": critical, "severe": severe, "elevated": elevated },
+                    "process_count": procs.len(),
+                    "status": if critical > 0 { "critical" } else if severe > 0 { "warning" } else { "clean" },
+                }).to_string(), 200)
+            }
+            #[cfg(not(target_os = "macos"))]
+            {
+                json_response(r#"{"findings":[],"total":0,"status":"clean","message":"Process analysis only available on macOS"}"#, 200)
+            }
+        }
+        (Method::Get, "/api/host/apps") => {
+            #[cfg(target_os = "macos")]
+            {
+                let apps = crate::collector_macos::collect_installed_apps();
+                let items: Vec<serde_json::Value> = apps.iter().map(|a| {
+                    serde_json::json!({
+                        "name": a.name, "path": a.path, "version": a.version,
+                        "bundle_id": a.bundle_id, "size_mb": (a.size_mb * 10.0).round() / 10.0,
+                        "last_modified": a.last_modified,
+                    })
+                }).collect();
+                json_response(&serde_json::json!({
+                    "apps": items, "count": items.len()
+                }).to_string(), 200)
+            }
+            #[cfg(not(target_os = "macos"))]
+            {
+                json_response(r#"{"apps":[],"count":0,"message":"App inventory only available on macOS"}"#, 200)
+            }
+        }
+        (Method::Get, "/api/host/inventory") => {
+            let inv = crate::inventory::collect_inventory();
+            match serde_json::to_string(&inv) {
+                Ok(json) => json_response(&json, 200),
+                Err(e) => error_json(&format!("serialization error: {e}"), 500),
+            }
         }
 
         // ── Encrypted Spool ───────────────────────────────────────
