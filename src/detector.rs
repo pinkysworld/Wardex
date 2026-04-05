@@ -888,6 +888,107 @@ impl ContinualLearner {
     }
 }
 
+// ─── Detection tuning profiles (Phase 29) ───
+
+/// Pre-configured detection sensitivity profiles.
+/// - **Aggressive**: Low thresholds, catches more threats but may increase FP rate.
+/// - **Balanced**: Default settings, tuned for production use.
+/// - **Quiet**: High thresholds, lower FP rate but may miss subtle attacks.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum TuningProfile {
+    Aggressive,
+    Balanced,
+    Quiet,
+}
+
+impl Default for TuningProfile {
+    fn default() -> Self {
+        Self::Balanced
+    }
+}
+
+impl TuningProfile {
+    /// Returns the threshold multiplier applied to detection scales.
+    /// Lower multiplier = more sensitive (more alerts).
+    pub fn threshold_multiplier(&self) -> f32 {
+        match self {
+            Self::Aggressive => 0.6,
+            Self::Balanced => 1.0,
+            Self::Quiet => 1.8,
+        }
+    }
+
+    /// Returns the learn threshold for the anomaly detector.
+    pub fn learn_threshold(&self) -> f32 {
+        match self {
+            Self::Aggressive => 1.5,
+            Self::Balanced => 2.5,
+            Self::Quiet => 4.0,
+        }
+    }
+
+    /// Returns a human-readable description.
+    pub fn description(&self) -> &'static str {
+        match self {
+            Self::Aggressive => "Maximum sensitivity — catches more threats but may increase false positives",
+            Self::Balanced => "Default — tuned for production with good precision/recall balance",
+            Self::Quiet => "Minimal alerts — high thresholds, lower false positives, may miss subtle attacks",
+        }
+    }
+
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::Aggressive => "aggressive",
+            Self::Balanced => "balanced",
+            Self::Quiet => "quiet",
+        }
+    }
+
+    pub fn from_str(s: &str) -> Option<Self> {
+        match s.to_lowercase().as_str() {
+            "aggressive" => Some(Self::Aggressive),
+            "balanced" => Some(Self::Balanced),
+            "quiet" => Some(Self::Quiet),
+            _ => None,
+        }
+    }
+}
+
+/// Normalized threat score in the 0–100 range with severity label.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct NormalizedScore {
+    pub raw_score: f32,
+    pub normalized: u8,
+    pub severity: String,
+    pub confidence: String,
+}
+
+/// Normalize an unbounded anomaly score to the 0–100 range.
+/// Uses a sigmoid-like mapping: `100 * (1 - e^(-score/k))`.
+pub fn normalize_score(raw: f32, confidence: f32) -> NormalizedScore {
+    let k = 5.0_f32; // Controls curve steepness
+    let normalized = (100.0 * (1.0 - (-raw / k).exp())).round().min(100.0).max(0.0) as u8;
+    let severity = match normalized {
+        0..=20 => "info",
+        21..=40 => "low",
+        41..=60 => "medium",
+        61..=80 => "high",
+        81..=100 => "critical",
+        _ => "info",
+    };
+    let conf = match confidence {
+        c if c >= 0.9 => "high",
+        c if c >= 0.6 => "medium",
+        _ => "low",
+    };
+    NormalizedScore {
+        raw_score: raw,
+        normalized,
+        severity: severity.to_string(),
+        confidence: conf.to_string(),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::AnomalyDetector;
@@ -1342,6 +1443,43 @@ mod tests {
         let report = det.evaluate();
         assert!(report.cumulative_auth_failures >= 50);
         assert!(report.auth_failure_rate > 0.0);
+    }
+
+    #[test]
+    fn tuning_profile_thresholds() {
+        use super::TuningProfile;
+        assert!(TuningProfile::Aggressive.threshold_multiplier() < 1.0);
+        assert!((TuningProfile::Balanced.threshold_multiplier() - 1.0).abs() < 0.001);
+        assert!(TuningProfile::Quiet.threshold_multiplier() > 1.0);
+        assert!(TuningProfile::Aggressive.learn_threshold() < TuningProfile::Balanced.learn_threshold());
+        assert!(TuningProfile::Balanced.learn_threshold() < TuningProfile::Quiet.learn_threshold());
+    }
+
+    #[test]
+    fn tuning_profile_round_trip() {
+        use super::TuningProfile;
+        for p in [TuningProfile::Aggressive, TuningProfile::Balanced, TuningProfile::Quiet] {
+            let s = p.as_str();
+            assert_eq!(TuningProfile::from_str(s), Some(p));
+        }
+        assert_eq!(TuningProfile::from_str("unknown"), None);
+    }
+
+    #[test]
+    fn normalize_score_bounds() {
+        use super::normalize_score;
+        let low = normalize_score(0.0, 1.0);
+        assert_eq!(low.normalized, 0);
+        assert_eq!(low.severity, "info");
+
+        let mid = normalize_score(5.0, 0.8);
+        assert!(mid.normalized > 40 && mid.normalized < 80);
+        assert_eq!(mid.confidence, "medium");
+
+        let high = normalize_score(25.0, 1.0);
+        assert!(high.normalized >= 95);
+        assert_eq!(high.severity, "critical");
+        assert_eq!(high.confidence, "high");
     }
 }
 

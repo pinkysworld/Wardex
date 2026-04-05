@@ -2,7 +2,7 @@
 
 Wardex is a Rust-based XDR and SIEM platform for private-cloud and self-hosted security operations. It combines cross-platform telemetry collection, detection engineering, analyst workflows, approval-gated response, agent lifecycle management, SIEM integrations, and tamper-evident evidence handling in a single deployable product.
 
-## What ships in `v0.38.1`
+## What ships in `v0.39.0`
 
 - Everything from v0.36.3 plus production hardening: 25 unwrap/panic sites fixed, structured logging via `log`+`env_logger`, release profile with LTO, zero clippy warnings, Helm version sync
 - OpenAPI 3.0.3 machine-readable spec covering 160+ endpoints with full schema definitions
@@ -17,7 +17,7 @@ Wardex is a Rust-based XDR and SIEM platform for private-cloud and self-hosted s
 - CI hardening with cargo-audit, code coverage, MSRV checks, and dependency caching
 - GraphQL query layer for threat hunting with aliases, sub-fields, and introspection
 - HA clustering with Raft-inspired leader election, log replication, and health monitoring
-- 93 Rust source modules, 160+ documented API paths, and 963 automated tests
+- 93 Rust source modules, 160+ documented API paths, and 981 automated tests
 
 See [FEATURES.md](FEATURES.md) for the concise capability summary, [CHANGELOG.md](CHANGELOG.md) for release history, and [docs/README.md](docs/README.md) for the full documentation map.
 
@@ -65,7 +65,7 @@ Run the full automated suite:
 cargo test
 ```
 
-The current release passes 948 automated tests (948 lib + 10 chaos integration) across unit and integration coverage. The repo also includes live verification helpers in [`tests/live_test.py`](tests/live_test.py), [`tests/verify_admin.py`](tests/verify_admin.py), and browser smoke coverage in [`tests/playwright/enterprise_console_smoke.spec.js`](tests/playwright/enterprise_console_smoke.spec.js).
+The current release passes 991 automated tests (981 lib + 10 chaos integration) across unit and integration coverage. The repo also includes live verification helpers in [`tests/live_test.py`](tests/live_test.py), [`tests/verify_admin.py`](tests/verify_admin.py), and browser smoke coverage in [`tests/playwright/enterprise_console_smoke.spec.js`](tests/playwright/enterprise_console_smoke.spec.js).
 
 ## Repository layout
 

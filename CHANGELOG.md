@@ -2,6 +2,25 @@
 
 All notable changes to Wardex are documented in this file.
 
+## [0.39.0] — Detection Engine Improvements, React Admin Console, MITRE Coverage & ML Stub
+
+### Added
+- **MITRE ATT&CK coverage tracker** (`src/mitre_coverage.rs`) — 12 tactics, ~65 techniques in matrix, 27 builtin detection-module mappings, heatmap generation, coverage summary with gap analysis, 5 tests.
+- **Detection tuning profiles** — `TuningProfile` enum (Aggressive/Balanced/Quiet) with configurable threshold multipliers and learn thresholds, plus normalized 0-100 threat scoring via sigmoid mapping.
+- **False-positive feedback loop** (`src/alert_analysis.rs`) — `FpFeedbackStore` tracks analyst FP markings per alert pattern, computes FP ratios and suppression weights (min 0.1, requires ≥5 samples), 4 tests.
+- **IoC aging / TTL purge** (`src/threat_intel.rs`) — `purge_expired(now, ttl_days)` removes stale IoCs; `enrichment_stats()` provides by-type/severity/source breakdowns, 3 tests.
+- **ML inference engine stub** (`src/ml_engine.rs`) — `InferenceEngine` trait, `StubEngine` placeholder with 3 planned model slots (anomaly detector, entity classifier, alert triage). Prepared for future ONNX runtime integration, 4 tests.
+- **12 new Sigma rules** — fileless malware (LOLBins, .NET assembly load), persistence (Run keys, scheduled tasks, systemd, LaunchAgent), defense evasion (indicator removal, masquerading, timestomping), exfiltration (alt protocol, large transfer, archive creation).
+- **11 new API endpoints** — `/api/threat-intel/stats`, `/api/threat-intel/purge`, `/api/mitre/coverage`, `/api/mitre/heatmap`, `/api/detection/profile` (GET/PUT), `/api/fp-feedback` (POST), `/api/fp-feedback/stats`, `/api/detection/score/normalize`.
+- **React admin console** — full Vite + React 19 migration of admin console with 10 sections (Dashboard, Live Monitor, Threat Detection, Fleet & Agents, Security Policy, SOC Workbench, Infrastructure, Reports & Exports, Settings, Help & Docs), all wired to ~160 live API endpoints with auth, dark/light theme, auto-refresh, toast notifications, MITRE heatmap visualization, and tabbed navigation.
+
+### Fixed
+- **Auth token display** — server startup now prints the full 64-character API token instead of only the first 8 characters, fixing the "wrong token" login issue after fresh start.
+
+### Changed
+- **Verification** — automated library test count is now 981 (991 total with chaos integration).
+- **Version sync** — Cargo, Helm, Kubernetes, OpenAPI, SDK, docs, and site metadata aligned to `0.39.0`.
+
 ## [0.38.1] — Approval Separation, Audit Attribution, and Post-Release Hardening
 
 ### Security

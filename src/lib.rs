@@ -51,6 +51,8 @@ pub mod lateral;
 pub mod live_response;
 pub mod memory_forensics;
 pub mod metrics;
+pub mod mitre_coverage;
+pub mod ml_engine;
 pub mod monitor;
 pub mod multi_tenant;
 pub mod notifications;

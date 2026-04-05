@@ -50,6 +50,19 @@ pub struct ThreatFeed {
 
 // ── IoC Store & Matching ─────────────────────────────────────────────────────
 
+/// Enrichment statistics across the IoC store.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct IoCEnrichmentStats {
+    pub total_iocs: usize,
+    pub by_type: HashMap<String, usize>,
+    pub by_severity: HashMap<String, usize>,
+    pub by_source: HashMap<String, usize>,
+    pub avg_confidence: f32,
+    pub active_feeds: usize,
+    pub total_feeds: usize,
+    pub match_history_size: usize,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MatchResult {
     pub matched: bool,
@@ -259,6 +272,51 @@ impl ThreatIntelStore {
                 }
             })
             .collect()
+    }
+
+    /// Purge IoCs whose `last_seen` is older than `ttl_days` from `now`.
+    /// Returns the number of IoCs removed.
+    pub fn purge_expired(&mut self, now: &str, ttl_days: u64) -> usize {
+        let now_ts = match chrono::DateTime::parse_from_rfc3339(now) {
+            Ok(ts) => ts.with_timezone(&chrono::Utc),
+            Err(_) => return 0,
+        };
+        let cutoff = now_ts - chrono::Duration::days(ttl_days as i64);
+        let before = self.iocs.len();
+        self.iocs.retain(|_, ioc| {
+            match chrono::DateTime::parse_from_rfc3339(&ioc.last_seen) {
+                Ok(ts) => ts.with_timezone(&chrono::Utc) >= cutoff,
+                Err(_) => true, // Keep IoCs with unparseable timestamps
+            }
+        });
+        before - self.iocs.len()
+    }
+
+    /// Compute enrichment statistics across all IoCs.
+    pub fn enrichment_stats(&self) -> IoCEnrichmentStats {
+        let mut by_type: HashMap<String, usize> = HashMap::new();
+        let mut by_severity: HashMap<String, usize> = HashMap::new();
+        let mut by_source: HashMap<String, usize> = HashMap::new();
+        let mut total_confidence: f32 = 0.0;
+
+        for ioc in self.iocs.values() {
+            *by_type.entry(format!("{:?}", ioc.ioc_type)).or_insert(0) += 1;
+            *by_severity.entry(ioc.severity.clone()).or_insert(0) += 1;
+            *by_source.entry(ioc.source.clone()).or_insert(0) += 1;
+            total_confidence += ioc.confidence;
+        }
+
+        let total = self.iocs.len();
+        IoCEnrichmentStats {
+            total_iocs: total,
+            by_type,
+            by_severity,
+            by_source,
+            avg_confidence: if total > 0 { total_confidence / total as f32 } else { 0.0 },
+            active_feeds: self.feeds.iter().filter(|f| f.active).count(),
+            total_feeds: self.feeds.len(),
+            match_history_size: self.match_history.len(),
+        }
     }
 }
 
@@ -885,5 +943,58 @@ mod tests {
 
         let expiring = store.expiring_iocs("2026-04-03T23:30:00Z");
         assert!(expiring.is_empty(), "invalid IoC timestamps should not be expired by mixed-mode fallback when cutoff is RFC3339");
+    }
+
+    #[test]
+    fn purge_expired_removes_old_iocs() {
+        let mut store = ThreatIntelStore::new();
+        store.add_ioc(IoC {
+            ioc_type: IoCType::IpAddress,
+            value: "10.0.0.1".into(),
+            confidence: 0.9, severity: "high".into(),
+            source: "test".into(),
+            first_seen: "2026-01-01T00:00:00Z".into(),
+            last_seen: "2026-01-01T00:00:00Z".into(),
+            tags: vec![], related_iocs: vec![],
+        });
+        store.add_ioc(IoC {
+            ioc_type: IoCType::IpAddress,
+            value: "10.0.0.2".into(),
+            confidence: 0.9, severity: "high".into(),
+            source: "test".into(),
+            first_seen: "2026-04-01T00:00:00Z".into(),
+            last_seen: "2026-04-01T00:00:00Z".into(),
+            tags: vec![], related_iocs: vec![],
+        });
+        assert_eq!(store.ioc_count(), 2);
+        let purged = store.purge_expired("2026-04-05T00:00:00Z", 30);
+        assert_eq!(purged, 1); // Jan IoC is > 30 days old
+        assert_eq!(store.ioc_count(), 1);
+    }
+
+    #[test]
+    fn enrichment_stats_populated() {
+        let mut store = ThreatIntelStore::new();
+        store.add_ioc(IoC {
+            ioc_type: IoCType::IpAddress,
+            value: "10.0.0.1".into(),
+            confidence: 0.9, severity: "high".into(),
+            source: "feed-a".into(),
+            first_seen: "t0".into(), last_seen: "t1".into(),
+            tags: vec![], related_iocs: vec![],
+        });
+        store.add_ioc(IoC {
+            ioc_type: IoCType::Domain,
+            value: "evil.com".into(),
+            confidence: 0.7, severity: "medium".into(),
+            source: "feed-b".into(),
+            first_seen: "t0".into(), last_seen: "t1".into(),
+            tags: vec![], related_iocs: vec![],
+        });
+        let stats = store.enrichment_stats();
+        assert_eq!(stats.total_iocs, 2);
+        assert_eq!(stats.by_type.len(), 2);
+        assert_eq!(stats.by_source.len(), 2);
+        assert!((stats.avg_confidence - 0.8).abs() < 0.01);
     }
 }

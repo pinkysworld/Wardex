@@ -1,0 +1,2425 @@
+#!/usr/bin/env python3
+"""
+DEPRECATED — This generator is no longer the canonical source for admin.html.
+
+Edit site/admin.html directly. This file is retained for reference only
+and will be removed in a future release.
+"""
+import os
+
+HTML = r'''<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Wardex — XDR Admin Console</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
+:root{
+  --bg:#0f1117;--bg-alt:#161822;--surface:#1a1d27;--surface-hover:#22253a;
+  --border:#2a2d3e;--border-light:#23263a;
+  --ink:#e2e4ed;--ink-2:#9fa3b4;--ink-3:#6b6f82;
+  --accent:#00d4aa;--accent-hover:#00eabb;--accent-light:rgba(0,212,170,0.12);
+  --orange:#f59e0b;--orange-light:rgba(245,158,11,0.12);
+  --red:#ef4444;--red-light:rgba(239,68,68,0.12);
+  --blue:#3b82f6;--blue-light:rgba(59,130,246,0.12);
+  --purple:#8b5cf6;--purple-light:rgba(139,92,246,0.12);
+  --mono:'JetBrains Mono',monospace;--sans:'Inter',system-ui,sans-serif;
+  --radius:8px;--radius-lg:14px;
+  --sidebar-w:240px;
+  --transition:all .2s ease;
+}
+html{font-size:14px;}
+body{font-family:var(--sans);background:var(--bg);color:var(--ink);min-height:100vh;overflow-x:hidden;}
+a{color:var(--accent);text-decoration:none;}
+a:hover{text-decoration:underline;}
+code{font-family:var(--mono);font-size:.88em;background:var(--bg-alt);padding:.15em .35em;border-radius:4px;}
+
+/* ── Sidebar ─────────────────────────────── */
+.sidebar{position:fixed;left:0;top:0;bottom:0;width:var(--sidebar-w);background:var(--surface);
+  border-right:1px solid var(--border);display:flex;flex-direction:column;z-index:100;
+  transition:transform .25s ease;}
+.sidebar-brand{padding:1.2rem 1rem;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:.65rem;}
+.sidebar-logo{width:34px;height:34px;border-radius:10px;background:linear-gradient(135deg,var(--accent),#0088cc);
+  display:flex;align-items:center;justify-content:center;font-weight:700;font-size:.85rem;color:#fff;}
+.sidebar-title{font-size:1.05rem;font-weight:700;letter-spacing:-.02em;}
+.sidebar-version{font-size:.68rem;color:var(--ink-3);font-family:var(--mono);}
+.sidebar-nav{flex:1;overflow-y:auto;padding:.5rem 0;}
+.nav-item{display:flex;align-items:center;gap:.7rem;padding:.65rem 1rem;margin:2px .5rem;
+  border-radius:var(--radius);cursor:pointer;color:var(--ink-2);font-size:.88rem;font-weight:500;
+  transition:var(--transition);user-select:none;}
+.nav-item:hover{background:var(--surface-hover);color:var(--ink);}
+.nav-item.active{background:var(--accent-light);color:var(--accent);font-weight:600;}
+.nav-item .nav-icon{width:20px;text-align:center;font-size:1rem;flex-shrink:0;}
+.nav-badge{margin-left:auto;font-size:.68rem;padding:1px 6px;border-radius:10px;font-weight:600;
+  background:var(--red);color:#fff;font-family:var(--mono);}
+.sidebar-footer{padding:.75rem 1rem;border-top:1px solid var(--border);font-size:.72rem;color:var(--ink-3);}
+.sidebar-toggle{display:none;position:fixed;top:12px;left:12px;z-index:200;background:var(--surface);
+  border:1px solid var(--border);border-radius:8px;padding:.5rem .6rem;cursor:pointer;color:var(--ink);font-size:1.1rem;}
+
+/* ── Top Bar ─────────────────────────────── */
+.topbar{position:fixed;top:0;left:var(--sidebar-w);right:0;height:56px;background:rgba(15,17,23,.92);
+  backdrop-filter:blur(10px);border-bottom:1px solid var(--border);display:flex;align-items:center;
+  padding:0 1.5rem;gap:1rem;z-index:90;}
+.topbar-left{display:flex;align-items:center;gap:.75rem;flex:1;}
+.conn-indicator{display:flex;align-items:center;gap:.4rem;font-size:.78rem;color:var(--ink-3);}
+.conn-dot{width:8px;height:8px;border-radius:50%;background:var(--ink-3);transition:background .3s;}
+.conn-dot.connected{background:var(--accent);box-shadow:0 0 6px var(--accent);}
+.conn-dot.error{background:var(--red);}
+.topbar-right{display:flex;align-items:center;gap:.75rem;}
+.auth-bar{display:flex;align-items:center;gap:.4rem;}
+.auth-bar input{font-family:var(--mono);font-size:.76rem;border:1px solid var(--border);border-radius:6px;
+  padding:.35rem .55rem;width:200px;background:var(--bg-alt);color:var(--ink);}
+.auth-bar input::placeholder{color:var(--ink-3);}
+.auth-status{font-size:.72rem;padding:.2rem .5rem;border-radius:4px;font-weight:600;}
+.auth-status.ok,.auth-status.authenticated{background:var(--accent-light);color:var(--accent);}
+.auth-status.error{background:var(--red-light);color:var(--red);}
+.auth-status.none{background:var(--bg-alt);color:var(--ink-3);}
+.demo-toggle{display:flex;align-items:center;gap:.4rem;font-size:.78rem;color:var(--ink-3);}
+.demo-toggle input{accent-color:var(--orange);}
+.demo-toggle.active{color:var(--orange);}
+
+/* ── Buttons ─────────────────────────────── */
+.btn{padding:.4rem .85rem;font-size:.82rem;border-radius:6px;border:1px solid var(--border);
+  background:var(--surface);cursor:pointer;font-weight:500;transition:var(--transition);
+  color:var(--ink);font-family:var(--sans);}
+.btn:hover{border-color:var(--accent);color:var(--accent);}
+.btn.active{background:var(--accent);color:#fff;border-color:var(--accent);}
+.btn.primary{background:var(--accent);color:#0f1117;border-color:var(--accent);font-weight:600;}
+.btn.primary:hover{background:var(--accent-hover);}
+.btn.danger{border-color:var(--red);color:var(--red);}
+.btn.danger:hover{background:var(--red);color:#fff;}
+.btn:disabled{opacity:.4;cursor:not-allowed;}
+.btn-sm{padding:.3rem .65rem;font-size:.78rem;}
+.btn-row{display:flex;gap:.5rem;flex-wrap:wrap;align-items:center;}
+
+/* ── Main Content ──────────────────────── */
+.main{margin-left:var(--sidebar-w);padding-top:56px;min-height:100vh;}
+.content{padding:1.5rem;}
+.section{display:none;}
+.section.active{display:block;}
+.section-header{margin-bottom:1.25rem;}
+.section-header h1{font-size:1.35rem;font-weight:700;letter-spacing:-.02em;margin-bottom:.3rem;}
+.section-header p{color:var(--ink-2);font-size:.88rem;line-height:1.55;}
+
+/* ── Cards ───────────────────────────────── */
+.card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:1.25rem;}
+.card h2{font-size:.95rem;font-weight:600;margin-bottom:1rem;display:flex;align-items:center;gap:.5rem;}
+.card h3{font-size:.85rem;font-weight:600;margin-bottom:.65rem;color:var(--ink-2);}
+.card-grid{display:grid;gap:1.25rem;}
+.card-grid.cols-2{grid-template-columns:repeat(2,1fr);}
+.card-grid.cols-3{grid-template-columns:repeat(3,1fr);}
+.card-grid.cols-4{grid-template-columns:repeat(4,1fr);}
+.card-grid.cols-full{grid-template-columns:1fr;}
+
+/* ── Metric Cards ────────────────────────── */
+.metric-strip{display:grid;grid-template-columns:repeat(4,1fr);gap:1rem;margin-bottom:1.25rem;}
+.metric-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);
+  padding:1rem 1.1rem;position:relative;overflow:hidden;}
+.metric-card::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;border-radius:14px 14px 0 0;}
+.metric-card.teal::before{background:var(--accent);}
+.metric-card.orange::before{background:var(--orange);}
+.metric-card.red::before{background:var(--red);}
+.metric-card.blue::before{background:var(--blue);}
+.metric-card.purple::before{background:var(--purple);}
+.metric-label{font-size:.72rem;color:var(--ink-3);text-transform:uppercase;letter-spacing:.06em;font-weight:600;}
+.metric-value{font-size:1.6rem;font-weight:700;font-family:var(--mono);line-height:1.3;margin:.25rem 0 .15rem;}
+.metric-sub{font-size:.72rem;color:var(--ink-3);}
+.metric-value.critical{color:var(--red);}
+.metric-value.warning{color:var(--orange);}
+.metric-value.ok{color:var(--accent);}
+
+/* ── KV Grid ─────────────────────────────── */
+.kv-grid{display:grid;grid-template-columns:1fr 1fr;gap:.4rem 1rem;font-size:.86rem;}
+.kv-grid dt{color:var(--ink-3);}
+.kv-grid dd{margin:0;font-weight:600;font-family:var(--mono);}
+
+/* ── Tables ──────────────────────────────── */
+.table-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch;}
+.data-table{width:100%;border-collapse:collapse;font-size:.82rem;}
+.data-table th,.data-table td{padding:.5rem .65rem;text-align:left;border-bottom:1px solid var(--border);}
+.data-table th{color:var(--ink-3);font-weight:500;font-size:.76rem;text-transform:uppercase;
+  letter-spacing:.04em;position:sticky;top:0;background:var(--surface);}
+.data-table tbody tr:hover{background:var(--surface-hover);}
+.level-nominal{color:var(--ink-3);}
+.level-elevated{color:var(--orange);}
+.level-severe{color:#f97316;font-weight:600;}
+.level-critical{color:var(--red);font-weight:700;}
+.alert-new{animation:alertPulse 1.5s ease-out;}
+@keyframes alertPulse{0%{background:var(--accent-light);}100%{background:transparent;}}
+
+/* ── Sparkline ───────────────────────────── */
+.sparkline-wrap{display:flex;gap:1rem;margin-top:.75rem;}
+.sparkline-box{flex:1;background:var(--bg-alt);border:1px solid var(--border);border-radius:var(--radius);padding:.65rem;}
+.sparkline-box .spark-label{font-size:.72rem;color:var(--ink-3);text-transform:uppercase;letter-spacing:.04em;
+  font-weight:600;margin-bottom:.4rem;}
+.sparkline-box canvas{width:100%;height:48px;display:block;}
+
+/* ── Dot indicators ──────────────────────── */
+.dot{width:8px;height:8px;border-radius:50%;display:inline-block;}
+.dot-green{background:var(--accent);}
+.dot-orange{background:var(--orange);}
+.dot-red{background:var(--red);}
+.dot-blue{background:var(--blue);}
+.dot-purple{background:var(--purple);}
+
+/* ── Flash & Toast ───────────────────────── */
+.flash{padding:.6rem 1rem;border-radius:var(--radius);font-size:.85rem;margin-bottom:1rem;display:none;}
+.flash.success{display:block;background:var(--accent-light);color:var(--accent);}
+.flash.error{display:block;background:var(--red-light);color:var(--red);}
+.toast{position:fixed;bottom:24px;right:24px;padding:.7rem 1.2rem;border-radius:10px;font-size:.85rem;
+  font-weight:500;box-shadow:0 8px 24px rgba(0,0,0,.3);transform:translateY(120%);opacity:0;
+  transition:transform .3s ease,opacity .3s ease;z-index:9999;}
+.toast.visible{transform:translateY(0);opacity:1;}
+.toast.success{background:var(--accent);color:#0f1117;}
+.toast.error{background:var(--red);color:#fff;}
+.toast.info{background:var(--blue);color:#fff;}
+
+/* ── Upload Zone ─────────────────────────── */
+.upload-zone{border:2px dashed var(--border);border-radius:var(--radius);padding:1.2rem;text-align:center;
+  color:var(--ink-3);font-size:.85rem;cursor:pointer;transition:var(--transition);margin-top:.5rem;}
+.upload-zone:hover,.upload-zone.dragover{border-color:var(--accent);color:var(--accent);background:var(--accent-light);}
+.upload-zone input{display:none;}
+
+/* ── Log Area ────────────────────────────── */
+.log-area{background:var(--bg);color:var(--accent);font-family:var(--mono);font-size:.75rem;
+  padding:.8rem;border-radius:var(--radius);max-height:200px;overflow-y:auto;line-height:1.7;
+  white-space:pre-wrap;border:1px solid var(--border);}
+
+/* ── Settings ────────────────────────────── */
+.settings-grid{display:grid;grid-template-columns:1fr 1fr;gap:1.2rem;}
+.settings-section{padding:1rem;border:1px solid var(--border);border-radius:var(--radius-lg);background:var(--bg-alt);}
+.settings-section h3{font-size:.85rem;margin-bottom:.65rem;color:var(--ink);}
+.settings-section label{display:block;font-size:.78rem;color:var(--ink-3);margin-bottom:.2rem;margin-top:.5rem;}
+.settings-section label:first-of-type{margin-top:0;}
+.settings-section input[type="number"],.settings-section input[type="text"],.settings-section textarea{
+  width:100%;font-family:var(--mono);font-size:.78rem;padding:.4rem .55rem;border:1px solid var(--border);
+  border-radius:6px;background:var(--bg);color:var(--ink);}
+.settings-section textarea{min-height:60px;resize:vertical;}
+.toggle-row{display:flex;align-items:center;gap:.5rem;margin-top:.5rem;font-size:.82rem;color:var(--ink-2);}
+.toggle-row input[type="checkbox"]{accent-color:var(--accent);}
+.settings-actions{display:flex;gap:.5rem;align-items:center;flex-wrap:wrap;margin-top:1rem;}
+
+/* ── Help Accordion ──────────────────────── */
+.accordion{border:1px solid var(--border);border-radius:var(--radius-lg);overflow:hidden;margin-bottom:.75rem;}
+.accordion-header{padding:.85rem 1rem;background:var(--surface);cursor:pointer;display:flex;
+  align-items:center;justify-content:space-between;font-weight:600;font-size:.9rem;
+  transition:var(--transition);user-select:none;}
+.accordion-header:hover{background:var(--surface-hover);}
+.accordion-header .arrow{transition:transform .2s;font-size:.75rem;color:var(--ink-3);}
+.accordion.open .accordion-header .arrow{transform:rotate(90deg);}
+.accordion-body{display:none;padding:1rem;border-top:1px solid var(--border);font-size:.88rem;
+  line-height:1.65;color:var(--ink-2);}
+.accordion.open .accordion-body{display:block;}
+.accordion-body h4{color:var(--ink);margin:1rem 0 .4rem;font-size:.88rem;}
+.accordion-body h4:first-child{margin-top:0;}
+.accordion-body ul{margin:.3rem 0 .5rem 1.2rem;}
+.accordion-body li{margin-bottom:.25rem;}
+
+/* ── Decay Slider ────────────────────────── */
+.decay-slider{display:none;align-items:center;gap:.5rem;margin-top:.5rem;font-size:.8rem;color:var(--ink-3);}
+.decay-slider.visible{display:flex;}
+.decay-slider input[type="range"]{flex:1;accent-color:var(--accent);}
+.decay-slider .decay-val{font-family:var(--mono);font-weight:600;min-width:3.5em;}
+
+/* ── Research badges ─────────────────────── */
+.track-badge{display:inline-block;padding:1px 8px;border-radius:4px;font-size:.73rem;font-weight:600;letter-spacing:.02em;}
+.track-badge.foundation{background:#0d3320;color:#6ee7b7;}
+.track-badge.scaffolded{background:#422006;color:#fbbf24;}
+.track-badge.planned{background:#172554;color:#93c5fd;}
+.track-badge.future{background:#1f2937;color:#9ca3af;}
+
+/* ── Auto refresh ────────────────────────── */
+.auto-refresh-toggle{display:flex;align-items:center;gap:.4rem;font-size:.78rem;color:var(--ink-3);}
+.auto-refresh-toggle input{accent-color:var(--accent);}
+
+/* ── Telemetry gauge ─────────────────────── */
+.gauge-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:.75rem;margin-top:.75rem;}
+.gauge{background:var(--bg-alt);border:1px solid var(--border);border-radius:var(--radius);
+  padding:.65rem .8rem;text-align:center;}
+.gauge-label{font-size:.68rem;color:var(--ink-3);text-transform:uppercase;letter-spacing:.05em;font-weight:600;}
+.gauge-value{font-size:1.2rem;font-weight:700;font-family:var(--mono);margin:.2rem 0;}
+.gauge-unit{font-size:.68rem;color:var(--ink-3);}
+
+/* ── Health bar ──────────────────────────── */
+.health-bar{display:flex;gap:1rem;flex-wrap:wrap;margin-top:.75rem;padding-top:.75rem;
+  border-top:1px solid var(--border);font-size:.78rem;color:var(--ink-3);}
+.health-bar span{display:flex;align-items:center;gap:.3rem;}
+.health-bar strong{color:var(--ink);font-family:var(--mono);font-size:.76rem;}
+
+/* ── Responsive ──────────────────────────── */
+@media(max-width:1024px){
+  .sidebar{transform:translateX(-100%);}
+  .sidebar.open{transform:translateX(0);}
+  .sidebar-toggle{display:block;}
+  .topbar{left:0;}
+  .main{margin-left:0;}
+  .metric-strip{grid-template-columns:repeat(2,1fr);}
+  .card-grid.cols-2,.card-grid.cols-3,.card-grid.cols-4{grid-template-columns:1fr;}
+  .gauge-grid{grid-template-columns:repeat(2,1fr);}
+  .settings-grid{grid-template-columns:1fr;}
+}
+@media(max-width:600px){
+  .metric-strip{grid-template-columns:1fr;}
+  .auth-bar input{width:140px;}
+}
+
+/* ── Misc ────────────────────────────────── */
+.hidden{display:none !important;}
+.mb-1{margin-bottom:1rem;}
+.mt-1{margin-top:1rem;}
+.text-muted{color:var(--ink-3);font-size:.82rem;}
+select{font-family:var(--sans);font-size:.82rem;padding:.35rem .5rem;border:1px solid var(--border);
+  border-radius:6px;background:var(--bg-alt);color:var(--ink);}
+input[type="text"],input[type="number"]{font-family:var(--mono);font-size:.82rem;padding:.35rem .55rem;
+  border:1px solid var(--border);border-radius:6px;background:var(--bg-alt);color:var(--ink);}
+input::placeholder{color:var(--ink-3);}
+.sub-grid{display:grid;gap:1.2rem;}
+.sub-grid.cols-2{grid-template-columns:1fr 1fr;}
+.sub-grid.cols-3{grid-template-columns:1fr 1fr 1fr;}
+@media(max-width:768px){.sub-grid.cols-2,.sub-grid.cols-3{grid-template-columns:1fr;}}
+</style>
+</head>
+
+<body>
+<!-- ═══ Sidebar Toggle (mobile) ═══ -->
+<button class="sidebar-toggle" id="sidebar-toggle" aria-label="Toggle sidebar">&#9776;</button>
+
+<!-- ═══ Sidebar ═══ -->
+<aside class="sidebar" id="sidebar">
+  <div class="sidebar-brand">
+    <div class="sidebar-logo">W</div>
+    <div>
+      <div class="sidebar-title">Wardex</div>
+      <div class="sidebar-version" id="sidebar-version">XDR Platform</div>
+    </div>
+  </div>
+  <nav class="sidebar-nav">
+    <div class="nav-item active" data-section="dashboard"><span class="nav-icon">&#9632;</span> Dashboard</div>
+    <div class="nav-item" data-section="live-monitor"><span class="nav-icon">&#9656;</span> Live Monitor <span class="nav-badge hidden" id="nav-alert-badge">0</span></div>
+    <div class="nav-item" data-section="threat-detection"><span class="nav-icon">&#9888;</span> Threat Detection</div>
+    <div class="nav-item" data-section="fleet-agents"><span class="nav-icon">&#8861;</span> Fleet &amp; Agents</div>
+    <div class="nav-item" data-section="security-policy"><span class="nav-icon">&#9881;</span> Security Policy</div>
+    <div class="nav-item" data-section="incident-response"><span class="nav-icon">&#9889;</span> Incident Response</div>
+    <div class="nav-item" data-section="infrastructure"><span class="nav-icon">&#9955;</span> Infrastructure</div>
+    <div class="nav-item" data-section="reports-exports"><span class="nav-icon">&#9776;</span> Reports &amp; Exports</div>
+    <div class="nav-item" data-section="settings"><span class="nav-icon">&#9881;</span> Settings</div>
+    <div class="nav-item" data-section="help-docs"><span class="nav-icon">&#9432;</span> Help &amp; Docs</div>
+  </nav>
+  <div class="sidebar-footer">
+    <div>&copy; 2025 Wardex XDR</div>
+    <div style="margin-top:.2rem;">Local Runtime Console</div>
+  </div>
+</aside>
+
+<!-- ═══ Top Bar ═══ -->
+<header class="topbar">
+  <div class="topbar-left">
+    <div class="conn-indicator">
+      <span class="conn-dot" id="conn-dot"></span>
+      <span id="conn-label">Disconnected</span>
+    </div>
+    <div class="auto-refresh-toggle">
+      <input type="checkbox" id="auto-refresh">
+      <label for="auto-refresh" id="auto-refresh-label">Auto-refresh (5s)</label>
+      <button id="btn-resume" class="btn btn-sm" style="display:none;margin-left:4px;">Resume</button>
+    </div>
+  </div>
+  <div class="topbar-right">
+    <div class="demo-toggle" id="demo-toggle-wrap">
+      <input type="checkbox" id="demo-mode-toggle">
+      <label for="demo-mode-toggle">Demo Mode</label>
+    </div>
+    <div class="auth-bar">
+      <input type="password" id="auth-token" placeholder="Paste API token" autocomplete="off" spellcheck="false">
+      <button class="btn btn-sm" id="btn-toggle-token" type="button" title="Show/hide token">&#128065;</button>
+      <button class="btn btn-sm primary" id="btn-connect" type="button">Connect</button>
+      <span class="auth-status none" id="auth-status">No token</span>
+    </div>
+  </div>
+</header>
+
+<!-- ═══ Main Content ═══ -->
+<div class="main">
+  <div class="content">
+    <div class="flash" id="flash"></div>
+
+    <!-- ═══════════════════════════════════════════════════════════ -->
+    <!-- SECTION 1: Dashboard                                        -->
+    <!-- ═══════════════════════════════════════════════════════════ -->
+    <div class="section active" id="sec-dashboard">
+      <div class="section-header">
+        <h1>Dashboard</h1>
+        <p>Real-time overview of your Wardex XDR platform — host telemetry, detection status, and alert summary.</p>
+      </div>
+
+      <div class="metric-strip">
+        <div class="metric-card teal">
+          <div class="metric-label">Total Alerts</div>
+          <div class="metric-value" id="dash-alerts">0</div>
+          <div class="metric-sub">Across all levels</div>
+        </div>
+        <div class="metric-card blue">
+          <div class="metric-label">Active Agents</div>
+          <div class="metric-value" id="dash-agents">1</div>
+          <div class="metric-sub">Local + enrolled</div>
+        </div>
+        <div class="metric-card orange">
+          <div class="metric-label">Threat Level</div>
+          <div class="metric-value ok" id="dash-threat">Nominal</div>
+          <div class="metric-sub" id="dash-threat-sub">All systems normal</div>
+        </div>
+        <div class="metric-card purple">
+          <div class="metric-label">System Health</div>
+          <div class="metric-value ok" id="dash-health">OK</div>
+          <div class="metric-sub" id="dash-uptime">—</div>
+        </div>
+      </div>
+
+      <div class="card-grid cols-2">
+        <div class="card">
+          <h2><span class="dot dot-green"></span> Host Information</h2>
+          <dl class="kv-grid" id="dash-host-grid">
+            <dt>Platform</dt><dd id="dash-platform">—</dd>
+            <dt>Hostname</dt><dd id="dash-hostname">—</dd>
+            <dt>CPU Cores</dt><dd id="dash-cores">—</dd>
+            <dt>Total Memory</dt><dd id="dash-memory">—</dd>
+            <dt>OS Version</dt><dd id="dash-osver">—</dd>
+            <dt>Uptime</dt><dd id="dash-host-uptime">—</dd>
+          </dl>
+        </div>
+
+        <div class="card">
+          <h2><span class="dot dot-green"></span> Current Telemetry</h2>
+          <div class="gauge-grid" id="dash-gauges">
+            <div class="gauge"><div class="gauge-label">CPU</div><div class="gauge-value" id="g-cpu">—</div><div class="gauge-unit">%</div></div>
+            <div class="gauge"><div class="gauge-label">Memory</div><div class="gauge-value" id="g-mem">—</div><div class="gauge-unit">%</div></div>
+            <div class="gauge"><div class="gauge-label">Network</div><div class="gauge-value" id="g-net">—</div><div class="gauge-unit">pkts</div></div>
+            <div class="gauge"><div class="gauge-label">Disk</div><div class="gauge-value" id="g-disk">—</div><div class="gauge-unit">%</div></div>
+            <div class="gauge"><div class="gauge-label">Processes</div><div class="gauge-value" id="g-procs">—</div><div class="gauge-unit">count</div></div>
+            <div class="gauge"><div class="gauge-label">Temp</div><div class="gauge-value" id="g-temp">—</div><div class="gauge-unit">&deg;C</div></div>
+            <div class="gauge"><div class="gauge-label">Auth Fail</div><div class="gauge-value" id="g-auth">—</div><div class="gauge-unit">events</div></div>
+            <div class="gauge"><div class="gauge-label">Battery</div><div class="gauge-value" id="g-batt">—</div><div class="gauge-unit">%</div></div>
+          </div>
+          <div class="sparkline-wrap">
+            <div class="sparkline-box"><div class="spark-label">CPU History</div><canvas id="spark-cpu" height="48"></canvas></div>
+            <div class="sparkline-box"><div class="spark-label">Memory History</div><canvas id="spark-mem" height="48"></canvas></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card mt-1">
+        <h2><span class="dot dot-orange"></span> Recent Alerts</h2>
+        <div class="table-wrap" style="max-height:240px;overflow-y:auto;">
+          <table class="data-table" id="dash-alert-table">
+            <thead><tr><th>Time</th><th>Score</th><th>Level</th><th>Action</th><th>Reason</th></tr></thead>
+            <tbody id="dash-alert-tbody"><tr><td colspan="5" class="text-muted">No alerts recorded yet.</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="card mt-1">
+        <h2><span class="dot dot-green"></span> Runtime Status</h2>
+        <dl class="kv-grid" id="status-grid">
+          <dt>Updated</dt><dd id="s-updated">—</dd>
+          <dt>Engineering Log</dt><dd id="s-backlog">—</dd>
+          <dt>Phases</dt><dd id="s-phases">—</dd>
+          <dt>CLI Commands</dt><dd id="s-commands">—</dd>
+          <dt>Implemented</dt><dd id="s-implemented">—</dd>
+          <dt>Partial</dt><dd id="s-partial">—</dd>
+          <dt>Not Built</dt><dd id="s-not-built">—</dd>
+        </dl>
+        <details style="margin-top:.5rem;font-size:.85rem;">
+          <summary style="cursor:pointer;color:var(--ink-3);">Show feature details...</summary>
+          <div id="status-partial-list" style="margin-top:.4rem;"></div>
+          <div id="status-notbuilt-list" style="margin-top:.4rem;"></div>
+        </details>
+        <div class="btn-row mt-1">
+          <button class="btn btn-sm primary" id="btn-refresh-status">Refresh Status</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══════════════════════════════════════════════════════════ -->
+    <!-- SECTION 2: Live Monitor                                     -->
+    <!-- ═══════════════════════════════════════════════════════════ -->
+    <div class="section" id="sec-live-monitor">
+      <div class="section-header">
+        <h1>Live Monitor</h1>
+        <p>Real-time alert feed from the running monitor. Alerts auto-poll every 5 seconds when connected.</p>
+      </div>
+
+      <div class="metric-strip">
+        <div class="metric-card teal">
+          <div class="metric-label">Total Alerts</div>
+          <div class="metric-value" id="lm-total">0</div>
+        </div>
+        <div class="metric-card red">
+          <div class="metric-label">Critical</div>
+          <div class="metric-value critical" id="lm-critical">0</div>
+        </div>
+        <div class="metric-card orange">
+          <div class="metric-label">Severe</div>
+          <div class="metric-value warning" id="lm-severe">0</div>
+        </div>
+        <div class="metric-card blue">
+          <div class="metric-label">Elevated</div>
+          <div class="metric-value" id="lm-elevated">0</div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2><span class="dot dot-green"></span> Alert Feed</h2>
+        <div class="table-wrap" style="max-height:400px;overflow-y:auto;">
+          <table class="data-table" id="alert-table">
+            <thead><tr><th>Time</th><th>Score</th><th>Level</th><th>Action</th><th>Reason</th></tr></thead>
+            <tbody id="alert-tbody"><tr><td colspan="5" class="text-muted">No alerts yet. Start the monitor with <code>cargo run -- serve</code>.</td></tr></tbody>
+          </table>
+        </div>
+        <div class="btn-row mt-1">
+          <button class="btn btn-sm" id="btn-refresh-alerts">Refresh Alerts</button>
+          <button class="btn btn-sm danger" id="btn-clear-alerts">Clear All</button>
+          <button class="btn btn-sm" id="btn-export-alerts-csv">Export CSV</button>
+          <label style="margin-left:auto;display:flex;align-items:center;gap:.3rem;font-size:.78rem;color:var(--ink-3);">
+            <input type="checkbox" id="alert-auto-poll" checked style="accent-color:var(--accent);">Auto-poll (5s)
+          </label>
+        </div>
+      </div>
+
+      <div class="card mt-1">
+        <h2><span class="dot dot-blue"></span> System Health</h2>
+        <div class="health-bar">
+          <span>Platform: <strong id="hb-platform">—</strong></span>
+          <span>Host: <strong id="hb-hostname">—</strong></span>
+          <span>Uptime: <strong id="hb-uptime">—</strong></span>
+          <span>Version: <strong id="hb-version">—</strong></span>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══════════════════════════════════════════════════════════ -->
+    <!-- SECTION 3: Threat Detection                                 -->
+    <!-- ═══════════════════════════════════════════════════════════ -->
+    <div class="section" id="sec-threat-detection">
+      <div class="section-header">
+        <h1>Threat Detection</h1>
+        <p>Configure detection modes, manage threat intelligence IOCs, deploy decoys, and monitor side-channel risks.</p>
+      </div>
+
+      <div class="card mb-1">
+        <h2><span class="dot dot-orange"></span> Detection Controls</h2>
+        <div style="margin-bottom:1rem;">
+          <label style="font-size:.82rem;color:var(--ink-3);margin-bottom:.35rem;display:block;">Detection Mode</label>
+          <div class="btn-row">
+            <button class="btn active" data-mode="normal">Normal</button>
+            <button class="btn" data-mode="frozen">Frozen</button>
+            <button class="btn" data-mode="decay">Decay</button>
+          </div>
+          <div class="decay-slider" id="decay-slider">
+            <span>Rate:</span>
+            <input type="range" min="1" max="100" value="10" id="decay-range">
+            <span class="decay-val" id="decay-val">10%</span>
+          </div>
+        </div>
+        <div class="btn-row">
+          <button class="btn primary" id="btn-run-demo">Run Demo Analysis</button>
+          <button class="btn danger" id="btn-reset">Reset Baseline</button>
+        </div>
+        <div style="margin-top:1rem;">
+          <label style="font-size:.82rem;color:var(--ink-3);margin-bottom:.35rem;display:block;">Checkpoints</label>
+          <div class="btn-row">
+            <button class="btn" id="btn-checkpoint">Save Checkpoint</button>
+            <button class="btn" id="btn-restore">Restore Latest</button>
+            <span class="text-muted" id="checkpoint-count"></span>
+          </div>
+        </div>
+      </div>
+
+      <div class="card-grid cols-2">
+        <div class="card">
+          <h3>Threat Intelligence</h3>
+          <dl class="kv-grid">
+            <dt>IOC Count</dt><dd id="ti-ioc-count">—</dd>
+            <dt>Match Count</dt><dd id="ti-match-count">—</dd>
+          </dl>
+          <div class="btn-row mt-1">
+            <input type="text" id="ioc-value" placeholder="IOC value" style="width:120px;">
+            <select id="ioc-type"><option value="ip">IP</option><option value="domain">Domain</option><option value="hash">Hash</option><option value="process">Process</option></select>
+            <button class="btn btn-sm primary" id="btn-add-ioc">Add IOC</button>
+          </div>
+        </div>
+        <div class="card">
+          <h3>Deception Engine</h3>
+          <dl class="kv-grid">
+            <dt>Total Decoys</dt><dd id="dec-total">—</dd>
+            <dt>Active</dt><dd id="dec-active">—</dd>
+            <dt>Interactions</dt><dd id="dec-interactions">—</dd>
+          </dl>
+          <div class="btn-row mt-1">
+            <input type="text" id="decoy-name" placeholder="Decoy name" style="width:110px;">
+            <select id="decoy-type"><option value="honeypot">Honeypot</option><option value="honeyfile">HoneyFile</option><option value="honeycredential">HoneyCred</option><option value="canary">Canary</option></select>
+            <button class="btn btn-sm primary" id="btn-deploy-decoy">Deploy</button>
+          </div>
+        </div>
+        <div class="card">
+          <h3>Side-Channel Detection</h3>
+          <dl class="kv-grid">
+            <dt>Risk Score</dt><dd id="sc-risk">—</dd>
+            <dt>Timing Samples</dt><dd id="sc-samples">—</dd>
+          </dl>
+        </div>
+        <div class="card">
+          <h3>Enforcement</h3>
+          <dl class="kv-grid">
+            <dt>Policies</dt><dd id="enf-policies">—</dd>
+            <dt>Actions Taken</dt><dd id="enf-actions">—</dd>
+          </dl>
+          <div class="btn-row mt-1">
+            <input type="text" id="quarantine-target" placeholder="Target ID" style="width:120px;">
+            <button class="btn btn-sm danger" id="btn-quarantine">Quarantine</button>
+          </div>
+        </div>
+      </div>
+      <div class="btn-row mt-1">
+        <button class="btn btn-sm" id="btn-refresh-security">Refresh Security Data</button>
+      </div>
+    </div>
+
+    <!-- ═══════════════════════════════════════════════════════════ -->
+    <!-- SECTION 4: Fleet & Agents                                   -->
+    <!-- ═══════════════════════════════════════════════════════════ -->
+    <div class="section" id="sec-fleet-agents">
+      <div class="section-header">
+        <h1>Fleet &amp; Agents</h1>
+        <p>Manage your XDR agent fleet, enrollment tokens, SIEM integration, and cross-agent event correlation.</p>
+      </div>
+
+      <div class="metric-strip">
+        <div class="metric-card teal">
+          <div class="metric-label">Enrolled Agents</div>
+          <div class="metric-value" id="xdr-agents">—</div>
+        </div>
+        <div class="metric-card blue">
+          <div class="metric-label">Online</div>
+          <div class="metric-value" id="xdr-online">0</div>
+        </div>
+        <div class="metric-card orange">
+          <div class="metric-label">Stale</div>
+          <div class="metric-value" id="xdr-stale">0</div>
+        </div>
+        <div class="metric-card red">
+          <div class="metric-label">Offline</div>
+          <div class="metric-value" id="xdr-offline">0</div>
+        </div>
+      </div>
+
+      <div class="card-grid cols-2">
+        <div class="card">
+          <h2><span class="dot dot-green"></span> Fleet Overview</h2>
+          <dl class="kv-grid">
+            <dt>Fleet Devices</dt><dd id="fl-devices">—</dd>
+            <dt>Online</dt><dd id="fl-online">—</dd>
+            <dt>Swarm Posture</dt><dd id="fl-posture">—</dd>
+            <dt>Platform</dt><dd id="fl-platform">—</dd>
+          </dl>
+          <div style="margin-top:.75rem;">
+            <h3>Register Device</h3>
+            <div class="btn-row">
+              <input type="text" id="reg-device-id" placeholder="Device ID" style="width:140px;">
+              <button class="btn btn-sm primary" id="btn-register-device">Register</button>
+            </div>
+          </div>
+          <div class="btn-row mt-1">
+            <button class="btn btn-sm" id="btn-refresh-fleet">Refresh Fleet</button>
+          </div>
+        </div>
+
+        <div class="card">
+          <h2><span class="dot dot-purple"></span> XDR Integration</h2>
+          <dl class="kv-grid">
+            <dt>Total Events</dt><dd id="xdr-events">0</dd>
+            <dt>Correlations</dt><dd id="xdr-correlations">0</dd>
+            <dt>Policy Version</dt><dd id="xdr-policy">0</dd>
+            <dt>Available Updates</dt><dd id="xdr-updates">0</dd>
+            <dt>SIEM Status</dt><dd id="xdr-siem">—</dd>
+            <dt>SIEM Pushed</dt><dd id="xdr-pushed">0</dd>
+            <dt>SIEM Pulled</dt><dd id="xdr-pulled">0</dd>
+          </dl>
+        </div>
+      </div>
+
+      <div class="card mt-1">
+        <h2><span class="dot dot-blue"></span> Agent Registry</h2>
+        <div id="xdr-agent-table" style="max-height:200px;overflow-y:auto;"><em class="text-muted">No agents enrolled</em></div>
+        <div style="margin-top:.75rem;">
+          <h3>Create Enrollment Token</h3>
+          <div class="btn-row">
+            <input type="number" id="xdr-token-uses" placeholder="Max uses" value="10" style="width:100px;">
+            <button class="btn btn-sm primary" id="btn-create-token">Create Token</button>
+          </div>
+          <div id="xdr-token-display" style="margin-top:.4rem;font-family:var(--mono);font-size:.78rem;word-break:break-all;"></div>
+        </div>
+      </div>
+
+      <div class="card mt-1">
+        <h2><span class="dot dot-orange"></span> Correlation Alerts</h2>
+        <div id="xdr-correlation-list" style="max-height:150px;overflow-y:auto;"><em class="text-muted">No correlations detected</em></div>
+        <div class="btn-row mt-1">
+          <button class="btn btn-sm" id="btn-refresh-xdr">Refresh XDR</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══════════════════════════════════════════════════════════ -->
+    <!-- SECTION 5: Security Policy                                  -->
+    <!-- ═══════════════════════════════════════════════════════════ -->
+    <div class="section" id="sec-security-policy">
+      <div class="section-header">
+        <h1>Security Policy</h1>
+        <p>Policy composition, WASM VM execution, compliance scoring, quantum key management, and privacy accounting.</p>
+      </div>
+
+      <div class="card-grid cols-2">
+        <div class="card">
+          <h2><span class="dot dot-blue"></span> Policy Composition</h2>
+          <div class="btn-row">
+            <select id="compose-op"><option value="max">Max Severity</option><option value="min">Min Severity</option><option value="left">Left Priority</option><option value="right">Right Priority</option></select>
+            <button class="btn btn-sm primary" id="btn-compose">Compose</button>
+          </div>
+          <div id="compose-result" class="text-muted mt-1"></div>
+        </div>
+        <div class="card">
+          <h2><span class="dot dot-purple"></span> WASM Policy VM</h2>
+          <div class="btn-row">
+            <button class="btn btn-sm primary" id="btn-run-vm">Execute Policy</button>
+          </div>
+          <div id="vm-result" class="text-muted mt-1"></div>
+        </div>
+        <div class="card">
+          <h2><span class="dot dot-green"></span> Compliance &amp; Privacy</h2>
+          <dl class="kv-grid">
+            <dt>Compliance Score</dt><dd id="comp-score">—</dd>
+            <dt>Controls Passed</dt><dd id="comp-controls">—</dd>
+            <dt>Attestation</dt><dd id="comp-attest">—</dd>
+            <dt>Privacy Budget</dt><dd id="comp-privacy">—</dd>
+            <dt>Budget Exhausted</dt><dd id="comp-exhausted">—</dd>
+          </dl>
+          <div class="btn-row mt-1">
+            <button class="btn btn-sm" id="btn-refresh-compliance">Refresh</button>
+          </div>
+        </div>
+        <div class="card">
+          <h2><span class="dot dot-orange"></span> Quantum Key Management</h2>
+          <dl class="kv-grid">
+            <dt>Algorithm</dt><dd id="q-algo">—</dd>
+            <dt>Rotations</dt><dd id="q-rotations">—</dd>
+          </dl>
+          <div class="btn-row mt-1">
+            <button class="btn btn-sm primary" id="btn-rotate-key">Rotate Key</button>
+            <button class="btn btn-sm" id="btn-refresh-quantum">Refresh</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══════════════════════════════════════════════════════════ -->
+    <!-- SECTION 6: Incident Response                                -->
+    <!-- ═══════════════════════════════════════════════════════════ -->
+    <div class="section" id="sec-incident-response">
+      <div class="section-header">
+        <h1>Incident Response</h1>
+        <p>Digital twin simulation, adversarial harness testing, and monitoring &amp; analysis tools.</p>
+      </div>
+
+      <div class="card-grid cols-2">
+        <div class="card">
+          <h2><span class="dot dot-green"></span> Digital Twin</h2>
+          <dl class="kv-grid">
+            <dt>Twin Devices</dt><dd id="tw-devices">—</dd>
+            <dt>Simulations Run</dt><dd id="tw-sims">—</dd>
+          </dl>
+          <div style="margin-top:.75rem;">
+            <h3>Simulate Event</h3>
+            <div class="btn-row">
+              <input type="text" id="sim-device" placeholder="Device ID" style="width:110px;">
+              <select id="sim-event"><option value="cpu_spike">CPU Spike</option><option value="memory_exhaust">Memory Exhaust</option><option value="network_flood">Network Flood</option><option value="malware_inject">Malware Inject</option></select>
+              <button class="btn btn-sm primary" id="btn-simulate">Simulate</button>
+            </div>
+          </div>
+          <div class="btn-row mt-1">
+            <button class="btn btn-sm" id="btn-refresh-twin">Refresh</button>
+          </div>
+        </div>
+        <div class="card">
+          <h2><span class="dot dot-red"></span> Adversarial Harness</h2>
+          <dl class="kv-grid">
+            <dt>Last Evasion Rate</dt><dd id="ha-evasion">—</dd>
+            <dt>Coverage</dt><dd id="ha-coverage">—</dd>
+          </dl>
+          <div class="btn-row mt-1">
+            <button class="btn btn-sm primary" id="btn-run-harness">Run Harness</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="card mt-1">
+        <h2><span class="dot dot-blue"></span> Monitoring &amp; Analysis</h2>
+        <div class="sub-grid cols-3">
+          <div>
+            <h3>Temporal Monitor</h3>
+            <dl class="kv-grid"><dt>Properties</dt><dd id="mon-props">—</dd><dt>Violations</dt><dd id="mon-violations">—</dd></dl>
+          </div>
+          <div>
+            <h3>Correlation</h3>
+            <dl class="kv-grid"><dt>Pairs Tracked</dt><dd id="corr-pairs">—</dd><dt>Max Correlation</dt><dd id="corr-max">—</dd></dl>
+          </div>
+          <div>
+            <h3>Drift Detection</h3>
+            <dl class="kv-grid"><dt>Sample Count</dt><dd id="dr-samples">—</dd></dl>
+            <div class="btn-row mt-1"><button class="btn btn-sm danger" id="btn-reset-drift">Reset Drift</button></div>
+          </div>
+          <div>
+            <h3>Fingerprint</h3>
+            <dl class="kv-grid"><dt>Trained</dt><dd id="fp-trained">—</dd><dt>Replay Samples</dt><dd id="fp-replay">—</dd></dl>
+          </div>
+          <div>
+            <h3>Causal Graph</h3>
+            <dl class="kv-grid"><dt>Nodes</dt><dd id="cg-nodes">—</dd><dt>Edges</dt><dd id="cg-edges">—</dd></dl>
+          </div>
+          <div>
+            <h3>Thread Status</h3>
+            <dl class="kv-grid"><dt>Monitor Thread</dt><dd id="th-monitor">—</dd><dt>Samples Collected</dt><dd id="th-samples">—</dd><dt>Collection Rate</dt><dd id="th-rate">—</dd></dl>
+          </div>
+        </div>
+        <div class="btn-row mt-1">
+          <button class="btn btn-sm" id="btn-refresh-analysis">Refresh Analysis</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══════════════════════════════════════════════════════════ -->
+    <!-- SECTION 7: Infrastructure                                   -->
+    <!-- ═══════════════════════════════════════════════════════════ -->
+    <div class="section" id="sec-infrastructure">
+      <div class="section-header">
+        <h1>Infrastructure</h1>
+        <p>Energy management, multi-tenant administration, patch management, and workload offloading.</p>
+      </div>
+
+      <div class="card-grid cols-2">
+        <div class="card">
+          <h2><span class="dot dot-orange"></span> Energy Budget</h2>
+          <dl class="kv-grid"><dt>Remaining</dt><dd id="nrg-remaining">—</dd><dt>Power State</dt><dd id="nrg-state">—</dd></dl>
+          <div class="btn-row mt-1">
+            <button class="btn btn-sm" id="btn-energy-harvest">Harvest</button>
+            <button class="btn btn-sm danger" id="btn-energy-consume">Consume</button>
+          </div>
+        </div>
+        <div class="card">
+          <h2><span class="dot dot-blue"></span> Multi-Tenant</h2>
+          <dl class="kv-grid"><dt>Tenants</dt><dd id="mt-count">—</dd></dl>
+        </div>
+        <div class="card">
+          <h2><span class="dot dot-green"></span> Patch Management</h2>
+          <dl class="kv-grid"><dt>Total Patches</dt><dd id="pm-total">—</dd><dt>Installed</dt><dd id="pm-installed">—</dd><dt>In Plan</dt><dd id="pm-plan">—</dd></dl>
+        </div>
+        <div class="card">
+          <h2><span class="dot dot-purple"></span> Workload Offload</h2>
+          <div class="btn-row"><button class="btn btn-sm primary" id="btn-offload">Decide Offload</button></div>
+          <div id="offload-result" class="text-muted mt-1"></div>
+        </div>
+      </div>
+      <div class="btn-row mt-1">
+        <button class="btn btn-sm" id="btn-refresh-infra">Refresh Infrastructure</button>
+      </div>
+    </div>
+
+    <!-- ═══════════════════════════════════════════════════════════ -->
+    <!-- SECTION 8: Reports & Exports                                -->
+    <!-- ═══════════════════════════════════════════════════════════ -->
+    <div class="section" id="sec-reports-exports">
+      <div class="section-header">
+        <h1>Reports &amp; Exports</h1>
+        <p>View detection reports, analyze custom data files, and export formal verification artifacts.</p>
+      </div>
+
+      <div class="card mb-1">
+        <h2><span class="dot dot-green"></span> Latest Report</h2>
+        <dl class="kv-grid" style="margin-bottom:1rem;">
+          <dt>Samples</dt><dd id="r-samples">—</dd>
+          <dt>Alerts</dt><dd id="r-alerts">—</dd>
+          <dt>Critical</dt><dd id="r-critical">—</dd>
+          <dt>Avg Score</dt><dd id="r-avg">—</dd>
+          <dt>Max Score</dt><dd id="r-max">—</dd>
+          <dt>Generated</dt><dd id="r-generated">—</dd>
+        </dl>
+        <div class="table-wrap" style="max-height:320px;overflow-y:auto;">
+          <table class="data-table" id="sample-table">
+            <thead><tr><th>#</th><th>Timestamp</th><th>Score</th><th>Level</th><th>Action</th><th>Isolation</th><th>Reasons</th></tr></thead>
+            <tbody id="sample-tbody"><tr><td colspan="7" class="text-muted">No report loaded yet.</td></tr></tbody>
+          </table>
+        </div>
+        <div class="btn-row mt-1">
+          <button class="btn btn-sm primary" id="btn-refresh-report">Refresh Report</button>
+          <button class="btn btn-sm" id="btn-export-csv">Export CSV</button>
+          <select id="filter-level"><option value="">All levels</option><option value="nominal">Nominal</option><option value="elevated">Elevated</option><option value="severe">Severe</option><option value="critical">Critical</option></select>
+        </div>
+      </div>
+
+      <div class="card-grid cols-2">
+        <div class="card">
+          <h2><span class="dot dot-orange"></span> Analyze Custom Data</h2>
+          <p class="text-muted" style="margin-bottom:.5rem;">Upload a JSONL or CSV file to run through the detection pipeline.</p>
+          <div class="upload-zone" id="upload-zone">
+            <input type="file" id="upload-input" accept=".jsonl,.csv,.json">
+            Drop a <strong>.jsonl</strong> or <strong>.csv</strong> file here, or click to browse
+          </div>
+          <div id="upload-status" class="text-muted" style="margin-top:.5rem;"></div>
+        </div>
+        <div class="card">
+          <h2><span class="dot dot-blue"></span> Formal Exports</h2>
+          <p class="text-muted" style="margin-bottom:.65rem;">Download TLA+ modules, Alloy specifications, and proof witnesses.</p>
+          <div class="btn-row">
+            <button class="btn btn-sm" id="btn-export-tla">TLA+ Module</button>
+            <button class="btn btn-sm" id="btn-export-alloy">Alloy Spec</button>
+            <button class="btn btn-sm" id="btn-export-witnesses">Witnesses</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="card mt-1">
+        <h2><span class="dot dot-green"></span> Activity Log</h2>
+        <div class="log-area" id="activity-log">Ready. Connect to the runtime with `cargo run -- serve`.</div>
+      </div>
+    </div>
+
+    <!-- ═══════════════════════════════════════════════════════════ -->
+    <!-- SECTION 9: Settings                                         -->
+    <!-- ═══════════════════════════════════════════════════════════ -->
+    <div class="section" id="sec-settings">
+      <div class="section-header">
+        <h1>Settings</h1>
+        <p>Configure monitoring, notifications, detection and policy thresholds. Changes are applied live and persisted to <code>var/wardex.toml</code>.</p>
+      </div>
+
+      <div class="card">
+        <div class="settings-grid">
+          <div class="settings-section">
+            <h3>Monitor</h3>
+            <label for="set-interval">Interval (seconds)</label>
+            <input type="number" id="set-interval" min="1" value="5">
+            <label for="set-threshold">Alert threshold</label>
+            <input type="number" id="set-threshold" min="0.1" step="0.1" value="3.5">
+            <label for="set-alert-log">Alert log path</label>
+            <input type="text" id="set-alert-log" value="var/alerts.jsonl">
+            <div class="toggle-row"><input type="checkbox" id="set-dry-run"><span>Dry-run mode <em style="color:var(--ink-3);font-size:.75rem;">(detect but don't enforce)</em></span></div>
+            <label for="set-duration">Duration (seconds, 0 = unlimited)</label>
+            <input type="number" id="set-duration" min="0" value="0">
+          </div>
+          <div class="settings-section">
+            <h3>Notifications</h3>
+            <label for="set-webhook">Webhook URL</label>
+            <input type="text" id="set-webhook" placeholder="https://hooks.slack.com/...">
+            <div style="margin-top:.4rem;"><button class="btn btn-sm" id="btn-test-webhook" type="button">Test Webhook</button></div>
+            <div class="toggle-row"><input type="checkbox" id="set-syslog"><span>Syslog output</span></div>
+            <div class="toggle-row"><input type="checkbox" id="set-cef"><span>CEF output</span></div>
+          </div>
+          <div class="settings-section">
+            <h3>File Integrity</h3>
+            <label for="set-watch-paths">Watch paths (one per line)</label>
+            <textarea id="set-watch-paths" placeholder="/etc&#10;/usr/bin"></textarea>
+          </div>
+          <div class="settings-section">
+            <h3>Detection Tuning</h3>
+            <label for="set-warmup">Warmup samples</label>
+            <input type="number" id="set-warmup" min="1" value="4">
+            <label for="set-smoothing">Smoothing factor</label>
+            <input type="number" id="set-smoothing" min="0" max="1" step="0.01" value="0.22">
+            <label for="set-learn">Learn threshold</label>
+            <input type="number" id="set-learn" min="0" step="0.01" value="1.35">
+          </div>
+          <div class="settings-section">
+            <h3>Policy Thresholds</h3>
+            <label for="set-critical">Critical score</label>
+            <input type="number" id="set-critical" min="0" step="0.1" value="5.2">
+            <label for="set-severe">Severe score</label>
+            <input type="number" id="set-severe" min="0" step="0.1" value="3.0">
+            <label for="set-elevated">Elevated score</label>
+            <input type="number" id="set-elevated" min="0" step="0.1" value="1.4">
+            <label for="set-battery">Low battery threshold (%)</label>
+            <input type="number" id="set-battery" min="0" max="100" step="1" value="20">
+          </div>
+          <div class="settings-section">
+            <h3>Server</h3>
+            <label for="set-cors">CORS origin</label>
+            <input type="text" id="set-cors" value="http://localhost" placeholder="http://localhost or http://localhost:3000">
+            <p class="text-muted" style="margin-top:.3rem;">Set via <code>SENTINEL_CORS_ORIGIN</code> env var.</p>
+          </div>
+        </div>
+        <div class="settings-actions">
+          <button class="btn primary" id="btn-save-settings" type="button">Save Settings</button>
+          <button class="btn" id="btn-reset-settings" type="button">Reset to Defaults</button>
+          <button class="btn" id="btn-load-settings" type="button">Load from Server</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══════════════════════════════════════════════════════════ -->
+    <!-- SECTION 10: Help & Docs                                     -->
+    <!-- ═══════════════════════════════════════════════════════════ -->
+    <div class="section" id="sec-help-docs">
+      <div class="section-header">
+        <h1>Help &amp; Documentation</h1>
+        <p>Comprehensive documentation for the Wardex XDR platform — what is monitored, how detection works, and how to use every feature.</p>
+      </div>
+
+      <div class="accordion open">
+        <div class="accordion-header" onclick="this.parentElement.classList.toggle('open')">
+          What Is Monitored <span class="arrow">&#9654;</span>
+        </div>
+        <div class="accordion-body">
+          <p>The Wardex monitor collects the following telemetry from each host in real-time:</p>
+          <h4>CPU Usage</h4>
+          <p>Percentage of CPU time in use. On macOS, collected via <code>sysctl kern.cp_time</code>; on Linux via <code>/proc/stat</code>; on Windows via performance counters. Spikes may indicate cryptomining, brute-force attacks, or runaway processes.</p>
+          <h4>Memory Pressure</h4>
+          <p>Percentage of physical RAM in use. On macOS, collected via <code>vm_stat</code>; on Linux via <code>/proc/meminfo</code>. Sudden increases can signal memory exhaustion attacks or malware injection.</p>
+          <h4>Network Activity</h4>
+          <p>Total packets transmitted across all interfaces. On macOS via <code>netstat -ib</code>; on Linux via <code>/proc/net/dev</code>. Anomalous spikes may indicate data exfiltration, C2 beacons, or DDoS activity.</p>
+          <h4>Disk Pressure</h4>
+          <p>Percentage of disk space used on the root filesystem. Monitored via <code>statvfs</code>. Rapid consumption can indicate ransomware encryption or log bombing.</p>
+          <h4>Temperature</h4>
+          <p>CPU or SoC temperature in degrees Celsius. On macOS via IOKit <code>SMC</code>; on Linux via <code>/sys/class/thermal</code>. Elevated temperatures may indicate cryptojacking or hardware tampering.</p>
+          <h4>Authentication Failures</h4>
+          <p>Count of failed login attempts. On macOS via <code>log show --predicate 'eventMessage contains "authentication failure"'</code>; on Linux via <code>/var/log/auth.log</code>. Spikes indicate brute-force or credential-stuffing attacks.</p>
+          <h4>Battery Level</h4>
+          <p>Current battery percentage (for portable/IoT devices). On macOS via <code>pmset -g batt</code>; on Linux via <code>/sys/class/power_supply</code>. Low battery can be weaponized to disable monitoring in battery-aware attacks.</p>
+          <h4>Process Count</h4>
+          <p>Number of running processes. Sudden increases may indicate fork bombs, lateral movement, or persistence mechanisms establishing new processes.</p>
+          <h4>File Integrity Monitoring (FIM)</h4>
+          <p>SHA-256 hashes of critical system files and directories. Configurable watch paths (e.g., <code>/etc</code>, <code>/usr/bin</code>). Any hash change generates an immediate alert — detects unauthorized modifications, rootkits, and supply-chain tampering.</p>
+          <h4>Drift Detection</h4>
+          <p>Statistical tracking of how telemetry distributions change over time using the Kolmogorov-Smirnov test. Detects slow, stealthy attacks that gradually shift system behavior below per-sample thresholds.</p>
+        </div>
+      </div>
+
+      <div class="accordion">
+        <div class="accordion-header" onclick="this.parentElement.classList.toggle('open')">
+          How Detection Works <span class="arrow">&#9654;</span>
+        </div>
+        <div class="accordion-body">
+          <h4>EWMA Anomaly Detection</h4>
+          <p>The core detection engine uses an Exponentially Weighted Moving Average (EWMA) to establish dynamic baselines for each telemetry dimension. Each sample is scored as the sum of normalized deviations across all dimensions — a single numeric anomaly score.</p>
+          <h4>Multi-Axis Scoring</h4>
+          <p>The detector evaluates 10 independent axes: CPU, memory, network, disk, temperature, auth failures, battery, process count, file integrity changes, and custom metrics. Each axis maintains its own mean and variance, making the detector resistant to single-axis evasion.</p>
+          <h4>Detection Modes</h4>
+          <ul>
+            <li><strong>Normal</strong> — Continuously learns and updates baselines from incoming telemetry.</li>
+            <li><strong>Frozen</strong> — Uses the current baseline without updating. Useful for known-good snapshots.</li>
+            <li><strong>Decay</strong> — Gradually forgets old baselines at a configurable rate. Useful for environments with expected drift.</li>
+          </ul>
+          <h4>Threat Levels</h4>
+          <ul>
+            <li><strong>Nominal</strong> — Score below elevated threshold (default: 1.4). Normal operations.</li>
+            <li><strong>Elevated</strong> — Score between 1.4 and 3.0. Possible anomaly, increased logging.</li>
+            <li><strong>Severe</strong> — Score between 3.0 and 5.2. Likely attack, automated response triggered.</li>
+            <li><strong>Critical</strong> — Score above 5.2. Active incident, maximum isolation and alerting.</li>
+          </ul>
+          <h4>Policy Engine</h4>
+          <p>The policy engine maps anomaly scores to enforcement actions: logging, rate-limiting, network isolation, process quarantine, or full lockdown. Policies can be composed (max, min, left/right priority) and executed in a sandboxed WASM VM for safe extensibility.</p>
+          <h4>Correlation Engine</h4>
+          <p>Cross-agent event correlation detects coordinated attacks spanning multiple endpoints. Uses temporal proximity, shared IOCs, and behavioral similarity to group related events across the fleet.</p>
+        </div>
+      </div>
+
+      <div class="accordion">
+        <div class="accordion-header" onclick="this.parentElement.classList.toggle('open')">
+          XDR Agent Architecture <span class="arrow">&#9654;</span>
+        </div>
+        <div class="accordion-body">
+          <h4>Server + Agent Model</h4>
+          <p>The Wardex server automatically monitors the local system without requiring a separate agent. Remote hosts run lightweight agents that report telemetry to the central server.</p>
+          <h4>Agent Enrollment</h4>
+          <p>Agents enroll using one-time tokens generated from the admin console (Fleet &amp; Agents &rarr; Create Enrollment Token). Each token has configurable max-uses. Agents authenticate with their enrollment credentials on each heartbeat.</p>
+          <h4>Heartbeat &amp; Telemetry</h4>
+          <p>Agents send heartbeats at configurable intervals (default: 5 seconds). Each heartbeat includes a full telemetry sample. The server evaluates each sample through the anomaly detector and generates alerts when thresholds are exceeded.</p>
+          <h4>SIEM Integration</h4>
+          <p>Events can be forwarded to external SIEM platforms via webhook, syslog, or CEF format. The server maintains an event store for correlation and historical analysis.</p>
+          <h4>Policy Distribution</h4>
+          <p>Security policies are versioned and distributed to agents via the policy store. Agents receive policy updates on each heartbeat check-in.</p>
+        </div>
+      </div>
+
+      <div class="accordion">
+        <div class="accordion-header" onclick="this.parentElement.classList.toggle('open')">
+          API Reference <span class="arrow">&#9654;</span>
+        </div>
+        <div class="accordion-body">
+          <p>The Wardex server exposes a comprehensive REST API. All mutating operations require Bearer token authentication.</p>
+          <div id="api-endpoint-list" class="text-muted">Loading API endpoints...</div>
+        </div>
+      </div>
+
+      <div class="accordion">
+        <div class="accordion-header" onclick="this.parentElement.classList.toggle('open')">
+          CLI Commands <span class="arrow">&#9654;</span>
+        </div>
+        <div class="accordion-body">
+          <p>Available commands when running <code>wardex</code>:</p>
+          <ul>
+            <li><code>serve</code> — Start the HTTP API server with admin console</li>
+            <li><code>monitor</code> — Run continuous host monitoring</li>
+            <li><code>analyze &lt;file&gt;</code> — Analyze a CSV/JSONL telemetry file</li>
+            <li><code>report</code> — Generate a JSON detection report</li>
+            <li><code>benchmark</code> — Run detection engine benchmarks</li>
+            <li><code>status</code> — Show runtime status manifest</li>
+            <li><code>fingerprint</code> — Generate device fingerprint</li>
+            <li><code>forensics &lt;file&gt;</code> — Run forensic analysis on telemetry</li>
+            <li><code>replay &lt;file&gt;</code> — Replay historical telemetry through detector</li>
+            <li><code>audit &lt;file&gt;</code> — Generate audit trail for telemetry</li>
+            <li><code>config</code> — Show current configuration</li>
+            <li><code>install-service</code> — Install as system service (systemd/launchd/sc.exe)</li>
+            <li><code>uninstall-service</code> — Remove system service</li>
+            <li><code>help</code> — Show help message</li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="accordion">
+        <div class="accordion-header" onclick="this.parentElement.classList.toggle('open')">
+          Platform Support <span class="arrow">&#9654;</span>
+        </div>
+        <div class="accordion-body">
+          <h4>Supported Platforms</h4>
+          <ul>
+            <li><strong>macOS</strong> — Full support. Telemetry via sysctl, vm_stat, netstat, IOKit, pmset, log show.</li>
+            <li><strong>Linux</strong> — Full support. Telemetry via /proc filesystem, /sys/class, journalctl.</li>
+            <li><strong>Windows</strong> — Partial support. Telemetry via performance counters, WMI, Event Log.</li>
+          </ul>
+          <h4>Service Installation</h4>
+          <ul>
+            <li><strong>macOS</strong> — LaunchDaemon plist in /Library/LaunchDaemons/</li>
+            <li><strong>Linux</strong> — systemd unit file in /etc/systemd/system/</li>
+            <li><strong>Windows</strong> — Windows Service via sc.exe</li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="accordion">
+        <div class="accordion-header" onclick="this.parentElement.classList.toggle('open')">
+          Getting Started <span class="arrow">&#9654;</span>
+        </div>
+        <div class="accordion-body">
+          <h4>Quick Start</h4>
+          <ol>
+            <li>Build the project: <code>cargo build --release</code></li>
+            <li>Start the server: <code>./target/release/wardex serve</code></li>
+            <li>Copy the API token printed in the terminal</li>
+            <li>Open the admin console in your browser (default: <code>http://localhost:8080/admin.html</code>)</li>
+            <li>Paste the token and click Connect</li>
+          </ol>
+          <h4>Configuration</h4>
+          <p>Settings are stored in <code>var/wardex.toml</code>. You can edit them via the Settings panel or directly edit the TOML file. The server picks up changes on next <code>config reload</code> API call.</p>
+          <h4>Monitoring Your First Host</h4>
+          <p>The server automatically monitors the local machine. Once connected, the Dashboard will show real-time CPU, memory, network, and other telemetry. Alerts appear when anomaly scores exceed the configured thresholds.</p>
+        </div>
+      </div>
+
+      <div class="accordion">
+        <div class="accordion-header" onclick="this.parentElement.classList.toggle('open')">
+          Research Blueprint Coverage <span class="arrow">&#9654;</span>
+        </div>
+        <div class="accordion-body">
+          <p>These tracks belong to the broader research blueprint. Planned and future items are not missing product features; they are unimplemented research directions.</p>
+          <div class="btn-row mb-1">
+            <div id="track-summary" style="display:flex;gap:.4rem;flex-wrap:wrap;"></div>
+            <button class="btn btn-sm" id="btn-toggle-future" type="button" style="margin-left:auto;">Show Future Tracks</button>
+          </div>
+          <div class="text-muted mb-1" id="track-note">Showing only foundation and scaffolded tracks.</div>
+          <div class="table-wrap">
+            <table class="data-table">
+              <thead><tr><th>Code</th><th>Track</th><th>Status</th></tr></thead>
+              <tbody id="track-tbody"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <div class="accordion">
+        <div class="accordion-header" onclick="this.parentElement.classList.toggle('open')">
+          Demo Mode <span class="arrow">&#9654;</span>
+        </div>
+        <div class="accordion-body">
+          <h4>What Is Demo Mode?</h4>
+          <p>Demo mode simulates a realistic XDR detection scenario entirely in the browser. It generates synthetic telemetry showing a normal baseline followed by an escalating attack, allowing you to see how the detection engine responds.</p>
+          <h4>How To Use</h4>
+          <ol>
+            <li>Toggle the &ldquo;Demo Mode&rdquo; switch in the top bar</li>
+            <li>Navigate to the Dashboard to see synthetic gauges and sparklines</li>
+            <li>Watch the Live Monitor for simulated alerts</li>
+            <li>Toggle off to return to real data</li>
+          </ol>
+          <h4>What Gets Simulated</h4>
+          <ul>
+            <li>CPU ramp from 15% to 95% (simulated cryptominer)</li>
+            <li>Memory climbing from 40% to 88%</li>
+            <li>Network spike to 50,000 packets (data exfiltration)</li>
+            <li>Authentication failure burst (credential stuffing)</li>
+            <li>Alerts escalating from Elevated through Severe to Critical</li>
+          </ul>
+          <p><strong>Note:</strong> Demo mode does not send any data to the server or modify any state. Everything runs client-side only.</p>
+        </div>
+      </div>
+    </div>
+
+  </div><!-- .content -->
+</div><!-- .main -->
+
+<!-- ═══ Toast ═══ -->
+<div class="toast" id="toast"></div>
+
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<!-- JavaScript                                                      -->
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<script>
+(function() {
+  const API = '';
+  const $ = (sel) => document.querySelector(sel);
+  const $$ = (sel) => document.querySelectorAll(sel);
+
+  // ── State ──
+  let autoRefreshTimer = null;
+  let autoRefreshFailures = 0;
+  let isAuthenticated = false;
+  let showFutureTracks = false;
+  let lastTracks = [];
+  let lastReportData = null;
+  let lastAlertCount = 0;
+  let alertPollTimer = null;
+  let nextTelemetryHistoryAt = 0;
+  let demoMode = false;
+  let demoTimer = null;
+  const AUTO_REFRESH_BASE = 5000;
+  const AUTO_REFRESH_MAX = 30000;
+  const AUTO_REFRESH_PAUSE_AFTER = 6;
+  const TELEMETRY_HISTORY_INTERVAL_MS = 20000;
+
+  // ── Helpers ──
+  function getToken() { return $('#auth-token').value.trim(); }
+
+  function escapeHtml(s) {
+    const div = document.createElement('div');
+    div.appendChild(document.createTextNode(String(s)));
+    return div.innerHTML;
+  }
+  const esc = escapeHtml;
+
+  function setAuthenticated(authed) {
+    document.body.classList.toggle('authenticated', authed);
+    isAuthenticated = authed;
+    const status = $('#auth-status');
+    if (authed) { status.textContent = 'Authenticated'; status.className = 'auth-status authenticated'; }
+    else if (!getToken()) { status.textContent = 'No token'; status.className = 'auth-status none'; }
+  }
+
+  function authHeaders(contentType) {
+    const h = {};
+    if (contentType) h['Content-Type'] = contentType;
+    const t = getToken();
+    if (t) h['Authorization'] = 'Bearer ' + t;
+    return h;
+  }
+
+  function log(msg) {
+    const el = $('#activity-log');
+    const ts = new Date().toLocaleTimeString();
+    el.textContent += '\n[' + ts + '] ' + msg;
+    el.scrollTop = el.scrollHeight;
+  }
+
+  function flash(msg, type) {
+    const el = $('#flash');
+    el.textContent = msg;
+    el.className = 'flash ' + type;
+    setTimeout(() => { el.className = 'flash'; }, 4000);
+  }
+
+  function toast(msg, type) {
+    const el = $('#toast');
+    el.textContent = msg;
+    el.className = 'toast ' + type + ' visible';
+    clearTimeout(toast._t);
+    toast._t = setTimeout(() => { el.className = 'toast'; }, 3500);
+  }
+
+  function setConn(state, detail) {
+    const dot = $('#conn-dot');
+    const label = $('#conn-label');
+    dot.className = 'conn-dot ' + state;
+    if (state === 'connected') {
+      label.textContent = 'Connected';
+      if (autoRefreshFailures > 0) { autoRefreshFailures = 0; rescheduleAutoRefresh(); }
+    } else if (state === 'error') {
+      label.textContent = detail || 'Error';
+      if (autoRefreshTimer) {
+        autoRefreshFailures++;
+        if (autoRefreshFailures >= AUTO_REFRESH_PAUSE_AFTER) {
+          clearTimeout(autoRefreshTimer); autoRefreshTimer = null;
+          label.textContent = (detail || 'Error') + ' — auto-refresh paused';
+          log('Auto-refresh paused after ' + autoRefreshFailures + ' failures.');
+          showResumeButton(true);
+        } else { rescheduleAutoRefresh(); }
+      }
+    } else { label.textContent = 'Disconnected'; }
+  }
+
+  function autoRefreshDelay() {
+    if (autoRefreshFailures === 0) return AUTO_REFRESH_BASE;
+    return Math.min(AUTO_REFRESH_BASE * Math.pow(2, autoRefreshFailures), AUTO_REFRESH_MAX);
+  }
+
+  function rescheduleAutoRefresh() {
+    if (autoRefreshTimer) clearTimeout(autoRefreshTimer);
+    const delay = autoRefreshDelay();
+    const label = $('#auto-refresh-label');
+    if (autoRefreshFailures > 0) { label.textContent = 'Retrying in ' + Math.round(delay / 1000) + 's...'; }
+    else { label.textContent = 'Auto-refresh (5s)'; }
+    autoRefreshTimer = setTimeout(() => {
+      refreshStatus(); refreshReport();
+      if ($('#auto-refresh').checked) rescheduleAutoRefresh();
+    }, delay);
+  }
+
+  function showResumeButton(show) {
+    const btn = $('#btn-resume');
+    if (btn) btn.style.display = show ? 'inline-block' : 'none';
+  }
+
+  // ── Navigation ──
+  function switchSection(sectionId) {
+    $$('.section').forEach(s => s.classList.remove('active'));
+    $$('.nav-item').forEach(n => n.classList.remove('active'));
+    const sec = $('#sec-' + sectionId);
+    if (sec) sec.classList.add('active');
+    const nav = document.querySelector('[data-section="' + sectionId + '"]');
+    if (nav) nav.classList.add('active');
+
+    // Auto-load data for each section
+    if (sectionId === 'live-monitor') { refreshAlerts(); refreshHealth(); }
+    else if (sectionId === 'threat-detection') { refreshSecurity(); refreshCheckpointCount(); }
+    else if (sectionId === 'fleet-agents') { refreshFleet(); refreshXdr(); }
+    else if (sectionId === 'security-policy') { refreshCompliance(); refreshQuantum(); }
+    else if (sectionId === 'incident-response') { refreshTwin(); refreshAnalysis(); }
+    else if (sectionId === 'infrastructure') { refreshInfra(); }
+    else if (sectionId === 'reports-exports') { refreshReport(); }
+    else if (sectionId === 'settings') { loadSettings(); }
+    else if (sectionId === 'help-docs') { loadApiEndpoints(); }
+    else if (sectionId === 'dashboard') { refreshDashboard(); }
+  }
+
+  $$('.nav-item').forEach(item => {
+    item.addEventListener('click', () => {
+      switchSection(item.dataset.section);
+      // Close sidebar on mobile
+      if (window.innerWidth <= 1024) $('#sidebar').classList.remove('open');
+    });
+  });
+
+  $('#sidebar-toggle').addEventListener('click', () => {
+    $('#sidebar').classList.toggle('open');
+  });
+
+  // ── Connect ──
+  async function connect() {
+    const token = getToken();
+    if (!token) { flash('Paste the token from the server terminal first.', 'error'); setAuthenticated(false); return; }
+    try {
+      const res = await fetch(API + '/api/auth/check', { method: 'GET', headers: authHeaders() });
+      if (res.status === 401) {
+        $('#auth-status').textContent = 'Invalid token'; $('#auth-status').className = 'auth-status error';
+        setAuthenticated(false); flash('Authentication failed. Check the token printed by the server.', 'error'); return;
+      }
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      localStorage.setItem('wardex.adminToken', token);
+      setAuthenticated(true);
+      flash('Admin access unlocked.', 'success');
+      log('Authenticated with live control plane');
+      refreshDashboard();
+    } catch (e) {
+      setAuthenticated(false);
+      $('#auth-status').textContent = 'Connection error'; $('#auth-status').className = 'auth-status error';
+      flash('Could not verify token: ' + e.message, 'error');
+    }
+  }
+
+  // ── Dashboard ──
+  async function refreshDashboard() {
+    refreshStatus();
+    refreshReport();
+    refreshCheckpointCount();
+    refreshAlerts();
+    refreshHealth();
+    refreshTelemetry(true);
+    refreshHostInfo();
+  }
+
+  async function refreshTelemetry(includeHistory) {
+    try {
+      const res = await fetch(API + '/api/telemetry/current');
+      if (!res.ok) return;
+      const d = await res.json();
+      $('#g-cpu').textContent = typeof d.cpu_pct === 'number' ? d.cpu_pct.toFixed(1) : '—';
+      $('#g-mem').textContent = typeof d.mem_pct === 'number' ? d.mem_pct.toFixed(1) : '—';
+      $('#g-net').textContent = typeof d.net_packets === 'number' ? d.net_packets : '—';
+      $('#g-disk').textContent = typeof d.disk_pct === 'number' ? d.disk_pct.toFixed(1) : '—';
+      $('#g-procs').textContent = typeof d.process_count === 'number' ? d.process_count : '—';
+      $('#g-temp').textContent = typeof d.temp_celsius === 'number' ? d.temp_celsius.toFixed(1) : '—';
+      $('#g-auth').textContent = typeof d.auth_failures === 'number' ? d.auth_failures : '—';
+      $('#g-batt').textContent = typeof d.battery_pct === 'number' ? d.battery_pct.toFixed(0) : '—';
+    } catch(e) { /* ignore */ }
+
+    const shouldRefreshHistory = includeHistory || Date.now() >= nextTelemetryHistoryAt;
+    if (!shouldRefreshHistory) return;
+
+    nextTelemetryHistoryAt = Date.now() + TELEMETRY_HISTORY_INTERVAL_MS;
+    try {
+      const res = await fetch(API + '/api/telemetry/history');
+      if (!res.ok) return;
+      const arr = await res.json();
+      if (arr.length > 0) {
+        drawSparkline('spark-cpu', arr.map(s => s.cpu_pct ?? 0), var_accent);
+        drawSparkline('spark-mem', arr.map(s => s.mem_pct ?? 0), '#3b82f6');
+      }
+    } catch(e) { /* ignore */ }
+  }
+
+  const var_accent = '#00d4aa';
+
+  function drawSparkline(canvasId, data, color) {
+    const canvas = document.getElementById(canvasId);
+    if (!canvas || !data.length) return;
+    const ctx = canvas.getContext('2d');
+    const w = canvas.width = canvas.offsetWidth * (window.devicePixelRatio || 1);
+    const h = canvas.height = 48 * (window.devicePixelRatio || 1);
+    ctx.scale(window.devicePixelRatio || 1, window.devicePixelRatio || 1);
+    const dw = canvas.offsetWidth;
+    const dh = 48;
+    ctx.clearRect(0, 0, dw, dh);
+    const max = Math.max(...data, 1);
+    const min = Math.min(...data, 0);
+    const range = max - min || 1;
+    const step = dw / (data.length - 1 || 1);
+    ctx.beginPath();
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 1.5;
+    ctx.lineJoin = 'round';
+    data.forEach((v, i) => {
+      const x = i * step;
+      const y = dh - ((v - min) / range) * (dh - 6) - 3;
+      if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+    });
+    ctx.stroke();
+    // Fill
+    ctx.lineTo((data.length - 1) * step, dh);
+    ctx.lineTo(0, dh);
+    ctx.closePath();
+    ctx.fillStyle = color.replace(')', ',0.1)').replace('rgb', 'rgba');
+    if (color.startsWith('#')) {
+      ctx.fillStyle = color + '18';
+    }
+    ctx.fill();
+  }
+
+  async function refreshHostInfo() {
+    try {
+      const res = await fetch(API + '/api/host/info');
+      if (!res.ok) return;
+      const d = await res.json();
+      $('#dash-platform').textContent = d.platform ?? '—';
+      $('#dash-hostname').textContent = d.hostname ?? '—';
+      $('#dash-cores').textContent = d.cpu_cores ?? '—';
+      $('#dash-memory').textContent = d.total_memory_mb ? Math.round(d.total_memory_mb) + ' MB' : '—';
+      $('#dash-osver').textContent = d.os_version ?? '—';
+      $('#dash-host-uptime').textContent = d.uptime_secs ? formatUptime(d.uptime_secs) : '—';
+    } catch(e) { /* ignore */ }
+  }
+
+  function formatUptime(secs) {
+    const h = Math.floor(secs / 3600);
+    const m = Math.floor((secs % 3600) / 60);
+    const s = secs % 60;
+    return h + 'h ' + m + 'm ' + s + 's';
+  }
+
+  // ── Status ──
+  async function refreshStatus() {
+    try {
+      const res = await fetch(API + '/api/status');
+      if (res.status === 401) { flash('Unauthorized', 'error'); setConn('error', 'Auth failed'); return; }
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      const d = await res.json();
+      $('#s-updated').textContent = d.updated_at;
+      $('#s-backlog').textContent = d.backlog_completed + '/' + d.backlog_total;
+      $('#s-phases').textContent = d.completed_phases + '/' + d.total_phases;
+      $('#s-commands').textContent = d.cli_commands.length;
+      $('#s-implemented').textContent = d.implemented.length;
+      $('#s-partial').textContent = d.partially_wired.length;
+      $('#s-not-built').textContent = d.not_implemented.length;
+
+      const partialEl = $('#status-partial-list');
+      const notbuiltEl = $('#status-notbuilt-list');
+      if (d.partially_wired.length) {
+        partialEl.innerHTML = '<strong style="color:var(--orange);">Partially wired:</strong><ul style="margin:.2rem 0 .5rem 1.2rem;">' +
+          d.partially_wired.map(i => '<li>' + esc(i) + '</li>').join('') + '</ul>';
+      } else { partialEl.innerHTML = ''; }
+      if (d.not_implemented.length) {
+        notbuiltEl.innerHTML = '<strong style="color:var(--ink-3);">Not implemented:</strong><ul style="margin:.2rem 0 .5rem 1.2rem;">' +
+          d.not_implemented.map(i => '<li>' + esc(i) + '</li>').join('') + '</ul>';
+      } else { notbuiltEl.innerHTML = ''; }
+
+      if (d.research_tracks && d.research_tracks.length) {
+        renderTracks(d.research_tracks);
+      }
+      setConn('connected');
+    } catch(e) {
+      const detail = e.message.includes('Failed to fetch') ? 'Server offline' : e.message;
+      setConn('error', detail);
+      log('Status fetch failed: ' + detail);
+    }
+  }
+
+  function renderTracks(tracks) {
+    lastTracks = tracks.slice();
+    const counts = { foundation: 0, scaffolded: 0, planned: 0, future: 0 };
+    tracks.forEach(t => { counts[t.status] = (counts[t.status] || 0) + 1; });
+    $('#track-summary').innerHTML =
+      '<span class="track-badge foundation">' + counts.foundation + ' Foundation</span> ' +
+      '<span class="track-badge scaffolded">' + counts.scaffolded + ' Scaffolded</span>' +
+      (showFutureTracks
+        ? ' <span class="track-badge planned">' + counts.planned + ' Planned</span>' +
+          ' <span class="track-badge future">' + counts.future + ' Future</span>'
+        : '');
+    $('#track-note').textContent = showFutureTracks
+      ? 'Showing the full research blueprint, including unimplemented planned and future investigations.'
+      : 'Showing only foundation and scaffolded tracks.';
+    $('#btn-toggle-future').textContent = showFutureTracks ? 'Hide Future Tracks' : 'Show Future Tracks';
+    const visible = showFutureTracks ? tracks : tracks.filter(t => t.status === 'foundation' || t.status === 'scaffolded');
+    const tbody = $('#track-tbody');
+    tbody.innerHTML = '';
+    for (const t of visible) {
+      const tr = document.createElement('tr');
+      tr.innerHTML = '<td><strong>' + esc(t.code) + '</strong></td><td>' + esc(t.title) + '</td><td><span class="track-badge ' + esc(t.status) + '">' + esc(t.status) + '</span></td>';
+      tbody.appendChild(tr);
+    }
+  }
+
+  // ── Report ──
+  async function refreshReport() {
+    try {
+      const res = await fetch(API + '/api/report');
+      if (res.status === 401) { flash('Unauthorized', 'error'); return; }
+      if (!res.ok) throw new Error(res.statusText);
+      const d = await res.json();
+      renderReport(d);
+      log('Report refreshed');
+    } catch(e) { log('Report fetch failed: ' + e.message); }
+  }
+
+  function renderReport(d) {
+    lastReportData = d;
+    $('#r-samples').textContent = d.summary.total_samples;
+    $('#r-alerts').textContent = d.summary.alert_count;
+    $('#r-critical').textContent = d.summary.critical_count;
+    $('#r-avg').textContent = d.summary.average_score.toFixed(2);
+    $('#r-max').textContent = d.summary.max_score.toFixed(2);
+    $('#r-generated').textContent = d.generated_at.substring(0, 19);
+    renderSamples(d.samples);
+  }
+
+  function renderSamples(samples) {
+    const filter = $('#filter-level').value;
+    const filtered = filter ? samples.filter(s => s.level === filter) : samples;
+    const tbody = $('#sample-tbody');
+    tbody.innerHTML = '';
+    if (filtered.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="7" class="text-muted">No matching samples.</td></tr>';
+      return;
+    }
+    for (const s of filtered) {
+      const tr = document.createElement('tr');
+      const level = esc(s.level);
+      tr.innerHTML = '<td>' + s.index + '</td><td>' + s.timestamp_ms + '</td><td>' + s.score.toFixed(2) + '</td><td class="level-' + level + '">' + level + '</td><td>' + esc(s.action) + '</td><td>' + s.isolation_pct + '%</td><td>' + esc(s.reasons.join('; ')) + '</td>';
+      tbody.appendChild(tr);
+    }
+  }
+
+  function exportCsv() {
+    if (!lastReportData || !lastReportData.samples.length) { flash('No report data to export', 'error'); return; }
+    const header = 'Index,Timestamp,Score,Level,Action,Isolation%,Reasons';
+    const rows = lastReportData.samples.map(s =>
+      [s.index, s.timestamp_ms, s.score.toFixed(2), s.level, s.action, s.isolation_pct, '"' + s.reasons.join('; ').replace(/"/g, '""') + '"'].join(',')
+    );
+    downloadBlob(header + '\n' + rows.join('\n'), 'wardex-report.csv', 'text/csv');
+    log('Report exported as CSV');
+  }
+
+  function downloadBlob(content, filename, mime) {
+    const blob = new Blob([content], { type: mime });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a'); a.href = url; a.download = filename; a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  // ── Controls ──
+  async function setMode(mode) {
+    try {
+      const res = await fetch(API + '/api/control/mode', { method: 'POST', headers: authHeaders('application/json'), body: JSON.stringify({ mode }) });
+      if (res.status === 401) { flash('Unauthorized', 'error'); return; }
+      if (!res.ok) throw new Error(res.statusText);
+      $$('[data-mode]').forEach(b => b.classList.toggle('active', b.dataset.mode === mode));
+      const slider = $('#decay-slider');
+      if (mode === 'decay') slider.classList.add('visible'); else slider.classList.remove('visible');
+      flash('Detection mode set to ' + mode, 'success');
+      log('Mode changed to ' + mode);
+    } catch(e) { flash('Failed: ' + e.message, 'error'); }
+  }
+
+  async function runDemo() {
+    const btn = $('#btn-run-demo'); btn.disabled = true;
+    try {
+      const res = await fetch(API + '/api/control/run-demo', { method: 'POST', headers: authHeaders('application/json') });
+      if (res.status === 401) { flash('Unauthorized', 'error'); return; }
+      if (!res.ok) throw new Error(res.statusText);
+      const d = await res.json();
+      renderReport(d);
+      flash('Demo analysis complete', 'success');
+      log('Demo analysis ran — ' + d.summary.total_samples + ' samples, ' + d.summary.alert_count + ' alerts');
+    } catch(e) { flash('Failed: ' + e.message, 'error'); }
+    finally { btn.disabled = false; }
+  }
+
+  async function resetBaseline() {
+    if (!confirm('Reset the detector baseline? This cannot be undone.')) return;
+    try {
+      const res = await fetch(API + '/api/control/reset-baseline', { method: 'POST', headers: authHeaders('application/json') });
+      if (res.status === 401) { flash('Unauthorized', 'error'); return; }
+      if (!res.ok) throw new Error(res.statusText);
+      flash('Baseline reset', 'success'); log('Baseline reset');
+    } catch(e) { flash('Failed: ' + e.message, 'error'); }
+  }
+
+  async function saveCheckpoint() {
+    try {
+      const res = await fetch(API + '/api/control/checkpoint', { method: 'POST', headers: authHeaders('application/json') });
+      if (res.status === 401) { flash('Unauthorized', 'error'); return; }
+      if (!res.ok) throw new Error(res.statusText);
+      const d = await res.json();
+      flash('Checkpoint saved (' + d.total + ' stored)', 'success');
+      log('Checkpoint saved — ' + d.total + ' total');
+      refreshCheckpointCount();
+    } catch(e) { flash('Failed: ' + e.message, 'error'); }
+  }
+
+  async function restoreCheckpoint() {
+    if (!confirm('Restore detector to the latest checkpoint?')) return;
+    try {
+      const res = await fetch(API + '/api/control/restore-checkpoint', { method: 'POST', headers: authHeaders('application/json') });
+      if (res.status === 401) { flash('Unauthorized', 'error'); return; }
+      if (res.status === 404) { flash('No checkpoints available', 'error'); return; }
+      if (!res.ok) throw new Error(res.statusText);
+      flash('Checkpoint restored', 'success'); log('Detector restored to latest checkpoint');
+    } catch(e) { flash('Failed: ' + e.message, 'error'); }
+  }
+
+  async function refreshCheckpointCount() {
+    try {
+      const res = await fetch(API + '/api/checkpoints');
+      if (!res.ok) return;
+      const d = await res.json();
+      $('#checkpoint-count').textContent = d.count + ' stored';
+    } catch(e) { /* ignore */ }
+  }
+
+  // ── Security Operations ──
+  async function refreshSecurity() {
+    try {
+      const [enfRes, tiRes, scRes, decRes] = await Promise.all([
+        fetch(API + '/api/enforcement/status', { headers: authHeaders() }),
+        fetch(API + '/api/threat-intel/status', { headers: authHeaders() }),
+        fetch(API + '/api/side-channel/status', { headers: authHeaders() }),
+        fetch(API + '/api/deception/status', { headers: authHeaders() }),
+      ]);
+      if (enfRes.ok) { const d = await enfRes.json(); $('#enf-policies').textContent = d.policy_count ?? d.policies ?? '—'; $('#enf-actions').textContent = d.history_len ?? d.actions ?? '—'; }
+      if (tiRes.ok) { const d = await tiRes.json(); $('#ti-ioc-count').textContent = d.ioc_count ?? '—'; $('#ti-match-count').textContent = d.match_count ?? '—'; }
+      if (scRes.ok) { const d = await scRes.json(); $('#sc-risk').textContent = typeof d.risk_score === 'number' ? d.risk_score.toFixed(3) : '—'; $('#sc-samples').textContent = d.timing_samples ?? '—'; }
+      if (decRes.ok) { const d = await decRes.json(); $('#dec-total').textContent = d.total_decoys ?? '—'; $('#dec-active').textContent = d.active_decoys ?? '—'; $('#dec-interactions').textContent = d.total_interactions ?? '—'; }
+      log('Security data refreshed');
+    } catch(e) { log('Security refresh failed: ' + e.message); }
+  }
+
+  async function quarantineTarget() {
+    const target = $('#quarantine-target').value.trim();
+    if (!target) { flash('Enter a target ID', 'error'); return; }
+    try {
+      const res = await fetch(API + '/api/enforcement/quarantine', { method: 'POST', headers: authHeaders('application/json'), body: JSON.stringify({ target }) });
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      const d = await res.json();
+      flash('Quarantined: ' + target + ' (' + d.actions + ' actions)', 'success');
+      log('Quarantine target: ' + target); refreshSecurity();
+    } catch(e) { flash('Quarantine failed: ' + e.message, 'error'); }
+  }
+
+  async function addIoc() {
+    const value = $('#ioc-value').value.trim();
+    const iocType = $('#ioc-type').value;
+    if (!value) { flash('Enter an IOC value', 'error'); return; }
+    try {
+      const res = await fetch(API + '/api/threat-intel/ioc', { method: 'POST', headers: authHeaders('application/json'), body: JSON.stringify({ value, ioc_type: iocType }) });
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      flash('IOC added: ' + value, 'success'); log('Added IOC: ' + value); $('#ioc-value').value = ''; refreshSecurity();
+    } catch(e) { flash('Add IOC failed: ' + e.message, 'error'); }
+  }
+
+  async function deployDecoy() {
+    const name = $('#decoy-name').value.trim();
+    const decoyType = $('#decoy-type').value;
+    if (!name) { flash('Enter a decoy name', 'error'); return; }
+    try {
+      const res = await fetch(API + '/api/deception/deploy', { method: 'POST', headers: authHeaders('application/json'), body: JSON.stringify({ decoy_type: decoyType, name }) });
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      const d = await res.json();
+      flash('Decoy deployed: ' + d.decoy_id, 'success'); log('Deployed decoy: ' + name + ' (' + decoyType + ')'); $('#decoy-name').value = ''; refreshSecurity();
+    } catch(e) { flash('Deploy failed: ' + e.message, 'error'); }
+  }
+
+  // ── Fleet & Swarm ──
+  async function refreshFleet() {
+    try {
+      const [flRes, posRes, platRes] = await Promise.all([
+        fetch(API + '/api/fleet/status', { headers: authHeaders() }),
+        fetch(API + '/api/swarm/posture', { headers: authHeaders() }),
+        fetch(API + '/api/platform', { headers: authHeaders() }),
+      ]);
+      if (flRes.ok) { const d = await flRes.json(); $('#fl-devices').textContent = d.total_devices ?? '—'; $('#fl-online').textContent = d.online ?? '—'; }
+      if (posRes.ok) { const d = await posRes.json(); $('#fl-posture').textContent = d.current_posture ?? '—'; }
+      if (platRes.ok) { const d = await platRes.json(); $('#fl-platform').textContent = d.platform ?? '—'; }
+      log('Fleet data refreshed');
+    } catch(e) { log('Fleet refresh failed: ' + e.message); }
+  }
+
+  async function registerDevice() {
+    const deviceId = $('#reg-device-id').value.trim();
+    if (!deviceId) { flash('Enter a device ID', 'error'); return; }
+    try {
+      const res = await fetch(API + '/api/fleet/register', { method: 'POST', headers: authHeaders('application/json'), body: JSON.stringify({ device_id: deviceId }) });
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      flash('Device registered: ' + deviceId, 'success'); log('Registered device: ' + deviceId); $('#reg-device-id').value = ''; refreshFleet();
+    } catch(e) { flash('Register failed: ' + e.message, 'error'); }
+  }
+
+  // ── XDR Dashboard ──
+  async function refreshXdr() {
+    try {
+      const [dashRes, agentsRes] = await Promise.all([
+        fetch(API + '/api/fleet/dashboard', { headers: authHeaders() }),
+        fetch(API + '/api/agents', { headers: authHeaders() }),
+      ]);
+      if (dashRes.ok) {
+        const d = await dashRes.json();
+        $('#xdr-agents').textContent = d.fleet?.total_agents ?? '—';
+        $('#xdr-online').textContent = d.fleet?.status_counts?.online ?? '0';
+        $('#xdr-stale').textContent = d.fleet?.status_counts?.stale ?? '0';
+        $('#xdr-offline').textContent = d.fleet?.status_counts?.offline ?? '0';
+        $('#xdr-events').textContent = d.events?.total ?? '0';
+        $('#xdr-correlations').textContent = d.events?.recent_correlations ?? '0';
+        $('#xdr-policy').textContent = d.policy?.current_version ?? '0';
+        $('#xdr-updates').textContent = d.updates?.available_releases ?? '0';
+        $('#xdr-siem').textContent = d.siem?.enabled ? 'Enabled' : 'Disabled';
+        $('#xdr-pushed').textContent = d.siem?.total_pushed ?? '0';
+        $('#xdr-pulled').textContent = d.siem?.total_pulled ?? '0';
+        const corrEl = $('#xdr-correlation-list');
+        if (d.events?.correlations?.length > 0) {
+          corrEl.innerHTML = d.events.correlations.map(c =>
+            '<div style="padding:.3rem 0;border-bottom:1px solid var(--border);"><strong>' + esc(c.reason) + '</strong> — ' + c.agents.length + ' agents, severity: ' + esc(c.severity) + '</div>'
+          ).join('');
+        } else { corrEl.innerHTML = '<em class="text-muted">No correlations detected</em>'; }
+      }
+      if (agentsRes.ok) {
+        const agents = await agentsRes.json();
+        const tblEl = $('#xdr-agent-table');
+        if (agents.length > 0) {
+          let html = '<table class="data-table"><tr><th>ID</th><th>Host</th><th>Platform</th><th>Status</th><th>Version</th></tr>';
+          agents.forEach(a => {
+            const sc = a.status === 'online' ? 'var(--accent)' : a.status === 'stale' ? 'var(--orange)' : 'var(--red)';
+            html += '<tr><td style="font-family:var(--mono);">' + esc(a.id?.substring(0,8) ?? '') + '...</td><td>' + esc(a.hostname ?? '') + '</td><td>' + esc(a.platform ?? '') + '</td><td><span style="color:' + sc + ';">&#9679;</span> ' + esc(a.status ?? '') + '</td><td>' + esc(a.version ?? '') + '</td></tr>';
+          });
+          html += '</table>';
+          tblEl.innerHTML = html;
+        } else { tblEl.innerHTML = '<em class="text-muted">No agents enrolled</em>'; }
+      }
+      log('XDR dashboard refreshed');
+    } catch(e) { log('XDR refresh failed: ' + e.message); }
+  }
+
+  async function createEnrollmentToken() {
+    const maxUses = parseInt($('#xdr-token-uses').value) || 10;
+    try {
+      const res = await fetch(API + '/api/agents/token', { method: 'POST', headers: authHeaders('application/json'), body: JSON.stringify({ max_uses: maxUses }) });
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      const data = await res.json();
+      $('#xdr-token-display').innerHTML = '<strong style="color:var(--accent);">' + esc(data.token) + '</strong> (uses: ' + data.max_uses + ')';
+      flash('Enrollment token created', 'success'); log('Created enrollment token: ' + data.token.substring(0, 8) + '...');
+    } catch(e) { flash('Token creation failed: ' + e.message, 'error'); }
+  }
+
+  // ── Digital Twin & Testing ──
+  async function refreshTwin() {
+    try {
+      const res = await fetch(API + '/api/digital-twin/status', { headers: authHeaders() });
+      if (res.ok) { const d = await res.json(); $('#tw-devices').textContent = d.twin_count ?? '—'; $('#tw-sims').textContent = d.total_simulations ?? '—'; }
+      log('Twin data refreshed');
+    } catch(e) { log('Twin refresh failed: ' + e.message); }
+  }
+
+  async function simulateEvent() {
+    const deviceId = $('#sim-device').value.trim() || 'device-0';
+    const eventType = $('#sim-event').value;
+    try {
+      const res = await fetch(API + '/api/digital-twin/simulate', { method: 'POST', headers: authHeaders('application/json'), body: JSON.stringify({ device_id: deviceId, event_type: eventType }) });
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      const d = await res.json();
+      flash('Simulated: ' + d.ticks_simulated + ' ticks, ' + d.alerts + ' alerts', 'success');
+      log('Simulated ' + eventType + ' on ' + deviceId); refreshTwin();
+    } catch(e) { flash('Simulation failed: ' + e.message, 'error'); }
+  }
+
+  async function runHarness() {
+    const btn = $('#btn-run-harness'); btn.disabled = true;
+    try {
+      const res = await fetch(API + '/api/harness/run', { method: 'POST', headers: authHeaders('application/json') });
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      const d = await res.json();
+      $('#ha-evasion').textContent = (d.evasion_rate * 100).toFixed(1) + '%';
+      $('#ha-coverage').textContent = (d.coverage_ratio * 100).toFixed(1) + '%';
+      flash('Harness: ' + d.evasion_count + '/' + d.total_count + ' evasions', 'success');
+      log('Adversarial harness: evasion rate ' + (d.evasion_rate * 100).toFixed(1) + '%');
+    } catch(e) { flash('Harness failed: ' + e.message, 'error'); }
+    finally { btn.disabled = false; }
+  }
+
+  // ── Monitoring & Analysis ──
+  async function refreshAnalysis() {
+    try {
+      const [monRes, corrRes, driftRes, fpRes, cgRes] = await Promise.all([
+        fetch(API + '/api/monitor/status', { headers: authHeaders() }),
+        fetch(API + '/api/correlation', { headers: authHeaders() }),
+        fetch(API + '/api/drift/status', { headers: authHeaders() }),
+        fetch(API + '/api/fingerprint/status', { headers: authHeaders() }),
+        fetch(API + '/api/causal/graph', { headers: authHeaders() }),
+      ]);
+      if (monRes.ok) { const d = await monRes.json(); $('#mon-props').textContent = d.properties ? d.properties.length : '—'; $('#mon-violations').textContent = d.violation_count ?? '—'; }
+      if (corrRes.ok) { const d = await corrRes.json(); const pairs = d.correlations ?? d.pairs ?? []; $('#corr-pairs').textContent = pairs.length; const maxC = pairs.reduce((m, p) => Math.max(m, Math.abs(p.value ?? p.correlation ?? 0)), 0); $('#corr-max').textContent = maxC.toFixed(3); }
+      if (driftRes.ok) { const d = await driftRes.json(); $('#dr-samples').textContent = d.sample_count ?? '—'; }
+      if (fpRes.ok) { const d = await fpRes.json(); $('#fp-trained').textContent = d.trained ? 'Yes' : 'No'; $('#fp-replay').textContent = d.replay_samples ?? '—'; }
+      if (cgRes.ok) { const d = await cgRes.json(); $('#cg-nodes').textContent = d.node_count ?? '—'; $('#cg-edges').textContent = d.edge_count ?? '—'; }
+      log('Analysis data refreshed');
+    } catch(e) { log('Analysis refresh failed: ' + e.message); }
+
+    // Thread status
+    try {
+      const res = await fetch(API + '/api/threads/status');
+      if (res.ok) {
+        const d = await res.json();
+        $('#th-monitor').textContent = d.monitoring_thread ?? '—';
+        $('#th-samples').textContent = d.sample_count ?? '—';
+        $('#th-rate').textContent = d.collection_rate_hz ? d.collection_rate_hz + ' Hz' : '—';
+      }
+    } catch(e) { /* ignore */ }
+  }
+
+  async function resetDrift() {
+    try {
+      const res = await fetch(API + '/api/drift/reset', { method: 'POST', headers: authHeaders('application/json') });
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      flash('Drift detector reset', 'success'); log('Drift detector reset'); refreshAnalysis();
+    } catch(e) { flash('Drift reset failed: ' + e.message, 'error'); }
+  }
+
+  // ── Compliance & Privacy ──
+  async function refreshCompliance() {
+    try {
+      const [compRes, attRes, privRes] = await Promise.all([
+        fetch(API + '/api/compliance/status', { headers: authHeaders() }),
+        fetch(API + '/api/attestation/status', { headers: authHeaders() }),
+        fetch(API + '/api/privacy/budget', { headers: authHeaders() }),
+      ]);
+      if (compRes.ok) { const d = await compRes.json(); $('#comp-score').textContent = typeof d.score === 'number' ? d.score.toFixed(1) + '%' : '—'; $('#comp-controls').textContent = (d.controls_passed ?? '—') + '/' + (d.controls_total ?? '—'); }
+      if (attRes.ok) { const d = await attRes.json(); $('#comp-attest').textContent = d.verified ? 'Verified' : 'Unverified'; }
+      if (privRes.ok) { const d = await privRes.json(); $('#comp-privacy').textContent = typeof d.budget_remaining === 'number' ? d.budget_remaining.toFixed(2) : '—'; $('#comp-exhausted').textContent = d.is_exhausted ? 'Yes' : 'No'; }
+      log('Compliance data refreshed');
+    } catch(e) { log('Compliance refresh failed: ' + e.message); }
+  }
+
+  // ── Quantum & Policy ──
+  async function refreshQuantum() {
+    try {
+      const res = await fetch(API + '/api/quantum/key-status', { headers: authHeaders() });
+      if (res.ok) { const d = await res.json(); $('#q-algo').textContent = d.algorithm ?? '—'; $('#q-rotations').textContent = d.rotation_count ?? '—'; }
+      log('Quantum data refreshed');
+    } catch(e) { log('Quantum refresh failed: ' + e.message); }
+  }
+
+  async function rotateKey() {
+    try {
+      const res = await fetch(API + '/api/quantum/rotate', { method: 'POST', headers: authHeaders('application/json') });
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      flash('Key rotated', 'success'); log('Quantum key rotated'); refreshQuantum();
+    } catch(e) { flash('Key rotation failed: ' + e.message, 'error'); }
+  }
+
+  async function composePolicy() {
+    const op = $('#compose-op').value;
+    try {
+      const res = await fetch(API + '/api/policy/compose', { method: 'POST', headers: authHeaders('application/json'), body: JSON.stringify({ operator: op, score_a: 3.5, battery_a: 80.0, score_b: 1.2, battery_b: 50.0 }) });
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      const d = await res.json();
+      let txt = 'Result: ';
+      if (d.result) txt += d.result.level + ' / ' + d.result.action;
+      else txt += 'none';
+      if (d.conflict) txt += ' | Conflict: ' + d.conflict.resolution;
+      $('#compose-result').textContent = txt; log('Policy composed with ' + op);
+    } catch(e) { flash('Compose failed: ' + e.message, 'error'); }
+  }
+
+  async function runPolicyVm() {
+    try {
+      const res = await fetch(API + '/api/policy-vm/execute', { method: 'POST', headers: authHeaders('application/json'), body: JSON.stringify({ env: { score: 3.0, battery: 0.8 } }) });
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      const d = await res.json();
+      let txt = d.success ? 'OK' : 'Failed';
+      if (d.outputs) { const entries = Object.entries(d.outputs).map(([k,v]) => k + '=' + v.toFixed(3)); txt += ' | ' + entries.join(', '); }
+      if (d.error) txt += ' | Error: ' + d.error;
+      $('#vm-result').textContent = txt; log('Policy VM executed: ' + d.steps_executed + ' steps');
+    } catch(e) { flash('VM execute failed: ' + e.message, 'error'); }
+  }
+
+  // ── Infrastructure ──
+  async function refreshInfra() {
+    try {
+      const [nrgRes, tenRes, patchRes] = await Promise.all([
+        fetch(API + '/api/energy/status', { headers: authHeaders() }),
+        fetch(API + '/api/tenants/count', { headers: authHeaders() }),
+        fetch(API + '/api/patches', { headers: authHeaders() }),
+      ]);
+      if (nrgRes.ok) { const d = await nrgRes.json(); $('#nrg-remaining').textContent = typeof d.remaining_pct === 'number' ? d.remaining_pct.toFixed(1) + '%' : '—'; $('#nrg-state').textContent = d.power_state ?? '—'; }
+      if (tenRes.ok) { const d = await tenRes.json(); $('#mt-count').textContent = d.count ?? '—'; }
+      if (patchRes.ok) { const d = await patchRes.json(); $('#pm-total').textContent = d.total_patches ?? '—'; $('#pm-installed').textContent = d.installed ?? '—'; $('#pm-plan').textContent = d.patches_in_plan ?? '—'; }
+      log('Infrastructure data refreshed');
+    } catch(e) { log('Infra refresh failed: ' + e.message); }
+  }
+
+  async function energyHarvest() {
+    try {
+      const res = await fetch(API + '/api/energy/harvest', { method: 'POST', headers: authHeaders('application/json') });
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      const d = await res.json();
+      flash('Harvested ' + d.recharged_mwh.toFixed(1) + ' mWh', 'success'); log('Energy harvested'); refreshInfra();
+    } catch(e) { flash('Harvest failed: ' + e.message, 'error'); }
+  }
+
+  async function energyConsume() {
+    try {
+      const res = await fetch(API + '/api/energy/consume', { method: 'POST', headers: authHeaders('application/json'), body: JSON.stringify({ drain_rate_mw: 10.0 }) });
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      const d = await res.json();
+      flash('Energy consumed — ' + d.remaining_pct.toFixed(1) + '% remaining', 'success'); log('Energy consumed — power state: ' + d.power_state); refreshInfra();
+    } catch(e) { flash('Consume failed: ' + e.message, 'error'); }
+  }
+
+  async function offloadDecide() {
+    try {
+      const res = await fetch(API + '/api/offload/decide', { method: 'POST', headers: authHeaders('application/json') });
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      const d = await res.json();
+      const lines = (d.decisions || []).map(dec => dec.workload + ' -> ' + dec.run_on + ' (' + dec.reason + ')');
+      $('#offload-result').textContent = lines.join(' | ') || 'No decisions'; log('Offload decision: ' + lines.length + ' workloads');
+    } catch(e) { flash('Offload failed: ' + e.message, 'error'); }
+  }
+
+  // ── Formal Exports ──
+  async function downloadExport(endpoint, filename) {
+    try {
+      const res = await fetch(API + '/api/export/' + endpoint, { headers: authHeaders() });
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      const text = await res.text();
+      downloadBlob(text, filename, 'text/plain'); log('Exported ' + filename);
+    } catch(e) { flash('Export failed: ' + e.message, 'error'); }
+  }
+
+  // ── File Upload ──
+  async function uploadFile(file) {
+    const statusEl = $('#upload-status');
+    const MAX_FILE_SIZE = 10 * 1024 * 1024;
+    if (file.size > MAX_FILE_SIZE) { flash('File too large (max 10 MB)', 'error'); return; }
+    statusEl.textContent = 'Uploading ' + file.name + '...';
+    try {
+      const text = await file.text();
+      let ct = file.name.endsWith('.csv') ? 'text/csv' : 'application/x-jsonlines';
+      const res = await fetch(API + '/api/analyze', { method: 'POST', headers: authHeaders(ct), body: text });
+      if (res.status === 401) { flash('Unauthorized', 'error'); statusEl.textContent = ''; return; }
+      if (!res.ok) throw new Error(res.statusText);
+      const d = await res.json();
+      renderReport(d);
+      statusEl.textContent = 'Analysis complete — ' + d.summary.total_samples + ' samples processed.';
+      flash('File analyzed: ' + file.name, 'success'); log('Analyzed uploaded file: ' + file.name);
+    } catch(e) { statusEl.textContent = 'Upload failed: ' + e.message; flash('Upload failed: ' + e.message, 'error'); }
+  }
+
+  // ── Alerts ──
+  async function refreshAlerts() {
+    try {
+      const [alertsRes, countRes] = await Promise.all([
+        fetch(API + '/api/alerts'),
+        fetch(API + '/api/alerts/count'),
+      ]);
+      if (alertsRes.ok) { const alerts = await alertsRes.json(); renderAlertTable(alerts); renderDashAlertTable(alerts); }
+      if (countRes.ok) {
+        const c = await countRes.json();
+        $('#lm-total').textContent = c.total;
+        $('#lm-critical').textContent = c.critical;
+        $('#lm-severe').textContent = c.severe;
+        $('#lm-elevated').textContent = c.elevated;
+        // Dashboard
+        $('#dash-alerts').textContent = c.total;
+        // Nav badge
+        const badge = $('#nav-alert-badge');
+        if (c.total > 0) { badge.textContent = c.total; badge.classList.remove('hidden'); }
+        else { badge.classList.add('hidden'); }
+        // Threat level
+        updateThreatLevel(c);
+      }
+    } catch(e) { log('Alert refresh failed: ' + e.message); }
+  }
+
+  function updateThreatLevel(c) {
+    const el = $('#dash-threat');
+    const sub = $('#dash-threat-sub');
+    if (c.critical > 0) { el.textContent = 'Critical'; el.className = 'metric-value critical'; sub.textContent = c.critical + ' critical alerts'; }
+    else if (c.severe > 0) { el.textContent = 'Severe'; el.className = 'metric-value warning'; sub.textContent = c.severe + ' severe alerts'; }
+    else if (c.elevated > 0) { el.textContent = 'Elevated'; el.className = 'metric-value warning'; sub.textContent = c.elevated + ' elevated alerts'; }
+    else { el.textContent = 'Nominal'; el.className = 'metric-value ok'; sub.textContent = 'All systems normal'; }
+  }
+
+  function renderAlertTable(alerts) {
+    const tbody = $('#alert-tbody');
+    tbody.innerHTML = '';
+    if (!alerts.length) {
+      tbody.innerHTML = '<tr><td colspan="5" class="text-muted">No alerts yet.</td></tr>';
+      lastAlertCount = 0; return;
+    }
+    const isNew = alerts.length > lastAlertCount;
+    lastAlertCount = alerts.length;
+    const reversed = alerts.slice().reverse().slice(0, 100);
+    reversed.forEach((a, idx) => {
+      const tr = document.createElement('tr');
+      if (isNew && idx === 0) tr.className = 'alert-new';
+      const lvl = esc(a.level || '');
+      const reason = a.reasons && a.reasons.length ? esc(a.reasons[0]) : '—';
+      tr.innerHTML = '<td>' + esc(a.timestamp || '') + '</td><td>' + (typeof a.score === 'number' ? a.score.toFixed(2) : '—') + '</td><td class="level-' + lvl + '">' + lvl + '</td><td>' + esc(a.action || '') + '</td><td>' + reason + '</td>';
+      tbody.appendChild(tr);
+    });
+  }
+
+  function renderDashAlertTable(alerts) {
+    const tbody = $('#dash-alert-tbody');
+    tbody.innerHTML = '';
+    if (!alerts.length) {
+      tbody.innerHTML = '<tr><td colspan="5" class="text-muted">No alerts recorded yet.</td></tr>';
+      return;
+    }
+    const recent = alerts.slice().reverse().slice(0, 10);
+    recent.forEach(a => {
+      const tr = document.createElement('tr');
+      const lvl = esc(a.level || '');
+      const reason = a.reasons && a.reasons.length ? esc(a.reasons[0]) : '—';
+      tr.innerHTML = '<td>' + esc(a.timestamp || '') + '</td><td>' + (typeof a.score === 'number' ? a.score.toFixed(2) : '—') + '</td><td class="level-' + lvl + '">' + lvl + '</td><td>' + esc(a.action || '') + '</td><td>' + reason + '</td>';
+      tbody.appendChild(tr);
+    });
+  }
+
+  async function clearAlerts() {
+    if (!confirm('Clear all alerts?')) return;
+    try {
+      const res = await fetch(API + '/api/alerts', { method: 'DELETE', headers: authHeaders() });
+      if (res.status === 401) { flash('Unauthorized', 'error'); return; }
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      toast('Alerts cleared', 'success'); log('Alerts cleared'); refreshAlerts();
+    } catch(e) { flash('Clear failed: ' + e.message, 'error'); }
+  }
+
+  function exportAlertsCsv() {
+    const trs = $$('#alert-table tbody tr');
+    if (!trs.length) { flash('No alerts to export', 'error'); return; }
+    const rows = ['Time,Score,Level,Action,Reason'];
+    trs.forEach(tr => {
+      const cells = tr.querySelectorAll('td');
+      if (cells.length >= 5) {
+        rows.push([cells[0].textContent, cells[1].textContent, cells[2].textContent, cells[3].textContent, '"' + cells[4].textContent.replace(/"/g, '""') + '"'].join(','));
+      }
+    });
+    downloadBlob(rows.join('\n'), 'wardex-alerts.csv', 'text/csv'); log('Alerts exported as CSV');
+  }
+
+  async function refreshHealth() {
+    try {
+      const res = await fetch(API + '/api/health');
+      if (!res.ok) return;
+      const d = await res.json();
+      $('#hb-platform').textContent = d.platform || '—';
+      $('#hb-hostname').textContent = d.hostname || '—';
+      $('#hb-version').textContent = d.version || '—';
+      const secs = d.uptime_secs || 0;
+      $('#hb-uptime').textContent = formatUptime(secs);
+      $('#dash-uptime').textContent = 'Uptime: ' + formatUptime(secs);
+      // Health indicator
+      const healthEl = $('#dash-health');
+      if (secs > 0) { healthEl.textContent = 'Online'; healthEl.className = 'metric-value ok'; }
+    } catch(e) { /* ignore */ }
+  }
+
+  function startAlertPolling() {
+    if (alertPollTimer) clearInterval(alertPollTimer);
+    alertPollTimer = setInterval(() => {
+      if ($('#alert-auto-poll').checked) { refreshAlerts(); refreshHealth(); refreshTelemetry(false); }
+    }, 5000);
+  }
+
+  // ── API Endpoints (Help) ──
+  async function loadApiEndpoints() {
+    try {
+      const res = await fetch(API + '/api/endpoints');
+      if (!res.ok) return;
+      const d = await res.json();
+      const el = $('#api-endpoint-list');
+      if (d.endpoints && d.endpoints.length) {
+        let html = '<table class="data-table"><tr><th>Method</th><th>Path</th><th>Auth</th></tr>';
+        d.endpoints.forEach(ep => {
+          const m = esc(ep.method || 'GET');
+          const p = esc(ep.path || '');
+          const auth = ep.auth ? '<span style="color:var(--orange);">Required</span>' : '<span style="color:var(--ink-3);">Public</span>';
+          html += '<tr><td><code>' + m + '</code></td><td><code>' + p + '</code></td><td>' + auth + '</td></tr>';
+        });
+        html += '</table>';
+        el.innerHTML = html;
+      }
+    } catch(e) { /* ignore */ }
+  }
+
+  // ── Settings ──
+  async function loadSettings() {
+    try {
+      const res = await fetch(API + '/api/config/current');
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      const cfg = await res.json();
+      if (cfg.detector) {
+        $('#set-warmup').value = cfg.detector.warmup_samples ?? 4;
+        $('#set-smoothing').value = cfg.detector.smoothing ?? 0.22;
+        $('#set-learn').value = cfg.detector.learn_threshold ?? 1.35;
+      }
+      if (cfg.policy) {
+        $('#set-critical').value = cfg.policy.critical_score ?? 5.2;
+        $('#set-severe').value = cfg.policy.severe_score ?? 3.0;
+        $('#set-elevated').value = cfg.policy.elevated_score ?? 1.4;
+        $('#set-battery').value = cfg.policy.low_battery_threshold ?? 20;
+      }
+      if (cfg.monitor) {
+        $('#set-interval').value = cfg.monitor.interval_secs ?? 5;
+        $('#set-threshold').value = cfg.monitor.alert_threshold ?? 3.5;
+        $('#set-alert-log').value = cfg.monitor.alert_log ?? 'var/alerts.jsonl';
+        $('#set-dry-run').checked = !!cfg.monitor.dry_run;
+        $('#set-duration').value = cfg.monitor.duration_secs ?? 0;
+        $('#set-webhook').value = cfg.monitor.webhook_url ?? '';
+        $('#set-syslog').checked = !!cfg.monitor.syslog;
+        $('#set-cef').checked = !!cfg.monitor.cef;
+        const paths = cfg.monitor.watch_paths ?? [];
+        $('#set-watch-paths').value = paths.join('\n');
+      }
+      log('Settings loaded from server');
+    } catch(e) { log('Settings load failed: ' + e.message); }
+  }
+
+  function collectSettings() {
+    const interval = parseInt($('#set-interval').value) || 5;
+    const threshold = parseFloat($('#set-threshold').value) || 3.5;
+    const critical = parseFloat($('#set-critical').value) || 5.2;
+    const severe = parseFloat($('#set-severe').value) || 3.0;
+    const elevated = parseFloat($('#set-elevated').value) || 1.4;
+    if (critical <= severe || severe <= elevated) { flash('Threshold ordering required: critical > severe > elevated', 'error'); return null; }
+    if (interval < 1) { flash('Interval must be at least 1 second', 'error'); return null; }
+    return {
+      detector: { warmup_samples: parseInt($('#set-warmup').value) || 4, smoothing: parseFloat($('#set-smoothing').value) || 0.22, learn_threshold: parseFloat($('#set-learn').value) || 1.35 },
+      policy: { critical_score: critical, severe_score: severe, elevated_score: elevated, low_battery_threshold: parseFloat($('#set-battery').value) || 20.0 },
+      monitor: { interval_secs: interval, alert_threshold: threshold, alert_log: $('#set-alert-log').value || 'var/alerts.jsonl', dry_run: $('#set-dry-run').checked, duration_secs: parseInt($('#set-duration').value) || 0, webhook_url: $('#set-webhook').value || null, syslog: $('#set-syslog').checked, cef: $('#set-cef').checked, watch_paths: $('#set-watch-paths').value.split('\n').map(s => s.trim()).filter(Boolean) },
+    };
+  }
+
+  async function saveSettings() {
+    const patch = collectSettings();
+    if (!patch) return;
+    try {
+      const reloadRes = await fetch(API + '/api/config/reload', { method: 'POST', headers: authHeaders('application/json'), body: JSON.stringify(patch) });
+      if (reloadRes.status === 401) { flash('Unauthorized', 'error'); return; }
+      if (!reloadRes.ok) { const err = await reloadRes.json().catch(() => ({})); flash('Save failed: ' + (err.error || reloadRes.statusText), 'error'); return; }
+      const saveRes = await fetch(API + '/api/config/save', { method: 'POST', headers: authHeaders('application/json') });
+      if (saveRes.ok) { toast('Settings saved', 'success'); log('Settings saved to disk'); }
+      else { toast('Applied but not persisted', 'error'); log('Config applied but disk save failed'); }
+    } catch(e) { flash('Save failed: ' + e.message, 'error'); }
+  }
+
+  function resetSettings() {
+    $('#set-interval').value = 5; $('#set-threshold').value = 3.5; $('#set-alert-log').value = 'var/alerts.jsonl';
+    $('#set-dry-run').checked = false; $('#set-duration').value = 0; $('#set-webhook').value = '';
+    $('#set-syslog').checked = false; $('#set-cef').checked = false; $('#set-watch-paths').value = '';
+    $('#set-warmup').value = 4; $('#set-smoothing').value = 0.22; $('#set-learn').value = 1.35;
+    $('#set-critical').value = 5.2; $('#set-severe').value = 3.0; $('#set-elevated').value = 1.4; $('#set-battery').value = 20;
+    toast('Reset to defaults — click Save to apply', 'success');
+  }
+
+  async function testWebhook() {
+    const url = $('#set-webhook').value.trim();
+    if (!url) { flash('Enter a webhook URL first', 'error'); return; }
+    try {
+      const res = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text: 'Wardex test alert — webhook is working', timestamp: new Date().toISOString(), level: 'info', source: 'admin-console' }) });
+      if (res.ok) { toast('Webhook test sent', 'success'); } else { toast('Webhook returned ' + res.status, 'error'); }
+    } catch(e) { toast('Webhook failed: ' + e.message, 'error'); }
+  }
+
+  // ── Demo Mode ──
+  function toggleDemoMode(enabled) {
+    demoMode = enabled;
+    const wrap = $('#demo-toggle-wrap');
+    if (enabled) {
+      wrap.classList.add('active');
+      toast('Demo Mode Active — showing simulated XDR data', 'info');
+      log('Demo mode enabled');
+      startDemoSimulation();
+    } else {
+      wrap.classList.remove('active');
+      if (demoTimer) { clearInterval(demoTimer); demoTimer = null; }
+      toast('Demo Mode disabled — returning to live data', 'info');
+      log('Demo mode disabled');
+      refreshDashboard();
+    }
+  }
+
+  function startDemoSimulation() {
+    let tick = 0;
+    const demoAlerts = [];
+
+    function demoTick() {
+      tick++;
+      // Simulate escalating attack
+      let cpu, mem, net, disk, auth, temp, procs, batt;
+      if (tick <= 10) {
+        // Normal baseline
+        cpu = 12 + Math.random() * 8;
+        mem = 38 + Math.random() * 5;
+        net = 200 + Math.floor(Math.random() * 100);
+        disk = 45 + Math.random() * 3;
+        auth = 0;
+        temp = 42 + Math.random() * 3;
+        procs = 180 + Math.floor(Math.random() * 10);
+        batt = 95 - tick * 0.5;
+      } else if (tick <= 20) {
+        // Escalation
+        const p = (tick - 10) / 10;
+        cpu = 20 + p * 60 + Math.random() * 10;
+        mem = 43 + p * 35 + Math.random() * 5;
+        net = 300 + Math.floor(p * 45000);
+        disk = 48 + p * 15;
+        auth = Math.floor(p * 15);
+        temp = 45 + p * 25;
+        procs = 190 + Math.floor(p * 80);
+        batt = 90 - tick * 1.5;
+      } else {
+        // Critical
+        cpu = 88 + Math.random() * 10;
+        mem = 82 + Math.random() * 8;
+        net = 48000 + Math.floor(Math.random() * 5000);
+        disk = 65 + Math.random() * 5;
+        auth = 12 + Math.floor(Math.random() * 8);
+        temp = 72 + Math.random() * 8;
+        procs = 270 + Math.floor(Math.random() * 30);
+        batt = Math.max(60 - tick, 20);
+      }
+
+      // Update gauges
+      $('#g-cpu').textContent = cpu.toFixed(1);
+      $('#g-mem').textContent = mem.toFixed(1);
+      $('#g-net').textContent = Math.floor(net);
+      $('#g-disk').textContent = disk.toFixed(1);
+      $('#g-auth').textContent = auth;
+      $('#g-temp').textContent = temp.toFixed(1);
+      $('#g-procs').textContent = Math.floor(procs);
+      $('#g-batt').textContent = Math.floor(batt);
+
+      // Generate alerts during attack
+      if (tick > 12) {
+        let level, score;
+        if (cpu > 80) { level = 'critical'; score = 5.5 + Math.random() * 2; }
+        else if (cpu > 50) { level = 'severe'; score = 3.2 + Math.random() * 1.5; }
+        else { level = 'elevated'; score = 1.5 + Math.random(); }
+        const reasons = [];
+        if (cpu > 60) reasons.push('CPU anomaly: ' + cpu.toFixed(1) + '%');
+        if (auth > 5) reasons.push('Auth failure burst: ' + auth);
+        if (net > 10000) reasons.push('Network spike: ' + net + ' pkts');
+        if (mem > 70) reasons.push('Memory pressure: ' + mem.toFixed(1) + '%');
+        const alert = {
+          timestamp: new Date().toLocaleTimeString(),
+          score: score,
+          level: level,
+          action: level === 'critical' ? 'isolate' : level === 'severe' ? 'throttle' : 'log',
+          reasons: reasons
+        };
+        demoAlerts.push(alert);
+        renderAlertTable(demoAlerts);
+        renderDashAlertTable(demoAlerts);
+
+        // Update counts
+        const counts = { total: demoAlerts.length, critical: 0, severe: 0, elevated: 0 };
+        demoAlerts.forEach(a => { if (a.level === 'critical') counts.critical++; else if (a.level === 'severe') counts.severe++; else counts.elevated++; });
+        $('#lm-total').textContent = counts.total;
+        $('#lm-critical').textContent = counts.critical;
+        $('#lm-severe').textContent = counts.severe;
+        $('#lm-elevated').textContent = counts.elevated;
+        $('#dash-alerts').textContent = counts.total;
+        updateThreatLevel(counts);
+        const badge = $('#nav-alert-badge');
+        badge.textContent = counts.total; badge.classList.remove('hidden');
+      }
+
+      // Reset demo after 30 ticks
+      if (tick >= 30) tick = 0;
+    }
+
+    demoTimer = setInterval(demoTick, 1500);
+    demoTick();
+  }
+
+  // ── Event Listeners ──
+  $('#auth-token').addEventListener('input', function() {
+    const el = $('#auth-status');
+    if (this.value.trim()) { el.textContent = 'Token set'; el.className = 'auth-status ok'; setAuthenticated(false); }
+    else { el.textContent = 'No token'; el.className = 'auth-status none'; setAuthenticated(false); }
+  });
+  $('#auth-token').addEventListener('keydown', function(e) { if (e.key === 'Enter') { e.preventDefault(); connect(); } });
+  $('#btn-connect').addEventListener('click', connect);
+  $('#btn-toggle-token').addEventListener('click', () => { const inp = $('#auth-token'); inp.type = inp.type === 'password' ? 'text' : 'password'; });
+  $('#decay-range').addEventListener('input', function() { $('#decay-val').textContent = this.value + '%'; });
+  $('#demo-mode-toggle').addEventListener('change', function() { toggleDemoMode(this.checked); });
+
+  // Auto-refresh
+  $('#auto-refresh').addEventListener('change', function() {
+    if (this.checked) { autoRefreshFailures = 0; showResumeButton(false); rescheduleAutoRefresh(); log('Auto-refresh enabled (5s)'); }
+    else { clearTimeout(autoRefreshTimer); autoRefreshTimer = null; autoRefreshFailures = 0; showResumeButton(false); $('#auto-refresh-label').textContent = 'Auto-refresh (5s)'; log('Auto-refresh disabled'); }
+  });
+  $('#btn-resume').addEventListener('click', () => { autoRefreshFailures = 0; showResumeButton(false); $('#auto-refresh').checked = true; rescheduleAutoRefresh(); refreshStatus(); refreshReport(); log('Auto-refresh resumed'); });
+
+  // Upload zone
+  const uploadZone = $('#upload-zone');
+  const uploadInput = $('#upload-input');
+  uploadZone.addEventListener('click', () => uploadInput.click());
+  uploadInput.addEventListener('change', (e) => { if (e.target.files.length) uploadFile(e.target.files[0]); });
+  uploadZone.addEventListener('dragover', (e) => { e.preventDefault(); uploadZone.classList.add('dragover'); });
+  uploadZone.addEventListener('dragleave', () => { uploadZone.classList.remove('dragover'); });
+  uploadZone.addEventListener('drop', (e) => { e.preventDefault(); uploadZone.classList.remove('dragover'); if (e.dataTransfer.files.length) uploadFile(e.dataTransfer.files[0]); });
+
+  // Dashboard
+  $('#btn-refresh-status').addEventListener('click', refreshStatus);
+
+  // Threat Detection
+  $$('[data-mode]').forEach(btn => { btn.addEventListener('click', () => setMode(btn.dataset.mode)); });
+  $('#btn-run-demo').addEventListener('click', runDemo);
+  $('#btn-reset').addEventListener('click', resetBaseline);
+  $('#btn-checkpoint').addEventListener('click', saveCheckpoint);
+  $('#btn-restore').addEventListener('click', restoreCheckpoint);
+  $('#btn-refresh-security').addEventListener('click', refreshSecurity);
+  $('#btn-quarantine').addEventListener('click', quarantineTarget);
+  $('#btn-add-ioc').addEventListener('click', addIoc);
+  $('#btn-deploy-decoy').addEventListener('click', deployDecoy);
+
+  // Fleet
+  $('#btn-refresh-fleet').addEventListener('click', refreshFleet);
+  $('#btn-register-device').addEventListener('click', registerDevice);
+  $('#btn-refresh-xdr').addEventListener('click', refreshXdr);
+  $('#btn-create-token').addEventListener('click', createEnrollmentToken);
+
+  // Security Policy
+  $('#btn-compose').addEventListener('click', composePolicy);
+  $('#btn-run-vm').addEventListener('click', runPolicyVm);
+  $('#btn-refresh-compliance').addEventListener('click', refreshCompliance);
+  $('#btn-refresh-quantum').addEventListener('click', refreshQuantum);
+  $('#btn-rotate-key').addEventListener('click', rotateKey);
+
+  // Incident Response
+  $('#btn-refresh-twin').addEventListener('click', refreshTwin);
+  $('#btn-simulate').addEventListener('click', simulateEvent);
+  $('#btn-run-harness').addEventListener('click', runHarness);
+  $('#btn-refresh-analysis').addEventListener('click', refreshAnalysis);
+  $('#btn-reset-drift').addEventListener('click', resetDrift);
+
+  // Infrastructure
+  $('#btn-refresh-infra').addEventListener('click', refreshInfra);
+  $('#btn-energy-harvest').addEventListener('click', energyHarvest);
+  $('#btn-energy-consume').addEventListener('click', energyConsume);
+  $('#btn-offload').addEventListener('click', offloadDecide);
+
+  // Reports
+  $('#btn-refresh-report').addEventListener('click', refreshReport);
+  $('#btn-export-csv').addEventListener('click', exportCsv);
+  $('#filter-level').addEventListener('change', function() { if (lastReportData) renderSamples(lastReportData.samples); });
+  $('#btn-export-tla').addEventListener('click', () => downloadExport('tla', 'wardex.tla'));
+  $('#btn-export-alloy').addEventListener('click', () => downloadExport('alloy', 'wardex.als'));
+  $('#btn-export-witnesses').addEventListener('click', () => downloadExport('witnesses', 'witnesses.json'));
+
+  // Alerts
+  $('#btn-refresh-alerts').addEventListener('click', refreshAlerts);
+  $('#btn-clear-alerts').addEventListener('click', clearAlerts);
+  $('#btn-export-alerts-csv').addEventListener('click', exportAlertsCsv);
+
+  // Settings
+  $('#btn-save-settings').addEventListener('click', saveSettings);
+  $('#btn-reset-settings').addEventListener('click', resetSettings);
+  $('#btn-load-settings').addEventListener('click', loadSettings);
+  $('#btn-test-webhook').addEventListener('click', testWebhook);
+
+  // Research tracks
+  $('#btn-toggle-future').addEventListener('click', () => { showFutureTracks = !showFutureTracks; if (lastTracks.length) renderTracks(lastTracks); });
+
+  // ── Initial Load ──
+  const savedToken = localStorage.getItem('wardex.adminToken');
+  if (savedToken) { $('#auth-token').value = savedToken; $('#auth-status').textContent = 'Token set'; $('#auth-status').className = 'auth-status ok'; }
+  refreshStatus();
+  refreshReport();
+  refreshCheckpointCount();
+  refreshAlerts();
+  refreshHealth();
+  refreshTelemetry(true);
+  refreshHostInfo();
+  startAlertPolling();
+  loadSettings();
+
+})();
+</script>
+</body>
+</html>'''
+
+# Write to admin.html
+script_dir = os.path.dirname(os.path.abspath(__file__))
+out = os.path.join(script_dir, 'admin.html')
+with open(out, 'w', encoding='utf-8') as f:
+    f.write(HTML)
+print(f'Wrote {len(HTML)} bytes to {out}')

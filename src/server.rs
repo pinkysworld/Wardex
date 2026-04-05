@@ -309,6 +309,10 @@ struct AppState {
     // Phase 34: slow-attack & ransomware detectors
     slow_attack: crate::detector::SlowAttackDetector,
     ransomware: crate::ransomware::RansomwareDetector,
+    // Phase 29: MITRE coverage, detection tuning, FP feedback
+    mitre_coverage: crate::mitre_coverage::MitreCoverageTracker,
+    tuning_profile: crate::detector::TuningProfile,
+    fp_feedback: crate::alert_analysis::FpFeedbackStore,
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
@@ -628,7 +632,7 @@ pub fn run_server(
     if std::env::var("WARDEX_ADMIN_TOKEN").is_ok() {
         eprintln!("  Auth token: (set via WARDEX_ADMIN_TOKEN)");
     } else {
-        eprintln!("  Auth token: {}", &token[..8]);
+        eprintln!("  Auth token: {token}");
         eprintln!("  (set WARDEX_ADMIN_TOKEN env var for a persistent token)");
     }
     eprintln!("  Press Ctrl+C to stop");
@@ -724,6 +728,9 @@ pub fn run_server(
             .map_err(|e| format!("failed to initialise storage: {e}"))?,
         slow_attack: crate::detector::SlowAttackDetector::default(),
         ransomware: crate::ransomware::RansomwareDetector::default(),
+        mitre_coverage: crate::mitre_coverage::MitreCoverageTracker::new(),
+        tuning_profile: crate::detector::TuningProfile::default(),
+        fp_feedback: crate::alert_analysis::FpFeedbackStore::new(),
     }));
 
     // Apply loaded config
@@ -1010,6 +1017,9 @@ pub fn spawn_test_server() -> (u16, String) {
             .expect("failed to initialise test storage"),
         slow_attack: crate::detector::SlowAttackDetector::default(),
         ransomware: crate::ransomware::RansomwareDetector::default(),
+        mitre_coverage: crate::mitre_coverage::MitreCoverageTracker::new(),
+        tuning_profile: crate::detector::TuningProfile::default(),
+        fp_feedback: crate::alert_analysis::FpFeedbackStore::new(),
     }));
     {
         let mut s = state.lock().unwrap_or_else(|e| e.into_inner());
@@ -3282,6 +3292,15 @@ fn handle_api(
                 | (Method::Post, "/api/enforcement/quarantine")
                 | (Method::Get, "/api/threat-intel/status")
                 | (Method::Post, "/api/threat-intel/ioc")
+                | (Method::Get, "/api/threat-intel/stats")
+                | (Method::Post, "/api/threat-intel/purge")
+                | (Method::Get, "/api/mitre/coverage")
+                | (Method::Get, "/api/mitre/heatmap")
+                | (Method::Get, "/api/detection/profile")
+                | (Method::Put, "/api/detection/profile")
+                | (Method::Post, "/api/fp-feedback")
+                | (Method::Get, "/api/fp-feedback/stats")
+                | (Method::Get, "/api/detection/score/normalize")
                 | (Method::Post, "/api/digital-twin/simulate")
                 | (Method::Post, "/api/energy/consume")
                 | (Method::Post, "/api/quantum/rotate")
@@ -3874,6 +3893,134 @@ fn handle_api(
             json_response(&info.to_string(), 200)
         }
         (Method::Post, "/api/threat-intel/ioc") => handle_threat_intel_ioc(&mut request, state),
+
+        // ── Threat Intel Stats ────────────────────────────────────
+        (Method::Get, "/api/threat-intel/stats") => {
+            let s = state.lock().unwrap_or_else(|e| e.into_inner());
+            let stats = s.threat_intel.enrichment_stats();
+            match serde_json::to_string(&stats) {
+                Ok(json) => json_response(&json, 200),
+                Err(e) => error_json(&format!("serialization error: {e}"), 500),
+            }
+        }
+
+        // ── IoC Purge (TTL-based) ─────────────────────────────────
+        (Method::Post, "/api/threat-intel/purge") => {
+            match read_body_limited(&mut request, 4096) {
+                Err(e) => error_json(&e, 400),
+                Ok(body) => match serde_json::from_str::<serde_json::Value>(&body) {
+                    Err(e) => error_json(&format!("invalid JSON: {e}"), 400),
+                    Ok(parsed) => {
+                        let ttl_days = parsed.get("ttl_days").and_then(|v| v.as_u64()).unwrap_or(90);
+                        let now = chrono::Utc::now().to_rfc3339();
+                        let mut s = state.lock().unwrap_or_else(|e| e.into_inner());
+                        let purged = s.threat_intel.purge_expired(&now, ttl_days);
+                        json_response(&format!(r#"{{"purged":{purged},"ttl_days":{ttl_days}}}"#), 200)
+                    }
+                }
+            }
+        }
+
+        // ── MITRE ATT&CK Coverage ────────────────────────────────
+        (Method::Get, "/api/mitre/coverage") => {
+            let s = state.lock().unwrap_or_else(|e| e.into_inner());
+            let summary = s.mitre_coverage.summary();
+            match serde_json::to_string(&summary) {
+                Ok(json) => json_response(&json, 200),
+                Err(e) => error_json(&format!("serialization error: {e}"), 500),
+            }
+        }
+        (Method::Get, "/api/mitre/heatmap") => {
+            let s = state.lock().unwrap_or_else(|e| e.into_inner());
+            let heatmap = s.mitre_coverage.heatmap();
+            match serde_json::to_string(&heatmap) {
+                Ok(json) => json_response(&json, 200),
+                Err(e) => error_json(&format!("serialization error: {e}"), 500),
+            }
+        }
+
+        // ── Detection Tuning Profile ──────────────────────────────
+        (Method::Get, "/api/detection/profile") => {
+            let s = state.lock().unwrap_or_else(|e| e.into_inner());
+            let profile = s.tuning_profile;
+            json_response(&format!(
+                r#"{{"profile":"{}","description":"{}","threshold_multiplier":{:.2},"learn_threshold":{:.1}}}"#,
+                profile.as_str(), profile.description(),
+                profile.threshold_multiplier(), profile.learn_threshold()
+            ), 200)
+        }
+        (Method::Put, "/api/detection/profile") => {
+            match read_body_limited(&mut request, 4096) {
+                Err(e) => error_json(&e, 400),
+                Ok(body) => match serde_json::from_str::<serde_json::Value>(&body) {
+                    Err(e) => error_json(&format!("invalid JSON: {e}"), 400),
+                    Ok(parsed) => {
+                        let name = parsed.get("profile").and_then(|v| v.as_str()).unwrap_or("");
+                        match crate::detector::TuningProfile::from_str(name) {
+                            Some(p) => {
+                                let mut s = state.lock().unwrap_or_else(|e| e.into_inner());
+                                s.tuning_profile = p;
+                                json_response(&format!(r#"{{"profile":"{}","applied":true}}"#, p.as_str()), 200)
+                            }
+                            None => error_json("invalid profile: use aggressive, balanced, or quiet", 400),
+                        }
+                    }
+                }
+            }
+        }
+
+        // ── False-Positive Feedback ───────────────────────────────
+        (Method::Post, "/api/fp-feedback") => {
+            match read_body_limited(&mut request, 4096) {
+                Err(e) => error_json(&e, 400),
+                Ok(body) => match serde_json::from_str::<crate::alert_analysis::FpFeedback>(&body) {
+                    Err(e) => error_json(&format!("invalid feedback: {e}"), 400),
+                    Ok(feedback) => {
+                        let mut s = state.lock().unwrap_or_else(|e| e.into_inner());
+                        s.fp_feedback.record(feedback);
+                        json_response(r#"{"recorded":true}"#, 200)
+                    }
+                }
+            }
+        }
+        (Method::Get, "/api/fp-feedback/stats") => {
+            let s = state.lock().unwrap_or_else(|e| e.into_inner());
+            let stats = s.fp_feedback.stats();
+            let json_stats: Vec<serde_json::Value> = stats.iter().map(|(p, total, fps, ratio)| {
+                serde_json::json!({
+                    "pattern": p,
+                    "total_marked": total,
+                    "false_positives": fps,
+                    "fp_ratio": ratio,
+                    "suppression_weight": s.fp_feedback.suppression_weight(p),
+                })
+            }).collect();
+            match serde_json::to_string(&json_stats) {
+                Ok(json) => json_response(&json, 200),
+                Err(e) => error_json(&format!("serialization error: {e}"), 500),
+            }
+        }
+
+        // ── Normalized Score ──────────────────────────────────────
+        (Method::Get, "/api/detection/score/normalize") => {
+            let s = state.lock().unwrap_or_else(|e| e.into_inner());
+            if let Some(ref analysis) = s.last_alert_analysis {
+                let score = analysis.severity_breakdown.critical as f32 * 10.0
+                    + analysis.severity_breakdown.severe as f32 * 5.0
+                    + analysis.severity_breakdown.elevated as f32 * 2.0;
+                let normalized = crate::detector::normalize_score(score, 1.0);
+                match serde_json::to_string(&normalized) {
+                    Ok(json) => json_response(&json, 200),
+                    Err(e) => error_json(&format!("serialization error: {e}"), 500),
+                }
+            } else {
+                let normalized = crate::detector::normalize_score(0.0, 0.0);
+                match serde_json::to_string(&normalized) {
+                    Ok(json) => json_response(&json, 200),
+                    Err(e) => error_json(&format!("serialization error: {e}"), 500),
+                }
+            }
+        }
 
         // ── Digital Twin ──────────────────────────────────────────
         (Method::Get, "/api/digital-twin/status") => {
@@ -4689,6 +4836,15 @@ fn handle_api(
                 {"method": "GET", "path": "/api/platform", "auth": true, "description": "Detected platform capabilities and hardware security support"},
                 {"method": "GET", "path": "/api/threat-intel/status", "auth": true, "description": "Threat intelligence indicator inventory status"},
                 {"method": "POST", "path": "/api/threat-intel/ioc", "auth": true, "description": "Submit a new indicator of compromise"},
+                {"method": "GET", "path": "/api/threat-intel/stats", "auth": true, "description": "IoC enrichment statistics (by type, severity, source)"},
+                {"method": "POST", "path": "/api/threat-intel/purge", "auth": true, "description": "Purge expired IoCs by TTL (days)"},
+                {"method": "GET", "path": "/api/mitre/coverage", "auth": true, "description": "MITRE ATT&CK coverage summary with gap analysis"},
+                {"method": "GET", "path": "/api/mitre/heatmap", "auth": true, "description": "MITRE ATT&CK heatmap (per-tactic, per-technique coverage)"},
+                {"method": "GET", "path": "/api/detection/profile", "auth": true, "description": "Current detection tuning profile"},
+                {"method": "PUT", "path": "/api/detection/profile", "auth": true, "description": "Set detection tuning profile (aggressive/balanced/quiet)"},
+                {"method": "POST", "path": "/api/fp-feedback", "auth": true, "description": "Submit false-positive feedback for an alert pattern"},
+                {"method": "GET", "path": "/api/fp-feedback/stats", "auth": true, "description": "False-positive feedback statistics and suppression weights"},
+                {"method": "GET", "path": "/api/detection/score/normalize", "auth": true, "description": "Get normalized 0-100 threat score with severity label"},
                 {"method": "GET", "path": "/api/playbooks", "auth": true, "description": "List registered automated response playbooks"},
                 {"method": "POST", "path": "/api/playbooks", "auth": true, "description": "Register or update an automated response playbook"},
                 {"method": "POST", "path": "/api/playbooks/execute", "auth": true, "description": "Start a playbook execution for a specific alert"},

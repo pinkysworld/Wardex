@@ -6,7 +6,7 @@ info:
     All mutating endpoints and sensitive monitoring endpoints require
     Bearer token authentication via the `Authorization` header.
     Agent-facing enrollment and heartbeat endpoints bypass admin auth.
-  version: "0.38.1"
+  version: "0.39.0"
   contact:
     name: Wardex Project
   license:

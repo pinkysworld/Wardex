@@ -929,3 +929,130 @@ mod tests {
         assert!(incidents.is_empty());
     }
 }
+
+// ── False-positive feedback loop ─────────────────────────────────
+
+/// Analyst feedback on an alert outcome.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FpFeedback {
+    pub alert_fingerprint: String,
+    pub marked_fp: bool,
+    pub analyst: String,
+    pub timestamp: String,
+    pub reason_pattern: String,
+}
+
+/// Accumulates false-positive feedback and computes per-pattern
+/// suppression weights that downstream detection can use to
+/// auto-lower confidence on recurring FP patterns.
+#[derive(Debug, Clone, Default)]
+pub struct FpFeedbackStore {
+    entries: Vec<FpFeedback>,
+    /// Pattern → (total_marked, fp_count)
+    pattern_stats: HashMap<String, (u64, u64)>,
+}
+
+impl FpFeedbackStore {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Record analyst feedback for an alert.
+    pub fn record(&mut self, feedback: FpFeedback) {
+        let key = feedback.reason_pattern.clone();
+        let entry = self.pattern_stats.entry(key).or_insert((0, 0));
+        entry.0 += 1;
+        if feedback.marked_fp {
+            entry.1 += 1;
+        }
+        self.entries.push(feedback);
+    }
+
+    /// Get the FP ratio for a given reason pattern (0.0–1.0).
+    /// Returns `None` if no feedback exists for the pattern.
+    pub fn fp_ratio(&self, pattern: &str) -> Option<f32> {
+        self.pattern_stats.get(pattern).map(|(total, fps)| {
+            if *total == 0 { 0.0 } else { *fps as f32 / *total as f32 }
+        })
+    }
+
+    /// Compute a suppression weight (0.0–1.0) for a reason pattern.
+    /// High FP ratio → lower weight (suppress more). Requires ≥5 samples.
+    pub fn suppression_weight(&self, pattern: &str) -> f32 {
+        match self.pattern_stats.get(pattern) {
+            Some((total, fps)) if *total >= 5 => {
+                let ratio = *fps as f32 / *total as f32;
+                (1.0 - ratio * 0.8).max(0.1) // Never fully suppress
+            }
+            _ => 1.0, // No suppression without enough data
+        }
+    }
+
+    /// List all patterns with their FP statistics.
+    pub fn stats(&self) -> Vec<(String, u64, u64, f32)> {
+        self.pattern_stats
+            .iter()
+            .map(|(pattern, (total, fps))| {
+                let ratio = if *total == 0 { 0.0 } else { *fps as f32 / *total as f32 };
+                (pattern.clone(), *total, *fps, ratio)
+            })
+            .collect()
+    }
+
+    pub fn entry_count(&self) -> usize {
+        self.entries.len()
+    }
+
+    pub fn entries(&self) -> &[FpFeedback] {
+        &self.entries
+    }
+}
+
+#[cfg(test)]
+mod fp_tests {
+    use super::*;
+
+    fn fb(pattern: &str, fp: bool) -> FpFeedback {
+        FpFeedback {
+            alert_fingerprint: "test".into(),
+            marked_fp: fp,
+            analyst: "analyst1".into(),
+            timestamp: "2026-04-05T00:00:00Z".into(),
+            reason_pattern: pattern.into(),
+        }
+    }
+
+    #[test]
+    fn fp_ratio_tracks_correctly() {
+        let mut store = FpFeedbackStore::new();
+        for _ in 0..7 { store.record(fb("brute force", true)); }
+        for _ in 0..3 { store.record(fb("brute force", false)); }
+        let ratio = store.fp_ratio("brute force").unwrap();
+        assert!((ratio - 0.7).abs() < 0.01);
+    }
+
+    #[test]
+    fn suppression_requires_minimum_samples() {
+        let mut store = FpFeedbackStore::new();
+        for _ in 0..3 { store.record(fb("network burst", true)); }
+        // Only 3 samples — not enough for suppression
+        assert!((store.suppression_weight("network burst") - 1.0).abs() < 0.001);
+    }
+
+    #[test]
+    fn suppression_weight_decreases_with_fp_ratio() {
+        let mut store = FpFeedbackStore::new();
+        for _ in 0..8 { store.record(fb("thermal", true)); }
+        for _ in 0..2 { store.record(fb("thermal", false)); }
+        let w = store.suppression_weight("thermal");
+        assert!(w < 0.5); // 80% FP rate → heavy suppression
+        assert!(w >= 0.1); // Never fully suppressed
+    }
+
+    #[test]
+    fn unknown_pattern_no_suppression() {
+        let store = FpFeedbackStore::new();
+        assert!((store.suppression_weight("unknown") - 1.0).abs() < 0.001);
+        assert!(store.fp_ratio("unknown").is_none());
+    }
+}

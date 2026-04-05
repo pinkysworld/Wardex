@@ -2,7 +2,8 @@ target/
 var/
 .DS_Store
 *.code-workspace
-admin-console/
+admin-console/node_modules/
+admin-console/dist/
 xdr_ai_handoff_pack/
 xdr_ai_handoff_pack.zip
 release/

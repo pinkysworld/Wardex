@@ -1,0 +1,129 @@
+title: Exfiltration - Data Transfer Over Alternative Protocol
+id: wdx-exfil-001
+status: stable
+level: high
+description: >
+  Detects potential data exfiltration through alternative protocols
+  such as DNS tunneling, ICMP exfil, or use of cloud storage CLIs.
+references:
+  - https://attack.mitre.org/techniques/T1048/
+  - https://attack.mitre.org/techniques/T1567/
+tags:
+  - attack.exfiltration
+  - attack.t1048
+  - attack.t1567
+logsource:
+  category: process_creation
+detection:
+  selection_dns_exfil:
+    CommandLine|contains:
+      - 'nslookup -type=txt'
+      - 'dig +short TXT'
+      - 'dnscat'
+      - 'iodine'
+      - 'dns2tcp'
+  selection_cloud_exfil:
+    Image|endswith:
+      - '\rclone.exe'
+      - '/rclone'
+      - '\megacmd.exe'
+      - '/mega-cmd'
+    CommandLine|contains:
+      - 'copy'
+      - 'sync'
+      - 'upload'
+      - 'put'
+  selection_http_exfil:
+    CommandLine|contains:
+      - 'curl -X POST'
+      - 'curl --upload-file'
+      - 'wget --post-file'
+      - 'Invoke-WebRequest -Method Post'
+      - 'Invoke-RestMethod -Method Post'
+  condition: selection_dns_exfil or selection_cloud_exfil or selection_http_exfil
+falsepositives:
+  - Legitimate cloud backup operations
+  - DNS diagnostic commands
+  - CI/CD artifact uploads
+mitre:
+  tactics:
+    - exfiltration
+  techniques:
+    - T1048.001  # Exfiltration Over Symmetric Encrypted Non-C2 Protocol
+    - T1048.003  # Exfiltration Over Unencrypted Non-C2 Protocol
+    - T1567.002  # Exfiltration to Cloud Storage
+
+---
+
+title: Exfiltration - Large Outbound Data Transfer
+id: wdx-exfil-002
+status: stable
+level: medium
+description: >
+  Detects unusually large outbound data transfers that may indicate
+  bulk data exfiltration. Requires network telemetry.
+tags:
+  - attack.exfiltration
+  - attack.t1048
+logsource:
+  category: network_connection
+detection:
+  selection:
+    Direction: outbound
+    BytesSent|gte: 104857600  # 100MB threshold
+  filter_known_services:
+    DestinationHostname|endswith:
+      - '.windowsupdate.com'
+      - '.microsoft.com'
+      - '.apple.com'
+      - '.googleapis.com'
+  condition: selection and not filter_known_services
+falsepositives:
+  - Legitimate large file uploads
+  - Video conferencing
+  - Cloud backup services
+mitre:
+  techniques:
+    - T1048  # Exfiltration Over Alternative Protocol
+    - T1029  # Scheduled Transfer
+
+---
+
+title: Exfiltration - Archive Creation Before Transfer
+id: wdx-exfil-003
+status: stable
+level: medium
+description: >
+  Detects creation of compressed archives in temporary or user
+  directories, commonly done before data exfiltration.
+tags:
+  - attack.collection
+  - attack.t1560.001
+  - attack.exfiltration
+logsource:
+  category: process_creation
+detection:
+  selection_archive:
+    CommandLine|contains:
+      - '7z a '
+      - 'zip -r'
+      - 'tar czf'
+      - 'tar -czf'
+      - 'rar a '
+      - 'Compress-Archive'
+  selection_sensitive_dirs:
+    CommandLine|contains:
+      - '\Users\'
+      - '\Documents\'
+      - '/home/'
+      - '/etc/'
+      - '\Desktop\'
+      - '\Downloads\'
+  condition: selection_archive and selection_sensitive_dirs
+falsepositives:
+  - Authorized backup procedures
+  - Developers archiving project files
+mitre:
+  techniques:
+    - T1560.001  # Archive via Utility
+    - T1074.001  # Local Data Staging

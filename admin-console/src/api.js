@@ -1,0 +1,313 @@
+// Wardex Admin Console — API Client
+// Auth-aware fetch wrapper + all endpoint functions for ~160 API routes.
+
+let _token = '';
+let _baseUrl = '';
+
+export function setToken(t) { _token = t; }
+export function getToken() { return _token; }
+export function setBaseUrl(u) { _baseUrl = u; }
+
+async function request(method, path, body, opts = {}) {
+  const headers = {};
+  if (_token) headers['Authorization'] = 'Bearer ' + _token;
+  if (body && typeof body === 'object') {
+    headers['Content-Type'] = 'application/json';
+    body = JSON.stringify(body);
+  } else if (body && typeof body === 'string') {
+    headers['Content-Type'] = 'application/json';
+  }
+  const url = _baseUrl + path;
+  const res = await fetch(url, { method, headers, body, signal: opts.signal });
+  if (!res.ok) {
+    const text = await res.text().catch(() => '');
+    const err = new Error(`${res.status} ${res.statusText}`);
+    err.status = res.status;
+    err.body = text;
+    throw err;
+  }
+  const ct = res.headers.get('content-type') || '';
+  if (ct.includes('json')) return res.json();
+  return res.text();
+}
+
+const get = (p, o) => request('GET', p, null, o);
+const post = (p, b, o) => request('POST', p, b, o);
+const put = (p, b, o) => request('PUT', p, b, o);
+const del = (p, o) => request('DELETE', p, null, o);
+
+// ── Auth ─────────────────────────────────────────────────────
+export const authCheck = () => get('/api/auth/check');
+export const authRotate = () => post('/api/auth/rotate');
+export const sessionInfo = () => get('/api/session/info');
+
+// ── Health & System ──────────────────────────────────────────
+export const health = () => get('/api/health');
+export const healthLive = () => get('/api/healthz/live');
+export const healthReady = () => get('/api/healthz/ready');
+export const status = () => get('/api/status');
+export const report = () => get('/api/report');
+export const hostInfo = () => get('/api/host/info');
+export const platform = () => get('/api/platform');
+export const threadsStatus = () => get('/api/threads/status');
+export const endpoints = () => get('/api/endpoints');
+export const openapi = () => get('/api/openapi.json');
+export const metrics = () => get('/api/metrics');
+export const sloStatus = () => get('/api/slo/status');
+export const supportDiag = () => get('/api/support/diagnostics');
+export const systemDeps = () => get('/api/system/health/dependencies');
+export const shutdown = () => post('/api/shutdown');
+
+// ── Telemetry ────────────────────────────────────────────────
+export const telemetryCurrent = () => get('/api/telemetry/current');
+export const telemetryHistory = () => get('/api/telemetry/history');
+
+// ── Alerts ───────────────────────────────────────────────────
+export const alerts = () => get('/api/alerts');
+export const alertsCount = () => get('/api/alerts/count');
+export const alertById = (id) => get(`/api/alerts/${encodeURIComponent(id)}`);
+export const alertsGrouped = () => get('/api/alerts/grouped');
+export const alertsAnalysis = (body) => post('/api/alerts/analysis', body);
+export const alertsSample = (body) => post('/api/alerts/sample', body);
+export const alertsClear = () => del('/api/alerts');
+
+// ── Detection ────────────────────────────────────────────────
+export const analyze = (body) => post('/api/analyze', body);
+export const controlMode = (body) => post('/api/control/mode', body);
+export const runDemo = () => post('/api/control/run-demo');
+export const resetBaseline = () => post('/api/control/reset-baseline');
+export const checkpoint = () => post('/api/control/checkpoint');
+export const restoreCheckpoint = (body) => post('/api/control/restore-checkpoint', body);
+export const checkpoints = () => get('/api/checkpoints');
+export const detectionProfile = () => get('/api/detection/profile');
+export const setDetectionProfile = (body) => put('/api/detection/profile', body);
+export const detectionSummary = () => get('/api/detection/summary');
+export const detectionWeights = () => get('/api/detection/weights');
+export const setDetectionWeights = (body) => post('/api/detection/weights', body);
+export const normalizeScore = () => get('/api/detection/score/normalize');
+export const fpFeedback = (body) => post('/api/fp-feedback', body);
+export const fpFeedbackStats = () => get('/api/fp-feedback/stats');
+
+// ── Sigma ────────────────────────────────────────────────────
+export const sigmaRules = () => get('/api/sigma/rules');
+export const sigmaStats = () => get('/api/sigma/stats');
+
+// ── Threat Intelligence ──────────────────────────────────────
+export const threatIntelStatus = () => get('/api/threat-intel/status');
+export const threatIntelStats = () => get('/api/threat-intel/stats');
+export const threatIntelIoc = (body) => post('/api/threat-intel/ioc', body);
+export const threatIntelPurge = (body) => post('/api/threat-intel/purge', body);
+
+// ── MITRE ATT&CK ─────────────────────────────────────────────
+export const mitreCoverage = () => get('/api/mitre/coverage');
+export const mitreHeatmap = () => get('/api/mitre/heatmap');
+export const mitreCoverageAlt = () => get('/api/coverage/mitre');
+
+// ── Fleet & Agents ───────────────────────────────────────────
+export const fleetStatus = () => get('/api/fleet/status');
+export const fleetDashboard = () => get('/api/fleet/dashboard');
+export const fleetInventory = () => get('/api/fleet/inventory');
+export const fleetRegister = (body) => post('/api/fleet/register', body);
+export const agents = () => get('/api/agents');
+export const agentsEnroll = (body) => post('/api/agents/enroll', body);
+export const agentsToken = (body) => post('/api/agents/token', body);
+export const agentDetails = (id) => get(`/api/agents/${encodeURIComponent(id)}/details`);
+export const agentActivity = (id) => get(`/api/agents/${encodeURIComponent(id)}/activity`);
+export const agentStatus = (id) => get(`/api/agents/${encodeURIComponent(id)}/status`);
+export const agentScope = (id) => get(`/api/agents/${encodeURIComponent(id)}/scope`);
+export const setAgentScope = (id, body) => post(`/api/agents/${encodeURIComponent(id)}/scope`, body);
+export const agentLogs = (id) => get(`/api/agents/${encodeURIComponent(id)}/logs`);
+export const agentInventory = (id) => get(`/api/agents/${encodeURIComponent(id)}/inventory`);
+export const deleteAgent = (id) => del(`/api/agents/${encodeURIComponent(id)}`);
+
+// ── Events ───────────────────────────────────────────────────
+export const events = () => get('/api/events');
+export const postEvents = (body) => post('/api/events', body);
+export const eventsExport = () => get('/api/events/export');
+export const eventsSummary = () => get('/api/events/summary');
+export const bulkTriage = (body) => post('/api/events/bulk-triage', body);
+export const triageEvent = (id, body) => post(`/api/events/${encodeURIComponent(id)}/triage`, body);
+
+// ── Incidents ────────────────────────────────────────────────
+export const incidents = () => get('/api/incidents');
+export const createIncident = (body) => post('/api/incidents', body);
+export const incidentById = (id) => get(`/api/incidents/${encodeURIComponent(id)}`);
+export const updateIncident = (id, body) => post(`/api/incidents/${encodeURIComponent(id)}/update`, body);
+export const incidentReport = (id) => get(`/api/incidents/${encodeURIComponent(id)}/report`);
+export const incidentStoryline = (id) => get(`/api/incidents/${encodeURIComponent(id)}/storyline`);
+
+// ── Cases ────────────────────────────────────────────────────
+export const cases = () => get('/api/cases');
+export const createCase = (body) => post('/api/cases', body);
+export const casesStats = () => get('/api/cases/stats');
+export const caseById = (id) => get(`/api/cases/${encodeURIComponent(id)}`);
+export const caseComment = (id, body) => post(`/api/cases/${encodeURIComponent(id)}/comment`, body);
+export const updateCase = (id, body) => post(`/api/cases/${encodeURIComponent(id)}/update`, body);
+export const closeCase = (id) => post(`/api/cases/${encodeURIComponent(id)}/close`);
+
+// ── SOC Queue ────────────────────────────────────────────────
+export const queueAlerts = () => get('/api/queue/alerts');
+export const queueStats = () => get('/api/queue/stats');
+export const queueAck = (body) => post('/api/queue/acknowledge', body);
+export const queueAssign = (body) => post('/api/queue/assign', body);
+
+// ── Response Actions ─────────────────────────────────────────
+export const responseRequest = (body) => post('/api/response/request', body);
+export const responseApprove = (body) => post('/api/response/approve', body);
+export const responseExecute = (body) => post('/api/response/execute', body);
+export const responsePending = () => get('/api/response/pending');
+export const responseRequests = () => get('/api/response/requests');
+export const responseAudit = () => get('/api/response/audit');
+export const responseStats = () => get('/api/response/stats');
+export const responseApprovals = () => get('/api/response/approvals');
+
+// ── Policy ───────────────────────────────────────────────────
+export const policyCurrent = () => get('/api/policy/current');
+export const policyHistory = () => get('/api/policy/history');
+export const policyPublish = (body) => post('/api/policy/publish', body);
+export const policyCompose = (body) => post('/api/policy/compose', body);
+export const policyVmExecute = (body) => post('/api/policy-vm/execute', body);
+
+// ── Updates / Rollout ────────────────────────────────────────
+export const updatesPublish = (body) => post('/api/updates/publish', body);
+export const updatesDeploy = (body) => post('/api/updates/deploy', body);
+export const updatesRollback = (body) => post('/api/updates/rollback', body);
+export const updatesCancel = () => post('/api/updates/cancel');
+export const updatesReleases = () => get('/api/updates/releases');
+export const rolloutConfig = () => get('/api/rollout/config');
+
+// ── Config ───────────────────────────────────────────────────
+export const configCurrent = () => get('/api/config/current');
+export const configReload = () => post('/api/config/reload');
+export const configSave = (body) => post('/api/config/save', body);
+
+// ── Enforcement ──────────────────────────────────────────────
+export const enforcementStatus = () => get('/api/enforcement/status');
+export const quarantine = (body) => post('/api/enforcement/quarantine', body);
+
+// ── Deception ────────────────────────────────────────────────
+export const deceptionStatus = () => get('/api/deception/status');
+export const deceptionDeploy = (body) => post('/api/deception/deploy', body);
+
+// ── Infrastructure ───────────────────────────────────────────
+export const monitorStatus = () => get('/api/monitor/status');
+export const monitorViolations = () => get('/api/monitor/violations');
+export const correlation = () => get('/api/correlation');
+export const driftStatus = () => get('/api/drift/status');
+export const driftReset = () => post('/api/drift/reset');
+export const fingerprintStatus = () => get('/api/fingerprint/status');
+export const causalGraph = () => get('/api/causal/graph');
+export const sideChannelStatus = () => get('/api/side-channel/status');
+export const digitalTwinStatus = () => get('/api/digital-twin/status');
+export const digitalTwinSimulate = (body) => post('/api/digital-twin/simulate', body);
+export const harnessRun = (body) => post('/api/harness/run', body);
+export const swarmPosture = () => get('/api/swarm/posture');
+export const swarmIntel = () => get('/api/swarm/intel');
+export const swarmIntelStats = () => get('/api/swarm/intel/stats');
+export const tlsStatus = () => get('/api/tls/status');
+export const meshHealth = () => get('/api/mesh/health');
+export const meshHeal = () => post('/api/mesh/heal');
+
+// ── Energy & Edge ────────────────────────────────────────────
+export const energyStatus = () => get('/api/energy/status');
+export const energyConsume = (body) => post('/api/energy/consume', body);
+export const energyHarvest = (body) => post('/api/energy/harvest', body);
+export const offloadDecide = (body) => post('/api/offload/decide', body);
+export const patches = () => get('/api/patches');
+export const tenantsCount = () => get('/api/tenants/count');
+
+// ── Compliance & Crypto ──────────────────────────────────────
+export const complianceStatus = () => get('/api/compliance/status');
+export const attestationStatus = () => get('/api/attestation/status');
+export const privacyBudget = () => get('/api/privacy/budget');
+export const quantumKeyStatus = () => get('/api/quantum/key-status');
+export const quantumRotate = () => post('/api/quantum/rotate');
+
+// ── Audit & Retention ────────────────────────────────────────
+export const auditLog = () => get('/api/audit/log');
+export const auditVerify = () => get('/api/audit/verify');
+export const auditAdmin = () => get('/api/audit/admin');
+export const retentionStatus = () => get('/api/retention/status');
+export const retentionApply = (body) => post('/api/retention/apply', body);
+
+// ── Reports ──────────────────────────────────────────────────
+export const reports = () => get('/api/reports');
+export const executiveSummary = () => get('/api/reports/executive-summary');
+export const reportById = (id) => get(`/api/reports/${encodeURIComponent(id)}`);
+export const deleteReport = (id) => del(`/api/reports/${encodeURIComponent(id)}`);
+
+// ── Export ───────────────────────────────────────────────────
+export const exportTla = () => get('/api/export/tla');
+export const exportAlloy = () => get('/api/export/alloy');
+export const exportWitnesses = () => get('/api/export/witnesses');
+
+// ── Hunts & Content ──────────────────────────────────────────
+export const hunts = () => get('/api/hunts');
+export const createHunt = (body) => post('/api/hunts', body);
+export const huntById = (id) => get(`/api/hunts/${encodeURIComponent(id)}`);
+export const runHunt = (id) => post(`/api/hunts/${encodeURIComponent(id)}/run`);
+export const contentRules = () => get('/api/content/rules');
+export const createContentRule = (body) => post('/api/content/rules', body);
+export const contentRuleLifecycle = (id, body) => post(`/api/content/rules/${encodeURIComponent(id)}/lifecycle`, body);
+export const contentPacks = () => get('/api/content/packs');
+export const createContentPack = (body) => post('/api/content/packs', body);
+export const suppressions = () => get('/api/suppressions');
+export const createSuppression = (body) => post('/api/suppressions', body);
+
+// ── Integrations ─────────────────────────────────────────────
+export const siemStatus = () => get('/api/siem/status');
+export const siemConfig = () => get('/api/siem/config');
+export const setSiemConfig = (body) => post('/api/siem/config', body);
+export const taxiiStatus = () => get('/api/taxii/status');
+export const taxiiConfig = () => get('/api/taxii/config');
+export const setTaxiiConfig = (body) => post('/api/taxii/config', body);
+export const taxiiPull = () => post('/api/taxii/pull');
+export const enrichmentConnectors = () => get('/api/enrichments/connectors');
+export const createEnrichmentConnector = (body) => post('/api/enrichments/connectors', body);
+export const ticketsSync = (body) => post('/api/tickets/sync', body);
+export const idpProviders = () => get('/api/idp/providers');
+export const createIdpProvider = (body) => post('/api/idp/providers', body);
+export const scimConfig = () => get('/api/scim/config');
+export const setScimConfig = (body) => post('/api/scim/config', body);
+
+// ── RBAC ─────────────────────────────────────────────────────
+export const rbacUsers = () => get('/api/rbac/users');
+export const createRbacUser = (body) => post('/api/rbac/users', body);
+export const deleteRbacUser = (u) => del(`/api/rbac/users/${encodeURIComponent(u)}`);
+
+// ── UEBA & Entity ────────────────────────────────────────────
+export const uebaEntity = (id) => get(`/api/ueba/entity/${encodeURIComponent(id)}`);
+export const entityById = (id) => get(`/api/entities/${encodeURIComponent(id)}`);
+
+// ── Process Tree ─────────────────────────────────────────────
+export const processTree = () => get('/api/process-tree');
+export const deepChains = () => get('/api/process-tree/deep-chains');
+
+// ── Timelines ────────────────────────────────────────────────
+export const timelineHost = () => get('/api/timeline/host');
+export const timelineAgent = () => get('/api/timeline/agent');
+export const timelineById = (id) => get(`/api/timeline/${encodeURIComponent(id)}`);
+
+// ── Other ────────────────────────────────────────────────────
+export const graphql = (body) => post('/api/graphql', body);
+export const researchTracks = () => get('/api/research-tracks');
+export const monitoringOptions = () => get('/api/monitoring/options');
+export const monitoringPaths = () => get('/api/monitoring/paths');
+export const featureFlags = () => get('/api/feature-flags');
+export const ocsfSchema = () => get('/api/ocsf/schema');
+export const ocsfSchemaVersion = () => get('/api/ocsf/schema/version');
+export const workbenchOverview = () => get('/api/workbench/overview');
+export const managerOverview = () => get('/api/manager/overview');
+export const gdprForget = (entity) => del(`/api/gdpr/forget/${encodeURIComponent(entity)}`);
+export const adminBackup = () => post('/api/admin/backup');
+export const adminDbVersion = () => get('/api/admin/db/version');
+export const adminDbRollback = () => post('/api/admin/db/rollback');
+export const sbom = () => get('/api/sbom');
+export const piiScan = (body) => post('/api/pii/scan', body);
+export const dlq = () => get('/api/dlq');
+export const dlqStats = () => get('/api/dlq/stats');
+export const dlqClear = () => del('/api/dlq');
+
+// ── ML Engine (stub) ─────────────────────────────────────────
+export const mlModels = () => get('/api/ml/models');
+export const mlPredict = (body) => post('/api/ml/predict', body);
