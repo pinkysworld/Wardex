@@ -291,7 +291,7 @@ mod tests {
 
         // Create 4 backups, manually adjusting timestamps to ensure ordering
         for i in 0..4 {
-            let rec = mgr.create_backup(source.path()).unwrap();
+            let _rec = mgr.create_backup(source.path()).unwrap();
             // Mutate the last record's timestamp to force ordering
             let idx = mgr.records.len() - 1;
             mgr.records[idx].timestamp =

@@ -6,7 +6,7 @@ use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 
 use axum::body::Body;
-use axum::http::{HeaderMap, HeaderValue, Method as HttpMethod, StatusCode};
+use axum::http::{HeaderMap, Method as HttpMethod};
 use axum::response::Response;
 
 /// Local Method enum preserving tiny_http variant names for match compatibility.
@@ -924,8 +924,6 @@ pub async fn run_server(
 
     use axum::Router;
     use axum::extract::ConnectInfo;
-    use axum::routing::any;
-
     let app = Router::new()
         .fallback(move |
             method: HttpMethod,
@@ -985,7 +983,6 @@ pub async fn run_server(
                     let st = state.clone();
                     let u = url.clone();
                     let ra = remote_addr.clone();
-                    let sd = site_dir.clone();
                     match tokio::task::spawn_blocking(move || {
                         // Catch panics so one bad request cannot crash the server
                         std::panic::catch_unwind(std::panic::AssertUnwindSafe(move || {
@@ -10159,7 +10156,7 @@ fn handle_agent_details(
     }
 }
 
-fn handle_agent_update_check(body: &[u8],
+fn handle_agent_update_check(_body: &[u8],
     url: &str,
     state: &Arc<Mutex<AppState>>,
 ) -> Response<Body> {

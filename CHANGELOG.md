@@ -2,6 +2,16 @@
 
 All notable changes to Wardex are documented in this file.
 
+## [0.41.2] — Release Consistency, Live Monitor Guidance & Verification
+
+### Fixed
+- **Live monitor empty state** — The embedded admin console no longer tells operators to start monitoring with `cargo run -- serve`; the initial live-monitor row now renders a neutral loading state until real alert data arrives.
+- **Release-document drift** — `README.md`, `docs/STATUS.md`, `docs/GETTING_STARTED.md`, and the static website now reflect the current release version, current module/API/test counts, and the correct default startup path (`cargo run`).
+- **Warning cleanup** — Removed fresh-build warning noise in `server.rs`, `pipeline.rs`, `license.rs`, `backup.rs`, and `storage_clickhouse.rs` so release builds and test runs stay signal-rich.
+
+### Added
+- **Live Playwright release smoke** — Added `tests/playwright/live_release_smoke.spec.js` to exercise token login, sample alert injection, live monitor refresh, and release screenshot capture against a running server.
+
 ## [0.41.1] — Security Hardening & Bug Fixes
 
 ### Fixed

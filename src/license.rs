@@ -311,7 +311,7 @@ mod tests {
         let key = generate_license(&claims, &sk).unwrap();
 
         // Flip a character in the signature portion
-        let mut parts: Vec<&str> = key.splitn(2, '.').collect();
+        let parts: Vec<&str> = key.splitn(2, '.').collect();
         let mut sig = parts[1].to_string();
         let replacement = if sig.ends_with('A') { 'B' } else { 'A' };
         sig.pop();

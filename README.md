@@ -2,22 +2,13 @@
 
 Wardex is a Rust-based XDR and SIEM platform for private-cloud and self-hosted security operations. It combines cross-platform telemetry collection, detection engineering, analyst workflows, approval-gated response, agent lifecycle management, SIEM integrations, and tamper-evident evidence handling in a single deployable product.
 
-## What ships in `v0.39.1`
+## What ships in `v0.41.2`
 
-- Everything from v0.36.3 plus production hardening: 25 unwrap/panic sites fixed, structured logging via `log`+`env_logger`, release profile with LTO, zero clippy warnings, Helm version sync
-- OpenAPI 3.0.3 machine-readable spec covering 160+ endpoints with full schema definitions
-- Prometheus metrics endpoint with 20+ wardex_* counters, gauges, and histograms
-- WebSocket event streaming with RFC 6455 framing and pub/sub channel filtering
-- Python SDK (`sdk/python/`) with ~30 typed API methods and custom exception hierarchy
-- Structured JSON logging with pluggable sinks (stdout, file, buffer) and per-request context
-- Kubernetes manifests and Helm chart for production deployment
-- Data archival engine with JSONL+gzip compression, CSV export, and SHA-256 manifests
-- 39 Sigma detection rules across 6 categories with YAML loader and event matching
-- Compliance templates for CIS v8, PCI-DSS v4, SOC 2, and NIST CSF 2.0 with auto-evaluation
-- CI hardening with cargo-audit, code coverage, MSRV checks, and dependency caching
-- GraphQL query layer for threat hunting with aliases, sub-fields, and introspection
-- HA clustering with Raft-inspired leader election, log replication, and health monitoring
-- 93 Rust source modules, 160+ documented API paths, and 982 automated tests
+- 105 Rust source modules covering telemetry collection, detection engineering, SOC workflows, fleet operations, governance, and automated incident response
+- 119 documented OpenAPI paths with authenticated admin-console workflows, fleet controls, reports, and enterprise support surfaces
+- 1251 automated tests (1088 lib + 163 integration) plus a live Playwright admin-console smoke flow for release validation
+- Default local control-plane startup via `cargo run`, which launches the server and embedded local monitor together
+- GitHub Actions packaging for Linux, macOS, and Windows release archives
 
 See [FEATURES.md](FEATURES.md) for the concise capability summary, [CHANGELOG.md](CHANGELOG.md) for release history, and [docs/README.md](docs/README.md) for the full documentation map.
 
@@ -44,10 +35,10 @@ cargo run -- analyze examples/credential_storm.csv
 Start the live control plane:
 
 ```bash
-cargo run -- serve
+cargo run
 ```
 
-Open `http://localhost:8080/admin.html`, paste the token printed in the terminal, and you will have access to the live admin console, SOC Workbench, fleet controls, detection engineering views, and reports.
+Open `http://localhost:8080/admin.html`, paste the token printed in the terminal, and you will have access to the live admin console, SOC Workbench, fleet controls, detection engineering views, and reports. Use `cargo run -- serve` only when you explicitly want the web server without the embedded local monitor.
 
 ## Core capabilities
 
@@ -65,12 +56,12 @@ Run the full automated suite:
 cargo test
 ```
 
-The current release passes 1145 automated tests (982 lib + 163 integration) across unit and integration coverage. The repo also includes live verification helpers in [`tests/live_test.py`](tests/live_test.py), [`tests/verify_admin.py`](tests/verify_admin.py), and browser smoke coverage in [`tests/playwright/enterprise_console_smoke.spec.js`](tests/playwright/enterprise_console_smoke.spec.js).
+The current release passes 1251 automated tests (1088 lib + 163 integration) across unit and integration coverage. The repo also includes live verification helpers in [`tests/live_test.py`](tests/live_test.py), [`tests/verify_admin.py`](tests/verify_admin.py), [`tests/playwright/enterprise_console_smoke.spec.js`](tests/playwright/enterprise_console_smoke.spec.js), and [`tests/playwright/live_release_smoke.spec.js`](tests/playwright/live_release_smoke.spec.js).
 
 ## Repository layout
 
 ```text
-src/                  Core platform modules (93 Rust source files)
+src/                  Core platform modules (105 Rust source files)
 tests/                Integration tests, live checks, and browser smoke coverage
 docs/                 Product, architecture, deployment, and runbook documentation
 site/                 Static website and browser admin console

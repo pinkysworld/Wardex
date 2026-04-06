@@ -1,6 +1,6 @@
 [package]
 name = "wardex"
-version = "0.41.1"
+version = "0.41.2"
 edition = "2024"
 description = "Private-cloud XDR and SIEM platform with enterprise detection, response, and fleet operations"
 license-file = "LICENSE"

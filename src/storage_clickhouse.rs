@@ -338,8 +338,6 @@ impl EventStore for InMemoryEventStore {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use chrono::TimeZone;
-
     fn sample_event(ts: &str, severity: u8, device: &str) -> StoredEvent {
         StoredEvent {
             timestamp: ts.parse::<DateTime<Utc>>().unwrap(),

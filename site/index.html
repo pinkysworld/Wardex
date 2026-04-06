@@ -86,7 +86,7 @@
               </div>
               <div class="terminal-snippet">
                 <span class="terminal-prompt">$</span>
-                <code>cargo run -- serve</code>
+                <code>cargo run</code>
               </div>
             </div>
 
@@ -98,7 +98,7 @@
 
               <div class="console-preview">
                 <div class="console-chrome"><span></span><span></span><span></span></div>
-                <pre class="console-output"><span class="c-dim">$</span> cargo run -- serve
+                <pre class="console-output"><span class="c-dim">$</span> cargo run
 
 <span class="c-label">fleet</span>     agents, rollouts, and activity snapshots available
 <span class="c-label">detect</span>    hunts, rule lifecycle, suppressions, and MITRE coverage
@@ -481,12 +481,12 @@
             </div>
             <div class="start-card">
               <h3>Launch the control plane</h3>
-              <div class="code-block"><code>cargo run -- serve</code></div>
-              <p>Run the live HTTP server and browser console locally on port <code>8080</code>.</p>
+              <div class="code-block"><code>cargo run</code></div>
+              <p>Run the live HTTP server, browser console, and embedded local monitor together on port <code>8080</code>.</p>
             </div>
             <div class="start-card">
               <h3>Package releases</h3>
-              <div class="code-block"><code>git tag v0.39.1</code></div>
+              <div class="code-block"><code>git tag v0.41.2</code></div>
               <p>Tagged releases trigger GitHub Actions packaging for Linux, macOS, and Windows archives.</p>
             </div>
             <div class="start-card">
@@ -577,7 +577,7 @@
             </div>
             <div class="start-card">
               <h3>Launch the console</h3>
-              <div class="code-block"><code>cargo run -- serve</code></div>
+              <div class="code-block"><code>cargo run</code></div>
             </div>
             <div class="start-card">
               <h3>Run the test suite</h3>
@@ -638,6 +638,7 @@
           </div>
 
           <div class="license-notice">
+            <p><strong>Current Release:</strong> <span id="license-version">v0.41.2</span></p>
             <p><strong>Change Date:</strong> The BSL 1.1 license converts to Apache 2.0 on April 1, 2029. After this date, all usage — including commercial — is permitted under Apache 2.0 terms.</p>
             <p>For questions about licensing, commercial use, or partnership opportunities, please <a href="mailto:michel_ng@icloud.com">contact us</a>.</p>
           </div>
@@ -650,7 +651,7 @@
             <div class="footer-col footer-about">
               <span class="nav-logo footer-logo">WX</span>
               <p>
-                Wardex is a release-oriented XDR and SIEM platform for private-cloud operations. 105 Rust modules, 200+ API endpoints, 1251 automated tests.
+                Wardex is a release-oriented XDR and SIEM platform for private-cloud operations. <span id="footer-about-module-count">105</span> Rust modules, <span id="footer-about-api-count">119</span> documented API paths, <span id="footer-about-test-count">1251</span> automated tests.
               </p>
             </div>
             <div class="footer-col">
@@ -670,7 +671,7 @@
             </div>
           </div>
           <div class="footer-bottom">
-            <p>Wardex · v0.41.1 · Enterprise XDR &amp; SIEM · 1251 tests · 105 modules · <a href="../LICENSE" style="color:inherit;">BSL 1.1</a> · Commercial use requires a <a href="#licensing" style="color: var(--nav-accent);">separate license</a></p>
+            <p>Wardex · <span id="footer-version">v0.41.2</span> · Enterprise XDR &amp; SIEM · <span id="footer-release-test-count">1251</span> tests · <span id="footer-release-module-count">105</span> modules · <a href="../LICENSE" style="color:inherit;">BSL 1.1</a> · Commercial use requires a <a href="#licensing" style="color: var(--nav-accent);">separate license</a></p>
           </div>
         </div>
       </footer>

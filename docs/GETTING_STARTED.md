@@ -47,10 +47,10 @@ Default output is `var/last-run.report.json`.
 ## Start the live control plane
 
 ```bash
-cargo run -- serve
+cargo run
 ```
 
-This starts the HTTP server on port `8080` and prints a one-time admin token to the terminal. Open `http://localhost:8080/admin.html`, paste the token, and use the console to:
+This starts the HTTP server on port `8080`, launches the embedded local monitor, and prints a one-time admin token to the terminal. Open `http://localhost:8080/admin.html`, paste the token, and use the console to:
 
 - inspect the Dashboard, Fleet & Agents, Threat Detection, Reports, and Settings surfaces
 - work cases and alerts in the SOC Workbench
@@ -72,13 +72,14 @@ This refreshes the structured status payload consumed by the static site and off
 cargo test
 ```
 
-The current release passes 991 automated tests (981 lib + 10 chaos integration) across unit and integration coverage, including API regression coverage for hunts, content lifecycle, suppressions, entity pivots, incident storyline, governance, and supportability.
+The current release passes 1251 automated tests (1088 lib + 163 integration) across unit and integration coverage, including API regression coverage for hunts, content lifecycle, suppressions, entity pivots, incident storyline, governance, and supportability.
 
 ## Live validation helpers
 
 - `python3 tests/live_test.py` exercises the live HTTP server paths.
 - `python3 tests/verify_admin.py` validates key admin-console data surfaces.
 - `tests/playwright/enterprise_console_smoke.spec.js` provides a reusable browser smoke flow for the enterprise console.
+- `tests/playwright/live_release_smoke.spec.js` provides a focused release smoke for token login, sample alert injection, and live monitor verification.
 
 ## Release packages
 

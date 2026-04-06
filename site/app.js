@@ -3,12 +3,32 @@
    Product-oriented landing page with lightweight progressive enhancement.
    ═══════════════════════════════════════════════════════════════════════════ */
 
+const RELEASE_VERSION = "0.41.2";
+const MODULE_COUNT = "105";
+const API_COUNT = "119";
+const TEST_COUNT = "1251";
+
 const stats = [
-  { value: "105", label: "Rust modules" },
-  { value: "200+", label: "API endpoints" },
-  { value: "1251", label: "automated tests" },
-  { value: "3", label: "release targets" },
+  { value: RELEASE_VERSION, label: "current version" },
+  { value: MODULE_COUNT, label: "Rust modules" },
+  { value: API_COUNT, label: "API paths" },
+  { value: TEST_COUNT, label: "automated tests" },
 ];
+
+function setText(selector, value) {
+  const node = document.querySelector(selector);
+  if (node) node.textContent = value;
+}
+
+function applyReleaseCopy() {
+  setText("#license-version", `v${RELEASE_VERSION}`);
+  setText("#footer-version", `v${RELEASE_VERSION}`);
+  setText("#footer-about-module-count", MODULE_COUNT);
+  setText("#footer-about-api-count", API_COUNT);
+  setText("#footer-about-test-count", TEST_COUNT);
+  setText("#footer-release-module-count", MODULE_COUNT);
+  setText("#footer-release-test-count", TEST_COUNT);
+}
 
 const pipelineDetails = [
   {
@@ -178,6 +198,7 @@ function initScrollReveal() {
 
 document.addEventListener("DOMContentLoaded", () => {
   renderStats();
+  applyReleaseCopy();
   renderPipelineDetails();
   renderInterfaces();
   initNav();

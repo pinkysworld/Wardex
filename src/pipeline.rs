@@ -126,7 +126,7 @@ impl PipelineManager {
         }
     }
 
-    pub fn submit(&self, event: PipelineEvent) -> Result<(), String> {
+    pub fn submit(&self, _event: PipelineEvent) -> Result<(), String> {
         let mut m = self.metrics.lock().unwrap_or_else(|e| e.into_inner());
         m.events_ingested += 1;
         let pending = m.events_ingested - m.events_stored;
