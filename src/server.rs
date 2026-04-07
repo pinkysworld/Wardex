@@ -361,6 +361,15 @@ struct AppState {
     mitre_coverage: crate::mitre_coverage::MitreCoverageTracker,
     tuning_profile: crate::detector::TuningProfile,
     fp_feedback: crate::alert_analysis::FpFeedbackStore,
+    // Phase 42: advanced detection & inventory
+    vulnerability_scanner: crate::vulnerability::VulnerabilityScanner,
+    ndr_engine: crate::ndr::NdrEngine,
+    container_detector: crate::container::ContainerDetector,
+    cert_monitor: crate::cert_monitor::CertMonitor,
+    config_drift_detector: crate::config_drift::ConfigDriftDetector,
+    asset_inventory: crate::cloud_inventory::AssetInventory,
+    efficacy_tracker: crate::detection_efficacy::EfficacyTracker,
+    workflow_store: crate::investigation::WorkflowStore,
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
@@ -766,6 +775,14 @@ pub async fn run_server(
         mitre_coverage: crate::mitre_coverage::MitreCoverageTracker::new(),
         tuning_profile: crate::detector::TuningProfile::default(),
         fp_feedback: crate::alert_analysis::FpFeedbackStore::new(),
+        vulnerability_scanner: crate::vulnerability::VulnerabilityScanner::new(),
+        ndr_engine: crate::ndr::NdrEngine::new(crate::ndr::NdrConfig::default()),
+        container_detector: crate::container::ContainerDetector::new(),
+        cert_monitor: crate::cert_monitor::CertMonitor::new(),
+        config_drift_detector: crate::config_drift::ConfigDriftDetector::new(),
+        asset_inventory: crate::cloud_inventory::AssetInventory::new(),
+        efficacy_tracker: crate::detection_efficacy::EfficacyTracker::new(100_000),
+        workflow_store: crate::investigation::WorkflowStore::new(),
     }));
 
     // Apply loaded config
@@ -1186,6 +1203,14 @@ pub fn spawn_test_server() -> (u16, String) {
         mitre_coverage: crate::mitre_coverage::MitreCoverageTracker::new(),
         tuning_profile: crate::detector::TuningProfile::default(),
         fp_feedback: crate::alert_analysis::FpFeedbackStore::new(),
+        vulnerability_scanner: crate::vulnerability::VulnerabilityScanner::new(),
+        ndr_engine: crate::ndr::NdrEngine::new(crate::ndr::NdrConfig::default()),
+        container_detector: crate::container::ContainerDetector::new(),
+        cert_monitor: crate::cert_monitor::CertMonitor::new(),
+        config_drift_detector: crate::config_drift::ConfigDriftDetector::new(),
+        asset_inventory: crate::cloud_inventory::AssetInventory::new(),
+        efficacy_tracker: crate::detection_efficacy::EfficacyTracker::new(100_000),
+        workflow_store: crate::investigation::WorkflowStore::new(),
     }));
     {
         let mut s = state.lock().unwrap_or_else(|e| e.into_inner());
@@ -4022,7 +4047,39 @@ fn handle_api(
         || (method == Method::Get && route_path == "/api/collectors/gcp")
         // ML engine
         || (method == Method::Get && route_path == "/api/ml/models")
-        || (method == Method::Post && route_path == "/api/ml/triage")));
+        || (method == Method::Post && route_path == "/api/ml/triage")
+        // Vulnerability scanner
+        || (method == Method::Get && route_path == "/api/vulnerability/scan")
+        || (method == Method::Get && route_path == "/api/vulnerability/summary")
+        // NDR engine
+        || (method == Method::Post && route_path == "/api/ndr/netflow")
+        || (method == Method::Get && route_path == "/api/ndr/report")
+        // Container detection
+        || (method == Method::Post && route_path == "/api/container/event")
+        || (method == Method::Get && route_path == "/api/container/alerts")
+        || (method == Method::Get && route_path == "/api/container/stats")
+        // Certificate monitor
+        || (method == Method::Post && route_path == "/api/certs/register")
+        || (method == Method::Get && route_path == "/api/certs/summary")
+        || (method == Method::Get && route_path == "/api/certs/alerts")
+        // Config drift detection
+        || (method == Method::Post && route_path == "/api/config-drift/check")
+        || (method == Method::Get && route_path == "/api/config-drift/baselines")
+        // Asset inventory
+        || (method == Method::Get && route_path == "/api/assets")
+        || (method == Method::Get && route_path == "/api/assets/summary")
+        || (method == Method::Post && route_path == "/api/assets/upsert")
+        || (method == Method::Get && route_path.starts_with("/api/assets/search"))
+        // Detection efficacy
+        || (method == Method::Post && route_path == "/api/efficacy/triage")
+        || (method == Method::Get && route_path == "/api/efficacy/summary")
+        || (method == Method::Get && route_path.starts_with("/api/efficacy/rule/"))
+        // Investigation workflows
+        || (method == Method::Get && route_path == "/api/investigations/workflows")
+        || (method == Method::Get && route_path.starts_with("/api/investigations/workflows/"))
+        || (method == Method::Post && route_path == "/api/investigations/start")
+        || (method == Method::Get && route_path == "/api/investigations/active")
+        || (method == Method::Post && route_path == "/api/investigations/suggest")));
 
     let auth_identity = authenticate_request(headers, state);
     if needs_auth && !auth_identity.is_authenticated() {
@@ -9949,6 +10006,255 @@ fn handle_api(
                     }
                     Err(e) => error_json(&e, 400),
                 }
+
+            // ── Vulnerability Scanner ─────────────────────────────────
+            } else if method == Method::Get && url_path == "/api/vulnerability/scan" {
+                let s = state.lock().unwrap_or_else(|e| e.into_inner());
+                let mut reports = Vec::new();
+                for (host_id, inv) in &s.agent_inventories {
+                    reports.push(s.vulnerability_scanner.scan(host_id, inv));
+                }
+                let body = serde_json::to_string(&reports).unwrap_or_default();
+                json_response(&body, 200)
+            } else if method == Method::Get && url_path == "/api/vulnerability/summary" {
+                let s = state.lock().unwrap_or_else(|e| e.into_inner());
+                let summary = s.vulnerability_scanner.fleet_summary(&s.agent_inventories);
+                let body = serde_json::to_string(&summary).unwrap_or_default();
+                json_response(&body, 200)
+
+            // ── NDR Engine ────────────────────────────────────────────
+            } else if method == Method::Post && url_path == "/api/ndr/netflow" {
+                match read_body_limited(body, 65536) {
+                    Ok(body_str) => {
+                        let record: crate::ndr::NetFlowRecord = match serde_json::from_str(&body_str) {
+                            Ok(r) => r,
+                            Err(e) => {
+                                return respond_api(state, &method, &url, remote_addr, auth_used, error_json(&format!("invalid netflow: {e}"), 400));
+                            }
+                        };
+                        let mut s = state.lock().unwrap_or_else(|e| e.into_inner());
+                        s.ndr_engine.record_flow(record);
+                        json_response(r#"{"status":"ingested"}"#, 200)
+                    }
+                    Err(e) => error_json(&e, 400),
+                }
+            } else if method == Method::Get && url_path == "/api/ndr/report" {
+                let s = state.lock().unwrap_or_else(|e| e.into_inner());
+                let report = s.ndr_engine.analyze();
+                let body = serde_json::to_string(&report).unwrap_or_default();
+                json_response(&body, 200)
+
+            // ── Container Detection ───────────────────────────────────
+            } else if method == Method::Post && url_path == "/api/container/event" {
+                match read_body_limited(body, 65536) {
+                    Ok(body_str) => {
+                        let event: crate::container::ContainerEvent = match serde_json::from_str(&body_str) {
+                            Ok(e) => e,
+                            Err(e) => {
+                                return respond_api(state, &method, &url, remote_addr, auth_used, error_json(&format!("invalid container event: {e}"), 400));
+                            }
+                        };
+                        let mut s = state.lock().unwrap_or_else(|e| e.into_inner());
+                        s.container_detector.record_event(event);
+                        let alerts = s.container_detector.alerts();
+                        let body = serde_json::to_string(&alerts).unwrap_or_default();
+                        json_response(&body, 200)
+                    }
+                    Err(e) => error_json(&e, 400),
+                }
+            } else if method == Method::Get && url_path == "/api/container/alerts" {
+                let s = state.lock().unwrap_or_else(|e| e.into_inner());
+                let alerts = s.container_detector.alerts();
+                let body = serde_json::to_string(&alerts).unwrap_or_default();
+                json_response(&body, 200)
+            } else if method == Method::Get && url_path == "/api/container/stats" {
+                let s = state.lock().unwrap_or_else(|e| e.into_inner());
+                let body = serde_json::json!({
+                    "total_events": s.container_detector.event_count(),
+                    "total_alerts": s.container_detector.alerts().len(),
+                });
+                json_response(&body.to_string(), 200)
+
+            // ── Certificate Monitor ───────────────────────────────────
+            } else if method == Method::Post && url_path == "/api/certs/register" {
+                match read_body_limited(body, 8192) {
+                    Ok(body_str) => {
+                        let cert: crate::cert_monitor::CertificateRecord = match serde_json::from_str(&body_str) {
+                            Ok(c) => c,
+                            Err(e) => {
+                                return respond_api(state, &method, &url, remote_addr, auth_used, error_json(&format!("invalid cert: {e}"), 400));
+                            }
+                        };
+                        let mut s = state.lock().unwrap_or_else(|e| e.into_inner());
+                        s.cert_monitor.record_certificate(cert);
+                        json_response(r#"{"status":"registered"}"#, 200)
+                    }
+                    Err(e) => error_json(&e, 400),
+                }
+            } else if method == Method::Get && url_path == "/api/certs/summary" {
+                let s = state.lock().unwrap_or_else(|e| e.into_inner());
+                let summary = s.cert_monitor.evaluate();
+                let body = serde_json::to_string(&summary).unwrap_or_default();
+                json_response(&body, 200)
+            } else if method == Method::Get && url_path == "/api/certs/alerts" {
+                let s = state.lock().unwrap_or_else(|e| e.into_inner());
+                let eval = s.cert_monitor.evaluate();
+                let body = serde_json::to_string(&eval.alerts).unwrap_or_default();
+                json_response(&body, 200)
+
+            // ── Config Drift Detection ────────────────────────────────
+            } else if method == Method::Post && url_path == "/api/config-drift/check" {
+                match read_body_limited(body, 65536) {
+                    Ok(body_str) => {
+                        #[derive(serde::Deserialize)]
+                        struct DriftCheckReq { host_id: String, configs: std::collections::HashMap<String, std::collections::HashMap<String, String>> }
+                        let req: DriftCheckReq = match serde_json::from_str(&body_str) {
+                            Ok(m) => m,
+                            Err(e) => {
+                                return respond_api(state, &method, &url, remote_addr, auth_used, error_json(&format!("invalid config map: {e}"), 400));
+                            }
+                        };
+                        let mut s = state.lock().unwrap_or_else(|e| e.into_inner());
+                        let report = s.config_drift_detector.check(&req.host_id, &req.configs);
+                        let body = serde_json::to_string(&report).unwrap_or_default();
+                        json_response(&body, 200)
+                    }
+                    Err(e) => error_json(&e, 400),
+                }
+            } else if method == Method::Get && url_path == "/api/config-drift/baselines" {
+                let s = state.lock().unwrap_or_else(|e| e.into_inner());
+                let summary = s.config_drift_detector.fleet_summary();
+                let body = serde_json::to_string(&summary).unwrap_or_default();
+                json_response(&body, 200)
+
+            // ── Asset Inventory ────────────────────────────────────────
+            } else if method == Method::Get && url_path == "/api/assets" {
+                let s = state.lock().unwrap_or_else(|e| e.into_inner());
+                let assets = s.asset_inventory.all();
+                let body = serde_json::to_string(&assets).unwrap_or_default();
+                json_response(&body, 200)
+            } else if method == Method::Get && url_path == "/api/assets/summary" {
+                let s = state.lock().unwrap_or_else(|e| e.into_inner());
+                let summary = s.asset_inventory.summary();
+                let body = serde_json::to_string(&summary).unwrap_or_default();
+                json_response(&body, 200)
+            } else if method == Method::Post && url_path == "/api/assets/upsert" {
+                match read_body_limited(body, 65536) {
+                    Ok(body_str) => {
+                        let asset: crate::cloud_inventory::UnifiedAsset = match serde_json::from_str(&body_str) {
+                            Ok(a) => a,
+                            Err(e) => {
+                                return respond_api(state, &method, &url, remote_addr, auth_used, error_json(&format!("invalid asset: {e}"), 400));
+                            }
+                        };
+                        let mut s = state.lock().unwrap_or_else(|e| e.into_inner());
+                        s.asset_inventory.upsert(asset);
+                        json_response(r#"{"status":"upserted"}"#, 200)
+                    }
+                    Err(e) => error_json(&e, 400),
+                }
+            } else if method == Method::Get && url_path.starts_with("/api/assets/search") {
+                let q = url_param(&url, "q").unwrap_or_default();
+                let s = state.lock().unwrap_or_else(|e| e.into_inner());
+                let results = s.asset_inventory.search(&q);
+                let body = serde_json::to_string(&results).unwrap_or_default();
+                json_response(&body, 200)
+
+            // ── Detection Efficacy ────────────────────────────────────
+            } else if method == Method::Post && url_path == "/api/efficacy/triage" {
+                match read_body_limited(body, 8192) {
+                    Ok(body_str) => {
+                        let record: crate::detection_efficacy::TriageRecord = match serde_json::from_str(&body_str) {
+                            Ok(r) => r,
+                            Err(e) => {
+                                return respond_api(state, &method, &url, remote_addr, auth_used, error_json(&format!("invalid triage: {e}"), 400));
+                            }
+                        };
+                        let mut s = state.lock().unwrap_or_else(|e| e.into_inner());
+                        s.efficacy_tracker.record(record);
+                        json_response(r#"{"status":"recorded"}"#, 200)
+                    }
+                    Err(e) => error_json(&e, 400),
+                }
+            } else if method == Method::Get && url_path == "/api/efficacy/summary" {
+                let s = state.lock().unwrap_or_else(|e| e.into_inner());
+                let summary = s.efficacy_tracker.summary();
+                let body = serde_json::to_string(&summary).unwrap_or_default();
+                json_response(&body, 200)
+            } else if method == Method::Get && url_path.starts_with("/api/efficacy/rule/") {
+                let rule_id = url_path.strip_prefix("/api/efficacy/rule/").unwrap_or("");
+                let s = state.lock().unwrap_or_else(|e| e.into_inner());
+                let all_rules = s.efficacy_tracker.per_rule_efficacy();
+                match all_rules.iter().find(|r| r.rule_id == rule_id) {
+                    Some(eff) => {
+                        let body = serde_json::to_string(&eff).unwrap_or_default();
+                        json_response(&body, 200)
+                    }
+                    None => error_json("rule not found", 404),
+                }
+
+            // ── Investigation Workflows ───────────────────────────────
+            } else if method == Method::Get && url_path == "/api/investigations/workflows" {
+                let s = state.lock().unwrap_or_else(|e| e.into_inner());
+                let workflows = s.workflow_store.list_workflows();
+                let body = serde_json::to_string(&workflows).unwrap_or_default();
+                json_response(&body, 200)
+            } else if method == Method::Get && url_path.starts_with("/api/investigations/workflows/") {
+                let wf_id = url_path.strip_prefix("/api/investigations/workflows/").unwrap_or("");
+                let s = state.lock().unwrap_or_else(|e| e.into_inner());
+                match s.workflow_store.get_workflow(wf_id) {
+                    Some(wf) => {
+                        let body = serde_json::to_string(&wf).unwrap_or_default();
+                        json_response(&body, 200)
+                    }
+                    None => error_json("workflow not found", 404),
+                }
+            } else if method == Method::Post && url_path == "/api/investigations/start" {
+                match read_body_limited(body, 8192) {
+                    Ok(body_str) => {
+                        #[derive(serde::Deserialize)]
+                        struct StartReq { workflow_id: String, analyst: String, case_id: Option<String> }
+                        let req: StartReq = match serde_json::from_str(&body_str) {
+                            Ok(r) => r,
+                            Err(e) => {
+                                return respond_api(state, &method, &url, remote_addr, auth_used, error_json(&format!("invalid request: {e}"), 400));
+                            }
+                        };
+                        let mut s = state.lock().unwrap_or_else(|e| e.into_inner());
+                        match s.workflow_store.start_investigation(&req.workflow_id, &req.analyst, req.case_id) {
+                            Some(progress) => {
+                                let body = serde_json::to_string(&progress).unwrap_or_default();
+                                json_response(&body, 200)
+                            }
+                            None => error_json("workflow not found", 404),
+                        }
+                    }
+                    Err(e) => error_json(&e, 400),
+                }
+            } else if method == Method::Get && url_path == "/api/investigations/active" {
+                let s = state.lock().unwrap_or_else(|e| e.into_inner());
+                let active = s.workflow_store.active_investigations();
+                let body = serde_json::to_string(&active).unwrap_or_default();
+                json_response(&body, 200)
+            } else if method == Method::Post && url_path == "/api/investigations/suggest" {
+                match read_body_limited(body, 8192) {
+                    Ok(body_str) => {
+                        #[derive(serde::Deserialize)]
+                        struct SuggestReq { alert_reasons: Vec<String> }
+                        let req: SuggestReq = match serde_json::from_str(&body_str) {
+                            Ok(r) => r,
+                            Err(e) => {
+                                return respond_api(state, &method, &url, remote_addr, auth_used, error_json(&format!("invalid request: {e}"), 400));
+                            }
+                        };
+                        let s = state.lock().unwrap_or_else(|e| e.into_inner());
+                        let suggestions = s.workflow_store.suggest_for_alert(&req.alert_reasons);
+                        let body = serde_json::to_string(&suggestions).unwrap_or_default();
+                        json_response(&body, 200)
+                    }
+                    Err(e) => error_json(&e, 400),
+                }
+
             } else {
                 error_json("not found", 404)
             }

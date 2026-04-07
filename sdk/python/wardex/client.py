@@ -389,3 +389,94 @@ class WardexClient:
 
     def openapi_spec(self) -> dict[str, Any]:
         return self._get("/api/openapi.json")
+
+    # ── vulnerability scanner ─────────────────────────────────────────
+
+    def vulnerability_scan(self) -> dict[str, Any]:
+        return self._get("/api/vulnerability/scan")
+
+    def vulnerability_summary(self) -> dict[str, Any]:
+        return self._get("/api/vulnerability/summary")
+
+    # ── NDR engine ────────────────────────────────────────────────────
+
+    def ndr_ingest(self, netflow: dict[str, Any]) -> dict[str, Any]:
+        return self._post("/api/ndr/netflow", netflow)
+
+    def ndr_report(self) -> dict[str, Any]:
+        return self._get("/api/ndr/report")
+
+    # ── container detection ───────────────────────────────────────────
+
+    def container_event(self, event: dict[str, Any]) -> list[dict[str, Any]]:
+        return self._post("/api/container/event", event)
+
+    def container_alerts(self) -> list[dict[str, Any]]:
+        return self._get("/api/container/alerts")
+
+    def container_stats(self) -> dict[str, Any]:
+        return self._get("/api/container/stats")
+
+    # ── certificate monitor ───────────────────────────────────────────
+
+    def register_cert(self, cert: dict[str, Any]) -> dict[str, Any]:
+        return self._post("/api/certs/register", cert)
+
+    def cert_summary(self) -> dict[str, Any]:
+        return self._get("/api/certs/summary")
+
+    def cert_alerts(self) -> list[dict[str, Any]]:
+        return self._get("/api/certs/alerts")
+
+    # ── config drift detection ────────────────────────────────────────
+
+    def config_drift_check(self, actual: dict[str, str]) -> dict[str, Any]:
+        return self._post("/api/config-drift/check", actual)
+
+    def config_drift_baselines(self) -> list[dict[str, Any]]:
+        return self._get("/api/config-drift/baselines")
+
+    # ── asset inventory ───────────────────────────────────────────────
+
+    def assets(self) -> list[dict[str, Any]]:
+        return self._get("/api/assets")
+
+    def assets_summary(self) -> dict[str, Any]:
+        return self._get("/api/assets/summary")
+
+    def upsert_asset(self, asset: dict[str, Any]) -> dict[str, Any]:
+        return self._post("/api/assets/upsert", asset)
+
+    def search_assets(self, query: str) -> list[dict[str, Any]]:
+        return self._get(f"/api/assets/search?q={query}")
+
+    # ── detection efficacy ────────────────────────────────────────────
+
+    def efficacy_triage(self, record: dict[str, Any]) -> dict[str, Any]:
+        return self._post("/api/efficacy/triage", record)
+
+    def efficacy_summary(self) -> dict[str, Any]:
+        return self._get("/api/efficacy/summary")
+
+    def efficacy_rule(self, rule_id: str) -> dict[str, Any]:
+        return self._get(f"/api/efficacy/rule/{rule_id}")
+
+    # ── investigation workflows ───────────────────────────────────────
+
+    def investigation_workflows(self) -> list[dict[str, Any]]:
+        return self._get("/api/investigations/workflows")
+
+    def investigation_workflow(self, workflow_id: str) -> dict[str, Any]:
+        return self._get(f"/api/investigations/workflows/{workflow_id}")
+
+    def start_investigation(self, workflow_id: str, analyst: str, case_id: str | None = None) -> dict[str, Any]:
+        payload: dict[str, Any] = {"workflow_id": workflow_id, "analyst": analyst}
+        if case_id:
+            payload["case_id"] = case_id
+        return self._post("/api/investigations/start", payload)
+
+    def active_investigations(self) -> list[dict[str, Any]]:
+        return self._get("/api/investigations/active")
+
+    def suggest_investigation(self, alert_reasons: list[str]) -> list[dict[str, Any]]:
+        return self._post("/api/investigations/suggest", {"alert_reasons": alert_reasons})

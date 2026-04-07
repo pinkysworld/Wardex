@@ -60,6 +60,17 @@ pub struct Notification {
     pub device_id: String,
     pub alert_ids: Vec<String>,
     pub metadata: HashMap<String, String>,
+    /// Enriched context fields (Phase 42)
+    #[serde(default)]
+    pub mitre_techniques: Vec<String>,
+    #[serde(default)]
+    pub kill_chain_phase: Option<String>,
+    #[serde(default)]
+    pub recommended_action: Option<String>,
+    #[serde(default)]
+    pub affected_hosts: Vec<String>,
+    #[serde(default)]
+    pub investigation_link: Option<String>,
 }
 
 /// Result of a delivery attempt.
@@ -77,30 +88,57 @@ pub struct DeliveryResult {
 // ── Formatter ────────────────────────────────────────────────────────
 
 fn format_slack(n: &Notification) -> String {
+    let mut context_elements = vec![
+        serde_json::json!({ "type": "mrkdwn", "text": format!("Device: `{}`", n.device_id) }),
+        serde_json::json!({ "type": "mrkdwn", "text": format!("Time: {}", n.timestamp) }),
+    ];
+    if !n.mitre_techniques.is_empty() {
+        context_elements.push(serde_json::json!({ "type": "mrkdwn", "text": format!("MITRE: {}", n.mitre_techniques.join(", ")) }));
+    }
+    if let Some(ref phase) = n.kill_chain_phase {
+        context_elements.push(serde_json::json!({ "type": "mrkdwn", "text": format!("Kill Chain: {}", phase) }));
+    }
+    let mut blocks = vec![
+        serde_json::json!({
+            "type": "header",
+            "text": { "type": "plain_text", "text": format!("[{}] {}", n.level, n.title) }
+        }),
+        serde_json::json!({
+            "type": "section",
+            "text": { "type": "mrkdwn", "text": n.body }
+        }),
+    ];
+    if let Some(ref action) = n.recommended_action {
+        blocks.push(serde_json::json!({
+            "type": "section",
+            "text": { "type": "mrkdwn", "text": format!(":point_right: *Recommended:* {}", action) }
+        }));
+    }
+    blocks.push(serde_json::json!({ "type": "context", "elements": context_elements }));
     serde_json::json!({
         "text": format!(":rotating_light: *{}* — {}", n.level, n.title),
-        "blocks": [
-            {
-                "type": "header",
-                "text": { "type": "plain_text", "text": format!("[{}] {}", n.level, n.title) }
-            },
-            {
-                "type": "section",
-                "text": { "type": "mrkdwn", "text": n.body }
-            },
-            {
-                "type": "context",
-                "elements": [
-                    { "type": "mrkdwn", "text": format!("Device: `{}`", n.device_id) },
-                    { "type": "mrkdwn", "text": format!("Time: {}", n.timestamp) }
-                ]
-            }
-        ]
+        "blocks": blocks
     })
     .to_string()
 }
 
 fn format_teams(n: &Notification) -> String {
+    let mut facts = vec![
+        serde_json::json!({ "name": "Device", "value": &n.device_id }),
+        serde_json::json!({ "name": "Time", "value": &n.timestamp }),
+    ];
+    if !n.mitre_techniques.is_empty() {
+        facts.push(serde_json::json!({ "name": "MITRE ATT&CK", "value": n.mitre_techniques.join(", ") }));
+    }
+    if let Some(ref phase) = n.kill_chain_phase {
+        facts.push(serde_json::json!({ "name": "Kill Chain Phase", "value": phase }));
+    }
+    if let Some(ref action) = n.recommended_action {
+        facts.push(serde_json::json!({ "name": "Recommended Action", "value": action }));
+    }
+    if !n.affected_hosts.is_empty() {
+        facts.push(serde_json::json!({ "name": "Affected Hosts", "value": n.affected_hosts.join(", ") }));
+    }
     serde_json::json!({
         "@type": "MessageCard",
         "@context": "http://schema.org/extensions",
@@ -112,10 +150,7 @@ fn format_teams(n: &Notification) -> String {
         "summary": format!("[{}] {}", n.level, n.title),
         "sections": [{
             "activityTitle": format!("[{}] {}", n.level, n.title),
-            "facts": [
-                { "name": "Device", "value": &n.device_id },
-                { "name": "Time", "value": &n.timestamp },
-            ],
+            "facts": facts,
             "text": &n.body,
         }]
     })
@@ -411,6 +446,11 @@ pub fn build_notification(
         device_id: device_id.to_string(),
         alert_ids: vec![alert_id.to_string()],
         metadata: HashMap::new(),
+        mitre_techniques: Vec::new(),
+        kill_chain_phase: None,
+        recommended_action: None,
+        affected_hosts: Vec::new(),
+        investigation_link: None,
     }
 }
 

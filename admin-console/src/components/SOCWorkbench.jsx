@@ -25,6 +25,9 @@ export default function SOCWorkbench() {
   const { data: tlHost } = useApi(api.timelineHost);
   const { data: escPolicies, reload: rEsc } = useApi(api.escalationPolicies);
   const { data: escActive, reload: rEscActive } = useApi(api.escalationActive);
+  const { data: workflows } = useApi(api.investigationWorkflows);
+  const { data: activeInvestigations, reload: rInv } = useApi(api.investigationActive);
+  const { data: efficacyData, reload: rEfficacy } = useApi(api.efficacySummary);
   const [selectedInc, setSelectedInc] = useState(null);
   const [incDetail, setIncDetail] = useState(null);
   const [incStoryline, setIncStoryline] = useState(null);
@@ -58,7 +61,7 @@ export default function SOCWorkbench() {
   return (
     <div>
       <div className="tabs">
-        {['overview', 'incidents', 'cases', 'queue', 'response', 'escalation', 'process-tree', 'entity', 'rbac', 'timeline'].map(t => (
+        {['overview', 'incidents', 'cases', 'queue', 'response', 'escalation', 'investigations', 'efficacy', 'process-tree', 'entity', 'rbac', 'timeline'].map(t => (
           <button key={t} className={`tab ${tab === t ? 'active' : ''}`} onClick={() => setTab(t)}>
             {t.replace(/-/g, ' ').replace(/^\w/, c => c.toUpperCase())}
           </button>
@@ -567,6 +570,86 @@ export default function SOCWorkbench() {
               </table>
             </div>
           )}
+        </div>
+      )}
+
+      {tab === 'investigations' && (
+        <div className="card">
+          <div className="card-header">
+            <span className="card-title">Investigation Workflows</span>
+            <button className="btn btn-sm" onClick={rInv}>↻ Refresh</button>
+          </div>
+          {workflows && Array.isArray(workflows) && workflows.length > 0 ? (
+            <div className="table-wrap">
+              <table>
+                <thead><tr><th>ID</th><th>Name</th><th>Severity</th><th>MITRE</th><th>Est. Time</th><th>Steps</th><th>Actions</th></tr></thead>
+                <tbody>
+                  {workflows.map((wf, i) => (
+                    <tr key={i}>
+                      <td style={{ fontFamily: 'var(--font-mono)', fontSize: 11 }}>{wf.id}</td>
+                      <td style={{ fontWeight: 600 }}>{wf.name}</td>
+                      <td><span className={`sev-${(wf.severity || 'medium').toLowerCase()}`}>{wf.severity}</span></td>
+                      <td style={{ fontSize: 11 }}>{(wf.mitre_techniques || []).join(', ')}</td>
+                      <td>{wf.estimated_minutes}m</td>
+                      <td>{(wf.steps || []).length}</td>
+                      <td>
+                        <button className="btn btn-sm btn-primary" onClick={async () => {
+                          try {
+                            await api.investigationStart({ workflow_id: wf.id, analyst: 'admin' });
+                            toast('Investigation started', 'success');
+                            rInv();
+                          } catch { toast('Failed to start', 'error'); }
+                        }}>Start</button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : <div className="empty">No workflows available</div>}
+          {activeInvestigations && Array.isArray(activeInvestigations) && activeInvestigations.length > 0 && (
+            <div style={{ marginTop: 20 }}>
+              <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 8 }}>Active Investigations</div>
+              <div className="table-wrap">
+                <table>
+                  <thead><tr><th>Workflow</th><th>Analyst</th><th>Started</th><th>Progress</th><th>Status</th></tr></thead>
+                  <tbody>
+                    {activeInvestigations.map((inv, i) => (
+                      <tr key={i}>
+                        <td>{inv.workflow_id}</td>
+                        <td>{inv.analyst}</td>
+                        <td style={{ fontSize: 11 }}>{inv.started_at}</td>
+                        <td>{(inv.completed_steps || []).length} steps done</td>
+                        <td><span className={`badge ${inv.status === 'in-progress' ? 'badge-warn' : 'badge-ok'}`}>{inv.status}</span></td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {tab === 'efficacy' && (
+        <div className="card">
+          <div className="card-header">
+            <span className="card-title">Detection Efficacy</span>
+            <button className="btn btn-sm" onClick={rEfficacy}>↻ Refresh</button>
+          </div>
+          {efficacyData ? (
+            <>
+              <div style={{ display: 'flex', gap: 16, marginBottom: 16, flexWrap: 'wrap' }}>
+                {Object.entries(efficacyData).filter(([, v]) => typeof v !== 'object').map(([k, v]) => (
+                  <div key={k} style={{ padding: '6px 12px', background: 'var(--bg)', borderRadius: 6, textAlign: 'center' }}>
+                    <div style={{ fontSize: 10, color: 'var(--text-secondary)', textTransform: 'uppercase' }}>{k.replace(/_/g, ' ')}</div>
+                    <div style={{ fontSize: 18, fontWeight: 700 }}>{typeof v === 'number' ? v.toFixed(2) : String(v)}</div>
+                  </div>
+                ))}
+              </div>
+              <JsonDetails data={efficacyData} />
+            </>
+          ) : <div className="empty">No efficacy data yet — triage alerts to populate</div>}
         </div>
       )}
 

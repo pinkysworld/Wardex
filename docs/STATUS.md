@@ -2,10 +2,10 @@
 
 ## Current release
 
-- **Version:** `0.41.5`
+- **Version:** `0.42.0`
 - **Positioning:** private-cloud XDR and SIEM platform with enterprise detection engineering, analyst workflows, fleet operations, behavioural analytics, and automated incident response
-- **Source footprint:** 105 Rust source modules
-- **API contract:** 119 documented OpenAPI paths
+- **Source footprint:** 113 Rust source modules
+- **API contract:** 149 documented OpenAPI paths
 - **Verification:** 1258 automated tests (1095 lib + 163 integration) plus live admin-console smoke coverage
 - **Production hardening:** 98% (58/59 controls implemented)
 
@@ -97,9 +97,26 @@ Wardex is now positioned as a professional XDR/SIEM control plane rather than an
 ## Next release priorities
 
 - full enterprise SSO workflows beyond IDP/SCIM configuration surfaces
-- HA/failover clustering and automated backup/restore
-- broader cloud and SaaS collectors (AWS CloudTrail, Azure Sentinel, GCP SCC)
-- content pack marketplace and richer distribution
+- customisable analyst dashboards with drag-and-drop widget placement
+- TypeScript/Node.js SDK alongside the Python SDK
+- searchable documentation site with versioned content
+- package-manager distribution (Homebrew, APT/YUM, Chocolatey)
+
+## Recently shipped (v0.42.0)
+
+- **Vulnerability scanner** — CVE correlation engine with 10 built-in advisories, semantic version comparison, and fleet-wide scanning with risk-scored summaries
+- **Network Detection & Response** — Netflow ingestion with top-talker analysis, unusual destination detection, protocol anomaly scoring, and encrypted-traffic statistics
+- **Container runtime detection** — 13 event kinds and 8 alert types covering escape, privileged exec, untrusted images, sensitive mounts, capabilities abuse, and K8s API abuse
+- **TLS certificate monitor** — Tracks certificate expiry (30d warn, 7d critical), self-signed and weak-key detection
+- **Configuration drift detection** — Baseline compliance for SSH, kernel, and Docker with MITRE ATT&CK mapping
+- **Unified asset inventory** — 9 asset types with upsert, risk scoring, and full-text search
+- **Detection efficacy tracker** — Per-rule TP/FP rate tracking, trend analysis, and summary metrics
+- **Guided investigation workflows** — 5 built-in playbooks (credential-storm, ransomware-triage, lateral-movement, c2-beacon, container-escape) with step-by-step guidance
+- **ML Random Forest triage** — Replaced stub with 5-tree ensemble for alert classification
+- **Notification enrichment** — Slack/Teams alerts now include MITRE techniques, kill-chain phase, recommended action, affected hosts, and investigation link
+- **Cloud Sigma rules** — 8 new detection rules (IAM role assumption, OAuth consent abuse, S3 cross-account, logging disabled, GCP SA keys, Lambda admin, impossible travel, DB snapshot sharing)
+- **Admin console expansion** — 7 new tabs across Infrastructure and SOC Workbench for all new capabilities
+- **Python SDK expansion** — 24 new typed methods covering all new API endpoints
 
 ## Recently shipped (v0.36.0)
 

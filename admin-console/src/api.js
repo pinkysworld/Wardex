@@ -329,6 +329,47 @@ export const dlq = () => get('/api/dlq');
 export const dlqStats = () => get('/api/dlq/stats');
 export const dlqClear = () => del('/api/dlq');
 
-// ── ML Engine (stub) ─────────────────────────────────────────
+// ── ML Engine ────────────────────────────────────────────────
 export const mlModels = () => get('/api/ml/models');
 export const mlPredict = (body) => post('/api/ml/predict', body);
+export const mlTriage = (body) => post('/api/ml/triage', body);
+
+// ── Vulnerability Scanner ────────────────────────────────────
+export const vulnerabilityScan = () => get('/api/vulnerability/scan');
+export const vulnerabilitySummary = () => get('/api/vulnerability/summary');
+
+// ── NDR Engine ───────────────────────────────────────────────
+export const ndrNetflow = (body) => post('/api/ndr/netflow', body);
+export const ndrReport = () => get('/api/ndr/report');
+
+// ── Container Detection ──────────────────────────────────────
+export const containerEvent = (body) => post('/api/container/event', body);
+export const containerAlerts = () => get('/api/container/alerts');
+export const containerStats = () => get('/api/container/stats');
+
+// ── Certificate Monitor ──────────────────────────────────────
+export const certsRegister = (body) => post('/api/certs/register', body);
+export const certsSummary = () => get('/api/certs/summary');
+export const certsAlerts = () => get('/api/certs/alerts');
+
+// ── Config Drift Detection ───────────────────────────────────
+export const configDriftCheck = (body) => post('/api/config-drift/check', body);
+export const configDriftBaselines = () => get('/api/config-drift/baselines');
+
+// ── Asset Inventory ──────────────────────────────────────────
+export const assets = () => get('/api/assets');
+export const assetsSummary = () => get('/api/assets/summary');
+export const assetsUpsert = (body) => post('/api/assets/upsert', body);
+export const assetsSearch = (q) => get(`/api/assets/search?q=${encodeURIComponent(q)}`);
+
+// ── Detection Efficacy ───────────────────────────────────────
+export const efficacyTriage = (body) => post('/api/efficacy/triage', body);
+export const efficacySummary = () => get('/api/efficacy/summary');
+export const efficacyRule = (id) => get(`/api/efficacy/rule/${encodeURIComponent(id)}`);
+
+// ── Investigation Workflows ──────────────────────────────────
+export const investigationWorkflows = () => get('/api/investigations/workflows');
+export const investigationWorkflow = (id) => get(`/api/investigations/workflows/${encodeURIComponent(id)}`);
+export const investigationStart = (body) => post('/api/investigations/start', body);
+export const investigationActive = () => get('/api/investigations/active');
+export const investigationSuggest = (body) => post('/api/investigations/suggest', body);

@@ -2,8 +2,8 @@ apiVersion: v2
 name: wardex
 description: Wardex — private-cloud XDR / SIEM platform
 type: application
-version: 0.41.5
-appVersion: "0.41.5"
+version: 0.42.0
+appVersion: "0.42.0"
 keywords:
   - security
   - xdr

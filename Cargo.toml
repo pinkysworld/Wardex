@@ -1,6 +1,6 @@
 [package]
 name = "wardex"
-version = "0.41.5"
+version = "0.42.0"
 edition = "2024"
 build = "build.rs"
 description = "Private-cloud XDR and SIEM platform with enterprise detection, response, and fleet operations"

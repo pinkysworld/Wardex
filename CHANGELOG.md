@@ -2,6 +2,28 @@
 
 All notable changes to Wardex are documented in this file.
 
+## [0.42.0] — Detection Expansion, Unified Asset Inventory & SOC Workflow Overhaul
+
+### Added
+- **Vulnerability scanner** (`vulnerability.rs`) — CVE correlation engine with 10 built-in advisories, semantic version comparison, fleet-wide scanning, and risk-scored vulnerability summaries. API: `GET /api/vulnerability/scan`, `GET /api/vulnerability/summary`.
+- **Network Detection & Response** (`ndr.rs`) — Netflow ingestion with top-talker analysis, unusual destination detection, protocol anomaly scoring, and encrypted-traffic statistics. API: `POST /api/ndr/netflow`, `GET /api/ndr/report`.
+- **Container runtime detection** (`container.rs`) — 13 event kinds and 8 alert types covering container escape, privileged execution, exec-into-container, untrusted images, sensitive mounts, dangerous capabilities, and Kubernetes API abuse. API: `POST /api/container/event`, `GET /api/container/alerts`, `GET /api/container/stats`.
+- **TLS certificate monitor** (`cert_monitor.rs`) — Tracks certificate expiry (30-day warning, 7-day critical), detects self-signed and weak-key certificates. API: `POST /api/certs/register`, `GET /api/certs/summary`, `GET /api/certs/alerts`.
+- **Configuration drift detection** (`config_drift.rs`) — Baseline compliance engine for SSH, kernel, and Docker configurations with MITRE ATT&CK mapping. API: `POST /api/config-drift/check`, `GET /api/config-drift/baselines`.
+- **Unified asset inventory** (`cloud_inventory.rs`) — 9 asset types (server, workstation, container, cloud VM, network device, IoT, mobile, virtual, serverless) with upsert, risk scoring, and full-text search. API: `GET /api/assets`, `GET /api/assets/summary`, `POST /api/assets/upsert`, `GET /api/assets/search`.
+- **Detection efficacy tracker** (`detection_efficacy.rs`) — Per-rule true-positive/false-positive rate tracking, trend analysis, and summary metrics. API: `POST /api/efficacy/triage`, `GET /api/efficacy/summary`, `GET /api/efficacy/rule/{id}`.
+- **Guided investigation workflows** (`investigation.rs`) — 5 built-in playbooks (credential-storm, ransomware-triage, lateral-movement, c2-beacon, container-escape) with step-by-step guidance, auto-queries, and analyst progress tracking. API: `GET /api/investigations/workflows`, `GET /api/investigations/workflows/{id}`, `POST /api/investigations/start`, `GET /api/investigations/active`, `POST /api/investigations/suggest`.
+- **Cloud-native Sigma rules** — 8 new detection rules (wardex-cloud-007 through 014): IAM role assumption by unusual principal, OAuth high-privilege consent, S3 cross-account policy change, cloud logging disabled, GCP service account key creation, Lambda admin deployment, impossible travel login, and database snapshot shared externally.
+- **Admin console — Infrastructure tabs** — 5 new tabs: Vulnerabilities (scan + summary), NDR (netflow report), Containers (alerts + stats), Certificates (summary + alerts), Assets (inventory + search).
+- **Admin console — SOC Workbench tabs** — 2 new tabs: Investigations (workflow browser, start/track investigations), Efficacy (per-rule TP/FP metrics and trends).
+
+### Improved
+- **ML triage engine** — Replaced stub heuristic with a 5-tree Random Forest ensemble (`alert_triage_rf_v1`) trained on anomaly_score, confidence, suspicious_axes, hour_of_day, day_of_week, alert_frequency, and device_risk_score.
+- **Notification context enrichment** — Slack and Teams alert notifications now include MITRE ATT&CK techniques, kill-chain phase, recommended action, affected hosts, and investigation deep-link.
+- **Python SDK** — 24 new typed methods covering all new API endpoints (vulnerability, NDR, container, certificate, config drift, asset inventory, efficacy, and investigation workflows).
+- **API surface** — 30+ new authenticated endpoints wired with bearer-token auth gates.
+- **Sigma detection rules** — Expanded from 202 to 210 rules across 22 categories (added cloud-native category).
+
 ## [0.41.5] — Structured Operator Details & Investigation Resilience
 
 ### Fixed

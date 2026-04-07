@@ -21,11 +21,21 @@ export default function Infrastructure() {
   const { data: deps } = useApi(api.systemDeps);
   const { data: hostApps, reload: rApps } = useApi(api.hostApps);
   const { data: hostInv } = useApi(api.hostInventory);
+  const { data: vulnSummary, reload: rVuln } = useApi(api.vulnerabilitySummary);
+  const { data: ndrData, reload: rNdr } = useApi(api.ndrReport);
+  const { data: containerSt, reload: rContainer } = useApi(api.containerStats);
+  const { data: containerAlerts } = useApi(api.containerAlerts);
+  const { data: certSummary, reload: rCerts } = useApi(api.certsSummary);
+  const { data: certAlerts } = useApi(api.certsAlerts);
+  const { data: driftBaselines } = useApi(api.configDriftBaselines);
+  const { data: assetSummary, reload: rAssets } = useApi(api.assetsSummary);
+  const [assetSearch, setAssetSearch] = useState('');
+  const [assetResults, setAssetResults] = useState(null);
 
   return (
     <div>
       <div className="tabs">
-        {['monitor', 'correlation', 'drift', 'energy', 'mesh', 'system', 'inventory'].map(t => (
+        {['monitor', 'correlation', 'drift', 'energy', 'mesh', 'system', 'inventory', 'vulnerabilities', 'ndr', 'containers', 'certificates', 'assets'].map(t => (
           <button key={t} className={`tab ${tab === t ? 'active' : ''}`} onClick={() => setTab(t)}>
             {t.charAt(0).toUpperCase() + t.slice(1)}
           </button>
@@ -376,6 +386,124 @@ export default function Infrastructure() {
               </div>
             </div>
           )}
+        </div>
+      )}
+
+      {tab === 'vulnerabilities' && (
+        <div className="card">
+          <div className="card-header">
+            <span className="card-title">Vulnerability Scanner</span>
+            <button className="btn btn-sm" onClick={rVuln}>↻ Refresh</button>
+          </div>
+          {vulnSummary ? <><SummaryGrid data={vulnSummary} limit={12} /><JsonDetails data={vulnSummary} /></> : <div className="empty">Loading...</div>}
+        </div>
+      )}
+
+      {tab === 'ndr' && (
+        <div className="card">
+          <div className="card-header">
+            <span className="card-title">Network Detection & Response</span>
+            <button className="btn btn-sm" onClick={rNdr}>↻ Refresh</button>
+          </div>
+          {ndrData ? <><SummaryGrid data={ndrData} limit={12} /><JsonDetails data={ndrData} /></> : <div className="empty">No network data yet. Ingest netflow via POST /api/ndr/netflow</div>}
+        </div>
+      )}
+
+      {tab === 'containers' && (
+        <div className="card">
+          <div className="card-header">
+            <span className="card-title">Container Security</span>
+            <button className="btn btn-sm" onClick={rContainer}>↻ Refresh</button>
+          </div>
+          {containerSt ? <SummaryGrid data={containerSt} limit={6} /> : <div className="empty">Loading...</div>}
+          {containerAlerts && Array.isArray(containerAlerts) && containerAlerts.length > 0 && (
+            <div style={{ marginTop: 16 }}>
+              <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 8 }}>Recent Alerts</div>
+              <div className="table-wrap">
+                <table>
+                  <thead><tr><th>Time</th><th>Kind</th><th>Container</th><th>Severity</th><th>Message</th></tr></thead>
+                  <tbody>
+                    {containerAlerts.slice(0, 50).map((a, i) => (
+                      <tr key={i}>
+                        <td style={{ fontSize: 11 }}>{a.timestamp || '—'}</td>
+                        <td>{a.kind || '—'}</td>
+                        <td style={{ fontFamily: 'var(--font-mono)', fontSize: 11 }}>{a.container_id || '—'}</td>
+                        <td><span className={`sev-${(a.severity || 'low').toLowerCase()}`}>{a.severity || '—'}</span></td>
+                        <td>{a.message || '—'}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {tab === 'certificates' && (
+        <div className="card">
+          <div className="card-header">
+            <span className="card-title">TLS Certificate Monitor</span>
+            <button className="btn btn-sm" onClick={rCerts}>↻ Refresh</button>
+          </div>
+          {certSummary ? <SummaryGrid data={certSummary} limit={10} /> : <div className="empty">Loading...</div>}
+          {certAlerts && Array.isArray(certAlerts) && certAlerts.length > 0 && (
+            <div style={{ marginTop: 16 }}>
+              <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 8 }}>Certificate Alerts</div>
+              <div className="table-wrap">
+                <table>
+                  <thead><tr><th>Domain</th><th>Issue</th><th>Days Left</th><th>Severity</th></tr></thead>
+                  <tbody>
+                    {certAlerts.map((a, i) => (
+                      <tr key={i}>
+                        <td>{a.domain || a.subject || '—'}</td>
+                        <td>{a.kind || a.issue || '—'}</td>
+                        <td>{a.days_remaining ?? '—'}</td>
+                        <td><span className={`sev-${(a.severity || 'medium').toLowerCase()}`}>{a.severity || '—'}</span></td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {tab === 'assets' && (
+        <div className="card">
+          <div className="card-header">
+            <span className="card-title">Unified Asset Inventory</span>
+            <button className="btn btn-sm" onClick={rAssets}>↻ Refresh</button>
+          </div>
+          {assetSummary ? <SummaryGrid data={assetSummary} limit={12} /> : <div className="empty">Loading...</div>}
+          <div style={{ display: 'flex', gap: 8, marginTop: 16, marginBottom: 12 }}>
+            <input type="text" placeholder="Search assets..." value={assetSearch} onChange={e => setAssetSearch(e.target.value)} className="auth-input" style={{ flex: 1 }} />
+            <button className="btn btn-sm btn-primary" onClick={async () => {
+              if (!assetSearch.trim()) return;
+              try { const r = await api.assetsSearch(assetSearch); setAssetResults(r); } catch { toast('Search failed', 'error'); }
+            }}>Search</button>
+          </div>
+          {assetResults && Array.isArray(assetResults) && (
+            <div className="table-wrap">
+              <table>
+                <thead><tr><th>ID</th><th>Name</th><th>Type</th><th>Provider</th><th>Risk</th><th>Last Seen</th></tr></thead>
+                <tbody>
+                  {assetResults.map((a, i) => (
+                    <tr key={i}>
+                      <td style={{ fontFamily: 'var(--font-mono)', fontSize: 11 }}>{a.id || '—'}</td>
+                      <td>{a.name || a.hostname || '—'}</td>
+                      <td>{a.asset_type || '—'}</td>
+                      <td>{a.provider || '—'}</td>
+                      <td>{a.risk_score != null ? a.risk_score.toFixed(2) : '—'}</td>
+                      <td>{a.last_seen || '—'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+          {assetSummary && <JsonDetails data={assetSummary} />}
         </div>
       )}
     </div>

@@ -10,10 +10,12 @@ Wardex is a self-hosted XDR and SIEM platform built in Rust for teams that want 
   - Rule testing, promote/rollback lifecycle, suppressions, and content packs
   - MITRE ATT&CK coverage views and threat-summary dashboards
   - Named entity extraction from alert text (IP, domain, hash, MITRE technique, process)
+  - Detection efficacy tracker with per-rule TP/FP rate analysis and trend reporting
 
 - **SOC operations**
   - Alert queue with SLA awareness, acknowledgement, assignment, and escalation
   - Case management, incident tracking, investigation pivots, process-tree and timeline views
+  - Guided investigation workflows: 5 built-in playbooks (credential-storm, ransomware-triage, lateral-movement, c2-beacon, container-escape) with step-by-step guidance and auto-queries
   - Live cross-platform process monitoring with CPU/memory usage (macOS, Linux, Windows)
   - Process security analysis: suspicious name detection, resource abuse, deleted-executable detection, LOLBin abuse
   - Installed application inventory (macOS .app bundles, Linux dpkg/rpm, Windows registry/wmic)
@@ -42,6 +44,15 @@ Wardex is a self-hosted XDR and SIEM platform built in Rust for teams that want 
   - Release catalog management with update checks and deployment history
   - Device fingerprint EWMA drift tracking for impersonation detection
 
+- **Vulnerability and exposure management**
+  - CVE correlation engine with built-in advisory database and semantic version comparison
+  - Fleet-wide vulnerability scanning with risk-scored summaries
+  - Network Detection & Response with netflow ingestion, top-talker analysis, and protocol anomaly scoring
+  - Container runtime detection: escape attempts, privileged exec, untrusted images, sensitive mounts, K8s API abuse
+  - TLS certificate monitor: expiry tracking (30d/7d), self-signed and weak-key detection
+  - Configuration drift detection with SSH, kernel, and Docker baselines and MITRE ATT&CK mappings
+  - Unified asset inventory with 9 asset types, upsert, risk scoring, and full-text search
+
 - **Enterprise controls**
   - RBAC with endpoint-level enforcement
   - Session TTL, token rotation, audit and retention controls
@@ -60,7 +71,7 @@ Wardex is a self-hosted XDR and SIEM platform built in Rust for teams that want 
   - Outbound notifications to Slack, Teams, PagerDuty, Webhook, and Email (real SMTP delivery with retry) with severity filtering
   - CycloneDX 1.5 and SPDX 2.3 SBOM generation from Cargo.lock for supply-chain compliance
   - Runbooks, OpenAPI contract, deployment models, disaster recovery guidance, and production hardening docs
-  - Python SDK with ~30 typed API methods and custom exception hierarchy
+  - Python SDK with ~55 typed API methods and custom exception hierarchy
   - GraphQL query layer for threat-hunting with aliases, sub-field selection, and introspection
   - Prometheus metrics endpoint with 20+ wardex_* counters, gauges, and histograms
   - OpenAPI 3.0.3 machine-readable spec with 90+ endpoints and full schema definitions
@@ -78,9 +89,9 @@ Wardex is a self-hosted XDR and SIEM platform built in Rust for teams that want 
   - WebSocket event streaming with RFC 6455 framing and pub/sub channels
   - Structured JSON logging with pluggable sinks and per-request context
   - Data archival with real gzip compression (flate2), CSV export, and SHA-256 manifests
-  - 202 Sigma detection rules across 21 categories
+  - 210 Sigma detection rules across 22 categories (including cloud-native)
   - ClickHouse storage adapter with buffered batch inserts, MergeTree DDL, and materialized views
-  - ML triage engine with true-positive/false-positive/needs-review classification
+  - ML triage engine with 5-tree Random Forest ensemble for true-positive/false-positive/needs-review classification
   - HA cluster snapshots with log compaction and persistent Raft state schema
   - OIDC/SAML SSO with session management (config, login, callback, session, logout)
   - Cloud collectors for AWS CloudTrail, Azure Activity Log, and GCP Audit Log
@@ -118,8 +129,8 @@ Wardex is a self-hosted XDR and SIEM platform built in Rust for teams that want 
 
 ## Product posture
 
-- 105 Rust source modules
-- ~200 API paths
+- 113 Rust source modules
+- ~230 API paths
 - 1088 lib tests + 163 integration tests, all passing
 - Production hardening score: 98% (58/59 controls)
 - GitHub Actions release packaging for Linux, macOS, and Windows

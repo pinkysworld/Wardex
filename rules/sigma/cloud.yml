@@ -128,3 +128,186 @@ detection:
   condition: selection
 falsepositives:
   - MFA reset during account recovery
+---
+title: IAM Role Assumed by Unusual Principal
+id: wardex-cloud-007
+status: stable
+level: high
+description: Detects sts:AssumeRole calls from principals not previously seen assuming this role, indicating potential privilege escalation.
+author: Wardex Contributors
+date: 2025/06/15
+tags:
+  - attack.privilege_escalation
+  - attack.t1078.004
+  - wardex.cloud
+  - wardex.aws
+logsource:
+  category: cloud
+  product: wardex
+  service: aws_cloudtrail
+detection:
+  selection:
+    event_type: assume_role
+    principal_first_seen: true
+  condition: selection
+falsepositives:
+  - New automation service account
+---
+title: OAuth Application Granted High Privileges
+id: wardex-cloud-008
+status: stable
+level: critical
+description: Detects OAuth consent grants with high-privilege scopes (e.g. Directory.ReadWrite.All, Mail.ReadWrite) that could enable account takeover.
+author: Wardex Contributors
+date: 2025/06/15
+tags:
+  - attack.persistence
+  - attack.t1098.003
+  - wardex.cloud
+  - wardex.azure
+logsource:
+  category: cloud
+  product: wardex
+  service: azure_audit
+detection:
+  selection:
+    event_type: oauth_consent
+    scope_level: high_privilege
+  condition: selection
+falsepositives:
+  - Approved enterprise application
+---
+title: S3 Bucket Policy Changed to Allow Cross-Account Access
+id: wardex-cloud-009
+status: stable
+level: critical
+description: Detects S3 bucket policy modifications that grant access to external AWS accounts.
+author: Wardex Contributors
+date: 2025/06/15
+tags:
+  - attack.exfiltration
+  - attack.t1537
+  - wardex.cloud
+  - wardex.aws
+logsource:
+  category: cloud
+  product: wardex
+  service: aws_cloudtrail
+detection:
+  selection:
+    event_type: s3_put_bucket_policy
+    cross_account_access: true
+  condition: selection
+falsepositives:
+  - Approved cross-account data sharing
+---
+title: Cloud Logging Disabled
+id: wardex-cloud-010
+status: stable
+level: critical
+description: Detects disabling of cloud audit logging (CloudTrail, GCP Audit, Azure Activity) which is a common defense evasion technique.
+author: Wardex Contributors
+date: 2025/06/15
+tags:
+  - attack.defense_evasion
+  - attack.t1562.008
+  - wardex.cloud
+logsource:
+  category: cloud
+  product: wardex
+detection:
+  selection:
+    event_type: logging_config_change
+    logging_enabled: false
+  condition: selection
+falsepositives:
+  - Logging migration
+---
+title: GCP Service Account Key Created
+id: wardex-cloud-011
+status: stable
+level: high
+description: Detects creation of service account keys which can be used for persistent unauthorized access.
+author: Wardex Contributors
+date: 2025/06/15
+tags:
+  - attack.persistence
+  - attack.t1098.001
+  - wardex.cloud
+  - wardex.gcp
+logsource:
+  category: cloud
+  product: wardex
+  service: gcp_audit
+detection:
+  selection:
+    event_type: sa_key_create
+  condition: selection
+falsepositives:
+  - Automated key rotation
+---
+title: Cloud Function or Lambda Deployed with Admin Privileges
+id: wardex-cloud-012
+status: stable
+level: critical
+description: Detects serverless function deployment with overly permissive IAM role (admin or wildcard).
+author: Wardex Contributors
+date: 2025/06/15
+tags:
+  - attack.execution
+  - attack.t1648
+  - wardex.cloud
+logsource:
+  category: cloud
+  product: wardex
+detection:
+  selection:
+    event_type: function_deploy
+    role_privilege: admin
+  condition: selection
+falsepositives:
+  - Development deployment
+---
+title: Impossible Travel for Cloud Admin
+id: wardex-cloud-013
+status: stable
+level: high
+description: Detects cloud console logins from geographically impossible locations within a short time window.
+author: Wardex Contributors
+date: 2025/06/15
+tags:
+  - attack.initial_access
+  - attack.t1078
+  - wardex.cloud
+logsource:
+  category: cloud
+  product: wardex
+detection:
+  selection:
+    event_type: console_login
+    impossible_travel: true
+  condition: selection
+falsepositives:
+  - VPN or proxy usage
+---
+title: Cloud Database Snapshot Shared Externally
+id: wardex-cloud-014
+status: stable
+level: critical
+description: Detects RDS/Cloud SQL snapshot being shared with external accounts, enabling data exfiltration.
+author: Wardex Contributors
+date: 2025/06/15
+tags:
+  - attack.exfiltration
+  - attack.t1537
+  - wardex.cloud
+logsource:
+  category: cloud
+  product: wardex
+detection:
+  selection:
+    event_type: db_snapshot_share
+    external_account: true
+  condition: selection
+falsepositives:
+  - Cross-account disaster recovery
