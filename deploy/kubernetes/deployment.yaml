@@ -35,7 +35,7 @@ spec:
         fsGroup: 1000
       containers:
         - name: wardex
-          image: wardex:0.41.4
+          image: wardex:0.41.5
           imagePullPolicy: IfNotPresent
           ports:
             - name: http

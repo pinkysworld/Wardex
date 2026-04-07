@@ -89,7 +89,7 @@ export default function AlertDrawer({ alert, onClose, onUpdated }) {
           </div>
         </div>
       )}
-      <JsonDetails data={alert} />
+      <JsonDetails data={alert} label="Full alert context" />
     </SideDrawer>
   );
 }

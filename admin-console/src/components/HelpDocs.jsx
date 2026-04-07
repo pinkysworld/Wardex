@@ -1,6 +1,6 @@
 import { useApi } from '../hooks.jsx';
 import * as api from '../api.js';
-import { JsonDetails, SummaryGrid } from './operator.jsx';
+import { JsonDetails, RawJsonDetails, SummaryGrid } from './operator.jsx';
 
 export default function HelpDocs() {
   const { data: epList } = useApi(api.endpoints);
@@ -59,7 +59,7 @@ export default function HelpDocs() {
         ) : (
           <>
             <div className="empty">Endpoint metadata is not available.</div>
-            <JsonDetails data={epList} label="Endpoint metadata JSON" />
+            <RawJsonDetails data={epList} label="Endpoint metadata JSON" />
           </>
         )}
       </div>
@@ -84,7 +84,7 @@ export default function HelpDocs() {
         <div className="card">
           <div className="card-title" style={{ marginBottom: 12 }}>OpenAPI Schema</div>
           <SummaryGrid data={openApiSummary} limit={6} />
-          <JsonDetails data={openApi} />
+          <RawJsonDetails data={openApi} label="OpenAPI JSON" />
         </div>
       )}
     </div>

@@ -25,6 +25,126 @@ function previewObject(value) {
     .slice(0, 3);
 }
 
+function isPrimitive(value) {
+  return value == null || typeof value !== 'object';
+}
+
+function collectionSummary(value) {
+  if (Array.isArray(value)) return `${value.length} item${value.length === 1 ? '' : 's'}`;
+  if (value && typeof value === 'object') return `${Object.keys(value).length} field${Object.keys(value).length === 1 ? '' : 's'}`;
+  return formatValue(value);
+}
+
+function itemPreview(value) {
+  if (isPrimitive(value)) return formatValue(value);
+  if (Array.isArray(value)) return collectionSummary(value);
+  const preview = previewObject(value);
+  if (!preview || preview.length === 0) return collectionSummary(value);
+  return preview.map(([key, innerValue]) => `${formatLabel(key)}: ${formatValue(innerValue)}`).join(' · ');
+}
+
+function StructuredInspector({ data, depth = 0 }) {
+  if (data == null) return <div className="empty">No additional fields available.</div>;
+
+  if (isPrimitive(data)) {
+    return (
+      <div className="inspector-leaf">
+        {typeof data === 'string' ? data : formatValue(data)}
+      </div>
+    );
+  }
+
+  if (Array.isArray(data)) {
+    if (data.length === 0) return <div className="empty">No items available.</div>;
+
+    const visibleItems = data.slice(0, 12);
+    const hiddenCount = data.length - visibleItems.length;
+
+    if (visibleItems.every(isPrimitive)) {
+      return (
+        <div>
+          <div className="chip-row">
+            {visibleItems.map((item, index) => (
+              <span key={`${String(item)}-${index}`} className="badge badge-info">
+                {typeof item === 'string' ? item : formatValue(item)}
+              </span>
+            ))}
+          </div>
+          {hiddenCount > 0 && (
+            <div className="hint" style={{ marginTop: 8 }}>
+              {hiddenCount} more item{hiddenCount === 1 ? '' : 's'} hidden to keep this view readable.
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    return (
+      <div className="inspector-stack">
+        {visibleItems.map((item, index) => (
+          <details key={index} className="inspector-section" open={depth === 0 && index < 2}>
+            <summary>
+              Item {index + 1}
+              <span>{itemPreview(item)}</span>
+            </summary>
+            <div className="inspector-content">
+              <StructuredInspector data={item} depth={depth + 1} />
+            </div>
+          </details>
+        ))}
+        {hiddenCount > 0 && (
+          <div className="hint">
+            {hiddenCount} more complex item{hiddenCount === 1 ? '' : 's'} hidden to keep this panel responsive.
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  const entries = Object.entries(data);
+  if (entries.length === 0) return <div className="empty">No additional fields available.</div>;
+
+  const scalarEntries = entries.filter(([, value]) => isPrimitive(value));
+  const complexEntries = entries.filter(([, value]) => !isPrimitive(value));
+  const visibleComplexEntries = complexEntries.slice(0, 12);
+  const hiddenComplexCount = complexEntries.length - visibleComplexEntries.length;
+
+  return (
+    <div className="inspector-stack">
+      {scalarEntries.length > 0 && (
+        <div className="inspector-kv-grid">
+          {scalarEntries.map(([key, value]) => (
+            <div key={key} className="inspector-kv-card">
+              <div className="inspector-kv-label">{formatLabel(key)}</div>
+              <div className="inspector-kv-value">
+                {typeof value === 'string' ? value : formatValue(value)}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {visibleComplexEntries.map(([key, value]) => (
+        <details key={key} className="inspector-section" open={depth === 0}>
+          <summary>
+            {formatLabel(key)}
+            <span>{collectionSummary(value)}</span>
+          </summary>
+          <div className="inspector-content">
+            <StructuredInspector data={value} depth={depth + 1} />
+          </div>
+        </details>
+      ))}
+
+      {hiddenComplexCount > 0 && (
+        <div className="hint">
+          {hiddenComplexCount} more nested section{hiddenComplexCount === 1 ? '' : 's'} hidden to keep this panel readable.
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function SummaryGrid({ data, exclude = [], limit = 12, emptyMessage = 'No data available' }) {
   if (!data || typeof data !== 'object') return <div className="empty">{emptyMessage}</div>;
   if (Array.isArray(data)) {
@@ -82,7 +202,19 @@ export function SummaryGrid({ data, exclude = [], limit = 12, emptyMessage = 'No
   );
 }
 
-export function JsonDetails({ data, label = 'Technical details' }) {
+export function JsonDetails({ data, label = 'Expanded details' }) {
+  if (data == null) return null;
+  return (
+    <details style={{ marginTop: 12 }}>
+      <summary style={{ cursor: 'pointer', fontSize: 12, color: 'var(--text-secondary)' }}>{label}</summary>
+      <div className="inspector-shell" style={{ marginTop: 8 }}>
+        <StructuredInspector data={data} />
+      </div>
+    </details>
+  );
+}
+
+export function RawJsonDetails({ data, label = 'Raw JSON' }) {
   if (data == null) return null;
   return (
     <details style={{ marginTop: 12 }}>

@@ -32,9 +32,15 @@ export default function SOCWorkbench() {
   const [entityResult, setEntityResult] = useState(null);
   const [escForm, setEscForm] = useState({ name: '', severity: 'critical', channel: 'email', targets: '', timeout_minutes: 30 });
   const [showEscForm, setShowEscForm] = useState(false);
-  const [selectedProcessPid, setSelectedProcessPid] = useState(null);
+  const [selectedProcess, setSelectedProcess] = useState(null);
 
   useInterval(() => { rOverview(); rQueue(); rEscActive(); }, 15000);
+  useInterval(() => {
+    if (tab === 'process-tree') {
+      rLive();
+      rProcFindings();
+    }
+  }, tab === 'process-tree' ? 15000 : null);
 
   const incArr = Array.isArray(incList) ? incList : incList?.incidents || [];
   const caseArr = Array.isArray(caseList) ? caseList : caseList?.cases || [];
@@ -47,6 +53,7 @@ export default function SOCWorkbench() {
     try { const d = await api.incidentById(id); setIncDetail(d); } catch { setIncDetail(null); }
     try { const s = await api.incidentStoryline(id); setIncStoryline(s); } catch { /* optional */ }
   };
+  const openProcess = (process) => setSelectedProcess(process ? { ...process } : null);
 
   return (
     <div>
@@ -437,7 +444,7 @@ export default function SOCWorkbench() {
                         <td>{f.cpu_percent?.toFixed(1)}%</td>
                         <td>{f.mem_percent?.toFixed(1)}%</td>
                         <td style={{ fontSize: 12 }}>{f.reason}</td>
-                        <td><button className="btn btn-sm" onClick={() => setSelectedProcessPid(f.pid)}>Investigate</button></td>
+                        <td><button className="btn btn-sm" onClick={() => openProcess(f)}>Investigate</button></td>
                       </tr>
                     ))}
                   </tbody>
@@ -469,7 +476,7 @@ export default function SOCWorkbench() {
                           <td>{p.user}</td>
                           <td style={{ color: p.cpu_percent > 50 ? 'var(--danger)' : undefined }}>{p.cpu_percent?.toFixed(1)}</td>
                           <td style={{ color: p.mem_percent > 30 ? 'var(--warning)' : undefined }}>{p.mem_percent?.toFixed(1)}</td>
-                          <td><button className="btn btn-sm" onClick={() => setSelectedProcessPid(p.pid)}>Investigate</button></td>
+                          <td><button className="btn btn-sm" onClick={() => openProcess(p)}>Investigate</button></td>
                         </tr>
                       ))}
                     </tbody>
@@ -502,7 +509,7 @@ export default function SOCWorkbench() {
             <details style={{ marginTop: 16 }}>
               <summary style={{ cursor: 'pointer', fontSize: 13, color: 'var(--text-secondary)' }}>Static Process Tree (raw)</summary>
               <div className="card" style={{ marginTop: 8 }}>
-                <JsonDetails data={procs} label="Process tree JSON" />
+                <JsonDetails data={procs} label="Process tree details" />
               </div>
             </details>
           )}
@@ -591,8 +598,9 @@ export default function SOCWorkbench() {
         </div>
       )}
       <ProcessDrawer
-        pid={selectedProcessPid}
-        onClose={() => setSelectedProcessPid(null)}
+        pid={selectedProcess?.pid}
+        snapshot={selectedProcess}
+        onClose={() => setSelectedProcess(null)}
         onUpdated={() => { rLive(); rProcFindings(); }}
       />
     </div>

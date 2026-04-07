@@ -1941,11 +1941,41 @@ fn process_recommendations(
     items
 }
 
+#[cfg(target_os = "macos")]
+fn collect_process_snapshot_macos(pid: u32) -> Option<crate::collector_macos::MacosProcessEvent> {
+    let pid_arg = pid.to_string();
+    let line = run_command_text(
+        "ps",
+        &["-p", &pid_arg, "-o", "pid=,ppid=,user=,group=,%cpu=,%mem=,comm="],
+    )?;
+    let fields: Vec<&str> = line.split_whitespace().collect();
+    if fields.len() < 7 {
+        return None;
+    }
+    Some(crate::collector_macos::MacosProcessEvent {
+        timestamp: chrono::Utc::now().to_rfc3339(),
+        pid: fields[0].parse().ok()?,
+        ppid: fields[1].parse().unwrap_or(0),
+        user: fields[2].to_string(),
+        group: fields[3].to_string(),
+        cpu_percent: fields[4].parse().unwrap_or(0.0),
+        mem_percent: fields[5].parse().unwrap_or(0.0),
+        name: fields[6..].join(" "),
+        code_signed: crate::collector_macos::CodeSignStatus::Unknown,
+        cmd_line: String::new(),
+        ocsf_class_id: crate::collector_macos::OCSF_PROCESS_ACTIVITY,
+    })
+}
+
 fn process_detail_json(pid: u32, hostname: &str) -> Option<serde_json::Value> {
     #[cfg(target_os = "macos")]
     {
         let processes = crate::collector_macos::collect_processes();
-        let process = processes.iter().find(|proc| proc.pid == pid)?;
+        let process = processes
+            .iter()
+            .find(|proc| proc.pid == pid)
+            .cloned()
+            .or_else(|| collect_process_snapshot_macos(pid))?;
         let findings: Vec<serde_json::Value> = crate::collector_macos::analyze_processes(&processes)
             .into_iter()
             .filter(|finding| finding.pid == pid)
@@ -1963,7 +1993,13 @@ fn process_detail_json(pid: u32, hostname: &str) -> Option<serde_json::Value> {
             .collect();
         let pid_arg = pid.to_string();
         let cmd_line = run_command_text("ps", &["-p", &pid_arg, "-o", "command="])
-            .unwrap_or_else(|| process.cmd_line.clone());
+            .unwrap_or_else(|| {
+                if process.cmd_line.is_empty() {
+                    process.name.clone()
+                } else {
+                    process.cmd_line.clone()
+                }
+            });
         let start_time = run_command_text("ps", &["-p", &pid_arg, "-o", "lstart="]);
         let elapsed = run_command_text("ps", &["-p", &pid_arg, "-o", "etime="]);
         let exe_path = process_lsof_path(pid, "txt");

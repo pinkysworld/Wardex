@@ -3,7 +3,7 @@ import { useApi, useInterval, useToast } from '../hooks.jsx';
 import * as api from '../api.js';
 import AlertDrawer from './AlertDrawer.jsx';
 import ProcessDrawer from './ProcessDrawer.jsx';
-import { downloadCsv, downloadData } from './operator.jsx';
+import { JsonDetails, downloadCsv, downloadData } from './operator.jsx';
 
 export default function LiveMonitor() {
   const toast = useToast();
@@ -22,10 +22,16 @@ export default function LiveMonitor() {
   const [sevFilter, setSevFilter] = useState('all');
   const [selectedAlerts, setSelectedAlerts] = useState(new Set());
   const [bulkAction, setBulkAction] = useState('');
-  const [selectedProcessPid, setSelectedProcessPid] = useState(null);
+  const [selectedProcess, setSelectedProcess] = useState(null);
 
   const reloadAll = () => { reload(); reloadCount(); reloadGrouped(); };
   useInterval(reloadAll, 10000);
+  useInterval(() => {
+    if (tab === 'processes') {
+      reloadProcs();
+      reloadPA();
+    }
+  }, tab === 'processes' ? 10000 : null);
 
   const alertList = Array.isArray(alertData) ? alertData : alertData?.alerts || [];
 
@@ -144,6 +150,8 @@ export default function LiveMonitor() {
     }
     downloadData({ processes: procList, findings: procAnalysis?.findings || [] }, 'wardex-processes.json');
   };
+
+  const openProcess = (process) => setSelectedProcess(process ? { ...process } : null);
 
   return (
     <div>
@@ -351,10 +359,7 @@ export default function LiveMonitor() {
                   ))}
                 </div>
               )}
-              <details>
-                <summary style={{ cursor: 'pointer', fontSize: 13, color: 'var(--text-secondary)' }}>Raw JSON</summary>
-                <div className="json-block" style={{ marginTop: 8 }}>{JSON.stringify(analysisResult, null, 2)}</div>
-              </details>
+              <JsonDetails data={analysisResult} label="Full analysis breakdown" />
             </div>
           ) : (
             <div className="empty">Click "Run Analysis" to analyze current alert patterns</div>
@@ -423,7 +428,7 @@ export default function LiveMonitor() {
                   <tbody>
                     {procAnalysis.findings.map((f, i) => (
                       <tr key={i} style={{ background: f.risk_level === 'critical' ? 'rgba(239,68,68,.06)' : f.risk_level === 'high' ? 'rgba(249,115,22,.06)' : undefined, cursor: 'pointer' }}
-                        onClick={() => setSelectedProcessPid(f.pid)}>
+                        onClick={() => openProcess(f)}>
                         <td><span className={`sev-${f.risk_level}`}>{f.risk_level}</span></td>
                         <td style={{ fontFamily: 'var(--font-mono)', fontSize: 12 }}>{f.pid}</td>
                         <td style={{ fontWeight: 600 }}>{f.name}</td>
@@ -434,7 +439,7 @@ export default function LiveMonitor() {
                         <td>
                           <button className="btn btn-sm" onClick={(event) => {
                             event.stopPropagation();
-                            setSelectedProcessPid(f.pid);
+                            openProcess(f);
                           }}>
                             Investigate
                           </button>
@@ -471,7 +476,7 @@ export default function LiveMonitor() {
                   </thead>
                   <tbody>
                     {procList.slice(0, 200).map(p => (
-                      <tr key={p.pid} style={{ cursor: 'pointer' }} onClick={() => setSelectedProcessPid(p.pid)}>
+                      <tr key={p.pid} style={{ cursor: 'pointer' }} onClick={() => openProcess(p)}>
                         <td style={{ fontFamily: 'var(--font-mono)', fontSize: 12 }}>{p.pid}</td>
                         <td style={{ fontFamily: 'var(--font-mono)', fontSize: 12 }}>{p.ppid ?? '—'}</td>
                         <td style={{ fontWeight: p.cpu_percent > 50 ? 700 : 400 }}>{p.name?.split('/').pop() || p.name}</td>
@@ -482,7 +487,7 @@ export default function LiveMonitor() {
                         <td>
                           <button className="btn btn-sm" onClick={(event) => {
                             event.stopPropagation();
-                            setSelectedProcessPid(p.pid);
+                            openProcess(p);
                           }}>
                             Investigate
                           </button>
@@ -502,7 +507,12 @@ export default function LiveMonitor() {
         </div>
       )}
       <AlertDrawer alert={selectedAlert} onClose={() => setSelectedId(null)} onUpdated={reloadAll} />
-      <ProcessDrawer pid={selectedProcessPid} onClose={() => setSelectedProcessPid(null)} onUpdated={() => { reloadProcs(); reloadPA(); }} />
+      <ProcessDrawer
+        pid={selectedProcess?.pid}
+        snapshot={selectedProcess}
+        onClose={() => setSelectedProcess(null)}
+        onUpdated={() => { reloadProcs(); reloadPA(); }}
+      />
     </div>
   );
 }

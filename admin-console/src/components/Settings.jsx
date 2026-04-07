@@ -341,12 +341,12 @@ export default function Settings() {
                       ))}
                     </div>
                   )}
-                  <JsonDetails data={structuredConfig} label="Full configuration detail" />
+                  <JsonDetails data={structuredConfig} label="Full configuration breakdown" />
                 </div>
               ) : (
                 <>
                   <div className="empty">Configuration is not yet available in structured form.</div>
-                  <JsonDetails data={config} label="Configuration detail" />
+                  <JsonDetails data={config} label="Available configuration fields" />
                 </>
               )
             )}

@@ -61,7 +61,7 @@ export default function Dashboard() {
   const [refreshing, setRefreshing] = useState(false);
   const [expandedAlert, setExpandedAlert] = useState(null);
   const [sevFilter, setSevFilter] = useState('all');
-  const [selectedProcessPid, setSelectedProcessPid] = useState(null);
+  const [selectedProcess, setSelectedProcess] = useState(null);
 
   const reloadAll = async () => {
     setRefreshing(true);
@@ -125,6 +125,7 @@ export default function Dashboard() {
   const selectedAlert = expandedAlert == null
     ? null
     : filteredAlerts.find((a, i) => (a.id || a.alert_id || `alert-${i}`) === expandedAlert);
+  const openProcess = (process) => setSelectedProcess(process ? { ...process } : null);
 
   if (l1) return <div className="loading"><div className="spinner" /> Loading dashboard…</div>;
 
@@ -230,7 +231,7 @@ export default function Dashboard() {
                   <tbody>
                     {procAnalysis.findings.map((f, i) => (
                       <tr key={i} style={{ cursor: 'pointer' }}
-                        onClick={() => setSelectedProcessPid(f.pid)}>
+                        onClick={() => openProcess(f)}>
                         <td style={{ fontFamily: 'var(--font-mono)', fontSize: 12 }}>{f.pid}</td>
                         <td><strong>{f.name}</strong></td>
                         <td>{f.user}</td>
@@ -241,7 +242,7 @@ export default function Dashboard() {
                         <td>
                           <button className="btn btn-sm" onClick={(event) => {
                             event.stopPropagation();
-                            setSelectedProcessPid(f.pid);
+                            openProcess(f);
                           }}>
                             Investigate
                           </button>
@@ -325,7 +326,12 @@ export default function Dashboard() {
         )}
       </div>
       <AlertDrawer alert={selectedAlert} onClose={() => setExpandedAlert(null)} onUpdated={reloadAll} />
-      <ProcessDrawer pid={selectedProcessPid} onClose={() => setSelectedProcessPid(null)} onUpdated={reloadAll} />
+      <ProcessDrawer
+        pid={selectedProcess?.pid}
+        snapshot={selectedProcess}
+        onClose={() => setSelectedProcess(null)}
+        onUpdated={reloadAll}
+      />
     </div>
   );
 }

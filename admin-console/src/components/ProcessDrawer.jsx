@@ -11,30 +11,87 @@ function requestSeverity(detail) {
   return 'low';
 }
 
-export default function ProcessDrawer({ pid, onClose, onUpdated }) {
+function buildSnapshotDetail(pid, snapshot) {
+  if (!snapshot) return null;
+  const name = snapshot.name || snapshot.display_name || `PID ${pid}`;
+  const displayName = snapshot.display_name || String(name).split('/').pop() || `PID ${pid}`;
+  const riskLevel = snapshot.risk_level || 'nominal';
+  const finding = snapshot.reason ? {
+    pid,
+    name,
+    user: snapshot.user || 'unknown',
+    risk_level: riskLevel,
+    reason: snapshot.reason,
+    cpu_percent: snapshot.cpu_percent ?? 0,
+    mem_percent: snapshot.mem_percent ?? 0,
+  } : null;
+  const findings = Array.isArray(snapshot.findings)
+    ? snapshot.findings
+    : finding
+      ? [finding]
+      : [];
+  const recommendations = snapshot.analysis?.recommendations?.length
+    ? snapshot.analysis.recommendations
+    : [
+        'This process exited before Wardex could collect a full live inspection.',
+        'The fields below come from the last visible snapshot in the process table.',
+      ];
+  return {
+    pid,
+    ppid: snapshot.ppid ?? null,
+    name,
+    display_name: displayName,
+    user: snapshot.user || 'unknown',
+    group: snapshot.group || '—',
+    cpu_percent: snapshot.cpu_percent ?? 0,
+    mem_percent: snapshot.mem_percent ?? 0,
+    hostname: snapshot.hostname || 'Local host',
+    platform: snapshot.platform || 'macos',
+    cmd_line: snapshot.cmd_line || name,
+    exe_path: snapshot.exe_path || (String(name).includes('/') ? name : null),
+    cwd: snapshot.cwd || null,
+    start_time: snapshot.start_time || null,
+    elapsed: snapshot.elapsed || null,
+    risk_level: riskLevel,
+    findings,
+    network_activity: snapshot.network_activity || [],
+    code_signature: snapshot.code_signature || null,
+    analysis: {
+      self_process: Boolean(snapshot.analysis?.self_process),
+      listener_count: snapshot.analysis?.listener_count ?? 0,
+      recommendations,
+      exited_before_inspection: true,
+    },
+  };
+}
+
+export default function ProcessDrawer({ pid, snapshot, onClose, onUpdated }) {
   const toast = useToast();
   const { data: detail, loading, error, reload } = useApi(
     () => api.processDetail(pid),
     [pid],
     { skip: !pid }
   );
+  const processGone = error?.status === 404;
+  const snapshotDetail = useMemo(() => buildSnapshotDetail(pid, snapshot), [pid, snapshot]);
+  const activeDetail = detail || (processGone ? snapshotDetail : null);
 
   const summary = useMemo(() => {
-    if (!detail) return null;
+    if (!activeDetail) return null;
     return {
-      pid: detail.pid,
-      ppid: detail.ppid,
-      user: detail.user,
-      group: detail.group,
-      cpu_percent: detail.cpu_percent,
-      mem_percent: detail.mem_percent,
-      hostname: detail.hostname,
-      platform: detail.platform,
-      start_time: detail.start_time,
-      elapsed: detail.elapsed,
-      risk_level: detail.risk_level,
+      pid: activeDetail.pid,
+      ppid: activeDetail.ppid,
+      user: activeDetail.user,
+      group: activeDetail.group,
+      cpu_percent: activeDetail.cpu_percent,
+      mem_percent: activeDetail.mem_percent,
+      hostname: activeDetail.hostname,
+      platform: activeDetail.platform,
+      start_time: activeDetail.start_time,
+      elapsed: activeDetail.elapsed,
+      risk_level: activeDetail.risk_level,
     };
-  }, [detail]);
+  }, [activeDetail]);
 
   if (!pid) return null;
 
@@ -77,20 +134,25 @@ export default function ProcessDrawer({ pid, onClose, onUpdated }) {
     <SideDrawer
       open={!!pid}
       onClose={onClose}
-      title={detail?.display_name || detail?.name || `PID ${pid}`}
-      subtitle={detail ? `${detail.platform} · ${detail.hostname}` : `PID ${pid}`}
+      title={activeDetail?.display_name || activeDetail?.name || `PID ${pid}`}
+      subtitle={activeDetail ? `${activeDetail.platform} · ${activeDetail.hostname}` : `PID ${pid}`}
       actions={
         <>
           <button className="btn btn-sm" onClick={reload}>Refresh</button>
-          {detail && <button className="btn btn-sm" onClick={() => downloadData(detail, `process-${detail.pid}.json`)}>Export</button>}
+          {activeDetail && <button className="btn btn-sm" onClick={() => downloadData(activeDetail, `process-${activeDetail.pid}.json`)}>Export</button>}
           <button className="btn btn-sm" disabled={!detail || detail?.analysis?.self_process} onClick={queueKill}>Queue Kill</button>
           <button className="btn btn-sm btn-primary" disabled={!detail} onClick={queueIsolate}>Queue Isolate</button>
         </>
       }
     >
       {loading && <div className="loading"><div className="spinner" /></div>}
-      {error && <div className="error-box">Failed to load process detail.</div>}
-      {detail && (
+      {processGone && (
+        <div className="error-box">
+          This process exited before Wardex could complete a live inspection. Showing the last known snapshot from the process table.
+        </div>
+      )}
+      {error && !processGone && <div className="error-box">Failed to load process detail.</div>}
+      {activeDetail && (
         <>
           <SummaryGrid data={summary} limit={10} />
 
@@ -99,27 +161,27 @@ export default function ProcessDrawer({ pid, onClose, onUpdated }) {
             <div className="drawer-copy-grid">
               <div>
                 <div className="metric-label">Executable</div>
-                <div style={{ fontFamily: 'var(--font-mono)', fontSize: 12, wordBreak: 'break-all' }}>{detail.exe_path || 'Unavailable'}</div>
+                <div style={{ fontFamily: 'var(--font-mono)', fontSize: 12, wordBreak: 'break-all' }}>{activeDetail.exe_path || 'Unavailable'}</div>
               </div>
               <div>
                 <div className="metric-label">Working Directory</div>
-                <div style={{ fontFamily: 'var(--font-mono)', fontSize: 12, wordBreak: 'break-all' }}>{detail.cwd || 'Unavailable'}</div>
+                <div style={{ fontFamily: 'var(--font-mono)', fontSize: 12, wordBreak: 'break-all' }}>{activeDetail.cwd || 'Unavailable'}</div>
               </div>
               <div style={{ gridColumn: '1 / -1' }}>
                 <div className="metric-label">Command Line</div>
-                <div style={{ fontFamily: 'var(--font-mono)', fontSize: 12, wordBreak: 'break-all' }}>{detail.cmd_line || 'Unavailable'}</div>
+                <div style={{ fontFamily: 'var(--font-mono)', fontSize: 12, wordBreak: 'break-all' }}>{activeDetail.cmd_line || 'Unavailable'}</div>
               </div>
             </div>
           </div>
 
-          {detail.findings?.length > 0 && (
+          {activeDetail.findings?.length > 0 && (
             <div className="card" style={{ marginTop: 16 }}>
               <div className="card-title" style={{ marginBottom: 8 }}>Behavioural Findings</div>
               <div className="table-wrap">
                 <table>
                   <thead><tr><th>Risk</th><th>Reason</th><th>CPU</th><th>Memory</th></tr></thead>
                   <tbody>
-                    {detail.findings.map((finding, index) => (
+                    {activeDetail.findings.map((finding, index) => (
                       <tr key={`${finding.pid}-${index}`}>
                         <td><span className={`sev-${finding.risk_level}`}>{finding.risk_level}</span></td>
                         <td>{finding.reason}</td>
@@ -133,23 +195,23 @@ export default function ProcessDrawer({ pid, onClose, onUpdated }) {
             </div>
           )}
 
-          {detail.analysis?.recommendations?.length > 0 && (
+          {activeDetail.analysis?.recommendations?.length > 0 && (
             <div className="card" style={{ marginTop: 16 }}>
               <div className="card-title" style={{ marginBottom: 8 }}>Analyst Guidance</div>
               <ul style={{ margin: 0, paddingLeft: 18, lineHeight: 1.7 }}>
-                {detail.analysis.recommendations.map((item) => <li key={item}>{item}</li>)}
+                {activeDetail.analysis.recommendations.map((item) => <li key={item}>{item}</li>)}
               </ul>
             </div>
           )}
 
-          {detail.network_activity?.length > 0 && (
+          {activeDetail.network_activity?.length > 0 && (
             <div className="card" style={{ marginTop: 16 }}>
               <div className="card-title" style={{ marginBottom: 8 }}>Network Activity</div>
               <div className="table-wrap">
                 <table>
                   <thead><tr><th>Protocol</th><th>Endpoint</th><th>State</th></tr></thead>
                   <tbody>
-                    {detail.network_activity.map((entry, index) => (
+                    {activeDetail.network_activity.map((entry, index) => (
                       <tr key={`${entry.endpoint}-${index}`}>
                         <td>{entry.protocol}</td>
                         <td style={{ fontFamily: 'var(--font-mono)', fontSize: 12 }}>{entry.endpoint}</td>
@@ -162,14 +224,14 @@ export default function ProcessDrawer({ pid, onClose, onUpdated }) {
             </div>
           )}
 
-          {detail.code_signature && (
+          {activeDetail.code_signature && (
             <div className="card" style={{ marginTop: 16 }}>
               <div className="card-title" style={{ marginBottom: 8 }}>Code Signature</div>
-              <SummaryGrid data={detail.code_signature} limit={6} />
+              <SummaryGrid data={activeDetail.code_signature} limit={6} />
             </div>
           )}
 
-          <JsonDetails data={detail} />
+          <JsonDetails data={activeDetail} label="Deep inspection fields" />
         </>
       )}
     </SideDrawer>

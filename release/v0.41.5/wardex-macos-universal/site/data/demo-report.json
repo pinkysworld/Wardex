@@ -1,0 +1,193 @@
+{
+  "version": "1.0",
+  "generated_at": "2026-03-12T08:06:37.368666+00:00",
+  "summary": {
+    "total_samples": 6,
+    "alert_count": 3,
+    "critical_count": 3,
+    "average_score": 9.738281,
+    "max_score": 24.573172
+  },
+  "samples": [
+    {
+      "index": 1,
+      "timestamp_ms": 1000,
+      "telemetry": {
+        "cpu_load_pct": 18.0,
+        "memory_load_pct": 32.0,
+        "temperature_c": 41.0,
+        "network_kbps": 500.0,
+        "auth_failures": 0,
+        "battery_pct": 94.0,
+        "integrity_drift": 0.01
+      },
+      "anomaly": {
+        "score": 0.0,
+        "confidence": 0.25,
+        "suspicious_axes": 0,
+        "reasons": [
+          "baseline initialized"
+        ]
+      },
+      "decision": {
+        "threat_level": "nominal",
+        "action": "observe",
+        "isolation_pct": 0,
+        "rationale": "score 0.00 with 25% confidence"
+      }
+    },
+    {
+      "index": 2,
+      "timestamp_ms": 2000,
+      "telemetry": {
+        "cpu_load_pct": 22.0,
+        "memory_load_pct": 34.0,
+        "temperature_c": 42.0,
+        "network_kbps": 540.0,
+        "auth_failures": 1,
+        "battery_pct": 92.0,
+        "integrity_drift": 0.02
+      },
+      "anomaly": {
+        "score": 0.44716668,
+        "confidence": 0.35,
+        "suspicious_axes": 0,
+        "reasons": [
+          "within learned baseline"
+        ]
+      },
+      "decision": {
+        "threat_level": "nominal",
+        "action": "observe",
+        "isolation_pct": 0,
+        "rationale": "score 0.45 with 35% confidence"
+      }
+    },
+    {
+      "index": 3,
+      "timestamp_ms": 3000,
+      "telemetry": {
+        "cpu_load_pct": 27.0,
+        "memory_load_pct": 37.0,
+        "temperature_c": 44.0,
+        "network_kbps": 610.0,
+        "auth_failures": 0,
+        "battery_pct": 91.0,
+        "integrity_drift": 0.02
+      },
+      "anomaly": {
+        "score": 0.6190016,
+        "confidence": 0.5,
+        "suspicious_axes": 0,
+        "reasons": [
+          "within learned baseline"
+        ]
+      },
+      "decision": {
+        "threat_level": "nominal",
+        "action": "observe",
+        "isolation_pct": 0,
+        "rationale": "score 0.62 with 50% confidence"
+      }
+    },
+    {
+      "index": 4,
+      "timestamp_ms": 4000,
+      "telemetry": {
+        "cpu_load_pct": 68.0,
+        "memory_load_pct": 59.0,
+        "temperature_c": 52.0,
+        "network_kbps": 5400.0,
+        "auth_failures": 9,
+        "battery_pct": 64.0,
+        "integrity_drift": 0.12
+      },
+      "anomaly": {
+        "score": 12.051306,
+        "confidence": 0.75,
+        "suspicious_axes": 7,
+        "reasons": [
+          "cpu load spike (+47.33)",
+          "memory pressure increase (+25.56)",
+          "thermal deviation (+10.17)",
+          "network burst (+4868.94)",
+          "auth failures surge (+8.83)",
+          "integrity drift increase (+0.11)",
+          "battery dropped sharply under load"
+        ]
+      },
+      "decision": {
+        "threat_level": "critical",
+        "action": "rollback-and-escalate",
+        "isolation_pct": 100,
+        "rationale": "score 12.05 with 75% confidence"
+      }
+    },
+    {
+      "index": 5,
+      "timestamp_ms": 5000,
+      "telemetry": {
+        "cpu_load_pct": 82.0,
+        "memory_load_pct": 71.0,
+        "temperature_c": 57.0,
+        "network_kbps": 7100.0,
+        "auth_failures": 16,
+        "battery_pct": 48.0,
+        "integrity_drift": 0.18
+      },
+      "anomaly": {
+        "score": 24.573172,
+        "confidence": 1.0,
+        "suspicious_axes": 7,
+        "reasons": [
+          "cpu load spike (+61.33)",
+          "memory pressure increase (+37.56)",
+          "thermal deviation (+15.17)",
+          "network burst (+6568.94)",
+          "auth failures surge (+15.83)",
+          "integrity drift increase (+0.17)",
+          "battery dropped sharply under load"
+        ]
+      },
+      "decision": {
+        "threat_level": "critical",
+        "action": "rollback-and-escalate",
+        "isolation_pct": 100,
+        "rationale": "score 24.57 with 100% confidence"
+      }
+    },
+    {
+      "index": 6,
+      "timestamp_ms": 6000,
+      "telemetry": {
+        "cpu_load_pct": 76.0,
+        "memory_load_pct": 66.0,
+        "temperature_c": 55.0,
+        "network_kbps": 6600.0,
+        "auth_failures": 12,
+        "battery_pct": 44.0,
+        "integrity_drift": 0.16
+      },
+      "anomaly": {
+        "score": 20.739044,
+        "confidence": 1.0,
+        "suspicious_axes": 7,
+        "reasons": [
+          "cpu load spike (+55.33)",
+          "memory pressure increase (+32.56)",
+          "thermal deviation (+13.17)",
+          "network burst (+6068.94)",
+          "auth failures surge (+11.83)",
+          "integrity drift increase (+0.15)",
+          "battery dropped sharply under load"
+        ]
+      },
+      "decision": {
+        "threat_level": "critical",
+        "action": "rollback-and-escalate",
+        "isolation_pct": 100,
+        "rationale": "score 20.74 with 100% confidence"
+      }
+    }
+  ]
+}
