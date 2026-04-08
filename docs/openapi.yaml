@@ -1915,3 +1915,289 @@ paths:
                         version: { type: integer }
                         name: { type: string }
                         applied_at: { type: string, format: date-time, nullable: true }
+
+  # ── v0.43.0 Malware Scanning ──────────────────────────────────────
+  /api/malware/stats:
+    get:
+      tags: [Malware]
+      summary: Get malware hash database statistics
+      security: [{ BearerAuth: [] }]
+      responses:
+        "200":
+          description: Hash DB stats (total hashes, families, recent detections)
+          content:
+            application/json:
+              schema:
+                type: object
+
+  /api/malware/recent:
+    get:
+      tags: [Malware]
+      summary: Get recent malware detections
+      security: [{ BearerAuth: [] }]
+      responses:
+        "200":
+          description: List of recent malware detections
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+
+  /api/malware/signatures/import:
+    post:
+      tags: [Malware]
+      summary: Import malware signatures from JSON or CSV
+      security: [{ BearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                format: { type: string, enum: [json, csv] }
+                data: { type: string }
+      responses:
+        "200":
+          description: Import result with count of imported signatures
+
+  /api/scan/buffer:
+    post:
+      tags: [Malware]
+      summary: Scan a file buffer for malware (hash + YARA)
+      security: [{ BearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                data: { type: string, description: Base64-encoded file content }
+                filename: { type: string }
+      responses:
+        "200":
+          description: Scan verdict (malicious, suspicious, or clean)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  verdict: { type: string, enum: [malicious, suspicious, clean] }
+                  matches: { type: array, items: { type: string } }
+
+  /api/scan/hash:
+    post:
+      tags: [Malware]
+      summary: Look up a file hash in the malware database
+      security: [{ BearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                hash: { type: string }
+                algorithm: { type: string, enum: [sha256, md5] }
+      responses:
+        "200":
+          description: Hash lookup result
+
+  # ── v0.43.0 Threat Hunting ────────────────────────────────────────
+  /api/hunt:
+    post:
+      tags: [Threat Hunting]
+      summary: Execute a KQL-like threat hunting query
+      security: [{ BearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [query]
+              properties:
+                query: { type: string, description: "KQL-like query (e.g., 'process == svchost.exe AND src == 10.0.0.*')" }
+      responses:
+        "200":
+          description: Hunt results
+        "400":
+          description: Invalid or empty query
+
+  # ── v0.43.0 SIEM Export ───────────────────────────────────────────
+  /api/export/alerts:
+    get:
+      tags: [SIEM]
+      summary: Export alerts in multiple SIEM formats
+      security: [{ BearerAuth: [] }]
+      parameters:
+        - name: format
+          in: query
+          schema:
+            type: string
+            enum: [json, cef, leef, syslog, sentinel, udm, ecs, qradar]
+            default: json
+      responses:
+        "200":
+          description: Exported alerts in the requested format
+        "400":
+          description: Unsupported export format
+
+  # ── v0.43.0 Compliance ────────────────────────────────────────────
+  /api/compliance/report:
+    get:
+      tags: [Compliance]
+      summary: Generate compliance report for one or all frameworks
+      security: [{ BearerAuth: [] }]
+      parameters:
+        - name: framework
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [cis-v8, pci-dss-v4, soc2-type2, nist-csf-2]
+      responses:
+        "200":
+          description: Compliance report with control status, score, and remediation actions
+        "404":
+          description: Framework not found
+
+  /api/compliance/summary:
+    get:
+      tags: [Compliance]
+      summary: Executive compliance summary across all frameworks
+      security: [{ BearerAuth: [] }]
+      responses:
+        "200":
+          description: Summary with overall score and per-framework breakdown
+
+  # ── v0.43.0 Playbook Execution ────────────────────────────────────
+  /api/playbooks/run:
+    post:
+      tags: [Playbooks]
+      summary: Execute a playbook
+      security: [{ BearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [playbook_id]
+              properties:
+                playbook_id: { type: string }
+                alert_id: { type: string, nullable: true }
+                variables: { type: object, additionalProperties: { type: string } }
+      responses:
+        "200":
+          description: Execution result with execution_id and step outcomes
+        "400":
+          description: Empty playbook_id or execution error
+
+  # ── v0.43.0 Alert Deduplication ────────────────────────────────────
+  /api/alerts/dedup:
+    get:
+      tags: [Alerts]
+      summary: Deduplicate alerts into incidents using time-window merging
+      security: [{ BearerAuth: [] }]
+      responses:
+        "200":
+          description: Deduplicated incident groups
+
+  # ── v0.43.0 API Analytics ─────────────────────────────────────────
+  /api/analytics:
+    get:
+      tags: [Observability]
+      summary: Get API usage analytics (per-endpoint counts, error rates, latency)
+      security: [{ BearerAuth: [] }]
+      responses:
+        "200":
+          description: Analytics summary with top endpoints and total request count
+
+  # ── v0.43.0 OpenTelemetry Traces ──────────────────────────────────
+  /api/traces:
+    get:
+      tags: [Observability]
+      summary: Get recent OpenTelemetry-compatible trace spans
+      security: [{ BearerAuth: [] }]
+      responses:
+        "200":
+          description: Trace stats and recent spans
+
+  # ── v0.43.0 Backup Encryption ─────────────────────────────────────
+  /api/backup/encrypt:
+    post:
+      tags: [Backup]
+      summary: Encrypt data with AES-256-GCM
+      security: [{ BearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [data, passphrase]
+              properties:
+                data: { type: string }
+                passphrase: { type: string, minLength: 1 }
+      responses:
+        "200":
+          description: Base64-encoded encrypted data
+        "400":
+          description: Missing passphrase
+
+  /api/backup/decrypt:
+    post:
+      tags: [Backup]
+      summary: Decrypt AES-256-GCM encrypted data
+      security: [{ BearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [data, passphrase]
+              properties:
+                data: { type: string, description: Base64-encoded encrypted data }
+                passphrase: { type: string, minLength: 1 }
+      responses:
+        "200":
+          description: Decrypted plaintext
+        "400":
+          description: Missing passphrase or decryption error
+
+  # ── v0.43.0 Detection Rules CRUD ──────────────────────────────────
+  /api/detection/rules:
+    get:
+      tags: [Detection]
+      summary: List loaded detection rules (Sigma, YARA, malware hashes)
+      security: [{ BearerAuth: [] }]
+      responses:
+        "200":
+          description: Rule inventory with counts per engine
+    post:
+      tags: [Detection]
+      summary: Add a custom detection rule
+      security: [{ BearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [type, pattern]
+              properties:
+                type: { type: string, enum: [yara] }
+                name: { type: string, default: custom_rule }
+                pattern: { type: string, minLength: 1 }
+                description: { type: string }
+                severity: { type: string, enum: [low, medium, high, critical], default: medium }
+      responses:
+        "200":
+          description: Rule added successfully
+        "400":
+          description: Empty pattern or unsupported rule type

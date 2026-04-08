@@ -2,11 +2,17 @@
 
 Wardex is a Rust-based XDR and SIEM platform for private-cloud and self-hosted security operations. It combines cross-platform telemetry collection, detection engineering, analyst workflows, approval-gated response, agent lifecycle management, SIEM integrations, and tamper-evident evidence handling in a single deployable product.
 
-## What ships in `v0.42.0`
+## What ships in `v0.43.0`
 
-- 105 Rust source modules covering telemetry collection, detection engineering, SOC workflows, fleet operations, governance, and automated incident response
-- 119 documented OpenAPI paths with authenticated admin-console workflows, fleet controls, reports, and enterprise support surfaces
-- 1258 automated tests (1095 lib + 163 integration) plus live Playwright admin-console smoke coverage for release validation
+- 116 Rust source modules covering telemetry collection, detection engineering, malware scanning, SOC workflows, fleet operations, governance, SIEM integrations, and automated incident response
+- 161 documented OpenAPI paths with authenticated admin-console workflows, fleet controls, reports, threat hunting, compliance, and enterprise support surfaces
+- 1345 automated tests (1161 lib + 184 integration) plus live Playwright admin-console smoke coverage for release validation
+- Malware hash database with ~48 built-in signatures, YARA rule engine, and real-time file scanning
+- Threat hunting DSL with KQL-like syntax, field aliases, and wildcard matching
+- Multi-format SIEM export (CEF, LEEF, Syslog, Sentinel, UDM, ECS, QRadar)
+- Compliance evaluation for CIS v8, PCI-DSS v4, SOC 2 Type II, and NIST CSF 2.0
+- Playbook execution engine with 11 step types, conditional branching, and approval gates
+- AES-256-GCM backup encryption with passphrase-derived keys
 - Default local control-plane startup via `cargo run`, which launches the server and embedded local monitor together
 - GitHub Actions packaging for Linux, macOS, and Windows release archives
 
@@ -42,11 +48,13 @@ Open `http://localhost:8080/admin/`, paste the token printed in the terminal, an
 
 ## Core capabilities
 
-- **Detection engineering**: managed Sigma/native rules, rule testing, promote/rollback lifecycle, suppressions, hunts, scheduled hunt history, and MITRE coverage.
-- **SOC operations**: queued alerts, case management, investigation graph and timelines, entity pivots, storyline generation, evidence export, and response approvals.
+- **Detection engineering**: managed Sigma/native rules, YARA engine, malware hash DB, rule testing, promote/rollback lifecycle, suppressions, KQL-like threat hunting, scheduled hunt history, and MITRE coverage.
+- **Malware scanning**: file hash lookup against ~48 built-in signatures, YARA pattern matching, verdict classification (malicious/suspicious/clean), and community rule packs.
+- **SOC operations**: queued alerts, case management, investigation graph and timelines, entity pivots, storyline generation, evidence export, alert deduplication, and response approvals.
+- **Incident automation**: declarative playbook engine with 11 step types, trigger matching, conditional branching, parallel execution, approval gates, and SLA-driven escalation.
 - **Fleet operations**: agent enrollment, policy sync, update rollout groups, release assignment, rollback, cancellation, and per-agent activity snapshots.
-- **Governance and trust**: RBAC, admin session control, tamper-evident audit records, change control entries, diagnostics bundles, dependency health, and IDP/SCIM configuration.
-- **Integrations**: SIEM outputs, threat-intel pull, ticket sync, runbooks, API docs, and release packaging for Linux, macOS, and Windows.
+- **Governance and compliance**: RBAC, admin session control, tamper-evident audit records, compliance evaluation (CIS v8, PCI-DSS v4, SOC 2, NIST CSF 2.0), encrypted backups, and IDP/SCIM configuration.
+- **Integrations**: multi-format SIEM export (CEF/LEEF/Syslog/Sentinel/UDM/ECS/QRadar), threat-intel pull, ticket sync, OpenTelemetry tracing, API analytics, and release packaging for Linux, macOS, and Windows.
 
 ## Verification
 
@@ -56,12 +64,12 @@ Run the full automated suite:
 cargo test
 ```
 
-The current release passes 1258 automated tests (1095 lib + 163 integration) across unit and integration coverage. The repo also includes live verification helpers in [`tests/live_test.py`](tests/live_test.py), [`tests/verify_admin.py`](tests/verify_admin.py), [`tests/playwright/enterprise_console_smoke.spec.js`](tests/playwright/enterprise_console_smoke.spec.js), and [`tests/playwright/live_release_smoke.spec.js`](tests/playwright/live_release_smoke.spec.js).
+The current release passes 1345 automated tests (1161 lib + 184 integration) across unit and integration coverage. The repo also includes live verification helpers in [`tests/live_test.py`](tests/live_test.py), [`tests/verify_admin.py`](tests/verify_admin.py), [`tests/playwright/enterprise_console_smoke.spec.js`](tests/playwright/enterprise_console_smoke.spec.js), and [`tests/playwright/live_release_smoke.spec.js`](tests/playwright/live_release_smoke.spec.js).
 
 ## Repository layout
 
 ```text
-src/                  Core platform modules (105 Rust source files)
+src/                  Core platform modules (116 Rust source files)
 tests/                Integration tests, live checks, and browser smoke coverage
 docs/                 Product, architecture, deployment, and runbook documentation
 admin-console/        React admin console source (embedded from dist at build time)

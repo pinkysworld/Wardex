@@ -88,9 +88,48 @@ jobs:
           path: ${{ matrix.archive }}
           if-no-files-found: error
 
+  # ── Generate CycloneDX SBOM ──────────────────────────────────────────
+  sbom:
+    name: Generate SBOM
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install cargo-cyclonedx
+        run: cargo install cargo-cyclonedx --locked
+
+      - name: Generate CycloneDX SBOM
+        run: cargo cyclonedx --format json --output-file wardex-sbom.cdx.json
+
+      - name: Upload SBOM
+        uses: actions/upload-artifact@v4
+        with:
+          name: wardex-sbom.cdx.json
+          path: wardex-sbom.cdx.json
+
+  # ── Lint Helm chart ──────────────────────────────────────────────────
+  helm-lint:
+    name: Helm Chart Lint
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Helm
+        uses: azure/setup-helm@v4
+        with:
+          version: latest
+
+      - name: Lint Helm chart
+        run: helm lint deploy/helm/wardex/
+
   release:
     name: Publish GitHub Release
-    needs: build
+    needs: [build, sbom, helm-lint]
     runs-on: ubuntu-latest
     if: always() && needs.build.result != 'cancelled'
 
@@ -122,4 +161,5 @@ jobs:
           body_path: release_notes.md
           draft: false
           prerelease: false
-          files: release-assets/*
+          files: |
+            release-assets/*

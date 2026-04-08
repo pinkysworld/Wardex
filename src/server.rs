@@ -8560,6 +8560,7 @@ fn handle_api(
                 && url_path != "/api/alerts/count"
                 && url_path != "/api/alerts/analysis"
                 && url_path != "/api/alerts/grouped"
+                && url_path != "/api/alerts/dedup"
             {
                 // GET /api/alerts/{index} — detailed alert view
                 match parse_numeric_path_suffix::<usize>(url_path, "/api/alerts/") {

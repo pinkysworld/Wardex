@@ -4694,3 +4694,292 @@ fn chaos_oversized_json_body() {
         .expect("health after oversized body");
     assert_eq!(resp.status(), 200);
 }
+
+// ═══════════════════════════════════════════════════════════════════
+// v0.43.0 feature integration tests
+// ═══════════════════════════════════════════════════════════════════
+
+// ── Malware scanning ───────────────────────────────────────────────
+
+#[test]
+fn malware_stats_returns_hash_db_info() {
+    let (port, token) = spawn_test_server();
+    let resp = ureq::get(&format!("{}/api/malware/stats", base(port)))
+        .set("Authorization", &auth_header(&token))
+        .call()
+        .expect("malware stats");
+    assert_eq!(resp.status(), 200);
+    let body: serde_json::Value = resp.into_json().unwrap();
+    assert!(body.get("database").is_some());
+    assert!(body.get("scanner").is_some());
+    assert!(body.get("yara_rules").is_some());
+}
+
+#[test]
+fn malware_recent_returns_array() {
+    let (port, token) = spawn_test_server();
+    let resp = ureq::get(&format!("{}/api/malware/recent", base(port)))
+        .set("Authorization", &auth_header(&token))
+        .call()
+        .expect("malware recent");
+    assert_eq!(resp.status(), 200);
+}
+
+#[test]
+fn scan_hash_returns_result() {
+    let (port, token) = spawn_test_server();
+    let resp = ureq::post(&format!("{}/api/scan/hash", base(port)))
+        .set("Authorization", &auth_header(&token))
+        .set("Content-Type", "application/json")
+        .send_string(r#"{"hash":"e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855","algorithm":"sha256"}"#)
+        .expect("scan hash");
+    assert_eq!(resp.status(), 200);
+}
+
+#[test]
+fn scan_buffer_returns_verdict() {
+    let (port, token) = spawn_test_server();
+    let resp = ureq::post(&format!("{}/api/scan/buffer", base(port)))
+        .set("Authorization", &auth_header(&token))
+        .set("Content-Type", "application/json")
+        .send_string(r#"{"data":"aGVsbG8gd29ybGQ=","filename":"test.txt"}"#)
+        .expect("scan buffer");
+    assert_eq!(resp.status(), 200);
+    let body: serde_json::Value = resp.into_json().unwrap();
+    assert!(body.get("verdict").is_some());
+}
+
+// ── Threat hunting ─────────────────────────────────────────────────
+
+#[test]
+fn hunt_with_valid_query_returns_results() {
+    let (port, token) = spawn_test_server();
+    let resp = ureq::post(&format!("{}/api/hunt", base(port)))
+        .set("Authorization", &auth_header(&token))
+        .set("Content-Type", "application/json")
+        .send_string(r#"{"query":"process == svchost.exe"}"#)
+        .expect("hunt query");
+    assert_eq!(resp.status(), 200);
+}
+
+#[test]
+fn hunt_with_empty_query_returns_400() {
+    let (port, token) = spawn_test_server();
+    let err = ureq::post(&format!("{}/api/hunt", base(port)))
+        .set("Authorization", &auth_header(&token))
+        .set("Content-Type", "application/json")
+        .send_string(r#"{"query":""}"#);
+    match err {
+        Err(ureq::Error::Status(400, _)) => {}
+        other => panic!("expected 400 for empty hunt query, got {other:?}"),
+    }
+}
+
+// ── SIEM export ────────────────────────────────────────────────────
+
+#[test]
+fn export_alerts_json_format() {
+    let (port, token) = spawn_test_server();
+    let resp = ureq::get(&format!("{}/api/export/alerts?format=json", base(port)))
+        .set("Authorization", &auth_header(&token))
+        .call()
+        .expect("export alerts json");
+    assert_eq!(resp.status(), 200);
+}
+
+#[test]
+fn export_alerts_cef_format() {
+    let (port, token) = spawn_test_server();
+    let resp = ureq::get(&format!("{}/api/export/alerts?format=cef", base(port)))
+        .set("Authorization", &auth_header(&token))
+        .call()
+        .expect("export alerts cef");
+    assert_eq!(resp.status(), 200);
+}
+
+#[test]
+fn export_alerts_unsupported_format_returns_400() {
+    let (port, token) = spawn_test_server();
+    let err = ureq::get(&format!("{}/api/export/alerts?format=invalid", base(port)))
+        .set("Authorization", &auth_header(&token))
+        .call();
+    match err {
+        Err(ureq::Error::Status(400, _)) => {}
+        other => panic!("expected 400 for unsupported format, got {other:?}"),
+    }
+}
+
+// ── Compliance reports ─────────────────────────────────────────────
+
+#[test]
+fn compliance_report_all_frameworks() {
+    let (port, token) = spawn_test_server();
+    let resp = ureq::get(&format!("{}/api/compliance/report", base(port)))
+        .set("Authorization", &auth_header(&token))
+        .call()
+        .expect("compliance report all");
+    assert_eq!(resp.status(), 200);
+}
+
+#[test]
+fn compliance_summary_returns_executive_view() {
+    let (port, token) = spawn_test_server();
+    let resp = ureq::get(&format!("{}/api/compliance/summary", base(port)))
+        .set("Authorization", &auth_header(&token))
+        .call()
+        .expect("compliance summary");
+    assert_eq!(resp.status(), 200);
+}
+
+#[test]
+fn compliance_report_unknown_framework_returns_404() {
+    let (port, token) = spawn_test_server();
+    let err = ureq::get(&format!("{}/api/compliance/report?framework=nonexistent", base(port)))
+        .set("Authorization", &auth_header(&token))
+        .call();
+    match err {
+        Err(ureq::Error::Status(404, _)) => {}
+        other => panic!("expected 404 for unknown framework, got {other:?}"),
+    }
+}
+
+// ── Playbook execution ─────────────────────────────────────────────
+
+#[test]
+fn playbook_run_without_id_returns_400() {
+    let (port, token) = spawn_test_server();
+    let err = ureq::post(&format!("{}/api/playbooks/run", base(port)))
+        .set("Authorization", &auth_header(&token))
+        .set("Content-Type", "application/json")
+        .send_string(r#"{"playbook_id":""}"#);
+    match err {
+        Err(ureq::Error::Status(400, _)) => {}
+        other => panic!("expected 400 for empty playbook_id, got {other:?}"),
+    }
+}
+
+// ── Alert deduplication ────────────────────────────────────────────
+
+#[test]
+fn alerts_dedup_returns_incidents() {
+    let (port, token) = spawn_test_server();
+    let resp = ureq::get(&format!("{}/api/alerts/dedup", base(port)))
+        .set("Authorization", &auth_header(&token))
+        .call()
+        .expect("alerts dedup");
+    assert_eq!(resp.status(), 200);
+}
+
+// ── API analytics ──────────────────────────────────────────────────
+
+#[test]
+fn api_analytics_returns_summary() {
+    let (port, token) = spawn_test_server();
+    // Make a few requests first to generate analytics data
+    let _ = ureq::get(&format!("{}/api/health", base(port))).call();
+    let _ = ureq::get(&format!("{}/api/status", base(port)))
+        .set("Authorization", &auth_header(&token))
+        .call();
+    let resp = ureq::get(&format!("{}/api/analytics", base(port)))
+        .set("Authorization", &auth_header(&token))
+        .call()
+        .expect("api analytics");
+    assert_eq!(resp.status(), 200);
+    let body: serde_json::Value = resp.into_json().unwrap();
+    assert!(body.get("total_requests").is_some() || body.get("endpoints").is_some());
+}
+
+// ── OpenTelemetry traces ───────────────────────────────────────────
+
+#[test]
+fn traces_returns_stats_and_recent() {
+    let (port, token) = spawn_test_server();
+    let resp = ureq::get(&format!("{}/api/traces", base(port)))
+        .set("Authorization", &auth_header(&token))
+        .call()
+        .expect("traces");
+    assert_eq!(resp.status(), 200);
+    let body: serde_json::Value = resp.into_json().unwrap();
+    assert!(body.get("stats").is_some());
+    assert!(body.get("recent").is_some());
+}
+
+// ── Backup encrypt/decrypt ─────────────────────────────────────────
+
+#[test]
+fn backup_encrypt_decrypt_roundtrip() {
+    let (port, token) = spawn_test_server();
+    // Encrypt
+    let enc_resp = ureq::post(&format!("{}/api/backup/encrypt", base(port)))
+        .set("Authorization", &auth_header(&token))
+        .set("Content-Type", "application/json")
+        .send_string(r#"{"data":"hello world","passphrase":"test-pass-123"}"#)
+        .expect("backup encrypt");
+    assert_eq!(enc_resp.status(), 200);
+    let enc_body: serde_json::Value = enc_resp.into_json().unwrap();
+    let encrypted = enc_body["encrypted"].as_str().expect("encrypted field");
+
+    // Decrypt
+    let dec_payload = serde_json::json!({"data": encrypted, "passphrase": "test-pass-123"});
+    let dec_resp = ureq::post(&format!("{}/api/backup/decrypt", base(port)))
+        .set("Authorization", &auth_header(&token))
+        .set("Content-Type", "application/json")
+        .send_string(&dec_payload.to_string())
+        .expect("backup decrypt");
+    assert_eq!(dec_resp.status(), 200);
+    let dec_body: serde_json::Value = dec_resp.into_json().unwrap();
+    assert_eq!(dec_body["data"].as_str().unwrap(), "hello world");
+}
+
+#[test]
+fn backup_encrypt_requires_passphrase() {
+    let (port, token) = spawn_test_server();
+    let err = ureq::post(&format!("{}/api/backup/encrypt", base(port)))
+        .set("Authorization", &auth_header(&token))
+        .set("Content-Type", "application/json")
+        .send_string(r#"{"data":"hello","passphrase":""}"#);
+    match err {
+        Err(ureq::Error::Status(400, _)) => {}
+        other => panic!("expected 400 for empty passphrase, got {other:?}"),
+    }
+}
+
+// ── Detection rules ────────────────────────────────────────────────
+
+#[test]
+fn detection_rules_list() {
+    let (port, token) = spawn_test_server();
+    let resp = ureq::get(&format!("{}/api/detection/rules", base(port)))
+        .set("Authorization", &auth_header(&token))
+        .call()
+        .expect("detection rules list");
+    assert_eq!(resp.status(), 200);
+    let body: serde_json::Value = resp.into_json().unwrap();
+    assert!(body.get("sigma").is_some());
+    assert!(body.get("yara").is_some());
+    assert!(body.get("malware_hashes").is_some());
+}
+
+#[test]
+fn detection_rules_add_yara() {
+    let (port, token) = spawn_test_server();
+    let resp = ureq::post(&format!("{}/api/detection/rules", base(port)))
+        .set("Authorization", &auth_header(&token))
+        .set("Content-Type", "application/json")
+        .send_string(r#"{"type":"yara","name":"test_rule","pattern":"suspicious_string","description":"test","severity":"high"}"#)
+        .expect("add yara rule");
+    assert_eq!(resp.status(), 200);
+}
+
+#[test]
+fn detection_rules_add_empty_pattern_returns_400() {
+    let (port, token) = spawn_test_server();
+    let err = ureq::post(&format!("{}/api/detection/rules", base(port)))
+        .set("Authorization", &auth_header(&token))
+        .set("Content-Type", "application/json")
+        .send_string(r#"{"type":"yara","name":"bad_rule","pattern":""}"#);
+    match err {
+        Err(ureq::Error::Status(400, _)) => {}
+        other => panic!("expected 400 for empty pattern, got {other:?}"),
+    }
+}

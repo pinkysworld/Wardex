@@ -196,6 +196,14 @@ pub struct Config {
     pub security: SecuritySettings,
     #[serde(default)]
     pub retention: RetentionSettings,
+    #[serde(default)]
+    pub malware: MalwareScannerSettings,
+    #[serde(default)]
+    pub playbook: PlaybookSettings,
+    #[serde(default)]
+    pub compliance: ComplianceSettings,
+    #[serde(default)]
+    pub tracing: TracingSettings,
 }
 
 /// Security-related settings for token management and session control.
@@ -210,6 +218,9 @@ pub struct SecuritySettings {
     /// Path to CA certificate for verifying agent client certs.
     #[serde(default)]
     pub agent_ca_cert_path: Option<String>,
+    /// Allowed CORS origins (empty = allow same-origin only).
+    #[serde(default)]
+    pub cors_allowed_origins: Vec<String>,
 }
 
 fn default_token_ttl_secs() -> u64 {
@@ -222,6 +233,7 @@ impl Default for SecuritySettings {
             token_ttl_secs: default_token_ttl_secs(),
             require_mtls_agents: false,
             agent_ca_cert_path: None,
+            cors_allowed_origins: Vec::new(),
         }
     }
 }
@@ -264,6 +276,127 @@ impl Default for RetentionSettings {
             event_max_records: default_event_max_records(),
             audit_max_age_secs: 0,
             remote_syslog_endpoint: None,
+        }
+    }
+}
+
+/// Malware scanner configuration.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MalwareScannerSettings {
+    /// Enable or disable the malware scanner.
+    #[serde(default = "default_true")]
+    pub enabled: bool,
+    /// Maximum file size in megabytes for buffer scans (0 = no limit).
+    #[serde(default = "default_max_scan_size_mb")]
+    pub max_scan_size_mb: usize,
+    /// Path to an external signature database (JSON). Empty = use built-in only.
+    #[serde(default)]
+    pub signature_db_path: Option<String>,
+}
+
+fn default_max_scan_size_mb() -> usize {
+    50
+}
+fn default_true() -> bool {
+    true
+}
+
+impl Default for MalwareScannerSettings {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            max_scan_size_mb: default_max_scan_size_mb(),
+            signature_db_path: None,
+        }
+    }
+}
+
+/// Playbook engine configuration.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PlaybookSettings {
+    /// Enable or disable the playbook execution engine.
+    #[serde(default = "default_true")]
+    pub enabled: bool,
+    /// Default step timeout in seconds.
+    #[serde(default = "default_step_timeout_secs")]
+    pub step_timeout_secs: u64,
+    /// Maximum concurrent playbook executions.
+    #[serde(default = "default_max_concurrent")]
+    pub max_concurrent: usize,
+}
+
+fn default_step_timeout_secs() -> u64 {
+    300
+}
+fn default_max_concurrent() -> usize {
+    10
+}
+
+impl Default for PlaybookSettings {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            step_timeout_secs: default_step_timeout_secs(),
+            max_concurrent: default_max_concurrent(),
+        }
+    }
+}
+
+/// Compliance evaluation configuration.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ComplianceSettings {
+    /// Enable or disable compliance reporting.
+    #[serde(default = "default_true")]
+    pub enabled: bool,
+    /// Frameworks to evaluate (empty = all).
+    #[serde(default)]
+    pub frameworks: Vec<String>,
+    /// Cache TTL for compliance reports in seconds.
+    #[serde(default = "default_report_cache_ttl")]
+    pub report_cache_ttl_secs: u64,
+}
+
+fn default_report_cache_ttl() -> u64 {
+    3600
+}
+
+impl Default for ComplianceSettings {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            frameworks: Vec::new(),
+            report_cache_ttl_secs: default_report_cache_ttl(),
+        }
+    }
+}
+
+/// OpenTelemetry tracing configuration.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TracingSettings {
+    /// Enable or disable OTel trace collection.
+    #[serde(default = "default_true")]
+    pub enabled: bool,
+    /// Sampling rate (0.0 to 1.0, where 1.0 = sample everything).
+    #[serde(default = "default_sample_rate")]
+    pub sample_rate: f64,
+    /// Maximum number of trace spans to retain in memory.
+    #[serde(default = "default_max_spans")]
+    pub max_spans: usize,
+}
+
+fn default_sample_rate() -> f64 {
+    1.0
+}
+fn default_max_spans() -> usize {
+    10_000
+}
+
+impl Default for TracingSettings {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            sample_rate: default_sample_rate(),
+            max_spans: default_max_spans(),
         }
     }
 }

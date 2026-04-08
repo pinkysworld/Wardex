@@ -35,6 +35,7 @@ pub struct ApiAnalytics {
     global_count: u64,
     global_errors: u64,
     max_records_per_endpoint: usize,
+    max_endpoints: usize,
 }
 
 impl Default for ApiAnalytics {
@@ -50,6 +51,7 @@ impl ApiAnalytics {
             global_count: 0,
             global_errors: 0,
             max_records_per_endpoint: 1000,
+            max_endpoints: 500,
         }
     }
 
@@ -70,6 +72,17 @@ impl ApiAnalytics {
         self.global_count += 1;
         if is_error {
             self.global_errors += 1;
+        }
+        // Evict least-used endpoints when we exceed the cap
+        if self.endpoints.len() > self.max_endpoints {
+            if let Some(smallest_key) = self
+                .endpoints
+                .iter()
+                .min_by_key(|(_, v)| v.len())
+                .map(|(k, _)| k.clone())
+            {
+                self.endpoints.remove(&smallest_key);
+            }
         }
     }
 

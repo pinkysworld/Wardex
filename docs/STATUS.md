@@ -4,9 +4,9 @@
 
 - **Version:** `0.43.0`
 - **Positioning:** private-cloud XDR and SIEM platform with enterprise detection engineering, malware scanning, analyst workflows, fleet operations, behavioural analytics, and automated incident response
-- **Source footprint:** 115 Rust source modules
+- **Source footprint:** 116 Rust source modules
 - **API contract:** 161 documented OpenAPI paths
-- **Verification:** 1258 automated tests (1095 lib + 163 integration) plus live admin-console smoke coverage
+- **Verification:** 1345 automated tests (1161 lib + 184 integration) plus live admin-console smoke coverage
 - **Production hardening:** 98% (58/59 controls implemented)
 
 ## Shipped in the current platform
@@ -98,9 +98,27 @@ Wardex is now positioned as a professional XDR/SIEM control plane rather than an
 
 - full enterprise SSO workflows beyond IDP/SCIM configuration surfaces
 - customisable analyst dashboards with drag-and-drop widget placement
-- TypeScript/Node.js SDK alongside the Python SDK
 - searchable documentation site with versioned content
-- package-manager distribution (Homebrew, APT/YUM, Chocolatey)
+- package-manager distribution (APT/YUM, Chocolatey)
+- secrets manager integration (HashiCorp Vault, AWS Secrets Manager)
+
+## Recently shipped (v0.43.0)
+
+- **Malware hash database** — In-memory threat intel DB with ~48 built-in SHA256/MD5 hashes, JSON/CSV import, community YARA rules
+- **Malware scanner** — Hash DB + YARA engine orchestration for file scanning with verdict classification
+- **Threat hunting DSL** — KQL-like query language with recursive descent parser, field aliases, wildcards, AND/OR/NOT
+- **SIEM export engine** — Multi-format alert export: CEF, LEEF, Syslog RFC 5424, Sentinel, UDM, ECS, QRadar, JSON
+- **Compliance report generator** — Full-framework evaluation for CIS v8, PCI-DSS v4, SOC 2 Type II, and NIST CSF 2.0
+- **Playbook execution engine** — 11 step types with on_failure jump, template variable substitution, and approval gates
+- **Alert deduplication** — Time-window incident merging with configurable cross-device settings
+- **API usage analytics** — Per-endpoint request tracking with count, error rate, and latency percentiles
+- **OpenTelemetry tracing** — OtelSpan with trace/span IDs, parent chaining, OTLP JSON export
+- **Backup encryption** — AES-256-GCM encryption with random salt and nonce, passphrase-derived keys
+- **Detection rules CRUD** — List and add custom YARA rules via API
+- **TypeScript SDK** — Full typed client with 20+ methods, AbortController timeout, TypeScript interfaces
+- **Homebrew formula** — Multi-platform installation with service integration
+- **Admin console** — 5 new tabs: Hunt, Compliance, Analytics, Traces, Rules
+- **Code review hardening** — Crypto fixes (random nonce/salt), O(1) ring buffers, input validation, JSON injection fixes
 
 ## Recently shipped (v0.42.0)
 
