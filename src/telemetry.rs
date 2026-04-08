@@ -142,25 +142,24 @@ impl OtelSpan {
 /// Trace collector for aggregating spans.
 #[derive(Debug, Default)]
 pub struct TraceCollector {
-    spans: Vec<OtelSpan>,
+    spans: std::collections::VecDeque<OtelSpan>,
     max_spans: usize,
 }
 
 impl TraceCollector {
     pub fn new(max_spans: usize) -> Self {
-        Self { spans: Vec::new(), max_spans }
+        Self { spans: std::collections::VecDeque::new(), max_spans }
     }
 
     pub fn record(&mut self, span: OtelSpan) {
-        self.spans.push(span);
+        self.spans.push_back(span);
         if self.spans.len() > self.max_spans {
-            self.spans.remove(0);
+            self.spans.pop_front();
         }
     }
 
-    pub fn recent(&self, limit: usize) -> &[OtelSpan] {
-        let start = self.spans.len().saturating_sub(limit);
-        &self.spans[start..]
+    pub fn recent(&self, limit: usize) -> Vec<&OtelSpan> {
+        self.spans.iter().rev().take(limit).collect()
     }
 
     pub fn stats(&self) -> TraceStats {

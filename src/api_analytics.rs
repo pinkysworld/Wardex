@@ -4,7 +4,7 @@
 // endpoint.  Lightweight in-memory metrics — no external dependency.
 
 use serde::Serialize;
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
 use std::time::Instant;
 
 /// Per-endpoint metrics.
@@ -31,7 +31,7 @@ struct RequestRecord {
 /// API analytics tracker.
 #[derive(Debug)]
 pub struct ApiAnalytics {
-    endpoints: HashMap<String, Vec<RequestRecord>>,
+    endpoints: HashMap<String, VecDeque<RequestRecord>>,
     global_count: u64,
     global_errors: u64,
     max_records_per_endpoint: usize,
@@ -55,15 +55,17 @@ impl ApiAnalytics {
 
     /// Record a completed API request.
     pub fn record(&mut self, method: &str, path: &str, latency_ms: f64, is_error: bool) {
+        // Guard against NaN/Infinity/negative latencies
+        let latency_ms = if latency_ms.is_finite() && latency_ms >= 0.0 { latency_ms } else { 0.0 };
         let key = format!("{} {}", method, path);
         let records = self.endpoints.entry(key).or_default();
-        records.push(RequestRecord {
+        records.push_back(RequestRecord {
             latency_ms,
             is_error,
         });
         // Keep only the most recent entries
         if records.len() > self.max_records_per_endpoint {
-            records.remove(0);
+            records.pop_front();
         }
         self.global_count += 1;
         if is_error {

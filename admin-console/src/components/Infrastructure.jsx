@@ -603,8 +603,8 @@ export default function Infrastructure() {
                   {Object.entries(compData.frameworks).map(([name, info]) => (
                     <div key={name} className="card">
                       <div className="card-title">{name}</div>
-                      <div className="big-number" style={{ color: (info.score ?? info) >= 80 ? 'var(--color-success)' : 'var(--color-warning)' }}>
-                        {typeof info === 'object' ? `${info.score}%` : `${info}%`}
+                      <div className="big-number" style={{ color: (typeof info === 'object' ? (info.score ?? 0) : (info ?? 0)) >= 80 ? 'var(--color-success)' : 'var(--color-warning)' }}>
+                        {typeof info === 'object' ? `${info.score ?? 0}%` : `${info ?? 0}%`}
                       </div>
                     </div>
                   ))}

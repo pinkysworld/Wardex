@@ -9,9 +9,12 @@ use aes_gcm::{
     aead::Aead,
 };
 
-/// Derive a 256-bit key from a passphrase using SHA-256.
-fn derive_key(passphrase: &str) -> [u8; 32] {
+/// Derive a 256-bit key from a passphrase + random salt using HKDF-like construction.
+/// Uses SHA-256(salt || "wardex-backup-key-v1|" || passphrase) — salt ensures unique
+/// keys even for the same passphrase across different backups.
+fn derive_key(passphrase: &str, salt: &[u8; 16]) -> [u8; 32] {
     let mut hasher = Sha256::new();
+    hasher.update(salt);
     hasher.update(b"wardex-backup-key-v1|");
     hasher.update(passphrase.as_bytes());
     let result = hasher.finalize();
@@ -20,17 +23,19 @@ fn derive_key(passphrase: &str) -> [u8; 32] {
     key
 }
 
-/// Encrypt data with AES-256-GCM.  Returns nonce (12 bytes) || ciphertext.
+/// Encrypt data with AES-256-GCM.  Returns salt (16 bytes) || nonce (12 bytes) || ciphertext.
 pub fn encrypt_backup_data(plaintext: &[u8], passphrase: &str) -> Result<Vec<u8>, String> {
-    let key = derive_key(passphrase);
+    use rand::Rng;
+    let mut rng = rand::thread_rng();
+    // Generate random salt and nonce — never reuse (key, nonce) pair
+    let salt: [u8; 16] = rng.r#gen();
+    let nonce_bytes: [u8; 12] = rng.r#gen();
+    let key = derive_key(passphrase, &salt);
     let cipher = Aes256Gcm::new_from_slice(&key).map_err(|e| format!("key error: {e}"))?;
-    // Generate deterministic nonce from SHA-256 of plaintext (first 12 bytes)
-    let mut nonce_bytes = [0u8; 12];
-    let hash = sha2::Sha256::digest(plaintext);
-    nonce_bytes.copy_from_slice(&hash[..12]);
     let nonce = Nonce::from_slice(&nonce_bytes);
     let ciphertext = cipher.encrypt(nonce, plaintext).map_err(|e| format!("encrypt error: {e}"))?;
-    let mut output = Vec::with_capacity(12 + ciphertext.len());
+    let mut output = Vec::with_capacity(16 + 12 + ciphertext.len());
+    output.extend_from_slice(&salt);
     output.extend_from_slice(&nonce_bytes);
     output.extend_from_slice(&ciphertext);
     Ok(output)
@@ -38,13 +43,14 @@ pub fn encrypt_backup_data(plaintext: &[u8], passphrase: &str) -> Result<Vec<u8>
 
 /// Decrypt data that was encrypted with `encrypt_backup_data`.
 pub fn decrypt_backup_data(encrypted: &[u8], passphrase: &str) -> Result<Vec<u8>, String> {
-    if encrypted.len() < 13 {
+    if encrypted.len() < 29 {
         return Err("encrypted data too short".into());
     }
-    let key = derive_key(passphrase);
+    let salt: [u8; 16] = encrypted[..16].try_into().map_err(|_| "bad salt")?;
+    let key = derive_key(passphrase, &salt);
     let cipher = Aes256Gcm::new_from_slice(&key).map_err(|e| format!("key error: {e}"))?;
-    let nonce = Nonce::from_slice(&encrypted[..12]);
-    let plaintext = cipher.decrypt(nonce, &encrypted[12..]).map_err(|e| format!("decrypt error: {e}"))?;
+    let nonce = Nonce::from_slice(&encrypted[16..28]);
+    let plaintext = cipher.decrypt(nonce, &encrypted[28..]).map_err(|e| format!("decrypt error: {e}"))?;
     Ok(plaintext)
 }
 

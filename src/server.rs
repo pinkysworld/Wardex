@@ -10397,6 +10397,9 @@ fn handle_api(
                             Err(e) => return error_json(&format!("invalid JSON: {e}"), 400),
                         };
                         let query = parsed["query"].as_str().unwrap_or("");
+                        if query.is_empty() {
+                            return error_json("query cannot be empty", 400);
+                        }
                         match crate::search::SearchIndex::new("/tmp/wardex-search") {
                             Ok(idx) => match idx.hunt(query) {
                                 Ok(result) => {
@@ -10415,6 +10418,10 @@ fn handle_api(
             } else if method == Method::Get && url_path == "/api/export/alerts" {
                 let qs = parse_query_string(&url);
                 let format = qs.get("format").map(|s| s.as_str()).unwrap_or("json");
+                match format {
+                    "json" | "cef" | "leef" | "syslog" | "sentinel" | "udm" | "ecs" | "qradar" => {}
+                    _ => return error_json("unsupported export format", 400),
+                }
                 let s = state.lock().unwrap_or_else(|e| e.into_inner());
                 let alerts: Vec<crate::collector::AlertRecord> = s.alerts.iter().cloned().collect();
                 let output = crate::siem::SiemConnector::export_alerts(&alerts, format);
@@ -10489,6 +10496,9 @@ fn handle_api(
                             Err(e) => return error_json(&format!("invalid JSON: {e}"), 400),
                         };
                         let playbook_id = parsed["playbook_id"].as_str().unwrap_or("");
+                        if playbook_id.is_empty() {
+                            return error_json("playbook_id is required", 400);
+                        }
                         let alert_id = parsed["alert_id"].as_str();
                         let variables: std::collections::HashMap<String, String> = parsed["variables"]
                             .as_object()
@@ -10584,7 +10594,8 @@ fn handle_api(
                                 match crate::backup::decrypt_backup_data(&encrypted, passphrase) {
                                     Ok(plaintext) => {
                                         let text = String::from_utf8_lossy(&plaintext);
-                                        json_response(&format!(r#"{{"data":"{}","size":{}}}"#, text, plaintext.len()), 200)
+                                        let resp = serde_json::json!({"data": text.as_ref(), "size": plaintext.len()});
+                                        json_response(&resp.to_string(), 200)
                                     }
                                     Err(e) => error_json(&e, 400),
                                 }
@@ -10620,6 +10631,9 @@ fn handle_api(
                             "yara" => {
                                 let name = parsed["name"].as_str().unwrap_or("custom_rule").to_string();
                                 let pattern = parsed["pattern"].as_str().unwrap_or("").to_string();
+                                if pattern.is_empty() {
+                                    return error_json("pattern cannot be empty", 400);
+                                }
                                 let description = parsed["description"].as_str().unwrap_or("").to_string();
                                 let rule = crate::yara_engine::YaraRule {
                                     name: name.clone(),

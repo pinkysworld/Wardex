@@ -39,7 +39,6 @@ ProtectProc=invisible
 ProcSubset=pid
 UMask=0077
 DevicePolicy=closed
-IPAddressDeny=any
 IPAddressAllow=localhost
 IPAddressAllow=10.0.0.0/8
 IPAddressAllow=172.16.0.0/12
@@ -50,9 +49,6 @@ LimitNOFILE=65536
 LimitNPROC=4096
 MemoryMax=2G
 CPUQuota=200%
-
-# Watchdog
-WatchdogSec=60
 
 # Restart policy
 Restart=on-failure
