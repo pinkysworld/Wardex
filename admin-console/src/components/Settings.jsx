@@ -5,16 +5,23 @@ import { JsonDetails, SummaryGrid } from './operator.jsx';
 
 function ToggleSwitch({ label, checked, onChange, description }) {
   return (
-    <label style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', padding: '6px 0' }}>
-      <div onClick={e => { e.preventDefault(); onChange(!checked); }}
-        style={{ width: 40, height: 22, borderRadius: 11, background: checked ? 'var(--primary)' : 'var(--border)', position: 'relative', transition: 'background .2s', cursor: 'pointer', flexShrink: 0 }}>
+    <div
+      role="switch"
+      aria-checked={checked}
+      tabIndex={0}
+      onClick={() => onChange(!checked)}
+      onKeyDown={e => { if (e.key === ' ' || e.key === 'Enter') { e.preventDefault(); onChange(!checked); } }}
+      style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', padding: '6px 0' }}
+    >
+      <div
+        style={{ width: 40, height: 22, borderRadius: 11, background: checked ? 'var(--primary)' : 'var(--border)', position: 'relative', transition: 'background .2s', flexShrink: 0 }}>
         <div style={{ width: 18, height: 18, borderRadius: 9, background: '#fff', position: 'absolute', top: 2, left: checked ? 20 : 2, transition: 'left .2s', boxShadow: '0 1px 3px rgba(0,0,0,.2)' }} />
       </div>
       <div>
         <div style={{ fontSize: 13, fontWeight: 500 }}>{label}</div>
         {description && <div style={{ fontSize: 11, color: 'var(--text-secondary)' }}>{description}</div>}
       </div>
-    </label>
+    </div>
   );
 }
 
@@ -81,10 +88,10 @@ export default function Settings() {
       const parsed = typeof config === 'string' ? (() => { try { return JSON.parse(config); } catch { return null; } })() : config;
       if (parsed) {
         setStructuredConfig(JSON.parse(JSON.stringify(parsed)));
-        if (!savedSnapshot) setSavedSnapshot(JSON.stringify(parsed, null, 2));
+        setSavedSnapshot(JSON.stringify(parsed, null, 2));
       }
     }
-  }, [config]);
+  }, [config, configEditing]);
 
   const startEdit = () => {
     const parsed = typeof config === 'string' ? (() => { try { return JSON.parse(config); } catch { return null; } })() : config;

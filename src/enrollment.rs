@@ -318,7 +318,10 @@ impl AgentRegistry {
             if let Some(parent) = path.parent() {
                 let _ = fs::create_dir_all(parent);
             }
-            let _ = fs::write(path, json);
+            let tmp = format!("{}.tmp", self.store_path);
+            if fs::write(&tmp, &json).is_ok() {
+                let _ = fs::rename(&tmp, path);
+            }
         }
     }
 

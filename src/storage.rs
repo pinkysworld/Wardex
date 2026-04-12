@@ -42,6 +42,22 @@ impl std::fmt::Display for StorageError {
     }
 }
 
+impl StorageError {
+    /// Return a safe error message suitable for API responses (no internal details).
+    pub fn safe_message(&self) -> &str {
+        match self.code {
+            StorageErrorCode::ConnectionFailed => "database connection error",
+            StorageErrorCode::MigrationFailed => "database migration error",
+            StorageErrorCode::QueryFailed => "database query error",
+            StorageErrorCode::SerializationError => "data serialization error",
+            StorageErrorCode::NotFound => "resource not found",
+            StorageErrorCode::Conflict => "resource conflict",
+            StorageErrorCode::CorruptData => "data integrity error",
+            StorageErrorCode::DiskFull => "storage capacity exceeded",
+        }
+    }
+}
+
 // ── Schema Migrations ─────────────────────────────────────────────────────────
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -279,6 +295,15 @@ pub struct QueryFilter {
     pub until: Option<String>,
     pub limit: Option<usize>,
     pub offset: Option<usize>,
+}
+
+impl QueryFilter {
+    /// Cap limit to a maximum value to prevent excessive memory usage.
+    const MAX_LIMIT: usize = 10_000;
+
+    pub fn capped_limit(&self) -> Option<usize> {
+        Some(self.limit.unwrap_or(100).min(Self::MAX_LIMIT))
+    }
 }
 
 impl Default for QueryFilter {
@@ -542,11 +567,15 @@ impl StorageBackend {
 
         sql.push_str(" ORDER BY timestamp DESC");
 
-        if let Some(limit) = filter.limit {
-            sql.push_str(&format!(" LIMIT {limit}"));
+        if let Some(limit) = filter.capped_limit() {
+            sql.push_str(&format!(" LIMIT ?{idx}"));
+            param_values.push(Box::new(limit as i64));
+            idx += 1;
         }
         if let Some(offset) = filter.offset {
-            sql.push_str(&format!(" OFFSET {offset}"));
+            sql.push_str(&format!(" OFFSET ?{idx}"));
+            param_values.push(Box::new(offset as i64));
+            idx += 1;
         }
 
         let _ = idx; // suppress unused warning
@@ -760,8 +789,10 @@ impl StorageBackend {
 
         sql.push_str(" ORDER BY updated_at DESC");
 
-        if let Some(limit) = filter.limit {
-            sql.push_str(&format!(" LIMIT {limit}"));
+        if let Some(limit) = filter.capped_limit() {
+            sql.push_str(&format!(" LIMIT ?{idx}"));
+            param_values.push(Box::new(limit as i64));
+            idx += 1;
         }
 
         let _ = idx;

@@ -18,6 +18,14 @@ services:
       - /tmp:size=64M
     security_opt:
       - no-new-privileges:true
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 512M
+        reservations:
+          cpus: "0.1"
+          memory: 128M
     environment:
       - SENTINEL_CORS_ORIGIN=http://localhost:8080
     healthcheck:

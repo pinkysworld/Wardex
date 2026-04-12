@@ -2,6 +2,26 @@
 
 All notable changes to Wardex are documented in this file.
 
+## [0.43.1] — Admin Console Quality & Platform Polish
+
+### Fixed
+- **Malware tab severity badges** — Replaced nonexistent CSS classes `badge-danger`/`badge-warning` with the correct `badge-err`/`badge-warn` classes in the Infrastructure malware detections table.
+- **Traces tab status badges** — Replaced nonexistent CSS classes `badge-danger`/`badge-success` with the correct `badge-err`/`badge-ok` classes in the Infrastructure trace spans table.
+- **SIEM export blob URL memory leak** — The SIEM export download now revokes the temporary blob URL after click, preventing unbounded memory growth in long-running browser sessions.
+- **Unused config-drift API fetch** — Removed a stale `useApi(api.configDriftBaselines)` call in Infrastructure that triggered a wasted `GET /api/config-drift/baselines` request on every component mount.
+- **Dashboard widget collapse/restore** — Fixed widget state management so collapse and restore operations work reliably without race conditions under rapid interaction.
+- **Alert severity filter** — Corrected the severity badge class mappings in the live alert stream so filters render with proper visual indicators.
+- **Toast notification lifecycle** — Fixed auto-dismiss timer cleanup to prevent stale timers from firing after manual dismissal.
+- **Search palette keyboard handling** — Corrected event propagation so the search palette closes cleanly on Escape without interfering with other keyboard shortcuts.
+- **Fleet agents table rendering** — Fixed agent status badge classes and heartbeat freshness display in the Fleet & Agents view.
+- **SOC Workbench case detail** — Corrected storyline timeline rendering and related-events display in the structured incident detail view.
+- **Settings edit mode** — Fixed configuration edit form submission and cancel button state management.
+
+### Improved
+- **Admin console test suite** — 83 automated tests: 26 Vitest unit tests covering API client, hooks, and rendering + 57 Playwright end-to-end tests covering authentication, navigation, all page views, responsive layout, onboarding wizard, and zero-JS-crash verification across all routes.
+- **Source module count** — Updated from 116 to 128 Rust source modules reflecting the accurate `src/` inventory.
+- **Total test count** — 1428 automated tests (1345 Rust + 83 admin-console) providing comprehensive coverage across the full platform.
+
 ## [0.43.0] — Malware Detection, Threat Hunting & Platform Hardening
 
 ### Added

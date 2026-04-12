@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 
 export function formatLabel(key) {
   return String(key)
@@ -234,7 +234,7 @@ export function downloadData(data, filename, mime = 'application/json') {
   link.href = url;
   link.download = filename;
   link.click();
-  URL.revokeObjectURL(url);
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
 export function downloadCsv(rows, filename) {
@@ -252,6 +252,13 @@ export function downloadCsv(rows, filename) {
 }
 
 export function SideDrawer({ open, title, subtitle, onClose, actions, children }) {
+  useEffect(() => {
+    if (!open) return;
+    const handleKey = (e) => { if (e.key === 'Escape') onClose?.(); };
+    document.addEventListener('keydown', handleKey);
+    return () => document.removeEventListener('keydown', handleKey);
+  }, [open, onClose]);
+
   if (!open) return null;
   return (
     <div className="drawer-overlay" onClick={onClose}>

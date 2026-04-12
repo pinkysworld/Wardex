@@ -204,7 +204,10 @@ impl ReportStore {
             let _ = fs::create_dir_all(parent);
         }
         if let Ok(json) = serde_json::to_string_pretty(&self.reports) {
-            let _ = fs::write(path, json);
+            let tmp = format!("{}.tmp", self.store_path);
+            if fs::write(&tmp, &json).is_ok() {
+                let _ = fs::rename(&tmp, path);
+            }
         }
     }
 

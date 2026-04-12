@@ -1,6 +1,7 @@
 //! Anomaly detection engine using EWMA baselines over telemetry signals to produce anomaly scores.
 
 use std::collections::HashMap;
+use std::collections::VecDeque;
 
 use serde::{Deserialize, Serialize};
 
@@ -113,7 +114,7 @@ pub struct AnomalyDetector {
     adaptation: AdaptationMode,
     custom_weights: Option<HashMap<String, f32>>,
     /// Rolling window of recent auth_failures for rate-of-change smoothing.
-    auth_history: Vec<u32>,
+    auth_history: VecDeque<u32>,
 }
 
 impl Default for AnomalyDetector {
@@ -130,7 +131,7 @@ impl AnomalyDetector {
             observed_samples: 0,
             adaptation: AdaptationMode::Normal,
             custom_weights: None,
-            auth_history: Vec::new(),
+            auth_history: VecDeque::new(),
         }
     }
 
@@ -377,13 +378,15 @@ impl AnomalyDetector {
                 // ── Auth failure rate-of-change smoothing ──
                 // Track a rolling window of auth_failures to detect acceleration.
                 // A sudden spike from 0 → 10 is suspicious even if baseline is low.
-                self.auth_history.push(sample.auth_failures);
+                self.auth_history.push_back(sample.auth_failures);
                 if self.auth_history.len() > 8 {
-                    self.auth_history.remove(0);
+                    self.auth_history.pop_front();
                 }
                 if self.auth_history.len() >= 3 {
-                    let recent = &self.auth_history[self.auth_history.len() - 3..];
-                    let rate_of_change = recent[2] as f32 - recent[0] as f32;
+                    let len = self.auth_history.len();
+                    let r0 = self.auth_history[len - 3];
+                    let r2 = self.auth_history[len - 1];
+                    let rate_of_change = r2 as f32 - r0 as f32;
                     if rate_of_change > 4.0 {
                         let roc_weight = self.weight_for("auth_rate_of_change", 0.8);
                         let roc_score = (rate_of_change / 8.0).min(1.5) * roc_weight;

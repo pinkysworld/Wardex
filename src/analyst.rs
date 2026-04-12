@@ -90,7 +90,10 @@ impl CaseStore {
             let _ = std::fs::create_dir_all(parent);
         }
         if let Ok(json) = serde_json::to_string_pretty(&self.cases) {
-            let _ = std::fs::write(path, json);
+            let tmp = format!("{}.tmp", self.store_path);
+            if std::fs::write(&tmp, &json).is_ok() {
+                let _ = std::fs::rename(&tmp, path);
+            }
         }
     }
 

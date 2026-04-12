@@ -79,12 +79,12 @@ export default function LiveMonitor() {
       toast(`Marked ${ids.length} alerts as false positive`, 'success');
     } else if (bulkAction === 'triage') {
       try {
-        await api.bulkTriage({ event_ids: ids.filter(id => typeof id === 'number'), verdict: 'acknowledged' });
+        await api.bulkTriage({ event_ids: ids, verdict: 'acknowledged' });
         toast(`Triaged ${ids.length} alerts`, 'success');
       } catch { toast('Bulk triage failed', 'error'); }
     } else if (bulkAction === 'incident') {
       try {
-        await api.createIncident({ title: `Bulk incident (${ids.length} alerts)`, severity: 'medium', event_ids: ids.filter(id => typeof id === 'number') });
+        await api.createIncident({ title: `Bulk incident (${ids.length} alerts)`, severity: 'medium', event_ids: ids });
         toast('Incident created from selected alerts', 'success');
       } catch { toast('Incident creation failed', 'error'); }
     }

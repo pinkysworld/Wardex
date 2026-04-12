@@ -2,11 +2,11 @@
 
 Wardex is a Rust-based XDR and SIEM platform for private-cloud and self-hosted security operations. It combines cross-platform telemetry collection, detection engineering, analyst workflows, approval-gated response, agent lifecycle management, SIEM integrations, and tamper-evident evidence handling in a single deployable product.
 
-## What ships in `v0.43.0`
+## What ships in `v0.43.1`
 
-- 116 Rust source modules covering telemetry collection, detection engineering, malware scanning, SOC workflows, fleet operations, governance, SIEM integrations, and automated incident response
+- 128 Rust source modules covering telemetry collection, detection engineering, malware scanning, SOC workflows, fleet operations, governance, SIEM integrations, and automated incident response
 - 161 documented OpenAPI paths with authenticated admin-console workflows, fleet controls, reports, threat hunting, compliance, and enterprise support surfaces
-- 1345 automated tests (1161 lib + 184 integration) plus live Playwright admin-console smoke coverage for release validation
+- 1428 automated tests (1345 Rust + 83 admin-console) plus live Playwright end-to-end coverage for release validation
 - Malware hash database with ~48 built-in signatures, YARA rule engine, and real-time file scanning
 - Threat hunting DSL with KQL-like syntax, field aliases, and wildcard matching
 - Multi-format SIEM export (CEF, LEEF, Syslog, Sentinel, UDM, ECS, QRadar)
@@ -64,12 +64,12 @@ Run the full automated suite:
 cargo test
 ```
 
-The current release passes 1345 automated tests (1161 lib + 184 integration) across unit and integration coverage. The repo also includes live verification helpers in [`tests/live_test.py`](tests/live_test.py), [`tests/verify_admin.py`](tests/verify_admin.py), [`tests/playwright/enterprise_console_smoke.spec.js`](tests/playwright/enterprise_console_smoke.spec.js), and [`tests/playwright/live_release_smoke.spec.js`](tests/playwright/live_release_smoke.spec.js).
+The current release passes 1428 automated tests (1345 Rust + 83 admin-console) across unit, integration, and end-to-end coverage. The repo also includes live verification helpers in [`tests/live_test.py`](tests/live_test.py), [`tests/verify_admin.py`](tests/verify_admin.py), [`tests/playwright/enterprise_console_smoke.spec.js`](tests/playwright/enterprise_console_smoke.spec.js), and [`tests/playwright/live_release_smoke.spec.js`](tests/playwright/live_release_smoke.spec.js).
 
 ## Repository layout
 
 ```text
-src/                  Core platform modules (116 Rust source files)
+src/                  Core platform modules (128 Rust source files)
 tests/                Integration tests, live checks, and browser smoke coverage
 docs/                 Product, architecture, deployment, and runbook documentation
 admin-console/        React admin console source (embedded from dist at build time)

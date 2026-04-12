@@ -12,4 +12,5 @@ test-results/
 docs/IMPLEMENTATION_PLAN.md
 migrate_axum.py
 migrate_fixup.py
-src/server.rs.bak
+*.bak
+sdk/typescript/node_modules/

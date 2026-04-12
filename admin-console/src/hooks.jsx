@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef, createContext, useContext } from 'react';
-import { setToken, getToken, authCheck } from './api.js';
+import { setToken, getToken, authCheck, authSession, wsConnect, wsDisconnect, wsPoll } from './api.js';
 
 // ── Auth Context ─────────────────────────────────────────────
 
@@ -49,19 +49,28 @@ export function useAuth() { return useContext(AuthContext); }
 
 // ── Role Context ─────────────────────────────────────────────
 
-const RoleContext = createContext({ role: 'admin' });
+const RoleContext = createContext({ role: 'viewer' });
 
 export function RoleProvider({ children }) {
   const { authenticated } = useAuth();
-  const [role, setRole] = useState('admin');
+  const [role, setRole] = useState('viewer');
 
   useEffect(() => {
     if (!authenticated) { setRole('viewer'); return; }
-    // Fetch role from session endpoint
-    fetch('/api/auth/session', { headers: { 'Authorization': `Bearer ${getToken()}` } })
-      .then(r => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.json(); })
-      .then(data => { if (data.role) setRole(data.role); })
-      .catch(() => setRole('viewer'));
+    let cancelled = false;
+    const fetchRole = (retries = 2) => {
+      authSession()
+        .then(data => { if (!cancelled && data.role) setRole(data.role); })
+        .catch(() => {
+          if (!cancelled && retries > 0) {
+            setTimeout(() => fetchRole(retries - 1), 1000);
+          } else if (!cancelled) {
+            setRole('viewer');
+          }
+        });
+    };
+    fetchRole();
+    return () => { cancelled = true; };
   }, [authenticated]);
 
   return (
@@ -170,4 +179,84 @@ export function useInterval(callback, delayMs) {
     const id = setInterval(() => savedCallback.current(), delayMs);
     return () => clearInterval(id);
   }, [delayMs]);
+}
+
+// ── useWebSocket hook (long-poll fallback) ───────────────────
+
+/**
+ * Real-time event stream via server-side EventBus polling.
+ * Connects on mount, disconnects on unmount.
+ * Returns { events, connected, clientCount }.
+ */
+export function useWebSocket(pollIntervalMs = 2000) {
+  const [events, setEvents] = useState([]);
+  const [connected, setConnected] = useState(false);
+  const subscriberIdRef = useRef(null);
+  const mountedRef = useRef(true);
+
+  useEffect(() => {
+    mountedRef.current = true;
+    let pollTimer = null;
+    let retryDelay = 2000;
+    let retryTimer = null;
+
+    const connect = async () => {
+      try {
+        const result = await wsConnect();
+        if (!mountedRef.current) return;
+        if (!result?.subscriber_id) {
+          throw new Error('Invalid ws connect response');
+        }
+        subscriberIdRef.current = result.subscriber_id;
+        setConnected(true);
+        retryDelay = 2000;
+        startPolling();
+      } catch {
+        if (mountedRef.current) {
+          setConnected(false);
+          const delay = Math.min(retryDelay, 30000);
+          retryDelay = Math.min(retryDelay * 2, 30000);
+          retryTimer = setTimeout(connect, delay);
+        }
+      }
+    };
+
+    const startPolling = () => {
+      pollTimer = setInterval(async () => {
+        if (!mountedRef.current || subscriberIdRef.current == null) return;
+        try {
+          const newEvents = await wsPoll(subscriberIdRef.current);
+          if (!mountedRef.current) return;
+          if (Array.isArray(newEvents) && newEvents.length > 0) {
+            setEvents(prev => [...newEvents, ...prev].slice(0, 500));
+          }
+        } catch {
+          // Connection lost — attempt reconnect with backoff
+          if (mountedRef.current) {
+            setConnected(false);
+            subscriberIdRef.current = null;
+            clearInterval(pollTimer);
+            const delay = Math.min(retryDelay, 30000);
+            retryDelay = Math.min(retryDelay * 2, 30000);
+            retryTimer = setTimeout(connect, delay);
+          }
+        }
+      }, pollIntervalMs);
+    };
+
+    connect();
+
+    return () => {
+      mountedRef.current = false;
+      if (retryTimer) clearTimeout(retryTimer);
+      if (pollTimer) clearInterval(pollTimer);
+      if (subscriberIdRef.current != null) {
+        wsDisconnect(subscriberIdRef.current).catch(() => {});
+      }
+    };
+  }, [pollIntervalMs]);
+
+  const clearEvents = useCallback(() => setEvents([]), []);
+
+  return { events, connected, clearEvents };
 }

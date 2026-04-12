@@ -171,7 +171,7 @@ impl RateLimiter {
             .buckets
             .entry(format!("{ip}:{bucket_suffix}"))
             .or_insert((now, 0));
-        if now - entry.0 >= 60 {
+        if now.saturating_sub(entry.0) >= 60 {
             *entry = (now, 1);
             true
         } else {
@@ -378,6 +378,16 @@ struct AppState {
     yara_engine: crate::yara_engine::YaraEngine,
     api_analytics: crate::api_analytics::ApiAnalytics,
     trace_collector: crate::telemetry::TraceCollector,
+    // Phase 44: advanced threat analysis, inventory, malware, UX
+    feed_engine: crate::feed_ingestion::FeedIngestionEngine,
+    playbook_dsl: crate::playbook_dsl::PlaybookDslStore,
+    image_inventory: crate::container_image::ImageInventory,
+    quarantine_store: crate::quarantine::QuarantineStore,
+    lifecycle_manager: crate::agent_lifecycle::LifecycleManager,
+    decay_config: crate::ioc_decay::DecayConfig,
+    // Phase 29: advanced detection engines
+    dns_analyzer: crate::dns_threat::DnsAnalyzer,
+    alert_broadcaster: crate::ws_stream::AlertBroadcaster,
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
@@ -746,7 +756,10 @@ pub async fn run_server(
         entropy: EntropyDetector::new(60, 8),
         compound: CompoundThreatDetector::default(),
         shutdown: shutdown.clone(),
-        rate_limiter: RateLimiter::new(360, 60),
+        rate_limiter: RateLimiter::new(
+            initial_config.server.rate_limit_read_per_minute,
+            initial_config.server.rate_limit_write_per_minute,
+        ),
         audit_log: AuditLog::new(1000),
         incident_store: IncidentStore::new("var/incidents.json"),
         agent_logs: HashMap::new(),
@@ -796,9 +809,19 @@ pub async fn run_server(
         yara_engine: crate::yara_engine::YaraEngine::new(),
         api_analytics: crate::api_analytics::ApiAnalytics::new(),
         trace_collector: crate::telemetry::TraceCollector::new(10000),
+        feed_engine: crate::feed_ingestion::FeedIngestionEngine::new(),
+        playbook_dsl: crate::playbook_dsl::PlaybookDslStore::new(),
+        image_inventory: crate::container_image::ImageInventory::new(),
+        quarantine_store: crate::quarantine::QuarantineStore::new(),
+        lifecycle_manager: crate::agent_lifecycle::LifecycleManager::new(crate::agent_lifecycle::LifecycleConfig::default()),
+        decay_config: crate::ioc_decay::DecayConfig::default(),
+        dns_analyzer: crate::dns_threat::DnsAnalyzer::new(),
+        alert_broadcaster: crate::ws_stream::AlertBroadcaster::new(),
     }));
 
     // Apply loaded config
+    let shutdown_timeout_secs = initial_config.server.shutdown_timeout_secs;
+
     {
         let mut s = state.lock().unwrap_or_else(|e| e.into_inner());
         s.config = initial_config;
@@ -981,13 +1004,23 @@ pub async fn run_server(
         std::thread::spawn(move || {
             loop {
                 std::thread::sleep(std::time::Duration::from_secs(300));
-                let mut s = match analysis_state.lock() {
-                    Ok(g) => g,
-                    Err(e) => e.into_inner(),
-                };
-                let alerts_vec: Vec<_> = s.alerts.iter().cloned().collect();
-                let analysis = crate::alert_analysis::analyze_alerts(&alerts_vec, 5);
-                s.last_alert_analysis = Some(analysis);
+                {
+                    let s = match analysis_state.lock() {
+                        Ok(g) => g,
+                        Err(e) => e.into_inner(),
+                    };
+                    if s.shutdown.load(Ordering::Relaxed) {
+                        break;
+                    }
+                    let alerts_vec: Vec<_> = s.alerts.iter().cloned().collect();
+                    drop(s);
+                    let analysis = crate::alert_analysis::analyze_alerts(&alerts_vec, 5);
+                    let mut s = match analysis_state.lock() {
+                        Ok(g) => g,
+                        Err(e) => e.into_inner(),
+                    };
+                    s.last_alert_analysis = Some(analysis);
+                }
             }
         });
     }
@@ -1099,19 +1132,25 @@ pub async fn run_server(
         },
     );
 
+    // Limit request body size to 10 MiB to prevent memory exhaustion attacks
+    let app = app.layer(tower_http::limit::RequestBodyLimitLayer::new(10 * 1024 * 1024));
+
     let app = app.into_make_service_with_connect_info::<std::net::SocketAddr>();
 
     eprintln!("Wardex server ready on http://localhost:{port}");
 
     axum::serve(listener, app)
         .with_graceful_shutdown(async move {
+            let timeout = tokio::time::Duration::from_secs(shutdown_timeout_secs);
             loop {
                 tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
                 if shutdown_flag.load(Ordering::Relaxed) {
                     break;
                 }
             }
-            log::info!("Server shutting down…");
+            log::info!("Graceful shutdown initiated (timeout={shutdown_timeout_secs}s)…");
+            tokio::time::sleep(timeout).await;
+            log::info!("Shutdown timeout reached, closing connections");
         })
         .await
         .map_err(|e| format!("server error: {e}"))?;
@@ -1244,6 +1283,14 @@ pub fn spawn_test_server() -> (u16, String) {
         yara_engine: crate::yara_engine::YaraEngine::new(),
         api_analytics: crate::api_analytics::ApiAnalytics::new(),
         trace_collector: crate::telemetry::TraceCollector::new(10000),
+        feed_engine: crate::feed_ingestion::FeedIngestionEngine::new(),
+        playbook_dsl: crate::playbook_dsl::PlaybookDslStore::new(),
+        image_inventory: crate::container_image::ImageInventory::new(),
+        quarantine_store: crate::quarantine::QuarantineStore::new(),
+        lifecycle_manager: crate::agent_lifecycle::LifecycleManager::new(crate::agent_lifecycle::LifecycleConfig::default()),
+        decay_config: crate::ioc_decay::DecayConfig::default(),
+        dns_analyzer: crate::dns_threat::DnsAnalyzer::new(),
+        alert_broadcaster: crate::ws_stream::AlertBroadcaster::new(),
     }));
     {
         let mut s = state.lock().unwrap_or_else(|e| e.into_inner());
@@ -1545,16 +1592,31 @@ fn cors_origin() -> String {
     }
 }
 
-fn json_response(body: &str, status: u16) -> Response<Body> {
+fn security_headers(
+    builder: axum::http::response::Builder,
+) -> axum::http::response::Builder {
     let origin = cors_origin();
-    Response::builder()
-        .status(status)
-        .header("Content-Type", "application/json")
+    builder
         .header("Access-Control-Allow-Origin", origin)
         .header("Vary", "Origin")
         .header("X-Content-Type-Options", "nosniff")
         .header("X-Frame-Options", "DENY")
         .header("Cache-Control", "no-store")
+        .header("Referrer-Policy", "strict-origin-when-cross-origin")
+        .header("Permissions-Policy", "camera=(), microphone=(), geolocation=()")
+        .header(
+            "Strict-Transport-Security",
+            "max-age=63072000; includeSubDomains; preload",
+        )
+        .header(
+            "Content-Security-Policy",
+            "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; font-src 'self'; frame-ancestors 'none'",
+        )
+}
+
+fn json_response(body: &str, status: u16) -> Response<Body> {
+    security_headers(Response::builder().status(status))
+        .header("Content-Type", "application/json")
         .body(Body::from(body.to_owned()))
         .unwrap()
 }
@@ -1565,29 +1627,15 @@ fn error_json(message: &str, status: u16) -> Response<Body> {
 }
 
 fn text_response(body: &str, status: u16) -> Response<Body> {
-    let origin = cors_origin();
-    Response::builder()
-        .status(status)
+    security_headers(Response::builder().status(status))
         .header("Content-Type", "text/plain; charset=utf-8")
-        .header("Access-Control-Allow-Origin", origin)
-        .header("Vary", "Origin")
-        .header("X-Content-Type-Options", "nosniff")
-        .header("X-Frame-Options", "DENY")
-        .header("Cache-Control", "no-store")
         .body(Body::from(body.to_owned()))
         .unwrap()
 }
 
 fn csv_response(body: &str, status: u16) -> Response<Body> {
-    let origin = cors_origin();
-    Response::builder()
-        .status(status)
+    security_headers(Response::builder().status(status))
         .header("Content-Type", "text/csv; charset=utf-8")
-        .header("Access-Control-Allow-Origin", origin)
-        .header("Vary", "Origin")
-        .header("X-Content-Type-Options", "nosniff")
-        .header("X-Frame-Options", "DENY")
-        .header("Cache-Control", "no-store")
         .body(Body::from(body.to_owned()))
         .unwrap()
 }
@@ -3233,7 +3281,10 @@ fn save_remote_deployments(path: &str, deployments: &HashMap<String, AgentDeploy
         if let Some(parent) = path_ref.parent() {
             let _ = fs::create_dir_all(parent);
         }
-        let _ = fs::write(path_ref, json);
+        let tmp = format!("{path}.tmp");
+        if fs::write(&tmp, &json).is_ok() {
+            let _ = fs::rename(&tmp, path_ref);
+        }
     }
 }
 
@@ -3244,7 +3295,9 @@ fn persist_config_to_path(config: &Config, path: &Path) -> Result<(), String> {
         fs::create_dir_all(parent)
             .map_err(|e| format!("failed to create config directory: {e}"))?;
     }
-    fs::write(path, toml_str).map_err(|e| format!("failed to write config: {e}"))
+    let tmp = path.with_extension("toml.tmp");
+    fs::write(&tmp, &toml_str).map_err(|e| format!("failed to write config: {e}"))?;
+    fs::rename(&tmp, path).map_err(|e| format!("failed to finalize config write: {e}"))
 }
 
 fn sync_enterprise_sigma_engine(state: &mut AppState) {
@@ -4131,7 +4184,48 @@ fn handle_api(
         || (method == Method::Post && route_path == "/api/backup/encrypt")
         || (method == Method::Post && route_path == "/api/backup/decrypt")
         || (method == Method::Get && route_path == "/api/detection/rules")
-        || (method == Method::Post && route_path == "/api/detection/rules")));
+        || (method == Method::Post && route_path == "/api/detection/rules")
+        // Phase 44: feed ingestion, playbook DSL, coverage gaps, containers, quarantine, lifecycle, IoC decay, host SBOM
+        || (method == Method::Get && route_path == "/api/feeds")
+        || (method == Method::Post && route_path == "/api/feeds")
+        || (method == Method::Delete && route_path.starts_with("/api/feeds/"))
+        || (method == Method::Post && route_path.starts_with("/api/feeds/") && route_path.ends_with("/poll"))
+        || (method == Method::Get && route_path == "/api/feeds/stats")
+        || (method == Method::Post && route_path == "/api/feeds/hot-reload/hashes")
+        || (method == Method::Get && route_path == "/api/playbook-dsl")
+        || (method == Method::Post && route_path == "/api/playbook-dsl")
+        || (method == Method::Get && route_path.starts_with("/api/playbook-dsl/"))
+        || (method == Method::Delete && route_path.starts_with("/api/playbook-dsl/"))
+        || (method == Method::Get && route_path == "/api/coverage/gaps")
+        || (method == Method::Get && route_path == "/api/images")
+        || (method == Method::Get && route_path == "/api/images/summary")
+        || (method == Method::Post && route_path == "/api/images/collect")
+        || (method == Method::Get && route_path == "/api/quarantine")
+        || (method == Method::Post && route_path == "/api/quarantine")
+        || (method == Method::Get && route_path == "/api/quarantine/stats")
+        || (method == Method::Post && route_path.starts_with("/api/quarantine/") && route_path.ends_with("/release"))
+        || (method == Method::Delete && route_path.starts_with("/api/quarantine/"))
+        || (method == Method::Get && route_path == "/api/lifecycle")
+        || (method == Method::Get && route_path == "/api/lifecycle/stats")
+        || (method == Method::Post && route_path == "/api/lifecycle/sweep")
+        || (method == Method::Post && route_path == "/api/ioc-decay/apply")
+        || (method == Method::Get && route_path == "/api/ioc-decay/preview")
+        || (method == Method::Get && route_path == "/api/sbom/host")
+        // Phase 29: advanced detection
+        || (method == Method::Post && route_path == "/api/entropy/analyze")
+        || (method == Method::Post && route_path == "/api/dns-threat/analyze")
+        || (method == Method::Get && route_path == "/api/dns-threat/summary")
+        || (method == Method::Post && route_path == "/api/dns-threat/record")
+        || (method == Method::Post && route_path == "/api/process-scoring/assess")
+        || (method == Method::Post && route_path == "/api/email/analyze")
+        || (method == Method::Post && route_path == "/api/memory-indicators/scan-maps")
+        || (method == Method::Post && route_path == "/api/memory-indicators/scan-buffer")
+        // Phase 29: WebSocket alert streaming
+        || (method == Method::Post && route_path == "/api/ws/connect")
+        || (method == Method::Post && route_path == "/api/ws/disconnect")
+        || (method == Method::Post && route_path == "/api/ws/poll")
+        || (method == Method::Get && route_path == "/api/ws/stats")
+        || (method == Method::Post && route_path == "/api/ws/broadcast")));
 
     let auth_identity = authenticate_request(headers, state);
     if needs_auth && !auth_identity.is_authenticated() {
@@ -5153,11 +5247,13 @@ fn handle_api(
             let limit = query
                 .get("limit")
                 .and_then(|value| value.parse::<usize>().ok())
-                .unwrap_or(100);
+                .unwrap_or(100)
+                .min(1_000);
             let offset = query
                 .get("offset")
                 .and_then(|value| value.parse::<usize>().ok())
-                .unwrap_or(0);
+                .unwrap_or(0)
+                .min(100_000);
             let s = state.lock().unwrap_or_else(|e| e.into_inner());
             let alerts_vec: Vec<_> = s.alerts.iter().cloned().collect();
             match recent_alerts_json(&alerts_vec, limit, offset) {
@@ -9038,7 +9134,7 @@ fn handle_api(
                             &serde_json::to_string(&serde_json::json!({
                                 "anomalies": anomalies,
                             }))
-                            .unwrap(),
+                            .unwrap_or_else(|_| "{}".to_string()),
                             200,
                         )
                     }
@@ -9047,7 +9143,7 @@ fn handle_api(
             } else if method == Method::Get && url_path == "/api/ueba/risky" {
                 let s = state.lock().unwrap_or_else(|e| e.into_inner());
                 let risky = s.ueba_engine.risky_entities(10.0);
-                json_response(&serde_json::to_string(&risky).unwrap(), 200)
+                json_response(&serde_json::to_string(&risky).unwrap_or_else(|_| "{}".to_string()), 200)
             } else if method == Method::Get && url_path.starts_with("/api/ueba/entity/") {
                 let entity_id = url_path.trim_start_matches("/api/ueba/entity/");
                 let s = state.lock().unwrap_or_else(|e| e.into_inner());
@@ -9055,7 +9151,7 @@ fn handle_api(
                     .ueba_engine
                     .entity_risk(&crate::ueba::EntityKind::User, entity_id)
                 {
-                    Some(risk) => json_response(&serde_json::to_string(&risk).unwrap(), 200),
+                    Some(risk) => json_response(&serde_json::to_string(&risk).unwrap_or_else(|_| "{}".to_string()), 200),
                     None => error_json("entity not found", 404),
                 }
 
@@ -9088,7 +9184,7 @@ fn handle_api(
             } else if method == Method::Get && url_path == "/api/beacon/analyze" {
                 let s = state.lock().unwrap_or_else(|e| e.into_inner());
                 let summary = s.beacon_detector.analyze();
-                json_response(&serde_json::to_string(&summary).unwrap(), 200)
+                json_response(&serde_json::to_string(&summary).unwrap_or_else(|_| "{}".to_string()), 200)
 
             // Kill Chain
             } else if method == Method::Post && url_path == "/api/killchain/reconstruct" {
@@ -9100,7 +9196,7 @@ fn handle_api(
                     Ok(events) => {
                         let s = state.lock().unwrap_or_else(|e| e.into_inner());
                         let chain = s.kill_chain_analyzer.reconstruct("api-request", &events);
-                        json_response(&serde_json::to_string(&chain).unwrap(), 200)
+                        json_response(&serde_json::to_string(&chain).unwrap_or_else(|_| "{}".to_string()), 200)
                     }
                     Err(e) => error_json(&e, 400),
                 }
@@ -9122,7 +9218,7 @@ fn handle_api(
             } else if method == Method::Get && url_path == "/api/lateral/analyze" {
                 let s = state.lock().unwrap_or_else(|e| e.into_inner());
                 let summary = s.lateral_detector.analyze();
-                json_response(&serde_json::to_string(&summary).unwrap(), 200)
+                json_response(&serde_json::to_string(&summary).unwrap_or_else(|_| "{}".to_string()), 200)
 
             // Kernel Events
             } else if method == Method::Post && url_path == "/api/kernel/event" {
@@ -9141,13 +9237,13 @@ fn handle_api(
             } else if method == Method::Get && url_path == "/api/kernel/recent" {
                 let s = state.lock().unwrap_or_else(|e| e.into_inner());
                 let events = s.kernel_event_stream.recent(100, None);
-                json_response(&serde_json::to_string(&events).unwrap(), 200)
+                json_response(&serde_json::to_string(&events).unwrap_or_else(|_| "{}".to_string()), 200)
 
             // Playbooks
             } else if method == Method::Get && url_path == "/api/playbooks" {
                 let s = state.lock().unwrap_or_else(|e| e.into_inner());
                 let pbs = s.playbook_engine.list_playbooks();
-                json_response(&serde_json::to_string(&pbs).unwrap(), 200)
+                json_response(&serde_json::to_string(&pbs).unwrap_or_else(|_| "{}".to_string()), 200)
             } else if method == Method::Post && url_path == "/api/playbooks" {
                 let body = read_body_limited(body, 16384);
                 match body.and_then(|b| {
@@ -9187,7 +9283,7 @@ fn handle_api(
             } else if method == Method::Get && url_path == "/api/playbooks/executions" {
                 let s = state.lock().unwrap_or_else(|e| e.into_inner());
                 let execs = s.playbook_engine.recent_executions(50);
-                json_response(&serde_json::to_string(&execs).unwrap(), 200)
+                json_response(&serde_json::to_string(&execs).unwrap_or_else(|_| "{}".to_string()), 200)
 
             // Live Response
             } else if method == Method::Post && url_path == "/api/live-response/session" {
@@ -9244,7 +9340,7 @@ fn handle_api(
             } else if method == Method::Get && url_path == "/api/live-response/sessions" {
                 let s = state.lock().unwrap_or_else(|e| e.into_inner());
                 let sessions = s.live_response_engine.all_sessions();
-                json_response(&serde_json::to_string(&sessions).unwrap(), 200)
+                json_response(&serde_json::to_string(&sessions).unwrap_or_else(|_| "{}".to_string()), 200)
             } else if method == Method::Get && url_path == "/api/live-response/audit" {
                 let s = state.lock().unwrap_or_else(|e| e.into_inner());
                 let log: Vec<serde_json::Value> = s
@@ -9253,7 +9349,7 @@ fn handle_api(
                     .iter()
                     .map(|(sid, cr)| serde_json::json!({"session_id": sid, "record": cr}))
                     .collect();
-                json_response(&serde_json::to_string(&log).unwrap(), 200)
+                json_response(&serde_json::to_string(&log).unwrap_or_else(|_| "{}".to_string()), 200)
 
             // Remediation
             } else if method == Method::Post && url_path == "/api/remediation/plan" {
@@ -9300,24 +9396,24 @@ fn handle_api(
                         };
                         let s = state.lock().unwrap_or_else(|e| e.into_inner());
                         let plan = s.remediation_engine.plan(&action, &platform);
-                        json_response(&serde_json::to_string(&plan).unwrap(), 200)
+                        json_response(&serde_json::to_string(&plan).unwrap_or_else(|_| "{}".to_string()), 200)
                     }
                     Err(e) => error_json(&e, 400),
                 }
             } else if method == Method::Get && url_path == "/api/remediation/results" {
                 let s = state.lock().unwrap_or_else(|e| e.into_inner());
                 let results = s.remediation_engine.recent_results(50);
-                json_response(&serde_json::to_string(&results).unwrap(), 200)
+                json_response(&serde_json::to_string(&results).unwrap_or_else(|_| "{}".to_string()), 200)
             } else if method == Method::Get && url_path == "/api/remediation/stats" {
                 let s = state.lock().unwrap_or_else(|e| e.into_inner());
                 let stats = s.remediation_engine.stats();
-                json_response(&serde_json::to_string(&stats).unwrap(), 200)
+                json_response(&serde_json::to_string(&stats).unwrap_or_else(|_| "{}".to_string()), 200)
 
             // Escalation
             } else if method == Method::Get && url_path == "/api/escalation/policies" {
                 let s = state.lock().unwrap_or_else(|e| e.into_inner());
                 let policies = s.escalation_engine.list_policies();
-                json_response(&serde_json::to_string(&policies).unwrap(), 200)
+                json_response(&serde_json::to_string(&policies).unwrap_or_else(|_| "{}".to_string()), 200)
             } else if method == Method::Post && url_path == "/api/escalation/policies" {
                 let body = read_body_limited(body, 16384);
                 match body.and_then(|b| {
@@ -9375,7 +9471,7 @@ fn handle_api(
             } else if method == Method::Get && url_path == "/api/escalation/active" {
                 let s = state.lock().unwrap_or_else(|e| e.into_inner());
                 let active = s.escalation_engine.active_escalations();
-                json_response(&serde_json::to_string(&active).unwrap(), 200)
+                json_response(&serde_json::to_string(&active).unwrap_or_else(|_| "{}".to_string()), 200)
             } else if method == Method::Post && url_path == "/api/escalation/check-sla" {
                 let now = chrono::Utc::now().timestamp_millis() as u64;
                 let mut s = state.lock().unwrap_or_else(|e| e.into_inner());
@@ -9388,13 +9484,13 @@ fn handle_api(
             // Evidence Collection Plans
             } else if method == Method::Get && url_path == "/api/evidence/plan/linux" {
                 let plan = crate::forensics::EvidenceCollectionPlan::linux();
-                json_response(&serde_json::to_string(&plan).unwrap(), 200)
+                json_response(&serde_json::to_string(&plan).unwrap_or_else(|_| "{}".to_string()), 200)
             } else if method == Method::Get && url_path == "/api/evidence/plan/macos" {
                 let plan = crate::forensics::EvidenceCollectionPlan::macos();
-                json_response(&serde_json::to_string(&plan).unwrap(), 200)
+                json_response(&serde_json::to_string(&plan).unwrap_or_else(|_| "{}".to_string()), 200)
             } else if method == Method::Get && url_path == "/api/evidence/plan/windows" {
                 let plan = crate::forensics::EvidenceCollectionPlan::windows();
-                json_response(&serde_json::to_string(&plan).unwrap(), 200)
+                json_response(&serde_json::to_string(&plan).unwrap_or_else(|_| "{}".to_string()), 200)
 
             // Containment Commands
             } else if method == Method::Post && url_path == "/api/containment/commands" {
@@ -9414,7 +9510,7 @@ fn handle_api(
                         let platform = v["platform"].as_str().unwrap_or("linux");
                         let s = state.lock().unwrap_or_else(|e| e.into_inner());
                         let cmds = s.enforcement.containment_commands(&level, target, platform);
-                        json_response(&serde_json::to_string(&cmds).unwrap(), 200)
+                        json_response(&serde_json::to_string(&cmds).unwrap_or_else(|_| "{}".to_string()), 200)
                     }
                     Err(e) => error_json(&e, 400),
                 }
@@ -9436,7 +9532,7 @@ fn handle_api(
                     Ok(alerts) => {
                         json_response(&serde_json::to_string(&alerts).unwrap_or_default(), 200)
                     }
-                    Err(e) => error_json(&e.message, 500),
+                    Err(e) => error_json(e.safe_message(), 500),
                 }
             } else if method == Method::Get && url_path == "/api/storage/cases" {
                 let query = parse_query_string(&url);
@@ -9451,7 +9547,7 @@ fn handle_api(
                     Ok(cases) => {
                         json_response(&serde_json::to_string(&cases).unwrap_or_default(), 200)
                     }
-                    Err(e) => error_json(&e.message, 500),
+                    Err(e) => error_json(e.safe_message(), 500),
                 }
             } else if method == Method::Get && url_path == "/api/storage/audit" {
                 let s = state.lock().unwrap_or_else(|e| e.into_inner());
@@ -9463,7 +9559,7 @@ fn handle_api(
                     }))
                 }) {
                     Ok(body) => json_response(&body.to_string(), 200),
-                    Err(e) => error_json(&e.message, 500),
+                    Err(e) => error_json(e.safe_message(), 500),
                 }
             } else if method == Method::Get && url_path == "/api/storage/stats" {
                 let s = state.lock().unwrap_or_else(|e| e.into_inner());
@@ -9471,7 +9567,7 @@ fn handle_api(
                     Ok(stats) => {
                         json_response(&serde_json::to_string(&stats).unwrap_or_default(), 200)
                     }
-                    Err(e) => error_json(&e.message, 500),
+                    Err(e) => error_json(e.safe_message(), 500),
                 }
             } else if method == Method::Get && url_path == "/api/storage/agents" {
                 let query = parse_query_string(&url);
@@ -9481,7 +9577,7 @@ fn handle_api(
                     Ok(agents) => {
                         json_response(&serde_json::to_string(&agents).unwrap_or_default(), 200)
                     }
-                    Err(e) => error_json(&e.message, 500),
+                    Err(e) => error_json(e.safe_message(), 500),
                 }
             } else if method == Method::Post && url_path == "/api/storage/alerts" {
                 match read_body_limited(body, 8192) {
@@ -9532,7 +9628,7 @@ fn handle_api(
                         json_response(&body.to_string(), 200)
                     }
                     Ok(None) => error_json("already at version 0, nothing to rollback", 400),
-                    Err(e) => error_json(&e.message, 500),
+                    Err(e) => error_json(e.safe_message(), 500),
                 }
 
             // ── GDPR right-to-forget ──────────────────────────────
@@ -9555,7 +9651,7 @@ fn handle_api(
                             });
                             json_response(&body.to_string(), 200)
                         }
-                        Err(e) => error_json(&e.message, 500),
+                        Err(e) => error_json(e.safe_message(), 500),
                     }
                 }
 
@@ -9578,7 +9674,7 @@ fn handle_api(
                         });
                         json_response(&body.to_string(), 200)
                     }
-                    Err(e) => error_json(&e.message, 500),
+                    Err(e) => error_json(e.safe_message(), 500),
                 }
 
             // ── Database schema version ───────────────────────────
@@ -9610,7 +9706,7 @@ fn handle_api(
                         });
                         json_response(&body.to_string(), 200)
                     }
-                    Err(e) => error_json(&e.message, 500),
+                    Err(e) => error_json(e.safe_message(), 500),
                 }
 
             // ── Database reset (purge all data) ───────────────────
@@ -9637,7 +9733,7 @@ fn handle_api(
                                     });
                                     json_response(&body.to_string(), 200)
                                 }
-                                Err(e) => error_json(&e.message, 500),
+                                Err(e) => error_json(e.safe_message(), 500),
                             }
                         }
                     }
@@ -9657,7 +9753,7 @@ fn handle_api(
                         });
                         json_response(&body.to_string(), 200)
                     }
-                    Err(e) => error_json(&e.message, 500),
+                    Err(e) => error_json(e.safe_message(), 500),
                 }
 
             // ── Cleanup legacy flat files ─────────────────────────
@@ -10663,6 +10759,441 @@ fn handle_api(
                         }
                     }
                     Err(e) => error_json(&e, 400),
+                }
+
+            // ── Feed Ingestion ────────────────────────────────────────
+            } else if method == Method::Get && url_path == "/api/feeds" {
+                let s = state.lock().unwrap_or_else(|e| e.into_inner());
+                let body = serde_json::to_string(s.feed_engine.sources()).unwrap_or_default();
+                json_response(&body, 200)
+
+            } else if method == Method::Post && url_path == "/api/feeds" {
+                match read_body_limited(body, 16384) {
+                    Ok(body_str) => {
+                        match serde_json::from_str::<crate::feed_ingestion::FeedSource>(&body_str) {
+                            Ok(src) => {
+                                let mut s = state.lock().unwrap_or_else(|e| e.into_inner());
+                                let id = s.feed_engine.add_source(src);
+                                json_response(&format!(r#"{{"id":"{id}"}}"#), 201)
+                            }
+                            Err(e) => error_json(&format!("invalid feed source: {e}"), 400),
+                        }
+                    }
+                    Err(e) => error_json(&e, 400),
+                }
+
+            } else if method == Method::Delete && url_path.starts_with("/api/feeds/") {
+                let feed_id = &url_path["/api/feeds/".len()..];
+                let mut s = state.lock().unwrap_or_else(|e| e.into_inner());
+                if s.feed_engine.remove_source(feed_id) {
+                    json_response(r#"{"deleted":true}"#, 200)
+                } else {
+                    error_json("feed source not found", 404)
+                }
+
+            } else if method == Method::Post && url_path.starts_with("/api/feeds/") && url_path.ends_with("/poll") {
+                let feed_id = &url_path["/api/feeds/".len()..url_path.len() - "/poll".len()];
+                match read_body_limited(body, 10 * 1024 * 1024) {
+                    Ok(body_str) => {
+                        let mut s = state.lock().unwrap_or_else(|e| e.into_inner());
+                        let AppState { ref mut feed_engine, ref mut threat_intel, ref mut malware_hash_db, ref mut yara_engine, .. } = *s;
+                        match feed_engine.poll_feed(feed_id, &body_str, threat_intel, malware_hash_db, yara_engine) {
+                            Ok(result) => {
+                                let body = serde_json::to_string(&result).unwrap_or_default();
+                                json_response(&body, 200)
+                            }
+                            Err(e) => error_json(&e, 400),
+                        }
+                    }
+                    Err(e) => error_json(&e, 400),
+                }
+
+            } else if method == Method::Get && url_path == "/api/feeds/stats" {
+                let s = state.lock().unwrap_or_else(|e| e.into_inner());
+                let body = serde_json::to_string(&s.feed_engine.stats()).unwrap_or_default();
+                json_response(&body, 200)
+
+            } else if method == Method::Post && url_path == "/api/feeds/hot-reload/hashes" {
+                match read_body_limited(body, 10 * 1024 * 1024) {
+                    Ok(body_str) => {
+                        let mut s = state.lock().unwrap_or_else(|e| e.into_inner());
+                        let AppState { ref mut feed_engine, ref mut malware_hash_db, .. } = *s;
+                        match feed_engine.hot_reload_hashes(&body_str, malware_hash_db) {
+                            Ok(count) => json_response(&format!(r#"{{"imported":{count}}}"#), 200),
+                            Err(e) => error_json(&e, 400),
+                        }
+                    }
+                    Err(e) => error_json(&e, 400),
+                }
+
+            // ── Playbook DSL ──────────────────────────────────────────
+            } else if method == Method::Get && url_path == "/api/playbook-dsl" {
+                let s = state.lock().unwrap_or_else(|e| e.into_inner());
+                let list = s.playbook_dsl.list();
+                let body = serde_json::to_string(&list).unwrap_or_default();
+                json_response(&body, 200)
+
+            } else if method == Method::Post && url_path == "/api/playbook-dsl" {
+                match read_body_limited(body, 64 * 1024) {
+                    Ok(body_str) => {
+                        match serde_json::from_str::<crate::playbook_dsl::PlaybookDefinition>(&body_str) {
+                            Ok(def) => {
+                                let mut s = state.lock().unwrap_or_else(|e| e.into_inner());
+                                let id = s.playbook_dsl.create(def);
+                                json_response(&format!(r#"{{"id":"{id}"}}"#), 201)
+                            }
+                            Err(e) => error_json(&format!("invalid playbook: {e}"), 400),
+                        }
+                    }
+                    Err(e) => error_json(&e, 400),
+                }
+
+            } else if method == Method::Get && url_path.starts_with("/api/playbook-dsl/") {
+                let pb_id = &url_path["/api/playbook-dsl/".len()..];
+                let s = state.lock().unwrap_or_else(|e| e.into_inner());
+                match s.playbook_dsl.get(pb_id) {
+                    Some(pb) => {
+                        let body = serde_json::to_string(pb).unwrap_or_default();
+                        json_response(&body, 200)
+                    }
+                    None => error_json("playbook not found", 404),
+                }
+
+            } else if method == Method::Delete && url_path.starts_with("/api/playbook-dsl/") {
+                let pb_id = &url_path["/api/playbook-dsl/".len()..];
+                let mut s = state.lock().unwrap_or_else(|e| e.into_inner());
+                if s.playbook_dsl.delete(pb_id) {
+                    json_response(r#"{"deleted":true}"#, 200)
+                } else {
+                    error_json("playbook not found", 404)
+                }
+
+            // ── ATT&CK Coverage Gaps ──────────────────────────────────
+            } else if method == Method::Get && url_path == "/api/coverage/gaps" {
+                let s = state.lock().unwrap_or_else(|e| e.into_inner());
+                let report = crate::coverage_gap::analyze_gaps(&s.mitre_coverage);
+                let body = serde_json::to_string(&report).unwrap_or_default();
+                json_response(&body, 200)
+
+            // ── Container Image Inventory ─────────────────────────────
+            } else if method == Method::Get && url_path == "/api/images" {
+                let s = state.lock().unwrap_or_else(|e| e.into_inner());
+                let body = serde_json::to_string(s.image_inventory.list()).unwrap_or_default();
+                json_response(&body, 200)
+
+            } else if method == Method::Get && url_path == "/api/images/summary" {
+                let s = state.lock().unwrap_or_else(|e| e.into_inner());
+                let body = serde_json::to_string(&s.image_inventory.summary()).unwrap_or_default();
+                json_response(&body, 200)
+
+            } else if method == Method::Post && url_path == "/api/images/collect" {
+                let mut s = state.lock().unwrap_or_else(|e| e.into_inner());
+                s.image_inventory.collect_from_runtime();
+                let body = serde_json::to_string(s.image_inventory.list()).unwrap_or_default();
+                json_response(&body, 200)
+
+            // ── Quarantine Store ──────────────────────────────────────
+            } else if method == Method::Get && url_path == "/api/quarantine" {
+                let s = state.lock().unwrap_or_else(|e| e.into_inner());
+                let body = serde_json::to_string(&s.quarantine_store.list()).unwrap_or_default();
+                json_response(&body, 200)
+
+            } else if method == Method::Post && url_path == "/api/quarantine" {
+                match read_body_limited(body, 65536) {
+                    Ok(body_str) => {
+                        #[derive(serde::Deserialize)]
+                        struct QuarantineReq {
+                            path: String,
+                            agent_id: Option<String>,
+                            hostname: Option<String>,
+                            verdict: Option<String>,
+                            malware_family: Option<String>,
+                        }
+                        match serde_json::from_str::<QuarantineReq>(&body_str) {
+                            Ok(req) => {
+                                let file_data = std::fs::read(&req.path)
+                                    .unwrap_or_default();
+                                if file_data.is_empty() {
+                                    return error_json("cannot read file or file is empty", 400);
+                                }
+                                let mut s = state.lock().unwrap_or_else(|e| e.into_inner());
+                                let record = s.quarantine_store.quarantine(
+                                    &req.path,
+                                    &file_data,
+                                    req.verdict.as_deref().unwrap_or("suspicious"),
+                                    req.malware_family.map(|s| s.to_string()),
+                                    vec![],
+                                    req.agent_id.map(|s| s.to_string()),
+                                    req.hostname.map(|s| s.to_string()),
+                                );
+                                json_response(&format!(r#"{{"id":"{}"}}"#, record.id), 201)
+                            }
+                            Err(e) => error_json(&format!("invalid quarantine request: {e}"), 400),
+                        }
+                    }
+                    Err(e) => error_json(&e, 400),
+                }
+
+            } else if method == Method::Get && url_path == "/api/quarantine/stats" {
+                let s = state.lock().unwrap_or_else(|e| e.into_inner());
+                let body = serde_json::to_string(&s.quarantine_store.stats()).unwrap_or_default();
+                json_response(&body, 200)
+
+            } else if method == Method::Post && url_path.starts_with("/api/quarantine/") && url_path.ends_with("/release") {
+                let qid = &url_path["/api/quarantine/".len()..url_path.len() - "/release".len()];
+                let analyst = "api_user";
+                let mut s = state.lock().unwrap_or_else(|e| e.into_inner());
+                if s.quarantine_store.release(qid, analyst) {
+                    json_response(r#"{"released":true}"#, 200)
+                } else {
+                    error_json("quarantine entry not found", 404)
+                }
+
+            } else if method == Method::Delete && url_path.starts_with("/api/quarantine/") {
+                let qid = &url_path["/api/quarantine/".len()..];
+                let mut s = state.lock().unwrap_or_else(|e| e.into_inner());
+                if s.quarantine_store.delete(qid) {
+                    json_response(r#"{"deleted":true}"#, 200)
+                } else {
+                    error_json("quarantine entry not found", 404)
+                }
+
+            // ── Agent Lifecycle ────────────────────────────────────────
+            } else if method == Method::Get && url_path == "/api/lifecycle" {
+                let s = state.lock().unwrap_or_else(|e| e.into_inner());
+                let agents = s.lifecycle_manager.all_entries();
+                let body = serde_json::to_string(&agents).unwrap_or_default();
+                json_response(&body, 200)
+
+            } else if method == Method::Get && url_path == "/api/lifecycle/stats" {
+                let mut s = state.lock().unwrap_or_else(|e| e.into_inner());
+                let stats = s.lifecycle_manager.sweep();
+                let body = serde_json::to_string(&stats).unwrap_or_default();
+                json_response(&body, 200)
+
+            } else if method == Method::Post && url_path == "/api/lifecycle/sweep" {
+                let mut s = state.lock().unwrap_or_else(|e| e.into_inner());
+                let transitions = s.lifecycle_manager.sweep();
+                let body = serde_json::to_string(&transitions).unwrap_or_default();
+                json_response(&body, 200)
+
+            // ── IoC Confidence Decay ──────────────────────────────────
+            } else if method == Method::Post && url_path == "/api/ioc-decay/apply" {
+                let mut s = state.lock().unwrap_or_else(|e| e.into_inner());
+                let config = s.decay_config.clone();
+                let result = crate::ioc_decay::apply_decay(&mut s.threat_intel, &config);
+                let body = serde_json::to_string(&result).unwrap_or_default();
+                json_response(&body, 200)
+
+            } else if method == Method::Get && url_path == "/api/ioc-decay/preview" {
+                let s = state.lock().unwrap_or_else(|e| e.into_inner());
+                let iocs = s.threat_intel.all_iocs();
+                let preview: Vec<serde_json::Value> = iocs.iter().take(50).map(|ioc| {
+                    let decayed = crate::ioc_decay::preview_decay(ioc, &s.decay_config);
+                    serde_json::json!({
+                        "value": ioc.value,
+                        "ioc_type": ioc.ioc_type,
+                        "original_confidence": ioc.confidence,
+                        "decayed_confidence": decayed,
+                        "last_seen": ioc.last_seen,
+                    })
+                }).collect();
+                let body = serde_json::to_string(&preview).unwrap_or_default();
+                json_response(&body, 200)
+
+            // ── Host SBOM ─────────────────────────────────────────────
+            } else if method == Method::Get && url_path == "/api/sbom/host" {
+                let sbgen = crate::sbom::SbomGenerator::new("wardex", env!("CARGO_PKG_VERSION"));
+                let inv = crate::inventory::collect_inventory();
+                let mut components = sbgen.from_inventory(&inv);
+                // Also include Cargo.lock dependencies if available
+                if let Ok(lock_content) = std::fs::read_to_string("Cargo.lock") {
+                    let cargo_comps = sbgen.parse_cargo_lock(&lock_content);
+                    components.extend(cargo_comps);
+                }
+                let doc = sbgen.generate(components, vec![], crate::sbom::SbomFormat::CycloneDX);
+                let body = sbgen.to_cyclonedx_json(&doc);
+                json_response(&body, 200)
+
+            // ── Phase 29: Entropy Analysis ─────────────────────────────
+            } else if method == Method::Post && url_path == "/api/entropy/analyze" {
+                match read_body_limited(body, 10 * 1024 * 1024) {
+                    Err(_) => error_json("request too large", 413),
+                    Ok(raw) => {
+                        let data = base64_decode_or_raw(&raw);
+                        let report = crate::entropy_analysis::analyze_entropy(&data);
+                        let body = serde_json::to_string(&report).unwrap_or_default();
+                        json_response(&body, 200)
+                    }
+                }
+
+            // ── Phase 29: DNS Threat Analysis ──────────────────────────
+            } else if method == Method::Post && url_path == "/api/dns-threat/analyze" {
+                match read_body_limited(body, 64 * 1024) {
+                    Err(_) => error_json("request too large", 413),
+                    Ok(raw) => {
+                        #[derive(serde::Deserialize)]
+                        struct DnsDomainReq { domain: String }
+                        match serde_json::from_str::<DnsDomainReq>(&raw) {
+                            Err(e) => error_json(&format!("invalid JSON: {e}"), 400),
+                            Ok(req) => {
+                                let s = state.lock().unwrap_or_else(|e| e.into_inner());
+                                let report = s.dns_analyzer.analyze_domain(&req.domain);
+                                drop(s);
+                                let body = serde_json::to_string(&report).unwrap_or_default();
+                                json_response(&body, 200)
+                            }
+                        }
+                    }
+                }
+
+            } else if method == Method::Get && url_path == "/api/dns-threat/summary" {
+                let s = state.lock().unwrap_or_else(|e| e.into_inner());
+                let summary = s.dns_analyzer.threat_summary();
+                drop(s);
+                let body = serde_json::to_string(&summary).unwrap_or_default();
+                json_response(&body, 200)
+
+            } else if method == Method::Post && url_path == "/api/dns-threat/record" {
+                match read_body_limited(body, 64 * 1024) {
+                    Err(_) => error_json("request too large", 413),
+                    Ok(raw) => match serde_json::from_str::<crate::dns_threat::DnsQuery>(&raw) {
+                        Err(e) => error_json(&format!("invalid JSON: {e}"), 400),
+                        Ok(query) => {
+                            let mut s = state.lock().unwrap_or_else(|e| e.into_inner());
+                            s.dns_analyzer.record_query(query);
+                            drop(s);
+                            json_response(r#"{"status":"recorded"}"#, 200)
+                        }
+                    }
+                }
+
+            // ── Phase 29: Process Scoring ──────────────────────────────
+            } else if method == Method::Post && url_path == "/api/process-scoring/assess" {
+                match read_body_limited(body, 64 * 1024) {
+                    Err(_) => error_json("request too large", 413),
+                    Ok(raw) => {
+                        #[derive(serde::Deserialize)]
+                        struct ProcReq { pid: u32, name: String, chain: Vec<String>, cmdline: Option<String> }
+                        match serde_json::from_str::<ProcReq>(&raw) {
+                            Err(e) => error_json(&format!("invalid JSON: {e}"), 400),
+                            Ok(req) => {
+                                let assessment = crate::process_scoring::ProcessScorer::assess(
+                                    req.pid, &req.name, &req.chain, req.cmdline.as_deref(),
+                                );
+                                let body = serde_json::to_string(&assessment).unwrap_or_default();
+                                json_response(&body, 200)
+                            }
+                        }
+                    }
+                }
+
+            // ── Phase 29: Email Analysis ───────────────────────────────
+            } else if method == Method::Post && url_path == "/api/email/analyze" {
+                match read_body_limited(body, 1024 * 1024) {
+                    Err(_) => error_json("request too large", 413),
+                    Ok(raw) => match serde_json::from_str::<crate::email_analysis::EmailInput>(&raw) {
+                        Err(e) => error_json(&format!("invalid JSON: {e}"), 400),
+                        Ok(input) => {
+                            let report = crate::email_analysis::EmailAnalyzer::analyze(&input);
+                            let body = serde_json::to_string(&report).unwrap_or_default();
+                            json_response(&body, 200)
+                        }
+                    }
+                }
+
+            // ── Phase 29: Memory Indicators ────────────────────────────
+            } else if method == Method::Post && url_path == "/api/memory-indicators/scan-maps" {
+                match read_body_limited(body, 2 * 1024 * 1024) {
+                    Err(_) => error_json("request too large", 413),
+                    Ok(raw) => {
+                        #[derive(serde::Deserialize)]
+                        struct MapsReq { pid: u32, process_name: String, maps_content: String }
+                        match serde_json::from_str::<MapsReq>(&raw) {
+                            Err(e) => error_json(&format!("invalid JSON: {e}"), 400),
+                            Ok(req) => {
+                                let report = crate::memory_indicators::analyze_maps(req.pid, &req.process_name, &req.maps_content);
+                                let body = serde_json::to_string(&report).unwrap_or_default();
+                                json_response(&body, 200)
+                            }
+                        }
+                    }
+                }
+
+            } else if method == Method::Post && url_path == "/api/memory-indicators/scan-buffer" {
+                match read_body_limited(body, 10 * 1024 * 1024) {
+                    Err(_) => error_json("request too large", 413),
+                    Ok(raw) => {
+                        let data = base64_decode_or_raw(&raw);
+                        let matches = crate::memory_indicators::scan_buffer_for_shellcode(&data);
+                        let body = serde_json::to_string(&matches).unwrap_or_default();
+                        json_response(&body, 200)
+                    }
+                }
+
+            // ── Phase 29: WebSocket Alert Streaming ────────────────────
+            } else if method == Method::Post && url_path == "/api/ws/connect" {
+                let mut s = state.lock().unwrap_or_else(|e| e.into_inner());
+                let id = s.alert_broadcaster.connect();
+                drop(s);
+                json_response(&format!(r#"{{"subscriber_id":{id}}}"#), 200)
+
+            } else if method == Method::Post && url_path == "/api/ws/disconnect" {
+                match read_body_limited(body, 1024) {
+                    Err(_) => error_json("request too large", 413),
+                    Ok(raw) => {
+                        #[derive(serde::Deserialize)]
+                        struct DisconnReq { subscriber_id: u64 }
+                        match serde_json::from_str::<DisconnReq>(&raw) {
+                            Err(e) => error_json(&format!("invalid JSON: {e}"), 400),
+                            Ok(req) => {
+                                let mut s = state.lock().unwrap_or_else(|e| e.into_inner());
+                                s.alert_broadcaster.disconnect(req.subscriber_id);
+                                drop(s);
+                                json_response(r#"{"status":"disconnected"}"#, 200)
+                            }
+                        }
+                    }
+                }
+
+            } else if method == Method::Post && url_path == "/api/ws/poll" {
+                match read_body_limited(body, 1024) {
+                    Err(_) => error_json("request too large", 413),
+                    Ok(raw) => {
+                        #[derive(serde::Deserialize)]
+                        struct PollReq { subscriber_id: u64 }
+                        match serde_json::from_str::<PollReq>(&raw) {
+                            Err(e) => error_json(&format!("invalid JSON: {e}"), 400),
+                            Ok(req) => {
+                                let mut s = state.lock().unwrap_or_else(|e| e.into_inner());
+                                let events = s.alert_broadcaster.drain_for(req.subscriber_id);
+                                drop(s);
+                                let body = serde_json::to_string(&events).unwrap_or_default();
+                                json_response(&body, 200)
+                            }
+                        }
+                    }
+                }
+
+            } else if method == Method::Get && url_path == "/api/ws/stats" {
+                let s = state.lock().unwrap_or_else(|e| e.into_inner());
+                let stats = s.alert_broadcaster.stats();
+                drop(s);
+                let body = serde_json::to_string(&stats).unwrap_or_default();
+                json_response(&body, 200)
+
+            } else if method == Method::Post && url_path == "/api/ws/broadcast" {
+                match read_body_limited(body, 64 * 1024) {
+                    Err(_) => error_json("request too large", 413),
+                    Ok(raw) => match serde_json::from_str::<serde_json::Value>(&raw) {
+                        Err(e) => error_json(&format!("invalid JSON: {e}"), 400),
+                        Ok(data) => {
+                            let mut s = state.lock().unwrap_or_else(|e| e.into_inner());
+                            s.alert_broadcaster.broadcast_alert(data);
+                            drop(s);
+                            json_response(r#"{"status":"broadcast"}"#, 200)
+                        }
+                    }
                 }
 
             } else {
@@ -12499,6 +13030,11 @@ fn base64_decode(input: &str) -> Result<Vec<u8>, String> {
         }
     }
     Ok(out)
+}
+
+/// Attempt base64 decode; fall back to raw bytes if invalid.
+fn base64_decode_or_raw(input: &str) -> Vec<u8> {
+    base64_decode(input).unwrap_or_else(|_| input.as_bytes().to_vec())
 }
 
 // Admin console embedded at compile time from the React build output.

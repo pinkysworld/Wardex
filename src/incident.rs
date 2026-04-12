@@ -69,7 +69,10 @@ impl IncidentStore {
             let _ = std::fs::create_dir_all(parent);
         }
         if let Ok(json) = serde_json::to_string_pretty(&self.incidents) {
-            let _ = std::fs::write(path, json);
+            let tmp = format!("{}.tmp", self.store_path);
+            if std::fs::write(&tmp, &json).is_ok() {
+                let _ = std::fs::rename(&tmp, path);
+            }
         }
     }
 
@@ -224,20 +227,19 @@ impl IncidentStore {
                 ) && event_ids.iter().any(|eid| inc.event_ids.contains(eid))
             });
             if already_covered {
-                // Merge new event_ids into ALL matching open/investigating incidents
-                for inc in self.incidents.iter_mut() {
-                    if matches!(
+                // Merge new event_ids into the FIRST matching open/investigating incident
+                if let Some(inc) = self.incidents.iter_mut().find(|inc| {
+                    matches!(
                         inc.status,
                         IncidentStatus::Open | IncidentStatus::Investigating
                     ) && event_ids.iter().any(|eid| inc.event_ids.contains(eid))
-                    {
-                        for eid in &event_ids {
-                            if !inc.event_ids.contains(eid) {
-                                inc.event_ids.push(*eid);
-                            }
+                }) {
+                    for eid in &event_ids {
+                        if !inc.event_ids.contains(eid) {
+                            inc.event_ids.push(*eid);
                         }
-                        inc.updated_at = chrono::Utc::now().to_rfc3339();
                     }
+                    inc.updated_at = chrono::Utc::now().to_rfc3339();
                 }
                 continue;
             }
@@ -312,20 +314,19 @@ impl IncidentStore {
                 ) && event_ids.iter().any(|eid| inc.event_ids.contains(eid))
             });
             if already_covered {
-                // Merge new event_ids into ALL matching open/investigating incidents
-                for inc in self.incidents.iter_mut() {
-                    if matches!(
+                // Merge new event_ids into the FIRST matching open/investigating incident
+                if let Some(inc) = self.incidents.iter_mut().find(|inc| {
+                    matches!(
                         inc.status,
                         IncidentStatus::Open | IncidentStatus::Investigating
                     ) && event_ids.iter().any(|eid| inc.event_ids.contains(eid))
-                    {
-                        for eid in &event_ids {
-                            if !inc.event_ids.contains(eid) {
-                                inc.event_ids.push(*eid);
-                            }
+                }) {
+                    for eid in &event_ids {
+                        if !inc.event_ids.contains(eid) {
+                            inc.event_ids.push(*eid);
                         }
-                        inc.updated_at = chrono::Utc::now().to_rfc3339();
                     }
+                    inc.updated_at = chrono::Utc::now().to_rfc3339();
                 }
                 continue;
             }
@@ -479,7 +480,7 @@ mod tests {
     }
 
     #[test]
-    fn auto_cluster_merges_into_all_matching_incidents() {
+    fn auto_cluster_merges_into_first_matching_incident() {
         let dir = std::env::temp_dir().join("wardex_test_multi_merge");
         let _ = std::fs::create_dir_all(&dir);
         let path = dir.join("multi_merge.json");
@@ -510,11 +511,12 @@ mod tests {
         ];
         store.auto_cluster(&events);
 
-        // Both incidents should now contain event_id 4
+        // Only the FIRST matching incident should receive event_id 4
+        // (merging into all would cause duplicate events across incidents)
         let inc_a = store.get(1).unwrap();
         let inc_b = store.get(2).unwrap();
         assert!(inc_a.event_ids.contains(&4), "Inc A should have event 4");
-        assert!(inc_b.event_ids.contains(&4), "Inc B should have event 4");
+        assert!(!inc_b.event_ids.contains(&4), "Inc B should NOT have event 4 (single-merge)");
 
         let _ = std::fs::remove_file(&path);
     }

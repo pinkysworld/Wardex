@@ -1,0 +1,22 @@
+# Default reviewers for all changes
+* @wardex/core-team
+
+# Security-critical paths require security team review
+src/auth.rs @wardex/security-team
+src/backup.rs @wardex/security-team
+src/rbac.rs @wardex/security-team
+src/ws_stream.rs @wardex/security-team
+src/storage.rs @wardex/security-team
+SECURITY.md @wardex/security-team
+
+# CI/CD and deployment changes
+.github/ @wardex/devops-team
+deploy/ @wardex/devops-team
+Dockerfile @wardex/devops-team
+docker-compose.yml @wardex/devops-team
+
+# Frontend
+admin-console/ @wardex/frontend-team
+
+# SDKs
+sdk/ @wardex/sdk-team

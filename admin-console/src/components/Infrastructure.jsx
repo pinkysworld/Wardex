@@ -27,7 +27,6 @@ export default function Infrastructure() {
   const { data: containerAlerts } = useApi(api.containerAlerts);
   const { data: certSummary, reload: rCerts } = useApi(api.certsSummary);
   const { data: certAlerts } = useApi(api.certsAlerts);
-  const { data: driftBaselines } = useApi(api.configDriftBaselines);
   const { data: assetSummary, reload: rAssets } = useApi(api.assetsSummary);
   const [assetSearch, setAssetSearch] = useState('');
   const [assetResults, setAssetResults] = useState(null);
@@ -136,7 +135,7 @@ export default function Infrastructure() {
                         {changes.map((c, i) => (
                           <tr key={i}>
                             <td style={{ fontFamily: 'var(--font-mono)', fontSize: 12 }}>{c.path || c.file || '—'}</td>
-                            <td><span className={`badge ${c.type === 'added' ? 'badge-ok' : c.type === 'removed' ? 'badge-danger' : 'badge-warn'}`}>{c.type || '—'}</span></td>
+                            <td><span className={`badge ${c.type === 'added' ? 'badge-ok' : c.type === 'removed' ? 'badge-err' : 'badge-warn'}`}>{c.type || '—'}</span></td>
                             <td>{c.detected || c.timestamp || '—'}</td>
                           </tr>
                         ))}
@@ -529,8 +528,8 @@ export default function Infrastructure() {
               <div className="card"><div className="card-title">Hash Signatures</div><div className="big-number">{malwareStatsData.database?.total_hashes ?? '—'}</div></div>
               <div className="card"><div className="card-title">YARA Rules</div><div className="big-number">{malwareStatsData.yara_rules ?? '—'}</div></div>
               <div className="card"><div className="card-title">Total Scans</div><div className="big-number">{malwareStatsData.scanner?.total_scans ?? 0}</div></div>
-              <div className="card"><div className="card-title">Malicious</div><div className="big-number" style={{ color: 'var(--color-danger)' }}>{malwareStatsData.scanner?.malicious_count ?? 0}</div></div>
-              <div className="card"><div className="card-title">Suspicious</div><div className="big-number" style={{ color: 'var(--color-warning)' }}>{malwareStatsData.scanner?.suspicious_count ?? 0}</div></div>
+              <div className="card"><div className="card-title">Malicious</div><div className="big-number" style={{ color: 'var(--danger)' }}>{malwareStatsData.scanner?.malicious_count ?? 0}</div></div>
+              <div className="card"><div className="card-title">Suspicious</div><div className="big-number" style={{ color: 'var(--warning)' }}>{malwareStatsData.scanner?.suspicious_count ?? 0}</div></div>
             </div>
           )}
           <h4 style={{ marginTop: 16 }}>Hash Lookup</h4>
@@ -553,7 +552,7 @@ export default function Infrastructure() {
                       <td style={{ fontFamily: 'var(--font-mono)', fontSize: 11 }}>{d.sha256?.substring(0, 16)}...</td>
                       <td>{d.name || '—'}</td>
                       <td>{d.family || '—'}</td>
-                      <td><span className={`badge badge-${d.severity === 'critical' ? 'danger' : d.severity === 'high' ? 'warning' : 'info'}`}>{d.severity}</span></td>
+                      <td><span className={`badge badge-${d.severity === 'critical' ? 'err' : d.severity === 'high' ? 'warn' : 'info'}`}>{d.severity}</span></td>
                       <td>{d.detected_at || '—'}</td>
                     </tr>
                   ))}
@@ -586,7 +585,9 @@ export default function Infrastructure() {
                 const blob = await api.exportAlerts(exportFmt);
                 const text = typeof blob === 'string' ? blob : JSON.stringify(blob, null, 2);
                 const b = new Blob([text], { type: 'text/plain' });
-                const a = document.createElement('a'); a.href = URL.createObjectURL(b); a.download = `alerts.${exportFmt}`; a.click();
+                const url = URL.createObjectURL(b);
+                const a = document.createElement('a'); a.href = url; a.download = `alerts.${exportFmt}`; a.click();
+                setTimeout(() => URL.revokeObjectURL(url), 1000);
               } catch (err) { toast('Export failed', 'error'); }
             }}>Download</button>
           </div>
@@ -603,7 +604,7 @@ export default function Infrastructure() {
                   {Object.entries(compData.frameworks).map(([name, info]) => (
                     <div key={name} className="card">
                       <div className="card-title">{name}</div>
-                      <div className="big-number" style={{ color: (typeof info === 'object' ? (info.score ?? 0) : (info ?? 0)) >= 80 ? 'var(--color-success)' : 'var(--color-warning)' }}>
+                      <div className="big-number" style={{ color: (typeof info === 'object' ? (info.score ?? 0) : (info ?? 0)) >= 80 ? 'var(--success)' : 'var(--warning)' }}>
                         {typeof info === 'object' ? `${info.score ?? 0}%` : `${info ?? 0}%`}
                       </div>
                     </div>
@@ -652,7 +653,7 @@ export default function Infrastructure() {
               {tracesData.stats && (
                 <div className="card-grid" style={{ marginBottom: 16 }}>
                   <div className="card"><div className="card-title">Total Spans</div><div className="big-number">{tracesData.stats.total_spans}</div></div>
-                  <div className="card"><div className="card-title">Error Spans</div><div className="big-number" style={{ color: 'var(--color-danger)' }}>{tracesData.stats.error_spans}</div></div>
+                  <div className="card"><div className="card-title">Error Spans</div><div className="big-number" style={{ color: 'var(--danger)' }}>{tracesData.stats.error_spans}</div></div>
                   <div className="card"><div className="card-title">Avg Duration</div><div className="big-number">{tracesData.stats.avg_duration_ms?.toFixed(1)}ms</div></div>
                 </div>
               )}
@@ -665,7 +666,7 @@ export default function Infrastructure() {
                         <tr key={i}>
                           <td style={{ fontFamily: 'var(--font-mono)', fontSize: 11 }}>{sp.trace_id?.substring(0, 12)}...</td>
                           <td>{sp.operation_name}</td>
-                          <td><span className={`badge badge-${sp.status === 'Error' ? 'danger' : 'success'}`}>{sp.status}</span></td>
+                          <td><span className={`badge badge-${sp.status === 'Error' ? 'err' : 'ok'}`}>{sp.status}</span></td>
                           <td>{sp.end_time_ms && sp.start_time_ms ? `${sp.end_time_ms - sp.start_time_ms}ms` : '—'}</td>
                         </tr>
                       ))}

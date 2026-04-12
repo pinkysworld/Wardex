@@ -132,8 +132,17 @@ impl UpdateManager {
             return Err("invalid file name".into());
         }
 
-        let file_path = format!("{}/releases/{}", self.store_dir, file_name);
-        fs::read(&file_path).map_err(|e| format!("release not found: {e}"))
+        let base = std::path::Path::new(&self.store_dir).join("releases");
+        let requested = base.join(file_name);
+
+        // Defence-in-depth: verify resolved path is still within releases/
+        let canonical_base = base.canonicalize().unwrap_or_else(|_| base.clone());
+        let canonical_req = requested.canonicalize().map_err(|_| "release not found".to_string())?;
+        if !canonical_req.starts_with(&canonical_base) {
+            return Err("invalid file name".into());
+        }
+
+        fs::read(&canonical_req).map_err(|e| format!("release not found: {e}"))
     }
 
     /// List all published releases.
@@ -152,7 +161,10 @@ impl UpdateManager {
         let index_path = format!("{}/releases.json", self.store_dir);
         if let Ok(json) = serde_json::to_string_pretty(&self.releases) {
             let _ = fs::create_dir_all(&self.store_dir);
-            let _ = fs::write(index_path, json);
+            let tmp = format!("{}/releases.json.tmp", self.store_dir);
+            if fs::write(&tmp, &json).is_ok() {
+                let _ = fs::rename(&tmp, &index_path);
+            }
         }
     }
 

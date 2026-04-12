@@ -206,6 +206,8 @@ pub struct Config {
     pub compliance: ComplianceSettings,
     #[serde(default)]
     pub tracing: TracingSettings,
+    #[serde(default)]
+    pub server: ServerSettings,
 }
 
 /// Security-related settings for token management and session control.
@@ -227,6 +229,40 @@ pub struct SecuritySettings {
 
 fn default_token_ttl_secs() -> u64 {
     3600
+}
+
+/// Server operational settings.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ServerSettings {
+    /// Maximum read requests per minute per IP (0 = unlimited).
+    #[serde(default = "default_read_rate_limit")]
+    pub rate_limit_read_per_minute: u32,
+    /// Maximum write requests per minute per IP (0 = unlimited).
+    #[serde(default = "default_write_rate_limit")]
+    pub rate_limit_write_per_minute: u32,
+    /// Graceful shutdown timeout in seconds.
+    #[serde(default = "default_shutdown_timeout_secs")]
+    pub shutdown_timeout_secs: u64,
+}
+
+fn default_read_rate_limit() -> u32 {
+    360
+}
+fn default_write_rate_limit() -> u32 {
+    60
+}
+fn default_shutdown_timeout_secs() -> u64 {
+    30
+}
+
+impl Default for ServerSettings {
+    fn default() -> Self {
+        Self {
+            rate_limit_read_per_minute: default_read_rate_limit(),
+            rate_limit_write_per_minute: default_write_rate_limit(),
+            shutdown_timeout_secs: default_shutdown_timeout_secs(),
+        }
+    }
 }
 
 impl Default for SecuritySettings {

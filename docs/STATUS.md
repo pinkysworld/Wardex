@@ -2,11 +2,11 @@
 
 ## Current release
 
-- **Version:** `0.43.0`
+- **Version:** `0.43.1`
 - **Positioning:** private-cloud XDR and SIEM platform with enterprise detection engineering, malware scanning, analyst workflows, fleet operations, behavioural analytics, and automated incident response
-- **Source footprint:** 116 Rust source modules
+- **Source footprint:** 128 Rust source modules
 - **API contract:** 161 documented OpenAPI paths
-- **Verification:** 1345 automated tests (1161 lib + 184 integration) plus live admin-console smoke coverage
+- **Verification:** 1428 automated tests (1345 Rust + 83 admin-console) plus live Playwright end-to-end coverage
 - **Production hardening:** 98% (58/59 controls implemented)
 
 ## Shipped in the current platform
@@ -101,6 +101,14 @@ Wardex is now positioned as a professional XDR/SIEM control plane rather than an
 - searchable documentation site with versioned content
 - package-manager distribution (APT/YUM, Chocolatey)
 - secrets manager integration (HashiCorp Vault, AWS Secrets Manager)
+
+## Recently shipped (v0.43.1)
+
+- **Admin console quality** — 6 phases of deep code review identified and fixed ~40 bugs across all admin-console components (Dashboard, Live Monitor, Threat Detection, Fleet & Agents, SOC Workbench, Infrastructure, Settings, Reports & Exports, Security Policy, Help & Docs)
+- **Badge CSS correctness** — Fixed malware severity and trace status badges using nonexistent CSS classes throughout Infrastructure views
+- **Memory leak fix** — SIEM export blob URLs are now revoked after download, preventing unbounded memory growth
+- **Unused API fetch removal** — Eliminated a stale config-drift baselines fetch that fired on every Infrastructure mount
+- **Admin console test suite** — 83 automated tests (26 Vitest unit + 57 Playwright e2e) covering authentication, navigation, all page views, responsive layout, onboarding wizard, and zero-JS-crash verification across all routes
 
 ## Recently shipped (v0.43.0)
 

@@ -4,6 +4,53 @@
  * Full-typed client for the Wardex XDR REST API.
  */
 
+// ── Errors ───────────────────────────────────────────────────────────────────
+
+/** Base error for all Wardex SDK errors. */
+export class WardexError extends Error {
+  public readonly statusCode: number | undefined;
+  public readonly body: string;
+
+  constructor(message: string, statusCode?: number, body: string = "") {
+    super(message);
+    this.name = "WardexError";
+    this.statusCode = statusCode;
+    this.body = body;
+  }
+}
+
+/** Raised on 401 / 403 responses. */
+export class AuthenticationError extends WardexError {
+  constructor(message: string, statusCode: number, body: string = "") {
+    super(message, statusCode, body);
+    this.name = "AuthenticationError";
+  }
+}
+
+/** Raised on 404 responses. */
+export class NotFoundError extends WardexError {
+  constructor(message: string, statusCode: number, body: string = "") {
+    super(message, statusCode, body);
+    this.name = "NotFoundError";
+  }
+}
+
+/** Raised on 429 responses. */
+export class RateLimitError extends WardexError {
+  constructor(message: string, statusCode: number, body: string = "") {
+    super(message, statusCode, body);
+    this.name = "RateLimitError";
+  }
+}
+
+/** Raised on 5xx responses. */
+export class ServerError extends WardexError {
+  constructor(message: string, statusCode: number, body: string = "") {
+    super(message, statusCode, body);
+    this.name = "ServerError";
+  }
+}
+
 // ── Types ────────────────────────────────────────────────────────────────────
 
 export interface WardexConfig {
@@ -179,7 +226,20 @@ export class WardexClient {
 
       if (!resp.ok) {
         const text = await resp.text().catch(() => "");
-        throw new Error(`HTTP ${resp.status}: ${text}`);
+        const msg = `HTTP ${resp.status}: ${text}`;
+        if (resp.status === 401 || resp.status === 403) {
+          throw new AuthenticationError(msg, resp.status, text);
+        }
+        if (resp.status === 404) {
+          throw new NotFoundError(msg, resp.status, text);
+        }
+        if (resp.status === 429) {
+          throw new RateLimitError(msg, resp.status, text);
+        }
+        if (resp.status >= 500) {
+          throw new ServerError(msg, resp.status, text);
+        }
+        throw new WardexError(msg, resp.status, text);
       }
 
       return (await resp.json()) as T;

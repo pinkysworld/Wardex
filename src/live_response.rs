@@ -279,7 +279,9 @@ impl LiveResponseEngine {
         }
 
         // Validate args against the command's allowed_args (empty = any args OK)
-        let matched_cmd = allowed.iter().find(|a| a.name == command).unwrap();
+        let Some(matched_cmd) = allowed.iter().find(|a| a.name == command) else {
+            return Err(format!("Command '{command}' not in allowlist"));
+        };
         if !matched_cmd.allowed_args.is_empty() {
             for arg in &args {
                 if !matched_cmd

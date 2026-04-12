@@ -39,6 +39,7 @@ const del = (p, o) => request('DELETE', p, null, o);
 // ── Auth ─────────────────────────────────────────────────────
 export const authCheck = () => get('/api/auth/check');
 export const authRotate = () => post('/api/auth/rotate');
+export const authSession = () => get('/api/auth/session');
 export const sessionInfo = () => get('/api/session/info');
 
 // ── Health & System ──────────────────────────────────────────
@@ -410,3 +411,61 @@ export const backupDecrypt = (body) => post('/api/backup/decrypt', body);
 // ── Detection Rules ──────────────────────────────────────────
 export const detectionRules = () => get('/api/detection/rules');
 export const addDetectionRule = (body) => post('/api/detection/rules', body);
+
+// ── Feed Ingestion ───────────────────────────────────────────
+export const feeds = () => get('/api/feeds');
+export const addFeed = (body) => post('/api/feeds', body);
+export const removeFeed = (id) => del(`/api/feeds/${encodeURIComponent(id)}`);
+export const pollFeed = (id, body) => post(`/api/feeds/${encodeURIComponent(id)}/poll`, body);
+export const feedStats = () => get('/api/feeds/stats');
+export const hotReloadHashes = (body) => post('/api/feeds/hot-reload/hashes', body);
+
+// ── Playbook DSL ─────────────────────────────────────────────
+export const playbookDslList = () => get('/api/playbook-dsl');
+export const playbookDslCreate = (body) => post('/api/playbook-dsl', body);
+export const playbookDslGet = (id) => get(`/api/playbook-dsl/${encodeURIComponent(id)}`);
+export const playbookDslDelete = (id) => del(`/api/playbook-dsl/${encodeURIComponent(id)}`);
+
+// ── ATT&CK Coverage Gaps ────────────────────────────────────
+export const coverageGaps = () => get('/api/coverage/gaps');
+
+// ── Container Image Inventory ────────────────────────────────
+export const images = () => get('/api/images');
+export const imagesSummary = () => get('/api/images/summary');
+export const imagesCollect = () => post('/api/images/collect');
+
+// ── Quarantine Store ─────────────────────────────────────────
+export const quarantineList = () => get('/api/quarantine');
+export const quarantineAdd = (body) => post('/api/quarantine', body);
+export const quarantineStats = () => get('/api/quarantine/stats');
+export const quarantineRelease = (id) => post(`/api/quarantine/${encodeURIComponent(id)}/release`);
+export const quarantineDelete = (id) => del(`/api/quarantine/${encodeURIComponent(id)}`);
+
+// ── Agent Lifecycle ──────────────────────────────────────────
+export const lifecycle = () => get('/api/lifecycle');
+export const lifecycleStats = () => get('/api/lifecycle/stats');
+export const lifecycleSweep = () => post('/api/lifecycle/sweep');
+
+// ── IoC Confidence Decay ─────────────────────────────────────
+export const iocDecayApply = () => post('/api/ioc-decay/apply');
+export const iocDecayPreview = () => get('/api/ioc-decay/preview');
+
+// ── Host SBOM ────────────────────────────────────────────────
+export const sbomHost = () => get('/api/sbom/host');
+
+// ── Phase 29: Advanced Detection ─────────────────────────────
+export const entropyAnalyze = (body) => post('/api/entropy/analyze', body);
+export const dnsThreatAnalyze = (domain) => post('/api/dns-threat/analyze', { domain });
+export const dnsThreatSummary = () => get('/api/dns-threat/summary');
+export const dnsThreatRecord = (query) => post('/api/dns-threat/record', query);
+export const processScoreAssess = (body) => post('/api/process-scoring/assess', body);
+export const emailAnalyze = (body) => post('/api/email/analyze', body);
+export const memoryIndicatorsScanMaps = (body) => post('/api/memory-indicators/scan-maps', body);
+export const memoryIndicatorsScanBuffer = (body) => post('/api/memory-indicators/scan-buffer', body);
+
+// ── Phase 29: WebSocket Alert Streaming ──────────────────────
+export const wsConnect = () => post('/api/ws/connect');
+export const wsDisconnect = (subscriberId) => post('/api/ws/disconnect', { subscriber_id: subscriberId });
+export const wsPoll = (subscriberId) => post('/api/ws/poll', { subscriber_id: subscriberId });
+export const wsStats = () => get('/api/ws/stats');
+export const wsBroadcast = (data) => post('/api/ws/broadcast', data);

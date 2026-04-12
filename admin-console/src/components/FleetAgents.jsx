@@ -118,7 +118,7 @@ export default function FleetAgents() {
                   const blob = new Blob([typeof data === 'string' ? data : JSON.stringify(data)], { type: 'application/json' });
                   const url = URL.createObjectURL(blob);
                   const a = document.createElement('a'); a.href = url; a.download = 'events.json'; a.click();
-                  URL.revokeObjectURL(url);
+                  setTimeout(() => URL.revokeObjectURL(url), 1000);
                   toast('Events exported', 'success');
                 } catch { toast('Export failed', 'error'); }
               }}>⬇ Export</button>

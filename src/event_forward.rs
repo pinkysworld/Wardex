@@ -133,7 +133,11 @@ impl EventStore {
             if let Some(parent) = path_ref.parent() {
                 let _ = fs::create_dir_all(parent);
             }
-            let _ = fs::write(path_ref, json);
+            // Atomic write: write to temp file then rename to prevent corruption on crash
+            let tmp_path = format!("{}.tmp", path);
+            if fs::write(&tmp_path, &json).is_ok() {
+                let _ = fs::rename(&tmp_path, path_ref);
+            }
         }
     }
 

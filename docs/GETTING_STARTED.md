@@ -104,3 +104,92 @@ JSONL line example:
 ```json
 {"timestamp_ms":1000,"cpu_load_pct":18,"memory_load_pct":32,"temperature_c":41,"network_kbps":500,"auth_failures":0,"battery_pct":94,"integrity_drift":0.01,"process_count":42,"disk_pressure_pct":8}
 ```
+
+## Production Configuration
+
+### Environment variables
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `WARDEX_ADMIN_TOKEN` | Override the auto-generated admin token. Set this in production to a 256-bit random hex string. | Auto-generated at startup |
+| `WARDEX_BIND` | Listen address and port. | `0.0.0.0:8080` |
+| `SENTINEL_CORS_ORIGIN` | Allowed CORS origin(s) for the admin console. | `http://localhost:8080` |
+| `WARDEX_LOG_LEVEL` | Log verbosity (`trace`, `debug`, `info`, `warn`, `error`). | `info` |
+| `WARDEX_DATA_DIR` | Path to the data directory. | `var/` |
+
+### TLS configuration
+
+To enable TLS for the HTTP listener, set the following in `var/config.toml`:
+
+```toml
+[tls]
+cert_path = "/path/to/cert.pem"
+key_path  = "/path/to/key.pem"
+```
+
+For mutual TLS (mTLS) agent authentication, add:
+
+```toml
+[tls]
+cert_path      = "/path/to/cert.pem"
+key_path       = "/path/to/key.pem"
+client_ca_path = "/path/to/ca.pem"
+```
+
+### Kubernetes / Helm secrets
+
+When deploying via Helm, configure secrets in `values.yaml`:
+
+```yaml
+env:
+  - name: WARDEX_ADMIN_TOKEN
+    valueFrom:
+      secretKeyRef:
+        name: wardex-secrets
+        key: admin-token
+
+# Mount TLS certs from a Secret or cert-manager
+extraVolumes:
+  - name: tls-certs
+    secret:
+      secretName: wardex-tls
+
+extraVolumeMounts:
+  - name: tls-certs
+    mountPath: /etc/wardex/tls
+    readOnly: true
+```
+
+### Docker Compose secrets
+
+Create a `.env` file (never committed to version control):
+
+```env
+WARDEX_ADMIN_TOKEN=your-256-bit-hex-token-here
+SENTINEL_CORS_ORIGIN=https://wardex.example.com
+```
+
+Reference it in `docker-compose.yml`:
+
+```yaml
+services:
+  wardex:
+    env_file: .env
+```
+
+## Demo Environment
+
+A demo environment with sample data is available for evaluation and development:
+
+```bash
+# Start the server
+cargo run
+
+# In a separate terminal, seed sample data (alerts, events, agents)
+bash demo/seed.sh
+```
+
+The seed script calls the Wardex API to populate alerts, events, and agent registrations
+so you can explore the admin console and API without importing real data.
+
+See `demo/docker-compose.yml` for a Docker-based demo setup.

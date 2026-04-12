@@ -3,6 +3,7 @@ import { useApi, useInterval, useToast } from '../hooks.jsx';
 import * as api from '../api.js';
 import ProcessDrawer from './ProcessDrawer.jsx';
 import { JsonDetails, SummaryGrid, downloadData } from './operator.jsx';
+import InvestigationTimeline from './InvestigationTimeline.jsx';
 
 export default function SOCWorkbench() {
   const toast = useToast();
@@ -61,7 +62,7 @@ export default function SOCWorkbench() {
   return (
     <div>
       <div className="tabs">
-        {['overview', 'incidents', 'cases', 'queue', 'response', 'escalation', 'investigations', 'efficacy', 'process-tree', 'entity', 'rbac', 'timeline'].map(t => (
+        {['overview', 'incidents', 'cases', 'queue', 'response', 'escalation', 'investigations', 'efficacy', 'process-tree', 'entity', 'rbac', 'timeline', 'investigation-timeline'].map(t => (
           <button key={t} className={`tab ${tab === t ? 'active' : ''}`} onClick={() => setTab(t)}>
             {t.replace(/-/g, ' ').replace(/^\w/, c => c.toUpperCase())}
           </button>
@@ -156,7 +157,7 @@ export default function SOCWorkbench() {
                   try { await api.updateIncident(selectedInc, { status: 'closed' }); toast('Incident closed', 'success'); viewInc(selectedInc); rInc(); } catch { toast('Failed', 'error'); }
                 }}>Close Incident</button>
                 <button className="btn btn-sm" onClick={async () => {
-                  try { const r = await api.incidentReport(selectedInc); const blob = new Blob([typeof r === 'string' ? r : JSON.stringify(r, null, 2)], { type: 'text/plain' }); const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `incident-${selectedInc}-report.txt`; a.click(); } catch { toast('Failed to generate report', 'error'); }
+                  try { const r = await api.incidentReport(selectedInc); downloadData(typeof r === 'string' ? r : r, `incident-${selectedInc}-report.txt`, 'text/plain'); } catch { toast('Failed to generate report', 'error'); }
                 }}>Export Report</button>
               </div>
             </div>
@@ -680,6 +681,14 @@ export default function SOCWorkbench() {
           })()}
         </div>
       )}
+
+      {tab === 'investigation-timeline' && (
+        <div className="card">
+          <div className="card-title" style={{ marginBottom: 12 }}>Investigation Timeline</div>
+          <InvestigationTimeline />
+        </div>
+      )}
+
       <ProcessDrawer
         pid={selectedProcess?.pid}
         snapshot={selectedProcess}

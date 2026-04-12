@@ -4,6 +4,7 @@ import * as api from '../api.js';
 import { AreaChart, Area, BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 import AlertDrawer from './AlertDrawer.jsx';
 import ProcessDrawer from './ProcessDrawer.jsx';
+import DashboardWidget, { useWidgetLayout } from './DashboardWidget.jsx';
 
 function Metric({ label, value, sub, accent, onClick }) {
   return (
@@ -14,10 +15,6 @@ function Metric({ label, value, sub, accent, onClick }) {
       {sub && <div className="metric-sub">{sub}</div>}
     </div>
   );
-}
-
-function SectionTitle({ children }) {
-  return <h3 style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '.5px', margin: '20px 0 10px' }}>{children}</h3>;
 }
 
 const SEV_COLORS = { critical: '#ef4444', severe: '#f97316', elevated: '#eab308', high: '#f97316', medium: '#3b82f6', low: '#6b7280' };
@@ -58,14 +55,24 @@ export default function Dashboard() {
   const { data: procAnalysis, reload: rPA } = useApi(api.processesAnalysis);
   const { data: hostInf } = useApi(api.hostInfo);
   const { data: telemHistory } = useApi(api.telemetryHistory);
+  // Phase 44: additional dashboard data
+  const { data: mwStats, reload: rMW } = useApi(api.malwareStats);
+  const { data: gaps, reload: rGap } = useApi(api.coverageGaps);
+  const { data: qrStats, reload: rQR } = useApi(api.quarantineStats);
+  const { data: lcStats, reload: rLC } = useApi(api.lifecycleStats);
+  const { data: fdStats, reload: rFD } = useApi(api.feedStats);
   const [refreshing, setRefreshing] = useState(false);
   const [expandedAlert, setExpandedAlert] = useState(null);
   const [sevFilter, setSevFilter] = useState('all');
   const [selectedProcess, setSelectedProcess] = useState(null);
+  const { data: dnsSummary, reload: rDNS } = useApi(api.dnsThreatSummary);
+
+  const defaultWidgets = ['system-health', 'telemetry', 'threat-overview', 'charts', 'process-security', 'detection-engine', 'malware-ti', 'dns-threats', 'lifecycle', 'recent-alerts'];
+  const { order, hidden, moveWidget, removeWidget, restoreWidget, resetLayout } = useWidgetLayout(defaultWidgets, 'dashboard');
 
   const reloadAll = async () => {
     setRefreshing(true);
-    await Promise.allSettled([r1(), r2(), r3(), r4(), r5(), r6(), r7(), r8(), r9(), rPA()]);
+    await Promise.allSettled([r1(), r2(), r3(), r4(), r5(), r6(), r7(), r8(), r9(), rPA(), rMW(), rGap(), rQR(), rLC(), rFD(), rDNS()]);
     setRefreshing(false);
   };
 
@@ -74,7 +81,6 @@ export default function Dashboard() {
   const alertList = Array.isArray(alertData) ? alertData : alertData?.alerts || [];
   const critical = alertList.filter(a => alertSeverity(a) === 'critical').length;
   const elevated = alertList.filter(a => ['elevated', 'severe', 'high'].includes(alertSeverity(a))).length;
-  const low = alertList.filter(a => ['low', 'medium', 'info'].includes(alertSeverity(a))).length;
 
   // Severity breakdown for pie chart
   const sevBreakdown = useMemo(() => {
@@ -138,22 +144,23 @@ export default function Dashboard() {
           <button className="btn btn-sm" onClick={reloadAll} disabled={refreshing}>
             {refreshing ? 'Refreshing…' : '↻ Refresh'}
           </button>
+          <button className="btn btn-sm" onClick={resetLayout} title="Reset widget layout">⊞ Reset Layout</button>
         </div>
       </div>
 
-      {/* ── System Health ── */}
-      <SectionTitle>System Health</SectionTitle>
+      {order.map(wid => {
+        if (wid === 'system-health') return (
+      <DashboardWidget key={wid} id={wid} title="System Health" index={order.indexOf(wid)} onMove={moveWidget} onRemove={removeWidget}>
       <div className="card-grid">
         <Metric label="System Status" value={hp?.status === 'ok' ? '✓ Healthy' : hp?.status || '—'} sub={`Uptime: ${st?.uptime || '—'}`} accent />
         <Metric label="Active Agents" value={fleet?.total_agents ?? fleet?.agents ?? '—'} sub={fleet?.online ? `${fleet.online} online` : undefined} />
         <Metric label="Events/sec" value={telem?.events_per_sec ?? telem?.rate ?? '—'} sub={telem?.total_events ? `Total: ${telem.total_events}` : undefined} />
         <Metric label="Queue Pending" value={qStats?.pending ?? qStats?.total ?? '—'} sub={qStats?.assigned ? `${qStats.assigned} assigned` : undefined} />
       </div>
-
-      {/* ── Telemetry Chart ── */}
-      {telemChart.length > 0 && (
-        <>
-          <SectionTitle>System Telemetry</SectionTitle>
+      </DashboardWidget>
+        );
+        if (wid === 'telemetry' && telemChart.length > 0) return (
+      <DashboardWidget key={wid} id={wid} title="System Telemetry" index={order.indexOf(wid)} onMove={moveWidget} onRemove={removeWidget}>
           <div className="card" style={{ padding: '12px 8px', marginBottom: 16 }}>
             <ResponsiveContainer width="100%" height={180}>
               <AreaChart data={telemChart}>
@@ -165,20 +172,20 @@ export default function Dashboard() {
               </AreaChart>
             </ResponsiveContainer>
           </div>
-        </>
-      )}
-
-      {/* ── Threat Overview with Charts ── */}
-      <SectionTitle>Threat Overview</SectionTitle>
+      </DashboardWidget>
+        );
+        if (wid === 'threat-overview') return (
+      <DashboardWidget key={wid} id={wid} title="Threat Overview" index={order.indexOf(wid)} onMove={moveWidget} onRemove={removeWidget}>
       <div className="card-grid">
         <Metric label="Total Alerts" value={alertList.length} sub={`${critical} critical · ${elevated} elevated`} />
         <Metric label="Detection Profile" value={profile?.profile || '—'} sub={profile?.description} />
         <Metric label="Threat Intel IoCs" value={tiStatus?.total_iocs ?? tiStatus?.ioc_count ?? '—'} sub={tiStatus?.active_feeds ? `${tiStatus.active_feeds} feeds` : undefined} />
         <Metric label="Response Actions" value={respStats?.total ?? '—'} sub={respStats?.pending ? `${respStats.pending} pending` : undefined} />
       </div>
-
-      {/* Alert timeline + severity pie */}
-      {(alertTimeline.length > 0 || sevBreakdown.length > 0) && (
+      </DashboardWidget>
+        );
+        if (wid === 'charts' && (alertTimeline.length > 0 || sevBreakdown.length > 0)) return (
+      <DashboardWidget key={wid} id={wid} title="Alert Charts" index={order.indexOf(wid)} onMove={moveWidget} onRemove={removeWidget}>
         <div className="card-grid" style={{ marginTop: 12, marginBottom: 16 }}>
           {alertTimeline.length > 0 && (
             <div className="card" style={{ padding: '12px 8px', gridColumn: sevBreakdown.length > 0 ? 'span 2' : 'span 3' }}>
@@ -209,12 +216,10 @@ export default function Dashboard() {
             </div>
           )}
         </div>
-      )}
-
-      {/* ── Process Security ── */}
-      {procAnalysis && (
-        <>
-          <SectionTitle>Process Security</SectionTitle>
+      </DashboardWidget>
+        );
+        if (wid === 'process-security' && procAnalysis) return (
+      <DashboardWidget key={wid} id={wid} title="Process Security" index={order.indexOf(wid)} onMove={moveWidget} onRemove={removeWidget}>
           <div className="card" style={{ marginBottom: 16 }}>
             <div className="card-header">
               <span className="card-title">
@@ -256,13 +261,10 @@ export default function Dashboard() {
               <div className="empty" style={{ padding: 12 }}>No suspicious processes detected</div>
             )}
           </div>
-        </>
-      )}
-
-      {/* ── Detection Summary ── */}
-      {detSum && (
-        <>
-          <SectionTitle>Detection Engine</SectionTitle>
+      </DashboardWidget>
+        );
+        if (wid === 'detection-engine' && detSum) return (
+      <DashboardWidget key={wid} id={wid} title="Detection Engine" index={order.indexOf(wid)} onMove={moveWidget} onRemove={removeWidget}>
           <div className="card" style={{ marginBottom: 16 }}>
             <div className="card-header"><span className="card-title">Detection Summary</span></div>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 10, padding: '12px 0' }}>
@@ -274,11 +276,40 @@ export default function Dashboard() {
               ))}
             </div>
           </div>
-        </>
-      )}
-
-      {/* ── Recent Alerts with severity filter ── */}
-      <SectionTitle>Recent Alerts</SectionTitle>
+      </DashboardWidget>
+        );
+        if (wid === 'malware-ti') return (
+      <DashboardWidget key={wid} id={wid} title="Malware & Threat Intelligence" index={order.indexOf(wid)} onMove={moveWidget} onRemove={removeWidget}>
+      <div className="card-grid">
+        <Metric label="Malware DB" value={mwStats?.database?.total_entries ?? '—'} sub={mwStats?.scanner?.total_scans ? `${mwStats.scanner.total_scans} scans` : undefined} />
+        <Metric label="YARA Rules" value={mwStats?.yara_rules ?? '—'} sub={mwStats?.scanner?.malicious_count ? `${mwStats.scanner.malicious_count} detections` : undefined} />
+        <Metric label="Quarantined" value={qrStats?.total ?? '—'} sub={qrStats?.pending_review ? `${qrStats.pending_review} pending review` : undefined} accent={qrStats?.total > 0} />
+        <Metric label="Feed Sources" value={fdStats?.total_sources ?? '—'} sub={fdStats?.active_sources ? `${fdStats.active_sources} active` : undefined} />
+      </div>
+      </DashboardWidget>
+        );
+        if (wid === 'dns-threats') return (
+      <DashboardWidget key={wid} id={wid} title="DNS Threat Intelligence" index={order.indexOf(wid)} onMove={moveWidget} onRemove={removeWidget}>
+      <div className="card-grid">
+        <Metric label="Domains Analyzed" value={dnsSummary?.domains_analyzed ?? '—'} sub={dnsSummary?.threats_detected ? `${dnsSummary.threats_detected} threats` : undefined} />
+        <Metric label="DGA Suspects" value={dnsSummary?.dga_suspects ?? '—'} accent={dnsSummary?.dga_suspects > 0} />
+        <Metric label="Tunnel Suspects" value={dnsSummary?.tunnel_suspects ?? '—'} accent={dnsSummary?.tunnel_suspects > 0} />
+        <Metric label="Fast-Flux" value={dnsSummary?.fast_flux_suspects ?? '—'} accent={dnsSummary?.fast_flux_suspects > 0} />
+      </div>
+      </DashboardWidget>
+        );
+        if (wid === 'lifecycle' && (lcStats || gaps)) return (
+      <DashboardWidget key={wid} id={wid} title="Fleet Lifecycle & Coverage" index={order.indexOf(wid)} onMove={moveWidget} onRemove={removeWidget}>
+          <div className="card-grid">
+            {lcStats && <Metric label="Active Agents" value={lcStats.active ?? '—'} sub={lcStats.stale ? `${lcStats.stale} stale · ${lcStats.offline ?? 0} offline` : undefined} />}
+            {lcStats && <Metric label="Archived" value={lcStats.archived ?? 0} sub={lcStats.decommissioned ? `${lcStats.decommissioned} decommissioned` : undefined} />}
+            {gaps && <Metric label="ATT&CK Gaps" value={gaps.total_gaps ?? gaps.gaps?.length ?? '—'} sub={gaps.critical_gaps != null ? `${gaps.critical_gaps} critical` : undefined} accent={gaps.total_gaps > 0 || (gaps.gaps?.length > 0)} />}
+            {fdStats && <Metric label="IoCs Ingested" value={fdStats.total_iocs_ingested ?? '—'} sub={fdStats.total_hashes_imported ? `${fdStats.total_hashes_imported} hashes` : undefined} />}
+          </div>
+      </DashboardWidget>
+        );
+        if (wid === 'recent-alerts') return (
+      <DashboardWidget key={wid} id={wid} title="Recent Alerts" index={order.indexOf(wid)} onMove={moveWidget} onRemove={removeWidget}>
       <div className="card">
         <div className="card-header">
           <span className="card-title">Latest ({Math.min(filteredAlerts.length, 25)} of {alertList.length})</span>
@@ -325,6 +356,23 @@ export default function Dashboard() {
           </div>
         )}
       </div>
+      </DashboardWidget>
+        );
+        return null;
+      })}
+
+      {/* Restore removed widgets */}
+      {hidden.size > 0 && (
+        <div style={{ marginTop: 12, display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
+          <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>Hidden widgets:</span>
+          {[...hidden].map(w => (
+            <button key={w} className="btn btn-sm" onClick={() => restoreWidget(w)}>
+              + {w.replace(/-/g, ' ')}
+            </button>
+          ))}
+        </div>
+      )}
+
       <AlertDrawer alert={selectedAlert} onClose={() => setExpandedAlert(null)} onUpdated={reloadAll} />
       <ProcessDrawer
         pid={selectedProcess?.pid}

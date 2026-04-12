@@ -1,7 +1,8 @@
 [package]
 name = "wardex"
-version = "0.43.0"
+version = "0.43.1"
 edition = "2024"
+rust-version = "1.85.0"
 build = "build.rs"
 description = "Private-cloud XDR and SIEM platform with enterprise detection, response, and fleet operations"
 license-file = "LICENSE"
@@ -19,7 +20,7 @@ rand = "0.8"
 ureq = { version = "2", default-features = false, features = ["json"] }
 ctrlc = "3"
 rusqlite = { version = "0.31", features = ["bundled"] }
-notify = { version = "6", default-features = false, features = ["macos_fsevent"] }
+notify = "6"
 flate2 = "1"
 log = "0.4"
 env_logger = "0.11"

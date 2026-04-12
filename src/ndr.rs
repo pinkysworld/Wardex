@@ -108,6 +108,8 @@ pub struct NdrReport {
     pub encrypted_traffic: EncryptedTrafficStats,
     pub unique_external_destinations: usize,
     pub connections_per_second: f32,
+    /// DNS threat analysis results.
+    pub dns_threats: Vec<crate::dns_threat::DnsThreatReport>,
 }
 
 // ── NDR Engine ──────────────────────────────────────────────────
@@ -197,6 +199,7 @@ impl NdrEngine {
             encrypted_traffic,
             unique_external_destinations: external_dests.len(),
             connections_per_second: (cps * 100.0).round() / 100.0,
+            dns_threats: Vec::new(),
         }
     }
 

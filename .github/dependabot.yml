@@ -1,0 +1,66 @@
+version: 2
+updates:
+  # Rust dependencies (Cargo)
+  - package-ecosystem: cargo
+    directory: "/"
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 10
+    labels:
+      - dependencies
+      - rust
+    reviewers:
+      - pinkysworld
+
+  # Admin console (npm)
+  - package-ecosystem: npm
+    directory: "/admin-console"
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    labels:
+      - dependencies
+      - javascript
+    reviewers:
+      - pinkysworld
+
+  # TypeScript SDK (npm)
+  - package-ecosystem: npm
+    directory: "/sdk/typescript"
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    labels:
+      - dependencies
+      - typescript
+    reviewers:
+      - pinkysworld
+
+  # Python SDK (pip)
+  - package-ecosystem: pip
+    directory: "/sdk/python"
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    labels:
+      - dependencies
+      - python
+    reviewers:
+      - pinkysworld
+
+  # GitHub Actions
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    labels:
+      - dependencies
+      - ci
+    reviewers:
+      - pinkysworld

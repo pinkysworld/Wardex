@@ -88,3 +88,37 @@ The test module `tests::disaster_recovery` validates:
 - [ ] Test restore to a staging instance monthly.
 - [ ] Confirm key escrow is current after every `POST /api/quantum/rotate`.
 - [ ] Review RTO/RPO with stakeholders quarterly.
+
+## Database Schema Migration
+
+Wardex uses an embedded SQLite database stored under `var/`.  Schema changes
+are applied automatically on startup.
+
+### Verifying the schema version
+
+```
+GET /api/schema/version
+```
+
+Returns the current schema version number.  After upgrading the binary, confirm
+the version has incremented to the expected value.
+
+### Upgrade workflow
+
+1. **Back up** `var/` before upgrading (see Backup Strategy above).
+2. Stop the running instance.
+3. Replace the binary with the new release.
+4. Start the new binary — migrations run automatically on first boot.
+5. Verify with `GET /api/health` and `GET /api/schema/version`.
+6. If the upgrade fails, restore from backup and file an issue.
+
+### Rollback
+
+If a schema migration introduces a problem:
+
+1. Stop the new binary.
+2. Restore `var/` from the pre-upgrade backup.
+3. Start the previous binary version.
+
+> **Note:** Forward-only migrations are not reversible at the SQL level.
+> Always back up before upgrading.

@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useApi, useToast } from '../hooks.jsx';
 import * as api from '../api.js';
 import { JsonDetails, SummaryGrid } from './operator.jsx';
+import RuleEditor from './RuleEditor.jsx';
 
 export default function ThreatDetection() {
   const toast = useToast();
@@ -42,7 +43,7 @@ export default function ThreatDetection() {
   return (
     <div>
       <div className="tabs">
-        {['overview', 'sigma', 'mitre', 'threat-intel', 'hunts', 'tuning'].map(t => (
+        {['overview', 'sigma', 'mitre', 'threat-intel', 'hunts', 'tuning', 'rule-editor'].map(t => (
           <button key={t} className={`tab ${tab === t ? 'active' : ''}`} onClick={() => setTab(t)}>
             {t.replace(/-/g, ' ').replace(/^\w/, c => c.toUpperCase())}
           </button>
@@ -521,6 +522,13 @@ export default function ThreatDetection() {
             </div>
           )}
         </>
+      )}
+
+      {tab === 'rule-editor' && (
+        <div className="card">
+          <div className="card-title" style={{ marginBottom: 12 }}>Detection Rule Editor</div>
+          <RuleEditor onRuleCreated={() => toast('Rule created — detection engine updated', 'success')} />
+        </div>
       )}
     </div>
   );

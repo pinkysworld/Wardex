@@ -26,6 +26,8 @@ fn derive_key(passphrase: &str, salt: &[u8; 16]) -> [u8; 32] {
 }
 
 /// Encrypt data with AES-256-GCM.  Returns salt (16 bytes) || nonce (12 bytes) || ciphertext.
+/// The plaintext is prefixed with a 4-byte big-endian length header before encryption,
+/// allowing post-decryption integrity verification that the data wasn't truncated.
 pub fn encrypt_backup_data(plaintext: &[u8], passphrase: &str) -> Result<Vec<u8>, String> {
     use rand::Rng;
     let mut rng = rand::thread_rng();
@@ -35,7 +37,12 @@ pub fn encrypt_backup_data(plaintext: &[u8], passphrase: &str) -> Result<Vec<u8>
     let key = derive_key(passphrase, &salt);
     let cipher = Aes256Gcm::new_from_slice(&key).map_err(|e| format!("key error: {e}"))?;
     let nonce = Nonce::from_slice(&nonce_bytes);
-    let ciphertext = cipher.encrypt(nonce, plaintext).map_err(|e| format!("encrypt error: {e}"))?;
+    // Prefix plaintext with 4-byte length header for post-decryption verification
+    let len = plaintext.len() as u32;
+    let mut prefixed = Vec::with_capacity(4 + plaintext.len());
+    prefixed.extend_from_slice(&len.to_be_bytes());
+    prefixed.extend_from_slice(plaintext);
+    let ciphertext = cipher.encrypt(nonce, prefixed.as_slice()).map_err(|e| format!("encrypt error: {e}"))?;
     let mut output = Vec::with_capacity(16 + 12 + ciphertext.len());
     output.extend_from_slice(&salt);
     output.extend_from_slice(&nonce_bytes);
@@ -44,6 +51,7 @@ pub fn encrypt_backup_data(plaintext: &[u8], passphrase: &str) -> Result<Vec<u8>
 }
 
 /// Decrypt data that was encrypted with `encrypt_backup_data`.
+/// Verifies the embedded length header to detect truncation or corruption.
 pub fn decrypt_backup_data(encrypted: &[u8], passphrase: &str) -> Result<Vec<u8>, String> {
     if encrypted.len() < 29 {
         return Err("encrypted data too short".into());
@@ -52,8 +60,21 @@ pub fn decrypt_backup_data(encrypted: &[u8], passphrase: &str) -> Result<Vec<u8>
     let key = derive_key(passphrase, &salt);
     let cipher = Aes256Gcm::new_from_slice(&key).map_err(|e| format!("key error: {e}"))?;
     let nonce = Nonce::from_slice(&encrypted[16..28]);
-    let plaintext = cipher.decrypt(nonce, &encrypted[28..]).map_err(|e| format!("decrypt error: {e}"))?;
-    Ok(plaintext)
+    let prefixed = cipher.decrypt(nonce, &encrypted[28..]).map_err(|e| format!("decrypt error: {e}"))?;
+    // Verify length header
+    if prefixed.len() < 4 {
+        return Err("decrypted data missing length header".into());
+    }
+    let expected_len = u32::from_be_bytes([prefixed[0], prefixed[1], prefixed[2], prefixed[3]]) as usize;
+    let plaintext = &prefixed[4..];
+    if plaintext.len() != expected_len {
+        return Err(format!(
+            "backup integrity check failed: expected {} bytes, got {}",
+            expected_len,
+            plaintext.len()
+        ));
+    }
+    Ok(plaintext.to_vec())
 }
 
 #[derive(Debug, Deserialize, Clone)]
@@ -161,6 +182,10 @@ impl BackupManager {
         };
 
         self.records.push(record.clone());
+
+        // Enforce retention policy — prune old backups after creating a new one
+        self.prune_old_backups();
+
         Ok(record)
     }
 
@@ -336,7 +361,7 @@ mod tests {
         let (source, _backup_root, config) = temp_backup_env();
         let mut mgr = BackupManager::new(config); // retention_count = 2
 
-        // Create 4 backups, manually adjusting timestamps to ensure ordering
+        // Create 4 backups — auto-pruning in create_backup keeps only retention_count
         for i in 0..4 {
             let _rec = mgr.create_backup(source.path()).unwrap();
             // Mutate the last record's timestamp to force ordering
@@ -345,10 +370,12 @@ mod tests {
             mgr.records[idx].name = format!("wardex-backup-{}", i);
         }
 
-        assert_eq!(mgr.records.len(), 4);
+        // Auto-pruning keeps at most retention_count (2) records
+        assert!(mgr.records.len() <= 2);
+        // Manual prune should be a no-op now
         let removed = mgr.prune_old_backups();
-        assert_eq!(removed.len(), 2);
-        assert_eq!(mgr.records.len(), 2);
+        assert_eq!(removed.len(), 0);
+        assert!(mgr.records.len() <= 2);
     }
 
     #[test]

@@ -7,6 +7,8 @@ on:
 
 permissions:
   contents: write
+  packages: write
+  id-token: write
 
 jobs:
   build:
@@ -127,6 +129,82 @@ jobs:
       - name: Lint Helm chart
         run: helm lint deploy/helm/wardex/
 
+  # ── Build deb & rpm packages ─────────────────────────────────────
+  linux-packages:
+    name: Build Linux Packages (deb/rpm)
+    needs: [build]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download Linux build artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: wardex-linux-x86_64.tar.gz
+          path: .
+
+      - name: Extract binary
+        run: |
+          tar -xzf wardex-linux-x86_64.tar.gz
+          chmod +x wardex-linux-x86_64/wardex
+
+      - name: Install packaging tools
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y ruby ruby-dev rpm
+          sudo gem install fpm -N
+
+      - name: Extract version from tag
+        id: version
+        run: echo "tag=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+
+      - name: Build deb package
+        run: |
+          fpm -s dir -t deb \
+            --name wardex \
+            --version "${{ steps.version.outputs.tag }}" \
+            --architecture amd64 \
+            --description "Wardex SentinelEdge XDR platform" \
+            --url "https://github.com/${{ github.repository }}" \
+            --license "BSL-1.1" \
+            --maintainer "${{ github.repository_owner }}" \
+            --after-install deploy/wardex.service \
+            --deb-systemd deploy/wardex.service \
+            wardex-linux-x86_64/wardex=/usr/bin/wardex \
+            examples/=/usr/share/wardex/examples/ \
+            README.md=/usr/share/doc/wardex/README.md \
+            LICENSE=/usr/share/doc/wardex/LICENSE
+
+      - name: Build rpm package
+        run: |
+          fpm -s dir -t rpm \
+            --name wardex \
+            --version "${{ steps.version.outputs.tag }}" \
+            --architecture x86_64 \
+            --description "Wardex SentinelEdge XDR platform" \
+            --url "https://github.com/${{ github.repository }}" \
+            --license "BSL-1.1" \
+            --maintainer "${{ github.repository_owner }}" \
+            wardex-linux-x86_64/wardex=/usr/bin/wardex \
+            examples/=/usr/share/wardex/examples/ \
+            README.md=/usr/share/doc/wardex/README.md \
+            LICENSE=/usr/share/doc/wardex/LICENSE
+
+      - name: Upload deb package
+        uses: actions/upload-artifact@v4
+        with:
+          name: wardex-deb
+          path: "*.deb"
+          if-no-files-found: error
+
+      - name: Upload rpm package
+        uses: actions/upload-artifact@v4
+        with:
+          name: wardex-rpm
+          path: "*.rpm"
+          if-no-files-found: error
+
   # ── Container image vulnerability scan ───────────────────────────────
   container-scan:
     name: Container Image Scan
@@ -150,11 +228,55 @@ jobs:
           severity: CRITICAL,HIGH
           ignore-unfixed: true
 
+  # ── Push & sign container image ───────────────────────────────────
+  container-push:
+    name: Push & Sign Container Image
+    needs: [container-scan]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract version from tag
+        id: version
+        run: echo "tag=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+
+      - name: Build & push image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: |
+            ghcr.io/${{ github.repository }}:${{ steps.version.outputs.tag }}
+            ghcr.io/${{ github.repository }}:latest
+
+      - name: Install cosign
+        uses: sigstore/cosign-installer@v3
+
+      - name: Sign container image
+        env:
+          COSIGN_EXPERIMENTAL: "1"
+        run: |
+          cosign sign --yes \
+            ghcr.io/${{ github.repository }}:${{ steps.version.outputs.tag }}
+          cosign sign --yes \
+            ghcr.io/${{ github.repository }}:latest
+
   release:
     name: Publish GitHub Release
-    needs: [build, sbom, helm-lint, container-scan]
+    needs: [build, sbom, helm-lint, linux-packages, container-scan, container-push]
     runs-on: ubuntu-latest
-    if: always() && needs.build.result != 'cancelled'
+    if: success()
 
     steps:
       - name: Checkout

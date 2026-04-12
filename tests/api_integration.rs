@@ -4798,6 +4798,66 @@ fn export_alerts_cef_format() {
 }
 
 #[test]
+fn export_alerts_leef_format() {
+    let (port, token) = spawn_test_server();
+    let resp = ureq::get(&format!("{}/api/export/alerts?format=leef", base(port)))
+        .set("Authorization", &auth_header(&token))
+        .call()
+        .expect("export alerts leef");
+    assert_eq!(resp.status(), 200);
+}
+
+#[test]
+fn export_alerts_syslog_format() {
+    let (port, token) = spawn_test_server();
+    let resp = ureq::get(&format!("{}/api/export/alerts?format=syslog", base(port)))
+        .set("Authorization", &auth_header(&token))
+        .call()
+        .expect("export alerts syslog");
+    assert_eq!(resp.status(), 200);
+}
+
+#[test]
+fn export_alerts_ecs_format() {
+    let (port, token) = spawn_test_server();
+    let resp = ureq::get(&format!("{}/api/export/alerts?format=ecs", base(port)))
+        .set("Authorization", &auth_header(&token))
+        .call()
+        .expect("export alerts ecs");
+    assert_eq!(resp.status(), 200);
+}
+
+#[test]
+fn export_alerts_udm_format() {
+    let (port, token) = spawn_test_server();
+    let resp = ureq::get(&format!("{}/api/export/alerts?format=udm", base(port)))
+        .set("Authorization", &auth_header(&token))
+        .call()
+        .expect("export alerts udm");
+    assert_eq!(resp.status(), 200);
+}
+
+#[test]
+fn export_alerts_sentinel_format() {
+    let (port, token) = spawn_test_server();
+    let resp = ureq::get(&format!("{}/api/export/alerts?format=sentinel", base(port)))
+        .set("Authorization", &auth_header(&token))
+        .call()
+        .expect("export alerts sentinel");
+    assert_eq!(resp.status(), 200);
+}
+
+#[test]
+fn export_alerts_qradar_format() {
+    let (port, token) = spawn_test_server();
+    let resp = ureq::get(&format!("{}/api/export/alerts?format=qradar", base(port)))
+        .set("Authorization", &auth_header(&token))
+        .call()
+        .expect("export alerts qradar");
+    assert_eq!(resp.status(), 200);
+}
+
+#[test]
 fn export_alerts_unsupported_format_returns_400() {
     let (port, token) = spawn_test_server();
     let err = ureq::get(&format!("{}/api/export/alerts?format=invalid", base(port)))

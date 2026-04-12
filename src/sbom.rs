@@ -120,6 +120,47 @@ impl SbomGenerator {
         components
     }
 
+    /// Convert a host system inventory into SBOM components.
+    /// Each installed software package becomes a component, and hardware info
+    /// is stored as Device/Firmware components.
+    pub fn from_inventory(&self, inv: &crate::inventory::SystemInventory) -> Vec<SbomComponent> {
+        let mut components = Vec::new();
+
+        // Hardware as a device component
+        components.push(SbomComponent {
+            name: inv.hardware.cpu_model.clone(),
+            version: format!("{}-core", inv.hardware.cpu_cores),
+            kind: ComponentKind::Device,
+            purl: format!("pkg:generic/{}@{}-core", inv.hardware.cpu_model.replace(' ', "-"), inv.hardware.cpu_cores),
+            license: None,
+            sha256: None,
+            supplier: None,
+        });
+
+        // Software packages
+        for pkg in &inv.software {
+            let purl_type = match pkg.source.to_lowercase().as_str() {
+                "homebrew" | "brew" => "brew",
+                "apt" | "dpkg" | "deb" => "deb",
+                "rpm" | "yum" | "dnf" => "rpm",
+                "pip" | "pypi" => "pypi",
+                "npm" => "npm",
+                _ => "generic",
+            };
+            components.push(SbomComponent {
+                name: pkg.name.clone(),
+                version: pkg.version.clone(),
+                kind: ComponentKind::Application,
+                purl: format!("pkg:{}/{}@{}", purl_type, pkg.name, pkg.version),
+                license: None,
+                sha256: None,
+                supplier: Some(pkg.source.clone()),
+            });
+        }
+
+        components
+    }
+
     /// Generate an SBOM document in the specified format.
     pub fn generate(
         &self,

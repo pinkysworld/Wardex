@@ -16,8 +16,8 @@ const OPCODE_CLOSE: u8 = 0x08;
 const _OPCODE_PING: u8 = 0x09;
 const OPCODE_PONG: u8 = 0x0A;
 
-/// Maximum allowed WebSocket frame payload (16 MiB).
-const MAX_FRAME_PAYLOAD: usize = 16 * 1024 * 1024;
+/// Maximum allowed WebSocket frame payload (1 MiB).
+const MAX_FRAME_PAYLOAD: usize = 1024 * 1024;
 
 // ── Event types ──────────────────────────────────────────────────────────────
 
@@ -92,6 +92,16 @@ impl WsFrame {
     }
 
     pub fn decode(data: &[u8]) -> Option<(Self, usize)> {
+        Self::decode_inner(data, false)
+    }
+
+    /// Decode a frame from a client, enforcing RFC 6455 masking requirement.
+    /// Client-to-server frames MUST be masked; unmasked frames are rejected.
+    pub fn decode_client(data: &[u8]) -> Option<(Self, usize)> {
+        Self::decode_inner(data, true)
+    }
+
+    fn decode_inner(data: &[u8], require_mask: bool) -> Option<(Self, usize)> {
         if data.len() < 2 {
             return None;
         }
@@ -99,6 +109,12 @@ impl WsFrame {
         let fin = (data[0] & 0x80) != 0;
         let opcode = data[0] & 0x0F;
         let masked = (data[1] & 0x80) != 0;
+
+        // RFC 6455 §5.1: client frames MUST be masked
+        if require_mask && !masked {
+            return None;
+        }
+
         let mut payload_len = (data[1] & 0x7F) as usize;
         let mut offset = 2;
 
@@ -114,7 +130,10 @@ impl WsFrame {
             }
             payload_len = 0;
             for i in 0..8 {
-                payload_len = (payload_len << 8) | (data[2 + i] as usize);
+                payload_len = match payload_len.checked_shl(8) {
+                    Some(shifted) => shifted | (data[2 + i] as usize),
+                    None => return None, // overflow — reject frame
+                };
             }
             offset = 10;
         }
@@ -467,6 +486,98 @@ impl WsConnection {
 
     pub fn since_last_ping(&self) -> Duration {
         self.last_ping.elapsed()
+    }
+}
+
+// ── AlertBroadcaster (pushes alerts to all connected WS clients) ────────────
+
+/// Manages broadcasting alert events to all subscribed WebSocket clients.
+pub struct AlertBroadcaster {
+    bus: EventBus,
+    connections: Vec<WsConnection>,
+}
+
+impl Default for AlertBroadcaster {
+    fn default() -> Self { Self::new() }
+}
+
+impl AlertBroadcaster {
+    pub fn new() -> Self {
+        Self {
+            bus: EventBus::new(5000),
+            connections: Vec::new(),
+        }
+    }
+
+    /// Register a new WebSocket client. Returns the subscriber ID.
+    pub fn connect(&mut self) -> u64 {
+        let id = self.bus.subscribe(vec!["alerts".into(), "events".into()]);
+        self.connections.push(WsConnection::new(id));
+        id
+    }
+
+    /// Disconnect a client by subscriber ID.
+    pub fn disconnect(&mut self, subscriber_id: u64) {
+        self.bus.unsubscribe(subscriber_id);
+        self.connections.retain(|c| c.subscriber_id != subscriber_id);
+    }
+
+    /// Broadcast an alert to all connected clients.
+    pub fn broadcast_alert(&mut self, alert: serde_json::Value) {
+        let event = WsEvent {
+            event_type: "alert".into(),
+            timestamp: chrono::Utc::now().to_rfc3339(),
+            data: alert,
+        };
+        self.bus.publish(event);
+    }
+
+    /// Broadcast a generic event to all connected clients.
+    pub fn broadcast_event(&mut self, event_type: &str, data: serde_json::Value) {
+        let event = WsEvent {
+            event_type: event_type.into(),
+            timestamp: chrono::Utc::now().to_rfc3339(),
+            data,
+        };
+        self.bus.publish(event);
+    }
+
+    /// Drain pending events for a specific subscriber.
+    pub fn drain_for(&mut self, subscriber_id: u64) -> Vec<WsEvent> {
+        self.bus.drain(subscriber_id)
+    }
+
+    /// Get the number of connected clients.
+    pub fn client_count(&self) -> usize {
+        self.connections.len()
+    }
+
+    /// Get connection stats.
+    pub fn stats(&self) -> serde_json::Value {
+        serde_json::json!({
+            "connected_clients": self.connections.len(),
+            "total_events": self.bus.event_count(),
+            "subscribers": self.bus.subscriber_count(),
+            "connections": self.connections.iter().map(|c| serde_json::json!({
+                "subscriber_id": c.subscriber_id,
+                "uptime_secs": c.uptime_secs(),
+                "frames_sent": c.frames_sent,
+                "frames_received": c.frames_received,
+            })).collect::<Vec<_>>(),
+        })
+    }
+
+    /// Remove idle connections (no ping for > timeout).
+    pub fn sweep_idle(&mut self, timeout: Duration) -> usize {
+        let stale: Vec<u64> = self.connections.iter()
+            .filter(|c| c.since_last_ping() > timeout)
+            .map(|c| c.subscriber_id)
+            .collect();
+        let count = stale.len();
+        for id in stale {
+            self.disconnect(id);
+        }
+        count
     }
 }
 

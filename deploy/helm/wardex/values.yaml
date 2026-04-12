@@ -90,6 +90,25 @@ livenessProbe:
   initialDelaySeconds: 15
   periodSeconds: 20
 
+autoscaling:
+  enabled: false
+  minReplicas: 2
+  maxReplicas: 10
+  targetCPUUtilizationPercentage: 80
+  # targetMemoryUtilizationPercentage: 80
+
+podDisruptionBudget:
+  enabled: true
+  minAvailable: 1
+  # maxUnavailable: 1
+
+serviceMonitor:
+  enabled: false
+  interval: 30s
+  # scrapeTimeout: 10s
+  # namespace: monitoring
+  additionalLabels: {}
+
 nodeSelector: {}
 tolerations: []
 affinity: {}

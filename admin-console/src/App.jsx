@@ -12,6 +12,9 @@ import Infrastructure from './components/Infrastructure.jsx';
 import ReportsExports from './components/ReportsExports.jsx';
 import Settings from './components/Settings.jsx';
 import HelpDocs from './components/HelpDocs.jsx';
+import SearchPalette from './components/SearchPalette.jsx';
+import NotificationToast from './components/NotificationToast.jsx';
+import OnboardingWizard from './components/OnboardingWizard.jsx';
 
 const SECTIONS = [
   { id: 'dashboard',        path: '/',                 label: 'Dashboard',        icon: '📊', minRole: 'viewer' },
@@ -51,6 +54,8 @@ export default function App() {
   const [authError, setAuthError] = useState('');
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [linkCopied, setLinkCopied] = useState(false);
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [showOnboarding, setShowOnboarding] = useState(() => !localStorage.getItem('wardex_onboarded'));
 
   const currentSection = SECTIONS.find(s => s.path === location.pathname) || SECTIONS[0];
 
@@ -80,16 +85,17 @@ export default function App() {
 
   return (
     <div className={`app ${sidebarCollapsed ? 'sidebar-collapsed' : ''}`}>
+      <a href="#main-content" className="sr-only focus-visible-only">Skip to main content</a>
       {/* Sidebar */}
-      <aside className="sidebar">
+      <aside className="sidebar" role="navigation" aria-label="Main navigation">
         <div className="sidebar-header">
           <span className="logo">🛡</span>
           {!sidebarCollapsed && <span className="brand">Wardex</span>}
-          <button className="btn-icon collapse-btn" onClick={() => setSidebarCollapsed(c => !c)} title="Toggle sidebar">
+          <button className="btn-icon collapse-btn" onClick={() => setSidebarCollapsed(c => !c)} title="Toggle sidebar" aria-expanded={!sidebarCollapsed} aria-controls="sidebar-nav">
             {sidebarCollapsed ? '→' : '←'}
           </button>
         </div>
-        <nav className="sidebar-nav">
+        <nav className="sidebar-nav" id="sidebar-nav" aria-label="Page sections">
           {visibleSections.map(s => (
             <button
               key={s.id}
@@ -116,13 +122,18 @@ export default function App() {
       </aside>
 
       {/* Main */}
-      <main className="main">
+      <main className="main" role="main" aria-label="Main content">
         {/* Top Bar */}
-        <header className="topbar">
+        <header className="topbar" role="banner">
           <h1 className="topbar-title">{currentSection.label}</h1>
           <div className="topbar-right">
             {hp?.version && (
               <span className="version-badge" title="Wardex version">v{hp.version}</span>
+            )}
+            {authenticated && (
+              <button className="btn btn-sm" onClick={() => setSearchOpen(true)} title="Global search (⌘K)">
+                🔍 Search
+              </button>
             )}
             {authenticated && (
               <button className="btn btn-sm" onClick={copyShareLink} title="Copy shareable deep-link to clipboard">
@@ -151,7 +162,7 @@ export default function App() {
         </header>
 
         {/* Content */}
-        <div className="content">
+        <div className="content" id="main-content">
           {!authenticated ? (
             <div className="auth-prompt">
               <h2>Welcome to Wardex Admin Console</h2>
@@ -175,6 +186,25 @@ export default function App() {
           )}
         </div>
       </main>
+      <SearchPalette
+        open={searchOpen}
+        onClose={(v) => setSearchOpen(typeof v === 'boolean' ? v : false)}
+        onNavigate={(item) => {
+          // Navigate to the appropriate section based on category
+          if (item.category === 'Alerts') navigate('/');
+          else if (item.category === 'Agents') navigate('/fleet');
+          else if (item.category === 'Detection Rules') navigate('/detection');
+          else if (item.category === 'Quarantine') navigate('/soc');
+          else if (item.category === 'Feed Sources') navigate('/infrastructure');
+        }}
+      />
+      <NotificationToast />
+      {showOnboarding && (
+        <OnboardingWizard onComplete={() => {
+          localStorage.setItem('wardex_onboarded', '1');
+          setShowOnboarding(false);
+        }} />
+      )}
     </div>
   );
 }
