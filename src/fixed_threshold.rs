@@ -127,6 +127,7 @@ impl FixedThresholdDetector {
             suspicious_axes: breached,
             reasons,
             contributions,
+            triage: None,
         }
     }
 }

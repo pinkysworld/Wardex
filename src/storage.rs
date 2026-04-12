@@ -1413,10 +1413,113 @@ pub struct StorageStats {
 
 // ── Thread-safe wrapper ───────────────────────────────────────────────────────
 
+// ── Alert Dedup Cache ─────────────────────────────────────────────────────────
+
+/// In-memory alert deduplication cache for content-hash based suppression.
+#[derive(Debug, Clone)]
+pub struct DedupEntry {
+    pub alert_id: String,
+    pub first_seen: i64,
+    pub occurrence_count: u32,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DedupStats {
+    pub total_suppressed: u64,
+    pub active_signatures: usize,
+    pub window_seconds: u64,
+}
+
+/// Content-hash dedup: hash(device_id + level + sorted_reasons) → suppress
+/// duplicate alerts within a configurable window (default 15 minutes).
+pub struct AlertDedupCache {
+    entries: HashMap<String, DedupEntry>,
+    window_secs: i64,
+    total_suppressed: u64,
+}
+
+impl std::fmt::Debug for AlertDedupCache {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("AlertDedupCache")
+            .field("entries", &self.entries.len())
+            .field("window_secs", &self.window_secs)
+            .field("total_suppressed", &self.total_suppressed)
+            .finish()
+    }
+}
+
+impl Default for AlertDedupCache {
+    fn default() -> Self {
+        Self {
+            entries: HashMap::new(),
+            window_secs: 900, // 15 minutes
+            total_suppressed: 0,
+        }
+    }
+}
+
+impl AlertDedupCache {
+    pub fn new(window_secs: i64) -> Self {
+        Self {
+            entries: HashMap::new(),
+            window_secs,
+            total_suppressed: 0,
+        }
+    }
+
+    /// Compute content hash for dedup signature.
+    fn content_hash(device_id: &str, level: &str, reasons: &[String]) -> String {
+        use sha2::Digest;
+        let mut sorted = reasons.to_vec();
+        sorted.sort();
+        let payload = format!("{device_id}|{level}|{}", sorted.join(","));
+        let hash = sha2::Sha256::digest(payload.as_bytes());
+        format!("{hash:x}")
+    }
+
+    /// Check if an alert is a duplicate. Returns Some(existing_alert_id) if suppressed,
+    /// None if the alert should be inserted.
+    pub fn check_and_record(&mut self, alert: &StoredAlert) -> Option<String> {
+        let now = chrono::Utc::now().timestamp();
+        let hash = Self::content_hash(&alert.device_id, &alert.level, &alert.reasons);
+
+        // Expire old entries
+        self.entries
+            .retain(|_, e| (now - e.first_seen) < self.window_secs);
+
+        if let Some(entry) = self.entries.get_mut(&hash) {
+            if (now - entry.first_seen) < self.window_secs {
+                entry.occurrence_count += 1;
+                self.total_suppressed += 1;
+                return Some(entry.alert_id.clone());
+            }
+        }
+
+        self.entries.insert(
+            hash,
+            DedupEntry {
+                alert_id: alert.id.clone(),
+                first_seen: now,
+                occurrence_count: 1,
+            },
+        );
+        None
+    }
+
+    pub fn stats(&self) -> DedupStats {
+        DedupStats {
+            total_suppressed: self.total_suppressed,
+            active_signatures: self.entries.len(),
+            window_seconds: self.window_secs as u64,
+        }
+    }
+}
+
 /// Thread-safe handle to the storage backend for use in server context.
 #[derive(Debug, Clone)]
 pub struct SharedStorage {
     inner: Arc<Mutex<StorageBackend>>,
+    dedup: Arc<Mutex<AlertDedupCache>>,
 }
 
 impl SharedStorage {
@@ -1424,6 +1527,7 @@ impl SharedStorage {
         let backend = StorageBackend::open(base_dir)?;
         Ok(Self {
             inner: Arc::new(Mutex::new(backend)),
+            dedup: Arc::new(Mutex::new(AlertDedupCache::default())),
         })
     }
 
@@ -1436,6 +1540,30 @@ impl SharedStorage {
             message: format!("lock poisoned: {e}"),
         })?;
         f(&mut guard)
+    }
+
+    /// Insert alert with dedup: if a matching signature exists within the window,
+    /// suppress the insert and return the existing alert ID.
+    pub fn insert_alert_dedup(&self, alert: StoredAlert) -> Result<Option<String>, StorageError> {
+        if let Ok(mut dedup) = self.dedup.lock() {
+            if let Some(existing_id) = dedup.check_and_record(&alert) {
+                return Ok(Some(existing_id));
+            }
+        }
+        self.with(|store| store.insert_alert(alert))?;
+        Ok(None)
+    }
+
+    /// Return dedup suppression statistics.
+    pub fn dedup_stats(&self) -> DedupStats {
+        self.dedup
+            .lock()
+            .map(|d| d.stats())
+            .unwrap_or(DedupStats {
+                total_suppressed: 0,
+                active_signatures: 0,
+                window_seconds: 900,
+            })
     }
 }
 

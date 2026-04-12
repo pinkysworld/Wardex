@@ -469,3 +469,16 @@ export const wsDisconnect = (subscriberId) => post('/api/ws/disconnect', { subsc
 export const wsPoll = (subscriberId) => post('/api/ws/poll', { subscriber_id: subscriberId });
 export const wsStats = () => get('/api/ws/stats');
 export const wsBroadcast = (data) => post('/api/ws/broadcast', data);
+
+// ── v0.44.0: Enhanced Detection & UX ─────────────────────────
+export const dedupStats = () => get('/api/alerts/dedup-stats');
+export const noisyRules = () => get('/api/detection/noisy-rules');
+export const playbooks = () => get('/api/playbooks');
+export const playbookById = (id) => get(`/api/playbooks/${encodeURIComponent(id)}`);
+export const playbookRun = (id) => post(`/api/playbooks/${encodeURIComponent(id)}/run`);
+export const canaryStatus = () => get('/api/canary/status');
+export const insiderRisk = (entityKind, entityId) => get(`/api/ueba/insider-risk/${encodeURIComponent(entityKind)}/${encodeURIComponent(entityId)}`);
+export const credentialSprayAlerts = () => get('/api/correlation/credential-spray');
+export const campaigns = () => get('/api/correlation/campaigns');
+export const rbacCreateUser = (body) => post('/api/rbac/users', body);
+export const rbacDeleteUser = (username) => del(`/api/rbac/users/${encodeURIComponent(username)}`);

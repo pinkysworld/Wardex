@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { Routes, Route, useNavigate, useLocation, Navigate } from 'react-router-dom';
 import { useAuth, useTheme, useRole, useApi } from './hooks.jsx';
 import * as api from './api.js';
@@ -56,6 +56,27 @@ export default function App() {
   const [linkCopied, setLinkCopied] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const [showOnboarding, setShowOnboarding] = useState(() => !localStorage.getItem('wardex_onboarded'));
+  const [showShortcuts, setShowShortcuts] = useState(false);
+
+  // ── Global Keyboard Shortcuts ──
+  useEffect(() => {
+    const handler = (e) => {
+      // Ignore if user is typing in an input/textarea
+      if (['INPUT', 'TEXTAREA', 'SELECT'].includes(e.target.tagName)) return;
+      switch (e.key) {
+        case '?': setShowShortcuts(s => !s); break;
+        case 'd': navigate('/'); break;
+        case 'm': navigate('/monitor'); break;
+        case 't': navigate('/detection'); break;
+        case 'f': navigate('/fleet'); break;
+        case 's': navigate('/soc'); break;
+        case 'g': navigate('/settings'); break;
+        default: break;
+      }
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [navigate]);
 
   const currentSection = SECTIONS.find(s => s.path === location.pathname) || SECTIONS[0];
 
@@ -204,6 +225,33 @@ export default function App() {
           localStorage.setItem('wardex_onboarded', '1');
           setShowOnboarding(false);
         }} />
+      )}
+      {showShortcuts && (
+        <div className="search-palette-overlay" onClick={() => setShowShortcuts(false)}>
+          <div className="search-palette" onClick={e => e.stopPropagation()} style={{ maxWidth: 400 }}>
+            <div style={{ padding: 16 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+                <h3 style={{ margin: 0 }}>Keyboard Shortcuts</h3>
+                <button className="btn btn-sm" onClick={() => setShowShortcuts(false)}>✕</button>
+              </div>
+              {[
+                ['?', 'Toggle this help'],
+                ['D', 'Go to Dashboard'],
+                ['M', 'Go to Live Monitor'],
+                ['T', 'Go to Threat Detection'],
+                ['F', 'Go to Fleet & Agents'],
+                ['S', 'Go to SOC Workbench'],
+                ['G', 'Go to Settings'],
+                ['⌘K', 'Open search palette'],
+              ].map(([key, desc]) => (
+                <div key={key} style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0', borderBottom: '1px solid var(--border)' }}>
+                  <span style={{ fontSize: 13 }}>{desc}</span>
+                  <kbd style={{ fontSize: 11, padding: '2px 8px', borderRadius: 4, background: 'var(--bg)', border: '1px solid var(--border)', fontFamily: 'var(--font-mono)' }}>{key}</kbd>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

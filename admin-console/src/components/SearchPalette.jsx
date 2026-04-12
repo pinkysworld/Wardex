@@ -1,6 +1,10 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import * as api from '../api.js';
 
+const SAVED_KEY = 'wardex_saved_searches';
+function loadSaved() { try { return JSON.parse(localStorage.getItem(SAVED_KEY) || '[]'); } catch { return []; } }
+function persistSaved(list) { localStorage.setItem(SAVED_KEY, JSON.stringify(list)); }
+
 const CATEGORIES = [
   { key: 'alerts', label: 'Alerts', icon: '🔔', search: api.alerts },
   { key: 'agents', label: 'Agents', icon: '🖥', search: api.agents },
@@ -14,6 +18,7 @@ export default function SearchPalette({ open, onClose, onNavigate }) {
   const [results, setResults] = useState([]);
   const [loading, setLoading] = useState(false);
   const [selectedIdx, setSelectedIdx] = useState(0);
+  const [saved, setSaved] = useState(loadSaved);
   const inputRef = useRef(null);
 
   useEffect(() => {
@@ -105,7 +110,24 @@ export default function SearchPalette({ open, onClose, onNavigate }) {
             className="search-palette-input"
           />
           <kbd style={{ fontSize: 11, padding: '2px 6px', borderRadius: 4, background: 'var(--bg)', border: '1px solid var(--border)' }}>ESC</kbd>
+          {query.length >= 2 && !saved.includes(query) && (
+            <button style={{ fontSize: 11, padding: '2px 8px', borderRadius: 4, background: 'var(--primary)', color: '#fff', border: 'none', cursor: 'pointer', marginLeft: 4, whiteSpace: 'nowrap' }}
+              onClick={() => { const next = [query, ...saved].slice(0, 20); setSaved(next); persistSaved(next); }}>Save</button>
+          )}
         </div>
+        {/* Saved searches shown when query is empty */}
+        {query.length < 2 && saved.length > 0 && (
+          <div style={{ padding: '8px 12px' }}>
+            <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginBottom: 6 }}>Saved searches</div>
+            {saved.map((s, i) => (
+              <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '4px 0', fontSize: 13 }}>
+                <span style={{ cursor: 'pointer', flex: 1 }} onClick={() => setQuery(s)}>🔖 {s}</span>
+                <button style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-secondary)', fontSize: 11 }}
+                  onClick={() => { const next = saved.filter((_, j) => j !== i); setSaved(next); persistSaved(next); }}>✕</button>
+              </div>
+            ))}
+          </div>
+        )}
         {loading && <div style={{ padding: 12, textAlign: 'center', color: 'var(--text-secondary)' }}>Searching…</div>}
         {!loading && results.length === 0 && query.length >= 2 && (
           <div style={{ padding: 16, textAlign: 'center', color: 'var(--text-secondary)' }}>No results found</div>

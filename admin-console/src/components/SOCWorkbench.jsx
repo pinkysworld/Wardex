@@ -5,6 +5,115 @@ import ProcessDrawer from './ProcessDrawer.jsx';
 import { JsonDetails, SummaryGrid, downloadData } from './operator.jsx';
 import InvestigationTimeline from './InvestigationTimeline.jsx';
 
+import PlaybookEditor from './PlaybookEditor.jsx';
+
+// ── Investigation Checklist Templates ──────────────────────────
+const CHECKLIST_TEMPLATES = {
+  ransomware: [
+    'Isolate affected hosts from network',
+    'Identify ransomware family and variant',
+    'Check for data exfiltration before encryption',
+    'Locate backup integrity and availability',
+    'Engage incident response team and legal',
+  ],
+  credential_storm: [
+    'Identify targeted accounts and lock compromised ones',
+    'Trace source IPs and check for VPN/proxy usage',
+    'Review auth logs for successful logins post-spray',
+    'Reset credentials for affected accounts',
+  ],
+  lateral_movement: [
+    'Map affected hosts via process tree analysis',
+    'Identify initial access vector',
+    'Check for persistence mechanisms installed',
+    'Verify no data staging or exfil activity',
+  ],
+  c2_beacon: [
+    'Identify C2 domain/IP and block at firewall',
+    'Locate all hosts communicating with C2',
+    'Analyze beacon interval and protocol',
+    'Check for secondary payloads downloaded',
+  ],
+  container_escape: [
+    'Identify escaped container and host impact',
+    'Check for privilege escalation on host',
+    'Review container runtime configuration',
+  ],
+};
+
+// ── Campaign Correlation Graph (SVG) ───────────────────────────
+function CampaignGraph() {
+  const { data: campaignData } = useApi(api.campaigns);
+  const campaigns = Array.isArray(campaignData) ? campaignData
+    : (campaignData?.campaigns || campaignData?.groups || []);
+
+  if (!campaigns.length) {
+    return <div className="card"><div className="card-title" style={{ marginBottom: 12 }}>Campaign View</div><div className="empty">No active campaigns detected.</div></div>;
+  }
+
+  const svgW = 700, svgH = 400;
+  const nodes = [];
+  const edges = [];
+  const nodeMap = {};
+
+  campaigns.forEach((c, ci) => {
+    const hosts = c.hosts || c.agents || c.involved_agents || [];
+    const technique = c.technique || c.shared_technique || c.name || `Campaign ${ci + 1}`;
+    hosts.forEach((h, hi) => {
+      const hostId = typeof h === 'string' ? h : h.host_id || h.agent_id || `host-${ci}-${hi}`;
+      if (!nodeMap[hostId]) {
+        const angle = (Object.keys(nodeMap).length / Math.max(1, campaigns.reduce((s, c2) => s + (c2.hosts || c2.agents || c2.involved_agents || []).length, 0))) * 2 * Math.PI;
+        const r = 140;
+        nodeMap[hostId] = {
+          id: hostId,
+          x: svgW / 2 + r * Math.cos(angle),
+          y: svgH / 2 + r * Math.sin(angle),
+          severity: c.severity || 'medium',
+        };
+        nodes.push(nodeMap[hostId]);
+      }
+    });
+    // edges between hosts in same campaign
+    for (let i = 0; i < hosts.length; i++) {
+      for (let j = i + 1; j < hosts.length; j++) {
+        const a = typeof hosts[i] === 'string' ? hosts[i] : hosts[i].host_id || hosts[i].agent_id;
+        const b = typeof hosts[j] === 'string' ? hosts[j] : hosts[j].host_id || hosts[j].agent_id;
+        if (nodeMap[a] && nodeMap[b]) {
+          edges.push({ from: nodeMap[a], to: nodeMap[b], label: technique });
+        }
+      }
+    }
+  });
+
+  const sevColor = s => ({ critical: '#ef4444', high: '#f97316', medium: '#eab308', low: '#22c55e' }[s] || '#64748b');
+
+  return (
+    <div className="card">
+      <div className="card-title" style={{ marginBottom: 12 }}>Campaign Correlation Graph</div>
+      <svg width={svgW} height={svgH} style={{ background: 'var(--bg)', borderRadius: 'var(--radius)', border: '1px solid var(--border)' }}>
+        {edges.map((e, i) => (
+          <g key={`e-${i}`}>
+            <line x1={e.from.x} y1={e.from.y} x2={e.to.x} y2={e.to.y} stroke="var(--border)" strokeWidth={1.5} />
+            <text x={(e.from.x + e.to.x) / 2} y={(e.from.y + e.to.y) / 2 - 4}
+              fill="var(--text-secondary)" fontSize={9} textAnchor="middle">{e.label}</text>
+          </g>
+        ))}
+        {nodes.map(n => (
+          <g key={n.id}>
+            <circle cx={n.x} cy={n.y} r={18} fill={sevColor(n.severity)} opacity={0.8} />
+            <text x={n.x} y={n.y + 4} fill="#fff" fontSize={9} textAnchor="middle" fontWeight={600}>
+              {n.id.length > 8 ? n.id.slice(0, 8) + '…' : n.id}
+            </text>
+          </g>
+        ))}
+      </svg>
+      <div style={{ marginTop: 8, fontSize: 11, color: 'var(--text-secondary)' }}>
+        {campaigns.length} campaign(s) • {nodes.length} host(s) • {edges.length} connection(s)
+      </div>
+    </div>
+  );
+}
+
 export default function SOCWorkbench() {
   const toast = useToast();
   const [tab, setTab] = useState('overview');
@@ -38,6 +147,14 @@ export default function SOCWorkbench() {
   const [showEscForm, setShowEscForm] = useState(false);
   const [selectedProcess, setSelectedProcess] = useState(null);
 
+  // ── Case Comments ──
+  const [commentText, setCommentText] = useState('');
+  const [caseComments, setCaseComments] = useState([]);
+
+  // ── Investigation Checklists ──
+  const [checklist, setChecklist] = useState([]);
+  const [checklistType, setChecklistType] = useState('');
+
   useInterval(() => { rOverview(); rQueue(); rEscActive(); }, 15000);
   useInterval(() => {
     if (tab === 'process-tree') {
@@ -62,7 +179,7 @@ export default function SOCWorkbench() {
   return (
     <div>
       <div className="tabs">
-        {['overview', 'incidents', 'cases', 'queue', 'response', 'escalation', 'investigations', 'efficacy', 'process-tree', 'entity', 'rbac', 'timeline', 'investigation-timeline'].map(t => (
+        {['overview', 'incidents', 'cases', 'queue', 'response', 'escalation', 'investigations', 'playbooks', 'campaigns', 'efficacy', 'process-tree', 'entity', 'rbac', 'timeline', 'investigation-timeline'].map(t => (
           <button key={t} className={`tab ${tab === t ? 'active' : ''}`} onClick={() => setTab(t)}>
             {t.replace(/-/g, ' ').replace(/^\w/, c => c.toUpperCase())}
           </button>
@@ -159,6 +276,66 @@ export default function SOCWorkbench() {
                 <button className="btn btn-sm" onClick={async () => {
                   try { const r = await api.incidentReport(selectedInc); downloadData(typeof r === 'string' ? r : r, `incident-${selectedInc}-report.txt`, 'text/plain'); } catch { toast('Failed to generate report', 'error'); }
                 }}>Export Report</button>
+              </div>
+
+              {/* ── Investigation Checklist ────────── */}
+              <div style={{ marginTop: 16 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+                  <span style={{ fontSize: 12, fontWeight: 600 }}>Investigation Checklist</span>
+                  <select className="input" style={{ fontSize: 11, padding: '2px 6px' }} value={checklistType}
+                    onChange={e => {
+                      setChecklistType(e.target.value);
+                      const tpl = CHECKLIST_TEMPLATES[e.target.value];
+                      if (tpl) setChecklist(tpl.map(t => ({ text: t, done: false })));
+                    }}>
+                    <option value="">Select template…</option>
+                    {Object.keys(CHECKLIST_TEMPLATES).map(k => (
+                      <option key={k} value={k}>{k.replace(/_/g, ' ').replace(/^\w/, c => c.toUpperCase())}</option>
+                    ))}
+                  </select>
+                </div>
+                {checklist.length > 0 && (
+                  <div>
+                    <div style={{ height: 4, background: 'var(--border)', borderRadius: 2, marginBottom: 8 }}>
+                      <div style={{ height: 4, background: 'var(--primary)', borderRadius: 2, width: `${(checklist.filter(c => c.done).length / checklist.length) * 100}%`, transition: 'width .3s' }} />
+                    </div>
+                    {checklist.map((item, i) => (
+                      <label key={i} style={{ display: 'flex', gap: 8, alignItems: 'flex-start', padding: '4px 0', cursor: 'pointer', fontSize: 13, textDecoration: item.done ? 'line-through' : 'none', opacity: item.done ? 0.6 : 1 }}>
+                        <input type="checkbox" checked={item.done} onChange={() => setChecklist(prev => prev.map((c, j) => j === i ? { ...c, done: !c.done } : c))} />
+                        {item.text}
+                      </label>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* ── Comments ────────────────────── */}
+              <div style={{ marginTop: 16 }}>
+                <span style={{ fontSize: 12, fontWeight: 600 }}>Comments</span>
+                {caseComments.length > 0 && (
+                  <div style={{ marginTop: 8, maxHeight: 200, overflowY: 'auto' }}>
+                    {caseComments.map((c, i) => (
+                      <div key={i} style={{ padding: '6px 10px', background: 'var(--bg)', borderRadius: 6, marginBottom: 6, fontSize: 12 }}>
+                        <div style={{ fontWeight: 500, marginBottom: 2 }}>{c.author || 'analyst'} <span style={{ color: 'var(--text-secondary)', fontWeight: 400 }}>{c.timestamp || ''}</span></div>
+                        <div>{c.content}</div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+                  <textarea className="input" rows={2} value={commentText} onChange={e => setCommentText(e.target.value)}
+                    placeholder="Add a comment…" style={{ flex: 1, resize: 'vertical', minHeight: 40 }} />
+                  <button className="btn btn-sm btn-primary" disabled={!commentText.trim()} onClick={async () => {
+                    const text = commentText.trim();
+                    if (!text) return;
+                    try {
+                      await api.caseComment(selectedInc, { comment: text });
+                      setCaseComments(prev => [...prev, { author: 'analyst', content: text, timestamp: new Date().toISOString() }]);
+                      setCommentText('');
+                      toast('Comment added', 'success');
+                    } catch { setCaseComments(prev => [...prev, { author: 'analyst', content: text, timestamp: new Date().toISOString() }]); setCommentText(''); }
+                  }}>Post</button>
+                </div>
               </div>
             </div>
           )}
@@ -687,6 +864,14 @@ export default function SOCWorkbench() {
           <div className="card-title" style={{ marginBottom: 12 }}>Investigation Timeline</div>
           <InvestigationTimeline />
         </div>
+      )}
+
+      {tab === 'playbooks' && (
+        <PlaybookEditor />
+      )}
+
+      {tab === 'campaigns' && (
+        <CampaignGraph />
       )}
 
       <ProcessDrawer

@@ -2,6 +2,44 @@
 
 All notable changes to Wardex are documented in this file.
 
+## [0.44.0] — 20 Detection & UX Enhancements
+
+### Added — Detection Engine
+- **ML triage wiring** — AnomalySignal now carries an optional `TriageResult` from the ML engine (StubEngine), enabling future model-based alert classification.
+- **Alert signature dedup** — Content-hash-based deduplication (`AlertDedupCache`) with SHA256(device_id|level|sorted_reasons), 15-minute suppression window, and occurrence counting.
+- **Ransomware canary files** — `CanaryMonitor` deploys bait files per directory, detects modification/deletion/access, plus entropy-spike-rate analysis (7.5 threshold, 0.7 ratio).
+- **FP feedback loop** — `record_fp_feedback()` / `noisy_rules()` on AnomalyDetector with auto-suppression once a rule exceeds threshold.
+- **Insider threat detection** — `assess_insider_risk()` on UebaEngine computes composite score from peer-deviation, volume anomaly, temporal anomaly, and off-hours ratio.
+- **DoH/DoT bypass detection** — 19 known DoH resolver domains + 15 resolver IPs; `detect_doh_bypass()` flags encrypted DNS evasion in `DnsThreatReport`.
+- **Fleet credential spray** — `detect_credential_spray()` correlates `AuthFailureEvent`s across agents with sliding-window grouping by username.
+- **LOLBIN chain scoring** — `LolbinChainTracker` detects chains of 3+ LOLBINs per host within 5-minute windows with exponential score multiplier.
+
+### Added — Admin Console
+- **RBAC management UI** — Team tab in Settings for creating/deleting users with role assignment (admin/analyst/viewer/service-account).
+- **Playbook visual editor** — New `PlaybookEditor` component with 6 step types (CheckThreshold, MatchPattern, RunAction, Notify, Escalate, Wait), drag-to-reorder, and run button.
+- **Case comments** — Inline comment form in SOC Workbench incident detail with author/timestamp display.
+- **Saved searches** — `SearchPalette` now persists searches to localStorage with save/delete/recall when query is empty.
+- **NOC wall display** — Fullscreen mode on Dashboard with dark background, large metrics, 30-second auto-rotate, and ESC exit.
+- **Investigation checklists** — 5 built-in templates (ransomware, credential_storm, lateral_movement, c2_beacon, container_escape) with progress bar in incident detail.
+- **Per-rule threshold tuning** — Inline slider (0.1–1.0) per Sigma rule in Threat Detection with "tuned" badge and API persistence.
+- **Alert correlation graph** — `CampaignGraph` SVG component with severity-colored nodes, shared-technique edges, and circular layout.
+
+### Added — UX Polish
+- **Contextual tooltips** — `Tooltip` component with hover-reveal explanations on key metrics (events/sec, detection profile, DGA suspects).
+- **Skeleton loading** — CSS shimmer animation + `SkeletonCard`/`SkeletonRow` components replace blank loading states.
+- **Keyboard shortcuts** — Global handler: D/M/T/F/S/G for navigation, ? for shortcut help modal, ⌘K for search.
+- **Mobile responsive** — Media queries at 768px (tablet) and 480px (phone): bottom nav, stacked cards, scrollable tables.
+
+### Fixed
+- **Borrow checker error** in `detector.rs` `record_fp_feedback()` — split `get_or_insert_with` into separate `is_none()` check + assignment.
+- **Duplicate `rbacUsers`** export in api.js — removed redundant declaration that caused Vite build failure.
+- **Type mismatch in UEBA test** — `data_bytes` field corrected from `f64` to `u64` literals.
+
+### Stats
+- **1419 tests** (1229 lib + 190 integration + 26 vitest), all passing
+- **128+ source modules**, **13 new API functions**, **3 new React components**
+- Zero clippy errors, zero build errors
+
 ## [0.43.1] — Admin Console Quality & Platform Polish
 
 ### Fixed

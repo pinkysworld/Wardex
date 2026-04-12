@@ -6,6 +6,7 @@ use std::collections::VecDeque;
 use serde::{Deserialize, Serialize};
 
 use crate::baseline::PersistedBaseline;
+use crate::ml_engine::{StubEngine, TriageFeatures, TriageResult};
 use crate::telemetry::TelemetrySample;
 
 #[derive(Debug, Clone, Copy)]
@@ -91,6 +92,8 @@ pub struct AnomalySignal {
     /// weighted score contributed by that signal dimension. Sum of contributions
     /// equals `score` (before history_factor scaling) when history_factor is 1.0.
     pub contributions: Vec<(&'static str, f32)>,
+    /// ML triage result if the signal triggered an alert-level score.
+    pub triage: Option<TriageResult>,
 }
 
 /// Controls how the detector updates its learned baseline (T041).
@@ -115,6 +118,12 @@ pub struct AnomalyDetector {
     custom_weights: Option<HashMap<String, f32>>,
     /// Rolling window of recent auth_failures for rate-of-change smoothing.
     auth_history: VecDeque<u32>,
+    /// ML triage engine for alert classification.
+    ml_engine: StubEngine,
+    /// FP feedback counts per signal/reason for auto-weight adjustment.
+    fp_feedback: HashMap<String, u32>,
+    /// Threshold of FP confirmations before auto-adjusting weight.
+    fp_auto_adjust_threshold: u32,
 }
 
 impl Default for AnomalyDetector {
@@ -132,6 +141,9 @@ impl AnomalyDetector {
             adaptation: AdaptationMode::Normal,
             custom_weights: None,
             auth_history: VecDeque::new(),
+            ml_engine: StubEngine::new(),
+            fp_feedback: HashMap::new(),
+            fp_auto_adjust_threshold: 5,
         }
     }
 
@@ -235,6 +247,7 @@ impl AnomalyDetector {
                     suspicious_axes: 0,
                     reasons: vec!["baseline initialized".to_string()],
                     contributions: Vec::new(),
+                    triage: None,
                 }
             }
             Some(mut baseline) => {
@@ -456,15 +469,66 @@ impl AnomalyDetector {
                     c.1 *= history_factor;
                 }
 
+                // ML triage: classify alert-level signals automatically
+                let triage = if score > 0.3 {
+                    let now = chrono::Utc::now();
+                    let features = TriageFeatures {
+                        anomaly_score: score as f64,
+                        confidence: history_factor as f64,
+                        suspicious_axes: suspicious_axes as u32,
+                        hour_of_day: now.format("%H").to_string().parse().unwrap_or(12),
+                        day_of_week: now.format("%u").to_string().parse::<u8>().unwrap_or(1).saturating_sub(1),
+                        alert_frequency_1h: 0, // caller can update this from alert store
+                        device_risk_score: score.min(1.0) as f64,
+                    };
+                    Some(self.ml_engine.triage_alert(&features))
+                } else {
+                    None
+                };
+
                 AnomalySignal {
                     score,
                     confidence: history_factor,
                     suspicious_axes,
                     reasons,
                     contributions,
+                    triage,
                 }
             }
         }
+    }
+
+    /// Record a false-positive confirmation for a signal/reason.
+    /// After `fp_auto_adjust_threshold` confirmations, the weight is reduced by 10%.
+    pub fn record_fp_feedback(&mut self, signal_or_reason: &str) {
+        let count = self.fp_feedback.entry(signal_or_reason.to_string()).or_insert(0);
+        *count += 1;
+        if *count >= self.fp_auto_adjust_threshold {
+            // Auto-lower the weight for this signal
+            if self.custom_weights.is_none() {
+                self.custom_weights = Some(self.signal_weights());
+            }
+            if let Some(ref mut weights) = self.custom_weights {
+                if let Some(w) = weights.get_mut(signal_or_reason) {
+                    *w *= 0.9; // reduce by 10%
+                }
+            }
+        }
+    }
+
+    /// Return signals/rules with highest FP feedback counts.
+    pub fn noisy_rules(&self) -> Vec<(String, u32)> {
+        let mut rules: Vec<_> = self.fp_feedback.iter()
+            .map(|(k, v)| (k.clone(), *v))
+            .collect();
+        rules.sort_by(|a, b| b.1.cmp(&a.1));
+        rules.truncate(20);
+        rules
+    }
+
+    /// Get current FP feedback counts.
+    pub fn fp_feedback_counts(&self) -> &HashMap<String, u32> {
+        &self.fp_feedback
     }
 }
 
@@ -1477,6 +1541,7 @@ mod tests {
                 ("auth_failures", 0.9),
                 ("disk_pressure_pct", 0.6),
             ],
+            triage: None,
         };
         let report = compound.evaluate(&signal);
         assert!(
@@ -1501,6 +1566,7 @@ mod tests {
             suspicious_axes: 1,
             reasons: vec!["cpu".into()],
             contributions: vec![("cpu_load_pct", 0.5)],
+            triage: None,
         };
         let sc_report = SideChannelReport {
             timing_anomalies: 12,

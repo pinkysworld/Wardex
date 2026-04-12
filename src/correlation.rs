@@ -149,6 +149,107 @@ pub fn analyze(buf: &ReplayBuffer, threshold: f32) -> CorrelationResult {
     }
 }
 
+// ── Fleet-Wide Credential Spray Detection ─────────────────────────────────────
+
+/// An authentication failure event reported by an agent.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AuthFailureEvent {
+    pub agent_id: String,
+    pub username: String,
+    pub timestamp_epoch: i64,
+    pub source_ip: Option<String>,
+}
+
+/// Alert generated when credential spray is detected across multiple agents.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CredentialSprayAlert {
+    pub target_account: String,
+    pub involved_agents: Vec<String>,
+    pub agent_count: usize,
+    pub time_window_secs: i64,
+    pub first_seen: i64,
+    pub last_seen: i64,
+    pub source_ips: Vec<String>,
+}
+
+/// Detect fleet-wide credential spray: a single username failing authentication
+/// across `min_agents` or more agents within `window_secs`.
+pub fn detect_credential_spray(
+    events: &[AuthFailureEvent],
+    window_secs: i64,
+    min_agents: usize,
+) -> Vec<CredentialSprayAlert> {
+    use std::collections::{BTreeMap, HashSet};
+
+    if events.is_empty() || min_agents == 0 {
+        return Vec::new();
+    }
+
+    // Group events by username
+    let mut by_user: BTreeMap<&str, Vec<&AuthFailureEvent>> = BTreeMap::new();
+    for ev in events {
+        by_user.entry(&ev.username).or_default().push(ev);
+    }
+
+    let mut alerts = Vec::new();
+
+    for (username, user_events) in &by_user {
+        if user_events.len() < min_agents {
+            continue;
+        }
+
+        // Sort by timestamp
+        let mut sorted: Vec<&&AuthFailureEvent> = user_events.iter().collect();
+        sorted.sort_by_key(|e| e.timestamp_epoch);
+
+        // Sliding window: find clusters of events within the window
+        let mut i = 0;
+        while i < sorted.len() {
+            let window_start = sorted[i].timestamp_epoch;
+            let window_end = window_start + window_secs;
+
+            let mut agents: HashSet<&str> = HashSet::new();
+            let mut ips: HashSet<&str> = HashSet::new();
+            let mut last_ts = window_start;
+            let mut j = i;
+
+            while j < sorted.len() && sorted[j].timestamp_epoch <= window_end {
+                agents.insert(&sorted[j].agent_id);
+                if let Some(ref ip) = sorted[j].source_ip {
+                    ips.insert(ip);
+                }
+                last_ts = sorted[j].timestamp_epoch;
+                j += 1;
+            }
+
+            if agents.len() >= min_agents {
+                let mut agent_list: Vec<String> =
+                    agents.iter().map(|a| a.to_string()).collect();
+                agent_list.sort();
+                let mut ip_list: Vec<String> = ips.iter().map(|i| i.to_string()).collect();
+                ip_list.sort();
+
+                alerts.push(CredentialSprayAlert {
+                    target_account: username.to_string(),
+                    involved_agents: agent_list.clone(),
+                    agent_count: agents.len(),
+                    time_window_secs: window_secs,
+                    first_seen: window_start,
+                    last_seen: last_ts,
+                    source_ips: ip_list,
+                });
+
+                // Skip past this window to avoid duplicate alerts
+                i = j;
+            } else {
+                i += 1;
+            }
+        }
+    }
+
+    alerts
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -244,5 +345,79 @@ mod tests {
             (r - (-1.0)).abs() < 0.001,
             "perfect negative correlation, got {r}"
         );
+    }
+
+    #[test]
+    fn credential_spray_detected() {
+        let events = vec![
+            AuthFailureEvent {
+                agent_id: "agent-1".into(),
+                username: "admin".into(),
+                timestamp_epoch: 1000,
+                source_ip: Some("10.0.0.1".into()),
+            },
+            AuthFailureEvent {
+                agent_id: "agent-2".into(),
+                username: "admin".into(),
+                timestamp_epoch: 1100,
+                source_ip: Some("10.0.0.2".into()),
+            },
+            AuthFailureEvent {
+                agent_id: "agent-3".into(),
+                username: "admin".into(),
+                timestamp_epoch: 1200,
+                source_ip: Some("10.0.0.3".into()),
+            },
+        ];
+        let alerts = detect_credential_spray(&events, 600, 3);
+        assert_eq!(alerts.len(), 1);
+        assert_eq!(alerts[0].target_account, "admin");
+        assert_eq!(alerts[0].agent_count, 3);
+    }
+
+    #[test]
+    fn credential_spray_not_triggered_below_threshold() {
+        let events = vec![
+            AuthFailureEvent {
+                agent_id: "agent-1".into(),
+                username: "admin".into(),
+                timestamp_epoch: 1000,
+                source_ip: None,
+            },
+            AuthFailureEvent {
+                agent_id: "agent-2".into(),
+                username: "admin".into(),
+                timestamp_epoch: 1100,
+                source_ip: None,
+            },
+        ];
+        let alerts = detect_credential_spray(&events, 600, 3);
+        assert!(alerts.is_empty());
+    }
+
+    #[test]
+    fn credential_spray_outside_window() {
+        let events = vec![
+            AuthFailureEvent {
+                agent_id: "agent-1".into(),
+                username: "admin".into(),
+                timestamp_epoch: 1000,
+                source_ip: None,
+            },
+            AuthFailureEvent {
+                agent_id: "agent-2".into(),
+                username: "admin".into(),
+                timestamp_epoch: 1100,
+                source_ip: None,
+            },
+            AuthFailureEvent {
+                agent_id: "agent-3".into(),
+                username: "admin".into(),
+                timestamp_epoch: 5000, // far outside window
+                source_ip: None,
+            },
+        ];
+        let alerts = detect_credential_spray(&events, 600, 3);
+        assert!(alerts.is_empty());
     }
 }

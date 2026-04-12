@@ -184,6 +184,25 @@ pub struct PeerGroupBaseline {
     pub avg_hour_histogram: [f32; 24],
 }
 
+/// Composite insider-threat risk score with peer-group z-score comparison.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct InsiderRiskScore {
+    pub entity_kind: EntityKind,
+    pub entity_id: String,
+    /// Z-score deviation of risk from peer group mean.
+    pub peer_deviation: f32,
+    /// Z-score deviation of data volume from peer average.
+    pub volume_anomaly: f32,
+    /// Temporal anomaly score (off-hours activity excess).
+    pub temporal_anomaly: f32,
+    /// Fraction of activity occurring during off-hours (0–5, 22–23).
+    pub off_hours_ratio: f32,
+    /// Weighted composite score (0–100).
+    pub composite_score: f32,
+    pub peer_group: String,
+    pub peer_count: usize,
+}
+
 // ── UEBA engine ─────────────────────────────────────────────────
 
 /// The User and Entity Behavior Analytics engine.
@@ -615,6 +634,96 @@ impl UebaEngine {
     /// Total anomalies stored.
     pub fn anomaly_count(&self) -> usize {
         self.anomalies.len()
+    }
+
+    /// Compute an insider threat risk score for an entity using z-score peer
+    /// comparison and off-hours activity weighting.
+    pub fn assess_insider_risk(
+        &self,
+        entity_kind: &EntityKind,
+        entity_id: &str,
+    ) -> Option<InsiderRiskScore> {
+        let key = Self::profile_key(entity_kind, entity_id);
+        let profile = self.profiles.get(&key)?;
+        let group = profile.peer_group.as_deref()?;
+
+        let peers: Vec<&EntityProfile> = self
+            .profiles
+            .values()
+            .filter(|p| {
+                p.peer_group.as_deref() == Some(group)
+                    && p.observation_count > 0
+                    && !(p.entity_kind == *entity_kind && p.entity_id == entity_id)
+            })
+            .collect();
+
+        if peers.len() < 2 {
+            return None;
+        }
+        let n = peers.len() as f64;
+
+        // z-score for risk
+        let peer_risks: Vec<f64> = peers.iter().map(|p| p.risk_score as f64).collect();
+        let mean_risk = peer_risks.iter().sum::<f64>() / n;
+        let var_risk =
+            peer_risks.iter().map(|r| (r - mean_risk).powi(2)).sum::<f64>() / n;
+        let std_risk = var_risk.sqrt().max(0.01);
+        let peer_deviation = ((profile.risk_score as f64 - mean_risk) / std_risk) as f32;
+
+        // z-score for data volume
+        let peer_vols: Vec<f64> = peers.iter().map(|p| p.avg_data_bytes).collect();
+        let mean_vol = peer_vols.iter().sum::<f64>() / n;
+        let var_vol = peer_vols.iter().map(|v| (v - mean_vol).powi(2)).sum::<f64>() / n;
+        let std_vol = var_vol.sqrt().max(0.01);
+        let volume_anomaly = ((profile.avg_data_bytes - mean_vol) / std_vol) as f32;
+
+        // Off-hours activity: hours 0-5 and 22-23 considered off-hours
+        let off_hours_total: f32 = profile.hour_histogram[0..6]
+            .iter()
+            .chain(&profile.hour_histogram[22..24])
+            .sum();
+        let total_activity: f32 = profile.hour_histogram.iter().sum();
+        let off_hours_ratio = if total_activity > 0.0 {
+            off_hours_total / total_activity
+        } else {
+            0.0
+        };
+
+        // Peer average off-hours ratio
+        let peer_off_hours: Vec<f32> = peers
+            .iter()
+            .map(|p| {
+                let off: f32 = p.hour_histogram[0..6]
+                    .iter()
+                    .chain(&p.hour_histogram[22..24])
+                    .sum();
+                let tot: f32 = p.hour_histogram.iter().sum();
+                if tot > 0.0 { off / tot } else { 0.0 }
+            })
+            .collect();
+        let mean_off = peer_off_hours.iter().sum::<f32>() / n as f32;
+        let temporal_anomaly = if off_hours_ratio > mean_off + 0.15 {
+            (off_hours_ratio - mean_off) * 30.0
+        } else {
+            0.0
+        };
+
+        let composite = (peer_deviation.max(0.0) * 5.0
+            + volume_anomaly.max(0.0) * 3.0
+            + temporal_anomaly)
+            .min(100.0);
+
+        Some(InsiderRiskScore {
+            entity_kind: entity_kind.clone(),
+            entity_id: entity_id.to_string(),
+            peer_deviation,
+            volume_anomaly,
+            temporal_anomaly,
+            off_hours_ratio,
+            composite_score: composite,
+            peer_group: group.to_string(),
+            peer_count: peers.len(),
+        })
     }
 }
 
@@ -1055,5 +1164,40 @@ mod tests {
         // Plausible travel: Paris → Tokyo in 24h
         let plausible = resolver.validate_geo("203.0.113.50", 48.8566, 2.3522, 24.0);
         assert!(plausible.is_none(), "24h travel should be plausible");
+    }
+
+    #[test]
+    fn insider_risk_assessment() {
+        let mut engine = UebaEngine::new(UebaConfig {
+            warmup_observations: 1,
+            ..Default::default()
+        });
+
+        // Create a peer group with 3 normal users
+        for user in &["peer1", "peer2", "peer3"] {
+            for i in 0..5 {
+                let mut obs = make_obs(user, 1000 + i * 1000);
+                obs.peer_group = Some("engineering".into());
+                obs.data_bytes = Some(1000);
+                obs.hour_of_day = Some(10); // business hours
+                engine.observe(&obs);
+            }
+        }
+
+        // Create an anomalous user with high data volume and off-hours activity
+        for i in 0..5 {
+            let mut obs = make_obs("insider", 2000 + i * 1000);
+            obs.peer_group = Some("engineering".into());
+            obs.data_bytes = Some(50_000); // 50x normal
+            obs.hour_of_day = Some(3); // off-hours
+            engine.observe(&obs);
+        }
+
+        let score = engine.assess_insider_risk(&EntityKind::User, "insider");
+        assert!(score.is_some());
+        let s = score.unwrap();
+        assert_eq!(s.peer_group, "engineering");
+        assert!(s.volume_anomaly > 0.0, "should flag volume anomaly");
+        assert!(s.composite_score > 0.0, "composite should be positive");
     }
 }

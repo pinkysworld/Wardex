@@ -5,12 +5,14 @@ import { AreaChart, Area, BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContai
 import AlertDrawer from './AlertDrawer.jsx';
 import ProcessDrawer from './ProcessDrawer.jsx';
 import DashboardWidget, { useWidgetLayout } from './DashboardWidget.jsx';
+import Tip from './Tooltip.jsx';
+import { SkeletonCard } from './Skeleton.jsx';
 
-function Metric({ label, value, sub, accent, onClick }) {
+function Metric({ label, value, sub, accent, onClick, tip }) {
   return (
     <div className={`card metric${accent ? ' metric-accent' : ''}`}
       style={onClick ? { cursor: 'pointer' } : undefined} onClick={onClick}>
-      <div className="metric-label">{label}</div>
+      <div className="metric-label">{label}{tip && <> <Tip text={tip} /></>}</div>
       <div className="metric-value">{value ?? '—'}</div>
       {sub && <div className="metric-sub">{sub}</div>}
     </div>
@@ -65,6 +67,8 @@ export default function Dashboard() {
   const [expandedAlert, setExpandedAlert] = useState(null);
   const [sevFilter, setSevFilter] = useState('all');
   const [selectedProcess, setSelectedProcess] = useState(null);
+  const [nocMode, setNocMode] = useState(false);
+  const [nocWidget, setNocWidget] = useState(0);
   const { data: dnsSummary, reload: rDNS } = useApi(api.dnsThreatSummary);
 
   const defaultWidgets = ['system-health', 'telemetry', 'threat-overview', 'charts', 'process-security', 'detection-engine', 'malware-ti', 'dns-threats', 'lifecycle', 'recent-alerts'];
@@ -77,6 +81,15 @@ export default function Dashboard() {
   };
 
   useInterval(reloadAll, 30000);
+
+  // NOC wall rotate & Escape exit
+  useEffect(() => {
+    if (!nocMode) return;
+    const esc = (e) => { if (e.key === 'Escape') { document.exitFullscreen?.().catch(() => {}); setNocMode(false); } };
+    window.addEventListener('keydown', esc);
+    const rotateId = setInterval(() => setNocWidget(p => p + 1), 30000);
+    return () => { window.removeEventListener('keydown', esc); clearInterval(rotateId); };
+  }, [nocMode]);
 
   const alertList = Array.isArray(alertData) ? alertData : alertData?.alerts || [];
   const critical = alertList.filter(a => alertSeverity(a) === 'critical').length;
@@ -133,7 +146,7 @@ export default function Dashboard() {
     : filteredAlerts.find((a, i) => (a.id || a.alert_id || `alert-${i}`) === expandedAlert);
   const openProcess = (process) => setSelectedProcess(process ? { ...process } : null);
 
-  if (l1) return <div className="loading"><div className="spinner" /> Loading dashboard…</div>;
+  if (l1) return <div style={{ padding: 20 }}><SkeletonCard height={60} /><SkeletonCard height={120} /><SkeletonCard height={80} /><SkeletonCard height={200} /></div>;
 
   return (
     <div>
@@ -145,8 +158,36 @@ export default function Dashboard() {
             {refreshing ? 'Refreshing…' : '↻ Refresh'}
           </button>
           <button className="btn btn-sm" onClick={resetLayout} title="Reset widget layout">⊞ Reset Layout</button>
+          <button className="btn btn-sm" onClick={() => { setNocMode(true); document.documentElement.requestFullscreen?.().catch(() => {}); }} title="NOC wall display (fullscreen)">📺 NOC</button>
         </div>
       </div>
+
+      {/* ── NOC Wall Display ─────────── */}
+      {nocMode && (() => {
+        const nocWidgets = order.filter(w => !hidden.has(w));
+        const idx = nocWidget % Math.max(nocWidgets.length, 1);
+        const wid = nocWidgets[idx] || nocWidgets[0];
+        return (
+          <div className="noc-wall" onClick={() => setNocWidget(p => p + 1)}>
+            <div className="noc-header">
+              <span>Wardex NOC — {new Date().toLocaleString()}</span>
+              <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
+                <span style={{ fontSize: 16, opacity: 0.6 }}>{idx + 1}/{nocWidgets.length}</span>
+                <button className="btn btn-sm" style={{ fontSize: 14 }} onClick={(e) => { e.stopPropagation(); document.exitFullscreen?.().catch(() => {}); setNocMode(false); }}>✕ Exit</button>
+              </div>
+            </div>
+            <div className="noc-body">
+              <div className="card-grid" style={{ fontSize: 18 }}>
+                <Metric label="System Status" value={hp?.status === 'ok' ? '✓ Healthy' : hp?.status || '—'} sub={`Uptime: ${st?.uptime || '—'}`} accent />
+                <Metric label="Active Agents" value={fleet?.total_agents ?? fleet?.agents ?? '—'} sub={fleet?.online ? `${fleet.online} online` : undefined} />
+                <Metric label="Total Alerts" value={alertList.length} sub={`${critical} critical · ${elevated} elevated`} />
+                <Metric label="Events/sec" value={telem?.events_per_sec ?? telem?.rate ?? '—'} />
+              </div>
+            </div>
+            <div className="noc-footer">Widget: {wid?.replace(/-/g, ' ')} — Click to advance · ESC to exit</div>
+          </div>
+        );
+      })()}
 
       {order.map(wid => {
         if (wid === 'system-health') return (
@@ -154,7 +195,7 @@ export default function Dashboard() {
       <div className="card-grid">
         <Metric label="System Status" value={hp?.status === 'ok' ? '✓ Healthy' : hp?.status || '—'} sub={`Uptime: ${st?.uptime || '—'}`} accent />
         <Metric label="Active Agents" value={fleet?.total_agents ?? fleet?.agents ?? '—'} sub={fleet?.online ? `${fleet.online} online` : undefined} />
-        <Metric label="Events/sec" value={telem?.events_per_sec ?? telem?.rate ?? '—'} sub={telem?.total_events ? `Total: ${telem.total_events}` : undefined} />
+        <Metric label="Events/sec" value={telem?.events_per_sec ?? telem?.rate ?? '—'} sub={telem?.total_events ? `Total: ${telem.total_events}` : undefined} tip="Telemetry ingest rate from all connected agents" />
         <Metric label="Queue Pending" value={qStats?.pending ?? qStats?.total ?? '—'} sub={qStats?.assigned ? `${qStats.assigned} assigned` : undefined} />
       </div>
       </DashboardWidget>
@@ -178,7 +219,7 @@ export default function Dashboard() {
       <DashboardWidget key={wid} id={wid} title="Threat Overview" index={order.indexOf(wid)} onMove={moveWidget} onRemove={removeWidget}>
       <div className="card-grid">
         <Metric label="Total Alerts" value={alertList.length} sub={`${critical} critical · ${elevated} elevated`} />
-        <Metric label="Detection Profile" value={profile?.profile || '—'} sub={profile?.description} />
+        <Metric label="Detection Profile" value={profile?.profile || '—'} sub={profile?.description} tip="Active anomaly detection sensitivity — aggressive, balanced, or quiet" />
         <Metric label="Threat Intel IoCs" value={tiStatus?.total_iocs ?? tiStatus?.ioc_count ?? '—'} sub={tiStatus?.active_feeds ? `${tiStatus.active_feeds} feeds` : undefined} />
         <Metric label="Response Actions" value={respStats?.total ?? '—'} sub={respStats?.pending ? `${respStats.pending} pending` : undefined} />
       </div>
@@ -292,7 +333,7 @@ export default function Dashboard() {
       <DashboardWidget key={wid} id={wid} title="DNS Threat Intelligence" index={order.indexOf(wid)} onMove={moveWidget} onRemove={removeWidget}>
       <div className="card-grid">
         <Metric label="Domains Analyzed" value={dnsSummary?.domains_analyzed ?? '—'} sub={dnsSummary?.threats_detected ? `${dnsSummary.threats_detected} threats` : undefined} />
-        <Metric label="DGA Suspects" value={dnsSummary?.dga_suspects ?? '—'} accent={dnsSummary?.dga_suspects > 0} />
+        <Metric label="DGA Suspects" value={dnsSummary?.dga_suspects ?? '—'} accent={dnsSummary?.dga_suspects > 0} tip="Domains flagged by the DGA detection algorithm" />
         <Metric label="Tunnel Suspects" value={dnsSummary?.tunnel_suspects ?? '—'} accent={dnsSummary?.tunnel_suspects > 0} />
         <Metric label="Fast-Flux" value={dnsSummary?.fast_flux_suspects ?? '—'} accent={dnsSummary?.fast_flux_suspects > 0} />
       </div>

@@ -82,6 +82,11 @@ export default function Settings() {
   const [resetting, setResetting] = useState(false);
   const [cleaning, setCleaning] = useState(false);
 
+  // ── Team (RBAC) ──
+  const { data: teamUsers, reload: rTeam } = useApi(api.rbacUsers);
+  const [newUser, setNewUser] = useState({ username: '', role: 'analyst' });
+  const [creatingUser, setCreatingUser] = useState(false);
+
   // Parse config into structured form when loaded
   useEffect(() => {
     if (config && !configEditing) {
@@ -217,7 +222,7 @@ export default function Settings() {
   return (
     <div>
       <div className="tabs">
-        {['config', 'monitoring', 'integrations', 'flags', 'admin'].map(t => (
+        {['config', 'monitoring', 'integrations', 'flags', 'team', 'admin'].map(t => (
           <button key={t} className={`tab ${tab === t ? 'active' : ''}`} onClick={() => setTab(t)}>
             {t.charAt(0).toUpperCase() + t.slice(1)}
           </button>
@@ -534,6 +539,63 @@ export default function Settings() {
               <div className="empty">No feature flags available.</div>
               <JsonDetails data={flags} />
             </>
+          )}
+        </div>
+      )}
+
+      {tab === 'team' && (
+        <div className="card">
+          <div className="card-title" style={{ marginBottom: 12 }}>Team &amp; RBAC</div>
+          <div style={{ display: 'flex', gap: 8, marginBottom: 16, flexWrap: 'wrap', alignItems: 'flex-end' }}>
+            <div>
+              <div style={{ fontSize: 12, marginBottom: 4 }}>Username</div>
+              <input className="input" value={newUser.username} onChange={e => setNewUser(p => ({ ...p, username: e.target.value }))}
+                placeholder="username" style={{ width: 180 }} />
+            </div>
+            <div>
+              <div style={{ fontSize: 12, marginBottom: 4 }}>Role</div>
+              <select className="input" value={newUser.role} onChange={e => setNewUser(p => ({ ...p, role: e.target.value }))}>
+                <option value="admin">Admin</option>
+                <option value="analyst">Analyst</option>
+                <option value="viewer">Viewer</option>
+                <option value="service-account">Service Account</option>
+              </select>
+            </div>
+            <button className="btn btn-primary" disabled={!newUser.username.trim() || creatingUser}
+              onClick={async () => {
+                setCreatingUser(true);
+                try {
+                  const res = await api.rbacCreateUser({ username: newUser.username.trim(), role: newUser.role });
+                  toast(`User created${res?.token ? ' — token: ' + res.token : ''}`, 'success');
+                  setNewUser({ username: '', role: 'analyst' });
+                  rTeam();
+                } catch (e) { toast('Failed to create user: ' + (e.message || e), 'error'); }
+                setCreatingUser(false);
+              }}>{creatingUser ? 'Creating…' : 'Create User'}</button>
+          </div>
+          <div className="table-wrap">
+            <table>
+              <thead><tr><th>Username</th><th>Role</th><th>Actions</th></tr></thead>
+              <tbody>
+                {(Array.isArray(teamUsers) ? teamUsers : []).map(u => (
+                  <tr key={u.username || u.name}>
+                    <td>{u.username || u.name}</td>
+                    <td><span className={`badge ${u.role === 'admin' ? 'badge-danger' : u.role === 'analyst' ? 'badge-ok' : 'badge-info'}`}>{u.role}</span></td>
+                    <td>
+                      <button className="btn btn-ghost btn-sm" style={{ color: 'var(--danger)' }}
+                        onClick={async () => {
+                          if (!confirm(`Delete user "${u.username || u.name}"?`)) return;
+                          try { await api.rbacDeleteUser(u.username || u.name); toast('User deleted', 'success'); rTeam(); }
+                          catch (e) { toast('Delete failed: ' + (e.message || e), 'error'); }
+                        }}>Delete</button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          {(!teamUsers || (Array.isArray(teamUsers) && teamUsers.length === 0)) && (
+            <div className="empty">No team members configured yet.</div>
           )}
         </div>
       )}

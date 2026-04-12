@@ -11618,6 +11618,7 @@ fn handle_policy_compose(body: &[u8], _state: &Arc<Mutex<AppState>>) -> Response
         suspicious_axes: 0,
         reasons: vec!["composed-a".into()],
         contributions: Vec::new(),
+        triage: None,
     };
     let sample_a = TelemetrySample {
         timestamp_ms: 0,
@@ -11638,6 +11639,7 @@ fn handle_policy_compose(body: &[u8], _state: &Arc<Mutex<AppState>>) -> Response
         suspicious_axes: 0,
         reasons: vec!["composed-b".into()],
         contributions: Vec::new(),
+        triage: None,
     };
     let sample_b = TelemetrySample {
         timestamp_ms: 0,

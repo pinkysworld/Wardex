@@ -137,6 +137,7 @@ mod tests {
                 suspicious_axes: 3,
                 reasons: vec!["network burst".into()],
                 contributions: Vec::new(),
+                triage: None,
             },
             &TelemetrySample {
                 timestamp_ms: 1,
@@ -166,6 +167,7 @@ mod tests {
                 suspicious_axes: 1,
                 reasons: vec!["integrity drift".into()],
                 contributions: Vec::new(),
+                triage: None,
             },
             &TelemetrySample {
                 timestamp_ms: 1,
@@ -318,6 +320,7 @@ mod composition_tests {
             suspicious_axes: 1,
             reasons: vec!["test".into()],
             contributions: Vec::new(),
+            triage: None,
         }
     }
 

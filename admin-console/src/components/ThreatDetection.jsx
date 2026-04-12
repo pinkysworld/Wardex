@@ -29,6 +29,8 @@ export default function ThreatDetection() {
   const [suppressForm, setSuppressForm] = useState({ name: '', rule_id: '', hostname: '', severity: '', text: '' });
   const [showHuntForm, setShowHuntForm] = useState(false);
   const [showSuppressForm, setShowSuppressForm] = useState(false);
+  const [tuningRule, setTuningRule] = useState(null);
+  const [tuneValue, setTuneValue] = useState(0.5);
 
   const handleProfileChange = async (name) => {
     try {
@@ -132,14 +134,34 @@ export default function ThreatDetection() {
                 <>
                   <div className="table-wrap">
                     <table>
-                      <thead><tr><th>Title</th><th>Level</th><th>Status</th><th>ID</th></tr></thead>
+                      <thead><tr><th>Title</th><th>Level</th><th>Status</th><th>ID</th><th>Tune</th></tr></thead>
                       <tbody>
                         {rules.slice(0, 50).map((rule, index) => (
                           <tr key={rule.id || index}>
-                            <td>{rule.title || 'Untitled rule'}</td>
+                            <td>{rule.title || 'Untitled rule'}{rule._custom_weight != null && <span className="badge badge-info" style={{ marginLeft: 6 }}>tuned</span>}</td>
                             <td>{rule.level || '—'}</td>
                             <td><span className={`badge ${rule.status === 'enabled' || rule.status === 'active' ? 'badge-ok' : 'badge-warn'}`}>{rule.status || 'unknown'}</span></td>
                             <td style={{ fontFamily: 'var(--font-mono)', fontSize: 12 }}>{rule.id || '—'}</td>
+                            <td>
+                              {tuningRule === (rule.id || index) ? (
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                                  <input type="range" min="0.1" max="1.0" step="0.05" value={tuneValue}
+                                    onChange={e => setTuneValue(parseFloat(e.target.value))} style={{ width: 80 }} />
+                                  <span style={{ fontSize: 11, fontFamily: 'var(--font-mono)', minWidth: 30 }}>{tuneValue.toFixed(2)}</span>
+                                  <button className="btn btn-sm btn-primary" onClick={async () => {
+                                    try {
+                                      await api.setDetectionWeights({ rule_id: rule.id, weight: tuneValue });
+                                      toast(`Weight set to ${tuneValue.toFixed(2)}`, 'success');
+                                      rule._custom_weight = tuneValue;
+                                      setTuningRule(null);
+                                    } catch { toast('Failed to save weight', 'error'); }
+                                  }}>Save</button>
+                                  <button className="btn btn-sm" onClick={() => setTuningRule(null)}>✕</button>
+                                </div>
+                              ) : (
+                                <button className="btn btn-sm" onClick={() => { setTuningRule(rule.id || index); setTuneValue(rule._custom_weight ?? 0.5); }}>Tune</button>
+                              )}
+                            </td>
                           </tr>
                         ))}
                       </tbody>

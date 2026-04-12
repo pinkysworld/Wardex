@@ -284,6 +284,117 @@ fn has_base64_payload(cmdline: &str) -> bool {
     })
 }
 
+// ── LOLBIN Chain Tracking ────────────────────────────────────────────────────
+
+/// A LOLBIN execution event for chain tracking.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LolbinExecution {
+    pub host_id: String,
+    pub lolbin_name: String,
+    pub pid: u32,
+    pub timestamp_epoch: i64,
+}
+
+/// Context for a detected LOLBIN chain on a single host.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ChainContext {
+    pub host_id: String,
+    pub chain: Vec<(String, i64)>, // (lolbin_name, timestamp)
+    pub chain_length: usize,
+    pub score_multiplier: f32,
+    pub window_secs: i64,
+}
+
+/// Per-host tracking of recent LOLBIN executions within a sliding window.
+/// When 3+ distinct LOLBINs execute on the same host within the window,
+/// the score multiplier increases (2x per additional LOLBIN beyond 2).
+pub struct LolbinChainTracker {
+    /// host_id → Vec<(lolbin_name, timestamp)>
+    recent: std::collections::HashMap<String, Vec<(String, i64)>>,
+    window_secs: i64,
+    chain_threshold: usize,
+    multiplier_per_extra: f32,
+}
+
+impl Default for LolbinChainTracker {
+    fn default() -> Self {
+        Self {
+            recent: std::collections::HashMap::new(),
+            window_secs: 300, // 5 minutes
+            chain_threshold: 3,
+            multiplier_per_extra: 2.0,
+        }
+    }
+}
+
+impl LolbinChainTracker {
+    pub fn new(window_secs: i64, chain_threshold: usize, multiplier: f32) -> Self {
+        Self {
+            recent: std::collections::HashMap::new(),
+            window_secs,
+            chain_threshold,
+            multiplier_per_extra: multiplier,
+        }
+    }
+
+    /// Record a LOLBIN execution and check for chain formation.
+    /// Returns Some(ChainContext) if a chain is detected.
+    pub fn record(&mut self, exec: &LolbinExecution) -> Option<ChainContext> {
+        let entries = self.recent.entry(exec.host_id.clone()).or_default();
+
+        // Expire old entries
+        entries.retain(|(_, ts)| (exec.timestamp_epoch - ts) < self.window_secs);
+
+        // Add new entry (only if this LOLBIN isn't already in the window)
+        let already_present = entries.iter().any(|(name, _)| name == &exec.lolbin_name);
+        if !already_present {
+            entries.push((exec.lolbin_name.clone(), exec.timestamp_epoch));
+        }
+
+        // Check for chain
+        let distinct_count = entries.len();
+        if distinct_count >= self.chain_threshold {
+            let extra = (distinct_count - self.chain_threshold + 1) as f32;
+            let multiplier = self.multiplier_per_extra.powf(extra);
+
+            Some(ChainContext {
+                host_id: exec.host_id.clone(),
+                chain: entries.clone(),
+                chain_length: distinct_count,
+                score_multiplier: multiplier,
+                window_secs: self.window_secs,
+            })
+        } else {
+            None
+        }
+    }
+
+    /// Get the current chain context for a host (if any).
+    pub fn host_chain(&self, host_id: &str) -> Option<ChainContext> {
+        let entries = self.recent.get(host_id)?;
+        if entries.len() >= self.chain_threshold {
+            let extra = (entries.len() - self.chain_threshold + 1) as f32;
+            Some(ChainContext {
+                host_id: host_id.to_string(),
+                chain: entries.clone(),
+                chain_length: entries.len(),
+                score_multiplier: self.multiplier_per_extra.powf(extra),
+                window_secs: self.window_secs,
+            })
+        } else {
+            None
+        }
+    }
+
+    /// Expire stale entries across all hosts.
+    pub fn expire(&mut self, now_epoch: i64) {
+        for entries in self.recent.values_mut() {
+            entries.retain(|(_, ts)| (now_epoch - ts) < self.window_secs);
+        }
+        self.recent.retain(|_, v| !v.is_empty());
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -327,5 +438,44 @@ mod tests {
         );
         assert!(assessment.total_risk > 0.5);
         assert!(assessment.lolbin_match.is_some());
+    }
+
+    #[test]
+    fn lolbin_chain_single_no_trigger() {
+        let mut tracker = LolbinChainTracker::default();
+        let exec = LolbinExecution {
+            host_id: "host-1".into(),
+            lolbin_name: "cmd.exe".into(),
+            pid: 100,
+            timestamp_epoch: 1000,
+        };
+        assert!(tracker.record(&exec).is_none());
+    }
+
+    #[test]
+    fn lolbin_chain_three_triggers() {
+        let mut tracker = LolbinChainTracker::default();
+        let execs = vec![
+            LolbinExecution { host_id: "host-1".into(), lolbin_name: "cmd.exe".into(), pid: 100, timestamp_epoch: 1000 },
+            LolbinExecution { host_id: "host-1".into(), lolbin_name: "powershell.exe".into(), pid: 101, timestamp_epoch: 1050 },
+            LolbinExecution { host_id: "host-1".into(), lolbin_name: "certutil.exe".into(), pid: 102, timestamp_epoch: 1100 },
+        ];
+        assert!(tracker.record(&execs[0]).is_none());
+        assert!(tracker.record(&execs[1]).is_none());
+        let chain = tracker.record(&execs[2]);
+        assert!(chain.is_some());
+        let ctx = chain.unwrap();
+        assert_eq!(ctx.chain_length, 3);
+        assert!(ctx.score_multiplier >= 2.0);
+    }
+
+    #[test]
+    fn lolbin_chain_different_hosts_independent() {
+        let mut tracker = LolbinChainTracker::default();
+        tracker.record(&LolbinExecution { host_id: "host-1".into(), lolbin_name: "cmd.exe".into(), pid: 1, timestamp_epoch: 1000 });
+        tracker.record(&LolbinExecution { host_id: "host-2".into(), lolbin_name: "powershell.exe".into(), pid: 2, timestamp_epoch: 1050 });
+        let result = tracker.record(&LolbinExecution { host_id: "host-1".into(), lolbin_name: "certutil.exe".into(), pid: 3, timestamp_epoch: 1100 });
+        // host-1 has 2 LOLBINs, not 3 — should not trigger
+        assert!(result.is_none());
     }
 }

@@ -38,6 +38,7 @@ pub struct DnsThreatReport {
     pub indicators: Vec<String>,
     pub tld_risk: f32,
     pub overall_score: f32,
+    pub doh_bypass_detected: bool,
 }
 
 /// DNS query record for aggregation.
@@ -342,6 +343,11 @@ impl DnsAnalyzer {
             indicators.push(format!("high-risk TLD (risk {tld:.1})"));
         }
 
+        let doh_bypass = is_known_doh_resolver(domain);
+        if doh_bypass {
+            indicators.push("DoH/DoT bypass: known encrypted DNS resolver".to_string());
+        }
+
         let overall = (dga * 0.35 + tunnel * 0.25 + flux * 0.25 + tld * 0.15).min(1.0);
 
         let verdict = if overall > 0.7 {
@@ -352,7 +358,7 @@ impl DnsAnalyzer {
             DnsVerdict::Clean
         };
 
-        DnsThreatReport { domain: domain.to_string(), dga_score: dga, tunnel_score: tunnel, fast_flux_score: flux, verdict, indicators, tld_risk: tld, overall_score: overall }
+        DnsThreatReport { domain: domain.to_string(), dga_score: dga, tunnel_score: tunnel, fast_flux_score: flux, verdict, indicators, tld_risk: tld, overall_score: overall, doh_bypass_detected: doh_bypass }
     }
 
     /// Get aggregated threat summary.
@@ -394,6 +400,85 @@ impl DnsAnalyzer {
     }
 }
 
+// ── DoH/DoT Bypass Detection ─────────────────────────────────────────────────
+
+/// Known DNS-over-HTTPS and DNS-over-TLS resolver domains.
+const DOH_RESOLVERS: &[&str] = &[
+    "dns.cloudflare.com",
+    "cloudflare-dns.com",
+    "one.one.one.one",
+    "dns.google",
+    "dns.google.com",
+    "dns.quad9.net",
+    "dns9.quad9.net",
+    "dns.nextdns.io",
+    "doh.opendns.com",
+    "dns.adguard.com",
+    "doh.cleanbrowsing.org",
+    "dns.mullvad.net",
+    "freedns.controld.com",
+    "dns.switch.ch",
+    "ordns.he.net",
+    "doh.applied-privacy.net",
+    "doh.dns.sb",
+    "resolver1.dns.watch",
+    "resolver2.dns.watch",
+];
+
+/// Known DoH resolver IP addresses (primary endpoints).
+const DOH_RESOLVER_IPS: &[&str] = &[
+    "1.1.1.1",
+    "1.0.0.1",
+    "8.8.8.8",
+    "8.8.4.4",
+    "9.9.9.9",
+    "149.112.112.112",
+    "208.67.222.222",
+    "208.67.220.220",
+    "94.140.14.14",
+    "94.140.15.15",
+    "185.228.168.168",
+    "76.76.2.0",
+    "76.76.10.0",
+    "193.110.81.0",
+    "185.253.5.0",
+];
+
+/// Check if a domain is a known DoH/DoT resolver.
+fn is_known_doh_resolver(domain: &str) -> bool {
+    let lower = domain.to_lowercase();
+    DOH_RESOLVERS
+        .iter()
+        .any(|&r| lower == r || lower.ends_with(&format!(".{r}")))
+}
+
+/// Check if an IP address belongs to a known DoH resolver.
+pub fn is_doh_resolver_ip(ip: &str) -> bool {
+    DOH_RESOLVER_IPS.contains(&ip)
+}
+
+/// Detect potential DoH bypass: returns list of (domain_or_ip, resolver_name)
+/// pairs from DNS query history that contact known DoH endpoints.
+pub fn detect_doh_bypass(queries: &[DnsQuery]) -> Vec<(String, String)> {
+    let mut detections = Vec::new();
+    for q in queries {
+        if is_known_doh_resolver(&q.domain) {
+            detections.push((q.domain.clone(), "Domain matches known DoH resolver".into()));
+        }
+        for ip in &q.response_ips {
+            if is_doh_resolver_ip(ip) {
+                detections.push((
+                    ip.clone(),
+                    format!("Response IP {ip} matches known DoH resolver"),
+                ));
+            }
+        }
+    }
+    detections.sort();
+    detections.dedup();
+    detections
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -404,6 +489,7 @@ mod tests {
         let report = analyzer.analyze_domain("google.com");
         assert!(report.dga_score < 0.3, "google.com dga_score={}", report.dga_score);
         assert_eq!(report.verdict, DnsVerdict::Clean);
+        assert!(!report.doh_bypass_detected);
     }
 
     #[test]
@@ -426,5 +512,44 @@ mod tests {
         let analyzer = DnsAnalyzer::new();
         let summary = analyzer.threat_summary();
         assert_eq!(summary.total_queries_analyzed, 0);
+    }
+
+    #[test]
+    fn doh_bypass_detection() {
+        let analyzer = DnsAnalyzer::new();
+        let report = analyzer.analyze_domain("dns.cloudflare.com");
+        assert!(report.doh_bypass_detected);
+        assert!(report.indicators.iter().any(|i| i.contains("DoH")));
+    }
+
+    #[test]
+    fn doh_resolver_ip_detection() {
+        assert!(is_doh_resolver_ip("1.1.1.1"));
+        assert!(is_doh_resolver_ip("8.8.8.8"));
+        assert!(!is_doh_resolver_ip("192.168.1.1"));
+    }
+
+    #[test]
+    fn detect_doh_bypass_from_queries() {
+        let queries = vec![
+            DnsQuery {
+                domain: "dns.google".into(),
+                query_type: "A".into(),
+                response_ips: vec!["8.8.8.8".into()],
+                ttl: Some(300),
+                timestamp: "2026-01-01T00:00:00Z".into(),
+                response_size: None,
+            },
+            DnsQuery {
+                domain: "example.com".into(),
+                query_type: "A".into(),
+                response_ips: vec!["93.184.216.34".into()],
+                ttl: Some(3600),
+                timestamp: "2026-01-01T00:01:00Z".into(),
+                response_size: None,
+            },
+        ];
+        let detections = detect_doh_bypass(&queries);
+        assert!(!detections.is_empty());
     }
 }
