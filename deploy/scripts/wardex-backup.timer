@@ -1,0 +1,14 @@
+# Wardex daily backup timer
+# Copy to /etc/systemd/system/ and enable:
+#   systemctl enable --now wardex-backup.timer
+
+[Unit]
+Description=Wardex daily backup timer
+
+[Timer]
+OnCalendar=*-*-* 02:00:00
+Persistent=true
+RandomizedDelaySec=300
+
+[Install]
+WantedBy=timers.target

@@ -2,6 +2,56 @@
 
 All notable changes to Wardex are documented in this file.
 
+## [0.46.0] — Hardening, Distribution & Observability
+
+### Security
+- **OIDC state cleanup** — Automatic purging of expired pending states (>600 s) and sessions in the OIDC provider.
+- **Security headers** — Added Cross-Origin-Opener-Policy, Cross-Origin-Resource-Policy, X-DNS-Prefetch-Control, and X-Permitted-Cross-Domain-Policies response headers.
+- **CSV injection fix** — Strip CRLF characters from CSV output before formula-prefix check.
+
+### Architecture
+- **AppState sub-structs** — Defined AuthSystems, DetectionSystems, FleetSystems, SocSystems, ComplianceSystems, ObservabilitySystems grouping structs for future decomposition.
+- **Feature-gated experimental modules** — `experimental-ml`, `experimental-llm`, `experimental-quantum`, `experimental-proof` compile-time features; all enabled by default.
+
+### Detection content
+- **44 community YARA rules** — Covers Emotet, CobaltStrike, Mimikatz, WannaCry, Ryuk, LockBit, ALPHV, Meterpreter, Sliver, PowerShell abuse, LOLBINs, process injection, web shells, Log4Shell, container escapes, and more (`rules/yara/community.json`).
+
+### Testing
+- **21 new tests** — 8 in `llm_analyst`, 7 in `ml_engine`, 6 in `oidc` covering boundary values, serialization, session lifecycle, and config validation.
+
+### Admin console
+- **TypeScript readiness** — Added `tsconfig.json` for gradual TS adoption (allowJs, strict).
+- **ErrorBoundary** — React error-boundary component with retry and `role="alert"` a11y.
+- **Accessibility** — `aria-current="page"` on active nav items, `aria-hidden="true"` on icon spans.
+
+### CI/CD
+- **cargo-deny** — Supply-chain audit job checking licenses and advisories.
+- **Feature-flag CI** — Builds with `--no-default-features` and `--all-features`.
+- **Playwright E2E** — Added browser install and Playwright test run to frontend CI job.
+- **Binary attestation** — SHA-256 manifest generation and artifact upload on main pushes.
+
+### Observability
+- **OTLP export config** — Full `deploy/otlp.yaml` with gRPC/HTTP, TLS, 10 % trace sampling, 12 metric instruments, and log export.
+- **Prometheus rules** — Recording rules (request rate, error rate, latency percentiles, fleet health) and 5 alerting rules (`deploy/prometheus-rules.yml`).
+
+### Performance
+- **LRU agent-log eviction** — Replaced random eviction with timestamp-based LRU to keep the most active agents in memory.
+- **Bulk fleet health endpoint** — `GET /api/fleet/health` returns total/online agent counts and fleet status.
+
+### Distribution
+- **Version sync** — Homebrew formula, Helm chart, and SDK packages updated to 0.46.0.
+- **Installation guide** — `docs/runbooks/installation.md` covering Homebrew, deb, rpm, Docker, Helm, and source.
+
+### Disaster recovery
+- **Automated backup script** — `deploy/scripts/backup.sh` with encryption (age), SHA-256 checksums, and configurable retention.
+- **Restore script** — `deploy/scripts/restore.sh` with pre-restore snapshot, optional decryption, and health-check verification.
+- **Systemd timer** — `wardex-backup.timer` + service unit for daily 02:00 UTC backups.
+
+### Documentation
+- **Feature flags guide** — `docs/FEATURE_FLAGS.md` covering compile-time and runtime flags.
+- **SDK guide** — `docs/SDK_GUIDE.md` with Python and TypeScript quick-start examples.
+- **Installation runbook** — Cross-platform installation and verification steps.
+
 ## [0.45.0] — Enterprise Integration & Intelligence
 
 ### Added — Authentication & Secrets

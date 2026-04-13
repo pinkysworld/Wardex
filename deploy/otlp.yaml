@@ -1,0 +1,103 @@
+# Wardex OTLP (OpenTelemetry Protocol) Export Configuration
+#
+# Place this file at /etc/wardex/otlp.yaml or pass via --otlp-config flag.
+# Wardex will push traces, metrics, and logs to the configured OTLP endpoint.
+
+exporter:
+  protocol: grpc           # grpc | http
+  endpoint: "localhost:4317"
+  headers: {}
+  timeout_ms: 10000
+  compression: gzip        # none | gzip
+
+  # TLS settings (optional)
+  tls:
+    enabled: false
+    cert_file: ""
+    key_file: ""
+    ca_file: ""
+    insecure_skip_verify: false
+
+traces:
+  enabled: true
+  sample_rate: 0.1          # 10% of requests
+  batch_size: 512
+  export_interval_ms: 5000
+  max_queue_size: 2048
+  # Span attributes added to every trace
+  resource_attributes:
+    service.name: wardex
+    service.version: "0.46.0"
+    deployment.environment: production
+
+metrics:
+  enabled: true
+  export_interval_ms: 15000
+  # Histogram buckets for request latency (ms)
+  latency_buckets: [1, 5, 10, 25, 50, 100, 250, 500, 1000, 2500, 5000]
+  resource_attributes:
+    service.name: wardex
+    service.version: "0.46.0"
+
+logs:
+  enabled: false             # Enable OTLP log export (in addition to stdout)
+  export_interval_ms: 5000
+  min_severity: warn         # trace | debug | info | warn | error
+  resource_attributes:
+    service.name: wardex
+
+# Metrics to export
+instruments:
+  - name: wardex_http_requests_total
+    type: counter
+    description: "Total HTTP requests processed"
+    labels: [method, path, status]
+
+  - name: wardex_http_request_duration_ms
+    type: histogram
+    description: "HTTP request latency in milliseconds"
+    labels: [method, path]
+
+  - name: wardex_alerts_total
+    type: counter
+    description: "Total alerts generated"
+    labels: [severity, source, rule]
+
+  - name: wardex_alerts_active
+    type: gauge
+    description: "Currently active (unresolved) alerts"
+    labels: [severity]
+
+  - name: wardex_agents_connected
+    type: gauge
+    description: "Number of connected fleet agents"
+    labels: [os, version]
+
+  - name: wardex_detection_latency_ms
+    type: histogram
+    description: "Detection pipeline processing latency"
+    labels: [engine]
+
+  - name: wardex_ml_triage_total
+    type: counter
+    description: "ML triage predictions"
+    labels: [label, model_version]
+
+  - name: wardex_yara_scans_total
+    type: counter
+    description: "YARA scan operations"
+    labels: [result]
+
+  - name: wardex_sigma_matches_total
+    type: counter
+    description: "Sigma rule matches"
+    labels: [rule_id, severity]
+
+  - name: wardex_event_store_size
+    type: gauge
+    description: "Events stored in Tantivy index"
+
+  - name: wardex_db_query_duration_ms
+    type: histogram
+    description: "SQLite query latency"
+    labels: [query_type]

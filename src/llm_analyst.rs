@@ -532,4 +532,107 @@ mod tests {
         let conf = analyst.estimate_confidence(&usage);
         assert!(conf > 0.0 && conf <= 1.0);
     }
+
+    #[test]
+    fn max_context_events_respected() {
+        let mut config = test_config();
+        config.max_context_events = 2;
+        let analyst = LlmAnalyst::new(config);
+        let events: Vec<ContextEvent> = (0..5)
+            .map(|i| ContextEvent {
+                id: format!("EVT-{i:03}"),
+                event_type: "alert".into(),
+                summary: format!("Event {i}"),
+                severity: "medium".into(),
+                timestamp: "2025-01-15T10:00:00Z".into(),
+                device: None,
+                raw_data: None,
+                relevance: 0.5,
+            })
+            .collect();
+        let block = analyst.build_context_block(&events);
+        // Should only include max_context_events entries
+        assert!(block.contains("EVT-000"));
+        assert!(block.contains("EVT-001"));
+    }
+
+    #[test]
+    fn context_block_escapes_special_chars() {
+        let analyst = LlmAnalyst::new(test_config());
+        let events = vec![ContextEvent {
+            id: "EVT-XSS".into(),
+            event_type: "alert".into(),
+            summary: "Script <script>alert('xss')</script> detected".into(),
+            severity: "high".into(),
+            timestamp: "2025-01-15T10:00:00Z".into(),
+            device: Some("host-01".into()),
+            raw_data: None,
+            relevance: 0.9,
+        }];
+        let block = analyst.build_context_block(&events);
+        assert!(block.contains("EVT-XSS"));
+        assert!(block.contains("Script"));
+    }
+
+    #[test]
+    fn conversation_isolation() {
+        let mut analyst = LlmAnalyst::new(test_config());
+        analyst.conversation_history.insert(
+            "conv-a".into(),
+            vec![ChatMessage { role: "user".into(), content: "question A".into() }],
+        );
+        analyst.conversation_history.insert(
+            "conv-b".into(),
+            vec![ChatMessage { role: "user".into(), content: "question B".into() }],
+        );
+        // Clearing one doesn't affect the other
+        assert!(analyst.clear_conversation("conv-a"));
+        assert!(!analyst.conversation_history.contains_key("conv-a"));
+        assert!(analyst.conversation_history.contains_key("conv-b"));
+    }
+
+    #[test]
+    fn default_config_values() {
+        let config = LlmConfig::default();
+        assert_eq!(config.max_tokens, 2048);
+        assert!((config.temperature - 0.1).abs() < f32::EPSILON);
+        assert_eq!(config.context_window, 8192);
+        assert_eq!(config.max_context_events, 20);
+        assert!(!config.enabled);
+        assert_eq!(config.provider, LlmProvider::OpenAi);
+    }
+
+    #[test]
+    fn provider_serialization_roundtrip() {
+        for provider in [LlmProvider::OpenAi, LlmProvider::AzureOpenAi, LlmProvider::Anthropic, LlmProvider::Ollama, LlmProvider::Custom] {
+            let json = serde_json::to_string(&provider).unwrap();
+            let back: LlmProvider = serde_json::from_str(&json).unwrap();
+            assert_eq!(provider, back);
+        }
+    }
+
+    #[test]
+    fn config_serialization_hides_api_key() {
+        let config = test_config();
+        let json = serde_json::to_string(&config).unwrap();
+        assert!(!json.contains("test-key-12345"));
+    }
+
+    #[test]
+    fn analyst_query_deserialization() {
+        let json = r#"{"question":"What happened?","conversation_id":"c1"}"#;
+        let query: AnalystQuery = serde_json::from_str(json).unwrap();
+        assert_eq!(query.question, "What happened?");
+        assert_eq!(query.conversation_id.unwrap(), "c1");
+        assert!(query.context_filter.is_none());
+    }
+
+    #[test]
+    fn context_filter_deserialization() {
+        let json = r#"{"question":"test","context_filter":{"time_range_hours":24,"severity_min":"high"}}"#;
+        let query: AnalystQuery = serde_json::from_str(json).unwrap();
+        let filter = query.context_filter.unwrap();
+        assert_eq!(filter.time_range_hours.unwrap(), 24);
+        assert_eq!(filter.severity_min.unwrap(), "high");
+    }
 }

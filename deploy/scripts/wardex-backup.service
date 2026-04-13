@@ -1,0 +1,9 @@
+[Unit]
+Description=Wardex backup
+After=wardex.service
+
+[Service]
+Type=oneshot
+ExecStart=/opt/wardex/deploy/scripts/backup.sh --var-dir /var/lib/wardex --out-dir /var/lib/wardex/backups --retention 30
+User=wardex
+Group=wardex

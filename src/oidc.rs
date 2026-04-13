@@ -195,6 +195,9 @@ impl OidcProvider {
             .unwrap_or_default()
             .as_secs();
 
+        // Purge stale pending states older than 10 minutes
+        self.pending_states.retain(|_, pa| now - pa.created_at < 600);
+
         self.pending_states.insert(
             state.clone(),
             PendingAuth {
@@ -293,6 +296,16 @@ impl OidcProvider {
             return None;
         }
         Some(session)
+    }
+
+    /// Purge expired sessions and stale pending states.
+    pub fn cleanup_expired(&mut self) {
+        let now = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs();
+        self.sessions.retain(|_, s| s.expires_at > now);
+        self.pending_states.retain(|_, pa| now - pa.created_at < 600);
     }
 
     /// Invalidate/logout a session.
@@ -512,5 +525,159 @@ mod tests {
     fn exchange_code_rejects_invalid_state() {
         let mut provider = OidcProvider::new(test_config());
         assert!(provider.exchange_code("code", "bad-state").is_err());
+    }
+
+    #[test]
+    fn cleanup_expired_removes_old_sessions() {
+        let mut provider = OidcProvider::new(test_config());
+        let now = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs();
+
+        // Insert an already-expired session
+        provider.sessions.insert(
+            "expired-session".into(),
+            SsoSession {
+                session_id: "expired-session".into(),
+                user_info: OidcUserInfo {
+                    sub: "u1".into(),
+                    name: None,
+                    email: None,
+                    email_verified: None,
+                    preferred_username: None,
+                    roles: vec![],
+                    groups: vec![],
+                },
+                wardex_role: "analyst".into(),
+                created_at: now - 7200,
+                expires_at: now - 3600, // expired 1 hour ago
+                refresh_token: None,
+                provider: "oidc".into(),
+            },
+        );
+        // Insert a valid session
+        provider.sessions.insert(
+            "valid-session".into(),
+            SsoSession {
+                session_id: "valid-session".into(),
+                user_info: OidcUserInfo {
+                    sub: "u2".into(),
+                    name: None,
+                    email: None,
+                    email_verified: None,
+                    preferred_username: None,
+                    roles: vec![],
+                    groups: vec![],
+                },
+                wardex_role: "admin".into(),
+                created_at: now,
+                expires_at: now + 3600,
+                refresh_token: None,
+                provider: "oidc".into(),
+            },
+        );
+
+        assert_eq!(provider.sessions.len(), 2);
+        provider.cleanup_expired();
+        assert_eq!(provider.sessions.len(), 1);
+        assert!(provider.sessions.contains_key("valid-session"));
+        assert!(!provider.sessions.contains_key("expired-session"));
+    }
+
+    #[test]
+    fn expired_session_not_validated() {
+        let mut provider = OidcProvider::new(test_config());
+        let now = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs();
+
+        provider.sessions.insert(
+            "expired".into(),
+            SsoSession {
+                session_id: "expired".into(),
+                user_info: OidcUserInfo {
+                    sub: "u1".into(),
+                    name: None,
+                    email: None,
+                    email_verified: None,
+                    preferred_username: None,
+                    roles: vec![],
+                    groups: vec![],
+                },
+                wardex_role: "analyst".into(),
+                created_at: now - 7200,
+                expires_at: now - 1, // just expired
+                refresh_token: None,
+                provider: "oidc".into(),
+            },
+        );
+        assert!(provider.validate_session("expired").is_none());
+    }
+
+    #[test]
+    fn role_mapping_group_fallback() {
+        let mut config = test_config();
+        config.role_mapping.insert("SecurityOps".into(), "admin".into());
+        let provider = OidcProvider::new(config);
+
+        let user = OidcUserInfo {
+            sub: "u1".into(),
+            name: None,
+            email: None,
+            email_verified: None,
+            preferred_username: None,
+            roles: vec!["UnknownRole".into()],
+            groups: vec!["SecurityOps".into()], // should match via group
+        };
+        assert_eq!(provider.resolve_role(&user), "admin");
+    }
+
+    #[test]
+    fn status_reflects_state() {
+        let provider = OidcProvider::new(test_config());
+        let status = provider.status();
+        assert!(status.oidc_enabled);
+        assert!(!status.discovered);
+        assert_eq!(status.active_sessions, 0);
+        assert!(status.auto_provision);
+    }
+
+    #[test]
+    fn sso_session_serialization() {
+        let now = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs();
+        let session = SsoSession {
+            session_id: "s1".into(),
+            user_info: OidcUserInfo {
+                sub: "u1".into(),
+                name: Some("Test User".into()),
+                email: Some("test@example.com".into()),
+                email_verified: Some(true),
+                preferred_username: None,
+                roles: vec!["admin".into()],
+                groups: vec![],
+            },
+            wardex_role: "admin".into(),
+            created_at: now,
+            expires_at: now + 3600,
+            refresh_token: Some("refresh-tok".into()),
+            provider: "oidc".into(),
+        };
+        let json = serde_json::to_string(&session).unwrap();
+        let back: SsoSession = serde_json::from_str(&json).unwrap();
+        assert_eq!(back.session_id, "s1");
+        assert_eq!(back.user_info.email.unwrap(), "test@example.com");
+        assert_eq!(back.wardex_role, "admin");
+    }
+
+    #[test]
+    fn oidc_config_serialization_hides_secret() {
+        let config = test_config();
+        let json = serde_json::to_string(&config).unwrap();
+        assert!(!json.contains("test-secret"));
     }
 }

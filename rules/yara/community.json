@@ -1,0 +1,489 @@
+[
+  {
+    "name": "emotet_doc_dropper",
+    "meta": { "author": "Wardex Community", "description": "Emotet document dropper with obfuscated VBA macros", "severity": "high", "mitre_ids": ["T1566.001", "T1059.005"], "created": "2025-06-01" },
+    "strings": [
+      { "id": "$vba1", "pattern": { "Text": "Auto_Open" }, "nocase": true },
+      { "id": "$vba2", "pattern": { "Text": "WScript.Shell" }, "nocase": true },
+      { "id": "$enc", "pattern": { "Text": "Chr(" }, "nocase": false }
+    ],
+    "condition": { "AtLeast": 2 },
+    "enabled": true
+  },
+  {
+    "name": "cobalt_strike_malleable",
+    "meta": { "author": "Wardex Community", "description": "Cobalt Strike malleable C2 profile artifacts", "severity": "critical", "mitre_ids": ["T1071.001"], "created": "2025-06-01" },
+    "strings": [
+      { "id": "$s1", "pattern": { "Text": "sleeptime" }, "nocase": true },
+      { "id": "$s2", "pattern": { "Text": "jitter" }, "nocase": true },
+      { "id": "$s3", "pattern": { "Text": "pipename" }, "nocase": true },
+      { "id": "$s4", "pattern": { "Text": "uri_x86" }, "nocase": false },
+      { "id": "$s5", "pattern": { "Text": "uri_x64" }, "nocase": false }
+    ],
+    "condition": { "AtLeast": 3 },
+    "enabled": true
+  },
+  {
+    "name": "mimikatz_memory",
+    "meta": { "author": "Wardex Community", "description": "Mimikatz credential dumper detected in memory", "severity": "critical", "mitre_ids": ["T1003.001"], "created": "2025-06-01" },
+    "strings": [
+      { "id": "$s1", "pattern": { "Text": "mimikatz" }, "nocase": true },
+      { "id": "$s2", "pattern": { "Text": "sekurlsa::logonpasswords" }, "nocase": false },
+      { "id": "$s3", "pattern": { "Text": "gentilkiwi" }, "nocase": false },
+      { "id": "$s4", "pattern": { "Text": "kerberos::list" }, "nocase": false }
+    ],
+    "condition": { "AtLeast": 2 },
+    "enabled": true
+  },
+  {
+    "name": "mimikatz_pe_binary",
+    "meta": { "author": "Wardex Community", "description": "Mimikatz PE binary on disk", "severity": "critical", "mitre_ids": ["T1003"], "created": "2025-06-01" },
+    "strings": [
+      { "id": "$mz", "pattern": { "Hex": [77, 90] }, "nocase": false },
+      { "id": "$s1", "pattern": { "Text": "lsadump::dcsync" }, "nocase": false },
+      { "id": "$s2", "pattern": { "Text": "privilege::debug" }, "nocase": false },
+      { "id": "$s3", "pattern": { "Text": "crypto::certificates" }, "nocase": false }
+    ],
+    "condition": { "AtLeast": 3 },
+    "enabled": true
+  },
+  {
+    "name": "wannacry_ransomware",
+    "meta": { "author": "Wardex Community", "description": "WannaCry ransomware indicators", "severity": "critical", "mitre_ids": ["T1486"], "created": "2025-06-01" },
+    "strings": [
+      { "id": "$s1", "pattern": { "Text": "WNcry@2ol7" }, "nocase": false },
+      { "id": "$s2", "pattern": { "Text": "msg/m_english.wnry" }, "nocase": false },
+      { "id": "$s3", "pattern": { "Text": "tasksche.exe" }, "nocase": false },
+      { "id": "$s4", "pattern": { "Text": "iuqerfsodp9ifjaposdfjhgosurijfaewrwergwea.com" }, "nocase": false }
+    ],
+    "condition": { "AtLeast": 2 },
+    "enabled": true
+  },
+  {
+    "name": "ryuk_ransomware",
+    "meta": { "author": "Wardex Community", "description": "Ryuk ransomware binary artifacts", "severity": "critical", "mitre_ids": ["T1486"], "created": "2025-06-01" },
+    "strings": [
+      { "id": "$s1", "pattern": { "Text": "RyukReadMe.html" }, "nocase": false },
+      { "id": "$s2", "pattern": { "Text": "HERMES" }, "nocase": false },
+      { "id": "$s3", "pattern": { "Text": "Wake-On-Lan" }, "nocase": false },
+      { "id": "$s4", "pattern": { "Text": "UNIQUE_ID_DO_NOT_REMOVE" }, "nocase": false }
+    ],
+    "condition": { "AtLeast": 2 },
+    "enabled": true
+  },
+  {
+    "name": "lockbit_ransomware",
+    "meta": { "author": "Wardex Community", "description": "LockBit ransomware indicators", "severity": "critical", "mitre_ids": ["T1486"], "created": "2025-06-01" },
+    "strings": [
+      { "id": "$s1", "pattern": { "Text": "lockbit" }, "nocase": true },
+      { "id": "$s2", "pattern": { "Text": "Restore-My-Files.txt" }, "nocase": false },
+      { "id": "$s3", "pattern": { "Text": ".lockbit" }, "nocase": false },
+      { "id": "$s4", "pattern": { "Text": "vssadmin delete shadows" }, "nocase": true }
+    ],
+    "condition": { "AtLeast": 2 },
+    "enabled": true
+  },
+  {
+    "name": "blackcat_alphv_ransomware",
+    "meta": { "author": "Wardex Community", "description": "BlackCat/ALPHV Rust-based ransomware", "severity": "critical", "mitre_ids": ["T1486"], "created": "2025-06-01" },
+    "strings": [
+      { "id": "$s1", "pattern": { "Text": "access-token" }, "nocase": false },
+      { "id": "$s2", "pattern": { "Text": "--child" }, "nocase": false },
+      { "id": "$s3", "pattern": { "Text": "esxi" }, "nocase": true },
+      { "id": "$s4", "pattern": { "Text": "locker::core" }, "nocase": false }
+    ],
+    "condition": { "AtLeast": 3 },
+    "enabled": true
+  },
+  {
+    "name": "ransomware_generic_behavior",
+    "meta": { "author": "Wardex Community", "description": "Generic ransomware behavioral strings", "severity": "critical", "mitre_ids": ["T1486", "T1490"], "created": "2025-06-01" },
+    "strings": [
+      { "id": "$s1", "pattern": { "Text": "vssadmin.exe delete shadows" }, "nocase": true },
+      { "id": "$s2", "pattern": { "Text": "bcdedit /set {default} recoveryenabled no" }, "nocase": true },
+      { "id": "$s3", "pattern": { "Text": "wbadmin delete catalog" }, "nocase": true },
+      { "id": "$s4", "pattern": { "Text": "Your files have been encrypted" }, "nocase": true }
+    ],
+    "condition": { "AtLeast": 2 },
+    "enabled": true
+  },
+  {
+    "name": "meterpreter_stager",
+    "meta": { "author": "Wardex Community", "description": "Metasploit Meterpreter stager and shell strings", "severity": "critical", "mitre_ids": ["T1059.006"], "created": "2025-06-01" },
+    "strings": [
+      { "id": "$s1", "pattern": { "Text": "metsrv.dll" }, "nocase": false },
+      { "id": "$s2", "pattern": { "Text": "stdapi_" }, "nocase": false },
+      { "id": "$s3", "pattern": { "Text": "ext_server_" }, "nocase": false },
+      { "id": "$s4", "pattern": { "Text": "core_channel_" }, "nocase": false }
+    ],
+    "condition": { "AtLeast": 2 },
+    "enabled": true
+  },
+  {
+    "name": "sliver_c2_implant",
+    "meta": { "author": "Wardex Community", "description": "Sliver C2 framework implant artifacts", "severity": "high", "mitre_ids": ["T1071"], "created": "2025-06-01" },
+    "strings": [
+      { "id": "$s1", "pattern": { "Text": "sliverpb" }, "nocase": false },
+      { "id": "$s2", "pattern": { "Text": "implant.proto" }, "nocase": false },
+      { "id": "$s3", "pattern": { "Text": "pivotlistener" }, "nocase": false }
+    ],
+    "condition": { "AtLeast": 2 },
+    "enabled": true
+  },
+  {
+    "name": "brute_ratel_c4",
+    "meta": { "author": "Wardex Community", "description": "Brute Ratel C4 red-team framework", "severity": "critical", "mitre_ids": ["T1071.001"], "created": "2025-06-01" },
+    "strings": [
+      { "id": "$s1", "pattern": { "Text": "bruteratel" }, "nocase": true },
+      { "id": "$s2", "pattern": { "Text": "badger_" }, "nocase": false },
+      { "id": "$s3", "pattern": { "Text": "brc4" }, "nocase": true }
+    ],
+    "condition": { "AtLeast": 2 },
+    "enabled": true
+  },
+  {
+    "name": "powershell_encoded_command",
+    "meta": { "author": "Wardex Community", "description": "Obfuscated PowerShell with encoded command invocation", "severity": "medium", "mitre_ids": ["T1059.001"], "created": "2025-06-01" },
+    "strings": [
+      { "id": "$s1", "pattern": { "Text": "-EncodedCommand" }, "nocase": true },
+      { "id": "$s2", "pattern": { "Text": "FromBase64String" }, "nocase": false },
+      { "id": "$s3", "pattern": { "Text": "Invoke-Expression" }, "nocase": false },
+      { "id": "$s4", "pattern": { "Text": "[Convert]::" }, "nocase": false }
+    ],
+    "condition": { "AtLeast": 2 },
+    "enabled": true
+  },
+  {
+    "name": "powershell_download_cradle",
+    "meta": { "author": "Wardex Community", "description": "PowerShell download cradle patterns for payload staging", "severity": "high", "mitre_ids": ["T1059.001", "T1105"], "created": "2025-06-01" },
+    "strings": [
+      { "id": "$s1", "pattern": { "Text": "Net.WebClient" }, "nocase": false },
+      { "id": "$s2", "pattern": { "Text": "DownloadString" }, "nocase": false },
+      { "id": "$s3", "pattern": { "Text": "DownloadFile" }, "nocase": false },
+      { "id": "$s4", "pattern": { "Text": "Invoke-WebRequest" }, "nocase": false }
+    ],
+    "condition": { "AtLeast": 2 },
+    "enabled": true
+  },
+  {
+    "name": "lolbin_msbuild_abuse",
+    "meta": { "author": "Wardex Community", "description": "MSBuild living-off-the-land proxy execution", "severity": "high", "mitre_ids": ["T1127.001"], "created": "2025-06-01" },
+    "strings": [
+      { "id": "$s1", "pattern": { "Text": "MSBuild.exe" }, "nocase": true },
+      { "id": "$s2", "pattern": { "Text": "UsingTask" }, "nocase": false },
+      { "id": "$s3", "pattern": { "Text": "CodeTaskFactory" }, "nocase": false }
+    ],
+    "condition": "AllOf",
+    "enabled": true
+  },
+  {
+    "name": "lolbin_certutil_download",
+    "meta": { "author": "Wardex Community", "description": "Certutil abuse for file download or decode", "severity": "medium", "mitre_ids": ["T1140"], "created": "2025-06-01" },
+    "strings": [
+      { "id": "$s1", "pattern": { "Text": "certutil" }, "nocase": true },
+      { "id": "$s2", "pattern": { "Text": "-urlcache" }, "nocase": true },
+      { "id": "$s3", "pattern": { "Text": "-decode" }, "nocase": true }
+    ],
+    "condition": { "AtLeast": 2 },
+    "enabled": true
+  },
+  {
+    "name": "lolbin_mshta_execute",
+    "meta": { "author": "Wardex Community", "description": "MSHTA living-off-the-land script execution", "severity": "high", "mitre_ids": ["T1218.005"], "created": "2025-06-01" },
+    "strings": [
+      { "id": "$s1", "pattern": { "Text": "mshta.exe" }, "nocase": true },
+      { "id": "$s2", "pattern": { "Text": "vbscript:Execute" }, "nocase": false },
+      { "id": "$s3", "pattern": { "Text": "javascript:" }, "nocase": false }
+    ],
+    "condition": { "AtLeast": 2 },
+    "enabled": true
+  },
+  {
+    "name": "process_injection_remote_thread",
+    "meta": { "author": "Wardex Community", "description": "Process injection via CreateRemoteThread API chain", "severity": "high", "mitre_ids": ["T1055.001"], "created": "2025-06-01" },
+    "strings": [
+      { "id": "$api1", "pattern": { "Text": "VirtualAllocEx" }, "nocase": false },
+      { "id": "$api2", "pattern": { "Text": "WriteProcessMemory" }, "nocase": false },
+      { "id": "$api3", "pattern": { "Text": "CreateRemoteThread" }, "nocase": false }
+    ],
+    "condition": "AllOf",
+    "enabled": true
+  },
+  {
+    "name": "process_hollowing",
+    "meta": { "author": "Wardex Community", "description": "Process hollowing technique indicators", "severity": "high", "mitre_ids": ["T1055.012"], "created": "2025-06-01" },
+    "strings": [
+      { "id": "$s1", "pattern": { "Text": "NtUnmapViewOfSection" }, "nocase": false },
+      { "id": "$s2", "pattern": { "Text": "SetThreadContext" }, "nocase": false },
+      { "id": "$s3", "pattern": { "Text": "ResumeThread" }, "nocase": false }
+    ],
+    "condition": "AllOf",
+    "enabled": true
+  },
+  {
+    "name": "credential_dump_lsass",
+    "meta": { "author": "Wardex Community", "description": "LSASS memory credential dumping techniques", "severity": "critical", "mitre_ids": ["T1003.001"], "created": "2025-06-01" },
+    "strings": [
+      { "id": "$s1", "pattern": { "Text": "lsass.exe" }, "nocase": true },
+      { "id": "$s2", "pattern": { "Text": "MiniDumpWriteDump" }, "nocase": false },
+      { "id": "$s3", "pattern": { "Text": "comsvcs.dll" }, "nocase": false },
+      { "id": "$s4", "pattern": { "Text": "procdump" }, "nocase": true }
+    ],
+    "condition": { "AtLeast": 2 },
+    "enabled": true
+  },
+  {
+    "name": "webshell_china_chopper",
+    "meta": { "author": "Wardex Community", "description": "China Chopper web shell one-liner variants", "severity": "critical", "mitre_ids": ["T1505.003"], "created": "2025-06-01" },
+    "strings": [
+      { "id": "$s1", "pattern": { "Text": "eval(Request.Item[" }, "nocase": false },
+      { "id": "$s2", "pattern": { "Text": "eval($_POST[" }, "nocase": false },
+      { "id": "$s3", "pattern": { "Text": "assert($_POST[" }, "nocase": false }
+    ],
+    "condition": "AnyOf",
+    "enabled": true
+  },
+  {
+    "name": "webshell_generic_jsp",
+    "meta": { "author": "Wardex Community", "description": "Generic JSP web shell indicators", "severity": "high", "mitre_ids": ["T1505.003"], "created": "2025-06-01" },
+    "strings": [
+      { "id": "$s1", "pattern": { "Text": "Runtime.getRuntime().exec" }, "nocase": false },
+      { "id": "$s2", "pattern": { "Text": "ProcessBuilder" }, "nocase": false },
+      { "id": "$s3", "pattern": { "Text": "getParameter" }, "nocase": false }
+    ],
+    "condition": { "AtLeast": 2 },
+    "enabled": true
+  },
+  {
+    "name": "reverse_shell_generic",
+    "meta": { "author": "Wardex Community", "description": "Generic reverse shell patterns across platforms", "severity": "high", "mitre_ids": ["T1059"], "created": "2025-06-01" },
+    "strings": [
+      { "id": "$s1", "pattern": { "Text": "/dev/tcp/" }, "nocase": false },
+      { "id": "$s2", "pattern": { "Text": "bash -i >& " }, "nocase": false },
+      { "id": "$s3", "pattern": { "Text": "nc -e /bin/" }, "nocase": false },
+      { "id": "$s4", "pattern": { "Text": "import socket,subprocess" }, "nocase": false }
+    ],
+    "condition": "AnyOf",
+    "enabled": true
+  },
+  {
+    "name": "sharphound_bloodhound",
+    "meta": { "author": "Wardex Community", "description": "SharpHound/BloodHound Active Directory enumeration", "severity": "high", "mitre_ids": ["T1087.002"], "created": "2025-06-01" },
+    "strings": [
+      { "id": "$s1", "pattern": { "Text": "SharpHound" }, "nocase": false },
+      { "id": "$s2", "pattern": { "Text": "BloodHound" }, "nocase": false },
+      { "id": "$s3", "pattern": { "Text": "Invoke-BloodHound" }, "nocase": false },
+      { "id": "$s4", "pattern": { "Text": "CollectionMethod" }, "nocase": false }
+    ],
+    "condition": { "AtLeast": 2 },
+    "enabled": true
+  },
+  {
+    "name": "rubeus_kerberos",
+    "meta": { "author": "Wardex Community", "description": "Rubeus Kerberos interaction tool indicators", "severity": "high", "mitre_ids": ["T1558"], "created": "2025-06-01" },
+    "strings": [
+      { "id": "$s1", "pattern": { "Text": "Rubeus" }, "nocase": false },
+      { "id": "$s2", "pattern": { "Text": "asktgt" }, "nocase": false },
+      { "id": "$s3", "pattern": { "Text": "kerberoast" }, "nocase": false },
+      { "id": "$s4", "pattern": { "Text": "tgtdeleg" }, "nocase": false }
+    ],
+    "condition": { "AtLeast": 2 },
+    "enabled": true
+  },
+  {
+    "name": "impacket_tools",
+    "meta": { "author": "Wardex Community", "description": "Impacket Python lateral movement toolkit", "severity": "high", "mitre_ids": ["T1021.002"], "created": "2025-06-01" },
+    "strings": [
+      { "id": "$s1", "pattern": { "Text": "impacket" }, "nocase": true },
+      { "id": "$s2", "pattern": { "Text": "secretsdump" }, "nocase": false },
+      { "id": "$s3", "pattern": { "Text": "wmiexec" }, "nocase": false },
+      { "id": "$s4", "pattern": { "Text": "smbexec" }, "nocase": false }
+    ],
+    "condition": { "AtLeast": 2 },
+    "enabled": true
+  },
+  {
+    "name": "packed_upx",
+    "meta": { "author": "Wardex Community", "description": "UPX packed executable (common malware packing)", "severity": "low", "mitre_ids": ["T1027.002"], "created": "2025-06-01" },
+    "strings": [
+      { "id": "$s1", "pattern": { "Text": "UPX0" }, "nocase": false },
+      { "id": "$s2", "pattern": { "Text": "UPX1" }, "nocase": false },
+      { "id": "$s3", "pattern": { "Text": "UPX!" }, "nocase": false }
+    ],
+    "condition": { "AtLeast": 2 },
+    "enabled": true
+  },
+  {
+    "name": "crypto_miner_generic",
+    "meta": { "author": "Wardex Community", "description": "Cryptocurrency miner indicators", "severity": "medium", "mitre_ids": ["T1496"], "created": "2025-06-01" },
+    "strings": [
+      { "id": "$s1", "pattern": { "Text": "stratum+tcp://" }, "nocase": false },
+      { "id": "$s2", "pattern": { "Text": "xmrig" }, "nocase": true },
+      { "id": "$s3", "pattern": { "Text": "cryptonight" }, "nocase": true },
+      { "id": "$s4", "pattern": { "Text": "hashrate" }, "nocase": true }
+    ],
+    "condition": { "AtLeast": 2 },
+    "enabled": true
+  },
+  {
+    "name": "rat_remcos",
+    "meta": { "author": "Wardex Community", "description": "Remcos RAT remote access trojan", "severity": "high", "mitre_ids": ["T1219"], "created": "2025-06-01" },
+    "strings": [
+      { "id": "$s1", "pattern": { "Text": "Remcos" }, "nocase": false },
+      { "id": "$s2", "pattern": { "Text": "remcos.exe" }, "nocase": true },
+      { "id": "$s3", "pattern": { "Text": "breakingsecurity" }, "nocase": true }
+    ],
+    "condition": { "AtLeast": 2 },
+    "enabled": true
+  },
+  {
+    "name": "rat_asyncrat",
+    "meta": { "author": "Wardex Community", "description": "AsyncRAT remote access trojan", "severity": "high", "mitre_ids": ["T1219"], "created": "2025-06-01" },
+    "strings": [
+      { "id": "$s1", "pattern": { "Text": "AsyncRAT" }, "nocase": false },
+      { "id": "$s2", "pattern": { "Text": "AsyncClient" }, "nocase": false },
+      { "id": "$s3", "pattern": { "Text": "Pastebin" }, "nocase": false }
+    ],
+    "condition": { "AtLeast": 2 },
+    "enabled": true
+  },
+  {
+    "name": "stealer_redline",
+    "meta": { "author": "Wardex Community", "description": "RedLine Stealer info-stealer malware", "severity": "high", "mitre_ids": ["T1555"], "created": "2025-06-01" },
+    "strings": [
+      { "id": "$s1", "pattern": { "Text": "RedLine" }, "nocase": false },
+      { "id": "$s2", "pattern": { "Text": "Login Data" }, "nocase": false },
+      { "id": "$s3", "pattern": { "Text": "Telegram Desktop" }, "nocase": false }
+    ],
+    "condition": { "AtLeast": 2 },
+    "enabled": true
+  },
+  {
+    "name": "infostealer_browser_harvest",
+    "meta": { "author": "Wardex Community", "description": "Generic browser credential and cookie harvesting", "severity": "medium", "mitre_ids": ["T1555.003"], "created": "2025-06-01" },
+    "strings": [
+      { "id": "$s1", "pattern": { "Text": "Google\\Chrome\\User Data" }, "nocase": false },
+      { "id": "$s2", "pattern": { "Text": "Mozilla\\Firefox\\Profiles" }, "nocase": false },
+      { "id": "$s3", "pattern": { "Text": "logins.json" }, "nocase": false },
+      { "id": "$s4", "pattern": { "Text": "cookies.sqlite" }, "nocase": false }
+    ],
+    "condition": { "AtLeast": 3 },
+    "enabled": true
+  },
+  {
+    "name": "exploit_log4shell",
+    "meta": { "author": "Wardex Community", "description": "Log4Shell CVE-2021-44228 exploitation patterns", "severity": "critical", "mitre_ids": ["T1190"], "created": "2025-06-01" },
+    "strings": [
+      { "id": "$s1", "pattern": { "Text": "${jndi:ldap://" }, "nocase": false },
+      { "id": "$s2", "pattern": { "Text": "${jndi:rmi://" }, "nocase": false },
+      { "id": "$s3", "pattern": { "Text": "${jndi:dns://" }, "nocase": false }
+    ],
+    "condition": "AnyOf",
+    "enabled": true
+  },
+  {
+    "name": "exploit_proxyshell",
+    "meta": { "author": "Wardex Community", "description": "ProxyShell Exchange exploitation chain indicators", "severity": "critical", "mitre_ids": ["T1190"], "created": "2025-06-01" },
+    "strings": [
+      { "id": "$s1", "pattern": { "Text": "/autodiscover/autodiscover.json" }, "nocase": false },
+      { "id": "$s2", "pattern": { "Text": "X-Rps-CAT" }, "nocase": false },
+      { "id": "$s3", "pattern": { "Text": "mapi/nspi/" }, "nocase": false }
+    ],
+    "condition": { "AtLeast": 2 },
+    "enabled": true
+  },
+  {
+    "name": "phishing_html_smuggling",
+    "meta": { "author": "Wardex Community", "description": "HTML smuggling for payload delivery via email/browser", "severity": "high", "mitre_ids": ["T1027.006"], "created": "2025-06-01" },
+    "strings": [
+      { "id": "$s1", "pattern": { "Text": "atob(" }, "nocase": false },
+      { "id": "$s2", "pattern": { "Text": "Blob(" }, "nocase": false },
+      { "id": "$s3", "pattern": { "Text": "URL.createObjectURL" }, "nocase": false },
+      { "id": "$s4", "pattern": { "Text": "msSaveOrOpenBlob" }, "nocase": false }
+    ],
+    "condition": { "AtLeast": 3 },
+    "enabled": true
+  },
+  {
+    "name": "container_escape",
+    "meta": { "author": "Wardex Community", "description": "Container escape attempt indicators", "severity": "critical", "mitre_ids": ["T1611"], "created": "2025-06-01" },
+    "strings": [
+      { "id": "$s1", "pattern": { "Text": "nsenter" }, "nocase": false },
+      { "id": "$s2", "pattern": { "Text": "/proc/1/root" }, "nocase": false },
+      { "id": "$s3", "pattern": { "Text": "cgroup_release_agent" }, "nocase": false },
+      { "id": "$s4", "pattern": { "Text": "SYS_ADMIN" }, "nocase": false }
+    ],
+    "condition": { "AtLeast": 2 },
+    "enabled": true
+  },
+  {
+    "name": "kubernetes_attack_tools",
+    "meta": { "author": "Wardex Community", "description": "Kubernetes cluster attack tooling signatures", "severity": "high", "mitre_ids": ["T1613"], "created": "2025-06-01" },
+    "strings": [
+      { "id": "$s1", "pattern": { "Text": "kube-hunter" }, "nocase": false },
+      { "id": "$s2", "pattern": { "Text": "peirates" }, "nocase": false },
+      { "id": "$s3", "pattern": { "Text": "kubeletctl" }, "nocase": false },
+      { "id": "$s4", "pattern": { "Text": "CDK_execCommand" }, "nocase": false }
+    ],
+    "condition": "AnyOf",
+    "enabled": true
+  },
+  {
+    "name": "linux_elf_reverse_shell",
+    "meta": { "author": "Wardex Community", "description": "Linux ELF reverse shell payload", "severity": "high", "mitre_ids": ["T1059.004"], "created": "2025-06-01" },
+    "strings": [
+      { "id": "$elf", "pattern": { "Hex": [127, 69, 76, 70] }, "nocase": false },
+      { "id": "$s1", "pattern": { "Text": "/bin/sh" }, "nocase": false },
+      { "id": "$s2", "pattern": { "Text": "socket" }, "nocase": false },
+      { "id": "$s3", "pattern": { "Text": "connect" }, "nocase": false },
+      { "id": "$s4", "pattern": { "Text": "dup2" }, "nocase": false }
+    ],
+    "condition": { "AtLeast": 4 },
+    "enabled": true
+  },
+  {
+    "name": "linux_persistence_crontab",
+    "meta": { "author": "Wardex Community", "description": "Linux crontab persistence technique", "severity": "medium", "mitre_ids": ["T1053.003"], "created": "2025-06-01" },
+    "strings": [
+      { "id": "$s1", "pattern": { "Text": "/etc/crontab" }, "nocase": false },
+      { "id": "$s2", "pattern": { "Text": "/var/spool/cron" }, "nocase": false },
+      { "id": "$s3", "pattern": { "Text": "@reboot" }, "nocase": false }
+    ],
+    "condition": { "AtLeast": 2 },
+    "enabled": true
+  },
+  {
+    "name": "macos_persistence_launchagent",
+    "meta": { "author": "Wardex Community", "description": "macOS LaunchAgent/LaunchDaemon persistence", "severity": "medium", "mitre_ids": ["T1543.001"], "created": "2025-06-01" },
+    "strings": [
+      { "id": "$s1", "pattern": { "Text": "LaunchAgents" }, "nocase": false },
+      { "id": "$s2", "pattern": { "Text": "LaunchDaemons" }, "nocase": false },
+      { "id": "$s3", "pattern": { "Text": "ProgramArguments" }, "nocase": false },
+      { "id": "$s4", "pattern": { "Text": "RunAtLoad" }, "nocase": false }
+    ],
+    "condition": { "AtLeast": 2 },
+    "enabled": true
+  },
+  {
+    "name": "rootkit_kernel_driver",
+    "meta": { "author": "Wardex Community", "description": "Kernel rootkit driver loading indicators", "severity": "critical", "mitre_ids": ["T1014"], "created": "2025-06-01" },
+    "strings": [
+      { "id": "$s1", "pattern": { "Text": "NtLoadDriver" }, "nocase": false },
+      { "id": "$s2", "pattern": { "Text": "IoCreateDevice" }, "nocase": false },
+      { "id": "$s3", "pattern": { "Text": "ObRegisterCallbacks" }, "nocase": false }
+    ],
+    "condition": { "AtLeast": 2 },
+    "enabled": true
+  },
+  {
+    "name": "data_exfiltration_dns",
+    "meta": { "author": "Wardex Community", "description": "DNS-based data exfiltration tunneling", "severity": "high", "mitre_ids": ["T1048.001"], "created": "2025-06-01" },
+    "strings": [
+      { "id": "$s1", "pattern": { "Text": "dnscat" }, "nocase": true },
+      { "id": "$s2", "pattern": { "Text": "iodine" }, "nocase": false },
+      { "id": "$s3", "pattern": { "Text": "dns2tcp" }, "nocase": false }
+    ],
+    "condition": "AnyOf",
+    "enabled": true
+  }
+]

@@ -1,0 +1,109 @@
+# Wardex Prometheus Recording Rules
+# Import into Prometheus via rule_files in prometheus.yml
+#
+# These rules pre-compute expensive aggregations for Grafana dashboards.
+
+groups:
+  - name: wardex_recording_rules
+    interval: 30s
+    rules:
+      # ── Request Rate ────────────────────────────────────────────────
+      - record: wardex:http_requests:rate5m
+        expr: rate(wardex_http_requests_total[5m])
+
+      - record: wardex:http_requests:rate5m_by_status
+        expr: sum by (status) (rate(wardex_http_requests_total[5m]))
+
+      - record: wardex:http_error_rate:ratio5m
+        expr: |
+          sum(rate(wardex_http_requests_total{status=~"5.."}[5m]))
+          /
+          sum(rate(wardex_http_requests_total[5m]))
+
+      # ── Latency ─────────────────────────────────────────────────────
+      - record: wardex:http_latency:p50_5m
+        expr: histogram_quantile(0.50, sum by (le) (rate(wardex_http_request_duration_ms_bucket[5m])))
+
+      - record: wardex:http_latency:p95_5m
+        expr: histogram_quantile(0.95, sum by (le) (rate(wardex_http_request_duration_ms_bucket[5m])))
+
+      - record: wardex:http_latency:p99_5m
+        expr: histogram_quantile(0.99, sum by (le) (rate(wardex_http_request_duration_ms_bucket[5m])))
+
+      # ── Alerts ──────────────────────────────────────────────────────
+      - record: wardex:alerts:rate5m
+        expr: rate(wardex_alerts_total[5m])
+
+      - record: wardex:alerts:rate5m_by_severity
+        expr: sum by (severity) (rate(wardex_alerts_total[5m]))
+
+      - record: wardex:alerts_critical:active
+        expr: wardex_alerts_active{severity="critical"}
+
+      # ── Detection Pipeline ──────────────────────────────────────────
+      - record: wardex:detection_latency:p95_5m
+        expr: histogram_quantile(0.95, sum by (le) (rate(wardex_detection_latency_ms_bucket[5m])))
+
+      - record: wardex:ml_triage:rate5m_by_label
+        expr: sum by (label) (rate(wardex_ml_triage_total[5m]))
+
+      - record: wardex:yara_scans:rate5m
+        expr: rate(wardex_yara_scans_total[5m])
+
+      - record: wardex:sigma_matches:rate5m
+        expr: rate(wardex_sigma_matches_total[5m])
+
+      # ── Fleet Health ────────────────────────────────────────────────
+      - record: wardex:agents:total_connected
+        expr: sum(wardex_agents_connected)
+
+      - record: wardex:agents:by_os
+        expr: sum by (os) (wardex_agents_connected)
+
+  - name: wardex_alerting_rules
+    interval: 60s
+    rules:
+      - alert: WardexHighErrorRate
+        expr: wardex:http_error_rate:ratio5m > 0.05
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Wardex HTTP error rate above 5%"
+          description: "Error rate is {{ $value | humanizePercentage }} over the last 5 minutes."
+
+      - alert: WardexHighLatency
+        expr: wardex:http_latency:p95_5m > 2000
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Wardex p95 latency above 2s"
+          description: "p95 request latency is {{ $value }}ms."
+
+      - alert: WardexCriticalAlertsHigh
+        expr: wardex:alerts_critical:active > 10
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "More than 10 critical alerts active"
+          description: "{{ $value }} critical alerts are currently unresolved."
+
+      - alert: WardexAgentsDegraded
+        expr: wardex:agents:total_connected < 1
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "No fleet agents connected"
+          description: "Zero agents reporting to Wardex for 5+ minutes."
+
+      - alert: WardexDetectionLatencyHigh
+        expr: wardex:detection_latency:p95_5m > 5000
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Detection pipeline p95 latency above 5s"
+          description: "Detection pipeline latency is {{ $value }}ms."

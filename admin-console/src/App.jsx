@@ -123,8 +123,9 @@ export default function App() {
               className={`nav-item ${location.pathname === s.path ? 'active' : ''}`}
               onClick={() => handleNavigate(s.path)}
               title={s.label}
+              aria-current={location.pathname === s.path ? 'page' : undefined}
             >
-              <span className="nav-icon">{s.icon}</span>
+              <span className="nav-icon" aria-hidden="true">{s.icon}</span>
               {!sidebarCollapsed && <span className="nav-label">{s.label}</span>}
             </button>
           ))}

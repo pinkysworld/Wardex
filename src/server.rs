@@ -77,7 +77,9 @@ use crate::monitor::Monitor;
 use crate::multi_tenant::MultiTenantManager;
 use crate::policy_dist::PolicyStore;
 use crate::privacy::PrivacyAccountant;
+#[cfg(feature = "experimental-proof")]
 use crate::proof::{DigestBackend, ProofRegistry};
+#[cfg(feature = "experimental-quantum")]
 use crate::quantum::KeyRotationManager;
 use crate::replay::ReplayBuffer;
 use crate::report::JsonReport;
@@ -268,6 +270,83 @@ impl AuditLog {
     }
 }
 
+// ── Grouped sub-structures for AppState ──────────────────────────────────────
+
+/// Authentication, RBAC, and session management sub-state.
+struct AuthSystems {
+    token: String,
+    token_issued_at: std::time::Instant,
+    rbac: RbacStore,
+}
+
+/// Detection engines and analytics sub-state.
+struct DetectionSystems {
+    detector: AnomalyDetector,
+    velocity: VelocityDetector,
+    entropy: EntropyDetector,
+    compound: CompoundThreatDetector,
+    slow_attack: crate::detector::SlowAttackDetector,
+    sigma_engine: SigmaEngine,
+    beacon_detector: crate::beacon::BeaconDetector,
+    ueba_engine: crate::ueba::UebaEngine,
+    kill_chain_analyzer: crate::kill_chain::KillChainAnalyzer,
+    lateral_detector: crate::lateral::LateralMovementDetector,
+    dns_analyzer: crate::dns_threat::DnsAnalyzer,
+    side_channel: SideChannelDetector,
+    ransomware: crate::ransomware::RansomwareDetector,
+    container_detector: crate::container::ContainerDetector,
+    ndr_engine: crate::ndr::NdrEngine,
+    feed_engine: crate::feed_ingestion::FeedIngestionEngine,
+    tuning_profile: crate::detector::TuningProfile,
+    fp_feedback: crate::alert_analysis::FpFeedbackStore,
+}
+
+/// Fleet management, agents, and deployment sub-state.
+struct FleetSystems {
+    agent_registry: AgentRegistry,
+    remote_deployments: HashMap<String, AgentDeployment>,
+    deployment_store_path: String,
+    update_manager: UpdateManager,
+    lifecycle_manager: crate::agent_lifecycle::LifecycleManager,
+    agent_logs: HashMap<String, Vec<crate::log_collector::LogRecord>>,
+    agent_inventories: HashMap<String, crate::inventory::SystemInventory>,
+}
+
+/// SOC operations, case management, and response sub-state.
+struct SocSystems {
+    case_store: CaseStore,
+    alert_queue: AlertQueue,
+    incident_store: IncidentStore,
+    approval_log: ApprovalLog,
+    response_orchestrator: ResponseOrchestrator,
+    playbook_engine: crate::playbook::PlaybookEngine,
+    playbook_dsl: crate::playbook_dsl::PlaybookDslStore,
+    live_response_engine: crate::live_response::LiveResponseEngine,
+    remediation_engine: crate::remediation::RemediationEngine,
+    escalation_engine: crate::escalation::EscalationEngine,
+    workflow_store: crate::investigation::WorkflowStore,
+}
+
+/// Compliance, governance, and enterprise sub-state.
+struct ComplianceSystems {
+    compliance: ComplianceManager,
+    multi_tenant: MultiTenantManager,
+    privacy: PrivacyAccountant,
+    enterprise: EnterpriseStore,
+    feature_flags: FeatureFlagRegistry,
+}
+
+/// Observability, metrics, and audit sub-state.
+struct ObservabilitySystems {
+    rate_limiter: RateLimiter,
+    audit_log: AuditLog,
+    api_analytics: crate::api_analytics::ApiAnalytics,
+    trace_collector: crate::telemetry::TraceCollector,
+    request_count: u64,
+    error_count: u64,
+    alert_broadcaster: crate::ws_stream::AlertBroadcaster,
+}
+
 struct AppState {
     detector: AnomalyDetector,
     checkpoints: CheckpointStore,
@@ -322,6 +401,7 @@ struct AppState {
     audit_log: AuditLog,
     incident_store: IncidentStore,
     agent_logs: HashMap<String, Vec<crate::log_collector::LogRecord>>,
+    agent_logs_last_access: HashMap<String, u64>,
     agent_inventories: HashMap<String, crate::inventory::SystemInventory>,
     report_store: crate::report::ReportStore,
     // Phase 26: XDR AI handoff modules
@@ -763,6 +843,7 @@ pub async fn run_server(
         audit_log: AuditLog::new(1000),
         incident_store: IncidentStore::new("var/incidents.json"),
         agent_logs: HashMap::new(),
+        agent_logs_last_access: HashMap::new(),
         agent_inventories: HashMap::new(),
         report_store: crate::report::ReportStore::new("var/reports.json"),
         sigma_engine: SigmaEngine::new(),
@@ -1232,6 +1313,7 @@ pub fn spawn_test_server() -> (u16, String) {
         audit_log: AuditLog::new(1000),
         incident_store: IncidentStore::new(&state_root.join("incidents.json").to_string_lossy()),
         agent_logs: HashMap::new(),
+        agent_logs_last_access: HashMap::new(),
         agent_inventories: HashMap::new(),
         report_store: crate::report::ReportStore::new(
             &state_root.join("reports.json").to_string_lossy(),
@@ -1612,6 +1694,10 @@ fn security_headers(
             "Content-Security-Policy",
             "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; font-src 'self'; frame-ancestors 'none'",
         )
+        .header("Cross-Origin-Opener-Policy", "same-origin")
+        .header("Cross-Origin-Resource-Policy", "same-origin")
+        .header("X-DNS-Prefetch-Control", "off")
+        .header("X-Permitted-Cross-Domain-Policies", "none")
 }
 
 fn json_response(body: &str, status: u16) -> Response<Body> {
@@ -3181,7 +3267,9 @@ fn filtered_events<'a>(
 }
 
 fn csv_escape(value: &str) -> String {
-    let safe = value.replace('"', "\"\"");
+    // Strip CRLF injection vectors
+    let sanitised = value.replace('\r', " ").replace('\n', " ");
+    let safe = sanitised.replace('"', "\"\"");
     // Prevent CSV formula injection (=, +, -, @, |, tab)
     if safe.starts_with(['=', '+', '-', '@', '|', '\t']) {
         format!("\"'{}\"", safe)
@@ -5136,6 +5224,29 @@ fn handle_api(
             } else {
                 json_response(r#"{"status":"not_ready","storage":"unreachable"}"#, 503)
             }
+        }
+        (Method::Get, "/api/fleet/health") => {
+            let s = match state.lock() {
+                Ok(g) => g,
+                Err(e) => e.into_inner(),
+            };
+            let agents = s.agent_registry.list();
+            let total_agents = agents.len();
+            let online = agents.iter().filter(|a| matches!(a.status, crate::enrollment::AgentStatus::Online)).count();
+            let stale = total_agents.saturating_sub(online);
+            let logs_tracked = s.agent_logs.len();
+            let inventories_tracked = s.agent_inventories.len();
+            json_response(
+                &serde_json::json!({
+                    "total_agents": total_agents,
+                    "online": online,
+                    "stale": stale,
+                    "logs_tracked": logs_tracked,
+                    "inventories_tracked": inventories_tracked,
+                })
+                .to_string(),
+                200,
+            )
         }
         (Method::Get, "/api/openapi.json") => json_response(
             &crate::openapi::openapi_json(env!("CARGO_PKG_VERSION")),
@@ -8329,11 +8440,20 @@ fn handle_api(
                 let mut s = state.lock().unwrap_or_else(|e| e.into_inner());
                 // Cap total tracked agents to prevent unbounded memory growth
                 if !s.agent_logs.contains_key(agent_id) && s.agent_logs.len() >= 10_000 {
-                    // Evict a random agent to make room
-                    if let Some(evict_key) = s.agent_logs.keys().next().cloned() {
+                    // LRU eviction: remove the agent with the oldest last-access time
+                    if let Some(evict_key) = s.agent_logs_last_access.iter()
+                        .min_by_key(|(_, ts)| *ts)
+                        .map(|(k, _)| k.clone())
+                    {
                         s.agent_logs.remove(&evict_key);
+                        s.agent_logs_last_access.remove(&evict_key);
                     }
                 }
+                let now_ts = std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .unwrap_or_default()
+                    .as_secs();
+                s.agent_logs_last_access.insert(agent_id.to_string(), now_ts);
                 let agent_log_buf = s.agent_logs.entry(agent_id.to_string()).or_default();
                 for log in logs {
                     if agent_log_buf.len() >= 500 {

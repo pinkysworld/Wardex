@@ -1,7 +1,7 @@
 class Wardex < Formula
   desc "SentinelEdge XDR — AI-powered endpoint detection & response"
   homepage "https://github.com/pinkysworld/Wardex"
-  version "0.43.0"
+  version "0.46.0"
   license "BSL-1.1"
 
   on_macos do

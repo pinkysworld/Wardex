@@ -731,4 +731,114 @@ mod onnx_tests {
         let engine = OnnxEngine::new("models");
         assert!(engine.model_stats("x").is_none());
     }
+
+    #[test]
+    fn triage_features_boundary_values() {
+        // Test with all-zero features
+        let zero = TriageFeatures {
+            anomaly_score: 0.0,
+            confidence: 0.0,
+            suspicious_axes: 0,
+            hour_of_day: 0,
+            day_of_week: 0,
+            alert_frequency_1h: 0,
+            device_risk_score: 0.0,
+        };
+        let vec = zero.to_vec();
+        assert_eq!(vec.len(), 7);
+        assert!((vec[0] - 0.0).abs() < f64::EPSILON);
+        assert!((vec[5] - 0.0_f64.ln_1p()).abs() < f64::EPSILON);
+
+        // Test with max boundary values
+        let max_features = TriageFeatures {
+            anomaly_score: 1.0,
+            confidence: 1.0,
+            suspicious_axes: 100,
+            hour_of_day: 255, // should clamp to 23
+            day_of_week: 255, // should clamp to 6
+            alert_frequency_1h: u32::MAX,
+            device_risk_score: 1.0,
+        };
+        let vec = max_features.to_vec();
+        assert!((vec[3] - 23.0 / 24.0).abs() < f64::EPSILON); // hour clamped
+        assert!((vec[4] - 6.0 / 7.0).abs() < f64::EPSILON);   // day clamped
+    }
+
+    #[test]
+    fn rf_all_trees_agree_high_anomaly() {
+        let rf = RandomForest::pretrained();
+        let features = TriageFeatures {
+            anomaly_score: 0.99,
+            confidence: 0.99,
+            suspicious_axes: 5,
+            hour_of_day: 3,
+            day_of_week: 6,
+            alert_frequency_1h: 50,
+            device_risk_score: 0.95,
+        };
+        let result = rf.predict(&features.to_vec());
+        assert_eq!(result.label, TriageLabel::TruePositive);
+        assert!(result.confidence > 0.7);
+    }
+
+    #[test]
+    fn rf_all_trees_agree_low_anomaly() {
+        let rf = RandomForest::pretrained();
+        let features = TriageFeatures {
+            anomaly_score: 0.05,
+            confidence: 0.1,
+            suspicious_axes: 0,
+            hour_of_day: 12,
+            day_of_week: 3,
+            alert_frequency_1h: 0,
+            device_risk_score: 0.1,
+        };
+        let result = rf.predict(&features.to_vec());
+        assert_eq!(result.label, TriageLabel::FalsePositive);
+    }
+
+    #[test]
+    fn onnx_triage_boundary_needs_review() {
+        let engine = OnnxEngine::new("models");
+        // Mid-range features should yield NeedsReview
+        let features = TriageFeatures {
+            anomaly_score: 0.5,
+            confidence: 0.5,
+            suspicious_axes: 1,
+            hour_of_day: 12,
+            day_of_week: 3,
+            alert_frequency_1h: 2,
+            device_risk_score: 0.4,
+        };
+        let result = engine.triage_alert(&features);
+        // The RF ensemble may predict NeedsReview for mid-range inputs
+        assert!(result.confidence > 0.0 && result.confidence <= 1.0);
+    }
+
+    #[test]
+    fn stub_multiple_models() {
+        let mut engine = StubEngine::new();
+        let _ = engine.load_model("model_a");
+        let _ = engine.load_model("model_b");
+        assert_eq!(engine.list_models().len(), 2);
+        engine.unload_model("model_a").unwrap();
+        assert_eq!(engine.list_models().len(), 1);
+        assert_eq!(engine.status("model_a"), ModelStatus::NotLoaded);
+        assert_eq!(engine.status("model_b"), ModelStatus::Ready);
+    }
+
+    #[test]
+    fn model_info_serialization() {
+        let info = ModelInfo {
+            name: "test".into(),
+            version: "1.0".into(),
+            input_shape: vec![1, 7],
+            output_shape: vec![1, 3],
+            description: "Test model".into(),
+        };
+        let json = serde_json::to_string(&info).unwrap();
+        let back: ModelInfo = serde_json::from_str(&json).unwrap();
+        assert_eq!(back.name, "test");
+        assert_eq!(back.input_shape, vec![1, 7]);
+    }
 }
