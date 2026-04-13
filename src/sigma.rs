@@ -226,6 +226,397 @@ impl Default for SigmaEngine {
     }
 }
 
+// ── SigmaHQ YAML Import ─────────────────────────────────────────────
+
+/// Result of importing SigmaHQ rules from a directory.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SigmaImportResult {
+    pub imported: usize,
+    pub skipped: usize,
+    pub errors: Vec<String>,
+    pub rules: Vec<SigmaRule>,
+}
+
+/// Import Sigma rules from a directory of SigmaHQ-format YAML files.
+///
+/// Recursively scans the directory for .yml/.yaml files and parses them
+/// into the internal SigmaRule format. SigmaHQ rules use a specific
+/// YAML schema with `title`, `logsource`, `detection`, `level` etc.
+pub fn import_sigmahq_directory(path: &str) -> SigmaImportResult {
+    let mut result = SigmaImportResult {
+        imported: 0,
+        skipped: 0,
+        errors: Vec::new(),
+        rules: Vec::new(),
+    };
+
+    let entries = match std::fs::read_dir(path) {
+        Ok(e) => e,
+        Err(e) => {
+            result.errors.push(format!("Failed to read directory {path}: {e}"));
+            return result;
+        }
+    };
+
+    for entry in entries.flatten() {
+        let entry_path = entry.path();
+        if entry_path.is_dir() {
+            let sub = import_sigmahq_directory(entry_path.to_str().unwrap_or(""));
+            result.imported += sub.imported;
+            result.skipped += sub.skipped;
+            result.errors.extend(sub.errors);
+            result.rules.extend(sub.rules);
+            continue;
+        }
+
+        let ext = entry_path.extension().and_then(|e| e.to_str()).unwrap_or("");
+        if ext != "yml" && ext != "yaml" {
+            continue;
+        }
+
+        let file_name = entry_path.to_str().unwrap_or("unknown").to_string();
+        let content = match std::fs::read_to_string(&entry_path) {
+            Ok(c) => c,
+            Err(e) => {
+                result.errors.push(format!("{file_name}: read error: {e}"));
+                result.skipped += 1;
+                continue;
+            }
+        };
+
+        match parse_sigmahq_yaml(&content) {
+            Ok(rule) => {
+                result.rules.push(rule);
+                result.imported += 1;
+            }
+            Err(e) => {
+                result.errors.push(format!("{file_name}: {e}"));
+                result.skipped += 1;
+            }
+        }
+    }
+
+    result
+}
+
+/// Parse a single SigmaHQ YAML file into a SigmaRule.
+pub fn parse_sigmahq_yaml(yaml_content: &str) -> Result<SigmaRule, String> {
+    // Simple YAML parser for SigmaHQ format
+    let doc: serde_json::Value = parse_yaml_to_json(yaml_content)?;
+
+    let id = doc
+        .get("id")
+        .and_then(|v| v.as_str())
+        .unwrap_or("unknown")
+        .to_string();
+    let title = doc
+        .get("title")
+        .and_then(|v| v.as_str())
+        .ok_or("Missing 'title' field")?
+        .to_string();
+    let description = doc
+        .get("description")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .to_string();
+    let level = match doc
+        .get("level")
+        .and_then(|v| v.as_str())
+        .unwrap_or("medium")
+    {
+        "informational" => SeverityLevel::Informational,
+        "low" => SeverityLevel::Low,
+        "medium" => SeverityLevel::Medium,
+        "high" => SeverityLevel::High,
+        "critical" => SeverityLevel::Critical,
+        _ => SeverityLevel::Medium,
+    };
+    let status = match doc
+        .get("status")
+        .and_then(|v| v.as_str())
+        .unwrap_or("experimental")
+    {
+        "stable" => RuleStatus::Stable,
+        "test" => RuleStatus::Test,
+        "deprecated" => RuleStatus::Deprecated,
+        _ => RuleStatus::Experimental,
+    };
+
+    // Parse logsource
+    let logsource_val = doc.get("logsource").ok_or("Missing 'logsource'")?;
+    let logsource = LogSource {
+        category: logsource_val
+            .get("category")
+            .and_then(|v| v.as_str())
+            .unwrap_or("detection")
+            .to_string(),
+        product: logsource_val
+            .get("product")
+            .and_then(|v| v.as_str())
+            .map(String::from),
+        service: logsource_val
+            .get("service")
+            .and_then(|v| v.as_str())
+            .map(String::from),
+    };
+
+    // Parse detection
+    let detection_val = doc.get("detection").ok_or("Missing 'detection'")?;
+    let condition = detection_val
+        .get("condition")
+        .and_then(|v| v.as_str())
+        .unwrap_or("selection")
+        .to_string();
+    let mut selections = HashMap::new();
+    let mut filters = HashMap::new();
+    if let Some(obj) = detection_val.as_object() {
+        for (key, val) in obj {
+            if key == "condition" {
+                continue;
+            }
+            let matchers = parse_sigma_detection_item(val);
+            if key.starts_with("filter") {
+                filters.insert(key.clone(), matchers);
+            } else {
+                selections.insert(key.clone(), matchers);
+            }
+        }
+    }
+
+    let detection = Detection {
+        selections,
+        filters,
+        condition,
+    };
+
+    // Parse tags
+    let tags: Vec<String> = doc
+        .get("tags")
+        .and_then(|v| v.as_array())
+        .map(|arr| {
+            arr.iter()
+                .filter_map(|v| v.as_str().map(String::from))
+                .collect()
+        })
+        .unwrap_or_default();
+
+    // Parse ATT&CK from tags
+    let attack: Vec<AttackMapping> = tags
+        .iter()
+        .filter(|t| t.starts_with("attack.t"))
+        .map(|t| {
+            let tech_id = t.strip_prefix("attack.").unwrap_or(t).to_uppercase();
+            AttackMapping {
+                tactic: String::new(),
+                technique_id: tech_id.clone(),
+                technique_name: tech_id,
+            }
+        })
+        .collect();
+
+    let falsepositives: Vec<String> = doc
+        .get("falsepositives")
+        .and_then(|v| v.as_array())
+        .map(|arr| {
+            arr.iter()
+                .filter_map(|v| v.as_str().map(String::from))
+                .collect()
+        })
+        .unwrap_or_default();
+
+    Ok(SigmaRule {
+        id,
+        title,
+        status,
+        level,
+        description,
+        logsource,
+        detection,
+        tags,
+        attack,
+        falsepositives,
+        suppress_for_secs: 0,
+        enabled: true,
+    })
+}
+
+fn parse_sigma_detection_item(val: &serde_json::Value) -> Vec<FieldMatcher> {
+    let mut matchers = Vec::new();
+
+    if let Some(obj) = val.as_object() {
+        for (field, field_val) in obj {
+            // Check for modifiers in field name: fieldname|modifier
+            let (base_field, modifier) = if let Some((f, m)) = field.split_once('|') {
+                let mod_type = match m {
+                    "contains" => MatchModifier::Contains,
+                    "startswith" => MatchModifier::StartsWith,
+                    "endswith" => MatchModifier::EndsWith,
+                    "re" => MatchModifier::Re,
+                    _ => MatchModifier::Equals,
+                };
+                (f.to_string(), mod_type)
+            } else {
+                (field.clone(), MatchModifier::Equals)
+            };
+
+            let values = match field_val {
+                serde_json::Value::Array(arr) => arr
+                    .iter()
+                    .filter_map(|v| match v {
+                        serde_json::Value::String(s) => Some(s.clone()),
+                        serde_json::Value::Number(n) => Some(n.to_string()),
+                        _ => None,
+                    })
+                    .collect(),
+                serde_json::Value::String(s) => vec![s.clone()],
+                serde_json::Value::Number(n) => vec![n.to_string()],
+                serde_json::Value::Bool(b) => vec![b.to_string()],
+                _ => vec![],
+            };
+
+            matchers.push(FieldMatcher {
+                field: base_field,
+                modifier,
+                values,
+            });
+        }
+    } else if let Some(arr) = val.as_array() {
+        // Array of detection items (OR within selection)
+        for item in arr {
+            matchers.extend(parse_sigma_detection_item(item));
+        }
+    }
+
+    matchers
+}
+
+/// Minimal YAML-to-JSON parser for SigmaHQ format.
+/// Handles the subset of YAML needed for Sigma rules: scalars, lists, maps.
+fn parse_yaml_to_json(yaml: &str) -> Result<serde_json::Value, String> {
+    // Use toml-compatible structure via line-by-line parsing
+    let mut root = serde_json::Map::new();
+    let mut current_key: Option<String> = None;
+    let mut current_list: Option<Vec<serde_json::Value>> = None;
+    let mut current_map: Option<serde_json::Map<String, serde_json::Value>> = None;
+    let mut in_sub_map = false;
+    let mut sub_key: Option<String> = None;
+
+    for line in yaml.lines() {
+        let trimmed = line.trim();
+        if trimmed.is_empty() || trimmed.starts_with('#') {
+            continue;
+        }
+
+        let indent = line.len() - line.trim_start().len();
+
+        if indent == 0 && trimmed.contains(':') && !trimmed.starts_with('-') {
+            // Flush previous
+            flush_current(&mut root, &mut current_key, &mut current_list, &mut current_map);
+            in_sub_map = false;
+            sub_key = None;
+
+            let (key, val) = trimmed.split_once(':').unwrap();
+            let key = key.trim().to_string();
+            let val = val.trim();
+            if val.is_empty() {
+                current_key = Some(key);
+                current_list = None;
+                current_map = Some(serde_json::Map::new());
+            } else {
+                root.insert(key, parse_yaml_scalar(val));
+            }
+        } else if indent > 0 && trimmed.starts_with('-') {
+            let val = trimmed.trim_start_matches('-').trim();
+            if current_list.is_none() {
+                current_list = Some(Vec::new());
+                current_map = None;
+            }
+            if let Some(ref mut list) = current_list {
+                list.push(parse_yaml_scalar(val));
+            }
+        } else if indent > 0 && trimmed.contains(':') && !trimmed.starts_with('-') {
+            let (k, v) = trimmed.split_once(':').unwrap();
+            let k = k.trim().to_string();
+            let v = v.trim();
+
+            if indent >= 8 && in_sub_map {
+                // Nested map (e.g., detection selection fields)
+                if let Some(ref mut map) = current_map {
+                    if let Some(ref sk) = sub_key {
+                        let sub = map.entry(sk.clone()).or_insert_with(|| serde_json::json!({}));
+                        if let Some(obj) = sub.as_object_mut() {
+                            obj.insert(k, parse_yaml_value(v));
+                        }
+                    }
+                }
+            } else if indent >= 4 {
+                if v.is_empty() {
+                    // Start of sub-map within current map
+                    in_sub_map = true;
+                    sub_key = Some(k.clone());
+                    if let Some(ref mut map) = current_map {
+                        map.insert(k, serde_json::json!({}));
+                    }
+                } else {
+                    in_sub_map = false;
+                    sub_key = None;
+                    if let Some(ref mut map) = current_map {
+                        map.insert(k, parse_yaml_value(v));
+                    }
+                }
+            }
+        }
+    }
+
+    flush_current(&mut root, &mut current_key, &mut current_list, &mut current_map);
+    Ok(serde_json::Value::Object(root))
+}
+
+fn flush_current(
+    root: &mut serde_json::Map<String, serde_json::Value>,
+    key: &mut Option<String>,
+    list: &mut Option<Vec<serde_json::Value>>,
+    map: &mut Option<serde_json::Map<String, serde_json::Value>>,
+) {
+    if let Some(k) = key.take() {
+        if let Some(l) = list.take() {
+            root.insert(k, serde_json::Value::Array(l));
+        } else if let Some(m) = map.take() {
+            root.insert(k, serde_json::Value::Object(m));
+        }
+    }
+    *list = None;
+    *map = None;
+}
+
+fn parse_yaml_scalar(s: &str) -> serde_json::Value {
+    let s = s.trim().trim_matches('\'').trim_matches('"');
+    if s == "true" {
+        serde_json::Value::Bool(true)
+    } else if s == "false" {
+        serde_json::Value::Bool(false)
+    } else if let Ok(n) = s.parse::<i64>() {
+        serde_json::json!(n)
+    } else {
+        serde_json::Value::String(s.to_string())
+    }
+}
+
+fn parse_yaml_value(s: &str) -> serde_json::Value {
+    let s = s.trim();
+    if s.starts_with('[') && s.ends_with(']') {
+        // Inline list: [val1, val2]
+        let inner = &s[1..s.len() - 1];
+        let items: Vec<serde_json::Value> = inner
+            .split(',')
+            .map(|item| parse_yaml_scalar(item.trim()))
+            .collect();
+        serde_json::Value::Array(items)
+    } else {
+        parse_yaml_scalar(s)
+    }
+}
+
 /// Bridge: convert a `KernelEvent` into OCSF fields for Sigma evaluation.
 /// Returns the extracted field map and the inferred logsource category.
 pub fn kernel_event_to_sigma_fields(

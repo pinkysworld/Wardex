@@ -2,7 +2,7 @@
 
 ## Current release
 
-- **Version:** `0.44.0`
+- **Version:** `0.45.0`
 - **Positioning:** private-cloud XDR and SIEM platform with enterprise detection engineering, malware scanning, analyst workflows, fleet operations, behavioural analytics, and automated incident response
 - **Source footprint:** 128 Rust source modules
 - **API contract:** 174 documented OpenAPI paths

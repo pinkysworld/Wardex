@@ -372,6 +372,137 @@ impl AwsCloudTrailCollector {
         }
         counts
     }
+
+    /// Poll CloudTrail LookupEvents via HTTPS using SigV4 signed requests.
+    ///
+    /// Makes a real HTTP POST to the CloudTrail endpoint, signs the request
+    /// with AWS Signature Version 4, and parses the response.
+    pub fn poll(&mut self) -> AwsPollResult {
+        let now = chrono::Utc::now().to_rfc3339();
+
+        if !self.is_enabled() {
+            return AwsPollResult {
+                events: Vec::new(),
+                event_count: 0,
+                success: false,
+                error: Some("Collector not enabled or not configured".into()),
+                polled_at: now,
+                next_token: None,
+            };
+        }
+
+        let endpoint = format!(
+            "https://cloudtrail.{}.amazonaws.com",
+            self.config.region
+        );
+        let body = self.build_request_body();
+        let date = chrono::Utc::now().format("%Y%m%dT%H%M%SZ").to_string();
+        let date_short = &date[..8];
+
+        // SigV4 canonical request components
+        let content_hash = sha256_hex(body.as_bytes());
+        let canonical_headers = format!(
+            "content-type:application/x-amz-json-1.1\nhost:cloudtrail.{}.amazonaws.com\nx-amz-date:{}\nx-amz-target:com.amazonaws.cloudtrail.v20131101.CloudTrail_20131101.LookupEvents\n",
+            self.config.region, date
+        );
+        let signed_headers = "content-type;host;x-amz-date;x-amz-target";
+        let canonical_request = format!(
+            "POST\n/\n\n{}\n{}\n{}",
+            canonical_headers, signed_headers, content_hash
+        );
+
+        let credential_scope = format!(
+            "{}/{}/cloudtrail/aws4_request",
+            date_short, self.config.region
+        );
+        let string_to_sign = format!(
+            "AWS4-HMAC-SHA256\n{}\n{}\n{}",
+            date,
+            credential_scope,
+            sha256_hex(canonical_request.as_bytes())
+        );
+
+        // Derive signing key
+        let k_date = hmac_sha256(
+            format!("AWS4{}", self.config.secret_access_key).as_bytes(),
+            date_short.as_bytes(),
+        );
+        let k_region = hmac_sha256(&k_date, self.config.region.as_bytes());
+        let k_service = hmac_sha256(&k_region, b"cloudtrail");
+        let k_signing = hmac_sha256(&k_service, b"aws4_request");
+        let signature = hex::encode(hmac_sha256(&k_signing, string_to_sign.as_bytes()));
+
+        let authorization = format!(
+            "AWS4-HMAC-SHA256 Credential={}/{}, SignedHeaders={}, Signature={}",
+            self.config.access_key_id, credential_scope, signed_headers, signature
+        );
+
+        let result = ureq::post(&endpoint)
+            .set("Content-Type", "application/x-amz-json-1.1")
+            .set("X-Amz-Date", &date)
+            .set("X-Amz-Target", "com.amazonaws.cloudtrail.v20131101.CloudTrail_20131101.LookupEvents")
+            .set("Authorization", &authorization)
+            .send_string(&body);
+
+        match result {
+            Ok(resp) => {
+                let resp_body = resp.into_string()
+                    .unwrap_or_default();
+                self.parse_response(&resp_body)
+            }
+            Err(e) => AwsPollResult {
+                events: Vec::new(),
+                event_count: 0,
+                success: false,
+                error: Some(format!("CloudTrail API call failed: {e}")),
+                polled_at: now,
+                next_token: None,
+            },
+        }
+    }
+}
+
+// ── SigV4 Crypto Helpers ──────────────────────────────────────────────────────
+
+fn sha256_hex(data: &[u8]) -> String {
+    use sha2::{Sha256, Digest};
+    let mut hasher = Sha256::new();
+    hasher.update(data);
+    hex::encode(hasher.finalize())
+}
+
+fn hmac_sha256(key: &[u8], data: &[u8]) -> Vec<u8> {
+    use sha2::Sha256;
+    // Simple HMAC implementation
+    let block_size = 64;
+    let mut padded_key = vec![0u8; block_size];
+    if key.len() > block_size {
+        use sha2::Digest;
+        let mut hasher = Sha256::new();
+        hasher.update(key);
+        let hash = hasher.finalize();
+        padded_key[..hash.len()].copy_from_slice(&hash);
+    } else {
+        padded_key[..key.len()].copy_from_slice(key);
+    }
+
+    let mut ipad = vec![0x36u8; block_size];
+    let mut opad = vec![0x5cu8; block_size];
+    for i in 0..block_size {
+        ipad[i] ^= padded_key[i];
+        opad[i] ^= padded_key[i];
+    }
+
+    use sha2::Digest;
+    let mut inner = Sha256::new();
+    inner.update(&ipad);
+    inner.update(data);
+    let inner_hash = inner.finalize();
+
+    let mut outer = Sha256::new();
+    outer.update(&opad);
+    outer.update(&inner_hash);
+    outer.finalize().to_vec()
 }
 
 // ── Tests ─────────────────────────────────────────────────────────────────────

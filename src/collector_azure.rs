@@ -378,6 +378,96 @@ impl AzureActivityCollector {
             .filter(|e| e.risk_score >= threshold)
             .collect()
     }
+
+    /// Authenticate with Azure AD and obtain an access token.
+    pub fn authenticate(&mut self) -> Result<(), String> {
+        if self.token_valid() {
+            return Ok(());
+        }
+
+        let url = self.token_endpoint();
+        let body = self.build_token_request();
+
+        let resp: serde_json::Value = ureq::post(&url)
+            .set("Content-Type", "application/x-www-form-urlencoded")
+            .send_string(&body)
+            .map_err(|e| format!("Azure AD auth failed: {e}"))?
+            .into_json()
+            .map_err(|e| format!("Azure AD token parse failed: {e}"))?;
+
+        let token = resp
+            .get("access_token")
+            .and_then(|v| v.as_str())
+            .ok_or("No access_token in response")?;
+
+        let expires_in = resp
+            .get("expires_in")
+            .and_then(|v| v.as_str())
+            .and_then(|s| s.parse::<u64>().ok())
+            .unwrap_or(3600);
+
+        self.set_token(token, expires_in);
+        Ok(())
+    }
+
+    /// Poll Azure Activity Log via the Management REST API.
+    pub fn poll(&mut self) -> AzurePollResult {
+        let now = chrono::Utc::now().to_rfc3339();
+
+        if !self.is_enabled() {
+            return AzurePollResult {
+                events: Vec::new(),
+                event_count: 0,
+                success: false,
+                error: Some("Collector not enabled or not configured".into()),
+                polled_at: now,
+            };
+        }
+
+        // Authenticate if needed
+        if let Err(e) = self.authenticate() {
+            return AzurePollResult {
+                events: Vec::new(),
+                event_count: 0,
+                success: false,
+                error: Some(e),
+                polled_at: now,
+            };
+        }
+
+        let token = match &self.access_token {
+            Some(t) => t.clone(),
+            None => {
+                return AzurePollResult {
+                    events: Vec::new(),
+                    event_count: 0,
+                    success: false,
+                    error: Some("No access token available".into()),
+                    polled_at: now,
+                };
+            }
+        };
+
+        let url = self.build_query_url();
+        let result = ureq::get(&url)
+            .set("Authorization", &format!("Bearer {token}"))
+            .call();
+
+        match result {
+            Ok(resp) => {
+                let resp_body = resp.into_string()
+                    .unwrap_or_default();
+                self.parse_response(&resp_body)
+            }
+            Err(e) => AzurePollResult {
+                events: Vec::new(),
+                event_count: 0,
+                success: false,
+                error: Some(format!("Azure Activity Log API call failed: {e}")),
+                polled_at: now,
+            },
+        }
+    }
 }
 
 // ── Tests ─────────────────────────────────────────────────────────────────────

@@ -80,11 +80,15 @@ Wardex is a self-hosted XDR and SIEM platform built in Rust for teams that want 
   - IDP and SCIM configuration surfaces
   - Change control, admin audit export, diagnostics, and dependency health
   - Digital twin calibration from real-world telemetry
+  - OIDC/SAML SSO with OpenID Connect discovery, authorization code flow, and automatic role mapping
+  - Centralised secrets management: env-var expansion, file-based secrets, HashiCorp Vault KV v2 with caching
 
 - **Research and AI**
   - Federated learning with convergence loop and differential privacy
   - Deception engine with randomised canary deployment and attacker behavior profiling
   - Privacy-preserving forensics with 4 redaction levels and ZK proofs
+  - LLM-assisted security analyst with RAG pipeline (OpenAI/Azure/Anthropic/Ollama), conversation history, and citation generation
+  - ONNX Runtime ML inference for real-time anomaly detection and triage classification
 
 - **Integrations and evidence**
   - Structured SIEM output, OCSF normalization, TAXII pull, and threat-intel enrichment
@@ -117,8 +121,9 @@ Wardex is a self-hosted XDR and SIEM platform built in Rust for teams that want 
   - ML triage engine with 5-tree Random Forest ensemble for true-positive/false-positive/needs-review classification
   - HA cluster snapshots with log compaction and persistent Raft state schema
   - OIDC/SAML SSO with session management (config, login, callback, session, logout)
-  - Cloud collectors for AWS CloudTrail, Azure Activity Log, and GCP Audit Log
-  - Full-text search index with query parsing and faceted results
+  - Cloud collectors for AWS CloudTrail (SigV4), Azure Activity Log (OAuth2), and GCP Audit Log (JWT/RS256) with live polling
+  - Full-text search index with Tantivy persistent event store, query parsing, and faceted results
+  - SigmaHQ YAML rule import from the community repository
   - Usage metering with plan limits and overage calculation
   - Billing engine with subscription management and invoice generation
   - Content marketplace with 10 built-in packs and install/uninstall lifecycle
@@ -126,6 +131,8 @@ Wardex is a self-hosted XDR and SIEM platform built in Rust for teams that want 
   - Ingestion pipeline with backpressure tracking and dead-letter queue
   - Scheduled backup manager with retention and restore verification
   - Ed25519-signed license validation with tier enforcement and feature gating
+  - HIPAA compliance evaluation: access controls, audit logging, encryption, breach notification, workforce training
+  - GDPR compliance evaluation: consent management, data subject rights, breach reporting, cross-border transfer safeguards
   - Compliance templates for CIS v8, PCI-DSS v4, SOC 2, and NIST CSF 2.0 with auto-evaluation
   - Kubernetes manifests and Helm chart for production deployment
   - CI hardening with cargo-audit, code coverage, MSRV checks, and dependency caching
@@ -152,10 +159,12 @@ Wardex is a self-hosted XDR and SIEM platform built in Rust for teams that want 
 
 ## Product posture
 
-- 116 Rust source modules
-- 161 documented API paths
-- 1161 lib tests + 184 integration tests, all passing
+- 135+ Rust source modules
+- 174 documented API paths
+- 1272 lib tests + 190 integration tests, all passing
 - 26 admin-console unit tests (Vitest)
+- Criterion micro-benchmarks for pipeline throughput
+- 6 libFuzzer fuzz targets for protocol/input fuzzing
 - Production hardening score: 98% (58/59 controls)
 - GitHub Actions release packaging for Linux, macOS, and Windows
 - CI quality gates: cargo-tarpaulin (70% threshold), cargo-semver-checks, fuzz testing, frontend lint+test

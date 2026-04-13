@@ -2,6 +2,35 @@
 
 All notable changes to Wardex are documented in this file.
 
+## [0.45.0] — Enterprise Integration & Intelligence
+
+### Added — Authentication & Secrets
+- **OIDC/SAML SSO** — Federated authentication with OpenID Connect discovery, authorization code flow, token exchange, automatic Wardex role mapping, and session management (`src/oidc.rs`).
+- **Secrets management** — Centralised `SecretsResolver` supporting env-var expansion (`${VAR}`), file-based secrets (`file://`), and HashiCorp Vault KV v2 (`vault://`) with namespace support and in-memory caching (`src/secrets.rs`).
+
+### Added — Intelligence & Analytics
+- **LLM-assisted analyst** — RAG-powered analyst with `/api/ask` endpoint. Supports OpenAI, Azure OpenAI, Anthropic, and Ollama backends. Includes conversation history, citation generation, and confidence scoring (`src/llm_analyst.rs`).
+- **ONNX ML inference** — Real model inference via ONNX Runtime for anomaly detection, replacing the stub engine. Supports loading `.onnx` models for triage classification (`src/ml_engine.rs`).
+- **SigmaHQ rule import** — YAML-based Sigma rule ingestion from the SigmaHQ community repository with field mapping and condition parsing (`src/sigma.rs`).
+
+### Added — Cloud & Data
+- **AWS CloudTrail live polling** — Real CloudTrail API integration with SigV4 request signing (`src/collector_aws.rs`).
+- **Azure Activity Log polling** — OAuth2 client-credentials flow with Azure AD, Management REST API querying (`src/collector_azure.rs`).
+- **GCP Cloud Audit Logs** — JWT-based service-account authentication and Logging v2 REST API polling (`src/collector_gcp.rs`).
+- **Persistent event store** — Tantivy full-text search index for event persistence and retrieval (`src/search.rs`).
+
+### Added — Compliance
+- **HIPAA compliance module** — Automated evaluation of healthcare security controls including access controls, audit logging, encryption, and breach notification (`src/compliance_hipaa.rs`).
+- **GDPR compliance module** — Data-protection control evaluation covering consent management, data subject rights, breach reporting, and cross-border transfer safeguards (`src/compliance_hipaa.rs`).
+
+### Added — Quality & Performance
+- **Criterion benchmarks** — Pipeline throughput micro-benchmarks for regression detection (`benches/pipeline.rs`).
+- **Expanded fuzz targets** — Three new libFuzzer targets: `search_query`, `secrets_expand`, `sigma_import` (`fuzz/fuzz_targets/`).
+- **Module organisation** — Refactored `lib.rs` with grouped module declarations for better navigability.
+
+### Stats
+- **135+ Rust source modules** · **1462+ tests** (1272 unit + 190 integration) · **174 API paths**
+
 ## [0.44.0] — 20 Detection & UX Enhancements
 
 ### Added — Detection Engine

@@ -31,3 +31,18 @@ doc = false
 name = "yara_load"
 path = "fuzz_targets/yara_load.rs"
 doc = false
+
+[[bin]]
+name = "search_query"
+path = "fuzz_targets/search_query.rs"
+doc = false
+
+[[bin]]
+name = "sigma_import"
+path = "fuzz_targets/sigma_import.rs"
+doc = false
+
+[[bin]]
+name = "secrets_expand"
+path = "fuzz_targets/secrets_expand.rs"
+doc = false
