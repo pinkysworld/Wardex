@@ -65,6 +65,12 @@ impl UpdateManager {
         mandatory: bool,
     ) -> Result<Release, String> {
         use sha2::{Digest, Sha256};
+        // Prevent path traversal via version/platform
+        if version.contains("..") || version.contains('/') || version.contains('\\')
+            || platform.contains("..") || platform.contains('/') || platform.contains('\\')
+        {
+            return Err("invalid version or platform name".into());
+        }
         let sha256 = hex::encode(Sha256::digest(binary));
         let file_name = format!("wardex-{}-{}", version, platform);
 
@@ -265,6 +271,10 @@ impl AtomicUpdater {
         use sha2::{Digest, Sha256};
 
         let started = chrono::Utc::now().to_rfc3339();
+        // Prevent path traversal via new_version
+        if new_version.contains("..") || new_version.contains('/') || new_version.contains('\\') {
+            return Err("invalid version name".into());
+        }
         let staged_path = format!("{}/staged-{}", self.staging_dir, new_version);
         let backup_path = format!("{}/backup-{}", self.staging_dir, self.current_version);
 

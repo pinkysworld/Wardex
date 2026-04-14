@@ -195,6 +195,9 @@ export class WardexClient {
   private timeout: number;
 
   constructor(config: WardexConfig) {
+    if (!/^https?:\/\//i.test(config.baseUrl)) {
+      throw new Error("baseUrl must start with http:// or https://");
+    }
     this.baseUrl = config.baseUrl.replace(/\/$/, "");
     this.apiKey = config.apiKey;
     this.timeout = config.timeout ?? 30000;
@@ -324,7 +327,7 @@ export class WardexClient {
   }
 
   async playbookExecution(executionId: string): Promise<PlaybookExecution> {
-    return this.request("GET", `/api/playbooks/executions/${executionId}`);
+    return this.request("GET", `/api/playbooks/executions/${encodeURIComponent(executionId)}`);
   }
 
   // ── Compliance ───────────────────────────────────────────────────
@@ -333,7 +336,7 @@ export class WardexClient {
     frameworkId?: string
   ): Promise<ComplianceReport | ComplianceReport[]> {
     const path = frameworkId
-      ? `/api/compliance/report?framework=${frameworkId}`
+      ? `/api/compliance/report?framework=${encodeURIComponent(frameworkId)}`
       : "/api/compliance/report";
     return this.request("GET", path);
   }
@@ -347,7 +350,7 @@ export class WardexClient {
   async exportAlerts(
     format: "cef" | "syslog" | "leef" | "json" | "ecs" | "udm"
   ): Promise<string> {
-    return this.request("GET", `/api/export/alerts?format=${format}`);
+    return this.request("GET", `/api/export/alerts?format=${encodeURIComponent(format)}`);
   }
 
   // ── Backups ──────────────────────────────────────────────────────

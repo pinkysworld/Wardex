@@ -1245,12 +1245,13 @@ impl StorageBackend {
         for &(table, column) in tables_columns {
             // Use LIKE for the metrics labels column (JSON text), exact match for others
             let sql = if column == "labels" {
-                format!("DELETE FROM {table} WHERE {column} LIKE ?1")
+                format!("DELETE FROM {table} WHERE {column} LIKE ?1 ESCAPE '\\'")
             } else {
                 format!("DELETE FROM {table} WHERE {column} = ?1")
             };
             let param = if column == "labels" {
-                format!("%{entity_id}%")
+                let escaped = entity_id.replace('%', "\\%").replace('_', "\\_");
+                format!("%{escaped}%")
             } else {
                 entity_id.to_string()
             };

@@ -1800,13 +1800,11 @@ fn incidents_json(
     let limit = query
         .get("limit")
         .and_then(|value| value.parse::<usize>().ok())
-        .map(|value| value.min(1000));
+        .unwrap_or(100)
+        .min(1000);
 
     let incidents = incident_store.list_filtered(status, severity);
-    let paged: Vec<_> = match limit {
-        Some(limit) => incidents.into_iter().skip(offset).take(limit).collect(),
-        None => incidents.into_iter().skip(offset).collect(),
-    };
+    let paged: Vec<_> = incidents.into_iter().skip(offset).take(limit).collect();
     serde_json::to_string(&paged).map_err(|e| format!("serialization error: {e}"))
 }
 
@@ -3307,12 +3305,8 @@ fn csv_escape(value: &str) -> String {
     // Strip CRLF injection vectors
     let sanitised = value.replace('\r', " ").replace('\n', " ");
     let safe = sanitised.replace('"', "\"\"");
-    // Prevent CSV formula injection (=, +, -, @, |, tab)
-    if safe.starts_with(['=', '+', '-', '@', '|', '\t']) {
-        format!("\"'{}\"", safe)
-    } else {
-        format!("\"{}\"", safe)
-    }
+    // Prevent CSV formula injection — unconditionally prefix with single quote
+    format!("\"'{}\"", safe)
 }
 
 fn ocsf_class_for_event(event: &crate::event_forward::StoredEvent) -> u32 {
@@ -8516,7 +8510,7 @@ fn handle_api(
                 let agent_log_buf = s.agent_logs.entry(agent_id.to_string()).or_default();
                 for log in logs {
                     if agent_log_buf.len() >= 500 {
-                        agent_log_buf.drain(..1);
+                        agent_log_buf.drain(..50);
                     }
                     agent_log_buf.push(log);
                 }

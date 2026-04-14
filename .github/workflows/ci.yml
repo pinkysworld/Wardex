@@ -116,7 +116,7 @@ jobs:
       - name: Run Python SDK tests
         run: |
           cd sdk/python
-          python -m pytest tests/ -v || echo "No tests found — lint only"
+          python -m pytest tests/ -v
       - name: Lint SDK
         run: |
           pip install ruff
@@ -177,11 +177,11 @@ jobs:
       - name: Unit tests
         run: npm test -- --run
       - name: Audit dependencies
-        run: npm audit --audit-level=high || true
+        run: npm audit --audit-level=high
       - name: Install Playwright browsers
         run: npx playwright install --with-deps chromium
       - name: Playwright E2E tests
-        run: npx playwright test --project=chromium || echo "No Playwright tests configured yet"
+        run: npx playwright test --project=chromium
 
   feature-flags:
     runs-on: ubuntu-latest

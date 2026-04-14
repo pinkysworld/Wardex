@@ -132,7 +132,10 @@ impl SiemConnector {
     pub fn queue_log(&mut self, log: &crate::log_collector::LogRecord) {
         self.pending_logs.push(log.clone());
         if self.pending_logs.len() >= self.config.batch_size {
-            let _ = self.flush_logs();
+            if let Err(e) = self.flush_logs() {
+                eprintln!("[WARN] SIEM flush_logs failed: {e}");
+                self.last_error = Some(e);
+            }
         }
     }
 
@@ -161,7 +164,10 @@ impl SiemConnector {
             })
             .to_string(),
         };
-        let _ = self.send_to_siem(&payload);
+        if let Err(e) = self.send_to_siem(&payload) {
+            eprintln!("[WARN] SIEM push_inventory failed: {e}");
+            self.last_error = Some(e);
+        }
     }
 
     fn flush_logs(&mut self) -> Result<usize, String> {

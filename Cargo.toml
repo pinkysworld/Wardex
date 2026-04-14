@@ -40,7 +40,7 @@ tantivy = "0.22"
 
 [features]
 default = ["experimental-ml", "experimental-llm", "experimental-quantum", "experimental-proof"]
-tls = []
+tls = ["ureq/tls"]
 experimental-ml = []
 experimental-llm = []
 experimental-quantum = []
