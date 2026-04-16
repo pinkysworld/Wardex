@@ -5,12 +5,15 @@
 
 # ── Stage 1: Build ────────────────────────────────────────────────
 FROM rust:1.85-bookworm AS builder
+COPY --from=node:22-bookworm /usr/local/ /usr/local/
 
 WORKDIR /build
 
 # Cache dependency build: copy manifests first, build with a dummy main
 COPY Cargo.toml Cargo.lock* ./
 COPY build.rs ./
+COPY admin-console/ admin-console/
+RUN npm ci --prefix admin-console
 RUN mkdir -p src && echo 'fn main() {}' > src/main.rs \
     && cargo build --release --features tls 2>&1 | tail -5 || true \
     && rm -rf src
