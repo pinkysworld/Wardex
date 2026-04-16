@@ -148,3 +148,4 @@ or **Not started**, with a priority of Critical / High / Medium.
 ## Remediation Priorities
 
 1. **Package publication verification** — keep release asset names, Homebrew formula URLs, and package checksum publication in lockstep on every tag.
+2. **Homebrew tap automation** — `.github/workflows/sync-homebrew-tap.yml` syncs the published release archives into `pinkysworld/homebrew-wardex` after a release is published. Configure a fine-grained PAT as `HOMEBREW_TAP_TOKEN` with contents write access to the tap repository before cutting releases.
