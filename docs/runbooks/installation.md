@@ -13,6 +13,8 @@ brew services start wardex
 wardex serve --port 9077
 ```
 
+The Homebrew tap is published from the dedicated repository `pinkysworld/homebrew-wardex`, so the standard commands now work without an explicit repository URL.
+
 ## Linux (Debian / Ubuntu)
 
 Download the `.deb` package from the [latest release](https://github.com/pinkysworld/Wardex/releases/latest):

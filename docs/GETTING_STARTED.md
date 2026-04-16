@@ -145,11 +145,12 @@ sudo dpkg -i ./wardex_*_amd64.deb
 # RHEL / Fedora / Rocky
 sudo rpm -i ./wardex-*.x86_64.rpm
 
-# Homebrew (formula kept in-repo)
-brew install --formula ./deploy/homebrew/wardex.rb
+# Homebrew
+brew tap pinkysworld/wardex
+brew install wardex
 ```
 
-The Homebrew formula installs the binary plus the bundled static site and example data into the usual Homebrew locations under `share/wardex/`.
+The Homebrew formula installs the binary plus the bundled static site and example data into the usual Homebrew locations under `share/wardex/`. The tap is published from the dedicated repository `pinkysworld/homebrew-wardex`.
 
 ## Telemetry format
 
