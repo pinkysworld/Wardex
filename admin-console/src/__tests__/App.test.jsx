@@ -5,15 +5,16 @@ import { MemoryRouter } from 'react-router-dom';
 import { AuthProvider, RoleProvider, ThemeProvider, ToastProvider } from '../hooks.jsx';
 import App from '../App.jsx';
 
-// Stub fetch globally
-global.fetch = vi.fn();
+const fetchMock = vi.fn();
+
+vi.stubGlobal('fetch', fetchMock);
 
 beforeEach(() => {
   vi.clearAllMocks();
-  global.fetch.mockReset();
+  fetchMock.mockReset();
   localStorage.clear();
   // Default stub: return empty JSON for any api call
-  global.fetch.mockResolvedValue({
+  fetchMock.mockResolvedValue({
     ok: true,
     headers: { get: () => 'application/json' },
     json: async () => ({}),
@@ -73,7 +74,7 @@ describe('App', () => {
   });
 
   it('shows auth error on failed connection', async () => {
-    global.fetch.mockImplementation(() => Promise.resolve({
+    fetchMock.mockImplementation(() => Promise.resolve({
       ok: false,
       status: 401,
       statusText: 'Unauthorized',
