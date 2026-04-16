@@ -3,8 +3,8 @@ require "json"
 class Wardex < Formula
   desc "SentinelEdge XDR — AI-powered endpoint detection & response"
   homepage "https://github.com/pinkysworld/Wardex"
-  url "https://github.com/pinkysworld/Wardex/archive/refs/tags/v0.52.1.tar.gz"
-  sha256 "5e9dda47ba4378f9d09d273163cfc86176cd72c6b68ac9ae8d5acbe7ffd7546b"
+  url "https://github.com/pinkysworld/Wardex/archive/refs/tags/v0.52.5.tar.gz"
+  sha256 "68da2b9a429420936434d5c621d213dc3eea18ca6c19682ab382eaa067f603a9"
   license "BUSL-1.1"
 
   depends_on "node" => :build
