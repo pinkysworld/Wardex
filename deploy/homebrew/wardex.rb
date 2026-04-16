@@ -7,16 +7,16 @@ class Wardex < Formula
   on_macos do
     if Hardware::CPU.arm?
       url "https://github.com/pinkysworld/Wardex/releases/download/v#{version}/wardex-macos-aarch64.tar.gz"
-      # sha256 "PLACEHOLDER"
+      sha256 "a27d183a9127d3f2e6d34819900553e6f3482fba761da0027968e82756a652de"
     else
       url "https://github.com/pinkysworld/Wardex/releases/download/v#{version}/wardex-macos-x86_64.tar.gz"
-      # sha256 "PLACEHOLDER"
+      sha256 "4e5077b1746f678c3b04ff5bafc9b9ae8e368a5a6f701fe985863fb124f4923f"
     end
   end
 
   on_linux do
     url "https://github.com/pinkysworld/Wardex/releases/download/v#{version}/wardex-linux-x86_64.tar.gz"
-    # sha256 "PLACEHOLDER"
+    sha256 "a665c17ac5706281612c8fa350d5710ceacd7d6567c9cea5e35fd10421cad5b5"
   end
 
   def install
