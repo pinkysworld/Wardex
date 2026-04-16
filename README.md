@@ -2,7 +2,7 @@
 
 Wardex is a Rust-based XDR and SIEM platform for private-cloud and self-hosted security operations. It combines cross-platform telemetry collection, detection engineering, analyst workflows, approval-gated response, agent lifecycle management, SIEM integrations, and tamper-evident evidence handling in a single deployable product.
 
-## What ships in `v0.52.4`
+## What ships in `v0.52.5`
 
 - 134 Rust source modules covering telemetry collection, detection engineering, hunt/search, SOC workflows, fleet operations, governance, and automated incident response.
 - 138 documented OpenAPI paths with authenticated admin-console workflows, fleet controls, reports, hunts, investigations, NDR, and enterprise support surfaces.

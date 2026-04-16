@@ -2,6 +2,11 @@
 
 All notable changes to Wardex are documented in this file.
 
+## [0.52.5] — Release Distribution Dispatch Authorization Fix
+
+### Packaging & Distribution
+- **Dispatch-capable release fan-out** — The tagged release workflow now validates `RELEASE_WORKFLOW_TOKEN` and uses it when dispatching GitHub Pages publication and Homebrew tap synchronization, avoiding the `GITHUB_TOKEN` workflow-dispatch permission failure.
+
 ## [0.52.4] — Release Asset Publication Fix
 
 ### Packaging & Distribution

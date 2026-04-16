@@ -343,9 +343,18 @@ jobs:
     if: success()
 
     steps:
+      - name: Validate workflow dispatch token
+        env:
+          RELEASE_WORKFLOW_TOKEN: ${{ secrets.RELEASE_WORKFLOW_TOKEN }}
+        run: |
+          if [[ -z "$RELEASE_WORKFLOW_TOKEN" ]]; then
+            echo "RELEASE_WORKFLOW_TOKEN secret is required to dispatch follow-up workflows from the release pipeline." >&2
+            exit 1
+          fi
+
       - name: Dispatch Pages publish
         env:
-          GH_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ secrets.RELEASE_WORKFLOW_TOKEN }}
         run: |
           gh workflow run pages.yml \
             -R "${{ github.repository }}" \
@@ -354,7 +363,7 @@ jobs:
 
       - name: Dispatch Homebrew tap sync
         env:
-          GH_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ secrets.RELEASE_WORKFLOW_TOKEN }}
         run: |
           gh workflow run sync-homebrew-tap.yml \
             -R "${{ github.repository }}" \

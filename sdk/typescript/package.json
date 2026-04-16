@@ -1,6 +1,6 @@
 {
   "name": "@wardex/sdk",
-  "version": "0.52.4",
+  "version": "0.52.5",
   "description": "TypeScript SDK for Wardex SentinelEdge XDR platform",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
