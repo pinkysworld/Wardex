@@ -1,6 +1,6 @@
 [package]
 name = "wardex"
-version = "0.52.0"
+version = "0.52.1"
 edition = "2024"
 rust-version = "1.85.0"
 build = "build.rs"
@@ -79,7 +79,9 @@ priority = "optional"
 depends = "$auto"
 assets = [
   ["target/release/wardex", "usr/bin/", "755"],
+  ["examples/**/*", "usr/share/wardex/examples/", "644"],
   ["rules/**/*", "usr/share/wardex/rules/", "644"],
+  ["site/**/*", "usr/share/wardex/site/", "644"],
   ["deploy/wardex.service", "lib/systemd/system/", "644"],
 ]
 conf-files = ["/etc/wardex/wardex.toml"]

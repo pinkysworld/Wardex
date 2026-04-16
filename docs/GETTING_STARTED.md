@@ -9,8 +9,11 @@
 ## Build
 
 ```bash
+npm ci --prefix admin-console
 cargo build --release
 ```
+
+The Rust build embeds the admin console from `admin-console/dist`, so install the frontend dependencies first when building from a clean checkout.
 
 ## Run the demo
 
@@ -139,8 +142,14 @@ Tagged releases are built by GitHub Actions for:
 Native installation assets are also published for operators who do not want to unpack raw archives:
 
 ```bash
-# Debian / Ubuntu
-sudo dpkg -i ./wardex_*_amd64.deb
+# Debian / Ubuntu (signed APT repository)
+curl -fsSL https://pinkysworld.github.io/Wardex/apt/wardex-archive-key.asc \
+  | gpg --dearmor \
+  | sudo tee /usr/share/keyrings/wardex-archive-keyring.gpg > /dev/null
+echo "deb [arch=amd64 signed-by=/usr/share/keyrings/wardex-archive-keyring.gpg] https://pinkysworld.github.io/Wardex/apt stable main" \
+  | sudo tee /etc/apt/sources.list.d/wardex.list > /dev/null
+sudo apt-get update
+sudo apt-get install wardex
 
 # RHEL / Fedora / Rocky
 sudo rpm -i ./wardex-*.x86_64.rpm
@@ -150,7 +159,9 @@ brew tap pinkysworld/wardex
 brew install wardex
 ```
 
-The Homebrew formula installs the binary plus the bundled static site and example data into the usual Homebrew locations under `share/wardex/`. The tap is published from the dedicated repository `pinkysworld/homebrew-wardex`.
+The Homebrew formula now builds Wardex from the tagged source archive, then installs the binary plus the bundled static site and example data under `share/wardex/`. The tap is published from the dedicated repository `pinkysworld/homebrew-wardex`.
+
+If you prefer a manual Debian install, download the versioned `.deb` from the latest GitHub release page and run `sudo dpkg -i ./wardex_<version>_amd64.deb`.
 
 ## Telemetry format
 
@@ -176,6 +187,7 @@ JSONL line example:
 |----------|-------------|---------|
 | `WARDEX_ADMIN_TOKEN` | Override the auto-generated admin token. Set this in production to a 256-bit random hex string. | Auto-generated at startup |
 | `WARDEX_BIND` | Listen address and port. | `0.0.0.0:8080` |
+| `WARDEX_CONFIG_PATH` | Explicit path to the runtime config file. Useful for packaged service installs. | Auto-discovered `var/wardex.toml` |
 | `SENTINEL_CORS_ORIGIN` | Allowed CORS origin(s) for the admin console. | `http://localhost:8080` |
 | `WARDEX_LOG_LEVEL` | Log verbosity (`trace`, `debug`, `info`, `warn`, `error`). | `info` |
 | `WARDEX_DATA_DIR` | Path to the data directory. | `var/` |

@@ -1,48 +1,37 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-if [[ $# -ne 5 ]]; then
-  echo "usage: $0 <version> <macos_aarch64_sha256> <macos_x86_64_sha256> <linux_x86_64_sha256> <output_path>" >&2
+if [[ $# -ne 4 ]]; then
+  echo "usage: $0 <version> <source_url> <source_sha256> <output_path>" >&2
   exit 1
 fi
 
 version="$1"
-macos_aarch64_sha256="$2"
-macos_x86_64_sha256="$3"
-linux_x86_64_sha256="$4"
-output_path="$5"
+source_url="$2"
+source_sha256="$3"
+output_path="$4"
 
 mkdir -p "$(dirname "$output_path")"
 
 cat >"$output_path" <<EOF
+require "json"
+
 class Wardex < Formula
   desc "SentinelEdge XDR — AI-powered endpoint detection & response"
   homepage "https://github.com/pinkysworld/Wardex"
-  version "$version"
-  license "BSL-1.1"
+  url "$source_url"
+  sha256 "$source_sha256"
+  license "BUSL-1.1"
 
-  on_macos do
-    if Hardware::CPU.arm?
-      url "https://github.com/pinkysworld/Wardex/releases/download/v#{version}/wardex-macos-aarch64.tar.gz"
-      sha256 "$macos_aarch64_sha256"
-    else
-      url "https://github.com/pinkysworld/Wardex/releases/download/v#{version}/wardex-macos-x86_64.tar.gz"
-      sha256 "$macos_x86_64_sha256"
-    end
-  end
-
-  on_linux do
-    url "https://github.com/pinkysworld/Wardex/releases/download/v#{version}/wardex-linux-x86_64.tar.gz"
-    sha256 "$linux_x86_64_sha256"
-  end
+  depends_on "node" => :build
+  depends_on "rust" => :build
 
   def install
-    pkg = Dir["wardex-*"] .find { |path| File.directory?(path) }
-    raise "release archive layout changed" unless pkg
+    system "npm", "ci", "--prefix", "admin-console"
+    system "cargo", "install", *std_cargo_args(path: ".")
 
-    bin.install "#{pkg}/wardex"
-    (share/"wardex/site").install Dir["#{pkg}/site/*"] if Dir.exist?("#{pkg}/site")
-    (share/"wardex/examples").install Dir["#{pkg}/examples/*"] if Dir.exist?("#{pkg}/examples")
+    pkgshare.install "examples", "site"
+    doc.install "README.md", "LICENSE"
   end
 
   def post_install
@@ -52,15 +41,24 @@ class Wardex < Formula
   end
 
   service do
-    run [opt_bin/"wardex", "serve", "--port", "8080"]
+    run [opt_bin/"wardex", "serve", "8080", opt_pkgshare/"site"]
     keep_alive true
+    environment_variables PATH: std_service_path_env, WARDEX_CONFIG_PATH: (var/"wardex/wardex.toml").to_s
     working_dir var/"wardex"
     log_path var/"log/wardex/wardex.log"
     error_log_path var/"log/wardex/wardex-error.log"
   end
 
   test do
-    assert_match "wardex", shell_output("#{bin}/wardex --version")
+    report_path = testpath/"report.json"
+    output = shell_output("#{bin}/wardex report #{pkgshare/"examples/benign_baseline.csv"} #{report_path}")
+    assert_match "JSON report written to", output
+    assert_path_exists report_path
+
+    report = JSON.parse(report_path.read)
+    assert_operator report.dig("summary", "total_samples"), :>, 0
+    assert_equal report.fetch("summary").fetch("total_samples"), report.fetch("samples").length
+    assert report.fetch("summary").key?("max_score")
   end
 end
 EOF

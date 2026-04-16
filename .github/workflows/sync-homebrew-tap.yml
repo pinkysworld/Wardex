@@ -52,20 +52,16 @@ jobs:
           echo "tag=$tag" >> "$GITHUB_OUTPUT"
           echo "version=${tag#v}" >> "$GITHUB_OUTPUT"
 
-      - name: Download release archives
+      - name: Download source archive
         env:
-          RELEASE_BASE: https://github.com/${{ github.repository }}/releases/download/${{ steps.release.outputs.tag }}
+          SOURCE_ARCHIVE_URL: https://github.com/${{ github.repository }}/archive/refs/tags/${{ steps.release.outputs.tag }}.tar.gz
         run: |
-          curl --fail --location --retry 5 --retry-delay 5 --output wardex-linux-x86_64.tar.gz "$RELEASE_BASE/wardex-linux-x86_64.tar.gz"
-          curl --fail --location --retry 5 --retry-delay 5 --output wardex-macos-aarch64.tar.gz "$RELEASE_BASE/wardex-macos-aarch64.tar.gz"
-          curl --fail --location --retry 5 --retry-delay 5 --output wardex-macos-x86_64.tar.gz "$RELEASE_BASE/wardex-macos-x86_64.tar.gz"
+          curl --fail --location --retry 5 --retry-delay 5 --output wardex-source.tar.gz "$SOURCE_ARCHIVE_URL"
 
-      - name: Compute archive checksums
+      - name: Compute source archive checksum
         id: checksums
         run: |
-          echo "linux=$(sha256sum wardex-linux-x86_64.tar.gz | awk '{print $1}')" >> "$GITHUB_OUTPUT"
-          echo "macos_aarch64=$(sha256sum wardex-macos-aarch64.tar.gz | awk '{print $1}')" >> "$GITHUB_OUTPUT"
-          echo "macos_x86_64=$(sha256sum wardex-macos-x86_64.tar.gz | awk '{print $1}')" >> "$GITHUB_OUTPUT"
+          echo "source=$(sha256sum wardex-source.tar.gz | awk '{print $1}')" >> "$GITHUB_OUTPUT"
 
       - name: Clone tap repository
         env:
@@ -77,9 +73,8 @@ jobs:
         run: |
           bash deploy/homebrew/render_formula.sh \
             "${{ steps.release.outputs.version }}" \
-            "${{ steps.checksums.outputs.macos_aarch64 }}" \
-            "${{ steps.checksums.outputs.macos_x86_64 }}" \
-            "${{ steps.checksums.outputs.linux }}" \
+            "https://github.com/${{ github.repository }}/archive/refs/tags/${{ steps.release.outputs.tag }}.tar.gz" \
+            "${{ steps.checksums.outputs.source }}" \
             tap-repo/Formula/wardex.rb
 
       - name: Validate formula syntax

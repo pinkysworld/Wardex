@@ -15,6 +15,12 @@ fn looks_like_runtime_root(path: &Path) -> bool {
         || path.join("SentinelEdge.code-workspace").exists()
 }
 
+fn explicit_runtime_config_path() -> Option<PathBuf> {
+    env::var_os("WARDEX_CONFIG_PATH")
+        .filter(|value| !value.is_empty())
+        .map(PathBuf::from)
+}
+
 pub fn runtime_root_dir() -> PathBuf {
     let mut candidates = Vec::new();
 
@@ -37,6 +43,10 @@ pub fn runtime_root_dir() -> PathBuf {
 }
 
 pub fn runtime_config_path() -> PathBuf {
+    if let Some(path) = explicit_runtime_config_path() {
+        return path;
+    }
+
     runtime_root_dir().join("var/wardex.toml")
 }
 

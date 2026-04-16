@@ -2,6 +2,15 @@
 
 All notable changes to Wardex are documented in this file.
 
+## [0.52.1] — Signed APT Delivery & Packaging Fixes
+
+### Packaging & Distribution
+- **Signed APT repository publishing** — GitHub Pages now rebuilds a Debian APT repository from the latest published `.deb` asset and signs `Release`, `Release.gpg`, and `InRelease` metadata when the repository signing secrets are configured.
+- **APT installation path** — Debian and Ubuntu installs now use a repository keyring plus `apt-get install wardex` instead of a manual `dpkg -i` fallback as the primary path.
+- **Linux package service fix** — The packaged systemd unit now points at `/usr/bin/wardex`, passes the correct positional `serve` arguments, sets `WARDEX_CONFIG_PATH=/etc/wardex/wardex.toml`, and can find the packaged static site assets.
+- **Linux package provisioning** — Debian packages now create the `wardex` service account, data/log directories, and a default config file during post-install.
+- **APT validation CI** — New Ubuntu workflow coverage builds a `.deb`, renders a signed local APT repository, installs from it with `apt-get`, and verifies the installed package layout.
+
 ## [0.52.0] — Hunt Workflows, NDR Depth & Release Polish
 
 ### Detection & Investigation UX

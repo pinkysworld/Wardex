@@ -1,0 +1,137 @@
+name: Validate APT Repository
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/validate-apt-repository.yml"
+      - ".github/workflows/pages.yml"
+      - ".github/workflows/release.yml"
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - "build.rs"
+      - "src/**"
+      - "deploy/**"
+      - "site/**"
+      - "examples/**"
+      - "admin-console/**"
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/validate-apt-repository.yml"
+      - ".github/workflows/pages.yml"
+      - ".github/workflows/release.yml"
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - "build.rs"
+      - "src/**"
+      - "deploy/**"
+      - "site/**"
+      - "examples/**"
+      - "admin-console/**"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    name: APT Repo Install
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: admin-console/package-lock.json
+
+      - name: Install admin console dependencies
+        run: npm ci --prefix admin-console
+
+      - name: Build release binary
+        run: cargo build --release
+
+      - name: Install packaging tools
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y apt-utils dpkg-dev gnupg ruby ruby-dev
+          sudo gem install fpm -N
+
+      - name: Resolve version
+        id: version
+        run: echo "value=$(grep '^version = ' Cargo.toml | head -n1 | cut -d '"' -f2)" >> "$GITHUB_OUTPUT"
+
+      - name: Build Debian package
+        run: |
+          fpm -s dir -t deb \
+            --name wardex \
+            --version "${{ steps.version.outputs.value }}" \
+            --architecture amd64 \
+            --description "Wardex SentinelEdge XDR platform" \
+            --url "https://github.com/${{ github.repository }}" \
+            --license "BSL-1.1" \
+            --maintainer "${{ github.repository_owner }}" \
+            --after-install deploy/scripts/postinstall-linux-package.sh \
+            --deb-systemd deploy/wardex.service \
+            target/release/wardex=/usr/bin/wardex \
+            examples/=/usr/share/wardex/examples/ \
+            site/=/usr/share/wardex/site/ \
+            README.md=/usr/share/doc/wardex/README.md \
+            LICENSE=/usr/share/doc/wardex/LICENSE
+
+      - name: Render local APT repository
+        run: |
+          mkdir -p output
+          shopt -s nullglob
+          debs=(./*.deb)
+          shopt -u nullglob
+          if [[ ${#debs[@]} -eq 0 ]]; then
+            echo "expected a Debian package artifact" >&2
+            exit 1
+          fi
+
+          export GNUPGHOME="$PWD/output/gnupg"
+          mkdir -p "$GNUPGHOME"
+          chmod 700 "$GNUPGHOME"
+          printf '%s\n' \
+            '%no-protection' \
+            'Key-Type: RSA' \
+            'Key-Length: 4096' \
+            'Name-Real: Wardex CI APT Signing' \
+            'Name-Email: ci@wardex.dev' \
+            'Expire-Date: 0' \
+            '%commit' \
+            > output/apt-signing-key.conf
+          gpg --batch --generate-key output/apt-signing-key.conf
+          fingerprint="$(gpg --batch --list-secret-keys --with-colons | awk -F: '/^sec:/ { print $5; exit }')"
+          gpg --batch --armor --export-secret-keys "$fingerprint" > output/apt-private.asc
+          gpg --batch --armor --export "$fingerprint" > output/apt-public.asc
+          export APT_GPG_PRIVATE_KEY="$(cat output/apt-private.asc)"
+
+          bash deploy/scripts/render_apt_repo.sh output/apt stable main "${debs[@]}"
+
+      - name: Install from local APT repository
+        run: |
+          sudo install -d -m 0755 /usr/share/keyrings
+          gpg --dearmor < output/apt-public.asc | sudo tee /usr/share/keyrings/wardex-local-archive-keyring.gpg > /dev/null
+          echo "deb [signed-by=/usr/share/keyrings/wardex-local-archive-keyring.gpg] file:${PWD}/output/apt stable main" \
+            | sudo tee /etc/apt/sources.list.d/wardex-local.list > /dev/null
+          sudo apt-get update
+          sudo apt-get install -y wardex
+
+      - name: Verify installed package layout
+        run: |
+          wardex status-json /tmp/wardex-status.json
+          test -f /tmp/wardex-status.json
+          test -f /usr/share/wardex/site/index.html
+          test -f /usr/share/wardex/examples/benign_baseline.csv
+          test -f /etc/wardex/wardex.toml
+          test -f /lib/systemd/system/wardex.service

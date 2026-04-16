@@ -62,14 +62,14 @@ fn run_admin_build(admin_dir: &Path) {
         .status()
         .unwrap_or_else(|e| {
             panic!(
-                "failed to run `{}` for embedded admin console build in {}: {e}",
+                "failed to run `{}` for embedded admin console build in {}: {e}. run `npm ci --prefix admin-console` before cargo build when building from a clean checkout",
                 npm.to_string_lossy(),
                 admin_dir.display()
             )
         });
     if !status.success() {
         panic!(
-            "embedded admin console build failed in {} with status {}",
+            "embedded admin console build failed in {} with status {}. run `npm ci --prefix admin-console` before cargo build when building from a clean checkout",
             admin_dir.display(),
             status
         );

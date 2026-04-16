@@ -44,7 +44,7 @@ fmt-check:
 
 # ── Admin Console ──
 admin:
-	cd admin-console && npm install && npm run build
+	cd admin-console && npm ci && npm run build
 
 admin-dev:
 	cd admin-console && npm run dev

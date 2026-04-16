@@ -1,0 +1,127 @@
+name: Validate Homebrew Formula
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/validate-homebrew-formula.yml"
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - "Makefile"
+      - "README.md"
+      - "build.rs"
+      - "deploy/homebrew/**"
+      - "docs/GETTING_STARTED.md"
+      - "src/**"
+      - "admin-console/**"
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/validate-homebrew-formula.yml"
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - "Makefile"
+      - "README.md"
+      - "build.rs"
+      - "deploy/homebrew/**"
+      - "docs/GETTING_STARTED.md"
+      - "src/**"
+      - "admin-console/**"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    name: Homebrew Formula — ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - ubuntu-latest
+          - macos-latest
+          - macos-15-intel
+    env:
+      HOMEBREW_NO_AUTO_UPDATE: "1"
+      HOMEBREW_NO_INSTALL_FROM_API: "1"
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure Homebrew
+        shell: bash
+        run: |
+          export PATH="/home/linuxbrew/.linuxbrew/bin:/opt/homebrew/bin:/usr/local/bin:$PATH"
+          echo "/home/linuxbrew/.linuxbrew/bin" >> "$GITHUB_PATH"
+          echo "/opt/homebrew/bin" >> "$GITHUB_PATH"
+          echo "/usr/local/bin" >> "$GITHUB_PATH"
+          command -v brew
+          brew --version
+
+      - name: Resolve version
+        id: version
+        shell: bash
+        run: |
+          version=$(grep '^version = ' Cargo.toml | head -n1 | cut -d '"' -f2)
+          echo "value=$version" >> "$GITHUB_OUTPUT"
+
+      - name: Create local source tarball
+        shell: bash
+        run: |
+          git archive \
+            --format=tar.gz \
+            --prefix="wardex-${{ steps.version.outputs.value }}/" \
+            --output="$PWD/wardex-source-v${{ steps.version.outputs.value }}.tar.gz" \
+            HEAD
+
+      - name: Compute tarball checksum
+        id: checksum
+        shell: bash
+        run: |
+          echo "value=$(shasum -a 256 "$PWD/wardex-source-v${{ steps.version.outputs.value }}.tar.gz" | awk '{print $1}')" >> "$GITHUB_OUTPUT"
+
+      - name: Render formula
+        shell: bash
+        run: |
+          mkdir -p homebrew-formula
+          bash deploy/homebrew/render_formula.sh \
+            "${{ steps.version.outputs.value }}" \
+            "file://$PWD/wardex-source-v${{ steps.version.outputs.value }}.tar.gz" \
+            "${{ steps.checksum.outputs.value }}" \
+            homebrew-formula/wardex.rb
+          ruby -c homebrew-formula/wardex.rb
+
+      - name: Stage formula in temporary tap
+        shell: bash
+        run: |
+          tap="local/wardex-ci"
+          tap_root="$(brew --repository)/Library/Taps/local/homebrew-wardex-ci"
+          if [[ ! -d "$tap_root" ]]; then
+            brew tap-new "$tap" >/dev/null
+          fi
+          mkdir -p "$tap_root/Formula"
+          cp homebrew-formula/wardex.rb "$tap_root/Formula/wardex.rb"
+
+      - name: Install formula from source
+        shell: bash
+        run: |
+          brew uninstall --force local/wardex-ci/wardex || true
+          brew install --build-from-source local/wardex-ci/wardex
+
+      - name: Run brew test
+        shell: bash
+        run: brew test local/wardex-ci/wardex
+
+      - name: Run brew audit
+        shell: bash
+        run: brew audit --strict --new --online local/wardex-ci/wardex
+
+      - name: Cleanup validation tap
+        if: always()
+        shell: bash
+        run: |
+          brew uninstall --force local/wardex-ci/wardex >/dev/null 2>&1 || true
+          brew untap local/wardex-ci >/dev/null 2>&1 || true

@@ -8,15 +8,16 @@ Wants=network-online.target
 Type=simple
 User=wardex
 Group=wardex
-ExecStart=/usr/local/bin/wardex serve --port 8080
+ExecStart=/usr/bin/wardex serve 8080 /usr/share/wardex/site
 WorkingDirectory=/var/lib/wardex
+Environment=WARDEX_CONFIG_PATH=/etc/wardex/wardex.toml
 Environment=SENTINEL_CORS_ORIGIN=http://localhost:8080
 
 # Hardening
 NoNewPrivileges=yes
 ProtectSystem=strict
 ProtectHome=yes
-ReadWritePaths=/var/lib/wardex
+ReadWritePaths=/var/lib/wardex /var/log/wardex
 PrivateTmp=yes
 ProtectKernelTunables=yes
 ProtectKernelModules=yes

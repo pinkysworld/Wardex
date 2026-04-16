@@ -147,5 +147,7 @@ or **Not started**, with a priority of Critical / High / Medium.
 
 ## Remediation Priorities
 
-1. **Package publication verification** — keep release asset names, Homebrew formula URLs, and package checksum publication in lockstep on every tag.
-2. **Homebrew tap automation** — `.github/workflows/sync-homebrew-tap.yml` syncs the published release archives into `pinkysworld/homebrew-wardex` after a release is published. Configure a fine-grained PAT as `HOMEBREW_TAP_TOKEN` with contents write access to the tap repository before cutting releases.
+1. **Package publication verification** — keep release tags, source archive checksums, and Homebrew formula metadata in lockstep on every tag.
+2. **Homebrew tap automation** — `.github/workflows/sync-homebrew-tap.yml` renders the tap formula against the tagged source archive and syncs it into `pinkysworld/homebrew-wardex` after a release is published. Configure a fine-grained PAT as `HOMEBREW_TAP_TOKEN` with contents write access to the tap repository before cutting releases.
+3. **Cross-platform Homebrew validation** — `.github/workflows/validate-homebrew-formula.yml` should stay green on Apple Silicon macOS, Intel macOS, and x86_64 Linux before release cuts so the tap remains aligned with `homebrew/core` build and test expectations.
+4. **APT repository publication** — `.github/workflows/pages.yml` now rebuilds `site/apt/` from the latest published `.deb` asset on Pages deploys and requires `APT_GPG_PRIVATE_KEY` to sign the published Debian repository metadata. Configure `APT_GPG_PRIVATE_KEY` and `APT_GPG_PASSPHRASE` before cutting releases so the public install path can stay on `signed-by=` rather than `trusted=yes`.

@@ -189,10 +189,11 @@ jobs:
             --url "https://github.com/${{ github.repository }}" \
             --license "BSL-1.1" \
             --maintainer "${{ github.repository_owner }}" \
-            --after-install deploy/wardex.service \
+            --after-install deploy/scripts/postinstall-linux-package.sh \
             --deb-systemd deploy/wardex.service \
             wardex-linux-x86_64/wardex=/usr/bin/wardex \
             examples/=/usr/share/wardex/examples/ \
+            site/=/usr/share/wardex/site/ \
             README.md=/usr/share/doc/wardex/README.md \
             LICENSE=/usr/share/doc/wardex/LICENSE
 
@@ -208,6 +209,7 @@ jobs:
             --maintainer "${{ github.repository_owner }}" \
             wardex-linux-x86_64/wardex=/usr/bin/wardex \
             examples/=/usr/share/wardex/examples/ \
+            site/=/usr/share/wardex/site/ \
             README.md=/usr/share/doc/wardex/README.md \
             LICENSE=/usr/share/doc/wardex/LICENSE
 

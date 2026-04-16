@@ -4,6 +4,8 @@ on:
   push:
     branches:
       - main
+  release:
+    types: [published]
   workflow_dispatch:
 
 permissions:
@@ -22,14 +24,73 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.repository.default_branch }}
 
       - name: Configure Pages
         uses: actions/configure-pages@v5
 
+      - name: Install APT repository tooling
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y apt-utils dpkg-dev gnupg
+
+      - name: Assemble site artifact
+        env:
+          APT_GPG_PASSPHRASE: ${{ secrets.APT_GPG_PASSPHRASE }}
+          APT_GPG_PRIVATE_KEY: ${{ secrets.APT_GPG_PRIVATE_KEY }}
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+        run: |
+          rm -rf site-build
+          mkdir -p site-build
+          cp -R site/. site-build/
+
+          release_api="https://api.github.com/repos/${GITHUB_REPOSITORY}/releases/latest"
+          if [[ "${GITHUB_EVENT_NAME}" == "release" && -n "${RELEASE_TAG}" ]]; then
+            release_api="https://api.github.com/repos/${GITHUB_REPOSITORY}/releases/tags/${RELEASE_TAG}"
+          fi
+
+          if curl --fail --silent --show-error --location \
+            -H "Accept: application/vnd.github+json" \
+            "$release_api" \
+            -o /tmp/wardex-release.json; then
+            mapfile -t deb_urls < <(
+              python3 -c 'import json, sys; release = json.load(open(sys.argv[1], encoding="utf-8")); [print(asset["browser_download_url"]) for asset in release.get("assets", []) if asset.get("name", "").endswith(".deb")]' /tmp/wardex-release.json
+            )
+
+            if [[ ${#deb_urls[@]} -gt 0 ]]; then
+              if [[ -z "${APT_GPG_PRIVATE_KEY:-}" ]]; then
+                echo "APT_GPG_PRIVATE_KEY secret is required when publishing Debian packages to the APT repository." >&2
+                exit 1
+              fi
+
+              rm -rf /tmp/wardex-apt-assets
+              mkdir -p /tmp/wardex-apt-assets
+
+              for deb_url in "${deb_urls[@]}"; do
+                curl --fail --silent --show-error --location --retry 5 --retry-delay 5 \
+                  --output "/tmp/wardex-apt-assets/$(basename "$deb_url")" \
+                  "$deb_url"
+              done
+
+              shopt -s nullglob
+              debs=(/tmp/wardex-apt-assets/*.deb)
+              shopt -u nullglob
+
+              if [[ ${#debs[@]} -gt 0 ]]; then
+                bash deploy/scripts/render_apt_repo.sh site-build/apt stable main "${debs[@]}"
+              fi
+            else
+              echo "No Debian release assets found; skipping APT repo generation."
+            fi
+          else
+            echo "No published release available; skipping APT repo generation."
+          fi
+
       - name: Upload static site
         uses: actions/upload-pages-artifact@v3
         with:
-          path: site
+          path: site-build
 
   deploy:
     needs: build

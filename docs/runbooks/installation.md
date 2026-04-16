@@ -10,23 +10,30 @@ brew install wardex
 brew services start wardex
 
 # Or run manually
-wardex serve --port 9077
+wardex serve 9077
 ```
 
 The Homebrew tap is published from the dedicated repository `pinkysworld/homebrew-wardex`, so the standard commands now work without an explicit repository URL.
 
 ## Linux (Debian / Ubuntu)
 
-Download the `.deb` package from the [latest release](https://github.com/pinkysworld/Wardex/releases/latest):
+Add the published APT repository and install with `apt-get`:
 
 ```bash
-curl -LO https://github.com/pinkysworld/Wardex/releases/latest/download/wardex_amd64.deb
-sudo dpkg -i wardex_amd64.deb
+curl -fsSL https://pinkysworld.github.io/Wardex/apt/wardex-archive-key.asc \
+  | gpg --dearmor \
+  | sudo tee /usr/share/keyrings/wardex-archive-keyring.gpg > /dev/null
+echo "deb [arch=amd64 signed-by=/usr/share/keyrings/wardex-archive-keyring.gpg] https://pinkysworld.github.io/Wardex/apt stable main" \
+  | sudo tee /etc/apt/sources.list.d/wardex.list > /dev/null
+sudo apt-get update
+sudo apt-get install wardex
 
 # Enable and start the systemd service
 sudo systemctl enable wardex
 sudo systemctl start wardex
 ```
+
+The APT repository is rebuilt from the latest published Debian release asset and served from GitHub Pages for this repository. If you need an offline or manual fallback, download the versioned `.deb` from the [latest release](https://github.com/pinkysworld/Wardex/releases/latest) and install it with `sudo dpkg -i ./wardex_<version>_amd64.deb`.
 
 ## Linux (RPM / Fedora / RHEL)
 
@@ -78,7 +85,7 @@ See `deploy/helm/wardex/values.yaml` for all configurable options.
 git clone https://github.com/pinkysworld/Wardex.git
 cd Wardex
 cargo build --release
-./target/release/wardex serve --port 9077
+./target/release/wardex serve 9077
 ```
 
 ### Feature Flags
