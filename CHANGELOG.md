@@ -2,6 +2,12 @@
 
 All notable changes to Wardex are documented in this file.
 
+## [0.52.3] — Release Workflow Completion Fixes
+
+### Packaging & Distribution
+- **Lowercase GHCR image naming** — The release workflow now normalizes the GitHub Container Registry image name to lowercase before pushing and signing container images.
+- **Post-release dispatch fix** — The release workflow now passes explicit repository context when dispatching GitHub Pages publication and Homebrew tap synchronization, so release-time workflow fan-out works without requiring a checkout.
+
 ## [0.52.2] — Release Automation & Container Build Fixes
 
 ### Packaging & Distribution
