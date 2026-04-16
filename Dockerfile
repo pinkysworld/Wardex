@@ -9,22 +9,17 @@ COPY --from=node:22-bookworm /usr/local/ /usr/local/
 
 WORKDIR /build
 
-# Cache dependency build: copy manifests first, build with a dummy main
+# Copy the full build inputs so Cargo and build.rs see a consistent project.
 COPY Cargo.toml Cargo.lock* ./
 COPY build.rs ./
-COPY admin-console/ admin-console/
-RUN npm ci --prefix admin-console
-RUN mkdir -p src && echo 'fn main() {}' > src/main.rs \
-    && cargo build --release --features tls 2>&1 | tail -5 || true \
-    && rm -rf src
-
-# Now copy real source and rebuild (dependencies already cached)
 COPY src/ src/
+COPY admin-console/ admin-console/
 COPY site/ site/
 COPY examples/ examples/
 COPY benches/ benches/
 COPY tests/ tests/
 
+RUN npm ci --prefix admin-console
 RUN cargo build --release --features tls --bin wardex \
     && strip target/release/wardex
 
