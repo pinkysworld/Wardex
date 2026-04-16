@@ -2,6 +2,14 @@
 
 All notable changes to Wardex are documented in this file.
 
+## [0.52.2] — Release Automation & Container Build Fixes
+
+### Packaging & Distribution
+- **Release fan-out automation** — The tagged release workflow now dispatches GitHub Pages publication and Homebrew tap synchronization after the GitHub release is published, so APT and Homebrew distribution stay aligned with the released tag.
+- **Tag-aware Pages republish** — Manual Pages runs can now target a specific release tag, allowing deterministic APT repository rebuilds from the exact published release assets.
+- **Container build toolchain alignment** — The Docker builder image now uses Rust 1.88 so the container-scan lane matches the dependency floor required by the current crate graph.
+- **Container runtime command fix** — The container image now starts Wardex with the current positional `serve` arguments and explicitly serves the bundled site assets from `/app/site`.
+
 ## [0.52.1] — Signed APT Delivery & Packaging Fixes
 
 ### Packaging & Distribution

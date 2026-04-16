@@ -71,7 +71,7 @@ export function createAgent(overrides = {}) {
     id: `agent-${idCounter}`,
     hostname: `agent-host-${idCounter}`,
     os: 'linux',
-    version: '0.52.1',
+    version: '0.52.2',
     status: 'online',
     last_heartbeat: new Date().toISOString(),
     ...overrides,
