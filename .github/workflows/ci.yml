@@ -288,13 +288,12 @@ jobs:
       - uses: actions/checkout@v5
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v4
-        with:
-          cache-binary: false
       - name: Build image for scanning
         run: docker build -t wardex:ci-scan .
       - name: Trivy vulnerability scan
         uses: aquasecurity/trivy-action@0.35.0
         with:
+          cache: 'false'
           image-ref: wardex:ci-scan
           format: table
           exit-code: 1
