@@ -1,4 +1,4 @@
-import { useState, useCallback, useMemo } from 'react';
+import { useState, useMemo } from 'react';
 import { useApi, useInterval } from '../hooks.jsx';
 import * as api from '../api.js';
 
@@ -65,7 +65,7 @@ export default function UEBADashboard() {
 
   const { data: riskyEntities, loading: loadingRisky, reload: reloadRisky } = useApi(() => api.uebaRiskyEntities(10));
   const { data: anomalies, loading: loadingAnomalies, reload: reloadAnomalies } = useApi(() => api.uebaAnomalies(200));
-  const { data: peerGroups, loading: loadingPeers } = useApi(api.uebaPeerGroups);
+  const { data: peerGroups } = useApi(api.uebaPeerGroups);
   const { data: entityDetail, loading: loadingDetail } = useApi(
     () => selectedEntity ? api.uebaEntity(selectedEntity) : Promise.resolve(null),
     [selectedEntity],

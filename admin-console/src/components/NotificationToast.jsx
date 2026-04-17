@@ -18,9 +18,10 @@ export default function NotificationToast() {
 
   // Cleanup AudioContext and pending timers on unmount
   useEffect(() => {
+    const timers = timersRef.current;
     return () => {
       audioRef.current?.close?.();
-      timersRef.current.forEach(t => clearTimeout(t));
+      timers.forEach(t => clearTimeout(t));
     };
   }, []);
 

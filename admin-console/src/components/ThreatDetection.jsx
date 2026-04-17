@@ -217,7 +217,7 @@ export default function ThreatDetection() {
     return () => {
       cancelled = true;
     };
-  }, [selectedRule?.id]);
+  }, [selectedRule]);
 
   useEffect(() => {
     if (!selectedRule) return;
@@ -230,7 +230,7 @@ export default function ThreatDetection() {
       severity: String(selectedRule.severity_mapping || draft.severity || 'medium').toLowerCase(),
       level: String(selectedRule.severity_mapping || draft.level || '').toLowerCase(),
     }));
-  }, [selectedRule?.id, drawerMode, huntIntent, huntQueryParam, huntNameParam]);
+  }, [selectedRule, drawerMode, huntIntent, huntQueryParam, huntNameParam]);
 
   const openDrawer = (mode) => {
     const next = new URLSearchParams(searchParams);

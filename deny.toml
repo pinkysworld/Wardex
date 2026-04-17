@@ -2,13 +2,12 @@
 # Run: cargo install cargo-deny && cargo deny check
 
 [advisories]
-vulnerability = "deny"
-unmaintained = "warn"
-yanked = "deny"
-notice = "warn"
+ignore = [
+    { id = "RUSTSEC-2024-0384", reason = "Transitive via tantivy/measure_time; no safe upgrade is currently available in the shipped dependency graph." },
+    { id = "RUSTSEC-2026-0097", reason = "rand 0.8 remains in the graph via tantivy dependencies; track upstream until the tree can move to a fixed release." },
+]
 
 [licenses]
-unlicensed = "deny"
 allow = [
     "MIT",
     "Apache-2.0",
@@ -19,13 +18,14 @@ allow = [
     "Unicode-DFS-2016",
     "Zlib",
     "BSL-1.0",
+    "BUSL-1.1",
     "CC0-1.0",
     "OpenSSL",
 ]
-copyleft = "deny"
+confidence-threshold = 0.8
 
 [[licenses.clarify]]
-name = "ring"
+crate = "ring"
 expression = "MIT AND ISC AND OpenSSL"
 license-files = [{ path = "LICENSE", hash = 0xbd0eed23 }]
 

@@ -171,7 +171,7 @@ export default function InvestigationTimeline() {
       }
       return true;
     });
-  }, [events, sevFilter, typeFilter, timeRange, search]);
+  }, [events, sevFilter, typeFilter, timeRange, search, useRegex]);
 
   const sevCounts = useMemo(() => {
     const counts = { critical: 0, high: 0, medium: 0, low: 0, info: 0 };

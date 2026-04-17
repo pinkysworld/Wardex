@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState } from 'react';
 import { useApi, useInterval } from '../hooks.jsx';
 import * as api from '../api.js';
 
@@ -16,7 +16,7 @@ export default function EmailSecurity() {
   const [analyzing, setAnalyzing] = useState(false);
 
   const { data: quarantine, loading: loadingQ, reload: reloadQ } = useApi(api.emailQuarantine);
-  const { data: stats, loading: loadingStats } = useApi(api.emailStats);
+  const { data: stats } = useApi(api.emailStats);
   const { data: policies, loading: loadingPolicies } = useApi(api.emailPolicies);
 
   useInterval(reloadQ, 30000);

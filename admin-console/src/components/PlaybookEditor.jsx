@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useApi, useToast } from '../hooks.jsx';
 import * as api from '../api.js';
 
@@ -40,7 +40,7 @@ function StepCard({ step, index, onRemove, onUpdate }) {
 
 export default function PlaybookEditor() {
   const toast = useToast();
-  const { data: playbookList, reload: rPlaybooks } = useApi(api.playbooks);
+  const { data: playbookList } = useApi(api.playbooks);
   const [selected, setSelected] = useState(null);
   const [steps, setSteps] = useState([]);
   const [pbName, setPbName] = useState('');

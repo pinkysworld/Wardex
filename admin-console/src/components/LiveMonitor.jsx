@@ -103,7 +103,10 @@ export default function LiveMonitor() {
     }
   }, tab === 'processes' ? 10000 : null);
 
-  const alertList = Array.isArray(alertData) ? alertData : alertData?.alerts || [];
+  const alertList = useMemo(
+    () => (Array.isArray(alertData) ? alertData : alertData?.alerts || []),
+    [alertData]
+  );
   const sourceOptions = ['all', ...new Set(alertList.map((alert) => alert.source).filter(Boolean))];
   const hostOptions = ['all', ...new Set(alertList.map((alert) => alert.hostname).filter(Boolean))];
 

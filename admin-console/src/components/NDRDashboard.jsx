@@ -22,8 +22,8 @@ function RiskBadge({ score }) {
 export default function NDRDashboard() {
   const [tab, setTab] = useState('overview');
   const { data: report, loading, reload } = useApi(api.ndrReport);
-  const { data: tlsAnomalies, loading: loadingTls } = useApi(api.ndrTlsAnomalies);
-  const { data: dpiAnomalies, loading: loadingDpi } = useApi(api.ndrDpiAnomalies);
+  const { data: tlsAnomalies } = useApi(api.ndrTlsAnomalies);
+  const { data: dpiAnomalies } = useApi(api.ndrDpiAnomalies);
 
   useInterval(reload, 30000);
 
