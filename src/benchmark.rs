@@ -484,6 +484,7 @@ mod tests {
         );
     }
 
+    #[cfg_attr(tarpaulin, ignore)]
     #[test]
     fn latency_1k_samples_under_100ms() {
         let mut detector = AnomalyDetector::default();

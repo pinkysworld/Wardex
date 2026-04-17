@@ -256,7 +256,7 @@ jobs:
       - name: Generate SBOM
         run: |
           cargo install cargo-cyclonedx --locked
-          cargo cyclonedx --format json --output-cdx
+          cargo cyclonedx --format json --override-filename wardex_bom.cdx
       - name: Upload attestation
         uses: actions/upload-artifact@v7
         with:
