@@ -5,6 +5,8 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 
 fn main() {
+    println!("cargo::rustc-check-cfg=cfg(tarpaulin)");
+
     let admin_dir = PathBuf::from("admin-console");
     let src_dir = admin_dir.join("src");
     let dist_index = admin_dir.join("dist").join("index.html");

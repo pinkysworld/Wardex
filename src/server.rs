@@ -3214,7 +3214,7 @@ fn build_agent_activity_snapshot(
         }
     }
     let mut top_reasons: Vec<(String, usize)> = reason_counts.into_iter().collect();
-    top_reasons.sort_by(|left, right| right.1.cmp(&left.1));
+    top_reasons.sort_by_key(|entry| std::cmp::Reverse(entry.1));
 
     let timeline = events
         .iter()
