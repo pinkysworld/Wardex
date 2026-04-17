@@ -1,3 +1,4 @@
+use std::path::PathBuf;
 use wardex::agent_client::AgentClient;
 use wardex::auth::SessionStore;
 use wardex::config::Config;
@@ -9,6 +10,14 @@ fn base(port: u16) -> String {
 
 fn auth_header(token: &str) -> String {
     format!("Bearer {token}")
+}
+
+fn test_state_root(port: u16) -> PathBuf {
+    PathBuf::from(format!("/tmp/wardex_test_{port}"))
+}
+
+fn test_state_path(port: u16, file_name: &str) -> String {
+    test_state_root(port).join(file_name).display().to_string()
 }
 
 // ── GET /api/status ────────────────────────────────────────────
@@ -479,7 +488,7 @@ fn auth_check_with_valid_token_returns_ok() {
 #[test]
 fn auth_session_accepts_sso_session_token_and_logout_revokes_it() {
     let (port, _token) = spawn_test_server();
-    let session_path = format!("/tmp/wardex_test_{port}/sessions.json");
+    let session_path = test_state_path(port, "sessions.json");
     let store = SessionStore::with_persistence(&session_path);
     let session_id = store.create_session("sso-user", "sso@example.com", "analyst", 8);
 
@@ -1303,7 +1312,7 @@ fn config_reload_updates_monitor_scope_and_current_config() {
 #[test]
 fn config_save_persists_reloaded_config_to_disk() {
     let (port, token) = spawn_test_server();
-    let config_path = format!("/tmp/wardex_test_{port}/wardex.toml");
+    let config_path = test_state_path(port, "wardex.toml");
 
     let patch = serde_json::json!({
         "monitor": {
@@ -1355,7 +1364,7 @@ fn config_save_persists_reloaded_config_to_disk() {
 #[test]
 fn taxii_config_persists_to_disk() {
     let (port, token) = spawn_test_server();
-    let config_path = format!("/tmp/wardex_test_{port}/wardex.toml");
+    let config_path = test_state_path(port, "wardex.toml");
 
     let resp: serde_json::Value = ureq::post(&format!("{}/api/taxii/config", base(port)))
         .set("Authorization", &format!("Bearer {token}"))
