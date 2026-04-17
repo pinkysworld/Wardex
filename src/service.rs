@@ -1,3 +1,4 @@
+#[cfg(any(target_os = "linux", target_os = "macos"))]
 use std::path::Path;
 
 /// Cross-platform service installation for Wardex (server or agent mode).

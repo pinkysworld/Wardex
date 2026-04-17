@@ -83,7 +83,10 @@ impl TlsConfig {
     /// and have reasonable properties.
     pub fn validate(&self) -> TlsValidationResult {
         let mut errors = Vec::new();
+        #[cfg(unix)]
         let mut warnings = Vec::new();
+        #[cfg(not(unix))]
+        let warnings = Vec::new();
 
         // Check certificate file
         if !self.cert_path.exists() {

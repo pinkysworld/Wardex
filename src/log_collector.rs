@@ -124,35 +124,35 @@ fn collect_windows_logs(logs: &mut Vec<LogRecord>, _since_secs: u64) {
         let output = std::process::Command::new("wevtutil")
             .args(["qe", channel, "/c:100", "/f:text", "/rd:true"])
             .output();
-        if let Ok(out) = output {
-            if out.status.success() {
-                let text = String::from_utf8_lossy(&out.stdout);
-                for block in text.split("\r\n\r\n").take(200) {
-                    if block.trim().is_empty() {
-                        continue;
-                    }
-                    let level = classify_log_level(block);
-                    let message: String = block
-                        .lines()
-                        .find(|l| l.trim_start().starts_with("Message"))
-                        .map(|l| {
-                            l.trim_start_matches("Message")
-                                .trim_start_matches('=')
-                                .trim()
-                                .to_string()
-                        })
-                        .unwrap_or_else(|| block.lines().next().unwrap_or("").to_string());
-                    logs.push(LogRecord {
-                        timestamp: chrono::Utc::now().to_rfc3339(),
-                        source: source.clone(),
-                        level,
-                        message: message.chars().take(1024).collect(),
-                        raw: Some(block.to_string()),
-                        metadata: HashMap::new(),
-                    });
-                    if logs.len() >= 500 {
-                        break;
-                    }
+        if let Ok(out) = output
+            && out.status.success()
+        {
+            let text = String::from_utf8_lossy(&out.stdout);
+            for block in text.split("\r\n\r\n").take(200) {
+                if block.trim().is_empty() {
+                    continue;
+                }
+                let level = classify_log_level(block);
+                let message: String = block
+                    .lines()
+                    .find(|l| l.trim_start().starts_with("Message"))
+                    .map(|l| {
+                        l.trim_start_matches("Message")
+                            .trim_start_matches('=')
+                            .trim()
+                            .to_string()
+                    })
+                    .unwrap_or_else(|| block.lines().next().unwrap_or("").to_string());
+                logs.push(LogRecord {
+                    timestamp: chrono::Utc::now().to_rfc3339(),
+                    source: source.clone(),
+                    level,
+                    message: message.chars().take(1024).collect(),
+                    raw: Some(block.to_string()),
+                    metadata: HashMap::new(),
+                });
+                if logs.len() >= 500 {
+                    break;
                 }
             }
         }

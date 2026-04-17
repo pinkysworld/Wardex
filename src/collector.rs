@@ -1668,26 +1668,26 @@ fn collect_dns_platform(timestamp_ms: u64) -> Vec<DnsEvent> {
             // Section header: "    example.com"
             // Might appear as: "    Record Name . . . . : example.com"
         }
-        if let Some(rest) = trimmed.strip_prefix("Record Name") {
-            if let Some(name) = rest.split(':').nth(1) {
-                current_domain = Some(name.trim().to_string());
-            }
+        if let Some(rest) = trimmed.strip_prefix("Record Name")
+            && let Some(name) = rest.split(':').nth(1)
+        {
+            current_domain = Some(name.trim().to_string());
         }
-        if let Some(rest) = trimmed.strip_prefix("Record Type") {
-            if let Some(ref domain) = current_domain {
-                let rtype = rest
-                    .split(':')
-                    .nth(1)
-                    .map(|t| t.trim().to_string())
-                    .unwrap_or_else(|| "A".into());
-                events.push(DnsEvent {
-                    timestamp_ms,
-                    domain: domain.clone(),
-                    record_type: rtype,
-                    source: "dns-cache".into(),
-                });
-                current_domain = None;
-            }
+        if let Some(rest) = trimmed.strip_prefix("Record Type")
+            && let Some(ref domain) = current_domain
+        {
+            let rtype = rest
+                .split(':')
+                .nth(1)
+                .map(|t| t.trim().to_string())
+                .unwrap_or_else(|| "A".into());
+            events.push(DnsEvent {
+                timestamp_ms,
+                domain: domain.clone(),
+                record_type: rtype,
+                source: "dns-cache".into(),
+            });
+            current_domain = None;
         }
     }
     events.into_iter().take(200).collect()

@@ -2247,10 +2247,12 @@ fn url_param(url: &str, key: &str) -> Option<String> {
         .filter(|v| !v.is_empty())
 }
 
+#[cfg(not(target_os = "windows"))]
 fn process_basename(value: &str) -> &str {
     value.rsplit('/').next().unwrap_or(value)
 }
 
+#[cfg(not(target_os = "windows"))]
 fn run_command_text(command: &str, args: &[&str]) -> Option<String> {
     let output = std::process::Command::new(command)
         .args(args)
@@ -2279,6 +2281,7 @@ fn process_lsof_path(pid: u32, descriptor: &str) -> Option<String> {
         .filter(|value| !value.is_empty())
 }
 
+#[cfg(not(target_os = "windows"))]
 fn parse_network_activity_lines(lines: &str) -> Vec<serde_json::Value> {
     lines
         .lines()
@@ -2349,6 +2352,7 @@ fn code_signature_summary(exe_path: &str) -> serde_json::Value {
     }
 }
 
+#[cfg(not(target_os = "windows"))]
 fn process_recommendations(
     findings: &[serde_json::Value],
     network: &[serde_json::Value],
