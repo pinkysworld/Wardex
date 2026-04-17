@@ -165,7 +165,19 @@ impl PlatformCapabilities {
                 process_control: true,
             }
         }
-        #[cfg(not(any(target_os = "linux", target_os = "macos")))]
+        #[cfg(target_os = "windows")]
+        {
+            Self {
+                platform: Platform::WindowsX86,
+                has_tpm: false,
+                has_seccomp: false,
+                has_ebpf: false,
+                has_firewall: true,
+                max_threads: 256,
+                process_control: true,
+            }
+        }
+        #[cfg(not(any(target_os = "linux", target_os = "macos", target_os = "windows")))]
         {
             Self {
                 platform: Platform::FreeBsd,
