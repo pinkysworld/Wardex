@@ -181,21 +181,29 @@ impl ContainerDetector {
 
     /// Generate a summary report.
     pub fn summary(&self) -> ContainerSummary {
-        let active_containers: std::collections::HashSet<&str> = self.events.iter()
+        let active_containers: std::collections::HashSet<&str> = self
+            .events
+            .iter()
             .filter(|e| e.kind == ContainerEventKind::ContainerStart)
             .map(|e| e.container_id.as_str())
             .collect();
-        let stopped: std::collections::HashSet<&str> = self.events.iter()
+        let stopped: std::collections::HashSet<&str> = self
+            .events
+            .iter()
             .filter(|e| e.kind == ContainerEventKind::ContainerStop)
             .map(|e| e.container_id.as_str())
             .collect();
         let running = active_containers.difference(&stopped).count();
-        let privileged = self.events.iter()
+        let privileged = self
+            .events
+            .iter()
             .filter(|e| e.kind == ContainerEventKind::PrivilegedRun)
             .map(|e| e.container_id.as_str())
             .collect::<std::collections::HashSet<_>>()
             .len();
-        let unique_images: std::collections::HashSet<&str> = self.events.iter()
+        let unique_images: std::collections::HashSet<&str> = self
+            .events
+            .iter()
             .map(|e| e.image.as_str())
             .filter(|i| !i.is_empty())
             .collect();
@@ -203,7 +211,9 @@ impl ContainerDetector {
         // Per-image stats
         let mut image_map: HashMap<&str, (usize, usize, usize, bool)> = HashMap::new();
         for e in &self.events {
-            if e.image.is_empty() { continue; }
+            if e.image.is_empty() {
+                continue;
+            }
             let entry = image_map.entry(&e.image).or_insert((0, 0, 0, false));
             if e.kind == ContainerEventKind::ContainerStart {
                 entry.0 += 1;
@@ -218,17 +228,22 @@ impl ContainerDetector {
                 entry.2 += 1;
             }
         }
-        let image_stats: Vec<ImageStat> = image_map.into_iter().map(|(img, (cc, ec, ac, priv_flag))| {
-            ImageStat {
+        let image_stats: Vec<ImageStat> = image_map
+            .into_iter()
+            .map(|(img, (cc, ec, ac, priv_flag))| ImageStat {
                 image: img.to_string(),
                 container_count: cc,
                 event_count: ec,
                 alert_count: ac,
                 privileged: priv_flag,
-            }
-        }).collect();
+            })
+            .collect();
 
-        let critical_alerts = self.alerts.iter().filter(|a| a.severity == ContainerSeverity::Critical).count();
+        let critical_alerts = self
+            .alerts
+            .iter()
+            .filter(|a| a.severity == ContainerSeverity::Critical)
+            .count();
 
         ContainerSummary {
             total_events: self.events.len(),
@@ -262,7 +277,10 @@ impl ContainerDetector {
                     container_name: event.container_name.clone(),
                     image: event.image.clone(),
                     hostname: event.hostname.clone(),
-                    description: format!("Privileged container started: {} ({})", event.container_name, event.image),
+                    description: format!(
+                        "Privileged container started: {} ({})",
+                        event.container_name, event.image
+                    ),
                     risk_score: 7.5,
                     mitre_techniques: vec!["T1610".into(), "T1611".into()],
                     recommendations: vec![
@@ -281,7 +299,10 @@ impl ContainerDetector {
                     container_name: event.container_name.clone(),
                     image: event.image.clone(),
                     hostname: event.hostname.clone(),
-                    description: format!("Container escape detected: {} on {}", event.container_name, event.hostname),
+                    description: format!(
+                        "Container escape detected: {} on {}",
+                        event.container_name, event.hostname
+                    ),
                     risk_score: 9.5,
                     mitre_techniques: vec!["T1611".into()],
                     recommendations: vec![
@@ -293,7 +314,9 @@ impl ContainerDetector {
             }
             ContainerEventKind::ContainerExec => {
                 if let Some(cmd) = &event.command {
-                    let suspicious_cmds = ["bash", "sh", "/bin/sh", "nc", "ncat", "curl", "wget", "python", "perl"];
+                    let suspicious_cmds = [
+                        "bash", "sh", "/bin/sh", "nc", "ncat", "curl", "wget", "python", "perl",
+                    ];
                     if suspicious_cmds.iter().any(|s| cmd.contains(s)) {
                         alerts.push(ContainerAlert {
                             id: self.next_alert_id(),
@@ -316,7 +339,10 @@ impl ContainerDetector {
             }
             ContainerEventKind::ImagePull => {
                 if !self.trusted_images.is_empty()
-                    && !self.trusted_images.iter().any(|t| event.image.starts_with(t))
+                    && !self
+                        .trusted_images
+                        .iter()
+                        .any(|t| event.image.starts_with(t))
                 {
                     alerts.push(ContainerAlert {
                         id: self.next_alert_id(),
@@ -374,9 +400,9 @@ impl ContainerDetector {
                             description: format!("Dangerous capability added: {cap}"),
                             risk_score: 6.5,
                             mitre_techniques: vec!["T1611".into()],
-                            recommendations: vec![
-                                format!("Remove {cap} capability if not strictly needed"),
-                            ],
+                            recommendations: vec![format!(
+                                "Remove {cap} capability if not strictly needed"
+                            )],
                         });
                     }
                 }
@@ -447,7 +473,10 @@ mod tests {
         let mut det = ContainerDetector::new();
         det.record_event(base_event(ContainerEventKind::PrivilegedRun));
         assert_eq!(det.alerts().len(), 1);
-        assert_eq!(det.alerts()[0].kind, ContainerAlertKind::PrivilegedContainer);
+        assert_eq!(
+            det.alerts()[0].kind,
+            ContainerAlertKind::PrivilegedContainer
+        );
     }
 
     #[test]

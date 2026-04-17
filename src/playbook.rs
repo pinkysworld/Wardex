@@ -435,12 +435,7 @@ impl PlaybookEngine {
                             continue;
                         }
                     }
-                    self.finish_execution(
-                        &exec_id,
-                        ExecutionStatus::Failed,
-                        Some(err),
-                        step_now,
-                    );
+                    self.finish_execution(&exec_id, ExecutionStatus::Failed, Some(err), step_now);
                     return Ok(exec_id);
                 }
             }
@@ -453,11 +448,7 @@ impl PlaybookEngine {
     }
 
     /// Dispatch a single step and return its output or an error.
-    fn dispatch_step(
-        &self,
-        step: &PlaybookStep,
-        exec_id: &str,
-    ) -> Result<Option<String>, String> {
+    fn dispatch_step(&self, step: &PlaybookStep, exec_id: &str) -> Result<Option<String>, String> {
         let exec = self
             .executions
             .iter()
@@ -465,18 +456,30 @@ impl PlaybookEngine {
             .ok_or("execution not found")?;
 
         match &step.step_type {
-            StepType::RunAction { action, params } => {
-                Ok(Some(format!("executed action '{}' with {} params", action, params.len())))
-            }
-            StepType::Notify { channel, message_template } => {
+            StepType::RunAction { action, params } => Ok(Some(format!(
+                "executed action '{}' with {} params",
+                action,
+                params.len()
+            ))),
+            StepType::Notify {
+                channel,
+                message_template,
+            } => {
                 let msg = substitute_template(message_template, &exec.variables);
                 Ok(Some(format!("notified {:?}: {}", channel, msg)))
             }
-            StepType::Enrich { source, query_template } => {
+            StepType::Enrich {
+                source,
+                query_template,
+            } => {
                 let query = substitute_template(query_template, &exec.variables);
                 Ok(Some(format!("enriched from '{}': {}", source, query)))
             }
-            StepType::Conditional { condition, then_step, else_step } => {
+            StepType::Conditional {
+                condition,
+                then_step,
+                else_step,
+            } => {
                 let result = evaluate_condition(condition, &exec.variables);
                 if result {
                     Ok(Some(format!("condition true → {}", then_step)))
@@ -489,26 +492,36 @@ impl PlaybookEngine {
             StepType::Parallel { step_ids } => {
                 Ok(Some(format!("parallel fan-out: {} steps", step_ids.len())))
             }
-            StepType::Wait { seconds } => {
-                Ok(Some(format!("waited {} seconds", seconds)))
-            }
-            StepType::Escalate { target, message_template } => {
+            StepType::Wait { seconds } => Ok(Some(format!("waited {} seconds", seconds))),
+            StepType::Escalate {
+                target,
+                message_template,
+            } => {
                 let msg = substitute_template(message_template, &exec.variables);
                 Ok(Some(format!("escalated to '{}': {}", target, msg)))
             }
-            StepType::CreateCase { case_template } => {
-                Ok(Some(format!("created case from template '{}'", case_template)))
-            }
-            StepType::Approval { approver, message_template } => {
+            StepType::CreateCase { case_template } => Ok(Some(format!(
+                "created case from template '{}'",
+                case_template
+            ))),
+            StepType::Approval {
+                approver,
+                message_template,
+            } => {
                 let msg = substitute_template(message_template, &exec.variables);
-                Ok(Some(format!("approval requested from '{}': {}", approver, msg)))
+                Ok(Some(format!(
+                    "approval requested from '{}': {}",
+                    approver, msg
+                )))
             }
             StepType::CollectEvidence { artifact_types } => {
                 Ok(Some(format!("collected evidence: {:?}", artifact_types)))
             }
-            StepType::Contain { action, params } => {
-                Ok(Some(format!("containment '{}' with {} params", action, params.len())))
-            }
+            StepType::Contain { action, params } => Ok(Some(format!(
+                "containment '{}' with {} params",
+                action,
+                params.len()
+            ))),
         }
     }
 }

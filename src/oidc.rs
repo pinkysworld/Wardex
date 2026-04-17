@@ -161,6 +161,7 @@ pub struct OidcProvider {
 }
 
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 struct PendingAuth {
     state: String,
     nonce: String,
@@ -180,7 +181,10 @@ impl OidcProvider {
 
     /// Fetch the OIDC discovery document from the issuer.
     pub fn discover(&mut self) -> Result<&OidcDiscovery, String> {
-        let url = format!("{}/.well-known/openid-configuration", self.config.issuer.trim_end_matches('/'));
+        let url = format!(
+            "{}/.well-known/openid-configuration",
+            self.config.issuer.trim_end_matches('/')
+        );
         let discovery: OidcDiscovery = ureq::get(&url)
             .call()
             .map_err(|e| format!("OIDC discovery failed: {e}"))?
@@ -202,7 +206,8 @@ impl OidcProvider {
             .as_secs();
 
         // Purge stale pending states older than 10 minutes
-        self.pending_states.retain(|_, pa| now - pa.created_at < PENDING_STATE_TTL_SECS);
+        self.pending_states
+            .retain(|_, pa| now - pa.created_at < PENDING_STATE_TTL_SECS);
 
         self.pending_states.insert(
             state.clone(),
@@ -265,7 +270,10 @@ impl OidcProvider {
 
         // Fetch user info
         let user_info: OidcUserInfo = ureq::get(&discovery.userinfo_endpoint)
-            .set("Authorization", &format!("Bearer {}", token_resp.access_token))
+            .set(
+                "Authorization",
+                &format!("Bearer {}", token_resp.access_token),
+            )
             .call()
             .map_err(|e| format!("UserInfo fetch failed: {e}"))?
             .into_json()
@@ -311,7 +319,8 @@ impl OidcProvider {
             .unwrap_or_default()
             .as_secs();
         self.sessions.retain(|_, s| s.expires_at > now);
-        self.pending_states.retain(|_, pa| now - pa.created_at < PENDING_STATE_TTL_SECS);
+        self.pending_states
+            .retain(|_, pa| now - pa.created_at < PENDING_STATE_TTL_SECS);
     }
 
     /// Invalidate/logout a session.
@@ -325,7 +334,10 @@ impl OidcProvider {
             .duration_since(UNIX_EPOCH)
             .unwrap_or_default()
             .as_secs();
-        self.sessions.values().filter(|s| s.expires_at > now).count()
+        self.sessions
+            .values()
+            .filter(|s| s.expires_at > now)
+            .count()
     }
 
     /// Get SSO provider status.
@@ -382,10 +394,14 @@ fn generate_random_string(len: usize) -> String {
     seed.hash(&mut hasher);
     std::thread::current().id().hash(&mut hasher);
     let hash = hasher.finish();
-    format!("{hash:016x}{:016x}", hash.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407))
-        .chars()
-        .take(len)
-        .collect()
+    format!(
+        "{hash:016x}{:016x}",
+        hash.wrapping_mul(6364136223846793005)
+            .wrapping_add(1442695040888963407)
+    )
+    .chars()
+    .take(len)
+    .collect()
 }
 
 fn urlencoded(s: &str) -> String {
@@ -625,7 +641,9 @@ mod tests {
     #[test]
     fn role_mapping_group_fallback() {
         let mut config = test_config();
-        config.role_mapping.insert("SecurityOps".into(), "admin".into());
+        config
+            .role_mapping
+            .insert("SecurityOps".into(), "admin".into());
         let provider = OidcProvider::new(config);
 
         let user = OidcUserInfo {

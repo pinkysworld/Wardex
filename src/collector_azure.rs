@@ -455,8 +455,7 @@ impl AzureActivityCollector {
 
         match result {
             Ok(resp) => {
-                let resp_body = resp.into_string()
-                    .unwrap_or_default();
+                let resp_body = resp.into_string().unwrap_or_default();
                 self.parse_response(&resp_body)
             }
             Err(e) => AzurePollResult {

@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-from unittest.mock import patch
 
 import pytest
 
@@ -476,7 +475,6 @@ def test_escalate_posts_to_escalation_start(monkeypatch):
 
 def test_retry_on_server_error(monkeypatch):
     attempt_count = {"n": 0}
-    original_install = install_stub
 
     def fake_request(session, method, url, **kwargs):
         attempt_count["n"] += 1

@@ -253,7 +253,9 @@ pub fn import_sigmahq_directory(path: &str) -> SigmaImportResult {
     let entries = match std::fs::read_dir(path) {
         Ok(e) => e,
         Err(e) => {
-            result.errors.push(format!("Failed to read directory {path}: {e}"));
+            result
+                .errors
+                .push(format!("Failed to read directory {path}: {e}"));
             return result;
         }
     };
@@ -269,7 +271,10 @@ pub fn import_sigmahq_directory(path: &str) -> SigmaImportResult {
             continue;
         }
 
-        let ext = entry_path.extension().and_then(|e| e.to_str()).unwrap_or("");
+        let ext = entry_path
+            .extension()
+            .and_then(|e| e.to_str())
+            .unwrap_or("");
         if ext != "yml" && ext != "yaml" {
             continue;
         }
@@ -511,11 +516,18 @@ fn parse_yaml_to_json(yaml: &str) -> Result<serde_json::Value, String> {
 
         if indent == 0 && trimmed.contains(':') && !trimmed.starts_with('-') {
             // Flush previous
-            flush_current(&mut root, &mut current_key, &mut current_list, &mut current_map);
+            flush_current(
+                &mut root,
+                &mut current_key,
+                &mut current_list,
+                &mut current_map,
+            );
             in_sub_map = false;
             sub_key = None;
 
-            let Some((key, val)) = trimmed.split_once(':') else { continue };
+            let Some((key, val)) = trimmed.split_once(':') else {
+                continue;
+            };
             let key = key.trim().to_string();
             let val = val.trim();
             if val.is_empty() {
@@ -535,7 +547,9 @@ fn parse_yaml_to_json(yaml: &str) -> Result<serde_json::Value, String> {
                 list.push(parse_yaml_scalar(val));
             }
         } else if indent > 0 && trimmed.contains(':') && !trimmed.starts_with('-') {
-            let Some((k, v)) = trimmed.split_once(':') else { continue };
+            let Some((k, v)) = trimmed.split_once(':') else {
+                continue;
+            };
             let k = k.trim().to_string();
             let v = v.trim();
 
@@ -543,7 +557,9 @@ fn parse_yaml_to_json(yaml: &str) -> Result<serde_json::Value, String> {
                 // Nested map (e.g., detection selection fields)
                 if let Some(ref mut map) = current_map {
                     if let Some(ref sk) = sub_key {
-                        let sub = map.entry(sk.clone()).or_insert_with(|| serde_json::json!({}));
+                        let sub = map
+                            .entry(sk.clone())
+                            .or_insert_with(|| serde_json::json!({}));
                         if let Some(obj) = sub.as_object_mut() {
                             obj.insert(k, parse_yaml_value(v));
                         }
@@ -568,7 +584,12 @@ fn parse_yaml_to_json(yaml: &str) -> Result<serde_json::Value, String> {
         }
     }
 
-    flush_current(&mut root, &mut current_key, &mut current_list, &mut current_map);
+    flush_current(
+        &mut root,
+        &mut current_key,
+        &mut current_list,
+        &mut current_map,
+    );
     Ok(serde_json::Value::Object(root))
 }
 

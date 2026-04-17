@@ -172,7 +172,10 @@ impl RbacStore {
     pub fn remove_user(&self, username: &str) -> bool {
         let mut users = self.users.lock().unwrap_or_else(|e| e.into_inner());
         if let Some(user) = users.remove(username) {
-            self.tokens.lock().unwrap_or_else(|e| e.into_inner()).remove(&user.token_hash);
+            self.tokens
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .remove(&user.token_hash);
             true
         } else {
             false
@@ -220,15 +223,29 @@ impl RbacStore {
     }
 
     pub fn get_user(&self, username: &str) -> Option<User> {
-        self.users.lock().unwrap_or_else(|e| e.into_inner()).get(username).cloned()
+        self.users
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .get(username)
+            .cloned()
     }
 
     pub fn list_users(&self) -> Vec<User> {
-        self.users.lock().unwrap_or_else(|e| e.into_inner()).values().cloned().collect()
+        self.users
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .values()
+            .cloned()
+            .collect()
     }
 
     pub fn update_role(&self, username: &str, role: Role) -> bool {
-        if let Some(user) = self.users.lock().unwrap_or_else(|e| e.into_inner()).get_mut(username) {
+        if let Some(user) = self
+            .users
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .get_mut(username)
+        {
             user.role = role;
             true
         } else {
@@ -237,7 +254,12 @@ impl RbacStore {
     }
 
     pub fn disable_user(&self, username: &str) -> bool {
-        if let Some(user) = self.users.lock().unwrap_or_else(|e| e.into_inner()).get_mut(username) {
+        if let Some(user) = self
+            .users
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .get_mut(username)
+        {
             user.enabled = false;
             true
         } else {
@@ -246,7 +268,12 @@ impl RbacStore {
     }
 
     pub fn enable_user(&self, username: &str) -> bool {
-        if let Some(user) = self.users.lock().unwrap_or_else(|e| e.into_inner()).get_mut(username) {
+        if let Some(user) = self
+            .users
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .get_mut(username)
+        {
             user.enabled = true;
             true
         } else {

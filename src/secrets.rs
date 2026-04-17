@@ -151,7 +151,10 @@ impl SecretsResolver {
     }
 
     /// Resolve a map of config values, expanding any secret references.
-    pub fn resolve_map(&self, map: &HashMap<String, String>) -> Result<HashMap<String, String>, String> {
+    pub fn resolve_map(
+        &self,
+        map: &HashMap<String, String>,
+    ) -> Result<HashMap<String, String>, String> {
         let mut resolved = HashMap::new();
         for (key, value) in map {
             resolved.insert(key.clone(), self.resolve(value)?);
@@ -317,7 +320,8 @@ mod tests {
     #[test]
     fn resolve_env_variable() {
         let mut r = default_resolver();
-        r.env_overrides.insert("WARDEX_TEST_SECRET_42".into(), "hunter2".into());
+        r.env_overrides
+            .insert("WARDEX_TEST_SECRET_42".into(), "hunter2".into());
         assert_eq!(r.resolve("${WARDEX_TEST_SECRET_42}").unwrap(), "hunter2");
     }
 
@@ -327,7 +331,8 @@ mod tests {
             env_prefix: Some("WDX_".into()),
             ..Default::default()
         });
-        r.env_overrides.insert("WDX_API_KEY".into(), "secret123".into());
+        r.env_overrides
+            .insert("WDX_API_KEY".into(), "secret123".into());
         assert_eq!(r.resolve("${API_KEY}").unwrap(), "secret123");
     }
 
@@ -340,8 +345,10 @@ mod tests {
     #[test]
     fn expand_string_mixed() {
         let mut r = default_resolver();
-        r.env_overrides.insert("WARDEX_HOST_TEST".into(), "localhost".into());
-        r.env_overrides.insert("WARDEX_PORT_TEST".into(), "8080".into());
+        r.env_overrides
+            .insert("WARDEX_HOST_TEST".into(), "localhost".into());
+        r.env_overrides
+            .insert("WARDEX_PORT_TEST".into(), "8080".into());
         let result = r
             .expand_string("http://${WARDEX_HOST_TEST}:${WARDEX_PORT_TEST}/api")
             .unwrap();
@@ -363,7 +370,8 @@ mod tests {
     #[test]
     fn resolve_map_all_types() {
         let mut r = default_resolver();
-        r.env_overrides.insert("WARDEX_TEST_MAP_KEY".into(), "resolved_value".into());
+        r.env_overrides
+            .insert("WARDEX_TEST_MAP_KEY".into(), "resolved_value".into());
         let mut map = HashMap::new();
         map.insert("literal".into(), "plain".into());
         map.insert("env".into(), "${WARDEX_TEST_MAP_KEY}".into());

@@ -82,7 +82,12 @@ impl WorkflowStore {
         self.workflows.iter().find(|w| w.id == id)
     }
 
-    pub fn start_investigation(&mut self, workflow_id: &str, analyst: &str, case_id: Option<String>) -> Option<InvestigationProgress> {
+    pub fn start_investigation(
+        &mut self,
+        workflow_id: &str,
+        analyst: &str,
+        case_id: Option<String>,
+    ) -> Option<InvestigationProgress> {
         if self.workflows.iter().any(|w| w.id == workflow_id) {
             let progress = InvestigationProgress {
                 workflow_id: workflow_id.to_string(),
@@ -101,8 +106,16 @@ impl WorkflowStore {
         }
     }
 
-    pub fn complete_step(&mut self, workflow_id: &str, analyst: &str, step: usize, note: Option<String>) {
-        if let Some(p) = self.progress.iter_mut().find(|p| p.workflow_id == workflow_id && p.analyst == analyst && p.status == "in-progress") {
+    pub fn complete_step(
+        &mut self,
+        workflow_id: &str,
+        analyst: &str,
+        step: usize,
+        note: Option<String>,
+    ) {
+        if let Some(p) = self.progress.iter_mut().find(|p| {
+            p.workflow_id == workflow_id && p.analyst == analyst && p.status == "in-progress"
+        }) {
             if !p.completed_steps.contains(&step) {
                 p.completed_steps.push(step);
             }
@@ -113,7 +126,10 @@ impl WorkflowStore {
     }
 
     pub fn active_investigations(&self) -> Vec<&InvestigationProgress> {
-        self.progress.iter().filter(|p| p.status == "in-progress").collect()
+        self.progress
+            .iter()
+            .filter(|p| p.status == "in-progress")
+            .collect()
     }
 
     pub fn workflow_count(&self) -> usize {
@@ -123,12 +139,17 @@ impl WorkflowStore {
     /// Suggest a workflow based on alert type.
     pub fn suggest_for_alert(&self, alert_reasons: &[String]) -> Vec<&InvestigationWorkflow> {
         let reasons_lower: Vec<String> = alert_reasons.iter().map(|r| r.to_lowercase()).collect();
-        self.workflows.iter().filter(|w| {
-            w.trigger_conditions.iter().any(|tc| {
-                let tc_lower = tc.to_lowercase();
-                reasons_lower.iter().any(|r| r.contains(&tc_lower) || tc_lower.contains(r.as_str()))
+        self.workflows
+            .iter()
+            .filter(|w| {
+                w.trigger_conditions.iter().any(|tc| {
+                    let tc_lower = tc.to_lowercase();
+                    reasons_lower
+                        .iter()
+                        .any(|r| r.contains(&tc_lower) || tc_lower.contains(r.as_str()))
+                })
             })
-        }).collect()
+            .collect()
     }
 }
 
@@ -399,7 +420,12 @@ mod tests {
         let mut store = WorkflowStore::new();
         let progress = store.start_investigation("credential-storm", "analyst-1", None);
         assert!(progress.is_some());
-        store.complete_step("credential-storm", "analyst-1", 1, Some("Found 3 targets".into()));
+        store.complete_step(
+            "credential-storm",
+            "analyst-1",
+            1,
+            Some("Found 3 targets".into()),
+        );
         let active = store.active_investigations();
         assert_eq!(active.len(), 1);
         assert!(active[0].completed_steps.contains(&1));

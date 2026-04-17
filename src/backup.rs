@@ -6,10 +6,7 @@ use sha2::{Digest, Sha256};
 use std::fs;
 use std::path::Path;
 
-use aes_gcm::{
-    Aes256Gcm, KeyInit, Nonce,
-    aead::Aead,
-};
+use aes_gcm::{Aes256Gcm, KeyInit, Nonce, aead::Aead};
 
 /// Derive a 256-bit key from a passphrase + random salt using HKDF-like construction.
 /// Uses SHA-256(salt || "wardex-backup-key-v1|" || passphrase) — salt ensures unique
@@ -42,7 +39,9 @@ pub fn encrypt_backup_data(plaintext: &[u8], passphrase: &str) -> Result<Vec<u8>
     let mut prefixed = Vec::with_capacity(4 + plaintext.len());
     prefixed.extend_from_slice(&len.to_be_bytes());
     prefixed.extend_from_slice(plaintext);
-    let ciphertext = cipher.encrypt(nonce, prefixed.as_slice()).map_err(|e| format!("encrypt error: {e}"))?;
+    let ciphertext = cipher
+        .encrypt(nonce, prefixed.as_slice())
+        .map_err(|e| format!("encrypt error: {e}"))?;
     let mut output = Vec::with_capacity(16 + 12 + ciphertext.len());
     output.extend_from_slice(&salt);
     output.extend_from_slice(&nonce_bytes);
@@ -60,12 +59,15 @@ pub fn decrypt_backup_data(encrypted: &[u8], passphrase: &str) -> Result<Vec<u8>
     let key = derive_key(passphrase, &salt);
     let cipher = Aes256Gcm::new_from_slice(&key).map_err(|e| format!("key error: {e}"))?;
     let nonce = Nonce::from_slice(&encrypted[16..28]);
-    let prefixed = cipher.decrypt(nonce, &encrypted[28..]).map_err(|e| format!("decrypt error: {e}"))?;
+    let prefixed = cipher
+        .decrypt(nonce, &encrypted[28..])
+        .map_err(|e| format!("decrypt error: {e}"))?;
     // Verify length header
     if prefixed.len() < 4 {
         return Err("decrypted data missing length header".into());
     }
-    let expected_len = u32::from_be_bytes([prefixed[0], prefixed[1], prefixed[2], prefixed[3]]) as usize;
+    let expected_len =
+        u32::from_be_bytes([prefixed[0], prefixed[1], prefixed[2], prefixed[3]]) as usize;
     let plaintext = &prefixed[4..];
     if plaintext.len() != expected_len {
         return Err(format!(

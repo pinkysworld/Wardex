@@ -665,15 +665,22 @@ impl UebaEngine {
         // z-score for risk
         let peer_risks: Vec<f64> = peers.iter().map(|p| p.risk_score as f64).collect();
         let mean_risk = peer_risks.iter().sum::<f64>() / n;
-        let var_risk =
-            peer_risks.iter().map(|r| (r - mean_risk).powi(2)).sum::<f64>() / n;
+        let var_risk = peer_risks
+            .iter()
+            .map(|r| (r - mean_risk).powi(2))
+            .sum::<f64>()
+            / n;
         let std_risk = var_risk.sqrt().max(0.01);
         let peer_deviation = ((profile.risk_score as f64 - mean_risk) / std_risk) as f32;
 
         // z-score for data volume
         let peer_vols: Vec<f64> = peers.iter().map(|p| p.avg_data_bytes).collect();
         let mean_vol = peer_vols.iter().sum::<f64>() / n;
-        let var_vol = peer_vols.iter().map(|v| (v - mean_vol).powi(2)).sum::<f64>() / n;
+        let var_vol = peer_vols
+            .iter()
+            .map(|v| (v - mean_vol).powi(2))
+            .sum::<f64>()
+            / n;
         let std_vol = var_vol.sqrt().max(0.01);
         let volume_anomaly = ((profile.avg_data_bytes - mean_vol) / std_vol) as f32;
 
@@ -708,10 +715,9 @@ impl UebaEngine {
             0.0
         };
 
-        let composite = (peer_deviation.max(0.0) * 5.0
-            + volume_anomaly.max(0.0) * 3.0
-            + temporal_anomaly)
-            .min(100.0);
+        let composite =
+            (peer_deviation.max(0.0) * 5.0 + volume_anomaly.max(0.0) * 3.0 + temporal_anomaly)
+                .min(100.0);
 
         Some(InsiderRiskScore {
             entity_kind: entity_kind.clone(),

@@ -76,7 +76,7 @@ impl Default for NdrConfig {
         Self {
             top_n: 10,
             unusual_volume_threshold: 100_000_000, // 100 MB
-            baseline_window_ms: 3_600_000,          // 1 hour
+            baseline_window_ms: 3_600_000,         // 1 hour
             min_flows: 10,
         }
     }
@@ -260,10 +260,22 @@ impl NdrEngine {
             flows: Vec::new(),
             internal_prefixes: vec![
                 "10.".into(),
-                "172.16.".into(), "172.17.".into(), "172.18.".into(), "172.19.".into(),
-                "172.20.".into(), "172.21.".into(), "172.22.".into(), "172.23.".into(),
-                "172.24.".into(), "172.25.".into(), "172.26.".into(), "172.27.".into(),
-                "172.28.".into(), "172.29.".into(), "172.30.".into(), "172.31.".into(),
+                "172.16.".into(),
+                "172.17.".into(),
+                "172.18.".into(),
+                "172.19.".into(),
+                "172.20.".into(),
+                "172.21.".into(),
+                "172.22.".into(),
+                "172.23.".into(),
+                "172.24.".into(),
+                "172.25.".into(),
+                "172.26.".into(),
+                "172.27.".into(),
+                "172.28.".into(),
+                "172.29.".into(),
+                "172.30.".into(),
+                "172.31.".into(),
                 "192.168.".into(),
                 "127.".into(),
                 "::1".into(),
@@ -303,12 +315,18 @@ impl NdrEngine {
         let beaconing_anomalies = self.detect_beaconing_anomalies();
         let self_signed_certs = self.detect_self_signed_certs();
 
-        let external_dests: std::collections::HashSet<&str> = self.flows.iter()
+        let external_dests: std::collections::HashSet<&str> = self
+            .flows
+            .iter()
             .filter(|f| self.is_external(&f.dst_addr))
             .map(|f| f.dst_addr.as_str())
             .collect();
 
-        let total_bytes: u64 = self.flows.iter().map(|f| f.bytes_sent + f.bytes_received).sum();
+        let total_bytes: u64 = self
+            .flows
+            .iter()
+            .map(|f| f.bytes_sent + f.bytes_received)
+            .sum();
 
         let duration_ms = if self.flows.len() >= 2 {
             let min_ts = self.flows.iter().map(|f| f.timestamp_ms).min().unwrap_or(0);
@@ -351,16 +369,18 @@ impl NdrEngine {
 
         let mut items: Vec<ProtocolDistribution> = by_protocol
             .into_iter()
-            .map(|(protocol, (flow_count, total_bytes, encrypted_count))| ProtocolDistribution {
-                protocol: protocol.to_string(),
-                flow_count,
-                total_bytes,
-                encrypted_ratio: if flow_count > 0 {
-                    encrypted_count as f32 / flow_count as f32
-                } else {
-                    0.0
+            .map(
+                |(protocol, (flow_count, total_bytes, encrypted_count))| ProtocolDistribution {
+                    protocol: protocol.to_string(),
+                    flow_count,
+                    total_bytes,
+                    encrypted_ratio: if flow_count > 0 {
+                        encrypted_count as f32 / flow_count as f32
+                    } else {
+                        0.0
+                    },
                 },
-            })
+            )
             .collect();
 
         items.sort_by(|left, right| {
@@ -373,23 +393,39 @@ impl NdrEngine {
     }
 
     fn compute_top_talkers(&self) -> Vec<TopTalker> {
-        let mut by_src: HashMap<&str, (u64, usize, std::collections::HashSet<&str>, std::collections::HashSet<&str>)> = HashMap::new();
+        let mut by_src: HashMap<
+            &str,
+            (
+                u64,
+                usize,
+                std::collections::HashSet<&str>,
+                std::collections::HashSet<&str>,
+            ),
+        > = HashMap::new();
         for f in &self.flows {
-            let entry = by_src.entry(&f.src_addr).or_insert_with(|| (0, 0, std::collections::HashSet::new(), std::collections::HashSet::new()));
+            let entry = by_src.entry(&f.src_addr).or_insert_with(|| {
+                (
+                    0,
+                    0,
+                    std::collections::HashSet::new(),
+                    std::collections::HashSet::new(),
+                )
+            });
             entry.0 += f.bytes_sent + f.bytes_received;
             entry.1 += 1;
             entry.2.insert(&f.dst_addr);
             entry.3.insert(&f.protocol);
         }
-        let mut talkers: Vec<TopTalker> = by_src.into_iter().map(|(addr, (bytes, count, dests, protos))| {
-            TopTalker {
+        let mut talkers: Vec<TopTalker> = by_src
+            .into_iter()
+            .map(|(addr, (bytes, count, dests, protos))| TopTalker {
                 addr: addr.to_string(),
                 total_bytes: bytes,
                 flow_count: count,
                 unique_destinations: dests.len(),
                 protocols: protos.into_iter().map(|s| s.to_string()).collect(),
-            }
-        }).collect();
+            })
+            .collect();
         talkers.sort_by(|a, b| b.total_bytes.cmp(&a.total_bytes));
         talkers.truncate(self.config.top_n);
         talkers
@@ -399,7 +435,9 @@ impl NdrEngine {
         let mut by_dst: HashMap<(&str, u16), (u64, usize, u64)> = HashMap::new();
         for f in &self.flows {
             if self.is_external(&f.dst_addr) {
-                let entry = by_dst.entry((&f.dst_addr, f.dst_port)).or_insert_with(|| (0, 0, f.timestamp_ms));
+                let entry = by_dst
+                    .entry((&f.dst_addr, f.dst_port))
+                    .or_insert_with(|| (0, 0, f.timestamp_ms));
                 entry.0 += f.bytes_sent + f.bytes_received;
                 entry.1 += 1;
                 if f.timestamp_ms < entry.2 {
@@ -407,10 +445,12 @@ impl NdrEngine {
                 }
             }
         }
-        let mut unusual: Vec<UnusualDestination> = by_dst.into_iter()
+        let mut unusual: Vec<UnusualDestination> = by_dst
+            .into_iter()
             .filter(|(_, (bytes, _, _))| *bytes > self.config.unusual_volume_threshold)
             .map(|((addr, port), (bytes, count, first))| {
-                let risk = ((bytes as f32 / self.config.unusual_volume_threshold as f32) * 3.0).min(10.0);
+                let risk =
+                    ((bytes as f32 / self.config.unusual_volume_threshold as f32) * 3.0).min(10.0);
                 UnusualDestination {
                     dst_addr: addr.to_string(),
                     dst_port: port,
@@ -418,7 +458,10 @@ impl NdrEngine {
                     flow_count: count,
                     first_seen_ms: first,
                     risk_score: (risk * 100.0).round() / 100.0,
-                    reason: format!("High-volume external transfer: {} bytes to {}:{}", bytes, addr, port),
+                    reason: format!(
+                        "High-volume external transfer: {} bytes to {}:{}",
+                        bytes, addr, port
+                    ),
                 }
             })
             .collect();
@@ -429,14 +472,25 @@ impl NdrEngine {
     fn detect_protocol_anomalies(&self) -> Vec<ProtocolAnomaly> {
         // Well-known port-to-protocol mapping
         let expected: HashMap<u16, &str> = HashMap::from([
-            (22, "SSH"), (80, "HTTP"), (443, "HTTPS"), (53, "DNS"),
-            (25, "SMTP"), (3306, "MySQL"), (5432, "PostgreSQL"),
-            (6379, "Redis"), (8080, "HTTP"), (8443, "HTTPS"),
+            (22, "SSH"),
+            (80, "HTTP"),
+            (443, "HTTPS"),
+            (53, "DNS"),
+            (25, "SMTP"),
+            (3306, "MySQL"),
+            (5432, "PostgreSQL"),
+            (6379, "Redis"),
+            (8080, "HTTP"),
+            (8443, "HTTPS"),
         ]);
 
         let mut port_protocols: HashMap<u16, HashMap<&str, usize>> = HashMap::new();
         for f in &self.flows {
-            *port_protocols.entry(f.dst_port).or_default().entry(&f.protocol).or_insert(0) += 1;
+            *port_protocols
+                .entry(f.dst_port)
+                .or_default()
+                .entry(&f.protocol)
+                .or_insert(0) += 1;
         }
 
         let mut anomalies = Vec::new();
@@ -462,13 +516,26 @@ impl NdrEngine {
     fn compute_encrypted_stats(&self) -> EncryptedTrafficStats {
         let total = self.flows.len();
         let encrypted = self.flows.iter().filter(|f| f.is_encrypted).count();
-        let total_bytes: u64 = self.flows.iter().map(|f| f.bytes_sent + f.bytes_received).sum();
-        let encrypted_bytes: u64 = self.flows.iter().filter(|f| f.is_encrypted).map(|f| f.bytes_sent + f.bytes_received).sum();
+        let total_bytes: u64 = self
+            .flows
+            .iter()
+            .map(|f| f.bytes_sent + f.bytes_received)
+            .sum();
+        let encrypted_bytes: u64 = self
+            .flows
+            .iter()
+            .filter(|f| f.is_encrypted)
+            .map(|f| f.bytes_sent + f.bytes_received)
+            .sum();
 
         EncryptedTrafficStats {
             total_flows: total,
             encrypted_flows: encrypted,
-            encrypted_ratio: if total > 0 { encrypted as f32 / total as f32 } else { 0.0 },
+            encrypted_ratio: if total > 0 {
+                encrypted as f32 / total as f32
+            } else {
+                0.0
+            },
             encrypted_bytes,
             total_bytes,
         }
@@ -518,7 +585,10 @@ impl NdrEngine {
                             tls_sni: first.tls_sni.clone().unwrap_or_default(),
                             tls_version: first.tls_version.clone().unwrap_or_default(),
                             risk_score: 4.0,
-                            reason: format!("Rare JA3 fingerprint seen in only {} flow(s)", flows.len()),
+                            reason: format!(
+                                "Rare JA3 fingerprint seen in only {} flow(s)",
+                                flows.len()
+                            ),
                             flow_count: flows.len(),
                         });
                     }
@@ -533,9 +603,17 @@ impl NdrEngine {
     /// Detect DPI protocol mismatches (e.g. SSH on port 443).
     fn detect_dpi_anomalies(&self) -> Vec<DpiAnomaly> {
         let port_to_dpi: HashMap<u16, &str> = HashMap::from([
-            (80, "HTTP"), (443, "HTTPS"), (22, "SSH"), (53, "DNS"),
-            (25, "SMTP"), (110, "POP3"), (143, "IMAP"), (993, "IMAPS"),
-            (3306, "MySQL"), (5432, "PostgreSQL"), (6379, "Redis"),
+            (80, "HTTP"),
+            (443, "HTTPS"),
+            (22, "SSH"),
+            (53, "DNS"),
+            (25, "SMTP"),
+            (110, "POP3"),
+            (143, "IMAP"),
+            (993, "IMAPS"),
+            (3306, "MySQL"),
+            (5432, "PostgreSQL"),
+            (6379, "Redis"),
         ]);
 
         let mut mismatches: HashMap<(String, String, u16, String), usize> = HashMap::new();
@@ -546,14 +624,20 @@ impl NdrEngine {
                     let dpi_upper = dpi_proto.to_uppercase();
                     let exp_upper = expected.to_uppercase();
                     if !dpi_upper.starts_with(&exp_upper) && !exp_upper.starts_with(&dpi_upper) {
-                        let key = (f.src_addr.clone(), f.dst_addr.clone(), f.dst_port, dpi_proto.clone());
+                        let key = (
+                            f.src_addr.clone(),
+                            f.dst_addr.clone(),
+                            f.dst_port,
+                            dpi_proto.clone(),
+                        );
                         *mismatches.entry(key).or_insert(0) += 1;
                     }
                 }
             }
         }
 
-        let mut anomalies: Vec<DpiAnomaly> = mismatches.into_iter()
+        let mut anomalies: Vec<DpiAnomaly> = mismatches
+            .into_iter()
             .filter(|(_, count)| *count >= 2)
             .map(|((src, dst, port, detected), count)| {
                 let expected = port_to_dpi.get(&port).unwrap_or(&"unknown").to_string();
@@ -581,7 +665,8 @@ impl NdrEngine {
         for f in &self.flows {
             if let Some(entropy) = f.payload_entropy {
                 if self.is_external(&f.dst_addr) && entropy > 7.5 {
-                    let entry = groups.entry((&f.src_addr, &f.dst_addr, f.dst_port))
+                    let entry = groups
+                        .entry((&f.src_addr, &f.dst_addr, f.dst_port))
                         .or_insert((0.0, 0, 0));
                     entry.0 += entropy as f64;
                     entry.1 += f.bytes_sent + f.bytes_received;
@@ -590,7 +675,8 @@ impl NdrEngine {
             }
         }
 
-        let mut anomalies: Vec<EntropyAnomaly> = groups.into_iter()
+        let mut anomalies: Vec<EntropyAnomaly> = groups
+            .into_iter()
             .filter(|(_, (_, _, count))| *count >= 3)
             .map(|((src, dst, port), (entropy_sum, bytes, count))| {
                 let avg_entropy = (entropy_sum / count as f64) as f32;
@@ -618,7 +704,12 @@ impl NdrEngine {
         for flow in &self.flows {
             if self.is_external(&flow.dst_addr) {
                 groups
-                    .entry((&flow.src_addr, &flow.dst_addr, flow.dst_port, &flow.protocol))
+                    .entry((
+                        &flow.src_addr,
+                        &flow.dst_addr,
+                        flow.dst_port,
+                        &flow.protocol,
+                    ))
                     .or_default()
                     .push(flow);
             }
@@ -654,13 +745,21 @@ impl NdrEngine {
                 .sum::<f32>()
                 / intervals.len() as f32;
             let stddev = variance.sqrt();
-            let jitter_ratio = if avg_interval > 0.0 { stddev / avg_interval } else { 1.0 };
+            let jitter_ratio = if avg_interval > 0.0 {
+                stddev / avg_interval
+            } else {
+                1.0
+            };
             if jitter_ratio > 0.15 {
                 continue;
             }
 
-            let total_bytes: u64 = flows.iter().map(|flow| flow.bytes_sent + flow.bytes_received).sum();
-            let encrypted_ratio = flows.iter().filter(|flow| flow.is_encrypted).count() as f32 / flows.len() as f32;
+            let total_bytes: u64 = flows
+                .iter()
+                .map(|flow| flow.bytes_sent + flow.bytes_received)
+                .sum();
+            let encrypted_ratio =
+                flows.iter().filter(|flow| flow.is_encrypted).count() as f32 / flows.len() as f32;
             let cadence_bonus = ((flows.len() as f32).ln() * 1.6).min(2.5);
             let jitter_bonus = ((0.15 - jitter_ratio).max(0.0) * 20.0).min(2.0);
             let risk = (4.0 + cadence_bonus + jitter_bonus + encrypted_ratio).min(10.0);
@@ -699,7 +798,8 @@ impl NdrEngine {
             }
         }
 
-        let mut certs: Vec<SelfSignedCert> = seen.into_iter()
+        let mut certs: Vec<SelfSignedCert> = seen
+            .into_iter()
             .map(|((addr, port), (flow, count))| {
                 let is_external = self.is_external(addr);
                 SelfSignedCert {
@@ -774,7 +874,7 @@ mod tests {
     fn encrypted_stats() {
         let mut engine = NdrEngine::default();
         engine.record_flow(make_flow("10.0.0.1", "1.1.1.1", 443, 1000)); // encrypted
-        engine.record_flow(make_flow("10.0.0.1", "1.1.1.1", 80, 1000));  // not encrypted
+        engine.record_flow(make_flow("10.0.0.1", "1.1.1.1", 80, 1000)); // not encrypted
         let report = engine.analyze();
         assert_eq!(report.encrypted_traffic.encrypted_flows, 1);
         assert_eq!(report.encrypted_traffic.total_flows, 2);
@@ -792,7 +892,11 @@ mod tests {
     #[test]
     fn known_bad_ja3_detected() {
         let mut engine = NdrEngine::default();
-        engine.record_flow(make_tls_flow("10.0.0.5", "8.8.4.4", "51c64c77e60f3980eea90869b68c58a8"));
+        engine.record_flow(make_tls_flow(
+            "10.0.0.5",
+            "8.8.4.4",
+            "51c64c77e60f3980eea90869b68c58a8",
+        ));
         let report = engine.analyze();
         assert!(!report.tls_anomalies.is_empty());
         assert!(report.tls_anomalies[0].risk_score >= 9.0);
@@ -802,9 +906,17 @@ mod tests {
     #[test]
     fn rare_ja3_flagged() {
         let mut engine = NdrEngine::default();
-        engine.record_flow(make_tls_flow("10.0.0.5", "1.2.3.4", "deadbeef00000000deadbeef00000000"));
+        engine.record_flow(make_tls_flow(
+            "10.0.0.5",
+            "1.2.3.4",
+            "deadbeef00000000deadbeef00000000",
+        ));
         let report = engine.analyze();
-        let rare: Vec<_> = report.tls_anomalies.iter().filter(|a| a.reason.contains("Rare")).collect();
+        let rare: Vec<_> = report
+            .tls_anomalies
+            .iter()
+            .filter(|a| a.reason.contains("Rare"))
+            .collect();
         assert!(!rare.is_empty());
     }
 

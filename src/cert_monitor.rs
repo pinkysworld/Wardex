@@ -95,10 +95,12 @@ impl CertMonitor {
     /// Record a discovered certificate.
     pub fn record_certificate(&mut self, mut cert: CertificateRecord) {
         cert.is_expired = cert.days_until_expiry < 0;
-        cert.is_expiring_soon = cert.days_until_expiry >= 0 && cert.days_until_expiry <= self.expiry_warning_days;
+        cert.is_expiring_soon =
+            cert.days_until_expiry >= 0 && cert.days_until_expiry <= self.expiry_warning_days;
 
         // Replace existing cert for the same host:port
-        self.certificates.retain(|c| !(c.hostname == cert.hostname && c.port == cert.port));
+        self.certificates
+            .retain(|c| !(c.hostname == cert.hostname && c.port == cert.port));
         self.certificates.push(cert);
     }
 

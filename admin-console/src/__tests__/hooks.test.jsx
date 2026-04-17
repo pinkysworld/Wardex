@@ -1,7 +1,16 @@
 import { render, renderHook, screen, act } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { MemoryRouter } from 'react-router-dom';
-import { AuthProvider, RoleProvider, ThemeProvider, ToastProvider, useAuth, useTheme, useToast, useWebSocket } from '../hooks.jsx';
+import {
+  AuthProvider,
+  RoleProvider,
+  ThemeProvider,
+  ToastProvider,
+  useAuth,
+  useTheme,
+  useToast,
+  useWebSocket,
+} from '../hooks.jsx';
 
 // Stub fetch globally
 const fetchMock = vi.fn();
@@ -55,10 +64,14 @@ describe('AuthProvider', () => {
 
   it('disconnect clears authentication', async () => {
     const { result } = renderHook(() => useAuth(), { wrapper: Providers });
-    await act(async () => { await result.current.connect('tok'); });
+    await act(async () => {
+      await result.current.connect('tok');
+    });
     expect(result.current.authenticated).toBe(true);
 
-    act(() => { result.current.disconnect(); });
+    act(() => {
+      result.current.disconnect();
+    });
     expect(result.current.authenticated).toBe(false);
   });
 });
@@ -73,7 +86,9 @@ describe('ThemeProvider', () => {
     const { result } = renderHook(() => useTheme(), { wrapper: Providers });
     const initial = result.current.dark;
 
-    act(() => { result.current.toggle(); });
+    act(() => {
+      result.current.toggle();
+    });
     const toggled = result.current.dark;
     expect(toggled).not.toBe(initial);
   });
@@ -82,7 +97,9 @@ describe('ThemeProvider', () => {
 describe('ToastProvider', () => {
   it('renders toast messages', async () => {
     const { result } = renderHook(() => useToast(), { wrapper: Providers });
-    act(() => { result.current('Test notification', 'info'); });
+    act(() => {
+      result.current('Test notification', 'info');
+    });
     expect(screen.getByText('Test notification')).toBeInTheDocument();
   });
 });

@@ -391,10 +391,7 @@ impl AwsCloudTrailCollector {
             };
         }
 
-        let endpoint = format!(
-            "https://cloudtrail.{}.amazonaws.com",
-            self.config.region
-        );
+        let endpoint = format!("https://cloudtrail.{}.amazonaws.com", self.config.region);
         let body = self.build_request_body();
         let date = chrono::Utc::now().format("%Y%m%dT%H%M%SZ").to_string();
         let date_short = &date[..8];
@@ -440,14 +437,16 @@ impl AwsCloudTrailCollector {
         let result = ureq::post(&endpoint)
             .set("Content-Type", "application/x-amz-json-1.1")
             .set("X-Amz-Date", &date)
-            .set("X-Amz-Target", "com.amazonaws.cloudtrail.v20131101.CloudTrail_20131101.LookupEvents")
+            .set(
+                "X-Amz-Target",
+                "com.amazonaws.cloudtrail.v20131101.CloudTrail_20131101.LookupEvents",
+            )
             .set("Authorization", &authorization)
             .send_string(&body);
 
         match result {
             Ok(resp) => {
-                let resp_body = resp.into_string()
-                    .unwrap_or_default();
+                let resp_body = resp.into_string().unwrap_or_default();
                 self.parse_response(&resp_body)
             }
             Err(e) => AwsPollResult {
@@ -465,7 +464,7 @@ impl AwsCloudTrailCollector {
 // ── SigV4 Crypto Helpers ──────────────────────────────────────────────────────
 
 fn sha256_hex(data: &[u8]) -> String {
-    use sha2::{Sha256, Digest};
+    use sha2::{Digest, Sha256};
     let mut hasher = Sha256::new();
     hasher.update(data);
     hex::encode(hasher.finalize())

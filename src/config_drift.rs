@@ -104,7 +104,11 @@ impl ConfigDriftDetector {
     }
 
     /// Check actual configuration against baselines.
-    pub fn check(&mut self, host_id: &str, actual_configs: &HashMap<String, HashMap<String, String>>) -> DriftReport {
+    pub fn check(
+        &mut self,
+        host_id: &str,
+        actual_configs: &HashMap<String, HashMap<String, String>>,
+    ) -> DriftReport {
         let mut changes = Vec::new();
         let ts = chrono::Utc::now().to_rfc3339();
 
@@ -146,8 +150,14 @@ impl ConfigDriftDetector {
             }
         }
 
-        let critical_drifts = changes.iter().filter(|c| c.severity == DriftSeverity::Critical).count();
-        let high_drifts = changes.iter().filter(|c| c.severity == DriftSeverity::High).count();
+        let critical_drifts = changes
+            .iter()
+            .filter(|c| c.severity == DriftSeverity::Critical)
+            .count();
+        let high_drifts = changes
+            .iter()
+            .filter(|c| c.severity == DriftSeverity::High)
+            .count();
 
         let report = DriftReport {
             host_id: host_id.to_string(),
@@ -277,13 +287,16 @@ mod tests {
     fn detects_ssh_drift() {
         let mut detector = ConfigDriftDetector::new();
         let mut actual = HashMap::new();
-        actual.insert("/etc/ssh/sshd_config".to_string(), HashMap::from([
-            ("PermitRootLogin".into(), "yes".into()),  // DRIFT
-            ("PasswordAuthentication".into(), "no".into()),
-            ("X11Forwarding".into(), "no".into()),
-            ("MaxAuthTries".into(), "3".into()),
-            ("Protocol".into(), "2".into()),
-        ]));
+        actual.insert(
+            "/etc/ssh/sshd_config".to_string(),
+            HashMap::from([
+                ("PermitRootLogin".into(), "yes".into()), // DRIFT
+                ("PasswordAuthentication".into(), "no".into()),
+                ("X11Forwarding".into(), "no".into()),
+                ("MaxAuthTries".into(), "3".into()),
+                ("Protocol".into(), "2".into()),
+            ]),
+        );
         let report = detector.check("host-1", &actual);
         assert!(report.drifts_found > 0);
         assert!(report.critical_drifts > 0);
@@ -294,25 +307,34 @@ mod tests {
     fn compliant_host() {
         let mut detector = ConfigDriftDetector::new();
         let mut actual = HashMap::new();
-        actual.insert("/etc/ssh/sshd_config".to_string(), HashMap::from([
-            ("PermitRootLogin".into(), "no".into()),
-            ("PasswordAuthentication".into(), "no".into()),
-            ("X11Forwarding".into(), "no".into()),
-            ("MaxAuthTries".into(), "3".into()),
-            ("Protocol".into(), "2".into()),
-        ]));
-        actual.insert("kernel.params".to_string(), HashMap::from([
-            ("kernel.randomize_va_space".into(), "2".into()),
-            ("net.ipv4.ip_forward".into(), "0".into()),
-            ("net.ipv4.conf.all.accept_redirects".into(), "0".into()),
-            ("net.ipv4.conf.all.send_redirects".into(), "0".into()),
-        ]));
-        actual.insert("/etc/docker/daemon.json".to_string(), HashMap::from([
-            ("no-new-privileges".into(), "true".into()),
-            ("icc".into(), "false".into()),
-            ("live-restore".into(), "true".into()),
-            ("userland-proxy".into(), "false".into()),
-        ]));
+        actual.insert(
+            "/etc/ssh/sshd_config".to_string(),
+            HashMap::from([
+                ("PermitRootLogin".into(), "no".into()),
+                ("PasswordAuthentication".into(), "no".into()),
+                ("X11Forwarding".into(), "no".into()),
+                ("MaxAuthTries".into(), "3".into()),
+                ("Protocol".into(), "2".into()),
+            ]),
+        );
+        actual.insert(
+            "kernel.params".to_string(),
+            HashMap::from([
+                ("kernel.randomize_va_space".into(), "2".into()),
+                ("net.ipv4.ip_forward".into(), "0".into()),
+                ("net.ipv4.conf.all.accept_redirects".into(), "0".into()),
+                ("net.ipv4.conf.all.send_redirects".into(), "0".into()),
+            ]),
+        );
+        actual.insert(
+            "/etc/docker/daemon.json".to_string(),
+            HashMap::from([
+                ("no-new-privileges".into(), "true".into()),
+                ("icc".into(), "false".into()),
+                ("live-restore".into(), "true".into()),
+                ("userland-proxy".into(), "false".into()),
+            ]),
+        );
         let report = detector.check("host-1", &actual);
         assert!(report.compliant);
     }

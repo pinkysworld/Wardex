@@ -433,8 +433,7 @@ impl GcpAuditCollector {
 
         match result {
             Ok(resp) => {
-                let resp_body = resp.into_string()
-                    .unwrap_or_default();
+                let resp_body = resp.into_string().unwrap_or_default();
                 self.parse_response(&resp_body)
             }
             Err(e) => GcpPollResult {
@@ -474,9 +473,8 @@ impl GcpAuditCollector {
             .as_secs();
 
         // Build a JWT assertion for the token endpoint
-        let header = base64_url_encode(
-            &serde_json::json!({"alg": "RS256", "typ": "JWT"}).to_string(),
-        );
+        let header =
+            base64_url_encode(&serde_json::json!({"alg": "RS256", "typ": "JWT"}).to_string());
         let claims = base64_url_encode(
             &serde_json::json!({
                 "iss": self.config.service_account_email,

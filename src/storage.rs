@@ -1557,14 +1557,11 @@ impl SharedStorage {
 
     /// Return dedup suppression statistics.
     pub fn dedup_stats(&self) -> DedupStats {
-        self.dedup
-            .lock()
-            .map(|d| d.stats())
-            .unwrap_or(DedupStats {
-                total_suppressed: 0,
-                active_signatures: 0,
-                window_seconds: 900,
-            })
+        self.dedup.lock().map(|d| d.stats()).unwrap_or(DedupStats {
+            total_suppressed: 0,
+            active_signatures: 0,
+            window_seconds: 900,
+        })
     }
 }
 

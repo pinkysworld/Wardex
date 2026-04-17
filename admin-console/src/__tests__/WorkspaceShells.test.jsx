@@ -15,8 +15,35 @@ beforeEach(() => {
     ok: true,
     headers: { get: () => 'application/json' },
     json: async () => {
-      if (String(url).includes('/api/content/rules')) return { rules: [{ id: 'rule-1', title: 'Suspicious PowerShell', lifecycle: 'test', enabled: true, attack: [], owner: 'secops', last_test_match_count: 2 }] };
-      if (String(url).includes('/api/report-templates')) return { templates: [{ id: 'tpl-1', name: 'Executive Status', kind: 'executive_status', scope: 'global', format: 'json', status: 'ready', audience: 'executive', description: 'Leadership snapshot' }] };
+      if (String(url).includes('/api/content/rules'))
+        return {
+          rules: [
+            {
+              id: 'rule-1',
+              title: 'Suspicious PowerShell',
+              lifecycle: 'test',
+              enabled: true,
+              attack: [],
+              owner: 'secops',
+              last_test_match_count: 2,
+            },
+          ],
+        };
+      if (String(url).includes('/api/report-templates'))
+        return {
+          templates: [
+            {
+              id: 'tpl-1',
+              name: 'Executive Status',
+              kind: 'executive_status',
+              scope: 'global',
+              format: 'json',
+              status: 'ready',
+              audience: 'executive',
+              description: 'Leadership snapshot',
+            },
+          ],
+        };
       if (String(url).includes('/api/inbox')) return { items: [] };
       return {};
     },
@@ -27,9 +54,7 @@ function renderWithProviders(node, route = '/') {
   return render(
     <MemoryRouter initialEntries={[route]}>
       <ThemeProvider>
-        <ToastProvider>
-          {node}
-        </ToastProvider>
+        <ToastProvider>{node}</ToastProvider>
       </ThemeProvider>
     </MemoryRouter>,
   );

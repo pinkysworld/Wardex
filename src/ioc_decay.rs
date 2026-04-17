@@ -41,7 +41,10 @@ impl DecayConfig {
                 self.half_life_days
             ));
         }
-        if !self.min_confidence.is_finite() || self.min_confidence < 0.0 || self.min_confidence > 1.0 {
+        if !self.min_confidence.is_finite()
+            || self.min_confidence < 0.0
+            || self.min_confidence > 1.0
+        {
             return Err(format!(
                 "min_confidence must be between 0.0 and 1.0, got {}",
                 self.min_confidence
@@ -145,7 +148,6 @@ pub fn apply_decay(store: &mut ThreatIntelStore, config: &DecayConfig) -> DecayR
     // (Use the existing purge mechanism or direct removal)
     // For simplicity, we do a targeted purge by age
     if !to_remove.is_empty() {
-        let cutoff = (now - chrono::Duration::days(config.max_age_days as i64)).to_rfc3339();
         store.purge_expired(&now.to_rfc3339(), config.max_age_days);
     }
 

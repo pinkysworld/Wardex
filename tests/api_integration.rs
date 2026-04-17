@@ -5021,9 +5021,12 @@ fn compliance_summary_returns_executive_view() {
 #[test]
 fn compliance_report_unknown_framework_returns_404() {
     let (port, token) = spawn_test_server();
-    let err = ureq::get(&format!("{}/api/compliance/report?framework=nonexistent", base(port)))
-        .set("Authorization", &auth_header(&token))
-        .call();
+    let err = ureq::get(&format!(
+        "{}/api/compliance/report?framework=nonexistent",
+        base(port)
+    ))
+    .set("Authorization", &auth_header(&token))
+    .call();
     match err {
         Err(ureq::Error::Status(404, _)) => {}
         other => panic!("expected 404 for unknown framework, got {other:?}"),

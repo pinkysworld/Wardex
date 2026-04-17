@@ -30,24 +30,75 @@ function TimelineEvent({ event, expanded, onToggle }) {
           <span className="timeline-time">{displayTime}</span>
           <span className={`timeline-sev ${sevClass}`}>{event.severity || 'info'}</span>
           <span className="timeline-type">{event.type || event.category || 'Event'}</span>
-          <span className="timeline-summary">{event.message || event.summary || event.description || '—'}</span>
+          <span className="timeline-summary">
+            {event.message || event.summary || event.description || '—'}
+          </span>
           <span className="timeline-chevron">{expanded ? '▾' : '▸'}</span>
         </button>
         {expanded && (
           <div className="timeline-detail">
-            {event.source && <div><strong>Source:</strong> {event.source}</div>}
-            {event.host && <div><strong>Host:</strong> {event.host}</div>}
-            {event.user && <div><strong>User:</strong> {event.user}</div>}
-            {event.pid && <div><strong>PID:</strong> {event.pid}</div>}
-            {event.process_name && <div><strong>Process:</strong> {event.process_name}</div>}
-            {event.action && <div><strong>Action:</strong> {event.action}</div>}
-            {event.mitre_ids && <div><strong>MITRE:</strong> {Array.isArray(event.mitre_ids) ? event.mitre_ids.join(', ') : event.mitre_ids}</div>}
-            {event.risk_score != null && <div><strong>Risk Score:</strong> {Number(event.risk_score).toFixed(2)}</div>}
+            {event.source && (
+              <div>
+                <strong>Source:</strong> {event.source}
+              </div>
+            )}
+            {event.host && (
+              <div>
+                <strong>Host:</strong> {event.host}
+              </div>
+            )}
+            {event.user && (
+              <div>
+                <strong>User:</strong> {event.user}
+              </div>
+            )}
+            {event.pid && (
+              <div>
+                <strong>PID:</strong> {event.pid}
+              </div>
+            )}
+            {event.process_name && (
+              <div>
+                <strong>Process:</strong> {event.process_name}
+              </div>
+            )}
+            {event.action && (
+              <div>
+                <strong>Action:</strong> {event.action}
+              </div>
+            )}
+            {event.mitre_ids && (
+              <div>
+                <strong>MITRE:</strong>{' '}
+                {Array.isArray(event.mitre_ids) ? event.mitre_ids.join(', ') : event.mitre_ids}
+              </div>
+            )}
+            {event.risk_score != null && (
+              <div>
+                <strong>Risk Score:</strong> {Number(event.risk_score).toFixed(2)}
+              </div>
+            )}
             {event.details && (
               <details style={{ marginTop: 8 }}>
-                <summary style={{ cursor: 'pointer', fontSize: 12, color: 'var(--text-secondary)' }}>Raw Details</summary>
-                <pre style={{ fontSize: 11, maxHeight: 200, overflow: 'auto', padding: 8, background: 'var(--code-bg)', borderRadius: 4, marginTop: 4 }}>
-                  {typeof event.details === 'string' ? event.details : JSON.stringify(event.details, null, 2)}
+                <summary
+                  style={{ cursor: 'pointer', fontSize: 12, color: 'var(--text-secondary)' }}
+                >
+                  Raw Details
+                </summary>
+                <pre
+                  style={{
+                    fontSize: 11,
+                    maxHeight: 200,
+                    overflow: 'auto',
+                    padding: 8,
+                    background: 'var(--code-bg)',
+                    borderRadius: 4,
+                    marginTop: 4,
+                  }}
+                >
+                  {typeof event.details === 'string'
+                    ? event.details
+                    : JSON.stringify(event.details, null, 2)}
                 </pre>
               </details>
             )}
@@ -72,8 +123,8 @@ export default function InvestigationTimeline() {
 
   useInterval(rAlerts, 30000);
 
-  const zoomIn = useCallback(() => setVisibleCount(c => Math.max(25, Math.floor(c / 2))), []);
-  const zoomOut = useCallback(() => setVisibleCount(c => Math.min(2000, c * 2)), []);
+  const zoomIn = useCallback(() => setVisibleCount((c) => Math.max(25, Math.floor(c / 2))), []);
+  const zoomOut = useCallback(() => setVisibleCount((c) => Math.min(2000, c * 2)), []);
   const resetZoom = useCallback(() => setVisibleCount(200), []);
 
   // Combine alert and timeline data into unified events
@@ -134,22 +185,23 @@ export default function InvestigationTimeline() {
 
   // Extract unique types for filter dropdown
   const eventTypes = useMemo(() => {
-    const types = new Set(events.map(e => e.type));
+    const types = new Set(events.map((e) => e.type));
     return ['all', ...Array.from(types).sort()];
   }, [events]);
 
   // Apply filters
   const filtered = useMemo(() => {
     const now = Date.now();
-    const rangeMs = {
-      '1h': 3600_000,
-      '6h': 6 * 3600_000,
-      '24h': 24 * 3600_000,
-      '7d': 7 * 24 * 3600_000,
-      'all': Infinity,
-    }[timeRange] || 24 * 3600_000;
+    const rangeMs =
+      {
+        '1h': 3600_000,
+        '6h': 6 * 3600_000,
+        '24h': 24 * 3600_000,
+        '7d': 7 * 24 * 3600_000,
+        all: Infinity,
+      }[timeRange] || 24 * 3600_000;
 
-    return events.filter(e => {
+    return events.filter((e) => {
       if (sevFilter !== 'all' && e.severity !== sevFilter) return false;
       if (typeFilter !== 'all' && e.type !== typeFilter) return false;
       if (rangeMs !== Infinity) {
@@ -164,7 +216,9 @@ export default function InvestigationTimeline() {
             // Block patterns with nested quantifiers that cause catastrophic backtracking
             if (/\([^)]*[+*][^)]*\)[+*?{]/.test(search)) return false;
             if (!new RegExp(search, 'i').test(searchable)) return false;
-          } catch { return false; }
+          } catch {
+            return false;
+          }
         } else {
           if (!searchable.toLowerCase().includes(search.toLowerCase())) return false;
         }
@@ -175,7 +229,9 @@ export default function InvestigationTimeline() {
 
   const sevCounts = useMemo(() => {
     const counts = { critical: 0, high: 0, medium: 0, low: 0, info: 0 };
-    filtered.forEach(e => { counts[e.severity] = (counts[e.severity] || 0) + 1; });
+    filtered.forEach((e) => {
+      counts[e.severity] = (counts[e.severity] || 0) + 1;
+    });
     return counts;
   }, [filtered]);
 
@@ -183,11 +239,17 @@ export default function InvestigationTimeline() {
   const grouped = useMemo(() => {
     if (groupBy === 'none') return null;
     const groups = {};
-    filtered.forEach(e => {
-      const key = groupBy === 'host' ? (e.host || 'Unknown') :
-                  groupBy === 'user' ? (e.user || 'Unknown') :
-                  groupBy === 'severity' ? (e.severity || 'info') :
-                  groupBy === 'process' ? (e.process_name || 'Unknown') : 'All';
+    filtered.forEach((e) => {
+      const key =
+        groupBy === 'host'
+          ? e.host || 'Unknown'
+          : groupBy === 'user'
+            ? e.user || 'Unknown'
+            : groupBy === 'severity'
+              ? e.severity || 'info'
+              : groupBy === 'process'
+                ? e.process_name || 'Unknown'
+                : 'All';
       (groups[key] ||= []).push(e);
     });
     return groups;
@@ -203,19 +265,29 @@ export default function InvestigationTimeline() {
             type="search"
             placeholder={useRegex ? 'Regex search…' : 'Search events…'}
             value={search}
-            onChange={e => setSearch(e.target.value)}
+            onChange={(e) => setSearch(e.target.value)}
             className="input"
             aria-label="Search timeline events"
             style={{ minWidth: 180 }}
           />
         </label>
         <label style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 12 }}>
-          <input type="checkbox" checked={useRegex} onChange={e => setUseRegex(e.target.checked)} /> Regex
+          <input
+            type="checkbox"
+            checked={useRegex}
+            onChange={(e) => setUseRegex(e.target.checked)}
+          />{' '}
+          Regex
         </label>
 
         <label>
           <span className="sr-only">Severity filter</span>
-          <select value={sevFilter} onChange={e => setSevFilter(e.target.value)} className="input" aria-label="Severity filter">
+          <select
+            value={sevFilter}
+            onChange={(e) => setSevFilter(e.target.value)}
+            className="input"
+            aria-label="Severity filter"
+          >
             <option value="all">All Severities</option>
             <option value="critical">Critical ({sevCounts.critical})</option>
             <option value="high">High ({sevCounts.high})</option>
@@ -227,14 +299,28 @@ export default function InvestigationTimeline() {
 
         <label>
           <span className="sr-only">Event type filter</span>
-          <select value={typeFilter} onChange={e => setTypeFilter(e.target.value)} className="input" aria-label="Event type filter">
-            {eventTypes.map(t => <option key={t} value={t}>{t === 'all' ? 'All Types' : t}</option>)}
+          <select
+            value={typeFilter}
+            onChange={(e) => setTypeFilter(e.target.value)}
+            className="input"
+            aria-label="Event type filter"
+          >
+            {eventTypes.map((t) => (
+              <option key={t} value={t}>
+                {t === 'all' ? 'All Types' : t}
+              </option>
+            ))}
           </select>
         </label>
 
         <label>
           <span className="sr-only">Time range</span>
-          <select value={timeRange} onChange={e => setTimeRange(e.target.value)} className="input" aria-label="Time range">
+          <select
+            value={timeRange}
+            onChange={(e) => setTimeRange(e.target.value)}
+            className="input"
+            aria-label="Time range"
+          >
             <option value="1h">Last 1 hour</option>
             <option value="6h">Last 6 hours</option>
             <option value="24h">Last 24 hours</option>
@@ -245,7 +331,12 @@ export default function InvestigationTimeline() {
 
         <label>
           <span className="sr-only">Group by</span>
-          <select value={groupBy} onChange={e => setGroupBy(e.target.value)} className="input" aria-label="Group by">
+          <select
+            value={groupBy}
+            onChange={(e) => setGroupBy(e.target.value)}
+            className="input"
+            aria-label="Group by"
+          >
             <option value="none">No Grouping</option>
             <option value="host">Host</option>
             <option value="user">User</option>
@@ -255,12 +346,21 @@ export default function InvestigationTimeline() {
         </label>
 
         <div className="btn-group" style={{ marginLeft: 4 }}>
-          <button className="btn btn-sm" onClick={zoomIn} title="Zoom in (fewer events)">🔍+</button>
-          <button className="btn btn-sm" onClick={zoomOut} title="Zoom out (more events)">🔍−</button>
-          <button className="btn btn-sm" onClick={resetZoom} title="Reset zoom">↺</button>
+          <button className="btn btn-sm" onClick={zoomIn} title="Zoom in (fewer events)">
+            🔍+
+          </button>
+          <button className="btn btn-sm" onClick={zoomOut} title="Zoom out (more events)">
+            🔍−
+          </button>
+          <button className="btn btn-sm" onClick={resetZoom} title="Reset zoom">
+            ↺
+          </button>
         </div>
 
-        <span className="timeline-count">{filtered.length} event{filtered.length !== 1 ? 's' : ''} (showing {Math.min(visibleCount, filtered.length)})</span>
+        <span className="timeline-count">
+          {filtered.length} event{filtered.length !== 1 ? 's' : ''} (showing{' '}
+          {Math.min(visibleCount, filtered.length)})
+        </span>
       </div>
 
       {/* Timeline */}
@@ -270,10 +370,18 @@ export default function InvestigationTimeline() {
         ) : grouped ? (
           Object.entries(grouped).map(([key, items]) => (
             <details key={key} open>
-              <summary style={{ cursor: 'pointer', fontWeight: 600, padding: '8px 0', fontSize: 13, borderBottom: '1px solid var(--border)' }}>
+              <summary
+                style={{
+                  cursor: 'pointer',
+                  fontWeight: 600,
+                  padding: '8px 0',
+                  fontSize: 13,
+                  borderBottom: '1px solid var(--border)',
+                }}
+              >
                 {groupBy}: {key} ({items.length})
               </summary>
-              {items.slice(0, visibleCount).map(event => (
+              {items.slice(0, visibleCount).map((event) => (
                 <TimelineEvent
                   key={event.id}
                   event={event}
@@ -284,19 +392,27 @@ export default function InvestigationTimeline() {
             </details>
           ))
         ) : (
-          filtered.slice(0, visibleCount).map(event => (
-            <TimelineEvent
-              key={event.id}
-              event={event}
-              expanded={expandedId === event.id}
-              onToggle={() => setExpandedId(expandedId === event.id ? null : event.id)}
-            />
-          ))
+          filtered
+            .slice(0, visibleCount)
+            .map((event) => (
+              <TimelineEvent
+                key={event.id}
+                event={event}
+                expanded={expandedId === event.id}
+                onToggle={() => setExpandedId(expandedId === event.id ? null : event.id)}
+              />
+            ))
         )}
         {filtered.length > visibleCount && (
           <div className="empty" style={{ padding: 8 }}>
             Showing {visibleCount} of {filtered.length} events
-            <button className="btn btn-sm" style={{ marginLeft: 8 }} onClick={() => setVisibleCount(c => c + 200)}>Load more</button>
+            <button
+              className="btn btn-sm"
+              style={{ marginLeft: 8 }}
+              onClick={() => setVisibleCount((c) => c + 200)}
+            >
+              Load more
+            </button>
           </div>
         )}
       </div>

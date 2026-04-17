@@ -249,8 +249,7 @@ impl PlaybookDslStore {
             .find(|e| e.run_id == run_id)
             .ok_or_else(|| format!("execution '{run_id}' not found"))?;
 
-        if ctx.status != ExecutionStatus::Running
-            && ctx.status != ExecutionStatus::WaitingForInput
+        if ctx.status != ExecutionStatus::Running && ctx.status != ExecutionStatus::WaitingForInput
         {
             return Err(format!("execution '{run_id}' is not in a runnable state"));
         }

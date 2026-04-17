@@ -5,7 +5,7 @@
 
 use serde::{Deserialize, Serialize};
 
-use crate::mitre_coverage::{CoverageConfidence, MitreCoverageTracker};
+use crate::mitre_coverage::MitreCoverageTracker;
 
 /// A gap in ATT&CK coverage — a technique with no detection.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -55,9 +55,8 @@ pub struct TacticGapSummary {
 
 /// Techniques commonly used in real-world attacks (higher priority when uncovered).
 const HIGH_VALUE_TECHNIQUES: &[&str] = &[
-    "T1059", "T1053", "T1547", "T1078", "T1110", "T1003", "T1021", "T1071",
-    "T1486", "T1190", "T1566", "T1055", "T1036", "T1027", "T1562", "T1070",
-    "T1569", "T1560", "T1105", "T1573",
+    "T1059", "T1053", "T1547", "T1078", "T1110", "T1003", "T1021", "T1071", "T1486", "T1190",
+    "T1566", "T1055", "T1036", "T1027", "T1562", "T1070", "T1569", "T1560", "T1105", "T1573",
 ];
 
 /// Generate a complete gap analysis from the coverage tracker.
@@ -134,7 +133,12 @@ pub fn analyze_gaps(tracker: &MitreCoverageTracker) -> GapAnalysisReport {
         .iter()
         .filter(|g| matches!(g.priority, GapPriority::Critical | GapPriority::High))
         .take(5)
-        .map(|g| format!("[{}] {}: {}", g.technique_id, g.technique_name, g.recommendation))
+        .map(|g| {
+            format!(
+                "[{}] {}: {}",
+                g.technique_id, g.technique_name, g.recommendation
+            )
+        })
         .collect();
 
     GapAnalysisReport {
@@ -151,7 +155,9 @@ pub fn analyze_gaps(tracker: &MitreCoverageTracker) -> GapAnalysisReport {
 
 fn generate_recommendation(technique_id: &str, technique_name: &str) -> String {
     match technique_id {
-        "T1059" => "Add Sigma rules for command-line interpreter usage (PowerShell, bash, cmd)".into(),
+        "T1059" => {
+            "Add Sigma rules for command-line interpreter usage (PowerShell, bash, cmd)".into()
+        }
         "T1053" => "Monitor scheduled task creation and modification events".into(),
         "T1547" => "Track autostart registry keys and startup folder modifications".into(),
         "T1078" => "Implement UEBA baseline for valid account usage patterns".into(),
@@ -171,7 +177,7 @@ fn generate_recommendation(technique_id: &str, technique_name: &str) -> String {
     }
 }
 
-fn suggest_detection_sources(technique_id: &str, tactic: &str) -> Vec<String> {
+fn suggest_detection_sources(_technique_id: &str, tactic: &str) -> Vec<String> {
     let mut sources = Vec::new();
     match tactic {
         "initial-access" => {

@@ -240,11 +240,7 @@ impl QuarantineStore {
                 .iter()
                 .filter(|f| f.status == QuarantineStatus::Released)
                 .count(),
-            total_size_bytes: self
-                .files
-                .iter()
-                .map(|f| f.size_bytes as u64)
-                .sum(),
+            total_size_bytes: self.files.iter().map(|f| f.size_bytes as u64).sum(),
             families,
         }
     }
@@ -311,11 +307,7 @@ impl EntropyWindow {
         if self.samples.is_empty() {
             return 0.0;
         }
-        let high_entropy = self
-            .samples
-            .iter()
-            .filter(|&&(_, e)| e > 7.5)
-            .count();
+        let high_entropy = self.samples.iter().filter(|&&(_, e)| e > 7.5).count();
         high_entropy as f64 / self.samples.len() as f64
     }
 
@@ -487,7 +479,15 @@ mod tests {
     #[test]
     fn release_removes_content() {
         let mut store = QuarantineStore::new();
-        let record = store.quarantine("/tmp/fp.bin", b"safe", "suspicious", None, vec![], None, None);
+        let record = store.quarantine(
+            "/tmp/fp.bin",
+            b"safe",
+            "suspicious",
+            None,
+            vec![],
+            None,
+            None,
+        );
         assert!(store.release(&record.id, "analyst1"));
         assert!(store.retrieve_content(&record.id).is_none());
         assert_eq!(
@@ -499,7 +499,15 @@ mod tests {
     #[test]
     fn search_by_hash_and_name() {
         let mut store = QuarantineStore::new();
-        let record = store.quarantine("/var/tmp/test.dll", b"test", "suspicious", None, vec![], None, None);
+        let record = store.quarantine(
+            "/var/tmp/test.dll",
+            b"test",
+            "suspicious",
+            None,
+            vec![],
+            None,
+            None,
+        );
         assert_eq!(store.search("test.dll").len(), 1);
         assert_eq!(store.search(&record.sha256[..8]).len(), 1);
     }
@@ -507,7 +515,15 @@ mod tests {
     #[test]
     fn stats_report() {
         let mut store = QuarantineStore::new();
-        store.quarantine("/a", b"a", "malicious", Some("FamilyA".into()), vec![], None, None);
+        store.quarantine(
+            "/a",
+            b"a",
+            "malicious",
+            Some("FamilyA".into()),
+            vec![],
+            None,
+            None,
+        );
         store.quarantine("/b", b"b", "suspicious", None, vec![], None, None);
         let stats = store.stats();
         assert_eq!(stats.total_files, 2);

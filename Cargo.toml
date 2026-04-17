@@ -6,7 +6,6 @@ rust-version = "1.85.0"
 build = "build.rs"
 description = "Private-cloud XDR and SIEM platform with enterprise detection, response, and fleet operations"
 license = "BUSL-1.1"
-license-file = "LICENSE"
 
 [dependencies]
 serde = { version = "1", features = ["derive"] }

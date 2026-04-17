@@ -117,7 +117,7 @@ pub struct AnalystResponse {
 /// Citation referencing a specific event or alert.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Citation {
-    pub source_type: String,  // "alert", "event", "rule"
+    pub source_type: String, // "alert", "event", "rule"
     pub source_id: String,
     pub summary: String,
     pub relevance_score: f32,
@@ -201,7 +201,10 @@ impl LlmAnalyst {
         // Build the prompt with context
         let system_msg = self.build_system_prompt();
         let context_block = self.build_context_block(context_events);
-        let user_msg = format!("{}\n\n### Relevant Security Context\n{}", query.question, context_block);
+        let user_msg = format!(
+            "{}\n\n### Relevant Security Context\n{}",
+            query.question, context_block
+        );
 
         // Get conversation history snapshot (clone to avoid borrow conflict with call_llm)
         let history_snapshot = self
@@ -288,7 +291,11 @@ impl LlmAnalyst {
         }
 
         let mut block = String::new();
-        for (i, event) in events.iter().take(self.config.max_context_events).enumerate() {
+        for (i, event) in events
+            .iter()
+            .take(self.config.max_context_events)
+            .enumerate()
+        {
             block.push_str(&format!(
                 "**[{}]** ({}) {} — Severity: {} | Device: {} | Time: {}\n  {}\n\n",
                 i + 1,
@@ -579,11 +586,17 @@ mod tests {
         let mut analyst = LlmAnalyst::new(test_config());
         analyst.conversation_history.insert(
             "conv-a".into(),
-            vec![ChatMessage { role: "user".into(), content: "question A".into() }],
+            vec![ChatMessage {
+                role: "user".into(),
+                content: "question A".into(),
+            }],
         );
         analyst.conversation_history.insert(
             "conv-b".into(),
-            vec![ChatMessage { role: "user".into(), content: "question B".into() }],
+            vec![ChatMessage {
+                role: "user".into(),
+                content: "question B".into(),
+            }],
         );
         // Clearing one doesn't affect the other
         assert!(analyst.clear_conversation("conv-a"));
@@ -604,7 +617,13 @@ mod tests {
 
     #[test]
     fn provider_serialization_roundtrip() {
-        for provider in [LlmProvider::OpenAi, LlmProvider::AzureOpenAi, LlmProvider::Anthropic, LlmProvider::Ollama, LlmProvider::Custom] {
+        for provider in [
+            LlmProvider::OpenAi,
+            LlmProvider::AzureOpenAi,
+            LlmProvider::Anthropic,
+            LlmProvider::Ollama,
+            LlmProvider::Custom,
+        ] {
             let json = serde_json::to_string(&provider).unwrap();
             let back: LlmProvider = serde_json::from_str(&json).unwrap();
             assert_eq!(provider, back);
@@ -629,7 +648,8 @@ mod tests {
 
     #[test]
     fn context_filter_deserialization() {
-        let json = r#"{"question":"test","context_filter":{"time_range_hours":24,"severity_min":"high"}}"#;
+        let json =
+            r#"{"question":"test","context_filter":{"time_range_hours":24,"severity_min":"high"}}"#;
         let query: AnalystQuery = serde_json::from_str(json).unwrap();
         let filter = query.context_filter.unwrap();
         assert_eq!(filter.time_range_hours.unwrap(), 24);

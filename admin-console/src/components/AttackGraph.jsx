@@ -8,8 +8,12 @@ import * as api from '../api.js';
 
 const NODE_RADIUS = 24;
 const NODE_COLORS = {
-  host: '#3498db', user: '#e74c3c', process: '#2ecc71',
-  service: '#9b59b6', ip: '#f39c12', unknown: '#95a5a6',
+  host: '#3498db',
+  user: '#e74c3c',
+  process: '#2ecc71',
+  service: '#9b59b6',
+  ip: '#f39c12',
+  unknown: '#95a5a6',
 };
 const EDGE_TYPES = {
   lateral_movement: { color: '#e74c3c', label: 'Lateral' },
@@ -42,8 +46,8 @@ function forceSimulation(nodes, edges, width, height, iterations = 100) {
         let dy = nodes[j].y - nodes[i].y;
         let dist = Math.sqrt(dx * dx + dy * dy) || 1;
         let force = (200 * alpha) / (dist * dist);
-        let fx = dx / dist * force;
-        let fy = dy / dist * force;
+        let fx = (dx / dist) * force;
+        let fy = (dy / dist) * force;
         nodes[i].vx -= fx;
         nodes[i].vy -= fy;
         nodes[j].vx += fx;
@@ -60,8 +64,8 @@ function forceSimulation(nodes, edges, width, height, iterations = 100) {
       let dy = nodes[ti].y - nodes[si].y;
       let dist = Math.sqrt(dx * dx + dy * dy) || 1;
       let force = (dist - 120) * 0.005 * alpha;
-      let fx = dx / dist * force;
-      let fy = dy / dist * force;
+      let fx = (dx / dist) * force;
+      let fy = (dy / dist) * force;
       nodes[si].vx += fx;
       nodes[si].vy += fy;
       nodes[ti].vx -= fx;
@@ -94,8 +98,8 @@ function drawGraph(ctx, nodes, edges, width, height, hoveredNode, isDark) {
 
   // Draw edges
   for (const e of edges) {
-    const src = nodes.find(n => n.id === e.source);
-    const tgt = nodes.find(n => n.id === e.target);
+    const src = nodes.find((n) => n.id === e.source);
+    const tgt = nodes.find((n) => n.id === e.target);
     if (!src || !tgt) continue;
     const edgeType = EDGE_TYPES[e.type] || EDGE_TYPES.default;
     ctx.beginPath();
@@ -103,7 +107,11 @@ function drawGraph(ctx, nodes, edges, width, height, hoveredNode, isDark) {
     ctx.lineTo(tgt.x, tgt.y);
     ctx.strokeStyle = edgeType.color;
     ctx.lineWidth = e.weight ? Math.min(e.weight, 4) : 1.5;
-    ctx.globalAlpha = hoveredNode ? (hoveredNode === e.source || hoveredNode === e.target ? 1 : 0.15) : 0.6;
+    ctx.globalAlpha = hoveredNode
+      ? hoveredNode === e.source || hoveredNode === e.target
+        ? 1
+        : 0.15
+      : 0.6;
     ctx.stroke();
 
     // Arrow head
@@ -164,7 +172,11 @@ function drawGraph(ctx, nodes, edges, width, height, hoveredNode, isDark) {
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     const label = n.label || n.id;
-    ctx.fillText(label.length > 12 ? label.substring(0, 11) + '…' : label, n.x, n.y + NODE_RADIUS + 14);
+    ctx.fillText(
+      label.length > 12 ? label.substring(0, 11) + '…' : label,
+      n.x,
+      n.y + NODE_RADIUS + 14,
+    );
     ctx.globalAlpha = 1;
   }
 }
@@ -186,7 +198,7 @@ export default function AttackGraph() {
 
   const layoutNodes = useMemo(() => {
     if (nodes.length === 0) return [];
-    return forceSimulation([...nodes.map(n => ({ ...n }))], edges, CANVAS_WIDTH, CANVAS_HEIGHT);
+    return forceSimulation([...nodes.map((n) => ({ ...n }))], edges, CANVAS_WIDTH, CANVAS_HEIGHT);
   }, [nodes, edges]);
 
   const render = useCallback(() => {
@@ -197,32 +209,44 @@ export default function AttackGraph() {
     drawGraph(ctx, layoutNodes, edges, canvas.width, canvas.height, hoveredNode, isDark);
   }, [layoutNodes, edges, hoveredNode]);
 
-  useEffect(() => { render(); }, [render]);
+  useEffect(() => {
+    render();
+  }, [render]);
 
-  const handleMouseMove = useCallback((e) => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const rect = canvas.getBoundingClientRect();
-    const mx = e.clientX - rect.left;
-    const my = e.clientY - rect.top;
-    const found = layoutNodes.find(n => Math.sqrt((n.x - mx) ** 2 + (n.y - my) ** 2) < NODE_RADIUS + 4);
-    setHoveredNode(found ? found.id : null);
-    canvas.style.cursor = found ? 'pointer' : 'default';
-  }, [layoutNodes]);
+  const handleMouseMove = useCallback(
+    (e) => {
+      const canvas = canvasRef.current;
+      if (!canvas) return;
+      const rect = canvas.getBoundingClientRect();
+      const mx = e.clientX - rect.left;
+      const my = e.clientY - rect.top;
+      const found = layoutNodes.find(
+        (n) => Math.sqrt((n.x - mx) ** 2 + (n.y - my) ** 2) < NODE_RADIUS + 4,
+      );
+      setHoveredNode(found ? found.id : null);
+      canvas.style.cursor = found ? 'pointer' : 'default';
+    },
+    [layoutNodes],
+  );
 
-  const handleClick = useCallback((e) => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const rect = canvas.getBoundingClientRect();
-    const mx = e.clientX - rect.left;
-    const my = e.clientY - rect.top;
-    const found = layoutNodes.find(n => Math.sqrt((n.x - mx) ** 2 + (n.y - my) ** 2) < NODE_RADIUS + 4);
-    setSelectedNode(found || null);
-  }, [layoutNodes]);
+  const handleClick = useCallback(
+    (e) => {
+      const canvas = canvasRef.current;
+      if (!canvas) return;
+      const rect = canvas.getBoundingClientRect();
+      const mx = e.clientX - rect.left;
+      const my = e.clientY - rect.top;
+      const found = layoutNodes.find(
+        (n) => Math.sqrt((n.x - mx) ** 2 + (n.y - my) ** 2) < NODE_RADIUS + 4,
+      );
+      setSelectedNode(found || null);
+    },
+    [layoutNodes],
+  );
 
   const selectedEdges = useMemo(() => {
     if (!selectedNode) return [];
-    return edges.filter(e => e.source === selectedNode.id || e.target === selectedNode.id);
+    return edges.filter((e) => e.source === selectedNode.id || e.target === selectedNode.id);
   }, [selectedNode, edges]);
 
   return (
@@ -230,24 +254,50 @@ export default function AttackGraph() {
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div>
           <div style={{ fontWeight: 700, fontSize: 16 }}>Attack Path Graph</div>
-          <div className="hint">{nodes.length} nodes, {edges.length} edges — lateral movement, privilege escalation, and data access paths</div>
+          <div className="hint">
+            {nodes.length} nodes, {edges.length} edges — lateral movement, privilege escalation, and
+            data access paths
+          </div>
         </div>
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-          {Object.entries(NODE_COLORS).filter(([k]) => k !== 'unknown').map(([type, color]) => (
-            <span key={type} style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 11 }}>
-              <span style={{ width: 10, height: 10, borderRadius: '50%', background: color, display: 'inline-block' }} />
-              {type}
-            </span>
-          ))}
+          {Object.entries(NODE_COLORS)
+            .filter(([k]) => k !== 'unknown')
+            .map(([type, color]) => (
+              <span
+                key={type}
+                style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 11 }}
+              >
+                <span
+                  style={{
+                    width: 10,
+                    height: 10,
+                    borderRadius: '50%',
+                    background: color,
+                    display: 'inline-block',
+                  }}
+                />
+                {type}
+              </span>
+            ))}
         </div>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: selectedNode ? '1fr 300px' : '1fr', gap: 16 }}>
+      <div
+        style={{
+          display: 'grid',
+          gridTemplateColumns: selectedNode ? '1fr 300px' : '1fr',
+          gap: 16,
+        }}
+      >
         <div className="card" style={{ padding: 0, overflow: 'hidden', position: 'relative' }}>
           {nodes.length === 0 ? (
             <div className="empty" style={{ padding: 60, textAlign: 'center' }}>
-              <div style={{ fontSize: 16, fontWeight: 600, marginBottom: 8 }}>No Attack Path Data</div>
-              <div className="hint">Campaign and lateral movement data will populate this graph</div>
+              <div style={{ fontSize: 16, fontWeight: 600, marginBottom: 8 }}>
+                No Attack Path Data
+              </div>
+              <div className="hint">
+                Campaign and lateral movement data will populate this graph
+              </div>
             </div>
           ) : (
             <canvas
@@ -265,24 +315,73 @@ export default function AttackGraph() {
 
         {selectedNode && (
           <div className="card" style={{ padding: 16 }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+            <div
+              style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                marginBottom: 12,
+              }}
+            >
               <div className="card-title">Node Detail</div>
-              <button className="btn btn-sm" onClick={() => setSelectedNode(null)} aria-label="Close node detail">✕</button>
+              <button
+                className="btn btn-sm"
+                onClick={() => setSelectedNode(null)}
+                aria-label="Close node detail"
+              >
+                ✕
+              </button>
             </div>
             <div style={{ display: 'grid', gap: 8, fontSize: 13 }}>
-              <div><strong>ID:</strong> {selectedNode.id}</div>
-              <div><strong>Type:</strong> <span className="badge badge-info">{selectedNode.type || 'unknown'}</span></div>
-              <div><strong>Label:</strong> {selectedNode.label || selectedNode.id}</div>
-              {selectedNode.risk_score !== undefined && <div><strong>Risk:</strong> <span className={`badge ${selectedNode.risk_score >= 60 ? 'badge-err' : 'badge-warn'}`}>{selectedNode.risk_score.toFixed(1)}</span></div>}
-              {selectedNode.compromised && <div><span className="badge badge-err">Compromised</span></div>}
+              <div>
+                <strong>ID:</strong> {selectedNode.id}
+              </div>
+              <div>
+                <strong>Type:</strong>{' '}
+                <span className="badge badge-info">{selectedNode.type || 'unknown'}</span>
+              </div>
+              <div>
+                <strong>Label:</strong> {selectedNode.label || selectedNode.id}
+              </div>
+              {selectedNode.risk_score !== undefined && (
+                <div>
+                  <strong>Risk:</strong>{' '}
+                  <span
+                    className={`badge ${selectedNode.risk_score >= 60 ? 'badge-err' : 'badge-warn'}`}
+                  >
+                    {selectedNode.risk_score.toFixed(1)}
+                  </span>
+                </div>
+              )}
+              {selectedNode.compromised && (
+                <div>
+                  <span className="badge badge-err">Compromised</span>
+                </div>
+              )}
               {selectedEdges.length > 0 && (
                 <div style={{ marginTop: 8 }}>
                   <strong>Connections ({selectedEdges.length}):</strong>
                   <div style={{ display: 'grid', gap: 4, marginTop: 6 }}>
                     {selectedEdges.map((e, i) => (
-                      <div key={i} style={{ padding: 6, borderRadius: 6, border: '1px solid var(--border)', fontSize: 12 }}>
-                        <span style={{ color: (EDGE_TYPES[e.type] || EDGE_TYPES.default).color, fontWeight: 600 }}>{e.type?.replace('_', ' ') || 'link'}</span>
-                        {' → '}{e.source === selectedNode.id ? e.target : e.source}
+                      <div
+                        key={i}
+                        style={{
+                          padding: 6,
+                          borderRadius: 6,
+                          border: '1px solid var(--border)',
+                          fontSize: 12,
+                        }}
+                      >
+                        <span
+                          style={{
+                            color: (EDGE_TYPES[e.type] || EDGE_TYPES.default).color,
+                            fontWeight: 600,
+                          }}
+                        >
+                          {e.type?.replace('_', ' ') || 'link'}
+                        </span>
+                        {' → '}
+                        {e.source === selectedNode.id ? e.target : e.source}
                       </div>
                     ))}
                   </div>

@@ -5,9 +5,15 @@ let _token = '';
 let _baseUrl = '';
 let _pendingSignal = null;
 
-export function setToken(t) { _token = t; }
-export function getToken() { return _token; }
-export function setBaseUrl(u) { _baseUrl = u; }
+export function setToken(t) {
+  _token = t;
+}
+export function getToken() {
+  return _token;
+}
+export function setBaseUrl(u) {
+  _baseUrl = u;
+}
 
 /**
  * Set a request-scoped AbortSignal. The signal is captured synchronously
@@ -130,7 +136,8 @@ export const agentDetails = (id) => get(`/api/agents/${encodeURIComponent(id)}/d
 export const agentActivity = (id) => get(`/api/agents/${encodeURIComponent(id)}/activity`);
 export const agentStatus = (id) => get(`/api/agents/${encodeURIComponent(id)}/status`);
 export const agentScope = (id) => get(`/api/agents/${encodeURIComponent(id)}/scope`);
-export const setAgentScope = (id, body) => post(`/api/agents/${encodeURIComponent(id)}/scope`, body);
+export const setAgentScope = (id, body) =>
+  post(`/api/agents/${encodeURIComponent(id)}/scope`, body);
 export const agentLogs = (id) => get(`/api/agents/${encodeURIComponent(id)}/logs`);
 export const agentInventory = (id) => get(`/api/agents/${encodeURIComponent(id)}/inventory`);
 export const deleteAgent = (id) => del(`/api/agents/${encodeURIComponent(id)}`);
@@ -147,7 +154,8 @@ export const triageEvent = (id, body) => post(`/api/events/${encodeURIComponent(
 export const incidents = () => get('/api/incidents');
 export const createIncident = (body) => post('/api/incidents', body);
 export const incidentById = (id) => get(`/api/incidents/${encodeURIComponent(id)}`);
-export const updateIncident = (id, body) => post(`/api/incidents/${encodeURIComponent(id)}/update`, body);
+export const updateIncident = (id, body) =>
+  post(`/api/incidents/${encodeURIComponent(id)}/update`, body);
 export const incidentReport = (id) => get(`/api/incidents/${encodeURIComponent(id)}/report`);
 export const incidentStoryline = (id) => get(`/api/incidents/${encodeURIComponent(id)}/storyline`);
 
@@ -271,10 +279,14 @@ export const huntById = (id) => get(`/api/hunts/${encodeURIComponent(id)}`);
 export const runHunt = (id) => post(`/api/hunts/${encodeURIComponent(id)}/run`);
 export const contentRules = () => get('/api/content/rules');
 export const createContentRule = (body) => post('/api/content/rules', body);
-export const contentRuleLifecycle = (id, body) => post(`/api/content/rules/${encodeURIComponent(id)}/lifecycle`, body);
-export const contentRuleTest = (id, body = {}) => post(`/api/content/rules/${encodeURIComponent(id)}/test`, body);
-export const contentRulePromote = (id, body) => post(`/api/content/rules/${encodeURIComponent(id)}/promote`, body);
-export const contentRuleRollback = (id) => post(`/api/content/rules/${encodeURIComponent(id)}/rollback`, {});
+export const contentRuleLifecycle = (id, body) =>
+  post(`/api/content/rules/${encodeURIComponent(id)}/lifecycle`, body);
+export const contentRuleTest = (id, body = {}) =>
+  post(`/api/content/rules/${encodeURIComponent(id)}/test`, body);
+export const contentRulePromote = (id, body) =>
+  post(`/api/content/rules/${encodeURIComponent(id)}/promote`, body);
+export const contentRuleRollback = (id) =>
+  post(`/api/content/rules/${encodeURIComponent(id)}/rollback`, {});
 export const contentPacks = () => get('/api/content/packs');
 export const createContentPack = (body) => post('/api/content/packs', body);
 export const suppressions = () => get('/api/suppressions');
@@ -381,7 +393,8 @@ export const ndrProtocolDistribution = () => get('/api/ndr/protocol-distribution
 
 // ── Email Security ───────────────────────────────────────────
 export const emailQuarantine = () => get('/api/email/quarantine');
-export const emailQuarantineRelease = (id) => post(`/api/email/quarantine/${encodeURIComponent(id)}/release`);
+export const emailQuarantineRelease = (id) =>
+  post(`/api/email/quarantine/${encodeURIComponent(id)}/release`);
 export const emailQuarantineDelete = (id) => del(`/api/email/quarantine/${encodeURIComponent(id)}`);
 export const emailStats = () => get('/api/email/stats');
 export const emailPolicies = () => get('/api/email/policies');
@@ -414,7 +427,8 @@ export const efficacyRule = (id) => get(`/api/efficacy/rule/${encodeURIComponent
 
 // ── Investigation Workflows ──────────────────────────────────
 export const investigationWorkflows = () => get('/api/investigations/workflows');
-export const investigationWorkflow = (id) => get(`/api/investigations/workflows/${encodeURIComponent(id)}`);
+export const investigationWorkflow = (id) =>
+  get(`/api/investigations/workflows/${encodeURIComponent(id)}`);
 export const investigationStart = (body) => post('/api/investigations/start', body);
 export const investigationActive = () => get('/api/investigations/active');
 export const investigationSuggest = (body) => post('/api/investigations/suggest', body);
@@ -430,10 +444,16 @@ export const malwareImport = (body) => post('/api/malware/signatures/import', bo
 export const hunt = (query) => post('/api/hunt', { query });
 
 // ── SIEM Export ──────────────────────────────────────────────
-export const exportAlerts = (fmt = 'json') => get(`/api/export/alerts?format=${encodeURIComponent(fmt)}`);
+export const exportAlerts = (fmt = 'json') =>
+  get(`/api/export/alerts?format=${encodeURIComponent(fmt)}`);
 
 // ── Compliance ───────────────────────────────────────────────
-export const complianceReport = (framework) => get(framework ? `/api/compliance/report?framework=${encodeURIComponent(framework)}` : '/api/compliance/report');
+export const complianceReport = (framework) =>
+  get(
+    framework
+      ? `/api/compliance/report?framework=${encodeURIComponent(framework)}`
+      : '/api/compliance/report',
+  );
 export const complianceSummary = () => get('/api/compliance/summary');
 
 // ── Playbook Run ─────────────────────────────────────────────
@@ -505,11 +525,13 @@ export const dnsThreatRecord = (query) => post('/api/dns-threat/record', query);
 export const processScoreAssess = (body) => post('/api/process-scoring/assess', body);
 export const emailAnalyze = (body) => post('/api/email/analyze', body);
 export const memoryIndicatorsScanMaps = (body) => post('/api/memory-indicators/scan-maps', body);
-export const memoryIndicatorsScanBuffer = (body) => post('/api/memory-indicators/scan-buffer', body);
+export const memoryIndicatorsScanBuffer = (body) =>
+  post('/api/memory-indicators/scan-buffer', body);
 
 // ── Phase 29: WebSocket Alert Streaming ──────────────────────
 export const wsConnect = () => post('/api/ws/connect');
-export const wsDisconnect = (subscriberId) => post('/api/ws/disconnect', { subscriber_id: subscriberId });
+export const wsDisconnect = (subscriberId) =>
+  post('/api/ws/disconnect', { subscriber_id: subscriberId });
 export const wsPoll = (subscriberId) => post('/api/ws/poll', { subscriber_id: subscriberId });
 export const wsStats = () => get('/api/ws/stats');
 export const wsBroadcast = (data) => post('/api/ws/broadcast', data);
@@ -521,7 +543,8 @@ export const playbooks = () => get('/api/playbooks');
 export const playbookById = (id) => get(`/api/playbooks/${encodeURIComponent(id)}`);
 export const playbookRun = (id) => post(`/api/playbooks/${encodeURIComponent(id)}/run`);
 export const canaryStatus = () => get('/api/canary/status');
-export const insiderRisk = (entityKind, entityId) => get(`/api/ueba/insider-risk/${encodeURIComponent(entityKind)}/${encodeURIComponent(entityId)}`);
+export const insiderRisk = (entityKind, entityId) =>
+  get(`/api/ueba/insider-risk/${encodeURIComponent(entityKind)}/${encodeURIComponent(entityId)}`);
 export const credentialSprayAlerts = () => get('/api/correlation/credential-spray');
 export const campaigns = () => get('/api/correlation/campaigns');
 export const rbacCreateUser = (body) => post('/api/rbac/users', body);

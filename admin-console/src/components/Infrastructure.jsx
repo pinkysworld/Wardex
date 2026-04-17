@@ -6,13 +6,25 @@ import { JsonDetails, SummaryGrid, formatDateTime, formatRelativeTime } from './
 
 const TABS = ['overview', 'assets', 'exposure', 'integrity', 'observability'];
 const SAVED_VIEWS = [
-  { id: 'critical', label: 'Critical Assets', match: (item) => item.priority === 'critical' || item.severity === 'critical' },
+  {
+    id: 'critical',
+    label: 'Critical Assets',
+    match: (item) => item.priority === 'critical' || item.severity === 'critical',
+  },
   { id: 'certs', label: 'Certificate Issues', match: (item) => item.type === 'certificate' },
   { id: 'containers', label: 'Container Risks', match: (item) => item.type === 'container' },
   { id: 'drifted', label: 'Drifted Systems', match: (item) => item.type === 'drift' },
 ];
 
-function normalizeAssets(assetSummary, vulnSummary, certSummary, certAlerts, malwareRecent, drift, containerStats) {
+function normalizeAssets(
+  assetSummary,
+  vulnSummary,
+  certSummary,
+  certAlerts,
+  malwareRecent,
+  drift,
+  containerStats,
+) {
   const items = [];
   const baseAssets = assetSummary?.assets || assetSummary?.items || assetSummary?.resources || [];
   baseAssets.forEach((asset, index) => {
@@ -32,7 +44,8 @@ function normalizeAssets(assetSummary, vulnSummary, certSummary, certAlerts, mal
   vulnerabilities.forEach((finding, index) => {
     items.push({
       id: finding.id || finding.asset_id || `vuln-${index}`,
-      title: finding.asset_name || finding.hostname || finding.package || `Vulnerability ${index + 1}`,
+      title:
+        finding.asset_name || finding.hostname || finding.package || `Vulnerability ${index + 1}`,
       subtitle: finding.cve || finding.summary || 'Vulnerability finding',
       type: 'vulnerability',
       status: finding.status || 'open',
@@ -56,7 +69,8 @@ function normalizeAssets(assetSummary, vulnSummary, certSummary, certAlerts, mal
     });
   });
 
-  const malwareItems = malwareRecent?.matches || malwareRecent?.recent || malwareRecent?.items || [];
+  const malwareItems =
+    malwareRecent?.matches || malwareRecent?.recent || malwareRecent?.items || [];
   malwareItems.forEach((entry, index) => {
     items.push({
       id: entry.id || entry.hash || `malware-${index}`,
@@ -84,7 +98,8 @@ function normalizeAssets(assetSummary, vulnSummary, certSummary, certAlerts, mal
     });
   });
 
-  const containers = containerStats?.containers || containerStats?.images || containerStats?.items || [];
+  const containers =
+    containerStats?.containers || containerStats?.images || containerStats?.items || [];
   containers.forEach((container, index) => {
     items.push({
       id: container.id || container.image || `container-${index}`,
@@ -125,24 +140,34 @@ export default function Infrastructure() {
   const savedView = searchParams.get('view') || 'critical';
   const query = searchParams.get('q') || '';
   const typeFilter = searchParams.get('type') || 'all';
-  const assets = normalizeAssets(assetSummary, vulnSummary, certSummary, certAlerts, malwareRecentData, drift, containerSt);
+  const assets = normalizeAssets(
+    assetSummary,
+    vulnSummary,
+    certSummary,
+    certAlerts,
+    malwareRecentData,
+    drift,
+    containerSt,
+  );
   const filteredAssets = assets.filter((item) => {
     const view = SAVED_VIEWS.find((entry) => entry.id === savedView);
     const viewMatch = view ? view.match(item) : true;
     const search = query.trim().toLowerCase();
-    const searchMatch = !search
-      || String(item.title).toLowerCase().includes(search)
-      || String(item.subtitle).toLowerCase().includes(search)
-      || String(item.id).toLowerCase().includes(search);
+    const searchMatch =
+      !search ||
+      String(item.title).toLowerCase().includes(search) ||
+      String(item.subtitle).toLowerCase().includes(search) ||
+      String(item.id).toLowerCase().includes(search);
     const typeMatch = typeFilter === 'all' || item.type === typeFilter;
     return viewMatch && searchMatch && typeMatch;
   });
   const selectedAssetId = searchParams.get('asset');
-  const selectedAsset = filteredAssets.find((item) => item.id === selectedAssetId)
-    || assets.find((item) => item.id === selectedAssetId)
-    || filteredAssets[0]
-    || assets[0]
-    || null;
+  const selectedAsset =
+    filteredAssets.find((item) => item.id === selectedAssetId) ||
+    assets.find((item) => item.id === selectedAssetId) ||
+    filteredAssets[0] ||
+    assets[0] ||
+    null;
 
   useEffect(() => {
     if (!selectedAsset || selectedAsset.id === selectedAssetId) return;
@@ -173,7 +198,11 @@ export default function Infrastructure() {
     <div>
       <div className="tabs" style={{ flexWrap: 'wrap' }}>
         {TABS.map((tab) => (
-          <button key={tab} className={`tab ${activeTab === tab ? 'active' : ''}`} onClick={() => updateParams({ tab })}>
+          <button
+            key={tab}
+            className={`tab ${activeTab === tab ? 'active' : ''}`}
+            onClick={() => updateParams({ tab })}
+          >
             {tab.charAt(0).toUpperCase() + tab.slice(1)}
           </button>
         ))}
@@ -182,43 +211,110 @@ export default function Infrastructure() {
       {activeTab === 'overview' && (
         <>
           <div className="card-grid">
-            <div className="card metric"><div className="metric-label">Critical Assets</div><div className="metric-value">{counts.critical}</div><div className="metric-sub">Assets or findings that should be triaged first</div></div>
-            <div className="card metric"><div className="metric-label">Exposure Queue</div><div className="metric-value">{counts.vulnerabilities + counts.certificates + counts.containers}</div><div className="metric-sub">Vulnerabilities, certificates, and container risks</div></div>
-            <div className="card metric"><div className="metric-label">Integrity Queue</div><div className="metric-value">{counts.drifted + counts.malware}</div><div className="metric-sub">Drift and malware findings that need narrative review</div></div>
-            <div className="card metric"><div className="metric-label">Observability Health</div><div className="metric-value">{slo?.health_gate || monSt?.health_gate || '—'}</div><div className="metric-sub">Threads, APIs, and monitoring systems</div></div>
+            <div className="card metric">
+              <div className="metric-label">Critical Assets</div>
+              <div className="metric-value">{counts.critical}</div>
+              <div className="metric-sub">Assets or findings that should be triaged first</div>
+            </div>
+            <div className="card metric">
+              <div className="metric-label">Exposure Queue</div>
+              <div className="metric-value">
+                {counts.vulnerabilities + counts.certificates + counts.containers}
+              </div>
+              <div className="metric-sub">Vulnerabilities, certificates, and container risks</div>
+            </div>
+            <div className="card metric">
+              <div className="metric-label">Integrity Queue</div>
+              <div className="metric-value">{counts.drifted + counts.malware}</div>
+              <div className="metric-sub">
+                Drift and malware findings that need narrative review
+              </div>
+            </div>
+            <div className="card metric">
+              <div className="metric-label">Observability Health</div>
+              <div className="metric-value">{slo?.health_gate || monSt?.health_gate || '—'}</div>
+              <div className="metric-sub">Threads, APIs, and monitoring systems</div>
+            </div>
           </div>
 
           <div className="card" style={{ marginBottom: 16 }}>
             <div className="card-header">
               <span className="card-title">Attention Queues</span>
               <div className="btn-group">
-                <button className="btn btn-sm" onClick={() => updateParams({ tab: 'assets', view: 'critical' })}>Open Assets</button>
-                <button className="btn btn-sm" onClick={() => updateParams({ tab: 'exposure' })}>Review Exposure</button>
-                <button className="btn btn-sm" onClick={() => updateParams({ tab: 'integrity' })}>Review Integrity</button>
+                <button
+                  className="btn btn-sm"
+                  onClick={() => updateParams({ tab: 'assets', view: 'critical' })}
+                >
+                  Open Assets
+                </button>
+                <button className="btn btn-sm" onClick={() => updateParams({ tab: 'exposure' })}>
+                  Review Exposure
+                </button>
+                <button className="btn btn-sm" onClick={() => updateParams({ tab: 'integrity' })}>
+                  Review Integrity
+                </button>
               </div>
             </div>
             <div className="summary-grid">
-              <div className="summary-card"><div className="summary-label">Vulnerable Assets</div><div className="summary-value">{counts.vulnerabilities}</div><div className="summary-meta">Use the asset explorer to pivot from a finding into the affected system.</div></div>
-              <div className="summary-card"><div className="summary-label">Expiring Certificates</div><div className="summary-value">{counts.certificates}</div><div className="summary-meta">Certificates are normalized into the same asset queue for quicker ownership checks.</div></div>
-              <div className="summary-card"><div className="summary-label">Drifted Systems</div><div className="summary-value">{counts.drifted}</div><div className="summary-meta">Raw subsystem details remain available below, but no longer drive the top-level IA.</div></div>
-              <div className="summary-card"><div className="summary-label">Recent Malware</div><div className="summary-value">{counts.malware}</div><div className="summary-meta">Recent detections feed the same sticky detail pane as infrastructure issues.</div></div>
+              <div className="summary-card">
+                <div className="summary-label">Vulnerable Assets</div>
+                <div className="summary-value">{counts.vulnerabilities}</div>
+                <div className="summary-meta">
+                  Use the asset explorer to pivot from a finding into the affected system.
+                </div>
+              </div>
+              <div className="summary-card">
+                <div className="summary-label">Expiring Certificates</div>
+                <div className="summary-value">{counts.certificates}</div>
+                <div className="summary-meta">
+                  Certificates are normalized into the same asset queue for quicker ownership
+                  checks.
+                </div>
+              </div>
+              <div className="summary-card">
+                <div className="summary-label">Drifted Systems</div>
+                <div className="summary-value">{counts.drifted}</div>
+                <div className="summary-meta">
+                  Raw subsystem details remain available below, but no longer drive the top-level
+                  IA.
+                </div>
+              </div>
+              <div className="summary-card">
+                <div className="summary-label">Recent Malware</div>
+                <div className="summary-value">{counts.malware}</div>
+                <div className="summary-meta">
+                  Recent detections feed the same sticky detail pane as infrastructure issues.
+                </div>
+              </div>
             </div>
           </div>
 
           <div className="card-grid">
             <div className="card">
-              <div className="card-title" style={{ marginBottom: 12 }}>Platform Overview</div>
+              <div className="card-title" style={{ marginBottom: 12 }}>
+                Platform Overview
+              </div>
               <SummaryGrid data={monSt} limit={8} />
               <JsonDetails data={monSt} label="Monitor status details" />
             </div>
             <div className="card">
-              <div className="card-title" style={{ marginBottom: 12 }}>Compliance Snapshot</div>
+              <div className="card-title" style={{ marginBottom: 12 }}>
+                Compliance Snapshot
+              </div>
               <SummaryGrid data={compData} limit={8} />
               <JsonDetails data={compData} label="Compliance detail" />
             </div>
             <div className="card">
-              <div className="card-title" style={{ marginBottom: 12 }}>Dependencies and SLOs</div>
-              <SummaryGrid data={{ ...slo, dependency_count: deps?.dependencies?.length || deps?.deps?.length || 0 }} limit={8} />
+              <div className="card-title" style={{ marginBottom: 12 }}>
+                Dependencies and SLOs
+              </div>
+              <SummaryGrid
+                data={{
+                  ...slo,
+                  dependency_count: deps?.dependencies?.length || deps?.deps?.length || 0,
+                }}
+                limit={8}
+              />
               <JsonDetails data={{ slo, deps, threads }} label="Observability detail" />
             </div>
           </div>
@@ -229,10 +325,16 @@ export default function Infrastructure() {
         <div className="triage-layout">
           <section className="triage-list">
             <div className="card" style={{ marginBottom: 16 }}>
-              <div className="card-title" style={{ marginBottom: 12 }}>Saved Views</div>
+              <div className="card-title" style={{ marginBottom: 12 }}>
+                Saved Views
+              </div>
               <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                 {SAVED_VIEWS.map((view) => (
-                  <button key={view.id} className={`filter-chip-button ${savedView === view.id ? 'active' : ''}`} onClick={() => updateParams({ view: view.id, asset: '' })}>
+                  <button
+                    key={view.id}
+                    className={`filter-chip-button ${savedView === view.id ? 'active' : ''}`}
+                    onClick={() => updateParams({ view: view.id, asset: '' })}
+                  >
                     {view.label}
                   </button>
                 ))}
@@ -242,19 +344,46 @@ export default function Infrastructure() {
             <div className="card">
               <div className="triage-toolbar">
                 <div className="triage-toolbar-group">
-                  <input className="form-input triage-search" placeholder="Search assets, hosts, findings" value={query} onChange={(event) => updateParams({ q: event.target.value, asset: '' })} />
-                  <select className="form-select" value={typeFilter} onChange={(event) => updateParams({ type: event.target.value, asset: '' })}>
+                  <input
+                    className="form-input triage-search"
+                    placeholder="Search assets, hosts, findings"
+                    value={query}
+                    onChange={(event) => updateParams({ q: event.target.value, asset: '' })}
+                  />
+                  <select
+                    className="form-select"
+                    value={typeFilter}
+                    onChange={(event) => updateParams({ type: event.target.value, asset: '' })}
+                  >
                     <option value="all">All types</option>
-                    {[...new Set(assets.map((item) => item.type))].map((type) => <option key={type} value={type}>{type}</option>)}
+                    {[...new Set(assets.map((item) => item.type))].map((type) => (
+                      <option key={type} value={type}>
+                        {type}
+                      </option>
+                    ))}
                   </select>
                 </div>
                 <div className="triage-toolbar-group">
-                  <button className="btn btn-sm" onClick={() => { reloadAssets(); reloadVuln(); reloadCerts(); reloadContainers(); reloadMalware(); }}>Refresh</button>
+                  <button
+                    className="btn btn-sm"
+                    onClick={() => {
+                      reloadAssets();
+                      reloadVuln();
+                      reloadCerts();
+                      reloadContainers();
+                      reloadMalware();
+                    }}
+                  >
+                    Refresh
+                  </button>
                 </div>
               </div>
 
               <div className="sticky-bulk-bar">
-                <span className="hint">Each row is normalized into one explorer so operators can move from host posture to evidence without changing screens.</span>
+                <span className="hint">
+                  Each row is normalized into one explorer so operators can move from host posture
+                  to evidence without changing screens.
+                </span>
               </div>
 
               <div className="split-list-table">
@@ -269,18 +398,43 @@ export default function Infrastructure() {
                   </thead>
                   <tbody>
                     {filteredAssets.length === 0 ? (
-                      <tr><td colSpan="4"><div className="empty" style={{ padding: 24 }}>No assets match the current view.</div></td></tr>
-                    ) : filteredAssets.map((item) => (
-                      <tr key={item.id} className={selectedAsset?.id === item.id ? 'row-active' : ''} onClick={() => updateParams({ asset: item.id })} style={{ cursor: 'pointer' }}>
-                        <td>
-                          <div className="row-primary">{item.title}</div>
-                          <div className="row-secondary">{item.subtitle}</div>
+                      <tr>
+                        <td colSpan="4">
+                          <div className="empty" style={{ padding: 24 }}>
+                            No assets match the current view.
+                          </div>
                         </td>
-                        <td>{item.type}</td>
-                        <td><span className={`badge ${item.status === 'expiring' || item.status === 'detected' ? 'badge-err' : 'badge-info'}`}>{item.status}</span></td>
-                        <td><span className={`badge ${item.severity === 'critical' || item.severity === 'high' ? 'badge-err' : 'badge-warn'}`}>{item.severity}</span></td>
                       </tr>
-                    ))}
+                    ) : (
+                      filteredAssets.map((item) => (
+                        <tr
+                          key={item.id}
+                          className={selectedAsset?.id === item.id ? 'row-active' : ''}
+                          onClick={() => updateParams({ asset: item.id })}
+                          style={{ cursor: 'pointer' }}
+                        >
+                          <td>
+                            <div className="row-primary">{item.title}</div>
+                            <div className="row-secondary">{item.subtitle}</div>
+                          </td>
+                          <td>{item.type}</td>
+                          <td>
+                            <span
+                              className={`badge ${item.status === 'expiring' || item.status === 'detected' ? 'badge-err' : 'badge-info'}`}
+                            >
+                              {item.status}
+                            </span>
+                          </td>
+                          <td>
+                            <span
+                              className={`badge ${item.severity === 'critical' || item.severity === 'high' ? 'badge-err' : 'badge-warn'}`}
+                            >
+                              {item.severity}
+                            </span>
+                          </td>
+                        </tr>
+                      ))
+                    )}
                   </tbody>
                 </table>
               </div>
@@ -289,30 +443,74 @@ export default function Infrastructure() {
 
           <aside className="triage-detail">
             <div className="card">
-              {!selectedAsset ? <div className="empty">Select an asset to review posture, related evidence, and subsystem details.</div> : (
+              {!selectedAsset ? (
+                <div className="empty">
+                  Select an asset to review posture, related evidence, and subsystem details.
+                </div>
+              ) : (
                 <>
                   <div className="detail-hero">
                     <div>
                       <div className="detail-hero-title">{selectedAsset.title}</div>
                       <div className="detail-hero-copy">{selectedAsset.subtitle}</div>
                     </div>
-                    <span className={`badge ${selectedAsset.priority === 'critical' ? 'badge-err' : 'badge-info'}`}>{selectedAsset.type}</span>
+                    <span
+                      className={`badge ${selectedAsset.priority === 'critical' ? 'badge-err' : 'badge-info'}`}
+                    >
+                      {selectedAsset.type}
+                    </span>
                   </div>
                   <div className="summary-grid" style={{ marginTop: 16 }}>
-                    <div className="summary-card"><div className="summary-label">Status</div><div className="summary-value">{selectedAsset.status}</div><div className="summary-meta">Current posture for this entity.</div></div>
-                    <div className="summary-card"><div className="summary-label">Severity</div><div className="summary-value">{selectedAsset.severity}</div><div className="summary-meta">Derived from the owning subsystem.</div></div>
-                    <div className="summary-card"><div className="summary-label">Priority</div><div className="summary-value">{selectedAsset.priority}</div><div className="summary-meta">Controls queue ordering in saved views.</div></div>
-                    <div className="summary-card"><div className="summary-label">Explorer Scope</div><div className="summary-value">{savedView}</div><div className="summary-meta">URL-persisted view to share or revisit.</div></div>
+                    <div className="summary-card">
+                      <div className="summary-label">Status</div>
+                      <div className="summary-value">{selectedAsset.status}</div>
+                      <div className="summary-meta">Current posture for this entity.</div>
+                    </div>
+                    <div className="summary-card">
+                      <div className="summary-label">Severity</div>
+                      <div className="summary-value">{selectedAsset.severity}</div>
+                      <div className="summary-meta">Derived from the owning subsystem.</div>
+                    </div>
+                    <div className="summary-card">
+                      <div className="summary-label">Priority</div>
+                      <div className="summary-value">{selectedAsset.priority}</div>
+                      <div className="summary-meta">Controls queue ordering in saved views.</div>
+                    </div>
+                    <div className="summary-card">
+                      <div className="summary-label">Explorer Scope</div>
+                      <div className="summary-value">{savedView}</div>
+                      <div className="summary-meta">URL-persisted view to share or revisit.</div>
+                    </div>
                   </div>
                   <div className="btn-group" style={{ marginTop: 16 }}>
-                    <button className="btn btn-sm" onClick={() => updateParams({ tab: 'exposure' })}>Open Related Exposure</button>
-                    <button className="btn btn-sm" onClick={() => updateParams({ tab: 'integrity' })}>Open Integrity Context</button>
-                    <button className="btn btn-sm" onClick={() => updateParams({ tab: 'observability' })}>Open Telemetry Context</button>
+                    <button
+                      className="btn btn-sm"
+                      onClick={() => updateParams({ tab: 'exposure' })}
+                    >
+                      Open Related Exposure
+                    </button>
+                    <button
+                      className="btn btn-sm"
+                      onClick={() => updateParams({ tab: 'integrity' })}
+                    >
+                      Open Integrity Context
+                    </button>
+                    <button
+                      className="btn btn-sm"
+                      onClick={() => updateParams({ tab: 'observability' })}
+                    >
+                      Open Telemetry Context
+                    </button>
                   </div>
                   <div className="detail-callout" style={{ marginTop: 16 }}>
-                    This sticky pane keeps technical evidence available while the left-hand list stays focused on scan speed. Raw subsystem payloads remain below for expert users.
+                    This sticky pane keeps technical evidence available while the left-hand list
+                    stays focused on scan speed. Raw subsystem payloads remain below for expert
+                    users.
                   </div>
-                  <JsonDetails data={selectedAsset.evidence} label="Asset evidence and subsystem payload" />
+                  <JsonDetails
+                    data={selectedAsset.evidence}
+                    label="Asset evidence and subsystem payload"
+                  />
                 </>
               )}
             </div>
@@ -323,16 +521,56 @@ export default function Infrastructure() {
       {activeTab === 'exposure' && (
         <>
           <div className="card-grid">
-            <div className="card"><div className="card-title" style={{ marginBottom: 12 }}>Vulnerability Summary</div><SummaryGrid data={vulnSummary} limit={10} /><JsonDetails data={vulnSummary} /></div>
-            <div className="card"><div className="card-title" style={{ marginBottom: 12 }}>Certificate Summary</div><SummaryGrid data={certSummary} limit={10} /><JsonDetails data={certSummary} /></div>
-            <div className="card"><div className="card-title" style={{ marginBottom: 12 }}>Container Risk</div><SummaryGrid data={containerSt} limit={10} /><JsonDetails data={containerSt} /></div>
+            <div className="card">
+              <div className="card-title" style={{ marginBottom: 12 }}>
+                Vulnerability Summary
+              </div>
+              <SummaryGrid data={vulnSummary} limit={10} />
+              <JsonDetails data={vulnSummary} />
+            </div>
+            <div className="card">
+              <div className="card-title" style={{ marginBottom: 12 }}>
+                Certificate Summary
+              </div>
+              <SummaryGrid data={certSummary} limit={10} />
+              <JsonDetails data={certSummary} />
+            </div>
+            <div className="card">
+              <div className="card-title" style={{ marginBottom: 12 }}>
+                Container Risk
+              </div>
+              <SummaryGrid data={containerSt} limit={10} />
+              <JsonDetails data={containerSt} />
+            </div>
           </div>
           <div className="card">
-            <div className="card-title" style={{ marginBottom: 12 }}>Exposure Narrative</div>
+            <div className="card-title" style={{ marginBottom: 12 }}>
+              Exposure Narrative
+            </div>
             <div className="summary-grid">
-              <div className="summary-card"><div className="summary-label">Vulnerabilities</div><div className="summary-value">{counts.vulnerabilities}</div><div className="summary-meta">Use the asset explorer to pivot into a specific system or package owner.</div></div>
-              <div className="summary-card"><div className="summary-label">Certificate Issues</div><div className="summary-value">{counts.certificates}</div><div className="summary-meta">Expiring credentials are normalized into the same workflow as host risk.</div></div>
-              <div className="summary-card"><div className="summary-label">NDR Findings</div><div className="summary-value">{ndrData?.findings?.length || ndrData?.alerts?.length || 0}</div><div className="summary-meta">Network detections can be reviewed without opening a separate subsystem tab.</div></div>
+              <div className="summary-card">
+                <div className="summary-label">Vulnerabilities</div>
+                <div className="summary-value">{counts.vulnerabilities}</div>
+                <div className="summary-meta">
+                  Use the asset explorer to pivot into a specific system or package owner.
+                </div>
+              </div>
+              <div className="summary-card">
+                <div className="summary-label">Certificate Issues</div>
+                <div className="summary-value">{counts.certificates}</div>
+                <div className="summary-meta">
+                  Expiring credentials are normalized into the same workflow as host risk.
+                </div>
+              </div>
+              <div className="summary-card">
+                <div className="summary-label">NDR Findings</div>
+                <div className="summary-value">
+                  {ndrData?.findings?.length || ndrData?.alerts?.length || 0}
+                </div>
+                <div className="summary-meta">
+                  Network detections can be reviewed without opening a separate subsystem tab.
+                </div>
+              </div>
             </div>
             <JsonDetails data={ndrData} label="Network detection details" />
           </div>
@@ -345,18 +583,35 @@ export default function Infrastructure() {
             <div className="card">
               <div className="card-header">
                 <span className="card-title">Configuration Drift</span>
-                <button className="btn btn-sm btn-primary" onClick={async () => { try { await api.driftReset(); reloadDrift(); toast('Drift baseline reset.', 'success'); } catch { toast('Unable to reset drift baseline.', 'error'); } }}>Reset Baseline</button>
+                <button
+                  className="btn btn-sm btn-primary"
+                  onClick={async () => {
+                    try {
+                      await api.driftReset();
+                      reloadDrift();
+                      toast('Drift baseline reset.', 'success');
+                    } catch {
+                      toast('Unable to reset drift baseline.', 'error');
+                    }
+                  }}
+                >
+                  Reset Baseline
+                </button>
               </div>
               <SummaryGrid data={drift} limit={10} />
               <JsonDetails data={drift} />
             </div>
             <div className="card">
-              <div className="card-title" style={{ marginBottom: 12 }}>Recent Malware</div>
+              <div className="card-title" style={{ marginBottom: 12 }}>
+                Recent Malware
+              </div>
               <SummaryGrid data={{ ...malwareStatsData, recent_hits: counts.malware }} limit={10} />
               <JsonDetails data={malwareRecentData} label="Recent malware evidence" />
             </div>
             <div className="card">
-              <div className="card-title" style={{ marginBottom: 12 }}>Compliance Signals</div>
+              <div className="card-title" style={{ marginBottom: 12 }}>
+                Compliance Signals
+              </div>
               <SummaryGrid data={compData} limit={10} />
               <JsonDetails data={compData} />
             </div>
@@ -367,25 +622,74 @@ export default function Infrastructure() {
       {activeTab === 'observability' && (
         <>
           <div className="card-grid">
-            <div className="card"><div className="card-title" style={{ marginBottom: 12 }}>Threads and Services</div><SummaryGrid data={threads} limit={10} /><JsonDetails data={threads} /></div>
-            <div className="card"><div className="card-title" style={{ marginBottom: 12 }}>Dependency Health</div><SummaryGrid data={deps} limit={10} /><JsonDetails data={deps} /></div>
-            <div className="card"><div className="card-title" style={{ marginBottom: 12 }}>API Analytics</div><SummaryGrid data={analyticsData} limit={10} /><JsonDetails data={analyticsData} /></div>
+            <div className="card">
+              <div className="card-title" style={{ marginBottom: 12 }}>
+                Threads and Services
+              </div>
+              <SummaryGrid data={threads} limit={10} />
+              <JsonDetails data={threads} />
+            </div>
+            <div className="card">
+              <div className="card-title" style={{ marginBottom: 12 }}>
+                Dependency Health
+              </div>
+              <SummaryGrid data={deps} limit={10} />
+              <JsonDetails data={deps} />
+            </div>
+            <div className="card">
+              <div className="card-title" style={{ marginBottom: 12 }}>
+                API Analytics
+              </div>
+              <SummaryGrid data={analyticsData} limit={10} />
+              <JsonDetails data={analyticsData} />
+            </div>
           </div>
           <div className="card">
-            <div className="card-title" style={{ marginBottom: 12 }}>Telemetry Detail</div>
-            <SummaryGrid data={{ trace_count: tracesData?.traces?.length || tracesData?.count || 0, generated_at: tracesData?.generated_at || null }} limit={4} />
+            <div className="card-title" style={{ marginBottom: 12 }}>
+              Telemetry Detail
+            </div>
+            <SummaryGrid
+              data={{
+                trace_count: tracesData?.traces?.length || tracesData?.count || 0,
+                generated_at: tracesData?.generated_at || null,
+              }}
+              limit={4}
+            />
             <JsonDetails data={tracesData} label="Trace collector detail" />
           </div>
         </>
       )}
 
       <div className="card" style={{ marginTop: 16 }}>
-        <div className="card-title" style={{ marginBottom: 12 }}>Technical Sections</div>
-        <div className="hint">Raw subsystem summaries stay available here so experts can drop down into the original data without turning the whole screen back into a tab wall.</div>
-        <JsonDetails data={{ assetSummary, vulnSummary, certSummary, certAlerts, drift, containerSt, malwareStatsData, malwareRecentData, monSt, deps, slo }} label="Expanded technical detail" />
+        <div className="card-title" style={{ marginBottom: 12 }}>
+          Technical Sections
+        </div>
+        <div className="hint">
+          Raw subsystem summaries stay available here so experts can drop down into the original
+          data without turning the whole screen back into a tab wall.
+        </div>
+        <JsonDetails
+          data={{
+            assetSummary,
+            vulnSummary,
+            certSummary,
+            certAlerts,
+            drift,
+            containerSt,
+            malwareStatsData,
+            malwareRecentData,
+            monSt,
+            deps,
+            slo,
+          }}
+          label="Expanded technical detail"
+        />
         {selectedAsset && (
           <div className="hint" style={{ marginTop: 12 }}>
-            Current scope: {selectedAsset.title} • {selectedAsset.type} • {selectedAsset.evidence?.updated_at ? `Updated ${formatRelativeTime(selectedAsset.evidence.updated_at)}` : `Selected ${formatDateTime(new Date())}`}
+            Current scope: {selectedAsset.title} • {selectedAsset.type} •{' '}
+            {selectedAsset.evidence?.updated_at
+              ? `Updated ${formatRelativeTime(selectedAsset.evidence.updated_at)}`
+              : `Selected ${formatDateTime(new Date())}`}
           </div>
         )}
       </div>

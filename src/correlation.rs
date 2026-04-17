@@ -223,8 +223,7 @@ pub fn detect_credential_spray(
             }
 
             if agents.len() >= min_agents {
-                let mut agent_list: Vec<String> =
-                    agents.iter().map(|a| a.to_string()).collect();
+                let mut agent_list: Vec<String> = agents.iter().map(|a| a.to_string()).collect();
                 agent_list.sort();
                 let mut ip_list: Vec<String> = ips.iter().map(|i| i.to_string()).collect();
                 ip_list.sort();

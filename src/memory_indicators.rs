@@ -60,6 +60,7 @@ struct MapEntry {
     addr_start: u64,
     addr_end: u64,
     permissions: String,
+    #[allow(dead_code)]
     offset: u64,
     path: String,
 }
@@ -118,18 +119,38 @@ fn parse_proc_maps(content: &str) -> Vec<MapEntry> {
     let mut entries = Vec::new();
     for line in content.lines() {
         let parts: Vec<&str> = line.split_whitespace().collect();
-        if parts.len() < 5 { continue; }
+        if parts.len() < 5 {
+            continue;
+        }
 
         let addr_range: Vec<&str> = parts[0].split('-').collect();
-        if addr_range.len() != 2 { continue; }
+        if addr_range.len() != 2 {
+            continue;
+        }
 
-        let Ok(addr_start) = u64::from_str_radix(addr_range[0], 16) else { continue };
-        let Ok(addr_end) = u64::from_str_radix(addr_range[1], 16) else { continue };
+        let Ok(addr_start) = u64::from_str_radix(addr_range[0], 16) else {
+            continue;
+        };
+        let Ok(addr_end) = u64::from_str_radix(addr_range[1], 16) else {
+            continue;
+        };
         let permissions = parts[1].to_string();
-        let Ok(offset) = u64::from_str_radix(parts[2], 16) else { continue };
-        let path = if parts.len() >= 6 { parts[5..].join(" ") } else { String::new() };
+        let Ok(offset) = u64::from_str_radix(parts[2], 16) else {
+            continue;
+        };
+        let path = if parts.len() >= 6 {
+            parts[5..].join(" ")
+        } else {
+            String::new()
+        };
 
-        entries.push(MapEntry { addr_start, addr_end, permissions, offset, path });
+        entries.push(MapEntry {
+            addr_start,
+            addr_end,
+            permissions,
+            offset,
+            path,
+        });
     }
     entries
 }
@@ -149,7 +170,8 @@ pub fn analyze_maps(pid: u32, process_name: &str, maps_content: &str) -> MemoryI
         let perms = &entry.permissions;
         let is_rwx = perms.contains('r') && perms.contains('w') && perms.contains('x');
         let is_executable = perms.contains('x');
-        let is_anonymous = entry.path.is_empty() || entry.path == "[heap]" || entry.path == "[stack]";
+        let is_anonymous =
+            entry.path.is_empty() || entry.path == "[heap]" || entry.path == "[stack]";
         let size = (entry.addr_end - entry.addr_start) as usize;
 
         // RWX detection
@@ -161,7 +183,11 @@ pub fn analyze_maps(pid: u32, process_name: &str, maps_content: &str) -> MemoryI
                     address_end: format!("0x{:x}", entry.addr_end),
                     permissions: perms.clone(),
                     size_bytes: size,
-                    backing: if entry.path.is_empty() { "anonymous".into() } else { entry.path.clone() },
+                    backing: if entry.path.is_empty() {
+                        "anonymous".into()
+                    } else {
+                        entry.path.clone()
+                    },
                     indicator: "RWX anonymous region (possible code injection)".into(),
                 });
             }
@@ -183,12 +209,17 @@ pub fn analyze_maps(pid: u32, process_name: &str, maps_content: &str) -> MemoryI
 
     if anonymous_executable > 2 {
         risk_score += 0.2;
-        indicators.push(format!("{anonymous_executable} anonymous executable regions"));
+        indicators.push(format!(
+            "{anonymous_executable} anonymous executable regions"
+        ));
     }
 
     if !reflective_suspects.is_empty() {
         risk_score += 0.3;
-        indicators.push(format!("{} potential reflective DLL region(s)", reflective_suspects.len()));
+        indicators.push(format!(
+            "{} potential reflective DLL region(s)",
+            reflective_suspects.len()
+        ));
     }
 
     let hollowing_suspected = false; // Requires comparing on-disk vs in-memory — needs actual memory reads
@@ -212,18 +243,24 @@ pub fn scan_buffer_for_shellcode(data: &[u8]) -> Vec<PatternMatch> {
     let mut matches = Vec::new();
 
     for sig in SHELLCODE_SIGS {
-        if sig.pattern.len() > data.len() { continue; }
+        if sig.pattern.len() > data.len() {
+            continue;
+        }
 
         for (offset, window) in data.windows(sig.pattern.len()).enumerate() {
             if window == sig.pattern {
                 // For NOP sleds, only report if it's a long sequence
                 if sig.name == "NOP_sled_x86" {
                     let nop_count = data[offset..].iter().take_while(|&&b| b == 0x90).count();
-                    if nop_count < 8 { continue; }
+                    if nop_count < 8 {
+                        continue;
+                    }
                 }
 
                 // For MZ headers, skip if at file start (normal) or in file-backed region
-                if sig.name == "PE_header_MZ" && offset == 0 { continue; }
+                if sig.name == "PE_header_MZ" && offset == 0 {
+                    continue;
+                }
 
                 matches.push(PatternMatch {
                     pattern_name: sig.name.to_string(),
@@ -277,12 +314,19 @@ pub fn scan_process(pid: u32) -> MemoryIndicatorReport {
 
 /// Build summary from multiple process scans.
 pub fn summarize(reports: &[MemoryIndicatorReport]) -> MemoryIndicatorSummary {
-    let flagged: Vec<_> = reports.iter().filter(|r| r.risk_score > 0.1).cloned().collect();
+    let flagged: Vec<_> = reports
+        .iter()
+        .filter(|r| r.risk_score > 0.1)
+        .cloned()
+        .collect();
     MemoryIndicatorSummary {
         processes_scanned: reports.len(),
         processes_flagged: flagged.len(),
         total_rwx_regions: reports.iter().map(|r| r.rwx_regions).sum(),
-        total_reflective_dll: reports.iter().map(|r| r.reflective_dll_suspects.len()).sum(),
+        total_reflective_dll: reports
+            .iter()
+            .map(|r| r.reflective_dll_suspects.len())
+            .sum(),
         total_shellcode: reports.iter().map(|r| r.shellcode_patterns.len()).sum(),
         flagged_processes: flagged,
     }

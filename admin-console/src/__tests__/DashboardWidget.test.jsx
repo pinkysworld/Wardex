@@ -7,7 +7,7 @@ describe('DashboardWidget', () => {
     render(
       <DashboardWidget id="w1" title="My Widget">
         <p>Widget content</p>
-      </DashboardWidget>
+      </DashboardWidget>,
     );
     expect(screen.getByText('My Widget')).toBeInTheDocument();
     expect(screen.getByText('Widget content')).toBeInTheDocument();
@@ -17,7 +17,7 @@ describe('DashboardWidget', () => {
     render(
       <DashboardWidget id="w2" title="Collapsible">
         <p>Visible content</p>
-      </DashboardWidget>
+      </DashboardWidget>,
     );
     expect(screen.getByText('Visible content')).toBeInTheDocument();
 
@@ -31,7 +31,7 @@ describe('DashboardWidget', () => {
     render(
       <DashboardWidget id="w3" title="Hidden" collapsed>
         <p>Hidden content</p>
-      </DashboardWidget>
+      </DashboardWidget>,
     );
     // The expand icon should be visible
     expect(screen.getByText('▸')).toBeInTheDocument();
@@ -42,7 +42,7 @@ describe('DashboardWidget', () => {
     render(
       <DashboardWidget id="w4" title="Removable" onRemove={onRemove}>
         <p>Content</p>
-      </DashboardWidget>
+      </DashboardWidget>,
     );
     const removeBtn = screen.getByText('✕');
     fireEvent.click(removeBtn);
@@ -53,7 +53,7 @@ describe('DashboardWidget', () => {
     render(
       <DashboardWidget id="w5" title="No Remove">
         <p>Content</p>
-      </DashboardWidget>
+      </DashboardWidget>,
     );
     expect(screen.queryByText('✕')).not.toBeInTheDocument();
   });

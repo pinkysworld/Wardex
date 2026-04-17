@@ -15,7 +15,7 @@ export function formatLabel(key) {
     .replace(/[_-]+/g, ' ')
     .replace(/\s+/g, ' ')
     .trim()
-    .replace(/^\w/, c => c.toUpperCase());
+    .replace(/^\w/, (c) => c.toUpperCase());
 }
 
 export function formatValue(value) {
@@ -67,7 +67,8 @@ function isPrimitive(value) {
 
 function collectionSummary(value) {
   if (Array.isArray(value)) return `${value.length} item${value.length === 1 ? '' : 's'}`;
-  if (value && typeof value === 'object') return `${Object.keys(value).length} field${Object.keys(value).length === 1 ? '' : 's'}`;
+  if (value && typeof value === 'object')
+    return `${Object.keys(value).length} field${Object.keys(value).length === 1 ? '' : 's'}`;
   return formatValue(value);
 }
 
@@ -76,7 +77,9 @@ function itemPreview(value) {
   if (Array.isArray(value)) return collectionSummary(value);
   const preview = previewObject(value);
   if (!preview || preview.length === 0) return collectionSummary(value);
-  return preview.map(([key, innerValue]) => `${formatLabel(key)}: ${formatValue(innerValue)}`).join(' · ');
+  return preview
+    .map(([key, innerValue]) => `${formatLabel(key)}: ${formatValue(innerValue)}`)
+    .join(' · ');
 }
 
 function StructuredInspector({ data, depth = 0 }) {
@@ -84,9 +87,7 @@ function StructuredInspector({ data, depth = 0 }) {
 
   if (isPrimitive(data)) {
     return (
-      <div className="inspector-leaf">
-        {typeof data === 'string' ? data : formatValue(data)}
-      </div>
+      <div className="inspector-leaf">{typeof data === 'string' ? data : formatValue(data)}</div>
     );
   }
 
@@ -108,7 +109,8 @@ function StructuredInspector({ data, depth = 0 }) {
           </div>
           {hiddenCount > 0 && (
             <div className="hint" style={{ marginTop: 8 }}>
-              {hiddenCount} more item{hiddenCount === 1 ? '' : 's'} hidden to keep this view readable.
+              {hiddenCount} more item{hiddenCount === 1 ? '' : 's'} hidden to keep this view
+              readable.
             </div>
           )}
         </div>
@@ -118,7 +120,11 @@ function StructuredInspector({ data, depth = 0 }) {
     return (
       <div className="inspector-stack">
         {visibleItems.map((item, index) => (
-          <details key={item?.id ?? `item-${index}`} className="inspector-section" open={depth === 0 && index < 2}>
+          <details
+            key={item?.id ?? `item-${index}`}
+            className="inspector-section"
+            open={depth === 0 && index < 2}
+          >
             <summary>
               Item {index + 1}
               <span>{itemPreview(item)}</span>
@@ -130,7 +136,8 @@ function StructuredInspector({ data, depth = 0 }) {
         ))}
         {hiddenCount > 0 && (
           <div className="hint">
-            {hiddenCount} more complex item{hiddenCount === 1 ? '' : 's'} hidden to keep this panel responsive.
+            {hiddenCount} more complex item{hiddenCount === 1 ? '' : 's'} hidden to keep this panel
+            responsive.
           </div>
         )}
       </div>
@@ -174,14 +181,20 @@ function StructuredInspector({ data, depth = 0 }) {
 
       {hiddenComplexCount > 0 && (
         <div className="hint">
-          {hiddenComplexCount} more nested section{hiddenComplexCount === 1 ? '' : 's'} hidden to keep this panel readable.
+          {hiddenComplexCount} more nested section{hiddenComplexCount === 1 ? '' : 's'} hidden to
+          keep this panel readable.
         </div>
       )}
     </div>
   );
 }
 
-export function SummaryGrid({ data, exclude = [], limit = 12, emptyMessage = 'No data available' }) {
+export function SummaryGrid({
+  data,
+  exclude = [],
+  limit = 12,
+  emptyMessage = 'No data available',
+}) {
   if (!data || typeof data !== 'object') return <div className="empty">{emptyMessage}</div>;
   if (Array.isArray(data)) {
     if (data.length === 0) return <div className="empty">{emptyMessage}</div>;
@@ -242,7 +255,9 @@ export function JsonDetails({ data, label = 'Expanded details' }) {
   if (data == null) return null;
   return (
     <details style={{ marginTop: 12 }}>
-      <summary style={{ cursor: 'pointer', fontSize: 12, color: 'var(--text-secondary)' }}>{label}</summary>
+      <summary style={{ cursor: 'pointer', fontSize: 12, color: 'var(--text-secondary)' }}>
+        {label}
+      </summary>
       <div className="inspector-shell" style={{ marginTop: 8 }}>
         <StructuredInspector data={data} />
       </div>
@@ -254,7 +269,9 @@ export function RawJsonDetails({ data, label = 'Raw JSON' }) {
   if (data == null) return null;
   return (
     <details style={{ marginTop: 12 }}>
-      <summary style={{ cursor: 'pointer', fontSize: 12, color: 'var(--text-secondary)' }}>{label}</summary>
+      <summary style={{ cursor: 'pointer', fontSize: 12, color: 'var(--text-secondary)' }}>
+        {label}
+      </summary>
       <div className="json-block" style={{ marginTop: 8 }}>
         {typeof data === 'string' ? data : JSON.stringify(data, null, 2)}
       </div>
@@ -281,7 +298,7 @@ export function downloadCsv(rows, filename) {
           const value = cell == null ? '' : String(cell);
           return `"${value.replace(/"/g, '""')}"`;
         })
-        .join(',')
+        .join(','),
     )
     .join('\n');
   downloadData(csv, filename, 'text/csv;charset=utf-8');
@@ -293,7 +310,9 @@ export function SideDrawer({ open, title, subtitle, onClose, actions, children }
 
   useEffect(() => {
     if (!open) return;
-    const handleKey = (e) => { if (e.key === 'Escape') onClose?.(); };
+    const handleKey = (e) => {
+      if (e.key === 'Escape') onClose?.();
+    };
     document.addEventListener('keydown', handleKey);
     return () => document.removeEventListener('keydown', handleKey);
   }, [open, onClose]);
@@ -302,8 +321,14 @@ export function SideDrawer({ open, title, subtitle, onClose, actions, children }
   useEffect(() => {
     if (!open || !panelRef.current) return;
     const panel = panelRef.current;
-    previousFocusRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-    const focusable = () => Array.from(panel.querySelectorAll('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])')).filter((node) => !node.hasAttribute('disabled'));
+    previousFocusRef.current =
+      document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const focusable = () =>
+      Array.from(
+        panel.querySelectorAll(
+          'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])',
+        ),
+      ).filter((node) => !node.hasAttribute('disabled'));
     const first = focusable()[0] || panel;
     first.focus();
 
@@ -314,9 +339,15 @@ export function SideDrawer({ open, title, subtitle, onClose, actions, children }
       const firstEl = els[0];
       const lastEl = els[els.length - 1];
       if (e.shiftKey) {
-        if (document.activeElement === firstEl) { e.preventDefault(); lastEl.focus(); }
+        if (document.activeElement === firstEl) {
+          e.preventDefault();
+          lastEl.focus();
+        }
       } else {
-        if (document.activeElement === lastEl) { e.preventDefault(); firstEl.focus(); }
+        if (document.activeElement === lastEl) {
+          e.preventDefault();
+          firstEl.focus();
+        }
       }
     };
     panel.addEventListener('keydown', trapFocus);
@@ -329,7 +360,15 @@ export function SideDrawer({ open, title, subtitle, onClose, actions, children }
   if (!open) return null;
   return (
     <div className="drawer-overlay" onClick={onClose}>
-      <aside className="drawer-panel" ref={panelRef} role="dialog" aria-modal="true" aria-label={title} tabIndex={-1} onClick={(event) => event.stopPropagation()}>
+      <aside
+        className="drawer-panel"
+        ref={panelRef}
+        role="dialog"
+        aria-modal="true"
+        aria-label={title}
+        tabIndex={-1}
+        onClick={(event) => event.stopPropagation()}
+      >
         <div className="drawer-header">
           <div>
             <div className="drawer-title">{title}</div>
@@ -337,7 +376,9 @@ export function SideDrawer({ open, title, subtitle, onClose, actions, children }
           </div>
           <div className="drawer-actions">
             {actions}
-            <button className="btn btn-sm" onClick={onClose}>Close</button>
+            <button className="btn btn-sm" onClick={onClose}>
+              Close
+            </button>
           </div>
         </div>
         <div className="drawer-body">{children}</div>
@@ -346,7 +387,16 @@ export function SideDrawer({ open, title, subtitle, onClose, actions, children }
   );
 }
 
-export function ConfirmDialog({ open, title, message, confirmLabel = 'Confirm', cancelLabel = 'Cancel', tone = 'danger', onConfirm, onCancel }) {
+export function ConfirmDialog({
+  open,
+  title,
+  message,
+  confirmLabel = 'Confirm',
+  cancelLabel = 'Cancel',
+  tone = 'danger',
+  onConfirm,
+  onCancel,
+}) {
   const dialogRef = useRef(null);
   const previousFocusRef = useRef(null);
 
@@ -363,8 +413,14 @@ export function ConfirmDialog({ open, title, message, confirmLabel = 'Confirm', 
   useEffect(() => {
     if (!open || !dialogRef.current) return;
     const dialog = dialogRef.current;
-    previousFocusRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-    const focusable = () => Array.from(dialog.querySelectorAll('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])')).filter((node) => !node.hasAttribute('disabled'));
+    previousFocusRef.current =
+      document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const focusable = () =>
+      Array.from(
+        dialog.querySelectorAll(
+          'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])',
+        ),
+      ).filter((node) => !node.hasAttribute('disabled'));
     const first = focusable()[0] || dialog;
     first.focus();
 
@@ -375,9 +431,15 @@ export function ConfirmDialog({ open, title, message, confirmLabel = 'Confirm', 
       const firstEl = els[0];
       const lastEl = els[els.length - 1];
       if (e.shiftKey) {
-        if (document.activeElement === firstEl) { e.preventDefault(); lastEl.focus(); }
+        if (document.activeElement === firstEl) {
+          e.preventDefault();
+          lastEl.focus();
+        }
       } else {
-        if (document.activeElement === lastEl) { e.preventDefault(); firstEl.focus(); }
+        if (document.activeElement === lastEl) {
+          e.preventDefault();
+          firstEl.focus();
+        }
       }
     };
     dialog.addEventListener('keydown', trapFocus);
@@ -391,14 +453,29 @@ export function ConfirmDialog({ open, title, message, confirmLabel = 'Confirm', 
 
   return (
     <div className="confirm-overlay" onClick={onCancel}>
-      <div className="confirm-dialog" ref={dialogRef} onClick={(event) => event.stopPropagation()} role="alertdialog" aria-modal="true" aria-labelledby="confirm-dialog-title" tabIndex={-1}>
+      <div
+        className="confirm-dialog"
+        ref={dialogRef}
+        onClick={(event) => event.stopPropagation()}
+        role="alertdialog"
+        aria-modal="true"
+        aria-labelledby="confirm-dialog-title"
+        tabIndex={-1}
+      >
         <div className="confirm-dialog-header">
           <h3 id="confirm-dialog-title">{title}</h3>
         </div>
         <p className="confirm-dialog-body">{message}</p>
         <div className="confirm-dialog-actions">
-          <button className="btn btn-sm" onClick={onCancel}>{cancelLabel}</button>
-          <button className={`btn btn-sm ${tone === 'danger' ? 'btn-danger' : 'btn-primary'}`} onClick={onConfirm}>{confirmLabel}</button>
+          <button className="btn btn-sm" onClick={onCancel}>
+            {cancelLabel}
+          </button>
+          <button
+            className={`btn btn-sm ${tone === 'danger' ? 'btn-danger' : 'btn-primary'}`}
+            onClick={onConfirm}
+          >
+            {confirmLabel}
+          </button>
         </div>
       </div>
     </div>

@@ -263,7 +263,10 @@ impl HipaaComplianceManager {
 
     /// Get all controls with a specific status.
     pub fn controls_by_status(&self, status: &ControlStatus) -> Vec<&HipaaControl> {
-        self.controls.iter().filter(|c| &c.status == status).collect()
+        self.controls
+            .iter()
+            .filter(|c| &c.status == status)
+            .collect()
     }
 
     /// Get breach records.
@@ -281,15 +284,15 @@ impl HipaaComplianceManager {
 
     /// HIPAA status summary.
     pub fn status(&self) -> HipaaStatus {
-        let report = self.controls.iter().fold(
-            (0u32, 0u32, 0u32),
-            |(comp, part, non), c| match c.status {
+        let report = self
+            .controls
+            .iter()
+            .fold((0u32, 0u32, 0u32), |(comp, part, non), c| match c.status {
                 ControlStatus::Compliant => (comp + 1, part, non),
                 ControlStatus::PartiallyCompliant => (comp, part + 1, non),
                 ControlStatus::NonCompliant => (comp, part, non + 1),
                 _ => (comp, part, non),
-            },
-        );
+            });
 
         HipaaStatus {
             total_controls: self.controls.len(),
@@ -356,7 +359,10 @@ impl HipaaComplianceManager {
                     severity: "high".into(),
                     control_id: control.id.clone(),
                     description: format!("Required control '{}' is non-compliant", control.title),
-                    recommendation: format!("Implement {}: {}", control.section, control.requirement),
+                    recommendation: format!(
+                        "Implement {}: {}",
+                        control.section, control.requirement
+                    ),
                 });
             }
         }
@@ -736,7 +742,13 @@ mod tests {
     #[test]
     fn phi_access_logging() {
         let mut mgr = HipaaComplianceManager::new();
-        mgr.log_phi_access("analyst-1", "view", "/patient/123", Some("10.0.0.5"), "success");
+        mgr.log_phi_access(
+            "analyst-1",
+            "view",
+            "/patient/123",
+            Some("10.0.0.5"),
+            "success",
+        );
         mgr.log_phi_access("analyst-2", "export", "/patient/456", None, "denied");
         assert_eq!(mgr.audit_log.len(), 2);
         assert!(mgr.audit_log[0].phi_accessed);
@@ -791,7 +803,12 @@ mod tests {
             last_reviewed: 0,
         });
         let report = mgr.assess();
-        assert!(report.findings.iter().any(|f| f.severity == "high" && f.control_id == "164.312(e)(1)"));
+        assert!(
+            report
+                .findings
+                .iter()
+                .any(|f| f.severity == "high" && f.control_id == "164.312(e)(1)")
+        );
     }
 
     #[test]

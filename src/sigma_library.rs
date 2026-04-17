@@ -85,7 +85,10 @@ impl SigmaLibrary {
     pub fn load_yaml(&mut self, yaml_text: &str) -> Result<usize, String> {
         let mut count = 0;
         // Split on YAML document separator (line consisting of ---)
-        let docs: Vec<&str> = yaml_text.split("\n---\n").flat_map(|d| d.split("\r\n---\r\n")).collect();
+        let docs: Vec<&str> = yaml_text
+            .split("\n---\n")
+            .flat_map(|d| d.split("\r\n---\r\n"))
+            .collect();
         for doc in docs {
             let trimmed = doc.trim();
             if trimmed.is_empty() {

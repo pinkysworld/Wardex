@@ -4,16 +4,28 @@ import { useState, useCallback, useRef, useEffect } from 'react';
  * DashboardWidget — draggable, collapsible, removable dashboard widget wrapper.
  * Uses HTML5 Drag and Drop API (no external deps).
  */
-export default function DashboardWidget({ id, title, children, collapsed: defaultCollapsed = false, onRemove, onMove, paused, onTogglePause }) {
+export default function DashboardWidget({
+  id,
+  title,
+  children,
+  collapsed: defaultCollapsed = false,
+  onRemove,
+  onMove,
+  paused,
+  onTogglePause,
+}) {
   const [collapsed, setCollapsed] = useState(defaultCollapsed);
   const [dragging, setDragging] = useState(false);
   const ref = useRef(null);
 
-  const handleDragStart = useCallback((e) => {
-    e.dataTransfer.setData('text/plain', id);
-    e.dataTransfer.effectAllowed = 'move';
-    setDragging(true);
-  }, [id]);
+  const handleDragStart = useCallback(
+    (e) => {
+      e.dataTransfer.setData('text/plain', id);
+      e.dataTransfer.effectAllowed = 'move';
+      setDragging(true);
+    },
+    [id],
+  );
 
   const handleDragEnd = useCallback(() => {
     setDragging(false);
@@ -24,13 +36,16 @@ export default function DashboardWidget({ id, title, children, collapsed: defaul
     e.dataTransfer.dropEffect = 'move';
   }, []);
 
-  const handleDrop = useCallback((e) => {
-    e.preventDefault();
-    const fromId = e.dataTransfer.getData('text/plain');
-    if (fromId && fromId !== id) {
-      onMove?.(fromId, id);
-    }
-  }, [id, onMove]);
+  const handleDrop = useCallback(
+    (e) => {
+      e.preventDefault();
+      const fromId = e.dataTransfer.getData('text/plain');
+      if (fromId && fromId !== id) {
+        onMove?.(fromId, id);
+      }
+    },
+    [id, onMove],
+  );
 
   return (
     <div
@@ -45,7 +60,9 @@ export default function DashboardWidget({ id, title, children, collapsed: defaul
       aria-label={title}
     >
       <div className="widget-header">
-        <span className="widget-grip" aria-hidden="true">⠿</span>
+        <span className="widget-grip" aria-hidden="true">
+          ⠿
+        </span>
         <span className="widget-title">{title}</span>
         <div className="widget-controls">
           {onTogglePause && (
@@ -61,7 +78,7 @@ export default function DashboardWidget({ id, title, children, collapsed: defaul
           )}
           <button
             className="btn-icon widget-collapse"
-            onClick={() => setCollapsed(c => !c)}
+            onClick={() => setCollapsed((c) => !c)}
             aria-label={collapsed ? `Expand ${title}` : `Collapse ${title}`}
             title={collapsed ? 'Expand' : 'Collapse'}
           >
@@ -79,11 +96,7 @@ export default function DashboardWidget({ id, title, children, collapsed: defaul
           )}
         </div>
       </div>
-      {!collapsed && (
-        <div className="widget-content">
-          {children}
-        </div>
-      )}
+      {!collapsed && <div className="widget-content">{children}</div>}
     </div>
   );
 }
@@ -99,11 +112,13 @@ export function useWidgetLayout(defaultOrder, storageKey = 'wardex_widget_layout
         const parsed = JSON.parse(saved);
         if (Array.isArray(parsed) && parsed.length > 0) {
           // Merge any new widgets from defaultOrder that aren't in saved layout
-          const missing = defaultOrder.filter(id => !parsed.includes(id));
+          const missing = defaultOrder.filter((id) => !parsed.includes(id));
           return missing.length > 0 ? [...parsed, ...missing] : parsed;
         }
       }
-    } catch { /* ignore */ }
+    } catch {
+      /* ignore */
+    }
     return defaultOrder;
   });
 
@@ -114,7 +129,9 @@ export function useWidgetLayout(defaultOrder, storageKey = 'wardex_widget_layout
         const parsed = JSON.parse(saved);
         if (Array.isArray(parsed)) return new Set(parsed);
       }
-    } catch { /* ignore */ }
+    } catch {
+      /* ignore */
+    }
     return new Set();
   });
 
@@ -127,7 +144,7 @@ export function useWidgetLayout(defaultOrder, storageKey = 'wardex_widget_layout
   }, [hidden, storageKey]);
 
   const moveWidget = useCallback((fromId, toId) => {
-    setOrder(prev => {
+    setOrder((prev) => {
       const arr = [...prev];
       const fromIdx = arr.indexOf(fromId);
       const toIdx = arr.indexOf(toId);
@@ -139,11 +156,11 @@ export function useWidgetLayout(defaultOrder, storageKey = 'wardex_widget_layout
   }, []);
 
   const removeWidget = useCallback((id) => {
-    setHidden(prev => new Set([...prev, id]));
+    setHidden((prev) => new Set([...prev, id]));
   }, []);
 
   const restoreWidget = useCallback((id) => {
-    setHidden(prev => {
+    setHidden((prev) => {
       const next = new Set(prev);
       next.delete(id);
       return next;
@@ -155,7 +172,7 @@ export function useWidgetLayout(defaultOrder, storageKey = 'wardex_widget_layout
     setHidden(new Set());
   }, [defaultOrder]);
 
-  const visibleWidgets = order.filter(id => !hidden.has(id));
+  const visibleWidgets = order.filter((id) => !hidden.has(id));
 
   return { order: visibleWidgets, hidden, moveWidget, removeWidget, restoreWidget, resetLayout };
 }

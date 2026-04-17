@@ -131,7 +131,11 @@ impl SbomGenerator {
             name: inv.hardware.cpu_model.clone(),
             version: format!("{}-core", inv.hardware.cpu_cores),
             kind: ComponentKind::Device,
-            purl: format!("pkg:generic/{}@{}-core", inv.hardware.cpu_model.replace(' ', "-"), inv.hardware.cpu_cores),
+            purl: format!(
+                "pkg:generic/{}@{}-core",
+                inv.hardware.cpu_model.replace(' ', "-"),
+                inv.hardware.cpu_cores
+            ),
             license: None,
             sha256: None,
             supplier: None,

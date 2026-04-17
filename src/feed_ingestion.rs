@@ -6,8 +6,8 @@
 
 use serde::{Deserialize, Serialize};
 
-use crate::threat_intel::{IoC, IoCType, ThreatIntelStore};
 use crate::malware_signatures::{MalwareEntry, MalwareHashDb, MalwareSeverity};
+use crate::threat_intel::{IoC, IoCType, ThreatIntelStore};
 use crate::yara_engine::YaraEngine;
 
 // ── Feed Types ───────────────────────────────────────────────────────
@@ -262,13 +262,7 @@ impl FeedIngestionEngine {
             total_iocs_ingested: self.total_iocs_ingested,
             total_hashes_imported: self.total_hashes_imported,
             total_yara_imported: self.total_yara_imported,
-            last_poll_results: self
-                .poll_results
-                .iter()
-                .rev()
-                .take(10)
-                .cloned()
-                .collect(),
+            last_poll_results: self.poll_results.iter().rev().take(10).cloned().collect(),
             errors_last_24h: errors_24h,
         }
     }
@@ -423,7 +417,11 @@ fn parse_abusech_feed(data: &str) -> AbusechParsed {
                 let tags: Vec<String> = entry
                     .get("tags")
                     .and_then(|v| v.as_array())
-                    .map(|arr| arr.iter().filter_map(|v| v.as_str().map(String::from)).collect())
+                    .map(|arr| {
+                        arr.iter()
+                            .filter_map(|v| v.as_str().map(String::from))
+                            .collect()
+                    })
                     .unwrap_or_else(|| vec!["malwarebazaar".into()]);
                 malware_entries.push(MalwareEntry {
                     sha256: sha256.to_lowercase(),
@@ -463,7 +461,10 @@ fn parse_abusech_feed(data: &str) -> AbusechParsed {
         }
     }
 
-    AbusechParsed { iocs, malware_entries }
+    AbusechParsed {
+        iocs,
+        malware_entries,
+    }
 }
 
 #[cfg(test)]
@@ -616,7 +617,11 @@ mod tests {
     #[test]
     fn default_sources_seed_common_hash_and_ioc_feeds() {
         let engine = FeedIngestionEngine::new_with_defaults();
-        let ids: Vec<_> = engine.sources().iter().map(|source| source.id.as_str()).collect();
+        let ids: Vec<_> = engine
+            .sources()
+            .iter()
+            .map(|source| source.id.as_str())
+            .collect();
 
         assert!(ids.contains(&"abusech-malwarebazaar"));
         assert!(ids.contains(&"cisa-stix"));

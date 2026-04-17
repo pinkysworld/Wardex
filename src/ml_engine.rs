@@ -119,7 +119,12 @@ pub enum TreeNode {
 impl TreeNode {
     fn predict(&self, features: &[f64]) -> (TriageLabel, f64) {
         match self {
-            TreeNode::Split { feature_idx, threshold, left, right } => {
+            TreeNode::Split {
+                feature_idx,
+                threshold,
+                left,
+                right,
+            } => {
                 let val = features.get(*feature_idx).copied().unwrap_or(0.0);
                 if val <= *threshold {
                     left.predict(features)
@@ -159,85 +164,181 @@ impl RandomForest {
         use TriageLabel::*;
         let trees = vec![
             // Tree 1: anomaly_score primary split
-            DecisionTree { root: TreeNode::Split {
-                feature_idx: 0, threshold: 0.7,
-                right: Box::new(TreeNode::Split {
-                    feature_idx: 1, threshold: 0.5,
-                    right: Box::new(TreeNode::Leaf { label: TruePositive, confidence: 0.92 }),
-                    left: Box::new(TreeNode::Leaf { label: NeedsReview, confidence: 0.60 }),
-                }),
-                left: Box::new(TreeNode::Split {
-                    feature_idx: 0, threshold: 0.3,
-                    right: Box::new(TreeNode::Leaf { label: NeedsReview, confidence: 0.55 }),
-                    left: Box::new(TreeNode::Leaf { label: FalsePositive, confidence: 0.88 }),
-                }),
-            }},
-            // Tree 2: confidence + alert_frequency
-            DecisionTree { root: TreeNode::Split {
-                feature_idx: 1, threshold: 0.6,
-                right: Box::new(TreeNode::Split {
-                    feature_idx: 5, threshold: 1.5, // ln(1+freq)
-                    right: Box::new(TreeNode::Leaf { label: TruePositive, confidence: 0.85 }),
+            DecisionTree {
+                root: TreeNode::Split {
+                    feature_idx: 0,
+                    threshold: 0.7,
+                    right: Box::new(TreeNode::Split {
+                        feature_idx: 1,
+                        threshold: 0.5,
+                        right: Box::new(TreeNode::Leaf {
+                            label: TruePositive,
+                            confidence: 0.92,
+                        }),
+                        left: Box::new(TreeNode::Leaf {
+                            label: NeedsReview,
+                            confidence: 0.60,
+                        }),
+                    }),
                     left: Box::new(TreeNode::Split {
-                        feature_idx: 0, threshold: 0.5,
-                        right: Box::new(TreeNode::Leaf { label: TruePositive, confidence: 0.78 }),
-                        left: Box::new(TreeNode::Leaf { label: NeedsReview, confidence: 0.52 }),
+                        feature_idx: 0,
+                        threshold: 0.3,
+                        right: Box::new(TreeNode::Leaf {
+                            label: NeedsReview,
+                            confidence: 0.55,
+                        }),
+                        left: Box::new(TreeNode::Leaf {
+                            label: FalsePositive,
+                            confidence: 0.88,
+                        }),
                     }),
-                }),
-                left: Box::new(TreeNode::Leaf { label: FalsePositive, confidence: 0.82 }),
-            }},
+                },
+            },
+            // Tree 2: confidence + alert_frequency
+            DecisionTree {
+                root: TreeNode::Split {
+                    feature_idx: 1,
+                    threshold: 0.6,
+                    right: Box::new(TreeNode::Split {
+                        feature_idx: 5,
+                        threshold: 1.5, // ln(1+freq)
+                        right: Box::new(TreeNode::Leaf {
+                            label: TruePositive,
+                            confidence: 0.85,
+                        }),
+                        left: Box::new(TreeNode::Split {
+                            feature_idx: 0,
+                            threshold: 0.5,
+                            right: Box::new(TreeNode::Leaf {
+                                label: TruePositive,
+                                confidence: 0.78,
+                            }),
+                            left: Box::new(TreeNode::Leaf {
+                                label: NeedsReview,
+                                confidence: 0.52,
+                            }),
+                        }),
+                    }),
+                    left: Box::new(TreeNode::Leaf {
+                        label: FalsePositive,
+                        confidence: 0.82,
+                    }),
+                },
+            },
             // Tree 3: device_risk + hour_of_day (off-hours = suspicious)
-            DecisionTree { root: TreeNode::Split {
-                feature_idx: 6, threshold: 0.5,
-                right: Box::new(TreeNode::Split {
-                    feature_idx: 3, threshold: 0.25, // before 6am normalised
-                    left: Box::new(TreeNode::Leaf { label: TruePositive, confidence: 0.90 }),
+            DecisionTree {
+                root: TreeNode::Split {
+                    feature_idx: 6,
+                    threshold: 0.5,
                     right: Box::new(TreeNode::Split {
-                        feature_idx: 0, threshold: 0.6,
-                        right: Box::new(TreeNode::Leaf { label: TruePositive, confidence: 0.80 }),
-                        left: Box::new(TreeNode::Leaf { label: NeedsReview, confidence: 0.58 }),
+                        feature_idx: 3,
+                        threshold: 0.25, // before 6am normalised
+                        left: Box::new(TreeNode::Leaf {
+                            label: TruePositive,
+                            confidence: 0.90,
+                        }),
+                        right: Box::new(TreeNode::Split {
+                            feature_idx: 0,
+                            threshold: 0.6,
+                            right: Box::new(TreeNode::Leaf {
+                                label: TruePositive,
+                                confidence: 0.80,
+                            }),
+                            left: Box::new(TreeNode::Leaf {
+                                label: NeedsReview,
+                                confidence: 0.58,
+                            }),
+                        }),
                     }),
-                }),
-                left: Box::new(TreeNode::Split {
-                    feature_idx: 0, threshold: 0.8,
-                    right: Box::new(TreeNode::Leaf { label: TruePositive, confidence: 0.75 }),
-                    left: Box::new(TreeNode::Leaf { label: FalsePositive, confidence: 0.80 }),
-                }),
-            }},
+                    left: Box::new(TreeNode::Split {
+                        feature_idx: 0,
+                        threshold: 0.8,
+                        right: Box::new(TreeNode::Leaf {
+                            label: TruePositive,
+                            confidence: 0.75,
+                        }),
+                        left: Box::new(TreeNode::Leaf {
+                            label: FalsePositive,
+                            confidence: 0.80,
+                        }),
+                    }),
+                },
+            },
             // Tree 4: suspicious_axes + anomaly_score
-            DecisionTree { root: TreeNode::Split {
-                feature_idx: 2, threshold: 1.5,
-                right: Box::new(TreeNode::Split {
-                    feature_idx: 0, threshold: 0.5,
-                    right: Box::new(TreeNode::Leaf { label: TruePositive, confidence: 0.88 }),
-                    left: Box::new(TreeNode::Leaf { label: NeedsReview, confidence: 0.55 }),
-                }),
-                left: Box::new(TreeNode::Split {
-                    feature_idx: 1, threshold: 0.7,
-                    right: Box::new(TreeNode::Leaf { label: NeedsReview, confidence: 0.50 }),
-                    left: Box::new(TreeNode::Leaf { label: FalsePositive, confidence: 0.85 }),
-                }),
-            }},
-            // Tree 5: day_of_week (weekend) + composite
-            DecisionTree { root: TreeNode::Split {
-                feature_idx: 4, threshold: 0.71, // weekend (5/7, 6/7)
-                right: Box::new(TreeNode::Split {
-                    feature_idx: 0, threshold: 0.4,
-                    right: Box::new(TreeNode::Leaf { label: TruePositive, confidence: 0.83 }),
-                    left: Box::new(TreeNode::Leaf { label: NeedsReview, confidence: 0.50 }),
-                }),
-                left: Box::new(TreeNode::Split {
-                    feature_idx: 0, threshold: 0.65,
+            DecisionTree {
+                root: TreeNode::Split {
+                    feature_idx: 2,
+                    threshold: 1.5,
                     right: Box::new(TreeNode::Split {
-                        feature_idx: 1, threshold: 0.5,
-                        right: Box::new(TreeNode::Leaf { label: TruePositive, confidence: 0.82 }),
-                        left: Box::new(TreeNode::Leaf { label: NeedsReview, confidence: 0.55 }),
+                        feature_idx: 0,
+                        threshold: 0.5,
+                        right: Box::new(TreeNode::Leaf {
+                            label: TruePositive,
+                            confidence: 0.88,
+                        }),
+                        left: Box::new(TreeNode::Leaf {
+                            label: NeedsReview,
+                            confidence: 0.55,
+                        }),
                     }),
-                    left: Box::new(TreeNode::Leaf { label: FalsePositive, confidence: 0.78 }),
-                }),
-            }},
+                    left: Box::new(TreeNode::Split {
+                        feature_idx: 1,
+                        threshold: 0.7,
+                        right: Box::new(TreeNode::Leaf {
+                            label: NeedsReview,
+                            confidence: 0.50,
+                        }),
+                        left: Box::new(TreeNode::Leaf {
+                            label: FalsePositive,
+                            confidence: 0.85,
+                        }),
+                    }),
+                },
+            },
+            // Tree 5: day_of_week (weekend) + composite
+            DecisionTree {
+                root: TreeNode::Split {
+                    feature_idx: 4,
+                    threshold: 0.71, // weekend (5/7, 6/7)
+                    right: Box::new(TreeNode::Split {
+                        feature_idx: 0,
+                        threshold: 0.4,
+                        right: Box::new(TreeNode::Leaf {
+                            label: TruePositive,
+                            confidence: 0.83,
+                        }),
+                        left: Box::new(TreeNode::Leaf {
+                            label: NeedsReview,
+                            confidence: 0.50,
+                        }),
+                    }),
+                    left: Box::new(TreeNode::Split {
+                        feature_idx: 0,
+                        threshold: 0.65,
+                        right: Box::new(TreeNode::Split {
+                            feature_idx: 1,
+                            threshold: 0.5,
+                            right: Box::new(TreeNode::Leaf {
+                                label: TruePositive,
+                                confidence: 0.82,
+                            }),
+                            left: Box::new(TreeNode::Leaf {
+                                label: NeedsReview,
+                                confidence: 0.55,
+                            }),
+                        }),
+                        left: Box::new(TreeNode::Leaf {
+                            label: FalsePositive,
+                            confidence: 0.78,
+                        }),
+                    }),
+                },
+            },
         ];
-        Self { trees, version: "1.0.0-rf5".into() }
+        Self {
+            trees,
+            version: "1.0.0-rf5".into(),
+        }
     }
 
     /// Majority-vote prediction across all trees.
@@ -325,7 +426,8 @@ impl StubEngine {
                 version: "1.0.0-rf5".into(),
                 input_shape: vec![1, 7],
                 output_shape: vec![1, 3],
-                description: "Random Forest alert triage (5 trees, 7 features) — TP/FP/Review".into(),
+                description: "Random Forest alert triage (5 trees, 7 features) — TP/FP/Review"
+                    .into(),
             },
         ]
     }
@@ -469,7 +571,9 @@ mod tests {
         };
         let result = engine.triage_alert(&features);
         // RF ensemble may classify mid-range as FP or NeedsReview
-        assert!(result.label == TriageLabel::NeedsReview || result.label == TriageLabel::FalsePositive);
+        assert!(
+            result.label == TriageLabel::NeedsReview || result.label == TriageLabel::FalsePositive
+        );
     }
 
     #[test]
@@ -563,11 +667,7 @@ impl OnnxEngine {
         };
         entries
             .filter_map(|e| e.ok())
-            .filter(|e| {
-                e.path()
-                    .extension()
-                    .is_some_and(|ext| ext == "onnx")
-            })
+            .filter(|e| e.path().extension().is_some_and(|ext| ext == "onnx"))
             .filter_map(|e| e.path().to_str().map(String::from))
             .collect()
     }
@@ -592,9 +692,7 @@ impl InferenceEngine for OnnxEngine {
             return Err(format!("Model file not found: {path}"));
         }
 
-        let file_size = std::fs::metadata(path)
-            .map(|m| m.len())
-            .unwrap_or(0);
+        let file_size = std::fs::metadata(path).map(|m| m.len()).unwrap_or(0);
 
         // NOTE: When `ort` crate is added, replace this with:
         //   let session = ort::Session::builder()?.commit_from_file(path)?;
@@ -604,8 +702,8 @@ impl InferenceEngine for OnnxEngine {
         let info = ModelInfo {
             name: name.clone(),
             version: format!("onnx-{}", file_size),
-            input_shape: vec![1, 64],  // Will be extracted from ONNX metadata
-            output_shape: vec![1, 1],  // Will be extracted from ONNX metadata
+            input_shape: vec![1, 64], // Will be extracted from ONNX metadata
+            output_shape: vec![1, 1], // Will be extracted from ONNX metadata
             description: format!("ONNX model loaded from {path} ({file_size} bytes)"),
         };
 
@@ -642,8 +740,8 @@ impl InferenceEngine for OnnxEngine {
 
         // Heuristic-based prediction based on feature statistics
         let mean = features.iter().sum::<f64>() / features.len().max(1) as f64;
-        let variance = features.iter().map(|x| (x - mean).powi(2)).sum::<f64>()
-            / features.len().max(1) as f64;
+        let variance =
+            features.iter().map(|x| (x - mean).powi(2)).sum::<f64>() / features.len().max(1) as f64;
 
         let (label, confidence) = if mean > 0.7 && variance < 0.1 {
             ("anomalous", 0.85 + variance)
@@ -761,7 +859,7 @@ mod onnx_tests {
         };
         let vec = max_features.to_vec();
         assert!((vec[3] - 23.0 / 24.0).abs() < f64::EPSILON); // hour clamped
-        assert!((vec[4] - 6.0 / 7.0).abs() < f64::EPSILON);   // day clamped
+        assert!((vec[4] - 6.0 / 7.0).abs() < f64::EPSILON); // day clamped
     }
 
     #[test]

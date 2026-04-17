@@ -96,7 +96,9 @@ fn format_slack(n: &Notification) -> String {
         context_elements.push(serde_json::json!({ "type": "mrkdwn", "text": format!("MITRE: {}", n.mitre_techniques.join(", ")) }));
     }
     if let Some(ref phase) = n.kill_chain_phase {
-        context_elements.push(serde_json::json!({ "type": "mrkdwn", "text": format!("Kill Chain: {}", phase) }));
+        context_elements.push(
+            serde_json::json!({ "type": "mrkdwn", "text": format!("Kill Chain: {}", phase) }),
+        );
     }
     let mut blocks = vec![
         serde_json::json!({
@@ -128,7 +130,9 @@ fn format_teams(n: &Notification) -> String {
         serde_json::json!({ "name": "Time", "value": &n.timestamp }),
     ];
     if !n.mitre_techniques.is_empty() {
-        facts.push(serde_json::json!({ "name": "MITRE ATT&CK", "value": n.mitre_techniques.join(", ") }));
+        facts.push(
+            serde_json::json!({ "name": "MITRE ATT&CK", "value": n.mitre_techniques.join(", ") }),
+        );
     }
     if let Some(ref phase) = n.kill_chain_phase {
         facts.push(serde_json::json!({ "name": "Kill Chain Phase", "value": phase }));
@@ -137,7 +141,9 @@ fn format_teams(n: &Notification) -> String {
         facts.push(serde_json::json!({ "name": "Recommended Action", "value": action }));
     }
     if !n.affected_hosts.is_empty() {
-        facts.push(serde_json::json!({ "name": "Affected Hosts", "value": n.affected_hosts.join(", ") }));
+        facts.push(
+            serde_json::json!({ "name": "Affected Hosts", "value": n.affected_hosts.join(", ") }),
+        );
     }
     serde_json::json!({
         "@type": "MessageCard",

@@ -58,7 +58,11 @@ impl ApiAnalytics {
     /// Record a completed API request.
     pub fn record(&mut self, method: &str, path: &str, latency_ms: f64, is_error: bool) {
         // Guard against NaN/Infinity/negative latencies
-        let latency_ms = if latency_ms.is_finite() && latency_ms >= 0.0 { latency_ms } else { 0.0 };
+        let latency_ms = if latency_ms.is_finite() && latency_ms >= 0.0 {
+            latency_ms
+        } else {
+            0.0
+        };
         let key = format!("{} {}", method, path);
         let records = self.endpoints.entry(key).or_default();
         records.push_back(RequestRecord {
@@ -106,17 +110,15 @@ impl ApiAnalytics {
                 .iter()
                 .map(|r| r.latency_ms)
                 .fold(f64::MAX, f64::min);
-            let max = records
-                .iter()
-                .map(|r| r.latency_ms)
-                .fold(0.0_f64, f64::max);
+            let max = records.iter().map(|r| r.latency_ms).fold(0.0_f64, f64::max);
             let avg = if count > 0 { total / count as f64 } else { 0.0 };
 
             // p95
             let mut latencies: Vec<f64> = records.iter().map(|r| r.latency_ms).collect();
             latencies.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
             let p95_idx = ((latencies.len() as f64) * 0.95) as usize;
-            let p95 = latencies.get(p95_idx.min(latencies.len().saturating_sub(1)))
+            let p95 = latencies
+                .get(p95_idx.min(latencies.len().saturating_sub(1)))
                 .copied()
                 .unwrap_or(0.0);
 

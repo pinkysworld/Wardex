@@ -66,8 +66,12 @@ impl UpdateManager {
     ) -> Result<Release, String> {
         use sha2::{Digest, Sha256};
         // Prevent path traversal via version/platform
-        if version.contains("..") || version.contains('/') || version.contains('\\')
-            || platform.contains("..") || platform.contains('/') || platform.contains('\\')
+        if version.contains("..")
+            || version.contains('/')
+            || version.contains('\\')
+            || platform.contains("..")
+            || platform.contains('/')
+            || platform.contains('\\')
         {
             return Err("invalid version or platform name".into());
         }
@@ -143,7 +147,9 @@ impl UpdateManager {
 
         // Defence-in-depth: verify resolved path is still within releases/
         let canonical_base = base.canonicalize().unwrap_or_else(|_| base.clone());
-        let canonical_req = requested.canonicalize().map_err(|_| "release not found".to_string())?;
+        let canonical_req = requested
+            .canonicalize()
+            .map_err(|_| "release not found".to_string())?;
         if !canonical_req.starts_with(&canonical_base) {
             return Err("invalid file name".into());
         }

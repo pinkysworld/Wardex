@@ -498,7 +498,9 @@ pub struct AlertBroadcaster {
 }
 
 impl Default for AlertBroadcaster {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl AlertBroadcaster {
@@ -519,7 +521,8 @@ impl AlertBroadcaster {
     /// Disconnect a client by subscriber ID.
     pub fn disconnect(&mut self, subscriber_id: u64) {
         self.bus.unsubscribe(subscriber_id);
-        self.connections.retain(|c| c.subscriber_id != subscriber_id);
+        self.connections
+            .retain(|c| c.subscriber_id != subscriber_id);
     }
 
     /// Broadcast an alert to all connected clients.
@@ -569,7 +572,9 @@ impl AlertBroadcaster {
 
     /// Remove idle connections (no ping for > timeout).
     pub fn sweep_idle(&mut self, timeout: Duration) -> usize {
-        let stale: Vec<u64> = self.connections.iter()
+        let stale: Vec<u64> = self
+            .connections
+            .iter()
             .filter(|c| c.since_last_ping() > timeout)
             .map(|c| c.subscriber_id)
             .collect();

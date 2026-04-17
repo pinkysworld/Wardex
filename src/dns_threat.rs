@@ -67,11 +67,26 @@ pub struct DnsThreatSummary {
 
 /// Known high-risk TLDs frequently abused.
 const HIGH_RISK_TLDS: &[(&str, f32)] = &[
-    (".tk", 0.8), (".top", 0.7), (".xyz", 0.6), (".buzz", 0.7),
-    (".cyou", 0.7), (".icu", 0.6), (".club", 0.5), (".gq", 0.8),
-    (".ml", 0.8), (".cf", 0.8), (".ga", 0.8), (".wang", 0.5),
-    (".work", 0.5), (".click", 0.6), (".link", 0.4), (".loan", 0.6),
-    (".racing", 0.6), (".win", 0.6), (".bid", 0.6), (".stream", 0.5),
+    (".tk", 0.8),
+    (".top", 0.7),
+    (".xyz", 0.6),
+    (".buzz", 0.7),
+    (".cyou", 0.7),
+    (".icu", 0.6),
+    (".club", 0.5),
+    (".gq", 0.8),
+    (".ml", 0.8),
+    (".cf", 0.8),
+    (".ga", 0.8),
+    (".wang", 0.5),
+    (".work", 0.5),
+    (".click", 0.6),
+    (".link", 0.4),
+    (".loan", 0.6),
+    (".racing", 0.6),
+    (".win", 0.6),
+    (".bid", 0.6),
+    (".stream", 0.5),
 ];
 
 const VOWELS: &[u8] = b"aeiou";
@@ -100,8 +115,14 @@ fn dga_score(domain: &str) -> (f32, Vec<String>) {
     }
 
     // 2. Consonant-vowel ratio
-    let vowel_count = sld.bytes().filter(|b| VOWELS.contains(&b.to_ascii_lowercase())).count();
-    let consonant_count = sld.bytes().filter(|b| b.is_ascii_alphabetic() && !VOWELS.contains(&b.to_ascii_lowercase())).count();
+    let vowel_count = sld
+        .bytes()
+        .filter(|b| VOWELS.contains(&b.to_ascii_lowercase()))
+        .count();
+    let consonant_count = sld
+        .bytes()
+        .filter(|b| b.is_ascii_alphabetic() && !VOWELS.contains(&b.to_ascii_lowercase()))
+        .count();
     if consonant_count > 0 {
         let ratio = vowel_count as f32 / consonant_count as f32;
         if ratio < 0.15 {
@@ -145,12 +166,19 @@ fn dga_score(domain: &str) -> (f32, Vec<String>) {
 }
 
 fn bigram_entropy(s: &str) -> f32 {
-    if s.len() < 2 { return 0.0; }
+    if s.len() < 2 {
+        return 0.0;
+    }
     let bytes = s.as_bytes();
     let mut freq: HashMap<(u8, u8), usize> = HashMap::new();
     let total = bytes.len() - 1;
     for i in 0..total {
-        *freq.entry((bytes[i].to_ascii_lowercase(), bytes[i + 1].to_ascii_lowercase())).or_default() += 1;
+        *freq
+            .entry((
+                bytes[i].to_ascii_lowercase(),
+                bytes[i + 1].to_ascii_lowercase(),
+            ))
+            .or_default() += 1;
     }
     let mut ent = 0.0_f32;
     for &count in freq.values() {
@@ -176,14 +204,16 @@ fn max_consecutive_consonants(s: &str) -> usize {
 
 /// Check for common English bigrams.
 const COMMON_BIGRAMS: &[&str] = &[
-    "th", "he", "in", "er", "an", "re", "on", "at", "en", "nd",
-    "ti", "es", "or", "te", "of", "ed", "is", "it", "al", "ar",
-    "st", "to", "nt", "ng", "se", "ha", "ou", "io", "le", "ve",
+    "th", "he", "in", "er", "an", "re", "on", "at", "en", "nd", "ti", "es", "or", "te", "of", "ed",
+    "is", "it", "al", "ar", "st", "to", "nt", "ng", "se", "ha", "ou", "io", "le", "ve",
 ];
 
 fn has_common_bigrams(s: &str) -> bool {
     let lower = s.to_lowercase();
-    let matches = COMMON_BIGRAMS.iter().filter(|bg| lower.contains(*bg)).count();
+    let matches = COMMON_BIGRAMS
+        .iter()
+        .filter(|bg| lower.contains(*bg))
+        .count();
     matches >= 3
 }
 
@@ -194,7 +224,8 @@ fn tunnel_score(queries: &[DnsQuery], domain: &str) -> (f32, Vec<String>) {
     let mut score = 0.0_f32;
     let mut indicators = Vec::new();
 
-    let domain_queries: Vec<_> = queries.iter()
+    let domain_queries: Vec<_> = queries
+        .iter()
         .filter(|q| q.domain.ends_with(domain) || q.domain == domain)
         .collect();
 
@@ -203,7 +234,8 @@ fn tunnel_score(queries: &[DnsQuery], domain: &str) -> (f32, Vec<String>) {
     }
 
     // 1. Subdomain depth
-    let max_depth = domain_queries.iter()
+    let max_depth = domain_queries
+        .iter()
         .map(|q| q.domain.split('.').count())
         .max()
         .unwrap_or(2);
@@ -213,7 +245,10 @@ fn tunnel_score(queries: &[DnsQuery], domain: &str) -> (f32, Vec<String>) {
     }
 
     // 2. Average query length (tunneling = long encoded payloads)
-    let avg_len: f32 = domain_queries.iter().map(|q| q.domain.len() as f32).sum::<f32>()
+    let avg_len: f32 = domain_queries
+        .iter()
+        .map(|q| q.domain.len() as f32)
+        .sum::<f32>()
         / domain_queries.len() as f32;
     if avg_len > 50.0 {
         score += 0.3;
@@ -223,7 +258,10 @@ fn tunnel_score(queries: &[DnsQuery], domain: &str) -> (f32, Vec<String>) {
     }
 
     // 3. TXT record ratio (tunneling often uses TXT for larger payloads)
-    let txt_count = domain_queries.iter().filter(|q| q.query_type == "TXT").count();
+    let txt_count = domain_queries
+        .iter()
+        .filter(|q| q.query_type == "TXT")
+        .count();
     let txt_ratio = txt_count as f32 / domain_queries.len() as f32;
     if txt_ratio > 0.5 {
         score += 0.2;
@@ -246,16 +284,15 @@ fn fast_flux_score(queries: &[DnsQuery], domain: &str) -> (f32, Vec<String>) {
     let mut score = 0.0_f32;
     let mut indicators = Vec::new();
 
-    let domain_queries: Vec<_> = queries.iter()
-        .filter(|q| q.domain == domain)
-        .collect();
+    let domain_queries: Vec<_> = queries.iter().filter(|q| q.domain == domain).collect();
 
     if domain_queries.is_empty() {
         return (0.0, indicators);
     }
 
     // 1. Unique IP addresses
-    let mut all_ips: Vec<&str> = domain_queries.iter()
+    let mut all_ips: Vec<&str> = domain_queries
+        .iter()
         .flat_map(|q| q.response_ips.iter().map(|s| s.as_str()))
         .collect();
     all_ips.sort();
@@ -270,7 +307,8 @@ fn fast_flux_score(queries: &[DnsQuery], domain: &str) -> (f32, Vec<String>) {
     }
 
     // 2. Low TTL
-    let low_ttl_count = domain_queries.iter()
+    let low_ttl_count = domain_queries
+        .iter()
         .filter(|q| q.ttl.map(|t| t < 300).unwrap_or(false))
         .count();
     let low_ttl_ratio = low_ttl_count as f32 / domain_queries.len().max(1) as f32;
@@ -280,7 +318,8 @@ fn fast_flux_score(queries: &[DnsQuery], domain: &str) -> (f32, Vec<String>) {
     }
 
     // 3. IP diversity per query (single query returning many IPs)
-    let max_ips_per_query = domain_queries.iter()
+    let max_ips_per_query = domain_queries
+        .iter()
         .map(|q| q.response_ips.len())
         .max()
         .unwrap_or(0);
@@ -308,17 +347,24 @@ fn tld_risk(domain: &str) -> f32 {
 /// DNS analysis engine.
 pub struct DnsAnalyzer {
     query_history: Vec<DnsQuery>,
+    #[allow(dead_code)]
     domain_scores: HashMap<String, DnsThreatReport>,
     max_history: usize,
 }
 
 impl Default for DnsAnalyzer {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl DnsAnalyzer {
     pub fn new() -> Self {
-        Self { query_history: Vec::new(), domain_scores: HashMap::new(), max_history: 100_000 }
+        Self {
+            query_history: Vec::new(),
+            domain_scores: HashMap::new(),
+            max_history: 100_000,
+        }
     }
 
     /// Record a DNS query for pattern analysis.
@@ -358,7 +404,17 @@ impl DnsAnalyzer {
             DnsVerdict::Clean
         };
 
-        DnsThreatReport { domain: domain.to_string(), dga_score: dga, tunnel_score: tunnel, fast_flux_score: flux, verdict, indicators, tld_risk: tld, overall_score: overall, doh_bypass_detected: doh_bypass }
+        DnsThreatReport {
+            domain: domain.to_string(),
+            dga_score: dga,
+            tunnel_score: tunnel,
+            fast_flux_score: flux,
+            verdict,
+            indicators,
+            tld_risk: tld,
+            overall_score: overall,
+            doh_bypass_detected: doh_bypass,
+        }
     }
 
     /// Get aggregated threat summary.
@@ -376,14 +432,24 @@ impl DnsAnalyzer {
         for domain in domain_counts.keys() {
             let report = self.analyze_domain(domain);
             if report.verdict != DnsVerdict::Clean {
-                if report.dga_score > 0.5 { dga_count += 1; }
-                if report.tunnel_score > 0.5 { tunnel_count += 1; }
-                if report.fast_flux_score > 0.5 { flux_count += 1; }
+                if report.dga_score > 0.5 {
+                    dga_count += 1;
+                }
+                if report.tunnel_score > 0.5 {
+                    tunnel_count += 1;
+                }
+                if report.fast_flux_score > 0.5 {
+                    flux_count += 1;
+                }
                 suspicious.push(report);
             }
         }
 
-        suspicious.sort_by(|a, b| b.overall_score.partial_cmp(&a.overall_score).unwrap_or(std::cmp::Ordering::Equal));
+        suspicious.sort_by(|a, b| {
+            b.overall_score
+                .partial_cmp(&a.overall_score)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
 
         let mut top_queried: Vec<_> = domain_counts.into_iter().collect();
         top_queried.sort_by(|a, b| b.1.cmp(&a.1));
@@ -487,7 +553,11 @@ mod tests {
     fn legitimate_domain_scores_low() {
         let analyzer = DnsAnalyzer::new();
         let report = analyzer.analyze_domain("google.com");
-        assert!(report.dga_score < 0.3, "google.com dga_score={}", report.dga_score);
+        assert!(
+            report.dga_score < 0.3,
+            "google.com dga_score={}",
+            report.dga_score
+        );
         assert_eq!(report.verdict, DnsVerdict::Clean);
         assert!(!report.doh_bypass_detected);
     }
@@ -497,7 +567,11 @@ mod tests {
         let analyzer = DnsAnalyzer::new();
         let report = analyzer.analyze_domain("xkjhqwzrtplmnbvc.tk");
         assert!(report.dga_score > 0.4, "dga_score={}", report.dga_score);
-        assert!(report.overall_score > 0.3, "overall={}", report.overall_score);
+        assert!(
+            report.overall_score > 0.3,
+            "overall={}",
+            report.overall_score
+        );
     }
 
     #[test]

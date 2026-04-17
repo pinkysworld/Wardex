@@ -5,7 +5,11 @@ import { SkeletonRow, SkeletonCard } from '../components/Skeleton';
 describe('Skeleton', () => {
   it('SkeletonRow renders correct number of cells', () => {
     const { container } = render(
-      <table><tbody><SkeletonRow cols={4} /></tbody></table>
+      <table>
+        <tbody>
+          <SkeletonRow cols={4} />
+        </tbody>
+      </table>,
     );
     const cells = container.querySelectorAll('td');
     expect(cells.length).toBe(4);
@@ -13,7 +17,11 @@ describe('Skeleton', () => {
 
   it('SkeletonRow defaults to 5 columns', () => {
     const { container } = render(
-      <table><tbody><SkeletonRow /></tbody></table>
+      <table>
+        <tbody>
+          <SkeletonRow />
+        </tbody>
+      </table>,
     );
     const cells = container.querySelectorAll('td');
     expect(cells.length).toBe(5);

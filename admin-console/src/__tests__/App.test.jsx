@@ -74,21 +74,26 @@ describe('App', () => {
   });
 
   it('shows auth error on failed connection', async () => {
-    fetchMock.mockImplementation(() => Promise.resolve({
-      ok: false,
-      status: 401,
-      statusText: 'Unauthorized',
-      headers: { get: () => null },
-      json: async () => ({}),
-      text: async () => '{"error":"unauthorized"}',
-    }));
+    fetchMock.mockImplementation(() =>
+      Promise.resolve({
+        ok: false,
+        status: 401,
+        statusText: 'Unauthorized',
+        headers: { get: () => null },
+        json: async () => ({}),
+        text: async () => '{"error":"unauthorized"}',
+      }),
+    );
     await renderApp();
     const input = screen.getAllByPlaceholderText('Paste API token…')[0];
     await userEvent.type(input, 'bad-token');
     await userEvent.click(screen.getByText('Connect'));
-    await waitFor(() => {
-      expect(screen.getByText(/Authentication failed/)).toBeInTheDocument();
-    }, { timeout: 3000 });
+    await waitFor(
+      () => {
+        expect(screen.getByText(/Authentication failed/)).toBeInTheDocument();
+      },
+      { timeout: 3000 },
+    );
   });
 
   it('displays skip-to-content link for accessibility', async () => {

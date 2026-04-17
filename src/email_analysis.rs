@@ -97,37 +97,59 @@ pub struct EmailThreatReport {
 // ── URL Shortener & Suspicious TLD lists ─────────────────────────────────────
 
 const URL_SHORTENERS: &[&str] = &[
-    "bit.ly", "tinyurl.com", "t.co", "goo.gl", "ow.ly", "is.gd",
-    "buff.ly", "adf.ly", "tiny.cc", "rb.gy", "cutt.ly", "shorturl.at",
+    "bit.ly",
+    "tinyurl.com",
+    "t.co",
+    "goo.gl",
+    "ow.ly",
+    "is.gd",
+    "buff.ly",
+    "adf.ly",
+    "tiny.cc",
+    "rb.gy",
+    "cutt.ly",
+    "shorturl.at",
 ];
 
 const SUSPICIOUS_TLDS: &[&str] = &[
-    ".tk", ".top", ".xyz", ".buzz", ".cyou", ".icu", ".gq", ".ml",
-    ".cf", ".ga", ".click", ".link", ".loan", ".racing", ".win",
+    ".tk", ".top", ".xyz", ".buzz", ".cyou", ".icu", ".gq", ".ml", ".cf", ".ga", ".click", ".link",
+    ".loan", ".racing", ".win",
 ];
 
 /// High-risk attachment extensions.
 const DANGEROUS_EXTENSIONS: &[&str] = &[
-    ".exe", ".scr", ".pif", ".bat", ".cmd", ".com", ".vbs", ".vbe",
-    ".js", ".jse", ".wsf", ".wsh", ".ps1", ".msi", ".hta", ".cpl",
-    ".dll", ".lnk", ".inf", ".reg",
+    ".exe", ".scr", ".pif", ".bat", ".cmd", ".com", ".vbs", ".vbe", ".js", ".jse", ".wsf", ".wsh",
+    ".ps1", ".msi", ".hta", ".cpl", ".dll", ".lnk", ".inf", ".reg",
 ];
 
 /// Macro-enabled Office formats.
 const MACRO_FORMATS: &[&str] = &[
-    ".docm", ".xlsm", ".pptm", ".dotm", ".xltm", ".ppam", ".sldm",
-    ".xlam",
+    ".docm", ".xlsm", ".pptm", ".dotm", ".xltm", ".ppam", ".sldm", ".xlam",
 ];
 
 /// Urgency keywords in subject lines.
 const URGENCY_KEYWORDS: &[(&str, f32)] = &[
-    ("urgent", 0.3), ("immediately", 0.3), ("action required", 0.3),
-    ("verify your", 0.4), ("confirm your", 0.3), ("suspended", 0.4),
-    ("locked", 0.3), ("invoice", 0.2), ("payment", 0.2),
-    ("password", 0.3), ("expire", 0.3), ("security alert", 0.3),
-    ("unusual activity", 0.3), ("unauthorized", 0.3), ("click here", 0.2),
-    ("act now", 0.3), ("limited time", 0.2), ("prize", 0.3),
-    ("winner", 0.3), ("congratulations", 0.3), ("inheritance", 0.4),
+    ("urgent", 0.3),
+    ("immediately", 0.3),
+    ("action required", 0.3),
+    ("verify your", 0.4),
+    ("confirm your", 0.3),
+    ("suspended", 0.4),
+    ("locked", 0.3),
+    ("invoice", 0.2),
+    ("payment", 0.2),
+    ("password", 0.3),
+    ("expire", 0.3),
+    ("security alert", 0.3),
+    ("unusual activity", 0.3),
+    ("unauthorized", 0.3),
+    ("click here", 0.2),
+    ("act now", 0.3),
+    ("limited time", 0.2),
+    ("prize", 0.3),
+    ("winner", 0.3),
+    ("congratulations", 0.3),
+    ("inheritance", 0.4),
 ];
 
 // ── Email Analyzer ───────────────────────────────────────────────────────────
@@ -160,15 +182,20 @@ impl EmailAnalyzer {
         let attachment_findings = Self::analyze_attachments(&input.attachments, &mut indicators);
 
         // 5. Urgency scoring
-        let urgency_score = Self::urgency_score(input.subject.as_deref().unwrap_or(""), &mut indicators);
+        let urgency_score =
+            Self::urgency_score(input.subject.as_deref().unwrap_or(""), &mut indicators);
 
         // 6. Received chain analysis
         Self::check_received_chain(&input.received_chain, &mut indicators);
 
         // Composite phishing score
         let phishing_score = Self::compute_phishing_score(
-            &auth_results, sender_mismatch, &url_findings,
-            &attachment_findings, urgency_score, sender_domain_score,
+            &auth_results,
+            sender_mismatch,
+            &url_findings,
+            &attachment_findings,
+            urgency_score,
+            sender_domain_score,
         );
 
         EmailThreatReport {
@@ -184,48 +211,96 @@ impl EmailAnalyzer {
     }
 
     fn check_auth(input: &EmailInput, indicators: &mut Vec<String>) -> AuthResults {
-        let auth_str = input.authentication_results.as_deref().unwrap_or("").to_lowercase();
+        let auth_str = input
+            .authentication_results
+            .as_deref()
+            .unwrap_or("")
+            .to_lowercase();
 
-        let spf = if auth_str.contains("spf=pass") { AuthStatus::Pass }
-            else if auth_str.contains("spf=fail") { AuthStatus::Fail }
-            else if auth_str.contains("spf=softfail") { AuthStatus::SoftFail }
-            else if auth_str.contains("spf=none") { AuthStatus::None }
-            else { AuthStatus::Unknown };
+        let spf = if auth_str.contains("spf=pass") {
+            AuthStatus::Pass
+        } else if auth_str.contains("spf=fail") {
+            AuthStatus::Fail
+        } else if auth_str.contains("spf=softfail") {
+            AuthStatus::SoftFail
+        } else if auth_str.contains("spf=none") {
+            AuthStatus::None
+        } else {
+            AuthStatus::Unknown
+        };
 
-        let dkim = if auth_str.contains("dkim=pass") { AuthStatus::Pass }
-            else if auth_str.contains("dkim=fail") { AuthStatus::Fail }
-            else { AuthStatus::Unknown };
+        let dkim = if auth_str.contains("dkim=pass") {
+            AuthStatus::Pass
+        } else if auth_str.contains("dkim=fail") {
+            AuthStatus::Fail
+        } else {
+            AuthStatus::Unknown
+        };
 
-        let dmarc = if auth_str.contains("dmarc=pass") { AuthStatus::Pass }
-            else if auth_str.contains("dmarc=fail") { AuthStatus::Fail }
-            else { AuthStatus::Unknown };
+        let dmarc = if auth_str.contains("dmarc=pass") {
+            AuthStatus::Pass
+        } else if auth_str.contains("dmarc=fail") {
+            AuthStatus::Fail
+        } else {
+            AuthStatus::Unknown
+        };
 
         let mut auth_score: f32 = 0.0;
-        if spf == AuthStatus::Fail { auth_score += 0.3; indicators.push("SPF fail".into()); }
-        if spf == AuthStatus::SoftFail { auth_score += 0.15; indicators.push("SPF softfail".into()); }
-        if spf == AuthStatus::None { auth_score += 0.1; indicators.push("no SPF record".into()); }
-        if dkim == AuthStatus::Fail { auth_score += 0.3; indicators.push("DKIM fail".into()); }
-        if dmarc == AuthStatus::Fail { auth_score += 0.3; indicators.push("DMARC fail".into()); }
+        if spf == AuthStatus::Fail {
+            auth_score += 0.3;
+            indicators.push("SPF fail".into());
+        }
+        if spf == AuthStatus::SoftFail {
+            auth_score += 0.15;
+            indicators.push("SPF softfail".into());
+        }
+        if spf == AuthStatus::None {
+            auth_score += 0.1;
+            indicators.push("no SPF record".into());
+        }
+        if dkim == AuthStatus::Fail {
+            auth_score += 0.3;
+            indicators.push("DKIM fail".into());
+        }
+        if dmarc == AuthStatus::Fail {
+            auth_score += 0.3;
+            indicators.push("DMARC fail".into());
+        }
 
-        AuthResults { spf, dkim, dmarc, auth_score: auth_score.min(1.0) }
+        AuthResults {
+            spf,
+            dkim,
+            dmarc,
+            auth_score: auth_score.min(1.0),
+        }
     }
 
     fn check_sender_mismatch(input: &EmailInput, indicators: &mut Vec<String>) -> bool {
         let from_domain = extract_domain(&input.from);
 
-        let reply_mismatch = input.reply_to.as_ref()
+        let reply_mismatch = input
+            .reply_to
+            .as_ref()
             .map(|r| extract_domain(r) != from_domain)
             .unwrap_or(false);
 
-        let return_mismatch = input.return_path.as_ref()
+        let return_mismatch = input
+            .return_path
+            .as_ref()
             .map(|r| extract_domain(r) != from_domain)
             .unwrap_or(false);
 
         if reply_mismatch {
-            indicators.push(format!("Reply-To domain differs from From ({})", input.reply_to.as_deref().unwrap_or("?")));
+            indicators.push(format!(
+                "Reply-To domain differs from From ({})",
+                input.reply_to.as_deref().unwrap_or("?")
+            ));
         }
         if return_mismatch {
-            indicators.push(format!("Return-Path domain differs from From ({})", input.return_path.as_deref().unwrap_or("?")));
+            indicators.push(format!(
+                "Return-Path domain differs from From ({})",
+                input.return_path.as_deref().unwrap_or("?")
+            ));
         }
 
         reply_mismatch || return_mismatch
@@ -239,7 +314,10 @@ impl EmailAnalyzer {
         for domain in [
             Some(from_domain.clone()),
             input.reply_to.as_ref().map(|value| extract_domain(value)),
-            input.return_path.as_ref().map(|value| extract_domain(value)),
+            input
+                .return_path
+                .as_ref()
+                .map(|value| extract_domain(value)),
         ]
         .into_iter()
         .flatten()
@@ -258,18 +336,27 @@ impl EmailAnalyzer {
             }
             if has_homoglyphs(&domain) {
                 score += 0.35;
-                indicators.push(format!("sender domain contains possible homoglyphs: {domain}"));
+                indicators.push(format!(
+                    "sender domain contains possible homoglyphs: {domain}"
+                ));
             }
-            if domain.chars().all(|c| c.is_ascii_digit() || c == '.') && domain.split('.').count() == 4 {
+            if domain.chars().all(|c| c.is_ascii_digit() || c == '.')
+                && domain.split('.').count() == 4
+            {
                 score += 0.25;
                 indicators.push(format!("sender domain is an IP literal: {domain}"));
             }
         }
 
         if let Some(message_id_domain) = input.message_id.as_deref().map(extract_domain) {
-            if !from_domain.is_empty() && !message_id_domain.is_empty() && message_id_domain != from_domain {
+            if !from_domain.is_empty()
+                && !message_id_domain.is_empty()
+                && message_id_domain != from_domain
+            {
                 score += 0.15;
-                indicators.push(format!("Message-ID domain differs from From ({message_id_domain})"));
+                indicators.push(format!(
+                    "Message-ID domain differs from From ({message_id_domain})"
+                ));
             }
         }
 
@@ -290,7 +377,10 @@ impl EmailAnalyzer {
             }
 
             // Check suspicious TLDs
-            if SUSPICIOUS_TLDS.iter().any(|t| url.ends_with(t) || url.contains(&format!("{t}/"))) {
+            if SUSPICIOUS_TLDS
+                .iter()
+                .any(|t| url.ends_with(t) || url.contains(&format!("{t}/")))
+            {
                 risk += 0.3;
                 url_indicators.push("suspicious TLD".into());
             }
@@ -309,14 +399,21 @@ impl EmailAnalyzer {
 
             if risk > 0.0 {
                 indicators.extend(url_indicators.iter().cloned());
-                findings.push(UrlFinding { url, risk_score: risk.min(1.0), indicators: url_indicators });
+                findings.push(UrlFinding {
+                    url,
+                    risk_score: risk.min(1.0),
+                    indicators: url_indicators,
+                });
             }
         }
 
         findings
     }
 
-    fn analyze_attachments(attachments: &[AttachmentInfo], indicators: &mut Vec<String>) -> Vec<AttachmentFinding> {
+    fn analyze_attachments(
+        attachments: &[AttachmentInfo],
+        indicators: &mut Vec<String>,
+    ) -> Vec<AttachmentFinding> {
         let mut findings = Vec::new();
 
         for att in attachments {
@@ -331,7 +428,8 @@ impl EmailAnalyzer {
                     let last_ext = &lower[last_dot_pos..];
                     if DANGEROUS_EXTENSIONS.contains(&last_ext) {
                         risk += 0.8;
-                        att_indicators.push("double extension with dangerous final extension".into());
+                        att_indicators
+                            .push("double extension with dangerous final extension".into());
                     }
                 }
             }
@@ -339,7 +437,10 @@ impl EmailAnalyzer {
             // Dangerous extension
             if DANGEROUS_EXTENSIONS.iter().any(|e| lower.ends_with(e)) {
                 risk += 0.6;
-                att_indicators.push(format!("dangerous extension: {}", lower.rsplit('.').next().unwrap_or("")));
+                att_indicators.push(format!(
+                    "dangerous extension: {}",
+                    lower.rsplit('.').next().unwrap_or("")
+                ));
             }
 
             // Macro-enabled Office
@@ -349,7 +450,11 @@ impl EmailAnalyzer {
             }
 
             // Archive that might contain executables
-            if lower.ends_with(".zip") || lower.ends_with(".rar") || lower.ends_with(".7z") || lower.ends_with(".iso") {
+            if lower.ends_with(".zip")
+                || lower.ends_with(".rar")
+                || lower.ends_with(".7z")
+                || lower.ends_with(".iso")
+            {
                 risk += 0.2;
                 att_indicators.push("archive attachment (may contain executables)".into());
             }
@@ -381,7 +486,12 @@ impl EmailAnalyzer {
         }
 
         // ALL CAPS subject
-        if subject.len() > 10 && subject.chars().filter(|c| c.is_alphabetic()).all(|c| c.is_uppercase()) {
+        if subject.len() > 10
+            && subject
+                .chars()
+                .filter(|c| c.is_alphabetic())
+                .all(|c| c.is_uppercase())
+        {
             score += 0.2;
             indicators.push("ALL CAPS subject".into());
         }
@@ -399,7 +509,10 @@ impl EmailAnalyzer {
     fn check_received_chain(chain: &[String], indicators: &mut Vec<String>) {
         // Too many hops may indicate relaying through open relays
         if chain.len() > 8 {
-            indicators.push(format!("{} hops in Received chain (possible relay abuse)", chain.len()));
+            indicators.push(format!(
+                "{} hops in Received chain (possible relay abuse)",
+                chain.len()
+            ));
         }
     }
 
@@ -415,17 +528,31 @@ impl EmailAnalyzer {
         let mismatch_component = if sender_mismatch { 0.14 } else { 0.0 };
         let sender_component = sender_domain_score * 0.2;
         let url_component = urls.iter().map(|u| u.risk_score).sum::<f32>().min(1.0) * 0.2;
-        let attachment_component = attachments.iter().map(|a| a.risk_score).sum::<f32>().min(1.0) * 0.18;
+        let attachment_component = attachments
+            .iter()
+            .map(|a| a.risk_score)
+            .sum::<f32>()
+            .min(1.0)
+            * 0.18;
         let urgency_component = urgency * 0.12;
 
-        (auth_component + mismatch_component + sender_component + url_component + attachment_component + urgency_component).min(1.0)
+        (auth_component
+            + mismatch_component
+            + sender_component
+            + url_component
+            + attachment_component
+            + urgency_component)
+            .min(1.0)
     }
 }
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
 fn extract_domain(email_or_addr: &str) -> String {
-    let s = email_or_addr.trim().trim_start_matches('<').trim_end_matches('>');
+    let s = email_or_addr
+        .trim()
+        .trim_start_matches('<')
+        .trim_end_matches('>');
     s.rsplit('@').next().unwrap_or(s).to_lowercase()
 }
 
@@ -442,7 +569,13 @@ fn extract_urls(text: &str) -> Vec<String> {
 
 fn has_homoglyphs(url: &str) -> bool {
     // Check for Cyrillic/Greek lookalikes in domain portion
-    let domain_part = url.split("://").nth(1).unwrap_or(url).split('/').next().unwrap_or("");
+    let domain_part = url
+        .split("://")
+        .nth(1)
+        .unwrap_or(url)
+        .split('/')
+        .next()
+        .unwrap_or("");
     domain_part.chars().any(|c| {
         matches!(c,
             '\u{0430}'..='\u{044F}' | // Cyrillic lowercase
@@ -453,10 +586,15 @@ fn has_homoglyphs(url: &str) -> bool {
 }
 
 fn url_host_is_ip(url: &str) -> bool {
-    let host = url.split("://").nth(1).unwrap_or("").split('/').next().unwrap_or("");
+    let host = url
+        .split("://")
+        .nth(1)
+        .unwrap_or("")
+        .split('/')
+        .next()
+        .unwrap_or("");
     let host = host.split(':').next().unwrap_or(host); // strip port
-    host.chars().all(|c| c.is_ascii_digit() || c == '.')
-        && host.split('.').count() == 4
+    host.chars().all(|c| c.is_ascii_digit() || c == '.') && host.split('.').count() == 4
 }
 
 #[cfg(test)]
@@ -500,7 +638,9 @@ mod tests {
         let mut input = make_input("sender@test.com", "Invoice", "spf=pass");
         input.attachments.push(AttachmentInfo {
             filename: "invoice.pdf.exe".into(),
-            content_type: None, sha256: None, size_bytes: None,
+            content_type: None,
+            sha256: None,
+            size_bytes: None,
         });
         let report = EmailAnalyzer::analyze(&input);
         assert!(!report.attachment_findings.is_empty());
@@ -509,16 +649,28 @@ mod tests {
 
     #[test]
     fn urgency_keywords_scored() {
-        let input = make_input("bank@phishing.com", "URGENT: Verify your account immediately!", "spf=fail");
+        let input = make_input(
+            "bank@phishing.com",
+            "URGENT: Verify your account immediately!",
+            "spf=fail",
+        );
         let report = EmailAnalyzer::analyze(&input);
         assert!(report.urgency_score > 0.3);
     }
 
     #[test]
     fn legitimate_email_low_score() {
-        let input = make_input("colleague@company.com", "Meeting notes", "spf=pass; dkim=pass; dmarc=pass");
+        let input = make_input(
+            "colleague@company.com",
+            "Meeting notes",
+            "spf=pass; dkim=pass; dmarc=pass",
+        );
         let report = EmailAnalyzer::analyze(&input);
-        assert!(report.phishing_score < 0.1, "score={}", report.phishing_score);
+        assert!(
+            report.phishing_score < 0.1,
+            "score={}",
+            report.phishing_score
+        );
     }
 
     #[test]
@@ -551,17 +703,39 @@ mod tests {
 
     #[test]
     fn suspicious_sender_domain_is_scored() {
-        let input = make_input("security@micr0soft-support.top", "Security alert", "spf=pass");
+        let input = make_input(
+            "security@micr0soft-support.top",
+            "Security alert",
+            "spf=pass",
+        );
         let report = EmailAnalyzer::analyze(&input);
-        assert!(report.phishing_score > 0.1, "score={}", report.phishing_score);
-        assert!(report.indicators.iter().any(|indicator| indicator.contains("suspicious TLD")));
+        assert!(
+            report.phishing_score > 0.1,
+            "score={}",
+            report.phishing_score
+        );
+        assert!(
+            report
+                .indicators
+                .iter()
+                .any(|indicator| indicator.contains("suspicious TLD"))
+        );
     }
 
     #[test]
     fn message_id_domain_mismatch_is_flagged() {
-        let mut input = make_input("alerts@company.com", "Quarterly report", "spf=pass; dkim=pass");
+        let mut input = make_input(
+            "alerts@company.com",
+            "Quarterly report",
+            "spf=pass; dkim=pass",
+        );
         input.message_id = Some("<12345@mailer.evil.example>".into());
         let report = EmailAnalyzer::analyze(&input);
-        assert!(report.indicators.iter().any(|indicator| indicator.contains("Message-ID domain differs")));
+        assert!(
+            report
+                .indicators
+                .iter()
+                .any(|indicator| indicator.contains("Message-ID domain differs"))
+        );
     }
 }

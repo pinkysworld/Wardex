@@ -241,7 +241,10 @@ impl SearchIndex {
 #[derive(Debug, Clone)]
 pub enum HuntPredicate {
     /// field:value (wildcard * supported)
-    FieldMatch { field: String, pattern: String },
+    FieldMatch {
+        field: String,
+        pattern: String,
+    },
     /// Full-text search
     FreeText(String),
     And(Box<HuntPredicate>, Box<HuntPredicate>),
@@ -316,10 +319,7 @@ fn tokenize_hunt(input: &str) -> Result<Vec<HuntToken>, String> {
                 _ => {
                     if let Some((field, value)) = word.split_once(':') {
                         let value = value.trim_matches('"').trim_matches('\'');
-                        tokens.push(HuntToken::FieldValue(
-                            field.to_string(),
-                            value.to_string(),
-                        ));
+                        tokens.push(HuntToken::FieldValue(field.to_string(), value.to_string()));
                     } else {
                         tokens.push(HuntToken::Word(word));
                     }
@@ -342,7 +342,16 @@ fn parse_or<'a>(tokens: &'a [HuntToken]) -> Result<(HuntPredicate, &'a [HuntToke
 
 fn parse_and<'a>(tokens: &'a [HuntToken]) -> Result<(HuntPredicate, &'a [HuntToken]), String> {
     let (mut left, mut rest) = parse_unary(tokens)?;
-    while !rest.is_empty() && (rest[0] == HuntToken::And || matches!(rest[0], HuntToken::Word(_) | HuntToken::FieldValue(_, _) | HuntToken::Not | HuntToken::LParen)) {
+    while !rest.is_empty()
+        && (rest[0] == HuntToken::And
+            || matches!(
+                rest[0],
+                HuntToken::Word(_)
+                    | HuntToken::FieldValue(_, _)
+                    | HuntToken::Not
+                    | HuntToken::LParen
+            ))
+    {
         if rest[0] == HuntToken::And {
             let (right, r) = parse_unary(&rest[1..])?;
             left = HuntPredicate::And(Box::new(left), Box::new(right));
@@ -380,15 +389,14 @@ fn parse_primary<'a>(tokens: &'a [HuntToken]) -> Result<(HuntPredicate, &'a [Hun
             }
             Ok((inner, &rest[1..]))
         }
-        HuntToken::FieldValue(field, value) => {
-            Ok((HuntPredicate::FieldMatch {
+        HuntToken::FieldValue(field, value) => Ok((
+            HuntPredicate::FieldMatch {
                 field: field.clone(),
                 pattern: value.clone(),
-            }, &tokens[1..]))
-        }
-        HuntToken::Word(w) => {
-            Ok((HuntPredicate::FreeText(w.clone()), &tokens[1..]))
-        }
+            },
+            &tokens[1..],
+        )),
+        HuntToken::Word(w) => Ok((HuntPredicate::FreeText(w.clone()), &tokens[1..])),
         other => Err(format!("unexpected token: {:?}", other)),
     }
 }
@@ -479,9 +487,15 @@ pub struct EventStoreConfig {
     pub compress_old_segments: bool,
 }
 
-fn default_retention_days() -> u32 { 90 }
-fn default_commit_interval() -> u64 { 30 }
-fn default_memory_budget() -> usize { 64 }
+fn default_retention_days() -> u32 {
+    90
+}
+fn default_commit_interval() -> u64 {
+    30
+}
+fn default_memory_budget() -> usize {
+    64
+}
 
 impl Default for EventStoreConfig {
     fn default() -> Self {
@@ -643,7 +657,9 @@ fn parse_hunt_pipe(input: &str) -> Result<(String, Option<HuntAggregation>), Str
         let agg = match tokens.first().map(String::as_str) {
             Some("count") => {
                 if tokens.len() >= 3 && tokens[1] == "by" {
-                    Some(HuntAggregation::Count { group_by: Some(tokens[2].clone()) })
+                    Some(HuntAggregation::Count {
+                        group_by: Some(tokens[2].clone()),
+                    })
                 } else if tokens.len() == 1 {
                     Some(HuntAggregation::Count { group_by: None })
                 } else {
@@ -651,7 +667,9 @@ fn parse_hunt_pipe(input: &str) -> Result<(String, Option<HuntAggregation>), Str
                 }
             }
             Some("count_distinct") => match tokens.get(1) {
-                Some(field) => Some(HuntAggregation::CountDistinct { field: field.clone() }),
+                Some(field) => Some(HuntAggregation::CountDistinct {
+                    field: field.clone(),
+                }),
                 None => return Err("count_distinct requires a field".into()),
             },
             Some("top") => {
@@ -659,21 +677,30 @@ fn parse_hunt_pipe(input: &str) -> Result<(String, Option<HuntAggregation>), Str
                     let n = tokens[1]
                         .parse::<usize>()
                         .map_err(|_| "top requires a numeric limit".to_string())?;
-                    Some(HuntAggregation::Top { n, field: tokens[2].clone() })
+                    Some(HuntAggregation::Top {
+                        n,
+                        field: tokens[2].clone(),
+                    })
                 } else {
                     return Err("top requires `top <n> <field>`".into());
                 }
             }
             Some("min") => match tokens.get(1) {
-                Some(field) => Some(HuntAggregation::Min { field: field.clone() }),
+                Some(field) => Some(HuntAggregation::Min {
+                    field: field.clone(),
+                }),
                 None => return Err("min requires a field".into()),
             },
             Some("max") => match tokens.get(1) {
-                Some(field) => Some(HuntAggregation::Max { field: field.clone() }),
+                Some(field) => Some(HuntAggregation::Max {
+                    field: field.clone(),
+                }),
                 None => return Err("max requires a field".into()),
             },
             Some("values") => match tokens.get(1) {
-                Some(field) => Some(HuntAggregation::Values { field: field.clone() }),
+                Some(field) => Some(HuntAggregation::Values {
+                    field: field.clone(),
+                }),
                 None => return Err("values requires a field".into()),
             },
             Some(_) => return Err(format!("unsupported aggregation: {agg_part}")),
@@ -700,12 +727,13 @@ impl SearchIndex {
 
         let docs = self.documents.lock().unwrap_or_else(|e| e.into_inner());
 
-        let matching: Vec<&SearchDocument> = docs.iter().filter(|doc| {
-            match &predicate {
+        let matching: Vec<&SearchDocument> = docs
+            .iter()
+            .filter(|doc| match &predicate {
                 Some(pred) => evaluate_predicate(pred, doc),
                 None => true,
-            }
-        }).collect();
+            })
+            .collect();
 
         let total_matching = matching.len() as u64;
 
@@ -715,22 +743,31 @@ impl SearchIndex {
         };
 
         let (buckets, scalar) = match &agg {
-            HuntAggregation::Count { group_by: None } => {
-                (vec![], Some(total_matching.to_string()))
-            }
-            HuntAggregation::Count { group_by: Some(field) } => {
+            HuntAggregation::Count { group_by: None } => (vec![], Some(total_matching.to_string())),
+            HuntAggregation::Count {
+                group_by: Some(field),
+            } => {
                 let mut groups: HashMap<String, u64> = HashMap::new();
                 for doc in &matching {
                     let key = field_value(doc, field);
-                    *groups.entry(if key.is_empty() { "(empty)".into() } else { key }).or_insert(0) += 1;
+                    *groups
+                        .entry(if key.is_empty() {
+                            "(empty)".into()
+                        } else {
+                            key
+                        })
+                        .or_insert(0) += 1;
                 }
-                let mut buckets: Vec<HuntAggBucket> = groups.into_iter()
-                    .map(|(key, count)| HuntAggBucket { key, count }).collect();
+                let mut buckets: Vec<HuntAggBucket> = groups
+                    .into_iter()
+                    .map(|(key, count)| HuntAggBucket { key, count })
+                    .collect();
                 buckets.sort_by(|a, b| b.count.cmp(&a.count));
                 (buckets, None)
             }
             HuntAggregation::CountDistinct { field } => {
-                let unique: std::collections::HashSet<String> = matching.iter()
+                let unique: std::collections::HashSet<String> = matching
+                    .iter()
                     .map(|d| field_value(d, field))
                     .filter(|v| !v.is_empty())
                     .collect();
@@ -744,27 +781,40 @@ impl SearchIndex {
                         *groups.entry(key).or_insert(0) += 1;
                     }
                 }
-                let mut buckets: Vec<HuntAggBucket> = groups.into_iter()
-                    .map(|(key, count)| HuntAggBucket { key, count }).collect();
+                let mut buckets: Vec<HuntAggBucket> = groups
+                    .into_iter()
+                    .map(|(key, count)| HuntAggBucket { key, count })
+                    .collect();
                 buckets.sort_by(|a, b| b.count.cmp(&a.count));
                 buckets.truncate(*n);
                 (buckets, None)
             }
             HuntAggregation::Min { field } => {
-                let val = matching.iter().map(|d| field_value(d, field)).filter(|v| !v.is_empty()).min();
+                let val = matching
+                    .iter()
+                    .map(|d| field_value(d, field))
+                    .filter(|v| !v.is_empty())
+                    .min();
                 (vec![], val)
             }
             HuntAggregation::Max { field } => {
-                let val = matching.iter().map(|d| field_value(d, field)).filter(|v| !v.is_empty()).max();
+                let val = matching
+                    .iter()
+                    .map(|d| field_value(d, field))
+                    .filter(|v| !v.is_empty())
+                    .max();
                 (vec![], val)
             }
             HuntAggregation::Values { field } => {
-                let unique: std::collections::HashSet<String> = matching.iter()
+                let unique: std::collections::HashSet<String> = matching
+                    .iter()
                     .map(|d| field_value(d, field))
                     .filter(|v| !v.is_empty())
                     .collect();
-                let buckets: Vec<HuntAggBucket> = unique.into_iter()
-                    .map(|key| HuntAggBucket { key, count: 1 }).collect();
+                let buckets: Vec<HuntAggBucket> = unique
+                    .into_iter()
+                    .map(|key| HuntAggBucket { key, count: 1 })
+                    .collect();
                 (buckets, None)
             }
         };
@@ -1003,7 +1053,9 @@ mod tests {
     #[test]
     fn test_hunt_aggregate_count_distinct() {
         let idx = make_index();
-        let r = idx.hunt_aggregate("* | count_distinct process_name").unwrap();
+        let r = idx
+            .hunt_aggregate("* | count_distinct process_name")
+            .unwrap();
         assert_eq!(r.scalar.as_deref(), Some("2"));
     }
 
@@ -1017,7 +1069,9 @@ mod tests {
     #[test]
     fn test_hunt_pipe_with_filter() {
         let idx = make_index();
-        let r = idx.hunt_aggregate("process:mimikatz | count by src_ip").unwrap();
+        let r = idx
+            .hunt_aggregate("process:mimikatz | count by src_ip")
+            .unwrap();
         assert_eq!(r.total_matching, 1);
         assert_eq!(r.buckets.len(), 1);
     }

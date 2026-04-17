@@ -33,36 +33,68 @@ pub struct ProcessRiskSummary {
 
 /// Living-Off-the-Land binaries with base risk score.
 const LOLBINS: &[(&str, f32)] = &[
-    ("powershell.exe", 0.4), ("powershell", 0.4),
-    ("pwsh.exe", 0.4), ("pwsh", 0.4),
-    ("cmd.exe", 0.3), ("cmd", 0.3),
-    ("wscript.exe", 0.5), ("wscript", 0.5),
-    ("cscript.exe", 0.5), ("cscript", 0.5),
-    ("mshta.exe", 0.6), ("mshta", 0.6),
-    ("rundll32.exe", 0.5), ("rundll32", 0.5),
-    ("regsvr32.exe", 0.5), ("regsvr32", 0.5),
-    ("certutil.exe", 0.5), ("certutil", 0.5),
-    ("bitsadmin.exe", 0.4), ("bitsadmin", 0.4),
-    ("msiexec.exe", 0.3), ("msiexec", 0.3),
-    ("installutil.exe", 0.5), ("installutil", 0.5),
-    ("regasm.exe", 0.5), ("regasm", 0.5),
-    ("regsvcs.exe", 0.5), ("regsvcs", 0.5),
-    ("msbuild.exe", 0.5), ("msbuild", 0.5),
-    ("cmstp.exe", 0.6), ("cmstp", 0.6),
-    ("wmic.exe", 0.4), ("wmic", 0.4),
-    ("forfiles.exe", 0.3), ("forfiles", 0.3),
-    ("pcalua.exe", 0.4), ("pcalua", 0.4),
-    ("explorer.exe", 0.1), ("explorer", 0.1),
-    ("schtasks.exe", 0.4), ("schtasks", 0.4),
-    ("at.exe", 0.4), ("sc.exe", 0.3),
-    ("net.exe", 0.2), ("net", 0.2),
-    ("netsh.exe", 0.3), ("netsh", 0.3),
-    ("python.exe", 0.2), ("python", 0.2), ("python3", 0.2),
-    ("perl.exe", 0.3), ("perl", 0.3),
-    ("bash", 0.2), ("sh", 0.2), ("zsh", 0.2),
-    ("curl", 0.2), ("wget", 0.2),
-    ("nslookup.exe", 0.2), ("nslookup", 0.2),
-    ("whoami.exe", 0.2), ("whoami", 0.2),
+    ("powershell.exe", 0.4),
+    ("powershell", 0.4),
+    ("pwsh.exe", 0.4),
+    ("pwsh", 0.4),
+    ("cmd.exe", 0.3),
+    ("cmd", 0.3),
+    ("wscript.exe", 0.5),
+    ("wscript", 0.5),
+    ("cscript.exe", 0.5),
+    ("cscript", 0.5),
+    ("mshta.exe", 0.6),
+    ("mshta", 0.6),
+    ("rundll32.exe", 0.5),
+    ("rundll32", 0.5),
+    ("regsvr32.exe", 0.5),
+    ("regsvr32", 0.5),
+    ("certutil.exe", 0.5),
+    ("certutil", 0.5),
+    ("bitsadmin.exe", 0.4),
+    ("bitsadmin", 0.4),
+    ("msiexec.exe", 0.3),
+    ("msiexec", 0.3),
+    ("installutil.exe", 0.5),
+    ("installutil", 0.5),
+    ("regasm.exe", 0.5),
+    ("regasm", 0.5),
+    ("regsvcs.exe", 0.5),
+    ("regsvcs", 0.5),
+    ("msbuild.exe", 0.5),
+    ("msbuild", 0.5),
+    ("cmstp.exe", 0.6),
+    ("cmstp", 0.6),
+    ("wmic.exe", 0.4),
+    ("wmic", 0.4),
+    ("forfiles.exe", 0.3),
+    ("forfiles", 0.3),
+    ("pcalua.exe", 0.4),
+    ("pcalua", 0.4),
+    ("explorer.exe", 0.1),
+    ("explorer", 0.1),
+    ("schtasks.exe", 0.4),
+    ("schtasks", 0.4),
+    ("at.exe", 0.4),
+    ("sc.exe", 0.3),
+    ("net.exe", 0.2),
+    ("net", 0.2),
+    ("netsh.exe", 0.3),
+    ("netsh", 0.3),
+    ("python.exe", 0.2),
+    ("python", 0.2),
+    ("python3", 0.2),
+    ("perl.exe", 0.3),
+    ("perl", 0.3),
+    ("bash", 0.2),
+    ("sh", 0.2),
+    ("zsh", 0.2),
+    ("curl", 0.2),
+    ("wget", 0.2),
+    ("nslookup.exe", 0.2),
+    ("nslookup", 0.2),
+    ("whoami.exe", 0.2),
+    ("whoami", 0.2),
 ];
 
 // ── Suspicious Lineage Rules ─────────────────────────────────────────────────
@@ -70,28 +102,45 @@ const LOLBINS: &[(&str, f32)] = &[
 /// Known suspicious parent-child patterns.
 const SUSPICIOUS_LINEAGE: &[(&[&str], &str, f32)] = &[
     // (parent patterns, child pattern, risk score)
-    (&["winword", "excel", "powerpnt", "outlook", "msaccess"],
-        "cmd", 0.8),
-    (&["winword", "excel", "powerpnt", "outlook", "msaccess"],
-        "powershell", 0.9),
-    (&["winword", "excel", "powerpnt", "outlook", "msaccess"],
-        "wscript", 0.9),
-    (&["winword", "excel", "powerpnt", "outlook", "msaccess"],
-        "mshta", 0.9),
-    (&["services"],
-        "cmd", 0.6),
-    (&["iexplore", "chrome", "firefox", "msedge", "safari"],
-        "cmd", 0.7),
-    (&["iexplore", "chrome", "firefox", "msedge", "safari"],
-        "powershell", 0.8),
-    (&["iexplore", "chrome", "firefox", "msedge", "safari"],
-        "bash", 0.7),
-    (&["svchost"],
-        "wscript", 0.7),
-    (&["wmiprvse"],
-        "powershell", 0.6),
-    (&["wmiprvse"],
-        "cmd", 0.6),
+    (
+        &["winword", "excel", "powerpnt", "outlook", "msaccess"],
+        "cmd",
+        0.8,
+    ),
+    (
+        &["winword", "excel", "powerpnt", "outlook", "msaccess"],
+        "powershell",
+        0.9,
+    ),
+    (
+        &["winword", "excel", "powerpnt", "outlook", "msaccess"],
+        "wscript",
+        0.9,
+    ),
+    (
+        &["winword", "excel", "powerpnt", "outlook", "msaccess"],
+        "mshta",
+        0.9,
+    ),
+    (&["services"], "cmd", 0.6),
+    (
+        &["iexplore", "chrome", "firefox", "msedge", "safari"],
+        "cmd",
+        0.7,
+    ),
+    (
+        &["iexplore", "chrome", "firefox", "msedge", "safari"],
+        "powershell",
+        0.8,
+    ),
+    (
+        &["iexplore", "chrome", "firefox", "msedge", "safari"],
+        "bash",
+        0.7,
+    ),
+    (&["svchost"], "wscript", 0.7),
+    (&["wmiprvse"], "powershell", 0.6),
+    (&["wmiprvse"], "cmd", 0.6),
 ];
 
 // ── Process Scorer ───────────────────────────────────────────────────────────
@@ -124,7 +173,10 @@ impl ProcessScorer {
             }
 
             // svchost.exe without services.exe parent (injection indicator)
-            if child.contains("svchost") && !parent.contains("services") && !parent.contains("wininit") {
+            if child.contains("svchost")
+                && !parent.contains("services")
+                && !parent.contains("wininit")
+            {
                 score += 0.5;
                 reasons.push(format!("svchost.exe with unexpected parent: {}", chain[1]));
             }
@@ -140,7 +192,8 @@ impl ProcessScorer {
         let lower = cmdline.to_lowercase();
 
         // Encoded PowerShell
-        if lower.contains("-enc ") || lower.contains("-encodedcommand")
+        if lower.contains("-enc ")
+            || lower.contains("-encodedcommand")
             || lower.contains("-e ") && lower.contains("powershell")
         {
             score += 0.6;
@@ -154,9 +207,12 @@ impl ProcessScorer {
         }
 
         // Download cradles
-        if (lower.contains("invoke-webrequest") || lower.contains("iwr ")
-            || lower.contains("wget ") || lower.contains("curl ")
-            || lower.contains("downloadstring") || lower.contains("downloadfile")
+        if (lower.contains("invoke-webrequest")
+            || lower.contains("iwr ")
+            || lower.contains("wget ")
+            || lower.contains("curl ")
+            || lower.contains("downloadstring")
+            || lower.contains("downloadfile")
             || lower.contains("net.webclient"))
             && (lower.contains("http://") || lower.contains("https://"))
         {
@@ -165,7 +221,8 @@ impl ProcessScorer {
         }
 
         // Registry modification
-        if lower.contains("reg add") || lower.contains("set-itemproperty")
+        if lower.contains("reg add")
+            || lower.contains("set-itemproperty")
             || lower.contains("new-itemproperty")
         {
             score += 0.3;
@@ -199,7 +256,8 @@ impl ProcessScorer {
         }
 
         // Disabling security tools
-        if lower.contains("set-mppreference") || lower.contains("disablerealtimemonitoring")
+        if lower.contains("set-mppreference")
+            || lower.contains("disablerealtimemonitoring")
             || lower.contains("disable-windowsoptionalfeature")
             || lower.contains("tamper") && lower.contains("protect")
         {
@@ -208,15 +266,18 @@ impl ProcessScorer {
         }
 
         // Hidden window
-        if lower.contains("-windowstyle hidden") || lower.contains("-w hidden")
-            || lower.contains("-nop") || lower.contains("-noprofile")
+        if lower.contains("-windowstyle hidden")
+            || lower.contains("-w hidden")
+            || lower.contains("-nop")
+            || lower.contains("-noprofile")
         {
             score += 0.3;
             reasons.push("hidden/stealthy execution".into());
         }
 
         // Suspicious temp/appdata execution
-        if lower.contains("\\temp\\") || lower.contains("/tmp/")
+        if lower.contains("\\temp\\")
+            || lower.contains("/tmp/")
             || lower.contains("\\appdata\\local\\temp")
             || lower.contains("/dev/shm/")
         {
@@ -231,7 +292,10 @@ impl ProcessScorer {
     pub fn check_lolbin(name: &str) -> Option<(String, f32)> {
         let lower = normalize_name(name);
         for &(lolbin, risk) in LOLBINS {
-            if lower == lolbin || lower.ends_with(&format!("/{lolbin}")) || lower.ends_with(&format!("\\{lolbin}")) {
+            if lower == lolbin
+                || lower.ends_with(&format!("/{lolbin}"))
+                || lower.ends_with(&format!("\\{lolbin}"))
+            {
                 return Some((lolbin.to_string(), risk));
             }
         }
@@ -275,15 +339,26 @@ impl ProcessScorer {
     /// Build a fleet-wide risk summary from a list of assessments.
     pub fn summarize(assessments: &[ProcessRiskAssessment]) -> ProcessRiskSummary {
         let high = assessments.iter().filter(|a| a.total_risk > 0.7).count();
-        let medium = assessments.iter().filter(|a| a.total_risk > 0.4 && a.total_risk <= 0.7).count();
+        let medium = assessments
+            .iter()
+            .filter(|a| a.total_risk > 0.4 && a.total_risk <= 0.7)
+            .count();
         let low = assessments.len() - high - medium;
-        let lolbin = assessments.iter().filter(|a| a.lolbin_match.is_some()).count();
+        let lolbin = assessments
+            .iter()
+            .filter(|a| a.lolbin_match.is_some())
+            .count();
 
-        let mut top: Vec<_> = assessments.iter()
+        let mut top: Vec<_> = assessments
+            .iter()
             .filter(|a| a.total_risk > 0.3)
             .cloned()
             .collect();
-        top.sort_by(|a, b| b.total_risk.partial_cmp(&a.total_risk).unwrap_or(std::cmp::Ordering::Equal));
+        top.sort_by(|a, b| {
+            b.total_risk
+                .partial_cmp(&a.total_risk)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
         top.truncate(20);
 
         ProcessRiskSummary {
@@ -299,14 +374,20 @@ impl ProcessScorer {
 
 fn normalize_name(name: &str) -> String {
     let n = name.to_lowercase();
-    n.rsplit(['/', '\\']).next().unwrap_or(&n).trim_end_matches(".exe").to_string()
+    n.rsplit(['/', '\\'])
+        .next()
+        .unwrap_or(&n)
+        .trim_end_matches(".exe")
+        .to_string()
 }
 
 fn has_base64_payload(cmdline: &str) -> bool {
     // Look for long base64-like tokens (>40 chars of [A-Za-z0-9+/=])
     cmdline.split_whitespace().any(|token| {
         token.len() > 40
-            && token.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'+' || b == b'/' || b == b'=')
+            && token
+                .bytes()
+                .all(|b| b.is_ascii_alphanumeric() || b == b'+' || b == b'/' || b == b'=')
     })
 }
 
@@ -427,7 +508,11 @@ mod tests {
 
     #[test]
     fn office_spawning_cmd_is_suspicious() {
-        let chain = vec!["cmd.exe".into(), "WINWORD.EXE".into(), "explorer.exe".into()];
+        let chain = vec![
+            "cmd.exe".into(),
+            "WINWORD.EXE".into(),
+            "explorer.exe".into(),
+        ];
         let (score, reasons) = ProcessScorer::score_lineage(&chain);
         assert!(score > 0.5, "score={score}");
         assert!(!reasons.is_empty());
@@ -442,9 +527,7 @@ mod tests {
 
     #[test]
     fn encoded_powershell_flagged() {
-        let (score, reasons) = ProcessScorer::score_cmdline(
-            "powershell.exe -enc SQBFAHgAIAAoA...",
-        );
+        let (score, reasons) = ProcessScorer::score_cmdline("powershell.exe -enc SQBFAHgAIAAoA...");
         assert!(score > 0.3, "score={score}");
         assert!(reasons.iter().any(|r| r.contains("encoded")));
     }
@@ -459,7 +542,9 @@ mod tests {
     fn full_assessment() {
         let chain = vec!["powershell.exe".into(), "EXCEL.EXE".into()];
         let assessment = ProcessScorer::assess(
-            1234, "powershell.exe", &chain,
+            1234,
+            "powershell.exe",
+            &chain,
             Some("powershell.exe -enc SQBFAHgA..."),
         );
         assert!(assessment.total_risk > 0.5);
@@ -481,7 +566,11 @@ mod tests {
             r#"reg add HKCU\Software\Microsoft\Windows\CurrentVersion\Run /v updater /d C:\Temp\updater.exe"#,
         );
         assert!(score >= 0.5, "score={score}");
-        assert!(reasons.iter().any(|reason| reason.contains("startup persistence")));
+        assert!(
+            reasons
+                .iter()
+                .any(|reason| reason.contains("startup persistence"))
+        );
     }
 
     #[test]
@@ -500,9 +589,24 @@ mod tests {
     fn lolbin_chain_three_triggers() {
         let mut tracker = LolbinChainTracker::default();
         let execs = vec![
-            LolbinExecution { host_id: "host-1".into(), lolbin_name: "cmd.exe".into(), pid: 100, timestamp_epoch: 1000 },
-            LolbinExecution { host_id: "host-1".into(), lolbin_name: "powershell.exe".into(), pid: 101, timestamp_epoch: 1050 },
-            LolbinExecution { host_id: "host-1".into(), lolbin_name: "certutil.exe".into(), pid: 102, timestamp_epoch: 1100 },
+            LolbinExecution {
+                host_id: "host-1".into(),
+                lolbin_name: "cmd.exe".into(),
+                pid: 100,
+                timestamp_epoch: 1000,
+            },
+            LolbinExecution {
+                host_id: "host-1".into(),
+                lolbin_name: "powershell.exe".into(),
+                pid: 101,
+                timestamp_epoch: 1050,
+            },
+            LolbinExecution {
+                host_id: "host-1".into(),
+                lolbin_name: "certutil.exe".into(),
+                pid: 102,
+                timestamp_epoch: 1100,
+            },
         ];
         assert!(tracker.record(&execs[0]).is_none());
         assert!(tracker.record(&execs[1]).is_none());
@@ -516,9 +620,24 @@ mod tests {
     #[test]
     fn lolbin_chain_different_hosts_independent() {
         let mut tracker = LolbinChainTracker::default();
-        tracker.record(&LolbinExecution { host_id: "host-1".into(), lolbin_name: "cmd.exe".into(), pid: 1, timestamp_epoch: 1000 });
-        tracker.record(&LolbinExecution { host_id: "host-2".into(), lolbin_name: "powershell.exe".into(), pid: 2, timestamp_epoch: 1050 });
-        let result = tracker.record(&LolbinExecution { host_id: "host-1".into(), lolbin_name: "certutil.exe".into(), pid: 3, timestamp_epoch: 1100 });
+        tracker.record(&LolbinExecution {
+            host_id: "host-1".into(),
+            lolbin_name: "cmd.exe".into(),
+            pid: 1,
+            timestamp_epoch: 1000,
+        });
+        tracker.record(&LolbinExecution {
+            host_id: "host-2".into(),
+            lolbin_name: "powershell.exe".into(),
+            pid: 2,
+            timestamp_epoch: 1050,
+        });
+        let result = tracker.record(&LolbinExecution {
+            host_id: "host-1".into(),
+            lolbin_name: "certutil.exe".into(),
+            pid: 3,
+            timestamp_epoch: 1100,
+        });
         // host-1 has 2 LOLBINs, not 3 — should not trigger
         assert!(result.is_none());
     }

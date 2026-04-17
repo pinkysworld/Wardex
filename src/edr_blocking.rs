@@ -107,17 +107,34 @@ pub enum IndicatorType {
     /// Suspicious system call sequence.
     SyscallSequence { calls: Vec<String> },
     /// Memory region with executable + writable permissions.
-    MemoryAnomaly { attack_type: MemoryAttackType, confidence: f64 },
+    MemoryAnomaly {
+        attack_type: MemoryAttackType,
+        confidence: f64,
+    },
     /// Credential access attempt (e.g., LSASS, /etc/shadow, Keychain).
     CredentialAccess { target: String },
     /// Privilege escalation attempt.
-    PrivilegeEscalation { from_uid: u32, to_uid: u32, method: String },
+    PrivilegeEscalation {
+        from_uid: u32,
+        to_uid: u32,
+        method: String,
+    },
     /// Suspicious child process spawn.
-    SuspiciousSpawn { child_path: String, child_args: Vec<String> },
+    SuspiciousSpawn {
+        child_path: String,
+        child_args: Vec<String>,
+    },
     /// File-less execution (memory-only payload).
-    FilelessExecution { region_addr: u64, region_size: usize },
+    FilelessExecution {
+        region_addr: u64,
+        region_size: usize,
+    },
     /// Network callback to known C2 pattern.
-    C2Callback { dest_ip: String, dest_port: u16, pattern: String },
+    C2Callback {
+        dest_ip: String,
+        dest_port: u16,
+        pattern: String,
+    },
     /// Persistence mechanism installation.
     PersistenceInstall { mechanism: String, path: String },
 }
@@ -176,6 +193,7 @@ pub enum BlockAction {
 /// Per-process behavioral state.
 #[derive(Debug, Clone)]
 struct ProcessState {
+    #[allow(dead_code)]
     pid: u32,
     process_name: String,
     indicators: VecDeque<BehaviorIndicator>,
@@ -216,7 +234,12 @@ impl EdrBlockingEngine {
         let pid = indicator.pid;
 
         // Skip allowlisted processes
-        if self.config.allowlist.iter().any(|p| indicator.process_name.contains(p)) {
+        if self
+            .config
+            .allowlist
+            .iter()
+            .any(|p| indicator.process_name.contains(p))
+        {
             return None;
         }
 
@@ -231,7 +254,11 @@ impl EdrBlockingEngine {
 
         // Expire old indicators outside the window
         let cutoff = now.saturating_sub(self.config.window_ms);
-        while state.indicators.front().map_or(false, |i| i.timestamp_ms < cutoff) {
+        while state
+            .indicators
+            .front()
+            .map_or(false, |i| i.timestamp_ms < cutoff)
+        {
             state.indicators.pop_front();
         }
 
@@ -253,7 +280,11 @@ impl EdrBlockingEngine {
 
         if should_alert || should_block {
             let action = if should_block {
-                if score >= 9.0 { BlockAction::Kill } else { BlockAction::Suspend }
+                if score >= 9.0 {
+                    BlockAction::Kill
+                } else {
+                    BlockAction::Suspend
+                }
             } else {
                 BlockAction::Alert
             };
@@ -303,14 +334,18 @@ impl EdrBlockingEngine {
     /// Remove stale process state (not seen in the last `max_age_ms`).
     pub fn gc(&mut self, max_age_ms: u64) {
         let now = now_ms();
-        self.processes.retain(|_, s| now.saturating_sub(s.last_seen_ms) < max_age_ms);
+        self.processes
+            .retain(|_, s| now.saturating_sub(s.last_seen_ms) < max_age_ms);
     }
 }
 
 /// Score an individual indicator based on its type (free function to avoid borrow conflicts).
 fn score_indicator(config: &EdrBlockingConfig, indicator: &BehaviorIndicator) -> BlockSignal {
     match &indicator.indicator {
-        IndicatorType::MemoryAnomaly { attack_type, confidence } => {
+        IndicatorType::MemoryAnomaly {
+            attack_type,
+            confidence,
+        } => {
             let weight = match attack_type {
                 MemoryAttackType::RopChain => config.rop_weight,
                 MemoryAttackType::HeapSpray => config.heap_spray_weight,
@@ -323,19 +358,28 @@ fn score_indicator(config: &EdrBlockingConfig, indicator: &BehaviorIndicator) ->
                 category: format!("memory:{attack_type:?}"),
                 weight,
                 raw_score: confidence * weight,
-                description: format!("{attack_type:?} detected with {:.0}% confidence", confidence * 100.0),
+                description: format!(
+                    "{attack_type:?} detected with {:.0}% confidence",
+                    confidence * 100.0
+                ),
             }
         }
-        IndicatorType::CredentialAccess { target } => {
-            BlockSignal {
-                category: "credential_access".into(),
-                weight: config.privesc_weight,
-                raw_score: config.privesc_weight * 0.8,
-                description: format!("Credential access: {target}"),
-            }
-        }
-        IndicatorType::PrivilegeEscalation { from_uid, to_uid, method } => {
-            let raw = if *to_uid == 0 { config.privesc_weight } else { config.privesc_weight * 0.6 };
+        IndicatorType::CredentialAccess { target } => BlockSignal {
+            category: "credential_access".into(),
+            weight: config.privesc_weight,
+            raw_score: config.privesc_weight * 0.8,
+            description: format!("Credential access: {target}"),
+        },
+        IndicatorType::PrivilegeEscalation {
+            from_uid,
+            to_uid,
+            method,
+        } => {
+            let raw = if *to_uid == 0 {
+                config.privesc_weight
+            } else {
+                config.privesc_weight * 0.6
+            };
             BlockSignal {
                 category: "privilege_escalation".into(),
                 weight: config.privesc_weight,
@@ -343,14 +387,12 @@ fn score_indicator(config: &EdrBlockingConfig, indicator: &BehaviorIndicator) ->
                 description: format!("Privesc {from_uid} → {to_uid} via {method}"),
             }
         }
-        IndicatorType::SuspiciousSpawn { child_path, .. } => {
-            BlockSignal {
-                category: "suspicious_spawn".into(),
-                weight: config.injection_weight,
-                raw_score: config.injection_weight * 0.5,
-                description: format!("Suspicious child: {child_path}"),
-            }
-        }
+        IndicatorType::SuspiciousSpawn { child_path, .. } => BlockSignal {
+            category: "suspicious_spawn".into(),
+            weight: config.injection_weight,
+            raw_score: config.injection_weight * 0.5,
+            description: format!("Suspicious child: {child_path}"),
+        },
         IndicatorType::FilelessExecution { region_size, .. } => {
             let confidence = if *region_size > 1_000_000 { 0.9 } else { 0.6 };
             BlockSignal {
@@ -360,26 +402,26 @@ fn score_indicator(config: &EdrBlockingConfig, indicator: &BehaviorIndicator) ->
                 description: format!("Fileless execution, region size: {region_size}"),
             }
         }
-        IndicatorType::C2Callback { dest_ip, dest_port, pattern } => {
-            BlockSignal {
-                category: "c2_callback".into(),
-                weight: config.injection_weight * 1.5,
-                raw_score: config.injection_weight * 1.2,
-                description: format!("C2 callback {dest_ip}:{dest_port} pattern={pattern}"),
-            }
-        }
-        IndicatorType::PersistenceInstall { mechanism, path } => {
-            BlockSignal {
-                category: "persistence".into(),
-                weight: config.privesc_weight,
-                raw_score: config.privesc_weight * 0.7,
-                description: format!("Persistence via {mechanism}: {path}"),
-            }
-        }
+        IndicatorType::C2Callback {
+            dest_ip,
+            dest_port,
+            pattern,
+        } => BlockSignal {
+            category: "c2_callback".into(),
+            weight: config.injection_weight * 1.5,
+            raw_score: config.injection_weight * 1.2,
+            description: format!("C2 callback {dest_ip}:{dest_port} pattern={pattern}"),
+        },
+        IndicatorType::PersistenceInstall { mechanism, path } => BlockSignal {
+            category: "persistence".into(),
+            weight: config.privesc_weight,
+            raw_score: config.privesc_weight * 0.7,
+            description: format!("Persistence via {mechanism}: {path}"),
+        },
         IndicatorType::SyscallSequence { calls } => {
-            let suspicious = calls.iter().any(|c| {
-                c.contains("ptrace") || c.contains("mprotect") || c.contains("execve")
-            });
+            let suspicious = calls
+                .iter()
+                .any(|c| c.contains("ptrace") || c.contains("mprotect") || c.contains("execve"));
             let raw = if suspicious { 1.5 } else { 0.3 };
             BlockSignal {
                 category: "syscall_sequence".into(),
@@ -455,11 +497,7 @@ pub fn detect_heap_spray(allocation_sizes: &[usize]) -> f64 {
     }
     let max_same = size_counts.values().copied().max().unwrap_or(0);
     let ratio = max_same as f64 / allocation_sizes.len() as f64;
-    if ratio > 0.7 {
-        ratio.min(1.0)
-    } else {
-        0.0
-    }
+    if ratio > 0.7 { ratio.min(1.0) } else { 0.0 }
 }
 
 /// Detect potential shellcode by looking for common NOP sled patterns
@@ -506,9 +544,13 @@ mod tests {
     #[test]
     fn test_benign_process_no_block() {
         let mut engine = EdrBlockingEngine::new(EdrBlockingConfig::default());
-        let ind = make_indicator(100, IndicatorType::SyscallSequence {
-            calls: vec!["read".into(), "write".into(), "close".into()],
-        }, 1000);
+        let ind = make_indicator(
+            100,
+            IndicatorType::SyscallSequence {
+                calls: vec!["read".into(), "write".into(), "close".into()],
+            },
+            1000,
+        );
         let decision = engine.evaluate(ind);
         assert!(decision.is_none() || !decision.unwrap().block);
     }
@@ -519,10 +561,14 @@ mod tests {
             alert_threshold: 2.0,
             ..Default::default()
         });
-        let ind = make_indicator(200, IndicatorType::MemoryAnomaly {
-            attack_type: MemoryAttackType::RopChain,
-            confidence: 0.9,
-        }, 1000);
+        let ind = make_indicator(
+            200,
+            IndicatorType::MemoryAnomaly {
+                attack_type: MemoryAttackType::RopChain,
+                confidence: 0.9,
+            },
+            1000,
+        );
         let decision = engine.evaluate(ind);
         assert!(decision.is_some());
         let d = decision.unwrap();
@@ -538,14 +584,22 @@ mod tests {
         });
         // Multiple high-confidence memory attacks should trigger block
         for i in 0..5 {
-            engine.evaluate(make_indicator(300, IndicatorType::MemoryAnomaly {
-                attack_type: MemoryAttackType::ShellcodeInjection,
-                confidence: 0.85,
-            }, 1000 + i * 100));
+            engine.evaluate(make_indicator(
+                300,
+                IndicatorType::MemoryAnomaly {
+                    attack_type: MemoryAttackType::ShellcodeInjection,
+                    confidence: 0.85,
+                },
+                1000 + i * 100,
+            ));
         }
-        let last = engine.evaluate(make_indicator(300, IndicatorType::CredentialAccess {
-            target: "/etc/shadow".into(),
-        }, 2000));
+        let last = engine.evaluate(make_indicator(
+            300,
+            IndicatorType::CredentialAccess {
+                target: "/etc/shadow".into(),
+            },
+            2000,
+        ));
         assert!(last.is_some());
         assert!(last.unwrap().block);
     }
@@ -557,10 +611,14 @@ mod tests {
             ..Default::default()
         };
         let mut engine = EdrBlockingEngine::new(config);
-        let mut ind = make_indicator(400, IndicatorType::MemoryAnomaly {
-            attack_type: MemoryAttackType::ProcessInjection,
-            confidence: 1.0,
-        }, 1000);
+        let mut ind = make_indicator(
+            400,
+            IndicatorType::MemoryAnomaly {
+                attack_type: MemoryAttackType::ProcessInjection,
+                confidence: 1.0,
+            },
+            1000,
+        );
         ind.process_name = "/usr/bin/systemd-journald".into();
         let decision = engine.evaluate(ind);
         assert!(decision.is_none());
@@ -595,9 +653,13 @@ mod tests {
     #[test]
     fn test_stats() {
         let mut engine = EdrBlockingEngine::new(EdrBlockingConfig::default());
-        engine.evaluate(make_indicator(500, IndicatorType::SyscallSequence {
-            calls: vec!["open".into()],
-        }, 1000));
+        engine.evaluate(make_indicator(
+            500,
+            IndicatorType::SyscallSequence {
+                calls: vec!["open".into()],
+            },
+            1000,
+        ));
         let stats = engine.stats();
         assert_eq!(stats.total_indicators, 1);
         assert_eq!(stats.tracked_processes, 1);
@@ -607,9 +669,13 @@ mod tests {
     #[test]
     fn test_gc_removes_stale() {
         let mut engine = EdrBlockingEngine::new(EdrBlockingConfig::default());
-        engine.evaluate(make_indicator(600, IndicatorType::SyscallSequence {
-            calls: vec!["read".into()],
-        }, 1000));
+        engine.evaluate(make_indicator(
+            600,
+            IndicatorType::SyscallSequence {
+                calls: vec!["read".into()],
+            },
+            1000,
+        ));
         assert_eq!(engine.processes.len(), 1);
         // GC with very short max age
         engine.gc(1);

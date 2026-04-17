@@ -92,7 +92,12 @@ impl CaseStore {
             && let Ok(content) = std::fs::read_to_string(path)
             && let Ok(cases) = serde_json::from_str::<Vec<Case>>(&content)
         {
-            self.next_id = cases.iter().map(|c| c.id).max().unwrap_or(0).saturating_add(1);
+            self.next_id = cases
+                .iter()
+                .map(|c| c.id)
+                .max()
+                .unwrap_or(0)
+                .saturating_add(1);
             self.cases = cases;
         }
     }

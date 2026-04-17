@@ -104,7 +104,8 @@ impl OtelSpan {
     }
 
     pub fn duration_ms(&self) -> Option<u64> {
-        self.end_time_ms.map(|end| end.saturating_sub(self.start_time_ms))
+        self.end_time_ms
+            .map(|end| end.saturating_sub(self.start_time_ms))
     }
 
     /// Export span in OTLP-compatible JSON format.
@@ -148,7 +149,10 @@ pub struct TraceCollector {
 
 impl TraceCollector {
     pub fn new(max_spans: usize) -> Self {
-        Self { spans: std::collections::VecDeque::new(), max_spans }
+        Self {
+            spans: std::collections::VecDeque::new(),
+            max_spans,
+        }
     }
 
     pub fn record(&mut self, span: OtelSpan) {
@@ -164,14 +168,22 @@ impl TraceCollector {
 
     pub fn stats(&self) -> TraceStats {
         let total = self.spans.len();
-        let errors = self.spans.iter().filter(|s| s.status == SpanStatus::Error).count();
+        let errors = self
+            .spans
+            .iter()
+            .filter(|s| s.status == SpanStatus::Error)
+            .count();
         let avg_duration = if total > 0 {
             let sum: u64 = self.spans.iter().filter_map(|s| s.duration_ms()).sum();
             sum as f64 / total as f64
         } else {
             0.0
         };
-        TraceStats { total_spans: total, error_spans: errors, avg_duration_ms: avg_duration }
+        TraceStats {
+            total_spans: total,
+            error_spans: errors,
+            avg_duration_ms: avg_duration,
+        }
     }
 }
 

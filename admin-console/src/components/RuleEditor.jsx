@@ -56,7 +56,8 @@ tags:
 }`,
 };
 
-const KEYWORDS = /^(title|id|status|level|description|logsource|detection|condition|falsepositives|tags|category|product|selection|rule|meta|strings|severity|author|name|enabled|actions|conditions|field|operator|value):/;
+const KEYWORDS =
+  /^(title|id|status|level|description|logsource|detection|condition|falsepositives|tags|category|product|selection|rule|meta|strings|severity|author|name|enabled|actions|conditions|field|operator|value):/;
 const CONSTANTS = /^(true|false|null|experimental|medium|high|critical|low)$/;
 const ATTACK_TAG = /^attack\.\w+$/;
 
@@ -70,7 +71,10 @@ function tokenize(text) {
       tokens.push({ cls: 'hl-key', text: part });
     } else if (part.startsWith('#')) {
       tokens.push({ cls: 'hl-comment', text: part });
-    } else if ((part.startsWith('"') && part.endsWith('"')) || (part.startsWith("'") && part.endsWith("'"))) {
+    } else if (
+      (part.startsWith('"') && part.endsWith('"')) ||
+      (part.startsWith("'") && part.endsWith("'"))
+    ) {
       tokens.push({ cls: 'hl-string', text: part });
     } else if (CONSTANTS.test(part)) {
       tokens.push({ cls: 'hl-const', text: part });
@@ -87,12 +91,20 @@ function SyntaxLine({ lineNum, text }) {
   const tokens = tokenize(text);
   return (
     <div className="code-line">
-      <span className="line-num" aria-hidden="true">{lineNum}</span>
+      <span className="line-num" aria-hidden="true">
+        {lineNum}
+      </span>
       <span className="line-text">
         {tokens.length === 0
           ? '\u00A0'
           : tokens.map((t, i) =>
-              t.cls ? <span key={i} className={t.cls}>{t.text}</span> : t.text
+              t.cls ? (
+                <span key={i} className={t.cls}>
+                  {t.text}
+                </span>
+              ) : (
+                t.text
+              ),
             )}
       </span>
     </div>
@@ -108,7 +120,8 @@ function validateRule(text, fmt) {
   if (fmt === 'sigma') {
     if (!text.includes('title:')) errors.push('Missing "title:" field');
     if (!text.includes('detection:')) errors.push('Missing "detection:" section');
-    if (!text.includes('condition:') && !text.includes('condition :')) errors.push('Missing "condition:" field');
+    if (!text.includes('condition:') && !text.includes('condition :'))
+      errors.push('Missing "condition:" field');
     if (!text.includes('level:')) errors.push('Missing "level:" field');
   } else if (fmt === 'yara') {
     if (!text.includes('rule ')) errors.push('Missing "rule" declaration');
@@ -117,7 +130,11 @@ function validateRule(text, fmt) {
     const closes = (text.match(/}/g) || []).length;
     if (opens !== closes) errors.push(`Unbalanced braces: ${opens} open, ${closes} close`);
   } else if (fmt === 'json') {
-    try { JSON.parse(text); } catch (e) { errors.push(`Invalid JSON: ${e.message}`); }
+    try {
+      JSON.parse(text);
+    } catch (e) {
+      errors.push(`Invalid JSON: ${e.message}`);
+    }
   }
   return errors;
 }
@@ -167,29 +184,41 @@ export default function RuleEditor({ onRuleCreated }) {
   // Keyboard shortcuts for undo/redo (stable handler — no deps on content/format)
   useEffect(() => {
     const handler = (e) => {
-      if ((e.metaKey || e.ctrlKey) && e.key === 'z' && !e.shiftKey) { e.preventDefault(); undo(); }
-      if ((e.metaKey || e.ctrlKey) && (e.key === 'y' || (e.key === 'z' && e.shiftKey))) { e.preventDefault(); redo(); }
+      if ((e.metaKey || e.ctrlKey) && e.key === 'z' && !e.shiftKey) {
+        e.preventDefault();
+        undo();
+      }
+      if ((e.metaKey || e.ctrlKey) && (e.key === 'y' || (e.key === 'z' && e.shiftKey))) {
+        e.preventDefault();
+        redo();
+      }
     };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
   }, [undo, redo]);
 
-  const handleContentChange = useCallback((e) => {
-    pushUndo(contentRef.current);
-    const text = e.target.value;
-    setContent(text);
-    setValidationErrors(validateRule(text, formatRef.current));
-  }, [pushUndo]);
+  const handleContentChange = useCallback(
+    (e) => {
+      pushUndo(contentRef.current);
+      const text = e.target.value;
+      setContent(text);
+      setValidationErrors(validateRule(text, formatRef.current));
+    },
+    [pushUndo],
+  );
 
-  const handleFormatChange = useCallback((newFormat) => {
-    pushUndo(contentRef.current);
-    setFormat(newFormat);
-    const tpl = RULE_TEMPLATES[newFormat] || '';
-    setContent(tpl);
-    savedContent.current = tpl;
-    setValidationErrors([]);
-    setEditingId(null);
-  }, [pushUndo]);
+  const handleFormatChange = useCallback(
+    (newFormat) => {
+      pushUndo(contentRef.current);
+      setFormat(newFormat);
+      const tpl = RULE_TEMPLATES[newFormat] || '';
+      setContent(tpl);
+      savedContent.current = tpl;
+      setValidationErrors([]);
+      setEditingId(null);
+    },
+    [pushUndo],
+  );
 
   const handleSave = useCallback(async () => {
     const errors = validateRule(content, format);
@@ -229,7 +258,7 @@ export default function RuleEditor({ onRuleCreated }) {
       {/* Toolbar */}
       <div className="rule-toolbar" role="toolbar" aria-label="Rule editor toolbar">
         <div className="btn-group">
-          {['sigma', 'yara', 'json'].map(f => (
+          {['sigma', 'yara', 'json'].map((f) => (
             <button
               key={f}
               className={`btn btn-sm ${format === f ? 'btn-primary' : ''}`}
@@ -241,10 +270,28 @@ export default function RuleEditor({ onRuleCreated }) {
           ))}
         </div>
         <div className="btn-group">
-          <button className="btn btn-sm" onClick={undo} disabled={!undoStack.current.length} title="Undo (⌘Z)">↩ Undo</button>
-          <button className="btn btn-sm" onClick={redo} disabled={!redoStack.current.length} title="Redo (⌘Y)">↪ Redo</button>
+          <button
+            className="btn btn-sm"
+            onClick={undo}
+            disabled={!undoStack.current.length}
+            title="Undo (⌘Z)"
+          >
+            ↩ Undo
+          </button>
+          <button
+            className="btn btn-sm"
+            onClick={redo}
+            disabled={!redoStack.current.length}
+            title="Redo (⌘Y)"
+          >
+            ↪ Redo
+          </button>
         </div>
-        {isDirty && <span style={{ fontSize: 11, color: 'var(--warning)', fontWeight: 600 }}>● Unsaved changes</span>}
+        {isDirty && (
+          <span style={{ fontSize: 11, color: 'var(--warning)', fontWeight: 600 }}>
+            ● Unsaved changes
+          </span>
+        )}
         <div className="btn-group">
           <button
             className="btn btn-sm btn-primary"
@@ -255,7 +302,13 @@ export default function RuleEditor({ onRuleCreated }) {
             {saving ? 'Saving…' : editingId ? 'Update Rule' : 'Save Rule'}
           </button>
           {editingId && (
-            <button className="btn btn-sm" onClick={() => { setEditingId(null); setContent(RULE_TEMPLATES[format]); }}>
+            <button
+              className="btn btn-sm"
+              onClick={() => {
+                setEditingId(null);
+                setContent(RULE_TEMPLATES[format]);
+              }}
+            >
               Cancel Edit
             </button>
           )}
@@ -266,7 +319,9 @@ export default function RuleEditor({ onRuleCreated }) {
       {validationErrors.length > 0 && (
         <div className="rule-errors" role="alert">
           {validationErrors.map((err, i) => (
-            <div key={i} className="rule-error">⚠ {err}</div>
+            <div key={i} className="rule-error">
+              ⚠ {err}
+            </div>
           ))}
         </div>
       )}
@@ -295,17 +350,33 @@ export default function RuleEditor({ onRuleCreated }) {
           <div className="table-wrap">
             <table>
               <thead>
-                <tr><th>Name/ID</th><th>Format</th><th>Severity</th><th>Status</th><th>Actions</th></tr>
+                <tr>
+                  <th>Name/ID</th>
+                  <th>Format</th>
+                  <th>Severity</th>
+                  <th>Status</th>
+                  <th>Actions</th>
+                </tr>
               </thead>
               <tbody>
                 {ruleList.slice(0, 50).map((rule, i) => (
                   <tr key={rule.id || rule.name || i}>
-                    <td style={{ fontFamily: 'var(--font-mono)', fontSize: 12 }}>{rule.name || rule.id || rule.title || `rule-${i}`}</td>
+                    <td style={{ fontFamily: 'var(--font-mono)', fontSize: 12 }}>
+                      {rule.name || rule.id || rule.title || `rule-${i}`}
+                    </td>
                     <td>{rule.format || 'sigma'}</td>
-                    <td><span className={`sev-${(rule.level || rule.severity || 'medium').toLowerCase()}`}>{rule.level || rule.severity || 'medium'}</span></td>
+                    <td>
+                      <span
+                        className={`sev-${(rule.level || rule.severity || 'medium').toLowerCase()}`}
+                      >
+                        {rule.level || rule.severity || 'medium'}
+                      </span>
+                    </td>
                     <td>{rule.status || (rule.enabled !== false ? '✓ Active' : '○ Disabled')}</td>
                     <td>
-                      <button className="btn btn-sm" onClick={() => handleEdit(rule)}>Edit</button>
+                      <button className="btn btn-sm" onClick={() => handleEdit(rule)}>
+                        Edit
+                      </button>
                     </td>
                   </tr>
                 ))}

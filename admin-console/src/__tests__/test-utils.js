@@ -14,7 +14,7 @@ export function jsonOk(data) {
   return {
     ok: true,
     status: 200,
-    headers: { get: (h) => h === 'content-type' ? 'application/json' : null },
+    headers: { get: (h) => (h === 'content-type' ? 'application/json' : null) },
     json: async () => data,
     text: async () => JSON.stringify(data),
   };
@@ -25,7 +25,7 @@ export function jsonError(status, body = {}) {
   return {
     ok: false,
     status,
-    headers: { get: (h) => h === 'content-type' ? 'application/json' : null },
+    headers: { get: (h) => (h === 'content-type' ? 'application/json' : null) },
     json: async () => body,
     text: async () => JSON.stringify(body),
   };

@@ -32,8 +32,8 @@ pub struct LifecycleConfig {
 impl Default for LifecycleConfig {
     fn default() -> Self {
         Self {
-            stale_after_secs: 300,      // 5 minutes
-            offline_after_secs: 3600,   // 1 hour
+            stale_after_secs: 300,    // 5 minutes
+            offline_after_secs: 3600, // 1 hour
             archive_after_days: 30,
             auto_archive: true,
         }
@@ -99,16 +99,17 @@ impl LifecycleManager {
     /// Register or update an agent's heartbeat.
     pub fn heartbeat(&mut self, agent_id: &str, hostname: &str) {
         let now = chrono::Utc::now().to_rfc3339();
-        let entry = self.entries.entry(agent_id.to_string()).or_insert_with(|| {
-            AgentLifecycleEntry {
-                agent_id: agent_id.to_string(),
-                hostname: hostname.to_string(),
-                state: AgentLifecycle::Active,
-                last_heartbeat: now.clone(),
-                state_changed_at: now.clone(),
-                notes: None,
-            }
-        });
+        let entry =
+            self.entries
+                .entry(agent_id.to_string())
+                .or_insert_with(|| AgentLifecycleEntry {
+                    agent_id: agent_id.to_string(),
+                    hostname: hostname.to_string(),
+                    state: AgentLifecycle::Active,
+                    last_heartbeat: now.clone(),
+                    state_changed_at: now.clone(),
+                    notes: None,
+                });
 
         entry.last_heartbeat = now.clone();
         entry.hostname = hostname.to_string();
@@ -128,12 +129,7 @@ impl LifecycleManager {
     }
 
     /// Manually set an agent's lifecycle state.
-    pub fn set_state(
-        &mut self,
-        agent_id: &str,
-        state: AgentLifecycle,
-        reason: &str,
-    ) -> bool {
+    pub fn set_state(&mut self, agent_id: &str, state: AgentLifecycle, reason: &str) -> bool {
         if let Some(entry) = self.entries.get_mut(agent_id) {
             let old_state = entry.state.clone();
             entry.state = state.clone();
@@ -272,7 +268,11 @@ mod tests {
     fn manual_decommission() {
         let mut mgr = LifecycleManager::default();
         mgr.heartbeat("agent-2", "host2");
-        assert!(mgr.set_state("agent-2", AgentLifecycle::Decommissioned, "Hardware retired"));
+        assert!(mgr.set_state(
+            "agent-2",
+            AgentLifecycle::Decommissioned,
+            "Hardware retired"
+        ));
         assert_eq!(
             mgr.get_entry("agent-2").unwrap().state,
             AgentLifecycle::Decommissioned

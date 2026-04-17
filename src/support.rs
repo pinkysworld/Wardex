@@ -95,7 +95,9 @@ fn default_templates() -> Vec<ReportTemplateRecord> {
             next_run_at: None,
             status: "ready".to_string(),
             audience: "executive".to_string(),
-            description: "Leadership-ready overview of queue pressure, incidents, and fleet posture.".to_string(),
+            description:
+                "Leadership-ready overview of queue pressure, incidents, and fleet posture."
+                    .to_string(),
         },
         ReportTemplateRecord {
             id: "tpl-audit-export".to_string(),
@@ -119,7 +121,8 @@ fn default_templates() -> Vec<ReportTemplateRecord> {
             next_run_at: None,
             status: "ready".to_string(),
             audience: "analyst".to_string(),
-            description: "Case-oriented bundle with queue, incident, and response context.".to_string(),
+            description: "Case-oriented bundle with queue, incident, and response context."
+                .to_string(),
         },
         ReportTemplateRecord {
             id: "tpl-compliance-snapshot".to_string(),
@@ -385,11 +388,7 @@ impl SupportStore {
     }
 
     pub fn acknowledge_inbox(&mut self, id: &str) -> Option<InboxItem> {
-        let item = self
-            .snapshot
-            .inbox
-            .iter_mut()
-            .find(|item| item.id == id)?;
+        let item = self.snapshot.inbox.iter_mut().find(|item| item.id == id)?;
         item.acknowledged = true;
         let updated = item.clone();
         self.persist();

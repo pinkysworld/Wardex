@@ -477,7 +477,12 @@ impl AnomalyDetector {
                         confidence: history_factor as f64,
                         suspicious_axes: suspicious_axes as u32,
                         hour_of_day: now.format("%H").to_string().parse().unwrap_or(12),
-                        day_of_week: now.format("%u").to_string().parse::<u8>().unwrap_or(1).saturating_sub(1),
+                        day_of_week: now
+                            .format("%u")
+                            .to_string()
+                            .parse::<u8>()
+                            .unwrap_or(1)
+                            .saturating_sub(1),
                         alert_frequency_1h: 0, // caller can update this from alert store
                         device_risk_score: score.min(1.0) as f64,
                     };
@@ -501,7 +506,10 @@ impl AnomalyDetector {
     /// Record a false-positive confirmation for a signal/reason.
     /// After `fp_auto_adjust_threshold` confirmations, the weight is reduced by 10%.
     pub fn record_fp_feedback(&mut self, signal_or_reason: &str) {
-        let count = self.fp_feedback.entry(signal_or_reason.to_string()).or_insert(0);
+        let count = self
+            .fp_feedback
+            .entry(signal_or_reason.to_string())
+            .or_insert(0);
         *count += 1;
         if *count >= self.fp_auto_adjust_threshold {
             // Auto-lower the weight for this signal
@@ -518,7 +526,9 @@ impl AnomalyDetector {
 
     /// Return signals/rules with highest FP feedback counts.
     pub fn noisy_rules(&self) -> Vec<(String, u32)> {
-        let mut rules: Vec<_> = self.fp_feedback.iter()
+        let mut rules: Vec<_> = self
+            .fp_feedback
+            .iter()
             .map(|(k, v)| (k.clone(), *v))
             .collect();
         rules.sort_by(|a, b| b.1.cmp(&a.1));

@@ -58,18 +58,35 @@ fn bench_throughput(c: &mut Criterion) {
 }
 
 fn bench_search_index(c: &mut Criterion) {
-    use wardex::search::{SearchIndex, SearchQuery};
     use std::collections::HashMap;
+    use wardex::search::{SearchIndex, SearchQuery};
 
     let idx = SearchIndex::new("/tmp/bench_search").unwrap();
     // Populate index with 500 events
     for i in 0..500 {
         let mut fields = HashMap::new();
-        fields.insert("timestamp".into(), format!("2026-04-05T{:02}:00:00Z", i % 24));
+        fields.insert(
+            "timestamp".into(),
+            format!("2026-04-05T{:02}:00:00Z", i % 24),
+        );
         fields.insert("device_id".into(), format!("srv-{:02}", i % 10));
-        fields.insert("process_name".into(), if i % 5 == 0 { "mimikatz.exe" } else { "svchost.exe" }.into());
-        fields.insert("src_ip".into(), format!("10.0.{}.{}", i % 256, (i * 7) % 256));
-        fields.insert("raw_text".into(), format!("Event {} on device srv-{:02}", i, i % 10));
+        fields.insert(
+            "process_name".into(),
+            if i % 5 == 0 {
+                "mimikatz.exe"
+            } else {
+                "svchost.exe"
+            }
+            .into(),
+        );
+        fields.insert(
+            "src_ip".into(),
+            format!("10.0.{}.{}", i % 256, (i * 7) % 256),
+        );
+        fields.insert(
+            "raw_text".into(),
+            format!("Event {} on device srv-{:02}", i, i % 10),
+        );
         let _ = idx.index_event(fields);
     }
     idx.commit().unwrap();
@@ -92,21 +109,35 @@ fn bench_search_index(c: &mut Criterion) {
 }
 
 fn bench_hunt_query(c: &mut Criterion) {
-    use wardex::search::SearchIndex;
     use std::collections::HashMap;
+    use wardex::search::SearchIndex;
 
     let idx = SearchIndex::new("/tmp/bench_hunt").unwrap();
     for i in 0..500 {
         let mut fields = HashMap::new();
-        fields.insert("process_name".into(), if i % 3 == 0 { "powershell.exe" } else { "cmd.exe" }.into());
-        fields.insert("src_ip".into(), format!("10.0.{}.{}", i % 256, (i * 3) % 256));
+        fields.insert(
+            "process_name".into(),
+            if i % 3 == 0 {
+                "powershell.exe"
+            } else {
+                "cmd.exe"
+            }
+            .into(),
+        );
+        fields.insert(
+            "src_ip".into(),
+            format!("10.0.{}.{}", i % 256, (i * 3) % 256),
+        );
         fields.insert("user_name".into(), format!("user{}", i % 20));
         let _ = idx.index_event(fields);
     }
     idx.commit().unwrap();
 
     c.bench_function("hunt_field_query", |b| {
-        b.iter(|| idx.hunt(black_box("process:powershell AND src:10.0.*")).unwrap());
+        b.iter(|| {
+            idx.hunt(black_box("process:powershell AND src:10.0.*"))
+                .unwrap()
+        });
     });
 }
 
@@ -130,42 +161,62 @@ fn bench_ml_triage(c: &mut Criterion) {
 }
 
 fn bench_sigma_evaluate(c: &mut Criterion) {
+    use wardex::ocsf::{ActorProcess, DeviceInfo, OcsfEvent, OsInfo, ProcessEvent, ProcessInfo};
     use wardex::sigma::{SigmaEngine, builtin_rules};
-    use wardex::ocsf::{OcsfEvent, OcsfData};
 
-    let mut engine = SigmaEngine::new();
-    engine.load_rules(builtin_rules());
-
-    let event = OcsfEvent {
-        class_uid: 1001,
-        activity_id: 1,
-        severity_id: 4,
-        status_id: 1,
-        timestamp: 1700000000000,
-        timezone_offset: 0,
-        message: "Process created".into(),
-        data: OcsfData {
-            device_hostname: "test-host".into(),
-            process_name: Some("mimikatz.exe".into()),
-            process_pid: Some(1234),
-            process_cmd_line: Some("mimikatz.exe sekurlsa::logonpasswords".into()),
-            file_path: Some("/tmp/mimikatz.exe".into()),
-            file_name: Some("mimikatz.exe".into()),
-            src_ip: None,
-            dst_ip: None,
-            dst_port: None,
-            user_name: None,
-            parent_process_name: Some("cmd.exe".into()),
-            protocol: None,
-            query_hostname: None,
-            config_name: None,
-            new_value: None,
+    let event = OcsfEvent::process(
+        "bench-process-1",
+        "2026-04-17T00:00:00Z",
+        4,
+        ProcessEvent {
+            activity_id: 1,
+            actor: ActorProcess {
+                process: ProcessInfo {
+                    pid: 1234,
+                    ppid: Some(4321),
+                    name: "mimikatz.exe".into(),
+                    cmd_line: Some("mimikatz.exe sekurlsa::logonpasswords".into()),
+                    file: None,
+                    created_time: None,
+                    uid: None,
+                },
+                user: None,
+            },
+            process: ProcessInfo {
+                pid: 1234,
+                ppid: Some(4321),
+                name: "mimikatz.exe".into(),
+                cmd_line: Some("mimikatz.exe sekurlsa::logonpasswords".into()),
+                file: None,
+                created_time: None,
+                uid: None,
+            },
+            parent_process: Some(ProcessInfo {
+                pid: 4321,
+                ppid: None,
+                name: "cmd.exe".into(),
+                cmd_line: Some("cmd.exe /c mimikatz.exe sekurlsa::logonpasswords".into()),
+                file: None,
+                created_time: None,
+                uid: None,
+            }),
+            device: DeviceInfo {
+                hostname: "test-host".into(),
+                os: OsInfo {
+                    name: "Windows".into(),
+                    os_type: "windows".into(),
+                    version: Some("11".into()),
+                },
+                ip: None,
+                agent_uid: None,
+            },
         },
-    };
+    );
 
     c.bench_function("sigma_evaluate_20_rules", |b| {
         b.iter(|| {
-            let mut eng = engine.clone();
+            let mut eng = SigmaEngine::new();
+            eng.load_rules(builtin_rules());
             eng.evaluate(black_box(&event), 1000)
         });
     });

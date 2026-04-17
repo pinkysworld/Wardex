@@ -37,18 +37,66 @@ struct PackerSignature {
 }
 
 const PACKER_SIGNATURES: &[PackerSignature] = &[
-    PackerSignature { name: "UPX", pattern: b"UPX!", offset_range: (0, 1024) },
-    PackerSignature { name: "UPX", pattern: b"UPX0", offset_range: (0, 2048) },
-    PackerSignature { name: "UPX", pattern: b"UPX1", offset_range: (0, 2048) },
-    PackerSignature { name: "Themida/WinLicense", pattern: b".themida", offset_range: (0, 4096) },
-    PackerSignature { name: "ASPack", pattern: b".aspack", offset_range: (0, 4096) },
-    PackerSignature { name: "PECompact", pattern: b"PEC2", offset_range: (0, 2048) },
-    PackerSignature { name: "MPRESS", pattern: b".MPRESS1", offset_range: (0, 4096) },
-    PackerSignature { name: "VMProtect", pattern: b".vmp0", offset_range: (0, 4096) },
-    PackerSignature { name: "VMProtect", pattern: b".vmp1", offset_range: (0, 4096) },
-    PackerSignature { name: "Enigma Protector", pattern: b".enigma1", offset_range: (0, 4096) },
-    PackerSignature { name: "NSPack", pattern: b".nsp0", offset_range: (0, 4096) },
-    PackerSignature { name: "PEtite", pattern: b".petite", offset_range: (0, 4096) },
+    PackerSignature {
+        name: "UPX",
+        pattern: b"UPX!",
+        offset_range: (0, 1024),
+    },
+    PackerSignature {
+        name: "UPX",
+        pattern: b"UPX0",
+        offset_range: (0, 2048),
+    },
+    PackerSignature {
+        name: "UPX",
+        pattern: b"UPX1",
+        offset_range: (0, 2048),
+    },
+    PackerSignature {
+        name: "Themida/WinLicense",
+        pattern: b".themida",
+        offset_range: (0, 4096),
+    },
+    PackerSignature {
+        name: "ASPack",
+        pattern: b".aspack",
+        offset_range: (0, 4096),
+    },
+    PackerSignature {
+        name: "PECompact",
+        pattern: b"PEC2",
+        offset_range: (0, 2048),
+    },
+    PackerSignature {
+        name: "MPRESS",
+        pattern: b".MPRESS1",
+        offset_range: (0, 4096),
+    },
+    PackerSignature {
+        name: "VMProtect",
+        pattern: b".vmp0",
+        offset_range: (0, 4096),
+    },
+    PackerSignature {
+        name: "VMProtect",
+        pattern: b".vmp1",
+        offset_range: (0, 4096),
+    },
+    PackerSignature {
+        name: "Enigma Protector",
+        pattern: b".enigma1",
+        offset_range: (0, 4096),
+    },
+    PackerSignature {
+        name: "NSPack",
+        pattern: b".nsp0",
+        offset_range: (0, 4096),
+    },
+    PackerSignature {
+        name: "PEtite",
+        pattern: b".petite",
+        offset_range: (0, 4096),
+    },
 ];
 
 // ── Entropy Calculation ──────────────────────────────────────────────────────
@@ -130,10 +178,8 @@ fn parse_pe_sections(data: &[u8]) -> Vec<SectionEntropy> {
         return sections;
     }
 
-    let num_sections =
-        u16::from_le_bytes([data[pe_offset + 6], data[pe_offset + 7]]) as usize;
-    let opt_hdr_size =
-        u16::from_le_bytes([data[pe_offset + 20], data[pe_offset + 21]]) as usize;
+    let num_sections = u16::from_le_bytes([data[pe_offset + 6], data[pe_offset + 7]]) as usize;
+    let opt_hdr_size = u16::from_le_bytes([data[pe_offset + 20], data[pe_offset + 21]]) as usize;
 
     let section_table_offset = pe_offset + 24 + opt_hdr_size;
 
@@ -150,10 +196,16 @@ fn parse_pe_sections(data: &[u8]) -> Vec<SectionEntropy> {
             .to_string();
 
         let raw_size = u32::from_le_bytes([
-            data[off + 16], data[off + 17], data[off + 18], data[off + 19],
+            data[off + 16],
+            data[off + 17],
+            data[off + 18],
+            data[off + 19],
         ]) as usize;
         let raw_offset = u32::from_le_bytes([
-            data[off + 20], data[off + 21], data[off + 22], data[off + 23],
+            data[off + 20],
+            data[off + 21],
+            data[off + 22],
+            data[off + 23],
         ]) as usize;
 
         if raw_offset + raw_size > data.len() || raw_size == 0 {
@@ -187,14 +239,18 @@ fn parse_elf_sections(data: &[u8]) -> Vec<SectionEntropy> {
     let is_64 = data[4] == 2;
 
     let (sh_offset, sh_entsize, sh_num, sh_strndx) = if is_64 {
-        if data.len() < 64 { return sections; }
+        if data.len() < 64 {
+            return sections;
+        }
         let off = u64::from_le_bytes(data[40..48].try_into().unwrap_or_default()) as usize;
         let entsz = u16::from_le_bytes([data[58], data[59]]) as usize;
         let num = u16::from_le_bytes([data[60], data[61]]) as usize;
         let strndx = u16::from_le_bytes([data[62], data[63]]) as usize;
         (off, entsz, num, strndx)
     } else {
-        if data.len() < 52 { return sections; }
+        if data.len() < 52 {
+            return sections;
+        }
         let off = u32::from_le_bytes(data[32..36].try_into().unwrap_or_default()) as usize;
         let entsz = u16::from_le_bytes([data[46], data[47]]) as usize;
         let num = u16::from_le_bytes([data[48], data[49]]) as usize;
@@ -213,37 +269,69 @@ fn parse_elf_sections(data: &[u8]) -> Vec<SectionEntropy> {
     }
 
     let (strtab_off, strtab_size) = if is_64 {
-        let o = u64::from_le_bytes(data[strtab_hdr_off + 24..strtab_hdr_off + 32].try_into().unwrap_or_default()) as usize;
-        let s = u64::from_le_bytes(data[strtab_hdr_off + 32..strtab_hdr_off + 40].try_into().unwrap_or_default()) as usize;
+        let o = u64::from_le_bytes(
+            data[strtab_hdr_off + 24..strtab_hdr_off + 32]
+                .try_into()
+                .unwrap_or_default(),
+        ) as usize;
+        let s = u64::from_le_bytes(
+            data[strtab_hdr_off + 32..strtab_hdr_off + 40]
+                .try_into()
+                .unwrap_or_default(),
+        ) as usize;
         (o, s)
     } else {
-        let o = u32::from_le_bytes(data[strtab_hdr_off + 16..strtab_hdr_off + 20].try_into().unwrap_or_default()) as usize;
-        let s = u32::from_le_bytes(data[strtab_hdr_off + 20..strtab_hdr_off + 24].try_into().unwrap_or_default()) as usize;
+        let o = u32::from_le_bytes(
+            data[strtab_hdr_off + 16..strtab_hdr_off + 20]
+                .try_into()
+                .unwrap_or_default(),
+        ) as usize;
+        let s = u32::from_le_bytes(
+            data[strtab_hdr_off + 20..strtab_hdr_off + 24]
+                .try_into()
+                .unwrap_or_default(),
+        ) as usize;
         (o, s)
     };
 
     for i in 0..sh_num.min(128) {
         let hoff = sh_offset + i * sh_entsize;
-        if hoff + sh_entsize > data.len() { break; }
+        if hoff + sh_entsize > data.len() {
+            break;
+        }
 
         let (sec_offset, sec_size, name_idx) = if is_64 {
-            let nidx = u32::from_le_bytes(data[hoff..hoff + 4].try_into().unwrap_or_default()) as usize;
-            let o = u64::from_le_bytes(data[hoff + 24..hoff + 32].try_into().unwrap_or_default()) as usize;
-            let s = u64::from_le_bytes(data[hoff + 32..hoff + 40].try_into().unwrap_or_default()) as usize;
+            let nidx =
+                u32::from_le_bytes(data[hoff..hoff + 4].try_into().unwrap_or_default()) as usize;
+            let o = u64::from_le_bytes(data[hoff + 24..hoff + 32].try_into().unwrap_or_default())
+                as usize;
+            let s = u64::from_le_bytes(data[hoff + 32..hoff + 40].try_into().unwrap_or_default())
+                as usize;
             (o, s, nidx)
         } else {
-            let nidx = u32::from_le_bytes(data[hoff..hoff + 4].try_into().unwrap_or_default()) as usize;
-            let o = u32::from_le_bytes(data[hoff + 16..hoff + 20].try_into().unwrap_or_default()) as usize;
-            let s = u32::from_le_bytes(data[hoff + 20..hoff + 24].try_into().unwrap_or_default()) as usize;
+            let nidx =
+                u32::from_le_bytes(data[hoff..hoff + 4].try_into().unwrap_or_default()) as usize;
+            let o = u32::from_le_bytes(data[hoff + 16..hoff + 20].try_into().unwrap_or_default())
+                as usize;
+            let s = u32::from_le_bytes(data[hoff + 20..hoff + 24].try_into().unwrap_or_default())
+                as usize;
             (o, s, nidx)
         };
 
-        if sec_size == 0 || sec_offset + sec_size > data.len() { continue; }
+        if sec_size == 0 || sec_offset + sec_size > data.len() {
+            continue;
+        }
 
         let name = if name_idx < strtab_size && strtab_off + name_idx < data.len() {
             let start = strtab_off + name_idx;
-            let end = data[start..].iter().position(|&b| b == 0).map(|p| start + p).unwrap_or(start + 32.min(data.len() - start));
-            std::str::from_utf8(&data[start..end]).unwrap_or("???").to_string()
+            let end = data[start..]
+                .iter()
+                .position(|&b| b == 0)
+                .map(|p| start + p)
+                .unwrap_or(start + 32.min(data.len() - start));
+            std::str::from_utf8(&data[start..end])
+                .unwrap_or("???")
+                .to_string()
         } else {
             format!("section_{i}")
         };
@@ -251,7 +339,13 @@ fn parse_elf_sections(data: &[u8]) -> Vec<SectionEntropy> {
         let entropy = shannon_entropy(&data[sec_offset..sec_offset + sec_size]);
         let suspicious = entropy > 7.0 || (name == ".text" && entropy > 6.8);
 
-        sections.push(SectionEntropy { name, offset: sec_offset, size: sec_size, entropy, suspicious });
+        sections.push(SectionEntropy {
+            name,
+            offset: sec_offset,
+            size: sec_size,
+            entropy,
+            suspicious,
+        });
     }
 
     sections
@@ -291,7 +385,8 @@ pub fn analyze_entropy(data: &[u8]) -> EntropyReport {
 
     let packer_hint = detect_packer(data);
 
-    let high_entropy_bytes: usize = sections.iter()
+    let high_entropy_bytes: usize = sections
+        .iter()
         .filter(|s| s.entropy > 7.0)
         .map(|s| s.size)
         .sum();
@@ -306,9 +401,7 @@ pub fn analyze_entropy(data: &[u8]) -> EntropyReport {
         || (overall_entropy > 7.2 && data.len() > 1024)
         || high_entropy_ratio > 0.75;
 
-    let suspicious = is_packed
-        || overall_entropy > 6.8
-        || sections.iter().any(|s| s.suspicious);
+    let suspicious = is_packed || overall_entropy > 6.8 || sections.iter().any(|s| s.suspicious);
 
     EntropyReport {
         overall_entropy,

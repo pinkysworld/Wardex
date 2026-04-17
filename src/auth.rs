@@ -97,11 +97,20 @@ impl SessionStore {
 
     /// Load sessions from disk, discarding any expired entries.
     fn load(&self) {
-        let Some(ref path) = self.store_path else { return };
-        let Ok(data) = std::fs::read_to_string(path) else { return };
-        let Ok(map) = serde_json::from_str::<HashMap<String, Session>>(&data) else { return };
+        let Some(ref path) = self.store_path else {
+            return;
+        };
+        let Ok(data) = std::fs::read_to_string(path) else {
+            return;
+        };
+        let Ok(map) = serde_json::from_str::<HashMap<String, Session>>(&data) else {
+            return;
+        };
         let now = Utc::now();
-        let valid: HashMap<String, Session> = map.into_iter().filter(|(_, s)| s.expires_at > now).collect();
+        let valid: HashMap<String, Session> = map
+            .into_iter()
+            .filter(|(_, s)| s.expires_at > now)
+            .collect();
         let mut store = self.sessions.lock().unwrap_or_else(|e| e.into_inner());
         *store = valid;
     }
@@ -113,7 +122,9 @@ impl SessionStore {
 
     /// Persist current sessions to disk (best-effort).
     fn save(&self) {
-        let Some(ref path) = self.store_path else { return };
+        let Some(ref path) = self.store_path else {
+            return;
+        };
         let store = self.sessions.lock().unwrap_or_else(|e| e.into_inner());
         if let Ok(json) = serde_json::to_string(&*store) {
             if let Some(parent) = Path::new(path).parent() {
@@ -172,7 +183,9 @@ impl SessionStore {
         let mut store = self.sessions.lock().unwrap_or_else(|e| e.into_inner());
         let existed = store.remove(id).is_some();
         drop(store);
-        if existed { self.save(); }
+        if existed {
+            self.save();
+        }
         existed
     }
 
@@ -184,7 +197,9 @@ impl SessionStore {
         store.retain(|_, s| s.expires_at > now);
         let changed = store.len() != before;
         drop(store);
-        if changed { self.save(); }
+        if changed {
+            self.save();
+        }
     }
 }
 
@@ -426,7 +441,9 @@ mod tests {
         let (url, _) = mgr.build_auth_url();
 
         assert!(url.contains("client_id=wardex%20console"));
-        assert!(url.contains("redirect_uri=https%3A%2F%2Fwardex.local%2Fcallback%3Ftenant%3Dacme%26next%3D%2Fadmin"));
+        assert!(url.contains(
+            "redirect_uri=https%3A%2F%2Fwardex.local%2Fcallback%3Ftenant%3Dacme%26next%3D%2Fadmin"
+        ));
         assert!(url.contains("scope=openid%20profile%20email"));
     }
 
@@ -500,7 +517,8 @@ mod tests {
 
     #[test]
     fn session_persistence_creates_missing_parent_directories() {
-        let root = std::env::temp_dir().join(format!("wardex_sessions_nested_{}", std::process::id()));
+        let root =
+            std::env::temp_dir().join(format!("wardex_sessions_nested_{}", std::process::id()));
         let path = root.join("nested").join("sessions.json");
         let path_str = path.to_string_lossy().to_string();
 

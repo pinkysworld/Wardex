@@ -11,11 +11,18 @@ import OnboardingWizard from './components/OnboardingWizard.jsx';
 const MAX_RECENT = 10;
 function useRecentItems() {
   const [items, setItems] = useState(() => {
-    try { return JSON.parse(localStorage.getItem('wardex_recent') || '[]'); } catch { return []; }
+    try {
+      return JSON.parse(localStorage.getItem('wardex_recent') || '[]');
+    } catch {
+      return [];
+    }
   });
   const add = useCallback((path, label) => {
-    setItems(prev => {
-      const next = [{ path, label, ts: Date.now() }, ...prev.filter(i => i.path !== path)].slice(0, MAX_RECENT);
+    setItems((prev) => {
+      const next = [{ path, label, ts: Date.now() }, ...prev.filter((i) => i.path !== path)].slice(
+        0,
+        MAX_RECENT,
+      );
       localStorage.setItem('wardex_recent', JSON.stringify(next));
       return next;
     });
@@ -25,14 +32,32 @@ function useRecentItems() {
 
 // ── Breadcrumbs ──────────────────────────────────────────────
 function Breadcrumbs({ sections, pathname }) {
-  const current = sections.find(s => s.path === pathname);
+  const current = sections.find((s) => s.path === pathname);
   if (!current || current.path === '/') return null;
   return (
     <nav className="breadcrumbs" aria-label="Breadcrumb">
-      <ol style={{ display: 'flex', gap: 4, listStyle: 'none', margin: 0, padding: 0, fontSize: 12, color: 'var(--text-secondary)' }}>
-        <li><Link className="btn-link" to="/">Dashboard</Link></li>
-        <li aria-hidden="true" style={{ margin: '0 2px' }}>›</li>
-        <li aria-current="page" style={{ fontWeight: 600, color: 'var(--text)' }}>{current.label}</li>
+      <ol
+        style={{
+          display: 'flex',
+          gap: 4,
+          listStyle: 'none',
+          margin: 0,
+          padding: 0,
+          fontSize: 12,
+          color: 'var(--text-secondary)',
+        }}
+      >
+        <li>
+          <Link className="btn-link" to="/">
+            Dashboard
+          </Link>
+        </li>
+        <li aria-hidden="true" style={{ margin: '0 2px' }}>
+          ›
+        </li>
+        <li aria-current="page" style={{ fontWeight: 600, color: 'var(--text)' }}>
+          {current.label}
+        </li>
       </ol>
     </nav>
   );
@@ -54,26 +79,95 @@ const EmailSecurity = lazy(() => import('./components/EmailSecurity.jsx'));
 const AttackGraph = lazy(() => import('./components/AttackGraph.jsx'));
 
 const SECTIONS = [
-  { id: 'dashboard',        path: '/',                 label: 'Dashboard',        shortLabel: 'DB', minRole: 'viewer' },
-  { id: 'live-monitor',     path: '/monitor',          label: 'Live Monitor',     shortLabel: 'LM', minRole: 'viewer' },
-  { id: 'threat-detection', path: '/detection',        label: 'Threat Detection', shortLabel: 'TD', minRole: 'analyst' },
-  { id: 'fleet-agents',     path: '/fleet',            label: 'Fleet & Agents',   shortLabel: 'FA', minRole: 'viewer' },
-  { id: 'security-policy',  path: '/policy',           label: 'Security Policy',  shortLabel: 'SP', minRole: 'analyst' },
-  { id: 'soc-workbench',    path: '/soc',              label: 'SOC Workbench',    shortLabel: 'SOC', minRole: 'analyst' },
-  { id: 'infrastructure',   path: '/infrastructure',   label: 'Infrastructure',   shortLabel: 'INF', minRole: 'analyst' },
-  { id: 'reports-exports',  path: '/reports',          label: 'Reports & Exports',shortLabel: 'REP', minRole: 'viewer' },
-  { id: 'settings',         path: '/settings',         label: 'Settings',         shortLabel: 'CFG', minRole: 'admin' },
-  { id: 'help-docs',        path: '/help',             label: 'Help & Docs',      shortLabel: 'DOC', minRole: 'viewer' },
-  { id: 'ueba',             path: '/ueba',             label: 'UEBA',             shortLabel: 'UBA', minRole: 'analyst' },
-  { id: 'ndr',              path: '/ndr',              label: 'NDR',              shortLabel: 'NDR', minRole: 'analyst' },
-  { id: 'email-security',   path: '/email-security',   label: 'Email Security',   shortLabel: 'EML', minRole: 'analyst' },
-  { id: 'attack-graph',     path: '/attack-graph',     label: 'Attack Graph',     shortLabel: 'ATK', minRole: 'analyst' },
+  { id: 'dashboard', path: '/', label: 'Dashboard', shortLabel: 'DB', minRole: 'viewer' },
+  {
+    id: 'live-monitor',
+    path: '/monitor',
+    label: 'Live Monitor',
+    shortLabel: 'LM',
+    minRole: 'viewer',
+  },
+  {
+    id: 'threat-detection',
+    path: '/detection',
+    label: 'Threat Detection',
+    shortLabel: 'TD',
+    minRole: 'analyst',
+  },
+  {
+    id: 'fleet-agents',
+    path: '/fleet',
+    label: 'Fleet & Agents',
+    shortLabel: 'FA',
+    minRole: 'viewer',
+  },
+  {
+    id: 'security-policy',
+    path: '/policy',
+    label: 'Security Policy',
+    shortLabel: 'SP',
+    minRole: 'analyst',
+  },
+  {
+    id: 'soc-workbench',
+    path: '/soc',
+    label: 'SOC Workbench',
+    shortLabel: 'SOC',
+    minRole: 'analyst',
+  },
+  {
+    id: 'infrastructure',
+    path: '/infrastructure',
+    label: 'Infrastructure',
+    shortLabel: 'INF',
+    minRole: 'analyst',
+  },
+  {
+    id: 'reports-exports',
+    path: '/reports',
+    label: 'Reports & Exports',
+    shortLabel: 'REP',
+    minRole: 'viewer',
+  },
+  { id: 'settings', path: '/settings', label: 'Settings', shortLabel: 'CFG', minRole: 'admin' },
+  { id: 'help-docs', path: '/help', label: 'Help & Docs', shortLabel: 'DOC', minRole: 'viewer' },
+  { id: 'ueba', path: '/ueba', label: 'UEBA', shortLabel: 'UBA', minRole: 'analyst' },
+  { id: 'ndr', path: '/ndr', label: 'NDR', shortLabel: 'NDR', minRole: 'analyst' },
+  {
+    id: 'email-security',
+    path: '/email-security',
+    label: 'Email Security',
+    shortLabel: 'EML',
+    minRole: 'analyst',
+  },
+  {
+    id: 'attack-graph',
+    path: '/attack-graph',
+    label: 'Attack Graph',
+    shortLabel: 'ATK',
+    minRole: 'analyst',
+  },
 ];
 
 const WORKFLOW_GROUPS = [
   { id: 'monitor', label: 'Monitor', sections: ['dashboard', 'live-monitor', 'reports-exports'] },
-  { id: 'investigate', label: 'Investigate', sections: ['soc-workbench', 'threat-detection', 'infrastructure', 'ueba', 'ndr', 'attack-graph'] },
-  { id: 'respond', label: 'Respond', sections: ['fleet-agents', 'security-policy', 'email-security'] },
+  {
+    id: 'investigate',
+    label: 'Investigate',
+    sections: [
+      'soc-workbench',
+      'threat-detection',
+      'infrastructure',
+      'ueba',
+      'ndr',
+      'attack-graph',
+    ],
+  },
+  {
+    id: 'respond',
+    label: 'Respond',
+    sections: ['fleet-agents', 'security-policy', 'email-security'],
+  },
   { id: 'manage', label: 'Manage', sections: ['settings', 'help-docs'] },
 ];
 
@@ -85,7 +179,9 @@ function RequireRole({ minRole, children }) {
   return (
     <div className="access-denied">
       <h2>Access Denied</h2>
-      <p>You need the <strong>{minRole}</strong> role or higher to view this section.</p>
+      <p>
+        You need the <strong>{minRole}</strong> role or higher to view this section.
+      </p>
     </div>
   );
 }
@@ -95,7 +191,9 @@ export default function App() {
   const { dark, toggle } = useTheme();
   const { role } = useRole();
   const { data: hp } = useApi(api.health);
-  const { data: inboxData, reload: reloadInbox } = useApi(api.inbox, [authenticated], { skip: !authenticated });
+  const { data: inboxData, reload: reloadInbox } = useApi(api.inbox, [authenticated], {
+    skip: !authenticated,
+  });
   const navigate = useNavigate();
   const location = useLocation();
   const { items: recentItems, add: addRecent } = useRecentItems();
@@ -106,23 +204,32 @@ export default function App() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [linkCopied, setLinkCopied] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
-  const [showOnboarding, setShowOnboarding] = useState(() => !localStorage.getItem('wardex_onboarded'));
+  const [showOnboarding, setShowOnboarding] = useState(
+    () => !localStorage.getItem('wardex_onboarded'),
+  );
   const [showShortcuts, setShowShortcuts] = useState(false);
   const [showInboxLocationKey, setShowInboxLocationKey] = useState(null);
   const [pinnedSections, setPinnedSections] = useState(() => {
-    try { return JSON.parse(localStorage.getItem('wardex_pinned_sections') || '[]'); } catch { return []; }
+    try {
+      return JSON.parse(localStorage.getItem('wardex_pinned_sections') || '[]');
+    } catch {
+      return [];
+    }
   });
   const showInbox = showInboxLocationKey === location.key;
 
   // Track page visits for recent items
   useEffect(() => {
-    const section = SECTIONS.find(s => s.path === location.pathname);
+    const section = SECTIONS.find((s) => s.path === location.pathname);
     if (section) addRecent(section.path, section.label);
   }, [location.pathname, addRecent]);
 
-  useInterval(() => {
-    if (authenticated) reloadInbox();
-  }, authenticated ? 30000 : null);
+  useInterval(
+    () => {
+      if (authenticated) reloadInbox();
+    },
+    authenticated ? 30000 : null,
+  );
 
   // ── Global Keyboard Shortcuts ──
   useEffect(() => {
@@ -130,36 +237,77 @@ export default function App() {
       // Ignore if user is typing in an input/textarea
       if (['INPUT', 'TEXTAREA', 'SELECT'].includes(e.target.tagName)) return;
       const key = e.key.toLowerCase();
-      if (key === '?') { setShowShortcuts(s => !s); return; }
+      if (key === '?') {
+        setShowShortcuts((s) => !s);
+        return;
+      }
       if (!authenticated) return;
       switch (key) {
-        case 'd': navigate('/'); break;
-        case 'm': navigate('/monitor'); break;
-        case 't': navigate('/detection'); break;
-        case 'f': navigate('/fleet'); break;
-        case 's': navigate('/soc'); break;
-        case 'g': navigate('/settings'); break;
-        case 'u': navigate('/ueba'); break;
-        case 'n': navigate('/ndr'); break;
-        case 'e': navigate('/email-security'); break;
-        case 'a': navigate('/attack-graph'); break;
-        default: break;
+        case 'd':
+          navigate('/');
+          break;
+        case 'm':
+          navigate('/monitor');
+          break;
+        case 't':
+          navigate('/detection');
+          break;
+        case 'f':
+          navigate('/fleet');
+          break;
+        case 's':
+          navigate('/soc');
+          break;
+        case 'g':
+          navigate('/settings');
+          break;
+        case 'u':
+          navigate('/ueba');
+          break;
+        case 'n':
+          navigate('/ndr');
+          break;
+        case 'e':
+          navigate('/email-security');
+          break;
+        case 'a':
+          navigate('/attack-graph');
+          break;
+        default:
+          break;
       }
     };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
   }, [navigate, authenticated]);
 
-  const currentSection = SECTIONS.find(s => s.path === location.pathname) || SECTIONS[0];
+  const currentSection = SECTIONS.find((s) => s.path === location.pathname) || SECTIONS[0];
   const currentGroup = WORKFLOW_GROUPS.find((group) => group.sections.includes(currentSection.id));
-  const primaryDestination = role === 'admin'
-    ? { label: 'System Status', path: '/fleet', description: 'Fleet health, rollouts, and platform posture.' }
-    : role === 'analyst'
-      ? { label: 'My Queue', path: '/soc', description: 'Open investigations, queue pressure, and response work.' }
-      : { label: 'Live Monitor', path: '/monitor', description: 'Current alerts and system activity.' };
+  const primaryDestination =
+    role === 'admin'
+      ? {
+          label: 'System Status',
+          path: '/fleet',
+          description: 'Fleet health, rollouts, and platform posture.',
+        }
+      : role === 'analyst'
+        ? {
+            label: 'My Queue',
+            path: '/soc',
+            description: 'Open investigations, queue pressure, and response work.',
+          }
+        : {
+            label: 'Live Monitor',
+            path: '/monitor',
+            description: 'Current alerts and system activity.',
+          };
   const scopeTokens = [
     currentGroup?.label,
-    role === 'admin' ? 'Admin Workspace' : role === 'analyst' ? 'Analyst Workspace' : 'Viewer Workspace',
+    role === 'admin'
+      ? 'Admin Workspace'
+      : role === 'analyst'
+        ? 'Analyst Workspace'
+        : 'Viewer Workspace',
     location.search ? `Scoped by ${location.search.replace(/^\?/, '').replace(/&/g, ' · ')}` : null,
   ].filter(Boolean);
   const inboxItems = Array.isArray(inboxData) ? inboxData : inboxData?.items || [];
@@ -167,7 +315,9 @@ export default function App() {
 
   const togglePinnedSection = useCallback((sectionId) => {
     setPinnedSections((prev) => {
-      const next = prev.includes(sectionId) ? prev.filter((id) => id !== sectionId) : [sectionId, ...prev].slice(0, 6);
+      const next = prev.includes(sectionId)
+        ? prev.filter((id) => id !== sectionId)
+        : [sectionId, ...prev].slice(0, 6);
       localStorage.setItem('wardex_pinned_sections', JSON.stringify(next));
       return next;
     });
@@ -183,36 +333,48 @@ export default function App() {
     }
   }, [location.pathname, location.search]);
 
-  const handleConnect = useCallback(async (e) => {
-    e.preventDefault();
-    setAuthError('');
-    const ok = await connect(tokenInput);
-    if (!ok) setAuthError('Authentication failed — check your token');
-  }, [tokenInput, connect]);
+  const handleConnect = useCallback(
+    async (e) => {
+      e.preventDefault();
+      setAuthError('');
+      const ok = await connect(tokenInput);
+      if (!ok) setAuthError('Authentication failed — check your token');
+    },
+    [tokenInput, connect],
+  );
 
   // Filter sidebar items by role
-  const visibleSections = SECTIONS.filter(s => ROLE_LEVEL[role] >= ROLE_LEVEL[s.minRole]);
+  const visibleSections = SECTIONS.filter((s) => ROLE_LEVEL[role] >= ROLE_LEVEL[s.minRole]);
   const pinnedVisibleSections = pinnedSections
     .map((id) => visibleSections.find((section) => section.id === id))
     .filter(Boolean);
-  const groupedSections = WORKFLOW_GROUPS
-    .map((group) => ({
-      ...group,
-      sections: group.sections
-        .map((id) => visibleSections.find((section) => section.id === id))
-        .filter(Boolean),
-    }))
-    .filter((group) => group.sections.length > 0);
+  const groupedSections = WORKFLOW_GROUPS.map((group) => ({
+    ...group,
+    sections: group.sections
+      .map((id) => visibleSections.find((section) => section.id === id))
+      .filter(Boolean),
+  })).filter((group) => group.sections.length > 0);
 
   return (
     <div className={`app ${sidebarCollapsed ? 'sidebar-collapsed' : ''}`}>
-      <a href="#main-content" className="sr-only focus-visible-only">Skip to main content</a>
+      <a href="#main-content" className="sr-only focus-visible-only">
+        Skip to main content
+      </a>
       {/* Sidebar */}
       <aside className="sidebar" role="navigation" aria-label="Main navigation">
         <div className="sidebar-header">
-          <span className="logo" aria-hidden="true">SE</span>
+          <span className="logo" aria-hidden="true">
+            SE
+          </span>
           {!sidebarCollapsed && <span className="brand">Wardex</span>}
-          <button className="btn-icon collapse-btn" onClick={() => setSidebarCollapsed(c => !c)} title="Toggle sidebar" aria-label="Toggle sidebar" aria-expanded={!sidebarCollapsed} aria-controls="sidebar-nav">
+          <button
+            className="btn-icon collapse-btn"
+            onClick={() => setSidebarCollapsed((c) => !c)}
+            title="Toggle sidebar"
+            aria-label="Toggle sidebar"
+            aria-expanded={!sidebarCollapsed}
+            aria-controls="sidebar-nav"
+          >
             {sidebarCollapsed ? '→' : '←'}
           </button>
         </div>
@@ -220,7 +382,10 @@ export default function App() {
           {!sidebarCollapsed && authenticated && (
             <div className="sidebar-primary">
               <div className="sidebar-group-title">Primary</div>
-              <NavLink className={({ isActive }) => `primary-destination ${isActive ? 'active' : ''}`} to={primaryDestination.path}>
+              <NavLink
+                className={({ isActive }) => `primary-destination ${isActive ? 'active' : ''}`}
+                to={primaryDestination.path}
+              >
                 <span className="primary-destination-label">{primaryDestination.label}</span>
                 <span className="primary-destination-copy">{primaryDestination.description}</span>
               </NavLink>
@@ -232,11 +397,15 @@ export default function App() {
               {pinnedVisibleSections.map((section) => (
                 <NavLink
                   key={section.id}
-                  className={({ isActive }) => `nav-item nav-item-pinned ${isActive ? 'active' : ''}`}
+                  className={({ isActive }) =>
+                    `nav-item nav-item-pinned ${isActive ? 'active' : ''}`
+                  }
                   to={section.path}
                   title={section.label}
                 >
-                  <span className="nav-icon nav-icon-text" aria-hidden="true">{section.shortLabel}</span>
+                  <span className="nav-icon nav-icon-text" aria-hidden="true">
+                    {section.shortLabel}
+                  </span>
                   <span className="nav-label">{section.label}</span>
                 </NavLink>
               ))}
@@ -253,7 +422,9 @@ export default function App() {
                     title={section.label}
                     aria-current={location.pathname === section.path ? 'page' : undefined}
                   >
-                    <span className="nav-icon nav-icon-text" aria-hidden="true">{section.shortLabel}</span>
+                    <span className="nav-icon nav-icon-text" aria-hidden="true">
+                      {section.shortLabel}
+                    </span>
                     {!sidebarCollapsed && <span className="nav-label">{section.label}</span>}
                   </NavLink>
                   {!sidebarCollapsed && authenticated && (
@@ -261,7 +432,11 @@ export default function App() {
                       className={`pin-toggle ${pinnedSections.includes(section.id) ? 'active' : ''}`}
                       type="button"
                       onClick={() => togglePinnedSection(section.id)}
-                      aria-label={pinnedSections.includes(section.id) ? `Unpin ${section.label}` : `Pin ${section.label}`}
+                      aria-label={
+                        pinnedSections.includes(section.id)
+                          ? `Unpin ${section.label}`
+                          : `Pin ${section.label}`
+                      }
                       title={pinnedSections.includes(section.id) ? 'Unpin' : 'Pin'}
                     >
                       ★
@@ -275,14 +450,28 @@ export default function App() {
         {/* Recent Items */}
         {!sidebarCollapsed && authenticated && recentItems.length > 0 && (
           <div className="sidebar-recent">
-            <button className="btn-link" onClick={() => setShowRecent(r => !r)} style={{ fontSize: 11, padding: '4px 12px', width: '100%', textAlign: 'left', opacity: 0.7 }}>
+            <button
+              className="btn-link"
+              onClick={() => setShowRecent((r) => !r)}
+              style={{
+                fontSize: 11,
+                padding: '4px 12px',
+                width: '100%',
+                textAlign: 'left',
+                opacity: 0.7,
+              }}
+            >
               {showRecent ? '▾' : '▸'} Recent
             </button>
             {showRecent && (
               <ul style={{ listStyle: 'none', margin: 0, padding: '0 8px', fontSize: 12 }}>
-                {recentItems.slice(0, 5).map(r => (
+                {recentItems.slice(0, 5).map((r) => (
                   <li key={r.path}>
-                    <NavLink className="btn-link nav-item recent-link" style={{ fontSize: 12, padding: '2px 8px', width: '100%', textAlign: 'left' }} to={r.path}>
+                    <NavLink
+                      className="btn-link nav-item recent-link"
+                      style={{ fontSize: 12, padding: '2px 8px', width: '100%', textAlign: 'left' }}
+                      to={r.path}
+                    >
                       {r.label}
                     </NavLink>
                   </li>
@@ -293,15 +482,36 @@ export default function App() {
         )}
         <div className="sidebar-footer">
           {authenticated && !sidebarCollapsed && (
-            <span className="role-badge" title="Current role">{role}</span>
+            <span className="role-badge" title="Current role">
+              {role}
+            </span>
           )}
-          <button className="btn-icon" onClick={toggle} title={dark ? 'Light mode' : 'Dark mode'} aria-label={dark ? 'Switch to light mode' : 'Switch to dark mode'}>
+          <button
+            className="btn-icon"
+            onClick={toggle}
+            title={dark ? 'Light mode' : 'Dark mode'}
+            aria-label={dark ? 'Switch to light mode' : 'Switch to dark mode'}
+          >
             {dark ? '☀' : '🌙'}
           </button>
           {authenticated && (
-            <button className="btn-icon" onClick={disconnect} title="Disconnect" aria-label="Disconnect">⎋</button>
+            <button
+              className="btn-icon"
+              onClick={disconnect}
+              title="Disconnect"
+              aria-label="Disconnect"
+            >
+              ⎋
+            </button>
           )}
-          <button className="shortcut-hint" type="button" title="Press ? for keyboard shortcuts" onClick={() => setShowShortcuts(true)}>⌘?</button>
+          <button
+            className="shortcut-hint"
+            type="button"
+            title="Press ? for keyboard shortcuts"
+            onClick={() => setShowShortcuts(true)}
+          >
+            ⌘?
+          </button>
         </div>
       </aside>
 
@@ -315,53 +525,139 @@ export default function App() {
           </div>
           <div className="topbar-right">
             {hp?.version && (
-              <span className="version-badge" title="Wardex version">v{hp.version}</span>
+              <span className="version-badge" title="Wardex version">
+                v{hp.version}
+              </span>
             )}
             {authenticated && (
               <div style={{ position: 'relative' }}>
                 <button
                   className="btn btn-sm"
                   type="button"
-                  onClick={() => setShowInboxLocationKey((current) => current === location.key ? null : location.key)}
+                  onClick={() =>
+                    setShowInboxLocationKey((current) =>
+                      current === location.key ? null : location.key,
+                    )
+                  }
                   aria-expanded={showInbox}
                   aria-haspopup="dialog"
                 >
                   Inbox{inboxPending > 0 ? ` (${inboxPending})` : ''}
                 </button>
                 {showInbox && (
-                  <div className="card" style={{ position: 'absolute', right: 0, top: 'calc(100% + 8px)', width: 360, zIndex: 20, padding: 0 }}>
-                    <div style={{ padding: 14, borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <div
+                    className="card"
+                    style={{
+                      position: 'absolute',
+                      right: 0,
+                      top: 'calc(100% + 8px)',
+                      width: 360,
+                      zIndex: 20,
+                      padding: 0,
+                    }}
+                  >
+                    <div
+                      style={{
+                        padding: 14,
+                        borderBottom: '1px solid var(--border)',
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center',
+                      }}
+                    >
                       <div>
                         <div className="card-title">Operator Inbox</div>
-                        <div className="hint" style={{ marginTop: 4 }}>Persistent approvals, degraded feeds, and follow-up work.</div>
-                      </div>
-                      <button className="btn btn-sm" onClick={() => setShowInboxLocationKey(null)}>Close</button>
-                    </div>
-                    <div style={{ maxHeight: 320, overflowY: 'auto', padding: 12, display: 'grid', gap: 10 }}>
-                      {inboxItems.length === 0 ? <div className="empty" style={{ padding: 20 }}>No active inbox items.</div> : inboxItems.map((item) => (
-                        <div key={item.id} style={{ border: '1px solid var(--border)', borderRadius: 12, padding: 12, opacity: item.acknowledged ? 0.65 : 1 }}>
-                          <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, alignItems: 'flex-start' }}>
-                            <div>
-                              <div style={{ fontWeight: 700, fontSize: 13 }}>{item.title}</div>
-                              <div className="hint" style={{ marginTop: 4 }}>{item.summary}</div>
-                            </div>
-                            <span className={`badge ${item.severity === 'high' ? 'badge-err' : item.severity === 'medium' ? 'badge-warn' : 'badge-info'}`}>{item.severity}</span>
-                          </div>
-                          <div style={{ display: 'flex', gap: 8, marginTop: 12, flexWrap: 'wrap' }}>
-                            <button className="btn btn-sm btn-primary" onClick={() => { navigate(item.path); setShowInboxLocationKey(null); }}>Open</button>
-                            {!item.acknowledged && (
-                              <button className="btn btn-sm" onClick={async () => { await api.ackInbox({ id: item.id }); reloadInbox(); }}>Acknowledge</button>
-                            )}
-                          </div>
+                        <div className="hint" style={{ marginTop: 4 }}>
+                          Persistent approvals, degraded feeds, and follow-up work.
                         </div>
-                      ))}
+                      </div>
+                      <button className="btn btn-sm" onClick={() => setShowInboxLocationKey(null)}>
+                        Close
+                      </button>
+                    </div>
+                    <div
+                      style={{
+                        maxHeight: 320,
+                        overflowY: 'auto',
+                        padding: 12,
+                        display: 'grid',
+                        gap: 10,
+                      }}
+                    >
+                      {inboxItems.length === 0 ? (
+                        <div className="empty" style={{ padding: 20 }}>
+                          No active inbox items.
+                        </div>
+                      ) : (
+                        inboxItems.map((item) => (
+                          <div
+                            key={item.id}
+                            style={{
+                              border: '1px solid var(--border)',
+                              borderRadius: 12,
+                              padding: 12,
+                              opacity: item.acknowledged ? 0.65 : 1,
+                            }}
+                          >
+                            <div
+                              style={{
+                                display: 'flex',
+                                justifyContent: 'space-between',
+                                gap: 8,
+                                alignItems: 'flex-start',
+                              }}
+                            >
+                              <div>
+                                <div style={{ fontWeight: 700, fontSize: 13 }}>{item.title}</div>
+                                <div className="hint" style={{ marginTop: 4 }}>
+                                  {item.summary}
+                                </div>
+                              </div>
+                              <span
+                                className={`badge ${item.severity === 'high' ? 'badge-err' : item.severity === 'medium' ? 'badge-warn' : 'badge-info'}`}
+                              >
+                                {item.severity}
+                              </span>
+                            </div>
+                            <div
+                              style={{ display: 'flex', gap: 8, marginTop: 12, flexWrap: 'wrap' }}
+                            >
+                              <button
+                                className="btn btn-sm btn-primary"
+                                onClick={() => {
+                                  navigate(item.path);
+                                  setShowInboxLocationKey(null);
+                                }}
+                              >
+                                Open
+                              </button>
+                              {!item.acknowledged && (
+                                <button
+                                  className="btn btn-sm"
+                                  onClick={async () => {
+                                    await api.ackInbox({ id: item.id });
+                                    reloadInbox();
+                                  }}
+                                >
+                                  Acknowledge
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                        ))
+                      )}
                     </div>
                   </div>
                 )}
               </div>
             )}
             {authenticated && (
-              <button className="btn btn-sm" onClick={() => setSearchOpen(true)} title="Global search (⌘K)" aria-label="Open global search (⌘K)">
+              <button
+                className="btn btn-sm"
+                onClick={() => setSearchOpen(true)}
+                title="Global search (⌘K)"
+                aria-label="Open global search (⌘K)"
+              >
                 Search
               </button>
             )}
@@ -379,7 +675,11 @@ export default function App() {
               </button>
             )}
             {authenticated && (
-              <button className="btn btn-sm" onClick={copyShareLink} title="Copy shareable deep-link to clipboard">
+              <button
+                className="btn btn-sm"
+                onClick={copyShareLink}
+                title="Copy shareable deep-link to clipboard"
+              >
                 {linkCopied ? 'Copied' : 'Share Link'}
               </button>
             )}
@@ -388,25 +688,35 @@ export default function App() {
                 className={`btn btn-sm ${pinnedSections.includes(currentSection.id) ? 'btn-primary' : ''}`}
                 type="button"
                 onClick={() => togglePinnedSection(currentSection.id)}
-                aria-label={pinnedSections.includes(currentSection.id) ? `Unpin ${currentSection.label}` : `Pin ${currentSection.label}`}
+                aria-label={
+                  pinnedSections.includes(currentSection.id)
+                    ? `Unpin ${currentSection.label}`
+                    : `Pin ${currentSection.label}`
+                }
               >
                 {pinnedSections.includes(currentSection.id) ? 'Pinned' : 'Pin View'}
               </button>
             )}
             {!authenticated ? (
               <form className="auth-form" onSubmit={handleConnect}>
-                <label className="sr-only" htmlFor="api-token-input">API token</label>
+                <label className="sr-only" htmlFor="api-token-input">
+                  API token
+                </label>
                 <input
                   id="api-token-input"
                   name="api_token"
                   type="password"
                   placeholder="Paste API token…"
                   value={tokenInput}
-                  onChange={e => setTokenInput(e.target.value)}
+                  onChange={(e) => setTokenInput(e.target.value)}
                   className="auth-input"
                   autoComplete="current-password"
                 />
-                <button type="submit" className="btn btn-primary" disabled={checking || !tokenInput}>
+                <button
+                  type="submit"
+                  className="btn btn-primary"
+                  disabled={checking || !tokenInput}
+                >
                   {checking ? 'Connecting…' : 'Connect'}
                 </button>
                 {authError && <span className="auth-error">{authError}</span>}
@@ -425,7 +735,9 @@ export default function App() {
             </div>
             <div className="scope-chips">
               {scopeTokens.map((token) => (
-                <span key={token} className="scope-chip">{token}</span>
+                <span key={token} className="scope-chip">
+                  {token}
+                </span>
               ))}
             </div>
           </div>
@@ -441,20 +753,164 @@ export default function App() {
             </div>
           ) : (
             <Routes>
-              <Route path="/" element={<ErrorBoundary><Suspense fallback={<div className="loading">Loading…</div>}><Dashboard /></Suspense></ErrorBoundary>} />
-              <Route path="/monitor" element={<ErrorBoundary><Suspense fallback={<div className="loading">Loading…</div>}><LiveMonitor /></Suspense></ErrorBoundary>} />
-              <Route path="/detection" element={<ErrorBoundary><RequireRole minRole="analyst"><Suspense fallback={<div className="loading">Loading…</div>}><ThreatDetection /></Suspense></RequireRole></ErrorBoundary>} />
-              <Route path="/fleet" element={<ErrorBoundary><Suspense fallback={<div className="loading">Loading…</div>}><FleetAgents /></Suspense></ErrorBoundary>} />
-              <Route path="/policy" element={<ErrorBoundary><RequireRole minRole="analyst"><Suspense fallback={<div className="loading">Loading…</div>}><SecurityPolicy /></Suspense></RequireRole></ErrorBoundary>} />
-              <Route path="/soc" element={<ErrorBoundary><RequireRole minRole="analyst"><Suspense fallback={<div className="loading">Loading…</div>}><SOCWorkbench /></Suspense></RequireRole></ErrorBoundary>} />
-              <Route path="/infrastructure" element={<ErrorBoundary><RequireRole minRole="analyst"><Suspense fallback={<div className="loading">Loading…</div>}><Infrastructure /></Suspense></RequireRole></ErrorBoundary>} />
-              <Route path="/reports" element={<ErrorBoundary><Suspense fallback={<div className="loading">Loading…</div>}><ReportsExports /></Suspense></ErrorBoundary>} />
-              <Route path="/settings" element={<ErrorBoundary><RequireRole minRole="admin"><Suspense fallback={<div className="loading">Loading…</div>}><Settings /></Suspense></RequireRole></ErrorBoundary>} />
-              <Route path="/help" element={<ErrorBoundary><Suspense fallback={<div className="loading">Loading…</div>}><HelpDocs /></Suspense></ErrorBoundary>} />
-              <Route path="/ueba" element={<ErrorBoundary><RequireRole minRole="analyst"><Suspense fallback={<div className="loading">Loading…</div>}><UEBADashboard /></Suspense></RequireRole></ErrorBoundary>} />
-              <Route path="/ndr" element={<ErrorBoundary><RequireRole minRole="analyst"><Suspense fallback={<div className="loading">Loading…</div>}><NDRDashboard /></Suspense></RequireRole></ErrorBoundary>} />
-              <Route path="/email-security" element={<ErrorBoundary><RequireRole minRole="analyst"><Suspense fallback={<div className="loading">Loading…</div>}><EmailSecurity /></Suspense></RequireRole></ErrorBoundary>} />
-              <Route path="/attack-graph" element={<ErrorBoundary><RequireRole minRole="analyst"><Suspense fallback={<div className="loading">Loading…</div>}><AttackGraph /></Suspense></RequireRole></ErrorBoundary>} />
+              <Route
+                path="/"
+                element={
+                  <ErrorBoundary>
+                    <Suspense fallback={<div className="loading">Loading…</div>}>
+                      <Dashboard />
+                    </Suspense>
+                  </ErrorBoundary>
+                }
+              />
+              <Route
+                path="/monitor"
+                element={
+                  <ErrorBoundary>
+                    <Suspense fallback={<div className="loading">Loading…</div>}>
+                      <LiveMonitor />
+                    </Suspense>
+                  </ErrorBoundary>
+                }
+              />
+              <Route
+                path="/detection"
+                element={
+                  <ErrorBoundary>
+                    <RequireRole minRole="analyst">
+                      <Suspense fallback={<div className="loading">Loading…</div>}>
+                        <ThreatDetection />
+                      </Suspense>
+                    </RequireRole>
+                  </ErrorBoundary>
+                }
+              />
+              <Route
+                path="/fleet"
+                element={
+                  <ErrorBoundary>
+                    <Suspense fallback={<div className="loading">Loading…</div>}>
+                      <FleetAgents />
+                    </Suspense>
+                  </ErrorBoundary>
+                }
+              />
+              <Route
+                path="/policy"
+                element={
+                  <ErrorBoundary>
+                    <RequireRole minRole="analyst">
+                      <Suspense fallback={<div className="loading">Loading…</div>}>
+                        <SecurityPolicy />
+                      </Suspense>
+                    </RequireRole>
+                  </ErrorBoundary>
+                }
+              />
+              <Route
+                path="/soc"
+                element={
+                  <ErrorBoundary>
+                    <RequireRole minRole="analyst">
+                      <Suspense fallback={<div className="loading">Loading…</div>}>
+                        <SOCWorkbench />
+                      </Suspense>
+                    </RequireRole>
+                  </ErrorBoundary>
+                }
+              />
+              <Route
+                path="/infrastructure"
+                element={
+                  <ErrorBoundary>
+                    <RequireRole minRole="analyst">
+                      <Suspense fallback={<div className="loading">Loading…</div>}>
+                        <Infrastructure />
+                      </Suspense>
+                    </RequireRole>
+                  </ErrorBoundary>
+                }
+              />
+              <Route
+                path="/reports"
+                element={
+                  <ErrorBoundary>
+                    <Suspense fallback={<div className="loading">Loading…</div>}>
+                      <ReportsExports />
+                    </Suspense>
+                  </ErrorBoundary>
+                }
+              />
+              <Route
+                path="/settings"
+                element={
+                  <ErrorBoundary>
+                    <RequireRole minRole="admin">
+                      <Suspense fallback={<div className="loading">Loading…</div>}>
+                        <Settings />
+                      </Suspense>
+                    </RequireRole>
+                  </ErrorBoundary>
+                }
+              />
+              <Route
+                path="/help"
+                element={
+                  <ErrorBoundary>
+                    <Suspense fallback={<div className="loading">Loading…</div>}>
+                      <HelpDocs />
+                    </Suspense>
+                  </ErrorBoundary>
+                }
+              />
+              <Route
+                path="/ueba"
+                element={
+                  <ErrorBoundary>
+                    <RequireRole minRole="analyst">
+                      <Suspense fallback={<div className="loading">Loading…</div>}>
+                        <UEBADashboard />
+                      </Suspense>
+                    </RequireRole>
+                  </ErrorBoundary>
+                }
+              />
+              <Route
+                path="/ndr"
+                element={
+                  <ErrorBoundary>
+                    <RequireRole minRole="analyst">
+                      <Suspense fallback={<div className="loading">Loading…</div>}>
+                        <NDRDashboard />
+                      </Suspense>
+                    </RequireRole>
+                  </ErrorBoundary>
+                }
+              />
+              <Route
+                path="/email-security"
+                element={
+                  <ErrorBoundary>
+                    <RequireRole minRole="analyst">
+                      <Suspense fallback={<div className="loading">Loading…</div>}>
+                        <EmailSecurity />
+                      </Suspense>
+                    </RequireRole>
+                  </ErrorBoundary>
+                }
+              />
+              <Route
+                path="/attack-graph"
+                element={
+                  <ErrorBoundary>
+                    <RequireRole minRole="analyst">
+                      <Suspense fallback={<div className="loading">Loading…</div>}>
+                        <AttackGraph />
+                      </Suspense>
+                    </RequireRole>
+                  </ErrorBoundary>
+                }
+              />
               <Route path="*" element={<Navigate to="/" replace />} />
             </Routes>
           )}
@@ -475,18 +931,33 @@ export default function App() {
       />
       <NotificationToast />
       {showOnboarding && (
-        <OnboardingWizard onComplete={() => {
-          localStorage.setItem('wardex_onboarded', '1');
-          setShowOnboarding(false);
-        }} />
+        <OnboardingWizard
+          onComplete={() => {
+            localStorage.setItem('wardex_onboarded', '1');
+            setShowOnboarding(false);
+          }}
+        />
       )}
       {showShortcuts && (
         <div className="search-palette-overlay" onClick={() => setShowShortcuts(false)}>
-          <div className="search-palette" onClick={e => e.stopPropagation()} style={{ maxWidth: 400 }}>
+          <div
+            className="search-palette"
+            onClick={(e) => e.stopPropagation()}
+            style={{ maxWidth: 400 }}
+          >
             <div style={{ padding: 16 }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+              <div
+                style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  marginBottom: 12,
+                }}
+              >
                 <h3 style={{ margin: 0 }}>Keyboard Shortcuts</h3>
-                <button className="btn btn-sm" onClick={() => setShowShortcuts(false)}>✕</button>
+                <button className="btn btn-sm" onClick={() => setShowShortcuts(false)}>
+                  ✕
+                </button>
               </div>
               {[
                 ['?', 'Toggle this help'],
@@ -498,9 +969,28 @@ export default function App() {
                 ['G', 'Go to Settings'],
                 ['⌘K', 'Open search palette'],
               ].map(([key, desc]) => (
-                <div key={key} style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0', borderBottom: '1px solid var(--border)' }}>
+                <div
+                  key={key}
+                  style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    padding: '6px 0',
+                    borderBottom: '1px solid var(--border)',
+                  }}
+                >
                   <span style={{ fontSize: 13 }}>{desc}</span>
-                  <kbd style={{ fontSize: 11, padding: '2px 8px', borderRadius: 4, background: 'var(--bg)', border: '1px solid var(--border)', fontFamily: 'var(--font-mono)' }}>{key}</kbd>
+                  <kbd
+                    style={{
+                      fontSize: 11,
+                      padding: '2px 8px',
+                      borderRadius: 4,
+                      background: 'var(--bg)',
+                      border: '1px solid var(--border)',
+                      fontFamily: 'var(--font-mono)',
+                    }}
+                  >
+                    {key}
+                  </kbd>
                 </div>
               ))}
             </div>

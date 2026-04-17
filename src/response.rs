@@ -290,7 +290,10 @@ impl ResponseOrchestrator {
 
         let id = request.id.clone();
         self.record_audit(&request);
-        self.requests.lock().unwrap_or_else(|e| e.into_inner()).push(request);
+        self.requests
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .push(request);
         Ok(id)
     }
 
@@ -369,7 +372,10 @@ impl ResponseOrchestrator {
 
     /// Get all requests.
     pub fn all_requests(&self) -> Vec<ResponseRequest> {
-        self.requests.lock().unwrap_or_else(|e| e.into_inner()).clone()
+        self.requests
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .clone()
     }
 
     /// Get a request by ID.
@@ -404,33 +410,42 @@ impl ResponseOrchestrator {
 
     /// Immutable audit ledger entries.
     pub fn audit_ledger(&self) -> Vec<ResponseAuditEntry> {
-        self.audit_ledger.lock().unwrap_or_else(|e| e.into_inner()).clone()
+        self.audit_ledger
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .clone()
     }
 
     fn record_audit(&self, req: &ResponseRequest) {
-        self.audit_ledger.lock().unwrap_or_else(|e| e.into_inner()).push(ResponseAuditEntry {
-            request_id: req.id.clone(),
-            action: format!("{:?}", req.action),
-            target_hostname: req.target.hostname.clone(),
-            tier: req.tier,
-            status: req.status.clone(),
-            timestamp: req.requested_at.clone(),
-            dry_run: req.dry_run,
-            approvals: req.approvals.clone(),
-        });
+        self.audit_ledger
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .push(ResponseAuditEntry {
+                request_id: req.id.clone(),
+                action: format!("{:?}", req.action),
+                target_hostname: req.target.hostname.clone(),
+                tier: req.tier,
+                status: req.status.clone(),
+                timestamp: req.requested_at.clone(),
+                dry_run: req.dry_run,
+                approvals: req.approvals.clone(),
+            });
     }
 
     fn record_audit_inner(&self, req: &ResponseRequest) {
-        self.audit_ledger.lock().unwrap_or_else(|e| e.into_inner()).push(ResponseAuditEntry {
-            request_id: req.id.clone(),
-            action: format!("{:?}", req.action),
-            target_hostname: req.target.hostname.clone(),
-            tier: req.tier,
-            status: req.status.clone(),
-            timestamp: chrono::Utc::now().to_rfc3339(),
-            dry_run: req.dry_run,
-            approvals: req.approvals.clone(),
-        });
+        self.audit_ledger
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .push(ResponseAuditEntry {
+                request_id: req.id.clone(),
+                action: format!("{:?}", req.action),
+                target_hostname: req.target.hostname.clone(),
+                tier: req.tier,
+                status: req.status.clone(),
+                timestamp: chrono::Utc::now().to_rfc3339(),
+                dry_run: req.dry_run,
+                approvals: req.approvals.clone(),
+            });
     }
 
     /// Execute all approved (non-dry-run) requests. Returns a summary of

@@ -6,21 +6,61 @@ import { JsonDetails, SummaryGrid } from './operator.jsx';
 function ToggleSwitch({ label, checked, onChange, description }) {
   const toggleId = useId();
   return (
-    <label htmlFor={toggleId} style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', padding: '6px 0' }}>
+    <label
+      htmlFor={toggleId}
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: 10,
+        cursor: 'pointer',
+        padding: '6px 0',
+      }}
+    >
       <button
         id={toggleId}
         type="button"
         role="switch"
         aria-checked={checked}
         onClick={() => onChange(!checked)}
-        onKeyDown={e => { if (e.key === ' ' || e.key === 'Enter') { e.preventDefault(); onChange(!checked); } }}
-        style={{ width: 40, height: 22, borderRadius: 11, background: checked ? 'var(--primary)' : 'var(--border)', position: 'relative', transition: 'background .2s', flexShrink: 0, border: 'none', padding: 0 }}
+        onKeyDown={(e) => {
+          if (e.key === ' ' || e.key === 'Enter') {
+            e.preventDefault();
+            onChange(!checked);
+          }
+        }}
+        style={{
+          width: 40,
+          height: 22,
+          borderRadius: 11,
+          background: checked ? 'var(--primary)' : 'var(--border)',
+          position: 'relative',
+          transition: 'background .2s',
+          flexShrink: 0,
+          border: 'none',
+          padding: 0,
+        }}
       >
-        <span style={{ width: 18, height: 18, borderRadius: 9, background: '#fff', position: 'absolute', top: 2, left: checked ? 20 : 2, transition: 'left .2s', boxShadow: '0 1px 3px rgba(0,0,0,.2)' }} />
+        <span
+          style={{
+            width: 18,
+            height: 18,
+            borderRadius: 9,
+            background: '#fff',
+            position: 'absolute',
+            top: 2,
+            left: checked ? 20 : 2,
+            transition: 'left .2s',
+            boxShadow: '0 1px 3px rgba(0,0,0,.2)',
+          }}
+        />
       </button>
       <span>
         <span style={{ fontSize: 13, fontWeight: 500 }}>{label}</span>
-        {description && <span style={{ display: 'block', fontSize: 11, color: 'var(--text-secondary)' }}>{description}</span>}
+        {description && (
+          <span style={{ display: 'block', fontSize: 11, color: 'var(--text-secondary)' }}>
+            {description}
+          </span>
+        )}
       </span>
     </label>
   );
@@ -30,14 +70,42 @@ function NumberInput({ label, value, onChange, min, max, step, unit, description
   const inputId = useId();
   return (
     <div style={{ marginBottom: 10 }}>
-      <label htmlFor={inputId} style={{ display: 'block', fontSize: 13, fontWeight: 500, marginBottom: 4 }}>{label}</label>
+      <label
+        htmlFor={inputId}
+        style={{ display: 'block', fontSize: 13, fontWeight: 500, marginBottom: 4 }}
+      >
+        {label}
+      </label>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-        <input id={inputId} name={label.toLowerCase().replace(/\s+/g, '_')} type="number" value={value ?? ''} onChange={e => { const n = Number(e.target.value); onChange(Math.min(max ?? Infinity, Math.max(min ?? -Infinity, n))); }}
-          min={min} max={max} step={step || 1}
-          style={{ width: 90, padding: '4px 8px', borderRadius: 'var(--radius)', border: '1px solid var(--border)', background: 'var(--bg)', color: 'var(--text)', fontSize: 13 }} />
+        <input
+          id={inputId}
+          name={label.toLowerCase().replace(/\s+/g, '_')}
+          type="number"
+          value={value ?? ''}
+          onChange={(e) => {
+            const n = Number(e.target.value);
+            onChange(Math.min(max ?? Infinity, Math.max(min ?? -Infinity, n)));
+          }}
+          min={min}
+          max={max}
+          step={step || 1}
+          style={{
+            width: 90,
+            padding: '4px 8px',
+            borderRadius: 'var(--radius)',
+            border: '1px solid var(--border)',
+            background: 'var(--bg)',
+            color: 'var(--text)',
+            fontSize: 13,
+          }}
+        />
         {unit && <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{unit}</span>}
       </div>
-      {description && <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginTop: 2 }}>{description}</div>}
+      {description && (
+        <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginTop: 2 }}>
+          {description}
+        </div>
+      )}
     </div>
   );
 }
@@ -46,10 +114,35 @@ function TextInput({ label, value, onChange, placeholder, description }) {
   const inputId = useId();
   return (
     <div style={{ marginBottom: 10 }}>
-      <label htmlFor={inputId} style={{ display: 'block', fontSize: 13, fontWeight: 500, marginBottom: 4 }}>{label}</label>
-      <input id={inputId} name={label.toLowerCase().replace(/\s+/g, '_')} type="text" value={value ?? ''} onChange={e => onChange(e.target.value)} placeholder={placeholder}
-        style={{ width: '100%', maxWidth: 400, padding: '6px 10px', borderRadius: 'var(--radius)', border: '1px solid var(--border)', background: 'var(--bg)', color: 'var(--text)', fontSize: 13 }} />
-      {description && <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginTop: 2 }}>{description}</div>}
+      <label
+        htmlFor={inputId}
+        style={{ display: 'block', fontSize: 13, fontWeight: 500, marginBottom: 4 }}
+      >
+        {label}
+      </label>
+      <input
+        id={inputId}
+        name={label.toLowerCase().replace(/\s+/g, '_')}
+        type="text"
+        value={value ?? ''}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder={placeholder}
+        style={{
+          width: '100%',
+          maxWidth: 400,
+          padding: '6px 10px',
+          borderRadius: 'var(--radius)',
+          border: '1px solid var(--border)',
+          background: 'var(--bg)',
+          color: 'var(--text)',
+          fontSize: 13,
+        }}
+      />
+      {description && (
+        <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginTop: 2 }}>
+          {description}
+        </div>
+      )}
     </div>
   );
 }
@@ -94,7 +187,16 @@ export default function Settings() {
   // Parse config into structured form when loaded
   useEffect(() => {
     if (config && !configEditing) {
-      const parsed = typeof config === 'string' ? (() => { try { return JSON.parse(config); } catch { return null; } })() : config;
+      const parsed =
+        typeof config === 'string'
+          ? (() => {
+              try {
+                return JSON.parse(config);
+              } catch {
+                return null;
+              }
+            })()
+          : config;
       if (parsed) {
         setStructuredConfig(structuredClone(parsed));
         setSavedSnapshot(JSON.stringify(parsed, null, 2));
@@ -103,7 +205,16 @@ export default function Settings() {
   }, [config, configEditing]);
 
   const startEdit = () => {
-    const parsed = typeof config === 'string' ? (() => { try { return JSON.parse(config); } catch { return null; } })() : config;
+    const parsed =
+      typeof config === 'string'
+        ? (() => {
+            try {
+              return JSON.parse(config);
+            } catch {
+              return null;
+            }
+          })()
+        : config;
     if (parsed) {
       setStructuredConfig(structuredClone(parsed));
       setSavedSnapshot(JSON.stringify(parsed, null, 2));
@@ -113,7 +224,7 @@ export default function Settings() {
   };
 
   const updateField = (path, value) => {
-    setStructuredConfig(prev => {
+    setStructuredConfig((prev) => {
       const next = structuredClone(prev);
       const keys = path.split('.');
       let obj = next;
@@ -135,7 +246,10 @@ export default function Settings() {
       setSavedSnapshot(JSON.stringify(body, null, 2));
       rConfig();
     } catch (e) {
-      toast(editMode === 'json' && e instanceof SyntaxError ? 'Invalid JSON' : 'Save failed', 'error');
+      toast(
+        editMode === 'json' && e instanceof SyntaxError ? 'Invalid JSON' : 'Save failed',
+        'error',
+      );
     }
   };
 
@@ -168,13 +282,17 @@ export default function Settings() {
   const configScalars = useMemo(() => {
     if (!structuredConfig || typeof structuredConfig !== 'object') return null;
     return Object.fromEntries(
-      Object.entries(structuredConfig).filter(([, value]) => value == null || typeof value !== 'object' || Array.isArray(value))
+      Object.entries(structuredConfig).filter(
+        ([, value]) => value == null || typeof value !== 'object' || Array.isArray(value),
+      ),
     );
   }, [structuredConfig]);
 
   const configSections = useMemo(() => {
     if (!structuredConfig || typeof structuredConfig !== 'object') return [];
-    return Object.entries(structuredConfig).filter(([, value]) => value && typeof value === 'object' && !Array.isArray(value));
+    return Object.entries(structuredConfig).filter(
+      ([, value]) => value && typeof value === 'object' && !Array.isArray(value),
+    );
   }, [structuredConfig]);
 
   const normalizedMonitoringPaths = useMemo(() => {
@@ -225,9 +343,11 @@ export default function Settings() {
 
   const resetToDefaults = () => {
     if (!confirm('Reset configuration to default values?')) return;
-    setStructuredConfig(prev => {
+    setStructuredConfig((prev) => {
       const next = structuredClone(prev);
-      Object.entries(DEFAULTS).forEach(([k, v]) => { if (k in next) next[k] = v; });
+      Object.entries(DEFAULTS).forEach(([k, v]) => {
+        if (k in next) next[k] = v;
+      });
       return next;
     });
     toast('Reset to defaults — click Save to apply', 'info');
@@ -236,7 +356,7 @@ export default function Settings() {
   return (
     <div>
       <div className="tabs">
-        {['config', 'monitoring', 'integrations', 'flags', 'team', 'admin'].map(t => (
+        {['config', 'monitoring', 'integrations', 'flags', 'team', 'admin'].map((t) => (
           <button key={t} className={`tab ${tab === t ? 'active' : ''}`} onClick={() => setTab(t)}>
             {t.charAt(0).toUpperCase() + t.slice(1)}
           </button>
@@ -249,21 +369,54 @@ export default function Settings() {
             <div className="card-header">
               <span className="card-title">Configuration</span>
               <div className="btn-group">
-                <button className="btn btn-sm" onClick={rConfig}>↻ Reload</button>
-                <button className="btn btn-sm" onClick={async () => {
-                  try { await api.configReload(); toast('Config reloaded from disk', 'success'); rConfig(); } catch { toast('Reload failed', 'error'); }
-                }}>Reload from Disk</button>
-                {!configEditing && <button className="btn btn-sm btn-primary" onClick={startEdit}>Edit</button>}
+                <button className="btn btn-sm" onClick={rConfig}>
+                  ↻ Reload
+                </button>
+                <button
+                  className="btn btn-sm"
+                  onClick={async () => {
+                    try {
+                      await api.configReload();
+                      toast('Config reloaded from disk', 'success');
+                      rConfig();
+                    } catch {
+                      toast('Reload failed', 'error');
+                    }
+                  }}
+                >
+                  Reload from Disk
+                </button>
+                {!configEditing && (
+                  <button className="btn btn-sm btn-primary" onClick={startEdit}>
+                    Edit
+                  </button>
+                )}
                 {configEditing && (
                   <>
-                    <button className={`btn btn-sm ${editMode === 'form' ? 'btn-primary' : ''}`} onClick={() => {
-                      setEditMode('form');
-                      if (configText) { try { setStructuredConfig(JSON.parse(configText)); } catch { /* ignore parse errors */ } }
-                    }}>Form</button>
-                    <button className={`btn btn-sm ${editMode === 'json' ? 'btn-primary' : ''}`} onClick={() => {
-                      setEditMode('json');
-                      setConfigText(JSON.stringify(structuredConfig, null, 2));
-                    }}>JSON</button>
+                    <button
+                      className={`btn btn-sm ${editMode === 'form' ? 'btn-primary' : ''}`}
+                      onClick={() => {
+                        setEditMode('form');
+                        if (configText) {
+                          try {
+                            setStructuredConfig(JSON.parse(configText));
+                          } catch {
+                            /* ignore parse errors */
+                          }
+                        }
+                      }}
+                    >
+                      Form
+                    </button>
+                    <button
+                      className={`btn btn-sm ${editMode === 'json' ? 'btn-primary' : ''}`}
+                      onClick={() => {
+                        setEditMode('json');
+                        setConfigText(JSON.stringify(structuredConfig, null, 2));
+                      }}
+                    >
+                      JSON
+                    </button>
                   </>
                 )}
               </div>
@@ -272,86 +425,306 @@ export default function Settings() {
               editMode === 'json' ? (
                 <div>
                   {configDiff && (
-                    <div className="error-box" style={{ marginBottom: 12, background: 'var(--bg)', color: 'var(--text)', borderColor: 'var(--warning)' }}>
-                      Unsaved changes are in progress. Leaving the page or closing the tab will discard them.
+                    <div
+                      className="error-box"
+                      style={{
+                        marginBottom: 12,
+                        background: 'var(--bg)',
+                        color: 'var(--text)',
+                        borderColor: 'var(--warning)',
+                      }}
+                    >
+                      Unsaved changes are in progress. Leaving the page or closing the tab will
+                      discard them.
                     </div>
                   )}
-                  <textarea className="form-textarea" style={{ height: 300, borderColor: jsonError ? 'var(--danger, #ef4444)' : undefined }} value={configText} onChange={e => {
-                    const v = e.target.value;
-                    setConfigText(v);
-                    try { JSON.parse(v); setJsonError(null); } catch (err) { setJsonError(err.message); }
-                  }} />
-                  {jsonError && <div style={{ fontSize: 11, color: 'var(--danger, #ef4444)', marginTop: 4 }}>⚠ {jsonError}</div>}
+                  <textarea
+                    className="form-textarea"
+                    style={{
+                      height: 300,
+                      borderColor: jsonError ? 'var(--danger, #ef4444)' : undefined,
+                    }}
+                    value={configText}
+                    onChange={(e) => {
+                      const v = e.target.value;
+                      setConfigText(v);
+                      try {
+                        JSON.parse(v);
+                        setJsonError(null);
+                      } catch (err) {
+                        setJsonError(err.message);
+                      }
+                    }}
+                  />
+                  {jsonError && (
+                    <div style={{ fontSize: 11, color: 'var(--danger, #ef4444)', marginTop: 4 }}>
+                      ⚠ {jsonError}
+                    </div>
+                  )}
                   <div className="btn-group" style={{ marginTop: 8 }}>
-                    <button className="btn btn-primary" onClick={saveConfig}>Save</button>
-                    <button className="btn" onClick={() => setConfigEditing(false)}>Cancel</button>
+                    <button className="btn btn-primary" onClick={saveConfig}>
+                      Save
+                    </button>
+                    <button className="btn" onClick={() => setConfigEditing(false)}>
+                      Cancel
+                    </button>
                   </div>
                 </div>
               ) : structuredConfig ? (
                 <div>
                   {configDiff && (
-                    <div className="error-box" style={{ marginBottom: 12, background: 'var(--bg)', color: 'var(--text)', borderColor: 'var(--warning)' }}>
+                    <div
+                      className="error-box"
+                      style={{
+                        marginBottom: 12,
+                        background: 'var(--bg)',
+                        color: 'var(--text)',
+                        borderColor: 'var(--warning)',
+                      }}
+                    >
                       Unsaved changes are in progress. Save or cancel before leaving this screen.
                     </div>
                   )}
                   {/* Structured form for common fields */}
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 16, padding: '12px 0' }}>
+                  <div
+                    style={{
+                      display: 'grid',
+                      gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
+                      gap: 16,
+                      padding: '12px 0',
+                    }}
+                  >
                     <div className="card" style={{ padding: 14 }}>
-                      <div style={{ fontWeight: 600, fontSize: 13, marginBottom: 12, color: 'var(--primary)' }}>General</div>
-                      <NumberInput label="Collection Interval" value={structuredConfig.collection_interval_secs} onChange={v => updateField('collection_interval_secs', v)} min={1} max={300} unit="seconds" />
-                      <NumberInput label="Port" value={structuredConfig.port} onChange={v => updateField('port', v)} min={1} max={65535} />
-                      <TextInput label="Log Level" value={structuredConfig.log_level} onChange={v => updateField('log_level', v)} placeholder="info, debug, warn" />
+                      <div
+                        style={{
+                          fontWeight: 600,
+                          fontSize: 13,
+                          marginBottom: 12,
+                          color: 'var(--primary)',
+                        }}
+                      >
+                        General
+                      </div>
+                      <NumberInput
+                        label="Collection Interval"
+                        value={structuredConfig.collection_interval_secs}
+                        onChange={(v) => updateField('collection_interval_secs', v)}
+                        min={1}
+                        max={300}
+                        unit="seconds"
+                      />
+                      <NumberInput
+                        label="Port"
+                        value={structuredConfig.port}
+                        onChange={(v) => updateField('port', v)}
+                        min={1}
+                        max={65535}
+                      />
+                      <TextInput
+                        label="Log Level"
+                        value={structuredConfig.log_level}
+                        onChange={(v) => updateField('log_level', v)}
+                        placeholder="info, debug, warn"
+                      />
                     </div>
                     <div className="card" style={{ padding: 14 }}>
-                      <div style={{ fontWeight: 600, fontSize: 13, marginBottom: 12, color: 'var(--primary)' }}>Detection Thresholds</div>
-                      <NumberInput label="Alert Threshold" value={structuredConfig.alert_threshold} onChange={v => updateField('alert_threshold', v)} min={0} max={10} step={0.1} description="Score above which an alert fires" />
-                      <NumberInput label="Entropy Threshold" value={structuredConfig.entropy_threshold_pct} onChange={v => updateField('entropy_threshold_pct', v)} min={0} max={100} unit="%" />
-                      <NumberInput label="Network Burst Threshold" value={structuredConfig.network_burst_threshold_kbps} onChange={v => updateField('network_burst_threshold_kbps', v)} min={0} max={100000} unit="kbps" />
+                      <div
+                        style={{
+                          fontWeight: 600,
+                          fontSize: 13,
+                          marginBottom: 12,
+                          color: 'var(--primary)',
+                        }}
+                      >
+                        Detection Thresholds
+                      </div>
+                      <NumberInput
+                        label="Alert Threshold"
+                        value={structuredConfig.alert_threshold}
+                        onChange={(v) => updateField('alert_threshold', v)}
+                        min={0}
+                        max={10}
+                        step={0.1}
+                        description="Score above which an alert fires"
+                      />
+                      <NumberInput
+                        label="Entropy Threshold"
+                        value={structuredConfig.entropy_threshold_pct}
+                        onChange={(v) => updateField('entropy_threshold_pct', v)}
+                        min={0}
+                        max={100}
+                        unit="%"
+                      />
+                      <NumberInput
+                        label="Network Burst Threshold"
+                        value={structuredConfig.network_burst_threshold_kbps}
+                        onChange={(v) => updateField('network_burst_threshold_kbps', v)}
+                        min={0}
+                        max={100000}
+                        unit="kbps"
+                      />
                     </div>
                     {structuredConfig.siem && (
                       <div className="card" style={{ padding: 14 }}>
-                        <div style={{ fontWeight: 600, fontSize: 13, marginBottom: 12, color: 'var(--primary)' }}>SIEM</div>
-                        <ToggleSwitch label="SIEM Enabled" checked={!!structuredConfig.siem?.enabled} onChange={v => updateField('siem.enabled', v)} />
-                        <TextInput label="Endpoint" value={structuredConfig.siem?.endpoint} onChange={v => updateField('siem.endpoint', v)} placeholder="https://siem.example.com" />
-                        <TextInput label="Format" value={structuredConfig.siem?.format} onChange={v => updateField('siem.format', v)} placeholder="cef, json, leef" />
+                        <div
+                          style={{
+                            fontWeight: 600,
+                            fontSize: 13,
+                            marginBottom: 12,
+                            color: 'var(--primary)',
+                          }}
+                        >
+                          SIEM
+                        </div>
+                        <ToggleSwitch
+                          label="SIEM Enabled"
+                          checked={!!structuredConfig.siem?.enabled}
+                          onChange={(v) => updateField('siem.enabled', v)}
+                        />
+                        <TextInput
+                          label="Endpoint"
+                          value={structuredConfig.siem?.endpoint}
+                          onChange={(v) => updateField('siem.endpoint', v)}
+                          placeholder="https://siem.example.com"
+                        />
+                        <TextInput
+                          label="Format"
+                          value={structuredConfig.siem?.format}
+                          onChange={(v) => updateField('siem.format', v)}
+                          placeholder="cef, json, leef"
+                        />
                       </div>
                     )}
                     {structuredConfig.taxii && (
                       <div className="card" style={{ padding: 14 }}>
-                        <div style={{ fontWeight: 600, fontSize: 13, marginBottom: 12, color: 'var(--primary)' }}>TAXII</div>
-                        <ToggleSwitch label="TAXII Enabled" checked={!!structuredConfig.taxii?.enabled} onChange={v => updateField('taxii.enabled', v)} />
-                        <TextInput label="Server URL" value={structuredConfig.taxii?.url} onChange={v => updateField('taxii.url', v)} placeholder="https://taxii.example.com" />
-                        <NumberInput label="Poll Interval" value={structuredConfig.taxii?.poll_interval_secs} onChange={v => updateField('taxii.poll_interval_secs', v)} min={60} unit="seconds" />
+                        <div
+                          style={{
+                            fontWeight: 600,
+                            fontSize: 13,
+                            marginBottom: 12,
+                            color: 'var(--primary)',
+                          }}
+                        >
+                          TAXII
+                        </div>
+                        <ToggleSwitch
+                          label="TAXII Enabled"
+                          checked={!!structuredConfig.taxii?.enabled}
+                          onChange={(v) => updateField('taxii.enabled', v)}
+                        />
+                        <TextInput
+                          label="Server URL"
+                          value={structuredConfig.taxii?.url}
+                          onChange={(v) => updateField('taxii.url', v)}
+                          placeholder="https://taxii.example.com"
+                        />
+                        <NumberInput
+                          label="Poll Interval"
+                          value={structuredConfig.taxii?.poll_interval_secs}
+                          onChange={(v) => updateField('taxii.poll_interval_secs', v)}
+                          min={60}
+                          unit="seconds"
+                        />
                       </div>
                     )}
                   </div>
                   {/* All other fields as key-value pairs */}
                   <details style={{ marginTop: 12 }}>
-                    <summary style={{ cursor: 'pointer', fontSize: 13, color: 'var(--text-secondary)' }}>All configuration fields ({Object.keys(structuredConfig).length})</summary>
+                    <summary
+                      style={{ cursor: 'pointer', fontSize: 13, color: 'var(--text-secondary)' }}
+                    >
+                      All configuration fields ({Object.keys(structuredConfig).length})
+                    </summary>
                     <div style={{ padding: '12px 0' }}>
-                      {Object.entries(structuredConfig).filter(([k]) => !['siem', 'taxii'].includes(k) && typeof structuredConfig[k] !== 'object').map(([k, v]) => (
-                        <div key={k} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '4px 0', borderBottom: '1px solid var(--border)' }}>
-                          <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, minWidth: 200, color: 'var(--text-secondary)' }}>{k}</span>
-                          {typeof v === 'boolean' ? (
-                            <ToggleSwitch label="" checked={v} onChange={val => updateField(k, val)} />
-                          ) : (
-                            <input type={typeof v === 'number' ? 'number' : 'text'} value={v ?? ''} onChange={e => updateField(k, typeof v === 'number' ? Number(e.target.value) : e.target.value)}
-                              style={{ flex: 1, maxWidth: 300, padding: '4px 8px', borderRadius: 'var(--radius)', border: '1px solid var(--border)', background: 'var(--bg)', color: 'var(--text)', fontSize: 12 }} />
-                          )}
-                        </div>
-                      ))}
+                      {Object.entries(structuredConfig)
+                        .filter(
+                          ([k]) =>
+                            !['siem', 'taxii'].includes(k) &&
+                            typeof structuredConfig[k] !== 'object',
+                        )
+                        .map(([k, v]) => (
+                          <div
+                            key={k}
+                            style={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: 10,
+                              padding: '4px 0',
+                              borderBottom: '1px solid var(--border)',
+                            }}
+                          >
+                            <span
+                              style={{
+                                fontFamily: 'var(--font-mono)',
+                                fontSize: 12,
+                                minWidth: 200,
+                                color: 'var(--text-secondary)',
+                              }}
+                            >
+                              {k}
+                            </span>
+                            {typeof v === 'boolean' ? (
+                              <ToggleSwitch
+                                label=""
+                                checked={v}
+                                onChange={(val) => updateField(k, val)}
+                              />
+                            ) : (
+                              <input
+                                type={typeof v === 'number' ? 'number' : 'text'}
+                                value={v ?? ''}
+                                onChange={(e) =>
+                                  updateField(
+                                    k,
+                                    typeof v === 'number' ? Number(e.target.value) : e.target.value,
+                                  )
+                                }
+                                style={{
+                                  flex: 1,
+                                  maxWidth: 300,
+                                  padding: '4px 8px',
+                                  borderRadius: 'var(--radius)',
+                                  border: '1px solid var(--border)',
+                                  background: 'var(--bg)',
+                                  color: 'var(--text)',
+                                  fontSize: 12,
+                                }}
+                              />
+                            )}
+                          </div>
+                        ))}
                     </div>
                   </details>
                   {/* Config diff */}
                   {configDiff && (
                     <div style={{ marginTop: 12 }}>
-                      <button className="btn btn-sm" onClick={() => setShowDiff(!showDiff)} style={{ marginBottom: 8 }}>
+                      <button
+                        className="btn btn-sm"
+                        onClick={() => setShowDiff(!showDiff)}
+                        style={{ marginBottom: 8 }}
+                      >
                         {showDiff ? 'Hide' : 'Show'} Changes ({configDiff.length})
                       </button>
                       {showDiff && (
-                        <div style={{ fontFamily: 'var(--font-mono)', fontSize: 11, background: 'var(--bg)', borderRadius: 'var(--radius)', padding: 10, maxHeight: 200, overflowY: 'auto' }}>
+                        <div
+                          style={{
+                            fontFamily: 'var(--font-mono)',
+                            fontSize: 11,
+                            background: 'var(--bg)',
+                            borderRadius: 'var(--radius)',
+                            padding: 10,
+                            maxHeight: 200,
+                            overflowY: 'auto',
+                          }}
+                        >
                           {configDiff.map((d, i) => (
-                            <div key={i} style={{ color: d.type === 'add' ? 'var(--success)' : 'var(--danger)', whiteSpace: 'pre' }}>
+                            <div
+                              key={i}
+                              style={{
+                                color: d.type === 'add' ? 'var(--success)' : 'var(--danger)',
+                                whiteSpace: 'pre',
+                              }}
+                            >
                               {d.type === 'add' ? '+' : '-'} {d.text}
                             </div>
                           ))}
@@ -360,36 +733,50 @@ export default function Settings() {
                     </div>
                   )}
                   <div className="btn-group" style={{ marginTop: 12 }}>
-                    <button className="btn btn-primary" onClick={saveConfig}>Save</button>
-                    <button className="btn" onClick={() => setConfigEditing(false)}>Cancel</button>
-                    <button className="btn" onClick={resetToDefaults} title="Reset common fields to default values">Reset Defaults</button>
+                    <button className="btn btn-primary" onClick={saveConfig}>
+                      Save
+                    </button>
+                    <button className="btn" onClick={() => setConfigEditing(false)}>
+                      Cancel
+                    </button>
+                    <button
+                      className="btn"
+                      onClick={resetToDefaults}
+                      title="Reset common fields to default values"
+                    >
+                      Reset Defaults
+                    </button>
                   </div>
                 </div>
               ) : (
                 <div className="empty">Loading configuration...</div>
               )
-            ) : (
-              structuredConfig ? (
-                <div style={{ padding: '12px 0' }}>
-                  <SummaryGrid data={configScalars} limit={12} emptyMessage="Configuration is organized into sections below" />
-                  {configSections.length > 0 && (
-                    <div className="card-grid" style={{ marginTop: 16 }}>
-                      {configSections.map(([sectionKey, sectionValue]) => (
-                        <div key={sectionKey} className="card" style={{ padding: 14 }}>
-                          <div className="card-title" style={{ marginBottom: 12 }}>{sectionKey.replace(/_/g, ' ')}</div>
-                          <SummaryGrid data={sectionValue} limit={8} />
+            ) : structuredConfig ? (
+              <div style={{ padding: '12px 0' }}>
+                <SummaryGrid
+                  data={configScalars}
+                  limit={12}
+                  emptyMessage="Configuration is organized into sections below"
+                />
+                {configSections.length > 0 && (
+                  <div className="card-grid" style={{ marginTop: 16 }}>
+                    {configSections.map(([sectionKey, sectionValue]) => (
+                      <div key={sectionKey} className="card" style={{ padding: 14 }}>
+                        <div className="card-title" style={{ marginBottom: 12 }}>
+                          {sectionKey.replace(/_/g, ' ')}
                         </div>
-                      ))}
-                    </div>
-                  )}
-                  <JsonDetails data={structuredConfig} label="Full configuration breakdown" />
-                </div>
-              ) : (
-                <>
-                  <div className="empty">Configuration is not yet available in structured form.</div>
-                  <JsonDetails data={config} label="Available configuration fields" />
-                </>
-              )
+                        <SummaryGrid data={sectionValue} limit={8} />
+                      </div>
+                    ))}
+                  </div>
+                )}
+                <JsonDetails data={structuredConfig} label="Full configuration breakdown" />
+              </div>
+            ) : (
+              <>
+                <div className="empty">Configuration is not yet available in structured form.</div>
+                <JsonDetails data={config} label="Available configuration fields" />
+              </>
             )}
           </div>
         </>
@@ -398,7 +785,9 @@ export default function Settings() {
       {tab === 'monitoring' && (
         <>
           <div className="card" style={{ marginBottom: 16 }}>
-            <div className="card-title" style={{ marginBottom: 12 }}>Monitoring Scope</div>
+            <div className="card-title" style={{ marginBottom: 12 }}>
+              Monitoring Scope
+            </div>
             {monOpts && typeof monOpts === 'object' ? (
               <>
                 <SummaryGrid data={monOpts} limit={12} />
@@ -412,16 +801,25 @@ export default function Settings() {
             )}
           </div>
           <div className="card">
-            <div className="card-title" style={{ marginBottom: 12 }}>Monitored Paths</div>
+            <div className="card-title" style={{ marginBottom: 12 }}>
+              Monitored Paths
+            </div>
             {normalizedMonitoringPaths.length > 0 ? (
               <div className="table-wrap">
                 <table>
-                  <thead><tr><th>Path</th><th>Type</th></tr></thead>
+                  <thead>
+                    <tr>
+                      <th>Path</th>
+                      <th>Type</th>
+                    </tr>
+                  </thead>
                   <tbody>
                     {normalizedMonitoringPaths.map((p, i) => (
                       <tr key={i}>
                         <td style={{ fontFamily: 'var(--font-mono)', fontSize: 12 }}>
-                          {typeof p === 'string' ? p : p.path || p.pattern || p.root || p.name || '—'}
+                          {typeof p === 'string'
+                            ? p
+                            : p.path || p.pattern || p.root || p.name || '—'}
                         </td>
                         <td>{typeof p === 'object' ? p.type || p.kind || 'file' : 'file'}</td>
                       </tr>
@@ -430,11 +828,22 @@ export default function Settings() {
                 </table>
               </div>
             ) : monPaths && typeof monPaths === 'object' ? (
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: 0 }}>
+              <div
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))',
+                  gap: 0,
+                }}
+              >
                 {Object.entries(monPaths).map(([k, v]) => (
-                  <div key={k} style={{ padding: '6px 0', borderBottom: '1px solid var(--border)' }}>
+                  <div
+                    key={k}
+                    style={{ padding: '6px 0', borderBottom: '1px solid var(--border)' }}
+                  >
                     <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12 }}>{k}:</span>
-                    <span style={{ marginLeft: 8, fontSize: 13 }}>{typeof v === 'boolean' ? (v ? '✓ active' : '✗ inactive') : String(v)}</span>
+                    <span style={{ marginLeft: 8, fontSize: 13 }}>
+                      {typeof v === 'boolean' ? (v ? '✓ active' : '✗ inactive') : String(v)}
+                    </span>
                   </div>
                 ))}
               </div>
@@ -454,7 +863,9 @@ export default function Settings() {
             <div className="card">
               <div className="card-header">
                 <span className="card-title">SIEM Integration</span>
-                <span className={`badge ${siemSt?.connected ? 'badge-ok' : 'badge-warn'}`}>{siemSt?.connected ? 'Connected' : 'Not connected'}</span>
+                <span className={`badge ${siemSt?.connected ? 'badge-ok' : 'badge-warn'}`}>
+                  {siemSt?.connected ? 'Connected' : 'Not connected'}
+                </span>
               </div>
               {siemCfg && typeof siemCfg === 'object' ? (
                 <>
@@ -472,10 +883,22 @@ export default function Settings() {
               <div className="card-header">
                 <span className="card-title">TAXII Feed</span>
                 <div className="btn-group">
-                  <span className={`badge ${taxiiSt?.connected ? 'badge-ok' : 'badge-warn'}`}>{taxiiSt?.connected ? 'Active' : 'Inactive'}</span>
-                  <button className="btn btn-sm" onClick={async () => {
-                    try { await api.taxiiPull(); toast('TAXII pull initiated', 'success'); } catch { toast('Pull failed', 'error'); }
-                  }}>Pull Now</button>
+                  <span className={`badge ${taxiiSt?.connected ? 'badge-ok' : 'badge-warn'}`}>
+                    {taxiiSt?.connected ? 'Active' : 'Inactive'}
+                  </span>
+                  <button
+                    className="btn btn-sm"
+                    onClick={async () => {
+                      try {
+                        await api.taxiiPull();
+                        toast('TAXII pull initiated', 'success');
+                      } catch {
+                        toast('Pull failed', 'error');
+                      }
+                    }}
+                  >
+                    Pull Now
+                  </button>
                 </div>
               </div>
               {taxiiCfg && typeof taxiiCfg === 'object' ? (
@@ -493,43 +916,85 @@ export default function Settings() {
           </div>
           <div className="card-grid" style={{ marginTop: 16 }}>
             <div className="card">
-              <div className="card-title" style={{ marginBottom: 12 }}>Enrichment Connectors</div>
+              <div className="card-title" style={{ marginBottom: 12 }}>
+                Enrichment Connectors
+              </div>
               {connectorRows.length > 0 ? (
-                  <div className="table-wrap">
-                    <table>
-                      <thead><tr><th>Name</th><th>Type</th><th>Status</th></tr></thead>
-                      <tbody>{connectorRows.map((c, i) => (
-                        <tr key={i}><td>{c.name || c.id || '—'}</td><td>{c.type || '—'}</td><td><span className={`badge ${c.enabled ? 'badge-ok' : 'badge-warn'}`}>{c.enabled ? 'Active' : 'Inactive'}</span></td></tr>
-                      ))}</tbody>
-                    </table>
-                  </div>
+                <div className="table-wrap">
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>Name</th>
+                        <th>Type</th>
+                        <th>Status</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {connectorRows.map((c, i) => (
+                        <tr key={i}>
+                          <td>{c.name || c.id || '—'}</td>
+                          <td>{c.type || '—'}</td>
+                          <td>
+                            <span className={`badge ${c.enabled ? 'badge-ok' : 'badge-warn'}`}>
+                              {c.enabled ? 'Active' : 'Inactive'}
+                            </span>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
               ) : (
                 <>
-                  <SummaryGrid data={enrichConn} limit={10} emptyMessage="No connectors configured" />
+                  <SummaryGrid
+                    data={enrichConn}
+                    limit={10}
+                    emptyMessage="No connectors configured"
+                  />
                   <JsonDetails data={enrichConn} />
                 </>
               )}
             </div>
             <div className="card">
-              <div className="card-title" style={{ marginBottom: 12 }}>IdP Providers</div>
+              <div className="card-title" style={{ marginBottom: 12 }}>
+                IdP Providers
+              </div>
               {idpRows.length > 0 ? (
-                  <div className="table-wrap">
-                    <table>
-                      <thead><tr><th>Name</th><th>Type</th><th>Status</th></tr></thead>
-                      <tbody>{idpRows.map((p, i) => (
-                        <tr key={i}><td>{p.name || p.id || '—'}</td><td>{p.type || '—'}</td><td>{p.enabled ? '✓' : '✗'}</td></tr>
-                      ))}</tbody>
-                    </table>
-                  </div>
+                <div className="table-wrap">
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>Name</th>
+                        <th>Type</th>
+                        <th>Status</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {idpRows.map((p, i) => (
+                        <tr key={i}>
+                          <td>{p.name || p.id || '—'}</td>
+                          <td>{p.type || '—'}</td>
+                          <td>{p.enabled ? '✓' : '✗'}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
               ) : (
                 <>
-                  <SummaryGrid data={idp} limit={10} emptyMessage="No identity providers configured" />
+                  <SummaryGrid
+                    data={idp}
+                    limit={10}
+                    emptyMessage="No identity providers configured"
+                  />
                   <JsonDetails data={idp} />
                 </>
               )}
             </div>
             <div className="card">
-              <div className="card-title" style={{ marginBottom: 12 }}>SCIM Config</div>
+              <div className="card-title" style={{ marginBottom: 12 }}>
+                SCIM Config
+              </div>
               {scim && typeof scim === 'object' && !Array.isArray(scim) ? (
                 <>
                   <SummaryGrid data={scim} limit={10} />
@@ -548,16 +1013,27 @@ export default function Settings() {
 
       {tab === 'flags' && (
         <div className="card">
-          <div className="card-title" style={{ marginBottom: 12 }}>Feature Flags</div>
+          <div className="card-title" style={{ marginBottom: 12 }}>
+            Feature Flags
+          </div>
           {flagEntries.length > 0 ? (
             <div className="table-wrap">
               <table>
-                <thead><tr><th>Flag</th><th>Status</th></tr></thead>
+                <thead>
+                  <tr>
+                    <th>Flag</th>
+                    <th>Status</th>
+                  </tr>
+                </thead>
                 <tbody>
                   {flagEntries.map(([k, v]) => (
                     <tr key={k}>
                       <td style={{ fontFamily: 'var(--font-mono)' }}>{k}</td>
-                      <td><span className={`badge ${v ? 'badge-ok' : 'badge-warn'}`}>{v ? 'Enabled' : 'Disabled'}</span></td>
+                      <td>
+                        <span className={`badge ${v ? 'badge-ok' : 'badge-warn'}`}>
+                          {v ? 'Enabled' : 'Disabled'}
+                        </span>
+                      </td>
                     </tr>
                   ))}
                 </tbody>
@@ -574,49 +1050,100 @@ export default function Settings() {
 
       {tab === 'team' && (
         <div className="card">
-          <div className="card-title" style={{ marginBottom: 12 }}>Team &amp; RBAC</div>
-          <div style={{ display: 'flex', gap: 8, marginBottom: 16, flexWrap: 'wrap', alignItems: 'flex-end' }}>
+          <div className="card-title" style={{ marginBottom: 12 }}>
+            Team &amp; RBAC
+          </div>
+          <div
+            style={{
+              display: 'flex',
+              gap: 8,
+              marginBottom: 16,
+              flexWrap: 'wrap',
+              alignItems: 'flex-end',
+            }}
+          >
             <div>
               <div style={{ fontSize: 12, marginBottom: 4 }}>Username</div>
-              <input className="input" value={newUser.username} onChange={e => setNewUser(p => ({ ...p, username: e.target.value }))}
-                placeholder="username" style={{ width: 180 }} />
+              <input
+                className="input"
+                value={newUser.username}
+                onChange={(e) => setNewUser((p) => ({ ...p, username: e.target.value }))}
+                placeholder="username"
+                style={{ width: 180 }}
+              />
             </div>
             <div>
               <div style={{ fontSize: 12, marginBottom: 4 }}>Role</div>
-              <select className="input" value={newUser.role} onChange={e => setNewUser(p => ({ ...p, role: e.target.value }))}>
+              <select
+                className="input"
+                value={newUser.role}
+                onChange={(e) => setNewUser((p) => ({ ...p, role: e.target.value }))}
+              >
                 <option value="admin">Admin</option>
                 <option value="analyst">Analyst</option>
                 <option value="viewer">Viewer</option>
                 <option value="service-account">Service Account</option>
               </select>
             </div>
-            <button className="btn btn-primary" disabled={!newUser.username.trim() || creatingUser}
+            <button
+              className="btn btn-primary"
+              disabled={!newUser.username.trim() || creatingUser}
               onClick={async () => {
                 setCreatingUser(true);
                 try {
-                  const res = await api.rbacCreateUser({ username: newUser.username.trim(), role: newUser.role });
+                  const res = await api.rbacCreateUser({
+                    username: newUser.username.trim(),
+                    role: newUser.role,
+                  });
                   toast(`User created${res?.token ? ' — token: ' + res.token : ''}`, 'success');
                   setNewUser({ username: '', role: 'analyst' });
                   rTeam();
-                } catch (e) { toast('Failed to create user: ' + (e.message || e), 'error'); }
+                } catch (e) {
+                  toast('Failed to create user: ' + (e.message || e), 'error');
+                }
                 setCreatingUser(false);
-              }}>{creatingUser ? 'Creating…' : 'Create User'}</button>
+              }}
+            >
+              {creatingUser ? 'Creating…' : 'Create User'}
+            </button>
           </div>
           <div className="table-wrap">
             <table>
-              <thead><tr><th>Username</th><th>Role</th><th>Actions</th></tr></thead>
+              <thead>
+                <tr>
+                  <th>Username</th>
+                  <th>Role</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
               <tbody>
-                {(Array.isArray(teamUsers) ? teamUsers : []).map(u => (
+                {(Array.isArray(teamUsers) ? teamUsers : []).map((u) => (
                   <tr key={u.username || u.name}>
                     <td>{u.username || u.name}</td>
-                    <td><span className={`badge ${u.role === 'admin' ? 'badge-danger' : u.role === 'analyst' ? 'badge-ok' : 'badge-info'}`}>{u.role}</span></td>
                     <td>
-                      <button className="btn btn-ghost btn-sm" style={{ color: 'var(--danger)' }}
+                      <span
+                        className={`badge ${u.role === 'admin' ? 'badge-danger' : u.role === 'analyst' ? 'badge-ok' : 'badge-info'}`}
+                      >
+                        {u.role}
+                      </span>
+                    </td>
+                    <td>
+                      <button
+                        className="btn btn-ghost btn-sm"
+                        style={{ color: 'var(--danger)' }}
                         onClick={async () => {
                           if (!confirm(`Delete user "${u.username || u.name}"?`)) return;
-                          try { await api.rbacDeleteUser(u.username || u.name); toast('User deleted', 'success'); rTeam(); }
-                          catch (e) { toast('Delete failed: ' + (e.message || e), 'error'); }
-                        }}>Delete</button>
+                          try {
+                            await api.rbacDeleteUser(u.username || u.name);
+                            toast('User deleted', 'success');
+                            rTeam();
+                          } catch (e) {
+                            toast('Delete failed: ' + (e.message || e), 'error');
+                          }
+                        }}
+                      >
+                        Delete
+                      </button>
                     </td>
                   </tr>
                 ))}
@@ -633,26 +1160,41 @@ export default function Settings() {
         <>
           <div className="card-grid">
             <div className="card">
-              <div className="card-title" style={{ marginBottom: 12 }}>DB Version</div>
+              <div className="card-title" style={{ marginBottom: 12 }}>
+                DB Version
+              </div>
               <SummaryGrid data={dbVer} limit={6} />
               <JsonDetails data={dbVer} />
             </div>
             <div className="card">
-              <div className="card-title" style={{ marginBottom: 12 }}>Dead Letter Queue</div>
+              <div className="card-title" style={{ marginBottom: 12 }}>
+                Dead Letter Queue
+              </div>
               <SummaryGrid data={dlqData} limit={8} />
               <JsonDetails data={dlqData} />
             </div>
             <div className="card">
-              <div className="card-title" style={{ marginBottom: 12 }}>SBOM</div>
+              <div className="card-title" style={{ marginBottom: 12 }}>
+                SBOM
+              </div>
               <SummaryGrid data={sbomData} limit={8} />
               <JsonDetails data={sbomData} />
             </div>
           </div>
 
           <div className="card" style={{ marginTop: 16 }}>
-            <div className="card-title" style={{ marginBottom: 12 }}>Database Storage</div>
+            <div className="card-title" style={{ marginBottom: 12 }}>
+              Database Storage
+            </div>
             {dbSizes && (
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 12, marginBottom: 16 }}>
+              <div
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))',
+                  gap: 12,
+                  marginBottom: 16,
+                }}
+              >
                 <div className="stat-box">
                   <div className="stat-label">Main DB</div>
                   <div className="stat-value">{formatBytes(dbSizes.db_bytes)}</div>
@@ -672,85 +1214,183 @@ export default function Settings() {
               </div>
             )}
             {storageStats && (
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: 12, marginBottom: 16 }}>
-                <div className="stat-box"><div className="stat-label">Alerts</div><div className="stat-value">{storageStats.total_alerts ?? '—'}</div></div>
-                <div className="stat-box"><div className="stat-label">Cases</div><div className="stat-value">{storageStats.total_cases ?? '—'}</div></div>
-                <div className="stat-box"><div className="stat-label">Audit</div><div className="stat-value">{storageStats.total_audit_entries ?? '—'}</div></div>
-                <div className="stat-box"><div className="stat-label">Agents</div><div className="stat-value">{storageStats.total_agents ?? '—'}</div></div>
+              <div
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))',
+                  gap: 12,
+                  marginBottom: 16,
+                }}
+              >
+                <div className="stat-box">
+                  <div className="stat-label">Alerts</div>
+                  <div className="stat-value">{storageStats.total_alerts ?? '—'}</div>
+                </div>
+                <div className="stat-box">
+                  <div className="stat-label">Cases</div>
+                  <div className="stat-value">{storageStats.total_cases ?? '—'}</div>
+                </div>
+                <div className="stat-box">
+                  <div className="stat-label">Audit</div>
+                  <div className="stat-value">{storageStats.total_audit_entries ?? '—'}</div>
+                </div>
+                <div className="stat-box">
+                  <div className="stat-label">Agents</div>
+                  <div className="stat-value">{storageStats.total_agents ?? '—'}</div>
+                </div>
               </div>
             )}
           </div>
 
           <div className="card" style={{ marginTop: 16 }}>
-            <div className="card-title" style={{ marginBottom: 12 }}>Database Maintenance</div>
+            <div className="card-title" style={{ marginBottom: 12 }}>
+              Database Maintenance
+            </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
-                <button className="btn" disabled={compacting} onClick={async () => {
-                  setCompacting(true);
-                  try {
-                    const r = await api.adminDbCompact();
-                    toast(`Compacted: ${formatBytes(r.bytes_reclaimed)} reclaimed`, 'success');
-                    rSizes();
-                  } catch { toast('Compact failed', 'error'); }
-                  setCompacting(false);
-                }}>{compacting ? 'Compacting...' : 'Compact Database'}</button>
-                <span style={{ fontSize: '0.85rem', opacity: 0.7 }}>VACUUM + WAL checkpoint — reclaims unused space</span>
+                <button
+                  className="btn"
+                  disabled={compacting}
+                  onClick={async () => {
+                    setCompacting(true);
+                    try {
+                      const r = await api.adminDbCompact();
+                      toast(`Compacted: ${formatBytes(r.bytes_reclaimed)} reclaimed`, 'success');
+                      rSizes();
+                    } catch {
+                      toast('Compact failed', 'error');
+                    }
+                    setCompacting(false);
+                  }}
+                >
+                  {compacting ? 'Compacting...' : 'Compact Database'}
+                </button>
+                <span style={{ fontSize: '0.85rem', opacity: 0.7 }}>
+                  VACUUM + WAL checkpoint — reclaims unused space
+                </span>
               </div>
 
               <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
                 <label style={{ fontSize: '0.85rem' }}>Purge data older than</label>
-                <input type="number" min="1" max="3650" value={purgeDays} onChange={e => setPurgeDays(Number(e.target.value))}
-                  style={{ width: 70, padding: '4px 8px' }} />
+                <input
+                  type="number"
+                  min="1"
+                  max="3650"
+                  value={purgeDays}
+                  onChange={(e) => setPurgeDays(Number(e.target.value))}
+                  style={{ width: 70, padding: '4px 8px' }}
+                />
                 <span style={{ fontSize: '0.85rem' }}>days</span>
-                <button className="btn" disabled={purging} onClick={async () => {
-                  if (isNaN(purgeDays) || purgeDays < 1) { toast('Invalid value — enter 1-3650 days', 'error'); return; }
-                  if (!confirm(`Purge all records older than ${purgeDays} days?`)) return;
-                  setPurging(true);
-                  try {
-                    const r = await api.adminDbPurge({ retention_days: purgeDays });
-                    toast(`Purged: ${r.alerts_purged} alerts, ${r.audit_purged} audit, ${r.metrics_purged} metrics`, 'success');
-                    rSizes(); rStats();
-                  } catch { toast('Purge failed', 'error'); }
-                  setPurging(false);
-                }}>{purging ? 'Purging...' : 'Purge Old Data'}</button>
+                <button
+                  className="btn"
+                  disabled={purging}
+                  onClick={async () => {
+                    if (isNaN(purgeDays) || purgeDays < 1) {
+                      toast('Invalid value — enter 1-3650 days', 'error');
+                      return;
+                    }
+                    if (!confirm(`Purge all records older than ${purgeDays} days?`)) return;
+                    setPurging(true);
+                    try {
+                      const r = await api.adminDbPurge({ retention_days: purgeDays });
+                      toast(
+                        `Purged: ${r.alerts_purged} alerts, ${r.audit_purged} audit, ${r.metrics_purged} metrics`,
+                        'success',
+                      );
+                      rSizes();
+                      rStats();
+                    } catch {
+                      toast('Purge failed', 'error');
+                    }
+                    setPurging(false);
+                  }}
+                >
+                  {purging ? 'Purging...' : 'Purge Old Data'}
+                </button>
               </div>
 
               <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
-                <button className="btn" disabled={cleaning} onClick={async () => {
-                  setCleaning(true);
-                  try {
-                    const r = await api.adminCleanupLegacy();
-                    if (r.count > 0) toast(`Cleaned ${r.count} legacy files`, 'success');
-                    else toast('No legacy files found', 'info');
-                  } catch { toast('Cleanup failed', 'error'); }
-                  setCleaning(false);
-                }}>{cleaning ? 'Cleaning...' : 'Clean Legacy Files'}</button>
-                <span style={{ fontSize: '0.85rem', opacity: 0.7 }}>Remove old .json/.jsonl flat files from var/</span>
+                <button
+                  className="btn"
+                  disabled={cleaning}
+                  onClick={async () => {
+                    setCleaning(true);
+                    try {
+                      const r = await api.adminCleanupLegacy();
+                      if (r.count > 0) toast(`Cleaned ${r.count} legacy files`, 'success');
+                      else toast('No legacy files found', 'info');
+                    } catch {
+                      toast('Cleanup failed', 'error');
+                    }
+                    setCleaning(false);
+                  }}
+                >
+                  {cleaning ? 'Cleaning...' : 'Clean Legacy Files'}
+                </button>
+                <span style={{ fontSize: '0.85rem', opacity: 0.7 }}>
+                  Remove old .json/.jsonl flat files from var/
+                </span>
               </div>
             </div>
           </div>
 
           <div className="card" style={{ marginTop: 16 }}>
-            <div className="card-title" style={{ marginBottom: 12 }}>Admin Actions</div>
+            <div className="card-title" style={{ marginBottom: 12 }}>
+              Admin Actions
+            </div>
             <div className="btn-group">
-              <button className="btn" onClick={async () => {
-                try { await api.adminBackup(); toast('Backup created', 'success'); } catch { toast('Backup failed', 'error'); }
-              }}>Create Backup</button>
-              <button className="btn btn-danger" style={{ marginLeft: 8 }} onClick={async () => {
-                const answer = prompt('Type RESET_ALL_DATA to confirm deleting all database records:');
-                if (answer !== 'RESET_ALL_DATA') { toast('Reset cancelled', 'info'); return; }
-                setResetting(true);
-                try {
-                  const r = await api.adminDbReset({ confirm: 'RESET_ALL_DATA' });
-                  toast(`Database reset: ${r.records_purged} records purged`, 'warning');
-                  rSizes(); rStats();
-                } catch { toast('Reset failed', 'error'); }
-                setResetting(false);
-              }}>{resetting ? 'Resetting...' : 'Reset Database'}</button>
-              <button className="btn btn-danger" onClick={async () => {
-                if (!confirm('Shutdown the Wardex server?')) return;
-                try { await api.shutdown(); toast('Shutdown initiated', 'warning'); } catch { toast('Shutdown failed', 'error'); }
-              }}>Shutdown Server</button>
+              <button
+                className="btn"
+                onClick={async () => {
+                  try {
+                    await api.adminBackup();
+                    toast('Backup created', 'success');
+                  } catch {
+                    toast('Backup failed', 'error');
+                  }
+                }}
+              >
+                Create Backup
+              </button>
+              <button
+                className="btn btn-danger"
+                style={{ marginLeft: 8 }}
+                onClick={async () => {
+                  const answer = prompt(
+                    'Type RESET_ALL_DATA to confirm deleting all database records:',
+                  );
+                  if (answer !== 'RESET_ALL_DATA') {
+                    toast('Reset cancelled', 'info');
+                    return;
+                  }
+                  setResetting(true);
+                  try {
+                    const r = await api.adminDbReset({ confirm: 'RESET_ALL_DATA' });
+                    toast(`Database reset: ${r.records_purged} records purged`, 'warning');
+                    rSizes();
+                    rStats();
+                  } catch {
+                    toast('Reset failed', 'error');
+                  }
+                  setResetting(false);
+                }}
+              >
+                {resetting ? 'Resetting...' : 'Reset Database'}
+              </button>
+              <button
+                className="btn btn-danger"
+                onClick={async () => {
+                  if (!confirm('Shutdown the Wardex server?')) return;
+                  try {
+                    await api.shutdown();
+                    toast('Shutdown initiated', 'warning');
+                  } catch {
+                    toast('Shutdown failed', 'error');
+                  }
+                }}
+              >
+                Shutdown Server
+              </button>
             </div>
           </div>
         </>

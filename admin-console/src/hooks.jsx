@@ -1,5 +1,13 @@
 import { useState, useEffect, useCallback, useRef, createContext, useContext } from 'react';
-import { setToken, authCheck, authSession, wsConnect, wsDisconnect, wsPoll, withSignal } from './api.js';
+import {
+  setToken,
+  authCheck,
+  authSession,
+  wsConnect,
+  wsDisconnect,
+  wsPoll,
+  withSignal,
+} from './api.js';
 
 // ── Auth Context ─────────────────────────────────────────────
 
@@ -45,7 +53,9 @@ export function AuthProvider({ children }) {
   );
 }
 
-export function useAuth() { return useContext(AuthContext); }
+export function useAuth() {
+  return useContext(AuthContext);
+}
 
 // ── Role Context ─────────────────────────────────────────────
 
@@ -56,11 +66,16 @@ export function RoleProvider({ children }) {
   const [role, setRole] = useState('viewer');
 
   useEffect(() => {
-    if (!authenticated) { setRole('viewer'); return; }
+    if (!authenticated) {
+      setRole('viewer');
+      return;
+    }
     let cancelled = false;
     const fetchRole = (retries = 2) => {
       authSession()
-        .then(data => { if (!cancelled && data.role) setRole(data.role); })
+        .then((data) => {
+          if (!cancelled && data.role) setRole(data.role);
+        })
         .catch(() => {
           if (!cancelled && retries > 0) {
             setTimeout(() => fetchRole(retries - 1), 1000);
@@ -70,17 +85,17 @@ export function RoleProvider({ children }) {
         });
     };
     fetchRole();
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, [authenticated]);
 
-  return (
-    <RoleContext.Provider value={{ role, setRole }}>
-      {children}
-    </RoleContext.Provider>
-  );
+  return <RoleContext.Provider value={{ role, setRole }}>{children}</RoleContext.Provider>;
 }
 
-export function useRole() { return useContext(RoleContext); }
+export function useRole() {
+  return useContext(RoleContext);
+}
 
 // ── Theme Context ────────────────────────────────────────────
 
@@ -99,16 +114,14 @@ export function ThemeProvider({ children }) {
     localStorage.setItem('wardex_theme', dark ? 'dark' : 'light');
   }, [dark]);
 
-  const toggle = useCallback(() => setDark(d => !d), []);
+  const toggle = useCallback(() => setDark((d) => !d), []);
 
-  return (
-    <ThemeContext.Provider value={{ dark, toggle }}>
-      {children}
-    </ThemeContext.Provider>
-  );
+  return <ThemeContext.Provider value={{ dark, toggle }}>{children}</ThemeContext.Provider>;
 }
 
-export function useTheme() { return useContext(ThemeContext); }
+export function useTheme() {
+  return useContext(ThemeContext);
+}
 
 // ── Toast Context ────────────────────────────────────────────
 
@@ -120,15 +133,15 @@ export function ToastProvider({ children }) {
 
   const toast = useCallback((message, kind = 'info') => {
     const id = ++idRef.current;
-    setToasts(t => [...t, { id, message, kind }]);
-    setTimeout(() => setToasts(t => t.filter(x => x.id !== id)), 5000);
+    setToasts((t) => [...t, { id, message, kind }]);
+    setTimeout(() => setToasts((t) => t.filter((x) => x.id !== id)), 5000);
   }, []);
 
   return (
-      <ToastContext.Provider value={toast}>
-        {children}
+    <ToastContext.Provider value={toast}>
+      {children}
       <div className="toast-container" aria-live="polite" aria-atomic="false">
-        {toasts.map(t => (
+        {toasts.map((t) => (
           <div key={t.id} className={`toast toast-${t.kind}`} role="status">
             {t.message}
           </div>
@@ -138,7 +151,9 @@ export function ToastProvider({ children }) {
   );
 }
 
-export function useToast() { return useContext(ToastContext); }
+export function useToast() {
+  return useContext(ToastContext);
+}
 
 // ── useApi hook ──────────────────────────────────────────────
 
@@ -148,11 +163,16 @@ export function useApi(fn, deps = [], opts = {}) {
   const [error, setError] = useState(null);
   const { skip = false } = opts;
   const fnRef = useRef(fn);
-  useEffect(() => { fnRef.current = fn; });
+  useEffect(() => {
+    fnRef.current = fn;
+  });
   const controllerRef = useRef(null);
 
   const load = useCallback(async () => {
-    if (skip) { setLoading(false); return; }
+    if (skip) {
+      setLoading(false);
+      return;
+    }
     if (controllerRef.current) controllerRef.current.abort();
     const controller = new AbortController();
     controllerRef.current = controller;
@@ -169,10 +189,14 @@ export function useApi(fn, deps = [], opts = {}) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [...deps, skip]);
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => {
+    load();
+  }, [load]);
 
   useEffect(() => {
-    return () => { if (controllerRef.current) controllerRef.current.abort(); };
+    return () => {
+      if (controllerRef.current) controllerRef.current.abort();
+    };
   }, []);
 
   return { data, loading, error, reload: load };
@@ -182,7 +206,9 @@ export function useApi(fn, deps = [], opts = {}) {
 
 export function useInterval(callback, delayMs) {
   const savedCallback = useRef(callback);
-  useEffect(() => { savedCallback.current = callback; }, [callback]);
+  useEffect(() => {
+    savedCallback.current = callback;
+  }, [callback]);
   useEffect(() => {
     if (delayMs == null) return;
     const id = setInterval(() => savedCallback.current(), delayMs);
@@ -219,9 +245,13 @@ export function useDraftAutosave(key, initialValue) {
         } else {
           localStorage.setItem(storageKey, JSON.stringify(value));
         }
-      } catch { /* quota exceeded — ignore */ }
+      } catch {
+        /* quota exceeded — ignore */
+      }
     }, 500);
-    return () => { if (timerRef.current) clearTimeout(timerRef.current); };
+    return () => {
+      if (timerRef.current) clearTimeout(timerRef.current);
+    };
   }, [value, storageKey, initialValue]);
 
   const clearDraft = useCallback(() => {
@@ -303,14 +333,19 @@ export function useWebSocket(pollIntervalMs = 2000) {
         handshakeTimer = setTimeout(() => {
           if (!mountedRef.current || wsRef.current !== ws || opened) return;
           wsRef.current = null;
-          try { ws.close(); } catch {
+          try {
+            ws.close();
+          } catch {
             /* ignore close errors during handshake fallback */
           }
           connectPolling();
         }, 3000);
 
         ws.onopen = () => {
-          if (!mountedRef.current || wsRef.current !== ws) { ws.close(); return; }
+          if (!mountedRef.current || wsRef.current !== ws) {
+            ws.close();
+            return;
+          }
           opened = true;
           clearHandshake();
           stopPolling(true);
@@ -323,15 +358,19 @@ export function useWebSocket(pollIntervalMs = 2000) {
           try {
             const data = JSON.parse(e.data);
             const newEvents = Array.isArray(data) ? data : [data];
-            setEvents(prev => [...newEvents, ...prev].slice(0, 500));
-          } catch { /* ignore malformed frames */ }
+            setEvents((prev) => [...newEvents, ...prev].slice(0, 500));
+          } catch {
+            /* ignore malformed frames */
+          }
         };
 
         ws.onerror = () => {
           if (!mountedRef.current || wsRef.current !== ws || opened) return;
           clearHandshake();
           wsRef.current = null;
-          try { ws.close(); } catch {
+          try {
+            ws.close();
+          } catch {
             /* ignore close errors after websocket failure */
           }
           connectPolling();
@@ -359,7 +398,12 @@ export function useWebSocket(pollIntervalMs = 2000) {
     };
 
     const connectPolling = async () => {
-      if (!mountedRef.current || pollingConnecting || pollTimer || subscriberIdRef.current != null) {
+      if (
+        !mountedRef.current ||
+        pollingConnecting ||
+        pollTimer ||
+        subscriberIdRef.current != null
+      ) {
         return;
       }
       const requestId = ++pollingConnectRequestId;
@@ -401,7 +445,7 @@ export function useWebSocket(pollIntervalMs = 2000) {
           const newEvents = await wsPoll(subscriberIdRef.current);
           if (!mountedRef.current) return;
           if (Array.isArray(newEvents) && newEvents.length > 0) {
-            setEvents(prev => [...newEvents, ...prev].slice(0, 500));
+            setEvents((prev) => [...newEvents, ...prev].slice(0, 500));
           }
         } catch {
           if (mountedRef.current) {
@@ -420,7 +464,10 @@ export function useWebSocket(pollIntervalMs = 2000) {
       mountedRef.current = false;
       clearRetry();
       clearHandshake();
-      if (wsRef.current) { wsRef.current.close(); wsRef.current = null; }
+      if (wsRef.current) {
+        wsRef.current.close();
+        wsRef.current = null;
+      }
       stopPolling(true);
     };
   }, [pollIntervalMs]);

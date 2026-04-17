@@ -170,14 +170,21 @@ impl AssetInventory {
     /// Search assets by query (matches name, hostname, IP, tags).
     pub fn search(&self, query: &str) -> Vec<&UnifiedAsset> {
         let q = query.to_lowercase();
-        self.assets.iter().filter(|a| {
-            a.name.to_lowercase().contains(&q)
-                || a.hostname.as_ref().is_some_and(|h| h.to_lowercase().contains(&q))
-                || a.ip_addresses.iter().any(|ip| ip.contains(&q))
-                || a.tags.values().any(|v| v.to_lowercase().contains(&q))
-                || a.id.to_lowercase().contains(&q)
-                || a.owner.as_ref().is_some_and(|o| o.to_lowercase().contains(&q))
-        }).collect()
+        self.assets
+            .iter()
+            .filter(|a| {
+                a.name.to_lowercase().contains(&q)
+                    || a.hostname
+                        .as_ref()
+                        .is_some_and(|h| h.to_lowercase().contains(&q))
+                    || a.ip_addresses.iter().any(|ip| ip.contains(&q))
+                    || a.tags.values().any(|v| v.to_lowercase().contains(&q))
+                    || a.id.to_lowercase().contains(&q)
+                    || a.owner
+                        .as_ref()
+                        .is_some_and(|o| o.to_lowercase().contains(&q))
+            })
+            .collect()
     }
 
     /// Get asset by ID.
@@ -205,8 +212,12 @@ impl AssetInventory {
         let mut total_risk = 0.0f32;
 
         for asset in &self.assets {
-            *by_type.entry(format!("{:?}", asset.asset_type)).or_insert(0) += 1;
-            *by_provider.entry(format!("{:?}", asset.cloud_provider)).or_insert(0) += 1;
+            *by_type
+                .entry(format!("{:?}", asset.asset_type))
+                .or_insert(0) += 1;
+            *by_provider
+                .entry(format!("{:?}", asset.cloud_provider))
+                .or_insert(0) += 1;
             *by_status.entry(format!("{:?}", asset.status)).or_insert(0) += 1;
             if asset.risk_score >= 7.0 {
                 high_risk += 1;
@@ -217,7 +228,11 @@ impl AssetInventory {
             total_risk += asset.risk_score;
         }
 
-        let avg = if self.assets.is_empty() { 0.0 } else { total_risk / self.assets.len() as f32 };
+        let avg = if self.assets.is_empty() {
+            0.0
+        } else {
+            total_risk / self.assets.len() as f32
+        };
 
         AssetSummary {
             total_assets: self.assets.len(),

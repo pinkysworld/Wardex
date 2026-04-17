@@ -23,22 +23,18 @@ describe('SearchPalette', () => {
 
   it('renders nothing when closed', () => {
     const { container } = render(
-      <SearchPalette open={false} onClose={onClose} onNavigate={onNavigate} />
+      <SearchPalette open={false} onClose={onClose} onNavigate={onNavigate} />,
     );
     expect(container.querySelector('.search-palette')).not.toBeInTheDocument();
   });
 
   it('renders search input when open', () => {
-    render(
-      <SearchPalette open={true} onClose={onClose} onNavigate={onNavigate} />
-    );
+    render(<SearchPalette open={true} onClose={onClose} onNavigate={onNavigate} />);
     expect(screen.getByPlaceholderText(/search/i)).toBeInTheDocument();
   });
 
   it('closes on ESC key', () => {
-    render(
-      <SearchPalette open={true} onClose={onClose} onNavigate={onNavigate} />
-    );
+    render(<SearchPalette open={true} onClose={onClose} onNavigate={onNavigate} />);
     const input = screen.getByPlaceholderText(/search/i);
     fireEvent.keyDown(input, { key: 'Escape' });
     expect(onClose).toHaveBeenCalledWith(false);
@@ -46,7 +42,7 @@ describe('SearchPalette', () => {
 
   it('closes on backdrop click', () => {
     const { container } = render(
-      <SearchPalette open={true} onClose={onClose} onNavigate={onNavigate} />
+      <SearchPalette open={true} onClose={onClose} onNavigate={onNavigate} />,
     );
     const overlay = container.querySelector('.search-palette-overlay');
     if (overlay) fireEvent.click(overlay);

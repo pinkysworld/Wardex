@@ -71,7 +71,12 @@ impl IncidentStore {
             && let Ok(content) = std::fs::read_to_string(path)
             && let Ok(incidents) = serde_json::from_str::<Vec<Incident>>(&content)
         {
-            self.next_id = incidents.iter().map(|i| i.id).max().unwrap_or(0).saturating_add(1);
+            self.next_id = incidents
+                .iter()
+                .map(|i| i.id)
+                .max()
+                .unwrap_or(0)
+                .saturating_add(1);
             self.incidents = incidents;
         }
     }
@@ -531,7 +536,10 @@ mod tests {
         let inc_a = store.get(1).unwrap();
         let inc_b = store.get(2).unwrap();
         assert!(inc_a.event_ids.contains(&4), "Inc A should have event 4");
-        assert!(!inc_b.event_ids.contains(&4), "Inc B should NOT have event 4 (single-merge)");
+        assert!(
+            !inc_b.event_ids.contains(&4),
+            "Inc B should NOT have event 4 (single-merge)"
+        );
 
         let _ = std::fs::remove_file(&path);
     }
