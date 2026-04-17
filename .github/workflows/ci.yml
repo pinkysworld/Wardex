@@ -26,7 +26,7 @@ jobs:
 
       - name: Install Rust
         run: |
-          rustup toolchain install stable --profile minimal --component clippy rustfmt
+          rustup toolchain install stable --profile minimal --component clippy --component rustfmt
           rustup default stable
 
       - name: Cache cargo registry & build

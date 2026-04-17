@@ -2271,6 +2271,7 @@ fn run_command_text(command: &str, args: &[&str]) -> Option<String> {
     }
 }
 
+#[cfg(target_os = "macos")]
 fn process_lsof_path(pid: u32, descriptor: &str) -> Option<String> {
     let pid_arg = pid.to_string();
     let output = run_command_text("lsof", &["-a", "-p", &pid_arg, "-d", descriptor, "-Fn"])?;
@@ -2310,6 +2311,7 @@ fn parse_network_activity_lines(lines: &str) -> Vec<serde_json::Value> {
         .collect()
 }
 
+#[cfg(target_os = "macos")]
 fn code_signature_summary(exe_path: &str) -> serde_json::Value {
     #[cfg(target_os = "macos")]
     {
