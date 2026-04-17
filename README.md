@@ -99,7 +99,7 @@ Tagged releases are packaged by GitHub Actions into Linux, macOS, and Windows ar
 
 ## Support
 
-You can support ongoing development, release validation, documentation, and SDK maintenance through [GitHub Sponsors](https://github.com/sponsors/pinkysworld). For production deployment or commercial usage under the current BSL 1.1 terms, contact the author for a separate commercial license.
+The public support page at [minh.systems/Wardex/donate.html](https://minh.systems/Wardex/donate.html) summarizes sponsorship, commercial licensing, and non-monetary ways to help. You can support ongoing development, release validation, documentation, and SDK maintenance through [GitHub Sponsors](https://github.com/sponsors/pinkysworld). For production deployment or commercial usage under the current BSL 1.1 terms, contact the author for a separate commercial license.
 
 ## License
 
