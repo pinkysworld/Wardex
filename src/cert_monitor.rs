@@ -194,7 +194,7 @@ impl CertMonitor {
         }
 
         // Sort alerts by severity
-        alerts.sort_by(|a, b| severity_rank(&a.severity).cmp(&severity_rank(&b.severity)));
+        alerts.sort_by_key(|a| severity_rank(&a.severity));
 
         CertSummary {
             total_certificates: self.certificates.len(),

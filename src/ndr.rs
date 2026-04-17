@@ -426,7 +426,7 @@ impl NdrEngine {
                 protocols: protos.into_iter().map(|s| s.to_string()).collect(),
             })
             .collect();
-        talkers.sort_by(|a, b| b.total_bytes.cmp(&a.total_bytes));
+        talkers.sort_by_key(|b| std::cmp::Reverse(b.total_bytes));
         talkers.truncate(self.config.top_n);
         talkers
     }

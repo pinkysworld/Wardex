@@ -7849,12 +7849,12 @@ fn handle_api(
                         let text = String::from_utf8_lossy(&output.stdout);
                         for line in text.lines().skip(1) {
                             let f: Vec<&str> = line.split_whitespace().collect();
-                            if f.len() >= 3 {
-                                if let Ok(pid) = f[0].parse::<u32>() {
-                                    let cpu: f32 = f[1].parse().unwrap_or(0.0);
-                                    let mem: f32 = f[2].parse().unwrap_or(0.0);
-                                    map.insert(pid, (cpu, mem));
-                                }
+                            if f.len() >= 3
+                                && let Ok(pid) = f[0].parse::<u32>()
+                            {
+                                let cpu: f32 = f[1].parse().unwrap_or(0.0);
+                                let mem: f32 = f[2].parse().unwrap_or(0.0);
+                                map.insert(pid, (cpu, mem));
                             }
                         }
                     }

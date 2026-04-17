@@ -817,7 +817,7 @@ pub fn analyze_processes(procs: &[WinProcessEvent]) -> Vec<ProcessFinding> {
     }
 
     // Sort by risk desc
-    findings.sort_by(|a, b| risk_ord(b.risk_level).cmp(&risk_ord(a.risk_level)));
+    findings.sort_by_key(|b| std::cmp::Reverse(risk_ord(b.risk_level)));
     findings
 }
 
@@ -917,7 +917,7 @@ pub fn collect_installed_apps() -> Vec<InstalledApp> {
         }
     }
 
-    apps.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()));
+    apps.sort_by_key(|a| a.name.to_lowercase());
     apps
 }
 

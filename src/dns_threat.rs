@@ -452,7 +452,7 @@ impl DnsAnalyzer {
         });
 
         let mut top_queried: Vec<_> = domain_counts.into_iter().collect();
-        top_queried.sort_by(|a, b| b.1.cmp(&a.1));
+        top_queried.sort_by_key(|b| std::cmp::Reverse(b.1));
         top_queried.truncate(20);
 
         DnsThreatSummary {

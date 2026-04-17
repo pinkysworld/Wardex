@@ -100,7 +100,7 @@ pub struct ScheduleResult {
 /// Schedule tasks respecting energy constraints.
 pub fn energy_aware_schedule(tasks: &[ScheduledTask], budget: &EnergyBudget) -> ScheduleResult {
     let mut sorted = tasks.to_vec();
-    sorted.sort_by(|a, b| a.priority.cmp(&b.priority));
+    sorted.sort_by_key(|a| a.priority);
 
     let mut available = budget.current_mwh;
     let mut executed = Vec::new();

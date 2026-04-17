@@ -328,7 +328,7 @@ impl ReportStore {
             }
         }
         let mut top_techniques: Vec<_> = technique_counts.into_iter().collect();
-        top_techniques.sort_by(|a, b| b.1.cmp(&a.1));
+        top_techniques.sort_by_key(|b| std::cmp::Reverse(b.1));
         top_techniques.truncate(5);
 
         // Aggregate detection reasons across all report samples
@@ -342,7 +342,7 @@ impl ReportStore {
             }
         }
         let mut top_reasons: Vec<_> = reason_counts.into_iter().collect();
-        top_reasons.sort_by(|a, b| b.1.cmp(&a.1));
+        top_reasons.sort_by_key(|b| std::cmp::Reverse(b.1));
         top_reasons.truncate(10);
 
         serde_json::json!({

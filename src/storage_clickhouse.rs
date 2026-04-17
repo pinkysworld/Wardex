@@ -294,7 +294,7 @@ impl EventStore for ClickHouseStorage {
             .into_iter()
             .map(|(key, count)| AggBucket { key, count })
             .collect();
-        buckets.sort_by(|a, b| b.count.cmp(&a.count));
+        buckets.sort_by_key(|b| std::cmp::Reverse(b.count));
         Ok(AggregationResult { buckets, total })
     }
 

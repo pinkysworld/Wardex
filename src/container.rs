@@ -337,31 +337,30 @@ impl ContainerDetector {
                     }
                 }
             }
-            ContainerEventKind::ImagePull => {
+            ContainerEventKind::ImagePull
                 if !self.trusted_images.is_empty()
                     && !self
                         .trusted_images
                         .iter()
-                        .any(|t| event.image.starts_with(t))
-                {
-                    alerts.push(ContainerAlert {
-                        id: self.next_alert_id(),
-                        timestamp: ts.clone(),
-                        severity: ContainerSeverity::Medium,
-                        kind: ContainerAlertKind::UnusualImagePull,
-                        container_id: event.container_id.clone(),
-                        container_name: event.container_name.clone(),
-                        image: event.image.clone(),
-                        hostname: event.hostname.clone(),
-                        description: format!("Untrusted image pulled: {}", event.image),
-                        risk_score: 4.0,
-                        mitre_techniques: vec!["T1610".into()],
-                        recommendations: vec![
-                            "Verify image provenance and signature".into(),
-                            "Check for known CVEs in image".into(),
-                        ],
-                    });
-                }
+                        .any(|t| event.image.starts_with(t)) =>
+            {
+                alerts.push(ContainerAlert {
+                    id: self.next_alert_id(),
+                    timestamp: ts.clone(),
+                    severity: ContainerSeverity::Medium,
+                    kind: ContainerAlertKind::UnusualImagePull,
+                    container_id: event.container_id.clone(),
+                    container_name: event.container_name.clone(),
+                    image: event.image.clone(),
+                    hostname: event.hostname.clone(),
+                    description: format!("Untrusted image pulled: {}", event.image),
+                    risk_score: 4.0,
+                    mitre_techniques: vec!["T1610".into()],
+                    recommendations: vec![
+                        "Verify image provenance and signature".into(),
+                        "Check for known CVEs in image".into(),
+                    ],
+                });
             }
             ContainerEventKind::VolumeMount => {
                 if let Some(path) = event.details.get("mount_path")

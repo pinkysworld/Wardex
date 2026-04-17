@@ -531,7 +531,7 @@ impl AnomalyDetector {
             .iter()
             .map(|(k, v)| (k.clone(), *v))
             .collect();
-        rules.sort_by(|a, b| b.1.cmp(&a.1));
+        rules.sort_by_key(|b| std::cmp::Reverse(b.1));
         rules.truncate(20);
         rules
     }

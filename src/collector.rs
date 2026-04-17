@@ -400,14 +400,12 @@ fn collect_memory() -> f32 {
     for line in content.lines() {
         if let Some(rest) = line.strip_prefix("MemTotal:") {
             total = rest
-                .trim()
                 .split_whitespace()
                 .next()
                 .and_then(|v| v.parse().ok())
                 .unwrap_or(0);
         } else if let Some(rest) = line.strip_prefix("MemAvailable:") {
             available = rest
-                .trim()
                 .split_whitespace()
                 .next()
                 .and_then(|v| v.parse().ok())
@@ -1602,7 +1600,7 @@ fn parse_syslog_dns_line(line: &str, timestamp_ms: u64) -> Option<DnsEvent> {
     if let Some(pos) = line.find("query[") {
         let rest = &line[pos + 6..];
         let rtype = rest.split(']').next().unwrap_or("A");
-        let domain = rest.split(']').nth(1)?.trim().split_whitespace().next()?;
+        let domain = rest.split(']').nth(1)?.split_whitespace().next()?;
         return Some(DnsEvent {
             timestamp_ms,
             domain: domain.to_string(),

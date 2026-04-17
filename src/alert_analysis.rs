@@ -188,7 +188,7 @@ pub fn deduplicate_alerts(alerts: &[AlertRecord], config: &DedupConfig) -> Vec<D
     }
 
     // Sort most recent first.
-    incidents.sort_by(|a, b| b.last_seen.cmp(&a.last_seen));
+    incidents.sort_by_key(|b| std::cmp::Reverse(b.last_seen.clone()));
     incidents
 }
 
@@ -422,7 +422,7 @@ fn compute_reason_histogram(alerts: &[AlertRecord]) -> Vec<(String, usize)> {
         }
     }
     let mut sorted: Vec<(String, usize)> = counts.into_iter().collect();
-    sorted.sort_by(|a, b| b.1.cmp(&a.1));
+    sorted.sort_by_key(|b| std::cmp::Reverse(b.1));
     sorted.truncate(10);
     sorted
 }

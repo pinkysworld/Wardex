@@ -134,7 +134,7 @@ impl ApiAnalytics {
             });
         }
         // Sort by request count descending
-        result.sort_by(|a, b| b.request_count.cmp(&a.request_count));
+        result.sort_by_key(|b| std::cmp::Reverse(b.request_count));
         result
     }
 
