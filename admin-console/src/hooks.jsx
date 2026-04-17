@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef, createContext, useContext } from 'react';
-import { setToken, getToken, authCheck, authSession, wsConnect, wsDisconnect, wsPoll, withSignal } from './api.js';
+import { setToken, authCheck, authSession, wsConnect, wsDisconnect, wsPoll, withSignal } from './api.js';
 
 // ── Auth Context ─────────────────────────────────────────────
 
@@ -303,7 +303,9 @@ export function useWebSocket(pollIntervalMs = 2000) {
         handshakeTimer = setTimeout(() => {
           if (!mountedRef.current || wsRef.current !== ws || opened) return;
           wsRef.current = null;
-          try { ws.close(); } catch {}
+          try { ws.close(); } catch {
+            /* ignore close errors during handshake fallback */
+          }
           connectPolling();
         }, 3000);
 
@@ -329,7 +331,9 @@ export function useWebSocket(pollIntervalMs = 2000) {
           if (!mountedRef.current || wsRef.current !== ws || opened) return;
           clearHandshake();
           wsRef.current = null;
-          try { ws.close(); } catch {}
+          try { ws.close(); } catch {
+            /* ignore close errors after websocket failure */
+          }
           connectPolling();
         };
 

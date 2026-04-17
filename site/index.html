@@ -15,8 +15,8 @@
       rel="stylesheet"
     >
     <link rel="icon" href="favicon.svg" type="image/svg+xml">
-    <link rel="stylesheet" href="styles.css?v=8">
-    <script defer src="app.js?v=9"></script>
+    <link rel="stylesheet" href="styles.css?v=9">
+    <script defer src="app.js?v=10"></script>
   </head>
   <body>
     <nav class="site-nav" id="site-nav">
@@ -59,6 +59,7 @@
           <a href="#deployment" class="nav-link" data-section="deployment">Deployment</a>
           <a href="#resources" class="nav-link" data-section="resources">Resources</a>
           <a href="#licensing" class="nav-link" data-section="licensing">Licensing</a>
+          <a href="donate.html" class="nav-link">Support</a>
           <a href="https://github.com/pinkysworld/Wardex" class="nav-link" target="_blank" rel="noopener">
             <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
           </a>
@@ -80,6 +81,7 @@
                 Wardex delivers a professional-grade security operations platform without cloud dependencies or vendor lock-in. 128 Rust modules cover cross-platform telemetry, Sigma and kernel-level detection, malware scanning, campaign clustering, memory forensics, deception engines, UEBA with geo-validation, file integrity monitoring, digital twin calibration, privacy-preserving federated learning, ClickHouse storage, ML triage, and cloud collectors — all in a single deployable binary with a live browser console.
               </p>
               <div class="hero-cta">
+                <a href="donate.html" class="btn btn-primary">Support Wardex</a>
                 <a href="#deployment" class="btn btn-outline">Deployment Guide</a>
                 <a href="#resources" class="btn btn-outline">Operator Resources</a>
                 <a href="https://github.com/pinkysworld/Wardex/releases" class="btn btn-ghost" target="_blank" rel="noopener">Release Artifacts →</a>
@@ -523,10 +525,15 @@
               <span>Search docs and references</span>
               <input id="resource-search" type="search" placeholder="Search runbooks, deployment, SDK, API, threat model…">
             </label>
-            <div class="resource-count" id="resource-count">8 resources visible</div>
+            <div class="resource-count" id="resource-count">9 resources visible</div>
           </div>
 
           <div class="start-grid">
+            <div class="start-card" data-resource-card data-search="support donate github sponsors funding sponsor sustain roadmap community">
+              <h3>Support Wardex</h3>
+              <p>Use the sponsor page for one-time or recurring support, or contact us for commercial licensing and deployment help.</p>
+              <p><a href="donate.html" class="btn btn-outline">Open Support Page</a></p>
+            </div>
             <div class="start-card" data-resource-card data-search="docs architecture deployment status runbooks getting started">
               <h3>Documentation Index</h3>
               <p>Start with the main documentation map for architecture, deployment, status, and runbooks.</p>
@@ -664,6 +671,7 @@
           <div class="license-notice">
             <p><strong>License &amp; Release:</strong> BSL 1.1 · <span id="license-version">v0.52.5</span></p>
             <p><strong>Change Date:</strong> The BSL 1.1 license converts to Apache 2.0 on April 1, 2029. After this date, all usage — including commercial — is permitted under Apache 2.0 terms.</p>
+            <p><strong>Community Support:</strong> Donations help fund releases, docs, packaging, and day-to-day maintenance, but production use still requires a separate commercial license.</p>
             <p>For questions about licensing, commercial use, or partnership opportunities, please <a href="mailto:michel_ng@icloud.com">contact us</a>.</p>
           </div>
         </div>
@@ -690,6 +698,7 @@
               <h4>Resources</h4>
               <a href="#deployment">Deployment</a>
               <a href="#licensing">Licensing</a>
+              <a href="donate.html">Support Wardex</a>
               <a href="https://github.com/pinkysworld/Wardex" target="_blank" rel="noopener">GitHub</a>
               <a href="https://github.com/pinkysworld/Wardex/releases" target="_blank" rel="noopener">Releases</a>
             </div>

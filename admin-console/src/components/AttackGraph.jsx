@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
-import { useApi, useInterval } from '../hooks.jsx';
+import { useApi } from '../hooks.jsx';
 import * as api from '../api.js';
 
 // ── Simple Force-Directed Graph Renderer ─────────────────────
@@ -18,6 +18,8 @@ const EDGE_TYPES = {
   execution: { color: '#9b59b6', label: 'Exec' },
   default: { color: '#95a5a6', label: '' },
 };
+const CANVAS_WIDTH = 900;
+const CANVAS_HEIGHT = 600;
 
 function forceSimulation(nodes, edges, width, height, iterations = 100) {
   // Initialize positions
@@ -171,7 +173,6 @@ export default function AttackGraph() {
   const canvasRef = useRef(null);
   const [hoveredNode, setHoveredNode] = useState(null);
   const [selectedNode, setSelectedNode] = useState(null);
-  const [graphData, setGraphData] = useState(null);
 
   const { data: lateralData } = useApi(api.campaigns);
 
@@ -185,10 +186,7 @@ export default function AttackGraph() {
 
   const layoutNodes = useMemo(() => {
     if (nodes.length === 0) return [];
-    const canvas = canvasRef.current;
-    const w = canvas?.width || 900;
-    const h = canvas?.height || 600;
-    return forceSimulation([...nodes.map(n => ({ ...n }))], edges, w, h);
+    return forceSimulation([...nodes.map(n => ({ ...n }))], edges, CANVAS_WIDTH, CANVAS_HEIGHT);
   }, [nodes, edges]);
 
   const render = useCallback(() => {
@@ -254,11 +252,11 @@ export default function AttackGraph() {
           ) : (
             <canvas
               ref={canvasRef}
-              width={900}
-              height={600}
+              width={CANVAS_WIDTH}
+              height={CANVAS_HEIGHT}
               onMouseMove={handleMouseMove}
               onClick={handleClick}
-              style={{ width: '100%', height: 600, display: 'block' }}
+              style={{ width: '100%', height: CANVAS_HEIGHT, display: 'block' }}
               aria-label={`Attack path graph with ${nodes.length} nodes and ${edges.length} edges`}
               role="img"
             />

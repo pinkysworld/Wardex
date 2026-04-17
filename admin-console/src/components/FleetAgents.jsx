@@ -76,8 +76,9 @@ export default function FleetAgents() {
   const [query, setQuery] = useState(() => searchParams.get('q') || '');
   const [statusFilter, setStatusFilter] = useState(() => searchParams.get('status') || 'all');
   const [osFilter, setOsFilter] = useState(() => searchParams.get('os') || 'all');
+  const [nowMs, setNowMs] = useState(() => Date.now());
   const { data: fleetSt, reload: rFleet } = useApi(api.fleetStatus);
-  const { data: dash, reload: rDash } = useApi(api.fleetDashboard);
+  const { data: dash } = useApi(api.fleetDashboard);
   const { data: agentList, reload: rAgents } = useApi(api.agents);
   const { data: swarm } = useApi(api.swarmPosture);
   const { data: swarmIntelData } = useApi(api.swarmIntel);
@@ -108,9 +109,16 @@ export default function FleetAgents() {
     setFleetQueryState({ fleetTab: nextTab });
   }, [setFleetQueryState]);
 
-  useInterval(() => { rFleet(); rAgents(); }, 15000);
+  useInterval(() => {
+    rFleet();
+    rAgents();
+    setNowMs(Date.now());
+  }, 15000);
 
-  const agentArr = (Array.isArray(agentList) ? agentList : agentList?.agents || []).map(normalizeAgent);
+  const agentArr = useMemo(
+    () => (Array.isArray(agentList) ? agentList : agentList?.agents || []).map(normalizeAgent),
+    [agentList]
+  );
   const eventArr = Array.isArray(evts) ? evts : evts?.events || [];
   const statusOptions = ['all', ...new Set(agentArr.map((agent) => agent.status))];
   const osOptions = ['all', ...new Set(agentArr.map((agent) => String(agent.os).toLowerCase()))];
@@ -122,12 +130,12 @@ export default function FleetAgents() {
       const matchesOs = osFilter === 'all' || String(agent.os).toLowerCase().includes(osFilter.toLowerCase());
       if (statusFilter === 'offline' && SAVED_VIEWS[1].filters.status === 'offline') {
         const lastSeenMs = agent.lastSeen ? new Date(agent.lastSeen).getTime() : 0;
-        const olderThanHour = !lastSeenMs || (Date.now() - lastSeenMs) > 60 * 60 * 1000;
+        const olderThanHour = !lastSeenMs || (nowMs - lastSeenMs) > 60 * 60 * 1000;
         return matchesQuery && matchesStatus && matchesOs && olderThanHour;
       }
       return matchesQuery && matchesStatus && matchesOs;
     });
-  }, [agentArr, osFilter, query, statusFilter]);
+  }, [agentArr, nowMs, osFilter, query, statusFilter]);
 
   const pagedAgents = useMemo(() => filteredAgents.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE), [filteredAgents, page]);
   const totalPages = Math.max(1, Math.ceil(filteredAgents.length / PAGE_SIZE));
@@ -136,11 +144,11 @@ export default function FleetAgents() {
   const currentPreview = agentDetail && selectedAgent ? { ...normalizeAgent(agentDetail, 0), raw: agentDetail } : hoveredAgent;
   const currentPreviewIndex = currentPreview ? filteredAgents.findIndex((agent) => agent.id === currentPreview.id) : -1;
 
-  const queueHealth = {
+  const queueHealth = useMemo(() => ({
     offline: agentArr.filter((agent) => agent.status === 'offline').length,
-    stale: agentArr.filter((agent) => agent.lastSeen && (Date.now() - new Date(agent.lastSeen).getTime()) > 30 * 60 * 1000).length,
+    stale: agentArr.filter((agent) => agent.lastSeen && (nowMs - new Date(agent.lastSeen).getTime()) > 30 * 60 * 1000).length,
     linux: agentArr.filter((agent) => String(agent.os).toLowerCase().includes('linux')).length,
-  };
+  }), [agentArr, nowMs]);
 
   const clearFleetFilters = useCallback(() => {
     setQuery('');

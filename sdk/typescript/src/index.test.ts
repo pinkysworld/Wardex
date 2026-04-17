@@ -11,11 +11,16 @@ import {
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
 function mockFetch(status: number, body: unknown, ok?: boolean) {
+  const contentType = typeof body === "string" ? "text/plain" : "application/json";
   return vi.fn().mockResolvedValue({
     ok: ok ?? (status >= 200 && status < 300),
     status,
+    headers: {
+      get: (name: string) =>
+        name.toLowerCase() === "content-type" ? contentType : null,
+    },
     json: () => Promise.resolve(body),
-    text: () => Promise.resolve(JSON.stringify(body)),
+    text: () => Promise.resolve(typeof body === "string" ? body : JSON.stringify(body)),
   });
 }
 
@@ -149,7 +154,8 @@ describe("WardexClient", () => {
     const mock = mockFetch(200, "CEF:0|...");
     globalThis.fetch = mock;
     const client = new WardexClient({ baseUrl: "http://localhost:8080" });
-    await client.exportAlerts("cef");
+    const result = await client.exportAlerts("cef");
+    expect(result).toBe("CEF:0|...");
     expect(mock).toHaveBeenCalledWith(
       "http://localhost:8080/api/export/alerts?format=cef",
       expect.objectContaining({ method: "GET" })

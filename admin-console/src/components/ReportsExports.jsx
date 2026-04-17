@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useApi, useToast } from '../hooks.jsx';
 import * as api from '../api.js';
@@ -29,13 +29,10 @@ export default function ReportsExports() {
     target: 'ops@sentineledge.local',
   });
 
-  const selectedTemplate = templates.find((template) => template.id === selectedTemplateId) || templates[0] || null;
-
-  useEffect(() => {
-    if (!selectedTemplate && !selectedTemplateId) return;
-    if (selectedTemplate?.id === selectedTemplateId) return;
-    setSelectedTemplateId(selectedTemplate?.id || null);
-  }, [selectedTemplate, selectedTemplateId]);
+  const activeTemplateId = templates.some((template) => template.id === selectedTemplateId)
+    ? selectedTemplateId
+    : templates[0]?.id || null;
+  const selectedTemplate = templates.find((template) => template.id === activeTemplateId) || null;
 
   const previewPayload = selectedTemplate ? {
     name: selectedTemplate.name,
@@ -137,8 +134,8 @@ export default function ReportsExports() {
                       style={{
                         textAlign: 'left',
                         padding: 16,
-                        borderColor: selectedTemplate?.id === template.id ? 'var(--accent)' : 'var(--border)',
-                        background: selectedTemplate?.id === template.id ? 'var(--bg)' : 'var(--bg-card)',
+                        borderColor: activeTemplateId === template.id ? 'var(--accent)' : 'var(--border)',
+                        background: activeTemplateId === template.id ? 'var(--bg)' : 'var(--bg-card)',
                       }}
                       onClick={() => setSelectedTemplateId(template.id)}
                     >

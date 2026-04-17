@@ -1,10 +1,11 @@
+import { render, renderHook, screen, act } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, act } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { AuthProvider, RoleProvider, ThemeProvider, ToastProvider, useAuth, useTheme, useToast, useWebSocket } from '../hooks.jsx';
 
 // Stub fetch globally
-global.fetch = vi.fn();
+const fetchMock = vi.fn();
+vi.stubGlobal('fetch', fetchMock);
 
 const jsonOk = (data) => ({
   ok: true,
@@ -15,9 +16,9 @@ const jsonOk = (data) => ({
 
 beforeEach(() => {
   vi.clearAllMocks();
-  global.fetch.mockReset();
+  fetchMock.mockReset();
   // Default: return a valid JSON response for any call
-  global.fetch.mockImplementation(() => Promise.resolve(jsonOk({})));
+  fetchMock.mockImplementation(() => Promise.resolve(jsonOk({})));
   localStorage.clear();
 });
 
@@ -38,85 +39,50 @@ function Providers({ children }) {
 
 describe('AuthProvider', () => {
   it('starts unauthenticated', () => {
-    function Probe() {
-      const { authenticated } = useAuth();
-      return <div data-testid="auth">{String(authenticated)}</div>;
-    }
-
-    render(<Providers><Probe /></Providers>);
-    expect(screen.getByTestId('auth').textContent).toBe('false');
+    const { result } = renderHook(() => useAuth(), { wrapper: Providers });
+    expect(result.current.authenticated).toBe(false);
   });
 
   it('connect sets authenticated on success', async () => {
-    let connectFn;
-    function Probe() {
-      const { authenticated, connect } = useAuth();
-      connectFn = connect;
-      return <div data-testid="auth">{String(authenticated)}</div>;
-    }
-
-    render(<Providers><Probe /></Providers>);
-    expect(screen.getByTestId('auth').textContent).toBe('false');
+    const { result } = renderHook(() => useAuth(), { wrapper: Providers });
+    expect(result.current.authenticated).toBe(false);
 
     await act(async () => {
-      await connectFn('valid-token');
+      await result.current.connect('valid-token');
     });
-    expect(screen.getByTestId('auth').textContent).toBe('true');
+    expect(result.current.authenticated).toBe(true);
   });
 
   it('disconnect clears authentication', async () => {
-    let authApi;
-    function Probe() {
-      authApi = useAuth();
-      return <div data-testid="auth">{String(authApi.authenticated)}</div>;
-    }
+    const { result } = renderHook(() => useAuth(), { wrapper: Providers });
+    await act(async () => { await result.current.connect('tok'); });
+    expect(result.current.authenticated).toBe(true);
 
-    render(<Providers><Probe /></Providers>);
-    await act(async () => { await authApi.connect('tok'); });
-    expect(screen.getByTestId('auth').textContent).toBe('true');
-
-    act(() => { authApi.disconnect(); });
-    expect(screen.getByTestId('auth').textContent).toBe('false');
+    act(() => { result.current.disconnect(); });
+    expect(result.current.authenticated).toBe(false);
   });
 });
 
 describe('ThemeProvider', () => {
   it('defaults to system preference', () => {
-    function Probe() {
-      const { dark } = useTheme();
-      return <div data-testid="dark">{String(dark)}</div>;
-    }
-    render(<Providers><Probe /></Providers>);
-    // Should render without crashing; value depends on matchMedia mock
-    expect(screen.getByTestId('dark')).toBeInTheDocument();
+    const { result } = renderHook(() => useTheme(), { wrapper: Providers });
+    expect(typeof result.current.dark).toBe('boolean');
   });
 
   it('toggle flips dark mode', () => {
-    let themeApi;
-    function Probe() {
-      themeApi = useTheme();
-      return <div data-testid="dark">{String(themeApi.dark)}</div>;
-    }
+    const { result } = renderHook(() => useTheme(), { wrapper: Providers });
+    const initial = result.current.dark;
 
-    render(<Providers><Probe /></Providers>);
-    const initial = screen.getByTestId('dark').textContent;
-
-    act(() => { themeApi.toggle(); });
-    const toggled = screen.getByTestId('dark').textContent;
+    act(() => { result.current.toggle(); });
+    const toggled = result.current.dark;
     expect(toggled).not.toBe(initial);
   });
 });
 
 describe('ToastProvider', () => {
   it('renders toast messages', async () => {
-    let toastFn;
-    function Probe() {
-      toastFn = useToast();
-      return null;
-    }
-
-    render(<Providers><Probe /></Providers>);
-    act(() => { toastFn('Test notification', 'info'); });
+    const { result } = renderHook(() => useToast(), { wrapper: Providers });
+    act(() => { result.current('Test notification', 'info'); });
     expect(screen.getByText('Test notification')).toBeInTheDocument();
   });
 });
@@ -124,7 +90,7 @@ describe('ToastProvider', () => {
 describe('useWebSocket', () => {
   beforeEach(() => {
     vi.useRealTimers();
-    delete global.WebSocket;
+    delete globalThis.WebSocket;
   });
 
   function WebSocketProbe({ interval = 2000 }) {
@@ -141,7 +107,7 @@ describe('useWebSocket', () => {
     vi.useFakeTimers();
     const sockets = [];
 
-    global.WebSocket = class MockWebSocket {
+    globalThis.WebSocket = class MockWebSocket {
       constructor(url) {
         this.url = url;
         this.readyState = 0;
@@ -156,7 +122,7 @@ describe('useWebSocket', () => {
       }
     };
 
-    global.fetch.mockImplementation((url) => {
+    fetchMock.mockImplementation((url) => {
       if (url === '/api/ws/connect') return Promise.resolve(jsonOk({ subscriber_id: 7 }));
       if (url === '/api/ws/disconnect') return Promise.resolve(jsonOk({ ok: true }));
       if (url === '/api/ws/poll') return Promise.resolve(jsonOk([]));
@@ -174,7 +140,7 @@ describe('useWebSocket', () => {
       await vi.advanceTimersByTimeAsync(3000);
     });
 
-    const connectCalls = global.fetch.mock.calls.filter(([url]) => url === '/api/ws/connect');
+    const connectCalls = fetchMock.mock.calls.filter(([url]) => url === '/api/ws/connect');
     expect(connectCalls).toHaveLength(1);
   });
 
@@ -182,7 +148,7 @@ describe('useWebSocket', () => {
     vi.useFakeTimers();
     const sockets = [];
 
-    global.WebSocket = class MockWebSocket {
+    globalThis.WebSocket = class MockWebSocket {
       constructor(url) {
         this.url = url;
         this.readyState = 0;
@@ -201,7 +167,7 @@ describe('useWebSocket', () => {
       }
     };
 
-    global.fetch.mockImplementation((url) => {
+    fetchMock.mockImplementation((url) => {
       if (url === '/api/ws/connect') return Promise.resolve(jsonOk({ subscriber_id: 9 }));
       if (url === '/api/ws/disconnect') return Promise.resolve(jsonOk({ ok: true }));
       if (url === '/api/ws/poll') return Promise.resolve(jsonOk([]));
@@ -234,7 +200,7 @@ describe('useWebSocket', () => {
       await Promise.resolve();
     });
 
-    const connectCalls = global.fetch.mock.calls.filter(([url]) => url === '/api/ws/connect');
+    const connectCalls = fetchMock.mock.calls.filter(([url]) => url === '/api/ws/connect');
     expect(connectCalls).toHaveLength(1);
   });
 
@@ -243,7 +209,7 @@ describe('useWebSocket', () => {
     const sockets = [];
     let resolveConnect;
 
-    global.WebSocket = class MockWebSocket {
+    globalThis.WebSocket = class MockWebSocket {
       constructor(url) {
         this.url = url;
         this.readyState = 0;
@@ -258,7 +224,7 @@ describe('useWebSocket', () => {
       }
     };
 
-    global.fetch.mockImplementation((url) => {
+    fetchMock.mockImplementation((url) => {
       if (url === '/api/ws/connect') {
         return new Promise((resolve) => {
           resolveConnect = () => resolve(jsonOk({ subscriber_id: 11 }));
@@ -283,7 +249,7 @@ describe('useWebSocket', () => {
       await Promise.resolve();
     });
 
-    const disconnectCalls = global.fetch.mock.calls.filter(([url]) => url === '/api/ws/disconnect');
+    const disconnectCalls = fetchMock.mock.calls.filter(([url]) => url === '/api/ws/disconnect');
     expect(disconnectCalls).toHaveLength(1);
   });
 });

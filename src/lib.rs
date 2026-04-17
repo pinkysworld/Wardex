@@ -15,7 +15,6 @@ pub mod ws_stream;
 pub mod detector;
 pub mod sigma;
 pub mod sigma_library;
-#[cfg(feature = "experimental-ml")]
 pub mod ml_engine;
 #[cfg(feature = "experimental-llm")]
 pub mod llm_analyst;
@@ -78,7 +77,6 @@ pub mod compliance_templates;
 pub mod privacy;
 pub mod report;
 pub mod audit;
-#[cfg(feature = "experimental-proof")]
 pub mod proof;
 
 // ── Fleet & Operations ───────────────────────────────────────────────────────
@@ -121,7 +119,6 @@ pub mod cloud_inventory;
 pub mod container;
 pub mod container_image;
 pub mod digital_twin;
-#[cfg(feature = "experimental-quantum")]
 pub mod quantum;
 pub mod side_channel;
 

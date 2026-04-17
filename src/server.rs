@@ -77,9 +77,7 @@ use crate::monitor::Monitor;
 use crate::multi_tenant::MultiTenantManager;
 use crate::policy_dist::PolicyStore;
 use crate::privacy::PrivacyAccountant;
-#[cfg(feature = "experimental-proof")]
 use crate::proof::{DigestBackend, ProofRegistry};
-#[cfg(feature = "experimental-quantum")]
 use crate::quantum::KeyRotationManager;
 use crate::replay::ReplayBuffer;
 use crate::report::JsonReport;

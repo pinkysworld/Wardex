@@ -63,6 +63,8 @@ cargo run -- benchmark examples/benign_baseline.csv examples/credential_storm.cs
 ## Loading into the admin console
 
 1. Start the backend: `cargo run`
-2. Open the admin console at `http://localhost:8080/admin/`
+2. Open the embedded local admin console at `http://localhost:8080/admin/`
 3. Use the API to inject telemetry: `POST /api/telemetry/ingest` with a JSON body containing the sample data
 4. Alternatively, use the live monitor and let the built-in collector generate live telemetry
+
+If you are running the frontend dev server separately, use `http://localhost:5173/admin/`; `:8080` is the backend-served default after `cargo run`.

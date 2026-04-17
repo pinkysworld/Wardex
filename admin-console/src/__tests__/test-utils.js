@@ -41,7 +41,7 @@ export function mockApiRoutes(routes = {}) {
     }
     return Promise.resolve(jsonOk({}));
   });
-  global.fetch = mock;
+  vi.stubGlobal('fetch', mock);
   return mock;
 }
 
@@ -133,5 +133,5 @@ export function resetTestState() {
   idCounter = 0;
   vi.clearAllMocks();
   localStorage.clear();
-  if (global.fetch?.mockReset) global.fetch.mockReset();
+  if (globalThis.fetch?.mockReset) globalThis.fetch.mockReset();
 }

@@ -72,6 +72,7 @@ export default function Dashboard() {
   const [selectedProcess, setSelectedProcess] = useState(null);
   const [nocMode, setNocMode] = useState(false);
   const [nocWidget, setNocWidget] = useState(0);
+  const [nowMs, setNowMs] = useState(() => Date.now());
   const { data: dnsSummary, reload: rDNS } = useApi(api.dnsThreatSummary);
 
   const defaultWidgets = ['system-health', 'telemetry', 'threat-overview', 'charts', 'process-security', 'detection-engine', 'malware-ti', 'dns-threats', 'lifecycle', 'recent-alerts'];
@@ -98,6 +99,7 @@ export default function Dashboard() {
   };
 
   useInterval(reloadAll, 30000);
+  useInterval(() => setNowMs(Date.now()), 60000);
 
   // NOC wall rotate & Escape exit
   useEffect(() => {
@@ -110,7 +112,7 @@ export default function Dashboard() {
     return () => { window.removeEventListener('keydown', esc); document.removeEventListener('fullscreenchange', onFullscreenChange); clearInterval(rotateId); };
   }, [nocMode]);
 
-  const alertList = Array.isArray(alertData) ? alertData : alertData?.alerts || [];
+  const alertList = useMemo(() => Array.isArray(alertData) ? alertData : alertData?.alerts || [], [alertData]);
   const critical = alertList.filter(a => alertSeverity(a) === 'critical').length;
   const elevated = alertList.filter(a => ['elevated', 'severe', 'high'].includes(alertSeverity(a))).length;
 
@@ -127,13 +129,12 @@ export default function Dashboard() {
   // Alert timeline data (last 24 hours bucketed into ~12 intervals)
   const alertTimeline = useMemo(() => {
     if (!alertList.length) return [];
-    const now = Date.now();
     const buckets = 12;
     const interval = 2 * 60 * 60 * 1000; // 2 hours
     const data = [];
     for (let i = buckets - 1; i >= 0; i--) {
-      const start = now - (i + 1) * interval;
-      const end = now - i * interval;
+      const start = nowMs - (i + 1) * interval;
+      const end = nowMs - i * interval;
       const count = alertList.filter(a => {
         const t = new Date(a.timestamp || a.time || 0).getTime();
         return t >= start && t < end;
@@ -142,7 +143,7 @@ export default function Dashboard() {
       data.push({ time: label, alerts: count });
     }
     return data;
-  }, [alertList]);
+  }, [alertList, nowMs]);
 
   // Telemetry history for area chart
   const telemChart = useMemo(() => {
@@ -157,23 +158,23 @@ export default function Dashboard() {
   }, [telemHistory]);
 
   // Filtered alerts
-  const filteredAlerts = sevFilter === 'all' ? alertList : alertList.filter(a =>
-    alertSeverity(a) === sevFilter
-  );
+  const filteredAlerts = useMemo(() => (
+    sevFilter === 'all' ? alertList : alertList.filter(a => alertSeverity(a) === sevFilter)
+  ), [alertList, sevFilter]);
   const selectedAlert = expandedAlert == null
     ? null
     : filteredAlerts.find((a, i) => (a.id || a.alert_id || `alert-${i}`) === expandedAlert);
   const openProcess = (process) => setSelectedProcess(process ? { ...process } : null);
-  const staleAlerts = alertList.filter((alert) => {
+  const staleAlerts = useMemo(() => alertList.filter((alert) => {
     const timestamp = new Date(alert.timestamp || alert.time || 0).getTime();
-    return timestamp > 0 && (Date.now() - timestamp) > 30 * 60 * 1000;
-  });
-  const priorityAlerts = [...alertList]
+    return timestamp > 0 && (nowMs - timestamp) > 30 * 60 * 1000;
+  }), [alertList, nowMs]);
+  const priorityAlerts = useMemo(() => [...alertList]
     .sort((left, right) => {
       const severityRank = { critical: 4, severe: 3, elevated: 2, high: 2, medium: 1, low: 0 };
       return (severityRank[alertSeverity(right)] || 0) - (severityRank[alertSeverity(left)] || 0);
     })
-    .slice(0, 5);
+    .slice(0, 5), [alertList]);
   const situationCards = [
     {
       title: 'Critical Now',

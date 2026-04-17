@@ -45,7 +45,7 @@ Start the live control plane:
 cargo run
 ```
 
-Open `http://localhost:8080/admin/`, paste the token printed in the terminal, and you will have access to the live admin console, SOC Workbench, fleet controls, detection engineering views, and reports. Use `cargo run -- serve` only when you explicitly want the web server without the embedded local monitor.
+`cargo run` starts the local Rust control plane on port `8080` and serves the embedded admin console from `http://localhost:8080/admin/`. Open that URL, paste the token printed in the terminal, and you will have access to the live admin console, SOC Workbench, fleet controls, detection engineering views, and reports. If you are developing the frontend separately with `npm run dev`, use `http://localhost:5173/admin/` instead; `:8080` is the backend-served local default, not the standalone Vite dev server. Use `cargo run -- serve` only when you explicitly want the web server without the embedded local monitor.
 
 ## Core capabilities
 

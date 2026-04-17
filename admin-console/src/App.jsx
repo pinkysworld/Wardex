@@ -108,16 +108,16 @@ export default function App() {
   const [searchOpen, setSearchOpen] = useState(false);
   const [showOnboarding, setShowOnboarding] = useState(() => !localStorage.getItem('wardex_onboarded'));
   const [showShortcuts, setShowShortcuts] = useState(false);
-  const [showInbox, setShowInbox] = useState(false);
+  const [showInboxLocationKey, setShowInboxLocationKey] = useState(null);
   const [pinnedSections, setPinnedSections] = useState(() => {
     try { return JSON.parse(localStorage.getItem('wardex_pinned_sections') || '[]'); } catch { return []; }
   });
+  const showInbox = showInboxLocationKey === location.key;
 
   // Track page visits for recent items
   useEffect(() => {
     const section = SECTIONS.find(s => s.path === location.pathname);
     if (section) addRecent(section.path, section.label);
-    setShowInbox(false);
   }, [location.pathname, addRecent]);
 
   useInterval(() => {
@@ -322,7 +322,7 @@ export default function App() {
                 <button
                   className="btn btn-sm"
                   type="button"
-                  onClick={() => setShowInbox((open) => !open)}
+                  onClick={() => setShowInboxLocationKey((current) => current === location.key ? null : location.key)}
                   aria-expanded={showInbox}
                   aria-haspopup="dialog"
                 >
@@ -335,7 +335,7 @@ export default function App() {
                         <div className="card-title">Operator Inbox</div>
                         <div className="hint" style={{ marginTop: 4 }}>Persistent approvals, degraded feeds, and follow-up work.</div>
                       </div>
-                      <button className="btn btn-sm" onClick={() => setShowInbox(false)}>Close</button>
+                      <button className="btn btn-sm" onClick={() => setShowInboxLocationKey(null)}>Close</button>
                     </div>
                     <div style={{ maxHeight: 320, overflowY: 'auto', padding: 12, display: 'grid', gap: 10 }}>
                       {inboxItems.length === 0 ? <div className="empty" style={{ padding: 20 }}>No active inbox items.</div> : inboxItems.map((item) => (
@@ -348,7 +348,7 @@ export default function App() {
                             <span className={`badge ${item.severity === 'high' ? 'badge-err' : item.severity === 'medium' ? 'badge-warn' : 'badge-info'}`}>{item.severity}</span>
                           </div>
                           <div style={{ display: 'flex', gap: 8, marginTop: 12, flexWrap: 'wrap' }}>
-                            <button className="btn btn-sm btn-primary" onClick={() => { navigate(item.path); setShowInbox(false); }}>Open</button>
+                            <button className="btn btn-sm btn-primary" onClick={() => { navigate(item.path); setShowInboxLocationKey(null); }}>Open</button>
                             {!item.acknowledged && (
                               <button className="btn btn-sm" onClick={async () => { await api.ackInbox({ id: item.id }); reloadInbox(); }}>Acknowledge</button>
                             )}

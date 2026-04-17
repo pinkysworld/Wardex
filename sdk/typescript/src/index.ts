@@ -187,6 +187,10 @@ export interface HealthStatus {
   uptime_secs: number;
 }
 
+interface RequestOptions {
+  responseType?: "json" | "text";
+}
+
 // ── Client ───────────────────────────────────────────────────────────────────
 
 export class WardexClient {
@@ -206,7 +210,8 @@ export class WardexClient {
   private async request<T>(
     method: string,
     path: string,
-    body?: unknown
+    body?: unknown,
+    options?: RequestOptions
   ): Promise<T> {
     const url = `${this.baseUrl}${path}`;
     const headers: Record<string, string> = {
@@ -243,6 +248,10 @@ export class WardexClient {
           throw new ServerError(msg, resp.status, text);
         }
         throw new WardexError(msg, resp.status, text);
+      }
+
+      if (options?.responseType === "text") {
+        return (await resp.text()) as T;
       }
 
       const ct = resp.headers.get("content-type") ?? "";
@@ -360,7 +369,12 @@ export class WardexClient {
   async exportAlerts(
     format: "cef" | "syslog" | "leef" | "json" | "ecs" | "udm"
   ): Promise<string> {
-    return this.request("GET", `/api/export/alerts?format=${encodeURIComponent(format)}`);
+    return this.request(
+      "GET",
+      `/api/export/alerts?format=${encodeURIComponent(format)}`,
+      undefined,
+      { responseType: "text" }
+    );
   }
 
   // ── Backups ──────────────────────────────────────────────────────
