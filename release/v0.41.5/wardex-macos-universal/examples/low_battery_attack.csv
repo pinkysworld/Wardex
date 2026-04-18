@@ -1,6 +1,0 @@
-timestamp_ms,cpu_load_pct,memory_load_pct,temperature_c,network_kbps,auth_failures,battery_pct,integrity_drift
-1000,20,30,40,500,0,15,0.01
-2000,22,32,41,520,0,13,0.02
-3000,60,55,50,5000,8,10,0.15
-4000,75,65,55,6500,12,7,0.22
-5000,85,75,60,7500,18,4,0.35

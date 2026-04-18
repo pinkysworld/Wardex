@@ -299,7 +299,7 @@ jobs:
       - name: Build image for scanning
         run: docker build -t wardex:ci-scan .
       - name: Trivy vulnerability scan
-        uses: aquasecurity/trivy-action@0.35.0
+        uses: aquasecurity/trivy-action@57a97c7e7821a5776cebc9bb87c984fa69cba8f1 # v0.35.0
         with:
           cache: 'false'
           version: latest
@@ -308,3 +308,40 @@ jobs:
           exit-code: 1
           severity: CRITICAL,HIGH
           ignore-unfixed: true
+
+  # ── Single aggregate status for branch protection ─────────────────────
+  # Depend on this one job in branch protection rules instead of pinning
+  # every individual matrix job. Uses `always()` + result checks so a
+  # skipped/cancelled upstream job still fails the gate.
+  ci-status:
+    name: CI Status
+    if: always()
+    needs:
+      - test
+      - audit
+      - deny
+      - coverage
+      - msrv
+      - python-sdk
+      - semver-check
+      - typescript-sdk
+      - frontend
+      - feature-flags
+      - sdk-generation
+      - container-scan
+    runs-on: ubuntu-latest
+    steps:
+      - name: Verify all required jobs succeeded
+        env:
+          RESULTS: ${{ toJSON(needs) }}
+        run: |
+          echo "$RESULTS" | python3 -c '
+          import json, sys
+          data = json.load(sys.stdin)
+          failed = [name for name, info in data.items()
+                    if info.get("result") not in ("success", "skipped")]
+          if failed:
+              print("Failed or incomplete jobs:", ", ".join(failed))
+              sys.exit(1)
+          print("All required CI jobs succeeded.")
+          '
