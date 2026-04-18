@@ -22,10 +22,10 @@ class Wardex < Formula
       ENV.prepend_path "PATH", File.join(ENV["CARGO_HOME"], "bin")
 
       rustc_bin = ENV["HOMEBREW_WARDEX_RUSTC_BIN"]
-      ENV["RUSTC"] = rustc_bin if rustc_bin && !rustc_bin.empty?
+      ENV["RUSTC"] = rustc_bin if rustc_bin.present?
 
       configured_cargo_bin = ENV["HOMEBREW_WARDEX_CARGO_BIN"]
-      cargo_bin = configured_cargo_bin if configured_cargo_bin && !configured_cargo_bin.empty?
+      cargo_bin = configured_cargo_bin if configured_cargo_bin.present?
     end
     system cargo_bin, "install", *std_cargo_args(path: ".")
 
