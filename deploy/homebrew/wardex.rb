@@ -11,15 +11,23 @@ class Wardex < Formula
   depends_on "rust" => :build if OS.mac?
 
   def install
+    cargo_bin = "cargo"
+
     if OS.mac?
       system "npm", "ci", "--prefix", "admin-console"
     else
       ENV["WARDEX_SKIP_ADMIN_BUILD"] = "1"
-      ENV["CARGO_HOME"] = "#{Dir.home}/.cargo"
-      ENV["RUSTUP_HOME"] = "#{Dir.home}/.rustup"
-      ENV.prepend_path "PATH", "#{Dir.home}/.cargo/bin"
+      ENV["CARGO_HOME"] = ENV.fetch("HOMEBREW_WARDEX_CARGO_HOME", "#{Dir.home}/.cargo")
+      ENV["RUSTUP_HOME"] = ENV.fetch("HOMEBREW_WARDEX_RUSTUP_HOME", "#{Dir.home}/.rustup")
+      ENV.prepend_path "PATH", File.join(ENV["CARGO_HOME"], "bin")
+
+      rustc_bin = ENV["HOMEBREW_WARDEX_RUSTC_BIN"]
+      ENV["RUSTC"] = rustc_bin if rustc_bin && !rustc_bin.empty?
+
+      configured_cargo_bin = ENV["HOMEBREW_WARDEX_CARGO_BIN"]
+      cargo_bin = configured_cargo_bin if configured_cargo_bin && !configured_cargo_bin.empty?
     end
-    system "cargo", "install", *std_cargo_args(path: ".")
+    system cargo_bin, "install", *std_cargo_args(path: ".")
 
     pkgshare.install "examples", "site"
     doc.install "README.md", "LICENSE"

@@ -127,6 +127,12 @@ jobs:
         shell: bash
         run: |
           brew uninstall --force local/wardex-ci/wardex || true
+          if [[ "$RUNNER_OS" == "Linux" ]]; then
+            export HOMEBREW_WARDEX_CARGO_BIN="$HOME/.cargo/bin/cargo"
+            export HOMEBREW_WARDEX_CARGO_HOME="$HOME/.cargo"
+            export HOMEBREW_WARDEX_RUSTUP_HOME="$HOME/.rustup"
+            export HOMEBREW_WARDEX_RUSTC_BIN="$HOME/.cargo/bin/rustc"
+          fi
           brew install --build-from-source local/wardex-ci/wardex
 
       - name: Run brew test
