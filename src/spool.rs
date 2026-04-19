@@ -47,11 +47,12 @@ fn spool_encrypt(data: &[u8], key: &[u8]) -> Vec<u8> {
 
 /// Decrypt: strip the 16-byte nonce prefix, then XOR with keystream.
 fn spool_decrypt(data: &[u8], key: &[u8]) -> Vec<u8> {
-    if data.len() < 16 {
+    // Structurally tie the length check to the nonce extraction so a future
+    // refactor cannot split them and reintroduce a panic path.
+    let Ok(nonce_bytes) = <[u8; 16]>::try_from(data.get(..16).unwrap_or(&[])) else {
         return Vec::new();
-    }
-    let nonce: [u8; 16] = data[..16].try_into().unwrap();
-    spool_cipher_core(&data[16..], key, &nonce)
+    };
+    spool_cipher_core(&data[16..], key, &nonce_bytes)
 }
 
 // ── Spool entry ─────────────────────────────────────────────────
