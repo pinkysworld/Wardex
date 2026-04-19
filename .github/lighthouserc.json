@@ -1,0 +1,32 @@
+{
+  "ci": {
+    "collect": {
+      "url": [
+        "http://localhost:8765/index.html",
+        "http://localhost:8765/features.html",
+        "http://localhost:8765/architecture.html",
+        "http://localhost:8765/resources.html",
+        "http://localhost:8765/pricing.html",
+        "http://localhost:8765/donate.html",
+        "http://localhost:8765/changelog.html"
+      ],
+      "numberOfRuns": 1,
+      "settings": {
+        "preset": "desktop",
+        "chromeFlags": "--no-sandbox --headless=new"
+      }
+    },
+    "assert": {
+      "assertions": {
+        "categories:accessibility": ["error", { "minScore": 0.9 }],
+        "categories:performance": ["warn", { "minScore": 0.8 }],
+        "categories:best-practices": ["warn", { "minScore": 0.85 }],
+        "categories:seo": ["warn", { "minScore": 0.85 }]
+      }
+    },
+    "upload": {
+      "target": "filesystem",
+      "outputDir": ".lighthouseci"
+    }
+  }
+}

@@ -1,0 +1,23 @@
+{
+  "defaults": {
+    "timeout": 30000,
+    "wait": 500,
+    "standard": "WCAG2AA",
+    "chromeLaunchConfig": {
+      "args": ["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage"]
+    },
+    "ignore": [
+      "warning",
+      "notice"
+    ]
+  },
+  "urls": [
+    "http://localhost:8765/index.html",
+    "http://localhost:8765/features.html",
+    "http://localhost:8765/architecture.html",
+    "http://localhost:8765/resources.html",
+    "http://localhost:8765/pricing.html",
+    "http://localhost:8765/donate.html",
+    "http://localhost:8765/changelog.html"
+  ]
+}

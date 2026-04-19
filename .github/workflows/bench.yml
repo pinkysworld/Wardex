@@ -1,0 +1,85 @@
+name: Bench Baselines
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+      - 'src/**'
+      - 'benches/**'
+      - '.github/workflows/bench.yml'
+  schedule:
+    # Daily at 03:45 UTC — cheap, catches slow-creeping regressions.
+    - cron: '45 3 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  deployments: write
+
+concurrency:
+  group: bench-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  CARGO_TERM_COLOR: always
+  RUSTFLAGS: "-C target-cpu=x86-64-v3"
+
+jobs:
+  criterion:
+    name: Criterion benches (ubuntu-latest)
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # stable
+        with:
+          toolchain: '1.88.0'
+
+      - name: Cache cargo registry & target
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: bench-${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            bench-${{ runner.os }}-
+
+      - name: Run criterion benches
+        run: |
+          cargo bench --bench pipeline -- --output-format bencher | tee bench-output.txt
+
+      - name: Store benchmark results
+        uses: benchmark-action/github-action-benchmark@4de1bed97a47495fc4c5404952da0499e31f5c29 # v1.20.3
+        with:
+          name: Wardex criterion benches
+          tool: cargo
+          output-file-path: bench-output.txt
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          # Publish results to gh-pages for historical tracking.
+          auto-push: ${{ github.event_name != 'pull_request' }}
+          gh-pages-branch: gh-pages-bench
+          benchmark-data-dir-path: bench-history
+          # Alert thresholds — warn at +50% regression, fail at +100%.
+          alert-threshold: '150%'
+          fail-threshold: '200%'
+          comment-on-alert: true
+          fail-on-alert: ${{ github.event_name == 'push' }}
+          alert-comment-cc-users: '@pinkysworld'
+
+      - name: Upload raw bench output
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: bench-output
+          path: |
+            bench-output.txt
+            target/criterion/
+          retention-days: 30

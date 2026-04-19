@@ -51,6 +51,9 @@ jobs:
           mkdir -p site-build
           cp -R site/. site-build/
 
+          # Auto-generate changelog.html from CHANGELOG.md
+          python3 scripts/build_changelog.py CHANGELOG.md site-build/changelog.html
+
           release_api="https://api.github.com/repos/${GITHUB_REPOSITORY}/releases/latest"
           selected_tag="${RELEASE_TAG}"
           if [[ "${GITHUB_EVENT_NAME}" == "workflow_dispatch" && -n "${INPUT_TAG}" ]]; then

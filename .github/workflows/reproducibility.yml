@@ -1,0 +1,118 @@
+name: Reproducibility
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+      - 'build.rs'
+      - 'rust-toolchain.toml'
+      - '.github/workflows/reproducibility.yml'
+  pull_request:
+    paths:
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+      - 'build.rs'
+      - 'rust-toolchain.toml'
+      - '.github/workflows/reproducibility.yml'
+  schedule:
+    # Weekly scheduled run — catches toolchain drift even when source is stable.
+    - cron: '17 4 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: reproducibility-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+  # Path remap only — we deliberately don't use -D warnings here because
+  # warnings can legitimately vary between release profiles without affecting binary output.
+  RUSTFLAGS: "--remap-path-prefix=${{ github.workspace }}=/build"
+  SOURCE_DATE_EPOCH: "1700000000"
+
+jobs:
+  two-build-diff:
+    name: Verify deterministic release build
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
+
+      - name: Install pinned Rust toolchain
+        uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # stable
+        with:
+          toolchain: '1.88.0'
+
+      - name: Print toolchain versions
+        run: |
+          rustc --version
+          cargo --version
+
+      - name: Build A — release binary (first pass)
+        run: |
+          cargo build --release --locked --bin wardex
+          mkdir -p repro-out
+          cp target/release/wardex repro-out/wardex-a
+          sha256sum repro-out/wardex-a
+
+      - name: Clean build artefacts
+        run: cargo clean
+
+      - name: Build B — release binary (second pass)
+        run: |
+          cargo build --release --locked --bin wardex
+          cp target/release/wardex repro-out/wardex-b
+          sha256sum repro-out/wardex-b
+
+      - name: Compare builds
+        id: diff
+        run: |
+          set -euo pipefail
+          hash_a="$(sha256sum repro-out/wardex-a | awk '{print $1}')"
+          hash_b="$(sha256sum repro-out/wardex-b | awk '{print $1}')"
+
+          {
+            echo "# Reproducibility report"
+            echo ""
+            echo "| Build | SHA-256 |"
+            echo "|-------|---------|"
+            echo "| A     | \`$hash_a\` |"
+            echo "| B     | \`$hash_b\` |"
+            echo ""
+            if [ "$hash_a" = "$hash_b" ]; then
+              echo "✅ **Bit-for-bit reproducible**"
+            else
+              echo "❌ **Binary mismatch detected**"
+              echo ""
+              echo "Top 20 differing byte offsets (hex):"
+              echo ""
+              echo '```'
+              cmp -l repro-out/wardex-a repro-out/wardex-b 2>&1 | head -20 || true
+              echo '```'
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          if [ "$hash_a" != "$hash_b" ]; then
+            echo "::error::Release build is NOT bit-for-bit reproducible. See summary for first differing bytes."
+            # Soft-fail on scheduled runs (so toolchain drift doesn't page us); hard-fail on PR/push.
+            if [ "${{ github.event_name }}" = "schedule" ]; then
+              echo "::warning::Non-reproducible build detected in scheduled run — not failing the job."
+              exit 0
+            fi
+            exit 1
+          fi
+
+      - name: Upload binaries for inspection
+        if: failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: reproducibility-binaries
+          path: repro-out/
+          retention-days: 7
