@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1776592713170,
+  "lastUpdate": 1776593096120,
   "repoUrl": "https://github.com/pinkysworld/Wardex",
   "entries": {
     "Wardex criterion benches": [
@@ -177,6 +177,96 @@ window.BENCHMARK_DATA = {
             "name": "sigma_evaluate_20_rules",
             "value": 33698,
             "range": "± 573",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "85413447+pinkysworld@users.noreply.github.com",
+            "name": "pinkysworld",
+            "username": "pinkysworld"
+          },
+          "committer": {
+            "email": "85413447+pinkysworld@users.noreply.github.com",
+            "name": "pinkysworld",
+            "username": "pinkysworld"
+          },
+          "distinct": true,
+          "id": "0a0b322d5030401b10b5370ff552a60e2ab825eb",
+          "message": "malware: rustfmt",
+          "timestamp": "2026-04-19T11:59:14+02:00",
+          "tree_id": "aaee70c7eeff576711ddb5625c74bc522efc1b91",
+          "url": "https://github.com/pinkysworld/Wardex/commit/0a0b322d5030401b10b5370ff552a60e2ab825eb"
+        },
+        "date": 1776593095277,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "full_pipeline/5",
+            "value": 46627,
+            "range": "± 264",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "full_pipeline/50",
+            "value": 406176,
+            "range": "± 4746",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "full_pipeline/200",
+            "value": 1851899,
+            "range": "± 54418",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "full_pipeline/1000",
+            "value": 17484034,
+            "range": "± 141469",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "detector_evaluate_single",
+            "value": 659,
+            "range": "± 1",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "policy_evaluate_single",
+            "value": 226,
+            "range": "± 0",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "throughput/1000_samples",
+            "value": 17430098,
+            "range": "± 206065",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "search_500_events",
+            "value": 113514,
+            "range": "± 611",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "hunt_field_query",
+            "value": 94780,
+            "range": "± 241",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "ml_triage_rf",
+            "value": 55,
+            "range": "± 0",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "sigma_evaluate_20_rules",
+            "value": 33749,
+            "range": "± 112",
             "unit": "ns/iter"
           }
         ]
