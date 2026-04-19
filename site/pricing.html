@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Pricing &amp; Licensing — Wardex</title>
+    <meta name="description" content="Wardex licensing: free for community, research, and non-production use. Commercial licence required for production.">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <link rel="icon" href="favicon.svg" type="image/svg+xml">
+    <link rel="stylesheet" href="styles.css?v=10">
+    <script defer src="app.js?v=11"></script>
+  </head>
+  <body>
+    <nav class="site-nav" id="site-nav">
+      <div class="nav-inner">
+        <a class="nav-brand" href="index.html">
+          <span class="nav-logo">WX</span>
+          <span class="nav-title">Wardex</span>
+        </a>
+        <button class="nav-toggle" id="nav-toggle" aria-label="Toggle navigation" aria-expanded="false">
+          <span></span><span></span><span></span>
+        </button>
+        <div class="nav-links" id="nav-links">
+          <a href="index.html" class="nav-link">Overview</a>
+          <a href="features.html" class="nav-link">Features</a>
+          <a href="architecture.html" class="nav-link">Architecture</a>
+          <a href="resources.html" class="nav-link">Resources</a>
+          <a href="pricing.html" class="nav-link active">Pricing</a>
+          <a href="donate.html" class="nav-link">Support</a>
+          <a href="https://github.com/pinkysworld/Wardex" class="nav-link nav-link-icon" target="_blank" rel="noopener" aria-label="GitHub">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
+          </a>
+        </div>
+      </div>
+    </nav>
+
+    <main class="main">
+      <section class="section page-hero">
+        <div class="container">
+          <p class="label">Pricing &amp; Licensing</p>
+          <h1>Free to learn. Licensed for production.</h1>
+          <p class="page-hero-desc">
+            Wardex is distributed under the Business Source License 1.1 (BSL 1.1). Source code is fully open for inspection, development, research, and non-production use. Commercial production use requires a separate licence.
+          </p>
+        </div>
+      </section>
+
+      <section class="section section-alt">
+        <div class="container">
+          <div class="license-grid">
+            <div class="license-card license-free">
+              <div class="license-card-header">
+                <h3>Community &amp; Research</h3>
+                <span class="license-price">Free</span>
+              </div>
+              <p class="license-tagline">Perfect for evaluation, research, and non-commercial use.</p>
+              <ul class="license-features">
+                <li><span class="license-check">&#10003;</span> Full source code access</li>
+                <li><span class="license-check">&#10003;</span> Local development and testing</li>
+                <li><span class="license-check">&#10003;</span> Academic and research use</li>
+                <li><span class="license-check">&#10003;</span> Personal and non-commercial use</li>
+                <li><span class="license-check">&#10003;</span> Internal evaluation and proof-of-concept</li>
+                <li><span class="license-check">&#10003;</span> Contributing to the open-source project</li>
+                <li><span class="license-check">&#10003;</span> Community support via GitHub Issues</li>
+              </ul>
+              <a href="https://github.com/pinkysworld/Wardex" class="btn btn-outline license-cta" target="_blank" rel="noopener">Get Started on GitHub</a>
+            </div>
+            <div class="license-card license-commercial">
+              <div class="license-ribbon">Required for Production</div>
+              <div class="license-card-header">
+                <h3>Commercial Licence</h3>
+                <span class="license-price">Contact Us</span>
+              </div>
+              <p class="license-tagline">For teams shipping Wardex into production environments.</p>
+              <ul class="license-features">
+                <li><span class="license-check">&#10003;</span> Production deployment rights</li>
+                <li><span class="license-check">&#10003;</span> Commercial use in any environment</li>
+                <li><span class="license-check">&#10003;</span> Offering as a managed service</li>
+                <li><span class="license-check">&#10003;</span> Embedding in commercial products</li>
+                <li><span class="license-check">&#10003;</span> Priority support and release channels</li>
+                <li><span class="license-check">&#10003;</span> Custom deployment assistance</li>
+                <li><span class="license-check">&#10003;</span> Direct engineering access</li>
+              </ul>
+              <a href="mailto:michel_ng@icloud.com" class="btn btn-primary license-cta">Request Commercial Licence</a>
+            </div>
+          </div>
+
+          <div class="license-notice">
+            <h3>How BSL 1.1 works in practice</h3>
+            <p><strong>Release version:</strong> <span id="license-version">v0.52.5</span></p>
+            <p><strong>Change Date:</strong> The BSL 1.1 licence converts to Apache 2.0 on <strong>1 April 2029</strong>. After that date, all usage — including commercial — is permitted under Apache 2.0 terms.</p>
+            <p><strong>Production use:</strong> Any commercial or production environment requires a separate commercial licence. Non-production use — development, research, internal evaluation — is fully permitted under BSL 1.1 itself.</p>
+            <p><strong>Verification:</strong> Release archives and container images ship with SLSA provenance attestations, CycloneDX SBOMs, and cosign signatures — verification steps are published in <a href="https://github.com/pinkysworld/Wardex/blob/main/docs/REPRODUCIBILITY.md" target="_blank" rel="noopener">Reproducibility &amp; Supply-Chain Verification</a>.</p>
+            <p><strong>Questions?</strong> For licensing, commercial use, or partnership discussions, please <a href="mailto:michel_ng@icloud.com">contact us directly</a>.</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- ── FAQ ──────────────────────────────────────────────────────────── -->
+      <section class="section">
+        <div class="container">
+          <div class="section-header">
+            <p class="label">Licensing FAQ</p>
+            <h2>Answers to the common questions.</h2>
+          </div>
+          <div class="faq-stack">
+            <details class="faq-item">
+              <summary>Can I use Wardex at work for internal evaluation?</summary>
+              <p>Yes. Internal evaluation, proof-of-concept, and development environments are covered under the BSL 1.1 free tier. Production or customer-facing deployments require a commercial licence.</p>
+            </details>
+            <details class="faq-item">
+              <summary>What exactly counts as &quot;production&quot; use?</summary>
+              <p>Any environment where Wardex is monitoring or protecting real business operations, customer data, or live workloads. If your SOC depends on it to detect real attacks, that's production.</p>
+            </details>
+            <details class="faq-item">
+              <summary>Is Wardex truly open-source?</summary>
+              <p>The source code is fully open, readable, forkable, and modifiable. BSL 1.1 is a source-available licence with a time-locked conversion to Apache 2.0. It's not OSI-certified open-source during the BSL window, but it's functionally open for every use case except production commercial deployment.</p>
+            </details>
+            <details class="faq-item">
+              <summary>Can I contribute to Wardex?</summary>
+              <p>Absolutely. Contributions are welcome — see <a href="https://github.com/pinkysworld/Wardex/blob/main/CONTRIBUTING.md" target="_blank" rel="noopener">CONTRIBUTING.md</a> for the workflow. Contributors retain copyright of their contributions under a standard CLA.</p>
+            </details>
+            <details class="faq-item">
+              <summary>What does a commercial licence include?</summary>
+              <p>Production rights, priority support, direct engineering access, and deployment assistance. Exact scope is tailored to your deployment shape — contact us for a quote.</p>
+            </details>
+            <details class="faq-item">
+              <summary>What happens after the Change Date?</summary>
+              <p>On 1 April 2029, every Wardex release up to that point converts automatically to Apache 2.0. No restrictions, no separate licence needed — the full product becomes traditional open-source.</p>
+            </details>
+          </div>
+        </div>
+      </section>
+
+      <section class="section section-cta-band">
+        <div class="container">
+          <div class="cta-card">
+            <div>
+              <h2>Ready to deploy Wardex in production?</h2>
+              <p>Get in touch for a commercial licence quote and a hands-on technical review of your deployment plan.</p>
+            </div>
+            <div class="cta-actions">
+              <a href="mailto:michel_ng@icloud.com" class="btn btn-primary">Contact Sales</a>
+              <a href="donate.html" class="btn btn-outline">Community Support</a>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <footer class="site-footer">
+        <div class="container">
+          <div class="footer-grid">
+            <div class="footer-col footer-about">
+              <span class="nav-logo footer-logo">WX</span>
+              <p>Private-cloud XDR &amp; SIEM built in Rust. One binary. Full data sovereignty.</p>
+              <p class="footer-version"><span id="footer-version">v0.52.5</span> · BSL 1.1</p>
+            </div>
+            <div class="footer-col">
+              <h4>Product</h4>
+              <a href="features.html">Features</a>
+              <a href="architecture.html">Architecture</a>
+              <a href="pricing.html">Pricing</a>
+              <a href="https://github.com/pinkysworld/Wardex/releases" target="_blank" rel="noopener">Releases</a>
+            </div>
+            <div class="footer-col">
+              <h4>Resources</h4>
+              <a href="resources.html">Documentation</a>
+              <a href="https://github.com/pinkysworld/Wardex/blob/main/docs/openapi.yaml" target="_blank" rel="noopener">OpenAPI</a>
+              <a href="https://github.com/pinkysworld/Wardex/blob/main/docs/SDK_GUIDE.md" target="_blank" rel="noopener">SDK Guide</a>
+              <a href="https://github.com/pinkysworld/Wardex/blob/main/docs/THREAT_MODEL.md" target="_blank" rel="noopener">Threat Model</a>
+            </div>
+            <div class="footer-col">
+              <h4>Project</h4>
+              <a href="https://github.com/pinkysworld/Wardex" target="_blank" rel="noopener">GitHub</a>
+              <a href="donate.html">Support</a>
+              <a href="https://github.com/pinkysworld/Wardex/blob/main/SECURITY.md" target="_blank" rel="noopener">Security</a>
+              <a href="mailto:michel_ng@icloud.com">Contact</a>
+            </div>
+          </div>
+          <div class="footer-bottom">
+            <p>Wardex · © 2024–2026 · <a href="../LICENSE" style="color:inherit;">BSL 1.1</a> · Commercial production use requires a <a href="pricing.html" style="color: var(--nav-accent);">separate licence</a>.</p>
+          </div>
+        </div>
+      </footer>
+    </main>
+  </body>
+</html>

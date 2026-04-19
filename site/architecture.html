@@ -1,0 +1,303 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Architecture — Wardex</title>
+    <meta name="description" content="Wardex platform architecture: data flow, deployment models, scalability, and supply-chain trust signals.">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <link rel="icon" href="favicon.svg" type="image/svg+xml">
+    <link rel="stylesheet" href="styles.css?v=10">
+    <script defer src="app.js?v=11"></script>
+  </head>
+  <body>
+    <nav class="site-nav" id="site-nav">
+      <div class="nav-inner">
+        <a class="nav-brand" href="index.html">
+          <span class="nav-logo">WX</span>
+          <span class="nav-title">Wardex</span>
+        </a>
+        <button class="nav-toggle" id="nav-toggle" aria-label="Toggle navigation" aria-expanded="false">
+          <span></span><span></span><span></span>
+        </button>
+        <div class="nav-links" id="nav-links">
+          <a href="index.html" class="nav-link">Overview</a>
+          <a href="features.html" class="nav-link">Features</a>
+          <a href="architecture.html" class="nav-link active">Architecture</a>
+          <a href="resources.html" class="nav-link">Resources</a>
+          <a href="pricing.html" class="nav-link">Pricing</a>
+          <a href="donate.html" class="nav-link">Support</a>
+          <a href="https://github.com/pinkysworld/Wardex" class="nav-link nav-link-icon" target="_blank" rel="noopener" aria-label="GitHub">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
+          </a>
+        </div>
+      </div>
+    </nav>
+
+    <main class="main">
+      <section class="section page-hero">
+        <div class="container">
+          <p class="label">Architecture</p>
+          <h1>A clear operational flow, end to end.</h1>
+          <p class="page-hero-desc">
+            Wardex is organised around the work the operator actually does: collect telemetry, detect, triage, investigate, respond, govern, deploy, and report. Each stage is a named subsystem with clear inputs and outputs.
+          </p>
+        </div>
+      </section>
+
+      <!-- ── Flow ──────────────────────────────────────────────────────────── -->
+      <section class="section section-alt">
+        <div class="container">
+          <div class="section-header">
+            <p class="label">Platform Flow</p>
+            <h2>From endpoint signal to auditable response.</h2>
+            <p class="section-desc">
+              Eight stages, one data model, one control plane.
+            </p>
+          </div>
+          <div class="arch-flow">
+            <div class="arch-stage">
+              <div class="arch-num">1</div>
+              <h3>Collect</h3>
+              <p>Cross-platform agents emit structured telemetry from macOS (EndpointSecurity), Linux (eBPF), and Windows (ETW). Encrypted spool buffers events during outages.</p>
+            </div>
+            <div class="arch-stage">
+              <div class="arch-num">2</div>
+              <h3>Detect</h3>
+              <p>Adaptive scoring, Sigma rules, YARA scanning, side-channel fusion, and kernel-event bridging converge on a single per-event risk assessment.</p>
+            </div>
+            <div class="arch-stage">
+              <div class="arch-num">3</div>
+              <h3>Triage</h3>
+              <p>Priority queue with SLAs, acknowledgement, assignment, escalation. Bulk actions and the false-positive advisor keep noise controlled.</p>
+            </div>
+            <div class="arch-stage">
+              <div class="arch-num">4</div>
+              <h3>Investigate</h3>
+              <p>Entity pivots, process trees, timelines, storyline views, and lateral-movement graphs all share the same underlying event index.</p>
+            </div>
+            <div class="arch-stage">
+              <div class="arch-num">5</div>
+              <h3>Respond</h3>
+              <p>Playbook engine executes approval-gated actions — isolation, quarantine, remediation — with automatic rollback on health-check failure.</p>
+            </div>
+            <div class="arch-stage">
+              <div class="arch-num">6</div>
+              <h3>Govern</h3>
+              <p>RBAC, OIDC/SCIM, session rotation, admin audit export, and change control provide enterprise guardrails around the product itself.</p>
+            </div>
+            <div class="arch-stage">
+              <div class="arch-num">7</div>
+              <h3>Deploy</h3>
+              <p>Release publishing, rollout groups, rollback, and per-agent activity snapshots give operators a controlled path to keep endpoint software current.</p>
+            </div>
+            <div class="arch-stage">
+              <div class="arch-num">8</div>
+              <h3>Report</h3>
+              <p>SIEM forwarding, ClickHouse archive, OpenAPI, manager summaries, and compliance templates keep external systems and stakeholders aligned.</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ── Component Map ──────────────────────────────────────────────────── -->
+      <section class="section">
+        <div class="container">
+          <div class="section-header">
+            <p class="label">Component Map</p>
+            <h2>How the pieces fit together.</h2>
+            <p class="section-desc">
+              Six subsystems, one binary. Each subsystem owns its domain and communicates through a well-defined API.
+            </p>
+          </div>
+          <div class="component-grid">
+            <div class="component-card">
+              <h3>Agent</h3>
+              <p>Cross-platform telemetry collection, encrypted local spool, auto-update participation, heartbeat, FIM, and live-response shell.</p>
+              <div class="component-tech"><span>Rust</span><span>eBPF</span><span>ETW</span><span>EndpointSecurity</span></div>
+            </div>
+            <div class="component-card">
+              <h3>Control Plane</h3>
+              <p>HTTP API server, authentication, RBAC enforcement, session management, policy distribution, and rollout orchestration.</p>
+              <div class="component-tech"><span>Axum</span><span>Tokio</span><span>mTLS</span></div>
+            </div>
+            <div class="component-card">
+              <h3>Detection Engine</h3>
+              <p>Sigma compilation, YARA scanning, adaptive scoring, anomaly detection, and multi-signal fusion.</p>
+              <div class="component-tech"><span>Sigma</span><span>YARA</span><span>EWMA</span></div>
+            </div>
+            <div class="component-card">
+              <h3>SOC Workbench</h3>
+              <p>Alert queue, case management, investigation pivots, entity extraction, and storyline view. Browser-based, shipped with the binary.</p>
+              <div class="component-tech"><span>React</span><span>TypeScript</span><span>Playwright-tested</span></div>
+            </div>
+            <div class="component-card">
+              <h3>Storage</h3>
+              <p>Local embedded storage for hot events and recent state; optional ClickHouse archive for cold storage and long-range analytics.</p>
+              <div class="component-tech"><span>Tantivy</span><span>ClickHouse</span></div>
+            </div>
+            <div class="component-card">
+              <h3>Response Orchestrator</h3>
+              <p>Playbook DSL, approval workflows, remediation scripts, quarantine management, and tamper-evident audit chain.</p>
+              <div class="component-tech"><span>DSL</span><span>Audit chain</span></div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ── Deployment Models ─────────────────────────────────────────────── -->
+      <section class="section section-alt">
+        <div class="container">
+          <div class="section-header">
+            <p class="label">Deployment Models</p>
+            <h2>Ship it where it needs to live.</h2>
+            <p class="section-desc">
+              From a single-host lab to a multi-region relay fleet, Wardex adapts without re-architecting.
+            </p>
+          </div>
+          <div class="deploy-models">
+            <div class="deploy-model">
+              <div class="deploy-model-badge">Standalone</div>
+              <h3>Single Host</h3>
+              <p>Everything in one binary on one machine. Ideal for labs, small teams, or a first production pilot.</p>
+              <ul class="check-list">
+                <li>One command to install</li>
+                <li>Embedded web console</li>
+                <li>Runs on any Linux, macOS, or Windows host</li>
+              </ul>
+            </div>
+            <div class="deploy-model">
+              <div class="deploy-model-badge">Enterprise</div>
+              <h3>Control Plane + Fleet</h3>
+              <p>Dedicated control plane serves thousands of agents with optional ClickHouse archive for long-term retention.</p>
+              <ul class="check-list">
+                <li>Horizontal agent scaling</li>
+                <li>ClickHouse cold archive</li>
+                <li>SIEM forwarding to your existing stack</li>
+              </ul>
+            </div>
+            <div class="deploy-model">
+              <div class="deploy-model-badge">Federated</div>
+              <h3>Multi-Region Relay</h3>
+              <p>Regional relays terminate agent connections locally and forward aggregated signals to a central SOC — perfect for MSSPs and global teams.</p>
+              <ul class="check-list">
+                <li>Locality-preserving data paths</li>
+                <li>Multi-tenant isolation</li>
+                <li>Federated learning across regions</li>
+              </ul>
+            </div>
+            <div class="deploy-model">
+              <div class="deploy-model-badge">Air-Gap</div>
+              <h3>Disconnected Environment</h3>
+              <p>Operate entirely offline with manually synchronised update bundles and offline policy packages. No outbound internet required.</p>
+              <ul class="check-list">
+                <li>Offline update bundles</li>
+                <li>Signed policy packages</li>
+                <li>Local threat-feed ingestion</li>
+              </ul>
+            </div>
+          </div>
+          <p class="section-link">
+            <a href="https://github.com/pinkysworld/Wardex/blob/main/docs/DEPLOYMENT_MODELS.md" class="btn btn-outline" target="_blank" rel="noopener">Deployment Guide →</a>
+          </p>
+        </div>
+      </section>
+
+      <!-- ── Supply-Chain Trust ────────────────────────────────────────────── -->
+      <section class="section">
+        <div class="container">
+          <div class="section-header">
+            <p class="label">Supply-Chain Trust</p>
+            <h2>Verify everything. Trust nothing silently.</h2>
+            <p class="section-desc">
+              Every release is signed, attested, and reproducible. Trust is earned through verification, not asserted on a slide.
+            </p>
+          </div>
+          <div class="trust-grid">
+            <div class="trust-card">
+              <h3>SLSA Build Provenance</h3>
+              <p>Every release archive and container image ships with signed SLSA provenance attestations issued by GitHub's attestation system. Verify with <code>gh attestation verify</code>.</p>
+            </div>
+            <div class="trust-card">
+              <h3>CycloneDX SBOM</h3>
+              <p>Machine-readable dependency inventory bundled with every release. Feed it straight into your vulnerability management pipeline.</p>
+            </div>
+            <div class="trust-card">
+              <h3>Cosign-Signed Images</h3>
+              <p>Container images are keyless-signed with sigstore cosign. Verify with <code>cosign verify</code> against the public transparency log.</p>
+            </div>
+            <div class="trust-card">
+              <h3>SHA-Pinned CI</h3>
+              <p>Every GitHub Action in the pipeline is pinned by commit SHA. No silent supply-chain surprises from a tag-rewrite attack.</p>
+            </div>
+            <div class="trust-card">
+              <h3>Secret Scanning</h3>
+              <p>Gitleaks runs on every pull request and push. Credentials never reach a release archive.</p>
+            </div>
+            <div class="trust-card">
+              <h3>Reproducible Builds</h3>
+              <p>Release builds are bit-for-bit reproducible from the tagged commit. Step-by-step verification documented in the repo.</p>
+            </div>
+          </div>
+          <p class="section-link">
+            <a href="https://github.com/pinkysworld/Wardex/blob/main/docs/REPRODUCIBILITY.md" class="btn btn-outline" target="_blank" rel="noopener">Reproducibility Guide →</a>
+          </p>
+        </div>
+      </section>
+
+      <!-- ── CTA ─────────────────────────────────────────────────────────── -->
+      <section class="section section-cta-band">
+        <div class="container">
+          <div class="cta-card">
+            <div>
+              <h2>Curious how it looks in code?</h2>
+              <p>The source is open to read. Every module is small and focused — no mystery frameworks, no hidden daemons.</p>
+            </div>
+            <div class="cta-actions">
+              <a href="resources.html" class="btn btn-primary">Read the Docs</a>
+              <a href="https://github.com/pinkysworld/Wardex" class="btn btn-outline" target="_blank" rel="noopener">Browse Source</a>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <footer class="site-footer">
+        <div class="container">
+          <div class="footer-grid">
+            <div class="footer-col footer-about">
+              <span class="nav-logo footer-logo">WX</span>
+              <p>Private-cloud XDR &amp; SIEM built in Rust. One binary. Full data sovereignty.</p>
+              <p class="footer-version"><span id="footer-version">v0.52.5</span> · BSL 1.1</p>
+            </div>
+            <div class="footer-col">
+              <h4>Product</h4>
+              <a href="features.html">Features</a>
+              <a href="architecture.html">Architecture</a>
+              <a href="pricing.html">Pricing</a>
+              <a href="https://github.com/pinkysworld/Wardex/releases" target="_blank" rel="noopener">Releases</a>
+            </div>
+            <div class="footer-col">
+              <h4>Resources</h4>
+              <a href="resources.html">Documentation</a>
+              <a href="https://github.com/pinkysworld/Wardex/blob/main/docs/openapi.yaml" target="_blank" rel="noopener">OpenAPI</a>
+              <a href="https://github.com/pinkysworld/Wardex/blob/main/docs/SDK_GUIDE.md" target="_blank" rel="noopener">SDK Guide</a>
+              <a href="https://github.com/pinkysworld/Wardex/blob/main/docs/THREAT_MODEL.md" target="_blank" rel="noopener">Threat Model</a>
+            </div>
+            <div class="footer-col">
+              <h4>Project</h4>
+              <a href="https://github.com/pinkysworld/Wardex" target="_blank" rel="noopener">GitHub</a>
+              <a href="donate.html">Support</a>
+              <a href="https://github.com/pinkysworld/Wardex/blob/main/SECURITY.md" target="_blank" rel="noopener">Security</a>
+              <a href="mailto:michel_ng@icloud.com">Contact</a>
+            </div>
+          </div>
+          <div class="footer-bottom">
+            <p>Wardex · © 2024–2026 · <a href="../LICENSE" style="color:inherit;">BSL 1.1</a> · Commercial production use requires a <a href="pricing.html" style="color: var(--nav-accent);">separate license</a>.</p>
+          </div>
+        </div>
+      </footer>
+    </main>
+  </body>
+</html>

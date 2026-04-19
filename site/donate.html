@@ -3,41 +3,33 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Support Wardex</title>
-    <meta
-      name="description"
-      content="Support Wardex through GitHub Sponsors or commercial partnership options. Help fund releases, documentation, SDK maintenance, and operator tooling."
-    >
+    <title>Support — Wardex</title>
+    <meta name="description" content="Support the Wardex project: sponsor on GitHub, contribute code, or engage commercially.">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link
-      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap"
-      rel="stylesheet"
-    >
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
     <link rel="icon" href="favicon.svg" type="image/svg+xml">
-    <link rel="stylesheet" href="styles.css?v=9">
-    <script defer src="app.js?v=10"></script>
+    <link rel="stylesheet" href="styles.css?v=10">
+    <script defer src="app.js?v=11"></script>
   </head>
   <body>
     <nav class="site-nav" id="site-nav">
       <div class="nav-inner">
-        <a class="nav-brand" href="index.html#overview">
+        <a class="nav-brand" href="index.html">
           <span class="nav-logo">WX</span>
           <span class="nav-title">Wardex</span>
         </a>
-
         <button class="nav-toggle" id="nav-toggle" aria-label="Toggle navigation" aria-expanded="false">
           <span></span><span></span><span></span>
         </button>
-
         <div class="nav-links" id="nav-links">
-          <a href="#overview" class="nav-link active" data-section="overview">Support</a>
-          <a href="#ways-to-give" class="nav-link" data-section="ways-to-give">Ways to Give</a>
-          <a href="#impact" class="nav-link" data-section="impact">Impact</a>
-          <a href="#faq" class="nav-link" data-section="faq">FAQ</a>
-          <a href="index.html#resources" class="nav-link">Resources</a>
-          <a href="index.html" class="nav-link">Main Site</a>
-          <a href="https://github.com/pinkysworld/Wardex" class="nav-link" target="_blank" rel="noopener">
+          <a href="index.html" class="nav-link">Overview</a>
+          <a href="features.html" class="nav-link">Features</a>
+          <a href="architecture.html" class="nav-link">Architecture</a>
+          <a href="resources.html" class="nav-link">Resources</a>
+          <a href="pricing.html" class="nav-link">Pricing</a>
+          <a href="donate.html" class="nav-link active">Support</a>
+          <a href="https://github.com/pinkysworld/Wardex" class="nav-link nav-link-icon" target="_blank" rel="noopener" aria-label="GitHub">
             <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
           </a>
         </div>
@@ -45,59 +37,30 @@
     </nav>
 
     <main class="main">
-      <section id="overview" class="section hero-section support-hero">
+      <section class="section page-hero">
         <div class="container">
-          <div class="hero-grid">
-            <div class="hero-text">
-              <p class="label">Independent Security Engineering</p>
-              <h1>Support Wardex</h1>
-              <p class="hero-subtitle">
-                Help sustain a private-cloud XDR platform built in public: releases, documentation, SDKs, detection content, and operator workflows all move faster with direct support.
-              </p>
-              <p class="hero-description">
-                Wardex is developed as a real product, not a demo repo. Sponsorship keeps packaging, release validation, admin-console polish, API maintenance, and day-to-day stabilization moving. For companies running Wardex in production, commercial licensing and deployment support are available separately.
-              </p>
-              <div class="hero-cta">
-                <a href="https://github.com/sponsors/pinkysworld" class="btn btn-primary" target="_blank" rel="noopener">Sponsor on GitHub</a>
-                <a href="#ways-to-give" class="btn btn-outline">Ways to Give</a>
-                <a href="mailto:michel_ng@icloud.com?subject=Wardex%20Commercial%20Inquiry" class="btn btn-ghost">Commercial licensing →</a>
-              </div>
-              <div class="terminal-snippet">
-                <span class="terminal-prompt">$</span>
-                <code>open https://github.com/sponsors/pinkysworld</code>
-              </div>
-            </div>
-
-            <aside class="hero-aside">
-              <div class="stat-card">
-                <div class="stat-header">Project Snapshot</div>
-                <div class="stat-grid" id="stats-grid"></div>
-              </div>
-
-              <div class="stat-card support-note">
-                <div class="support-note-label">What your support funds</div>
-                <ul class="support-note-list">
-                  <li>Release packaging and CI stabilization</li>
-                  <li>Admin console quality and browser coverage</li>
-                  <li>SDK maintenance and API contract work</li>
-                  <li>Documentation, runbooks, and sample data</li>
-                </ul>
-              </div>
-            </aside>
+          <p class="label">Support the Project</p>
+          <h1>Help sustain independent security engineering.</h1>
+          <p class="page-hero-desc">
+            Wardex is developed as a real product, not a demo repo. Sponsorship, contribution, or commercial engagement all help keep releases, docs, SDKs, and detection content moving.
+          </p>
+          <div class="hero-cta">
+            <a href="https://github.com/sponsors/pinkysworld" class="btn btn-primary" target="_blank" rel="noopener">Sponsor on GitHub</a>
+            <a href="#ways" class="btn btn-outline">Ways to Help</a>
+            <a href="mailto:michel_ng@icloud.com?subject=Wardex%20Commercial%20Inquiry" class="btn btn-ghost">Commercial licensing →</a>
           </div>
         </div>
       </section>
 
-      <section id="ways-to-give" class="section section-alt">
+      <section id="ways" class="section section-alt">
         <div class="container">
           <div class="section-header">
             <p class="label">Ways to Give</p>
-            <h2>Choose the Right Support Path</h2>
+            <h2>Choose the right support path.</h2>
             <p class="section-desc">
-              Wardex supports both community sponsorship and commercial engagement. Pick the path that matches how you use the project.
+              Wardex welcomes both community sponsorship and commercial engagement. Pick whichever matches how you use the project.
             </p>
           </div>
-
           <div class="support-grid">
             <article class="support-card support-card-featured">
               <span class="support-badge">Fastest Path</span>
@@ -106,12 +69,12 @@
                 <span class="support-price">Custom</span>
               </div>
               <p class="support-copy">
-                Use GitHub Sponsors for a one-time contribution. This is the simplest way to back release polish, docs, packaging, and maintenance work.
+                Use GitHub Sponsors for a one-time contribution. Simplest way to back release polish, docs, packaging, and maintenance.
               </p>
               <ul class="support-list">
                 <li>Small or custom contribution sizes</li>
                 <li>No separate payment system to maintain</li>
-                <li>Useful for individual users and evaluators</li>
+                <li>Works for individuals and evaluators</li>
               </ul>
               <a href="https://github.com/sponsors/pinkysworld" class="btn btn-primary support-cta" target="_blank" rel="noopener">Open GitHub Sponsors</a>
             </article>
@@ -122,14 +85,14 @@
                 <span class="support-price">Monthly</span>
               </div>
               <p class="support-copy">
-                Recurring sponsorship helps sustain the long tail of product work: CI reliability, admin-console refinement, SDK updates, docs, and backlog execution.
+                Recurring sponsorship sustains the long tail: CI reliability, admin-console refinement, SDK updates, docs, and backlog execution.
               </p>
               <ul class="support-list">
                 <li>Best for teams following the roadmap</li>
-                <li>Helps smooth release and maintenance cadence</li>
-                <li>Visible signal that continued investment matters</li>
+                <li>Smooths release and maintenance cadence</li>
+                <li>Visible signal that investment matters</li>
               </ul>
-              <a href="https://github.com/sponsors/pinkysworld" class="btn btn-outline support-cta" target="_blank" rel="noopener">Choose a Sponsorship</a>
+              <a href="https://github.com/sponsors/pinkysworld" class="btn btn-outline support-cta" target="_blank" rel="noopener">Choose a Tier</a>
             </article>
 
             <article class="support-card">
@@ -138,19 +101,18 @@
                 <span class="support-price">Contact</span>
               </div>
               <p class="support-copy">
-                For production deployments, managed rollouts, custom work, or priority help, use the commercial licensing path instead of a donation.
+                For production deployments, managed rollouts, or priority help, use the commercial licensing path — not a donation.
               </p>
               <ul class="support-list">
                 <li>Production licensing under BSL terms</li>
                 <li>Deployment and hardening guidance</li>
-                <li>Priority discussions for roadmap alignment</li>
+                <li>Priority roadmap alignment</li>
               </ul>
               <a href="mailto:michel_ng@icloud.com?subject=Wardex%20Commercial%20Inquiry" class="btn btn-outline support-cta">Request Commercial Terms</a>
             </article>
           </div>
-
           <p class="support-fineprint">
-            Donations and sponsorships support development. They do not replace the separate commercial license required for production use under the current BSL 1.1 terms.
+            Donations and sponsorships support development. They do not replace the separate commercial licence required for production use under BSL 1.1.
           </p>
         </div>
       </section>
@@ -159,109 +121,70 @@
         <div class="container">
           <div class="section-header">
             <p class="label">Impact</p>
-            <h2>What Support Unlocks</h2>
-            <p class="section-desc">
-              The most valuable support is not abstract. It converts directly into product quality, better release hygiene, and less backlog drag.
-            </p>
+            <h2>Where your support lands.</h2>
           </div>
-
           <div class="impact-grid">
             <article class="impact-card">
               <span class="analytics-num">01</span>
               <div>
                 <h3>Release Engineering</h3>
-                <p>Binary packaging, GitHub Actions stability, feature-matrix validation, and post-release cleanup take sustained effort across platforms.</p>
+                <p>Packaging, CI stability, feature-matrix validation, and post-release cleanup across platforms.</p>
               </div>
             </article>
             <article class="impact-card">
               <span class="analytics-num">02</span>
               <div>
                 <h3>Operator Experience</h3>
-                <p>Admin-console quality, investigation workflows, dashboard reliability, and browser smoke coverage all benefit from focused iteration.</p>
+                <p>Admin-console quality, investigation workflows, dashboard reliability, and browser smoke coverage.</p>
               </div>
             </article>
             <article class="impact-card">
               <span class="analytics-num">03</span>
               <div>
-                <h3>SDK and API Maintenance</h3>
-                <p>TypeScript and Python SDK fixes, OpenAPI contract drift prevention, and automation-friendly APIs are ongoing product work.</p>
+                <h3>SDK &amp; API Maintenance</h3>
+                <p>TypeScript and Python SDK fixes, OpenAPI contract drift prevention, and automation-friendly APIs.</p>
               </div>
             </article>
             <article class="impact-card">
               <span class="analytics-num">04</span>
               <div>
-                <h3>Documentation and Runbooks</h3>
-                <p>Getting-started flows, deployment guides, threat-model documentation, and sample scenarios reduce onboarding friction for real evaluators.</p>
+                <h3>Documentation</h3>
+                <p>Getting-started flows, deployment guides, threat-model documentation, and sample scenarios.</p>
               </div>
             </article>
           </div>
         </div>
       </section>
 
-      <section id="other-ways" class="section section-alt">
+      <section class="section section-alt">
         <div class="container">
           <div class="section-header">
             <p class="label">Other Ways to Help</p>
-            <h2>Support Wardex Without a Payment Link</h2>
+            <h2>Support Wardex without a payment link.</h2>
             <p class="section-desc">
-              Sponsorship matters, but so do crisp bug reports, release smoke tests, operator feedback, and docs polish. If money is not the right support path, there are still concrete ways to move the product forward.
+              Crisp bug reports, release smoke tests, operator feedback, and docs polish move the product forward just as effectively as cash.
             </p>
           </div>
-
           <div class="start-grid">
             <article class="start-card">
               <h3>Validate a Release</h3>
-              <p>Pull a tagged build, exercise the console or CLI, and report regressions while packaging or workflow changes are still fresh.</p>
+              <p>Pull a tagged build, exercise the console or CLI, and report regressions while packaging is fresh.</p>
               <p><a href="https://github.com/pinkysworld/Wardex/releases" class="btn btn-outline" target="_blank" rel="noopener">Review Releases</a></p>
             </article>
-
             <article class="start-card">
-              <h3>Improve Docs and Examples</h3>
+              <h3>Improve Docs</h3>
               <p>Clarify deployment notes, tighten runbooks, or improve sample scenarios so evaluators spend less time guessing.</p>
-              <p><a href="https://github.com/pinkysworld/Wardex/blob/main/CONTRIBUTING.md" class="btn btn-outline" target="_blank" rel="noopener">Read Contributing Guide</a></p>
+              <p><a href="https://github.com/pinkysworld/Wardex/blob/main/CONTRIBUTING.md" class="btn btn-outline" target="_blank" rel="noopener">Contributing Guide</a></p>
             </article>
-
             <article class="start-card">
               <h3>Share Operator Feedback</h3>
-              <p>Send friction points from hunts, rollout workflows, admin-console UX, or deployment setup so the roadmap stays anchored in real operating needs.</p>
+              <p>Send friction points from hunts, rollouts, admin-console UX, or deployment so the roadmap stays anchored in reality.</p>
               <p><a href="mailto:michel_ng@icloud.com?subject=Wardex%20Operator%20Feedback" class="btn btn-outline">Send Feedback</a></p>
             </article>
-
             <article class="start-card">
               <h3>Open a Focused Issue</h3>
-              <p>Small, concrete issues on CI, docs, SDKs, or browser workflows are often as useful as a cash contribution because they reduce guesswork immediately.</p>
+              <p>Small concrete issues on CI, docs, SDKs, or browser workflows are often as useful as a cash contribution.</p>
               <p><a href="https://github.com/pinkysworld/Wardex/issues/new/choose" class="btn btn-outline" target="_blank" rel="noopener">Open GitHub Issue</a></p>
-            </article>
-          </div>
-        </div>
-      </section>
-
-      <section id="faq" class="section">
-        <div class="container">
-          <div class="section-header">
-            <p class="label">FAQ</p>
-            <h2>Support Without Confusion</h2>
-            <p class="section-desc">
-              The support page should stay explicit about what a donation is and what it is not.
-            </p>
-          </div>
-
-          <div class="faq-grid">
-            <article class="faq-card">
-              <h3>Does a donation grant production rights?</h3>
-              <p>No. Donations and GitHub sponsorships support development, but production usage still requires a separate commercial license under BSL 1.1.</p>
-            </article>
-            <article class="faq-card">
-              <h3>Why use GitHub Sponsors?</h3>
-              <p>It is already live for this account, familiar for developer audiences, and avoids adding a second payment stack to maintain right now.</p>
-            </article>
-            <article class="faq-card">
-              <h3>Can a company both sponsor and license Wardex?</h3>
-              <p>Yes. Sponsorship can support public development, while licensing covers production deployment and commercial use terms.</p>
-            </article>
-            <article class="faq-card">
-              <h3>What kind of support matters most?</h3>
-              <p>Recurring sponsorship is the strongest signal for roadmap sustainability. One-time donations still help with releases, docs, and maintenance spikes.</p>
             </article>
           </div>
         </div>
@@ -272,28 +195,33 @@
           <div class="footer-grid">
             <div class="footer-col footer-about">
               <span class="nav-logo footer-logo">WX</span>
-              <p>
-                Wardex is a release-oriented XDR and SIEM platform for private-cloud operations. <span id="footer-about-module-count">134</span> Rust modules, <span id="footer-about-api-count">138</span> documented API paths, <span id="footer-about-test-count">1500+</span> automated tests.
-              </p>
+              <p>Private-cloud XDR &amp; SIEM built in Rust. One binary. Full data sovereignty.</p>
+              <p class="footer-version"><span id="footer-version">v0.52.5</span> · BSL 1.1</p>
             </div>
             <div class="footer-col">
-              <h4>Support</h4>
-              <a href="https://github.com/sponsors/pinkysworld" target="_blank" rel="noopener">GitHub Sponsors</a>
-              <a href="#ways-to-give">Ways to Give</a>
-              <a href="#other-ways">Other Ways to Help</a>
-              <a href="#faq">FAQ</a>
-              <a href="mailto:michel_ng@icloud.com?subject=Wardex%20Commercial%20Inquiry">Commercial Licensing</a>
+              <h4>Product</h4>
+              <a href="features.html">Features</a>
+              <a href="architecture.html">Architecture</a>
+              <a href="pricing.html">Pricing</a>
+              <a href="https://github.com/pinkysworld/Wardex/releases" target="_blank" rel="noopener">Releases</a>
+            </div>
+            <div class="footer-col">
+              <h4>Resources</h4>
+              <a href="resources.html">Documentation</a>
+              <a href="https://github.com/pinkysworld/Wardex/blob/main/docs/openapi.yaml" target="_blank" rel="noopener">OpenAPI</a>
+              <a href="https://github.com/pinkysworld/Wardex/blob/main/docs/SDK_GUIDE.md" target="_blank" rel="noopener">SDK Guide</a>
+              <a href="https://github.com/pinkysworld/Wardex/blob/main/docs/THREAT_MODEL.md" target="_blank" rel="noopener">Threat Model</a>
             </div>
             <div class="footer-col">
               <h4>Project</h4>
-              <a href="index.html">Main Site</a>
-              <a href="index.html#resources">Resources</a>
               <a href="https://github.com/pinkysworld/Wardex" target="_blank" rel="noopener">GitHub</a>
-              <a href="https://github.com/pinkysworld/Wardex/releases" target="_blank" rel="noopener">Releases</a>
+              <a href="donate.html">Support</a>
+              <a href="https://github.com/pinkysworld/Wardex/blob/main/SECURITY.md" target="_blank" rel="noopener">Security</a>
+              <a href="mailto:michel_ng@icloud.com">Contact</a>
             </div>
           </div>
           <div class="footer-bottom">
-            <p>Wardex · Enterprise XDR &amp; SIEM · <span id="footer-release-test-count">1500+</span> tests · <span id="footer-release-module-count">134</span> modules · <a href="../LICENSE" style="color:inherit;">BSL 1.1</a> · <span id="footer-version">v0.52.5</span> · Production use still requires a separate commercial license</p>
+            <p>Wardex · © 2024–2026 · <a href="../LICENSE" style="color:inherit;">BSL 1.1</a> · Commercial production use requires a <a href="pricing.html" style="color: var(--nav-accent);">separate licence</a>.</p>
           </div>
         </div>
       </footer>

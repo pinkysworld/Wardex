@@ -79,13 +79,18 @@ const interfaceFields = [
 ];
 
 function renderStats() {
-  const el = document.getElementById("stats-grid");
-  if (!el) return;
-  stats.forEach((s) => {
-    const div = document.createElement("div");
-    div.className = "stat-item";
-    div.innerHTML = `<span class="stat-value">${s.value}</span><span class="stat-label">${s.label}</span>`;
-    el.appendChild(div);
+  const targets = [
+    document.getElementById("stats-grid"),
+    document.getElementById("stat-strip"),
+  ].filter(Boolean);
+  if (targets.length === 0) return;
+  targets.forEach((el) => {
+    stats.forEach((s) => {
+      const div = document.createElement("div");
+      div.className = "stat-item";
+      div.innerHTML = `<span class="stat-value">${s.value}</span><span class="stat-label">${s.label}</span>`;
+      el.appendChild(div);
+    });
   });
 }
 
@@ -205,7 +210,8 @@ function initScrollReveal() {
     ".section-header, .arch-stage, .detail-card, .status-col, .start-card, " +
     ".stat-card, .console-preview, .module-table, .csv-format, " +
     ".capability-card, .hunting-card, .analytics-item, .license-card, .license-notice, " +
-    ".support-card, .impact-card, .faq-card"
+    ".support-card, .impact-card, .faq-card, " +
+    ".pillar-card, .trust-card, .deploy-model, .component-card, .feature-cell"
   );
 
   const observer = new IntersectionObserver((entries) => {

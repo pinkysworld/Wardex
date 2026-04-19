@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Resources — Wardex</title>
+    <meta name="description" content="Documentation, runbooks, SDKs, OpenAPI, and operator references for Wardex.">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <link rel="icon" href="favicon.svg" type="image/svg+xml">
+    <link rel="stylesheet" href="styles.css?v=10">
+    <script defer src="app.js?v=11"></script>
+  </head>
+  <body>
+    <nav class="site-nav" id="site-nav">
+      <div class="nav-inner">
+        <a class="nav-brand" href="index.html">
+          <span class="nav-logo">WX</span>
+          <span class="nav-title">Wardex</span>
+        </a>
+        <button class="nav-toggle" id="nav-toggle" aria-label="Toggle navigation" aria-expanded="false">
+          <span></span><span></span><span></span>
+        </button>
+        <div class="nav-links" id="nav-links">
+          <a href="index.html" class="nav-link">Overview</a>
+          <a href="features.html" class="nav-link">Features</a>
+          <a href="architecture.html" class="nav-link">Architecture</a>
+          <a href="resources.html" class="nav-link active">Resources</a>
+          <a href="pricing.html" class="nav-link">Pricing</a>
+          <a href="donate.html" class="nav-link">Support</a>
+          <a href="https://github.com/pinkysworld/Wardex" class="nav-link nav-link-icon" target="_blank" rel="noopener" aria-label="GitHub">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
+          </a>
+        </div>
+      </div>
+    </nav>
+
+    <main class="main">
+      <section class="section page-hero">
+        <div class="container">
+          <p class="label">Resources</p>
+          <h1>Everything you need to evaluate, operate, or extend Wardex.</h1>
+          <p class="page-hero-desc">
+            Documentation, runbooks, SDKs, and reference material — all versioned with the product.
+          </p>
+        </div>
+      </section>
+
+      <!-- ── Quick Start ───────────────────────────────────────────────────── -->
+      <section class="section section-alt">
+        <div class="container">
+          <div class="section-header">
+            <p class="label">Quick Start</p>
+            <h2>Running in under five minutes.</h2>
+          </div>
+          <div class="start-grid">
+            <div class="start-card">
+              <h3>Build from source</h3>
+              <div class="code-block"><code>cargo build --release</code></div>
+              <p>Requires Rust edition 2024, MSRV 1.88.0.</p>
+            </div>
+            <div class="start-card">
+              <h3>Launch the server</h3>
+              <div class="code-block"><code>cargo run -- serve</code></div>
+              <p>API, browser console, and embedded monitor on port 8080.</p>
+            </div>
+            <div class="start-card">
+              <h3>Analyse a scenario</h3>
+              <div class="code-block"><code>cargo run -- analyze examples/credential_storm.csv</code></div>
+              <p>Run a canned attack scenario through the detection pipeline.</p>
+            </div>
+            <div class="start-card">
+              <h3>Run the test suite</h3>
+              <div class="code-block"><code>cargo test</code></div>
+              <p>1,500+ automated tests with stable CI signal.</p>
+            </div>
+            <div class="start-card">
+              <h3>Install on macOS</h3>
+              <div class="code-block"><code>brew tap pinkysworld/wardex &amp;&amp; brew install wardex</code></div>
+            </div>
+            <div class="start-card">
+              <h3>Install on Debian / Ubuntu</h3>
+              <div class="code-block"><code>sudo apt install wardex</code></div>
+              <p>Via the signed Wardex APT repository.</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ── Documentation Index ────────────────────────────────────────────── -->
+      <section class="section">
+        <div class="container">
+          <div class="section-header">
+            <p class="label">Documentation</p>
+            <h2>Find what you need, fast.</h2>
+            <p class="section-desc">
+              All docs are kept in-repo alongside the code they describe. No stale pages, no out-of-sync references.
+            </p>
+          </div>
+
+          <div class="resource-toolbar">
+            <label class="resource-search" for="resource-search">
+              <span>Search resources</span>
+              <input id="resource-search" type="search" placeholder="Search runbooks, deployment, SDK, API, threat model…">
+            </label>
+            <div class="resource-count" id="resource-count">12 resources visible</div>
+          </div>
+
+          <div class="start-grid">
+            <div class="start-card" data-resource-card data-search="getting started quickstart install onboarding">
+              <h3>Getting Started</h3>
+              <p>Step-by-step guide from fresh clone to running control plane with a sample agent enrolled.</p>
+              <p><a href="https://github.com/pinkysworld/Wardex/blob/main/docs/GETTING_STARTED.md" class="btn btn-outline" target="_blank" rel="noopener">Open Guide</a></p>
+            </div>
+            <div class="start-card" data-resource-card data-search="docs architecture deployment status runbooks index">
+              <h3>Documentation Index</h3>
+              <p>The master map of all in-repo documentation — architecture, operations, research, and roadmap.</p>
+              <p><a href="https://github.com/pinkysworld/Wardex/blob/main/docs/README.md" class="btn btn-outline" target="_blank" rel="noopener">Open Docs</a></p>
+            </div>
+            <div class="start-card" data-resource-card data-search="openapi api contract integrations automation sdk rest http">
+              <h3>OpenAPI Contract</h3>
+              <p>The versioned HTTP contract for every REST endpoint Wardex exposes. Feed directly into your OpenAPI tooling.</p>
+              <p><a href="https://github.com/pinkysworld/Wardex/blob/main/docs/openapi.yaml" class="btn btn-outline" target="_blank" rel="noopener">View OpenAPI</a></p>
+            </div>
+            <div class="start-card" data-resource-card data-search="deployment models sizing high availability relay federation multi-tenant helm kubernetes">
+              <h3>Deployment Models</h3>
+              <p>Standalone, enterprise control-plane, regional relay, and air-gapped deployment patterns.</p>
+              <p><a href="https://github.com/pinkysworld/Wardex/blob/main/docs/DEPLOYMENT_MODELS.md" class="btn btn-outline" target="_blank" rel="noopener">Read Guide</a></p>
+            </div>
+            <div class="start-card" data-resource-card data-search="runbooks response operations incidents agents siem installation rollback">
+              <h3>Runbooks</h3>
+              <p>Operational guidance for agents, incident response, SIEM integrations, and agent rollback procedures.</p>
+              <p><a href="https://github.com/pinkysworld/Wardex/tree/main/docs/runbooks" class="btn btn-outline" target="_blank" rel="noopener">Open Runbooks</a></p>
+            </div>
+            <div class="start-card" data-resource-card data-search="sdk integrations python typescript automation ci generate openapi">
+              <h3>SDK Guide</h3>
+              <p>TypeScript and Python SDKs with 60+ methods. Perfect for automation, CI gating, and bespoke dashboards.</p>
+              <p><a href="https://github.com/pinkysworld/Wardex/blob/main/docs/SDK_GUIDE.md" class="btn btn-outline" target="_blank" rel="noopener">SDK Guide</a></p>
+            </div>
+            <div class="start-card" data-resource-card data-search="wasm extension guide plugins sandbox detection response custom">
+              <h3>WASM Extensions</h3>
+              <p>Build custom detection and response plugins as sandboxed WebAssembly modules.</p>
+              <p><a href="https://github.com/pinkysworld/Wardex/blob/main/docs/WASM_TUTORIAL.md" class="btn btn-outline" target="_blank" rel="noopener">WASM Tutorial</a></p>
+            </div>
+            <div class="start-card" data-resource-card data-search="threat model adversary abuse cases trust boundaries security">
+              <h3>Threat Model</h3>
+              <p>Adversary profiles, abuse cases, trust boundaries, and mitigation inventory for the platform itself.</p>
+              <p><a href="https://github.com/pinkysworld/Wardex/blob/main/docs/THREAT_MODEL.md" class="btn btn-outline" target="_blank" rel="noopener">Threat Model</a></p>
+            </div>
+            <div class="start-card" data-resource-card data-search="configuration settings env vars toml operator tuning">
+              <h3>Configuration Reference</h3>
+              <p>Every config knob, every environment variable, every default. With examples for common deployment shapes.</p>
+              <p><a href="https://github.com/pinkysworld/Wardex/blob/main/docs/CONFIGURATION.md" class="btn btn-outline" target="_blank" rel="noopener">Open Reference</a></p>
+            </div>
+            <div class="start-card" data-resource-card data-search="disaster recovery dr backup restore snapshot incident continuity">
+              <h3>Disaster Recovery</h3>
+              <p>Backup, restore, and continuity procedures for the control plane and archive tiers.</p>
+              <p><a href="https://github.com/pinkysworld/Wardex/blob/main/docs/DISASTER_RECOVERY.md" class="btn btn-outline" target="_blank" rel="noopener">DR Guide</a></p>
+            </div>
+            <div class="start-card" data-resource-card data-search="reproducibility supply chain verification attestation slsa sbom cosign">
+              <h3>Reproducibility &amp; Supply Chain</h3>
+              <p>How to verify SLSA attestations, cosign signatures, and reproduce release builds bit-for-bit.</p>
+              <p><a href="https://github.com/pinkysworld/Wardex/blob/main/docs/REPRODUCIBILITY.md" class="btn btn-outline" target="_blank" rel="noopener">Verification Guide</a></p>
+            </div>
+            <div class="start-card" data-resource-card data-search="roadmap backlog features ecosystem ha sso future">
+              <h3>Roadmap</h3>
+              <p>Where Wardex is going — SSO, HA clustering, content operations, ecosystem expansion.</p>
+              <p><a href="https://github.com/pinkysworld/Wardex/blob/main/docs/ROADMAP_XDR_PROFESSIONAL.md" class="btn btn-outline" target="_blank" rel="noopener">View Roadmap</a></p>
+            </div>
+          </div>
+          <div class="resource-empty" id="resource-empty" hidden>No resources match the current search. Try terms like deployment, SDK, threat model, or runbooks.</div>
+        </div>
+      </section>
+
+      <!-- ── Interfaces ─────────────────────────────────────────────────────── -->
+      <section class="section section-alt">
+        <div class="container">
+          <div class="section-header">
+            <p class="label">Interfaces</p>
+            <h2>Six ways to work with Wardex.</h2>
+          </div>
+          <div class="field-grid" id="field-grid"></div>
+        </div>
+      </section>
+
+      <footer class="site-footer">
+        <div class="container">
+          <div class="footer-grid">
+            <div class="footer-col footer-about">
+              <span class="nav-logo footer-logo">WX</span>
+              <p>Private-cloud XDR &amp; SIEM built in Rust. One binary. Full data sovereignty.</p>
+              <p class="footer-version"><span id="footer-version">v0.52.5</span> · BSL 1.1</p>
+            </div>
+            <div class="footer-col">
+              <h4>Product</h4>
+              <a href="features.html">Features</a>
+              <a href="architecture.html">Architecture</a>
+              <a href="pricing.html">Pricing</a>
+              <a href="https://github.com/pinkysworld/Wardex/releases" target="_blank" rel="noopener">Releases</a>
+            </div>
+            <div class="footer-col">
+              <h4>Resources</h4>
+              <a href="resources.html">Documentation</a>
+              <a href="https://github.com/pinkysworld/Wardex/blob/main/docs/openapi.yaml" target="_blank" rel="noopener">OpenAPI</a>
+              <a href="https://github.com/pinkysworld/Wardex/blob/main/docs/SDK_GUIDE.md" target="_blank" rel="noopener">SDK Guide</a>
+              <a href="https://github.com/pinkysworld/Wardex/blob/main/docs/THREAT_MODEL.md" target="_blank" rel="noopener">Threat Model</a>
+            </div>
+            <div class="footer-col">
+              <h4>Project</h4>
+              <a href="https://github.com/pinkysworld/Wardex" target="_blank" rel="noopener">GitHub</a>
+              <a href="donate.html">Support</a>
+              <a href="https://github.com/pinkysworld/Wardex/blob/main/SECURITY.md" target="_blank" rel="noopener">Security</a>
+              <a href="mailto:michel_ng@icloud.com">Contact</a>
+            </div>
+          </div>
+          <div class="footer-bottom">
+            <p>Wardex · © 2024–2026 · <a href="../LICENSE" style="color:inherit;">BSL 1.1</a> · Commercial production use requires a <a href="pricing.html" style="color: var(--nav-accent);">separate license</a>.</p>
+          </div>
+        </div>
+      </footer>
+    </main>
+  </body>
+</html>

@@ -1,0 +1,450 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Features — Wardex</title>
+    <meta name="description" content="Full feature catalogue for Wardex: detection, investigation, threat hunting, advanced analytics, governance, and fleet operations.">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <link rel="icon" href="favicon.svg" type="image/svg+xml">
+    <link rel="stylesheet" href="styles.css?v=10">
+    <script defer src="app.js?v=11"></script>
+  </head>
+  <body>
+    <nav class="site-nav" id="site-nav">
+      <div class="nav-inner">
+        <a class="nav-brand" href="index.html">
+          <span class="nav-logo">WX</span>
+          <span class="nav-title">Wardex</span>
+        </a>
+        <button class="nav-toggle" id="nav-toggle" aria-label="Toggle navigation" aria-expanded="false">
+          <span></span><span></span><span></span>
+        </button>
+        <div class="nav-links" id="nav-links">
+          <a href="index.html" class="nav-link">Overview</a>
+          <a href="features.html" class="nav-link active">Features</a>
+          <a href="architecture.html" class="nav-link">Architecture</a>
+          <a href="resources.html" class="nav-link">Resources</a>
+          <a href="pricing.html" class="nav-link">Pricing</a>
+          <a href="donate.html" class="nav-link">Support</a>
+          <a href="https://github.com/pinkysworld/Wardex" class="nav-link nav-link-icon" target="_blank" rel="noopener" aria-label="GitHub">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
+          </a>
+        </div>
+      </div>
+    </nav>
+
+    <main class="main">
+      <!-- ── Page Hero ────────────────────────────────────────────────────── -->
+      <section class="section page-hero">
+        <div class="container">
+          <p class="label">Features</p>
+          <h1>Everything a modern SOC needs, in one binary.</h1>
+          <p class="page-hero-desc">
+            Wardex consolidates detection engineering, alert triage, investigation, threat hunting, response automation, fleet operations, and governance into a single Rust platform. Organised by SOC discipline below.
+          </p>
+          <nav class="feature-anchor-nav">
+            <a href="#detection">Detection</a>
+            <a href="#investigation">Investigation</a>
+            <a href="#hunting">Threat Hunting</a>
+            <a href="#analytics">Analytics</a>
+            <a href="#response">Response</a>
+            <a href="#fleet">Fleet</a>
+            <a href="#governance">Governance</a>
+            <a href="#integrations">Integrations</a>
+          </nav>
+        </div>
+      </section>
+
+      <!-- ── Detection ────────────────────────────────────────────────────── -->
+      <section id="detection" class="section section-alt">
+        <div class="container">
+          <div class="feature-row">
+            <div class="feature-headline">
+              <p class="label">Detection Engineering</p>
+              <h2>Catch attacks as they unfold.</h2>
+              <p>Multiple detection engines compose into a single adaptive score per event. Rules, heuristics, and machine signals cross-validate each other instead of fighting.</p>
+            </div>
+            <div class="feature-matrix">
+              <div class="feature-cell">
+                <h3>Sigma Rule Engine</h3>
+                <p>Native Sigma parsing with in-memory compilation. Field schema bridges kernel events directly into rule evaluation — no extra translation layer.</p>
+              </div>
+              <div class="feature-cell">
+                <h3>Adaptive Anomaly Scoring</h3>
+                <p>Per-host baselines with EWMA drift tracking. Gradual behavioural changes elevate risk scores without triggering noise on every short spike.</p>
+              </div>
+              <div class="feature-cell">
+                <h3>YARA Malware Scanning</h3>
+                <p>Embedded YARA engine scans executables, scripts, and memory regions against a curated malware signature database with hot-reload support.</p>
+              </div>
+              <div class="feature-cell">
+                <h3>Kernel Event Bridge</h3>
+                <p>Process creation, file writes, DNS queries, and network connections flow through a unified schema on Linux (eBPF), macOS (EndpointSecurity), and Windows (ETW).</p>
+              </div>
+              <div class="feature-cell">
+                <h3>MITRE ATT&amp;CK Coverage</h3>
+                <p>Every rule maps to ATT&amp;CK techniques. The coverage matrix shows exactly where your detection depth sits and highlights gaps worth filling.</p>
+              </div>
+              <div class="feature-cell">
+                <h3>Scheduled Hunts</h3>
+                <p>Author hunts as saved queries, schedule them, and promote high-signal results directly into the alert queue with suppression rules to control noise.</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ── Investigation ────────────────────────────────────────────────── -->
+      <section id="investigation" class="section">
+        <div class="container">
+          <div class="feature-row">
+            <div class="feature-headline">
+              <p class="label">SOC Workbench</p>
+              <h2>Every pivot your analysts need.</h2>
+              <p>From alert intake to case closure, analysts stay inside a single investigation surface. Context follows the analyst, not the tab.</p>
+            </div>
+            <div class="feature-matrix">
+              <div class="feature-cell">
+                <h3>Alert Queue with SLAs</h3>
+                <p>Priority-weighted queue with acknowledgement, assignment, escalation, and SLA countdown. Bulk actions keep high-volume days manageable.</p>
+              </div>
+              <div class="feature-cell">
+                <h3>Process Tree &amp; Timeline</h3>
+                <p>Pivot from any alert into the full process genealogy, file access timeline, and network connection graph for the affected host.</p>
+              </div>
+              <div class="feature-cell">
+                <h3>Storyline View</h3>
+                <p>Related events collapse into a coherent narrative. See the attack arc at a glance instead of scrolling through thousands of raw records.</p>
+              </div>
+              <div class="feature-cell">
+                <h3>Entity Extraction</h3>
+                <p>IPs, domains, paths, hashes, usernames, and MITRE techniques are extracted automatically from alert reasons and investigation notes.</p>
+              </div>
+              <div class="feature-cell">
+                <h3>Case Management</h3>
+                <p>Cases aggregate alerts, evidence, analyst notes, and response actions with per-step timestamps and exportable evidence packages.</p>
+              </div>
+              <div class="feature-cell">
+                <h3>False-Positive Advisor</h3>
+                <p>When an analyst marks an alert as benign, the system suggests suppression rule patches so the same noise doesn't reappear tomorrow.</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ── Threat Hunting ───────────────────────────────────────────────── -->
+      <section id="hunting" class="section section-alt">
+        <div class="container">
+          <div class="feature-row">
+            <div class="feature-headline">
+              <p class="label">Threat Hunting</p>
+              <h2>Go find them before they find you.</h2>
+              <p>Purpose-built tools for proactive investigation, campaign analysis, and adversary tracking across your fleet.</p>
+            </div>
+            <div class="hunting-grid">
+              <div class="hunting-card hunting-card-featured">
+                <span class="hunting-badge">Fleet-Wide</span>
+                <h3>Campaign Clustering</h3>
+                <p>Jaccard-similarity analysis correlates alerts by technique, target, and timing to surface multi-host campaigns that individual detections miss entirely.</p>
+              </div>
+              <div class="hunting-card">
+                <span class="hunting-badge">Deception</span>
+                <h3>Canary Deployment</h3>
+                <p>Randomised honeypots, honey files, honey credentials, and canary services. Track attacker interactions to build detailed behaviour profiles.</p>
+              </div>
+              <div class="hunting-card">
+                <span class="hunting-badge">Forensics</span>
+                <h3>Memory Analysis</h3>
+                <p>Detect code injection, process hollowing, RWX regions, and unbacked executable memory with platform-specific collection plans.</p>
+              </div>
+              <div class="hunting-card">
+                <span class="hunting-badge">Intel</span>
+                <h3>Threat Feed Ingestion</h3>
+                <p>Pull MISP, OSINT, and custom JSON-lines feeds. IoCs enrich every alert automatically and age out on a configurable decay schedule.</p>
+              </div>
+              <div class="hunting-card">
+                <span class="hunting-badge">Lateral</span>
+                <h3>Lateral Movement Graph</h3>
+                <p>Authentication traversals, process spawning chains, and SMB/WinRM sessions render into a graph so cross-host compromise reads at a glance.</p>
+              </div>
+              <div class="hunting-card">
+                <span class="hunting-badge">Hypothesis</span>
+                <h3>Hunt DSL</h3>
+                <p>Saved, parameterised hunt templates run on schedule or on-demand. Results route through the same queue + suppression pipeline as live detections.</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ── Advanced Analytics ───────────────────────────────────────────── -->
+      <section id="analytics" class="section">
+        <div class="container">
+          <div class="feature-row">
+            <div class="feature-headline">
+              <p class="label">Advanced Analytics</p>
+              <h2>Intelligence-driven detection without the cloud.</h2>
+              <p>Multi-signal fusion, behavioural baselines, and privacy-preserving ML — trained and evaluated entirely inside your environment.</p>
+            </div>
+            <div class="analytics-grid">
+              <div class="analytics-item">
+                <div class="analytics-num">01</div>
+                <div>
+                  <h3>Side-Channel Score Fusion</h3>
+                  <p>Combine traditional detection signals with hardware side-channel analysis. Critical findings boost compound threat scores by up to +1.5.</p>
+                </div>
+              </div>
+              <div class="analytics-item">
+                <div class="analytics-num">02</div>
+                <div>
+                  <h3>EWMA Drift Tracking</h3>
+                  <p>Exponentially weighted moving averages catch the gradual behavioural drift that static baselines miss entirely.</p>
+                </div>
+              </div>
+              <div class="analytics-item">
+                <div class="analytics-num">03</div>
+                <div>
+                  <h3>Impossible-Travel Detection</h3>
+                  <p>Geo-IP validation flags authentication events that imply travel speeds exceeding 900 km/h — credential sharing and account compromise in one signal.</p>
+                </div>
+              </div>
+              <div class="analytics-item">
+                <div class="analytics-num">04</div>
+                <div>
+                  <h3>Digital Twin Calibration</h3>
+                  <p>Virtual device replicas track drift between expected and observed behaviour with per-parameter deltas and alert thresholds.</p>
+                </div>
+              </div>
+              <div class="analytics-item">
+                <div class="analytics-num">05</div>
+                <div>
+                  <h3>Federated Learning Convergence</h3>
+                  <p>Train global detection models across distributed agents without centralising sensitive data. Multi-round averaging converges to accuracy thresholds automatically.</p>
+                </div>
+              </div>
+              <div class="analytics-item">
+                <div class="analytics-num">06</div>
+                <div>
+                  <h3>ML Triage Assist</h3>
+                  <p>Per-alert feature vectors feed into a lightweight triage model that surfaces the 5 % of incidents most likely to be real.</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ── Response ─────────────────────────────────────────────────────── -->
+      <section id="response" class="section section-alt">
+        <div class="container">
+          <div class="feature-row">
+            <div class="feature-headline">
+              <p class="label">Response &amp; Remediation</p>
+              <h2>Controlled action with a full paper trail.</h2>
+              <p>Every response path is approval-gated, audited, and reversible. Speed when you need it; accountability when you're asked for it.</p>
+            </div>
+            <div class="feature-matrix">
+              <div class="feature-cell">
+                <h3>Approval-Gated Requests</h3>
+                <p>Isolation, quarantine, process termination, and remediation all require explicit approval with analyst + approver identities recorded.</p>
+              </div>
+              <div class="feature-cell">
+                <h3>Playbook Engine</h3>
+                <p>Define response workflows in a declarative DSL. Conditional steps, timeouts, and rollback handlers are first-class language primitives.</p>
+              </div>
+              <div class="feature-cell">
+                <h3>Live Response Shell</h3>
+                <p>On-demand triage commands stream back to the console over an authenticated session with full keystroke audit logging.</p>
+              </div>
+              <div class="feature-cell">
+                <h3>Host Quarantine</h3>
+                <p>Network isolation with a deny-all firewall profile that preserves the analyst's own back-channel. Reversible with a single approved action.</p>
+              </div>
+              <div class="feature-cell">
+                <h3>Remediation Scripts</h3>
+                <p>Library of vetted remediation scripts for common attack artefacts — persistence cleanup, credential rotation, registry restore.</p>
+              </div>
+              <div class="feature-cell">
+                <h3>Full Response Audit</h3>
+                <p>Every approval, execution, and outcome is written to a tamper-evident audit chain for incident post-mortems and compliance evidence.</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ── Fleet Operations ─────────────────────────────────────────────── -->
+      <section id="fleet" class="section">
+        <div class="container">
+          <div class="feature-row">
+            <div class="feature-headline">
+              <p class="label">Fleet Operations</p>
+              <h2>Run a fleet. Don't babysit it.</h2>
+              <p>Agents enrol, phone home, update themselves, and rotate keys — all under policy. You watch the dashboards, not the cron jobs.</p>
+            </div>
+            <div class="feature-matrix">
+              <div class="feature-cell">
+                <h3>Zero-Touch Enrolment</h3>
+                <p>One-time tokens bootstrap agents cryptographically. Post-enrolment, mutual TLS is issued automatically and rotated on schedule.</p>
+              </div>
+              <div class="feature-cell">
+                <h3>Rolling Auto-Update</h3>
+                <p>SHA-256 verified binary releases with staged rollout groups, automatic rollback on health-check failure, and per-agent visibility.</p>
+              </div>
+              <div class="feature-cell">
+                <h3>Heartbeat &amp; Liveness</h3>
+                <p>Configurable freshness windows, degraded-state flagging, and per-agent last-seen tracking — with alerting when a cohort goes dark.</p>
+              </div>
+              <div class="feature-cell">
+                <h3>Policy Distribution</h3>
+                <p>Versioned policy bundles reach every agent under a deterministic rollout. Rollback is a single click.</p>
+              </div>
+              <div class="feature-cell">
+                <h3>Event Spool</h3>
+                <p>Encrypted local spool buffers events during control-plane outages and replays them in order on reconnect — no data loss, no silent drops.</p>
+              </div>
+              <div class="feature-cell">
+                <h3>Offline / Air-Gap Mode</h3>
+                <p>Operate with manually-synchronised update bundles and offline policy packages. No outbound internet required.</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ── Governance ───────────────────────────────────────────────────── -->
+      <section id="governance" class="section section-alt">
+        <div class="container">
+          <div class="feature-row">
+            <div class="feature-headline">
+              <p class="label">Governance &amp; Trust</p>
+              <h2>Auditable by design.</h2>
+              <p>Everything sensitive is recorded. Everything recorded is signed. Everything signed is verifiable years later.</p>
+            </div>
+            <div class="feature-matrix">
+              <div class="feature-cell">
+                <h3>RBAC with Session Rotation</h3>
+                <p>Role-based access for admin, analyst, responder, and viewer personas. Session tokens rotate automatically with configurable TTLs.</p>
+              </div>
+              <div class="feature-cell">
+                <h3>OIDC &amp; SCIM</h3>
+                <p>Native OIDC login flow and SCIM user/group provisioning keep Wardex aligned with your identity provider.</p>
+              </div>
+              <div class="feature-cell">
+                <h3>Tamper-Evident Audit Chain</h3>
+                <p>Hash-chained audit records mean any retroactive modification becomes mathematically detectable.</p>
+              </div>
+              <div class="feature-cell">
+                <h3>Compliance Templates</h3>
+                <p>Pre-built report templates for SOC 2, ISO 27001, PCI DSS, and HIPAA with evidence aggregation across timeframes.</p>
+              </div>
+              <div class="feature-cell">
+                <h3>Data Retention Controls</h3>
+                <p>Per-tenant retention policies with automatic purge, legal-hold overrides, and reversible soft-delete for investigations.</p>
+              </div>
+              <div class="feature-cell">
+                <h3>Multi-Tenant Isolation</h3>
+                <p>Tenant scoping at the data-model level prevents cross-tenant bleed in MSSP deployments. Per-tenant keys, per-tenant quotas.</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ── Integrations ─────────────────────────────────────────────────── -->
+      <section id="integrations" class="section">
+        <div class="container">
+          <div class="feature-row">
+            <div class="feature-headline">
+              <p class="label">Integrations &amp; Extensibility</p>
+              <h2>Plug in. Scale out. Extend.</h2>
+              <p>Wardex talks to the tools your team already uses — and stays extensible for the ones that haven't been invented yet.</p>
+            </div>
+            <div class="feature-matrix">
+              <div class="feature-cell">
+                <h3>SIEM Forwarding</h3>
+                <p>OCSF, CEF, ECS, and raw JSON output to Splunk, Elastic, Sentinel, Chronicle, and any syslog-compatible receiver.</p>
+              </div>
+              <div class="feature-cell">
+                <h3>ClickHouse Archive</h3>
+                <p>Cold storage and long-range analytics on ClickHouse with schema migration hooks and tenant partitioning.</p>
+              </div>
+              <div class="feature-cell">
+                <h3>WASM Extensions</h3>
+                <p>Write custom detectors and response handlers in any language that compiles to WebAssembly. Sandboxed execution with explicit capability grants.</p>
+              </div>
+              <div class="feature-cell">
+                <h3>Python &amp; TypeScript SDKs</h3>
+                <p>Officially maintained client SDKs with 60+ methods. Perfect for CI automation, runbook scripting, and bespoke dashboards.</p>
+              </div>
+              <div class="feature-cell">
+                <h3>OpenAPI Contract</h3>
+                <p>Versioned OpenAPI spec tracked in-repo. Every API change is reviewed; no surprise breakage for downstream consumers.</p>
+              </div>
+              <div class="feature-cell">
+                <h3>Cloud Inventory Collectors</h3>
+                <p>AWS, GCP, and Azure asset inventory ingestion keeps your infrastructure in the same pane of glass as your endpoints.</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ── CTA ──────────────────────────────────────────────────────────── -->
+      <section class="section section-cta-band">
+        <div class="container">
+          <div class="cta-card">
+            <div>
+              <h2>Ready to see it running?</h2>
+              <p>Evaluate Wardex in your own environment. Full source is available for inspection and non-production use under BSL 1.1.</p>
+            </div>
+            <div class="cta-actions">
+              <a href="architecture.html" class="btn btn-primary">See the Architecture</a>
+              <a href="https://github.com/pinkysworld/Wardex" class="btn btn-outline" target="_blank" rel="noopener">View Source</a>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <footer class="site-footer">
+        <div class="container">
+          <div class="footer-grid">
+            <div class="footer-col footer-about">
+              <span class="nav-logo footer-logo">WX</span>
+              <p>Private-cloud XDR &amp; SIEM built in Rust. One binary. Full data sovereignty.</p>
+              <p class="footer-version"><span id="footer-version">v0.52.5</span> · BSL 1.1</p>
+            </div>
+            <div class="footer-col">
+              <h4>Product</h4>
+              <a href="features.html">Features</a>
+              <a href="architecture.html">Architecture</a>
+              <a href="pricing.html">Pricing</a>
+              <a href="https://github.com/pinkysworld/Wardex/releases" target="_blank" rel="noopener">Releases</a>
+            </div>
+            <div class="footer-col">
+              <h4>Resources</h4>
+              <a href="resources.html">Documentation</a>
+              <a href="https://github.com/pinkysworld/Wardex/blob/main/docs/openapi.yaml" target="_blank" rel="noopener">OpenAPI</a>
+              <a href="https://github.com/pinkysworld/Wardex/blob/main/docs/SDK_GUIDE.md" target="_blank" rel="noopener">SDK Guide</a>
+              <a href="https://github.com/pinkysworld/Wardex/blob/main/docs/THREAT_MODEL.md" target="_blank" rel="noopener">Threat Model</a>
+            </div>
+            <div class="footer-col">
+              <h4>Project</h4>
+              <a href="https://github.com/pinkysworld/Wardex" target="_blank" rel="noopener">GitHub</a>
+              <a href="donate.html">Support</a>
+              <a href="https://github.com/pinkysworld/Wardex/blob/main/SECURITY.md" target="_blank" rel="noopener">Security</a>
+              <a href="mailto:michel_ng@icloud.com">Contact</a>
+            </div>
+          </div>
+          <div class="footer-bottom">
+            <p>Wardex · © 2024–2026 · <a href="../LICENSE" style="color:inherit;">BSL 1.1</a> · Commercial production use requires a <a href="pricing.html" style="color: var(--nav-accent);">separate license</a>.</p>
+          </div>
+        </div>
+      </footer>
+    </main>
+  </body>
+</html>
