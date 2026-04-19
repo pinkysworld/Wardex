@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1776614972737,
+  "lastUpdate": 1776615532630,
   "repoUrl": "https://github.com/pinkysworld/Wardex",
   "entries": {
     "Wardex criterion benches": [
@@ -537,6 +537,96 @@ window.BENCHMARK_DATA = {
             "name": "sigma_evaluate_20_rules",
             "value": 32766,
             "range": "± 414",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "85413447+pinkysworld@users.noreply.github.com",
+            "name": "pinkysworld",
+            "username": "pinkysworld"
+          },
+          "committer": {
+            "email": "85413447+pinkysworld@users.noreply.github.com",
+            "name": "pinkysworld",
+            "username": "pinkysworld"
+          },
+          "distinct": true,
+          "id": "c8964c9be50b97d8d467cf612e4329c0010fc406",
+          "message": "release: v0.53.0 — rules marketplace, tiered pricing, wardex doctor\n\nFeatures:\n- site/rules.html — 302-rule marketplace (92 YARA + 210 Sigma) with\n  MITRE ATT&CK filters, severity chips, and free-text search\n- site/pricing.html — 5-tier plan grid: Community (free), Starter\n  (€49/mo), Team (€3/ep), Business (€6/ep), Enterprise (custom)\n- site/checkout.html — Starter-tier intake with order summary + VAT\n- site/status.html — releases, CVEs, supply-chain, signing key info\n- site/integrations.html — 20+ built-in and planned connectors\n- site/api.html — Redoc-rendered OpenAPI reference\n- site/comparison.html — feature matrix vs. 5 competitor products\n- wardex doctor — preflight/health diagnostic subcommand\n- Admin console: accessible ConfirmDialog + EmptyState + copy-to-clipboard\n\nPolish:\n- OG/Twitter Card meta on every page; sitemap.xml; robots.txt; 404 page\n- pa11y-ci WCAG 2.1 AA clean across all pages\n- Site footers and comparison page now reference v0.53.0",
+          "timestamp": "2026-04-19T18:13:14+02:00",
+          "tree_id": "80d6b3f8b66b579c79df8baf9d9b30387ad5cc55",
+          "url": "https://github.com/pinkysworld/Wardex/commit/c8964c9be50b97d8d467cf612e4329c0010fc406"
+        },
+        "date": 1776615531767,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "full_pipeline/5",
+            "value": 47307,
+            "range": "± 607",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "full_pipeline/50",
+            "value": 406137,
+            "range": "± 2377",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "full_pipeline/200",
+            "value": 1856665,
+            "range": "± 14798",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "full_pipeline/1000",
+            "value": 17366375,
+            "range": "± 51936",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "detector_evaluate_single",
+            "value": 756,
+            "range": "± 20",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "policy_evaluate_single",
+            "value": 227,
+            "range": "± 2",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "throughput/1000_samples",
+            "value": 17413607,
+            "range": "± 338254",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "search_500_events",
+            "value": 112222,
+            "range": "± 731",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "hunt_field_query",
+            "value": 94853,
+            "range": "± 588",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "ml_triage_rf",
+            "value": 55,
+            "range": "± 0",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "sigma_evaluate_20_rules",
+            "value": 33404,
+            "range": "± 162",
             "unit": "ns/iter"
           }
         ]
