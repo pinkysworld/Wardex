@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1776607538627,
+  "lastUpdate": 1776614972737,
   "repoUrl": "https://github.com/pinkysworld/Wardex",
   "entries": {
     "Wardex criterion benches": [
@@ -447,6 +447,96 @@ window.BENCHMARK_DATA = {
             "name": "sigma_evaluate_20_rules",
             "value": 33439,
             "range": "± 355",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "85413447+pinkysworld@users.noreply.github.com",
+            "name": "pinkysworld",
+            "username": "pinkysworld"
+          },
+          "committer": {
+            "email": "85413447+pinkysworld@users.noreply.github.com",
+            "name": "pinkysworld",
+            "username": "pinkysworld"
+          },
+          "distinct": true,
+          "id": "840c3ef65fd3eec8743e39edde1dbb82f300e89d",
+          "message": "site+cli: rules marketplace, status, integrations, checkout, wardex doctor\n\nPhase-2 deliverables from the strategic 22-item list:\n\n## #2 — Rules marketplace (site/rules.html)\n- Client-rendered catalog of all 302 built-in detections (92 YARA + 210 Sigma)\n- Filter by kind, severity, free-text search across name/description/MITRE\n- MITRE ATT&CK chip links to attack.mitre.org\n- Rule-name copy-to-clipboard with 1.5s feedback\n- New scripts/build_rules_index.py generates site/rules-index.json from\n  rules/yara/*.json and rules/sigma/*.yml at release time\n- pages.yml workflow regenerates the index on every deploy\n\n## #18 — Public status page (site/status.html)\n- Release cadence, open CVEs, supply-chain incidents, SBOM availability\n- Signing-key and checksum verification instructions\n- Live recent-releases pane via GitHub API with graceful fallback\n- Explicit that this is not a SaaS uptime page\n\n## #10 — Integrations registry (site/integrations.html)\n- Grouped grid: alerting/chat, ticketing, SIEM, identity, threat-intel\n- Built-in vs. planned status badges per connector\n\n## #7 — Check## #7 — Check## #7 — Check## #7 — Check## #7 â49/mo, up to 25 endpoints) request form\n- Order s- Order s- Order s- Order s- Order s- Order s- Order s- Or link issuance\n- Noin- Noin- Noin- Noin- Noin- Noin- Noin- Noin-  wardex doctor CLI\n- New src/do- New src/do- New src/do- New src/do- Neild/ru- New src/do- New src/do-  site dir, rule packs, - New src/do- New src/do- New src/do- New src/do- Neild/ru- New src test- New src/do- New src/do- New src/do- New src/do- Neild/pr- New src/do- New src/do- New src/do- New src/do- Ne to ever- New src/do- New src/do- New src/do- New esource- New src/do- New src/do- New src/do- New src/do- Neild/ru- New src/doin- New src/do- New src/do- New src/do- New src/do- o checkout.html instead of mailto:\n- +97 lines styles.css (rule-card, status-card, integration-card,\n  checkout-grid, form-field, cta-box)",
+          "timestamp": "2026-04-19T18:03:47+02:00",
+          "tree_id": "f11b1fab5aec809a857e55cd6bc8c40916288400",
+          "url": "https://github.com/pinkysworld/Wardex/commit/840c3ef65fd3eec8743e39edde1dbb82f300e89d"
+        },
+        "date": 1776614972459,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "full_pipeline/5",
+            "value": 47644,
+            "range": "± 394",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "full_pipeline/50",
+            "value": 414537,
+            "range": "± 1399",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "full_pipeline/200",
+            "value": 1895664,
+            "range": "± 30527",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "full_pipeline/1000",
+            "value": 17898612,
+            "range": "± 36122",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "detector_evaluate_single",
+            "value": 630,
+            "range": "± 0",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "policy_evaluate_single",
+            "value": 231,
+            "range": "± 1",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "throughput/1000_samples",
+            "value": 17906655,
+            "range": "± 45582",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "search_500_events",
+            "value": 109106,
+            "range": "± 1878",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "hunt_field_query",
+            "value": 89508,
+            "range": "± 9886",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "ml_triage_rf",
+            "value": 50,
+            "range": "± 0",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "sigma_evaluate_20_rules",
+            "value": 32766,
+            "range": "± 414",
             "unit": "ns/iter"
           }
         ]
