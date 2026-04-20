@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1776615532630,
+  "lastUpdate": 1776660658170,
   "repoUrl": "https://github.com/pinkysworld/Wardex",
   "entries": {
     "Wardex criterion benches": [
@@ -627,6 +627,94 @@ window.BENCHMARK_DATA = {
             "name": "sigma_evaluate_20_rules",
             "value": 33404,
             "range": "± 162",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "name": "pinkysworld",
+            "username": "pinkysworld",
+            "email": "85413447+pinkysworld@users.noreply.github.com"
+          },
+          "committer": {
+            "name": "pinkysworld",
+            "username": "pinkysworld",
+            "email": "85413447+pinkysworld@users.noreply.github.com"
+          },
+          "id": "961f3fa6d63eebb35d10d131be6d5853060995dd",
+          "message": "site: fix corrupted CSS blocks — pricing tiers, checkout, rules, features\n\nThe styles.css file had several large corrupted regions from prior sed passes that produced invalid syntax (repeated fragments, unclosed braces, mangled selectors). The net effect was that .tier-card, .tier-price, .tier-features, .compare-table, .notfound-card, .feature-anchor-nav, .component-grid, .component-tech, .deploy-model-badge, .trust-card, .faq-item summary, and .chl-release-head rules were silently dropped by the browser, producing the broken layouts on /pricing, /checkout, /rules, /features, /architecture and /changelog.\n\nChanges:\n- Rewrote corrupted v12 pricing block (tier-grid, tier-card, tier-price, compare-table, 404) with clean responsive rules and a 'Most popular' ribbon centered on the featured card\n- Rewrote corrupted v10 blocks (feature-anchor-nav, feature-row, component-grid, component-tech, deploy-model, trust-card, faq-item, chl-* changelog)\n- Added missing design tokens: --ink-soft, --text, --text-muted, --accent-contrast (used by the newer rules/status/checkout/integrations blocks but never declared) in both light and dark palettes\n- Removed the weak .page-hero override in the rules block that stripped the section gradient\n- Bumped cache-buster styles.css?v=13 to v14 across all site pages",
+          "timestamp": "2026-04-19T16:35:17Z",
+          "url": "https://github.com/pinkysworld/Wardex/commit/961f3fa6d63eebb35d10d131be6d5853060995dd"
+        },
+        "date": 1776660657678,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "full_pipeline/5",
+            "value": 47245,
+            "range": "± 203",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "full_pipeline/50",
+            "value": 407016,
+            "range": "± 4197",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "full_pipeline/200",
+            "value": 1853782,
+            "range": "± 9615",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "full_pipeline/1000",
+            "value": 17274703,
+            "range": "± 68370",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "detector_evaluate_single",
+            "value": 687,
+            "range": "± 2",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "policy_evaluate_single",
+            "value": 228,
+            "range": "± 1",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "throughput/1000_samples",
+            "value": 17334126,
+            "range": "± 69237",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "search_500_events",
+            "value": 111393,
+            "range": "± 531",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "hunt_field_query",
+            "value": 96914,
+            "range": "± 305",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "ml_triage_rf",
+            "value": 55,
+            "range": "± 0",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "sigma_evaluate_20_rules",
+            "value": 33739,
+            "range": "± 150",
             "unit": "ns/iter"
           }
         ]
