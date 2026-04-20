@@ -939,6 +939,332 @@ fn collect_disk_pressure() -> f32 {
     0.0
 }
 
+// ── Host Inventory (processes + sockets) ─────────────────────────────
+
+/// A single process captured by [`collect_host_inventory`].
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct ProcessEntry {
+    pub pid: u32,
+    pub name: String,
+    pub user: String,
+    pub cpu_pct: f32,
+    pub memory_mb: f32,
+    pub command: String,
+}
+
+/// A listening or established socket captured by [`collect_host_inventory`].
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct SocketEntry {
+    pub proto: String,
+    pub local_addr: String,
+    pub remote_addr: String,
+    pub state: String,
+    pub pid: Option<u32>,
+    pub process: String,
+}
+
+/// A snapshot of processes and listening/established sockets on the host.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct HostInventory {
+    pub captured_at: String,
+    pub process_total: u32,
+    pub processes: Vec<ProcessEntry>,
+    pub listening_sockets: Vec<SocketEntry>,
+    pub established_sockets: Vec<SocketEntry>,
+}
+
+/// Collect a best-effort inventory snapshot of the local host: top processes
+/// by CPU plus a bounded set of listening/established sockets. Returns an
+/// empty inventory on unsupported platforms; never panics.
+pub fn collect_host_inventory(process_limit: usize, socket_limit: usize) -> HostInventory {
+    let captured_at = chrono::Utc::now().to_rfc3339();
+    let mut processes = collect_processes();
+    let process_total = processes.len() as u32;
+    processes.sort_by(|a, b| b.cpu_pct.partial_cmp(&a.cpu_pct).unwrap_or(std::cmp::Ordering::Equal));
+    processes.truncate(process_limit.max(1));
+    let (listening_sockets, established_sockets) = collect_sockets(socket_limit);
+    HostInventory {
+        captured_at,
+        process_total,
+        processes,
+        listening_sockets,
+        established_sockets,
+    }
+}
+
+#[cfg(any(target_os = "macos", target_os = "linux"))]
+fn collect_processes() -> Vec<ProcessEntry> {
+    // `ps` is portable across macOS and most Linux distributions and avoids
+    // pulling in a large dependency just to walk /proc.
+    let Ok(output) = std::process::Command::new("ps")
+        .args(["-axo", "pid=,user=,pcpu=,rss=,comm=,args="])
+        .output()
+    else {
+        return Vec::new();
+    };
+    if !output.status.success() {
+        return Vec::new();
+    }
+    let text = String::from_utf8_lossy(&output.stdout);
+    let mut entries = Vec::new();
+    for raw_line in text.lines() {
+        let line = raw_line.trim_start();
+        if line.is_empty() {
+            continue;
+        }
+        let mut parts = line.splitn(5, char::is_whitespace).map(str::trim);
+        let Some(pid_s) = parts.next() else { continue };
+        let Some(user) = parts.next() else { continue };
+        let Some(cpu_s) = parts.next() else { continue };
+        let Some(rss_s) = parts.next() else { continue };
+        let Some(rest) = parts.next() else { continue };
+        let Ok(pid) = pid_s.parse::<u32>() else {
+            continue;
+        };
+        let cpu = cpu_s.parse::<f32>().unwrap_or(0.0);
+        let rss_kb = rss_s.parse::<f32>().unwrap_or(0.0);
+        let mut rest_parts = rest.splitn(2, char::is_whitespace);
+        let name = rest_parts.next().unwrap_or("").to_string();
+        let command = rest_parts.next().unwrap_or("").trim().to_string();
+        let short_name = std::path::Path::new(&name)
+            .file_name()
+            .and_then(|n| n.to_str())
+            .unwrap_or(&name)
+            .to_string();
+        entries.push(ProcessEntry {
+            pid,
+            name: short_name,
+            user: user.to_string(),
+            cpu_pct: cpu,
+            memory_mb: rss_kb / 1024.0,
+            command: if command.is_empty() {
+                name.clone()
+            } else {
+                command
+            },
+        });
+    }
+    entries
+}
+
+#[cfg(target_os = "windows")]
+fn collect_processes() -> Vec<ProcessEntry> {
+    let Ok(output) = std::process::Command::new("wmic")
+        .args([
+            "process",
+            "get",
+            "ProcessId,Name,WorkingSetSize,CommandLine",
+            "/format:csv",
+        ])
+        .output()
+    else {
+        return Vec::new();
+    };
+    if !output.status.success() {
+        return Vec::new();
+    }
+    let text = String::from_utf8_lossy(&output.stdout);
+    let mut entries = Vec::new();
+    for line in text.lines().skip(2) {
+        let trimmed = line.trim();
+        if trimmed.is_empty() {
+            continue;
+        }
+        // Node,CommandLine,Name,ProcessId,WorkingSetSize
+        let parts: Vec<&str> = trimmed.split(',').collect();
+        if parts.len() < 5 {
+            continue;
+        }
+        let command = parts[1].to_string();
+        let name = parts[2].to_string();
+        let pid = parts[3].trim().parse::<u32>().unwrap_or(0);
+        let wss = parts[4].trim().parse::<f32>().unwrap_or(0.0);
+        entries.push(ProcessEntry {
+            pid,
+            name,
+            user: String::new(),
+            cpu_pct: 0.0,
+            memory_mb: wss / (1024.0 * 1024.0),
+            command,
+        });
+    }
+    entries
+}
+
+#[cfg(not(any(target_os = "linux", target_os = "macos", target_os = "windows")))]
+fn collect_processes() -> Vec<ProcessEntry> {
+    Vec::new()
+}
+
+#[cfg(target_os = "macos")]
+fn collect_sockets(limit: usize) -> (Vec<SocketEntry>, Vec<SocketEntry>) {
+    let Ok(output) = std::process::Command::new("lsof")
+        .args(["-nP", "-iTCP", "-iUDP"])
+        .output()
+    else {
+        return (Vec::new(), Vec::new());
+    };
+    if !output.status.success() {
+        return (Vec::new(), Vec::new());
+    }
+    let text = String::from_utf8_lossy(&output.stdout);
+    let mut listening = Vec::new();
+    let mut established = Vec::new();
+    for line in text.lines().skip(1) {
+        let cols: Vec<&str> = line.split_whitespace().collect();
+        if cols.len() < 9 {
+            continue;
+        }
+        let command = cols[0].to_string();
+        let pid = cols[1].parse::<u32>().ok();
+        let proto = cols[7].to_string();
+        let name_field = cols[8..].join(" ");
+        let state = cols
+            .last()
+            .and_then(|s| s.strip_prefix('(').and_then(|s| s.strip_suffix(')')))
+            .unwrap_or("")
+            .to_string();
+        let (local_addr, remote_addr) = if let Some((l, r)) = name_field.split_once("->") {
+            (
+                l.trim().to_string(),
+                r.split_whitespace().next().unwrap_or("").to_string(),
+            )
+        } else {
+            (
+                name_field.split_whitespace().next().unwrap_or("").to_string(),
+                String::new(),
+            )
+        };
+        let entry = SocketEntry {
+            proto,
+            local_addr,
+            remote_addr,
+            state: state.clone(),
+            pid,
+            process: command,
+        };
+        if state.eq_ignore_ascii_case("LISTEN") {
+            if listening.len() < limit {
+                listening.push(entry);
+            }
+        } else if state.eq_ignore_ascii_case("ESTABLISHED") && established.len() < limit {
+            established.push(entry);
+        }
+    }
+    (listening, established)
+}
+
+#[cfg(target_os = "linux")]
+fn collect_sockets(limit: usize) -> (Vec<SocketEntry>, Vec<SocketEntry>) {
+    let Ok(output) = std::process::Command::new("ss").args(["-tupn"]).output() else {
+        return (Vec::new(), Vec::new());
+    };
+    if !output.status.success() {
+        return (Vec::new(), Vec::new());
+    }
+    let text = String::from_utf8_lossy(&output.stdout);
+    let mut listening = Vec::new();
+    let mut established = Vec::new();
+    for line in text.lines().skip(1) {
+        let cols: Vec<&str> = line.split_whitespace().collect();
+        if cols.len() < 5 {
+            continue;
+        }
+        // Netid State Recv-Q Send-Q Local:Port Peer:Port [users]
+        let proto = cols[0].to_string();
+        let state = cols[1].to_string();
+        let local_addr = cols[4].to_string();
+        let remote_addr = cols.get(5).copied().unwrap_or("").to_string();
+        let users_field = cols.get(6).copied().unwrap_or("");
+        let mut pid: Option<u32> = None;
+        let mut process = String::new();
+        if let Some(start) = users_field.find("((") {
+            let trimmed = &users_field[start + 2..];
+            let inner = trimmed.trim_end_matches(')').trim_end_matches(')');
+            // inner like: "sshd",pid=1234,fd=3
+            if let Some(name_end) = inner.find('"') {
+                let after = &inner[name_end + 1..];
+                if let Some(name_close) = after.find('"') {
+                    process = after[..name_close].to_string();
+                }
+            }
+            if let Some(pid_pos) = inner.find("pid=") {
+                let tail = &inner[pid_pos + 4..];
+                let digits: String = tail.chars().take_while(|c| c.is_ascii_digit()).collect();
+                pid = digits.parse::<u32>().ok();
+            }
+        }
+        let entry = SocketEntry {
+            proto,
+            local_addr,
+            remote_addr,
+            state: state.clone(),
+            pid,
+            process,
+        };
+        if state.eq_ignore_ascii_case("LISTEN") {
+            if listening.len() < limit {
+                listening.push(entry);
+            }
+        } else if state.eq_ignore_ascii_case("ESTAB") && established.len() < limit {
+            established.push(entry);
+        }
+    }
+    (listening, established)
+}
+
+#[cfg(target_os = "windows")]
+fn collect_sockets(limit: usize) -> (Vec<SocketEntry>, Vec<SocketEntry>) {
+    let Ok(output) = std::process::Command::new("netstat").args(["-ano"]).output() else {
+        return (Vec::new(), Vec::new());
+    };
+    if !output.status.success() {
+        return (Vec::new(), Vec::new());
+    }
+    let text = String::from_utf8_lossy(&output.stdout);
+    let mut listening = Vec::new();
+    let mut established = Vec::new();
+    for line in text.lines() {
+        let cols: Vec<&str> = line.split_whitespace().collect();
+        if cols.len() < 4 {
+            continue;
+        }
+        let proto = cols[0].to_string();
+        if !(proto.eq_ignore_ascii_case("TCP") || proto.eq_ignore_ascii_case("UDP")) {
+            continue;
+        }
+        let local_addr = cols[1].to_string();
+        let remote_addr = cols[2].to_string();
+        let (state, pid_col) = if proto.eq_ignore_ascii_case("TCP") {
+            (cols[3].to_string(), cols.get(4).copied().unwrap_or(""))
+        } else {
+            (String::from("UDP"), cols.get(3).copied().unwrap_or(""))
+        };
+        let pid = pid_col.parse::<u32>().ok();
+        let entry = SocketEntry {
+            proto,
+            local_addr,
+            remote_addr,
+            state: state.clone(),
+            pid,
+            process: String::new(),
+        };
+        if state.eq_ignore_ascii_case("LISTENING") {
+            if listening.len() < limit {
+                listening.push(entry);
+            }
+        } else if state.eq_ignore_ascii_case("ESTABLISHED") && established.len() < limit {
+            established.push(entry);
+        }
+    }
+    (listening, established)
+}
+
+#[cfg(not(any(target_os = "linux", target_os = "macos", target_os = "windows")))]
+fn collect_sockets(_limit: usize) -> (Vec<SocketEntry>, Vec<SocketEntry>) {
+    (Vec::new(), Vec::new())
+}
+
 // ── File Integrity Monitor ───────────────────────────────────────────
 
 const MAX_FIM_FILE_SIZE: u64 = 10 * 1024 * 1024; // 10 MB
@@ -1032,6 +1358,26 @@ fn collect_dir_hashes_bounded(dir: &Path, out: &mut HashMap<PathBuf, String>, de
 
 // ── Alert Record ─────────────────────────────────────────────────────
 
+/// Human-readable narrative attached to an alert so operators do not have to
+/// reverse-engineer raw telemetry deltas. Populated by the monitor loop when
+/// an alert is raised on the local host; remains `None` for alerts ingested
+/// from remote agents until they are enriched downstream.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct AlertNarrative {
+    pub headline: String,
+    pub summary: String,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub observations: Vec<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub baseline_comparison: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub time_window: Option<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub involved_entities: Vec<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub suggested_queries: Vec<String>,
+}
+
 /// An alert generated when the anomaly score exceeds the threshold.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AlertRecord {
@@ -1047,6 +1393,8 @@ pub struct AlertRecord {
     pub enforced: bool,
     #[serde(default)]
     pub mitre: Vec<crate::telemetry::MitreAttack>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub narrative: Option<AlertNarrative>,
 }
 
 impl AlertRecord {
@@ -1088,6 +1436,234 @@ impl AlertRecord {
             action = self.action,
         )
     }
+}
+
+/// Build a plain-English narrative for a local-host alert by comparing the
+/// current sample against a recent baseline window and summarising which
+/// telemetry axes drove the score. The result is safe to attach to any alert
+/// emitted from the monitor loop.
+pub fn build_alert_narrative(
+    alert: &AlertRecord,
+    recent_samples: &[TelemetrySample],
+    inventory: Option<&HostInventory>,
+) -> AlertNarrative {
+    let sample = &alert.sample;
+
+    // Baseline is the mean of the preceding samples, excluding the current one.
+    let baseline_len = recent_samples.len().saturating_sub(1);
+    let (baseline_net, baseline_cpu, baseline_auth, baseline_mem) = if baseline_len == 0 {
+        (0.0_f32, 0.0_f32, 0.0_f32, 0.0_f32)
+    } else {
+        let mut net = 0.0_f32;
+        let mut cpu = 0.0_f32;
+        let mut auth = 0.0_f32;
+        let mut mem = 0.0_f32;
+        for s in &recent_samples[..baseline_len] {
+            net += s.network_kbps;
+            cpu += s.cpu_load_pct;
+            auth += s.auth_failures as f32;
+            mem += s.memory_load_pct;
+        }
+        let n = baseline_len as f32;
+        (net / n, cpu / n, auth / n, mem / n)
+    };
+
+    let primary_reason = alert.reasons.first().cloned().unwrap_or_default();
+    let category = classify_reason(&primary_reason);
+    let headline = match category {
+        NarrativeCategory::NetworkBurst => {
+            format!("Network traffic burst on {}", alert.hostname)
+        }
+        NarrativeCategory::AuthSurge => format!("Authentication failure surge on {}", alert.hostname),
+        NarrativeCategory::CpuSpike => format!("CPU load spike on {}", alert.hostname),
+        NarrativeCategory::MemoryPressure => format!("Memory pressure spike on {}", alert.hostname),
+        NarrativeCategory::IntegrityDrift => {
+            format!("File integrity drift on {}", alert.hostname)
+        }
+        NarrativeCategory::Compound => format!("Compound anomaly on {}", alert.hostname),
+        NarrativeCategory::Generic => format!("Anomaly detected on {}", alert.hostname),
+    };
+
+    let mut observations: Vec<String> = Vec::new();
+    let mut baseline_comparison: Option<String> = None;
+
+    match category {
+        NarrativeCategory::NetworkBurst => {
+            observations.push(format!(
+                "Network throughput reached {:.0} kbps (process count {}).",
+                sample.network_kbps, sample.process_count
+            ));
+            if baseline_net > 0.0 {
+                let multiplier = sample.network_kbps / baseline_net.max(1.0);
+                baseline_comparison = Some(format!(
+                    "Current {:.0} kbps is {:.1}× the {:.0} kbps baseline from the previous {} samples.",
+                    sample.network_kbps, multiplier, baseline_net, baseline_len
+                ));
+            }
+        }
+        NarrativeCategory::AuthSurge => {
+            observations.push(format!(
+                "{} authentication failures in this window (baseline {:.1}).",
+                sample.auth_failures, baseline_auth
+            ));
+            if baseline_auth > 0.0 {
+                baseline_comparison = Some(format!(
+                    "Failures are {:.1}× the trailing baseline of {:.1}.",
+                    sample.auth_failures as f32 / baseline_auth.max(0.1),
+                    baseline_auth
+                ));
+            }
+        }
+        NarrativeCategory::CpuSpike => {
+            observations.push(format!(
+                "CPU load reached {:.1}% (baseline {:.1}%).",
+                sample.cpu_load_pct, baseline_cpu
+            ));
+        }
+        NarrativeCategory::MemoryPressure => {
+            observations.push(format!(
+                "Memory pressure at {:.1}% (baseline {:.1}%).",
+                sample.memory_load_pct, baseline_mem
+            ));
+        }
+        NarrativeCategory::IntegrityDrift => {
+            observations.push(format!(
+                "File integrity drift {:.0}% of watched files changed.",
+                sample.integrity_drift * 100.0
+            ));
+        }
+        NarrativeCategory::Compound => {
+            observations.push(
+                "Multiple telemetry axes moved together, which typically indicates an adversary action rather than a natural workload spike."
+                    .to_string(),
+            );
+        }
+        NarrativeCategory::Generic => {
+            observations.push(format!(
+                "Anomaly score {:.2} (confidence {:.0}%).",
+                alert.score,
+                alert.confidence * 100.0
+            ));
+        }
+    }
+
+    if !alert.reasons.is_empty() {
+        observations.push(format!(
+            "Detector reasons: {}.",
+            alert.reasons.join(", ")
+        ));
+    }
+
+    let mut involved_entities: Vec<String> = vec![format!("host:{}", alert.hostname)];
+    let mut suggested_queries: Vec<String> = Vec::new();
+
+    if matches!(category, NarrativeCategory::NetworkBurst) {
+        if let Some(inv) = inventory {
+            for entry in inv.established_sockets.iter().take(5) {
+                if !entry.remote_addr.is_empty() {
+                    involved_entities.push(format!(
+                        "peer:{} ({})",
+                        entry.remote_addr, entry.process
+                    ));
+                }
+            }
+            for entry in inv.listening_sockets.iter().take(3) {
+                involved_entities.push(format!(
+                    "listener:{} ({})",
+                    entry.local_addr, entry.process
+                ));
+            }
+        }
+        suggested_queries.push(format!(
+            "network_kbps > {:.0} AND hostname = \"{}\"",
+            baseline_net.max(sample.network_kbps * 0.5),
+            alert.hostname
+        ));
+        suggested_queries.push(format!(
+            "established_peers on {} in the last 5 minutes",
+            alert.hostname
+        ));
+    }
+    if matches!(category, NarrativeCategory::AuthSurge) {
+        suggested_queries.push(format!(
+            "auth_failures > {:.0} AND hostname = \"{}\"",
+            baseline_auth.max(1.0),
+            alert.hostname
+        ));
+    }
+
+    let summary = if let Some(ref baseline_line) = baseline_comparison {
+        format!(
+            "{}. {} {}",
+            headline,
+            observations.first().cloned().unwrap_or_default(),
+            baseline_line
+        )
+    } else {
+        format!(
+            "{}. {}",
+            headline,
+            observations.first().cloned().unwrap_or_default()
+        )
+    };
+
+    let time_window = timestamp_window(recent_samples);
+
+    AlertNarrative {
+        headline,
+        summary,
+        observations,
+        baseline_comparison,
+        time_window,
+        involved_entities,
+        suggested_queries,
+    }
+}
+
+enum NarrativeCategory {
+    NetworkBurst,
+    AuthSurge,
+    CpuSpike,
+    MemoryPressure,
+    IntegrityDrift,
+    Compound,
+    Generic,
+}
+
+fn classify_reason(reason: &str) -> NarrativeCategory {
+    let r = reason.to_ascii_lowercase();
+    if r.contains("network burst") || r.contains("network_kbps") {
+        NarrativeCategory::NetworkBurst
+    } else if r.contains("auth") {
+        NarrativeCategory::AuthSurge
+    } else if r.contains("compound") {
+        NarrativeCategory::Compound
+    } else if r.contains("cpu") {
+        NarrativeCategory::CpuSpike
+    } else if r.contains("memory") {
+        NarrativeCategory::MemoryPressure
+    } else if r.contains("integrity") || r.contains("drift") || r.contains("persistence") {
+        NarrativeCategory::IntegrityDrift
+    } else {
+        NarrativeCategory::Generic
+    }
+}
+
+fn timestamp_window(samples: &[TelemetrySample]) -> Option<String> {
+    if samples.is_empty() {
+        return None;
+    }
+    let first = samples.first()?.timestamp_ms;
+    let last = samples.last()?.timestamp_ms;
+    let span_secs = last.saturating_sub(first) / 1000;
+    let first_rfc = chrono::DateTime::<chrono::Utc>::from_timestamp_millis(first as i64)?
+        .to_rfc3339();
+    let last_rfc = chrono::DateTime::<chrono::Utc>::from_timestamp_millis(last as i64)?
+        .to_rfc3339();
+    Some(format!(
+        "{} → {} ({}s of telemetry)",
+        first_rfc, last_rfc, span_secs
+    ))
 }
 
 // ── Monitor Configuration ────────────────────────────────────────────
@@ -1237,6 +1813,7 @@ pub fn run_monitor(
                 sample,
                 enforced: !mon.dry_run && decision.level >= ThreatLevel::Severe,
                 mitre,
+                narrative: None,
             };
 
             summary.alerts += 1;
@@ -1810,6 +2387,7 @@ mod tests {
             },
             enforced: false,
             mitre: vec![],
+            narrative: None,
         };
         let syslog = alert.to_syslog();
         assert!(syslog.contains("Wardex"));
@@ -1842,6 +2420,7 @@ mod tests {
             },
             enforced: true,
             mitre: vec![],
+            narrative: None,
         };
         let cef = alert.to_cef();
         assert!(cef.starts_with("CEF:0|Wardex"));
@@ -1908,5 +2487,80 @@ mod tests {
         assert_eq!(HostPlatform::MacOS.to_string(), "macOS");
         assert_eq!(HostPlatform::Windows.to_string(), "Windows");
         assert_eq!(HostPlatform::WindowsServer.to_string(), "Windows Server");
+    }
+
+    #[cfg(any(target_os = "macos", target_os = "linux"))]
+    #[test]
+    fn collect_host_inventory_returns_processes() {
+        let inv = collect_host_inventory(10, 10);
+        // The test harness itself is running, so we must see at least one
+        // process. Socket collection is best-effort and may be empty in
+        // sandboxed CI environments.
+        assert!(!inv.processes.is_empty(), "expected at least one process");
+        assert!(!inv.captured_at.is_empty());
+        for entry in &inv.processes {
+            assert!(entry.pid > 0, "process {entry:?} missing pid");
+        }
+    }
+
+    #[test]
+    fn network_burst_narrative_is_human_readable() {
+        fn sample(ts_ms: u64, network_kbps: f32) -> crate::telemetry::TelemetrySample {
+            crate::telemetry::TelemetrySample {
+                timestamp_ms: ts_ms,
+                cpu_load_pct: 10.0,
+                memory_load_pct: 30.0,
+                temperature_c: 40.0,
+                network_kbps,
+                auth_failures: 0,
+                battery_pct: 100.0,
+                integrity_drift: 0.0,
+                process_count: 120,
+                disk_pressure_pct: 10.0,
+            }
+        }
+        let recent = vec![
+            sample(1_000_000, 100.0),
+            sample(1_005_000, 120.0),
+            sample(1_010_000, 110.0),
+            sample(1_015_000, 5_200.0),
+        ];
+        let alert = AlertRecord {
+            timestamp: "2026-04-20T12:00:00Z".into(),
+            hostname: "macbook.local".into(),
+            platform: "macOS".into(),
+            score: 4.2,
+            confidence: 0.9,
+            level: "Severe".into(),
+            action: "monitor".into(),
+            reasons: vec!["network burst".into()],
+            sample: recent[3],
+            enforced: false,
+            mitre: vec![],
+            narrative: None,
+        };
+        let narrative = build_alert_narrative(&alert, &recent, None);
+        assert!(
+            narrative.headline.contains("Network traffic burst"),
+            "headline={}",
+            narrative.headline
+        );
+        assert!(
+            narrative
+                .baseline_comparison
+                .as_deref()
+                .unwrap_or("")
+                .contains("baseline"),
+            "baseline_comparison missing"
+        );
+        assert!(
+            narrative
+                .observations
+                .iter()
+                .any(|line| line.contains("5200") || line.contains("5,200") || line.contains("kbps")),
+            "observations={:?}",
+            narrative.observations
+        );
+        assert!(narrative.time_window.is_some());
     }
 }

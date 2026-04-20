@@ -427,6 +427,7 @@ mod tests {
                     technique_id: mitre_id.into(),
                     technique_name: "Test Technique".into(),
                 }],
+                narrative: None,
             },
             correlated: false,
             triage: crate::event_forward::EventTriage::default(),

@@ -3,6 +3,7 @@ import { useToast } from '../hooks.jsx';
 import * as api from '../api.js';
 import { JsonDetails, SideDrawer, SummaryGrid } from './operator.jsx';
 import { downloadData } from './operatorUtils.js';
+import AlertNarrative from './AlertNarrative.jsx';
 
 /* ── MITRE + investigation helpers ──────────────────────────── */
 
@@ -201,6 +202,8 @@ export default function AlertDrawer({
       }
     >
       <SummaryGrid data={summary} limit={8} />
+
+      <AlertNarrative narrative={alert.narrative} />
 
       {/* ── Explain Alert ───────────────────────────── */}
       <div className="card" style={{ marginTop: 16 }}>

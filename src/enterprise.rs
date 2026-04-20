@@ -2567,6 +2567,7 @@ mod tests {
                     technique_id: "T1110".to_string(),
                     technique_name: "Brute Force".to_string(),
                 }],
+                narrative: None,
             },
             correlated: false,
             triage: Default::default(),

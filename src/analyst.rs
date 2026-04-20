@@ -742,6 +742,7 @@ mod tests {
                 tactic: "Execution".into(),
             }],
             sample: make_sample(),
+            narrative: None,
         }
     }
 

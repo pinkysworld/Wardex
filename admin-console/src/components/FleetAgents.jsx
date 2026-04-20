@@ -4,6 +4,7 @@ import { useApi, useInterval, useToast } from '../hooks.jsx';
 import * as api from '../api.js';
 import { ConfirmDialog, JsonDetails, SummaryGrid } from './operator.jsx';
 import { formatDateTime, formatRelativeTime } from './operatorUtils.js';
+import LocalConsoleInventory from './LocalConsoleInventory.jsx';
 
 const AGENT_COLUMNS = ['id', 'hostname', 'os', 'version', 'status', 'last_seen'];
 const PAGE_SIZE = 25;
@@ -729,6 +730,7 @@ export default function FleetAgents() {
                     ? 'This endpoint is offline. Review recent heartbeat time and recovery readiness before rolling out changes.'
                     : 'This endpoint is healthy. Use this panel to verify version, platform, and detailed inventory quickly.'}
                 </div>
+                {currentPreview.isLocalConsole && <LocalConsoleInventory />}
                 <JsonDetails
                   data={agentDetail || currentPreview.raw}
                   label="Detailed endpoint context"

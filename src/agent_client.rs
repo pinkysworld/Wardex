@@ -621,6 +621,7 @@ pub fn run_agent(
                 sample,
                 enforced: false,
                 mitre,
+                narrative: None,
             };
             pending_alerts.push(alert.clone());
             client.set_queue_depth(pending_alerts.len());

@@ -983,6 +983,7 @@ mod tests {
                 technique_id: "T1110".into(),
                 technique_name: "Brute Force".into(),
             }],
+            narrative: None,
         };
         let ocsf = alert_to_ocsf(&alert);
         assert_eq!(ocsf.class_uid, 2004);

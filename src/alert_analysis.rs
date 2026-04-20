@@ -922,6 +922,7 @@ mod tests {
             sample: sample(),
             enforced: false,
             mitre: vec![],
+            narrative: None,
         }
     }
 

@@ -140,6 +140,7 @@ export const setAgentScope = (id, body) =>
   post(`/api/agents/${encodeURIComponent(id)}/scope`, body);
 export const agentLogs = (id) => get(`/api/agents/${encodeURIComponent(id)}/logs`);
 export const agentInventory = (id) => get(`/api/agents/${encodeURIComponent(id)}/inventory`);
+export const localConsoleInventory = () => get('/api/agents/local-console/inventory');
 export const deleteAgent = (id) => del(`/api/agents/${encodeURIComponent(id)}`);
 
 // ── Events ───────────────────────────────────────────────────

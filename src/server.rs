@@ -404,6 +404,9 @@ struct AppState {
     // Local host telemetry (ring buffer, last 300 samples)
     local_telemetry: VecDeque<TelemetrySample>,
     local_host_info: HostInfo,
+    // Cached host inventory (processes + sockets) refreshed by the monitor loop
+    last_inventory: Option<crate::collector::HostInventory>,
+    last_inventory_at_ms: u64,
     // Phase 21: advanced detectors
     velocity: VelocityDetector,
     entropy: EntropyDetector,
@@ -856,6 +859,10 @@ fn local_console_agent_summary_json(state: &AppState) -> serde_json::Value {
             "process_count".to_string(),
             serde_json::json!(latest_sample.map(|sample| sample.process_count)),
         );
+        object.insert(
+            "inventory_available".to_string(),
+            serde_json::Value::Bool(state.last_inventory.is_some()),
+        );
     }
     summary
 }
@@ -1030,6 +1037,8 @@ pub async fn run_server(
         taxii_client: crate::siem::TaxiiClient::new(initial_config.taxii.clone()),
         local_telemetry: VecDeque::new(),
         local_host_info: detect_platform(),
+        last_inventory: None,
+        last_inventory_at_ms: 0,
         velocity: VelocityDetector::new(60, 2.5),
         entropy: EntropyDetector::new(60, 8),
         compound: CompoundThreatDetector::default(),
@@ -1190,6 +1199,18 @@ pub async fn run_server(
                         s.local_telemetry.pop_front();
                     }
                     s.local_telemetry.push_back(sample);
+                    // Refresh host inventory (top processes + sockets) at most
+                    // once every 10 s. Best-effort: failure leaves the last
+                    // snapshot in place.
+                    let should_refresh_inventory = sample
+                        .timestamp_ms
+                        .saturating_sub(s.last_inventory_at_ms)
+                        > 10_000;
+                    if should_refresh_inventory {
+                        let inventory = crate::collector::collect_host_inventory(50, 50);
+                        s.last_inventory_at_ms = sample.timestamp_ms;
+                        s.last_inventory = Some(inventory);
+                    }
                     let mut signal = s.detector.evaluate(&sample);
 
                     // Phase 21: velocity / entropy / compound enrichment
@@ -1232,7 +1253,9 @@ pub async fn run_server(
                             };
                             let host = s.local_host_info.clone();
                             let mitre = crate::telemetry::map_alert_to_mitre(&signal.reasons);
-                            let alert = AlertRecord {
+                            let recent_samples: Vec<_> =
+                                s.local_telemetry.iter().cloned().collect();
+                            let mut alert = AlertRecord {
                                 timestamp: chrono::Utc::now().to_rfc3339(),
                                 hostname: host.hostname,
                                 platform: host.platform.to_string(),
@@ -1244,7 +1267,13 @@ pub async fn run_server(
                                 sample,
                                 enforced: false,
                                 mitre,
+                                narrative: None,
                             };
+                            alert.narrative = Some(crate::collector::build_alert_narrative(
+                                &alert,
+                                &recent_samples,
+                                s.last_inventory.as_ref(),
+                            ));
                             if s.alerts.len() >= 10_000 {
                                 s.alerts.pop_front();
                             }
@@ -1521,6 +1550,8 @@ pub fn spawn_test_server() -> (u16, String) {
         taxii_client: crate::siem::TaxiiClient::new(crate::siem::TaxiiConfig::default()),
         local_telemetry: VecDeque::new(),
         local_host_info: detect_platform(),
+        last_inventory: None,
+        last_inventory_at_ms: 0,
         velocity: VelocityDetector::new(60, 2.5),
         entropy: EntropyDetector::new(60, 8),
         compound: CompoundThreatDetector::default(),
@@ -5885,6 +5916,7 @@ fn handle_api(
                 sample,
                 enforced: false,
                 mitre: vec![],
+                narrative: None,
             };
             let mut s = state.lock().unwrap_or_else(|e| e.into_inner());
             if s.alerts.len() >= 10_000 {
@@ -6432,6 +6464,28 @@ fn handle_api(
                 .take(limit)
                 .collect::<Vec<_>>();
             match serde_json::to_string(&payload) {
+                Ok(json) => json_response(&json, 200),
+                Err(e) => error_json(&format!("serialization error: {e}"), 500),
+            }
+        }
+
+        // ── Local console host inventory (processes + sockets) ───
+        (Method::Get, "/api/agents/local-console/inventory") => {
+            let cached = {
+                let s = state.lock().unwrap_or_else(|e| e.into_inner());
+                s.last_inventory.clone()
+            };
+            let inventory = cached.unwrap_or_else(|| {
+                let fresh = crate::collector::collect_host_inventory(50, 50);
+                let mut s = state.lock().unwrap_or_else(|e| e.into_inner());
+                s.last_inventory = Some(fresh.clone());
+                s.last_inventory_at_ms = std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .map(|d| d.as_millis() as u64)
+                    .unwrap_or(0);
+                fresh
+            });
+            match serde_json::to_string(&inventory) {
                 Ok(json) => json_response(&json, 200),
                 Err(e) => error_json(&format!("serialization error: {e}"), 500),
             }
@@ -14760,6 +14814,7 @@ mod tests {
             },
             enforced: false,
             mitre: Vec::new(),
+            narrative: None,
         }
     }
 

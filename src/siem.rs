@@ -1062,6 +1062,7 @@ mod tests {
             },
             enforced: false,
             mitre: vec![],
+            narrative: None,
         }
     }
 
