@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1776660658170,
+  "lastUpdate": 1776661365842,
   "repoUrl": "https://github.com/pinkysworld/Wardex",
   "entries": {
     "Wardex criterion benches": [
@@ -715,6 +715,96 @@ window.BENCHMARK_DATA = {
             "name": "sigma_evaluate_20_rules",
             "value": 33739,
             "range": "± 150",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "85413447+pinkysworld@users.noreply.github.com",
+            "name": "pinkysworld",
+            "username": "pinkysworld"
+          },
+          "committer": {
+            "email": "85413447+pinkysworld@users.noreply.github.com",
+            "name": "pinkysworld",
+            "username": "pinkysworld"
+          },
+          "distinct": true,
+          "id": "45beb87f475ffb0b7477f5c98c0b290f723209c4",
+          "message": "readme+cli: restore project README, add `wardex version` command\n\nThe v0.53.0 tag accidentally inherited the bench-branch README stub (\"Wardex bench history\") from the gh-pages-bench bootstrap commit (d4e7ab7). Restore the full product README from bd8adbe and refresh the \"What ships in\" section to call out the features that actually shipped in v0.53.0 (rules marketplace, tiered pricing & checkout, `wardex doctor`, status/integrations pages, admin-console UX polish, site CSS repairs).\n\nAlso add a simple `wardex version` / `--version` / `-V` subcommand so operators can verify which binary is running from the CLI without starting the server — this was impossible before, which is how it was easy to ship an old build (e.g. v0.31) and not notice.",
+          "timestamp": "2026-04-20T06:57:14+02:00",
+          "tree_id": "41c7b1929f0972fa60c26621744fe6caa4a2cf64",
+          "url": "https://github.com/pinkysworld/Wardex/commit/45beb87f475ffb0b7477f5c98c0b290f723209c4"
+        },
+        "date": 1776661365525,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "full_pipeline/5",
+            "value": 47369,
+            "range": "± 1650",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "full_pipeline/50",
+            "value": 404513,
+            "range": "± 5539",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "full_pipeline/200",
+            "value": 1847902,
+            "range": "± 127229",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "full_pipeline/1000",
+            "value": 17305293,
+            "range": "± 65802",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "detector_evaluate_single",
+            "value": 640,
+            "range": "± 1",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "policy_evaluate_single",
+            "value": 227,
+            "range": "± 0",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "throughput/1000_samples",
+            "value": 17362001,
+            "range": "± 112026",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "search_500_events",
+            "value": 113149,
+            "range": "± 842",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "hunt_field_query",
+            "value": 95563,
+            "range": "± 671",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "ml_triage_rf",
+            "value": 55,
+            "range": "± 0",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "sigma_evaluate_20_rules",
+            "value": 33983,
+            "range": "± 368",
             "unit": "ns/iter"
           }
         ]
