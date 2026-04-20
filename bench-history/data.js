@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1776670025257,
+  "lastUpdate": 1776672197139,
   "repoUrl": "https://github.com/pinkysworld/Wardex",
   "entries": {
     "Wardex criterion benches": [
@@ -895,6 +895,96 @@ window.BENCHMARK_DATA = {
             "name": "sigma_evaluate_20_rules",
             "value": 33629,
             "range": "± 166",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "85413447+pinkysworld@users.noreply.github.com",
+            "name": "pinkysworld",
+            "username": "pinkysworld"
+          },
+          "committer": {
+            "email": "85413447+pinkysworld@users.noreply.github.com",
+            "name": "pinkysworld",
+            "username": "pinkysworld"
+          },
+          "distinct": true,
+          "id": "9d6b0d6df70b95a7add7f0582581b8fb4934ae39",
+          "message": "feat: local console inventory + human-readable alert narratives\n\nSingle-machine deployments now expose the host as a first-class agent with\nlive process and socket inventory, and alerts carry a narrative payload that\nexplains the signal in plain language.\n\nBackend (Rust):\n- collector: add ProcessEntry / SocketEntry / HostInventory and\n  collect_host_inventory() using platform-gated shell calls\n  (ps/lsof/ss/netstat/wmic) — no new deps.\n- collector: add AlertNarrative + build_alert_narrative() that classifies\n  the reason, computes baseline multipliers, and surfaces involved\n  entities, suggested queries, and the observation window.\n- AlertRecord gains an optional, serde-skip-if-none 'narrative' field\n  (backward compatible with stored alerts); 10 construction sites updated.\n- server: AppState caches last_inventory; monitor loop refreshes every\n  10s and attaches narratives to freshly-  10s and attaches narratives to freshly-  10s and attaches narratives to freshly-  10s and attaches narratives to freshly-  10s and attaches narratives to freshly-  10s and attaches narr fa  10s and attaches narratives to freshly-  10s and attaches narratives tondering processes and sockets\n  with 15s refresh, shown in the local-console ag  with 15s refresh, shown in the lompone  with 15s refea  with 15smary, baseline\n  comparison, observations, involved entities, and suggested queries.\n- wired into FleetAgents and AlertDrawer.\n- lint clean for touched files; 66 vitest tests pass.",
+          "timestamp": "2026-04-20T09:57:25+02:00",
+          "tree_id": "9c86d36497dd0b6a07529d1b02ac93b84ffff938",
+          "url": "https://github.com/pinkysworld/Wardex/commit/9d6b0d6df70b95a7add7f0582581b8fb4934ae39"
+        },
+        "date": 1776672196667,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "full_pipeline/5",
+            "value": 48373,
+            "range": "± 4917",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "full_pipeline/50",
+            "value": 407478,
+            "range": "± 1857",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "full_pipeline/200",
+            "value": 1857547,
+            "range": "± 24828",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "full_pipeline/1000",
+            "value": 17472417,
+            "range": "± 132662",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "detector_evaluate_single",
+            "value": 648,
+            "range": "± 2",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "policy_evaluate_single",
+            "value": 222,
+            "range": "± 0",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "throughput/1000_samples",
+            "value": 17682158,
+            "range": "± 226425",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "search_500_events",
+            "value": 111969,
+            "range": "± 678",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "hunt_field_query",
+            "value": 97033,
+            "range": "± 558",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "ml_triage_rf",
+            "value": 54,
+            "range": "± 0",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "sigma_evaluate_20_rules",
+            "value": 33513,
+            "range": "± 167",
             "unit": "ns/iter"
           }
         ]
