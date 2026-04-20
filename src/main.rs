@@ -236,6 +236,9 @@ async fn run() -> Result<(), String> {
             }
         }
         "help" | "--help" | "-h" => print_usage(),
+        "version" | "--version" | "-V" => {
+            println!("wardex {}", env!("CARGO_PKG_VERSION"));
+        }
         "harness" => {
             if args.next().is_some() {
                 return Err("`harness` does not accept extra arguments".into());
@@ -528,6 +531,7 @@ fn print_usage() {
     println!("  export-model <tla|alloy> [path]    Export formal model");
     println!("  attest <binary> [manifest] [...]   Generate build manifest");
     println!("  bench <benign> <attack> [thresh]   Benchmark detectors");
+    println!("  version                            Print Wardex version and exit");
     println!("  help                               Show this message");
     println!();
     println!("Monitor flags (for start/monitor):");
