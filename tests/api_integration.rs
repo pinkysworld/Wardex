@@ -5094,16 +5094,18 @@ fn playbook_executions_keeps_live_execution_shape_after_history_exists() {
         .expect("execution id")
         .to_string();
 
-    let executions: serde_json::Value = ureq::get(&format!("{}/api/playbooks/executions", base(port)))
-        .set("Authorization", &auth_header(&token))
-        .call()
-        .expect("list executions")
-        .into_json()
-        .unwrap();
+    let executions: serde_json::Value =
+        ureq::get(&format!("{}/api/playbooks/executions", base(port)))
+            .set("Authorization", &auth_header(&token))
+            .call()
+            .expect("list executions")
+            .into_json()
+            .unwrap();
     let execution = executions
         .as_array()
         .and_then(|items| {
-            items.iter()
+            items
+                .iter()
                 .find(|entry| entry["execution_id"].as_str() == Some(execution_id.as_str()))
         })
         .expect("live execution present");

@@ -62,9 +62,7 @@ export default function LocalConsoleInventory() {
   }
 
   const processes = Array.isArray(inventory?.processes) ? inventory.processes : [];
-  const listening = Array.isArray(inventory?.listening_sockets)
-    ? inventory.listening_sockets
-    : [];
+  const listening = Array.isArray(inventory?.listening_sockets) ? inventory.listening_sockets : [];
   const established = Array.isArray(inventory?.established_sockets)
     ? inventory.established_sockets
     : [];

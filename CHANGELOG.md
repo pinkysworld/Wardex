@@ -2,6 +2,34 @@
 
 All notable changes to Wardex are documented in this file.
 
+## [Unreleased] — Hunt Maturity, SOC UX Throughput, and Case Automation
+
+### Threat hunting workflow upgrades
+- **Hypothesis-first hunts** — Saved hunts now persist `hypothesis` and `expected_outcome` (`confirm`, `refute`, `explore`) and expose them in the Threat Detection hunt workflow.
+- **Retrohunt windows** — Saved-hunt execution now accepts `time_from` and `time_to` windows to scope historical runs to incident timelines.
+- **Cron scheduling support** — Hunts now support optional cron expressions in addition to interval scheduling.
+- **Escalate-to-case from hunt results** — New `POST /api/hunts/{id}/escalate` creates a case from a selected hunt run and links the resulting case id back to the run.
+- **Hunt scorecard telemetry** — Hunt run records now include yield metadata (`yield_rate`, suppression context, linked case id).
+
+### ATT&CK coverage and detection surfaces
+- **Coverage gap visibility** — Threat Detection and Attack Graph now surface ATT&CK gap heatmap summaries from coverage gap APIs.
+- **Detection domain visibility** — Threat Detection now includes dedicated domain summary cards for malware scanning, feed ingestion, quarantine store, and asset inventory APIs.
+
+### SOC and fleet operator efficiency
+- **Inline case title edits** — Case titles can now be edited inline in SOC Workbench and saved through the existing case update API.
+- **Saved queue filters** — SOC queue now supports bookmarkable/saved filter presets for recurring analyst query workflows.
+- **Bulk case operations** — Case table now supports multi-select with bulk status update actions.
+- **Safer destructive actions** — Fleet agent deletes now provide a 5-second undo window before execution.
+- **Keyboard table navigation** — Fleet agent table now supports `j`/`k` row navigation, `Enter` to open, and `Esc` to clear detail selection.
+- **Fleet column customization** — Fleet table columns are now show/hide toggleable and persisted in local storage.
+
+### Automation depth
+- **Dedup incident auto-create path** — New `POST /api/alerts/dedup/auto-create` creates incidents from high-cardinality dedup groups (3+ related alerts in a 5-minute window).
+
+### API additions
+- `POST /api/hunts/{id}/escalate`
+- `POST /api/alerts/dedup/auto-create`
+
 ## [0.53.0] — Rules Marketplace, Tiered Pricing & `wardex doctor`
 
 ### Marketing Site

@@ -175,7 +175,8 @@ beforeEach(() => {
               priority: 'high',
               title: 'Complete identity routing',
               summary: 'Provider or SCIM validation still blocks clean group-based routing.',
-              action_hint: 'Review IdP and SCIM mappings before widening automated response coverage.',
+              action_hint:
+                'Review IdP and SCIM mappings before widening automated response coverage.',
             },
           ],
         };

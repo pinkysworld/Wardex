@@ -63,11 +63,12 @@ export default function ConfirmDialog({ state, onClose }) {
     }
   };
 
-  const toneClass = tone === 'danger'
-    ? 'confirm-btn confirm-btn-danger'
-    : tone === 'warning'
-      ? 'confirm-btn confirm-btn-warning'
-      : 'confirm-btn confirm-btn-primary';
+  const toneClass =
+    tone === 'danger'
+      ? 'confirm-btn confirm-btn-danger'
+      : tone === 'warning'
+        ? 'confirm-btn confirm-btn-warning'
+        : 'confirm-btn confirm-btn-primary';
 
   return (
     <div className="confirm-backdrop" onClick={() => onClose(false)} role="presentation">
@@ -80,20 +81,23 @@ export default function ConfirmDialog({ state, onClose }) {
         aria-describedby="confirm-message"
         onClick={(e) => e.stopPropagation()}
       >
-        <h2 id="confirm-title" className="confirm-title">{title}</h2>
+        <h2 id="confirm-title" className="confirm-title">
+          {title}
+        </h2>
         {message && (
-          <p id="confirm-message" className="confirm-message">{message}</p>
+          <p id="confirm-message" className="confirm-message">
+            {message}
+          </p>
         )}
         <div className="confirm-actions">
-          <button type="button" className="confirm-btn confirm-btn-ghost" onClick={() => onClose(false)}>
-            {cancelLabel}
-          </button>
           <button
             type="button"
-            ref={confirmBtnRef}
-            className={toneClass}
-            onClick={handleConfirm}
+            className="confirm-btn confirm-btn-ghost"
+            onClick={() => onClose(false)}
           >
+            {cancelLabel}
+          </button>
+          <button type="button" ref={confirmBtnRef} className={toneClass} onClick={handleConfirm}>
             {confirmLabel}
           </button>
         </div>

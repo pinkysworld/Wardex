@@ -27,9 +27,7 @@ export default function AlertNarrative({ narrative }) {
       <div className="card-title" style={{ marginBottom: 8 }}>
         {headline || 'What happened'}
       </div>
-      {summary && (
-        <div style={{ lineHeight: 1.6, fontSize: 14, marginBottom: 12 }}>{summary}</div>
-      )}
+      {summary && <div style={{ lineHeight: 1.6, fontSize: 14, marginBottom: 12 }}>{summary}</div>}
 
       {Array.isArray(observations) && observations.length > 0 && (
         <>

@@ -980,7 +980,11 @@ pub fn collect_host_inventory(process_limit: usize, socket_limit: usize) -> Host
     let captured_at = chrono::Utc::now().to_rfc3339();
     let mut processes = collect_processes();
     let process_total = processes.len() as u32;
-    processes.sort_by(|a, b| b.cpu_pct.partial_cmp(&a.cpu_pct).unwrap_or(std::cmp::Ordering::Equal));
+    processes.sort_by(|a, b| {
+        b.cpu_pct
+            .partial_cmp(&a.cpu_pct)
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
     processes.truncate(process_limit.max(1));
     let (listening_sockets, established_sockets) = collect_sockets(socket_limit);
     HostInventory {
@@ -1131,7 +1135,11 @@ fn collect_sockets(limit: usize) -> (Vec<SocketEntry>, Vec<SocketEntry>) {
             )
         } else {
             (
-                name_field.split_whitespace().next().unwrap_or("").to_string(),
+                name_field
+                    .split_whitespace()
+                    .next()
+                    .unwrap_or("")
+                    .to_string(),
                 String::new(),
             )
         };
@@ -1215,7 +1223,10 @@ fn collect_sockets(limit: usize) -> (Vec<SocketEntry>, Vec<SocketEntry>) {
 
 #[cfg(target_os = "windows")]
 fn collect_sockets(limit: usize) -> (Vec<SocketEntry>, Vec<SocketEntry>) {
-    let Ok(output) = std::process::Command::new("netstat").args(["-ano"]).output() else {
+    let Ok(output) = std::process::Command::new("netstat")
+        .args(["-ano"])
+        .output()
+    else {
         return (Vec::new(), Vec::new());
     };
     if !output.status.success() {
@@ -1474,7 +1485,9 @@ pub fn build_alert_narrative(
         NarrativeCategory::NetworkBurst => {
             format!("Network traffic burst on {}", alert.hostname)
         }
-        NarrativeCategory::AuthSurge => format!("Authentication failure surge on {}", alert.hostname),
+        NarrativeCategory::AuthSurge => {
+            format!("Authentication failure surge on {}", alert.hostname)
+        }
         NarrativeCategory::CpuSpike => format!("CPU load spike on {}", alert.hostname),
         NarrativeCategory::MemoryPressure => format!("Memory pressure spike on {}", alert.hostname),
         NarrativeCategory::IntegrityDrift => {
@@ -1548,10 +1561,7 @@ pub fn build_alert_narrative(
     }
 
     if !alert.reasons.is_empty() {
-        observations.push(format!(
-            "Detector reasons: {}.",
-            alert.reasons.join(", ")
-        ));
+        observations.push(format!("Detector reasons: {}.", alert.reasons.join(", ")));
     }
 
     let mut involved_entities: Vec<String> = vec![format!("host:{}", alert.hostname)];
@@ -1561,17 +1571,13 @@ pub fn build_alert_narrative(
         if let Some(inv) = inventory {
             for entry in inv.established_sockets.iter().take(5) {
                 if !entry.remote_addr.is_empty() {
-                    involved_entities.push(format!(
-                        "peer:{} ({})",
-                        entry.remote_addr, entry.process
-                    ));
+                    involved_entities
+                        .push(format!("peer:{} ({})", entry.remote_addr, entry.process));
                 }
             }
             for entry in inv.listening_sockets.iter().take(3) {
-                involved_entities.push(format!(
-                    "listener:{} ({})",
-                    entry.local_addr, entry.process
-                ));
+                involved_entities
+                    .push(format!("listener:{} ({})", entry.local_addr, entry.process));
             }
         }
         suggested_queries.push(format!(
@@ -1656,10 +1662,10 @@ fn timestamp_window(samples: &[TelemetrySample]) -> Option<String> {
     let first = samples.first()?.timestamp_ms;
     let last = samples.last()?.timestamp_ms;
     let span_secs = last.saturating_sub(first) / 1000;
-    let first_rfc = chrono::DateTime::<chrono::Utc>::from_timestamp_millis(first as i64)?
-        .to_rfc3339();
-    let last_rfc = chrono::DateTime::<chrono::Utc>::from_timestamp_millis(last as i64)?
-        .to_rfc3339();
+    let first_rfc =
+        chrono::DateTime::<chrono::Utc>::from_timestamp_millis(first as i64)?.to_rfc3339();
+    let last_rfc =
+        chrono::DateTime::<chrono::Utc>::from_timestamp_millis(last as i64)?.to_rfc3339();
     Some(format!(
         "{} → {} ({}s of telemetry)",
         first_rfc, last_rfc, span_secs
@@ -2557,7 +2563,9 @@ mod tests {
             narrative
                 .observations
                 .iter()
-                .any(|line| line.contains("5200") || line.contains("5,200") || line.contains("kbps")),
+                .any(|line| line.contains("5200")
+                    || line.contains("5,200")
+                    || line.contains("kbps")),
             "observations={:?}",
             narrative.observations
         );

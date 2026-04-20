@@ -205,7 +205,9 @@ function createScimDraft(config = null) {
 }
 
 function auditEmptyMessage(filtersActive) {
-  return filtersActive ? 'No audit entries match the current filters.' : 'No audit entries captured yet.';
+  return filtersActive
+    ? 'No audit entries match the current filters.'
+    : 'No audit entries captured yet.';
 }
 
 function ToggleSwitch({ label, checked, onChange, description }) {
@@ -816,7 +818,8 @@ export default function Settings() {
   const resetToDefaults = async () => {
     const ok = await confirm({
       title: 'Reset configuration to defaults?',
-      message: 'Built-in defaults will overwrite the currently loaded values. You still have to click Save to apply them server-side.',
+      message:
+        'Built-in defaults will overwrite the currently loaded values. You still have to click Save to apply them server-side.',
       confirmLabel: 'Reset',
       tone: 'warning',
     });
@@ -1491,7 +1494,9 @@ export default function Settings() {
                     </table>
                   </div>
                   {idpRows.some((provider) => provider.validation?.issues?.length > 0) && (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 12 }}>
+                    <div
+                      style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 12 }}
+                    >
                       {idpRows
                         .filter((provider) => provider.validation?.issues?.length > 0)
                         .map((provider) => (
@@ -1594,7 +1599,9 @@ export default function Settings() {
                         />
                       </div>
                       {idpFormError && (
-                        <div style={{ fontSize: 12, color: 'var(--danger, #b42318)', marginTop: 12 }}>
+                        <div
+                          style={{ fontSize: 12, color: 'var(--danger, #b42318)', marginTop: 12 }}
+                        >
                           {idpFormError}
                         </div>
                       )}
@@ -1696,7 +1703,9 @@ export default function Settings() {
                         />
                       </div>
                       {idpFormError && (
-                        <div style={{ fontSize: 12, color: 'var(--danger, #b42318)', marginTop: 12 }}>
+                        <div
+                          style={{ fontSize: 12, color: 'var(--danger, #b42318)', marginTop: 12 }}
+                        >
                           {idpFormError}
                         </div>
                       )}
@@ -1737,9 +1746,15 @@ export default function Settings() {
                     {scimValidation.mapping_count === 1 ? '' : 's'} configured
                   </div>
                   {scimValidation.issues.length > 0 && (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 12 }}>
+                    <div
+                      style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 12 }}
+                    >
                       {scimValidation.issues.map((issue, index) => (
-                        <div key={`scim-issue-${index}`} className="stat-box" style={{ fontSize: 12 }}>
+                        <div
+                          key={`scim-issue-${index}`}
+                          className="stat-box"
+                          style={{ fontSize: 12 }}
+                        >
                           <span
                             className={`badge ${issue.level === 'error' ? 'badge-err' : 'badge-warn'}`}
                             style={{ marginRight: 8 }}
@@ -1960,7 +1975,8 @@ export default function Settings() {
                           const username = u.username || u.name;
                           const ok = await confirm({
                             title: `Delete user "${username}"?`,
-                            message: 'The account is removed and any active sessions are revoked. This cannot be undone.',
+                            message:
+                              'The account is removed and any active sessions are revoked. This cannot be undone.',
                             confirmLabel: 'Delete user',
                             tone: 'danger',
                           });
@@ -2193,7 +2209,11 @@ export default function Settings() {
                 Filters apply to both the paged table and the CSV export.
               </span>
               <div className="btn-group">
-                <button className="btn btn-sm" disabled={!auditFiltersActive} onClick={clearAuditFilters}>
+                <button
+                  className="btn btn-sm"
+                  disabled={!auditFiltersActive}
+                  onClick={clearAuditFilters}
+                >
                   Clear Filters
                 </button>
                 <button className="btn btn-sm" disabled={auditLogLoading} onClick={exportAuditLog}>
@@ -2248,7 +2268,9 @@ export default function Settings() {
                             </span>
                           </td>
                           <td>
-                            <span className={`badge ${entry.auth_used ? 'badge-ok' : 'badge-warn'}`}>
+                            <span
+                              className={`badge ${entry.auth_used ? 'badge-ok' : 'badge-warn'}`}
+                            >
                               {entry.auth_used ? 'Authenticated' : 'Anonymous'}
                             </span>
                           </td>
@@ -2348,7 +2370,8 @@ export default function Settings() {
                     }
                     const ok = await confirm({
                       title: `Purge records older than ${purgeDays} days?`,
-                      message: 'Alerts, audit events and metrics older than the retention window will be permanently deleted. This cannot be undone.',
+                      message:
+                        'Alerts, audit events and metrics older than the retention window will be permanently deleted. This cannot be undone.',
                       confirmLabel: 'Purge records',
                       tone: 'danger',
                     });
@@ -2445,7 +2468,8 @@ export default function Settings() {
                 onClick={async () => {
                   const ok = await confirm({
                     title: 'Shutdown the Wardex server?',
-                    message: 'The server process will terminate. You will need out-of-band access to restart it.',
+                    message:
+                      'The server process will terminate. You will need out-of-band access to restart it.',
                     confirmLabel: 'Shutdown',
                     tone: 'danger',
                   });

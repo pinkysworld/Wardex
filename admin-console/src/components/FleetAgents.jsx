@@ -1,32 +1,20 @@
-import { useState, useMemo, useCallback } from 'react';
+import { useState, useMemo, useCallback, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useApi, useInterval, useToast } from '../hooks.jsx';
 import * as api from '../api.js';
 import { ConfirmDialog, JsonDetails, SummaryGrid } from './operator.jsx';
+import EmptyState from './EmptyState.jsx';
 import { formatDateTime, formatRelativeTime } from './operatorUtils.js';
 import LocalConsoleInventory from './LocalConsoleInventory.jsx';
 
 const AGENT_COLUMNS = ['id', 'hostname', 'os', 'version', 'status', 'last_seen'];
-const PAGE_SIZE = 25;
+const PAGE_SIZE_OPTIONS = [10, 25, 50, 100];
+const DEFAULT_PAGE_SIZE = 25;
 const SAVED_VIEWS = [
   { id: 'all', label: 'All Agents', filters: { status: 'all', q: '', os: 'all' } },
   { id: 'offline', label: 'Offline Agents > 1h', filters: { status: 'offline', q: '', os: 'all' } },
   { id: 'linux', label: 'Linux Fleet', filters: { status: 'all', q: '', os: 'linux' } },
 ];
-
-function TriageEmptyState({ title, description, actionLabel, onAction }) {
-  return (
-    <div className="triage-empty">
-      <div className="triage-empty-title">{title}</div>
-      <div className="triage-empty-copy">{description}</div>
-      {actionLabel && onAction && (
-        <button className="btn btn-sm" onClick={onAction}>
-          {actionLabel}
-        </button>
-      )}
-    </div>
-  );
-}
 
 function MobileAgentCard({ agent, active, onOpen, onCopy }) {
   return (
@@ -113,6 +101,7 @@ export default function FleetAgents() {
   const { data: plat } = useApi(api.platform);
   const { data: evts, reload: rEvents } = useApi(api.events);
   const { data: evtSum } = useApi(api.eventsSummary);
+  const { data: wsStats } = useApi(api.wsStats);
   const { data: policyHist } = useApi(api.policyHistory);
   const { data: releases } = useApi(api.updatesReleases);
   const { data: rollout } = useApi(api.rolloutConfig);
@@ -121,7 +110,25 @@ export default function FleetAgents() {
   const [agentDetail, setAgentDetail] = useState(null);
   const [selected, setSelected] = useState(new Set());
   const [page, setPage] = useState(0);
+  const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
   const [confirmState, setConfirmState] = useState(null);
+  const [pendingDelete, setPendingDelete] = useState(null);
+  const [focusedRowIndex, setFocusedRowIndex] = useState(0);
+  const [visibleColumns, setVisibleColumns] = useState(() => {
+    try {
+      const parsed = JSON.parse(localStorage.getItem('wardex_fleet_columns') || 'null');
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        return AGENT_COLUMNS.filter((column) => parsed.includes(column));
+      }
+    } catch {
+      // Ignore malformed stored values and fall back to defaults.
+    }
+    return AGENT_COLUMNS;
+  });
+
+  useEffect(() => {
+    localStorage.setItem('wardex_fleet_columns', JSON.stringify(visibleColumns));
+  }, [visibleColumns]);
 
   const setFleetQueryState = useCallback(
     (updates) => {
@@ -174,10 +181,16 @@ export default function FleetAgents() {
   }, [agentArr, nowMs, osFilter, query, statusFilter]);
 
   const pagedAgents = useMemo(
-    () => filteredAgents.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE),
-    [filteredAgents, page],
+    () => filteredAgents.slice(page * pageSize, (page + 1) * pageSize),
+    [filteredAgents, page, pageSize],
   );
-  const totalPages = Math.max(1, Math.ceil(filteredAgents.length / PAGE_SIZE));
+
+  useEffect(() => {
+    if (focusedRowIndex >= pagedAgents.length) {
+      setFocusedRowIndex(Math.max(0, pagedAgents.length - 1));
+    }
+  }, [focusedRowIndex, pagedAgents.length]);
+  const totalPages = Math.max(1, Math.ceil(filteredAgents.length / pageSize));
   const hasFleetFilters = statusFilter !== 'all' || osFilter !== 'all' || Boolean(query);
 
   const currentPreview =
@@ -206,6 +219,21 @@ export default function FleetAgents() {
     setPage(0);
     setFleetQueryState({ q: '', status: 'all', os: 'all' });
   }, [setFleetQueryState]);
+
+  const hasColumn = useCallback(
+    (column) => visibleColumns.includes(column),
+    [visibleColumns],
+  );
+
+  const toggleColumn = useCallback((column) => {
+    setVisibleColumns((current) => {
+      if (current.includes(column)) {
+        if (current.length === 1) return current;
+        return current.filter((candidate) => candidate !== column);
+      }
+      return [...current, column];
+    });
+  }, []);
 
   const openAgent = async (agent) => {
     setSelectedAgent(agent.id);
@@ -242,7 +270,8 @@ export default function FleetAgents() {
 
   const removablePagedAgents = pagedAgents.filter((agent) => !agent.isLocalConsole);
   const allSelected =
-    removablePagedAgents.length > 0 && removablePagedAgents.every((agent) => selected.has(agent.id));
+    removablePagedAgents.length > 0 &&
+    removablePagedAgents.every((agent) => selected.has(agent.id));
   const toggleAll = useCallback(() => {
     setSelected((prev) => {
       const next = new Set(prev);
@@ -264,20 +293,39 @@ export default function FleetAgents() {
       toast('The local console host cannot be removed.', 'warning');
       return;
     }
-    const results = await Promise.allSettled(removableIds.map((id) => api.deleteAgent(id)));
-    const ok = results.filter((result) => result.status === 'fulfilled').length;
-    toast(
-      `Removed ${ok}/${removableIds.length} agents`,
-      ok === removableIds.length ? 'success' : 'warning',
-    );
-    setSelected(new Set());
-    if (selectedAgent && removableIds.includes(selectedAgent)) {
-      setSelectedAgent(null);
-      setAgentDetail(null);
-    }
+    const timer = setTimeout(async () => {
+      const results = await Promise.allSettled(removableIds.map((id) => api.deleteAgent(id)));
+      const ok = results.filter((result) => result.status === 'fulfilled').length;
+      toast(
+        `Removed ${ok}/${removableIds.length} agents`,
+        ok === removableIds.length ? 'success' : 'warning',
+      );
+      setSelected(new Set());
+      if (selectedAgent && removableIds.includes(selectedAgent)) {
+        setSelectedAgent(null);
+        setAgentDetail(null);
+      }
+      setPendingDelete(null);
+      rAgents();
+    }, 5000);
+    setPendingDelete({ ids: removableIds, timer });
+    toast('Delete queued. Undo within 5 seconds.', 'warning');
     setConfirmState(null);
-    rAgents();
   };
+
+  const undoPendingDelete = useCallback(() => {
+    if (!pendingDelete?.timer) return;
+    clearTimeout(pendingDelete.timer);
+    setPendingDelete(null);
+    toast('Delete canceled.', 'success');
+  }, [pendingDelete, toast]);
+
+  useEffect(
+    () => () => {
+      if (pendingDelete?.timer) clearTimeout(pendingDelete.timer);
+    },
+    [pendingDelete],
+  );
 
   const activeViewId = SAVED_VIEWS.find(
     (view) =>
@@ -346,6 +394,11 @@ export default function FleetAgents() {
             <div className="card-header">
               <span className="card-title">Registered Agents ({filteredAgents.length})</span>
               <div className="btn-group">
+                <span className={`badge ${(wsStats?.connected_subscribers || 0) > 0 ? 'badge-ok' : 'badge-warn'}`}>
+                  {(wsStats?.connected_subscribers || 0) > 0
+                    ? `Live (${wsStats.connected_subscribers})`
+                    : 'Live idle'}
+                </span>
                 <button
                   className="btn btn-sm"
                   onClick={() => {
@@ -444,6 +497,18 @@ export default function FleetAgents() {
                     </option>
                   ))}
                 </select>
+                <div className="btn-group" style={{ marginLeft: 8 }}>
+                  {AGENT_COLUMNS.map((column) => (
+                    <button
+                      key={column}
+                      className={`btn btn-sm ${hasColumn(column) ? 'btn-primary' : ''}`}
+                      onClick={() => toggleColumn(column)}
+                      title={`Toggle ${column.replace('_', ' ')} column`}
+                    >
+                      {column.replace('_', ' ')}
+                    </button>
+                  ))}
+                </div>
               </div>
             </div>
             <div className="summary-grid triage-summary-grid">
@@ -491,16 +556,53 @@ export default function FleetAgents() {
               )}
             </div>
 
+            {pendingDelete && (
+              <div className="sticky-bulk-bar" style={{ marginBottom: 12 }}>
+                <span className="hint">
+                  Delete scheduled for {pendingDelete.ids.length} agent
+                  {pendingDelete.ids.length === 1 ? '' : 's'}.
+                </span>
+                <button className="btn btn-sm" onClick={undoPendingDelete}>
+                  Undo
+                </button>
+              </div>
+            )}
+
             {filteredAgents.length === 0 ? (
-              <TriageEmptyState
+              <EmptyState
                 title="No agents match the current view"
-                description="The fleet is available, but the current search and platform filters narrowed this view to zero endpoints. Clear the scope or switch a saved view to continue operating."
-                actionLabel={hasFleetFilters ? 'Clear Filters' : null}
-                onAction={hasFleetFilters ? clearFleetFilters : null}
+                message="The fleet is available, but the current search and platform filters narrowed this view to zero endpoints. Clear the scope or switch a saved view to continue operating."
+                primaryCta={
+                  hasFleetFilters
+                    ? { label: 'Clear Filters', onClick: clearFleetFilters }
+                    : undefined
+                }
               />
             ) : (
               <>
-                <div className="split-list-table">
+                <div
+                  className="split-list-table"
+                  tabIndex={0}
+                  onKeyDown={(event) => {
+                    if (event.key === 'j') {
+                      event.preventDefault();
+                      setFocusedRowIndex((index) => Math.min(index + 1, Math.max(0, pagedAgents.length - 1)));
+                    }
+                    if (event.key === 'k') {
+                      event.preventDefault();
+                      setFocusedRowIndex((index) => Math.max(index - 1, 0));
+                    }
+                    if (event.key === 'Enter' && pagedAgents[focusedRowIndex]) {
+                      event.preventDefault();
+                      openAgent(pagedAgents[focusedRowIndex]);
+                    }
+                    if (event.key === 'Escape') {
+                      event.preventDefault();
+                      setSelectedAgent(null);
+                      setAgentDetail(null);
+                    }
+                  }}
+                >
                   <div className="desktop-table-only">
                     <table>
                       <thead>
@@ -513,11 +615,12 @@ export default function FleetAgents() {
                               aria-label="Select all visible agents"
                             />
                           </th>
-                          <th>Host</th>
-                          <th>Status</th>
-                          <th>OS</th>
-                          <th>Version</th>
-                          <th>Last Seen</th>
+                          {hasColumn('hostname') && <th>Host</th>}
+                          {hasColumn('id') && <th>Agent ID</th>}
+                          {hasColumn('status') && <th>Status</th>}
+                          {hasColumn('os') && <th>OS</th>}
+                          {hasColumn('version') && <th>Version</th>}
+                          {hasColumn('last_seen') && <th>Last Seen</th>}
                         </tr>
                       </thead>
                       <tbody>
@@ -528,7 +631,7 @@ export default function FleetAgents() {
                           return (
                             <tr
                               key={agent.id}
-                              className={isActive ? 'row-active' : ''}
+                              className={isActive || pagedAgents[focusedRowIndex]?.id === agent.id ? 'row-active' : ''}
                               onMouseEnter={() => setHoveredAgent(agent)}
                               onFocus={() => setHoveredAgent(agent)}
                               onClick={() => openAgent(agent)}
@@ -547,30 +650,36 @@ export default function FleetAgents() {
                                   }
                                 />
                               </td>
-                              <td>
-                                <div className="row-primary">{agent.hostname}</div>
-                                <div className="row-secondary">
-                                  {agent.id}
-                                  {agent.isLocalConsole ? ' · Local Console Host' : ''}
-                                </div>
-                              </td>
-                              <td>
-                                <span
-                                  className={`badge ${agent.status === 'online' ? 'badge-ok' : agent.status === 'offline' ? 'badge-err' : 'badge-warn'}`}
-                                >
-                                  {agent.status}
-                                </span>
-                              </td>
-                              <td>{agent.os}</td>
-                              <td>{agent.version}</td>
-                              <td>
-                                <div className="row-primary">
-                                  {formatRelativeTime(agent.lastSeen)}
-                                </div>
-                                <div className="row-secondary">
-                                  {formatDateTime(agent.lastSeen)}
-                                </div>
-                              </td>
+                              {hasColumn('hostname') && (
+                                <td>
+                                  <div className="row-primary">{agent.hostname}</div>
+                                  <div className="row-secondary">
+                                    {agent.isLocalConsole ? ' · Local Console Host' : ''}
+                                  </div>
+                                </td>
+                              )}
+                              {hasColumn('id') && <td>{agent.id}</td>}
+                              {hasColumn('status') && (
+                                <td>
+                                  <span
+                                    className={`badge ${agent.status === 'online' ? 'badge-ok' : agent.status === 'offline' ? 'badge-err' : 'badge-warn'}`}
+                                  >
+                                    {agent.status}
+                                  </span>
+                                </td>
+                              )}
+                              {hasColumn('os') && <td>{agent.os}</td>}
+                              {hasColumn('version') && <td>{agent.version}</td>}
+                              {hasColumn('last_seen') && (
+                                <td>
+                                  <div className="row-primary">
+                                    {formatRelativeTime(agent.lastSeen)}
+                                  </div>
+                                  <div className="row-secondary">
+                                    {formatDateTime(agent.lastSeen)}
+                                  </div>
+                                </td>
+                              )}
                             </tr>
                           );
                         })}
@@ -596,23 +705,48 @@ export default function FleetAgents() {
                 </div>
                 {totalPages > 1 && (
                   <div className="triage-pagination">
-                    <button
-                      className="btn btn-sm"
-                      disabled={page === 0}
-                      onClick={() => setPage((current) => current - 1)}
-                    >
-                      Previous
-                    </button>
-                    <span>
-                      {page + 1} / {totalPages}
-                    </span>
-                    <button
-                      className="btn btn-sm"
-                      disabled={page >= totalPages - 1}
-                      onClick={() => setPage((current) => current + 1)}
-                    >
-                      Next
-                    </button>
+                    <div className="triage-pagination-meta">
+                      Showing {page * pageSize + 1}–
+                      {Math.min((page + 1) * pageSize, filteredAgents.length)} of{' '}
+                      {filteredAgents.length} agents
+                    </div>
+                    <div className="triage-pagination-controls">
+                      <label className="sr-only" htmlFor="fleet-page-size">
+                        Rows per page
+                      </label>
+                      <select
+                        id="fleet-page-size"
+                        className="form-select"
+                        value={pageSize}
+                        onChange={(event) => {
+                          setPageSize(Number(event.target.value));
+                          setPage(0);
+                        }}
+                      >
+                        {PAGE_SIZE_OPTIONS.map((size) => (
+                          <option key={size} value={size}>
+                            {size} / page
+                          </option>
+                        ))}
+                      </select>
+                      <button
+                        className="btn btn-sm"
+                        disabled={page === 0}
+                        onClick={() => setPage((current) => current - 1)}
+                      >
+                        Previous
+                      </button>
+                      <span>
+                        {page + 1} / {totalPages}
+                      </span>
+                      <button
+                        className="btn btn-sm"
+                        disabled={page >= totalPages - 1}
+                        onClick={() => setPage((current) => current + 1)}
+                      >
+                        Next
+                      </button>
+                    </div>
                   </div>
                 )}
               </>
@@ -690,8 +824,8 @@ export default function FleetAgents() {
                       {currentPreview.isLocalConsole
                         ? 'Local Wardex console host with direct process and telemetry access'
                         : currentPreview.status === 'offline'
-                        ? 'Needs operator attention'
-                        : 'Healthy endpoint context available'}
+                          ? 'Needs operator attention'
+                          : 'Healthy endpoint context available'}
                     </div>
                   </div>
                   <span
@@ -727,8 +861,8 @@ export default function FleetAgents() {
                   {currentPreview.isLocalConsole
                     ? 'This host is running the Wardex control plane locally. Use the live monitor and process views to inspect this machine directly without deregistration workflows.'
                     : currentPreview.status === 'offline'
-                    ? 'This endpoint is offline. Review recent heartbeat time and recovery readiness before rolling out changes.'
-                    : 'This endpoint is healthy. Use this panel to verify version, platform, and detailed inventory quickly.'}
+                      ? 'This endpoint is offline. Review recent heartbeat time and recovery readiness before rolling out changes.'
+                      : 'This endpoint is healthy. Use this panel to verify version, platform, and detailed inventory quickly.'}
                 </div>
                 {currentPreview.isLocalConsole && <LocalConsoleInventory />}
                 <JsonDetails
@@ -737,9 +871,9 @@ export default function FleetAgents() {
                 />
               </>
             ) : (
-              <TriageEmptyState
+              <EmptyState
                 title="No agent preview yet"
-                description="Hover a row on desktop or tap a card on mobile to inspect endpoint details without losing list position."
+                message="Hover a row on desktop or tap a card on mobile to inspect endpoint details without losing list position."
               />
             )}
           </aside>

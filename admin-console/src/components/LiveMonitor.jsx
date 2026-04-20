@@ -137,8 +137,11 @@ function MobileAlertCard({ alert, index, active, onPreview, onOpen, onMarkFP }) 
 export default function LiveMonitor() {
   const toast = useToast();
   const [searchParams, setSearchParams] = useSearchParams();
-  const { events: streamEvents, connected: streamConnected, transport: streamTransport } =
-    useWebSocket(2000);
+  const {
+    events: streamEvents,
+    connected: streamConnected,
+    transport: streamTransport,
+  } = useWebSocket(2000);
   const { data: alertData, loading, reload } = useApi(api.alerts);
   const { data: countData, reload: reloadCount } = useApi(api.alertsCount);
   const { data: grouped, reload: reloadGrouped } = useApi(api.alertsGrouped);
@@ -450,7 +453,7 @@ export default function LiveMonitor() {
             {countData == null
               ? '…'
               : typeof countData === 'object'
-                ? countData.total ?? countData.count ?? filteredAlerts.length
+                ? (countData.total ?? countData.count ?? filteredAlerts.length)
                 : countData}{' '}
             alerts
           </span>

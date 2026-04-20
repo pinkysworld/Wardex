@@ -165,189 +165,193 @@ export default function ProcessDrawer({
 
   return (
     <>
-    <SideDrawer
-      open={!!pid}
-      onClose={onClose}
-      title={activeDetail?.display_name || activeDetail?.name || `PID ${pid}`}
-      subtitle={activeDetail ? `${activeDetail.platform} · ${activeDetail.hostname}` : `PID ${pid}`}
-      actions={
-        <>
-          {(onPrevious || onNext || positionLabel) && (
-            <div className="drawer-nav">
-              {positionLabel && <span className="scope-chip">{positionLabel}</span>}
-              {onPrevious && (
-                <button className="btn btn-sm" onClick={onPrevious} disabled={!canPrevious}>
-                  Previous
-                </button>
-              )}
-              {onNext && (
-                <button className="btn btn-sm" onClick={onNext} disabled={!canNext}>
-                  Next
-                </button>
-              )}
-            </div>
-          )}
-          <button className="btn btn-sm" onClick={reload}>
-            Refresh
-          </button>
-          {activeDetail && (
+      <SideDrawer
+        open={!!pid}
+        onClose={onClose}
+        title={activeDetail?.display_name || activeDetail?.name || `PID ${pid}`}
+        subtitle={
+          activeDetail ? `${activeDetail.platform} · ${activeDetail.hostname}` : `PID ${pid}`
+        }
+        actions={
+          <>
+            {(onPrevious || onNext || positionLabel) && (
+              <div className="drawer-nav">
+                {positionLabel && <span className="scope-chip">{positionLabel}</span>}
+                {onPrevious && (
+                  <button className="btn btn-sm" onClick={onPrevious} disabled={!canPrevious}>
+                    Previous
+                  </button>
+                )}
+                {onNext && (
+                  <button className="btn btn-sm" onClick={onNext} disabled={!canNext}>
+                    Next
+                  </button>
+                )}
+              </div>
+            )}
+            <button className="btn btn-sm" onClick={reload}>
+              Refresh
+            </button>
+            {activeDetail && (
+              <button
+                className="btn btn-sm"
+                onClick={() => downloadData(activeDetail, `process-${activeDetail.pid}.json`)}
+              >
+                Export
+              </button>
+            )}
             <button
               className="btn btn-sm"
-              onClick={() => downloadData(activeDetail, `process-${activeDetail.pid}.json`)}
+              disabled={!detail || detail?.analysis?.self_process}
+              onClick={queueKill}
             >
-              Export
+              Queue Kill
             </button>
-          )}
-          <button
-            className="btn btn-sm"
-            disabled={!detail || detail?.analysis?.self_process}
-            onClick={queueKill}
-          >
-            Queue Kill
-          </button>
-          <button className="btn btn-sm btn-primary" disabled={!detail} onClick={queueIsolate}>
-            Queue Isolate
-          </button>
-        </>
-      }
-    >
-      {loading && (
-        <div className="loading">
-          <div className="spinner" />
-        </div>
-      )}
-      {processGone && (
-        <div className="error-box">
-          This process exited before Wardex could complete a live inspection. Showing the last known
-          snapshot from the process table.
-        </div>
-      )}
-      {error && !processGone && <div className="error-box">Failed to load process detail.</div>}
-      {activeDetail && (
-        <>
-          <SummaryGrid data={summary} limit={10} />
-
-          <div className="card" style={{ marginTop: 16 }}>
-            <div className="card-title" style={{ marginBottom: 8 }}>
-              Execution Context
-            </div>
-            <div className="drawer-copy-grid">
-              <div>
-                <div className="metric-label">Executable</div>
-                <div
-                  style={{ fontFamily: 'var(--font-mono)', fontSize: 12, wordBreak: 'break-all' }}
-                >
-                  {activeDetail.exe_path || 'Unavailable'}
-                </div>
-              </div>
-              <div>
-                <div className="metric-label">Working Directory</div>
-                <div
-                  style={{ fontFamily: 'var(--font-mono)', fontSize: 12, wordBreak: 'break-all' }}
-                >
-                  {activeDetail.cwd || 'Unavailable'}
-                </div>
-              </div>
-              <div style={{ gridColumn: '1 / -1' }}>
-                <div className="metric-label">Command Line</div>
-                <div
-                  style={{ fontFamily: 'var(--font-mono)', fontSize: 12, wordBreak: 'break-all' }}
-                >
-                  {activeDetail.cmd_line || 'Unavailable'}
-                </div>
-              </div>
-            </div>
+            <button className="btn btn-sm btn-primary" disabled={!detail} onClick={queueIsolate}>
+              Queue Isolate
+            </button>
+          </>
+        }
+      >
+        {loading && (
+          <div className="loading">
+            <div className="spinner" />
           </div>
+        )}
+        {processGone && (
+          <div className="error-box">
+            This process exited before Wardex could complete a live inspection. Showing the last
+            known snapshot from the process table.
+          </div>
+        )}
+        {error && !processGone && <div className="error-box">Failed to load process detail.</div>}
+        {activeDetail && (
+          <>
+            <SummaryGrid data={summary} limit={10} />
 
-          {activeDetail.findings?.length > 0 && (
             <div className="card" style={{ marginTop: 16 }}>
               <div className="card-title" style={{ marginBottom: 8 }}>
-                Behavioural Findings
+                Execution Context
               </div>
-              <div className="table-wrap">
-                <table>
-                  <thead>
-                    <tr>
-                      <th>Risk</th>
-                      <th>Reason</th>
-                      <th>CPU</th>
-                      <th>Memory</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {activeDetail.findings.map((finding, index) => (
-                      <tr key={`${finding.pid}-${index}`}>
-                        <td>
-                          <span className={`sev-${finding.risk_level}`}>{finding.risk_level}</span>
-                        </td>
-                        <td>{finding.reason}</td>
-                        <td>{finding.cpu_percent?.toFixed?.(1) ?? finding.cpu_percent}</td>
-                        <td>{finding.mem_percent?.toFixed?.(1) ?? finding.mem_percent}</td>
+              <div className="drawer-copy-grid">
+                <div>
+                  <div className="metric-label">Executable</div>
+                  <div
+                    style={{ fontFamily: 'var(--font-mono)', fontSize: 12, wordBreak: 'break-all' }}
+                  >
+                    {activeDetail.exe_path || 'Unavailable'}
+                  </div>
+                </div>
+                <div>
+                  <div className="metric-label">Working Directory</div>
+                  <div
+                    style={{ fontFamily: 'var(--font-mono)', fontSize: 12, wordBreak: 'break-all' }}
+                  >
+                    {activeDetail.cwd || 'Unavailable'}
+                  </div>
+                </div>
+                <div style={{ gridColumn: '1 / -1' }}>
+                  <div className="metric-label">Command Line</div>
+                  <div
+                    style={{ fontFamily: 'var(--font-mono)', fontSize: 12, wordBreak: 'break-all' }}
+                  >
+                    {activeDetail.cmd_line || 'Unavailable'}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {activeDetail.findings?.length > 0 && (
+              <div className="card" style={{ marginTop: 16 }}>
+                <div className="card-title" style={{ marginBottom: 8 }}>
+                  Behavioural Findings
+                </div>
+                <div className="table-wrap">
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>Risk</th>
+                        <th>Reason</th>
+                        <th>CPU</th>
+                        <th>Memory</th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
+                    </thead>
+                    <tbody>
+                      {activeDetail.findings.map((finding, index) => (
+                        <tr key={`${finding.pid}-${index}`}>
+                          <td>
+                            <span className={`sev-${finding.risk_level}`}>
+                              {finding.risk_level}
+                            </span>
+                          </td>
+                          <td>{finding.reason}</td>
+                          <td>{finding.cpu_percent?.toFixed?.(1) ?? finding.cpu_percent}</td>
+                          <td>{finding.mem_percent?.toFixed?.(1) ?? finding.mem_percent}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
               </div>
-            </div>
-          )}
+            )}
 
-          {activeDetail.analysis?.recommendations?.length > 0 && (
-            <div className="card" style={{ marginTop: 16 }}>
-              <div className="card-title" style={{ marginBottom: 8 }}>
-                Analyst Guidance
+            {activeDetail.analysis?.recommendations?.length > 0 && (
+              <div className="card" style={{ marginTop: 16 }}>
+                <div className="card-title" style={{ marginBottom: 8 }}>
+                  Analyst Guidance
+                </div>
+                <ul style={{ margin: 0, paddingLeft: 18, lineHeight: 1.7 }}>
+                  {activeDetail.analysis.recommendations.map((item) => (
+                    <li key={item}>{item}</li>
+                  ))}
+                </ul>
               </div>
-              <ul style={{ margin: 0, paddingLeft: 18, lineHeight: 1.7 }}>
-                {activeDetail.analysis.recommendations.map((item) => (
-                  <li key={item}>{item}</li>
-                ))}
-              </ul>
-            </div>
-          )}
+            )}
 
-          {activeDetail.network_activity?.length > 0 && (
-            <div className="card" style={{ marginTop: 16 }}>
-              <div className="card-title" style={{ marginBottom: 8 }}>
-                Network Activity
-              </div>
-              <div className="table-wrap">
-                <table>
-                  <thead>
-                    <tr>
-                      <th>Protocol</th>
-                      <th>Endpoint</th>
-                      <th>State</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {activeDetail.network_activity.map((entry, index) => (
-                      <tr key={`${entry.endpoint}-${index}`}>
-                        <td>{entry.protocol}</td>
-                        <td style={{ fontFamily: 'var(--font-mono)', fontSize: 12 }}>
-                          {entry.endpoint}
-                        </td>
-                        <td>{entry.state || '—'}</td>
+            {activeDetail.network_activity?.length > 0 && (
+              <div className="card" style={{ marginTop: 16 }}>
+                <div className="card-title" style={{ marginBottom: 8 }}>
+                  Network Activity
+                </div>
+                <div className="table-wrap">
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>Protocol</th>
+                        <th>Endpoint</th>
+                        <th>State</th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
+                    </thead>
+                    <tbody>
+                      {activeDetail.network_activity.map((entry, index) => (
+                        <tr key={`${entry.endpoint}-${index}`}>
+                          <td>{entry.protocol}</td>
+                          <td style={{ fontFamily: 'var(--font-mono)', fontSize: 12 }}>
+                            {entry.endpoint}
+                          </td>
+                          <td>{entry.state || '—'}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
               </div>
-            </div>
-          )}
+            )}
 
-          {activeDetail.code_signature && (
-            <div className="card" style={{ marginTop: 16 }}>
-              <div className="card-title" style={{ marginBottom: 8 }}>
-                Code Signature
+            {activeDetail.code_signature && (
+              <div className="card" style={{ marginTop: 16 }}>
+                <div className="card-title" style={{ marginBottom: 8 }}>
+                  Code Signature
+                </div>
+                <SummaryGrid data={activeDetail.code_signature} limit={6} />
               </div>
-              <SummaryGrid data={activeDetail.code_signature} limit={6} />
-            </div>
-          )}
+            )}
 
-          <JsonDetails data={activeDetail} label="Deep inspection fields" />
-        </>
-      )}
-    </SideDrawer>
-    {confirmUI}
+            <JsonDetails data={activeDetail} label="Deep inspection fields" />
+          </>
+        )}
+      </SideDrawer>
+      {confirmUI}
     </>
   );
 }

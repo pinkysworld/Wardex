@@ -78,9 +78,8 @@ use crate::enforcement::EnforcementEngine;
 use crate::enrollment::{AgentHealth, AgentIdentity, AgentRegistry, AgentStatus};
 use crate::enterprise::{
     ContentLifecycle, EnterpriseStore, HuntResponseAction, HuntRun, IdentityConfigValidation,
-    ResponseActionResult,
-    SavedHunt, build_content_rules_view, build_entity_profile, build_entity_timeline,
-    build_incident_storyline, build_mitre_coverage,
+    ResponseActionResult, SavedHunt, build_content_rules_view, build_entity_profile,
+    build_entity_timeline, build_incident_storyline, build_mitre_coverage,
 };
 use crate::event_forward::{EventAnalytics, EventStore, StoredEvent};
 use crate::fingerprint::DeviceFingerprint;
@@ -406,6 +405,7 @@ impl AuditLog {
             .collect()
     }
 
+    #[cfg(test)]
     fn page(&self, limit: usize, offset: usize) -> AuditLogPage {
         self.page_filtered(limit, offset, &AuditLogFilter::default())
     }
@@ -1076,8 +1076,14 @@ fn local_console_agent_summary_json(state: &AppState) -> serde_json::Value {
     );
     if let Some(object) = summary.as_object_mut() {
         object.insert("local_console".to_string(), serde_json::Value::Bool(true));
-        object.insert("local_monitoring".to_string(), serde_json::Value::Bool(true));
-        object.insert("source".to_string(), serde_json::Value::String("local".to_string()));
+        object.insert(
+            "local_monitoring".to_string(),
+            serde_json::Value::Bool(true),
+        );
+        object.insert(
+            "source".to_string(),
+            serde_json::Value::String("local".to_string()),
+        );
         object.insert(
             "os_version".to_string(),
             serde_json::Value::String(state.local_host_info.os_version.clone()),
@@ -1439,10 +1445,8 @@ pub async fn run_server(
                     // Refresh host inventory (top processes + sockets) at most
                     // once every 10 s. Best-effort: failure leaves the last
                     // snapshot in place.
-                    let should_refresh_inventory = sample
-                        .timestamp_ms
-                        .saturating_sub(s.last_inventory_at_ms)
-                        > 10_000;
+                    let should_refresh_inventory =
+                        sample.timestamp_ms.saturating_sub(s.last_inventory_at_ms) > 10_000;
                     if should_refresh_inventory {
                         let inventory = crate::collector::collect_host_inventory(50, 50);
                         s.last_inventory_at_ms = sample.timestamp_ms;
@@ -2574,7 +2578,10 @@ fn ensure_target_group_access(
     auth: &AuthIdentity,
     target_group: Option<&str>,
 ) -> Result<(), String> {
-    let Some(target_group) = target_group.map(str::trim).filter(|value| !value.is_empty()) else {
+    let Some(target_group) = target_group
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+    else {
         return Ok(());
     };
     match auth {
@@ -3439,8 +3446,7 @@ fn build_workbench_overview(
         .builtin_rules()
         .iter()
         .filter(|rule| {
-            rule.enabled
-                && rule.lifecycle == crate::enterprise::ContentLifecycle::Canary
+            rule.enabled && rule.lifecycle == crate::enterprise::ContentLifecycle::Canary
         })
         .count()
         + enterprise
@@ -3504,7 +3510,9 @@ fn build_workbench_overview(
         .iter()
         .filter(|event| event.action == "rollback")
         .count();
-    let last_rollout_at = rollout_history.last().map(|event| event.recorded_at.clone());
+    let last_rollout_at = rollout_history
+        .last()
+        .map(|event| event.recorded_at.clone());
     let mut recent_rollout_history = rollout_history
         .iter()
         .rev()
@@ -3514,8 +3522,11 @@ fn build_workbench_overview(
     recent_rollout_history.reverse();
 
     let recent_playbook_executions = playbook_engine.recent_executions(50);
-    let merged_playbook_history =
-        merge_playbook_history(enterprise.playbook_history(), &recent_playbook_executions, 50);
+    let merged_playbook_history = merge_playbook_history(
+        enterprise.playbook_history(),
+        &recent_playbook_executions,
+        50,
+    );
     let historical_playbook_runs = merged_playbook_history.len();
     let completed_playbook_history: Vec<&crate::enterprise::PlaybookAnalyticsRecord> =
         merged_playbook_history
@@ -3645,9 +3656,7 @@ fn build_workbench_overview(
         urgent_items.push(UrgentItem {
             kind: "automation".to_string(),
             severity: "Elevated".to_string(),
-            title: format!(
-                "{pending_automation_approvals} automation approval(s) waiting"
-            ),
+            title: format!("{pending_automation_approvals} automation approval(s) waiting"),
             subtitle: "Playbook executions have paused for human approval".to_string(),
             reference_id: "automation-approvals".to_string(),
         });
@@ -3690,8 +3699,9 @@ fn build_workbench_overview(
             } else {
                 "Provider or SCIM validation still blocks clean group-based routing.".to_string()
             },
-            action_hint: "Review IdP and SCIM mappings before widening automated response coverage."
-                .to_string(),
+            action_hint:
+                "Review IdP and SCIM mappings before widening automated response coverage."
+                    .to_string(),
         });
     }
     if canary_rules + canary_hunts > 0 {
@@ -3703,11 +3713,14 @@ fn build_workbench_overview(
                 "{} rule(s) and {} hunt(s) are still in canary.",
                 canary_rules, canary_hunts
             ),
-            action_hint: "Use the detection workspace to confirm tests and push mature content to active."
-                .to_string(),
+            action_hint:
+                "Use the detection workspace to confirm tests and push mature content to active."
+                    .to_string(),
         });
     }
-    if packs.iter().any(|pack| pack.recommended_workflows.is_empty())
+    if packs
+        .iter()
+        .any(|pack| pack.recommended_workflows.is_empty())
         || packs.iter().any(|pack| pack.saved_searches.is_empty())
     {
         recommendations.push(WorkbenchRecommendation {
@@ -3744,8 +3757,9 @@ fn build_workbench_overview(
                 pending_automation_approvals,
                 workflow_store.active_investigations().len()
             ),
-            action_hint: "Review approvals and active investigations so response playbooks do not stall."
-                .to_string(),
+            action_hint:
+                "Review approvals and active investigations so response playbooks do not stall."
+                    .to_string(),
         });
     }
 
@@ -3824,7 +3838,8 @@ fn build_workbench_overview(
             playbooks: playbook_engine.list_playbooks().len(),
             workflow_templates: workflow_store.workflow_count(),
             dynamic_templates: playbook_dsl.list().len(),
-            active_executions: playbook_engine.active_count() + playbook_dsl.active_executions().len(),
+            active_executions: playbook_engine.active_count()
+                + playbook_dsl.active_executions().len(),
             pending_approvals: pending_automation_approvals,
             success_rate: if completed_playbook_history.is_empty() {
                 0.0
@@ -4135,7 +4150,8 @@ fn build_agent_activity_snapshot(
         computed_status,
         heartbeat_age_secs,
         deployment: state.remote_deployments.get(agent_id).cloned(),
-        scope_override: !is_local_console && state.agent_registry.get_monitor_scope(agent_id).is_some(),
+        scope_override: !is_local_console
+            && state.agent_registry.get_monitor_scope(agent_id).is_some(),
         effective_scope,
         health: agent.health.clone(),
         analytics: AgentEventAnalyticsSummary {
@@ -4547,7 +4563,7 @@ fn spawn_enterprise_hunt_scheduler(state: &Arc<Mutex<AppState>>) {
             let events = s.event_store.all_events().to_vec();
             for hunt_id in due_hunt_ids {
                 let started = std::time::Instant::now();
-                if let Ok(run) = s.enterprise.run_hunt(&hunt_id, &events) {
+                if let Ok(run) = s.enterprise.run_hunt(&hunt_id, &events, None, None) {
                     let hunt = s
                         .enterprise
                         .hunts()
@@ -5414,6 +5430,7 @@ fn handle_api(
         || (method == Method::Post && route_path == "/api/efficacy/triage")
         || (method == Method::Get && route_path == "/api/efficacy/summary")
         || (method == Method::Get && route_path.starts_with("/api/efficacy/rule/"))
+        || (method == Method::Post && route_path == "/api/efficacy/canary-promote")
         // Investigation workflows
         || (method == Method::Get && route_path == "/api/investigations/workflows")
         || (method == Method::Get && route_path.starts_with("/api/investigations/workflows/"))
@@ -6433,7 +6450,8 @@ fn handle_api(
                 .iter()
                 .filter(|agent| computed_agent_status(agent, heartbeat_interval).0 == "online")
                 .count();
-            let local_online = usize::from(computed_agent_status(&local_agent, heartbeat_interval).0 == "online");
+            let local_online =
+                usize::from(computed_agent_status(&local_agent, heartbeat_interval).0 == "online");
             let stale = total_agents.saturating_sub(online + local_online);
             let logs_tracked = s.agent_logs.len();
             let inventories_tracked = s.agent_inventories.len() + 1;
@@ -7242,7 +7260,11 @@ fn handle_api(
             let mut payload = Vec::with_capacity(agents.len() + 1);
             payload.push(local_console_agent_summary_json(&s));
             payload.extend(agents.iter().map(|agent| {
-                agent_summary_json(agent, s.remote_deployments.get(&agent.id), heartbeat_interval)
+                agent_summary_json(
+                    agent,
+                    s.remote_deployments.get(&agent.id),
+                    heartbeat_interval,
+                )
             }));
             let payload = payload
                 .into_iter()
@@ -7980,6 +8002,9 @@ fn handle_api(
                         "threshold": hunt.threshold,
                         "suppression_window_secs": hunt.suppression_window_secs,
                         "schedule_interval_secs": hunt.schedule_interval_secs,
+                        "schedule_cron": hunt.schedule_cron,
+                        "hypothesis": hunt.hypothesis,
+                        "expected_outcome": hunt.expected_outcome,
                         "last_run_at": hunt.last_run_at,
                         "next_run_at": hunt.next_run_at,
                         "query": hunt.query,
@@ -8082,9 +8107,10 @@ fn handle_api(
                                     .as_ref()
                                     .and_then(|pack| pack.target_group.clone())
                             });
-                        if let Err(message) =
-                            ensure_target_group_access(&auth_identity, effective_target_group.as_deref())
-                        {
+                        if let Err(message) = ensure_target_group_access(
+                            &auth_identity,
+                            effective_target_group.as_deref(),
+                        ) {
                             return error_json(&message, 403);
                         }
                         let persisted_workflows = if workflow_field_present {
@@ -8112,7 +8138,23 @@ fn handle_api(
                             v["threshold"].as_u64().unwrap_or(1) as usize,
                             v["suppression_window_secs"].as_u64().unwrap_or(0),
                             v["schedule_interval_secs"].as_u64(),
+                            v.get("schedule_cron")
+                                .and_then(|value| value.as_str())
+                                .map(|value| value.to_string()),
                             query,
+                            v.get("hypothesis")
+                                .and_then(|value| value.as_str())
+                                .unwrap_or_default()
+                                .to_string(),
+                            match v
+                                .get("expected_outcome")
+                                .and_then(|value| value.as_str())
+                                .unwrap_or("explore")
+                            {
+                                "confirm" => crate::enterprise::HuntExpectedOutcome::Confirm,
+                                "refute" => crate::enterprise::HuntExpectedOutcome::Refute,
+                                _ => crate::enterprise::HuntExpectedOutcome::Explore,
+                            },
                             lifecycle,
                             v["canary_percentage"].as_u64().unwrap_or(100) as u8,
                             pack_id,
@@ -8295,9 +8337,11 @@ fn handle_api(
                         .as_ref()
                         .and_then(|pack| pack.target_group.clone())
                 };
-                let effective_target_group = target_group
-                    .clone()
-                    .or_else(|| existing_pack.as_ref().and_then(|pack| pack.target_group.clone()));
+                let effective_target_group = target_group.clone().or_else(|| {
+                    existing_pack
+                        .as_ref()
+                        .and_then(|pack| pack.target_group.clone())
+                });
                 if let Err(message) =
                     ensure_target_group_access(&auth_identity, effective_target_group.as_deref())
                 {
@@ -10612,8 +10656,28 @@ fn handle_api(
                 {
                     return error_json(&message, 403);
                 }
+                let run_window = read_json_value(body, 4096)
+                    .ok()
+                    .map(|value| {
+                        (
+                            value
+                                .get("time_from")
+                                .and_then(|v| v.as_str())
+                                .and_then(|v| chrono::DateTime::parse_from_rfc3339(v).ok())
+                                .map(|dt| dt.with_timezone(&chrono::Utc)),
+                            value
+                                .get("time_to")
+                                .and_then(|v| v.as_str())
+                                .and_then(|v| chrono::DateTime::parse_from_rfc3339(v).ok())
+                                .map(|dt| dt.with_timezone(&chrono::Utc)),
+                        )
+                    })
+                    .unwrap_or((None, None));
                 let events = s.event_store.all_events().to_vec();
-                match s.enterprise.run_hunt(hunt_id, &events) {
+                match s
+                    .enterprise
+                    .run_hunt(hunt_id, &events, run_window.0, run_window.1)
+                {
                     Ok(run) => {
                         let AppState {
                             incident_store,
@@ -10654,6 +10718,106 @@ fn handle_api(
                     }
                     Err(e) => error_json(&e, 404),
                 }
+            } else if method == Method::Post
+                && url_path.starts_with("/api/hunts/")
+                && url_path.ends_with("/escalate")
+            {
+                let hunt_id = url_path
+                    .trim_start_matches("/api/hunts/")
+                    .trim_end_matches("/escalate")
+                    .trim_end_matches('/');
+                let mut s = state.lock().unwrap_or_else(|e| e.into_inner());
+                let hunt = match s
+                    .enterprise
+                    .hunts()
+                    .iter()
+                    .find(|hunt| hunt.id == hunt_id)
+                    .cloned()
+                {
+                    Some(hunt) => hunt,
+                    None => return error_json("hunt not found", 404),
+                };
+                if let Err(message) =
+                    ensure_target_group_access(&auth_identity, hunt.target_group.as_deref())
+                {
+                    return error_json(&message, 403);
+                }
+                let payload = read_json_value(body, 16 * 1024).unwrap_or_else(|_| serde_json::json!({}));
+                let requested_run_id = payload
+                    .get("run_id")
+                    .and_then(|value| value.as_str())
+                    .map(|value| value.to_string());
+                let selected_run = s
+                    .enterprise
+                    .hunt_runs(hunt_id)
+                    .into_iter()
+                    .filter(|run| {
+                        requested_run_id
+                            .as_ref()
+                            .map(|expected| run.id == *expected)
+                            .unwrap_or(true)
+                    })
+                    .max_by(|left, right| left.run_at.cmp(&right.run_at))
+                    .cloned();
+                let run = match selected_run {
+                    Some(run) => run,
+                    None => return error_json("hunt run not found", 404),
+                };
+
+                let title = payload
+                    .get("title")
+                    .and_then(|value| value.as_str())
+                    .map(|value| value.to_string())
+                    .unwrap_or_else(|| format!("Hunt escalation: {}", hunt.name));
+                let description = format!(
+                    "Hunt: {}\nHypothesis: {}\nExpected outcome: {:?}\nRun: {}\nMatches: {}\nSuppressed: {}\nAgents: {}\nSummary: {}",
+                    hunt.name,
+                    hunt.hypothesis,
+                    hunt.expected_outcome,
+                    run.run_at,
+                    run.match_count,
+                    run.suppressed_count,
+                    run.matched_agent_ids.join(", "),
+                    run.summary,
+                );
+                let mut tags = vec!["hunt-escalation".to_string(), format!("hunt:{}", hunt.id)];
+                tags.extend(
+                    hunt.mitre_techniques
+                        .iter()
+                        .take(6)
+                        .map(|tech| format!("mitre:{tech}")),
+                );
+                let priority = match hunt.severity.to_ascii_lowercase().as_str() {
+                    "critical" => CasePriority::Critical,
+                    "high" => CasePriority::High,
+                    "low" => CasePriority::Low,
+                    "info" => CasePriority::Info,
+                    _ => CasePriority::Medium,
+                };
+                let case_id = {
+                    let case = s.case_store.create(
+                        title,
+                        description,
+                        priority,
+                        Vec::new(),
+                        run.matched_event_ids.clone(),
+                        tags,
+                    );
+                    case.id
+                };
+                let _ = s.enterprise.link_hunt_run_case(&run.id, case_id);
+                json_response(
+                    &serde_json::json!({
+                        "status": "created",
+                        "case_id": case_id,
+                        "hunt_id": hunt.id,
+                        "run_id": run.id,
+                        "event_count": run.matched_event_ids.len(),
+                        "agent_ids": run.matched_agent_ids,
+                    })
+                    .to_string(),
+                    201,
+                )
             } else if method == Method::Post
                 && url_path.starts_with("/api/content/rules/")
                 && url_path.ends_with("/test")
@@ -10942,6 +11106,47 @@ fn handle_api(
                                         error_json("case not found", 404),
                                     );
                                 }
+                                if let Some(title) = v["title"].as_str()
+                                    && !s.case_store.update_title(id, title.to_string())
+                                {
+                                    return respond_api(
+                                        state,
+                                        &method,
+                                        &url,
+                                        remote_addr,
+                                        needs_auth,
+                                        error_json("case not found", 404),
+                                    );
+                                }
+                                if let Some(description) = v["description"].as_str()
+                                    && !s.case_store.update_description(id, description.to_string())
+                                {
+                                    return respond_api(
+                                        state,
+                                        &method,
+                                        &url,
+                                        remote_addr,
+                                        needs_auth,
+                                        error_json("case not found", 404),
+                                    );
+                                }
+                                if let Some(tags) = v["tags"].as_array() {
+                                    let normalized_tags = tags
+                                        .iter()
+                                        .filter_map(|value| value.as_str().map(|s| s.trim().to_string()))
+                                        .filter(|tag| !tag.is_empty())
+                                        .collect::<Vec<_>>();
+                                    if !s.case_store.update_tags(id, normalized_tags) {
+                                        return respond_api(
+                                            state,
+                                            &method,
+                                            &url,
+                                            remote_addr,
+                                            needs_auth,
+                                            error_json("case not found", 404),
+                                        );
+                                    }
+                                }
                                 if let Some(incident_id) = v["link_incident"].as_u64() {
                                     s.case_store.link_incident(id, incident_id);
                                 }
@@ -11157,7 +11362,9 @@ fn handle_api(
                             .start_execution(pb_id, alert_id, &executed_by, now)
                         {
                             Some(eid) => {
-                                if let Some(execution) = s.playbook_engine.get_execution(&eid).cloned() {
+                                if let Some(execution) =
+                                    s.playbook_engine.get_execution(&eid).cloned()
+                                {
                                     s.enterprise.record_playbook_execution(&execution);
                                 }
                                 eprintln!(
@@ -12392,6 +12599,18 @@ fn handle_api(
                     }
                     None => error_json("rule not found", 404),
                 }
+            } else if method == Method::Post && url_path == "/api/efficacy/canary-promote" {
+                let mut s = state.lock().unwrap_or_else(|e| e.into_inner());
+                let efficacy = s.efficacy_tracker.per_rule_efficacy();
+                let results = s.enterprise.canary_auto_promote(&efficacy, 10, 7, 0.15);
+                if results.iter().any(|r| {
+                    r.action == crate::enterprise::CanaryAction::Promoted
+                        || r.action == crate::enterprise::CanaryAction::RolledBack
+                }) {
+                    sync_enterprise_sigma_engine(&mut s);
+                }
+                let body = serde_json::to_string(&results).unwrap_or_default();
+                json_response(&body, 200)
 
             // ── Investigation Workflows ───────────────────────────────
             } else if method == Method::Get && url_path == "/api/investigations/workflows" {
@@ -12772,7 +12991,9 @@ fn handle_api(
                             now,
                         ) {
                             Ok(exec_id) => {
-                                if let Some(exec) = s.playbook_engine.get_execution(&exec_id).cloned() {
+                                if let Some(exec) =
+                                    s.playbook_engine.get_execution(&exec_id).cloned()
+                                {
                                     s.enterprise.record_playbook_execution(&exec);
                                     let body = serde_json::to_string(&exec).unwrap_or_default();
                                     json_response(&body, 200)
@@ -12797,6 +13018,36 @@ fn handle_api(
                 let incidents = crate::alert_analysis::deduplicate_alerts(&alerts, &config);
                 let body = serde_json::to_string(&incidents).unwrap_or_default();
                 json_response(&body, 200)
+
+            } else if method == Method::Post && url_path == "/api/alerts/dedup/auto-create" {
+                let mut s = state.lock().unwrap_or_else(|e| e.into_inner());
+                let alerts: Vec<crate::collector::AlertRecord> = s.alerts.iter().cloned().collect();
+                let config = crate::alert_analysis::DedupConfig {
+                    window_secs: 300,
+                    cross_device: true,
+                    max_merge: 250,
+                };
+                let deduped = crate::alert_analysis::deduplicate_alerts(&alerts, &config);
+                let mut created = Vec::new();
+                for group in deduped.into_iter().filter(|incident| incident.alert_count >= 3) {
+                    let severity = group.level.to_ascii_lowercase();
+                    s.incident_store.create(
+                        format!("Auto incident {}", group.incident_id),
+                        severity,
+                        Vec::new(),
+                        group.device_ids.clone(),
+                        Vec::new(),
+                        format!(
+                            "Auto-created from {} related alerts in 5-minute dedup window. Fingerprint: {}",
+                            group.alert_count, group.fingerprint
+                        ),
+                    );
+                    created.push(group.incident_id);
+                }
+                json_response(
+                    &serde_json::json!({"status": "ok", "created_incidents": created, "count": created.len()}).to_string(),
+                    200,
+                )
 
             // ── API Analytics ────────────────────────────────────────
             } else if method == Method::Get && url_path == "/api/analytics" {
@@ -14561,7 +14812,10 @@ fn handle_update_deploy(
         Some(deployment.rollout_group.clone()),
         &deployment.status,
         auth.actor(),
-        deployment.status_reason.clone().or_else(|| Some(deployment.release_notes.clone())),
+        deployment
+            .status_reason
+            .clone()
+            .or_else(|| Some(deployment.release_notes.clone())),
     );
 
     let payload = serde_json::json!({
@@ -15948,10 +16202,9 @@ mod tests {
             .set("Authorization", &auth_header)
             .call()
             .expect("agents response");
-        let agents: serde_json::Value = serde_json::from_str(
-            &agents_response.into_string().expect("agents response body"),
-        )
-        .expect("agents json");
+        let agents: serde_json::Value =
+            serde_json::from_str(&agents_response.into_string().expect("agents response body"))
+                .expect("agents json");
         let local_agent = agents
             .as_array()
             .and_then(|entries| {
@@ -15969,12 +16222,14 @@ mod tests {
         .set("Authorization", &auth_header)
         .call()
         .expect("agent details response");
-        let details: serde_json::Value = serde_json::from_str(
-            &details_response.into_string().expect("agent details body"),
-        )
-        .expect("agent details json");
+        let details: serde_json::Value =
+            serde_json::from_str(&details_response.into_string().expect("agent details body"))
+                .expect("agent details json");
         assert_eq!(details["local_console"], serde_json::json!(true));
-        assert_eq!(details["agent"]["id"], serde_json::json!(LOCAL_CONSOLE_AGENT_ID));
+        assert_eq!(
+            details["agent"]["id"],
+            serde_json::json!(LOCAL_CONSOLE_AGENT_ID)
+        );
 
         let fleet_health_response = ureq::get(&format!("{base_url}/api/fleet/health"))
             .set("Authorization", &auth_header)
@@ -16026,11 +16281,16 @@ mod tests {
             .send_string(r#"{"theme":"dark","pinned_sections":["fleet","monitor"]}"#)
             .expect("update preferences response");
         let updated: serde_json::Value = serde_json::from_str(
-            &update_response.into_string().expect("update preferences body"),
+            &update_response
+                .into_string()
+                .expect("update preferences body"),
         )
         .expect("update preferences json");
         assert_eq!(updated["theme"], serde_json::json!("dark"));
-        assert_eq!(updated["pinned_sections"], serde_json::json!(["fleet", "monitor"]));
+        assert_eq!(
+            updated["pinned_sections"],
+            serde_json::json!(["fleet", "monitor"])
+        );
         assert!(updated["updated_at"].as_str().is_some());
 
         let merge_response = ureq::put(&format!("{base_url}/api/user/preferences"))
@@ -16038,18 +16298,25 @@ mod tests {
             .send_string(r#"{"theme":"light"}"#)
             .expect("merge preferences response");
         let merged: serde_json::Value = serde_json::from_str(
-            &merge_response.into_string().expect("merge preferences body"),
+            &merge_response
+                .into_string()
+                .expect("merge preferences body"),
         )
         .expect("merge preferences json");
         assert_eq!(merged["theme"], serde_json::json!("light"));
-        assert_eq!(merged["pinned_sections"], serde_json::json!(["fleet", "monitor"]));
+        assert_eq!(
+            merged["pinned_sections"],
+            serde_json::json!(["fleet", "monitor"])
+        );
 
         let final_response = ureq::get(&format!("{base_url}/api/user/preferences"))
             .set("Authorization", &auth_header)
             .call()
             .expect("final preferences response");
         let final_value: serde_json::Value = serde_json::from_str(
-            &final_response.into_string().expect("final preferences body"),
+            &final_response
+                .into_string()
+                .expect("final preferences body"),
         )
         .expect("final preferences json");
         assert_eq!(final_value["theme"], serde_json::json!("light"));
@@ -16127,17 +16394,18 @@ mod tests {
             .set("Authorization", &auth_header)
             .call()
             .expect("audit log response");
-        let audit_page: serde_json::Value = serde_json::from_str(
-            &audit_response.into_string().expect("audit log body"),
-        )
-        .expect("audit log json");
+        let audit_page: serde_json::Value =
+            serde_json::from_str(&audit_response.into_string().expect("audit log body"))
+                .expect("audit log json");
 
         assert_eq!(audit_page["total"], serde_json::json!(3));
         assert_eq!(audit_page["offset"], serde_json::json!(0));
         assert_eq!(audit_page["limit"], serde_json::json!(2));
         assert_eq!(audit_page["count"], serde_json::json!(2));
         assert_eq!(audit_page["has_more"], serde_json::json!(true));
-        let entries = audit_page["entries"].as_array().expect("audit entries array");
+        let entries = audit_page["entries"]
+            .as_array()
+            .expect("audit entries array");
         assert_eq!(entries.len(), 2);
         assert_eq!(entries[0]["path"], serde_json::json!("/api/platform"));
         assert_eq!(entries[1]["path"], serde_json::json!("/api/health"));
@@ -16213,12 +16481,14 @@ mod tests {
                 r#"{"kind":"oidc","display_name":"Corporate SSO","issuer_url":"https://issuer.example.com","client_id":"wardex-admin","enabled":true,"group_role_mappings":{"Security":"admin"}}"#,
             )
             .expect("save idp provider response");
-        let saved: serde_json::Value = serde_json::from_str(
-            &save_response.into_string().expect("save idp provider body"),
-        )
-        .expect("save idp provider json");
+        let saved: serde_json::Value =
+            serde_json::from_str(&save_response.into_string().expect("save idp provider body"))
+                .expect("save idp provider json");
         assert_eq!(saved["status"], serde_json::json!("saved"));
-        assert_eq!(saved["provider"]["display_name"], serde_json::json!("Corporate SSO"));
+        assert_eq!(
+            saved["provider"]["display_name"],
+            serde_json::json!("Corporate SSO")
+        );
         assert_eq!(saved["validation"]["status"], serde_json::json!("ready"));
         assert_eq!(saved["validation"]["mapping_count"], serde_json::json!(1));
 
@@ -16244,10 +16514,9 @@ mod tests {
             .send_string(r#"{"kind":"oidc","display_name":"Broken OIDC","enabled":true}"#)
         {
             Err(ureq::Error::Status(400, response)) => {
-                let body: serde_json::Value = serde_json::from_str(
-                    &response.into_string().expect("invalid idp body"),
-                )
-                .expect("invalid idp json");
+                let body: serde_json::Value =
+                    serde_json::from_str(&response.into_string().expect("invalid idp body"))
+                        .expect("invalid idp json");
                 assert_eq!(body["code"], serde_json::json!("VALIDATION_ERROR"));
                 assert_eq!(
                     body["error"],
@@ -16271,10 +16540,9 @@ mod tests {
                 r#"{"enabled":true,"base_url":"https://scim.example.com","bearer_token":"super-secret-token","provisioning_mode":"automatic","default_role":"viewer","group_role_mappings":{"Security":"analyst"}}"#,
             )
             .expect("save scim config response");
-        let saved: serde_json::Value = serde_json::from_str(
-            &save_response.into_string().expect("save scim config body"),
-        )
-        .expect("save scim config json");
+        let saved: serde_json::Value =
+            serde_json::from_str(&save_response.into_string().expect("save scim config body"))
+                .expect("save scim config json");
         assert_eq!(saved["status"], serde_json::json!("saved"));
         assert_eq!(saved["config"]["default_role"], serde_json::json!("viewer"));
         assert_eq!(saved["validation"]["status"], serde_json::json!("ready"));
@@ -16284,11 +16552,13 @@ mod tests {
             .set("Authorization", &auth_header)
             .call()
             .expect("get scim config response");
-        let config: serde_json::Value = serde_json::from_str(
-            &config_response.into_string().expect("get scim config body"),
-        )
-        .expect("get scim config json");
-        assert_eq!(config["config"]["provisioning_mode"], serde_json::json!("automatic"));
+        let config: serde_json::Value =
+            serde_json::from_str(&config_response.into_string().expect("get scim config body"))
+                .expect("get scim config json");
+        assert_eq!(
+            config["config"]["provisioning_mode"],
+            serde_json::json!("automatic")
+        );
         assert_eq!(config["validation"]["status"], serde_json::json!("ready"));
 
         match ureq::post(&format!("{base_url}/api/scim/config"))
@@ -16326,7 +16596,9 @@ mod tests {
             .call()
             .expect("connect ws subscriber");
         let connected: serde_json::Value = serde_json::from_str(
-            &connect_response.into_string().expect("connect response body"),
+            &connect_response
+                .into_string()
+                .expect("connect response body"),
         )
         .expect("connect response json");
         let subscriber_id = connected["subscriber_id"].as_u64().expect("subscriber id");
@@ -16340,10 +16612,9 @@ mod tests {
             .set("Authorization", &auth_header)
             .send_string(&format!(r#"{{"subscriber_id":{subscriber_id}}}"#))
             .expect("poll ws subscriber");
-        let events: serde_json::Value = serde_json::from_str(
-            &poll_response.into_string().expect("poll response body"),
-        )
-        .expect("poll response json");
+        let events: serde_json::Value =
+            serde_json::from_str(&poll_response.into_string().expect("poll response body"))
+                .expect("poll response json");
         let first_event = events
             .as_array()
             .and_then(|entries| entries.first())
@@ -16594,6 +16865,7 @@ mod tests {
             1,
             0,
             Some(300),
+            Some("0 * * * *".to_string()),
             crate::analyst::SearchQuery {
                 text: Some("credential".to_string()),
                 hostname: None,
@@ -16603,6 +16875,8 @@ mod tests {
                 to_ts: None,
                 limit: Some(50),
             },
+            "Credential abuse should persist across the hour".to_string(),
+            crate::enterprise::HuntExpectedOutcome::Confirm,
             crate::enterprise::ContentLifecycle::Canary,
             15,
             Some("identity-attacks".to_string()),
@@ -16731,16 +17005,15 @@ mod tests {
         assert!(overview.content.saved_searches > 0);
         assert_eq!(overview.automation.pending_approvals, 1);
         assert_eq!(overview.analytics.api_requests, 2);
-        assert!(overview
-            .recommendations
-            .iter()
-            .any(|item| item.category == "rollout" || item.category == "automation"));
         assert!(
             overview
-                .urgent_items
+                .recommendations
                 .iter()
-                .any(|item| item.kind == "queue" || item.kind == "response" || item.kind == "automation")
+                .any(|item| item.category == "rollout" || item.category == "automation")
         );
+        assert!(overview.urgent_items.iter().any(|item| item.kind == "queue"
+            || item.kind == "response"
+            || item.kind == "automation"));
         assert_eq!(overview.hot_agents.len(), 1);
 
         let _ = fs::remove_file(case_path);
@@ -16953,6 +17226,7 @@ mod tests {
             threshold: 1,
             suppression_window_secs: 0,
             schedule_interval_secs: None,
+            schedule_cron: None,
             last_run_at: None,
             next_run_at: None,
             query: crate::analyst::SearchQuery {
@@ -16964,6 +17238,8 @@ mod tests {
                 to_ts: None,
                 limit: None,
             },
+            hypothesis: "Credential storm should produce correlated host-level evidence".to_string(),
+            expected_outcome: crate::enterprise::HuntExpectedOutcome::Confirm,
             created_at: chrono::Utc::now().to_rfc3339(),
             updated_at: chrono::Utc::now().to_rfc3339(),
             lifecycle: crate::enterprise::ContentLifecycle::Canary,
@@ -16997,6 +17273,10 @@ mod tests {
             suppressed_count: 0,
             threshold_exceeded: true,
             severity: "high".to_string(),
+            case_id: None,
+            time_from: None,
+            time_to: None,
+            yield_rate: 1.0,
             matched_event_ids: vec![stored_events[0].id],
             matched_agent_ids: vec![agent_id],
             sample_event_ids: vec![stored_events[0].id],
@@ -17077,6 +17357,7 @@ mod tests {
             threshold: 1,
             suppression_window_secs: 0,
             schedule_interval_secs: None,
+            schedule_cron: None,
             last_run_at: None,
             next_run_at: None,
             query: crate::analyst::SearchQuery {
@@ -17088,6 +17369,8 @@ mod tests {
                 to_ts: None,
                 limit: None,
             },
+            hypothesis: "Shared host should fan out to both endpoints".to_string(),
+            expected_outcome: crate::enterprise::HuntExpectedOutcome::Confirm,
             created_at: chrono::Utc::now().to_rfc3339(),
             updated_at: chrono::Utc::now().to_rfc3339(),
             lifecycle: crate::enterprise::ContentLifecycle::Canary,
@@ -17107,6 +17390,10 @@ mod tests {
             suppressed_count: 0,
             threshold_exceeded: true,
             severity: "high".to_string(),
+            case_id: None,
+            time_from: None,
+            time_to: None,
+            yield_rate: 1.0,
             matched_event_ids: vec![1, 2],
             matched_agent_ids: vec!["agent-a".into(), "agent-b".into()],
             sample_event_ids: vec![1, 2],
@@ -17166,6 +17453,7 @@ mod tests {
             threshold: 1,
             suppression_window_secs: 0,
             schedule_interval_secs: None,
+            schedule_cron: None,
             last_run_at: None,
             next_run_at: None,
             query: crate::analyst::SearchQuery {
@@ -17177,6 +17465,8 @@ mod tests {
                 to_ts: None,
                 limit: None,
             },
+            hypothesis: "Repeated runs should reuse prior incident marker".to_string(),
+            expected_outcome: crate::enterprise::HuntExpectedOutcome::Confirm,
             created_at: chrono::Utc::now().to_rfc3339(),
             updated_at: chrono::Utc::now().to_rfc3339(),
             lifecycle: crate::enterprise::ContentLifecycle::Active,
@@ -17199,6 +17489,10 @@ mod tests {
             suppressed_count: 0,
             threshold_exceeded: true,
             severity: "high".to_string(),
+            case_id: None,
+            time_from: None,
+            time_to: None,
+            yield_rate: 1.0,
             matched_event_ids: vec![11],
             matched_agent_ids: vec!["agent-a".into()],
             sample_event_ids: vec![11],
@@ -17212,6 +17506,10 @@ mod tests {
             suppressed_count: 0,
             threshold_exceeded: true,
             severity: "high".to_string(),
+            case_id: None,
+            time_from: None,
+            time_to: None,
+            yield_rate: 1.0,
             matched_event_ids: vec![11],
             matched_agent_ids: vec!["agent-a".into()],
             sample_event_ids: vec![11],
@@ -17324,7 +17622,9 @@ mod tests {
         });
 
         assert!(ensure_target_group_access(&auth, Some("soc-analysts")).is_ok());
-        assert!(ensure_target_group_access(&AuthIdentity::AdminToken, Some("soc-analysts")).is_ok());
+        assert!(
+            ensure_target_group_access(&AuthIdentity::AdminToken, Some("soc-analysts")).is_ok()
+        );
     }
 
     #[test]

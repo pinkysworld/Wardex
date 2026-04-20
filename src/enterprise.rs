@@ -9,6 +9,7 @@ use crate::response::{ApprovalStatus, ResponseAction, ResponseAuditEntry, Respon
 use crate::sigma::{AttackMapping, RuleStatus, SigmaEngine, SigmaRule, builtin_rules};
 use crate::telemetry::MitreAttack;
 use crate::threat_intel::{IoC, IoCType};
+use chrono::{Datelike, Timelike};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use std::path::Path;
@@ -46,6 +47,54 @@ fn parse_time(value: &str) -> Option<chrono::DateTime<chrono::Utc>> {
     chrono::DateTime::parse_from_rfc3339(value)
         .ok()
         .map(|dt| dt.with_timezone(&chrono::Utc))
+}
+
+fn cron_field_matches(value: u32, expr: &str) -> bool {
+    let token = expr.trim();
+    if token == "*" {
+        return true;
+    }
+    token.parse::<u32>() == Ok(value)
+}
+
+fn cron_is_due(
+    expr: &str,
+    now: chrono::DateTime<chrono::Utc>,
+    last_run_at: Option<&str>,
+) -> bool {
+    let parts: Vec<&str> = expr.split_whitespace().collect();
+    if parts.len() != 5 {
+        return false;
+    }
+
+    let minute = now.minute();
+    let hour = now.hour();
+    let day = now.day();
+    let month = now.month();
+    let weekday = now.weekday().num_days_from_sunday();
+
+    let matches_now = cron_field_matches(minute, parts[0])
+        && cron_field_matches(hour, parts[1])
+        && cron_field_matches(day, parts[2])
+        && cron_field_matches(month, parts[3])
+        && cron_field_matches(weekday, parts[4]);
+    if !matches_now {
+        return false;
+    }
+
+    let Some(last_run_at) = last_run_at else {
+        return true;
+    };
+    let Some(last_run) = parse_time(last_run_at) else {
+        return true;
+    };
+
+    // Prevent repeated trigger in the same minute while scheduler loop runs each second.
+    !(last_run.year() == now.year()
+        && last_run.month() == now.month()
+        && last_run.day() == now.day()
+        && last_run.hour() == now.hour()
+        && last_run.minute() == now.minute())
 }
 
 fn severity_rank(severity: &str) -> u8 {
@@ -222,9 +271,7 @@ fn default_pack_workflows(id: &str) -> Vec<String> {
 
 fn default_pack_target_group(id: &str) -> Option<String> {
     match id {
-        "identity-attacks" | "lateral-movement" | "ransomware" => {
-            Some("soc-analysts".to_string())
-        }
+        "identity-attacks" | "lateral-movement" | "ransomware" => Some("soc-analysts".to_string()),
         "admin-abuse" => Some("soc-admins".to_string()),
         "cloud-audit" => Some("cloud-responders".to_string()),
         "insider-risk" => Some("insider-risk-reviewers".to_string()),
@@ -426,6 +473,24 @@ pub struct LifecycleChange {
     pub reason: String,
 }
 
+/// Result of the canary auto-promotion evaluation for a single rule.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CanaryPromotionResult {
+    pub rule_id: String,
+    pub rule_name: String,
+    pub action: CanaryAction,
+    pub reason: String,
+}
+
+/// Action taken (or not) during canary auto-promotion.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum CanaryAction {
+    Promoted,
+    RolledBack,
+    NoChange,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ManagedRuleMetadata {
     pub id: String,
@@ -527,6 +592,22 @@ fn default_canary_percentage() -> u8 {
     100
 }
 
+fn default_hunt_hypothesis() -> String {
+    String::new()
+}
+
+fn default_hunt_expected_outcome() -> HuntExpectedOutcome {
+    HuntExpectedOutcome::Explore
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum HuntExpectedOutcome {
+    Confirm,
+    Refute,
+    Explore,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SavedHunt {
     pub id: String,
@@ -537,9 +618,14 @@ pub struct SavedHunt {
     pub threshold: usize,
     pub suppression_window_secs: u64,
     pub schedule_interval_secs: Option<u64>,
+    pub schedule_cron: Option<String>,
     pub last_run_at: Option<String>,
     pub next_run_at: Option<String>,
     pub query: SearchQuery,
+    #[serde(default = "default_hunt_hypothesis")]
+    pub hypothesis: String,
+    #[serde(default = "default_hunt_expected_outcome")]
+    pub expected_outcome: HuntExpectedOutcome,
     pub created_at: String,
     pub updated_at: String,
     #[serde(default = "default_hunt_lifecycle")]
@@ -656,6 +742,10 @@ pub struct HuntRun {
     pub suppressed_count: usize,
     pub threshold_exceeded: bool,
     pub severity: String,
+    pub case_id: Option<u64>,
+    pub time_from: Option<String>,
+    pub time_to: Option<String>,
+    pub yield_rate: f32,
     #[serde(default)]
     pub matched_event_ids: Vec<u64>,
     #[serde(default)]
@@ -1161,6 +1251,20 @@ impl EnterpriseStore {
             .collect()
     }
 
+    pub fn link_hunt_run_case(&mut self, run_id: &str, case_id: u64) -> bool {
+        if let Some(run) = self
+            .snapshot
+            .hunt_runs
+            .iter_mut()
+            .find(|candidate| candidate.id == run_id)
+        {
+            run.case_id = Some(case_id);
+            self.persist();
+            return true;
+        }
+        false
+    }
+
     pub fn suppressions(&self) -> &[AlertSuppression] {
         &self.snapshot.suppressions
     }
@@ -1404,7 +1508,10 @@ impl EnterpriseStore {
         threshold: usize,
         suppression_window_secs: u64,
         schedule_interval_secs: Option<u64>,
+        schedule_cron: Option<String>,
         query: SearchQuery,
+        hypothesis: String,
+        expected_outcome: HuntExpectedOutcome,
         lifecycle: ContentLifecycle,
         canary_percentage: u8,
         pack_id: Option<String>,
@@ -1419,6 +1526,8 @@ impl EnterpriseStore {
         let normalized_pack_id = normalize_optional_text(pack_id);
         let normalized_workflows = normalize_string_list(recommended_workflows);
         let normalized_target_group = normalize_optional_text(target_group);
+        let normalized_hypothesis = hypothesis.trim().to_string();
+        let normalized_schedule_cron = normalize_optional_text(schedule_cron);
         if let Some(existing_id) = id
             && let Some(index) = self
                 .snapshot
@@ -1434,7 +1543,10 @@ impl EnterpriseStore {
                 hunt.threshold = threshold;
                 hunt.suppression_window_secs = suppression_window_secs;
                 hunt.schedule_interval_secs = schedule_interval_secs;
+                hunt.schedule_cron = normalized_schedule_cron;
                 hunt.query = query;
+                hunt.hypothesis = normalized_hypothesis;
+                hunt.expected_outcome = expected_outcome;
                 hunt.lifecycle = lifecycle;
                 hunt.canary_percentage = normalized_canary;
                 hunt.pack_id = normalized_pack_id;
@@ -1456,11 +1568,14 @@ impl EnterpriseStore {
             threshold,
             suppression_window_secs,
             schedule_interval_secs,
+            schedule_cron: normalized_schedule_cron,
             last_run_at: None,
             next_run_at: schedule_interval_secs.map(|secs| {
                 (chrono::Utc::now() + chrono::Duration::seconds(secs as i64)).to_rfc3339()
             }),
             query,
+            hypothesis: normalized_hypothesis,
+            expected_outcome,
             created_at: created_at.clone(),
             updated_at: created_at,
             lifecycle,
@@ -1482,19 +1597,34 @@ impl EnterpriseStore {
         self.snapshot
             .hunts
             .iter()
-            .filter(|hunt| hunt.enabled && hunt.schedule_interval_secs.is_some())
             .filter(|hunt| {
-                hunt.next_run_at
+                hunt.enabled && (hunt.schedule_interval_secs.is_some() || hunt.schedule_cron.is_some())
+            })
+            .filter(|hunt| {
+                let interval_due = hunt
+                    .next_run_at
                     .as_deref()
                     .and_then(parse_time)
                     .map(|next| next <= now)
-                    .unwrap_or(false)
+                    .unwrap_or(false);
+                let cron_due_now = hunt
+                    .schedule_cron
+                    .as_deref()
+                    .map(|expr| cron_is_due(expr, now, hunt.last_run_at.as_deref()))
+                    .unwrap_or(false);
+                interval_due || cron_due_now
             })
             .map(|hunt| hunt.id.clone())
             .collect()
     }
 
-    pub fn run_hunt(&mut self, hunt_id: &str, events: &[StoredEvent]) -> Result<HuntRun, String> {
+    pub fn run_hunt(
+        &mut self,
+        hunt_id: &str,
+        events: &[StoredEvent],
+        time_from: Option<chrono::DateTime<chrono::Utc>>,
+        time_to: Option<chrono::DateTime<chrono::Utc>>,
+    ) -> Result<HuntRun, String> {
         let hunt_index = self
             .snapshot
             .hunts
@@ -1505,6 +1635,20 @@ impl EnterpriseStore {
         let hunt = self.snapshot.hunts[hunt_index].clone();
         let matches: Vec<&StoredEvent> = events
             .iter()
+            .filter(|event| {
+                let received_at = parse_time(&event.received_at);
+                if let (Some(received), Some(from)) = (received_at, time_from)
+                    && received < from
+                {
+                    return false;
+                }
+                if let (Some(received), Some(to)) = (received_at, time_to)
+                    && received > to
+                {
+                    return false;
+                }
+                true
+            })
             .filter(|event| search_query_matches_event(event, &hunt.query))
             .collect();
         let suppressed_matches: Vec<&StoredEvent> = matches
@@ -1524,6 +1668,14 @@ impl EnterpriseStore {
             suppressed_count: suppressed_matches.len(),
             threshold_exceeded: visible_matches.len() >= hunt.threshold,
             severity: hunt.severity.clone(),
+            case_id: None,
+            time_from: time_from.map(|dt| dt.to_rfc3339()),
+            time_to: time_to.map(|dt| dt.to_rfc3339()),
+            yield_rate: if visible_matches.is_empty() {
+                0.0
+            } else {
+                visible_matches.len() as f32 / (visible_matches.len() + suppressed_matches.len()) as f32
+            },
             matched_event_ids: visible_matches.iter().map(|event| event.id).collect(),
             matched_agent_ids: visible_matches
                 .iter()
@@ -1553,6 +1705,9 @@ impl EnterpriseStore {
             hunt_mut.next_run_at = hunt_mut.schedule_interval_secs.map(|secs| {
                 (chrono::Utc::now() + chrono::Duration::seconds(secs as i64)).to_rfc3339()
             });
+            if hunt_mut.next_run_at.is_none() && hunt_mut.schedule_cron.is_some() {
+                hunt_mut.next_run_at = Some((chrono::Utc::now() + chrono::Duration::minutes(1)).to_rfc3339());
+            }
             hunt_mut.updated_at = now_rfc3339();
         }
         self.persist();
@@ -1791,6 +1946,120 @@ impl EnterpriseStore {
         Err("content rule not found".to_string())
     }
 
+    /// Automatically promote canary rules to active and rollback degrading
+    /// canary rules based on detection efficacy data.
+    ///
+    /// Rules in the `Canary` lifecycle are eligible for promotion when they
+    /// have accumulated at least `min_alerts` resolved triage records with
+    /// zero false positives and have been in canary for at least `min_days`.
+    ///
+    /// Canary rules whose FP rate exceeds `max_fp_rate` are automatically
+    /// rolled back to `Test` to prevent analyst fatigue.
+    pub fn canary_auto_promote(
+        &mut self,
+        efficacy: &[crate::detection_efficacy::RuleEfficacy],
+        min_alerts: usize,
+        min_days: u64,
+        max_fp_rate: f32,
+    ) -> Vec<CanaryPromotionResult> {
+        let now = chrono::Utc::now();
+        let min_duration = chrono::Duration::days(min_days as i64);
+        let efficacy_map: std::collections::HashMap<
+            &str,
+            &crate::detection_efficacy::RuleEfficacy,
+        > = efficacy.iter().map(|e| (e.rule_id.as_str(), e)).collect();
+
+        let mut results = Vec::new();
+
+        // Collect canary rule IDs first to avoid borrow issues
+        let canary_ids: Vec<(String, Option<String>)> = self
+            .snapshot
+            .builtin_rules
+            .iter()
+            .filter(|r| r.lifecycle == ContentLifecycle::Canary)
+            .map(|r| (r.id.clone(), r.last_promotion_at.clone()))
+            .chain(
+                self.snapshot
+                    .native_rules
+                    .iter()
+                    .filter(|r| r.metadata.lifecycle == ContentLifecycle::Canary)
+                    .map(|r| (r.metadata.id.clone(), r.metadata.last_promotion_at.clone())),
+            )
+            .collect();
+
+        for (rule_id, last_promotion_at) in &canary_ids {
+            let in_canary_long_enough = last_promotion_at
+                .as_deref()
+                .and_then(parse_time)
+                .is_some_and(|promoted_at| now - promoted_at >= min_duration);
+
+            let eff = efficacy_map.get(rule_id.as_str());
+
+            // Rollback: FP rate exceeds threshold
+            if let Some(e) = eff {
+                if e.total_alerts >= min_alerts && e.fp_rate > max_fp_rate {
+                    if let Ok(meta) = self.rollback_rule(rule_id, "canary-auto-promote") {
+                        results.push(CanaryPromotionResult {
+                            rule_id: rule_id.clone(),
+                            rule_name: meta.title.clone(),
+                            action: CanaryAction::RolledBack,
+                            reason: format!(
+                                "FP rate {:.1}% exceeds threshold {:.1}%",
+                                e.fp_rate * 100.0,
+                                max_fp_rate * 100.0
+                            ),
+                        });
+                        continue;
+                    }
+                }
+            }
+
+            // Promote: enough alerts, zero FPs, enough time in canary
+            if let Some(e) = eff {
+                if in_canary_long_enough && e.total_alerts >= min_alerts && e.false_positives == 0 {
+                    if let Ok(meta) = self.promote_rule(
+                        rule_id,
+                        ContentLifecycle::Active,
+                        "canary-auto-promote",
+                        &format!(
+                            "auto-promoted after {} alerts with 0 FPs over {}+ days",
+                            e.total_alerts, min_days
+                        ),
+                    ) {
+                        results.push(CanaryPromotionResult {
+                            rule_id: rule_id.clone(),
+                            rule_name: meta.title.clone(),
+                            action: CanaryAction::Promoted,
+                            reason: format!(
+                                "{} alerts, 0 FPs, canary duration satisfied",
+                                e.total_alerts
+                            ),
+                        });
+                        continue;
+                    }
+                }
+            }
+
+            // No action yet
+            results.push(CanaryPromotionResult {
+                rule_id: rule_id.clone(),
+                rule_name: eff.map(|e| e.rule_name.clone()).unwrap_or_default(),
+                action: CanaryAction::NoChange,
+                reason: if eff.is_none() {
+                    "no efficacy data yet".to_string()
+                } else if !in_canary_long_enough {
+                    format!("canary period < {min_days} days")
+                } else {
+                    format!(
+                        "only {} of {min_alerts} required alerts",
+                        eff.map(|e| e.total_alerts).unwrap_or(0)
+                    )
+                },
+            });
+        }
+        results
+    }
+
     pub fn test_rule(
         &mut self,
         rule_id: &str,
@@ -1958,7 +2227,9 @@ impl EnterpriseStore {
                         rule.metadata.pack_ids.push(pack_id.clone());
                     }
                 } else {
-                    rule.metadata.pack_ids.retain(|existing| existing != &pack_id);
+                    rule.metadata
+                        .pack_ids
+                        .retain(|existing| existing != &pack_id);
                 }
             }
             self.persist();
@@ -2325,14 +2596,28 @@ fn validate_idp_provider_config(provider: &IdentityProviderConfig) -> IdentityCo
 
     match provider.kind.trim().to_ascii_lowercase().as_str() {
         "oidc" => {
-            if provider.enabled && provider.issuer_url.as_deref().unwrap_or("").trim().is_empty() {
+            if provider.enabled
+                && provider
+                    .issuer_url
+                    .as_deref()
+                    .unwrap_or("")
+                    .trim()
+                    .is_empty()
+            {
                 issues.push(validation_issue(
                     "error",
                     "issuer_url",
                     "Enabled OIDC providers require an issuer URL.",
                 ));
             }
-            if provider.enabled && provider.client_id.as_deref().unwrap_or("").trim().is_empty() {
+            if provider.enabled
+                && provider
+                    .client_id
+                    .as_deref()
+                    .unwrap_or("")
+                    .trim()
+                    .is_empty()
+            {
                 issues.push(validation_issue(
                     "error",
                     "client_id",
@@ -2348,7 +2633,14 @@ fn validate_idp_provider_config(provider: &IdentityProviderConfig) -> IdentityCo
                     "Enabled SAML providers require an SSO URL.",
                 ));
             }
-            if provider.enabled && provider.entity_id.as_deref().unwrap_or("").trim().is_empty() {
+            if provider.enabled
+                && provider
+                    .entity_id
+                    .as_deref()
+                    .unwrap_or("")
+                    .trim()
+                    .is_empty()
+            {
                 issues.push(validation_issue(
                     "error",
                     "entity_id",
@@ -2387,7 +2679,14 @@ fn validate_scim_config(config: &ScimConfig) -> IdentityConfigValidation {
             "Enabled SCIM provisioning requires a base URL.",
         ));
     }
-    if config.enabled && config.bearer_token.as_deref().unwrap_or("").trim().is_empty() {
+    if config.enabled
+        && config
+            .bearer_token
+            .as_deref()
+            .unwrap_or("")
+            .trim()
+            .is_empty()
+    {
         issues.push(validation_issue(
             "error",
             "bearer_token",
@@ -3169,6 +3468,7 @@ mod tests {
             1,
             0,
             None,
+            None,
             SearchQuery {
                 text: Some("credential".to_string()),
                 hostname: None,
@@ -3178,6 +3478,8 @@ mod tests {
                 to_ts: None,
                 limit: Some(100),
             },
+            "Credential abuse likely present on exposed hosts".to_string(),
+            HuntExpectedOutcome::Confirm,
             ContentLifecycle::Canary,
             15,
             Some("identity-attacks".to_string()),
@@ -3193,6 +3495,8 @@ mod tests {
                     "Critical",
                     &["credential_access"],
                 )],
+                None,
+                None,
             )
             .expect("hunt run");
         assert_eq!(run.match_count, 1);
@@ -3246,7 +3550,10 @@ mod tests {
         assert_eq!(store.playbook_history()[0].status, "succeeded");
         assert_eq!(store.rollout_history().len(), 1);
         assert_eq!(store.rollout_history()[0].action, "deploy");
-        assert_eq!(store.rollout_history()[0].agent_id.as_deref(), Some("agent-7"));
+        assert_eq!(
+            store.rollout_history()[0].agent_id.as_deref(),
+            Some("agent-7")
+        );
 
         let _ = std::fs::remove_file(&path);
     }
@@ -3262,6 +3569,7 @@ mod tests {
             threshold: 5,
             suppression_window_secs: 3600,
             schedule_interval_secs: Some(300),
+            schedule_cron: None,
             last_run_at: None,
             next_run_at: None,
             query: SearchQuery {
@@ -3273,6 +3581,8 @@ mod tests {
                 to_ts: None,
                 limit: None,
             },
+            hypothesis: "Credential scan should find repeated auth failures".into(),
+            expected_outcome: HuntExpectedOutcome::Confirm,
             created_at: now_rfc3339(),
             updated_at: now_rfc3339(),
             lifecycle: ContentLifecycle::Canary,
@@ -3302,6 +3612,10 @@ mod tests {
             suppressed_count: 0,
             threshold_exceeded: true,
             severity: "high".into(),
+            case_id: None,
+            time_from: None,
+            time_to: None,
+            yield_rate: 1.0,
             matched_event_ids: vec![1, 2, 3],
             matched_agent_ids: vec!["agent-1".into()],
             sample_event_ids: vec![1, 2, 3],
@@ -3326,6 +3640,7 @@ mod tests {
             threshold: 5,
             suppression_window_secs: 0,
             schedule_interval_secs: None,
+            schedule_cron: None,
             last_run_at: None,
             next_run_at: None,
             query: SearchQuery {
@@ -3337,6 +3652,8 @@ mod tests {
                 to_ts: None,
                 limit: None,
             },
+            hypothesis: String::new(),
+            expected_outcome: HuntExpectedOutcome::Explore,
             created_at: now_rfc3339(),
             updated_at: now_rfc3339(),
             lifecycle: ContentLifecycle::Draft,
@@ -3357,6 +3674,10 @@ mod tests {
             suppressed_count: 0,
             threshold_exceeded: false,
             severity: "low".into(),
+            case_id: None,
+            time_from: None,
+            time_to: None,
+            yield_rate: 1.0,
             matched_event_ids: vec![],
             matched_agent_ids: vec![],
             sample_event_ids: vec![],
@@ -3378,6 +3699,7 @@ mod tests {
             threshold: 1,
             suppression_window_secs: 0,
             schedule_interval_secs: None,
+            schedule_cron: None,
             last_run_at: None,
             next_run_at: None,
             query: SearchQuery {
@@ -3389,6 +3711,8 @@ mod tests {
                 to_ts: None,
                 limit: None,
             },
+            hypothesis: String::new(),
+            expected_outcome: HuntExpectedOutcome::Explore,
             created_at: now_rfc3339(),
             updated_at: now_rfc3339(),
             lifecycle: ContentLifecycle::Test,
@@ -3412,6 +3736,10 @@ mod tests {
             suppressed_count: 0,
             threshold_exceeded: true,
             severity: "medium".into(),
+            case_id: None,
+            time_from: None,
+            time_to: None,
+            yield_rate: 1.0,
             matched_event_ids: vec![1],
             matched_agent_ids: vec!["agent-1".into()],
             sample_event_ids: vec![1],
@@ -3448,10 +3776,16 @@ mod tests {
 
         assert_eq!(provider.kind, "oidc");
         assert_eq!(provider.display_name, "Corporate SSO");
-        assert_eq!(provider.issuer_url.as_deref(), Some("https://issuer.example.com"));
+        assert_eq!(
+            provider.issuer_url.as_deref(),
+            Some("https://issuer.example.com")
+        );
         assert_eq!(provider.client_id.as_deref(), Some("wardex-admin"));
         assert_eq!(
-            provider.group_role_mappings.get("Engineers").map(String::as_str),
+            provider
+                .group_role_mappings
+                .get("Engineers")
+                .map(String::as_str),
             Some("analyst")
         );
 
@@ -3501,13 +3835,17 @@ mod tests {
         let validation = store.scim_validation();
         assert_eq!(validation.status, "warning");
         assert_eq!(validation.mapping_count, 0);
-        assert!(validation
-            .issues
-            .iter()
-            .any(|issue| issue.field == "group_role_mappings" && issue.level == "warning"));
-        assert!(validation
-            .issues
-            .iter()
-            .any(|issue| issue.field == "default_role" && issue.level == "warning"));
+        assert!(
+            validation
+                .issues
+                .iter()
+                .any(|issue| issue.field == "group_role_mappings" && issue.level == "warning")
+        );
+        assert!(
+            validation
+                .issues
+                .iter()
+                .any(|issue| issue.field == "default_role" && issue.level == "warning")
+        );
     }
 }

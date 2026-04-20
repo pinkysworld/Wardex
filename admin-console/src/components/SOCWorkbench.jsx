@@ -21,6 +21,7 @@ const TAB_GROUPS = [
       'timeline',
       'investigation-timeline',
       'campaigns',
+      'analyst',
     ],
   },
   { label: 'Respond', tabs: ['response', 'escalation', 'playbooks', 'rbac'] },
@@ -264,6 +265,7 @@ export default function SOCWorkbench() {
   const { data: workflows } = useApi(api.investigationWorkflows);
   const { data: activeInvestigations, reload: rInv } = useApi(api.investigationActive);
   const { data: efficacyData, reload: rEfficacy } = useApi(api.efficacySummary);
+  const { data: wsStats } = useApi(api.wsStats);
   const [selectedInc, setSelectedInc] = useState(null);
   const [incDetail, setIncDetail] = useState(null);
   const [incStoryline, setIncStoryline] = useState(null);
@@ -282,6 +284,21 @@ export default function SOCWorkbench() {
   const [plannerSuggestions, setPlannerSuggestions] = useState([]);
   const [plannerLoading, setPlannerLoading] = useState(false);
   const [startingWorkflowId, setStartingWorkflowId] = useState(null);
+  const [caseTitleDrafts, setCaseTitleDrafts] = useState({});
+  const [analystPrompt, setAnalystPrompt] = useState('show me high severity alerts from this week');
+  const [analystResult, setAnalystResult] = useState(null);
+  const [analystLoading, setAnalystLoading] = useState(false);
+  const [queueFilterText, setQueueFilterText] = useState('');
+  const [savedQueueFilters, setSavedQueueFilters] = useState(() => {
+    try {
+      const parsed = JSON.parse(localStorage.getItem('wardex_saved_queue_filters') || '[]');
+      return Array.isArray(parsed) ? parsed : [];
+    } catch {
+      return [];
+    }
+  });
+  const [selectedCaseIds, setSelectedCaseIds] = useState(new Set());
+  const [bulkCaseStatus, setBulkCaseStatus] = useState('investigating');
 
   // ── Case Comments ──
   const [commentText, setCommentText] = useState('');
@@ -343,6 +360,15 @@ export default function SOCWorkbench() {
   const caseArr = Array.isArray(caseList) ? caseList : caseList?.cases || [];
   const queueArr = Array.isArray(queue) ? queue : queue?.alerts || [];
   const rbacArr = Array.isArray(rbacData) ? rbacData : rbacData?.users || [];
+  const filteredQueueArr = queueArr.filter((alert) => {
+    const q = queueFilterText.trim().toLowerCase();
+    if (!q) return true;
+    return JSON.stringify(alert || {}).toLowerCase().includes(q);
+  });
+
+  useEffect(() => {
+    localStorage.setItem('wardex_saved_queue_filters', JSON.stringify(savedQueueFilters));
+  }, [savedQueueFilters]);
 
   const startWorkflow = async (workflow, caseId) => {
     if (!workflow?.id) return;
@@ -414,6 +440,46 @@ export default function SOCWorkbench() {
   };
   const openProcess = (process) => setSelectedProcess(process ? { ...process } : null);
 
+  const updateCaseTitleInline = async (caseItem) => {
+    const id = caseItem?.id;
+    if (!id) return;
+    const nextTitle = String(caseTitleDrafts[id] ?? caseItem.title ?? '').trim();
+    if (!nextTitle || nextTitle === String(caseItem.title || '').trim()) return;
+    try {
+      await api.updateCase(id, { title: nextTitle });
+      toast('Case title updated', 'success');
+      rCases();
+    } catch {
+      toast('Failed to update case title', 'error');
+    }
+  };
+
+  const runAnalystQuery = async () => {
+    const text = String(analystPrompt || '').trim();
+    if (!text) return;
+    setAnalystLoading(true);
+    try {
+      const normalized = text.toLowerCase();
+      const payload = {
+        text,
+        level: normalized.includes('critical')
+          ? 'critical'
+          : normalized.includes('high')
+            ? 'high'
+            : undefined,
+        limit: normalized.includes('all') ? 1000 : 200,
+      };
+      const result = await api.analystQuery(payload);
+      setAnalystResult(result);
+      toast('Analyst query completed', 'success');
+    } catch {
+      toast('Analyst query failed', 'error');
+      setAnalystResult(null);
+    } finally {
+      setAnalystLoading(false);
+    }
+  };
+
   return (
     <div>
       <div className="tabs" style={{ flexWrap: 'wrap', gap: 0 }}>
@@ -448,8 +514,8 @@ export default function SOCWorkbench() {
         ))}
       </div>
 
-      {tab === 'overview' && (
-        overview ? (
+      {tab === 'overview' &&
+        (overview ? (
           <>
             <div className="card">
               <div className="card-title" style={{ marginBottom: 12 }}>
@@ -459,17 +525,20 @@ export default function SOCWorkbench() {
                 <div className="card metric">
                   <div className="metric-label">Identity Routing</div>
                   <div className="metric-value">
-                    {overview.identity?.ready_providers || 0}/{overview.identity?.providers_configured || 0}
+                    {overview.identity?.ready_providers || 0}/
+                    {overview.identity?.providers_configured || 0}
                   </div>
                   <div className="metric-sub">
-                    Ready providers aligned with {overview.identity?.mapped_groups || 0} mapped group
+                    Ready providers aligned with {overview.identity?.mapped_groups || 0} mapped
+                    group
                     {overview.identity?.mapped_groups === 1 ? '' : 's'}
                   </div>
                 </div>
                 <div className="card metric">
                   <div className="metric-label">Canary Content</div>
                   <div className="metric-value">
-                    {(overview.rollouts?.canary_rules || 0) + (overview.rollouts?.canary_hunts || 0)}
+                    {(overview.rollouts?.canary_rules || 0) +
+                      (overview.rollouts?.canary_hunts || 0)}
                   </div>
                   <div className="metric-sub">
                     {overview.rollouts?.promotion_ready_rules || 0} promotion-ready rule
@@ -480,8 +549,9 @@ export default function SOCWorkbench() {
                   <div className="metric-label">Saved Search Library</div>
                   <div className="metric-value">{overview.content?.saved_searches || 0}</div>
                   <div className="metric-sub">
-                    {(overview.content?.packs || 0)} pack bundle
-                    {(overview.content?.packs || 0) === 1 ? '' : 's'} and {(overview.content?.hunt_library || 0)} hunt
+                    {overview.content?.packs || 0} pack bundle
+                    {(overview.content?.packs || 0) === 1 ? '' : 's'} and{' '}
+                    {overview.content?.hunt_library || 0} hunt
                     {(overview.content?.hunt_library || 0) === 1 ? '' : 's'}
                   </div>
                 </div>
@@ -497,14 +567,16 @@ export default function SOCWorkbench() {
                   <div className="metric-label">API Health</div>
                   <div className="metric-value">{formatMs(overview.analytics?.worst_p95_ms)}</div>
                   <div className="metric-sub">
-                    {formatPct(1 - (overview.analytics?.api_error_rate || 0))} request success across{' '}
-                    {overview.analytics?.api_requests || 0} API call
+                    {formatPct(1 - (overview.analytics?.api_error_rate || 0))} request success
+                    across {overview.analytics?.api_requests || 0} API call
                     {(overview.analytics?.api_requests || 0) === 1 ? '' : 's'}
                   </div>
                 </div>
                 <div className="card metric">
                   <div className="metric-label">Investigations In Flight</div>
-                  <div className="metric-value">{overview.automation?.active_investigations || 0}</div>
+                  <div className="metric-value">
+                    {overview.automation?.active_investigations || 0}
+                  </div>
                   <div className="metric-sub">
                     {overview.automation?.workflow_templates || 0} workflow template
                     {(overview.automation?.workflow_templates || 0) === 1 ? '' : 's'} available
@@ -521,18 +593,21 @@ export default function SOCWorkbench() {
                 <div className="summary-grid">
                   <div className="summary-card">
                     <div className="summary-label">SCIM Status</div>
-                    <div className="summary-value">{overview.identity?.scim_status || 'disabled'}</div>
+                    <div className="summary-value">
+                      {overview.identity?.scim_status || 'disabled'}
+                    </div>
                     <div className="summary-meta">
                       {overview.identity?.automation_targets_aligned || 0} automation target
-                      {(overview.identity?.automation_targets_aligned || 0) === 1 ? '' : 's'} aligned
+                      {(overview.identity?.automation_targets_aligned || 0) === 1 ? '' : 's'}{' '}
+                      aligned
                     </div>
                   </div>
                   <div className="summary-card">
                     <div className="summary-label">Providers With Gaps</div>
-                    <div className="summary-value">{overview.identity?.providers_with_gaps || 0}</div>
-                    <div className="summary-meta">
-                      Review group mappings before broad rollout.
+                    <div className="summary-value">
+                      {overview.identity?.providers_with_gaps || 0}
                     </div>
+                    <div className="summary-meta">Review group mappings before broad rollout.</div>
                   </div>
                 </div>
               </div>
@@ -554,7 +629,8 @@ export default function SOCWorkbench() {
                     <div className="summary-value">{overview.rollouts?.rollout_targets || 0}</div>
                     <div className="summary-meta">
                       {overview.rollouts?.active_hunts || 0} active hunt
-                      {(overview.rollouts?.active_hunts || 0) === 1 ? '' : 's'} attached to delivery lanes
+                      {(overview.rollouts?.active_hunts || 0) === 1 ? '' : 's'} attached to delivery
+                      lanes
                     </div>
                   </div>
                   <div className="summary-card">
@@ -588,7 +664,7 @@ export default function SOCWorkbench() {
                             {event.action} • {event.version}
                           </div>
                           <div className="row-secondary">
-                            {(event.agent_id || event.platform || 'shared rollout')} • {event.status}
+                            {event.agent_id || event.platform || 'shared rollout'} • {event.status}
                           </div>
                         </div>
                         <div className="hint" style={{ textAlign: 'right' }}>
@@ -608,9 +684,12 @@ export default function SOCWorkbench() {
                 <div className="summary-grid">
                   <div className="summary-card">
                     <div className="summary-label">Packs With Workflows</div>
-                    <div className="summary-value">{overview.content?.packs_with_workflows || 0}</div>
+                    <div className="summary-value">
+                      {overview.content?.packs_with_workflows || 0}
+                    </div>
                     <div className="summary-meta">
-                      {overview.content?.enabled_packs || 0}/{overview.content?.packs || 0} enabled packs
+                      {overview.content?.enabled_packs || 0}/{overview.content?.packs || 0} enabled
+                      packs
                     </div>
                   </div>
                   <div className="summary-card">
@@ -631,16 +710,20 @@ export default function SOCWorkbench() {
                   <div className="summary-card">
                     <div className="summary-label">Coverage</div>
                     <div className="summary-value">
-                      {(overview.automation?.playbooks || 0) + (overview.automation?.dynamic_templates || 0)}
+                      {(overview.automation?.playbooks || 0) +
+                        (overview.automation?.dynamic_templates || 0)}
                     </div>
                     <div className="summary-meta">
                       {overview.automation?.playbooks || 0} static playbook
-                      {(overview.automation?.playbooks || 0) === 1 ? '' : 's'} • {overview.automation?.dynamic_templates || 0} dynamic
+                      {(overview.automation?.playbooks || 0) === 1 ? '' : 's'} •{' '}
+                      {overview.automation?.dynamic_templates || 0} dynamic
                     </div>
                   </div>
                   <div className="summary-card">
                     <div className="summary-label">Success Rate</div>
-                    <div className="summary-value">{formatPct(overview.automation?.success_rate || 0)}</div>
+                    <div className="summary-value">
+                      {formatPct(overview.automation?.success_rate || 0)}
+                    </div>
                     <div className="summary-meta">
                       Avg runtime {formatMs(overview.automation?.avg_execution_ms)}
                     </div>
@@ -649,7 +732,8 @@ export default function SOCWorkbench() {
                     <div className="summary-label">Historical Runs</div>
                     <div className="summary-value">{overview.automation?.historical_runs || 0}</div>
                     <div className="summary-meta">
-                      Latest {overview.automation?.last_execution_at
+                      Latest{' '}
+                      {overview.automation?.last_execution_at
                         ? formatRelativeTime(overview.automation.last_execution_at)
                         : 'not recorded'}
                     </div>
@@ -674,7 +758,10 @@ export default function SOCWorkbench() {
                             {execution.playbook_id} • {execution.status}
                           </div>
                           <div className="row-secondary">
-                            {execution.executed_by} • {execution.duration_ms ? formatMs(execution.duration_ms) : 'runtime pending'}
+                            {execution.executed_by} •{' '}
+                            {execution.duration_ms
+                              ? formatMs(execution.duration_ms)
+                              : 'runtime pending'}
                           </div>
                         </div>
                         <div className="hint" style={{ textAlign: 'right' }}>
@@ -704,7 +791,9 @@ export default function SOCWorkbench() {
                   </div>
                   <div className="summary-card">
                     <div className="summary-label">Latency Snapshots</div>
-                    <div className="summary-value">{formatMs(overview.analytics?.last_hunt_latency_ms)}</div>
+                    <div className="summary-value">
+                      {formatMs(overview.analytics?.last_hunt_latency_ms)}
+                    </div>
                     <div className="summary-meta">
                       Response {formatMs(overview.analytics?.last_response_latency_ms)}
                     </div>
@@ -727,7 +816,10 @@ export default function SOCWorkbench() {
                       alignItems: 'flex-start',
                       gap: 12,
                       padding: '10px 0',
-                      borderBottom: index === overview.recommendations.length - 1 ? 'none' : '1px solid var(--border)',
+                      borderBottom:
+                        index === overview.recommendations.length - 1
+                          ? 'none'
+                          : '1px solid var(--border)',
                     }}
                   >
                     <div style={{ flex: 1 }}>
@@ -772,8 +864,7 @@ export default function SOCWorkbench() {
             </div>
             <div className="empty">Loading...</div>
           </div>
-        )
-      )}
+        ))}
 
       {tab === 'incidents' && (
         <div className="card">
@@ -1161,20 +1252,46 @@ export default function SOCWorkbench() {
         <div className="card">
           <div className="card-header">
             <span className="card-title">Cases ({caseArr.length})</span>
-            <button
-              className="btn btn-sm btn-primary"
-              onClick={async () => {
-                try {
-                  await api.createCase({ title: 'New investigation' });
-                  toast('Case created', 'success');
+            <div className="btn-group">
+              <select
+                className="form-select"
+                value={bulkCaseStatus}
+                onChange={(event) => setBulkCaseStatus(event.target.value)}
+              >
+                {['new', 'triaging', 'investigating', 'escalated', 'resolved', 'closed'].map((status) => (
+                  <option key={status} value={status}>
+                    {status}
+                  </option>
+                ))}
+              </select>
+              <button
+                className="btn btn-sm"
+                disabled={selectedCaseIds.size === 0}
+                onClick={async () => {
+                  const ids = [...selectedCaseIds];
+                  await Promise.allSettled(ids.map((id) => api.updateCase(id, { status: bulkCaseStatus })));
+                  toast(`Updated ${ids.length} case(s)`, 'success');
+                  setSelectedCaseIds(new Set());
                   rCases();
-                } catch {
-                  toast('Failed', 'error');
-                }
-              }}
-            >
-              + New Case
-            </button>
+                }}
+              >
+                Bulk Apply
+              </button>
+              <button
+                className="btn btn-sm btn-primary"
+                onClick={async () => {
+                  try {
+                    await api.createCase({ title: 'New investigation' });
+                    toast('Case created', 'success');
+                    rCases();
+                  } catch {
+                    toast('Failed', 'error');
+                  }
+                }}
+              >
+                + New Case
+              </button>
+            </div>
           </div>
           {caseStats && (
             <div style={{ marginBottom: 12 }}>
@@ -1188,6 +1305,19 @@ export default function SOCWorkbench() {
               <table>
                 <thead>
                   <tr>
+                    <th>
+                      <input
+                        type="checkbox"
+                        checked={caseArr.length > 0 && selectedCaseIds.size === caseArr.length}
+                        onChange={(event) => {
+                          if (event.target.checked) {
+                            setSelectedCaseIds(new Set(caseArr.map((c) => c.id).filter(Boolean)));
+                          } else {
+                            setSelectedCaseIds(new Set());
+                          }
+                        }}
+                      />
+                    </th>
                     <th>ID</th>
                     <th>Title</th>
                     <th>Status</th>
@@ -1198,8 +1328,40 @@ export default function SOCWorkbench() {
                 <tbody>
                   {caseArr.map((c, i) => (
                     <tr key={i}>
+                      <td>
+                        <input
+                          type="checkbox"
+                          checked={selectedCaseIds.has(c.id)}
+                          onChange={(event) => {
+                            setSelectedCaseIds((current) => {
+                              const next = new Set(current);
+                              if (event.target.checked) next.add(c.id);
+                              else next.delete(c.id);
+                              return next;
+                            });
+                          }}
+                        />
+                      </td>
                       <td style={{ fontFamily: 'var(--font-mono)', fontSize: 12 }}>{c.id || i}</td>
-                      <td>{c.title || '—'}</td>
+                      <td>
+                        <input
+                          className="form-input"
+                          value={caseTitleDrafts[c.id] ?? c.title ?? ''}
+                          onChange={(event) =>
+                            setCaseTitleDrafts((current) => ({
+                              ...current,
+                              [c.id]: event.target.value,
+                            }))
+                          }
+                          onBlur={() => updateCaseTitleInline(c)}
+                          onKeyDown={(event) => {
+                            if (event.key === 'Enter') {
+                              event.preventDefault();
+                              updateCaseTitleInline(c);
+                            }
+                          }}
+                        />
+                      </td>
                       <td>
                         <span
                           className={`badge ${c.status === 'closed' ? 'badge-ok' : 'badge-warn'}`}
@@ -1218,13 +1380,62 @@ export default function SOCWorkbench() {
         </div>
       )}
 
+      {tab === 'analyst' && (
+        <div className="card">
+          <div className="card-header">
+            <span className="card-title">Ask the Analyst</span>
+            <span className="badge badge-info">Experimental</span>
+          </div>
+          <div className="hint" style={{ marginBottom: 10 }}>
+            Natural-language prompt to build an event search quickly for triage and hunt pivots.
+          </div>
+          <div className="form-group">
+            <label className="form-label" htmlFor="analyst-prompt">
+              Prompt
+            </label>
+            <textarea
+              id="analyst-prompt"
+              className="form-textarea"
+              rows={3}
+              value={analystPrompt}
+              onChange={(event) => setAnalystPrompt(event.target.value)}
+              placeholder="Show me lateral movement on db-01 this week"
+            />
+          </div>
+          <div className="btn-group" style={{ marginTop: 10 }}>
+            <button className="btn btn-sm btn-primary" onClick={runAnalystQuery} disabled={analystLoading}>
+              {analystLoading ? 'Running…' : 'Run Query'}
+            </button>
+            <button className="btn btn-sm" onClick={() => setAnalystResult(null)}>
+              Clear
+            </button>
+          </div>
+          <div style={{ marginTop: 14 }}>
+            {analystResult ? (
+              <JsonDetails data={analystResult} label="Analyst query result" />
+            ) : (
+              <div className="empty">No analyst query run yet.</div>
+            )}
+          </div>
+        </div>
+      )}
+
       {tab === 'queue' && (
         <div className="card">
           <div className="card-header">
-            <span className="card-title">SOC Queue ({queueArr.length} alerts)</span>
-            <button className="btn btn-sm" onClick={rQueue}>
-              ↻ Refresh
-            </button>
+            <span className="card-title">SOC Queue ({filteredQueueArr.length} alerts)</span>
+            <div className="btn-group">
+              <span
+                className={`badge ${(wsStats?.connected_subscribers || 0) > 0 ? 'badge-ok' : 'badge-warn'}`}
+              >
+                {(wsStats?.connected_subscribers || 0) > 0
+                  ? `Live (${wsStats.connected_subscribers})`
+                  : 'Live idle'}
+              </span>
+              <button className="btn btn-sm" onClick={rQueue}>
+                ↻ Refresh
+              </button>
+            </div>
           </div>
           {qStats && (
             <div style={{ marginBottom: 12 }}>
@@ -1232,7 +1443,42 @@ export default function SOCWorkbench() {
               <JsonDetails data={qStats} />
             </div>
           )}
-          {queueArr.length === 0 ? (
+          <div className="triage-toolbar" style={{ marginBottom: 10 }}>
+            <div className="triage-toolbar-group">
+              <input
+                className="form-input triage-search"
+                value={queueFilterText}
+                placeholder="Filter alerts…"
+                onChange={(event) => setQueueFilterText(event.target.value)}
+              />
+              <button
+                className="btn btn-sm"
+                onClick={() => {
+                  const name = `Filter ${savedQueueFilters.length + 1}`;
+                  const query = queueFilterText.trim();
+                  if (!query) return;
+                  setSavedQueueFilters((current) => {
+                    const next = [...current.filter((item) => item.query !== query), { name, query }];
+                    return next.slice(-10);
+                  });
+                }}
+              >
+                Save Filter
+              </button>
+            </div>
+            <div className="triage-toolbar-group">
+              {savedQueueFilters.slice(-4).map((item) => (
+                <button
+                  key={`${item.name}-${item.query}`}
+                  className="btn btn-sm"
+                  onClick={() => setQueueFilterText(item.query)}
+                >
+                  {item.name}
+                </button>
+              ))}
+            </div>
+          </div>
+          {filteredQueueArr.length === 0 ? (
             <div className="empty">Queue empty</div>
           ) : (
             <div className="table-wrap">
@@ -1247,7 +1493,7 @@ export default function SOCWorkbench() {
                   </tr>
                 </thead>
                 <tbody>
-                  {queueArr.map((a, i) => (
+                  {filteredQueueArr.map((a, i) => (
                     <tr key={i}>
                       <td>{a.id || i}</td>
                       <td>

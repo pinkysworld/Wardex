@@ -103,10 +103,9 @@ describe('ThemeProvider', () => {
       return Promise.resolve(jsonOk({}));
     });
 
-    const { result } = renderHook(
-      () => ({ auth: useAuth(), theme: useTheme() }),
-      { wrapper: Providers },
-    );
+    const { result } = renderHook(() => ({ auth: useAuth(), theme: useTheme() }), {
+      wrapper: Providers,
+    });
 
     await act(async () => {
       await result.current.auth.connect('valid-token');

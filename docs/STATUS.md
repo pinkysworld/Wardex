@@ -43,6 +43,7 @@
 - SOC Workbench with queue, cases, investigation pivots, storyline views, response approval flows, escalation management, planner-to-hunt handoffs, identity-routing readiness, rollout history, content bundle posture, automation history, and operational analytics recommendations
 - Structured incident detail view with severity badge, storyline timeline, related events/agents, close/export actions
 - Event search, incident timelines, process-tree inspection, and evidence package export
+- Inline case title editing, saved queue-filter bookmarks, and bulk case status operations
 
 ### Detection engineering
 
@@ -52,6 +53,8 @@
 - Content pack bundles with saved-search templates, workflow routes, target groups, and rollout notes directly editable from the detection workspace
 - Suppression rules management with inline creation form (rule_id, hostname, severity filters)
 - Hunt drawer UX with route-driven run-hunt intent, live execution, saved-hunt reopening, and workflow suggestions from selected rule context
+- Hunt hypothesis and expected-outcome tracking, retrohunt time windows, cron scheduling, and one-click hunt-to-case escalation
+- ATT&CK gap heatmap overlays for rule-and-hunt coverage blind spots
 
 ### Fleet and release operations
 
@@ -98,7 +101,7 @@ Wardex is now positioned as a professional XDR/SIEM control plane rather than an
 ## Next release priorities
 
 - full enterprise SSO workflows beyond IDP/SCIM configuration surfaces
-- customisable analyst dashboards with drag-and-drop widget placement
+- customizable analyst dashboards with drag-and-drop widget placement polish and shared presets
 - searchable documentation site with versioned content
 - package-manager distribution (APT/YUM, Chocolatey)
 - secrets manager integration (HashiCorp Vault, AWS Secrets Manager)

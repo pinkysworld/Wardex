@@ -187,6 +187,7 @@ export default function AttackGraph() {
   const [selectedNode, setSelectedNode] = useState(null);
 
   const { data: lateralData } = useApi(api.campaigns);
+  const { data: coverageGaps } = useApi(api.coverageGaps);
 
   const { nodes, edges } = useMemo(() => {
     if (!lateralData) return { nodes: [], edges: [] };
@@ -390,6 +391,34 @@ export default function AttackGraph() {
             </div>
           </div>
         )}
+      </div>
+
+      <div className="card" style={{ padding: 16 }}>
+        <div className="card-title" style={{ marginBottom: 8 }}>
+          ATT&CK Gap Heatmap
+        </div>
+        <div className="hint" style={{ marginBottom: 10 }}>
+          Techniques with no active hunt/rule coverage are highlighted for engineering backlogs.
+        </div>
+        <div style={{ display: 'grid', gap: 6 }}>
+          {(Array.isArray(coverageGaps?.gaps) ? coverageGaps.gaps : Array.isArray(coverageGaps) ? coverageGaps : [])
+            .slice(0, 10)
+            .map((gap, index) => (
+              <div
+                key={`${gap?.technique_id || gap?.technique || 'gap'}-${index}`}
+                style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  gap: 12,
+                  borderBottom: '1px solid var(--border)',
+                  padding: '8px 0',
+                }}
+              >
+                <span className="row-primary">{gap?.technique_id || gap?.technique || 'Unknown'}</span>
+                <span className="row-secondary">{gap?.technique_name || gap?.name || 'Unmapped'}</span>
+              </div>
+            ))}
+        </div>
       </div>
     </div>
   );

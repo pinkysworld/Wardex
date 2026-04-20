@@ -109,7 +109,9 @@ impl UserPreferencesStore {
         }
 
         current.updated_at = Some(chrono::Utc::now().to_rfc3339());
-        self.snapshot.users.insert(actor.to_string(), current.clone());
+        self.snapshot
+            .users
+            .insert(actor.to_string(), current.clone());
         self.persist();
         Ok(current)
     }

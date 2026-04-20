@@ -180,6 +180,39 @@ impl CaseStore {
         }
     }
 
+    pub fn update_title(&mut self, id: u64, title: String) -> bool {
+        if let Some(c) = self.cases.iter_mut().find(|c| c.id == id) {
+            c.title = title;
+            c.updated_at = chrono::Utc::now().to_rfc3339();
+            self.persist();
+            true
+        } else {
+            false
+        }
+    }
+
+    pub fn update_description(&mut self, id: u64, description: String) -> bool {
+        if let Some(c) = self.cases.iter_mut().find(|c| c.id == id) {
+            c.description = description;
+            c.updated_at = chrono::Utc::now().to_rfc3339();
+            self.persist();
+            true
+        } else {
+            false
+        }
+    }
+
+    pub fn update_tags(&mut self, id: u64, tags: Vec<String>) -> bool {
+        if let Some(c) = self.cases.iter_mut().find(|c| c.id == id) {
+            c.tags = tags;
+            c.updated_at = chrono::Utc::now().to_rfc3339();
+            self.persist();
+            true
+        } else {
+            false
+        }
+    }
+
     pub fn add_comment(&mut self, id: u64, author: String, text: String) -> bool {
         if let Some(c) = self.cases.iter_mut().find(|c| c.id == id) {
             c.comments.push(CaseComment {

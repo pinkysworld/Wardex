@@ -20,7 +20,7 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
     <link rel="icon" href="favicon.svg" type="image/svg+xml">
-    <link rel="stylesheet" href="styles.css?v=14">
+    <link rel="stylesheet" href="styles.css?v=15">
     <script defer src="app.js?v=14"></script>
   </head>
   <body>
@@ -116,9 +116,9 @@
               <ul class="tier-features">
                 <li>Everything in Starter</li>
                 <li>Priority email (24h)</li>
-                <li>SSO &amp; SAML (OIDC)</li>
-                <li>RBAC + audit logs</li>
+                <li>Priority email (24h SLA)</li>
                 <li>Multi-tenant isolation</li>
+                <li>Onboarding checklist</li>
               </ul>
               <a href="mailto:michel_ng@icloud.com?subject=Wardex%20Team" class="btn btn-outline tier-cta">Contact Sales</a>
             </div>
@@ -161,7 +161,7 @@
 
           </div>
 
-          <p class="pricing-footnote">Prices exclude VAT. Annual prepay saves ~17%. Paid tiers include a 30-day evaluation under non-production BSL terms. All deployments remain fully self-hosted — we never receive your telemetry.</p>
+          <p class="pricing-footnote">Prices exclude VAT. Annual prepay saves ~17%. Paid tiers include a 30-day evaluation under non-production BSL terms. All deployments remain fully self-hosted — we never receive your telemetry. SSO, SAML, RBAC and audit logs are included in every tier.</p>
         </div>
       </section>
 
@@ -187,8 +187,8 @@
                 <tr><th scope="row">Endpoints</th><td>10</td><td>25</td><td>250</td><td>5 000</td><td>Unlimited</td></tr>
                 <tr><th scope="row">Production use</th><td>—</td><td>✓</td><td>✓</td><td>✓</td><td>✓</td></tr>
                 <tr><th scope="row">All detection engines</th><td>✓</td><td>✓</td><td>✓</td><td>✓</td><td>✓</td></tr>
-                <tr><th scope="row">SSO / SAML</th><td>—</td><td>—</td><td>✓</td><td>✓</td><td>✓</td></tr>
-                <tr><th scope="row">RBAC + audit logs</th><td>—</td><td>—</td><td>✓</td><td>✓</td><td>✓</td></tr>
+                <tr><th scope="row">SSO / SAML</th><td>✓</td><td>✓</td><td>✓</td><td>✓</td><td>✓</td></tr>
+                <tr><th scope="row">RBAC + audit logs</th><td>✓</td><td>✓</td><td>✓</td><td>✓</td><td>✓</td></tr>
                 <tr><th scope="row">HA reference arch</th><td>—</td><td>—</td><td>—</td><td>✓</td><td>✓</td></tr>
                 <tr><th scope="row">Support SLA</th><td>Community</td><td>72h email</td><td>24h email</td><td>8×5 Slack</td><td>24/7 signed</td></tr>
                 <tr><th scope="row">Dedicated engineer</th><td>—</td><td>—</td><td>—</td><td>—</td><td>✓</td></tr>
@@ -222,7 +222,7 @@
           <div class="faq-stack">
             <details class="faq-item"><summary>Do I need to pay to try Wardex?</summary><p>No. The Community tier is free for up to 10 endpoints and covers evaluation, research, homelab and non-production use. Paid tiers are only required when you run Wardex against live business operations.</p></details>
             <details class="faq-item"><summary>What exactly counts as &quot;production&quot; use?</summary><p>Any environment where Wardex is monitoring or protecting real business operations, customer data or live workloads. If a SOC depends on it to detect real attacks — that's production.</p></details>
-            <details class="faq-item"><summary>Is the product the same across tiers?</summary><p>Yes. Every tier ships the same binary with all detection engines, the full admin console, the complete API, and YARA/Sigma rule packs. Tiers differ on endpoint count, support SLA, SSO/RBAC, HA and contract terms — not on feature flags.</p></details>
+            <details class="faq-item"><summary>Is the product the same across tiers?</summary><p>Yes. Every tier ships the same binary with all detection engines, SSO/SAML, RBAC, audit logs, the full admin console, the complete API, and YARA/Sigma rule packs. Tiers differ on endpoint count, support SLA, HA and contract terms — not on feature flags.</p></details>
             <details class="faq-item"><summary>Do you see my telemetry?</summary><p>Never. Wardex is 100% self-hosted. Agent events, alerts and analytics stay in your infrastructure. We don't operate a cloud backplane — there is nothing to phone home to.</p></details>
             <details class="faq-item"><summary>Is Wardex truly open-source?</summary><p>The source is fully open, readable, forkable and modifiable. BSL 1.1 is source-available with a time-locked conversion to Apache 2.0. It's not OSI-certified open-source during the BSL window, but it's functionally open for every use case except commercial production deployment.</p></details>
             <details class="faq-item"><summary>Can I switch tiers or cancel?</summary><p>Yes. Monthly plans cancel at any time — you keep the right to run the version you licensed for the remainder of the period. Annual plans renew yearly. No lock-in — the source stays yours.</p></details>

@@ -42,7 +42,9 @@ function normalizePinnedSections(value) {
 
 function readStoredPinnedSections() {
   try {
-    return normalizePinnedSections(JSON.parse(localStorage.getItem('wardex_pinned_sections') || '[]'));
+    return normalizePinnedSections(
+      JSON.parse(localStorage.getItem('wardex_pinned_sections') || '[]'),
+    );
   } catch {
     return [];
   }
@@ -374,13 +376,16 @@ export default function App() {
   const inboxItems = Array.isArray(inboxData) ? inboxData : inboxData?.items || [];
   const inboxPending = inboxItems.filter((item) => !item.acknowledged).length;
 
-  const togglePinnedSection = useCallback((sectionId) => {
-    const current = pinnedSectionsRef.current;
-    const next = current.includes(sectionId)
-      ? current.filter((id) => id !== sectionId)
-      : [sectionId, ...current].slice(0, MAX_PINNED_SECTIONS);
-    applyPinnedSections(next, true);
-  }, [applyPinnedSections]);
+  const togglePinnedSection = useCallback(
+    (sectionId) => {
+      const current = pinnedSectionsRef.current;
+      const next = current.includes(sectionId)
+        ? current.filter((id) => id !== sectionId)
+        : [sectionId, ...current].slice(0, MAX_PINNED_SECTIONS);
+      applyPinnedSections(next, true);
+    },
+    [applyPinnedSections],
+  );
 
   const copyShareLink = useCallback(() => {
     const url = window.location.origin + location.pathname + location.search;

@@ -267,7 +267,9 @@ describe('Settings', () => {
         return Promise.resolve({
           ok: true,
           status: 200,
-          headers: { get: (header) => (header === 'content-type' ? 'text/csv; charset=utf-8' : null) },
+          headers: {
+            get: (header) => (header === 'content-type' ? 'text/csv; charset=utf-8' : null),
+          },
           text: async () =>
             'timestamp,method,path,source_ip,status_code,auth_state\n"\'2026-04-20T10:17:00Z","\'POST","\'/api/alerts/sample","\'127.0.0.1",200,"\'authenticated"\n',
         });
@@ -368,7 +370,9 @@ describe('Settings', () => {
     expect(within(providerRow).getByText('Review')).toBeInTheDocument();
     expect(within(providerRow).getByText('1 issue • 0 mappings')).toBeInTheDocument();
     expect(
-      screen.getByText('No group-to-role mappings configured; users may fall back to viewer access.'),
+      screen.getByText(
+        'No group-to-role mappings configured; users may fall back to viewer access.',
+      ),
     ).toBeInTheDocument();
 
     const scimCard = screen.getByText('SCIM Config').closest('.card');
@@ -387,9 +391,9 @@ describe('Settings', () => {
       expect(
         globalThis.fetch.mock.calls.some(([url]) => String(url) === '/api/idp/providers'),
       ).toBe(true);
-      expect(
-        globalThis.fetch.mock.calls.some(([url]) => String(url) === '/api/scim/config'),
-      ).toBe(true);
+      expect(globalThis.fetch.mock.calls.some(([url]) => String(url) === '/api/scim/config')).toBe(
+        true,
+      );
     });
   });
 

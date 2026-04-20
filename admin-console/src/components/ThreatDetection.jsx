@@ -57,6 +57,13 @@ const tokenize = (value) =>
 
 const formatRatio = (value) => `${Math.round((Number(value) || 0) * 100)}%`;
 
+const toIsoOrUndefined = (value) => {
+  if (!value) return undefined;
+  const timestamp = new Date(value);
+  if (Number.isNaN(timestamp.getTime())) return undefined;
+  return timestamp.toISOString();
+};
+
 const scoreFpPatternMatch = (rule, pattern) => {
   if (!rule || !pattern) return 0;
 
@@ -166,15 +173,14 @@ const summarizeHuntResult = (result) => {
 const bundleListToText = (values) =>
   (Array.isArray(values) ? values : []).filter((value) => String(value || '').trim()).join('\n');
 
-const textToBundleList = (value) =>
-  [
-    ...new Set(
-      String(value || '')
-        .split(/\n|,/)
-        .map((entry) => entry.trim())
-        .filter(Boolean),
-    ),
-  ];
+const textToBundleList = (value) => [
+  ...new Set(
+    String(value || '')
+      .split(/\n|,/)
+      .map((entry) => entry.trim())
+      .filter(Boolean),
+  ),
+];
 
 const derivePackRuleIds = (pack, rules, selectedRuleId) => {
   if (Array.isArray(pack?.rule_ids) && pack.rule_ids.length > 0) {
@@ -267,6 +273,15 @@ export default function ThreatDetection() {
   const { data: huntsData, reload: reloadHunts } = useApi(api.hunts);
   const { data: suppressionsData, reload: reloadSuppressions } = useApi(api.suppressions);
   const { data: mitreCoverage } = useApi(api.mitreCoverageAlt);
+  const { data: coverageGaps } = useApi(api.coverageGaps);
+  const { data: malwareStats } = useApi(api.malwareStats);
+  const { data: malwareRecent } = useApi(api.malwareRecent);
+  const { data: feedStats } = useApi(api.feedStats);
+  const { data: feeds } = useApi(api.feeds);
+  const { data: quarantineStats } = useApi(api.quarantineStats);
+  const { data: quarantineItems } = useApi(api.quarantineList);
+  const { data: hostInventory } = useApi(api.hostInventory);
+  const { data: fleetInventory } = useApi(api.fleetInventory);
   const [testResult, setTestResult] = useState(null);
   const [drawerMode, setDrawerMode] = useState(null);
   const [weightInput, setWeightInput] = useState('0.50');
@@ -274,12 +289,17 @@ export default function ThreatDetection() {
     id: '',
     name: '',
     query: '',
+    hypothesis: '',
+    expectedOutcome: 'explore',
     severity: 'medium',
     level: '',
     limit: '250',
     threshold: '1',
     suppressionWindowSecs: '0',
     scheduleIntervalSecs: '',
+    scheduleCron: '',
+    timeFrom: '',
+    timeTo: '',
     lifecycle: 'draft',
     canaryPercentage: '100',
     packId: '',
@@ -302,6 +322,7 @@ export default function ThreatDetection() {
   const [huntSaving, setHuntSaving] = useState(false);
   const [packSaving, setPackSaving] = useState(false);
   const [runningSavedHuntId, setRunningSavedHuntId] = useState(null);
+  const [escalatingRunId, setEscalatingRunId] = useState(null);
   const [drawerSessionId, setDrawerSessionId] = useState(0);
   const [drawerBaseline, setDrawerBaseline] = useState(null);
   const [investigationSuggestions, setInvestigationSuggestions] = useState([]);
@@ -318,8 +339,14 @@ export default function ThreatDetection() {
     () => (Array.isArray(contentRulesData?.rules) ? contentRulesData.rules : []),
     [contentRulesData],
   );
-  const packs = useMemo(() => (Array.isArray(packsData?.packs) ? packsData.packs : []), [packsData]);
-  const hunts = useMemo(() => (Array.isArray(huntsData?.hunts) ? huntsData.hunts : []), [huntsData]);
+  const packs = useMemo(
+    () => (Array.isArray(packsData?.packs) ? packsData.packs : []),
+    [packsData],
+  );
+  const hunts = useMemo(
+    () => (Array.isArray(huntsData?.hunts) ? huntsData.hunts : []),
+    [huntsData],
+  );
   const suppressions = useMemo(
     () => (Array.isArray(suppressionsData?.suppressions) ? suppressionsData.suppressions : []),
     [suppressionsData],
@@ -735,9 +762,12 @@ export default function ThreatDetection() {
     const selectedPack = packs.find((pack) => pack.id === huntDraft.packId) || selectedPacks[0];
     const recommendedWorkflows = [
       ...new Set([
-        ...((huntDraft.recommendedWorkflows || []).filter(Boolean)),
-        ...((selectedPack?.recommended_workflows || []).filter(Boolean)),
-        ...investigationSuggestions.slice(0, 3).map((workflow) => workflow?.id).filter(Boolean),
+        ...(huntDraft.recommendedWorkflows || []).filter(Boolean),
+        ...(selectedPack?.recommended_workflows || []).filter(Boolean),
+        ...investigationSuggestions
+          .slice(0, 3)
+          .map((workflow) => workflow?.id)
+          .filter(Boolean),
       ]),
     ];
 
@@ -746,12 +776,15 @@ export default function ThreatDetection() {
       await api.createHunt({
         id: huntDraft.id || undefined,
         name: huntDraft.name || `Hunt ${selectedRule?.title || selectedRule?.id || 'Signals'}`,
+        hypothesis: huntDraft.hypothesis || undefined,
+        expected_outcome: huntDraft.expectedOutcome || 'explore',
         severity: huntDraft.severity || selectedRule?.severity_mapping || 'medium',
         threshold: Number(huntDraft.threshold) || 1,
         suppression_window_secs: Number(huntDraft.suppressionWindowSecs) || 0,
         schedule_interval_secs: huntDraft.scheduleIntervalSecs
           ? Number(huntDraft.scheduleIntervalSecs)
           : undefined,
+        schedule_cron: huntDraft.scheduleCron || undefined,
         lifecycle: huntDraft.lifecycle || 'draft',
         canary_percentage:
           huntDraft.lifecycle === 'canary' ? Number(huntDraft.canaryPercentage) || 10 : 100,
@@ -791,7 +824,10 @@ export default function ThreatDetection() {
     if (!huntId) return;
     setRunningSavedHuntId(huntId);
     try {
-      const result = await api.runHunt(huntId);
+      const result = await api.runHunt(huntId, {
+        time_from: toIsoOrUndefined(huntDraft.timeFrom),
+        time_to: toIsoOrUndefined(huntDraft.timeTo),
+      });
       setHuntResult(result);
       openDrawer('hunt');
       toast('Saved hunt executed.', 'success');
@@ -805,6 +841,24 @@ export default function ThreatDetection() {
       );
     } finally {
       setRunningSavedHuntId(null);
+    }
+  };
+
+  const escalateHuntRun = async (huntId, runId) => {
+    if (!huntId || !runId) return;
+    setEscalatingRunId(runId);
+    try {
+      const result = await api.escalateHunt(huntId, { run_id: runId });
+      toast(`Escalated to case #${result?.case_id || 'new'}.`, 'success');
+      setHuntResult((current) => ({
+        ...(current || {}),
+        escalated_case_id: result?.case_id,
+      }));
+      reloadHunts();
+    } catch {
+      toast('Failed to escalate hunt result to case.', 'error');
+    } finally {
+      setEscalatingRunId(null);
     }
   };
 
@@ -831,12 +885,17 @@ export default function ThreatDetection() {
       id: hunt.id || '',
       name: hunt.name || `Hunt ${selectedRule?.title || selectedRule?.id || 'Signals'}`,
       query: queryText,
+      hypothesis: String(hunt.hypothesis || ''),
+      expectedOutcome: String(hunt.expected_outcome || 'explore'),
       severity: String(hunt.severity || selectedRule?.severity_mapping || 'medium').toLowerCase(),
       level: String(hunt.query?.level || '').toLowerCase(),
       limit: String(hunt.query?.limit || 250),
       threshold: String(hunt.threshold || 1),
       suppressionWindowSecs: String(hunt.suppression_window_secs || 0),
       scheduleIntervalSecs: hunt.schedule_interval_secs ? String(hunt.schedule_interval_secs) : '',
+      scheduleCron: hunt.schedule_cron || '',
+      timeFrom: '',
+      timeTo: '',
       lifecycle: String(hunt.lifecycle || 'draft').toLowerCase(),
       canaryPercentage: String(hunt.canary_percentage || 100),
       packId: hunt.pack_id || '',
@@ -850,7 +909,11 @@ export default function ThreatDetection() {
 
   const packNames = selectedPacks.map((pack) => pack.name || pack.id);
   const packSavedSearches = [
-    ...new Set(selectedPacks.flatMap((pack) => (Array.isArray(pack.saved_searches) ? pack.saved_searches : []))),
+    ...new Set(
+      selectedPacks.flatMap((pack) =>
+        Array.isArray(pack.saved_searches) ? pack.saved_searches : [],
+      ),
+    ),
   ];
   const packWorkflowIds = [
     ...new Set(
@@ -861,7 +924,8 @@ export default function ThreatDetection() {
   ];
   const relatedHunts = hunts.filter((hunt) => {
     const text = `${hunt.name || ''} ${JSON.stringify(hunt.query || {})}`.toLowerCase();
-    const packMatch = selectedRule && hunt.pack_id && (selectedRule.pack_ids || []).includes(hunt.pack_id);
+    const packMatch =
+      selectedRule && hunt.pack_id && (selectedRule.pack_ids || []).includes(hunt.pack_id);
     return (
       selectedRule &&
       (text.includes(String(selectedRule.id).toLowerCase()) ||
@@ -1004,6 +1068,84 @@ export default function ThreatDetection() {
           </div>
         </div>
         {summary && <JsonDetails data={summary} label="Detection summary details" />}
+      </div>
+
+      <div className="card" style={{ marginBottom: 16 }}>
+        <div className="card-title" style={{ marginBottom: 10 }}>
+          ATT&CK Coverage Heatmap (Rules + Hunts)
+        </div>
+        <div className="hint" style={{ marginBottom: 12 }}>
+          Highlights technique blind spots where neither rule coverage nor hunt coverage is present.
+        </div>
+        <div className="summary-grid">
+          <div className="summary-card">
+            <div className="summary-label">Covered Techniques</div>
+            <div className="summary-value">{mitreCoverage?.covered_techniques ?? '—'}</div>
+            <div className="summary-meta">{mitreCoverage?.coverage_pct ?? '—'}% total ATT&CK coverage</div>
+          </div>
+          <div className="summary-card">
+            <div className="summary-label">Gap Techniques</div>
+            <div className="summary-value">
+              {Array.isArray(coverageGaps?.gaps)
+                ? coverageGaps.gaps.length
+                : Array.isArray(coverageGaps)
+                  ? coverageGaps.length
+                  : '—'}
+            </div>
+            <div className="summary-meta">Techniques without matched rule/hunt content</div>
+          </div>
+        </div>
+        <div style={{ marginTop: 10, display: 'grid', gap: 8 }}>
+          {(Array.isArray(coverageGaps?.gaps) ? coverageGaps.gaps : Array.isArray(coverageGaps) ? coverageGaps : [])
+            .slice(0, 8)
+            .map((gap, index) => (
+              <div
+                key={`${gap?.technique_id || gap?.technique || 'gap'}-${index}`}
+                style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  borderBottom: '1px solid var(--border)',
+                  padding: '8px 0',
+                }}
+              >
+                <div className="row-primary">
+                  {gap?.technique_id || gap?.technique || 'Unknown technique'}
+                </div>
+                <div className="row-secondary">{gap?.technique_name || gap?.name || 'Unmapped'}</div>
+              </div>
+            ))}
+        </div>
+      </div>
+
+      <div className="card" style={{ marginBottom: 16 }}>
+        <div className="card-title" style={{ marginBottom: 10 }}>
+          Detection Domains
+        </div>
+        <div className="summary-grid">
+          <div className="summary-card">
+            <div className="summary-label">Malware Scanning</div>
+            <div className="summary-value">{malwareStats?.detections ?? malwareRecent?.length ?? 0}</div>
+            <div className="summary-meta">Recent detections and signature activity</div>
+          </div>
+          <div className="summary-card">
+            <div className="summary-label">Feed Ingestion</div>
+            <div className="summary-value">{feedStats?.active_feeds ?? feeds?.feeds?.length ?? 0}</div>
+            <div className="summary-meta">Connected intel and rules feeds</div>
+          </div>
+          <div className="summary-card">
+            <div className="summary-label">Quarantine Store</div>
+            <div className="summary-value">{quarantineStats?.active ?? quarantineItems?.items?.length ?? 0}</div>
+            <div className="summary-meta">Tracked quarantined artifacts</div>
+          </div>
+          <div className="summary-card">
+            <div className="summary-label">Asset Inventory</div>
+            <div className="summary-value">
+              {fleetInventory?.items?.length ?? hostInventory?.software?.length ?? 0}
+            </div>
+            <div className="summary-meta">Visible endpoint and host assets</div>
+          </div>
+        </div>
       </div>
 
       <div className="triage-layout">
@@ -1501,9 +1643,9 @@ export default function ThreatDetection() {
                     </div>
                     {selectedPacks.length === 0 ? (
                       <div className="hint">
-                        This rule is not attached to a content pack bundle yet. Create one to
-                        manage saved searches, workflow routes, and target-group rollout notes from
-                        this workspace.
+                        This rule is not attached to a content pack bundle yet. Create one to manage
+                        saved searches, workflow routes, and target-group rollout notes from this
+                        workspace.
                       </div>
                     ) : (
                       selectedPacks.slice(0, 2).map((pack) => (
@@ -1578,14 +1720,26 @@ export default function ThreatDetection() {
                               {hunt.query?.text || JSON.stringify(hunt.query || {})}
                             </div>
                             <div className="hint" style={{ marginTop: 4 }}>
-                              {(hunt.lifecycle || 'draft').replace(/_/g, ' ')} • {hunt.canary_percentage || 100}% rollout •{' '}
+                              {(hunt.lifecycle || 'draft').replace(/_/g, ' ')} •{' '}
+                              {hunt.canary_percentage || 100}% rollout •{' '}
                               {hunt.target_group || 'unassigned target'}
                               {hunt.pack_id ? ` • ${hunt.pack_id}` : ''}
+                            </div>
+                            <div className="hint" style={{ marginTop: 4 }}>
+                              {(hunt.expected_outcome || 'explore').toUpperCase()} •{' '}
+                              {hunt.hypothesis || 'No explicit hypothesis documented.'}
                             </div>
                             <div className="hint" style={{ marginTop: 4 }}>
                               {hunt.latest_run?.started_at
                                 ? `Last run ${formatRelativeTime(hunt.latest_run.started_at)} • ${hunt.latest_run.match_count || 0} matches`
                                 : 'No saved-hunt run recorded yet.'}
+                            </div>
+                            <div className="hint" style={{ marginTop: 4 }}>
+                              Yield {(Number(hunt.latest_run?.yield_rate || 0) * 100).toFixed(0)}%
+                              {hunt.latest_run?.suppressed_count != null
+                                ? ` • ${hunt.latest_run.suppressed_count} suppressed`
+                                : ''}
+                              {hunt.latest_run?.case_id ? ` • linked case #${hunt.latest_run.case_id}` : ''}
                             </div>
                           </div>
                           <div className="btn-group" style={{ alignItems: 'center' }}>
@@ -1601,6 +1755,15 @@ export default function ThreatDetection() {
                               disabled={runningSavedHuntId === hunt.id}
                             >
                               {runningSavedHuntId === hunt.id ? 'Running…' : 'Run'}
+                            </button>
+                            <button
+                              className="btn btn-sm"
+                              onClick={() => escalateHuntRun(hunt.id, hunt.latest_run?.id)}
+                              disabled={!hunt.latest_run?.id || escalatingRunId === hunt.latest_run?.id}
+                            >
+                              {escalatingRunId === hunt.latest_run?.id
+                                ? 'Escalating…'
+                                : 'Escalate to Case'}
                             </button>
                           </div>
                         </div>
@@ -1795,7 +1958,11 @@ export default function ThreatDetection() {
 
       <SideDrawer
         open={drawerMode === 'pack'}
-        title={packDraft.id ? `Edit ${packDraft.name || 'Content Pack Bundle'}` : 'Create Content Pack Bundle'}
+        title={
+          packDraft.id
+            ? `Edit ${packDraft.name || 'Content Pack Bundle'}`
+            : 'Create Content Pack Bundle'
+        }
         subtitle="Manage saved-search bundles, workflow routes, and target-group rollout notes without leaving the detection workspace."
         onClose={closeDrawer}
         actions={
@@ -1882,7 +2049,9 @@ export default function ThreatDetection() {
             }
             placeholder={'failed logins by user\ngeo anomalies by src_ip'}
           />
-          <div className="hint">Use one saved-search template per line or separate values with commas.</div>
+          <div className="hint">
+            Use one saved-search template per line or separate values with commas.
+          </div>
         </div>
         <div className="form-group">
           <label className="form-label" htmlFor="pack-workflows">
@@ -1901,7 +2070,9 @@ export default function ThreatDetection() {
             }
             placeholder={'credential-storm\nidentity-abuse'}
           />
-          <div className="hint">These workflow ids are attached to new hunts and rule context for this bundle.</div>
+          <div className="hint">
+            These workflow ids are attached to new hunts and rule context for this bundle.
+          </div>
         </div>
         <div className="form-group">
           <label className="form-label" htmlFor="pack-rollout-notes">
@@ -2040,6 +2211,39 @@ export default function ThreatDetection() {
         </div>
         <div className="summary-grid" style={{ marginBottom: 16 }}>
           <div className="form-group">
+            <label className="form-label" htmlFor="hunt-hypothesis">
+              Hypothesis
+            </label>
+            <input
+              id="hunt-hypothesis"
+              className="form-input"
+              value={huntDraft.hypothesis}
+              onChange={(event) =>
+                setHuntDraft((draft) => ({ ...draft, hypothesis: event.target.value }))
+              }
+              placeholder="What are we trying to validate?"
+            />
+          </div>
+          <div className="form-group">
+            <label className="form-label" htmlFor="hunt-expected-outcome">
+              Expected Outcome
+            </label>
+            <select
+              id="hunt-expected-outcome"
+              className="form-select"
+              value={huntDraft.expectedOutcome}
+              onChange={(event) =>
+                setHuntDraft((draft) => ({ ...draft, expectedOutcome: event.target.value }))
+              }
+            >
+              {['confirm', 'refute', 'explore'].map((option) => (
+                <option key={option} value={option}>
+                  {option}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="form-group">
             <label className="form-label" htmlFor="hunt-severity">
               Severity
             </label>
@@ -2135,6 +2339,48 @@ export default function ThreatDetection() {
                 setHuntDraft((draft) => ({ ...draft, scheduleIntervalSecs: event.target.value }))
               }
               placeholder="Optional"
+            />
+          </div>
+          <div className="form-group">
+            <label className="form-label" htmlFor="hunt-schedule-cron">
+              Schedule (Cron)
+            </label>
+            <input
+              id="hunt-schedule-cron"
+              className="form-input"
+              value={huntDraft.scheduleCron}
+              onChange={(event) =>
+                setHuntDraft((draft) => ({ ...draft, scheduleCron: event.target.value }))
+              }
+              placeholder="0 8 * * *"
+            />
+          </div>
+          <div className="form-group">
+            <label className="form-label" htmlFor="hunt-time-from">
+              Retro Window From
+            </label>
+            <input
+              id="hunt-time-from"
+              className="form-input"
+              type="datetime-local"
+              value={huntDraft.timeFrom}
+              onChange={(event) =>
+                setHuntDraft((draft) => ({ ...draft, timeFrom: event.target.value }))
+              }
+            />
+          </div>
+          <div className="form-group">
+            <label className="form-label" htmlFor="hunt-time-to">
+              Retro Window To
+            </label>
+            <input
+              id="hunt-time-to"
+              className="form-input"
+              type="datetime-local"
+              value={huntDraft.timeTo}
+              onChange={(event) =>
+                setHuntDraft((draft) => ({ ...draft, timeTo: event.target.value }))
+              }
             />
           </div>
           <div className="form-group">

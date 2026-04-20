@@ -26,7 +26,7 @@
       rel="stylesheet"
     >
     <link rel="icon" href="favicon.svg" type="image/svg+xml">
-    <link rel="stylesheet" href="styles.css?v=14">
+    <link rel="stylesheet" href="styles.css?v=15">
     <script defer src="app.js?v=14"></script>
   </head>
   <body>
@@ -191,6 +191,122 @@
           </div>
           <div class="section-cta">
             <a href="features.html" class="btn btn-outline">See all features →</a>
+          </div>
+        </div>
+      </section>
+
+      <!-- ── Inside Wardex ───────────────────────────────────────────────── -->
+      <section class="section insights-section" id="insights">
+        <div class="container">
+          <div class="section-header insights-header">
+            <p class="label">Insights</p>
+            <h2>Inside Wardex: live operator views from a real control plane.</h2>
+            <p class="section-desc">
+              Captured from a local Wardex v0.53.0 instance with seeded alerts, enrolled endpoints, active incidents, and an in-progress hunt. No static mockups.
+            </p>
+          </div>
+
+          <div class="insights-feature">
+            <div class="insights-copy">
+              <p class="insights-eyebrow">One control plane for posture, triage, fleet recovery, and hunt workflows.</p>
+              <div class="insights-pills">
+                <span class="insight-pill">Live local capture</span>
+                <span class="insight-pill">Seeded alerts + incidents</span>
+                <span class="insight-pill">Fleet + hunt context</span>
+              </div>
+              <p>
+                Wardex keeps detection, investigation, and endpoint operations inside the same product surface. Analysts do not have to swivel between stitched-together tools to move from an alert to a host, a case, or a hunt.
+              </p>
+              <ul class="insights-list">
+                <li>Dashboard posture, fleet state, and threat volume share the same data model.</li>
+                <li>Fleet recovery stays next to version drift, heartbeat loss, and rollout status.</li>
+                <li>Incidents, cases, and hunts remain linked to the same endpoints and evidence.</li>
+              </ul>
+              <div class="hero-cta insights-actions">
+                <a href="features.html" class="btn btn-primary">See Full Platform</a>
+                <a href="resources.html" class="btn btn-outline">Read Operator Docs</a>
+              </div>
+            </div>
+
+            <figure class="insight-frame insight-frame-featured">
+              <div class="insight-frame-meta">
+                <span>Dashboard</span>
+                <span>Live operator view</span>
+              </div>
+              <img
+                src="media/insights/dashboard-live.png"
+                alt="Wardex dashboard with live security overview, alert charts, and threat metrics from a real local instance."
+                loading="lazy"
+                width="1540"
+                height="980"
+              >
+            </figure>
+          </div>
+
+          <div class="insights-grid">
+            <article class="insight-card">
+              <div class="insight-card-copy">
+                <p class="insight-kicker">Fleet Operations</p>
+                <h3>Spot version drift and offline endpoints in one sweep.</h3>
+                <p>Version lag, heartbeat gaps, and endpoint detail stay visible without leaving the fleet workspace.</p>
+              </div>
+              <figure class="insight-frame">
+                <div class="insight-frame-meta">
+                  <span>Fleet &amp; Agents</span>
+                  <span>Coverage + rollout detail</span>
+                </div>
+                <img
+                  src="media/insights/fleet-live.png"
+                  alt="Wardex fleet view showing enrolled endpoints, operating systems, versions, and endpoint detail for an offline finance MacBook."
+                  loading="lazy"
+                  width="1540"
+                  height="980"
+                >
+              </figure>
+            </article>
+
+            <article class="insight-card">
+              <div class="insight-card-copy">
+                <p class="insight-kicker">Incident Response</p>
+                <h3>Move from incident list to action plan without another tool.</h3>
+                <p>Open incidents carry linked agents, narrative context, and next-response actions inside the same SOC workbench.</p>
+              </div>
+              <figure class="insight-frame">
+                <div class="insight-frame-meta">
+                  <span>SOC Workbench</span>
+                  <span>Incident detail in context</span>
+                </div>
+                <img
+                  src="media/insights/soc-live.png"
+                  alt="Wardex SOC workbench showing open incidents and the detail view for a credential abuse investigation."
+                  loading="lazy"
+                  width="1540"
+                  height="980"
+                >
+              </figure>
+            </article>
+
+            <article class="insight-card">
+              <div class="insight-card-copy">
+                <p class="insight-kicker">Threat Hunting</p>
+                <h3>Pivot into live hunts directly from rule context.</h3>
+                <p>Run an ad hoc hunt, reuse the query, and widen scope from the same detection engineering surface.</p>
+              </div>
+              <figure class="insight-frame">
+                <div class="insight-frame-meta">
+                  <span>Threat Detection</span>
+                  <span>Hunt workflow</span>
+                </div>
+                <img
+                  class="insight-media insight-media-right"
+                  src="media/insights/detection-live.png"
+                  alt="Wardex threat detection workspace with a live hunt drawer open from rule context."
+                  loading="lazy"
+                  width="1540"
+                  height="980"
+                >
+              </figure>
+            </article>
           </div>
         </div>
       </section>

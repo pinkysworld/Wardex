@@ -486,15 +486,13 @@ mod tests {
     #[test]
     fn validate_session_cookie_valid() {
         let mgr = AuthManager::new(test_config());
-        let sid = mgr
-            .sessions
-            .create_session(
-                "u5",
-                "u5@example.com",
-                "analyst",
-                &["soc-analysts".to_string()],
-                8,
-            );
+        let sid = mgr.sessions.create_session(
+            "u5",
+            "u5@example.com",
+            "analyst",
+            &["soc-analysts".to_string()],
+            8,
+        );
         let session = mgr.validate_session_cookie(&sid).expect("should be valid");
         assert_eq!(session.email, "u5@example.com");
         assert_eq!(session.groups, vec!["soc-analysts"]);

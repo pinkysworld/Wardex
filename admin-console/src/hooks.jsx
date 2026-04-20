@@ -168,12 +168,15 @@ export function ThemeProvider({ children }) {
     };
   }, [authenticated]);
 
-  const persistTheme = useCallback((nextDark) => {
-    if (!authenticated) return;
-    void updateUserPreferences({ theme: nextDark ? 'dark' : 'light' }).catch((error) => {
-      void error;
-    });
-  }, [authenticated]);
+  const persistTheme = useCallback(
+    (nextDark) => {
+      if (!authenticated) return;
+      void updateUserPreferences({ theme: nextDark ? 'dark' : 'light' }).catch((error) => {
+        void error;
+      });
+    },
+    [authenticated],
+  );
 
   const toggle = useCallback(() => {
     const nextDark = !darkRef.current;

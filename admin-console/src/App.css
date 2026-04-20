@@ -1916,10 +1916,24 @@ textarea:focus-visible,
 
 .triage-pagination {
   display: flex;
-  justify-content: center;
+  justify-content: space-between;
   align-items: center;
   gap: 10px;
   margin-top: 12px;
+  flex-wrap: wrap;
+}
+.triage-pagination-meta {
+  font-size: 0.82rem;
+  color: var(--ink-2, #666);
+}
+.triage-pagination-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.triage-pagination-controls .form-select {
+  width: auto;
+  min-width: 90px;
 }
 
 .triage-detail-nav {
@@ -2218,43 +2232,6 @@ textarea:focus-visible,
   color: var(--text-secondary);
 }
 
-/* ── Confirm dialog ───────────────────────────────────────── */
-.confirm-overlay {
-  position: fixed;
-  inset: 0;
-  background: rgba(15, 17, 23, 0.56);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 2200;
-  padding: 24px;
-}
-
-.confirm-dialog {
-  width: min(420px, 100%);
-  background: var(--bg-card);
-  border: 1px solid var(--border);
-  border-radius: 16px;
-  padding: 20px;
-  box-shadow: 0 18px 56px rgba(0, 0, 0, 0.28);
-}
-
-.confirm-dialog-header h3 {
-  margin: 0 0 8px;
-}
-
-.confirm-dialog-body {
-  color: var(--text-secondary);
-  line-height: 1.6;
-}
-
-.confirm-dialog-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 8px;
-  margin-top: 18px;
-}
-
 /* ── Mobile Responsive ────────────────────────────────────── */
 @media (max-width: 768px) {
   :root {
@@ -2420,11 +2397,34 @@ textarea:focus-visible,
   padding: 24px;
   animation: confirm-fade 120ms ease-out;
 }
-@keyframes confirm-fade { from { opacity: 0; } to { opacity: 1; } }
+@keyframes confirm-fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
 
 .confirm-dialog {
-  width: min(460px, 1  width: min(460px, 1  width: min(460px, 1  width: min(460px, 1  width: min(460px, 1  width: min(460px, 1  width: mi  border-radius: 12px;
-                                                                                                                                                                                                                                     nsform: none; opacity: 1; } }
+  width: min(460px, 100%);
+  background: var(--bg-card, #fff);
+  border: 1px solid var(--border, #e0e0e0);
+  border-radius: 12px;
+  padding: 24px;
+  box-shadow: 0 18px 56px rgba(0, 0, 0, 0.22);
+  animation: confirm-slide 150ms ease-out;
+}
+@keyframes confirm-slide {
+  from {
+    transform: translateY(8px);
+    opacity: 0;
+  }
+  to {
+    transform: none;
+    opacity: 1;
+  }
+}
 
 .confirm-title {
   margin: 0 0 10px;
@@ -2446,24 +2446,77 @@ textarea:focus-visible,
   appearance: none;
   border: 1px solid transparent;
   border-radius: 8px;
-  paddin  paddin  paddifo  paddinrit;
-  font-siz  font-siz  font-siweight: 600;
+  padding: 8px 18px;
+  font-size: 0.88rem;
+  font-weight: 600;
   cursor: pointer;
-  transition: background 150ms, border-color 150ms, co  transition: background 150ms, border-color 150ms, co  transitionsla  transition: bafi  transition: background 150ms, border-color 150ms, co  transition: background 150ms, border-color 150ms, co  transitionsla  transition: bafi  transition: bac(-  transition: background 150ms, border-color 150ms, co  transition: background 150ms, border-color 150ms, co  transitionsla  transition: bafi  transition: background 150ms, border-color 150ms, co  transition: background 150ms, border-color 150ms, co  transi-accent-hover, #145a4b); }
-.confirm-btn-danger {
-  background: #c0392b;
-  border-color: #c0392b;
+  transition:
+    background 150ms,
+    border-color 150ms,
+    color 150ms;
+}
+.confirm-btn-primary {
+  background: var(--accent, #1a6b5a);
+  border-color: var(--accent, #1a6b5a);
   color: #fff;
 }
-.confirm-btn-danger:hover { background: #a13023; border-color:.con3023; }
-.confirm-btn-warning {
-  back  band: #c47a2e;
-  border-color: #c47a2e;
-  co  co  co ;
+.confirm-btn-primary:hover {
+  background: var(--accent-hover, #145a4b);
+  border-color: var(--accent-hover, #145a4b);
 }
-..............ar..............ackground: #a4671f; border-color: #a467..............ar.... *..............ar..............ackg  flex-direction: column;
+.confirm-btn-danger {
+  background: var(--danger, #ef4444);
+  border-color: var(--danger, #ef4444);
+  color: #fff;
+}
+.confirm-btn-danger:hover {
+  background: color-mix(in srgb, var(--danger, #ef4444) 85%, #000);
+  border-color: color-mix(in srgb, var(--danger, #ef4444) 85%, #000);
+}
+.confirm-btn-warning {
+  background: var(--warning, #f59e0b);
+  border-color: var(--warning, #f59e0b);
+  color: #fff;
+}
+.confirm-btn-warning:hover {
+  background: color-mix(in srgb, var(--warning, #f59e0b) 85%, #000);
+  border-color: color-mix(in srgb, var(--warning, #f59e0b) 85%, #000);
+}
+.confirm-btn-ghost {
+  background: transparent;
+  border-color: var(--border, #d0d0d0);
+  color: var(--ink, #1a1a1a);
+}
+.confirm-btn-ghost:hover {
+  background: var(--bg-alt, #f3f2ee);
+}
+
+/* ── EmptyState ───────────────────────────────────────────── */
+.empty-state {
+  display: flex;
+  flex-direction: column;
   align-items: center;
-  justify-conten  justify-conten  justify-conten  justify-conten  justify-conten  justify-conten  justify-conten  justify-conten  justify-conten  justify-conten  justify-conten  justify-conten  justify-conten  justify-conten  justify-conten  justify-conten  justify-conten  justify-conten  justify-conten  justify-conten  justify-conten  justify-conten  justify-conten  justify-conten  justify-conten  justify-conten  justify-conten  justify-conten  justify-conten  justify-conten  justify-conten  justify-conten  justify-conten  justify-conten  justify-conten  justify-conten  justify-conten  justisi  justify-contenax-width: 46ch;
+  justify-content: center;
+  padding: 48px 24px;
+  text-align: center;
+}
+.empty-state-compact {
+  padding: 24px 16px;
+}
+.empty-state-icon {
+  font-size: 2.4rem;
+  margin-bottom: 12px;
+  opacity: 0.6;
+}
+.empty-state-title {
+  margin: 0 0 6px;
+  font-size: 1.05rem;
+  font-weight: 700;
+}
+.empty-state-message {
+  margin: 0;
+  color: var(--ink-2, #4a4a4a);
+  max-width: 46ch;
   line-height: 1.5;
 }
 .empty-state-actions {
@@ -2473,47 +2526,34 @@ textarea:focus-visible,
   margin-top: 8px;
 }
 .empty-cta {
-                       
+  display: inline-flex;
   align-items: center;
-                       font-size: 0.85rem;
-                       font-size: 0.85rem;
-onten  justify-conten  justify-conten  justify-conten  justify-conten  justify-conten  justify-conten  jusrsonten  justify-contenecoration: none;
-  transition: background 150ms, color 150ms, border-color 150ms;
+  gap: 6px;
+  padding: 7px 14px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  border: 1px solid var(--border, #d0d0d0);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--ink-2, #4a4a4a);
+  text-decoration: none;
+  cursor: pointer;
+  transition:
+    background 150ms,
+    color 150ms,
+    border-color 150ms;
 }
-.empty-cta:hover { background: var(--bg-alt, #f3f2ee); color: var(--ink, #1a1a1a); }
+.empty-cta:hover {
+  background: var(--bg-alt, #f3f2ee);
+  color: var(--ink, #1a1a1a);
+}
 .empty-cta-primary {
   background: var(--accent, #1a6b5a);
   color: #fff;
   border-color: var(--accent, #1a6b5a);
 }
-.empty-cta-primary:hover { background: var(--accent-hover, #145a4b); border-color: var(--accent-hover, #145a4b); color: #fff; }
-
-/* Onboarding discoverability banner */
-.onboarding-banner {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  padding: 12px 18px;
-  margin: 0 0 16px;
-  background: linear-gradient(90deg, rgba(26,107,90,0.08), rgba(7  background1));
-  bor  bor1px solid rgba(26,  bor  bor1px sborder-radius: 10px;
-  font-size:  font-size.onboardin  font-sizeon {
-  width: 32px;
-  heig  heig  heig  heig  hfl  heig  heig  heig  heig  hfl  heig  heigent: center;
-  background: rgba(26,107,90,0.18);
-  color: var(--accent, #1a6b5a);
-  border-radius: 50%;
-  font-weight: 700;
-  flex-shrink: 0;
-}
-.onboarding-banner-body { flex: 1; }
-.onboardin.onboardin.onboardin.onboardin.onboardin.onboardin.onboardin.on}
-.o.o.o.o.o.o.o.o.o.o.o.o.o.o.o.o.o.o.o.o.o.o.o.o.o.o.o.o.o.o.o.o.o.o.o.o.o.o.o.o.o.o.in.o.o.o.o.o.o.o.o.o.di.o.o.o.o.o.o.o.o.o.o.o.o.o.o.o.o.o.o-b.o.o.o.o.o.o.
-  appearance: none;
-  background: transparent;
-  border: 0;
-  color: var(--ink-3, #6b6b6b);
-  font-size: 1.2rem;
-  cursor: pointer;
-  padding: 4px 8px;
+.empty-cta-primary:hover {
+  background: var(--accent-hover, #145a4b);
+  border-color: var(--accent-hover, #145a4b);
+  color: #fff;
 }

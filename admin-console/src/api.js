@@ -297,7 +297,9 @@ export const exportWitnesses = () => get('/api/export/witnesses');
 export const hunts = () => get('/api/hunts');
 export const createHunt = (body) => post('/api/hunts', body);
 export const huntById = (id) => get(`/api/hunts/${encodeURIComponent(id)}`);
-export const runHunt = (id) => post(`/api/hunts/${encodeURIComponent(id)}/run`);
+export const runHunt = (id, body = {}) => post(`/api/hunts/${encodeURIComponent(id)}/run`, body);
+export const escalateHunt = (id, body = {}) =>
+  post(`/api/hunts/${encodeURIComponent(id)}/escalate`, body);
 export const contentRules = () => get('/api/content/rules');
 export const createContentRule = (body) => post('/api/content/rules', body);
 export const contentRuleLifecycle = (id, body) =>
@@ -453,6 +455,7 @@ export const investigationWorkflow = (id) =>
 export const investigationStart = (body) => post('/api/investigations/start', body);
 export const investigationActive = () => get('/api/investigations/active');
 export const investigationSuggest = (body) => post('/api/investigations/suggest', body);
+export const analystQuery = (body) => post('/api/events/search', body);
 
 // ── Malware Detection / AV Scanning ──────────────────────────
 export const scanBuffer = (body) => post('/api/scan/buffer', body);
