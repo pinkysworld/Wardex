@@ -3,7 +3,7 @@ import { useApi, useToast } from '../hooks.jsx';
 import * as api from '../api.js';
 import { JsonDetails, SideDrawer, SummaryGrid } from './operator.jsx';
 import { downloadData } from './operatorUtils.js';
-import { useConfirm } from './ConfirmDialog.jsx';
+import { useConfirm } from './useConfirm.jsx';
 
 function requestSeverity(detail) {
   const risk = (detail?.risk_level || '').toLowerCase();

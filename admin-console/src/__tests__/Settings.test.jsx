@@ -14,66 +14,159 @@ const jsonOk = (data) => ({
 
 describe('Settings', () => {
   beforeEach(() => {
+    let idpState = {
+      providers: [
+        {
+          id: 'idp-1',
+          display_name: 'Corporate SSO',
+          kind: 'oidc',
+          enabled: true,
+          issuer_url: 'https://issuer.example.com',
+          client_id: 'wardex-admin',
+          group_role_mappings: {},
+          validation: {
+            status: 'warning',
+            issues: [
+              {
+                level: 'warning',
+                field: 'group_role_mappings',
+                message:
+                  'No group-to-role mappings configured; users may fall back to viewer access.',
+              },
+            ],
+            mapping_count: 0,
+          },
+        },
+      ],
+      count: 1,
+      healthy: 0,
+    };
+    let scimState = {
+      config: {
+        enabled: true,
+        base_url: 'https://scim.example.com',
+        bearer_token: 'super-secret-token',
+        provisioning_mode: 'automatic',
+        default_role: 'admin',
+        group_role_mappings: { Security: 'admin' },
+        status: 'configured',
+      },
+      validation: {
+        status: 'warning',
+        issues: [
+          {
+            level: 'warning',
+            field: 'default_role',
+            message:
+              'Default role is admin; review whether all newly provisioned users should be privileged.',
+          },
+        ],
+        mapping_count: 1,
+      },
+    };
+
     vi.clearAllMocks();
     localStorage.clear();
     globalThis.URL.createObjectURL = vi.fn(() => 'blob:wardex-audit');
     globalThis.URL.revokeObjectURL = vi.fn();
-    globalThis.fetch = vi.fn((url) => {
+    globalThis.fetch = vi.fn((url, options = {}) => {
       const parsed = new URL(String(url), 'http://localhost');
       const path = parsed.pathname;
       const params = parsed.searchParams;
+      const method = options.method || 'GET';
 
-      if (path === '/api/idp/providers') {
+      if (path === '/api/idp/providers' && method === 'GET') {
+        return Promise.resolve(jsonOk(idpState));
+      }
+      if (path === '/api/idp/providers' && method === 'POST') {
+        const body = JSON.parse(options.body || '{}');
+        const mappingCount = Object.keys(body.group_role_mappings || {}).length;
+        const validation = {
+          status: mappingCount > 0 ? 'ready' : 'warning',
+          issues:
+            mappingCount > 0
+              ? []
+              : [
+                  {
+                    level: 'warning',
+                    field: 'group_role_mappings',
+                    message:
+                      'No group-to-role mappings configured; users may fall back to viewer access.',
+                  },
+                ],
+          mapping_count: mappingCount,
+        };
+        const provider = {
+          id: body.id || 'idp-1',
+          display_name: body.display_name,
+          kind: body.kind,
+          enabled: body.enabled ?? true,
+          issuer_url: body.issuer_url || null,
+          sso_url: body.sso_url || null,
+          client_id: body.client_id || null,
+          entity_id: body.entity_id || null,
+          group_role_mappings: body.group_role_mappings || {},
+          validation,
+        };
+        idpState = {
+          providers: [provider],
+          count: 1,
+          healthy: validation.status === 'ready' ? 1 : 0,
+        };
         return Promise.resolve(
           jsonOk({
-            providers: [
-              {
-                id: 'idp-1',
-                display_name: 'Corporate SSO',
-                kind: 'oidc',
-                enabled: true,
-                validation: {
-                  status: 'warning',
-                  issues: [
-                    {
-                      level: 'warning',
-                      field: 'group_role_mappings',
-                      message:
-                        'No group-to-role mappings configured; users may fall back to viewer access.',
-                    },
-                  ],
-                  mapping_count: 0,
-                },
-              },
-            ],
-            count: 1,
-            healthy: 0,
+            status: 'saved',
+            provider: {
+              id: provider.id,
+              display_name: provider.display_name,
+              kind: provider.kind,
+              enabled: provider.enabled,
+              issuer_url: provider.issuer_url,
+              sso_url: provider.sso_url,
+              client_id: provider.client_id,
+              entity_id: provider.entity_id,
+              group_role_mappings: provider.group_role_mappings,
+            },
+            validation,
           }),
         );
       }
-      if (path === '/api/scim/config') {
+      if (path === '/api/scim/config' && method === 'GET') {
+        return Promise.resolve(jsonOk(scimState));
+      }
+      if (path === '/api/scim/config' && method === 'POST') {
+        const body = JSON.parse(options.body || '{}');
+        const mappingCount = Object.keys(body.group_role_mappings || {}).length;
+        const validation = {
+          status: body.default_role === 'admin' ? 'warning' : 'ready',
+          issues:
+            body.default_role === 'admin'
+              ? [
+                  {
+                    level: 'warning',
+                    field: 'default_role',
+                    message:
+                      'Default role is admin; review whether all newly provisioned users should be privileged.',
+                  },
+                ]
+              : [],
+          mapping_count: mappingCount,
+        };
+        const config = {
+          enabled: body.enabled ?? false,
+          base_url: body.base_url || null,
+          bearer_token: body.bearer_token || null,
+          provisioning_mode: body.provisioning_mode,
+          default_role: body.default_role,
+          group_role_mappings: body.group_role_mappings || {},
+          status: body.enabled ? 'configured' : 'disabled',
+        };
+        scimState = { config, validation };
         return Promise.resolve(
           jsonOk({
-            config: {
-              enabled: true,
-              base_url: 'https://scim.example.com',
-              provisioning_mode: 'automatic',
-              default_role: 'admin',
-              group_role_mappings: { Security: 'admin' },
-              status: 'configured',
-            },
-            validation: {
-              status: 'warning',
-              issues: [
-                {
-                  level: 'warning',
-                  field: 'default_role',
-                  message:
-                    'Default role is admin; review whether all newly provisioned users should be privileged.',
-                },
-              ],
-              mapping_count: 1,
-            },
+            status: 'saved',
+            config,
+            validation,
           }),
         );
       }
@@ -298,5 +391,72 @@ describe('Settings', () => {
         globalThis.fetch.mock.calls.some(([url]) => String(url) === '/api/scim/config'),
       ).toBe(true);
     });
+  });
+
+  it('saves provider and scim edits from the integrations tab', async () => {
+    const user = userEvent.setup();
+
+    render(
+      <ToastProvider>
+        <Settings />
+      </ToastProvider>,
+    );
+
+    await user.click(screen.getByRole('button', { name: 'Integrations' }));
+    await screen.findByText('IdP Providers');
+
+    await user.click(screen.getByRole('button', { name: 'Edit Provider' }));
+    const providerNameInput = await screen.findByLabelText('Provider Name');
+    await user.clear(providerNameInput);
+    await user.type(providerNameInput, 'Workforce SSO');
+    const providerMappingsInput = screen.getByLabelText('Provider Group Mappings');
+    await user.clear(providerMappingsInput);
+    await user.type(providerMappingsInput, 'Security=admin');
+    await user.click(screen.getByRole('button', { name: 'Save Provider' }));
+
+    await waitFor(() => {
+      const idpCall = globalThis.fetch.mock.calls.find(
+        ([url, options]) =>
+          String(url) === '/api/idp/providers' && (options?.method || 'GET') === 'POST',
+      );
+      expect(idpCall).toBeDefined();
+      expect(JSON.parse(idpCall[1].body)).toMatchObject({
+        display_name: 'Workforce SSO',
+        group_role_mappings: { Security: 'admin' },
+      });
+    });
+
+    const idpCard = screen.getByText('IdP Providers').closest('.card');
+    expect(idpCard).not.toBeNull();
+    const updatedProviderCell = within(idpCard).getByRole('cell', { name: 'Workforce SSO' });
+    const updatedProviderRow = updatedProviderCell.closest('tr');
+    expect(updatedProviderRow).not.toBeNull();
+    expect(within(updatedProviderRow).getByText('Ready')).toBeInTheDocument();
+    expect(within(updatedProviderRow).getByText('0 issues • 1 mapping')).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Edit SCIM' }));
+    const defaultRoleInput = await screen.findByLabelText('Default Role');
+    await user.selectOptions(defaultRoleInput, 'viewer');
+    const scimMappingsInput = screen.getByLabelText('SCIM Group Mappings');
+    await user.clear(scimMappingsInput);
+    await user.type(scimMappingsInput, 'Security=viewer');
+    await user.click(screen.getByRole('button', { name: 'Save SCIM' }));
+
+    await waitFor(() => {
+      const scimCall = globalThis.fetch.mock.calls.find(
+        ([url, options]) =>
+          String(url) === '/api/scim/config' && (options?.method || 'GET') === 'POST',
+      );
+      expect(scimCall).toBeDefined();
+      expect(JSON.parse(scimCall[1].body)).toMatchObject({
+        default_role: 'viewer',
+        group_role_mappings: { Security: 'viewer' },
+      });
+    });
+
+    const scimCard = screen.getByText('SCIM Config').closest('.card');
+    expect(scimCard).not.toBeNull();
+    expect(within(scimCard).getByText('Ready')).toBeInTheDocument();
+    expect(within(scimCard).getByText('1 group mapping configured')).toBeInTheDocument();
   });
 });

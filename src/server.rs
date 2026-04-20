@@ -15390,6 +15390,120 @@ mod tests {
     }
 
     #[test]
+    fn idp_provider_endpoint_saves_and_rejects_invalid_configs() {
+        let (port, token) = spawn_test_server();
+        let base_url = format!("http://127.0.0.1:{port}");
+        let auth_header = format!("Bearer {token}");
+
+        let save_response = ureq::post(&format!("{base_url}/api/idp/providers"))
+            .set("Authorization", &auth_header)
+            .send_string(
+                r#"{"kind":"oidc","display_name":"Corporate SSO","issuer_url":"https://issuer.example.com","client_id":"wardex-admin","enabled":true,"group_role_mappings":{"Security":"admin"}}"#,
+            )
+            .expect("save idp provider response");
+        let saved: serde_json::Value = serde_json::from_str(
+            &save_response.into_string().expect("save idp provider body"),
+        )
+        .expect("save idp provider json");
+        assert_eq!(saved["status"], serde_json::json!("saved"));
+        assert_eq!(saved["provider"]["display_name"], serde_json::json!("Corporate SSO"));
+        assert_eq!(saved["validation"]["status"], serde_json::json!("ready"));
+        assert_eq!(saved["validation"]["mapping_count"], serde_json::json!(1));
+
+        let providers_response = ureq::get(&format!("{base_url}/api/idp/providers"))
+            .set("Authorization", &auth_header)
+            .call()
+            .expect("list idp providers response");
+        let providers: serde_json::Value = serde_json::from_str(
+            &providers_response
+                .into_string()
+                .expect("list idp providers body"),
+        )
+        .expect("list idp providers json");
+        assert_eq!(providers["count"], serde_json::json!(1));
+        assert_eq!(providers["healthy"], serde_json::json!(1));
+        assert_eq!(
+            providers["providers"][0]["group_role_mappings"]["Security"],
+            serde_json::json!("admin")
+        );
+
+        match ureq::post(&format!("{base_url}/api/idp/providers"))
+            .set("Authorization", &auth_header)
+            .send_string(r#"{"kind":"oidc","display_name":"Broken OIDC","enabled":true}"#)
+        {
+            Err(ureq::Error::Status(400, response)) => {
+                let body: serde_json::Value = serde_json::from_str(
+                    &response.into_string().expect("invalid idp body"),
+                )
+                .expect("invalid idp json");
+                assert_eq!(body["code"], serde_json::json!("VALIDATION_ERROR"));
+                assert_eq!(
+                    body["error"],
+                    serde_json::json!("enabled OIDC providers require issuer_url")
+                );
+            }
+            Ok(_) => panic!("invalid idp provider unexpectedly succeeded"),
+            Err(err) => panic!("unexpected invalid idp provider error: {err}"),
+        }
+    }
+
+    #[test]
+    fn scim_config_endpoint_saves_and_rejects_invalid_roles() {
+        let (port, token) = spawn_test_server();
+        let base_url = format!("http://127.0.0.1:{port}");
+        let auth_header = format!("Bearer {token}");
+
+        let save_response = ureq::post(&format!("{base_url}/api/scim/config"))
+            .set("Authorization", &auth_header)
+            .send_string(
+                r#"{"enabled":true,"base_url":"https://scim.example.com","bearer_token":"super-secret-token","provisioning_mode":"automatic","default_role":"viewer","group_role_mappings":{"Security":"analyst"}}"#,
+            )
+            .expect("save scim config response");
+        let saved: serde_json::Value = serde_json::from_str(
+            &save_response.into_string().expect("save scim config body"),
+        )
+        .expect("save scim config json");
+        assert_eq!(saved["status"], serde_json::json!("saved"));
+        assert_eq!(saved["config"]["default_role"], serde_json::json!("viewer"));
+        assert_eq!(saved["validation"]["status"], serde_json::json!("ready"));
+        assert_eq!(saved["validation"]["mapping_count"], serde_json::json!(1));
+
+        let config_response = ureq::get(&format!("{base_url}/api/scim/config"))
+            .set("Authorization", &auth_header)
+            .call()
+            .expect("get scim config response");
+        let config: serde_json::Value = serde_json::from_str(
+            &config_response.into_string().expect("get scim config body"),
+        )
+        .expect("get scim config json");
+        assert_eq!(config["config"]["provisioning_mode"], serde_json::json!("automatic"));
+        assert_eq!(config["validation"]["status"], serde_json::json!("ready"));
+
+        match ureq::post(&format!("{base_url}/api/scim/config"))
+            .set("Authorization", &auth_header)
+            .send_string(
+                r#"{"enabled":false,"provisioning_mode":"manual","default_role":"owner","group_role_mappings":{}}"#,
+            )
+        {
+            Err(ureq::Error::Status(400, response)) => {
+                let body: serde_json::Value = serde_json::from_str(
+                    &response.into_string().expect("invalid scim body"),
+                )
+                .expect("invalid scim json");
+                assert_eq!(body["code"], serde_json::json!("VALIDATION_ERROR"));
+                assert_eq!(
+                    body["error"],
+                    serde_json::json!(
+                        "invalid role 'owner'; expected one of admin, analyst, viewer"
+                    )
+                );
+            }
+            Ok(_) => panic!("invalid scim config unexpectedly succeeded"),
+            Err(err) => panic!("unexpected invalid scim config error: {err}"),
+        }
+    }
+
+    #[test]
     fn sample_alerts_are_streamed_to_ws_poll_subscribers() {
         let (port, token) = spawn_test_server();
         let base_url = format!("http://127.0.0.1:{port}");

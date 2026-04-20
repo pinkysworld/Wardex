@@ -23,7 +23,12 @@ export default function EmptyState({
     const className = variant === 'primary' ? 'empty-cta empty-cta-primary' : 'empty-cta';
     if (cta.href) {
       return (
-        <a className={className} href={cta.href} target={cta.external ? '_blank' : undefined} rel={cta.external ? 'noopener' : undefined}>
+        <a
+          className={className}
+          href={cta.href}
+          target={cta.external ? '_blank' : undefined}
+          rel={cta.external ? 'noreferrer' : undefined}
+        >
           {cta.label}
         </a>
       );

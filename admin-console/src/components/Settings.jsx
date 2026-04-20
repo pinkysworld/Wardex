@@ -2,13 +2,26 @@ import { useState, useEffect, useMemo, useId } from 'react';
 import { useApi, useToast } from '../hooks.jsx';
 import * as api from '../api.js';
 import { JsonDetails, SummaryGrid } from './operator.jsx';
-import { useConfirm } from './ConfirmDialog.jsx';
+import { useConfirm } from './useConfirm.jsx';
 import { downloadData } from './operatorUtils.js';
 
 const AUDIT_PAGE_SIZE = 25;
 const AUDIT_METHOD_OPTIONS = ['all', 'GET', 'POST', 'PUT', 'DELETE'];
 const AUDIT_STATUS_OPTIONS = ['all', '2xx', '4xx', '5xx'];
 const AUDIT_AUTH_OPTIONS = ['all', 'authenticated', 'anonymous'];
+const IDENTITY_PROVIDER_OPTIONS = [
+  { value: 'oidc', label: 'OIDC' },
+  { value: 'saml', label: 'SAML' },
+];
+const IDENTITY_ROLE_OPTIONS = [
+  { value: 'admin', label: 'Admin' },
+  { value: 'analyst', label: 'Analyst' },
+  { value: 'viewer', label: 'Viewer' },
+];
+const SCIM_MODE_OPTIONS = [
+  { value: 'manual', label: 'Manual' },
+  { value: 'automatic', label: 'Automatic' },
+];
 
 function parseStructuredConfig(config) {
   if (!config) return null;
@@ -113,6 +126,82 @@ function validationStatusLabel(status) {
     default:
       return 'Unknown';
   }
+}
+
+function optionalTextValue(value) {
+  const trimmed = value?.trim();
+  return trimmed ? trimmed : undefined;
+}
+
+function formatGroupRoleMappings(value) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return '';
+  return Object.entries(value)
+    .sort(([left], [right]) => left.localeCompare(right))
+    .map(([group, role]) => `${group}=${role}`)
+    .join('\n');
+}
+
+function parseGroupRoleMappings(value) {
+  const mappings = {};
+  for (const line of value.split('\n')) {
+    const trimmed = line.trim();
+    if (!trimmed) continue;
+    const separatorIndex = trimmed.includes('=') ? trimmed.indexOf('=') : trimmed.indexOf(':');
+    if (separatorIndex <= 0) {
+      return {
+        mappings: null,
+        error: `Use group=role on each line. Problem: ${trimmed}`,
+      };
+    }
+    const group = trimmed.slice(0, separatorIndex).trim();
+    const role = trimmed.slice(separatorIndex + 1).trim();
+    if (!group || !role) {
+      return {
+        mappings: null,
+        error: `Use group=role on each line. Problem: ${trimmed}`,
+      };
+    }
+    mappings[group] = role;
+  }
+  return { mappings, error: null };
+}
+
+function formatApiError(error, fallback) {
+  if (error?.body) {
+    try {
+      const parsed = JSON.parse(error.body);
+      if (typeof parsed?.error === 'string' && parsed.error) return parsed.error;
+    } catch {
+      /* ignore invalid error bodies */
+    }
+  }
+  if (typeof error?.message === 'string' && error.message) return error.message;
+  return fallback;
+}
+
+function createIdpDraft(provider = null) {
+  return {
+    id: provider?.id || '',
+    kind: String(provider?.kind || 'oidc').toLowerCase(),
+    display_name: provider?.display_name || provider?.name || '',
+    issuer_url: provider?.issuer_url || '',
+    sso_url: provider?.sso_url || '',
+    client_id: provider?.client_id || '',
+    entity_id: provider?.entity_id || '',
+    enabled: provider?.enabled ?? true,
+    mappings_text: formatGroupRoleMappings(provider?.group_role_mappings),
+  };
+}
+
+function createScimDraft(config = null) {
+  return {
+    enabled: Boolean(config?.enabled),
+    base_url: config?.base_url || '',
+    bearer_token: config?.bearer_token || '',
+    provisioning_mode: String(config?.provisioning_mode || 'manual').toLowerCase(),
+    default_role: String(config?.default_role || 'viewer').toLowerCase(),
+    mappings_text: formatGroupRoleMappings(config?.group_role_mappings),
+  };
 }
 
 function auditEmptyMessage(filtersActive) {
@@ -263,6 +352,84 @@ function TextInput({ label, value, onChange, placeholder, description }) {
   );
 }
 
+function SelectInput({ label, value, onChange, options, description }) {
+  const inputId = useId();
+  return (
+    <div style={{ marginBottom: 10 }}>
+      <label
+        htmlFor={inputId}
+        style={{ display: 'block', fontSize: 13, fontWeight: 500, marginBottom: 4 }}
+      >
+        {label}
+      </label>
+      <select
+        id={inputId}
+        name={label.toLowerCase().replace(/\s+/g, '_')}
+        value={value ?? ''}
+        onChange={(e) => onChange(e.target.value)}
+        style={{
+          width: '100%',
+          maxWidth: 400,
+          padding: '6px 10px',
+          borderRadius: 'var(--radius)',
+          border: '1px solid var(--border)',
+          background: 'var(--bg)',
+          color: 'var(--text)',
+          fontSize: 13,
+        }}
+      >
+        {options.map((option) => (
+          <option key={option.value} value={option.value}>
+            {option.label}
+          </option>
+        ))}
+      </select>
+      {description && (
+        <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginTop: 2 }}>
+          {description}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function TextAreaInput({ label, value, onChange, placeholder, rows = 5, description }) {
+  const inputId = useId();
+  return (
+    <div style={{ marginBottom: 10 }}>
+      <label
+        htmlFor={inputId}
+        style={{ display: 'block', fontSize: 13, fontWeight: 500, marginBottom: 4 }}
+      >
+        {label}
+      </label>
+      <textarea
+        id={inputId}
+        name={label.toLowerCase().replace(/\s+/g, '_')}
+        value={value ?? ''}
+        rows={rows}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder={placeholder}
+        style={{
+          width: '100%',
+          padding: '8px 10px',
+          borderRadius: 'var(--radius)',
+          border: '1px solid var(--border)',
+          background: 'var(--bg)',
+          color: 'var(--text)',
+          fontSize: 13,
+          fontFamily: 'var(--font-mono, ui-monospace, monospace)',
+        }}
+      />
+      {description && (
+        <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginTop: 2 }}>
+          {description}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function Settings() {
   const toast = useToast();
   const [confirm, confirmUI] = useConfirm();
@@ -281,8 +448,8 @@ export default function Settings() {
   const { data: taxiiSt } = useApi(api.taxiiStatus);
   const { data: taxiiCfg } = useApi(api.taxiiConfig);
   const { data: enrichConn } = useApi(api.enrichmentConnectors);
-  const { data: idp } = useApi(api.idpProviders);
-  const { data: scim } = useApi(api.scimConfig);
+  const { data: idp, reload: rIdp } = useApi(api.idpProviders);
+  const { data: scim, reload: rScim } = useApi(api.scimConfig);
   const { data: sbomData } = useApi(api.sbom);
   const { data: dbVer } = useApi(api.adminDbVersion);
   const { data: dlqData } = useApi(api.dlqStats);
@@ -328,6 +495,14 @@ export default function Settings() {
   const [purging, setPurging] = useState(false);
   const [resetting, setResetting] = useState(false);
   const [cleaning, setCleaning] = useState(false);
+  const [idpDraft, setIdpDraft] = useState(() => createIdpDraft());
+  const [idpEditorOpen, setIdpEditorOpen] = useState(false);
+  const [idpSaving, setIdpSaving] = useState(false);
+  const [idpFormError, setIdpFormError] = useState(null);
+  const [scimDraft, setScimDraft] = useState(() => createScimDraft());
+  const [scimEditing, setScimEditing] = useState(false);
+  const [scimSaving, setScimSaving] = useState(false);
+  const [scimFormError, setScimFormError] = useState(null);
 
   // ── Team (RBAC) ──
   const { data: teamUsers, reload: rTeam } = useApi(api.rbacUsers);
@@ -459,6 +634,16 @@ export default function Settings() {
 
   const scimValidation = useMemo(() => normalizeValidation(scim?.validation), [scim]);
 
+  useEffect(() => {
+    if (idpRows.length === 0) setIdpEditorOpen(true);
+  }, [idpRows.length]);
+
+  useEffect(() => {
+    if (scimEditing) return;
+    setScimDraft(createScimDraft(scimConfigData));
+    setScimFormError(null);
+  }, [scimConfigData, scimEditing]);
+
   const flagEntries = useMemo(() => {
     if (!flags || typeof flags !== 'object' || Array.isArray(flags)) return [];
     return Object.entries(flags);
@@ -501,6 +686,110 @@ export default function Settings() {
       toast('Audit log exported', 'success');
     } catch {
       toast('Audit export failed', 'error');
+    }
+  };
+
+  const openIdpEditor = (provider = null) => {
+    setIdpDraft(createIdpDraft(provider));
+    setIdpFormError(null);
+    setIdpEditorOpen(true);
+  };
+
+  const closeIdpEditor = () => {
+    setIdpFormError(null);
+    setIdpDraft(createIdpDraft());
+    setIdpEditorOpen(idpRows.length === 0);
+  };
+
+  const saveIdpProvider = async () => {
+    const { mappings, error } = parseGroupRoleMappings(idpDraft.mappings_text);
+    if (error) {
+      setIdpFormError(error);
+      toast(error, 'error');
+      return;
+    }
+
+    setIdpSaving(true);
+    setIdpFormError(null);
+    try {
+      const result = await api.createIdpProvider({
+        id: idpDraft.id || undefined,
+        kind: idpDraft.kind,
+        display_name: idpDraft.display_name,
+        issuer_url: optionalTextValue(idpDraft.issuer_url),
+        sso_url: optionalTextValue(idpDraft.sso_url),
+        client_id: optionalTextValue(idpDraft.client_id),
+        entity_id: optionalTextValue(idpDraft.entity_id),
+        enabled: idpDraft.enabled,
+        group_role_mappings: mappings,
+      });
+      const validation = normalizeValidation(result?.validation);
+      const provider = result?.provider ?? {};
+      await rIdp();
+      setIdpDraft(createIdpDraft(provider));
+      setIdpEditorOpen(validation.status === 'warning');
+      toast(
+        validation.status === 'warning'
+          ? 'Identity provider saved with warnings'
+          : 'Identity provider saved',
+        validation.status === 'warning' ? 'warning' : 'success',
+      );
+    } catch (error) {
+      const message = formatApiError(error, 'Failed to save identity provider');
+      setIdpFormError(message);
+      toast(message, 'error');
+    } finally {
+      setIdpSaving(false);
+    }
+  };
+
+  const openScimEditor = () => {
+    setScimDraft(createScimDraft(scimConfigData));
+    setScimFormError(null);
+    setScimEditing(true);
+  };
+
+  const closeScimEditor = () => {
+    setScimDraft(createScimDraft(scimConfigData));
+    setScimFormError(null);
+    setScimEditing(false);
+  };
+
+  const saveScimConfig = async () => {
+    const { mappings, error } = parseGroupRoleMappings(scimDraft.mappings_text);
+    if (error) {
+      setScimFormError(error);
+      toast(error, 'error');
+      return;
+    }
+
+    setScimSaving(true);
+    setScimFormError(null);
+    try {
+      const result = await api.setScimConfig({
+        enabled: scimDraft.enabled,
+        base_url: optionalTextValue(scimDraft.base_url),
+        bearer_token: optionalTextValue(scimDraft.bearer_token),
+        provisioning_mode: scimDraft.provisioning_mode,
+        default_role: scimDraft.default_role,
+        group_role_mappings: mappings,
+      });
+      const validation = normalizeValidation(result?.validation);
+      await rScim();
+      setScimDraft(createScimDraft(result?.config ?? scimConfigData));
+      setScimEditing(validation.status === 'warning');
+      toast(
+        validation.status === 'warning'
+          ? 'SCIM configuration saved with warnings'
+          : 'SCIM configuration saved',
+        validation.status === 'warning' ? 'warning' : 'success',
+      );
+    } catch (error) {
+      const message = formatApiError(error, 'Failed to save SCIM configuration');
+      setScimFormError(message);
+      toast(message, 'error');
+    } finally {
+      setScimSaving(false);
     }
   };
 
@@ -1145,8 +1434,11 @@ export default function Settings() {
               )}
             </div>
             <div className="card">
-              <div className="card-title" style={{ marginBottom: 12 }}>
-                IdP Providers
+              <div className="card-header">
+                <span className="card-title">IdP Providers</span>
+                <button className="btn btn-sm" type="button" onClick={() => openIdpEditor()}>
+                  New Provider
+                </button>
               </div>
               {idpRows.length > 0 ? (
                 <>
@@ -1158,6 +1450,7 @@ export default function Settings() {
                           <th>Type</th>
                           <th>Status</th>
                           <th>Validation</th>
+                          <th>Actions</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -1182,6 +1475,15 @@ export default function Settings() {
                                 {p.validation?.mapping_count || 0} mapping
                                 {(p.validation?.mapping_count || 0) === 1 ? '' : 's'}
                               </div>
+                            </td>
+                            <td>
+                              <button
+                                className="btn btn-sm"
+                                type="button"
+                                onClick={() => openIdpEditor(p)}
+                              >
+                                Edit Provider
+                              </button>
                             </td>
                           </tr>
                         ))}
@@ -1214,6 +1516,103 @@ export default function Settings() {
                         ))}
                     </div>
                   )}
+                  {idpEditorOpen && (
+                    <div className="stat-box" style={{ marginTop: 12 }}>
+                      <div style={{ fontWeight: 600, marginBottom: 10 }}>
+                        {idpDraft.id
+                          ? `Edit ${idpDraft.display_name || 'Identity Provider'}`
+                          : 'New Identity Provider'}
+                      </div>
+                      <div style={{ display: 'grid', gap: 10 }}>
+                        <SelectInput
+                          label="Provider Type"
+                          value={idpDraft.kind}
+                          onChange={(value) => setIdpDraft((prev) => ({ ...prev, kind: value }))}
+                          options={IDENTITY_PROVIDER_OPTIONS}
+                        />
+                        <ToggleSwitch
+                          label="Enabled"
+                          checked={idpDraft.enabled}
+                          onChange={(value) => setIdpDraft((prev) => ({ ...prev, enabled: value }))}
+                          description="Disabled providers stay configured but cannot authenticate users."
+                        />
+                        <TextInput
+                          label="Provider Name"
+                          value={idpDraft.display_name}
+                          onChange={(value) =>
+                            setIdpDraft((prev) => ({ ...prev, display_name: value }))
+                          }
+                          placeholder="Corporate SSO"
+                        />
+                        {idpDraft.kind === 'oidc' ? (
+                          <>
+                            <TextInput
+                              label="Issuer URL"
+                              value={idpDraft.issuer_url}
+                              onChange={(value) =>
+                                setIdpDraft((prev) => ({ ...prev, issuer_url: value }))
+                              }
+                              placeholder="https://issuer.example.com"
+                            />
+                            <TextInput
+                              label="Client ID"
+                              value={idpDraft.client_id}
+                              onChange={(value) =>
+                                setIdpDraft((prev) => ({ ...prev, client_id: value }))
+                              }
+                              placeholder="wardex-admin"
+                            />
+                          </>
+                        ) : (
+                          <>
+                            <TextInput
+                              label="SSO URL"
+                              value={idpDraft.sso_url}
+                              onChange={(value) =>
+                                setIdpDraft((prev) => ({ ...prev, sso_url: value }))
+                              }
+                              placeholder="https://sso.example.com/login"
+                            />
+                            <TextInput
+                              label="Entity ID"
+                              value={idpDraft.entity_id}
+                              onChange={(value) =>
+                                setIdpDraft((prev) => ({ ...prev, entity_id: value }))
+                              }
+                              placeholder="urn:example:wardex"
+                            />
+                          </>
+                        )}
+                        <TextAreaInput
+                          label="Provider Group Mappings"
+                          value={idpDraft.mappings_text}
+                          onChange={(value) =>
+                            setIdpDraft((prev) => ({ ...prev, mappings_text: value }))
+                          }
+                          placeholder={'Security=admin\nSOC Analysts=analyst'}
+                          description="One mapping per line using group=role. Roles must be admin, analyst, or viewer."
+                        />
+                      </div>
+                      {idpFormError && (
+                        <div style={{ fontSize: 12, color: 'var(--danger, #b42318)', marginTop: 12 }}>
+                          {idpFormError}
+                        </div>
+                      )}
+                      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 12 }}>
+                        <button
+                          className="btn btn-primary"
+                          type="button"
+                          disabled={idpSaving}
+                          onClick={saveIdpProvider}
+                        >
+                          {idpSaving ? 'Saving…' : 'Save Provider'}
+                        </button>
+                        <button className="btn" type="button" onClick={closeIdpEditor}>
+                          Cancel
+                        </button>
+                      </div>
+                    </div>
+                  )}
                 </>
               ) : (
                 <>
@@ -1223,15 +1622,112 @@ export default function Settings() {
                     emptyMessage="No identity providers configured"
                   />
                   <JsonDetails data={idp} />
+                  {idpEditorOpen && (
+                    <div className="stat-box" style={{ marginTop: 12 }}>
+                      <div style={{ fontWeight: 600, marginBottom: 10 }}>New Identity Provider</div>
+                      <div style={{ display: 'grid', gap: 10 }}>
+                        <SelectInput
+                          label="Provider Type"
+                          value={idpDraft.kind}
+                          onChange={(value) => setIdpDraft((prev) => ({ ...prev, kind: value }))}
+                          options={IDENTITY_PROVIDER_OPTIONS}
+                        />
+                        <ToggleSwitch
+                          label="Enabled"
+                          checked={idpDraft.enabled}
+                          onChange={(value) => setIdpDraft((prev) => ({ ...prev, enabled: value }))}
+                          description="Disabled providers stay configured but cannot authenticate users."
+                        />
+                        <TextInput
+                          label="Provider Name"
+                          value={idpDraft.display_name}
+                          onChange={(value) =>
+                            setIdpDraft((prev) => ({ ...prev, display_name: value }))
+                          }
+                          placeholder="Corporate SSO"
+                        />
+                        {idpDraft.kind === 'oidc' ? (
+                          <>
+                            <TextInput
+                              label="Issuer URL"
+                              value={idpDraft.issuer_url}
+                              onChange={(value) =>
+                                setIdpDraft((prev) => ({ ...prev, issuer_url: value }))
+                              }
+                              placeholder="https://issuer.example.com"
+                            />
+                            <TextInput
+                              label="Client ID"
+                              value={idpDraft.client_id}
+                              onChange={(value) =>
+                                setIdpDraft((prev) => ({ ...prev, client_id: value }))
+                              }
+                              placeholder="wardex-admin"
+                            />
+                          </>
+                        ) : (
+                          <>
+                            <TextInput
+                              label="SSO URL"
+                              value={idpDraft.sso_url}
+                              onChange={(value) =>
+                                setIdpDraft((prev) => ({ ...prev, sso_url: value }))
+                              }
+                              placeholder="https://sso.example.com/login"
+                            />
+                            <TextInput
+                              label="Entity ID"
+                              value={idpDraft.entity_id}
+                              onChange={(value) =>
+                                setIdpDraft((prev) => ({ ...prev, entity_id: value }))
+                              }
+                              placeholder="urn:example:wardex"
+                            />
+                          </>
+                        )}
+                        <TextAreaInput
+                          label="Provider Group Mappings"
+                          value={idpDraft.mappings_text}
+                          onChange={(value) =>
+                            setIdpDraft((prev) => ({ ...prev, mappings_text: value }))
+                          }
+                          placeholder={'Security=admin\nSOC Analysts=analyst'}
+                          description="One mapping per line using group=role. Roles must be admin, analyst, or viewer."
+                        />
+                      </div>
+                      {idpFormError && (
+                        <div style={{ fontSize: 12, color: 'var(--danger, #b42318)', marginTop: 12 }}>
+                          {idpFormError}
+                        </div>
+                      )}
+                      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 12 }}>
+                        <button
+                          className="btn btn-primary"
+                          type="button"
+                          disabled={idpSaving}
+                          onClick={saveIdpProvider}
+                        >
+                          {idpSaving ? 'Saving…' : 'Save Provider'}
+                        </button>
+                      </div>
+                    </div>
+                  )}
                 </>
               )}
             </div>
             <div className="card">
               <div className="card-header">
                 <span className="card-title">SCIM Config</span>
-                <span className={`badge ${validationBadgeClass(scimValidation.status)}`}>
-                  {validationStatusLabel(scimValidation.status)}
-                </span>
+                <div className="btn-group">
+                  <span className={`badge ${validationBadgeClass(scimValidation.status)}`}>
+                    {validationStatusLabel(scimValidation.status)}
+                  </span>
+                  {!scimEditing && (
+                    <button className="btn btn-sm" type="button" onClick={openScimEditor}>
+                      {scimConfigData ? 'Edit SCIM' : 'Configure SCIM'}
+                    </button>
+                  )}
+                </div>
               </div>
               {scimConfigData ? (
                 <>
@@ -1262,6 +1758,78 @@ export default function Settings() {
                   <div className="empty">No SCIM configuration available.</div>
                   <JsonDetails data={scim} />
                 </>
+              )}
+              {(scimEditing || !scimConfigData) && (
+                <div className="stat-box" style={{ marginTop: 12 }}>
+                  <div style={{ fontWeight: 600, marginBottom: 10 }}>SCIM Provisioning Editor</div>
+                  <div style={{ display: 'grid', gap: 10 }}>
+                    <ToggleSwitch
+                      label="Enable SCIM Provisioning"
+                      checked={scimDraft.enabled}
+                      onChange={(value) => setScimDraft((prev) => ({ ...prev, enabled: value }))}
+                      description="Disable provisioning to retain config without synchronizing users."
+                    />
+                    <TextInput
+                      label="Base URL"
+                      value={scimDraft.base_url}
+                      onChange={(value) => setScimDraft((prev) => ({ ...prev, base_url: value }))}
+                      placeholder="https://scim.example.com"
+                    />
+                    <TextInput
+                      label="Bearer Token"
+                      value={scimDraft.bearer_token}
+                      onChange={(value) =>
+                        setScimDraft((prev) => ({ ...prev, bearer_token: value }))
+                      }
+                      placeholder="Paste SCIM bearer token"
+                    />
+                    <SelectInput
+                      label="Provisioning Mode"
+                      value={scimDraft.provisioning_mode}
+                      onChange={(value) =>
+                        setScimDraft((prev) => ({ ...prev, provisioning_mode: value }))
+                      }
+                      options={SCIM_MODE_OPTIONS}
+                    />
+                    <SelectInput
+                      label="Default Role"
+                      value={scimDraft.default_role}
+                      onChange={(value) =>
+                        setScimDraft((prev) => ({ ...prev, default_role: value }))
+                      }
+                      options={IDENTITY_ROLE_OPTIONS}
+                    />
+                    <TextAreaInput
+                      label="SCIM Group Mappings"
+                      value={scimDraft.mappings_text}
+                      onChange={(value) =>
+                        setScimDraft((prev) => ({ ...prev, mappings_text: value }))
+                      }
+                      placeholder={'Security=admin\nSOC Analysts=analyst'}
+                      description="One mapping per line using group=role. Roles must be admin, analyst, or viewer."
+                    />
+                  </div>
+                  {scimFormError && (
+                    <div style={{ fontSize: 12, color: 'var(--danger, #b42318)', marginTop: 12 }}>
+                      {scimFormError}
+                    </div>
+                  )}
+                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 12 }}>
+                    <button
+                      className="btn btn-primary"
+                      type="button"
+                      disabled={scimSaving}
+                      onClick={saveScimConfig}
+                    >
+                      {scimSaving ? 'Saving…' : 'Save SCIM'}
+                    </button>
+                    {scimConfigData && (
+                      <button className="btn" type="button" onClick={closeScimEditor}>
+                        Cancel
+                      </button>
+                    )}
+                  </div>
+                </div>
               )}
             </div>
           </div>
