@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1776661365842,
+  "lastUpdate": 1776670025257,
   "repoUrl": "https://github.com/pinkysworld/Wardex",
   "entries": {
     "Wardex criterion benches": [
@@ -805,6 +805,96 @@ window.BENCHMARK_DATA = {
             "name": "sigma_evaluate_20_rules",
             "value": 33983,
             "range": "± 368",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "85413447+pinkysworld@users.noreply.github.com",
+            "name": "pinkysworld",
+            "username": "pinkysworld"
+          },
+          "committer": {
+            "email": "85413447+pinkysworld@users.noreply.github.com",
+            "name": "pinkysworld",
+            "username": "pinkysworld"
+          },
+          "distinct": true,
+          "id": "244bd4327a7fec35519ecd9d0daf079be7b0f79f",
+          "message": "Polish admin console shell and fleet coverage",
+          "timestamp": "2026-04-20T09:20:49+02:00",
+          "tree_id": "a9a07de56ab5125bb19e0935fb34db60aff5f8c9",
+          "url": "https://github.com/pinkysworld/Wardex/commit/244bd4327a7fec35519ecd9d0daf079be7b0f79f"
+        },
+        "date": 1776670024773,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "full_pipeline/5",
+            "value": 46810,
+            "range": "± 139",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "full_pipeline/50",
+            "value": 405634,
+            "range": "± 1500",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "full_pipeline/200",
+            "value": 1855363,
+            "range": "± 12394",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "full_pipeline/1000",
+            "value": 17883807,
+            "range": "± 76747",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "detector_evaluate_single",
+            "value": 637,
+            "range": "± 5",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "policy_evaluate_single",
+            "value": 225,
+            "range": "± 4",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "throughput/1000_samples",
+            "value": 17913743,
+            "range": "± 169534",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "search_500_events",
+            "value": 113379,
+            "range": "± 509",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "hunt_field_query",
+            "value": 95318,
+            "range": "± 372",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "ml_triage_rf",
+            "value": 55,
+            "range": "± 0",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "sigma_evaluate_20_rules",
+            "value": 33629,
+            "range": "± 166",
             "unit": "ns/iter"
           }
         ]
