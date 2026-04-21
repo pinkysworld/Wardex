@@ -76,7 +76,7 @@
               </label>
               <button type="submit" class="btn btn-primary btn-block" id="checkout-submit">Email me a checkout link</button>
               <p class="form-status" id="checkout-status" role="status" aria-live="polite"></p>
-              <p class="muted form-footnote">Prefer invoice or wire for 3+ seats? <a href="mailto:michel_ng@icloud.com?subject=Wardex%20invoice%20billing">Email us directly</a>.</p>
+              <p class="muted form-footnote">Prefer invoice or wire for 3+ seats? <a href="mailto:mip@gmx.biz?subject=Wardex%20invoice%20billing">Email us directly</a>.</p>
             </form>
           </div>
         </div>
@@ -109,10 +109,10 @@
           'VAT ID: ' + (data.vat || '') + '\n' +
           '\nPlease send a Stripe checkout link for Wardex Starter (€49/mo, up to 25 endpoints).'
         );
-        window.location.href = 'mailto:michel_ng@icloud.com?subject=' + subject + '&body=' + body;
+        window.location.href = 'mailto:mip@gmx.biz?subject=' + subject + '&body=' + body;
         btn.disabled = true;
         btn.textContent = 'Opening email client…';
-        status.textContent = 'If your email client did not open, copy michel_ng@icloud.com and include your company name.';
+        status.textContent = 'If your email client did not open, copy mip@gmx.biz and include your company name.';
         status.className = 'form-status form-status-ok';
       });
     </script>

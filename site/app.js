@@ -439,11 +439,11 @@ function initNav() {
 
 function initScrollReveal() {
   const targets = document.querySelectorAll(
-    ".section-header, .arch-stage, .detail-card, .status-col, .start-card, " +
+    ".section-header, .detail-card, .status-col, .start-card, " +
     ".stat-card, .console-preview, .module-table, .csv-format, " +
     ".capability-card, .hunting-card, .analytics-item, .license-card, .license-notice, " +
     ".support-card, .impact-card, .faq-card, " +
-    ".pillar-card, .trust-card, .deploy-model, .component-card, .feature-cell"
+    ".pillar-card, .trust-card, .feature-cell"
   );
 
   const observer = new IntersectionObserver((entries) => {

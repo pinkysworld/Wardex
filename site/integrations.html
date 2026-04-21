@@ -20,8 +20,8 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
     <link rel="icon" href="favicon.svg" type="image/svg+xml">
-    <link rel="stylesheet" href="styles.css?v=15">
-    <script defer src="app.js?v=15"></script>
+    <link rel="stylesheet" href="styles.css?v=20">
+    <script defer src="app.js?v=20"></script>
   </head>
   <body>
     <nav class="site-nav" id="site-nav" data-shared-nav="true">
@@ -40,7 +40,7 @@
           <a href="rules.html" class="nav-link">Rules</a>
           <a href="resources.html" class="nav-link">Resources</a>
           <a href="pricing.html" class="nav-link">Pricing</a>
-          <a href="donate.html" class="nav-link">Support</a>
+          <a href="support/" class="nav-link">Support</a>
           <div class="nav-dropdown">
             <button type="button" class="nav-link nav-dropdown-trigger active" aria-haspopup="true" aria-expanded="false">
               More
@@ -122,6 +122,111 @@
       <section class="section">
         <div class="container">
           <div class="section-header">
+            <p class="label">Integration Guide</p>
+            <h2>Document the operating model, not just the logo.</h2>
+            <p class="section-desc">Every connector needs explicit auth, payload ownership, and retry behavior. Treat the integration as part of the incident path, not a decorative add-on.</p>
+          </div>
+          <div class="integration-doc-grid">
+            <article class="integration-doc-card">
+              <h3>Authentication &amp; Secret Handling</h3>
+              <p>Store credentials in the integration config only long enough to test delivery, then rotate into the secret source you actually operate with.</p>
+              <ul class="integration-doc-list">
+                <li>Prefer scoped API tokens over user passwords</li>
+                <li>Record token owner and rotation window</li>
+                <li>Run a dry test after every secret change</li>
+              </ul>
+            </article>
+            <article class="integration-doc-card">
+              <h3>Delivery, Retry, and Audit Trail</h3>
+              <p>Wardex connectors retry transient failures, keep dedup keys stable where the downstream API supports them, and write the integration attempt into the audit surface.</p>
+              <ul class="integration-doc-list">
+                <li>PagerDuty dedups on case ID</li>
+                <li>Webhook and HEC sinks use backoff rather than blind loops</li>
+                <li>Keep a failure mailbox for sinks that are business-critical</li>
+              </ul>
+            </article>
+            <article class="integration-doc-card">
+              <h3>Field Mapping Rules</h3>
+              <p>Decide once how severity, ownership, MITRE references, asset identity, and case URLs map into the downstream system, then keep that mapping stable across releases.</p>
+              <ul class="integration-doc-list">
+                <li>Map Wardex severity to downstream priority explicitly</li>
+                <li>Carry case ID and endpoint ID through every payload</li>
+                <li>Include the Wardex URL so the external system links back cleanly</li>
+              </ul>
+            </article>
+          </div>
+        </div>
+      </section>
+
+      <section class="section section-alt">
+        <div class="container">
+          <div class="section-header">
+            <p class="label">Setup Walkthrough</p>
+            <h2>How to bring a connector online safely.</h2>
+            <p class="section-desc">The goal is predictable delivery and predictable rollback. This is the shortest path that still leaves an audit trail.</p>
+          </div>
+          <div class="integration-steps">
+            <article class="integration-step">
+              <span class="integration-step-num">01</span>
+              <h3>Define the owner</h3>
+              <p>Assign the person or team that owns the downstream endpoint, token, and escalation path before you paste credentials into the admin console.</p>
+            </article>
+            <article class="integration-step">
+              <span class="integration-step-num">02</span>
+              <h3>Map severity and routing</h3>
+              <p>Choose which severities send immediately, which cases create tickets, and whether the connector should mirror alerts, cases, or both.</p>
+            </article>
+            <article class="integration-step">
+              <span class="integration-step-num">03</span>
+              <h3>Dry-run a known sample</h3>
+              <p>Send a single controlled event or case update first. Validate the payload shape, timestamp formatting, and backlink into Wardex before enabling wide fan-out.</p>
+            </article>
+            <article class="integration-step">
+              <span class="integration-step-num">04</span>
+              <h3>Document fallback behavior</h3>
+              <p>Decide what operators do if the connector is down: retry later, fall back to email, or continue case work only inside Wardex until the sink recovers.</p>
+            </article>
+          </div>
+
+          <div class="integration-code-grid">
+            <article class="integration-code-card">
+              <h3>Generic Webhook Example</h3>
+              <p>Signed JSON payloads are the safest default when the downstream system has a custom receiver.</p>
+              <div class="code-block"><code>{
+  "case_id": "CASE-1042",
+  "severity": "high",
+  "status": "triage",
+  "title": "Suspicious shell spawned from Office",
+  "endpoint_id": "macbook-sec-17",
+  "rule": "office-child-process",
+  "mitre": ["T1204", "T1059"],
+  "wardex_url": "https://console.example/cases/CASE-1042"
+}</code></div>
+            </article>
+            <article class="integration-code-card">
+              <h3>Syslog / SIEM Payload Notes</h3>
+              <p>When forwarding to syslog or a SIEM collector, keep the normalized case identifiers and timestamps intact so correlation stays deterministic.</p>
+              <div class="code-block"><code>&lt;134&gt;1 2026-04-21T14:22:09Z wardex control-plane - - -
+event.kind=alert event.id=CASE-1042 severity=high
+endpoint.id=macbook-sec-17 rule=office-child-process
+wardex.url=https://console.example/cases/CASE-1042</code></div>
+            </article>
+          </div>
+
+          <div class="integration-callout">
+            <p><strong>Reference docs:</strong> Pair this page with the SIEM runbook, the OpenAPI contract, and the SDK guide when you build or debug a connector.</p>
+            <div class="integration-links">
+              <a class="btn btn-outline" href="https://github.com/pinkysworld/Wardex/blob/main/docs/runbooks/siem-integrations.md" target="_blank" rel="noopener">SIEM Runbook</a>
+              <a class="btn btn-outline" href="https://github.com/pinkysworld/Wardex/blob/main/docs/openapi.yaml" target="_blank" rel="noopener">OpenAPI YAML</a>
+              <a class="btn btn-outline" href="https://github.com/pinkysworld/Wardex/blob/main/docs/SDK_GUIDE.md" target="_blank" rel="noopener">SDK Guide</a>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="section">
+        <div class="container">
+          <div class="section-header">
             <p class="label">Identity &amp; SSO</p>
             <h2>Plug into your IdP</h2>
           </div>
@@ -152,10 +257,10 @@
         <div class="container">
           <div class="cta-box">
             <h2>Missing a connector?</h2>
-            <p>The integration layer is a stable Rust trait. Ping us or open a PR and we'll prioritize it.</p>
+            <p>The integration layer is a stable Rust trait. Email the support mailbox with the downstream system, auth model, payload expectations, and urgency, or open a PR if you already know the implementation shape.</p>
             <div class="cta-actions">
               <a class="btn btn-primary" href="https://github.com/pinkysworld/Wardex/issues/new?labels=integration" target="_blank" rel="noopener">Request an integration</a>
-              <a class="btn btn-outline" href="resources.html">SDK &amp; docs</a>
+              <a class="btn btn-outline" href="mailto:mip@gmx.biz?subject=Wardex%20Integration%20Request">Email Integration Support</a>
             </div>
           </div>
         </div>

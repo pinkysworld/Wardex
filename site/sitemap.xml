@@ -10,6 +10,6 @@
   <url><loc>https://pinkysworld.github.io/Wardex/status.html</loc><changefreq>weekly</changefreq><priority>0.6</priority></url>
   <url><loc>https://pinkysworld.github.io/Wardex/integrations.html</loc><changefreq>monthly</changefreq><priority>0.6</priority></url>
   <url><loc>https://pinkysworld.github.io/Wardex/api.html</loc><changefreq>monthly</changefreq><priority>0.7</priority></url>
-  <url><loc>https://pinkysworld.github.io/Wardex/donate.html</loc><changefreq>monthly</changefreq><priority>0.5</priority></url>
+  <url><loc>https://pinkysworld.github.io/Wardex/support/</loc><changefreq>monthly</changefreq><priority>0.5</priority></url>
   <url><loc>https://pinkysworld.github.io/Wardex/changelog.html</loc><changefreq>weekly</changefreq><priority>0.6</priority></url>
 </urlset>

@@ -13,18 +13,33 @@
     <meta name="twitter:title" content="API Reference — Wardex">
     <meta name="twitter:description" content="Interactive reference for the Wardex REST control plane.">
     <link rel="icon" href="favicon.svg" type="image/svg+xml">
-    <link rel="stylesheet" href="styles.css?v=15">
-    <script defer src="app.js?v=15"></script>
+    <link rel="stylesheet" href="styles.css?v=20">
+    <script defer src="app.js?v=20"></script>
     <style>
-      body { margin: 0; }
-      #redoc-wrap { min-height: 100vh; }
-      .api-hero { padding: 72px 24px 32px; background: var(--nav-bg); color: #e8e8e8; }
+      body.api-page { margin: 0; background: #eef2f6; }
+      #redoc-wrap { min-height: 100vh; background: #fff; }
+      .api-hero { padding: 72px 24px 32px; background: linear-gradient(180deg, #141922 0%, #1b2430 100%); color: #e8eef5; }
       .api-hero h1 { color: #fff; }
       .api-hero .container { max-width: 1120px; margin: 0 auto; }
-      .api-hero a { color: var(--nav-accent); }
+      .api-hero p { max-width: 72ch; color: #c5d1dc; }
+      .api-hero a { color: #88f2d6; }
+      .api-hero-actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 18px; }
+      .api-hero-link {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 9px 14px;
+        border-radius: 999px;
+        border: 1px solid rgba(255,255,255,0.14);
+        background: rgba(255,255,255,0.04);
+        color: #eef7ff;
+        font-size: 0.84rem;
+        font-weight: 600;
+      }
+      .api-hero-link:hover { background: rgba(255,255,255,0.08); }
     </style>
   </head>
-  <body>
+  <body class="api-page">
     <nav class="site-nav" id="site-nav" data-shared-nav="true">
       <div class="nav-inner">
         <a class="nav-brand" href="index.html">
@@ -41,7 +56,7 @@
           <a href="rules.html" class="nav-link">Rules</a>
           <a href="resources.html" class="nav-link">Resources</a>
           <a href="pricing.html" class="nav-link">Pricing</a>
-          <a href="donate.html" class="nav-link">Support</a>
+          <a href="support/" class="nav-link">Support</a>
           <div class="nav-dropdown">
             <button type="button" class="nav-link nav-dropdown-trigger active" aria-haspopup="true" aria-expanded="false">
               More
@@ -67,12 +82,59 @@
         <p class="label" style="color: var(--nav-accent);">REST API</p>
         <h1>Wardex API Reference</h1>
         <p>Rendered from <a href="https://github.com/pinkysworld/Wardex/blob/main/docs/openapi.yaml" target="_blank" rel="noopener">docs/openapi.yaml</a> · bearer-token authentication · 163 endpoints across ingestion, detection, triage, fleet, hunt, response, and admin surfaces.</p>
+        <div class="api-hero-actions">
+          <a class="api-hero-link" href="https://github.com/pinkysworld/Wardex/blob/main/docs/openapi.yaml" target="_blank" rel="noopener">Open OpenAPI YAML</a>
+          <a class="api-hero-link" href="resources.html">Docs &amp; SDK guide</a>
+          <a class="api-hero-link" href="mailto:mip@gmx.biz?subject=Wardex%20API%20Question">Ask about the API</a>
+        </div>
       </div>
     </section>
 
-    <div id="redoc-wrap">
-      <redoc spec-url="https://raw.githubusercontent.com/pinkysworld/Wardex/main/docs/openapi.yaml" theme='{"typography":{"fontFamily":"Inter, system-ui, sans-serif"}}'></redoc>
-    </div>
+    <div id="redoc-wrap"></div>
     <script src="https://cdn.redoc.ly/redoc/latest/bundles/redoc.standalone.js"></script>
+    <script>
+      const redocTheme = {
+        colors: {
+          primary: { main: "#1a6b5a" },
+          text: { primary: "#16202a", secondary: "#4c5a67" },
+          border: { dark: "#d8e0e8", light: "#e8edf3" },
+          http: {
+            get: "#1f9d55",
+            post: "#2563eb",
+            put: "#7c3aed",
+            options: "#0f766e",
+            patch: "#b45309",
+            delete: "#c53030"
+          }
+        },
+        typography: {
+          fontFamily: "Inter, system-ui, sans-serif",
+          fontSize: "15px",
+          headings: { fontFamily: "Inter, system-ui, sans-serif", fontWeight: "700" },
+          code: { fontFamily: "JetBrains Mono, monospace", fontSize: "14px" }
+        },
+        sidebar: {
+          backgroundColor: "#ffffff",
+          textColor: "#1a1f27",
+          activeTextColor: "#1a6b5a"
+        },
+        rightPanel: {
+          backgroundColor: "#131922",
+          textColor: "#d8e2ec"
+        }
+      };
+
+      Redoc.init(
+        "https://raw.githubusercontent.com/pinkysworld/Wardex/main/docs/openapi.yaml",
+        {
+          theme: redocTheme,
+          scrollYOffset: 76,
+          pathInMiddlePanel: true,
+          expandResponses: "200,201",
+          nativeScrollbars: true
+        },
+        document.getElementById("redoc-wrap")
+      );
+    </script>
   </body>
 </html>
