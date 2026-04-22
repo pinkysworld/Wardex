@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1776856939752,
+  "lastUpdate": 1776866765696,
   "repoUrl": "https://github.com/pinkysworld/Wardex",
   "entries": {
     "Wardex criterion benches": [
@@ -1701,6 +1701,96 @@ window.BENCHMARK_DATA = {
             "name": "sigma_evaluate_20_rules",
             "value": 33524,
             "range": "± 246",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "85413447+pinkysworld@users.noreply.github.com",
+            "name": "pinkysworld",
+            "username": "pinkysworld"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "f1b756047203946faddab886f10e49f6e569114b",
+          "message": "Merge pull request #38 from pinkysworld/copilot/main-ci-triage-20260422\n\nStabilize main CI gates",
+          "timestamp": "2026-04-22T15:58:32+02:00",
+          "tree_id": "6c2bcdbd687df352021135748626efaa770db8f9",
+          "url": "https://github.com/pinkysworld/Wardex/commit/f1b756047203946faddab886f10e49f6e569114b"
+        },
+        "date": 1776866764750,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "full_pipeline/5",
+            "value": 47242,
+            "range": "± 714",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "full_pipeline/50",
+            "value": 401626,
+            "range": "± 1478",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "full_pipeline/200",
+            "value": 1833518,
+            "range": "± 43276",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "full_pipeline/1000",
+            "value": 17219175,
+            "range": "± 82547",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "detector_evaluate_single",
+            "value": 642,
+            "range": "± 2",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "policy_evaluate_single",
+            "value": 227,
+            "range": "± 1",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "throughput/1000_samples",
+            "value": 17197173,
+            "range": "± 84486",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "search_500_events",
+            "value": 115630,
+            "range": "± 518",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "hunt_field_query",
+            "value": 94861,
+            "range": "± 832",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "ml_triage_rf",
+            "value": 55,
+            "range": "± 0",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "sigma_evaluate_20_rules",
+            "value": 33280,
+            "range": "± 283",
             "unit": "ns/iter"
           }
         ]
