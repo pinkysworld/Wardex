@@ -116,7 +116,7 @@ jobs:
       # downstream consumers can verify provenance with:
       #   gh attestation verify <archive> --repo pinkysworld/Wardex
       - name: Generate build provenance attestation
-        uses: actions/attest-build-provenance@e8998f949152b193b063cb0ec769d69d929409be # v2
+        uses: actions/attest-build-provenance@a2bbfa25375fe432b6a289bc6b6cd05ecd0c4c32 # v4.1.0
         with:
           subject-path: ${{ matrix.archive }}
 
@@ -312,7 +312,7 @@ jobs:
 
       # ── SLSA v1.0 container provenance ──────────────────────────────────
       - name: Generate container provenance attestation
-        uses: actions/attest-build-provenance@e8998f949152b193b063cb0ec769d69d929409be # v2
+        uses: actions/attest-build-provenance@a2bbfa25375fe432b6a289bc6b6cd05ecd0c4c32 # v4.1.0
         with:
           subject-name: ${{ steps.image.outputs.name }}
           subject-digest: ${{ steps.build-push.outputs.digest }}
