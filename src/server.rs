@@ -3484,18 +3484,13 @@ fn build_workbench_overview(
         .filter(|hunt| hunt.lifecycle == crate::enterprise::ContentLifecycle::Canary)
         .count();
     let active_hunts = hunts.iter().filter(|hunt| hunt.enabled).count();
-    let average_canary_percentage = if canary_hunts > 0 {
-        Some(
-            (hunts
-                .iter()
-                .filter(|hunt| hunt.lifecycle == crate::enterprise::ContentLifecycle::Canary)
-                .map(|hunt| hunt.canary_percentage as usize)
-                .sum::<usize>()
-                / canary_hunts) as u8,
-        )
-    } else {
-        None
-    };
+    let average_canary_percentage = hunts
+        .iter()
+        .filter(|hunt| hunt.lifecycle == crate::enterprise::ContentLifecycle::Canary)
+        .map(|hunt| hunt.canary_percentage as usize)
+        .sum::<usize>()
+        .checked_div(canary_hunts)
+        .map(|average| average as u8);
 
     let saved_searches = hunts.len()
         + packs
