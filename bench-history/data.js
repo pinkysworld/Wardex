@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1776833203764,
+  "lastUpdate": 1776856939752,
   "repoUrl": "https://github.com/pinkysworld/Wardex",
   "entries": {
     "Wardex criterion benches": [
@@ -1611,6 +1611,96 @@ window.BENCHMARK_DATA = {
             "name": "sigma_evaluate_20_rules",
             "value": 33259,
             "range": "± 202",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "85413447+pinkysworld@users.noreply.github.com",
+            "name": "pinkysworld",
+            "username": "pinkysworld"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "7898429d6fd1b0b8c8369e5829838a22a2125581",
+          "message": "Merge pull request #37 from pinkysworld/copilot/release-hash-hex-fix-20260422\n\nFix release build digest hex encoding",
+          "timestamp": "2026-04-22T13:16:32+02:00",
+          "tree_id": "feabd3e9e1c5366d5ac3e4c9097c4f45f73a2471",
+          "url": "https://github.com/pinkysworld/Wardex/commit/7898429d6fd1b0b8c8369e5829838a22a2125581"
+        },
+        "date": 1776856939361,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "full_pipeline/5",
+            "value": 47733,
+            "range": "± 929",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "full_pipeline/50",
+            "value": 403385,
+            "range": "± 1612",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "full_pipeline/200",
+            "value": 1844427,
+            "range": "± 17953",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "full_pipeline/1000",
+            "value": 17242009,
+            "range": "± 32936",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "detector_evaluate_single",
+            "value": 695,
+            "range": "± 1",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "policy_evaluate_single",
+            "value": 224,
+            "range": "± 1",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "throughput/1000_samples",
+            "value": 17246620,
+            "range": "± 273190",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "search_500_events",
+            "value": 114487,
+            "range": "± 261",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "hunt_field_query",
+            "value": 94231,
+            "range": "± 656",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "ml_triage_rf",
+            "value": 54,
+            "range": "± 0",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "sigma_evaluate_20_rules",
+            "value": 33524,
+            "range": "± 246",
             "unit": "ns/iter"
           }
         ]
