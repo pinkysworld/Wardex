@@ -363,7 +363,9 @@ export default function SOCWorkbench() {
   const filteredQueueArr = queueArr.filter((alert) => {
     const q = queueFilterText.trim().toLowerCase();
     if (!q) return true;
-    return JSON.stringify(alert || {}).toLowerCase().includes(q);
+    return JSON.stringify(alert || {})
+      .toLowerCase()
+      .includes(q);
   });
 
   useEffect(() => {
@@ -1258,18 +1260,22 @@ export default function SOCWorkbench() {
                 value={bulkCaseStatus}
                 onChange={(event) => setBulkCaseStatus(event.target.value)}
               >
-                {['new', 'triaging', 'investigating', 'escalated', 'resolved', 'closed'].map((status) => (
-                  <option key={status} value={status}>
-                    {status}
-                  </option>
-                ))}
+                {['new', 'triaging', 'investigating', 'escalated', 'resolved', 'closed'].map(
+                  (status) => (
+                    <option key={status} value={status}>
+                      {status}
+                    </option>
+                  ),
+                )}
               </select>
               <button
                 className="btn btn-sm"
                 disabled={selectedCaseIds.size === 0}
                 onClick={async () => {
                   const ids = [...selectedCaseIds];
-                  await Promise.allSettled(ids.map((id) => api.updateCase(id, { status: bulkCaseStatus })));
+                  await Promise.allSettled(
+                    ids.map((id) => api.updateCase(id, { status: bulkCaseStatus })),
+                  );
                   toast(`Updated ${ids.length} case(s)`, 'success');
                   setSelectedCaseIds(new Set());
                   rCases();
@@ -1403,7 +1409,11 @@ export default function SOCWorkbench() {
             />
           </div>
           <div className="btn-group" style={{ marginTop: 10 }}>
-            <button className="btn btn-sm btn-primary" onClick={runAnalystQuery} disabled={analystLoading}>
+            <button
+              className="btn btn-sm btn-primary"
+              onClick={runAnalystQuery}
+              disabled={analystLoading}
+            >
               {analystLoading ? 'Running…' : 'Run Query'}
             </button>
             <button className="btn btn-sm" onClick={() => setAnalystResult(null)}>
@@ -1458,7 +1468,10 @@ export default function SOCWorkbench() {
                   const query = queueFilterText.trim();
                   if (!query) return;
                   setSavedQueueFilters((current) => {
-                    const next = [...current.filter((item) => item.query !== query), { name, query }];
+                    const next = [
+                      ...current.filter((item) => item.query !== query),
+                      { name, query },
+                    ];
                     return next.slice(-10);
                   });
                 }}

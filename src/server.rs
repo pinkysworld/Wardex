@@ -10742,7 +10742,8 @@ fn handle_api(
                 {
                     return error_json(&message, 403);
                 }
-                let payload = read_json_value(body, 16 * 1024).unwrap_or_else(|_| serde_json::json!({}));
+                let payload =
+                    read_json_value(body, 16 * 1024).unwrap_or_else(|_| serde_json::json!({}));
                 let requested_run_id = payload
                     .get("run_id")
                     .and_then(|value| value.as_str())
@@ -11133,7 +11134,9 @@ fn handle_api(
                                 if let Some(tags) = v["tags"].as_array() {
                                     let normalized_tags = tags
                                         .iter()
-                                        .filter_map(|value| value.as_str().map(|s| s.trim().to_string()))
+                                        .filter_map(|value| {
+                                            value.as_str().map(|s| s.trim().to_string())
+                                        })
                                         .filter(|tag| !tag.is_empty())
                                         .collect::<Vec<_>>();
                                     if !s.case_store.update_tags(id, normalized_tags) {
@@ -13018,7 +13021,6 @@ fn handle_api(
                 let incidents = crate::alert_analysis::deduplicate_alerts(&alerts, &config);
                 let body = serde_json::to_string(&incidents).unwrap_or_default();
                 json_response(&body, 200)
-
             } else if method == Method::Post && url_path == "/api/alerts/dedup/auto-create" {
                 let mut s = state.lock().unwrap_or_else(|e| e.into_inner());
                 let alerts: Vec<crate::collector::AlertRecord> = s.alerts.iter().cloned().collect();
@@ -13029,7 +13031,10 @@ fn handle_api(
                 };
                 let deduped = crate::alert_analysis::deduplicate_alerts(&alerts, &config);
                 let mut created = Vec::new();
-                for group in deduped.into_iter().filter(|incident| incident.alert_count >= 3) {
+                for group in deduped
+                    .into_iter()
+                    .filter(|incident| incident.alert_count >= 3)
+                {
                     let severity = group.level.to_ascii_lowercase();
                     s.incident_store.create(
                         format!("Auto incident {}", group.incident_id),
@@ -17238,7 +17243,8 @@ mod tests {
                 to_ts: None,
                 limit: None,
             },
-            hypothesis: "Credential storm should produce correlated host-level evidence".to_string(),
+            hypothesis: "Credential storm should produce correlated host-level evidence"
+                .to_string(),
             expected_outcome: crate::enterprise::HuntExpectedOutcome::Confirm,
             created_at: chrono::Utc::now().to_rfc3339(),
             updated_at: chrono::Utc::now().to_rfc3339(),

@@ -57,11 +57,7 @@ fn cron_field_matches(value: u32, expr: &str) -> bool {
     token.parse::<u32>() == Ok(value)
 }
 
-fn cron_is_due(
-    expr: &str,
-    now: chrono::DateTime<chrono::Utc>,
-    last_run_at: Option<&str>,
-) -> bool {
+fn cron_is_due(expr: &str, now: chrono::DateTime<chrono::Utc>, last_run_at: Option<&str>) -> bool {
     let parts: Vec<&str> = expr.split_whitespace().collect();
     if parts.len() != 5 {
         return false;
@@ -1598,7 +1594,8 @@ impl EnterpriseStore {
             .hunts
             .iter()
             .filter(|hunt| {
-                hunt.enabled && (hunt.schedule_interval_secs.is_some() || hunt.schedule_cron.is_some())
+                hunt.enabled
+                    && (hunt.schedule_interval_secs.is_some() || hunt.schedule_cron.is_some())
             })
             .filter(|hunt| {
                 let interval_due = hunt
@@ -1674,7 +1671,8 @@ impl EnterpriseStore {
             yield_rate: if visible_matches.is_empty() {
                 0.0
             } else {
-                visible_matches.len() as f32 / (visible_matches.len() + suppressed_matches.len()) as f32
+                visible_matches.len() as f32
+                    / (visible_matches.len() + suppressed_matches.len()) as f32
             },
             matched_event_ids: visible_matches.iter().map(|event| event.id).collect(),
             matched_agent_ids: visible_matches
@@ -1706,7 +1704,8 @@ impl EnterpriseStore {
                 (chrono::Utc::now() + chrono::Duration::seconds(secs as i64)).to_rfc3339()
             });
             if hunt_mut.next_run_at.is_none() && hunt_mut.schedule_cron.is_some() {
-                hunt_mut.next_run_at = Some((chrono::Utc::now() + chrono::Duration::minutes(1)).to_rfc3339());
+                hunt_mut.next_run_at =
+                    Some((chrono::Utc::now() + chrono::Duration::minutes(1)).to_rfc3339());
             }
             hunt_mut.updated_at = now_rfc3339();
         }

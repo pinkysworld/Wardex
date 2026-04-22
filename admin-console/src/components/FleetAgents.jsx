@@ -184,12 +184,7 @@ export default function FleetAgents() {
     () => filteredAgents.slice(page * pageSize, (page + 1) * pageSize),
     [filteredAgents, page, pageSize],
   );
-
-  useEffect(() => {
-    if (focusedRowIndex >= pagedAgents.length) {
-      setFocusedRowIndex(Math.max(0, pagedAgents.length - 1));
-    }
-  }, [focusedRowIndex, pagedAgents.length]);
+  const activeRowIndex = Math.min(focusedRowIndex, Math.max(0, pagedAgents.length - 1));
   const totalPages = Math.max(1, Math.ceil(filteredAgents.length / pageSize));
   const hasFleetFilters = statusFilter !== 'all' || osFilter !== 'all' || Boolean(query);
 
@@ -220,10 +215,7 @@ export default function FleetAgents() {
     setFleetQueryState({ q: '', status: 'all', os: 'all' });
   }, [setFleetQueryState]);
 
-  const hasColumn = useCallback(
-    (column) => visibleColumns.includes(column),
-    [visibleColumns],
-  );
+  const hasColumn = useCallback((column) => visibleColumns.includes(column), [visibleColumns]);
 
   const toggleColumn = useCallback((column) => {
     setVisibleColumns((current) => {
@@ -394,7 +386,9 @@ export default function FleetAgents() {
             <div className="card-header">
               <span className="card-title">Registered Agents ({filteredAgents.length})</span>
               <div className="btn-group">
-                <span className={`badge ${(wsStats?.connected_subscribers || 0) > 0 ? 'badge-ok' : 'badge-warn'}`}>
+                <span
+                  className={`badge ${(wsStats?.connected_subscribers || 0) > 0 ? 'badge-ok' : 'badge-warn'}`}
+                >
                   {(wsStats?.connected_subscribers || 0) > 0
                     ? `Live (${wsStats.connected_subscribers})`
                     : 'Live idle'}
@@ -586,15 +580,17 @@ export default function FleetAgents() {
                   onKeyDown={(event) => {
                     if (event.key === 'j') {
                       event.preventDefault();
-                      setFocusedRowIndex((index) => Math.min(index + 1, Math.max(0, pagedAgents.length - 1)));
+                      setFocusedRowIndex(
+                        Math.min(activeRowIndex + 1, Math.max(0, pagedAgents.length - 1)),
+                      );
                     }
                     if (event.key === 'k') {
                       event.preventDefault();
-                      setFocusedRowIndex((index) => Math.max(index - 1, 0));
+                      setFocusedRowIndex(Math.max(activeRowIndex - 1, 0));
                     }
-                    if (event.key === 'Enter' && pagedAgents[focusedRowIndex]) {
+                    if (event.key === 'Enter' && pagedAgents[activeRowIndex]) {
                       event.preventDefault();
-                      openAgent(pagedAgents[focusedRowIndex]);
+                      openAgent(pagedAgents[activeRowIndex]);
                     }
                     if (event.key === 'Escape') {
                       event.preventDefault();
@@ -631,7 +627,11 @@ export default function FleetAgents() {
                           return (
                             <tr
                               key={agent.id}
-                              className={isActive || pagedAgents[focusedRowIndex]?.id === agent.id ? 'row-active' : ''}
+                              className={
+                                isActive || pagedAgents[activeRowIndex]?.id === agent.id
+                                  ? 'row-active'
+                                  : ''
+                              }
                               onMouseEnter={() => setHoveredAgent(agent)}
                               onFocus={() => setHoveredAgent(agent)}
                               onClick={() => openAgent(agent)}

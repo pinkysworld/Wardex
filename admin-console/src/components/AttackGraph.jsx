@@ -401,7 +401,12 @@ export default function AttackGraph() {
           Techniques with no active hunt/rule coverage are highlighted for engineering backlogs.
         </div>
         <div style={{ display: 'grid', gap: 6 }}>
-          {(Array.isArray(coverageGaps?.gaps) ? coverageGaps.gaps : Array.isArray(coverageGaps) ? coverageGaps : [])
+          {(Array.isArray(coverageGaps?.gaps)
+            ? coverageGaps.gaps
+            : Array.isArray(coverageGaps)
+              ? coverageGaps
+              : []
+          )
             .slice(0, 10)
             .map((gap, index) => (
               <div
@@ -414,8 +419,12 @@ export default function AttackGraph() {
                   padding: '8px 0',
                 }}
               >
-                <span className="row-primary">{gap?.technique_id || gap?.technique || 'Unknown'}</span>
-                <span className="row-secondary">{gap?.technique_name || gap?.name || 'Unmapped'}</span>
+                <span className="row-primary">
+                  {gap?.technique_id || gap?.technique || 'Unknown'}
+                </span>
+                <span className="row-secondary">
+                  {gap?.technique_name || gap?.name || 'Unmapped'}
+                </span>
               </div>
             ))}
         </div>

@@ -1081,7 +1081,9 @@ export default function ThreatDetection() {
           <div className="summary-card">
             <div className="summary-label">Covered Techniques</div>
             <div className="summary-value">{mitreCoverage?.covered_techniques ?? '—'}</div>
-            <div className="summary-meta">{mitreCoverage?.coverage_pct ?? '—'}% total ATT&CK coverage</div>
+            <div className="summary-meta">
+              {mitreCoverage?.coverage_pct ?? '—'}% total ATT&CK coverage
+            </div>
           </div>
           <div className="summary-card">
             <div className="summary-label">Gap Techniques</div>
@@ -1096,7 +1098,12 @@ export default function ThreatDetection() {
           </div>
         </div>
         <div style={{ marginTop: 10, display: 'grid', gap: 8 }}>
-          {(Array.isArray(coverageGaps?.gaps) ? coverageGaps.gaps : Array.isArray(coverageGaps) ? coverageGaps : [])
+          {(Array.isArray(coverageGaps?.gaps)
+            ? coverageGaps.gaps
+            : Array.isArray(coverageGaps)
+              ? coverageGaps
+              : []
+          )
             .slice(0, 8)
             .map((gap, index) => (
               <div
@@ -1112,7 +1119,9 @@ export default function ThreatDetection() {
                 <div className="row-primary">
                   {gap?.technique_id || gap?.technique || 'Unknown technique'}
                 </div>
-                <div className="row-secondary">{gap?.technique_name || gap?.name || 'Unmapped'}</div>
+                <div className="row-secondary">
+                  {gap?.technique_name || gap?.name || 'Unmapped'}
+                </div>
               </div>
             ))}
         </div>
@@ -1125,17 +1134,23 @@ export default function ThreatDetection() {
         <div className="summary-grid">
           <div className="summary-card">
             <div className="summary-label">Malware Scanning</div>
-            <div className="summary-value">{malwareStats?.detections ?? malwareRecent?.length ?? 0}</div>
+            <div className="summary-value">
+              {malwareStats?.detections ?? malwareRecent?.length ?? 0}
+            </div>
             <div className="summary-meta">Recent detections and signature activity</div>
           </div>
           <div className="summary-card">
             <div className="summary-label">Feed Ingestion</div>
-            <div className="summary-value">{feedStats?.active_feeds ?? feeds?.feeds?.length ?? 0}</div>
+            <div className="summary-value">
+              {feedStats?.active_feeds ?? feeds?.feeds?.length ?? 0}
+            </div>
             <div className="summary-meta">Connected intel and rules feeds</div>
           </div>
           <div className="summary-card">
             <div className="summary-label">Quarantine Store</div>
-            <div className="summary-value">{quarantineStats?.active ?? quarantineItems?.items?.length ?? 0}</div>
+            <div className="summary-value">
+              {quarantineStats?.active ?? quarantineItems?.items?.length ?? 0}
+            </div>
             <div className="summary-meta">Tracked quarantined artifacts</div>
           </div>
           <div className="summary-card">
@@ -1739,7 +1754,9 @@ export default function ThreatDetection() {
                               {hunt.latest_run?.suppressed_count != null
                                 ? ` • ${hunt.latest_run.suppressed_count} suppressed`
                                 : ''}
-                              {hunt.latest_run?.case_id ? ` • linked case #${hunt.latest_run.case_id}` : ''}
+                              {hunt.latest_run?.case_id
+                                ? ` • linked case #${hunt.latest_run.case_id}`
+                                : ''}
                             </div>
                           </div>
                           <div className="btn-group" style={{ alignItems: 'center' }}>
@@ -1759,7 +1776,9 @@ export default function ThreatDetection() {
                             <button
                               className="btn btn-sm"
                               onClick={() => escalateHuntRun(hunt.id, hunt.latest_run?.id)}
-                              disabled={!hunt.latest_run?.id || escalatingRunId === hunt.latest_run?.id}
+                              disabled={
+                                !hunt.latest_run?.id || escalatingRunId === hunt.latest_run?.id
+                              }
                             >
                               {escalatingRunId === hunt.latest_run?.id
                                 ? 'Escalating…'
