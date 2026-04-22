@@ -12,6 +12,19 @@ fn auth_header(token: &str) -> String {
     format!("Bearer {token}")
 }
 
+const LOCAL_CONSOLE_AGENT_ID: &str = "local-console";
+
+fn find_agent_by_id<'a>(agents: &'a serde_json::Value, agent_id: &str) -> &'a serde_json::Value {
+    agents
+        .as_array()
+        .and_then(|entries| {
+            entries
+                .iter()
+                .find(|agent| agent["id"] == serde_json::Value::String(agent_id.to_string()))
+        })
+        .unwrap_or_else(|| panic!("missing agent {agent_id}"))
+}
+
 fn test_state_root(port: u16) -> PathBuf {
     PathBuf::from(format!("/tmp/wardex_test_{port}"))
 }
@@ -2053,7 +2066,19 @@ fn create_enrollment_token_and_enroll_agent() {
         .expect("list agents");
     assert_eq!(resp.status(), 200);
     let agents: serde_json::Value = resp.into_json().unwrap();
-    assert_eq!(agents.as_array().unwrap().len(), 1);
+    let agent_entries = agents.as_array().unwrap();
+    assert_eq!(agent_entries.len(), 2);
+    assert!(
+        agent_entries
+            .iter()
+            .any(|agent| agent["id"] == serde_json::json!(LOCAL_CONSOLE_AGENT_ID))
+    );
+    assert_eq!(
+        find_agent_by_id(&agents, agent_id)["hostname"]
+            .as_str()
+            .unwrap(),
+        "test-agent-1"
+    );
 
     // Deregister agent (requires auth)
     let resp = ureq::request("DELETE", &format!("{}/api/agents/{}", base(port), agent_id))
@@ -2268,7 +2293,7 @@ fn fleet_dashboard_returns_summary() {
     assert!(body.get("policy").is_some());
     assert!(body.get("updates").is_some());
     assert!(body.get("siem").is_some());
-    assert_eq!(body["fleet"]["total_agents"].as_u64().unwrap(), 0);
+    assert_eq!(body["fleet"]["total_agents"].as_u64().unwrap(), 1);
     assert!(body["events"]["analytics"].is_object());
     assert!(body["policy"]["history_depth"].is_u64());
 }
@@ -3311,13 +3336,23 @@ fn agents_summary_includes_freshness_versions_and_rollout_fields() {
         .expect("agent summary")
         .into_json()
         .unwrap();
-    let first = &agents[0];
-    assert_eq!(first["id"].as_str().unwrap(), agent_id);
-    assert!(first["last_seen_age_secs"].is_u64());
-    assert!(first["current_version"].is_string());
-    assert_eq!(first["target_version"].as_str().unwrap(), "1.2.3");
-    assert_eq!(first["rollout_group"].as_str().unwrap(), "canary");
-    assert_eq!(first["deployment_status"].as_str().unwrap(), "assigned");
+    assert!(
+        agents
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|agent| agent["id"] == serde_json::json!(LOCAL_CONSOLE_AGENT_ID))
+    );
+    let enrolled_agent = find_agent_by_id(&agents, &agent_id);
+    assert_eq!(enrolled_agent["id"].as_str().unwrap(), agent_id);
+    assert!(enrolled_agent["last_seen_age_secs"].is_u64());
+    assert!(enrolled_agent["current_version"].is_string());
+    assert_eq!(enrolled_agent["target_version"].as_str().unwrap(), "1.2.3");
+    assert_eq!(enrolled_agent["rollout_group"].as_str().unwrap(), "canary");
+    assert_eq!(
+        enrolled_agent["deployment_status"].as_str().unwrap(),
+        "assigned"
+    );
 }
 
 #[test]
