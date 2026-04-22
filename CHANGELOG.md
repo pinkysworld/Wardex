@@ -2,7 +2,7 @@
 
 All notable changes to Wardex are documented in this file.
 
-## [Unreleased] — Hunt Maturity, SOC UX Throughput, and Case Automation
+## [0.53.1] — Hunt Maturity, SOC UX Throughput, and Case Automation
 
 ### Threat hunting workflow upgrades
 - **Hypothesis-first hunts** — Saved hunts now persist `hypothesis` and `expected_outcome` (`confirm`, `refute`, `explore`) and expose them in the Threat Detection hunt workflow.
@@ -25,6 +25,10 @@ All notable changes to Wardex are documented in this file.
 
 ### Automation depth
 - **Dedup incident auto-create path** — New `POST /api/alerts/dedup/auto-create` creates incidents from high-cardinality dedup groups (3+ related alerts in a 5-minute window).
+
+### Release hardening
+- **SDK version mapping self-test** — `sdk/generate.sh` now includes a built-in version conversion self-test so Cargo-to-PEP-440 drift fails fast in CI before SDK artifacts are regenerated.
+- **Fleet keyboard regression coverage** — FleetAgents now has focused tests for keyboard selection after filter and pagination changes, reducing the risk of stale row focus opening the wrong endpoint.
 
 ### API additions
 - `POST /api/hunts/{id}/escalate`

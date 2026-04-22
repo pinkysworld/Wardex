@@ -50,6 +50,49 @@ python_version_from_cargo() {
   esac
 }
 
+run_version_mapping_self_tests() {
+  local test_case input expected actual
+  local -a test_cases=(
+    '0.53.1|0.53.1'
+    '0.53.1-alpha|0.53.1a0'
+    '0.53.1-alpha.2|0.53.1a2'
+    '0.53.1-beta|0.53.1b0'
+    '0.53.1-beta.3|0.53.1b3'
+    '0.53.1-rc|0.53.1rc0'
+    '0.53.1-rc.4|0.53.1rc4'
+    '0.53.1-dev|0.53.1.dev0'
+    '0.53.1-dev.5|0.53.1.dev5'
+    '0.53.1-local|0.53.1+local'
+    '0.53.1-local.7|0.53.1+local.7'
+    '0.53.1-feature-flag|0.53.1.dev0+feature.flag'
+  )
+
+  for test_case in "${test_cases[@]}"; do
+    IFS='|' read -r input expected <<<"$test_case"
+    actual="$(python_version_from_cargo "$input")"
+    if [[ "$actual" != "$expected" ]]; then
+      printf 'python_version_from_cargo(%s) produced %s, expected %s\n' \
+        "$input" "$actual" "$expected" >&2
+      return 1
+    fi
+  done
+
+  echo "python_version_from_cargo self-test passed"
+}
+
+case "${1:-}" in
+  --self-test-version-mapping)
+    run_version_mapping_self_tests
+    exit 0
+    ;;
+  "")
+    ;;
+  *)
+    echo "Unknown option: $1" >&2
+    exit 1
+    ;;
+esac
+
 PYTHON_VERSION="$(python_version_from_cargo "$VERSION")"
 SPEC="docs/openapi.yaml"
 PYTHON_OUTPUT="sdk/python-generated"

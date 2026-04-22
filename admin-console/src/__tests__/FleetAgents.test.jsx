@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent, act } from '@testing-library/react';
+import { render, screen, fireEvent, act, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { AuthProvider, RoleProvider, ThemeProvider, ToastProvider } from '../hooks.jsx';
 import { setToken } from '../api.js';
@@ -40,6 +40,56 @@ const AGENTS = [
   },
 ];
 
+const createAgents = (count) =>
+  Array.from({ length: count }, (_, index) => ({
+    id: `a-${index + 1}`,
+    hostname: `host-${String(index + 1).padStart(2, '0')}`,
+    os: index % 2 === 0 ? 'linux' : 'windows',
+    version: '0.53.1',
+    status: 'online',
+    last_seen: new Date(Date.now() - index * 60_000).toISOString(),
+  }));
+
+function installFleetFetchMock(agents = AGENTS) {
+  globalThis.fetch = vi.fn((url) => {
+    const u = String(url);
+    const detailMatch = u.match(/\/api\/agents\/([^/]+)\/details$/);
+    if (detailMatch) {
+      const agent = agents.find((candidate) => candidate.id === decodeURIComponent(detailMatch[1]));
+      return Promise.resolve(jsonOk(agent ?? {}));
+    }
+    if (u.includes('/api/agents')) return Promise.resolve(jsonOk(agents));
+    if (u.includes('/api/fleet/status')) return Promise.resolve(jsonOk({ status: 'ok' }));
+    if (u.includes('/api/fleet/dashboard')) {
+      return Promise.resolve(jsonOk({ total_agents: agents.length, agents: agents.length }));
+    }
+    if (u.includes('/api/swarm')) return Promise.resolve(jsonOk({}));
+    if (u.includes('/api/events')) return Promise.resolve(jsonOk([]));
+    if (u.includes('/api/platform')) return Promise.resolve(jsonOk({ os: 'linux' }));
+    if (u.includes('/api/updates')) return Promise.resolve(jsonOk({}));
+    if (u.includes('/api/rollout')) return Promise.resolve(jsonOk({}));
+    if (u.includes('/api/policy')) return Promise.resolve(jsonOk({}));
+    return Promise.resolve(jsonOk({}));
+  });
+}
+
+async function renderAgentsView(agents = AGENTS) {
+  installFleetFetchMock(agents);
+  let view;
+  await act(async () => {
+    view = render(<FleetAgents />, { wrapper: Wrapper });
+  });
+  const agentsTab = screen.getAllByText('Agents').find((el) => el.classList.contains('tab'));
+  await act(async () => {
+    fireEvent.click(agentsTab);
+  });
+  const table = view.container.querySelector('.split-list-table');
+  if (!table) {
+    throw new Error('split-list-table not rendered');
+  }
+  return { ...view, table };
+}
+
 function Wrapper({ children }) {
   return (
     <MemoryRouter>
@@ -59,20 +109,7 @@ describe('FleetAgents', () => {
     vi.clearAllMocks();
     localStorage.clear();
     setToken('');
-    globalThis.fetch = vi.fn((url) => {
-      const u = String(url);
-      if (u.includes('/api/agents')) return Promise.resolve(jsonOk(AGENTS));
-      if (u.includes('/api/fleet/status')) return Promise.resolve(jsonOk({ status: 'ok' }));
-      if (u.includes('/api/fleet/dashboard'))
-        return Promise.resolve(jsonOk({ total_agents: 3, agents: 3 }));
-      if (u.includes('/api/swarm')) return Promise.resolve(jsonOk({}));
-      if (u.includes('/api/events')) return Promise.resolve(jsonOk([]));
-      if (u.includes('/api/platform')) return Promise.resolve(jsonOk({ os: 'linux' }));
-      if (u.includes('/api/updates')) return Promise.resolve(jsonOk({}));
-      if (u.includes('/api/rollout')) return Promise.resolve(jsonOk({}));
-      if (u.includes('/api/policy')) return Promise.resolve(jsonOk({}));
-      return Promise.resolve(jsonOk({}));
-    });
+    installFleetFetchMock();
   });
 
   it('renders fleet tab by default with metric cards', async () => {
@@ -117,5 +154,69 @@ describe('FleetAgents', () => {
     expect(tabLabels).toContain('Events');
     expect(tabLabels).toContain('Updates');
     expect(tabLabels).toContain('Swarm');
+  });
+
+  it('clamps keyboard focus after filtering shrinks the visible rows', async () => {
+    const { container, table } = await renderAgentsView();
+    const desktopTable = container.querySelector('.desktop-table-only');
+
+    await act(async () => {
+      fireEvent.keyDown(table, { key: 'j' });
+      fireEvent.keyDown(table, { key: 'j' });
+    });
+
+    await act(async () => {
+      fireEvent.change(screen.getByLabelText('Search agents'), {
+        target: { value: 'web-01' },
+      });
+    });
+
+    expect(desktopTable).not.toBeNull();
+    expect(
+      within(desktopTable).getByText('web-01').closest('tr')?.classList.contains('row-active'),
+    ).toBe(true);
+
+    await act(async () => {
+      fireEvent.keyDown(table, { key: 'Enter' });
+    });
+
+    const detailPanel = container.querySelector('.triage-detail');
+    expect(detailPanel).not.toBeNull();
+    expect(
+      await within(detailPanel).findByText('web-01', { selector: '.detail-hero-title' }),
+    ).toBeInTheDocument();
+  });
+
+  it('clamps keyboard focus to the last visible row after pagination narrows the page', async () => {
+    const { container, table } = await renderAgentsView(createAgents(26));
+    const desktopTable = container.querySelector('.desktop-table-only');
+
+    await act(async () => {
+      fireEvent.change(screen.getByLabelText('Rows per page'), {
+        target: { value: '10' },
+      });
+    });
+
+    for (let index = 0; index < 9; index += 1) {
+      // Mirror real user key repeats so each step observes the latest focused row.
+      await act(async () => {
+        fireEvent.keyDown(table, { key: 'j' });
+      });
+    }
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Next' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Next' }));
+    });
+
+    await act(async () => {
+      fireEvent.keyDown(table, { key: 'Enter' });
+    });
+
+    const detailPanel = container.querySelector('.triage-detail');
+    expect(detailPanel).not.toBeNull();
+    expect(
+      await within(detailPanel).findByText('host-26', { selector: '.detail-hero-title' }),
+    ).toBeInTheDocument();
   });
 });
