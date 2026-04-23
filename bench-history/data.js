@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1776919663596,
+  "lastUpdate": 1776964865147,
   "repoUrl": "https://github.com/pinkysworld/Wardex",
   "entries": {
     "Wardex criterion benches": [
@@ -1969,6 +1969,96 @@ window.BENCHMARK_DATA = {
             "name": "sigma_evaluate_20_rules",
             "value": 33345,
             "range": "± 581",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "85413447+pinkysworld@users.noreply.github.com",
+            "name": "pinkysworld",
+            "username": "pinkysworld"
+          },
+          "committer": {
+            "email": "85413447+pinkysworld@users.noreply.github.com",
+            "name": "pinkysworld",
+            "username": "pinkysworld"
+          },
+          "distinct": true,
+          "id": "93f8463df2f1737357f72042987adbc04e4eed67",
+          "message": "Merge branch 'codex/reporting-roadmap-continuation'\n\n# Conflicts:\n#\tCHANGELOG.md\n#\tCargo.lock\n#\tCargo.toml\n#\tadmin-console/src/components/SOCWorkbench.jsx\n#\tadmin-console/src/components/ThreatDetection.jsx\n#\tsdk/python/pyproject.toml\n#\tsdk/python/wardex/__init__.py\n#\tsdk/typescript/package-lock.json\n#\tsdk/typescript/package.json",
+          "timestamp": "2026-04-23T19:14:31+02:00",
+          "tree_id": "abfc88618b43ddf6470dae9cb30408a912758bca",
+          "url": "https://github.com/pinkysworld/Wardex/commit/93f8463df2f1737357f72042987adbc04e4eed67"
+        },
+        "date": 1776964864635,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "full_pipeline/5",
+            "value": 48243,
+            "range": "± 438",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "full_pipeline/50",
+            "value": 409778,
+            "range": "± 2308",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "full_pipeline/200",
+            "value": 1863291,
+            "range": "± 7002",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "full_pipeline/1000",
+            "value": 17334039,
+            "range": "± 43632",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "detector_evaluate_single",
+            "value": 676,
+            "range": "± 4",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "policy_evaluate_single",
+            "value": 226,
+            "range": "± 1",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "throughput/1000_samples",
+            "value": 17371737,
+            "range": "± 179083",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "search_500_events",
+            "value": 113743,
+            "range": "± 616",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "hunt_field_query",
+            "value": 96233,
+            "range": "± 446",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "ml_triage_rf",
+            "value": 55,
+            "range": "± 0",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "sigma_evaluate_20_rules",
+            "value": 33721,
+            "range": "± 250",
             "unit": "ns/iter"
           }
         ]
