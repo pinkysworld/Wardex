@@ -2,11 +2,11 @@
 
 ## Current release
 
-- **Version:** `0.53.0`
+- **Version:** `0.53.1-local`
 - **Positioning:** private-cloud XDR and SIEM platform with enterprise detection engineering, malware scanning, analyst workflows, fleet operations, behavioural analytics, and automated incident response
 - **Source footprint:** 134 Rust source modules
-- **API contract:** versioned OpenAPI surface synchronized to the generated Python and TypeScript SDKs
-- **Verification:** Rust integration coverage, SDK regeneration checks, and focused admin-console regression coverage for auth routing, workbench overview, and saved-hunt editing
+- **API contract:** versioned OpenAPI surface with REST, GraphQL, and generated SDK parity diagnostics that surface alignment drift directly in the operator console
+- **Verification:** Rust integration coverage, focused support-center and OpenAPI contract tests, Help & Docs unit coverage, assistant/ticketing/enterprise API regression tests, SDK regeneration checks, and focused admin-console regression coverage for auth routing, dashboard presets, detection drill-downs, workbench overview, investigation-to-response pivots, assistant queries, ticket sync, long-retention history, and collector/secrets setup flows
 - **Production hardening:** 100% (59/59 controls implemented)
 
 ## Shipped in the current platform
@@ -40,7 +40,8 @@
 ### SOC operations
 
 - Dashboard with Recharts visualizations (severity pie, 24h alert timeline, CPU/memory area chart), severity filter, and clickable alert drill-down
-- SOC Workbench with queue, cases, investigation pivots, storyline views, response approval flows, escalation management, planner-to-hunt handoffs, identity-routing readiness, rollout history, content bundle posture, automation history, and operational analytics recommendations
+- Dashboard with persisted personal presets plus shared analyst/admin layouts for role-specific starting views
+- SOC Workbench with queue, cases, guided investigation planning, active step tracking, analyst notes, auto-query pivots, case handoff workflows, storyline views, response approval flows, escalation management, planner-to-hunt handoffs, hunt-to-case promotion, focused case routing, workflow-to-response handoffs, identity-routing readiness, rollout history, content bundle posture, automation history, and operational analytics recommendations
 - Structured incident detail view with severity badge, storyline timeline, related events/agents, close/export actions
 - Event search, incident timelines, process-tree inspection, and evidence package export
 - Inline case title editing, saved queue-filter bookmarks, and bulk case status operations
@@ -48,7 +49,7 @@
 ### Detection engineering
 
 - Sigma and native managed rules
-- Rule testing, promotion, rollback, suppressions, content packs, MITRE coverage, and inline false-positive advisor actions
+- Rule testing, promotion, rollback, suppressions, content packs, MITRE coverage, inline false-positive advisor actions, and first-class efficacy / ATT&CK gap / suppression-noise / rollout drill-downs in the detection workspace
 - Saved hunts with thresholds, schedules, owners, history, scheduled execution, lifecycle promotion state, canary percentages, target-group routing, and workflow recommendations
 - Content pack bundles with saved-search templates, workflow routes, target groups, and rollout notes directly editable from the detection workspace
 - Suppression rules management with inline creation form (rule_id, hostname, severity filters)
@@ -64,9 +65,18 @@
 
 ### Governance and enterprise controls
 
-- RBAC, session TTL, token rotation, session-backed identity groups, audit and retention controls
-- IDP and SCIM configuration surfaces
+- RBAC, session TTL, token rotation, session-backed identity groups, audit and retention controls, ClickHouse-backed retained-event search, and retention apply workflows
+- IDP, SCIM, cloud collector, and secrets manager configuration surfaces with validation and health visibility, plus enterprise-provider discovery on the unauthenticated sign-in shell
 - Change control entries, admin audit export, diagnostics bundle, dependency health endpoints, persisted rollout history, and persisted playbook analytics history
+
+### Analyst assistance and case collaboration
+
+- Analyst Assistant routed workspace with case-aware queries, citations, retrieval-first fallback answers, context windows, recent turns, and direct pivots back into SOC case workflows
+- SOC Workbench case ticket-sync workflow with provider, queue/project, and summary inputs plus the last sync result rendered in place
+
+### Supportability and documentation
+
+- Help & Docs support center with searchable embedded documentation, version-aware runbooks and deployment guidance, operator inbox context, support diagnostics, REST/OpenAPI/GraphQL/SDK parity diagnostics, live GraphQL query execution, and API endpoint exploration
 
 ### Integrations and evidence
 
@@ -78,13 +88,23 @@
 
 The current release has been verified with:
 
-- `cargo test` passing across unit and integration suites
-- targeted API regression coverage for session auth routing, hunt/content lifecycle, playbook execution shape, suppressions, storylines, governance, and supportability
-- deterministic browser regression coverage of run-hunt routing, saved-hunt reopen/update behavior, investigation planner start, queue-to-hunt pivots, and the expanded SOC workbench overview
+- `cargo test` passing across unit and integration suites, including focused support-center parity/docs coverage, OpenAPI support-route coverage, retention-config coverage, and integration-setup persistence coverage
+- targeted admin-console unit coverage for the Help & Docs support center, embedded docs search/load, parity rendering, GraphQL query execution, the analyst assistant, and existing workspace shell flows
+- targeted API regression coverage for session auth routing, hunt/content lifecycle, playbook execution shape, suppressions, storylines, governance, supportability, retention config patching, integration-setup persistence, assistant responses, and enterprise-provider exposure
+- deterministic browser regression coverage of dashboard preset persistence, detection efficacy / ATT&CK gap / suppression / rollout drill-downs, run-hunt routing, hunt-result case promotion, saved-hunt reopen/update behavior, investigation planner start, active investigation progress and handoff workflows, queue-to-hunt pivots, workflow-to-response context handoffs, expanded SOC workbench overview, assistant case queries, case ticket sync, enterprise sign-in shell provider exposure, long-retention history search, and collector/secrets setup validation
 
 ## Current product posture
 
 Wardex is now positioned as a professional XDR/SIEM control plane rather than an implementation diary. The runtime, admin console, release process, and website have been aligned around operator workflows, deployment readiness, and product documentation.
+
+## Recently shipped (v0.53.1-local)
+
+- **Analyst assistant workflow** — Added a dedicated Analyst Assistant route with case-aware questions, citations, retrieval-mode fallback answers, context windows, recent turns, and direct links back into SOC case handling
+- **Case ticket-sync workflow** — SOC Workbench cases now expose analyst-side external ticket sync with provider, queue/project, summary, and last-sync result rendering instead of leaving ticketing as backend-only plumbing
+- **Enterprise SSO sign-in shell bridge** — Configured enterprise identity providers now surface on the unauthenticated login shell via `/api/auth/sso/config`, so operator-visible SSO discovery matches provider setup state
+- **Support center and docs surface** — Help & Docs now combines support diagnostics, runtime parity reporting, searchable embedded docs, version-aware runbooks, deployment guidance, API contract exploration, and a live GraphQL runner in one routed operator workflow
+- **Runtime contract supportability** — OpenAPI now publishes the support parity/docs routes and the GraphQL endpoint alongside the existing endpoint catalog, so contract drift is visible from both the API surface and the console
+- **Regression asset expansion** — Added Help & Docs and Analyst Assistant unit coverage plus broader Playwright smoke coverage for dashboard, SOC workbench investigations, settings identity/admin surfaces, advanced operator workflows, and the new assistant/ticket-sync/SSO login-shell path
 
 ## Recently shipped (v0.39.5)
 
@@ -100,11 +120,11 @@ Wardex is now positioned as a professional XDR/SIEM control plane rather than an
 
 ## Next release priorities
 
-- full enterprise SSO workflows beyond IDP/SCIM configuration surfaces
-- customizable analyst dashboards with drag-and-drop widget placement polish and shared presets
-- searchable documentation site with versioned content
+- full enterprise SSO workflows beyond the shipped IDP/SCIM configuration surfaces
+- API contract and SDK regeneration follow-up to clear surfaced parity drift during release preparation
 - package-manager distribution (APT/YUM, Chocolatey)
-- secrets manager integration (HashiCorp Vault, AWS Secrets Manager)
+- remaining SaaS and identity collector coverage beyond the shipped cloud, secrets-manager, and case ticket-sync flows
+- UEBA, NDR, and infrastructure remediation depth on top of the shipped workflow pivots
 
 ## Recently shipped (v0.43.1)
 

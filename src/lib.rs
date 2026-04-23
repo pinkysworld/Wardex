@@ -5,11 +5,13 @@ pub mod auth;
 pub mod config;
 pub mod doctor;
 pub mod graphql;
+pub mod integration_setup;
 pub mod oidc;
 pub mod openapi;
 pub mod rbac;
 pub mod secrets;
 pub mod server;
+pub mod support_center;
 pub mod ws_stream;
 
 // ── Detection & Analytics ────────────────────────────────────────────────────
@@ -19,6 +21,7 @@ pub mod baseline;
 pub mod campaign;
 pub mod correlation;
 pub mod coverage_gap;
+pub mod detection_feedback;
 pub mod detection_efficacy;
 pub mod detector;
 pub mod dns_threat;

@@ -5,6 +5,9 @@ import * as api from '../api.js';
 import { JsonDetails, SummaryGrid, SideDrawer } from './operator.jsx';
 import { formatDateTime, formatRelativeTime } from './operatorUtils.js';
 import { useConfirm } from './useConfirm.jsx';
+import ThreatIntelOperations from './ThreatIntelOperations.jsx';
+import WorkflowGuidance from './WorkflowGuidance.jsx';
+import { buildHref } from './workflowPivots.js';
 
 const SAVED_VIEWS = [
   {
@@ -57,6 +60,106 @@ const tokenize = (value) =>
 
 const formatRatio = (value) => `${Math.round((Number(value) || 0) * 100)}%`;
 
+const formatMetricNumber = (value, digits = 1) => {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) return '0.0';
+  return numeric.toFixed(digits);
+};
+
+const formatTrendLabel = (trend) => {
+  const normalized = normalizeText(trend);
+  if (normalized === 'improving') return 'Improving';
+  if (normalized === 'degrading') return 'Degrading';
+  if (normalized === 'stable') return 'Stable';
+  if (normalized === 'insufficientdata') return 'Limited data';
+  return trend || 'Unknown';
+};
+
+const trendTone = (trend) => {
+  const normalized = normalizeText(trend);
+  if (normalized === 'improving') return 'badge-ok';
+  if (normalized === 'degrading') return 'badge-err';
+  if (normalized === 'stable') return 'badge-info';
+  return 'badge-warn';
+};
+
+const priorityRank = (priority) => {
+  const normalized = normalizeText(priority);
+  if (normalized === 'critical') return 0;
+  if (normalized === 'high') return 1;
+  if (normalized === 'medium') return 2;
+  return 3;
+};
+
+const priorityTone = (priority) => {
+  const normalized = normalizeText(priority);
+  if (normalized === 'critical') return 'badge-err';
+  if (normalized === 'high') return 'badge-warn';
+  if (normalized === 'medium') return 'badge-info';
+  return 'badge-ok';
+};
+
+const ageInDays = (timestamp) => {
+  if (!timestamp) return null;
+  const parsed = new Date(timestamp);
+  if (Number.isNaN(parsed.getTime())) return null;
+  return Math.max(0, Math.floor((Date.now() - parsed.getTime()) / (24 * 60 * 60 * 1000)));
+};
+
+const summarizePackRollout = (pack, linkedHuntCount, ageDays) => {
+  const savedSearchCount = Array.isArray(pack?.saved_searches) ? pack.saved_searches.length : 0;
+  const workflowCount = Array.isArray(pack?.recommended_workflows)
+    ? pack.recommended_workflows.length
+    : 0;
+
+  if (pack?.enabled === false) {
+    return {
+      label: 'Disabled',
+      tone: 'badge-warn',
+      rank: 5,
+      detail: 'Bundle is disabled and will not take part in promotion or analyst routing.',
+    };
+  }
+  if (!String(pack?.target_group || '').trim()) {
+    return {
+      label: 'Needs target',
+      tone: 'badge-warn',
+      rank: 1,
+      detail: 'Assign a target group before broad rollout or automation use.',
+    };
+  }
+  if (savedSearchCount === 0 && workflowCount === 0) {
+    return {
+      label: 'Needs pivots',
+      tone: 'badge-warn',
+      rank: 2,
+      detail: 'Add saved searches or workflow routes so analysts can pivot from the pack.',
+    };
+  }
+  if (linkedHuntCount === 0) {
+    return {
+      label: 'Needs hunt',
+      tone: 'badge-info',
+      rank: 3,
+      detail: 'No saved hunt currently inherits this bundle context.',
+    };
+  }
+  if (ageDays != null && ageDays >= 21) {
+    return {
+      label: 'Review stale',
+      tone: 'badge-info',
+      rank: 4,
+      detail: `Bundle has not been updated in ${ageDays} days.`,
+    };
+  }
+  return {
+    label: 'Ready',
+    tone: 'badge-ok',
+    rank: 0,
+    detail: 'Target routing, pivots, and saved-hunt linkage are already in place.',
+  };
+};
+
 const toIsoOrUndefined = (value) => {
   if (!value) return undefined;
   const timestamp = new Date(value);
@@ -84,6 +187,40 @@ const scoreFpPatternMatch = (rule, pattern) => {
   }
 
   return 0;
+};
+
+const casePriorityForSeverity = (severity) => {
+  const normalized = normalizeText(severity);
+  if (normalized === 'critical') return 'critical';
+  if (normalized === 'high' || normalized === 'severe') return 'high';
+  if (normalized === 'low' || normalized === 'info') return normalized;
+  return 'medium';
+};
+
+const linkedCaseIdFromHuntResult = (result) =>
+  result?.escalated_case_id || result?.case_id || result?.run?.case_id || result?.latest_run?.case_id || null;
+
+const huntResultContextTarget = (result, selectedRule) => {
+  const sources = [
+    result?.matches,
+    result?.results,
+    result?.rows,
+    result?.items,
+    result?.alerts,
+    result?.events,
+  ].find((entry) => Array.isArray(entry) && entry.length > 0);
+
+  const first = Array.isArray(sources) ? sources[0] : null;
+  return (
+    first?.hostname ||
+    first?.host ||
+    first?.agent_id ||
+    first?.endpoint_id ||
+    first?.entity_id ||
+    first?.user ||
+    selectedRule?.id ||
+    ''
+  );
 };
 
 const buildDefaultHuntQuery = (rule, explicitQuery = '') => {
@@ -266,6 +403,7 @@ export default function ThreatDetection() {
   const [searchParams, setSearchParams] = useSearchParams();
   const { data: profile } = useApi(api.detectionProfile);
   const { data: summary } = useApi(api.detectionSummary);
+  const { data: efficacySummary } = useApi(api.efficacySummary);
   const { data: weights, reload: reloadWeights } = useApi(api.detectionWeights);
   const { data: fpStats } = useApi(api.fpFeedbackStats);
   const { data: contentRulesData, reload: reloadRules } = useApi(api.contentRules);
@@ -323,6 +461,7 @@ export default function ThreatDetection() {
   const [packSaving, setPackSaving] = useState(false);
   const [runningSavedHuntId, setRunningSavedHuntId] = useState(null);
   const [escalatingRunId, setEscalatingRunId] = useState(null);
+  const [promotingHuntResult, setPromotingHuntResult] = useState(false);
   const [drawerSessionId, setDrawerSessionId] = useState(0);
   const [drawerBaseline, setDrawerBaseline] = useState(null);
   const [investigationSuggestions, setInvestigationSuggestions] = useState([]);
@@ -392,6 +531,11 @@ export default function ThreatDetection() {
     filteredRules[0] ||
     allRules[0] ||
     null;
+  const { data: selectedRuleEfficacy } = useApi(
+    () => api.efficacyRule(selectedRule.id),
+    [selectedRule?.id],
+    { skip: !selectedRule?.id },
+  );
   const selectedPacks = useMemo(
     () => packs.filter((pack) => (selectedRule?.pack_ids || []).includes(pack.id)),
     [packs, selectedRule],
@@ -934,6 +1078,88 @@ export default function ThreatDetection() {
     );
   });
   const huntSummary = summarizeHuntResult(huntResult);
+  const linkedHuntCaseId = linkedCaseIdFromHuntResult(huntResult);
+
+  const openHuntCase = () => {
+    if (!linkedHuntCaseId) return;
+    navigate(
+      buildHref('/soc', {
+        params: { case: linkedHuntCaseId, source: 'hunt' },
+        hash: 'cases',
+      }),
+    );
+  };
+
+  const openHuntResponse = () => {
+    if (!huntResult) return;
+    navigate(
+      buildHref('/soc', {
+        params: {
+          case: linkedHuntCaseId || undefined,
+          target: huntResultContextTarget(huntResult, selectedRule),
+          source: 'hunt',
+        },
+        hash: 'response',
+      }),
+    );
+  };
+
+  const promoteCurrentHuntToCase = async () => {
+    if (!huntResult) {
+      toast('Run a hunt before promoting it to a case.', 'warning');
+      return;
+    }
+    if (linkedHuntCaseId) {
+      openHuntCase();
+      return;
+    }
+
+    setPromotingHuntResult(true);
+    try {
+      const caseTitle =
+        huntDraft.name || `Hunt ${selectedRule?.title || selectedRule?.id || 'Signals'}`;
+      const caseDescription = [
+        selectedRule?.title ? `Rule: ${selectedRule.title}` : null,
+        huntDraft.query ? `Query: ${huntDraft.query}` : null,
+        huntSummary.count ? `Matches returned: ${huntSummary.count}.` : null,
+        huntSummary.label || null,
+      ]
+        .filter(Boolean)
+        .join('\n');
+      const tags = [
+        'hunt',
+        selectedRule?.id,
+        ...(Array.isArray(selectedRule?.attack)
+          ? selectedRule.attack.map((mapping) => mapping?.technique_id).filter(Boolean)
+          : []),
+        ...(huntDraft.recommendedWorkflows || []).filter(Boolean),
+      ].filter(Boolean);
+
+      const result = await api.createCase({
+        title: caseTitle,
+        description: caseDescription,
+        priority: casePriorityForSeverity(huntDraft.severity || selectedRule?.severity_mapping),
+        tags: [...new Set(tags)],
+      });
+      setHuntResult((current) => ({
+        ...(current || {}),
+        escalated_case_id: result?.id,
+      }));
+      toast(`Promoted hunt result to case #${result?.id || 'new'}.`, 'success');
+      if (result?.id) {
+        navigate(
+          buildHref('/soc', {
+            params: { case: result.id, source: 'hunt' },
+            hash: 'cases',
+          }),
+        );
+      }
+    } catch {
+      toast('Failed to promote hunt result to case.', 'error');
+    } finally {
+      setPromotingHuntResult(false);
+    }
+  };
   const fpEntries = (
     Array.isArray(fpStats) ? fpStats : Array.isArray(fpStats?.items) ? fpStats.items : []
   )
@@ -965,6 +1191,158 @@ export default function ThreatDetection() {
   const suppressionAdvisor = ruleFpSignals[0] || null;
   const fpPreview = (ruleFpSignals.length > 0 ? ruleFpSignals : fpEntries).slice(0, 3);
   const huntQuickStarts = buildHuntQuickStarts(selectedRule);
+  const severityEfficacyRows = useMemo(
+    () =>
+      Object.entries(efficacySummary?.by_severity || {})
+        .map(([severity, metrics]) => ({ severity, metrics }))
+        .sort((left, right) => severityTone(right.severity).localeCompare(severityTone(left.severity))),
+    [efficacySummary],
+  );
+  const efficacyWorstRules = useMemo(
+    () => (Array.isArray(efficacySummary?.worst_rules) ? efficacySummary.worst_rules : []),
+    [efficacySummary],
+  );
+  const efficacyBestRules = useMemo(
+    () => (Array.isArray(efficacySummary?.best_rules) ? efficacySummary.best_rules : []),
+    [efficacySummary],
+  );
+  const coverageGapItems = useMemo(() => {
+    const items = Array.isArray(coverageGaps?.gaps)
+      ? coverageGaps.gaps
+      : Array.isArray(coverageGaps)
+        ? coverageGaps
+        : [];
+    return [...items].sort(
+      (left, right) =>
+        priorityRank(left?.priority) - priorityRank(right?.priority) ||
+        String(left?.technique_id || '').localeCompare(String(right?.technique_id || '')),
+    );
+  }, [coverageGaps]);
+  const tacticGapRows = useMemo(() => {
+    const items = Array.isArray(coverageGaps?.by_tactic) ? coverageGaps.by_tactic : [];
+    return [...items].sort(
+      (left, right) =>
+        Number(left?.pct ?? 100) - Number(right?.pct ?? 100) ||
+        Number(right?.uncovered ?? 0) - Number(left?.uncovered ?? 0),
+    );
+  }, [coverageGaps]);
+  const urgentCoverageGapCount = coverageGapItems.filter(
+    (gap) => priorityRank(gap?.priority) <= 1,
+  ).length;
+  const weakestTactic = tacticGapRows[0] || null;
+  const selectedRuleTechniqueIds = new Set(
+    (Array.isArray(selectedRule?.attack) ? selectedRule.attack : [])
+      .map((attack) => String(attack?.technique_id || '').trim())
+      .filter(Boolean),
+  );
+  const selectedRuleTactics = new Set(
+    (Array.isArray(selectedRule?.attack) ? selectedRule.attack : [])
+      .map((attack) => normalizeText(attack?.tactic))
+      .filter(Boolean),
+  );
+  const selectedRuleCoverageGaps = coverageGapItems.filter(
+    (gap) =>
+      selectedRuleTechniqueIds.has(String(gap?.technique_id || '').trim()) ||
+      selectedRuleTactics.has(normalizeText(gap?.tactic)),
+  );
+  const activeSuppressions = useMemo(
+    () => suppressions.filter((item) => item.active !== false),
+    [suppressions],
+  );
+  const expiringSuppressions = useMemo(
+    () =>
+      activeSuppressions.filter((item) => {
+        if (!item.expires_at) return false;
+        const expiresAt = new Date(item.expires_at);
+        if (Number.isNaN(expiresAt.getTime())) return false;
+        const delta = expiresAt.getTime() - Date.now();
+        return delta >= 0 && delta <= 7 * 24 * 60 * 60 * 1000;
+      }),
+    [activeSuppressions],
+  );
+  const noiseWatchlist = useMemo(
+    () =>
+      allRules
+        .map((rule) => {
+          const hits = Number(rule.last_test_match_count) || 0;
+          const liveSuppressions = suppressionCount[rule.id] || 0;
+          const fpSignal = fpEntries
+            .map((entry) => ({
+              ...entry,
+              matchScore: scoreFpPatternMatch(rule, entry.pattern),
+            }))
+            .filter((entry) => entry.matchScore > 0)
+            .sort(
+              (left, right) =>
+                right.matchScore - left.matchScore ||
+                right.fp_ratio - left.fp_ratio ||
+                right.total_marked - left.total_marked,
+            )[0] || null;
+          const riskScore =
+            (hits >= 5 ? 4 : hits > 0 ? 2 : 0) +
+            (liveSuppressions === 0 ? 2 : 0) +
+            ((fpSignal?.fp_ratio || 0) >= 0.5 ? 2 : 0) +
+            ((fpSignal?.fp_ratio || 0) >= 0.7 ? 1 : 0);
+          return {
+            rule,
+            hits,
+            liveSuppressions,
+            fpSignal,
+            riskScore,
+            unresolvedNoise: hits >= 5 && liveSuppressions === 0,
+          };
+        })
+        .filter(
+          (item) =>
+            item.hits > 0 || item.liveSuppressions > 0 || item.fpSignal || item.unresolvedNoise,
+        )
+        .sort(
+          (left, right) =>
+            right.riskScore - left.riskScore ||
+            right.hits - left.hits ||
+            (right.fpSignal?.fp_ratio || 0) - (left.fpSignal?.fp_ratio || 0),
+        ),
+    [allRules, suppressionCount, fpEntries],
+  );
+  const unresolvedNoiseCount = noiseWatchlist.filter((item) => item.unresolvedNoise).length;
+  const packRolloutRows = useMemo(
+    () =>
+      packs
+        .map((pack) => {
+          const ruleIds = Array.isArray(pack.rule_ids) ? pack.rule_ids : [];
+          const linkedRules = allRules.filter(
+            (rule) => ruleIds.includes(rule.id) || (rule.pack_ids || []).includes(pack.id),
+          );
+          const linkedHunts = hunts.filter((hunt) => hunt.pack_id === pack.id);
+          const ageDays = ageInDays(pack.updated_at);
+          const rollout = summarizePackRollout(pack, linkedHunts.length, ageDays);
+          return {
+            ...pack,
+            linkedRules,
+            linkedHunts,
+            ageDays,
+            rollout,
+            averageHits: linkedRules.length
+              ? linkedRules.reduce(
+                  (acc, rule) => acc + (Number(rule.last_test_match_count) || 0),
+                  0,
+                ) / linkedRules.length
+              : 0,
+          };
+        })
+        .sort(
+          (left, right) =>
+            left.rollout.rank - right.rollout.rank ||
+            right.linkedRules.length - left.linkedRules.length ||
+            String(left.name || left.id).localeCompare(String(right.name || right.id)),
+        ),
+    [packs, allRules, hunts],
+  );
+  const readyPackCount = packRolloutRows.filter((pack) => pack.rollout.label === 'Ready').length;
+  const targetlessPackCount = packRolloutRows.filter(
+    (pack) => pack.rollout.label === 'Needs target',
+  ).length;
+  const stalePackCount = packRolloutRows.filter((pack) => pack.rollout.label === 'Review stale').length;
 
   const queueCounts = SAVED_VIEWS.reduce((acc, item) => {
     acc[item.id] = allRules.filter((rule) => item.match(rule, { suppressionCount })).length;
@@ -977,6 +1355,49 @@ export default function ThreatDetection() {
     packCount: selectedPacks.length,
     targetGroup: selectedPacks[0]?.target_group || huntDraft.targetGroup,
   });
+  const focusRule = (ruleId) => {
+    if (!ruleId) return;
+    const next = new URLSearchParams(searchParams);
+    next.set('rule', ruleId);
+    setSearchParams(next, { replace: true });
+  };
+  const workflowItems = [
+    {
+      id: 'soc-investigations',
+      title: 'Move Into Investigations',
+      description: `${investigationSuggestions.length} suggested workflow${investigationSuggestions.length === 1 ? '' : 's'} and ${relatedHunts.length} related hunt${relatedHunts.length === 1 ? '' : 's'} are ready for analyst execution.`,
+      to: '/soc#investigations',
+      minRole: 'analyst',
+      tone: 'primary',
+      badge: 'Investigate',
+    },
+    {
+      id: 'attack-graph',
+      title: 'Validate Attack Path Impact',
+      description: `Check whether ${selectedRule?.title || 'this rule family'} is surfacing part of a broader campaign path.`,
+      to: '/attack-graph',
+      minRole: 'analyst',
+      badge: 'Graph',
+    },
+    {
+      id: 'infrastructure',
+      title: 'Cross-Check Affected Assets',
+      description: `Review drift, malware, and exposure evidence tied to ${selectedRule?.title || 'the active detection context'}.`,
+      to: buildHref('/infrastructure', {
+        params: { tab: 'integrity', q: selectedRule?.id || selectedRule?.title || '' },
+      }),
+      minRole: 'analyst',
+      badge: 'Asset',
+    },
+    {
+      id: 'reports',
+      title: 'Package Validation Evidence',
+      description: `${selectedPacks.length} content pack${selectedPacks.length === 1 ? '' : 's'} and current rollout notes can move straight into evidence exports.`,
+      to: buildHref('/reports', { params: { tab: 'evidence' } }),
+      minRole: 'viewer',
+      badge: 'Report',
+    },
+  ];
 
   const prefillSuppressionFromSignal = (entry) => {
     if (!selectedRule) return;
@@ -1072,6 +1493,148 @@ export default function ThreatDetection() {
 
       <div className="card" style={{ marginBottom: 16 }}>
         <div className="card-title" style={{ marginBottom: 10 }}>
+          Detection Efficacy Drilldown
+        </div>
+        <div className="hint" style={{ marginBottom: 12 }}>
+          Review analyst-triaged true positives, false positives, and mean triage time before you
+          promote or suppress content.
+        </div>
+        <div className="summary-grid">
+          <div className="summary-card">
+            <div className="summary-label">Overall Precision</div>
+            <div className="summary-value">{formatRatio(efficacySummary?.overall_precision)}</div>
+            <div className="summary-meta">
+              True-positive share across resolved rule outcomes.
+            </div>
+          </div>
+          <div className="summary-card">
+            <div className="summary-label">True Positive Rate</div>
+            <div className="summary-value">{formatRatio(efficacySummary?.overall_tp_rate)}</div>
+            <div className="summary-meta">
+              Across {efficacySummary?.total_alerts_triaged ?? 0} triaged alerts.
+            </div>
+          </div>
+          <div className="summary-card">
+            <div className="summary-label">False Positive Rate</div>
+            <div className="summary-value">{formatRatio(efficacySummary?.overall_fp_rate)}</div>
+            <div className="summary-meta">Use this to prioritize tuning and suppression work.</div>
+          </div>
+          <div className="summary-card">
+            <div className="summary-label">Mean Triage</div>
+            <div className="summary-value">{formatMetricNumber(efficacySummary?.mean_triage_secs)}s</div>
+            <div className="summary-meta">
+              {efficacySummary?.rules_tracked ?? 0} rules currently have outcome history.
+            </div>
+          </div>
+        </div>
+        <div className="card-grid" style={{ marginTop: 16 }}>
+          <div className="card" style={{ background: 'var(--bg)' }}>
+            <div className="card-title" style={{ marginBottom: 10 }}>
+              Severity Breakdown
+            </div>
+            {severityEfficacyRows.length === 0 ? (
+              <div className="hint">No severity-level triage metrics have been recorded yet.</div>
+            ) : (
+              severityEfficacyRows.map(({ severity, metrics }) => (
+                <div
+                  key={severity}
+                  style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    gap: 12,
+                    padding: '10px 0',
+                    borderBottom: '1px solid var(--border)',
+                  }}
+                >
+                  <div style={{ flex: 1 }}>
+                    <div className="row-primary">{severity}</div>
+                    <div className="row-secondary">
+                      {metrics.total || 0} triaged alert{metrics.total === 1 ? '' : 's'} • mean triage{' '}
+                      {formatMetricNumber(metrics.mean_triage_secs)}s
+                    </div>
+                  </div>
+                  <div className="btn-group" style={{ alignItems: 'center' }}>
+                    <span className={`badge ${severityTone(severity)}`}>{formatRatio(metrics.tp_rate)} TP</span>
+                    <span className="badge badge-info">{formatRatio(metrics.fp_rate)} FP</span>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+          <div className="card" style={{ background: 'var(--bg)' }}>
+            <div className="card-title" style={{ marginBottom: 10 }}>
+              Rules Needing Attention
+            </div>
+            {efficacyWorstRules.length === 0 ? (
+              <div className="hint">No rule-level efficacy ranking is available yet.</div>
+            ) : (
+              efficacyWorstRules.slice(0, 4).map((rule) => (
+                <div
+                  key={rule.rule_id}
+                  style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    gap: 12,
+                    padding: '10px 0',
+                    borderBottom: '1px solid var(--border)',
+                  }}
+                >
+                  <div style={{ flex: 1 }}>
+                    <div className="row-primary">{rule.rule_name || rule.rule_id}</div>
+                    <div className="row-secondary">
+                      Precision {formatRatio(rule.precision)} • {rule.false_positives || 0} false positive
+                      {rule.false_positives === 1 ? '' : 's'} • {formatMetricNumber(rule.mean_triage_secs)}s mean triage
+                    </div>
+                  </div>
+                  <div className="btn-group" style={{ alignItems: 'center' }}>
+                    <span className={`badge ${trendTone(rule.trend)}`}>{formatTrendLabel(rule.trend)}</span>
+                    <button className="btn btn-sm" onClick={() => focusRule(rule.rule_id)}>
+                      Focus Rule
+                    </button>
+                  </div>
+                </div>
+              ))
+            )}
+            <div className="card-title" style={{ marginTop: 16, marginBottom: 10 }}>
+              High Precision Rules
+            </div>
+            {efficacyBestRules.length === 0 ? (
+              <div className="hint">The high-confidence rule list will appear once outcomes are tracked.</div>
+            ) : (
+              efficacyBestRules.slice(0, 3).map((rule) => (
+                <div
+                  key={rule.rule_id}
+                  style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    gap: 12,
+                    padding: '10px 0',
+                    borderBottom: '1px solid var(--border)',
+                  }}
+                >
+                  <div style={{ flex: 1 }}>
+                    <div className="row-primary">{rule.rule_name || rule.rule_id}</div>
+                    <div className="row-secondary">
+                      Precision {formatRatio(rule.precision)} • {rule.true_positives || 0} true positive
+                      {rule.true_positives === 1 ? '' : 's'}
+                    </div>
+                  </div>
+                  <span className={`badge ${trendTone(rule.trend)}`}>{formatTrendLabel(rule.trend)}</span>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+      </div>
+
+      <WorkflowGuidance
+        title="Detection Pivots"
+        description="Carry the active rule, hunt, and pack context into analyst investigations, asset review, and export workflows."
+        items={workflowItems}
+      />
+
+      <div className="card" style={{ marginBottom: 16 }}>
+        <div className="card-title" style={{ marginBottom: 10 }}>
           ATT&CK Coverage Heatmap (Rules + Hunts)
         </div>
         <div className="hint" style={{ marginBottom: 12 }}>
@@ -1094,27 +1657,240 @@ export default function ThreatDetection() {
             </div>
             <div className="summary-meta">Techniques without matched rule/hunt content</div>
           </div>
+          <div className="summary-card">
+            <div className="summary-label">Critical + High Gaps</div>
+            <div className="summary-value">{urgentCoverageGapCount}</div>
+            <div className="summary-meta">Prioritize these before broad content promotion.</div>
+          </div>
+          <div className="summary-card">
+            <div className="summary-label">Weakest Tactic</div>
+            <div className="summary-value">{weakestTactic?.tactic || '—'}</div>
+            <div className="summary-meta">
+              {weakestTactic
+                ? `${weakestTactic.uncovered} uncovered technique${weakestTactic.uncovered === 1 ? '' : 's'} • ${Math.round(Number(weakestTactic.pct) || 0)}% coverage`
+                : 'No tactic-level gap summary available.'}
+            </div>
+          </div>
         </div>
-        <div style={{ marginTop: 10, display: 'grid', gap: 8 }}>
-          {(Array.isArray(coverageGaps?.gaps) ? coverageGaps.gaps : Array.isArray(coverageGaps) ? coverageGaps : [])
-            .slice(0, 8)
-            .map((gap, index) => (
-              <div
-                key={`${gap?.technique_id || gap?.technique || 'gap'}-${index}`}
-                style={{
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'center',
-                  borderBottom: '1px solid var(--border)',
-                  padding: '8px 0',
-                }}
-              >
-                <div className="row-primary">
-                  {gap?.technique_id || gap?.technique || 'Unknown technique'}
+        <div className="card-grid" style={{ marginTop: 16 }}>
+          <div className="card" style={{ background: 'var(--bg)' }}>
+            <div className="card-title" style={{ marginBottom: 10 }}>
+              Priority Gaps
+            </div>
+            {coverageGapItems.length === 0 ? (
+              <div className="hint">No ATT&CK gaps are currently reported.</div>
+            ) : (
+              coverageGapItems.slice(0, 6).map((gap) => (
+                <div
+                  key={`${gap?.technique_id || gap?.technique || 'gap'}-${gap?.tactic || 'tactic'}`}
+                  style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    gap: 12,
+                    padding: '10px 0',
+                    borderBottom: '1px solid var(--border)',
+                  }}
+                >
+                  <div style={{ flex: 1 }}>
+                    <div className="row-primary">
+                      {gap?.technique_id || gap?.technique || 'Unknown technique'} • {gap?.technique_name || gap?.name || 'Unmapped'}
+                    </div>
+                    <div className="row-secondary">
+                      {gap?.tactic || 'unknown tactic'} • {gap?.recommendation || 'No recommendation available.'}
+                    </div>
+                    <div className="hint" style={{ marginTop: 4 }}>
+                      {(Array.isArray(gap?.suggested_sources) ? gap.suggested_sources : []).join(' • ') ||
+                        'No suggested sources'}
+                    </div>
+                  </div>
+                  <span className={`badge ${priorityTone(gap?.priority)}`}>{gap?.priority || 'Low'}</span>
                 </div>
-                <div className="row-secondary">{gap?.technique_name || gap?.name || 'Unmapped'}</div>
-              </div>
-            ))}
+              ))
+            )}
+          </div>
+          <div className="card" style={{ background: 'var(--bg)' }}>
+            <div className="card-title" style={{ marginBottom: 10 }}>
+              Tactic Coverage + Recommendations
+            </div>
+            {tacticGapRows.length === 0 ? (
+              <div className="hint">No tactic-level gap data has been recorded yet.</div>
+            ) : (
+              tacticGapRows.slice(0, 5).map((row) => (
+                <div
+                  key={row.tactic}
+                  style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    gap: 12,
+                    padding: '10px 0',
+                    borderBottom: '1px solid var(--border)',
+                  }}
+                >
+                  <div style={{ flex: 1 }}>
+                    <div className="row-primary">{row.tactic}</div>
+                    <div className="row-secondary">
+                      {row.covered}/{row.total} covered • {row.uncovered} gap
+                      {row.uncovered === 1 ? '' : 's'}
+                    </div>
+                  </div>
+                  <span className={`badge ${Number(row.pct) < 50 ? 'badge-err' : Number(row.pct) < 75 ? 'badge-warn' : 'badge-ok'}`}>
+                    {Math.round(Number(row.pct) || 0)}%
+                  </span>
+                </div>
+              ))
+            )}
+            <div className="card-title" style={{ marginTop: 16, marginBottom: 10 }}>
+              Top Recommendations
+            </div>
+            {Array.isArray(coverageGaps?.top_recommendations) && coverageGaps.top_recommendations.length > 0 ? (
+              coverageGaps.top_recommendations.slice(0, 4).map((recommendation) => (
+                <div
+                  key={recommendation}
+                  style={{ padding: '8px 0', borderBottom: '1px solid var(--border)' }}
+                >
+                  <div className="row-secondary">{recommendation}</div>
+                </div>
+              ))
+            ) : (
+              <div className="hint">No prioritized coverage recommendations are available.</div>
+            )}
+          </div>
+        </div>
+      </div>
+
+      <div className="card-grid" style={{ marginBottom: 16 }}>
+        <div className="card">
+          <div className="card-title" style={{ marginBottom: 10 }}>
+            Suppression Noise Signals
+          </div>
+          <div className="hint" style={{ marginBottom: 12 }}>
+            Use live suppression scope, replay hits, and false-positive labels to decide where to tune next.
+          </div>
+          <div className="summary-grid">
+            <div className="summary-card">
+              <div className="summary-label">Active Suppressions</div>
+              <div className="summary-value">{activeSuppressions.length}</div>
+              <div className="summary-meta">Currently shaping live alert visibility.</div>
+            </div>
+            <div className="summary-card">
+              <div className="summary-label">Noisy Without Scope</div>
+              <div className="summary-value">{unresolvedNoiseCount}</div>
+              <div className="summary-meta">High-hit rules that still lack a scoped suppression.</div>
+            </div>
+            <div className="summary-card">
+              <div className="summary-label">Expiring This Week</div>
+              <div className="summary-value">{expiringSuppressions.length}</div>
+              <div className="summary-meta">Review before the exception window closes.</div>
+            </div>
+            <div className="summary-card">
+              <div className="summary-label">Rule FP Signals</div>
+              <div className="summary-value">{ruleFpSignals.length}</div>
+              <div className="summary-meta">Pattern-level analyst noise already overlaps the selected rule.</div>
+            </div>
+          </div>
+          <div style={{ marginTop: 12 }}>
+            {noiseWatchlist.length === 0 ? (
+              <div className="hint">No replay noise or false-positive signals are available yet.</div>
+            ) : (
+              noiseWatchlist.slice(0, 5).map((item) => (
+                <div
+                  key={item.rule.id}
+                  style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    gap: 12,
+                    padding: '10px 0',
+                    borderBottom: '1px solid var(--border)',
+                  }}
+                >
+                  <div style={{ flex: 1 }}>
+                    <div className="row-primary">{item.rule.title || item.rule.id}</div>
+                    <div className="row-secondary">
+                      {item.hits} replay hit{item.hits === 1 ? '' : 's'} • {item.liveSuppressions} live suppression
+                      {item.liveSuppressions === 1 ? '' : 's'}
+                      {item.fpSignal ? ` • ${formatRatio(item.fpSignal.fp_ratio)} FP pattern ${item.fpSignal.pattern}` : ''}
+                    </div>
+                  </div>
+                  <div className="btn-group" style={{ alignItems: 'center' }}>
+                    <span className={`badge ${item.unresolvedNoise ? 'badge-err' : item.liveSuppressions > 0 ? 'badge-ok' : 'badge-warn'}`}>
+                      {item.unresolvedNoise ? 'Needs scope' : item.liveSuppressions > 0 ? 'Scoped' : 'Review'}
+                    </span>
+                    <button className="btn btn-sm" onClick={() => focusRule(item.rule.id)}>
+                      Focus Rule
+                    </button>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+
+        <div className="card">
+          <div className="card-title" style={{ marginBottom: 10 }}>
+            Content Pack Rollout Signals
+          </div>
+          <div className="hint" style={{ marginBottom: 12 }}>
+            Track which bundles are ready for analyst use, still missing routing, or need a stale-content review.
+          </div>
+          <div className="summary-grid">
+            <div className="summary-card">
+              <div className="summary-label">Ready Bundles</div>
+              <div className="summary-value">{readyPackCount}</div>
+              <div className="summary-meta">Target routing, pivots, and hunt linkage are in place.</div>
+            </div>
+            <div className="summary-card">
+              <div className="summary-label">Missing Target Group</div>
+              <div className="summary-value">{targetlessPackCount}</div>
+              <div className="summary-meta">These bundles still need analyst routing.</div>
+            </div>
+            <div className="summary-card">
+              <div className="summary-label">Stale Bundles</div>
+              <div className="summary-value">{stalePackCount}</div>
+              <div className="summary-meta">Bundles older than 21 days without an update.</div>
+            </div>
+            <div className="summary-card">
+              <div className="summary-label">Tracked Packs</div>
+              <div className="summary-value">{packRolloutRows.length}</div>
+              <div className="summary-meta">Includes saved-search and workflow-routed content bundles.</div>
+            </div>
+          </div>
+          <div style={{ marginTop: 12 }}>
+            {packRolloutRows.length === 0 ? (
+              <div className="hint">No content pack bundles are defined yet.</div>
+            ) : (
+              packRolloutRows.slice(0, 5).map((pack) => (
+                <div
+                  key={pack.id}
+                  style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    gap: 12,
+                    padding: '10px 0',
+                    borderBottom: '1px solid var(--border)',
+                  }}
+                >
+                  <div style={{ flex: 1 }}>
+                    <div className="row-primary">{pack.name || pack.id}</div>
+                    <div className="row-secondary">
+                      {pack.linkedRules.length} rule{pack.linkedRules.length === 1 ? '' : 's'} • {pack.linkedHunts.length} hunt
+                      {pack.linkedHunts.length === 1 ? '' : 's'} • target {pack.target_group || 'unassigned'}
+                    </div>
+                    <div className="hint" style={{ marginTop: 4 }}>
+                      {pack.rollout.detail}
+                      {pack.ageDays != null ? ` • updated ${pack.ageDays}d ago` : ''}
+                      {pack.rollout_notes ? ` • ${pack.rollout_notes}` : ''}
+                    </div>
+                  </div>
+                  <div className="btn-group" style={{ alignItems: 'center' }}>
+                    <span className={`badge ${pack.rollout.tone}`}>{pack.rollout.label}</span>
+                    <button className="btn btn-sm" onClick={() => openPackEditor(pack)}>
+                      Open Bundle
+                    </button>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
         </div>
       </div>
 
@@ -1147,6 +1923,8 @@ export default function ThreatDetection() {
           </div>
         </div>
       </div>
+
+      <ThreatIntelOperations />
 
       <div className="triage-layout">
         <section className="triage-list">
@@ -1418,6 +2196,96 @@ export default function ThreatDetection() {
                         'No saved-search bundle attached to this rule yet.'}
                     </div>
                   </div>
+                </div>
+
+                <div
+                  className="card"
+                  style={{ marginTop: 16, padding: 16, background: 'var(--bg)' }}
+                >
+                  <div className="card-title" style={{ marginBottom: 10 }}>
+                    Rule Efficacy
+                  </div>
+                  <div className="hint" style={{ marginBottom: 10 }}>
+                    Analyst outcome quality for the currently selected rule.
+                  </div>
+                  {selectedRuleEfficacy ? (
+                    <>
+                      <div className="summary-grid">
+                        <div className="summary-card">
+                          <div className="summary-label">Precision</div>
+                          <div className="summary-value">{formatRatio(selectedRuleEfficacy.precision)}</div>
+                          <div className="summary-meta">
+                            {selectedRuleEfficacy.true_positives || 0} TP • {selectedRuleEfficacy.false_positives || 0} FP
+                          </div>
+                        </div>
+                        <div className="summary-card">
+                          <div className="summary-label">True Positive Rate</div>
+                          <div className="summary-value">{formatRatio(selectedRuleEfficacy.tp_rate)}</div>
+                          <div className="summary-meta">
+                            {selectedRuleEfficacy.total_alerts || 0} tracked alert outcome
+                            {selectedRuleEfficacy.total_alerts === 1 ? '' : 's'}
+                          </div>
+                        </div>
+                        <div className="summary-card">
+                          <div className="summary-label">False Positive Rate</div>
+                          <div className="summary-value">{formatRatio(selectedRuleEfficacy.fp_rate)}</div>
+                          <div className="summary-meta">
+                            {selectedRuleEfficacy.pending || 0} pending • {selectedRuleEfficacy.inconclusive || 0} inconclusive
+                          </div>
+                        </div>
+                        <div className="summary-card">
+                          <div className="summary-label">Trend</div>
+                          <div className="summary-value">{formatTrendLabel(selectedRuleEfficacy.trend)}</div>
+                          <div className="summary-meta">
+                            Mean triage {formatMetricNumber(selectedRuleEfficacy.mean_triage_secs)}s
+                          </div>
+                        </div>
+                      </div>
+                    </>
+                  ) : (
+                    <div className="hint">
+                      No triage outcomes are recorded for this rule yet. Once analysts label alerts,
+                      precision and trend will appear here.
+                    </div>
+                  )}
+
+                  <div className="card-title" style={{ marginTop: 16, marginBottom: 10 }}>
+                    Mapped tactic gaps
+                  </div>
+                  {Array.isArray(selectedRule.attack) && selectedRule.attack.length > 0 ? (
+                    selectedRuleCoverageGaps.length === 0 ? (
+                      <div className="hint">
+                        No uncovered ATT&CK gaps currently overlap this rule&apos;s mapped tactics.
+                      </div>
+                    ) : (
+                      selectedRuleCoverageGaps.slice(0, 4).map((gap) => (
+                        <div
+                          key={`${gap.technique_id}-${gap.tactic}`}
+                          style={{
+                            display: 'flex',
+                            justifyContent: 'space-between',
+                            gap: 12,
+                            padding: '10px 0',
+                            borderBottom: '1px solid var(--border)',
+                          }}
+                        >
+                          <div style={{ flex: 1 }}>
+                            <div className="row-primary">
+                              {gap.technique_id} • {gap.technique_name}
+                            </div>
+                            <div className="row-secondary">
+                              {gap.tactic} • {gap.recommendation}
+                            </div>
+                          </div>
+                          <span className={`badge ${priorityTone(gap.priority)}`}>{gap.priority}</span>
+                        </div>
+                      ))
+                    )
+                  ) : (
+                    <div className="hint">
+                      Attach ATT&CK mappings to this rule to surface tactic-adjacent gaps here.
+                    </div>
+                  )}
                 </div>
 
                 <div className="detail-callout" style={{ marginTop: 16 }}>
@@ -2503,6 +3371,29 @@ export default function ThreatDetection() {
                 Matches, rows, or buckets returned by the most recent run.
               </div>
             </div>
+          </div>
+          <div className="btn-group" style={{ marginTop: 12, flexWrap: 'wrap' }}>
+            <button
+              className="btn btn-sm btn-primary"
+              disabled={!huntResult || promotingHuntResult}
+              onClick={promoteCurrentHuntToCase}
+            >
+              {!huntResult
+                ? 'Promote to Case'
+                : linkedHuntCaseId
+                  ? 'Open Linked Case'
+                  : promotingHuntResult
+                    ? 'Promoting…'
+                    : 'Promote to Case'}
+            </button>
+            {linkedHuntCaseId && (
+              <button className="btn btn-sm" onClick={openHuntCase}>
+                Open Case
+              </button>
+            )}
+            <button className="btn btn-sm" disabled={!huntResult} onClick={openHuntResponse}>
+              Open Response
+            </button>
           </div>
           {!huntResult ? (
             <div className="hint" style={{ marginTop: 10 }}>

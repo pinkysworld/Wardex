@@ -12,7 +12,7 @@ fn looks_like_runtime_root(path: &Path) -> bool {
         || path.join("site/index.html").exists()
         || path.join("admin-console/package.json").exists()
         || path.join("Cargo.toml").exists()
-        || path.join("SentinelEdge.code-workspace").exists()
+        || path.join("Wardex.code-workspace").exists()
 }
 
 fn explicit_runtime_config_path() -> Option<PathBuf> {
@@ -696,6 +696,8 @@ pub struct ConfigPatch {
     pub monitor: Option<MonitorSettings>,
     #[serde(default)]
     pub rollout: Option<RolloutSettings>,
+    #[serde(default)]
+    pub retention: Option<RetentionSettings>,
 }
 
 impl ConfigPatch {
@@ -728,6 +730,11 @@ impl ConfigPatch {
             previous.insert("rollout".into(), format!("{:?}", config.rollout));
             config.rollout = r.clone();
             applied.push("rollout".into());
+        }
+        if let Some(ref retention) = self.retention {
+            previous.insert("retention".into(), format!("{:?}", config.retention));
+            config.retention = retention.clone();
+            applied.push("retention".into());
         }
 
         if let Some(v) = self.warmup_samples {
@@ -817,7 +824,10 @@ impl ConfigPatch {
 
 #[cfg(test)]
 mod tests {
-    use super::{Config, ConfigPatch, MonitorScopeSettings, MonitorSettings, PolicySettings};
+    use super::{
+        Config, ConfigPatch, MonitorScopeSettings, MonitorSettings, PolicySettings,
+        RetentionSettings,
+    };
 
     #[test]
     fn default_round_trip_toml() {
@@ -926,6 +936,34 @@ mod tests {
         let result = patch.apply(&mut config);
         assert!(result.success);
         assert!(result.applied_fields.is_empty());
+    }
+
+    #[test]
+    fn hot_reload_updates_retention_section() {
+        let mut config = Config::default();
+        let patch = ConfigPatch {
+            retention: Some(RetentionSettings {
+                audit_max_records: 10_000,
+                alert_max_records: 5_000,
+                event_max_records: 20_000,
+                audit_max_age_secs: 86_400,
+                remote_syslog_endpoint: Some("udp://syslog.example.com:514".into()),
+            }),
+            ..Default::default()
+        };
+
+        let result = patch.apply(&mut config);
+
+        assert!(result.success);
+        assert_eq!(config.retention.audit_max_records, 10_000);
+        assert_eq!(config.retention.alert_max_records, 5_000);
+        assert_eq!(config.retention.event_max_records, 20_000);
+        assert_eq!(config.retention.audit_max_age_secs, 86_400);
+        assert_eq!(
+            config.retention.remote_syslog_endpoint.as_deref(),
+            Some("udp://syslog.example.com:514"),
+        );
+        assert!(result.applied_fields.contains(&"retention".to_string()));
     }
 
     #[test]

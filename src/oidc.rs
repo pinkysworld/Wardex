@@ -233,8 +233,16 @@ impl OidcProvider {
         Ok(url)
     }
 
+    pub fn has_pending_state(&self, state: &str) -> bool {
+        self.pending_states.contains_key(state)
+    }
+
     /// Exchange an authorization code for tokens and create a session.
-    pub fn exchange_code(&mut self, code: &str, state: &str) -> Result<SsoSession, String> {
+    pub fn exchange_code(
+        &mut self,
+        code: &str,
+        state: &str,
+    ) -> Result<(SsoSession, Option<String>), String> {
         let pending = self
             .pending_states
             .remove(state)
@@ -296,7 +304,7 @@ impl OidcProvider {
         };
 
         self.sessions.insert(session_id, session.clone());
-        Ok(session)
+        Ok((session, pending.redirect_after))
     }
 
     /// Validate a session ID and return the session if valid.

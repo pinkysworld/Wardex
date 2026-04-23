@@ -4,6 +4,7 @@ import {
   getToken,
   setToken,
   authCheck,
+  authLogout,
   authSession,
   userPreferences as getUserPreferences,
   setUserPreferences as updateUserPreferences,
@@ -39,15 +40,41 @@ export function AuthProvider({ children }) {
   }, []);
 
   const disconnect = useCallback(() => {
+    void authLogout().catch((error) => {
+      void error;
+    });
     setToken('');
     setAuthenticated(false);
     localStorage.removeItem('wardex_token');
   }, []);
 
-  // auto-reconnect from localStorage
+  // auto-reconnect from localStorage or an existing session cookie
   useEffect(() => {
     const saved = localStorage.getItem('wardex_token');
-    if (saved) connect(saved);
+    let cancelled = false;
+
+    if (saved) {
+      void connect(saved);
+      return undefined;
+    }
+
+    setChecking(true);
+    authSession()
+      .then((session) => {
+        if (!cancelled) {
+          setAuthenticated((current) => current || Boolean(session?.authenticated));
+        }
+      })
+      .catch(() => {})
+      .finally(() => {
+        if (!cancelled) {
+          setChecking(false);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
   }, [connect]);
 
   return (
@@ -338,18 +365,39 @@ export function useDraftAutosave(key, initialValue) {
  * Bearer-token sessions skip native WebSocket because browsers cannot attach
  * Authorization headers to the handshake, so they connect directly to the
  * authenticated polling transport.
- * Returns { events, connected, transport, clearEvents }.
+ * Returns connection metadata plus { events, connected, transport, clearEvents, reconnect }.
  */
 export function useWebSocket(pollIntervalMs = 2000) {
   const [events, setEvents] = useState([]);
   const [connected, setConnected] = useState(false);
   const [transport, setTransport] = useState('connecting');
+  const [status, setStatus] = useState('connecting');
+  const [subscriberId, setSubscriberId] = useState(null);
+  const [recoveryAttempts, setRecoveryAttempts] = useState(0);
+  const [lastEventAt, setLastEventAt] = useState(null);
+  const [lastConnectAt, setLastConnectAt] = useState(null);
+  const [lastDisconnectAt, setLastDisconnectAt] = useState(null);
+  const [lastError, setLastError] = useState('');
+  const [reconnectToken, setReconnectToken] = useState(0);
   const subscriberIdRef = useRef(null);
   const wsRef = useRef(null);
   const mountedRef = useRef(true);
 
+  const reconnect = useCallback(() => {
+    setConnected(false);
+    setTransport('connecting');
+    setStatus('connecting');
+    setSubscriberId(null);
+    setLastError('');
+    setReconnectToken((current) => current + 1);
+  }, []);
+
   useEffect(() => {
     mountedRef.current = true;
+    setConnected(false);
+    setTransport('connecting');
+    setStatus('connecting');
+    setSubscriberId(null);
     let pollTimer = null;
     let retryDelay = 2000;
     let retryTimer = null;
@@ -380,6 +428,7 @@ export function useWebSocket(pollIntervalMs = 2000) {
       }
       const subscriberId = subscriberIdRef.current;
       subscriberIdRef.current = null;
+      setSubscriberId(null);
       if (disconnectSubscriber && subscriberId != null) {
         wsDisconnect(subscriberId).catch((error) => {
           void error;
@@ -387,8 +436,18 @@ export function useWebSocket(pollIntervalMs = 2000) {
       }
     };
 
+    const recordRecovery = (message) => {
+      if (!mountedRef.current) return;
+      setConnected(false);
+      setStatus('reconnecting');
+      setLastDisconnectAt(new Date().toISOString());
+      if (message) setLastError(message);
+      setRecoveryAttempts((count) => count + 1);
+    };
+
     const schedulePollingReconnect = () => {
       if (!mountedRef.current) return;
+      setStatus('reconnecting');
       clearRetry();
       const delay = Math.min(retryDelay, 30000);
       retryDelay = Math.min(retryDelay * 2, 30000);
@@ -412,6 +471,7 @@ export function useWebSocket(pollIntervalMs = 2000) {
           } catch {
             /* ignore close errors during handshake fallback */
           }
+          recordRecovery('native websocket handshake timed out');
           setTransport('connecting');
           connectPolling();
         }, 3000);
@@ -425,7 +485,11 @@ export function useWebSocket(pollIntervalMs = 2000) {
           clearHandshake();
           stopPolling(true);
           setConnected(true);
+          setStatus('connected');
           setTransport('websocket');
+          setSubscriberId(null);
+          setLastConnectAt(new Date().toISOString());
+          setLastError('');
           retryDelay = 2000;
         };
 
@@ -435,6 +499,7 @@ export function useWebSocket(pollIntervalMs = 2000) {
             const data = JSON.parse(e.data);
             const newEvents = Array.isArray(data) ? data : [data];
             setEvents((prev) => [...newEvents, ...prev].slice(0, 500));
+            setLastEventAt(new Date().toISOString());
           } catch {
             /* ignore malformed frames */
           }
@@ -449,6 +514,7 @@ export function useWebSocket(pollIntervalMs = 2000) {
           } catch {
             /* ignore close errors after websocket failure */
           }
+          recordRecovery('native websocket unavailable, falling back to polling');
           setTransport('connecting');
           connectPolling();
         };
@@ -460,7 +526,7 @@ export function useWebSocket(pollIntervalMs = 2000) {
           clearHandshake();
           if (!mountedRef.current) return;
           if (opened) {
-            setConnected(false);
+            recordRecovery('websocket connection closed');
             setTransport('connecting');
             const delay = Math.min(retryDelay, 30000);
             retryDelay = Math.min(retryDelay * 2, 30000);
@@ -501,13 +567,17 @@ export function useWebSocket(pollIntervalMs = 2000) {
           throw new Error('Invalid ws connect response');
         }
         subscriberIdRef.current = result.subscriber_id;
+        setSubscriberId(result.subscriber_id);
         setConnected(true);
+        setStatus('connected');
         setTransport('polling');
+        setLastConnectAt(new Date().toISOString());
+        setLastError('');
         retryDelay = 2000;
         startPolling();
       } catch {
         if (mountedRef.current && requestId === pollingConnectRequestId) {
-          setConnected(false);
+          recordRecovery('polling transport unavailable');
           setTransport('connecting');
           stopPolling(false);
           schedulePollingReconnect();
@@ -528,10 +598,11 @@ export function useWebSocket(pollIntervalMs = 2000) {
           if (!mountedRef.current) return;
           if (Array.isArray(newEvents) && newEvents.length > 0) {
             setEvents((prev) => [...newEvents, ...prev].slice(0, 500));
+            setLastEventAt(new Date().toISOString());
           }
         } catch {
           if (mountedRef.current) {
-            setConnected(false);
+            recordRecovery('polling subscriber interrupted');
             stopPolling(false);
             schedulePollingReconnect();
           }
@@ -555,9 +626,22 @@ export function useWebSocket(pollIntervalMs = 2000) {
       }
       stopPolling(true);
     };
-  }, [pollIntervalMs]);
+  }, [pollIntervalMs, reconnectToken]);
 
   const clearEvents = useCallback(() => setEvents([]), []);
 
-  return { events, connected, transport, clearEvents };
+  return {
+    events,
+    connected,
+    transport,
+    status,
+    subscriberId,
+    recoveryAttempts,
+    lastEventAt,
+    lastConnectAt,
+    lastDisconnectAt,
+    lastError,
+    clearEvents,
+    reconnect,
+  };
 }

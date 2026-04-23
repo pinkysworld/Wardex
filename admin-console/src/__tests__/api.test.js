@@ -159,6 +159,48 @@ describe('GET endpoints', () => {
     expect(mockFetch.mock.calls[0][0]).toBe('/api/report-runs');
   });
 
+  it('reportRuns() includes scope filter query params', async () => {
+    mockFetch.mockResolvedValueOnce(jsonOk({ runs: [] }));
+    await api.reportRuns({
+      caseId: '42',
+      incidentId: '7',
+      investigationId: 'inv-7',
+      source: 'case',
+      scope: 'scoped',
+    });
+    expect(mockFetch.mock.calls[0][0]).toBe(
+      '/api/report-runs?case_id=42&incident_id=7&investigation_id=inv-7&source=case&scope=scoped',
+    );
+  });
+
+  it('reportSchedules() includes scope filter query params', async () => {
+    mockFetch.mockResolvedValueOnce(jsonOk({ schedules: [] }));
+    await api.reportSchedules({
+      caseId: '42',
+      incidentId: '7',
+      investigationId: 'inv-7',
+      source: 'case',
+      scope: 'scoped',
+    });
+    expect(mockFetch.mock.calls[0][0]).toBe(
+      '/api/report-schedules?case_id=42&incident_id=7&investigation_id=inv-7&source=case&scope=scoped',
+    );
+  });
+
+  it('reports() includes scope filter query params', async () => {
+    mockFetch.mockResolvedValueOnce(jsonOk({ reports: [] }));
+    await api.reports({
+      caseId: '42',
+      incidentId: '7',
+      investigationId: 'inv-7',
+      source: 'case',
+      scope: 'scoped',
+    });
+    expect(mockFetch.mock.calls[0][0]).toBe(
+      '/api/reports?case_id=42&incident_id=7&investigation_id=inv-7&source=case&scope=scoped',
+    );
+  });
+
   it('inbox() calls /api/inbox', async () => {
     mockFetch.mockResolvedValueOnce(jsonOk({ items: [] }));
     await api.inbox();
@@ -207,5 +249,14 @@ describe('POST endpoints', () => {
     await api.createReportRun({ kind: 'executive_status', scope: 'global' });
     expect(mockFetch.mock.calls[0][0]).toBe('/api/report-runs');
     expect(JSON.parse(mockFetch.mock.calls[0][1].body).kind).toBe('executive_status');
+  });
+
+  it('annotateReportContext() posts scope to the report context endpoint', async () => {
+    mockFetch.mockResolvedValueOnce(jsonOk({ status: 'updated' }));
+    await api.annotateReportContext(101, { case_id: '42', source: 'case' });
+    expect(mockFetch.mock.calls[0][0]).toBe('/api/reports/101/context');
+    expect(JSON.parse(mockFetch.mock.calls[0][1].body)).toEqual(
+      expect.objectContaining({ case_id: '42', source: 'case' }),
+    );
   });
 });

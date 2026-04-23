@@ -1475,7 +1475,7 @@ impl AlertDedupCache {
         sorted.sort();
         let payload = format!("{device_id}|{level}|{}", sorted.join(","));
         let hash = sha2::Sha256::digest(payload.as_bytes());
-        format!("{hash:x}")
+        hex::encode(hash)
     }
 
     /// Check if an alert is a duplicate. Returns Some(existing_alert_id) if suppressed,

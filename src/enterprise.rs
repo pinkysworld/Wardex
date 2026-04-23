@@ -891,6 +891,10 @@ pub struct IdentityProviderConfig {
     pub issuer_url: Option<String>,
     pub sso_url: Option<String>,
     pub client_id: Option<String>,
+    #[serde(default)]
+    pub client_secret: Option<String>,
+    #[serde(default)]
+    pub redirect_uri: Option<String>,
     pub entity_id: Option<String>,
     pub enabled: bool,
     pub status: String,
@@ -2454,6 +2458,8 @@ impl EnterpriseStore {
         issuer_url: Option<String>,
         sso_url: Option<String>,
         client_id: Option<String>,
+        client_secret: Option<String>,
+        redirect_uri: Option<String>,
         entity_id: Option<String>,
         enabled: bool,
         group_role_mappings: HashMap<String, String>,
@@ -2469,6 +2475,16 @@ impl EnterpriseStore {
         let normalized_issuer_url = normalize_optional_text(issuer_url);
         let normalized_sso_url = normalize_optional_text(sso_url);
         let normalized_client_id = normalize_optional_text(client_id);
+        let normalized_client_secret = if normalized_kind == "oidc" {
+            normalize_optional_text(client_secret)
+        } else {
+            None
+        };
+        let normalized_redirect_uri = if normalized_kind == "oidc" {
+            normalize_optional_text(redirect_uri)
+        } else {
+            None
+        };
         let normalized_entity_id = normalize_optional_text(entity_id);
         let normalized_mappings = normalize_group_role_mappings(group_role_mappings)?;
 
@@ -2479,6 +2495,12 @@ impl EnterpriseStore {
                 }
                 if normalized_client_id.is_none() {
                     return Err("enabled OIDC providers require client_id".into());
+                }
+                if normalized_client_secret.is_none() {
+                    return Err("enabled OIDC providers require client_secret".into());
+                }
+                if normalized_redirect_uri.is_none() {
+                    return Err("enabled OIDC providers require redirect_uri".into());
                 }
             } else {
                 if normalized_sso_url.is_none() {
@@ -2497,6 +2519,22 @@ impl EnterpriseStore {
                 .iter()
                 .position(|provider| provider.id == id)
         {
+            let existing_client_secret = self.snapshot.idp_providers[index].client_secret.clone();
+            let effective_client_secret = if normalized_kind == "oidc" {
+                normalized_client_secret
+                    .clone()
+                    .or(existing_client_secret.clone())
+            } else {
+                None
+            };
+            if enabled && normalized_kind == "oidc" {
+                if effective_client_secret.is_none() {
+                    return Err("enabled OIDC providers require client_secret".into());
+                }
+                if normalized_redirect_uri.is_none() {
+                    return Err("enabled OIDC providers require redirect_uri".into());
+                }
+            }
             let updated = {
                 let provider = &mut self.snapshot.idp_providers[index];
                 provider.kind = normalized_kind;
@@ -2504,6 +2542,8 @@ impl EnterpriseStore {
                 provider.issuer_url = normalized_issuer_url;
                 provider.sso_url = normalized_sso_url;
                 provider.client_id = normalized_client_id;
+                provider.client_secret = effective_client_secret;
+                provider.redirect_uri = normalized_redirect_uri;
                 provider.entity_id = normalized_entity_id;
                 provider.enabled = enabled;
                 provider.group_role_mappings = normalized_mappings;
@@ -2525,6 +2565,8 @@ impl EnterpriseStore {
             issuer_url: normalized_issuer_url,
             sso_url: normalized_sso_url,
             client_id: normalized_client_id,
+            client_secret: normalized_client_secret,
+            redirect_uri: normalized_redirect_uri,
             entity_id: normalized_entity_id,
             enabled,
             status: if enabled {
@@ -2622,6 +2664,34 @@ fn validate_idp_provider_config(provider: &IdentityProviderConfig) -> IdentityCo
                     "error",
                     "client_id",
                     "Enabled OIDC providers require a client ID.",
+                ));
+            }
+            if provider.enabled
+                && provider
+                    .client_secret
+                    .as_deref()
+                    .unwrap_or("")
+                    .trim()
+                    .is_empty()
+            {
+                issues.push(validation_issue(
+                    "error",
+                    "client_secret",
+                    "Enabled OIDC providers require a client secret.",
+                ));
+            }
+            if provider.enabled
+                && provider
+                    .redirect_uri
+                    .as_deref()
+                    .unwrap_or("")
+                    .trim()
+                    .is_empty()
+            {
+                issues.push(validation_issue(
+                    "error",
+                    "redirect_uri",
+                    "Enabled OIDC providers require a redirect URI.",
                 ));
             }
         }
@@ -3768,6 +3838,8 @@ mod tests {
                 Some(" https://issuer.example.com ".to_string()),
                 None,
                 Some(" wardex-admin ".to_string()),
+                Some(" super-secret ".to_string()),
+                Some(" https://wardex.example.com/api/auth/sso/callback ".to_string()),
                 None,
                 true,
                 mappings,
@@ -3781,6 +3853,7 @@ mod tests {
             Some("https://issuer.example.com")
         );
         assert_eq!(provider.client_id.as_deref(), Some("wardex-admin"));
+        assert_eq!(provider.redirect_uri.as_deref(), Some("https://wardex.example.com/api/auth/sso/callback"));
         assert_eq!(
             provider
                 .group_role_mappings

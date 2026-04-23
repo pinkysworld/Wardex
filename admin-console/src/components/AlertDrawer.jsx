@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useToast } from '../hooks.jsx';
 import * as api from '../api.js';
 import { JsonDetails, SideDrawer, SummaryGrid } from './operator.jsx';
@@ -103,6 +103,8 @@ export default function AlertDrawer({
 }) {
   const toast = useToast();
   const [explainOpen, setExplainOpen] = useState(false);
+  const [explainData, setExplainData] = useState(null);
+  const [explainLoading, setExplainLoading] = useState(false);
 
   const summary = useMemo(() => {
     if (!alert) return null;
@@ -118,6 +120,33 @@ export default function AlertDrawer({
     };
   }, [alert]);
 
+  useEffect(() => {
+    let cancelled = false;
+    if (!alert) {
+      setExplainData(null);
+      setExplainLoading(false);
+      return undefined;
+    }
+    setExplainLoading(true);
+    api
+      .detectionExplain({
+        event_id: alert.id || alert.alert_id,
+        alert_id: alert.alert_id || alert.id,
+      })
+      .then((data) => {
+        if (!cancelled) setExplainData(data);
+      })
+      .catch(() => {
+        if (!cancelled) setExplainData(null);
+      })
+      .finally(() => {
+        if (!cancelled) setExplainLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [alert]);
+
   if (!alert) return null;
 
   const reasons = Array.isArray(alert.reasons)
@@ -127,8 +156,42 @@ export default function AlertDrawer({
       : [];
 
   const mitre = inferMitre(alert);
-  const explanation = buildExplanation(alert, mitre, reasons);
-  const nextSteps = suggestNextSteps(alert, mitre);
+  const fallbackExplanation = buildExplanation(alert, mitre, reasons);
+  const fallbackNextSteps = suggestNextSteps(alert, mitre);
+
+  const explanation = explainData?.why_fired?.length
+    ? [...(explainData.summary || []), ...explainData.why_fired]
+    : fallbackExplanation;
+  const whySafeOrNoisy = explainData?.why_safe_or_noisy || [];
+  const nextSteps = explainData?.next_steps?.length ? explainData.next_steps : fallbackNextSteps;
+  const analystFeedback = Array.isArray(explainData?.feedback) ? explainData.feedback : [];
+
+  const submitFeedback = async (verdict) => {
+    try {
+      await api.recordDetectionFeedback({
+        event_id: alert.id || alert.alert_id,
+        alert_id: String(alert.alert_id || alert.id || ''),
+        analyst: 'console_analyst',
+        verdict,
+        reason_pattern:
+          reasons.length > 0 ? reasons.join(', ') : alert.category || alert.type || 'unknown',
+        notes:
+          verdict === 'false_positive'
+            ? 'Submitted from alert drawer as benign or noisy.'
+            : 'Submitted from alert drawer as analyst-confirmed malicious activity.',
+        evidence: (explainData?.evidence || []).slice(0, 8),
+      });
+      const refreshed = await api.detectionExplain({
+        event_id: alert.id || alert.alert_id,
+        alert_id: alert.alert_id || alert.id,
+      });
+      setExplainData(refreshed);
+      toast('Analyst feedback saved', 'success');
+      onUpdated?.();
+    } catch {
+      toast('Analyst feedback failed', 'error');
+    }
+  };
 
   const markFalsePositive = async () => {
     const pattern =
@@ -138,6 +201,15 @@ export default function AlertDrawer({
         alert_id: alert.id || alert.alert_id,
         pattern,
         is_false_positive: true,
+      });
+      await api.recordDetectionFeedback({
+        event_id: alert.id || alert.alert_id,
+        alert_id: String(alert.alert_id || alert.id || ''),
+        analyst: 'console_analyst',
+        verdict: 'false_positive',
+        reason_pattern: pattern,
+        notes: 'Marked as false positive from the alert drawer.',
+        evidence: (explainData?.evidence || []).slice(0, 8),
       });
       toast('Marked as false positive', 'success');
       onUpdated?.();
@@ -195,6 +267,9 @@ export default function AlertDrawer({
           <button className="btn btn-sm" onClick={markFalsePositive}>
             Mark FP
           </button>
+          <button className="btn btn-sm" onClick={() => submitFeedback('true_positive')}>
+            Confirm TP
+          </button>
           <button className="btn btn-sm btn-primary" onClick={createIncidentFromAlert}>
             Create Incident
           </button>
@@ -226,6 +301,11 @@ export default function AlertDrawer({
         </button>
         {explainOpen && (
           <div style={{ marginTop: 12 }}>
+            {explainLoading && (
+              <div style={{ marginBottom: 10, fontSize: 13, color: 'var(--text-secondary)' }}>
+                Loading server-backed explainability…
+              </div>
+            )}
             {mitre && (
               <div style={{ marginBottom: 10 }}>
                 <span className="badge badge-info" style={{ marginRight: 6 }}>
@@ -249,6 +329,26 @@ export default function AlertDrawer({
                 <li key={i}>{line}</li>
               ))}
             </ul>
+            {whySafeOrNoisy.length > 0 && (
+              <>
+                <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 4 }}>
+                  Why this may be safe or noisy
+                </div>
+                <ul
+                  style={{
+                    margin: '0 0 12px',
+                    paddingLeft: 18,
+                    fontSize: 13,
+                    lineHeight: 1.7,
+                    color: 'var(--text-secondary)',
+                  }}
+                >
+                  {whySafeOrNoisy.map((line, i) => (
+                    <li key={`noise-${i}`}>{line}</li>
+                  ))}
+                </ul>
+              </>
+            )}
             <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 4 }}>
               Recommended next steps
             </div>
@@ -265,6 +365,12 @@ export default function AlertDrawer({
                 <li key={i}>{s}</li>
               ))}
             </ol>
+            {analystFeedback.length > 0 && (
+              <div style={{ marginTop: 12, fontSize: 13, color: 'var(--text-secondary)' }}>
+                Latest analyst feedback: {analystFeedback[0].analyst} marked this as{' '}
+                {String(analystFeedback[0].verdict || '').replace(/_/g, ' ')}.
+              </div>
+            )}
           </div>
         )}
       </div>

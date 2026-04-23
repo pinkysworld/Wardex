@@ -820,12 +820,51 @@ pub fn wardex_openapi_spec(version: &str) -> OpenApiSpec {
         .path(
             "/api/reports",
             "get",
-            op("listReports", "List stored reports", &["reports"]),
+            with_parameters(
+                op("listReports", "List stored reports", &["reports"]),
+                vec![
+                    string_parameter("case_id", "query", "Filter reports by case handoff id", false),
+                    string_parameter(
+                        "incident_id",
+                        "query",
+                        "Filter reports by incident handoff id",
+                        false,
+                    ),
+                    string_parameter(
+                        "investigation_id",
+                        "query",
+                        "Filter reports by investigation handoff id",
+                        false,
+                    ),
+                    string_parameter(
+                        "source",
+                        "query",
+                        "Filter reports by execution-context source",
+                        false,
+                    ),
+                    string_parameter(
+                        "scope",
+                        "query",
+                        "Return all, scoped, or unscoped reports (`all`, `scoped`, `unscoped`)",
+                        false,
+                    ),
+                ],
+            ),
         )
         .path(
             "/api/reports/{id}",
             "get",
             op("getReportById", "Retrieve a specific report", &["reports"]),
+        )
+        .path(
+            "/api/reports/{id}/context",
+            "post",
+            op_post(
+                "setReportExecutionContext",
+                "Attach or update execution context for a stored report",
+                &["reports"],
+                "Execution context fields for the stored report",
+            ),
         )
         .path(
             "/api/reports/{id}/html",
@@ -849,6 +888,79 @@ pub fn wardex_openapi_spec(version: &str) -> OpenApiSpec {
                 "getExecutiveSummary",
                 "Executive summary across reports and incidents",
                 &["reports"],
+            ),
+        )
+        .path(
+            "/api/report-runs",
+            "get",
+            with_parameters(
+                op("listReportRuns", "List persisted report runs", &["reports"]),
+                vec![
+                    string_parameter("case_id", "query", "Filter runs by case handoff id", false),
+                    string_parameter(
+                        "incident_id",
+                        "query",
+                        "Filter runs by incident handoff id",
+                        false,
+                    ),
+                    string_parameter(
+                        "investigation_id",
+                        "query",
+                        "Filter runs by investigation handoff id",
+                        false,
+                    ),
+                    string_parameter(
+                        "source",
+                        "query",
+                        "Filter runs by execution-context source",
+                        false,
+                    ),
+                    string_parameter(
+                        "scope",
+                        "query",
+                        "Return all, scoped, or unscoped runs (`all`, `scoped`, `unscoped`)",
+                        false,
+                    ),
+                ],
+            ),
+        )
+        .path(
+            "/api/report-schedules",
+            "get",
+            with_parameters(
+                op("listReportSchedules", "List saved report schedules", &["reports"]),
+                vec![
+                    string_parameter(
+                        "case_id",
+                        "query",
+                        "Filter schedules by case handoff id",
+                        false,
+                    ),
+                    string_parameter(
+                        "incident_id",
+                        "query",
+                        "Filter schedules by incident handoff id",
+                        false,
+                    ),
+                    string_parameter(
+                        "investigation_id",
+                        "query",
+                        "Filter schedules by investigation handoff id",
+                        false,
+                    ),
+                    string_parameter(
+                        "source",
+                        "query",
+                        "Filter schedules by execution-context source",
+                        false,
+                    ),
+                    string_parameter(
+                        "scope",
+                        "query",
+                        "Return all, scoped, or unscoped schedules (`all`, `scoped`, `unscoped`)",
+                        false,
+                    ),
+                ],
             ),
         )
         .path(
@@ -1603,11 +1715,96 @@ pub fn wardex_openapi_spec(version: &str) -> OpenApiSpec {
             ),
         )
         .path(
+            "/api/investigations/workflows",
+            "get",
+            op(
+                "listInvestigationWorkflows",
+                "List available investigation workflow templates",
+                &["incidents"],
+            ),
+        )
+        .path(
+            "/api/investigations/workflows/{id}",
+            "get",
+            op(
+                "getInvestigationWorkflow",
+                "Get a single investigation workflow template",
+                &["incidents"],
+            ),
+        )
+        .path(
+            "/api/investigations/start",
+            "post",
+            op_post(
+                "startInvestigationWorkflow",
+                "Start a guided investigation workflow",
+                &["incidents"],
+                "Investigation start request",
+            ),
+        )
+        .path(
+            "/api/investigations/active",
+            "get",
+            op(
+                "listActiveInvestigations",
+                "List active investigations with workflow metadata and progress",
+                &["incidents"],
+            ),
+        )
+        .path(
+            "/api/investigations/progress",
+            "post",
+            op_post(
+                "updateInvestigationProgress",
+                "Update step completion, notes, findings, or status for an active investigation",
+                &["incidents"],
+                "Investigation progress update",
+            ),
+        )
+        .path(
+            "/api/investigations/handoff",
+            "post",
+            op_post(
+                "handoffInvestigation",
+                "Hand an active investigation to another analyst and sync the linked case",
+                &["incidents"],
+                "Investigation handoff request",
+            ),
+        )
+        .path(
+            "/api/investigations/suggest",
+            "post",
+            op_post(
+                "suggestInvestigationWorkflow",
+                "Suggest workflows that match the current alert or incident context",
+                &["incidents"],
+                "Investigation suggestion request",
+            ),
+        )
+        .path(
             "/api/threat-intel/status",
             "get",
             op(
                 "getThreatIntelStatus",
                 "Threat intelligence indicator inventory status",
+                &["threat-intel"],
+            ),
+        )
+        .path(
+            "/api/threat-intel/library",
+            "get",
+            op(
+                "getThreatIntelLibrary",
+                "List tracked indicators, feeds, and recent matches",
+                &["threat-intel"],
+            ),
+        )
+        .path(
+            "/api/threat-intel/stats",
+            "get",
+            op(
+                "getThreatIntelStats",
+                "Threat intelligence enrichment and feed statistics",
                 &["threat-intel"],
             ),
         )
@@ -1619,6 +1816,35 @@ pub fn wardex_openapi_spec(version: &str) -> OpenApiSpec {
                 "Submit a new indicator of compromise",
                 &["threat-intel"],
                 "Indicator submission payload",
+            ),
+        )
+        .path(
+            "/api/threat-intel/purge",
+            "post",
+            op_post(
+                "purgeThreatIntelIndicators",
+                "Purge expired indicators from the threat intelligence store",
+                &["threat-intel"],
+                "Threat intelligence purge request",
+            ),
+        )
+        .path(
+            "/api/deception/status",
+            "get",
+            op(
+                "getDeceptionStatus",
+                "Deception engine status and artifact coverage",
+                &["threat-intel"],
+            ),
+        )
+        .path(
+            "/api/deception/deploy",
+            "post",
+            op_post(
+                "deployDeceptionArtifacts",
+                "Deploy deception artifacts and decoys",
+                &["threat-intel"],
+                "Decoy deployment request",
             ),
         )
         .path(
@@ -1693,6 +1919,43 @@ pub fn wardex_openapi_spec(version: &str) -> OpenApiSpec {
                 "getSupportDiagnostics",
                 "Support diagnostics bundle",
                 &["status"],
+            ),
+        )
+        .path(
+            "/api/support/parity",
+            "get",
+            op(
+                "getSupportParity",
+                "API, SDK, and GraphQL parity diagnostics",
+                &["status"],
+            ),
+        )
+        .path(
+            "/api/docs/index",
+            "get",
+            op(
+                "listSupportDocs",
+                "Search embedded documentation and runbooks",
+                &["status"],
+            ),
+        )
+        .path(
+            "/api/docs/content",
+            "get",
+            op(
+                "getSupportDocContent",
+                "Load a specific embedded documentation page",
+                &["status"],
+            ),
+        )
+        .path(
+            "/api/graphql",
+            "post",
+            op_post(
+                "executeGraphql",
+                "Execute GraphQL queries against the Wardex schema",
+                &["status"],
+                "GraphQL request payload",
             ),
         )
         .path(
@@ -1962,6 +2225,18 @@ mod tests {
         }));
         assert!(catalog.iter().any(|entry| {
             entry.method == "GET" && entry.path == "/api/fleet/dashboard" && entry.auth
+        }));
+        assert!(catalog.iter().any(|entry| {
+            entry.method == "GET"
+                && entry.path == "/api/support/parity"
+                && entry.auth
+                && entry.description == "API, SDK, and GraphQL parity diagnostics"
+        }));
+        assert!(catalog.iter().any(|entry| {
+            entry.method == "GET"
+                && entry.path == "/api/docs/index"
+                && entry.auth
+                && entry.description == "Search embedded documentation and runbooks"
         }));
     }
 }

@@ -369,7 +369,7 @@ impl SiemConnector {
                 .map(|m| format!("{}:{}", m.technique_id, m.tactic))
                 .collect::<Vec<_>>().join(",");
             format!(
-                "CEF:0|Wardex|SentinelEdge|1.0|alert|{}|{}|src={} dst={} cs1={} cs1Label=reasons cs2={} cs2Label=mitre cfp1={:.2} cfp1Label=score",
+                "CEF:0|Wardex|Wardex|1.0|alert|{}|{}|src={} dst={} cs1={} cs1Label=reasons cs2={} cs2Label=mitre cfp1={:.2} cfp1Label=score",
                 a.action,
                 severity,
                 a.hostname,
@@ -388,7 +388,7 @@ impl SiemConnector {
                 .map(|m| format!("{}:{}", m.technique_id, m.tactic))
                 .collect::<Vec<_>>().join(",");
             format!(
-                "LEEF:2.0|Wardex|SentinelEdge|1.0|alert|\tdevTime={}\tsrc={}\tsev={}\taction={}\treasons={}\tmitre={}\tscore={:.2}",
+                "LEEF:2.0|Wardex|Wardex|1.0|alert|\tdevTime={}\tsrc={}\tsev={}\taction={}\treasons={}\tmitre={}\tscore={:.2}",
                 a.timestamp,
                 a.hostname,
                 a.level,
@@ -417,7 +417,7 @@ impl SiemConnector {
                 let mitre_tactics: Vec<String> = a.mitre.iter().map(|m| m.tactic.clone()).collect();
                 serde_json::json!({
                     "TimeGenerated": a.timestamp,
-                    "EventProduct": "SentinelEdge",
+                    "EventProduct": "Wardex",
                     "EventVendor": "Wardex",
                     "EventSchemaVersion": "0.1",
                     "EventType": "Alert",
@@ -477,7 +477,7 @@ impl SiemConnector {
                         "event_timestamp": a.timestamp,
                         "event_type": "GENERIC_EVENT",
                         "vendor_name": "Wardex",
-                        "product_name": "SentinelEdge",
+                        "product_name": "Wardex",
                         "product_event_type": "alert",
                         "product_log_id": format!("{}-{:.0}", a.hostname, a.score * 1000.0),
                     },
@@ -533,8 +533,8 @@ impl SiemConnector {
                         "type": ["indicator"],
                         "severity": severity_num,
                         "risk_score": a.score,
-                        "module": "sentineledge",
-                        "dataset": "sentineledge.alert",
+                        "module": "wardex",
+                        "dataset": "wardex.alert",
                         "outcome": if a.enforced { "success" } else { "unknown" },
                     },
                     "host": {
@@ -559,10 +559,10 @@ impl SiemConnector {
                     },
                     "observer": {
                         "vendor": "Wardex",
-                        "product": "SentinelEdge",
+                        "product": "Wardex",
                         "type": "ids",
                     },
-                    "sentineledge": {
+                    "wardex": {
                         "score": a.score,
                         "confidence": a.confidence,
                         "action": &a.action,
@@ -593,8 +593,8 @@ impl SiemConnector {
                     .join(",");
                 serde_json::json!({
                     "HEADER": {
-                        "logSourceTypeName": "SentinelEdge XDR",
-                        "logSourceName": format!("sentineledge-{}", a.hostname),
+                        "logSourceTypeName": "Wardex XDR",
+                        "logSourceName": format!("wardex-{}", a.hostname),
                     },
                     "EventName": a.reasons.first().cloned().unwrap_or("alert".into()),
                     "EventTime": a.timestamp,
@@ -640,7 +640,7 @@ impl SiemConnector {
                 .collect::<Vec<_>>().join(",");
             // <PRI>VERSION TIMESTAMP HOSTNAME APP-NAME PROCID MSGID [SD] MSG
             format!(
-                "<{pri}>1 {ts} {host} SentinelEdge - {action} [wardex@48710 score=\"{score:.2}\" level=\"{level}\" confidence=\"{conf:.2}\" mitre=\"{mitre}\"] {reasons}",
+                "<{pri}>1 {ts} {host} Wardex - {action} [wardex@48710 score=\"{score:.2}\" level=\"{level}\" confidence=\"{conf:.2}\" mitre=\"{mitre}\"] {reasons}",
                 pri = pri,
                 ts = a.timestamp,
                 host = a.hostname,
@@ -1196,7 +1196,7 @@ mod tests {
         let output = SiemConnector::format_sentinel_asim(&[alert]);
         let parsed: Vec<serde_json::Value> = serde_json::from_str(&output).unwrap();
         assert_eq!(parsed.len(), 1);
-        assert_eq!(parsed[0]["EventProduct"], "SentinelEdge");
+        assert_eq!(parsed[0]["EventProduct"], "Wardex");
         assert_eq!(parsed[0]["EventVendor"], "Wardex");
         assert_eq!(parsed[0]["DvcHostname"], "test-host");
         assert!(parsed[0]["ThreatConfidence"].as_u64().unwrap() > 0);
@@ -1218,7 +1218,7 @@ mod tests {
         let parsed: Vec<serde_json::Value> = serde_json::from_str(&output).unwrap();
         assert_eq!(parsed.len(), 1);
         assert_eq!(parsed[0]["metadata"]["vendor_name"], "Wardex");
-        assert_eq!(parsed[0]["metadata"]["product_name"], "SentinelEdge");
+        assert_eq!(parsed[0]["metadata"]["product_name"], "Wardex");
         assert_eq!(parsed[0]["principal"]["hostname"], "test-host");
         assert_eq!(parsed[0]["principal"]["platform"], "LINUX");
     }
@@ -1251,7 +1251,7 @@ mod tests {
     fn cef_format_output() {
         let alerts = vec![make_alert()];
         let output = SiemConnector::format_cef(&alerts);
-        assert!(output.starts_with("CEF:0|Wardex|SentinelEdge|"));
+        assert!(output.starts_with("CEF:0|Wardex|Wardex|"));
         assert!(output.contains("src=test-host"));
     }
 
@@ -1259,7 +1259,7 @@ mod tests {
     fn leef_format_output() {
         let alerts = vec![make_alert()];
         let output = SiemConnector::format_leef(&alerts);
-        assert!(output.starts_with("LEEF:2.0|Wardex|SentinelEdge|"));
+        assert!(output.starts_with("LEEF:2.0|Wardex|Wardex|"));
         assert!(output.contains("src=test-host"));
     }
 
@@ -1273,7 +1273,7 @@ mod tests {
         assert_eq!(ev["event"]["kind"], "alert");
         assert_eq!(ev["observer"]["vendor"], "Wardex");
         assert_eq!(ev["host"]["hostname"], "test-host");
-        assert!(ev["sentineledge"]["score"].as_f64().unwrap() > 0.0);
+        assert!(ev["wardex"]["score"].as_f64().unwrap() > 0.0);
     }
 
     #[test]
@@ -1292,7 +1292,7 @@ mod tests {
         let parsed: Vec<serde_json::Value> = serde_json::from_str(&output).unwrap();
         assert_eq!(parsed.len(), 1);
         let ev = &parsed[0];
-        assert_eq!(ev["HEADER"]["logSourceTypeName"], "SentinelEdge XDR");
+        assert_eq!(ev["HEADER"]["logSourceTypeName"], "Wardex XDR");
         assert_eq!(ev["SourceHostName"], "test-host");
         assert!(ev["Severity"].as_u64().unwrap() > 0);
     }
@@ -1391,7 +1391,7 @@ mod tests {
         let output = SiemConnector::format_syslog_rfc5424(&alerts);
         // PRI = 20*8 + 2 = 162 for critical
         assert!(output.starts_with("<162>1 "));
-        assert!(output.contains("SentinelEdge"));
+        assert!(output.contains("Wardex"));
         assert!(output.contains("[wardex@48710"));
         assert!(output.contains("score="));
     }

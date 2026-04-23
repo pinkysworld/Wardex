@@ -2,7 +2,7 @@
 
 ## Overview
 
-SentinelEdge provides automated and analyst-approved response actions through the Response Orchestrator. This runbook covers the response workflow, approval process, and standard playbooks.
+Wardex provides automated and analyst-approved response actions through the Response Orchestrator. This runbook covers the response workflow, approval process, and standard playbooks.
 
 ## Response Workflow
 

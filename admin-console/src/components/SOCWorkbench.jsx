@@ -1,11 +1,13 @@
-import { useState, useCallback, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useState, useCallback, useEffect, useRef } from 'react';
+import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { useApi, useInterval, useToast } from '../hooks.jsx';
 import * as api from '../api.js';
 import ProcessDrawer from './ProcessDrawer.jsx';
-import { JsonDetails, SummaryGrid } from './operator.jsx';
+import WorkflowGuidance from './WorkflowGuidance.jsx';
+import { JsonDetails, SideDrawer, SummaryGrid } from './operator.jsx';
 import InvestigationTimeline from './InvestigationTimeline.jsx';
 import { downloadData, formatDateTime, formatRelativeTime } from './operatorUtils.js';
+import { buildHref } from './workflowPivots.js';
 
 import PlaybookEditor from './PlaybookEditor.jsx';
 
@@ -92,6 +94,222 @@ const buildPlannerHuntName = (context) => {
   const label = context?.title || context?.summary || context?.message || context?.id || 'Signal';
   return `Hunt ${label}`;
 };
+
+const splitMultilineList = (value) =>
+  String(value || '')
+    .split('\n')
+    .map((entry) => entry.trim())
+    .filter(Boolean);
+
+const investigationStatusBadgeClass = (status) => {
+  switch (status) {
+    case 'handoff-ready':
+      return 'badge-warn';
+    case 'completed':
+      return 'badge-ok';
+    default:
+      return 'badge-info';
+  }
+};
+
+const investigationStatusLabel = (status) => {
+  switch (status) {
+    case 'handoff-ready':
+      return 'Handoff Ready';
+    case 'in-progress':
+      return 'In Progress';
+    case 'completed':
+      return 'Completed';
+    default:
+      return status || 'Unknown';
+  }
+};
+
+const caseStatusBadgeClass = (status) => {
+  switch (String(status || '').toLowerCase()) {
+    case 'resolved':
+    case 'closed':
+      return 'badge-ok';
+    case 'escalated':
+      return 'badge-err';
+    default:
+      return 'badge-warn';
+  }
+};
+
+const casePriorityBadgeClass = (priority) => {
+  switch (String(priority || '').toLowerCase()) {
+    case 'critical':
+    case 'high':
+      return 'badge-err';
+    case 'medium':
+      return 'badge-warn';
+    default:
+      return 'badge-info';
+  }
+};
+
+const caseContainmentLabel = (status) => {
+  switch (String(status || '').toLowerCase()) {
+    case 'resolved':
+    case 'closed':
+      return 'Contained';
+    case 'escalated':
+      return 'Escalated';
+    case 'investigating':
+      return 'Investigating';
+    case 'triaging':
+      return 'Triaging';
+    default:
+      return 'Open';
+  }
+};
+
+const INCIDENT_DRAWER_PANELS = [
+  { id: 'summary', label: 'Summary' },
+  { id: 'storyline', label: 'Storyline' },
+  { id: 'actions', label: 'Actions' },
+];
+
+const CASE_DRAWER_PANELS = [
+  { id: 'summary', label: 'Summary' },
+  { id: 'evidence', label: 'Evidence' },
+  { id: 'actions', label: 'Actions' },
+];
+
+const normalizePanelId = (value, panels, fallback) =>
+  panels.some((panel) => panel.id === value) ? value : fallback;
+
+const mergeSearchState = (searchParams, updates = {}) => {
+  const next = Object.fromEntries(searchParams.entries());
+  Object.entries(updates).forEach(([key, value]) => {
+    if (value == null) {
+      delete next[key];
+      return;
+    }
+
+    const normalized = String(value).trim();
+    if (!normalized) delete next[key];
+    else next[key] = normalized;
+  });
+  return next;
+};
+
+function resolveInvestigationPivot(endpoint, context, label) {
+  const normalized = String(endpoint || '').trim();
+  if (!normalized) return null;
+
+  if (normalized.startsWith('/api/ueba/risky')) {
+    return {
+      label: label || 'Open UEBA',
+      to: buildHref('/ueba', {
+        params: {
+          entity:
+            context?.entity_id || context?.user || context?.username || context?.principal || '',
+        },
+      }),
+    };
+  }
+
+  if (
+    normalized.startsWith('/api/lateral/analyze') ||
+    normalized.startsWith('/api/killchain/reconstruct')
+  ) {
+    return {
+      label: label || 'Open Attack Graph',
+      to: buildHref('/attack-graph', {
+        params: { node: context?.host || context?.agent_id || context?.entity_id || '' },
+      }),
+    };
+  }
+
+  if (normalized.startsWith('/api/beacon/analyze')) {
+    return {
+      label: label || 'Open NDR',
+      to: buildHref('/ndr', { params: { tab: 'beaconing' } }),
+    };
+  }
+
+  if (
+    normalized.startsWith('/api/processes/analysis') ||
+    normalized.startsWith('/api/processes/live')
+  ) {
+    return { label: label || 'Open Process Tree', to: '/soc#process-tree' };
+  }
+
+  if (normalized.startsWith('/api/response/request')) {
+    return { label: label || 'Open Response', to: '/soc#response' };
+  }
+
+  if (normalized.startsWith('/api/container/alerts')) {
+    return {
+      label: label || 'Open Infrastructure',
+      to: buildHref('/infrastructure', {
+        params: { tab: 'observability', q: context?.host || context?.agent_id || '' },
+      }),
+    };
+  }
+
+  if (normalized.startsWith('/api/evidence/plan')) {
+    return {
+      label: label || 'Open Evidence',
+      to: buildHref('/reports', {
+        params: {
+          tab: 'evidence',
+          case: context?.case_id || context?.caseId || undefined,
+          incident: context?.incident_id || context?.incidentId || undefined,
+          investigation:
+            context?.investigation_id || context?.investigationId || context?.workflow_id || undefined,
+          source: context?.source || context?.workflow_source || 'investigation',
+        },
+      }),
+    };
+  }
+
+  if (normalized.startsWith('/api/events') || normalized.startsWith('/api/alerts')) {
+    return {
+      label: label || 'Launch Hunt',
+      to: buildHref('/detection', {
+        params: {
+          intent: 'run-hunt',
+          huntQuery: buildPlannerHuntQuery(context),
+          huntName: buildPlannerHuntName(context),
+        },
+      }),
+    };
+  }
+
+  return null;
+}
+
+function collectStepPivots(step, context) {
+  const pivots = [];
+  const pushPivot = (pivot, key, description) => {
+    if (!pivot || !pivot.to || pivots.some((entry) => entry.to === pivot.to)) return;
+    pivots.push({
+      key,
+      label: pivot.label,
+      to: pivot.to,
+      description,
+    });
+  };
+
+  pushPivot(
+    resolveInvestigationPivot(step?.api_pivot, context, 'Open Primary Pivot'),
+    `${step?.order || 'step'}-primary`,
+    step?.description,
+  );
+
+  (step?.auto_queries || []).forEach((query, index) => {
+    pushPivot(
+      resolveInvestigationPivot(query.endpoint, context, query.name),
+      `${step?.order || 'step'}-query-${index}`,
+      query.description,
+    );
+  });
+
+  return pivots;
+}
 
 const formatPct = (value) => `${Math.round((Number(value) || 0) * 100)}%`;
 
@@ -219,25 +437,57 @@ function CampaignGraph() {
 
 export default function SOCWorkbench() {
   const toast = useToast();
+  const location = useLocation();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const focusedCaseId = searchParams.get('case') || '';
+  const focusedInvestigationParam = searchParams.get('investigation') || '';
+  const responseTarget = searchParams.get('target') || '';
+  const responseSource = searchParams.get('source') || '';
+  const focusedIncidentParam = searchParams.get('incident') || '';
+  const drawerMode = searchParams.get('drawer') || '';
+  const queueFilterParam = searchParams.get('queueFilter') || '';
+  const incidentDrawerPanel = normalizePanelId(
+    searchParams.get('incidentPanel'),
+    INCIDENT_DRAWER_PANELS,
+    'summary',
+  );
+  const caseDrawerPanel = normalizePanelId(
+    searchParams.get('casePanel'),
+    CASE_DRAWER_PANELS,
+    'summary',
+  );
+
+  const navigateSoc = useCallback(
+    (updates = {}, { hash = location.hash.replace('#', '') || undefined, replace = false } = {}) =>
+      navigate(
+        buildHref('/soc', {
+          params: mergeSearchState(searchParams, updates),
+          hash,
+        }),
+        { replace },
+      ),
+    [location.hash, navigate, searchParams],
+  );
 
   // Persist active tab in URL hash
   const [tab, setTabRaw] = useState(() => {
-    const h = window.location.hash.replace('#', '');
+    const h = location.hash.replace('#', '');
     return TAB_GROUPS.some((g) => g.tabs.includes(h)) ? h : 'overview';
   });
-  const setTab = useCallback((t) => {
-    setTabRaw(t);
-    window.location.hash = t;
-  }, []);
+  const setTab = useCallback(
+    (t) => {
+      setTabRaw(t);
+      navigateSoc({}, { hash: t });
+    },
+    [navigateSoc],
+  );
   useEffect(() => {
-    const onHash = () => {
-      const h = window.location.hash.replace('#', '');
-      if (TAB_GROUPS.some((g) => g.tabs.includes(h))) setTabRaw(h);
-    };
-    window.addEventListener('hashchange', onHash);
-    return () => window.removeEventListener('hashchange', onHash);
-  }, []);
+    const h = location.hash.replace('#', '');
+    if (TAB_GROUPS.some((g) => g.tabs.includes(h))) {
+      setTabRaw(h);
+    }
+  }, [location.hash]);
   const [collapsedGroups, setCollapsedGroups] = useState({});
   const toggleGroup = useCallback(
     (label) => setCollapsedGroups((p) => ({ ...p, [label]: !p[label] })),
@@ -284,11 +534,22 @@ export default function SOCWorkbench() {
   const [plannerSuggestions, setPlannerSuggestions] = useState([]);
   const [plannerLoading, setPlannerLoading] = useState(false);
   const [startingWorkflowId, setStartingWorkflowId] = useState(null);
+  const [selectedInvestigationId, setSelectedInvestigationId] = useState('');
+  const [stepNoteDrafts, setStepNoteDrafts] = useState({});
+  const [findingDraft, setFindingDraft] = useState('');
+  const [savingProgressKey, setSavingProgressKey] = useState('');
+  const [handoffDraft, setHandoffDraft] = useState({
+    toAnalyst: '',
+    summary: '',
+    nextActions: '',
+    questions: '',
+  });
+  const [savingHandoff, setSavingHandoff] = useState(false);
   const [caseTitleDrafts, setCaseTitleDrafts] = useState({});
   const [analystPrompt, setAnalystPrompt] = useState('show me high severity alerts from this week');
   const [analystResult, setAnalystResult] = useState(null);
   const [analystLoading, setAnalystLoading] = useState(false);
-  const [queueFilterText, setQueueFilterText] = useState('');
+  const [queueFilterText, setQueueFilterText] = useState(queueFilterParam);
   const [savedQueueFilters, setSavedQueueFilters] = useState(() => {
     try {
       const parsed = JSON.parse(localStorage.getItem('wardex_saved_queue_filters') || '[]');
@@ -299,6 +560,19 @@ export default function SOCWorkbench() {
   });
   const [selectedCaseIds, setSelectedCaseIds] = useState(new Set());
   const [bulkCaseStatus, setBulkCaseStatus] = useState('investigating');
+  const [ticketSyncDraft, setTicketSyncDraft] = useState({
+    caseId: null,
+    provider: 'jira',
+    queueOrProject: '',
+    summary: null,
+  });
+  const [ticketSyncLoading, setTicketSyncLoading] = useState(false);
+  const [ticketSyncResult, setTicketSyncResult] = useState(null);
+  const [caseWorkspaceComment, setCaseWorkspaceComment] = useState('');
+  const [caseWorkspaceCommentSaving, setCaseWorkspaceCommentSaving] = useState(false);
+  const [drawerIncidentDetail, setDrawerIncidentDetail] = useState(null);
+  const [drawerIncidentStoryline, setDrawerIncidentStoryline] = useState(null);
+  const incidentDrawerRequestRef = useRef(0);
 
   // ── Case Comments ──
   const [commentText, setCommentText] = useState('');
@@ -358,29 +632,396 @@ export default function SOCWorkbench() {
 
   const incArr = Array.isArray(incList) ? incList : incList?.incidents || [];
   const caseArr = Array.isArray(caseList) ? caseList : caseList?.cases || [];
-  const queueArr = Array.isArray(queue) ? queue : queue?.alerts || [];
+  const queueArr = Array.isArray(queue) ? queue : queue?.queue || queue?.alerts || [];
   const rbacArr = Array.isArray(rbacData) ? rbacData : rbacData?.users || [];
+  const activeInvestigationArr = Array.isArray(activeInvestigations)
+    ? activeInvestigations
+    : activeInvestigations?.items || [];
   const filteredQueueArr = queueArr.filter((alert) => {
     const q = queueFilterText.trim().toLowerCase();
     if (!q) return true;
     return JSON.stringify(alert || {}).toLowerCase().includes(q);
   });
+  const casesById = Object.fromEntries(caseArr.map((caseItem) => [String(caseItem.id), caseItem]));
+  const selectedCaseIdList = [...selectedCaseIds];
+  const focusedCase = focusedCaseId ? casesById[String(focusedCaseId)] || null : null;
+  const preferredTicketCase =
+    (selectedCaseIdList.length === 1 && casesById[String(selectedCaseIdList[0])]) ||
+    focusedCase ||
+    caseArr[0] ||
+    null;
+  const activeTicketCaseId =
+    ticketSyncDraft.caseId ?? (preferredTicketCase ? String(preferredTicketCase.id) : '');
+  const activeTicketCase = activeTicketCaseId
+    ? casesById[String(activeTicketCaseId)] || preferredTicketCase
+    : preferredTicketCase;
+  const activeWorkspaceCase =
+    focusedCase ||
+    (selectedCaseIdList.length === 1 ? casesById[String(selectedCaseIdList[0])] || null : null) ||
+    caseArr[0] ||
+    null;
+  const defaultTicketSummary = activeTicketCase
+    ? `Case #${activeTicketCase.id}: ${activeTicketCase.title || 'Investigation'}`
+    : 'SOC investigation sync';
+  const activeTicketSummary = ticketSyncDraft.summary ?? defaultTicketSummary;
+  const assistantCaseHref = activeTicketCaseId ? `/assistant?case=${activeTicketCaseId}` : '/assistant';
+  const focusedInvestigation = focusedInvestigationParam
+    ? activeInvestigationArr.find((entry) => entry.id === focusedInvestigationParam) || null
+    : null;
+  const selectedInvestigation =
+    activeInvestigationArr.find((entry) => entry.id === selectedInvestigationId) ||
+    activeInvestigationArr[0] ||
+    null;
+  const selectedInvestigationCase = selectedInvestigation?.case_id
+    ? casesById[String(selectedInvestigation.case_id)] || null
+    : null;
+  const activeWorkspaceInvestigation = activeWorkspaceCase
+    ? activeInvestigationArr.find(
+        (entry) => String(entry.case_id || '') === String(activeWorkspaceCase.id),
+      ) || null
+    : null;
+  const activeCaseIncidentIds = Array.isArray(activeWorkspaceCase?.incident_ids)
+    ? activeWorkspaceCase.incident_ids
+    : [];
+  const activeCaseEventIds = Array.isArray(activeWorkspaceCase?.event_ids)
+    ? activeWorkspaceCase.event_ids
+    : [];
+  const activeCaseEvidence = Array.isArray(activeWorkspaceCase?.evidence)
+    ? activeWorkspaceCase.evidence
+    : [];
+  const activeCaseComments = Array.isArray(activeWorkspaceCase?.comments)
+    ? activeWorkspaceCase.comments
+    : [];
+  const activeCaseTags = Array.isArray(activeWorkspaceCase?.tags) ? activeWorkspaceCase.tags : [];
+  const activeCaseMitre = Array.isArray(activeWorkspaceCase?.mitre_techniques)
+    ? activeWorkspaceCase.mitre_techniques
+    : [];
+  const queueSeed = investigationContext || filteredQueueArr[0] || incArr[0] || null;
+  const investigationDetailContext =
+    selectedInvestigationCase ||
+    investigationContext ||
+    (selectedInvestigation
+      ? {
+          title: selectedInvestigation.workflow_name,
+          summary: selectedInvestigation.workflow_description,
+          id: selectedInvestigation.workflow_id,
+          severity: selectedInvestigation.workflow_severity,
+          case_id: selectedInvestigation.case_id,
+        }
+      : queueSeed || null);
+  const queueSeedLabel =
+    queueSeed?.title || queueSeed?.summary || queueSeed?.message || queueSeed?.id || 'active signal';
+  const queueSeedEntity =
+    queueSeed?.entity_id || queueSeed?.user || queueSeed?.username || queueSeed?.principal || '';
+  const queueSeedHost = queueSeed?.host || queueSeed?.agent_id || queueSeed?.endpoint_id || '';
+  const investigationResponseTarget =
+    investigationDetailContext?.host ||
+    investigationDetailContext?.agent_id ||
+    investigationDetailContext?.endpoint_id ||
+    investigationDetailContext?.entity_id ||
+    queueSeedHost ||
+    queueSeedEntity;
+  const hasResponseContext = Boolean(
+    focusedCaseId || focusedInvestigationParam || responseTarget || responseSource,
+  );
+  const caseDrawerOpen = drawerMode === 'case-workspace' && Boolean(focusedCaseId);
+  const incidentDrawerOpen = drawerMode === 'incident-detail' && Boolean(focusedIncidentParam);
+  const drawerIncidentEvents =
+    drawerIncidentStoryline?.events ||
+    drawerIncidentStoryline?.steps ||
+    (Array.isArray(drawerIncidentStoryline) ? drawerIncidentStoryline : []);
+  const drawerIncidentCaseId =
+    drawerIncidentDetail?.case_id || drawerIncidentDetail?.linked_case_id || focusedCaseId || '';
+  const workflowItems = [
+    {
+      id: 'threat-detection',
+      title: 'Pivot To Threat Detection',
+      description: `Turn ${queueSeedLabel} into a hunt or tuning workflow without rebuilding the query.`,
+      to: buildHref('/detection', {
+        params: {
+          intent: 'run-hunt',
+          huntQuery: buildPlannerHuntQuery(queueSeed),
+          huntName: buildPlannerHuntName(queueSeed),
+        },
+      }),
+      minRole: 'analyst',
+      tone: 'primary',
+      badge: 'Detect',
+    },
+    queueSeedEntity
+      ? {
+          id: 'ueba',
+          title: 'Inspect UEBA Risk',
+          description: `Open entity-risk analytics for ${queueSeedEntity} before escalating further.`,
+          to: buildHref('/ueba', { params: { entity: queueSeedEntity } }),
+          minRole: 'analyst',
+          badge: 'Entity',
+        }
+      : null,
+    {
+      id: 'infrastructure',
+      title: 'Review Asset Context',
+      description: 'Check infrastructure exposure, drift, and observability evidence around the active case or alert.',
+      to: buildHref('/infrastructure', {
+        params: { tab: 'assets', q: queueSeedHost || queueSeedEntity },
+      }),
+      minRole: 'analyst',
+      badge: 'Asset',
+    },
+    {
+      id: 'attack-graph',
+      title: 'Open Campaign Graph',
+      description: 'Validate whether the current investigation belongs to a broader propagation path.',
+      to: '/attack-graph',
+      minRole: 'analyst',
+      badge: 'Graph',
+    },
+    {
+      id: 'reports',
+      title: 'Export Delivery Snapshot',
+      description: 'Package response posture, case progress, and approvals into report delivery workflows.',
+      to: buildHref('/reports', {
+        params: {
+          tab: 'delivery',
+          case: focusedCaseId || undefined,
+          incident: focusedIncidentParam || undefined,
+          investigation: focusedInvestigationParam || undefined,
+          source: responseSource || 'soc-workbench',
+        },
+      }),
+      minRole: 'viewer',
+      badge: 'Report',
+    },
+  ].filter(Boolean);
+
+  const openCaseFocus = useCallback(
+    (caseId) => {
+      if (!caseId) return;
+      navigateSoc(
+        {
+          case: caseId,
+          drawer: undefined,
+          casePanel: undefined,
+          incident: undefined,
+          incidentPanel: undefined,
+        },
+        { hash: 'cases' },
+      );
+    },
+    [navigateSoc],
+  );
+
+  const openCaseDrawer = useCallback(
+    (caseId, { panel = 'summary', hash = 'cases' } = {}) => {
+      if (!caseId) return;
+      navigateSoc(
+        {
+          case: caseId,
+          drawer: 'case-workspace',
+          casePanel: panel,
+          incident: undefined,
+          incidentPanel: undefined,
+        },
+        { hash },
+      );
+    },
+    [navigateSoc],
+  );
+
+  const openInvestigationFocus = useCallback(
+    (investigationId, caseId) => {
+      if (!investigationId) return;
+      navigateSoc(
+        {
+          investigation: investigationId,
+          case: caseId || undefined,
+          drawer: undefined,
+          casePanel: undefined,
+          incident: undefined,
+          incidentPanel: undefined,
+        },
+        { hash: 'investigations' },
+      );
+    },
+    [navigateSoc],
+  );
+
+  const openResponseFocus = useCallback(
+    ({ caseId, investigationId, target, source } = {}) => {
+      navigateSoc(
+        {
+          case: caseId || undefined,
+          investigation: investigationId || undefined,
+          target: target || undefined,
+          source: source || undefined,
+          drawer: undefined,
+          casePanel: undefined,
+          incident: undefined,
+          incidentPanel: undefined,
+        },
+        { hash: 'response' },
+      );
+    },
+    [navigateSoc],
+  );
+
+  const openIncidentDrawer = useCallback(
+    (incidentId, { caseId, panel = 'summary', hash = 'incidents' } = {}) => {
+      if (!incidentId) return;
+      navigateSoc(
+        {
+          case: caseId || focusedCaseId || undefined,
+          incident: incidentId,
+          drawer: 'incident-detail',
+          casePanel: undefined,
+          incidentPanel: panel,
+        },
+        { hash },
+      );
+    },
+    [focusedCaseId, navigateSoc],
+  );
+
+  const closeCaseDrawer = useCallback(() => {
+    navigateSoc(
+      {
+        drawer: undefined,
+        casePanel: undefined,
+      },
+      { replace: true },
+    );
+  }, [navigateSoc]);
+
+  const closeIncidentDrawer = useCallback(() => {
+    navigateSoc(
+      {
+        drawer: undefined,
+        casePanel: undefined,
+        incident: undefined,
+        incidentPanel: undefined,
+      },
+      { replace: true },
+    );
+  }, [navigateSoc]);
+
+  useEffect(() => {
+    if (activeInvestigationArr.length === 0) {
+      if (selectedInvestigationId) setSelectedInvestigationId('');
+      return;
+    }
+    if (
+      focusedInvestigationParam &&
+      activeInvestigationArr.some((entry) => entry.id === focusedInvestigationParam)
+    ) {
+      if (selectedInvestigationId !== focusedInvestigationParam) {
+        setSelectedInvestigationId(focusedInvestigationParam);
+      }
+      return;
+    }
+    if (!activeInvestigationArr.some((entry) => entry.id === selectedInvestigationId)) {
+      setSelectedInvestigationId(activeInvestigationArr[0].id);
+    }
+  }, [activeInvestigationArr, focusedInvestigationParam, selectedInvestigationId]);
+
+  useEffect(() => {
+    if (!selectedInvestigation) {
+      setFindingDraft('');
+      setHandoffDraft({ toAnalyst: '', summary: '', nextActions: '', questions: '' });
+      return;
+    }
+
+    const handoff = selectedInvestigation.handoff || null;
+    setFindingDraft('');
+    setHandoffDraft({
+      toAnalyst: handoff?.to_analyst || selectedInvestigationCase?.assignee || '',
+      summary: handoff?.summary || '',
+      nextActions: Array.isArray(handoff?.next_actions) ? handoff.next_actions.join('\n') : '',
+      questions: Array.isArray(handoff?.questions) ? handoff.questions.join('\n') : '',
+    });
+  }, [selectedInvestigation?.id, selectedInvestigationCase?.id, selectedInvestigationCase?.assignee]);
 
   useEffect(() => {
     localStorage.setItem('wardex_saved_queue_filters', JSON.stringify(savedQueueFilters));
   }, [savedQueueFilters]);
 
+  useEffect(() => {
+    if (queueFilterText === queueFilterParam) return;
+    setQueueFilterText(queueFilterParam);
+  }, [queueFilterParam, queueFilterText]);
+
+  useEffect(() => {
+    setCaseWorkspaceComment('');
+  }, [activeWorkspaceCase?.id]);
+
+  const fetchDrawerIncidentDetail = useCallback(async (incidentId) => {
+    if (!incidentId) {
+      setDrawerIncidentDetail(null);
+      setDrawerIncidentStoryline(null);
+      return;
+    }
+
+    const requestId = ++incidentDrawerRequestRef.current;
+    setDrawerIncidentDetail((current) =>
+      String(current?.id || '') === String(incidentId) ? current : null,
+    );
+    setDrawerIncidentStoryline(null);
+
+    try {
+      const detail = await api.incidentById(incidentId);
+      if (incidentDrawerRequestRef.current === requestId) setDrawerIncidentDetail(detail);
+    } catch {
+      if (incidentDrawerRequestRef.current === requestId) setDrawerIncidentDetail(null);
+    }
+
+    try {
+      const storyline = await api.incidentStoryline(incidentId);
+      if (incidentDrawerRequestRef.current === requestId) setDrawerIncidentStoryline(storyline);
+    } catch {
+      if (incidentDrawerRequestRef.current === requestId) setDrawerIncidentStoryline(null);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (drawerMode !== 'incident-detail' || !focusedIncidentParam) {
+      incidentDrawerRequestRef.current += 1;
+      setDrawerIncidentDetail(null);
+      setDrawerIncidentStoryline(null);
+      return;
+    }
+
+    fetchDrawerIncidentDetail(focusedIncidentParam);
+  }, [drawerMode, fetchDrawerIncidentDetail, focusedIncidentParam]);
+
+  const updateQueueFilter = useCallback(
+    (value, { replace = true } = {}) => {
+      setQueueFilterText(value);
+      navigateSoc(
+        {
+          queueFilter: value || undefined,
+        },
+        {
+          hash: 'queue',
+          replace,
+        },
+      );
+    },
+    [navigateSoc],
+  );
+
   const startWorkflow = async (workflow, caseId) => {
     if (!workflow?.id) return;
     setStartingWorkflowId(workflow.id);
     try {
-      await api.investigationStart({
+      const snapshot = await api.investigationStart({
         workflow_id: workflow.id,
         analyst: 'admin',
         case_id: caseId || undefined,
       });
+      if (snapshot?.id) {
+        setSelectedInvestigationId(snapshot.id);
+        openInvestigationFocus(snapshot.id, snapshot.case_id || caseId);
+      }
       toast('Investigation started', 'success');
-      setTab('investigations');
       rInv();
     } catch {
       toast('Failed to start', 'error');
@@ -422,6 +1063,53 @@ export default function SOCWorkbench() {
     navigate(`/detection?${params.toString()}`);
   };
 
+  const saveInvestigationProgress = async (investigationId, payload, successMessage, progressKey) => {
+    if (!investigationId) return;
+    setSavingProgressKey(progressKey || investigationId);
+    try {
+      const snapshot = await api.investigationProgress({
+        investigation_id: investigationId,
+        ...payload,
+      });
+      if (snapshot?.id) setSelectedInvestigationId(snapshot.id);
+      if (payload.finding) setFindingDraft('');
+      rInv();
+      toast(successMessage, 'success');
+    } catch {
+      toast('Failed to update investigation progress', 'error');
+    } finally {
+      setSavingProgressKey('');
+    }
+  };
+
+  const submitInvestigationHandoff = async () => {
+    if (!selectedInvestigation) return;
+    if (!handoffDraft.toAnalyst.trim() || !handoffDraft.summary.trim()) {
+      toast('Handoff target and summary are required', 'warning');
+      return;
+    }
+
+    setSavingHandoff(true);
+    try {
+      const snapshot = await api.investigationHandoff({
+        investigation_id: selectedInvestigation.id,
+        to_analyst: handoffDraft.toAnalyst.trim(),
+        summary: handoffDraft.summary.trim(),
+        next_actions: splitMultilineList(handoffDraft.nextActions),
+        questions: splitMultilineList(handoffDraft.questions),
+        case_id: selectedInvestigation.case_id || undefined,
+      });
+      if (snapshot?.id) setSelectedInvestigationId(snapshot.id);
+      rInv();
+      rCases();
+      toast('Investigation handed off', 'success');
+    } catch {
+      toast('Failed to hand off investigation', 'error');
+    } finally {
+      setSavingHandoff(false);
+    }
+  };
+
   const viewInc = async (id) => {
     setSelectedInc(id);
     setIncStoryline(null);
@@ -451,6 +1139,54 @@ export default function SOCWorkbench() {
       rCases();
     } catch {
       toast('Failed to update case title', 'error');
+    }
+  };
+
+  const syncSelectedCaseToTicket = async () => {
+    if (!activeTicketCaseId) {
+      toast('Select a case before syncing to ticketing', 'warning');
+      return;
+    }
+
+    const summary = String(activeTicketSummary || '').trim() || defaultTicketSummary;
+    setTicketSyncLoading(true);
+    try {
+      const result = await api.ticketsSync({
+        provider: ticketSyncDraft.provider || 'jira',
+        object_kind: 'case',
+        object_id: String(activeTicketCaseId),
+        queue_or_project: ticketSyncDraft.queueOrProject.trim() || undefined,
+        summary,
+      });
+      setTicketSyncResult(result);
+      setTicketSyncDraft((current) => ({ ...current, summary }));
+      toast('Ticket sync submitted', 'success');
+    } catch {
+      setTicketSyncResult(null);
+      toast('Ticket sync failed', 'error');
+    } finally {
+      setTicketSyncLoading(false);
+    }
+  };
+
+  const addCaseWorkspaceComment = async () => {
+    if (!activeWorkspaceCase?.id) return;
+    const text = String(caseWorkspaceComment || '').trim();
+    if (!text) {
+      toast('Write a case note before posting it', 'warning');
+      return;
+    }
+
+    setCaseWorkspaceCommentSaving(true);
+    try {
+      await api.caseComment(activeWorkspaceCase.id, { comment: text });
+      setCaseWorkspaceComment('');
+      toast('Case note added', 'success');
+      rCases();
+    } catch {
+      toast('Failed to add case note', 'error');
+    } finally {
+      setCaseWorkspaceCommentSaving(false);
     }
   };
 
@@ -513,6 +1249,12 @@ export default function SOCWorkbench() {
           </div>
         ))}
       </div>
+
+      <WorkflowGuidance
+        title="SOC Pivots"
+        description="Move from queue and case context into hunts, entity analytics, asset evidence, campaign mapping, and delivery reporting."
+        items={workflowItems}
+      />
 
       {tab === 'overview' &&
         (overview ? (
@@ -927,9 +1669,22 @@ export default function SOCWorkbench() {
                       <td>{inc.created || inc.timestamp || '—'}</td>
                       <td>
                         {inc.id ? (
-                          <button className="btn btn-sm" onClick={() => viewInc(inc.id)}>
-                            View
-                          </button>
+                          <div className="btn-group">
+                            <button className="btn btn-sm" onClick={() => viewInc(inc.id)}>
+                              View
+                            </button>
+                            <button
+                              className="btn btn-sm"
+                              onClick={() =>
+                                openIncidentDrawer(inc.id, {
+                                  panel: 'summary',
+                                  hash: 'incidents',
+                                })
+                              }
+                            >
+                              Open Drawer
+                            </button>
+                          </div>
                         ) : (
                           '—'
                         )}
@@ -946,16 +1701,29 @@ export default function SOCWorkbench() {
                 <span className="card-title">
                   Incident Detail — {incDetail.title || incDetail.id || selectedInc}
                 </span>
-                <button
-                  className="btn btn-sm"
-                  onClick={() => {
-                    setSelectedInc(null);
-                    setIncDetail(null);
-                    setIncStoryline(null);
-                  }}
-                >
-                  ✕ Close
-                </button>
+                <div className="btn-group">
+                  <button
+                    className="btn btn-sm"
+                    onClick={() =>
+                      openIncidentDrawer(selectedInc, {
+                        panel: 'summary',
+                        hash: 'incidents',
+                      })
+                    }
+                  >
+                    Open Shareable Drawer
+                  </button>
+                  <button
+                    className="btn btn-sm"
+                    onClick={() => {
+                      setSelectedInc(null);
+                      setIncDetail(null);
+                      setIncStoryline(null);
+                    }}
+                  >
+                    ✕ Close
+                  </button>
+                </div>
               </div>
               <div
                 style={{
@@ -1249,135 +2017,667 @@ export default function SOCWorkbench() {
       )}
 
       {tab === 'cases' && (
-        <div className="card">
-          <div className="card-header">
-            <span className="card-title">Cases ({caseArr.length})</span>
-            <div className="btn-group">
-              <select
-                className="form-select"
-                value={bulkCaseStatus}
-                onChange={(event) => setBulkCaseStatus(event.target.value)}
-              >
-                {['new', 'triaging', 'investigating', 'escalated', 'resolved', 'closed'].map((status) => (
-                  <option key={status} value={status}>
-                    {status}
-                  </option>
-                ))}
-              </select>
-              <button
-                className="btn btn-sm"
-                disabled={selectedCaseIds.size === 0}
-                onClick={async () => {
-                  const ids = [...selectedCaseIds];
-                  await Promise.allSettled(ids.map((id) => api.updateCase(id, { status: bulkCaseStatus })));
-                  toast(`Updated ${ids.length} case(s)`, 'success');
-                  setSelectedCaseIds(new Set());
-                  rCases();
-                }}
-              >
-                Bulk Apply
-              </button>
-              <button
-                className="btn btn-sm btn-primary"
-                onClick={async () => {
-                  try {
-                    await api.createCase({ title: 'New investigation' });
-                    toast('Case created', 'success');
+        <>
+          <div className="card">
+            <div className="card-header">
+              <span className="card-title">Cases ({caseArr.length})</span>
+              <div className="btn-group">
+                <select
+                  className="form-select"
+                  value={bulkCaseStatus}
+                  onChange={(event) => setBulkCaseStatus(event.target.value)}
+                >
+                  {['new', 'triaging', 'investigating', 'escalated', 'resolved', 'closed'].map((status) => (
+                    <option key={status} value={status}>
+                      {status}
+                    </option>
+                  ))}
+                </select>
+                <button
+                  className="btn btn-sm"
+                  disabled={selectedCaseIds.size === 0}
+                  onClick={async () => {
+                    const ids = [...selectedCaseIds];
+                    await Promise.allSettled(ids.map((id) => api.updateCase(id, { status: bulkCaseStatus })));
+                    toast(`Updated ${ids.length} case(s)`, 'success');
+                    setSelectedCaseIds(new Set());
                     rCases();
-                  } catch {
-                    toast('Failed', 'error');
-                  }
-                }}
-              >
-                + New Case
-              </button>
+                  }}
+                >
+                  Bulk Apply
+                </button>
+                <button className="btn btn-sm" onClick={() => navigate(assistantCaseHref)}>
+                  Ask Assistant
+                </button>
+                <button
+                  className="btn btn-sm btn-primary"
+                  onClick={async () => {
+                    try {
+                      await api.createCase({ title: 'New investigation' });
+                      toast('Case created', 'success');
+                      rCases();
+                    } catch {
+                      toast('Failed', 'error');
+                    }
+                  }}
+                >
+                  + New Case
+                </button>
+              </div>
             </div>
-          </div>
-          {caseStats && (
-            <div style={{ marginBottom: 12 }}>
-              <SummaryGrid data={caseStats} limit={8} />
-            </div>
-          )}
-          {caseArr.length === 0 ? (
-            <div className="empty">No cases</div>
-          ) : (
-            <div className="table-wrap">
-              <table>
-                <thead>
-                  <tr>
-                    <th>
-                      <input
-                        type="checkbox"
-                        checked={caseArr.length > 0 && selectedCaseIds.size === caseArr.length}
-                        onChange={(event) => {
-                          if (event.target.checked) {
-                            setSelectedCaseIds(new Set(caseArr.map((c) => c.id).filter(Boolean)));
-                          } else {
-                            setSelectedCaseIds(new Set());
-                          }
-                        }}
-                      />
-                    </th>
-                    <th>ID</th>
-                    <th>Title</th>
-                    <th>Status</th>
-                    <th>Owner</th>
-                    <th>Created</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {caseArr.map((c, i) => (
-                    <tr key={i}>
-                      <td>
+            {caseStats && (
+              <div style={{ marginBottom: 12 }}>
+                <SummaryGrid data={caseStats} limit={8} />
+              </div>
+            )}
+            {caseArr.length === 0 ? (
+              <div className="empty">No cases</div>
+            ) : (
+              <div className="table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>
                         <input
                           type="checkbox"
-                          checked={selectedCaseIds.has(c.id)}
+                          checked={caseArr.length > 0 && selectedCaseIds.size === caseArr.length}
                           onChange={(event) => {
-                            setSelectedCaseIds((current) => {
-                              const next = new Set(current);
-                              if (event.target.checked) next.add(c.id);
-                              else next.delete(c.id);
-                              return next;
-                            });
-                          }}
-                        />
-                      </td>
-                      <td style={{ fontFamily: 'var(--font-mono)', fontSize: 12 }}>{c.id || i}</td>
-                      <td>
-                        <input
-                          className="form-input"
-                          value={caseTitleDrafts[c.id] ?? c.title ?? ''}
-                          onChange={(event) =>
-                            setCaseTitleDrafts((current) => ({
-                              ...current,
-                              [c.id]: event.target.value,
-                            }))
-                          }
-                          onBlur={() => updateCaseTitleInline(c)}
-                          onKeyDown={(event) => {
-                            if (event.key === 'Enter') {
-                              event.preventDefault();
-                              updateCaseTitleInline(c);
+                            if (event.target.checked) {
+                              setSelectedCaseIds(new Set(caseArr.map((c) => c.id).filter(Boolean)));
+                            } else {
+                              setSelectedCaseIds(new Set());
                             }
                           }}
                         />
-                      </td>
-                      <td>
-                        <span
-                          className={`badge ${c.status === 'closed' ? 'badge-ok' : 'badge-warn'}`}
-                        >
-                          {c.status || '—'}
-                        </span>
-                      </td>
-                      <td>{c.owner || c.assigned_to || '—'}</td>
-                      <td>{c.created || c.timestamp || '—'}</td>
+                      </th>
+                      <th>ID</th>
+                      <th>Title</th>
+                      <th>Status</th>
+                      <th>Owner</th>
+                      <th>Created</th>
+                      <th>Workspace</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody>
+                    {caseArr.map((c, i) => (
+                      <tr
+                        key={i}
+                        style={
+                          String(c.id) === focusedCaseId
+                            ? { background: 'rgba(59,130,246,.08)' }
+                            : undefined
+                        }
+                      >
+                        <td>
+                          <input
+                            type="checkbox"
+                            checked={selectedCaseIds.has(c.id)}
+                            onChange={(event) => {
+                              setSelectedCaseIds((current) => {
+                                const next = new Set(current);
+                                if (event.target.checked) next.add(c.id);
+                                else next.delete(c.id);
+                                return next;
+                              });
+                            }}
+                          />
+                        </td>
+                        <td style={{ fontFamily: 'var(--font-mono)', fontSize: 12 }}>{c.id || i}</td>
+                        <td>
+                          <input
+                            className="form-input"
+                            value={caseTitleDrafts[c.id] ?? c.title ?? ''}
+                            onChange={(event) =>
+                              setCaseTitleDrafts((current) => ({
+                                ...current,
+                                [c.id]: event.target.value,
+                              }))
+                            }
+                            onBlur={() => updateCaseTitleInline(c)}
+                            onKeyDown={(event) => {
+                              if (event.key === 'Enter') {
+                                event.preventDefault();
+                                updateCaseTitleInline(c);
+                              }
+                            }}
+                          />
+                        </td>
+                        <td>
+                          <span
+                            className={`badge ${caseStatusBadgeClass(c.status)}`}
+                          >
+                            {c.status || '—'}
+                          </span>
+                        </td>
+                        <td>{c.assignee || c.owner || c.assigned_to || '—'}</td>
+                        <td>{c.created_at || c.created || c.timestamp || '—'}</td>
+                        <td>
+                          <div className="btn-group">
+                            <button className="btn btn-sm" onClick={() => openCaseFocus(c.id)}>
+                              {String(c.id) === focusedCaseId ? 'Focused' : 'Open Workspace'}
+                            </button>
+                            <button
+                              className="btn btn-sm"
+                              onClick={() =>
+                                openCaseDrawer(c.id, {
+                                  panel: 'summary',
+                                  hash: 'cases',
+                                })
+                              }
+                            >
+                              Open Drawer
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+
+          <div className="card">
+            <div className="card-header">
+              <div>
+                <span className="card-title">Focused Case Workspace</span>
+                <div className="hint" style={{ marginTop: 6 }}>
+                  Keep narrative, ownership, evidence, pivots, and notes together so analysts can
+                  stay in one workflow instead of bouncing across tabs.
+                </div>
+              </div>
+              <div className="btn-group">
+                {activeWorkspaceCase && String(activeWorkspaceCase.id) !== focusedCaseId ? (
+                  <button className="btn btn-sm" onClick={() => openCaseFocus(activeWorkspaceCase.id)}>
+                    Create Deep Link
+                  </button>
+                ) : null}
+                <button
+                  className="btn btn-sm"
+                  disabled={!activeWorkspaceCase}
+                  onClick={() =>
+                    activeWorkspaceCase
+                      ? openCaseDrawer(activeWorkspaceCase.id, {
+                          panel: 'summary',
+                          hash: 'cases',
+                        })
+                      : null
+                  }
+                >
+                  Open Shareable Drawer
+                </button>
+                <button
+                  className="btn btn-sm"
+                  disabled={!activeWorkspaceCase}
+                  onClick={() =>
+                    activeWorkspaceInvestigation
+                      ? openInvestigationFocus(
+                          activeWorkspaceInvestigation.id,
+                          activeWorkspaceCase?.id,
+                        )
+                      : setTab('investigations')
+                  }
+                >
+                  {activeWorkspaceInvestigation ? 'Open Investigation' : 'Open Investigations'}
+                </button>
+                <button
+                  className="btn btn-sm"
+                  disabled={!activeWorkspaceCase}
+                  onClick={() =>
+                    navigate(
+                      activeWorkspaceCase
+                        ? `/assistant?case=${encodeURIComponent(activeWorkspaceCase.id)}`
+                        : '/assistant',
+                    )
+                  }
+                >
+                  Ask Assistant
+                </button>
+                <button
+                  className="btn btn-sm btn-primary"
+                  disabled={!activeWorkspaceCase}
+                  onClick={() =>
+                    openResponseFocus({
+                      caseId: activeWorkspaceCase?.id,
+                      target: activeWorkspaceCase ? `case:${activeWorkspaceCase.id}` : undefined,
+                      source: 'case',
+                    })
+                  }
+                >
+                  Open Response Workspace
+                </button>
+              </div>
             </div>
-          )}
-        </div>
+            {!activeWorkspaceCase ? (
+              <div className="empty">
+                Focus a case from the table or use a `?case=` deep link to open a case workspace.
+              </div>
+            ) : (
+              <>
+                <SummaryGrid
+                  data={{
+                    case_id: activeWorkspaceCase.id,
+                    status: activeWorkspaceCase.status || 'new',
+                    priority: activeWorkspaceCase.priority || 'medium',
+                    containment: caseContainmentLabel(activeWorkspaceCase.status),
+                    owner: activeWorkspaceCase.assignee || 'Unassigned',
+                    updated_at: activeWorkspaceCase.updated_at || activeWorkspaceCase.created_at,
+                    incidents: activeCaseIncidentIds.length,
+                    events: activeCaseEventIds.length,
+                    evidence: activeCaseEvidence.length,
+                    comments: activeCaseComments.length,
+                    linked_workflow: activeWorkspaceInvestigation?.workflow_name || 'Not started',
+                  }}
+                  limit={10}
+                />
+
+                <div
+                  style={{
+                    display: 'grid',
+                    gap: 14,
+                    gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))',
+                    marginTop: 16,
+                  }}
+                >
+                  <div
+                    style={{
+                      border: '1px solid var(--border)',
+                      borderRadius: 12,
+                      padding: 14,
+                      background: 'var(--bg-card)',
+                    }}
+                  >
+                    <div className="card-title" style={{ marginBottom: 10 }}>
+                      Narrative
+                    </div>
+                    <div style={{ lineHeight: 1.5 }}>
+                      {activeWorkspaceCase.description?.trim() ||
+                        'No case narrative has been written yet. Use this workspace to track the analyst story, scope, and containment state.'}
+                    </div>
+                    <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 12 }}>
+                      <span className={`badge ${caseStatusBadgeClass(activeWorkspaceCase.status)}`}>
+                        {activeWorkspaceCase.status || 'new'}
+                      </span>
+                      <span
+                        className={`badge ${casePriorityBadgeClass(activeWorkspaceCase.priority)}`}
+                      >
+                        {activeWorkspaceCase.priority || 'medium'}
+                      </span>
+                      {activeWorkspaceCase.assignee ? (
+                        <span className="badge badge-info">
+                          Owner {activeWorkspaceCase.assignee}
+                        </span>
+                      ) : null}
+                    </div>
+                  </div>
+
+                  <div
+                    style={{
+                      border: '1px solid var(--border)',
+                      borderRadius: 12,
+                      padding: 14,
+                      background: 'var(--bg-card)',
+                    }}
+                  >
+                    <div className="card-title" style={{ marginBottom: 10 }}>
+                      Linked Context
+                    </div>
+                    <div className="hint" style={{ marginBottom: 8 }}>
+                      Follow the same case across incidents, events, ATT&CK mapping, and analyst
+                      tags.
+                    </div>
+                    {activeCaseIncidentIds.length === 0 &&
+                    activeCaseEventIds.length === 0 &&
+                    activeCaseMitre.length === 0 &&
+                    activeCaseTags.length === 0 ? (
+                      <div className="empty">No linked evidence or context yet.</div>
+                    ) : (
+                      <>
+                        {activeCaseIncidentIds.length > 0 ? (
+                            <div style={{ marginBottom: 10 }}>
+                              <div className="row-secondary" style={{ marginBottom: 6 }}>
+                                Linked incidents
+                              </div>
+                              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                                {activeCaseIncidentIds.map((incidentId) => (
+                                  <button
+                                    key={`case-incident-${incidentId}`}
+                                    className="btn btn-sm"
+                                    onClick={() =>
+                                      openIncidentDrawer(incidentId, {
+                                        caseId: activeWorkspaceCase.id,
+                                        panel: 'summary',
+                                        hash: 'cases',
+                                      })
+                                    }
+                                  >
+                                    {`Incident #${incidentId}`}
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+                          ) : null}
+                        {activeCaseEventIds.length > 0 ? (
+                          <div style={{ marginBottom: 10 }}>
+                            <div className="row-secondary" style={{ marginBottom: 6 }}>
+                              Linked events
+                            </div>
+                            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                              {activeCaseEventIds.map((eventId) => (
+                                <span key={`case-event-${eventId}`} className="badge badge-info">
+                                  Event #{eventId}
+                                </span>
+                              ))}
+                            </div>
+                          </div>
+                        ) : null}
+                        {activeCaseMitre.length > 0 ? (
+                          <div style={{ marginBottom: 10 }}>
+                            <div className="row-secondary" style={{ marginBottom: 6 }}>
+                              ATT&CK coverage
+                            </div>
+                            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                              {activeCaseMitre.map((technique) => (
+                                <span key={`case-mitre-${technique}`} className="badge badge-info">
+                                  {technique}
+                                </span>
+                              ))}
+                            </div>
+                          </div>
+                        ) : null}
+                        {activeCaseTags.length > 0 ? (
+                          <div>
+                            <div className="row-secondary" style={{ marginBottom: 6 }}>
+                              Analyst tags
+                            </div>
+                            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                              {activeCaseTags.map((tag) => (
+                                <span key={`case-tag-${tag}`} className="badge badge-info">
+                                  {tag}
+                                </span>
+                              ))}
+                            </div>
+                          </div>
+                        ) : null}
+                      </>
+                    )}
+                  </div>
+                </div>
+
+                <div className="card-title" style={{ marginTop: 18, marginBottom: 12 }}>
+                  Recommended pivots
+                </div>
+                <div className="btn-group" style={{ flexWrap: 'wrap' }}>
+                  <button className="btn btn-sm" onClick={() => setTab('investigations')}>
+                    Investigation timeline
+                  </button>
+                  <button
+                    className="btn btn-sm"
+                    onClick={() =>
+                      navigate(
+                        buildHref('/reports', {
+                          params: {
+                            tab: 'evidence',
+                            case: activeWorkspaceCase?.id || focusedCaseId || undefined,
+                            incident: focusedIncidentParam || undefined,
+                            investigation:
+                              activeWorkspaceInvestigation?.id ||
+                              focusedInvestigationParam ||
+                              undefined,
+                            source: responseSource || 'case-workspace',
+                          },
+                        }),
+                      )
+                    }
+                  >
+                    Evidence report
+                  </button>
+                  <button
+                    className="btn btn-sm"
+                    onClick={() =>
+                      navigate(buildHref('/infrastructure', { params: { tab: 'assets' } }))
+                    }
+                  >
+                    Asset context
+                  </button>
+                  <button
+                    className="btn btn-sm btn-primary"
+                    onClick={() =>
+                      openResponseFocus({
+                        caseId: activeWorkspaceCase.id,
+                        target: `case:${activeWorkspaceCase.id}`,
+                        source: 'case',
+                      })
+                    }
+                  >
+                    Response approvals
+                  </button>
+                </div>
+
+                <div
+                  style={{
+                    display: 'grid',
+                    gap: 14,
+                    gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
+                    marginTop: 16,
+                  }}
+                >
+                  <div
+                    style={{
+                      border: '1px solid var(--border)',
+                      borderRadius: 12,
+                      padding: 14,
+                      background: 'var(--bg-card)',
+                    }}
+                  >
+                    <div className="card-title" style={{ marginBottom: 10 }}>
+                      Evidence
+                    </div>
+                    {activeCaseEvidence.length === 0 ? (
+                      <div className="empty">No evidence linked yet.</div>
+                    ) : (
+                      <div style={{ display: 'grid', gap: 10 }}>
+                        {activeCaseEvidence.map((item, index) => (
+                          <div
+                            key={`${item.reference_id || item.kind || 'evidence'}-${index}`}
+                            style={{
+                              border: '1px solid var(--border)',
+                              borderRadius: 10,
+                              padding: 12,
+                              background: 'var(--bg)',
+                            }}
+                          >
+                            <div className="row-primary">
+                              {item.description || item.reference_id || 'Linked evidence'}
+                            </div>
+                            <div className="row-secondary">
+                              {item.kind || 'unknown'} · {item.reference_id || 'no reference'}
+                            </div>
+                            <div className="row-secondary" style={{ marginTop: 6 }}>
+                              Added {item.added_at ? formatDateTime(item.added_at) : 'recently'}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  <div
+                    style={{
+                      border: '1px solid var(--border)',
+                      borderRadius: 12,
+                      padding: 14,
+                      background: 'var(--bg-card)',
+                    }}
+                  >
+                    <div className="card-title" style={{ marginBottom: 10 }}>
+                      Case Notes
+                    </div>
+                    {activeCaseComments.length === 0 ? (
+                      <div className="empty">No case notes yet.</div>
+                    ) : (
+                      <div style={{ display: 'grid', gap: 10 }}>
+                        {activeCaseComments.map((comment, index) => (
+                          <div
+                            key={`${comment.timestamp || 'comment'}-${index}`}
+                            style={{
+                              border: '1px solid var(--border)',
+                              borderRadius: 10,
+                              padding: 12,
+                              background: 'var(--bg)',
+                            }}
+                          >
+                            <div className="row-primary">{comment.author || 'analyst'}</div>
+                            <div className="row-secondary">
+                              {comment.timestamp ? formatDateTime(comment.timestamp) : 'recently'}
+                            </div>
+                            <div style={{ marginTop: 8 }}>
+                              {comment.text || comment.content || 'No comment body'}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    <div style={{ marginTop: 12 }}>
+                      <label className="form-label" htmlFor="case-workspace-comment">
+                        Add case note
+                      </label>
+                      <textarea
+                        id="case-workspace-comment"
+                        className="form-input"
+                        rows={3}
+                        value={caseWorkspaceComment}
+                        onChange={(event) => setCaseWorkspaceComment(event.target.value)}
+                        placeholder="Capture analyst context, next steps, or containment updates."
+                      />
+                      <div className="btn-group" style={{ marginTop: 10 }}>
+                        <button
+                          className="btn btn-sm btn-primary"
+                          disabled={caseWorkspaceCommentSaving || !caseWorkspaceComment.trim()}
+                          onClick={addCaseWorkspaceComment}
+                        >
+                          {caseWorkspaceCommentSaving ? 'Posting…' : 'Post Case Note'}
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <JsonDetails data={activeWorkspaceCase} label="Focused case payload" />
+              </>
+            )}
+          </div>
+
+          <div className="card">
+            <div className="card-header">
+              <div>
+                <span className="card-title">Ticket Sync</span>
+                <div className="hint" style={{ marginTop: 6 }}>
+                  Sync the selected or focused case into Jira, ServiceNow, Linear, or another
+                  downstream queue without leaving the workbench.
+                </div>
+              </div>
+              <div className="btn-group">
+                <button className="btn btn-sm" onClick={() => setTicketSyncResult(null)}>
+                  Clear Result
+                </button>
+                <button
+                  className="btn btn-sm btn-primary"
+                  onClick={syncSelectedCaseToTicket}
+                  disabled={ticketSyncLoading || !activeTicketCaseId}
+                >
+                  {ticketSyncLoading ? 'Syncing…' : 'Sync Case'}
+                </button>
+              </div>
+            </div>
+            <div
+              style={{
+                display: 'grid',
+                gap: 12,
+                gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
+              }}
+            >
+              <div>
+                <label className="form-label" htmlFor="ticket-sync-case">
+                  Target case
+                </label>
+                <select
+                  id="ticket-sync-case"
+                  className="form-select"
+                  value={activeTicketCaseId}
+                  onChange={(event) =>
+                    setTicketSyncDraft((current) => ({ ...current, caseId: event.target.value }))
+                  }
+                >
+                  <option value="">Select a case</option>
+                  {caseArr.map((caseItem) => (
+                    <option key={caseItem.id} value={String(caseItem.id)}>
+                      {`#${caseItem.id} ${caseItem.title || 'Untitled case'}`}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="form-label" htmlFor="ticket-sync-provider">
+                  Ticketing provider
+                </label>
+                <select
+                  id="ticket-sync-provider"
+                  className="form-select"
+                  value={ticketSyncDraft.provider}
+                  onChange={(event) =>
+                    setTicketSyncDraft((current) => ({ ...current, provider: event.target.value }))
+                  }
+                >
+                  {['jira', 'servicenow', 'linear', 'pagerduty', 'custom'].map((provider) => (
+                    <option key={provider} value={provider}>
+                      {provider}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="form-label" htmlFor="ticket-sync-queue">
+                  Project or queue
+                </label>
+                <input
+                  id="ticket-sync-queue"
+                  className="form-input"
+                  value={ticketSyncDraft.queueOrProject}
+                  onChange={(event) =>
+                    setTicketSyncDraft((current) => ({
+                      ...current,
+                      queueOrProject: event.target.value,
+                    }))
+                  }
+                  placeholder="SECOPS"
+                />
+              </div>
+            </div>
+            <div style={{ marginTop: 12 }}>
+              <label className="form-label" htmlFor="ticket-sync-summary">
+                Sync summary
+              </label>
+              <input
+                id="ticket-sync-summary"
+                className="form-input"
+                value={activeTicketSummary}
+                onChange={(event) =>
+                  setTicketSyncDraft((current) => ({ ...current, summary: event.target.value }))
+                }
+                placeholder="Summarize the case for the downstream queue"
+              />
+            </div>
+            <div className="hint" style={{ marginTop: 10 }}>
+              Use the assistant route for case-aware summaries and citations before syncing this case.
+            </div>
+            {ticketSyncResult ? (
+              <div style={{ marginTop: 14 }}>
+                <JsonDetails data={ticketSyncResult} label="Last ticket sync" />
+              </div>
+            ) : null}
+          </div>
+        </>
       )}
 
       {tab === 'analyst' && (
@@ -1449,7 +2749,7 @@ export default function SOCWorkbench() {
                 className="form-input triage-search"
                 value={queueFilterText}
                 placeholder="Filter alerts…"
-                onChange={(event) => setQueueFilterText(event.target.value)}
+                onChange={(event) => updateQueueFilter(event.target.value)}
               />
               <button
                 className="btn btn-sm"
@@ -1465,21 +2765,38 @@ export default function SOCWorkbench() {
               >
                 Save Filter
               </button>
+              <button
+                className="btn btn-sm"
+                disabled={!queueFilterText.trim()}
+                onClick={() => updateQueueFilter('')}
+              >
+                Clear Filter
+              </button>
             </div>
             <div className="triage-toolbar-group">
               {savedQueueFilters.slice(-4).map((item) => (
                 <button
                   key={`${item.name}-${item.query}`}
                   className="btn btn-sm"
-                  onClick={() => setQueueFilterText(item.query)}
+                  onClick={() => updateQueueFilter(item.query, { replace: false })}
                 >
                   {item.name}
                 </button>
               ))}
             </div>
           </div>
+          {queueFilterText.trim() ? (
+            <div className="hint" style={{ marginBottom: 10 }}>
+              This queue filter is mirrored into the URL so the current triage slice can be shared
+              or reopened directly.
+            </div>
+          ) : null}
           {filteredQueueArr.length === 0 ? (
-            <div className="empty">Queue empty</div>
+            <div className="empty">
+              {queueArr.length > 0 && queueFilterText.trim()
+                ? 'Filters excluded every queued alert. Clear or adjust the URL-backed filter to continue.'
+                : 'Queue empty'}
+            </div>
           ) : (
             <div className="table-wrap">
               <table>
@@ -1531,6 +2848,18 @@ export default function SOCWorkbench() {
                         <button className="btn btn-sm" onClick={() => pivotPlannerToHunt(a)}>
                           Hunt
                         </button>
+                        <button
+                          className="btn btn-sm"
+                          onClick={() =>
+                            openResponseFocus({
+                              target:
+                                a.host || a.agent_id || a.endpoint_id || a.entity_id || a.id,
+                              source: 'queue',
+                            })
+                          }
+                        >
+                          Respond
+                        </button>
                       </td>
                     </tr>
                   ))}
@@ -1543,6 +2872,41 @@ export default function SOCWorkbench() {
 
       {tab === 'response' && (
         <>
+          {hasResponseContext && (
+            <div className="detail-callout" style={{ marginBottom: 16 }}>
+              <strong>Workflow handoff context</strong>
+              <div style={{ marginTop: 6 }}>
+                {responseSource
+                  ? `${responseSource.charAt(0).toUpperCase()}${responseSource.slice(1)} workflow`
+                  : 'Selected workflow'}
+                {focusedCase ? ` is linked to case ${focusedCase.id} (${focusedCase.title}).` : ''}
+                {focusedInvestigation
+                  ? ` Investigation ${focusedInvestigation.workflow_name || focusedInvestigation.id} is still active.`
+                  : ''}
+                {responseTarget ? ` Suggested response target: ${responseTarget}.` : ''}
+              </div>
+              <div className="btn-group" style={{ marginTop: 10, flexWrap: 'wrap' }}>
+                {focusedCase && (
+                  <button className="btn btn-sm" onClick={() => openCaseFocus(focusedCase.id)}>
+                    Open Case
+                  </button>
+                )}
+                {focusedInvestigation && (
+                  <button
+                    className="btn btn-sm"
+                    onClick={() =>
+                      openInvestigationFocus(
+                        focusedInvestigation.id,
+                        focusedInvestigation.case_id,
+                      )
+                    }
+                  >
+                    Open Investigation
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
           <div className="card-grid">
             <div className="card">
               <div className="card-title" style={{ marginBottom: 12 }}>
@@ -1785,6 +3149,7 @@ export default function SOCWorkbench() {
               </div>
               {(() => {
                 const entries =
+                  respAudit?.audit_log ||
                   respAudit?.entries ||
                   respAudit?.audit ||
                   (Array.isArray(respAudit) ? respAudit : []);
@@ -1796,9 +3161,12 @@ export default function SOCWorkbench() {
                           {e.timestamp || e.time || '—'}
                         </span>
                         <span style={{ marginRight: 8, color: 'var(--primary)' }}>
-                          {e.user || e.actor || '—'}
+                          {e.user || e.actor || e.target || '—'}
                         </span>
-                        <span>{e.action || e.message || e.description || JSON.stringify(e)}</span>
+                        <span>
+                          {e.action || e.message || e.description || 'Audit event'}
+                          {e.outcome ? ` (${e.outcome})` : ''}
+                        </span>
                       </div>
                     ))}
                   </div>
@@ -2350,199 +3718,685 @@ export default function SOCWorkbench() {
       )}
 
       {tab === 'investigations' && (
-        <div className="card">
-          <div className="card-header">
-            <span className="card-title">Investigation Workflows</span>
-            <button className="btn btn-sm" onClick={rInv}>
-              ↻ Refresh
-            </button>
-          </div>
-          {investigationContext && (
-            <div className="card" style={{ marginBottom: 16, background: 'var(--bg)' }}>
-              <div className="card-header">
-                <div>
-                  <div className="card-title">Planner Context</div>
-                  <div className="hint">
-                    {investigationContext.sourceType || 'signal'} •{' '}
-                    {investigationContext.title ||
-                      investigationContext.summary ||
-                      investigationContext.message ||
-                      investigationContext.id ||
-                      'Untitled signal'}
+        <>
+          <div className="card" style={{ marginBottom: 16 }}>
+            <div className="card-header">
+              <span className="card-title">Investigation Planner</span>
+              <button className="btn btn-sm" onClick={rInv}>
+                ↻ Refresh
+              </button>
+            </div>
+            {investigationContext ? (
+              <div className="card" style={{ marginTop: 16, background: 'var(--bg)' }}>
+                <div className="card-header">
+                  <div>
+                    <div className="card-title">Planner Context</div>
+                    <div className="hint">
+                      {investigationContext.sourceType || 'signal'} •{' '}
+                      {investigationContext.title ||
+                        investigationContext.summary ||
+                        investigationContext.message ||
+                        investigationContext.id ||
+                        'Untitled signal'}
+                    </div>
                   </div>
-                </div>
-                <div className="btn-group">
-                  <button
-                    className="btn btn-sm"
-                    onClick={() => pivotPlannerToHunt(investigationContext)}
-                  >
-                    Open Hunt
-                  </button>
-                  <button
-                    className="btn btn-sm"
-                    onClick={() => {
-                      setInvestigationContext(null);
-                      setPlannerSuggestions([]);
-                    }}
-                  >
-                    Clear
-                  </button>
-                </div>
-              </div>
-              <div className="summary-grid">
-                <div className="summary-card">
-                  <div className="summary-label">Severity</div>
-                  <div className="summary-value">{investigationContext.severity || '—'}</div>
-                  <div className="summary-meta">
-                    {investigationContext.rule_id ||
-                      investigationContext.id ||
-                      'No explicit rule or incident ID'}
-                  </div>
-                </div>
-                <div className="summary-card">
-                  <div className="summary-label">Suggested Workflows</div>
-                  <div className="summary-value">
-                    {plannerLoading ? '…' : plannerSuggestions.length}
-                  </div>
-                  <div className="summary-meta">
-                    Matched from incident or alert wording using backend workflow triggers.
-                  </div>
-                </div>
-              </div>
-              <div style={{ marginTop: 12 }}>
-                {plannerLoading ? (
-                  <div className="hint">Evaluating workflow matches for this context…</div>
-                ) : plannerSuggestions.length === 0 ? (
-                  <div className="hint">
-                    No workflow suggestion matched. Use the hunt pivot to build a rule-specific
-                    search instead.
-                  </div>
-                ) : (
-                  plannerSuggestions.map((workflow) => (
-                    <div
-                      key={workflow.id}
-                      style={{
-                        display: 'flex',
-                        justifyContent: 'space-between',
-                        gap: 12,
-                        padding: '10px 0',
-                        borderBottom: '1px solid var(--border)',
+                  <div className="btn-group">
+                    <button
+                      className="btn btn-sm"
+                      onClick={() => pivotPlannerToHunt(investigationContext)}
+                    >
+                      Open Hunt
+                    </button>
+                    <button
+                      className="btn btn-sm"
+                      onClick={() => {
+                        setInvestigationContext(null);
+                        setPlannerSuggestions([]);
                       }}
                     >
-                      <div style={{ flex: 1 }}>
-                        <div style={{ fontWeight: 600 }}>{workflow.name}</div>
-                        <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
-                          {workflow.description}
+                      Clear
+                    </button>
+                  </div>
+                </div>
+                <div className="summary-grid">
+                  <div className="summary-card">
+                    <div className="summary-label">Severity</div>
+                    <div className="summary-value">{investigationContext.severity || '—'}</div>
+                    <div className="summary-meta">
+                      {investigationContext.rule_id ||
+                        investigationContext.id ||
+                        'No explicit rule or incident ID'}
+                    </div>
+                  </div>
+                  <div className="summary-card">
+                    <div className="summary-label">Suggested Workflows</div>
+                    <div className="summary-value">
+                      {plannerLoading ? '…' : plannerSuggestions.length}
+                    </div>
+                    <div className="summary-meta">
+                      Matched from incident or alert wording using backend workflow triggers.
+                    </div>
+                  </div>
+                  <div className="summary-card">
+                    <div className="summary-label">Linked Case</div>
+                    <div className="summary-value">
+                      {investigationContext.case_id || selectedInvestigationCase?.id || 'Unlinked'}
+                    </div>
+                    <div className="summary-meta">
+                      {selectedInvestigationCase?.title || 'Start a workflow and hand it into a case when needed.'}
+                    </div>
+                  </div>
+                </div>
+                <div style={{ marginTop: 12 }}>
+                  {plannerLoading ? (
+                    <div className="hint">Evaluating workflow matches for this context…</div>
+                  ) : plannerSuggestions.length === 0 ? (
+                    <div className="hint">
+                      No workflow suggestion matched. Use the hunt pivot to build a rule-specific
+                      search instead.
+                    </div>
+                  ) : (
+                    plannerSuggestions.map((workflow) => (
+                      <div
+                        key={workflow.id}
+                        style={{
+                          display: 'flex',
+                          justifyContent: 'space-between',
+                          gap: 12,
+                          padding: '10px 0',
+                          borderBottom: '1px solid var(--border)',
+                        }}
+                      >
+                        <div style={{ flex: 1 }}>
+                          <div style={{ fontWeight: 600 }}>{workflow.name}</div>
+                          <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
+                            {workflow.description}
+                          </div>
+                          <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginTop: 4 }}>
+                            {(workflow.steps || []).length} steps •{' '}
+                            {(workflow.mitre_techniques || []).join(', ') || 'No ATT&CK mapping'}
+                          </div>
                         </div>
-                        <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginTop: 4 }}>
-                          {(workflow.steps || []).length} steps •{' '}
-                          {(workflow.mitre_techniques || []).join(', ') || 'No ATT&CK mapping'}
+                        <div className="btn-group" style={{ alignItems: 'center' }}>
+                          <span
+                            className={`badge ${(workflow.severity || '').toLowerCase() === 'critical' || (workflow.severity || '').toLowerCase() === 'high' ? 'badge-err' : 'badge-info'}`}
+                          >
+                            {workflow.severity || 'medium'}
+                          </span>
+                          <button
+                            className="btn btn-sm btn-primary"
+                            onClick={() => startWorkflow(workflow, investigationContext.case_id)}
+                            disabled={startingWorkflowId === workflow.id}
+                          >
+                            {startingWorkflowId === workflow.id ? 'Starting…' : 'Start'}
+                          </button>
                         </div>
                       </div>
-                      <div className="btn-group" style={{ alignItems: 'center' }}>
-                        <span
-                          className={`badge ${(workflow.severity || '').toLowerCase() === 'critical' || (workflow.severity || '').toLowerCase() === 'high' ? 'badge-err' : 'badge-info'}`}
+                    ))
+                  )}
+                </div>
+              </div>
+            ) : (
+              <div className="hint" style={{ marginTop: 16 }}>
+                Open the planner from an incident or queue alert to seed workflow suggestions and
+                hunt pivots from the current signal.
+              </div>
+            )}
+          </div>
+
+          <div className="triage-layout">
+            <section className="triage-list">
+              <div className="card" style={{ marginBottom: 16 }}>
+                <div className="card-header">
+                  <span className="card-title">Active Investigations</span>
+                  <span className="badge badge-info">{activeInvestigationArr.length}</span>
+                </div>
+                {activeInvestigationArr.length === 0 ? (
+                  <div className="empty">
+                    No active investigations yet. Start a workflow from the planner or the library
+                    below.
+                  </div>
+                ) : (
+                  <div style={{ display: 'grid', gap: 12 }}>
+                    {activeInvestigationArr.map((investigation) => (
+                      <button
+                        key={investigation.id}
+                        className="card"
+                        style={{
+                          textAlign: 'left',
+                          padding: 16,
+                          borderColor:
+                            selectedInvestigation?.id === investigation.id
+                              ? 'var(--accent)'
+                              : 'var(--border)',
+                          background:
+                            selectedInvestigation?.id === investigation.id
+                              ? 'var(--bg)'
+                              : 'var(--bg-card)',
+                        }}
+                        onClick={() =>
+                          openInvestigationFocus(investigation.id, investigation.case_id)
+                        }
+                      >
+                        <div
+                          style={{
+                            display: 'flex',
+                            justifyContent: 'space-between',
+                            gap: 12,
+                            alignItems: 'flex-start',
+                          }}
                         >
-                          {workflow.severity || 'medium'}
-                        </span>
+                          <div>
+                            <div className="row-primary">
+                              {investigation.workflow_name || investigation.workflow_id}
+                            </div>
+                            <div className="row-secondary">
+                              {investigation.analyst} •{' '}
+                              {investigation.case_id ? `Case ${investigation.case_id}` : 'No linked case'}
+                            </div>
+                          </div>
+                          <span
+                            className={`badge ${investigationStatusBadgeClass(investigation.status)}`}
+                          >
+                            {investigationStatusLabel(investigation.status)}
+                          </span>
+                        </div>
+                        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 12 }}>
+                          <span className="badge badge-info">
+                            {investigation.completion_percent || 0}% complete
+                          </span>
+                          <span className="badge badge-info">
+                            {(investigation.completed_steps || []).length}/{investigation.total_steps || 0}{' '}
+                            steps
+                          </span>
+                          {investigation.next_step?.title ? (
+                            <span className="badge badge-info">
+                              Next: {investigation.next_step.title}
+                            </span>
+                          ) : null}
+                        </div>
+                        <div className="row-secondary" style={{ marginTop: 10 }}>
+                          Updated {formatRelativeTime(investigation.updated_at || investigation.started_at)}
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              <div className="card">
+                <div className="card-header">
+                  <span className="card-title">Workflow Library</span>
+                  <span className="badge badge-info">
+                    {Array.isArray(workflows) ? workflows.length : 0}
+                  </span>
+                </div>
+                {workflows && Array.isArray(workflows) && workflows.length > 0 ? (
+                  <div className="table-wrap">
+                    <table>
+                      <thead>
+                        <tr>
+                          <th>ID</th>
+                          <th>Name</th>
+                          <th>Severity</th>
+                          <th>MITRE</th>
+                          <th>Est. Time</th>
+                          <th>Steps</th>
+                          <th>Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {workflows.map((wf, i) => (
+                          <tr key={i}>
+                            <td style={{ fontFamily: 'var(--font-mono)', fontSize: 11 }}>{wf.id}</td>
+                            <td>
+                              <div className="row-primary">{wf.name}</div>
+                              <div className="row-secondary">{wf.description}</div>
+                            </td>
+                            <td>
+                              <span className={`sev-${(wf.severity || 'medium').toLowerCase()}`}>
+                                {wf.severity}
+                              </span>
+                            </td>
+                            <td style={{ fontSize: 11 }}>{(wf.mitre_techniques || []).join(', ')}</td>
+                            <td>{wf.estimated_minutes}m</td>
+                            <td>{(wf.steps || []).length}</td>
+                            <td>
+                              <button
+                                className="btn btn-sm btn-primary"
+                                onClick={() =>
+                                  startWorkflow(
+                                    wf,
+                                    investigationContext?.case_id || selectedInvestigation?.case_id,
+                                  )
+                                }
+                                disabled={startingWorkflowId === wf.id}
+                              >
+                                {startingWorkflowId === wf.id ? 'Starting…' : 'Start'}
+                              </button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                ) : (
+                  <div className="empty">No workflows available</div>
+                )}
+              </div>
+            </section>
+
+            <aside className="triage-detail">
+              <div className="card">
+                {!selectedInvestigation ? (
+                  <div className="empty">
+                    Select an active investigation to track step progress, notes, pivots, and
+                    handoff details.
+                  </div>
+                ) : (
+                  <>
+                    <div className="detail-hero">
+                      <div>
+                        <div className="detail-hero-title">
+                          {selectedInvestigation.workflow_name || selectedInvestigation.workflow_id}
+                        </div>
+                        <div className="detail-hero-copy">
+                          {selectedInvestigation.workflow_description}
+                        </div>
+                      </div>
+                      <span
+                        className={`badge ${investigationStatusBadgeClass(selectedInvestigation.status)}`}
+                      >
+                        {investigationStatusLabel(selectedInvestigation.status)}
+                      </span>
+                    </div>
+
+                    <div style={{ marginTop: 16 }}>
+                      <SummaryGrid
+                        data={{
+                          analyst: selectedInvestigation.analyst,
+                          case: selectedInvestigation.case_id || 'Unlinked',
+                          progress: `${selectedInvestigation.completion_percent || 0}%`,
+                          steps_completed: `${(selectedInvestigation.completed_steps || []).length}/${selectedInvestigation.total_steps || 0}`,
+                          started_at: formatDateTime(selectedInvestigation.started_at),
+                          updated_at: formatDateTime(
+                            selectedInvestigation.updated_at || selectedInvestigation.started_at,
+                          ),
+                        }}
+                        limit={6}
+                      />
+                    </div>
+
+                    <div className="btn-group" style={{ marginTop: 16, flexWrap: 'wrap' }}>
+                      <button
+                        className="btn btn-sm"
+                        onClick={() => pivotPlannerToHunt(investigationDetailContext)}
+                      >
+                        Open Hunt
+                      </button>
+                      {selectedInvestigationCase ? (
+                        <button
+                          className="btn btn-sm"
+                          onClick={() => openCaseFocus(selectedInvestigationCase.id)}
+                        >
+                          Open Case
+                        </button>
+                      ) : null}
+                      <button
+                        className="btn btn-sm btn-primary"
+                        onClick={() =>
+                          openResponseFocus({
+                            caseId: selectedInvestigationCase?.id || selectedInvestigation?.case_id,
+                            investigationId: selectedInvestigation.id,
+                            target: investigationResponseTarget,
+                            source: 'investigation',
+                          })
+                        }
+                      >
+                        Open Response
+                      </button>
+                    </div>
+
+                    {selectedInvestigation.handoff && (
+                      <div className="detail-callout" style={{ marginTop: 16 }}>
+                        <strong>Latest handoff</strong>
+                        <div style={{ marginTop: 6 }}>
+                          {selectedInvestigation.handoff.from_analyst} handed this workflow to{' '}
+                          {selectedInvestigation.handoff.to_analyst} {formatRelativeTime(selectedInvestigation.handoff.updated_at)}.
+                        </div>
+                        <div style={{ marginTop: 6 }}>{selectedInvestigation.handoff.summary}</div>
+                      </div>
+                    )}
+
+                    <div className="card" style={{ marginTop: 16 }}>
+                      <div className="card-header">
+                        <span className="card-title">Findings and Completion Criteria</span>
+                        {selectedInvestigation.next_step?.title ? (
+                          <span className="badge badge-info">
+                            Next: {selectedInvestigation.next_step.title}
+                          </span>
+                        ) : null}
+                      </div>
+                      {(selectedInvestigation.findings || []).length > 0 ? (
+                        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 12 }}>
+                          {selectedInvestigation.findings.map((finding, index) => (
+                            <span key={`${finding}-${index}`} className="badge badge-info">
+                              {finding}
+                            </span>
+                          ))}
+                        </div>
+                      ) : (
+                        <div className="hint" style={{ marginBottom: 12 }}>
+                          No findings recorded yet. Capture decisive takeaways as the workflow moves.
+                        </div>
+                      )}
+                      <div className="form-group">
+                        <label className="form-label" htmlFor="investigation-finding-input">
+                          Add finding
+                        </label>
+                        <input
+                          id="investigation-finding-input"
+                          className="form-input"
+                          value={findingDraft}
+                          placeholder="Containment complete on two hosts; VPN IP blocked"
+                          onChange={(event) => setFindingDraft(event.target.value)}
+                        />
+                      </div>
+                      <div className="btn-group">
+                        <button
+                          className="btn btn-sm"
+                          disabled={savingProgressKey === `${selectedInvestigation.id}:finding` || !findingDraft.trim()}
+                          onClick={() =>
+                            saveInvestigationProgress(
+                              selectedInvestigation.id,
+                              { finding: findingDraft.trim() },
+                              'Finding recorded',
+                              `${selectedInvestigation.id}:finding`,
+                            )
+                          }
+                        >
+                          {savingProgressKey === `${selectedInvestigation.id}:finding`
+                            ? 'Saving…'
+                            : 'Record Finding'}
+                        </button>
+                      </div>
+                      {(selectedInvestigation.completion_criteria || []).length > 0 && (
+                        <div style={{ marginTop: 16 }}>
+                          <div className="card-title" style={{ marginBottom: 8 }}>
+                            Completion Criteria
+                          </div>
+                          <ul style={{ margin: 0, paddingLeft: 18, display: 'grid', gap: 6 }}>
+                            {selectedInvestigation.completion_criteria.map((criterion) => (
+                              <li key={criterion}>{criterion}</li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="card" style={{ marginTop: 16 }}>
+                      <div className="card-title" style={{ marginBottom: 12 }}>
+                        Step Progress
+                      </div>
+                      <div style={{ display: 'grid', gap: 12 }}>
+                        {(selectedInvestigation.steps || []).map((step) => {
+                          const stepKey = `${selectedInvestigation.id}:${step.order}`;
+                          const noteValue =
+                            stepNoteDrafts[stepKey] ??
+                            selectedInvestigation.notes?.[step.order] ??
+                            selectedInvestigation.notes?.[String(step.order)] ??
+                            '';
+                          const isCompleted = (selectedInvestigation.completed_steps || []).includes(
+                            step.order,
+                          );
+                          const stepPivots = collectStepPivots(step, investigationDetailContext);
+
+                          return (
+                            <div
+                              key={step.order}
+                              style={{
+                                border: '1px solid var(--border)',
+                                borderRadius: 12,
+                                padding: 14,
+                                display: 'grid',
+                                gap: 10,
+                              }}
+                            >
+                              <div
+                                style={{
+                                  display: 'flex',
+                                  justifyContent: 'space-between',
+                                  gap: 12,
+                                  alignItems: 'flex-start',
+                                }}
+                              >
+                                <div>
+                                  <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                                    <span className={`badge ${isCompleted ? 'badge-ok' : 'badge-info'}`}>
+                                      {isCompleted ? 'Done' : `Step ${step.order}`}
+                                    </span>
+                                    <strong>{step.title}</strong>
+                                  </div>
+                                  <div className="row-secondary" style={{ marginTop: 6 }}>
+                                    {step.description}
+                                  </div>
+                                </div>
+                                <button
+                                  className={`btn btn-sm ${!isCompleted ? 'btn-primary' : ''}`}
+                                  disabled={savingProgressKey === stepKey}
+                                  onClick={() =>
+                                    saveInvestigationProgress(
+                                      selectedInvestigation.id,
+                                      {
+                                        step: step.order,
+                                        completed: !isCompleted,
+                                        note: noteValue,
+                                      },
+                                      isCompleted ? 'Step reopened' : 'Step marked complete',
+                                      stepKey,
+                                    )
+                                  }
+                                >
+                                  {savingProgressKey === stepKey
+                                    ? 'Saving…'
+                                    : isCompleted
+                                      ? 'Reopen'
+                                      : 'Mark Complete'}
+                                </button>
+                              </div>
+
+                              {(step.recommended_actions || []).length > 0 && (
+                                <div>
+                                  <div className="row-primary">Recommended actions</div>
+                                  <ul style={{ margin: '6px 0 0', paddingLeft: 18, display: 'grid', gap: 4 }}>
+                                    {(step.recommended_actions || []).map((action) => (
+                                      <li key={action}>{action}</li>
+                                    ))}
+                                  </ul>
+                                </div>
+                              )}
+
+                              {(step.evidence_to_collect || []).length > 0 && (
+                                <div>
+                                  <div className="row-primary">Evidence to collect</div>
+                                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 6 }}>
+                                    {(step.evidence_to_collect || []).map((item) => (
+                                      <span key={item} className="badge badge-info">
+                                        {item}
+                                      </span>
+                                    ))}
+                                  </div>
+                                </div>
+                              )}
+
+                              {stepPivots.length > 0 && (
+                                <div>
+                                  <div className="row-primary">Auto-query pivots</div>
+                                  <div className="btn-group" style={{ marginTop: 8, flexWrap: 'wrap' }}>
+                                    {stepPivots.map((pivot) => (
+                                      <button
+                                        key={pivot.key}
+                                        className="btn btn-sm"
+                                        onClick={() => navigate(pivot.to)}
+                                        title={pivot.description || pivot.label}
+                                      >
+                                        {pivot.label}
+                                      </button>
+                                    ))}
+                                  </div>
+                                </div>
+                              )}
+
+                              <div className="form-group" style={{ marginBottom: 0 }}>
+                                <label className="form-label" htmlFor={`investigation-step-note-${step.order}`}>
+                                  Analyst note
+                                </label>
+                                <textarea
+                                  id={`investigation-step-note-${step.order}`}
+                                  className="form-input"
+                                  rows={3}
+                                  value={noteValue}
+                                  onChange={(event) =>
+                                    setStepNoteDrafts((current) => ({
+                                      ...current,
+                                      [stepKey]: event.target.value,
+                                    }))
+                                  }
+                                  placeholder="Capture what was confirmed, blocked, or still needs review."
+                                />
+                              </div>
+                              <div className="btn-group">
+                                <button
+                                  className="btn btn-sm"
+                                  disabled={savingProgressKey === `${stepKey}:note`}
+                                  onClick={() =>
+                                    saveInvestigationProgress(
+                                      selectedInvestigation.id,
+                                      { step: step.order, note: noteValue },
+                                      'Step note saved',
+                                      `${stepKey}:note`,
+                                    )
+                                  }
+                                >
+                                  {savingProgressKey === `${stepKey}:note` ? 'Saving…' : 'Save Note'}
+                                </button>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    <div className="card" style={{ marginTop: 16 }}>
+                      <div className="card-title" style={{ marginBottom: 12 }}>
+                        Case Handoff
+                      </div>
+                      {selectedInvestigationCase ? (
+                        <div className="detail-callout" style={{ marginBottom: 16 }}>
+                          <strong>Linked case {selectedInvestigationCase.id}</strong>
+                          <div style={{ marginTop: 6 }}>
+                            {selectedInvestigationCase.title}
+                            {selectedInvestigationCase.assignee
+                              ? ` • currently assigned to ${selectedInvestigationCase.assignee}`
+                              : ' • currently unassigned'}
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="detail-callout" style={{ marginBottom: 16 }}>
+                          <strong>No linked case</strong>
+                          <div style={{ marginTop: 6 }}>
+                            Handoff still records against the investigation, but no case owner will be
+                            synchronized until the workflow is attached to a case.
+                          </div>
+                        </div>
+                      )}
+                      <div className="form-group">
+                        <label className="form-label" htmlFor="investigation-handoff-target">
+                          Handoff target
+                        </label>
+                        <input
+                          id="investigation-handoff-target"
+                          className="form-input"
+                          value={handoffDraft.toAnalyst}
+                          onChange={(event) =>
+                            setHandoffDraft((current) => ({
+                              ...current,
+                              toAnalyst: event.target.value,
+                            }))
+                          }
+                          placeholder="analyst-2"
+                        />
+                      </div>
+                      <div className="form-group">
+                        <label className="form-label" htmlFor="investigation-handoff-summary">
+                          Summary
+                        </label>
+                        <textarea
+                          id="investigation-handoff-summary"
+                          className="form-input"
+                          rows={4}
+                          value={handoffDraft.summary}
+                          onChange={(event) =>
+                            setHandoffDraft((current) => ({
+                              ...current,
+                              summary: event.target.value,
+                            }))
+                          }
+                          placeholder="What is confirmed, what is contained, and what still blocks closure?"
+                        />
+                      </div>
+                      <div className="form-group">
+                        <label className="form-label" htmlFor="investigation-handoff-actions">
+                          Next actions
+                        </label>
+                        <textarea
+                          id="investigation-handoff-actions"
+                          className="form-input"
+                          rows={3}
+                          value={handoffDraft.nextActions}
+                          onChange={(event) =>
+                            setHandoffDraft((current) => ({
+                              ...current,
+                              nextActions: event.target.value,
+                            }))
+                          }
+                          placeholder="One action per line"
+                        />
+                      </div>
+                      <div className="form-group">
+                        <label className="form-label" htmlFor="investigation-handoff-questions">
+                          Open questions
+                        </label>
+                        <textarea
+                          id="investigation-handoff-questions"
+                          className="form-input"
+                          rows={3}
+                          value={handoffDraft.questions}
+                          onChange={(event) =>
+                            setHandoffDraft((current) => ({
+                              ...current,
+                              questions: event.target.value,
+                            }))
+                          }
+                          placeholder="One question per line"
+                        />
+                      </div>
+                      <div className="btn-group">
                         <button
                           className="btn btn-sm btn-primary"
-                          onClick={() => startWorkflow(workflow, investigationContext.case_id)}
-                          disabled={startingWorkflowId === workflow.id}
+                          disabled={savingHandoff}
+                          onClick={submitInvestigationHandoff}
                         >
-                          {startingWorkflowId === workflow.id ? 'Starting…' : 'Start'}
+                          {savingHandoff ? 'Handing Off…' : 'Hand Off Investigation'}
                         </button>
                       </div>
                     </div>
-                  ))
+                  </>
                 )}
               </div>
-            </div>
-          )}
-          {workflows && Array.isArray(workflows) && workflows.length > 0 ? (
-            <div className="table-wrap">
-              <table>
-                <thead>
-                  <tr>
-                    <th>ID</th>
-                    <th>Name</th>
-                    <th>Severity</th>
-                    <th>MITRE</th>
-                    <th>Est. Time</th>
-                    <th>Steps</th>
-                    <th>Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {workflows.map((wf, i) => (
-                    <tr key={i}>
-                      <td style={{ fontFamily: 'var(--font-mono)', fontSize: 11 }}>{wf.id}</td>
-                      <td style={{ fontWeight: 600 }}>{wf.name}</td>
-                      <td>
-                        <span className={`sev-${(wf.severity || 'medium').toLowerCase()}`}>
-                          {wf.severity}
-                        </span>
-                      </td>
-                      <td style={{ fontSize: 11 }}>{(wf.mitre_techniques || []).join(', ')}</td>
-                      <td>{wf.estimated_minutes}m</td>
-                      <td>{(wf.steps || []).length}</td>
-                      <td>
-                        <button
-                          className="btn btn-sm btn-primary"
-                          onClick={() => startWorkflow(wf, investigationContext?.case_id)}
-                          disabled={startingWorkflowId === wf.id}
-                        >
-                          {startingWorkflowId === wf.id ? 'Starting…' : 'Start'}
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          ) : (
-            <div className="empty">No workflows available</div>
-          )}
-          {activeInvestigations &&
-            Array.isArray(activeInvestigations) &&
-            activeInvestigations.length > 0 && (
-              <div style={{ marginTop: 20 }}>
-                <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 8 }}>
-                  Active Investigations
-                </div>
-                <div className="table-wrap">
-                  <table>
-                    <thead>
-                      <tr>
-                        <th>Workflow</th>
-                        <th>Analyst</th>
-                        <th>Started</th>
-                        <th>Progress</th>
-                        <th>Status</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {activeInvestigations.map((inv, i) => (
-                        <tr key={i}>
-                          <td>{inv.workflow_id}</td>
-                          <td>{inv.analyst}</td>
-                          <td style={{ fontSize: 11 }}>{inv.started_at}</td>
-                          <td>{(inv.completed_steps || []).length} steps done</td>
-                          <td>
-                            <span
-                              className={`badge ${inv.status === 'in-progress' ? 'badge-warn' : 'badge-ok'}`}
-                            >
-                              {inv.status}
-                            </span>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            )}
-        </div>
+            </aside>
+          </div>
+        </>
       )}
 
       {tab === 'efficacy' && (
@@ -2651,6 +4505,627 @@ export default function SOCWorkbench() {
       {tab === 'playbooks' && <PlaybookEditor />}
 
       {tab === 'campaigns' && <CampaignGraph />}
+
+      <SideDrawer
+        open={caseDrawerOpen}
+        title={
+          activeWorkspaceCase
+            ? `Case Workspace — #${activeWorkspaceCase.id} ${activeWorkspaceCase.title || 'Untitled case'}`
+            : `Case Workspace — ${focusedCaseId}`
+        }
+        subtitle="Shareable case context with evidence, pivots, and analyst notes."
+        onClose={closeCaseDrawer}
+        actions={
+          <div className="btn-group" style={{ flexWrap: 'wrap' }}>
+            {CASE_DRAWER_PANELS.map((panel) => (
+              <button
+                key={panel.id}
+                className={`btn btn-sm ${caseDrawerPanel === panel.id ? 'btn-primary' : ''}`}
+                onClick={() =>
+                  openCaseDrawer(focusedCaseId, {
+                    panel: panel.id,
+                    hash: location.hash.replace('#', '') || 'cases',
+                  })
+                }
+              >
+                {panel.label}
+              </button>
+            ))}
+          </div>
+        }
+      >
+        {!focusedCaseId ? (
+          <div className="empty">No case is selected for this drawer.</div>
+        ) : !activeWorkspaceCase ? (
+          <div className="empty">Loading case context…</div>
+        ) : (
+          <>
+            {caseDrawerPanel === 'summary' && (
+              <>
+                <SummaryGrid
+                  data={{
+                    case_id: activeWorkspaceCase.id,
+                    status: activeWorkspaceCase.status || 'new',
+                    priority: activeWorkspaceCase.priority || 'medium',
+                    containment: caseContainmentLabel(activeWorkspaceCase.status),
+                    owner:
+                      activeWorkspaceCase.assignee ||
+                      activeWorkspaceCase.owner ||
+                      activeWorkspaceCase.assigned_to ||
+                      'Unassigned',
+                    updated_at:
+                      activeWorkspaceCase.updated_at || activeWorkspaceCase.created_at || '—',
+                    incidents: activeCaseIncidentIds.length,
+                    events: activeCaseEventIds.length,
+                    evidence: activeCaseEvidence.length,
+                    comments: activeCaseComments.length,
+                    linked_workflow:
+                      activeWorkspaceInvestigation?.workflow_name || 'Not started',
+                  }}
+                  limit={10}
+                />
+
+                <div
+                  style={{
+                    marginTop: 14,
+                    padding: '12px 14px',
+                    background: 'var(--bg)',
+                    border: '1px solid var(--border)',
+                    borderRadius: 10,
+                    lineHeight: 1.5,
+                  }}
+                >
+                  {activeWorkspaceCase.description?.trim() ||
+                    'No case narrative has been written yet. Use this shareable drawer to keep the analyst story and pivots together.'}
+                </div>
+
+                <div
+                  style={{
+                    display: 'grid',
+                    gap: 14,
+                    gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
+                    marginTop: 14,
+                  }}
+                >
+                  <div
+                    style={{
+                      border: '1px solid var(--border)',
+                      borderRadius: 12,
+                      padding: 14,
+                      background: 'var(--bg-card)',
+                    }}
+                  >
+                    <div className="card-title" style={{ marginBottom: 8 }}>
+                      Linked incidents
+                    </div>
+                    {activeCaseIncidentIds.length === 0 ? (
+                      <div className="empty">No linked incidents yet.</div>
+                    ) : (
+                      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                        {activeCaseIncidentIds.map((incidentId) => (
+                          <button
+                            key={`case-drawer-incident-${incidentId}`}
+                            className="btn btn-sm"
+                            onClick={() =>
+                              openIncidentDrawer(incidentId, {
+                                caseId: activeWorkspaceCase.id,
+                                panel: 'summary',
+                                hash: 'cases',
+                              })
+                            }
+                          >
+                            {`Incident #${incidentId}`}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  <div
+                    style={{
+                      border: '1px solid var(--border)',
+                      borderRadius: 12,
+                      padding: 14,
+                      background: 'var(--bg-card)',
+                    }}
+                  >
+                    <div className="card-title" style={{ marginBottom: 8 }}>
+                      ATT&CK & Tags
+                    </div>
+                    {activeCaseMitre.length === 0 && activeCaseTags.length === 0 ? (
+                      <div className="empty">No ATT&CK coverage or analyst tags yet.</div>
+                    ) : (
+                      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                        {activeCaseMitre.map((technique) => (
+                          <span key={`case-drawer-mitre-${technique}`} className="badge badge-info">
+                            {technique}
+                          </span>
+                        ))}
+                        {activeCaseTags.map((tag) => (
+                          <span key={`case-drawer-tag-${tag}`} className="badge badge-info">
+                            {tag}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                    <div className="hint" style={{ marginTop: 10 }}>
+                      Keep this drawer open while pivoting so the case context stays reusable.
+                    </div>
+                  </div>
+                </div>
+
+                <JsonDetails data={activeWorkspaceCase} label="Case payload" />
+              </>
+            )}
+
+            {caseDrawerPanel === 'evidence' && (
+              <>
+                <div
+                  style={{
+                    display: 'grid',
+                    gap: 14,
+                    gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))',
+                  }}
+                >
+                  <div
+                    style={{
+                      border: '1px solid var(--border)',
+                      borderRadius: 12,
+                      padding: 14,
+                      background: 'var(--bg-card)',
+                    }}
+                  >
+                    <div className="card-title" style={{ marginBottom: 10 }}>
+                      Evidence
+                    </div>
+                    {activeCaseEvidence.length === 0 ? (
+                      <div className="empty">No evidence linked yet.</div>
+                    ) : (
+                      <div style={{ display: 'grid', gap: 10 }}>
+                        {activeCaseEvidence.map((item, index) => (
+                          <div
+                            key={`${item.reference_id || item.kind || 'drawer-evidence'}-${index}`}
+                            style={{
+                              border: '1px solid var(--border)',
+                              borderRadius: 10,
+                              padding: 12,
+                              background: 'var(--bg)',
+                            }}
+                          >
+                            <div className="row-primary">
+                              {item.description || item.reference_id || 'Linked evidence'}
+                            </div>
+                            <div className="row-secondary">
+                              {item.kind || 'unknown'} · {item.reference_id || 'no reference'}
+                            </div>
+                            <div className="row-secondary" style={{ marginTop: 6 }}>
+                              Added {item.added_at ? formatDateTime(item.added_at) : 'recently'}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  <div
+                    style={{
+                      border: '1px solid var(--border)',
+                      borderRadius: 12,
+                      padding: 14,
+                      background: 'var(--bg-card)',
+                    }}
+                  >
+                    <div className="card-title" style={{ marginBottom: 10 }}>
+                      Case Notes
+                    </div>
+                    {activeCaseComments.length === 0 ? (
+                      <div className="empty">No case notes yet.</div>
+                    ) : (
+                      <div style={{ display: 'grid', gap: 10 }}>
+                        {activeCaseComments.map((comment, index) => (
+                          <div
+                            key={`${comment.timestamp || 'drawer-comment'}-${index}`}
+                            style={{
+                              border: '1px solid var(--border)',
+                              borderRadius: 10,
+                              padding: 12,
+                              background: 'var(--bg)',
+                            }}
+                          >
+                            <div className="row-primary">{comment.author || 'analyst'}</div>
+                            <div className="row-secondary">
+                              {comment.timestamp ? formatDateTime(comment.timestamp) : 'recently'}
+                            </div>
+                            <div style={{ marginTop: 8 }}>
+                              {comment.text || comment.content || 'No comment body'}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    <div style={{ marginTop: 12 }}>
+                      <label className="form-label" htmlFor="case-drawer-comment">
+                        Add case note (drawer)
+                      </label>
+                      <textarea
+                        id="case-drawer-comment"
+                        className="form-input"
+                        rows={3}
+                        value={caseWorkspaceComment}
+                        onChange={(event) => setCaseWorkspaceComment(event.target.value)}
+                        placeholder="Capture analyst context, next steps, or containment updates."
+                      />
+                      <div className="btn-group" style={{ marginTop: 10 }}>
+                        <button
+                          className="btn btn-sm btn-primary"
+                          disabled={caseWorkspaceCommentSaving || !caseWorkspaceComment.trim()}
+                          onClick={addCaseWorkspaceComment}
+                        >
+                          {caseWorkspaceCommentSaving ? 'Posting…' : 'Post Case Note'}
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </>
+            )}
+
+            {caseDrawerPanel === 'actions' && (
+              <>
+                <div className="hint" style={{ marginBottom: 12 }}>
+                  Use this case drawer to hand off the current investigation without losing the
+                  focused case context.
+                </div>
+                <div className="btn-group" style={{ flexWrap: 'wrap' }}>
+                  {activeWorkspaceInvestigation ? (
+                    <button
+                      className="btn btn-sm"
+                      onClick={() =>
+                        openInvestigationFocus(
+                          activeWorkspaceInvestigation.id,
+                          activeWorkspaceCase.id,
+                        )
+                      }
+                    >
+                      Open Investigation
+                    </button>
+                  ) : null}
+                  <button
+                    className="btn btn-sm"
+                    onClick={() =>
+                      navigate(`/assistant?case=${encodeURIComponent(activeWorkspaceCase.id)}`)
+                    }
+                  >
+                    Ask Assistant
+                  </button>
+                  <button
+                    className="btn btn-sm"
+                    onClick={() =>
+                      navigate(
+                        buildHref('/reports', {
+                          params: {
+                            tab: 'evidence',
+                            case: activeWorkspaceCase?.id || focusedCaseId || undefined,
+                            incident: focusedIncidentParam || undefined,
+                            investigation:
+                              activeWorkspaceInvestigation?.id ||
+                              focusedInvestigationParam ||
+                              undefined,
+                            source: responseSource || 'case-drawer',
+                          },
+                        }),
+                      )
+                    }
+                  >
+                    Evidence Report
+                  </button>
+                  <button
+                    className="btn btn-sm"
+                    onClick={() =>
+                      navigate(buildHref('/infrastructure', { params: { tab: 'assets' } }))
+                    }
+                  >
+                    Asset Context
+                  </button>
+                  <button
+                    className="btn btn-sm btn-primary"
+                    onClick={() =>
+                      openResponseFocus({
+                        caseId: activeWorkspaceCase.id,
+                        target: `case:${activeWorkspaceCase.id}`,
+                        source: 'case',
+                      })
+                    }
+                  >
+                    Open Response Workspace
+                  </button>
+                </div>
+
+                <div style={{ marginTop: 14 }}>
+                  <SummaryGrid
+                    data={{
+                      linked_incidents: activeCaseIncidentIds.length,
+                      evidence_items: activeCaseEvidence.length,
+                      notes: activeCaseComments.length,
+                      linked_workflow:
+                        activeWorkspaceInvestigation?.workflow_name || 'Not started',
+                    }}
+                    limit={4}
+                  />
+                </div>
+              </>
+            )}
+          </>
+        )}
+      </SideDrawer>
+
+      <SideDrawer
+        open={incidentDrawerOpen}
+        title={
+          drawerIncidentDetail
+            ? `Incident Workspace — ${drawerIncidentDetail.title || drawerIncidentDetail.id || focusedIncidentParam}`
+            : `Incident Workspace — ${focusedIncidentParam}`
+        }
+        subtitle="Shareable incident context with storyline, pivots, and response handoff."
+        onClose={closeIncidentDrawer}
+        actions={
+          <div className="btn-group" style={{ flexWrap: 'wrap' }}>
+            {INCIDENT_DRAWER_PANELS.map((panel) => (
+              <button
+                key={panel.id}
+                className={`btn btn-sm ${incidentDrawerPanel === panel.id ? 'btn-primary' : ''}`}
+                onClick={() =>
+                  openIncidentDrawer(focusedIncidentParam, {
+                    caseId: drawerIncidentCaseId || undefined,
+                    panel: panel.id,
+                    hash: location.hash.replace('#', '') || 'incidents',
+                  })
+                }
+              >
+                {panel.label}
+              </button>
+            ))}
+          </div>
+        }
+      >
+        {!focusedIncidentParam ? (
+          <div className="empty">No incident is selected for this drawer.</div>
+        ) : !drawerIncidentDetail ? (
+          <div className="empty">Loading incident context…</div>
+        ) : (
+          <>
+            {incidentDrawerPanel === 'summary' && (
+              <>
+                <SummaryGrid
+                  data={{
+                    incident_id: drawerIncidentDetail.id || focusedIncidentParam,
+                    severity: drawerIncidentDetail.severity || 'unknown',
+                    status: drawerIncidentDetail.status || 'open',
+                    created: drawerIncidentDetail.created || drawerIncidentDetail.timestamp || '—',
+                    updated:
+                      drawerIncidentDetail.updated || drawerIncidentDetail.last_updated || '—',
+                    owner: drawerIncidentDetail.owner || drawerIncidentDetail.assigned_to || '—',
+                    linked_case: drawerIncidentCaseId || 'Not linked',
+                    alerts: (drawerIncidentDetail.alert_ids || []).length,
+                    events: (drawerIncidentDetail.event_ids || []).length,
+                    agents: (drawerIncidentDetail.agent_ids || []).length,
+                  }}
+                  limit={9}
+                />
+
+                {drawerIncidentDetail.summary ? (
+                  <div
+                    style={{
+                      marginTop: 14,
+                      padding: '12px 14px',
+                      background: 'var(--bg)',
+                      border: '1px solid var(--border)',
+                      borderRadius: 10,
+                      lineHeight: 1.5,
+                    }}
+                  >
+                    {drawerIncidentDetail.summary}
+                  </div>
+                ) : null}
+
+                <div
+                  style={{
+                    display: 'grid',
+                    gap: 14,
+                    gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
+                    marginTop: 14,
+                  }}
+                >
+                  <div
+                    style={{
+                      border: '1px solid var(--border)',
+                      borderRadius: 12,
+                      padding: 14,
+                      background: 'var(--bg-card)',
+                    }}
+                  >
+                    <div className="card-title" style={{ marginBottom: 8 }}>
+                      Related Alerts & Events
+                    </div>
+                    {((drawerIncidentDetail.event_ids || []).length === 0 &&
+                      (drawerIncidentDetail.alert_ids || []).length === 0) ? (
+                      <div className="empty">No linked alerts or events were provided.</div>
+                    ) : (
+                      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                        {[...(drawerIncidentDetail.event_ids || []), ...(drawerIncidentDetail.alert_ids || [])].map(
+                          (entry, index) => (
+                            <span
+                              key={`${entry}-${index}`}
+                              className="badge badge-info"
+                            >
+                              {entry}
+                            </span>
+                          ),
+                        )}
+                      </div>
+                    )}
+                  </div>
+
+                  <div
+                    style={{
+                      border: '1px solid var(--border)',
+                      borderRadius: 12,
+                      padding: 14,
+                      background: 'var(--bg-card)',
+                    }}
+                  >
+                    <div className="card-title" style={{ marginBottom: 8 }}>
+                      Agent Scope
+                    </div>
+                    {(drawerIncidentDetail.agent_ids || []).length === 0 ? (
+                      <div className="empty">No agent scope is attached to this incident.</div>
+                    ) : (
+                      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                        {drawerIncidentDetail.agent_ids.map((agentId, index) => (
+                          <span key={`${agentId}-${index}`} className="badge badge-info">
+                            {agentId}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                    <div className="hint" style={{ marginTop: 10 }}>
+                      Keep this drawer open while pivoting so the incident context remains
+                      shareable and easy to resume.
+                    </div>
+                  </div>
+                </div>
+
+                <JsonDetails data={drawerIncidentDetail} label="Incident payload" />
+              </>
+            )}
+
+            {incidentDrawerPanel === 'storyline' && (
+              <>
+                {drawerIncidentEvents.length === 0 ? (
+                  <div className="empty">No storyline events are available for this incident yet.</div>
+                ) : (
+                  <div style={{ display: 'grid', gap: 10 }}>
+                    {drawerIncidentEvents.map((event, index) => (
+                      <div
+                        key={`${event.timestamp || event.time || 'event'}-${index}`}
+                        style={{
+                          border: '1px solid var(--border)',
+                          borderRadius: 12,
+                          padding: 14,
+                          background: 'var(--bg-card)',
+                        }}
+                      >
+                        <div className="row-primary">
+                          {event.description || event.message || event.action || `Step ${index + 1}`}
+                        </div>
+                        <div className="row-secondary" style={{ marginTop: 4 }}>
+                          {event.timestamp || event.time || `Step ${index + 1}`}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {drawerIncidentStoryline ? (
+                  <JsonDetails
+                    data={drawerIncidentStoryline}
+                    label="Incident storyline payload"
+                  />
+                ) : null}
+              </>
+            )}
+
+            {incidentDrawerPanel === 'actions' && (
+              <>
+                <div className="hint" style={{ marginBottom: 12 }}>
+                  Use this incident drawer as the bridge between the active case, investigation
+                  workflow, and response approvals.
+                </div>
+                <div className="btn-group" style={{ flexWrap: 'wrap' }}>
+                  {drawerIncidentCaseId ? (
+                    <button className="btn btn-sm" onClick={() => openCaseFocus(drawerIncidentCaseId)}>
+                      Open Linked Case
+                    </button>
+                  ) : null}
+                  <button
+                    className="btn btn-sm"
+                    onClick={() => openInvestigationPlanner(drawerIncidentDetail, 'incident')}
+                  >
+                    Plan Investigation
+                  </button>
+                  <button
+                    className="btn btn-sm"
+                    onClick={() => pivotPlannerToHunt(drawerIncidentDetail)}
+                  >
+                    Open Hunt
+                  </button>
+                  <button
+                    className="btn btn-sm"
+                    onClick={() =>
+                      openResponseFocus({
+                        caseId: drawerIncidentCaseId || undefined,
+                        target:
+                          drawerIncidentDetail.agent_ids?.[0] ||
+                          drawerIncidentDetail.id ||
+                          focusedIncidentParam,
+                        source: 'incident',
+                      })
+                    }
+                  >
+                    Open Response Workspace
+                  </button>
+                  <button
+                    className="btn btn-sm btn-primary"
+                    onClick={async () => {
+                      try {
+                        await api.updateIncident(focusedIncidentParam, { status: 'closed' });
+                        toast('Incident closed', 'success');
+                        await fetchDrawerIncidentDetail(focusedIncidentParam);
+                        rInc();
+                      } catch {
+                        toast('Failed', 'error');
+                      }
+                    }}
+                  >
+                    Close Incident
+                  </button>
+                  <button
+                    className="btn btn-sm"
+                    onClick={async () => {
+                      try {
+                        const report = await api.incidentReport(focusedIncidentParam);
+                        downloadData(
+                          typeof report === 'string' ? report : report,
+                          `incident-${focusedIncidentParam}-report.txt`,
+                          'text/plain',
+                        );
+                      } catch {
+                        toast('Failed to generate report', 'error');
+                      }
+                    }}
+                  >
+                    Export Report
+                  </button>
+                </div>
+
+                <div style={{ marginTop: 14 }}>
+                  <SummaryGrid
+                    data={{
+                      linked_case: drawerIncidentCaseId || '—',
+                      response_target:
+                        drawerIncidentDetail.agent_ids?.[0] ||
+                        drawerIncidentDetail.id ||
+                        focusedIncidentParam,
+                      storyline_events: drawerIncidentEvents.length,
+                    }}
+                    limit={3}
+                  />
+                </div>
+              </>
+            )}
+          </>
+        )}
+      </SideDrawer>
 
       <ProcessDrawer
         pid={selectedProcess?.pid}

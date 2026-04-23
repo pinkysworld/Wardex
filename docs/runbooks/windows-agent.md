@@ -4,7 +4,7 @@
 
 - Windows 8.1+ or Windows Server 2016+
 - Administrator privileges for installation
-- Network access to the SentinelEdge server (default port 9090)
+- Network access to the Wardex server (default port 9090)
 - .NET Framework 4.7.2+ (for WMI collection)
 
 ## Deployment
@@ -12,14 +12,14 @@
 ### 1. Download Agent Binary
 
 ```powershell
-Invoke-WebRequest -Uri "https://<server>:9090/api/updates/download/sentineledge-agent-windows.exe" `
-  -OutFile "$env:TEMP\sentineledge-agent.exe"
+Invoke-WebRequest -Uri "https://<server>:9090/api/updates/download/wardex-agent-windows.exe" `
+  -OutFile "$env:TEMP\wardex-agent.exe"
 ```
 
 ### 2. Enroll Agent
 
 ```powershell
-.\sentineledge-agent.exe enroll `
+.\wardex-agent.exe enroll `
   --server https://<server>:9090 `
   --token <enrollment-token> `
   --hostname $env:COMPUTERNAME `
@@ -29,11 +29,11 @@ Invoke-WebRequest -Uri "https://<server>:9090/api/updates/download/sentineledge-
 ### 3. Install as Service
 
 ```powershell
-sc.exe create SentinelEdgeAgent `
-  binPath= "C:\Program Files\SentinelEdge\sentineledge-agent.exe --run" `
+sc.exe create WardexAgent `
+  binPath= "C:\Program Files\Wardex\wardex-agent.exe --run" `
   start= auto `
-  DisplayName= "SentinelEdge XDR Agent"
-sc.exe start SentinelEdgeAgent
+  DisplayName= "Wardex XDR Agent"
+sc.exe start WardexAgent
 ```
 
 ## Telemetry Sources
@@ -48,10 +48,10 @@ sc.exe start SentinelEdgeAgent
 
 ### Sysmon Configuration
 
-For enhanced visibility, install Sysmon with the SentinelEdge-optimized config:
+For enhanced visibility, install Sysmon with the Wardex-optimized config:
 
 ```powershell
-sysmon64.exe -accepteula -i sentineledge-sysmon.xml
+sysmon64.exe -accepteula -i wardex-sysmon.xml
 ```
 
 Key Sysmon event IDs monitored:
@@ -82,11 +82,11 @@ The agent monitors these persistence-relevant registry paths:
 
 1. Check service status:
    ```powershell
-   Get-Service SentinelEdgeAgent
+   Get-Service WardexAgent
    ```
 2. Check agent logs:
    ```powershell
-   Get-Content "C:\ProgramData\SentinelEdge\agent.log" -Tail 50
+   Get-Content "C:\ProgramData\Wardex\agent.log" -Tail 50
    ```
 3. Verify network connectivity:
    ```powershell
@@ -98,7 +98,7 @@ The agent monitors these persistence-relevant registry paths:
 1. Check collection interval (default 10s, increase if needed):
    ```powershell
    # Edit config
-   notepad "C:\ProgramData\SentinelEdge\config.toml"
+   notepad "C:\ProgramData\Wardex\config.toml"
    # Set: collection_interval_secs = 30
    ```
 2. Disable expensive collectors:
@@ -121,8 +121,8 @@ powershell_script_block_logging = false
 ## Uninstallation
 
 ```powershell
-sc.exe stop SentinelEdgeAgent
-sc.exe delete SentinelEdgeAgent
-Remove-Item -Recurse "C:\Program Files\SentinelEdge"
-Remove-Item -Recurse "C:\ProgramData\SentinelEdge"
+sc.exe stop WardexAgent
+sc.exe delete WardexAgent
+Remove-Item -Recurse "C:\Program Files\Wardex"
+Remove-Item -Recurse "C:\ProgramData\Wardex"
 ```

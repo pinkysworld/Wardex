@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import * as api from '../api.js';
 
 const ROLES = ['viewer', 'analyst', 'admin'];
@@ -27,21 +27,53 @@ export default function OnboardingWizard({ onComplete }) {
   const [token, setToken] = useState(localStorage.getItem('wardex_token') || '');
   const [role, setRole] = useState(localStorage.getItem('wardex_role') || 'analyst');
   const [selectedFeeds, setSelectedFeeds] = useState([FEEDS[0]]);
+  const [readiness, setReadiness] = useState(null);
+  const [readinessCheck, setReadinessCheck] = useState({
+    busy: false,
+    message: 'Refresh operator readiness once the backend is reachable.',
+  });
   const [tokenCheck, setTokenCheck] = useState({
     busy: false,
     ok: false,
     message: 'Validate the API token before finishing setup.',
   });
-  const [feedCheck, setFeedCheck] = useState({
-    busy: false,
-    ok: false,
-    message: 'Select at least one feed and validate connectivity.',
-  });
-  const [telemetryCheck, setTelemetryCheck] = useState({
-    busy: false,
-    ok: false,
-    message: 'Confirm that the backend is already producing telemetry.',
-  });
+
+  const refreshReadiness = useCallback(async () => {
+    setReadinessCheck({
+      busy: true,
+      message: 'Checking operator readiness across agents, telemetry, malware, and response…',
+    });
+    try {
+      const next = await api.onboardingReadiness();
+      setReadiness(next);
+      setReadinessCheck({
+        busy: false,
+        message: next?.ready
+          ? 'Operator readiness checks are passing.'
+          : 'Some readiness checks still need attention.',
+      });
+    } catch {
+      setReadinessCheck({
+        busy: false,
+        message:
+          'Readiness checks could not be loaded right now. You can still finish setup and retry once the backend is authenticated.',
+      });
+    }
+  }, []);
+
+  useEffect(() => {
+    refreshReadiness();
+  }, [refreshReadiness]);
+
+  const readinessChecks = useMemo(() => {
+    const items = Array.isArray(readiness?.checks) ? readiness.checks : [];
+    return items.reduce((acc, item) => {
+      acc[item.key] = item;
+      return acc;
+    }, {});
+  }, [readiness]);
+
+  const readinessItem = (key, fallbackLabel) => readinessChecks[key] || { label: fallbackLabel };
 
   const checklist = useMemo(
     () => [
@@ -65,6 +97,7 @@ export default function OnboardingWizard({ onComplete }) {
           try {
             api.setToken(token.trim());
             await api.authCheck();
+            await refreshReadiness();
             setTokenCheck({ busy: false, ok: true, message: 'Backend accepted the token.' });
           } catch {
             setTokenCheck({
@@ -87,74 +120,76 @@ export default function OnboardingWizard({ onComplete }) {
           : 'Choose the workspace that matches your daily responsibilities.',
       },
       {
-        key: 'feeds-validated',
-        label: 'Validate feed connectivity',
-        complete: feedCheck.ok,
-        helper: feedCheck.message,
-        actionLabel: 'Validate Feeds',
-        onAction: async () => {
-          setFeedCheck({ busy: true, ok: false, message: 'Checking feed subsystem status…' });
-          try {
-            const stats = await api.feedStats();
-            const sourceCount =
-              stats?.total_sources ?? stats?.active_sources ?? selectedFeeds.length;
-            setFeedCheck({
-              busy: false,
-              ok: selectedFeeds.length > 0,
-              message:
-                selectedFeeds.length > 0
-                  ? `${sourceCount} configured source${sourceCount === 1 ? '' : 's'} available for ingestion.`
-                  : 'Select at least one feed before validating connectivity.',
-            });
-          } catch {
-            setFeedCheck({
-              busy: false,
-              ok: selectedFeeds.length > 0,
-              message:
-                selectedFeeds.length > 0
-                  ? 'Feed service could not be reached right now, but selected feeds will still be saved.'
-                  : 'Select at least one feed before validating connectivity.',
-            });
-          }
-        },
-        busy: feedCheck.busy,
+        key: 'first-agent-online',
+        label: readinessItem('first_agent_online', 'First agent online').label,
+        complete: Boolean(readinessItem('first_agent_online').ready),
+        helper:
+          readinessItem('first_agent_online').detail ||
+          'Enroll an agent and confirm the first healthy heartbeat.',
+        actionLabel: 'Refresh',
+        onAction: refreshReadiness,
+        busy: readinessCheck.busy,
       },
       {
-        key: 'telemetry-confirmed',
-        label: 'Confirm first telemetry received',
-        complete: telemetryCheck.ok,
-        helper: telemetryCheck.message,
-        actionLabel: 'Check Telemetry',
-        onAction: async () => {
-          setTelemetryCheck({
-            busy: true,
-            ok: false,
-            message: 'Checking current telemetry volume…',
-          });
-          try {
-            const telemetry = await api.telemetryCurrent();
-            const rate = telemetry?.events_per_sec ?? telemetry?.rate ?? 0;
-            const total = telemetry?.total_events ?? 0;
-            setTelemetryCheck({
-              busy: false,
-              ok: rate > 0 || total > 0,
-              message:
-                rate > 0 || total > 0
-                  ? `Telemetry is flowing (${rate || total} observed).`
-                  : 'No telemetry observed yet. You can finish setup and return once agents are online.',
-            });
-          } catch {
-            setTelemetryCheck({
-              busy: false,
-              ok: false,
-              message: 'Telemetry check failed. Confirm the backend is running and retry.',
-            });
-          }
-        },
-        busy: telemetryCheck.busy,
+        key: 'telemetry-flowing',
+        label: readinessItem('telemetry_flowing', 'Telemetry flowing').label,
+        complete: Boolean(readinessItem('telemetry_flowing').ready),
+        helper:
+          readinessItem('telemetry_flowing').detail ||
+          'Confirm the backend is receiving live telemetry.',
+        actionLabel: 'Refresh',
+        onAction: refreshReadiness,
+        busy: readinessCheck.busy,
+      },
+      {
+        key: 'first-alert-visible',
+        label: readinessItem('first_alert_visible', 'First alert visible').label,
+        complete: Boolean(readinessItem('first_alert_visible').ready),
+        helper:
+          readinessItem('first_alert_visible').detail ||
+          'Trigger or ingest one alert so the queue can be validated.',
+        actionLabel: 'Refresh',
+        onAction: refreshReadiness,
+        busy: readinessCheck.busy,
+      },
+      {
+        key: 'intel-source-healthy',
+        label: readinessItem('intel_source_healthy', 'Intel source healthy').label,
+        complete: Boolean(readinessItem('intel_source_healthy').ready),
+        helper:
+          readinessItem('intel_source_healthy').detail ||
+          'Validate at least one active enrichment feed or imported indicator source.',
+        actionLabel: 'Refresh',
+        onAction: refreshReadiness,
+        busy: readinessCheck.busy,
+      },
+      {
+        key: 'malware-scan-run',
+        label: readinessItem('malware_scan_run', 'Malware scan run').label,
+        complete: Boolean(readinessItem('malware_scan_run').ready),
+        helper:
+          readinessItem('malware_scan_run').detail ||
+          'Run one malware scan to verify verdict and provenance paths.',
+        actionLabel: 'Refresh',
+        onAction: refreshReadiness,
+        busy: readinessCheck.busy,
+      },
+      {
+        key: 'response-dry-run',
+        label: readinessItem(
+          'response_approval_dry_run_completed',
+          'Response approval dry-run completed',
+        ).label,
+        complete: Boolean(readinessItem('response_approval_dry_run_completed').ready),
+        helper:
+          readinessItem('response_approval_dry_run_completed').detail ||
+          'Submit a dry-run response request to validate approvals and rollback flow.',
+        actionLabel: 'Refresh',
+        onAction: refreshReadiness,
+        busy: readinessCheck.busy,
       },
     ],
-    [feedCheck, role, selectedFeeds.length, telemetryCheck, token, tokenCheck],
+    [readinessCheck.busy, readinessChecks, refreshReadiness, role, token, tokenCheck],
   );
 
   const completedCount = checklist.filter((item) => item.complete).length;
@@ -164,16 +199,12 @@ export default function OnboardingWizard({ onComplete }) {
     setSelectedFeeds((prev) =>
       prev.includes(feed) ? prev.filter((item) => item !== feed) : [...prev, feed],
     );
-    setFeedCheck({
-      busy: false,
-      ok: false,
-      message: 'Validate feed connectivity after updating the feed selection.',
-    });
   };
 
   const finish = async () => {
     if (token) localStorage.setItem('wardex_token', token);
     if (role) localStorage.setItem('wardex_role', role);
+    localStorage.setItem('wardex_onboarding_complete', '1');
     for (const feed of selectedFeeds) {
       try {
         await api.addFeed({ name: feed });
@@ -197,8 +228,8 @@ export default function OnboardingWizard({ onComplete }) {
             <div className="onboarding-eyebrow">Workspace Setup</div>
             <h3 id="onboarding-title">Set up the Wardex admin console</h3>
             <p>
-              This checklist gets the console ready for real analyst and admin workflows without
-              hiding the important steps.
+              This checklist moves beyond basic login setup and checks whether the workspace is
+              actually ready for analyst work.
             </p>
           </div>
           <div className="onboarding-progress">

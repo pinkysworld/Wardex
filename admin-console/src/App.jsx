@@ -89,6 +89,7 @@ const ThreatDetection = lazy(() => import('./components/ThreatDetection.jsx'));
 const FleetAgents = lazy(() => import('./components/FleetAgents.jsx'));
 const SecurityPolicy = lazy(() => import('./components/SecurityPolicy.jsx'));
 const SOCWorkbench = lazy(() => import('./components/SOCWorkbench.jsx'));
+const AssistantWorkspace = lazy(() => import('./components/AssistantWorkspace.jsx'));
 const Infrastructure = lazy(() => import('./components/Infrastructure.jsx'));
 const ReportsExports = lazy(() => import('./components/ReportsExports.jsx'));
 const Settings = lazy(() => import('./components/Settings.jsx'));
@@ -136,6 +137,13 @@ const SECTIONS = [
     minRole: 'analyst',
   },
   {
+    id: 'assistant-workspace',
+    path: '/assistant',
+    label: 'Analyst Assistant',
+    shortLabel: 'AST',
+    minRole: 'analyst',
+  },
+  {
     id: 'infrastructure',
     path: '/infrastructure',
     label: 'Infrastructure',
@@ -176,6 +184,7 @@ const WORKFLOW_GROUPS = [
     label: 'Investigate',
     sections: [
       'soc-workbench',
+      'assistant-workspace',
       'threat-detection',
       'infrastructure',
       'ueba',
@@ -221,6 +230,7 @@ export default function App() {
 
   const [tokenInput, setTokenInput] = useState('');
   const [authError, setAuthError] = useState('');
+  const [ssoProviders, setSsoProviders] = useState([]);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [linkCopied, setLinkCopied] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
@@ -229,13 +239,48 @@ export default function App() {
   );
   const [showShortcuts, setShowShortcuts] = useState(false);
   const [showInboxLocationKey, setShowInboxLocationKey] = useState(null);
+  const [showTopbarActionsLocationKey, setShowTopbarActionsLocationKey] = useState(null);
   const [pinnedSections, setPinnedSections] = useState(() => readStoredPinnedSections());
   const pinnedSectionsRef = useRef(pinnedSections);
   const showInbox = showInboxLocationKey === location.key;
+  const showTopbarActions = showTopbarActionsLocationKey === location.key;
+
+  useEffect(() => {
+    setShowInboxLocationKey(null);
+    setShowTopbarActionsLocationKey(null);
+  }, [location.key]);
 
   useEffect(() => {
     pinnedSectionsRef.current = pinnedSections;
   }, [pinnedSections]);
+
+  useEffect(() => {
+    if (authenticated) return undefined;
+    let cancelled = false;
+    api.authSsoConfig()
+      .then((config) => {
+        if (!cancelled) {
+          setSsoProviders(Array.isArray(config?.providers) ? config.providers : []);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setSsoProviders([]);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [authenticated]);
+
+  useEffect(() => {
+    if (authenticated) return;
+    const params = new URLSearchParams(location.search);
+    const error = params.get('sso_error');
+    if (error) {
+      setAuthError(error);
+    }
+  }, [authenticated, location.search]);
 
   const applyPinnedSections = useCallback(
     (nextSections, persistRemote = false) => {
@@ -405,6 +450,20 @@ export default function App() {
       if (!ok) setAuthError('Authentication failed — check your token');
     },
     [tokenInput, connect],
+  );
+
+  const handleSsoLogin = useCallback(
+    (providerId) => {
+      setAuthError('');
+      const redirectParams = new URLSearchParams(location.search);
+      redirectParams.delete('sso_error');
+      const redirect = `${location.pathname}${redirectParams.toString() ? `?${redirectParams.toString()}` : ''}`;
+      const params = new URLSearchParams();
+      if (providerId) params.set('provider_id', providerId);
+      params.set('redirect', redirect || '/');
+      window.location.assign(`/api/auth/sso/login?${params.toString()}`);
+    },
+    [location.pathname, location.search],
   );
 
   // Filter sidebar items by role
@@ -599,7 +658,7 @@ export default function App() {
               <Breadcrumbs sections={SECTIONS} pathname={location.pathname} />
             </div>
           </div>
-          <div className="topbar-right">
+          <div className={`topbar-right ${showTopbarActions ? 'topbar-menu-open' : ''}`}>
             {hp?.version && (
               <span className="version-badge" title="Wardex version">
                 v{hp.version}
@@ -627,7 +686,7 @@ export default function App() {
                       position: 'absolute',
                       right: 0,
                       top: 'calc(100% + 8px)',
-                      width: 360,
+                      width: 'min(360px, calc(100vw - 24px))',
                       zIndex: 20,
                       padding: 0,
                     }}
@@ -728,50 +787,117 @@ export default function App() {
               </div>
             )}
             {authenticated && (
-              <button
-                className="btn btn-sm"
-                onClick={() => setSearchOpen(true)}
-                title="Global search (⌘K)"
-                aria-label="Open global search (⌘K)"
-              >
-                Search
-              </button>
-            )}
-            {authenticated && currentSection.path !== '/help' && (
-              <button
-                className="btn btn-sm"
-                onClick={() => {
-                  const params = new URLSearchParams(location.search);
-                  params.set('context', currentSection.id);
-                  navigate(`/help?${params.toString()}`);
-                }}
-                title="Open contextual help for this workspace"
-              >
-                Help For View
-              </button>
+              <div className="topbar-secondary-actions">
+                <button
+                  className="btn btn-sm"
+                  onClick={() => setSearchOpen(true)}
+                  title="Global search (⌘K)"
+                  aria-label="Open global search (⌘K)"
+                >
+                  Search
+                </button>
+                {currentSection.path !== '/help' && (
+                  <button
+                    className="btn btn-sm"
+                    onClick={() => {
+                      const params = new URLSearchParams(location.search);
+                      params.set('context', currentSection.id);
+                      navigate(`/help?${params.toString()}`);
+                    }}
+                    title="Open contextual help for this workspace"
+                  >
+                    Help For View
+                  </button>
+                )}
+                <button
+                  className="btn btn-sm"
+                  onClick={copyShareLink}
+                  title="Copy shareable deep-link to clipboard"
+                >
+                  {linkCopied ? 'Copied' : 'Share Link'}
+                </button>
+                <button
+                  className={`btn btn-sm ${pinnedSections.includes(currentSection.id) ? 'btn-primary' : ''}`}
+                  type="button"
+                  onClick={() => togglePinnedSection(currentSection.id)}
+                  aria-label={
+                    pinnedSections.includes(currentSection.id)
+                      ? `Unpin ${currentSection.label}`
+                      : `Pin ${currentSection.label}`
+                  }
+                >
+                  {pinnedSections.includes(currentSection.id) ? 'Pinned' : 'Pin View'}
+                </button>
+              </div>
             )}
             {authenticated && (
-              <button
-                className="btn btn-sm"
-                onClick={copyShareLink}
-                title="Copy shareable deep-link to clipboard"
-              >
-                {linkCopied ? 'Copied' : 'Share Link'}
-              </button>
-            )}
-            {authenticated && (
-              <button
-                className={`btn btn-sm ${pinnedSections.includes(currentSection.id) ? 'btn-primary' : ''}`}
-                type="button"
-                onClick={() => togglePinnedSection(currentSection.id)}
-                aria-label={
-                  pinnedSections.includes(currentSection.id)
-                    ? `Unpin ${currentSection.label}`
-                    : `Pin ${currentSection.label}`
-                }
-              >
-                {pinnedSections.includes(currentSection.id) ? 'Pinned' : 'Pin View'}
-              </button>
+              <div className="mobile-topbar-actions">
+                <button
+                  className="btn btn-sm"
+                  type="button"
+                  onClick={() =>
+                    setShowTopbarActionsLocationKey((current) =>
+                      current === location.key ? null : location.key,
+                    )
+                  }
+                  aria-expanded={showTopbarActions}
+                  aria-haspopup="menu"
+                >
+                  More
+                </button>
+                {showTopbarActions && (
+                  <div className="card mobile-topbar-actions-menu" role="menu" aria-label="More actions">
+                    <button
+                      className="btn btn-sm"
+                      type="button"
+                      role="menuitem"
+                      onClick={() => {
+                        setSearchOpen(true);
+                        setShowTopbarActionsLocationKey(null);
+                      }}
+                    >
+                      Search
+                    </button>
+                    {currentSection.path !== '/help' && (
+                      <button
+                        className="btn btn-sm"
+                        type="button"
+                        role="menuitem"
+                        onClick={() => {
+                          const params = new URLSearchParams(location.search);
+                          params.set('context', currentSection.id);
+                          navigate(`/help?${params.toString()}`);
+                          setShowTopbarActionsLocationKey(null);
+                        }}
+                      >
+                        Help For View
+                      </button>
+                    )}
+                    <button
+                      className="btn btn-sm"
+                      type="button"
+                      role="menuitem"
+                      onClick={() => {
+                        copyShareLink();
+                        setShowTopbarActionsLocationKey(null);
+                      }}
+                    >
+                      {linkCopied ? 'Copied' : 'Share Link'}
+                    </button>
+                    <button
+                      className={`btn btn-sm ${pinnedSections.includes(currentSection.id) ? 'btn-primary' : ''}`}
+                      type="button"
+                      role="menuitem"
+                      onClick={() => {
+                        togglePinnedSection(currentSection.id);
+                        setShowTopbarActionsLocationKey(null);
+                      }}
+                    >
+                      {pinnedSections.includes(currentSection.id) ? 'Pinned' : 'Pin View'}
+                    </button>
+                  </div>
+                )}
+              </div>
             )}
             {!authenticated ? (
               <form className="auth-form" onSubmit={handleConnect}>
@@ -795,10 +921,32 @@ export default function App() {
                 >
                   {checking ? 'Connecting…' : 'Connect'}
                 </button>
+                {ssoProviders.length > 0 && (
+                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                    {ssoProviders.map((provider) => (
+                      <button
+                        key={provider.id}
+                        type="button"
+                        className="btn"
+                        onClick={() => handleSsoLogin(provider.id)}
+                        disabled={checking}
+                      >
+                        {ssoProviders.length === 1
+                          ? `Sign in with ${provider.display_name}`
+                          : provider.display_name}
+                      </button>
+                    ))}
+                  </div>
+                )}
                 {authError && <span className="auth-error">{authError}</span>}
               </form>
             ) : (
-              <span className="auth-badge">● Connected</span>
+              <span className="auth-badge" aria-label="Connected to Wardex">
+                <span className="auth-badge-full">● Connected</span>
+                <span className="auth-badge-compact" aria-hidden="true">
+                  ● On
+                </span>
+              </span>
             )}
           </div>
         </header>
@@ -828,6 +976,20 @@ export default function App() {
               <p className="hint">
                 Read it from var/.wardex_token, or start Wardex with WARDEX_ADMIN_TOKEN.
               </p>
+              {ssoProviders.length > 0 && (
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 16 }}>
+                  {ssoProviders.map((provider) => (
+                    <button
+                      key={`prompt-${provider.id}`}
+                      type="button"
+                      className="btn btn-primary"
+                      onClick={() => handleSsoLogin(provider.id)}
+                    >
+                      {`Sign in with ${provider.display_name}`}
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
           ) : (
             <Routes>
@@ -892,6 +1054,18 @@ export default function App() {
                     <RequireRole minRole="analyst">
                       <Suspense fallback={<div className="loading">Loading…</div>}>
                         <SOCWorkbench />
+                      </Suspense>
+                    </RequireRole>
+                  </ErrorBoundary>
+                }
+              />
+              <Route
+                path="/assistant"
+                element={
+                  <ErrorBoundary>
+                    <RequireRole minRole="analyst">
+                      <Suspense fallback={<div className="loading">Loading…</div>}>
+                        <AssistantWorkspace />
                       </Suspense>
                     </RequireRole>
                   </ErrorBoundary>

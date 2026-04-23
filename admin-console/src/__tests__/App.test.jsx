@@ -54,6 +54,24 @@ describe('App', () => {
     expect(screen.getByText('Connect')).toBeInTheDocument();
   });
 
+  it('shows SSO entry points when enterprise SSO is configured', async () => {
+    fetchMock.mockImplementation(async (url) => ({
+      ok: true,
+      headers: { get: () => 'application/json' },
+      json: async () => {
+        if (url === '/api/auth/session') return { authenticated: false };
+        if (url === '/api/auth/sso/config') {
+          return { providers: [{ id: 'idp-1', display_name: 'Corporate SSO' }] };
+        }
+        return {};
+      },
+    }));
+
+    await renderApp();
+
+    expect((await screen.findAllByText('Sign in with Corporate SSO')).length).toBeGreaterThan(0);
+  });
+
   it('renders sidebar navigation items', async () => {
     await renderApp();
     // Check that navigation labels exist
@@ -157,5 +175,30 @@ describe('App', () => {
     await renderApp();
 
     expect(await screen.findByText('Pinned Views')).toBeInTheDocument();
+  });
+
+  it('renders the analyst assistant route for authenticated analysts', async () => {
+    localStorage.setItem('wardex_token', 'persisted-token');
+    fetchMock.mockImplementation(async (url) => ({
+      ok: true,
+      headers: { get: () => 'application/json' },
+      json: async () => {
+        if (url === '/api/auth/session') {
+          return { authenticated: true, role: 'analyst' };
+        }
+        if (url === '/api/assistant/status') {
+          return { mode: 'retrieval-only', model: 'retrieval-only' };
+        }
+        if (url === '/api/cases') {
+          return { cases: [{ id: 42, title: 'Identity escalation case', status: 'investigating' }] };
+        }
+        return {};
+      },
+    }));
+
+    await renderApp('/assistant');
+
+    expect(await screen.findByRole('heading', { name: 'Analyst Assistant' })).toBeInTheDocument();
+    expect(screen.getAllByText('Analyst Assistant').length).toBeGreaterThan(0);
   });
 });

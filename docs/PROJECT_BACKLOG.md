@@ -258,15 +258,49 @@ This backlog lists the next concrete tasks in build order.
 - [x] T215: Define service-level objectives, error budgets, and operator-facing observability acceptance criteria.
 - [x] T216: Document and scaffold regional, single-tenant, and relay deployment models.
 - [x] T217: Promote the threat model into the primary documentation set and release/phase acceptance criteria.
+
+## Phase 29 — Console parity & operator usability
+
+- [ ] T230: Create and maintain a feature-to-UI coverage matrix so every capability in `FEATURES.md` maps to a reachable admin-console surface or an explicit backlog gap.
+- [x] T231: Replace broken or raw-json Security Policy workflows with working forms and structured result views for policy composition, digital twin simulation, adversarial harness runs, deception deployment, and enforcement quarantine.
+- [x] T232: Complete operator-first threat-intel, enrichment, and deception management surfaces with browse/filter/action workflows instead of status-only summaries.
+- [x] T233: Finish structured compliance, GDPR, PII, and evidence-export workflows in the browser console so governance features are usable without manual API calls.
+- [x] T234: Add deep links, guided pivots, and workflow recommendations between Dashboard, Threat Detection, SOC Workbench, UEBA, NDR, Attack Graph, Infrastructure, and Reports.
+
+## Phase 30 — Analyst workflow depth & realtime
+
+- [x] T235: Harden authenticated realtime analyst transport UX with connection-state visibility, session recovery, and filtered live-event controls.
+- [x] T236: Expand investigation planner and active-investigation tracking with step progress, notes, auto-query pivots, and case handoff support.
+- [x] T237: Promote detection efficacy, ATT&CK gap, suppression noise, and content-pack rollout signals into first-class operator drill-down surfaces.
+- [x] T238: Add customizable dashboards with persisted analyst/admin presets and shared layout support.
+- [x] T239: Close queue-to-hunt, hunt-to-case, and workflow-to-response usability gaps across the SOC workflow.
+
+## Phase 31 — Platform scale, configuration, and docs completion
+
+- [x] T240: Finish ClickHouse-backed long-retention history UX, retention controls, and validation against real deployments.
+- [x] T241: Add structured cloud-collector and secrets-manager setup flows with validation, health, and ingestion visibility.
+- [x] T242: Add API, SDK, and GraphQL parity diagnostics plus an operator-facing API explorer for supportability and contract verification.
+- [x] T243: Deliver searchable, versioned documentation with console-linked runbooks and deployment guidance.
+- [x] T244: Keep `STATUS.md`, roadmap, release, packaging, and support docs aligned with the shipped product surface.
+
+## Phase 32 — Acceptance and regression closure
+
+- [x] T245: Expand Playwright and browser regression coverage across Security Policy, enterprise SSO, investigations, dashboards, and advanced operator workflows.
+- [x] T246: Add a release acceptance checklist that enforces routed UI coverage, structured presentation, and no broken JSON-only dead ends for shipped features.
+- [x] T247: Audit and fix remaining admin-console request/response mismatches against the server API contract.
 - [x] T218: Add a production-hardening review checklist derived from `xdr_ai_handoff_pack` guidance.
 
 ## Recommended next build order
 
-160 of 160 backlog items are complete. Phases 0–28 are complete.
+Phases 0–32 are complete. Routed browser regression coverage, the repeatable release-acceptance gate, and the admin-console API contract audit are all in place.
 
-Phase 28 adds production hardening controls: token TTL with session expiry, token rotation, configurable retention policies, audit chain verification, spool per-tenant partitioning, mTLS configuration, Dockerfile, systemd/launchd service units, and chaos tests.
+Recommended next sequence:
 
-All planned backlog items are done. See `docs/ROADMAP_XDR_PROFESSIONAL.md` for the professional roadmap beyond Phase 28.
+1. Complete true end-to-end federated SSO redirect/callback validation beyond the shipped provider discovery and login shell.
+2. Extend remaining SaaS and identity collector workflows beyond the shipped cloud, secrets-manager, and case ticket-sync paths.
+3. Deepen UEBA, NDR, and infrastructure remediation workflows that still rely on thinner operator narratives.
+
+See `docs/ROADMAP_XDR_PROFESSIONAL.md` for the broader professional roadmap beyond the current implementation order.
 
 ## Code-quality sweep (post-Phase 7)
 

@@ -1,6 +1,6 @@
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useApi, useInterval, useToast } from '../hooks.jsx';
+import { useApi, useInterval, useToast, useRole } from '../hooks.jsx';
 import * as api from '../api.js';
 import {
   AreaChart,
@@ -18,10 +18,12 @@ import {
 import AlertDrawer from './AlertDrawer.jsx';
 import ProcessDrawer from './ProcessDrawer.jsx';
 import DashboardWidget from './DashboardWidget.jsx';
+import WorkflowGuidance from './WorkflowGuidance.jsx';
 import Tip from './Tooltip.jsx';
 import { SkeletonCard } from './Skeleton.jsx';
 import { formatDateTime, formatNumber, formatRelativeTime } from './operatorUtils.js';
 import { useWidgetLayout } from './useWidgetLayout.js';
+import { buildHref } from './workflowPivots.js';
 
 function Metric({ label, value, sub, accent, onClick, tip }) {
   return (
@@ -54,6 +56,116 @@ const SEV_COLORS = {
   low: '#6b7280',
 };
 
+const DASHBOARD_WIDGETS = [
+  'system-health',
+  'telemetry',
+  'threat-overview',
+  'charts',
+  'process-security',
+  'detection-engine',
+  'malware-ti',
+  'dns-threats',
+  'lifecycle',
+  'manager-digest',
+  'recent-alerts',
+];
+
+const SHARED_DASHBOARD_PRESETS = [
+  {
+    id: 'analyst-triage',
+    name: 'Analyst Triage',
+    description: 'Prioritize queue pressure, recent alerts, and tuning signals for active analysts.',
+    widgets: [
+      'threat-overview',
+      'recent-alerts',
+      'detection-engine',
+      'charts',
+      'process-security',
+      'system-health',
+      'telemetry',
+      'lifecycle',
+      'manager-digest',
+      'malware-ti',
+      'dns-threats',
+    ],
+    hidden: [],
+    audience: 'analyst',
+  },
+  {
+    id: 'admin-operations',
+    name: 'Admin Operations',
+    description: 'Balance platform health, telemetry, lifecycle, and response readiness for operators.',
+    widgets: [
+      'system-health',
+      'telemetry',
+      'lifecycle',
+      'threat-overview',
+      'charts',
+      'recent-alerts',
+      'detection-engine',
+      'process-security',
+      'manager-digest',
+      'malware-ti',
+      'dns-threats',
+    ],
+    hidden: [],
+    audience: 'admin',
+  },
+  {
+    id: 'noc-wall',
+    name: 'NOC Wall',
+    description: 'Keep the wallboard focused on posture, alert pressure, and broad telemetry trends.',
+    widgets: [
+      'system-health',
+      'threat-overview',
+      'telemetry',
+      'charts',
+      'lifecycle',
+      'manager-digest',
+      'recent-alerts',
+      'detection-engine',
+      'process-security',
+      'malware-ti',
+      'dns-threats',
+    ],
+    hidden: ['dns-threats'],
+    audience: 'shared',
+  },
+];
+
+function sharedPresetKey(id) {
+  return `shared:${id}`;
+}
+
+function savedPresetKey(name) {
+  return `saved:${name}`;
+}
+
+function isSavedPresetKey(key) {
+  return String(key || '').startsWith('saved:');
+}
+
+function getSavedPresetName(key) {
+  return String(key || '').replace(/^saved:/, '');
+}
+
+function findPresetByKey(key, savedPresets) {
+  const normalized = String(key || '').trim();
+  if (!normalized) return null;
+  if (normalized.startsWith('shared:')) {
+    const id = normalized.replace(/^shared:/, '');
+    return SHARED_DASHBOARD_PRESETS.find((preset) => preset.id === id) || null;
+  }
+  if (normalized.startsWith('saved:')) {
+    const name = getSavedPresetName(normalized);
+    return (
+      (Array.isArray(savedPresets) ? savedPresets : []).find((preset) => preset.name === name) ||
+      null
+    );
+  }
+  return null;
+}
+
 function alertSeverity(alert) {
   return (alert?.severity || alert?.level || alert?.risk_level || 'unknown').toLowerCase();
 }
@@ -79,6 +191,7 @@ function alertNarrative(alert) {
 export default function Dashboard() {
   const toast = useToast();
   const navigate = useNavigate();
+  const { role } = useRole();
   const { data: st, loading: l1, reload: r1 } = useApi(api.status);
   const { data: fleet, reload: r2 } = useApi(api.fleetDashboard);
   const { data: alertData, reload: r3 } = useApi(api.alerts);
@@ -92,12 +205,14 @@ export default function Dashboard() {
   const { data: procAnalysis, reload: rPA } = useApi(api.processesAnalysis);
   const { data: hostInf } = useApi(api.hostInfo);
   const { data: telemHistory } = useApi(api.telemetryHistory);
+  const { data: userPrefs } = useApi(api.userPreferences);
   // Phase 44: additional dashboard data
   const { data: mwStats, reload: rMW } = useApi(api.malwareStats);
   const { data: gaps, reload: rGap } = useApi(api.coverageGaps);
   const { data: qrStats, reload: rQR } = useApi(api.quarantineStats);
   const { data: lcStats, reload: rLC } = useApi(api.lifecycleStats);
   const { data: fdStats, reload: rFD } = useApi(api.feedStats);
+  const { data: managerDigest, reload: rMgrDigest } = useApi(api.managerQueueDigest);
   const [refreshing, setRefreshing] = useState(false);
   const [expandedAlert, setExpandedAlert] = useState(null);
   const [sevFilter, setSevFilter] = useState('all');
@@ -105,24 +220,163 @@ export default function Dashboard() {
   const [nocMode, setNocMode] = useState(false);
   const [nocWidget, setNocWidget] = useState(0);
   const [nowMs, setNowMs] = useState(() => Date.now());
+  const [presetName, setPresetName] = useState('');
+  const [savedPresets, setSavedPresets] = useState([]);
+  const [selectedPresetKey, setSelectedPresetKey] = useState('');
+  const [savingPreset, setSavingPreset] = useState(false);
   const { data: dnsSummary, reload: rDNS } = useApi(api.dnsThreatSummary);
-
-  const defaultWidgets = [
-    'system-health',
-    'telemetry',
-    'threat-overview',
-    'charts',
-    'process-security',
-    'detection-engine',
-    'malware-ti',
-    'dns-threats',
-    'lifecycle',
-    'recent-alerts',
-  ];
-  const { order, hidden, moveWidget, removeWidget, restoreWidget, resetLayout } = useWidgetLayout(
-    defaultWidgets,
-    'dashboard',
+  const hasLocalLayoutRef = useRef(
+    Boolean(localStorage.getItem('dashboard') || localStorage.getItem('dashboard_hidden')),
   );
+  const hydratedPresetsRef = useRef(false);
+
+  const recommendedSharedPresetId = role === 'admin' ? 'admin-operations' : 'analyst-triage';
+  const activePreset = useMemo(
+    () => findPresetByKey(selectedPresetKey, savedPresets),
+    [savedPresets, selectedPresetKey],
+  );
+  const fleetSummary = fleet?.fleet || fleet || {};
+  const fleetStatusCounts = fleetSummary.status_counts || fleet?.status_counts || {};
+  const fleetOnline = fleetStatusCounts.online ?? fleet?.online;
+  const presetOptions = useMemo(
+    () => [
+      ...SHARED_DASHBOARD_PRESETS.map((preset) => ({
+        key: sharedPresetKey(preset.id),
+        label: `Shared · ${preset.name}`,
+      })),
+      ...savedPresets.map((preset) => ({
+        key: savedPresetKey(preset.name),
+        label: `Personal · ${preset.name}`,
+      })),
+    ],
+    [savedPresets],
+  );
+  const {
+    order,
+    allWidgets,
+    hidden,
+    moveWidget,
+    removeWidget,
+    restoreWidget,
+    resetLayout,
+    applyLayout,
+    snapshot,
+  } = useWidgetLayout(DASHBOARD_WIDGETS, 'dashboard');
+
+  useEffect(() => {
+    if (hydratedPresetsRef.current || !userPrefs) return;
+    const nextSavedPresets = Array.isArray(userPrefs.dashboard_presets)
+      ? userPrefs.dashboard_presets
+      : [];
+    const persistedActivePreset = String(userPrefs.active_dashboard_preset || '').trim();
+    const fallbackPresetKey = sharedPresetKey(recommendedSharedPresetId);
+    setSavedPresets(nextSavedPresets);
+    setSelectedPresetKey(persistedActivePreset || fallbackPresetKey);
+
+    if (!hasLocalLayoutRef.current && persistedActivePreset) {
+      const preset = findPresetByKey(persistedActivePreset, nextSavedPresets);
+      if (preset) applyLayout(preset);
+    }
+
+    hydratedPresetsRef.current = true;
+  }, [applyLayout, recommendedSharedPresetId, userPrefs]);
+
+  useEffect(() => {
+    if (selectedPresetKey) return;
+    setSelectedPresetKey(sharedPresetKey(recommendedSharedPresetId));
+  }, [recommendedSharedPresetId, selectedPresetKey]);
+
+  const updatePresetPreferences = useCallback(
+    async (patch, successMessage) => {
+      setSavingPreset(true);
+      try {
+        const updated = await api.setUserPreferences(patch);
+        const nextSavedPresets = Array.isArray(updated?.dashboard_presets)
+          ? updated.dashboard_presets
+          : Array.isArray(patch.dashboard_presets)
+            ? patch.dashboard_presets
+            : savedPresets;
+        const nextActivePreset =
+          typeof updated?.active_dashboard_preset === 'string'
+            ? updated.active_dashboard_preset
+            : patch.active_dashboard_preset || selectedPresetKey;
+
+        setSavedPresets(nextSavedPresets);
+        setSelectedPresetKey(nextActivePreset || sharedPresetKey(recommendedSharedPresetId));
+        if (successMessage) toast(successMessage, 'success');
+        return true;
+      } catch {
+        toast('Failed to update dashboard presets.', 'error');
+        return false;
+      } finally {
+        setSavingPreset(false);
+      }
+    },
+    [recommendedSharedPresetId, savedPresets, selectedPresetKey, toast],
+  );
+
+  const applySelectedPreset = useCallback(async () => {
+    const preset = findPresetByKey(selectedPresetKey, savedPresets);
+    if (!preset) {
+      toast('Select a dashboard preset first.', 'warning');
+      return;
+    }
+    applyLayout(preset);
+    hasLocalLayoutRef.current = false;
+    await updatePresetPreferences(
+      { active_dashboard_preset: selectedPresetKey },
+      `${preset.name} applied.`,
+    );
+  }, [applyLayout, savedPresets, selectedPresetKey, toast, updatePresetPreferences]);
+
+  const saveCurrentPreset = useCallback(async () => {
+    const trimmedName = presetName.trim();
+    if (!trimmedName) {
+      toast('Preset name is required.', 'warning');
+      return;
+    }
+
+    const nextPreset = {
+      name: trimmedName,
+      widgets: snapshot.widgets,
+      hidden: snapshot.hidden,
+    };
+    const nextPresets = [
+      ...savedPresets.filter((preset) => preset.name.toLowerCase() !== trimmedName.toLowerCase()),
+      nextPreset,
+    ];
+    const nextPresetKey = savedPresetKey(trimmedName);
+    const updated = await updatePresetPreferences(
+      {
+        dashboard_presets: nextPresets,
+        active_dashboard_preset: nextPresetKey,
+      },
+      `Saved ${trimmedName}.`,
+    );
+    if (updated) {
+      setPresetName('');
+      setSelectedPresetKey(nextPresetKey);
+    }
+  }, [presetName, savedPresets, snapshot.hidden, snapshot.widgets, toast, updatePresetPreferences]);
+
+  const deleteSelectedPreset = useCallback(async () => {
+    if (!isSavedPresetKey(selectedPresetKey)) return;
+    const presetToDelete = getSavedPresetName(selectedPresetKey);
+    const nextPresets = savedPresets.filter((preset) => preset.name !== presetToDelete);
+    const fallbackPresetKey = sharedPresetKey(recommendedSharedPresetId);
+    const updated = await updatePresetPreferences(
+      {
+        dashboard_presets: nextPresets,
+        active_dashboard_preset: fallbackPresetKey,
+      },
+      `Removed ${presetToDelete}.`,
+    );
+    if (updated) {
+      setSelectedPresetKey(fallbackPresetKey);
+      const fallbackPreset = findPresetByKey(fallbackPresetKey, nextPresets);
+      if (fallbackPreset) applyLayout(fallbackPreset);
+    }
+  }, [applyLayout, recommendedSharedPresetId, savedPresets, selectedPresetKey, updatePresetPreferences]);
 
   // Per-widget auto-refresh toggle
   const [pausedWidgets, setPausedWidgets] = useState(() => {
@@ -142,7 +396,7 @@ export default function Dashboard() {
   };
 
   const reloadAll = async () => {
-    if (pausedWidgets.size >= defaultWidgets.length) return;
+    if (pausedWidgets.size >= DASHBOARD_WIDGETS.length) return;
     setRefreshing(true);
     await Promise.allSettled([
       r1(),
@@ -160,6 +414,7 @@ export default function Dashboard() {
       rQR(),
       rLC(),
       rFD(),
+      rMgrDigest(),
       rDNS(),
     ]);
     setRefreshing(false);
@@ -305,6 +560,50 @@ export default function Dashboard() {
       onAction: () => navigate('/soc#response'),
     },
   ];
+  const coverageGapCount = Array.isArray(gaps?.gaps) ? gaps.gaps.length : Array.isArray(gaps) ? gaps.length : 0;
+  const workflowItems = [
+    {
+      id: 'soc-triage',
+      title: 'Open SOC Triage',
+      description: `${critical} critical and ${staleAlerts.length} stale alerts are ready for queue or case coordination.`,
+      to: '/soc#queue',
+      minRole: 'analyst',
+      tone: 'primary',
+      badge: 'Triage',
+    },
+    {
+      id: 'threat-detection',
+      title: 'Tune Detection Coverage',
+      description: `${coverageGapCount} ATT&CK gaps and ${tiStatus?.ioc_count || 0} tracked indicators can be pulled straight into detection review.`,
+      to: buildHref('/detection', { params: { queue: 'noisy' } }),
+      minRole: 'analyst',
+      badge: 'Detect',
+    },
+    {
+      id: 'infrastructure',
+      title: 'Review Critical Assets',
+      description: 'Use infrastructure queues to validate drift, malware, and observability hotspots behind the current posture.',
+      to: buildHref('/infrastructure', { params: { tab: 'assets', view: 'critical' } }),
+      minRole: 'analyst',
+      badge: 'Asset',
+    },
+    {
+      id: 'attack-graph',
+      title: 'Map Campaign Paths',
+      description: 'Check whether the priority stack is part of a broader lateral-movement chain.',
+      to: '/attack-graph',
+      minRole: 'analyst',
+      badge: 'Graph',
+    },
+    {
+      id: 'reports',
+      title: 'Package Evidence',
+      description: 'Export evidence, compliance posture, and delivery artifacts for leadership or audit review.',
+      to: buildHref('/reports', { params: { tab: 'evidence' } }),
+      minRole: 'viewer',
+      badge: 'Report',
+    },
+  ];
 
   if (l1)
     return (
@@ -345,6 +644,80 @@ export default function Dashboard() {
         </div>
       </div>
 
+      <div className="card" style={{ marginBottom: 16 }}>
+        <div className="card-header">
+          <span className="card-title">Dashboard Layout Presets</span>
+          <span className="badge badge-info">
+            {savedPresets.length} personal • {SHARED_DASHBOARD_PRESETS.length} shared
+          </span>
+        </div>
+        <div className="summary-grid" style={{ marginBottom: 12 }}>
+          <div className="summary-card">
+            <div className="summary-label">Selected Layout</div>
+            <div className="summary-value">{activePreset?.name || 'Custom Layout'}</div>
+            <div className="summary-meta">
+              {activePreset?.description || 'The current widget order is running from local layout state.'}
+            </div>
+          </div>
+          <div className="summary-card">
+            <div className="summary-label">Audience</div>
+            <div className="summary-value">
+              {activePreset?.audience || (isSavedPresetKey(selectedPresetKey) ? 'personal' : role)}
+            </div>
+            <div className="summary-meta">Recommended shared preset for this role: {role === 'admin' ? 'Admin Operations' : 'Analyst Triage'}.</div>
+          </div>
+          <div className="summary-card">
+            <div className="summary-label">Hidden Widgets</div>
+            <div className="summary-value">{hidden.size}</div>
+            <div className="summary-meta">Hidden widgets remain restorable below the dashboard grid.</div>
+          </div>
+        </div>
+        <div className="triage-toolbar" style={{ marginBottom: 10 }}>
+          <div className="triage-toolbar-group" style={{ flexWrap: 'wrap' }}>
+            <select
+              className="form-select"
+              aria-label="Dashboard preset"
+              value={selectedPresetKey}
+              onChange={(event) => setSelectedPresetKey(event.target.value)}
+            >
+              {presetOptions.map((option) => (
+                <option key={option.key} value={option.key}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+            <button className="btn btn-sm" onClick={applySelectedPreset} disabled={savingPreset}>
+              Apply Preset
+            </button>
+            {isSavedPresetKey(selectedPresetKey) && (
+              <button className="btn btn-sm" onClick={deleteSelectedPreset} disabled={savingPreset}>
+                Delete Preset
+              </button>
+            )}
+          </div>
+          <div className="triage-toolbar-group" style={{ flexWrap: 'wrap' }}>
+            <input
+              className="form-input"
+              aria-label="Preset name"
+              value={presetName}
+              placeholder="Save current layout as…"
+              onChange={(event) => setPresetName(event.target.value)}
+            />
+            <button
+              className="btn btn-sm btn-primary"
+              onClick={saveCurrentPreset}
+              disabled={savingPreset}
+            >
+              {savingPreset ? 'Saving…' : 'Save Current Layout'}
+            </button>
+          </div>
+        </div>
+        <div className="hint">
+          Shared presets give analysts and admins a consistent starting point. Personal presets sync
+          through the user preferences API so your layout survives new sessions.
+        </div>
+      </div>
+
       <div className="situation-grid">
         {situationCards.map((card) => (
           <article key={card.title} className="situation-card">
@@ -357,6 +730,12 @@ export default function Dashboard() {
           </article>
         ))}
       </div>
+
+      <WorkflowGuidance
+        title="Console Pivots"
+        description="Use the overview to jump directly into the next operator workflow instead of re-finding the same context in each workspace."
+        items={workflowItems}
+      />
 
       <div className="card priority-stack">
         <div className="card-header">
@@ -433,8 +812,8 @@ export default function Dashboard() {
                   />
                   <Metric
                     label="Active Agents"
-                    value={fleet?.total_agents ?? fleet?.agents ?? '—'}
-                    sub={fleet?.online ? `${fleet.online} online` : undefined}
+                    value={fleetSummary?.total_agents ?? fleet?.agents ?? '—'}
+                    sub={fleetOnline ? `${fleetOnline} online` : undefined}
                   />
                   <Metric
                     label="Total Alerts"
@@ -474,8 +853,8 @@ export default function Dashboard() {
                 />
                 <Metric
                   label="Active Agents"
-                  value={fleet?.total_agents ?? fleet?.agents ?? '—'}
-                  sub={fleet?.online ? `${fleet.online} online` : undefined}
+                  value={fleetSummary?.total_agents ?? fleet?.agents ?? '—'}
+                  sub={fleetOnline ? `${fleetOnline} online` : undefined}
                 />
                 <Metric
                   label="Events/sec"
@@ -907,6 +1286,82 @@ export default function Dashboard() {
                     }
                   />
                 )}
+              </div>
+            </DashboardWidget>
+          );
+        if (wid === 'manager-digest' && managerDigest)
+          return (
+            <DashboardWidget
+              key={wid}
+              id={wid}
+              title="Morning Brief"
+              index={order.indexOf(wid)}
+              onMove={moveWidget}
+              onRemove={removeWidget}
+              paused={widgetPaused}
+              onTogglePause={toggleWidgetRefresh}
+            >
+              <div className="card-grid">
+                <Metric
+                  label="Pending Queue"
+                  value={managerDigest.queue?.pending ?? '—'}
+                  sub={
+                    managerDigest.queue?.sla_breached
+                      ? `${managerDigest.queue.sla_breached} past SLA`
+                      : 'No SLA breaches'
+                  }
+                  accent={managerDigest.queue?.sla_breached > 0}
+                />
+                <Metric
+                  label="Stale Cases"
+                  value={managerDigest.stale_cases ?? '—'}
+                  sub="Open cases with no recent analyst update"
+                  accent={managerDigest.stale_cases > 0}
+                />
+                <Metric
+                  label="Degraded Collectors"
+                  value={managerDigest.degraded_collectors ?? '—'}
+                  sub="Agents currently stale or offline"
+                  accent={managerDigest.degraded_collectors > 0}
+                />
+                <Metric
+                  label="Dry-Run Approvals"
+                  value={managerDigest.pending_dry_run_approvals ?? '—'}
+                  sub={
+                    managerDigest.ready_to_execute
+                      ? `${managerDigest.ready_to_execute} ready to execute`
+                      : undefined
+                  }
+                />
+              </div>
+              <div
+                style={{
+                  display: 'grid',
+                  gap: 12,
+                  gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))',
+                  marginTop: 16,
+                }}
+              >
+                <div className="card">
+                  <div className="card-title" style={{ marginBottom: 8 }}>
+                    What Changed
+                  </div>
+                  <ul style={{ margin: 0, paddingLeft: 18, lineHeight: 1.7, fontSize: 13 }}>
+                    {(managerDigest.changes_since_last_shift || []).slice(0, 4).map((item, index) => (
+                      <li key={index}>{item}</li>
+                    ))}
+                  </ul>
+                </div>
+                <div className="card">
+                  <div className="card-title" style={{ marginBottom: 8 }}>
+                    Noisy Reasons
+                  </div>
+                  <ul style={{ margin: 0, paddingLeft: 18, lineHeight: 1.7, fontSize: 13 }}>
+                    {(managerDigest.noisy_reasons || []).slice(0, 4).map((item, index) => (
+                      <li key={index}>{item}</li>
+                    ))}
+                  </ul>
+                </div>
               </div>
             </DashboardWidget>
           );

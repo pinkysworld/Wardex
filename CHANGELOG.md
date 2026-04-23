@@ -4,6 +4,10 @@ All notable changes to Wardex are documented in this file.
 
 ## [Unreleased] — Hunt Maturity, SOC UX Throughput, and Case Automation
 
+### Release confidence
+- **Release acceptance gate** — Added `scripts/release_acceptance.sh` and `make release-acceptance` to build the shipped admin console and Rust binary, validate published site links, and run the live routed Playwright suite (`live_release_smoke`, `advanced_console_workflows`, `enterprise_console_smoke`, and `mobile_topbar_smoke`) against a real Wardex instance before sign-off.
+- **API contract alignment** — Normalized the admin-console to the canonical backend payloads for response audit entries (`audit_log`), fleet dashboard summaries (`fleet.total_agents` and `fleet.status_counts`), and SOC queue items (`queue`), and updated the affected Playwright mocks to match the shipped server contract.
+
 ### Threat hunting workflow upgrades
 - **Hypothesis-first hunts** — Saved hunts now persist `hypothesis` and `expected_outcome` (`confirm`, `refute`, `explore`) and expose them in the Threat Detection hunt workflow.
 - **Retrohunt windows** — Saved-hunt execution now accepts `time_from` and `time_to` windows to scope historical runs to incident timelines.

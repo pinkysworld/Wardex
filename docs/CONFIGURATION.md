@@ -1,4 +1,4 @@
-# Configuration Reference — SentinelEdge / Wardex
+# Configuration Reference — Wardex
 
 This document covers all configuration options for the Wardex XDR agent and server.
 

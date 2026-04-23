@@ -157,7 +157,7 @@ fn simple_hash(s: &str) -> u64 {
     h
 }
 
-/// Register built-in feature flags for SentinelEdge.
+/// Register built-in feature flags for Wardex.
 pub fn register_defaults(registry: &FeatureFlagRegistry) {
     let defaults = vec![
         FeatureFlag {

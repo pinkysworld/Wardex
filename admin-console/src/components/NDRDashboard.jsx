@@ -1,6 +1,9 @@
-import { useState } from 'react';
+import { useMemo } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useApi, useInterval } from '../hooks.jsx';
 import * as api from '../api.js';
+import WorkflowGuidance from './WorkflowGuidance.jsx';
+import { buildHref } from './workflowPivots.js';
 
 const PROTOCOL_COLORS = {
   TCP: '#3498db',
@@ -27,10 +30,19 @@ function RiskBadge({ score }) {
 }
 
 export default function NDRDashboard() {
-  const [tab, setTab] = useState('overview');
+  const [searchParams, setSearchParams] = useSearchParams();
   const { data: report, loading, reload } = useApi(api.ndrReport);
   const { data: tlsAnomalies } = useApi(api.ndrTlsAnomalies);
   const { data: dpiAnomalies } = useApi(api.ndrDpiAnomalies);
+
+  const updateParams = (changes) => {
+    const next = new URLSearchParams(searchParams);
+    Object.entries(changes).forEach(([key, value]) => {
+      if (value == null || value === '') next.delete(key);
+      else next.set(key, value);
+    });
+    setSearchParams(next, { replace: true });
+  };
 
   useInterval(reload, 30000);
 
@@ -57,6 +69,64 @@ export default function NDRDashboard() {
     { id: 'beaconing', label: `Beaconing (${beaconingList.length})` },
     { id: 'certs', label: `Certs (${selfSignedList.length})` },
   ];
+  const activeTab = tabs.some((entry) => entry.id === searchParams.get('tab'))
+    ? searchParams.get('tab')
+    : 'overview';
+  const leadAddress = unusualDests[0]?.dst_addr || topTalkers[0]?.addr || '';
+  const workflowItems = useMemo(
+    () => [
+      {
+        id: 'soc-triage',
+        title: 'Hand Network Signals To SOC',
+        description: `${tlsList.length + beaconingList.length + dpiList.length} network findings can move directly into queue triage and response review.`,
+        to: '/soc#queue',
+        minRole: 'analyst',
+        tone: 'primary',
+        badge: 'Triage',
+      },
+      {
+        id: 'infrastructure-review',
+        title: 'Review Impacted Assets',
+        description: `Pivot ${leadAddress || 'the active network footprint'} into observability and asset health review.`,
+        to: buildHref('/infrastructure', {
+          params: { tab: 'observability', q: leadAddress },
+        }),
+        minRole: 'analyst',
+        badge: 'Asset',
+      },
+      {
+        id: 'hunt-network-pattern',
+        title: 'Launch A Hunt',
+        description: `Carry ${activeTab} context into Threat Detection for a saved or ad-hoc network hunt.`,
+        to: buildHref('/detection', {
+          params: {
+            intent: 'run-hunt',
+            huntQuery: `${activeTab} network anomaly ${leadAddress}`,
+            huntName: `Hunt ${activeTab} network anomalies`,
+          },
+        }),
+        minRole: 'analyst',
+        badge: 'Detect',
+      },
+      {
+        id: 'attack-graph',
+        title: 'Map Campaign Propagation',
+        description: 'Use the attack graph to validate whether network findings are part of a broader campaign chain.',
+        to: '/attack-graph',
+        minRole: 'analyst',
+        badge: 'Graph',
+      },
+      {
+        id: 'reports',
+        title: 'Package Delivery Evidence',
+        description: 'Open report delivery and evidence workflows for executive or audit-ready exports.',
+        to: buildHref('/reports', { params: { tab: 'delivery' } }),
+        minRole: 'viewer',
+        badge: 'Report',
+      },
+    ],
+    [activeTab, beaconingList.length, dpiList.length, leadAddress, tlsList.length],
+  );
 
   return (
     <div style={{ display: 'grid', gap: 16 }}>
@@ -124,6 +194,12 @@ export default function NDRDashboard() {
         </div>
       </div>
 
+      <WorkflowGuidance
+        title="Network Pivots"
+        description="Push active network findings into hunts, asset review, investigations, and delivery workflows without rebuilding the context by hand."
+        items={workflowItems}
+      />
+
       {/* Tab Bar */}
       <div
         style={{
@@ -136,10 +212,10 @@ export default function NDRDashboard() {
         {tabs.map((t) => (
           <button
             key={t.id}
-            className={`btn btn-sm ${tab === t.id ? 'btn-primary' : ''}`}
-            onClick={() => setTab(t.id)}
+            className={`btn btn-sm ${activeTab === t.id ? 'btn-primary' : ''}`}
+            onClick={() => updateParams({ tab: t.id })}
             style={{ borderRadius: '8px 8px 0 0' }}
-            aria-selected={tab === t.id}
+            aria-selected={activeTab === t.id}
             role="tab"
           >
             {t.label}
@@ -158,7 +234,7 @@ export default function NDRDashboard() {
       ) : (
         <>
           {/* Overview Tab */}
-          {tab === 'overview' && (
+          {activeTab === 'overview' && (
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
               {/* Top Talkers */}
               <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
@@ -316,7 +392,7 @@ export default function NDRDashboard() {
           )}
 
           {/* TLS Fingerprint Tab */}
-          {tab === 'tls' && (
+          {activeTab === 'tls' && (
             <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
               <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--border)' }}>
                 <div className="card-title">JA3/JA4 TLS Fingerprint Anomalies</div>
@@ -390,7 +466,7 @@ export default function NDRDashboard() {
           )}
 
           {/* DPI Tab */}
-          {tab === 'dpi' && (
+          {activeTab === 'dpi' && (
             <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
               <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--border)' }}>
                 <div className="card-title">Deep Packet Inspection Mismatches</div>
@@ -445,7 +521,7 @@ export default function NDRDashboard() {
           )}
 
           {/* Entropy Tab */}
-          {tab === 'entropy' && (
+          {activeTab === 'entropy' && (
             <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
               <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--border)' }}>
                 <div className="card-title">High-Entropy Encrypted Sessions</div>
@@ -501,7 +577,7 @@ export default function NDRDashboard() {
             </div>
           )}
 
-          {tab === 'beaconing' && (
+          {activeTab === 'beaconing' && (
             <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
               <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--border)' }}>
                 <div className="card-title">Regular Beaconing Cadence</div>
@@ -564,7 +640,7 @@ export default function NDRDashboard() {
           )}
 
           {/* Certs Tab */}
-          {tab === 'certs' && (
+          {activeTab === 'certs' && (
             <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
               <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--border)' }}>
                 <div className="card-title">Self-Signed Certificate Detections</div>

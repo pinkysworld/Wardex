@@ -322,7 +322,7 @@ impl OcsfEvent {
     fn base_metadata(uid: &str) -> EventMetadata {
         EventMetadata {
             product: ProductInfo {
-                name: "SentinelEdge".into(),
+                name: "Wardex".into(),
                 vendor_name: "Wardex".into(),
                 version: env!("CARGO_PKG_VERSION").into(),
             },

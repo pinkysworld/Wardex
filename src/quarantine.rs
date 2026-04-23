@@ -349,7 +349,7 @@ impl CanaryMonitor {
             for name in &bait_names {
                 let path = format!("{dir}/{name}");
                 let content = format!("canary:{path}:{now}");
-                let hash = format!("{:x}", sha2::Sha256::digest(content.as_bytes()));
+                let hash = hex::encode(sha2::Sha256::digest(content.as_bytes()));
                 let canary = CanaryFile {
                     path: path.clone(),
                     content_hash: hash,

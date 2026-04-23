@@ -201,6 +201,8 @@ mod tests {
             last_seen: last_seen.to_string(),
             tags: vec![],
             related_iocs: vec![],
+            metadata: crate::threat_intel::IndicatorMetadata::default(),
+            sightings: Vec::new(),
         }
     }
 
