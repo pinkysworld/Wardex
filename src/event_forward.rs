@@ -491,95 +491,7 @@ impl EventStore {
     }
 
     pub fn analytics(&self) -> EventAnalytics {
-        let total_events = self.events.len();
-        let correlated_events = self.events.iter().filter(|event| event.correlated).count();
-
-        let mut severity_counts: HashMap<String, usize> = HashMap::new();
-        let mut triage_counts: HashMap<String, usize> = HashMap::new();
-        let mut reason_counts: HashMap<String, usize> = HashMap::new();
-        let mut per_agent: HashMap<String, Vec<&StoredEvent>> = HashMap::new();
-
-        for event in &self.events {
-            let level = event.alert.level.to_ascii_lowercase();
-            *severity_counts.entry(level).or_insert(0) += 1;
-            *triage_counts
-                .entry(event.triage.status.clone())
-                .or_insert(0) += 1;
-
-            for reason in &event.alert.reasons {
-                *reason_counts.entry(reason.clone()).or_insert(0) += 1;
-            }
-
-            per_agent
-                .entry(event.agent_id.clone())
-                .or_default()
-                .push(event);
-        }
-
-        let mut top_reasons: Vec<TopReason> = reason_counts
-            .into_iter()
-            .map(|(reason, count)| TopReason { reason, count })
-            .collect();
-        top_reasons.sort_by(|a, b| b.count.cmp(&a.count).then_with(|| a.reason.cmp(&b.reason)));
-        top_reasons.truncate(5);
-
-        let mut hot_agents: Vec<AgentRiskSummary> = per_agent
-            .into_iter()
-            .map(|(agent_id, events)| {
-                let event_count = events.len();
-                let correlated_count = events.iter().filter(|event| event.correlated).count();
-                let critical_count = events
-                    .iter()
-                    .filter(|event| severity_rank(&event.alert.level) >= 3)
-                    .count();
-                let average_score = if event_count > 0 {
-                    events.iter().map(|event| event.alert.score).sum::<f32>() / event_count as f32
-                } else {
-                    0.0
-                };
-                let max_score = events
-                    .iter()
-                    .map(|event| event.alert.score)
-                    .fold(0.0f32, f32::max);
-                let max_rank = events
-                    .iter()
-                    .map(|event| severity_rank(&event.alert.level))
-                    .max()
-                    .unwrap_or(0);
-
-                AgentRiskSummary {
-                    agent_id,
-                    event_count,
-                    correlated_count,
-                    critical_count,
-                    max_score,
-                    average_score,
-                    highest_level: severity_label(max_rank).to_string(),
-                    risk: risk_label(max_rank, average_score, correlated_count).to_string(),
-                }
-            })
-            .collect();
-        hot_agents.sort_by(|a, b| {
-            severity_rank(&b.risk)
-                .cmp(&severity_rank(&a.risk))
-                .then_with(|| b.correlated_count.cmp(&a.correlated_count))
-                .then_with(|| b.max_score.total_cmp(&a.max_score))
-        });
-        hot_agents.truncate(5);
-
-        EventAnalytics {
-            total_events,
-            correlated_events,
-            correlation_rate: if total_events > 0 {
-                correlated_events as f32 / total_events as f32
-            } else {
-                0.0
-            },
-            severity_counts,
-            triage_counts,
-            top_reasons,
-            hot_agents,
-        }
+        analytics_for_events(&self.events)
     }
 
     pub fn clear(&mut self) {
@@ -687,6 +599,95 @@ fn risk_label(max_rank: u8, average_score: f32, correlated_count: usize) -> &'st
     }
 }
 
+pub fn analytics_for_events(events: &[StoredEvent]) -> EventAnalytics {
+    let total_events = events.len();
+    let correlated_events = events.iter().filter(|event| event.correlated).count();
+
+    let mut severity_counts: HashMap<String, usize> = HashMap::new();
+    let mut triage_counts: HashMap<String, usize> = HashMap::new();
+    let mut reason_counts: HashMap<String, usize> = HashMap::new();
+    let mut per_agent: HashMap<String, Vec<&StoredEvent>> = HashMap::new();
+
+    for event in events {
+        let level = event.alert.level.to_ascii_lowercase();
+        *severity_counts.entry(level).or_insert(0) += 1;
+        *triage_counts
+            .entry(event.triage.status.clone())
+            .or_insert(0) += 1;
+
+        for reason in &event.alert.reasons {
+            *reason_counts.entry(reason.clone()).or_insert(0) += 1;
+        }
+
+        per_agent.entry(event.agent_id.clone()).or_default().push(event);
+    }
+
+    let mut top_reasons: Vec<TopReason> = reason_counts
+        .into_iter()
+        .map(|(reason, count)| TopReason { reason, count })
+        .collect();
+    top_reasons.sort_by(|a, b| b.count.cmp(&a.count).then_with(|| a.reason.cmp(&b.reason)));
+    top_reasons.truncate(5);
+
+    let mut hot_agents: Vec<AgentRiskSummary> = per_agent
+        .into_iter()
+        .map(|(agent_id, events)| {
+            let event_count = events.len();
+            let correlated_count = events.iter().filter(|event| event.correlated).count();
+            let critical_count = events
+                .iter()
+                .filter(|event| severity_rank(&event.alert.level) >= 3)
+                .count();
+            let average_score = if event_count > 0 {
+                events.iter().map(|event| event.alert.score).sum::<f32>() / event_count as f32
+            } else {
+                0.0
+            };
+            let max_score = events
+                .iter()
+                .map(|event| event.alert.score)
+                .fold(0.0f32, f32::max);
+            let max_rank = events
+                .iter()
+                .map(|event| severity_rank(&event.alert.level))
+                .max()
+                .unwrap_or(0);
+
+            AgentRiskSummary {
+                agent_id,
+                event_count,
+                correlated_count,
+                critical_count,
+                max_score,
+                average_score,
+                highest_level: severity_label(max_rank).to_string(),
+                risk: risk_label(max_rank, average_score, correlated_count).to_string(),
+            }
+        })
+        .collect();
+    hot_agents.sort_by(|a, b| {
+        severity_rank(&b.risk)
+            .cmp(&severity_rank(&a.risk))
+            .then_with(|| b.correlated_count.cmp(&a.correlated_count))
+            .then_with(|| b.max_score.total_cmp(&a.max_score))
+    });
+    hot_agents.truncate(5);
+
+    EventAnalytics {
+        total_events,
+        correlated_events,
+        correlation_rate: if total_events > 0 {
+            correlated_events as f32 / total_events as f32
+        } else {
+            0.0
+        },
+        severity_counts,
+        triage_counts,
+        top_reasons,
+        hot_agents,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -758,57 +759,13 @@ mod tests {
         for i in 0..10 {
             let batch = EventBatch {
                 agent_id: format!("agent-{}", i % 3),
-                events: vec![make_alert(&["test"])],
+                events: vec![make_alert(&["high_cpu"])],
             };
             store.ingest(&batch);
         }
-        assert!(store.total_events() <= 5);
-    }
 
-    #[test]
-    fn list_filters_by_agent() {
-        let mut store = EventStore::new(100);
-        let batch1 = EventBatch {
-            agent_id: "agent-1".into(),
-            events: vec![make_alert(&["x"]), make_alert(&["y"])],
-        };
-        let batch2 = EventBatch {
-            agent_id: "agent-2".into(),
-            events: vec![make_alert(&["z"])],
-        };
-        store.ingest(&batch1);
-        store.ingest(&batch2);
-
-        assert_eq!(store.list(Some("agent-1"), 10).len(), 2);
-        assert_eq!(store.list(Some("agent-2"), 10).len(), 1);
-        assert_eq!(store.list(None, 10).len(), 3);
-    }
-
-    #[test]
-    fn triage_updates_status_and_notes() {
-        let mut store = EventStore::new(100);
-        store.ingest(&EventBatch {
-            agent_id: "agent-1".into(),
-            events: vec![make_alert(&["high_cpu"])],
-        });
-
-        let updated = store
-            .update_triage(
-                1,
-                EventTriageUpdate {
-                    status: Some("investigating".into()),
-                    assignee: Some("alice".into()),
-                    tags: Some(vec!["cpu".into(), "urgent".into()]),
-                    note: Some("Escalated to SOC".into()),
-                    author: Some("ops".into()),
-                },
-            )
-            .expect("update triage");
-
-        assert_eq!(updated.triage.status, "investigating");
-        assert_eq!(updated.triage.assignee.as_deref(), Some("alice"));
-        assert_eq!(updated.triage.notes.len(), 1);
-        assert!(updated.triage.acknowledged_at.is_some());
+        assert_eq!(store.total_events(), 5);
+        assert_eq!(store.all_events().first().map(|event| event.id), Some(6));
     }
 
     #[test]

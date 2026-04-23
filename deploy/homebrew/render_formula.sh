@@ -17,7 +17,7 @@ cat >"$output_path" <<EOF
 require "json"
 
 class Wardex < Formula
-  desc "SentinelEdge XDR — AI-powered endpoint detection & response"
+  desc "Wardex XDR — AI-powered endpoint detection & response"
   homepage "https://github.com/pinkysworld/Wardex"
   url "$source_url"
   sha256 "$source_sha256"

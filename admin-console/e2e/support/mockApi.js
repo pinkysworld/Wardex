@@ -310,7 +310,17 @@ function buildResponses() {
     },
     'GET /api/threat-intel/status': { feeds_online: 2, last_sync_at: NOW },
     'GET /api/queue/stats': { open: 3, assigned: 1, sla_breaches: 0 },
-    'GET /api/response/stats': { pending_approvals: 1, executed_today: 4 },
+    'GET /api/response/stats': {
+      auto_executed: 4,
+      executed: 4,
+      pending: 1,
+      pending_approval: 1,
+      ready_to_execute: 1,
+      approved_ready: 1,
+      total_requests: 5,
+      denied: 0,
+      protected_assets: 2,
+    },
     'GET /api/processes/analysis': {
       findings: [
         {

@@ -117,4 +117,4 @@ The full API is documented at `docs/openapi.yaml`. Key areas include:
 | Feature flags     | `/api/feature-flags/*`                 |
 | Health            | `/api/healthz/*`, `/api/status-json`   |
 
-Recent 0.53.0 additions reflected in the generated SDKs include the auth-session identity fields (`groups`, `user_id`, `source`), saved-hunt lifecycle and target-group fields, content-pack bundle metadata, the consolidated workbench overview model, and the live playbook execution record shape.
+Recent 0.53.3 additions reflected in the generated SDKs include detection feedback and explainability responses, onboarding-readiness and manager queue-digest models, threat-intel `v2` library and sightings endpoints, deep malware scan `v2` profiles, and execution-context-aware reporting endpoints for reports, runs, schedules, templates, stored reports, and persisted report artifacts.

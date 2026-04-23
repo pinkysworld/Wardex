@@ -2,7 +2,7 @@
 
 ## Overview
 
-This runbook covers fresh installation, rolling upgrades via the atomic updater, and rollback procedures for SentinelEdge / Wardex XDR.
+This runbook covers fresh installation, rolling upgrades via the atomic updater, and rollback procedures for Wardex XDR.
 
 ---
 
@@ -21,20 +21,20 @@ This runbook covers fresh installation, rolling upgrades via the atomic updater,
 
 ```bash
 # 1. Clone repository
-git clone <repo-url> sentineledge && cd sentineledge
+git clone <repo-url> wardex && cd wardex
 
 # 2. Build release binary
 cargo build --release
 
 # 3. Verify
-./target/release/sentineledge --version
+./target/release/wardex --version
 
 # 4. Create config directory
-mkdir -p /etc/sentineledge
-cp var/test-config.toml /etc/sentineledge/config.toml
+mkdir -p /etc/wardex
+cp var/test-config.toml /etc/wardex/config.toml
 
 # 5. Start server
-./target/release/sentineledge serve --config /etc/sentineledge/config.toml
+./target/release/wardex serve --config /etc/wardex/config.toml
 ```
 
 ### Post-Install Verification
@@ -106,7 +106,7 @@ If the new version has issues after a successful upgrade:
 ### Enroll a New Agent
 
 ```toml
-# Agent config (/etc/sentineledge/agent.toml)
+# Agent config (/etc/wardex/agent.toml)
 [agent]
 server_url = "https://central.example.com:8443"
 tenant_id = "tenant-acme"
@@ -130,17 +130,17 @@ curl -s http://localhost:8080/api/fleet | jq '.agents[] | select(.device_id == "
 
 | Path | Purpose |
 |------|---------|
-| `/etc/sentineledge/config.toml` | Server configuration |
-| `/etc/sentineledge/agent.toml` | Agent configuration |
-| `/var/lib/sentineledge/storage/` | Persistent storage (JSON) |
-| `/var/lib/sentineledge/staging/` | Update staging directory |
-| `/var/log/sentineledge/` | Application logs |
+| `/etc/wardex/config.toml` | Server configuration |
+| `/etc/wardex/agent.toml` | Agent configuration |
+| `/var/lib/wardex/storage/` | Persistent storage (JSON) |
+| `/var/lib/wardex/staging/` | Update staging directory |
+| `/var/log/wardex/` | Application logs |
 
 ### Environment Variables
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `SENTINELEDGE_CONFIG` | `/etc/sentineledge/config.toml` | Config file path |
-| `SENTINELEDGE_PORT` | `8080` | HTTP listen port |
-| `SENTINELEDGE_LOG_LEVEL` | `info` | Log verbosity |
-| `SENTINELEDGE_STORAGE_DIR` | `./var/storage` | Storage backend directory |
+| `WARDEX_CONFIG` | `/etc/wardex/config.toml` | Config file path |
+| `WARDEX_PORT` | `8080` | HTTP listen port |
+| `WARDEX_LOG_LEVEL` | `info` | Log verbosity |
+| `WARDEX_STORAGE_DIR` | `./var/storage` | Storage backend directory |

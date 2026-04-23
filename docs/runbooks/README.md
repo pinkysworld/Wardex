@@ -1,6 +1,6 @@
-# SentinelEdge Operational Runbooks
+# Wardex Operational Runbooks
 
-This directory contains operational runbooks for deploying, configuring, and operating SentinelEdge XDR agents and the central server across all supported platforms.
+This directory contains operational runbooks for deploying, configuring, and operating Wardex XDR agents and the central server across all supported platforms.
 
 ## Contents
 

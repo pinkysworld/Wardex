@@ -18,6 +18,33 @@ pub struct ReportTemplateRecord {
     pub status: String,
     pub audience: String,
     pub description: String,
+    #[serde(default)]
+    pub execution_context: Option<ReportExecutionContext>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ReportExecutionContext {
+    pub case_id: Option<String>,
+    pub incident_id: Option<String>,
+    pub investigation_id: Option<String>,
+    pub source: Option<String>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum ReportExecutionScopeFilter {
+    #[default]
+    All,
+    Scoped,
+    Unscoped,
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct ReportExecutionContextFilter {
+    pub case_id: Option<String>,
+    pub incident_id: Option<String>,
+    pub investigation_id: Option<String>,
+    pub source: Option<String>,
+    pub scope: ReportExecutionScopeFilter,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -34,6 +61,8 @@ pub struct ReportRunRecord {
     pub summary: String,
     pub size_bytes: u64,
     pub preview: serde_json::Value,
+    #[serde(default)]
+    pub execution_context: Option<ReportExecutionContext>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -48,6 +77,8 @@ pub struct ReportScheduleRecord {
     pub status: String,
     pub cadence: String,
     pub target: String,
+    #[serde(default)]
+    pub execution_context: Option<ReportExecutionContext>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -98,6 +129,7 @@ fn default_templates() -> Vec<ReportTemplateRecord> {
             description:
                 "Leadership-ready overview of queue pressure, incidents, and fleet posture."
                     .to_string(),
+            execution_context: None,
         },
         ReportTemplateRecord {
             id: "tpl-audit-export".to_string(),
@@ -110,6 +142,7 @@ fn default_templates() -> Vec<ReportTemplateRecord> {
             status: "ready".to_string(),
             audience: "security".to_string(),
             description: "Operational audit evidence for investigations and reviews.".to_string(),
+            execution_context: None,
         },
         ReportTemplateRecord {
             id: "tpl-incident-package".to_string(),
@@ -123,6 +156,7 @@ fn default_templates() -> Vec<ReportTemplateRecord> {
             audience: "analyst".to_string(),
             description: "Case-oriented bundle with queue, incident, and response context."
                 .to_string(),
+            execution_context: None,
         },
         ReportTemplateRecord {
             id: "tpl-compliance-snapshot".to_string(),
@@ -135,6 +169,7 @@ fn default_templates() -> Vec<ReportTemplateRecord> {
             status: "ready".to_string(),
             audience: "audit".to_string(),
             description: "Current compliance and control health posture.".to_string(),
+            execution_context: None,
         },
         ReportTemplateRecord {
             id: "tpl-formal-verification".to_string(),
@@ -147,6 +182,7 @@ fn default_templates() -> Vec<ReportTemplateRecord> {
             status: "ready".to_string(),
             audience: "engineering".to_string(),
             description: "Artifacts and metadata for formal verification exports.".to_string(),
+            execution_context: None,
         },
     ]
 }
@@ -215,12 +251,48 @@ impl SupportStore {
         &self.snapshot.templates
     }
 
+    pub fn report_templates_filtered(
+        &self,
+        filter: &ReportExecutionContextFilter,
+    ) -> Vec<ReportTemplateRecord> {
+        self.snapshot
+            .templates
+            .iter()
+            .filter(|template| execution_context_matches(template.execution_context.as_ref(), filter))
+            .cloned()
+            .collect()
+    }
+
     pub fn report_runs(&self) -> &[ReportRunRecord] {
         &self.snapshot.runs
     }
 
+    pub fn report_runs_filtered(
+        &self,
+        filter: &ReportExecutionContextFilter,
+    ) -> Vec<ReportRunRecord> {
+        self.snapshot
+            .runs
+            .iter()
+            .filter(|run| execution_context_matches(run.execution_context.as_ref(), filter))
+            .cloned()
+            .collect()
+    }
+
     pub fn report_schedules(&self) -> &[ReportScheduleRecord] {
         &self.snapshot.schedules
+    }
+
+    pub fn report_schedules_filtered(
+        &self,
+        filter: &ReportExecutionContextFilter,
+    ) -> Vec<ReportScheduleRecord> {
+        self.snapshot
+            .schedules
+            .iter()
+            .filter(|schedule| execution_context_matches(schedule.execution_context.as_ref(), filter))
+            .cloned()
+            .collect()
     }
 
     pub fn inbox_items(&self) -> &[InboxItem] {
@@ -237,6 +309,7 @@ impl SupportStore {
         status: String,
         audience: String,
         description: String,
+        execution_context: Option<ReportExecutionContext>,
     ) -> ReportTemplateRecord {
         if let Some(existing_id) = id
             && let Some(template) = self
@@ -252,6 +325,7 @@ impl SupportStore {
             template.status = status;
             template.audience = audience;
             template.description = description;
+            template.execution_context = execution_context;
             let updated = template.clone();
             self.persist();
             return updated;
@@ -268,6 +342,7 @@ impl SupportStore {
             status,
             audience,
             description,
+            execution_context,
         };
         self.snapshot.templates.push(created.clone());
         self.persist();
@@ -285,6 +360,7 @@ impl SupportStore {
         summary: String,
         size_bytes: u64,
         preview: serde_json::Value,
+        execution_context: Option<ReportExecutionContext>,
     ) -> ReportRunRecord {
         let now = now_rfc3339();
         let created = ReportRunRecord {
@@ -300,6 +376,7 @@ impl SupportStore {
             summary,
             size_bytes,
             preview,
+            execution_context,
         };
         self.snapshot.runs.insert(0, created.clone());
         self.snapshot.runs.truncate(100);
@@ -330,6 +407,7 @@ impl SupportStore {
         target: String,
         next_run_at: Option<String>,
         status: String,
+        execution_context: Option<ReportExecutionContext>,
     ) -> ReportScheduleRecord {
         if let Some(existing_id) = id
             && let Some(schedule) = self
@@ -346,6 +424,7 @@ impl SupportStore {
             schedule.target = target;
             schedule.next_run_at = next_run_at;
             schedule.status = status;
+            schedule.execution_context = execution_context;
             let updated = schedule.clone();
             self.persist();
             return updated;
@@ -362,6 +441,7 @@ impl SupportStore {
             status,
             cadence,
             target,
+            execution_context,
         };
         self.snapshot.schedules.insert(0, created.clone());
         self.persist();
@@ -393,5 +473,262 @@ impl SupportStore {
         let updated = item.clone();
         self.persist();
         Some(updated)
+    }
+}
+
+fn execution_context_matches(
+    context: Option<&ReportExecutionContext>,
+    filter: &ReportExecutionContextFilter,
+) -> bool {
+    match filter.scope {
+        ReportExecutionScopeFilter::Unscoped => return context.is_none(),
+        ReportExecutionScopeFilter::Scoped if context.is_none() => return false,
+        ReportExecutionScopeFilter::All | ReportExecutionScopeFilter::Scoped => {}
+    }
+
+    let requires_context_match = filter.case_id.is_some()
+        || filter.incident_id.is_some()
+        || filter.investigation_id.is_some()
+        || filter.source.is_some();
+    if !requires_context_match {
+        return true;
+    }
+
+    let Some(context) = context else {
+        return false;
+    };
+
+    fn field_matches(actual: Option<&String>, expected: Option<&String>) -> bool {
+        match expected {
+            Some(expected_value) => actual.is_some_and(|actual_value| actual_value == expected_value),
+            None => true,
+        }
+    }
+
+    field_matches(context.case_id.as_ref(), filter.case_id.as_ref())
+        && field_matches(context.incident_id.as_ref(), filter.incident_id.as_ref())
+        && field_matches(
+            context.investigation_id.as_ref(),
+            filter.investigation_id.as_ref(),
+        )
+        && field_matches(context.source.as_ref(), filter.source.as_ref())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{
+        ReportExecutionContext, ReportExecutionContextFilter, ReportExecutionScopeFilter,
+        SupportStore,
+    };
+
+    fn temp_store_path(label: &str) -> String {
+        let nanos = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .expect("system time after unix epoch")
+            .as_nanos();
+        std::env::temp_dir()
+            .join(format!("sentineledge-support-{label}-{nanos}.json"))
+            .to_string_lossy()
+            .to_string()
+    }
+
+    #[test]
+    fn report_runs_and_schedules_preserve_execution_context() {
+        let path = temp_store_path("context");
+        let mut store = SupportStore::new(&path);
+        let execution_context = ReportExecutionContext {
+            case_id: Some("42".to_string()),
+            incident_id: Some("7".to_string()),
+            investigation_id: Some("inv-7".to_string()),
+            source: Some("case".to_string()),
+        };
+
+        let run = store.add_report_run(
+            "Scoped report".to_string(),
+            "incident_package".to_string(),
+            "incidents".to_string(),
+            "json".to_string(),
+            "analyst".to_string(),
+            "completed".to_string(),
+            "Scoped summary".to_string(),
+            128,
+            serde_json::json!({"ok": true}),
+            Some(execution_context.clone()),
+        );
+        let schedule = store.upsert_report_schedule(
+            None,
+            "Scoped schedule".to_string(),
+            "incident_package".to_string(),
+            "incidents".to_string(),
+            "json".to_string(),
+            "weekly".to_string(),
+            "ops@wardex.local".to_string(),
+            Some("2026-04-30T08:00:00Z".to_string()),
+            "active".to_string(),
+            Some(execution_context.clone()),
+        );
+
+        assert_eq!(
+            run.execution_context
+                .as_ref()
+                .and_then(|context| context.case_id.as_deref()),
+            Some("42")
+        );
+        assert_eq!(
+            schedule
+                .execution_context
+                .as_ref()
+                .and_then(|context| context.investigation_id.as_deref()),
+            Some("inv-7")
+        );
+
+        let reloaded = SupportStore::new(&path);
+        assert_eq!(
+            reloaded.report_runs()[0]
+                .execution_context
+                .as_ref()
+                .and_then(|context| context.incident_id.as_deref()),
+            Some("7")
+        );
+        assert_eq!(
+            reloaded.report_schedules()[0]
+                .execution_context
+                .as_ref()
+                .and_then(|context| context.source.as_deref()),
+            Some("case")
+        );
+
+        let _ = std::fs::remove_file(path);
+    }
+
+    #[test]
+    fn report_runs_and_schedules_filter_by_execution_context() {
+        let path = temp_store_path("filters");
+        let mut store = SupportStore::new(&path);
+        let scoped_context = ReportExecutionContext {
+            case_id: Some("42".to_string()),
+            incident_id: Some("7".to_string()),
+            investigation_id: Some("inv-7".to_string()),
+            source: Some("case".to_string()),
+        };
+
+        store.add_report_run(
+            "Scoped report".to_string(),
+            "incident_package".to_string(),
+            "incidents".to_string(),
+            "json".to_string(),
+            "analyst".to_string(),
+            "completed".to_string(),
+            "Scoped summary".to_string(),
+            128,
+            serde_json::json!({"ok": true}),
+            Some(scoped_context.clone()),
+        );
+        store.add_report_run(
+            "Global report".to_string(),
+            "executive_status".to_string(),
+            "global".to_string(),
+            "json".to_string(),
+            "executive".to_string(),
+            "completed".to_string(),
+            "Global summary".to_string(),
+            64,
+            serde_json::json!({"ok": true}),
+            None,
+        );
+        store.upsert_report_schedule(
+            None,
+            "Scoped schedule".to_string(),
+            "incident_package".to_string(),
+            "incidents".to_string(),
+            "json".to_string(),
+            "weekly".to_string(),
+            "analysts@wardex.local".to_string(),
+            Some("2026-04-24T08:00:00Z".to_string()),
+            "active".to_string(),
+            Some(scoped_context.clone()),
+        );
+        store.upsert_report_schedule(
+            None,
+            "Global schedule".to_string(),
+            "executive_status".to_string(),
+            "global".to_string(),
+            "json".to_string(),
+            "weekly".to_string(),
+            "exec@wardex.local".to_string(),
+            Some("2026-04-24T08:00:00Z".to_string()),
+            "active".to_string(),
+            None,
+        );
+
+        let scoped_filter = ReportExecutionContextFilter {
+            case_id: Some("42".to_string()),
+            incident_id: Some("7".to_string()),
+            investigation_id: Some("inv-7".to_string()),
+            source: Some("case".to_string()),
+            scope: ReportExecutionScopeFilter::Scoped,
+        };
+        let unscoped_filter = ReportExecutionContextFilter {
+            scope: ReportExecutionScopeFilter::Unscoped,
+            ..ReportExecutionContextFilter::default()
+        };
+
+        assert_eq!(store.report_runs_filtered(&scoped_filter).len(), 1);
+        assert_eq!(store.report_schedules_filtered(&scoped_filter).len(), 1);
+        assert_eq!(store.report_runs_filtered(&unscoped_filter).len(), 1);
+        assert_eq!(store.report_schedules_filtered(&unscoped_filter).len(), 1);
+
+        let _ = std::fs::remove_file(path);
+    }
+
+    #[test]
+    fn report_templates_preserve_and_filter_execution_context() {
+        let path = temp_store_path("template-filters");
+        let mut store = SupportStore::new(&path);
+        let scoped_context = ReportExecutionContext {
+            case_id: Some("42".to_string()),
+            incident_id: Some("7".to_string()),
+            investigation_id: Some("inv-7".to_string()),
+            source: Some("case".to_string()),
+        };
+
+        let scoped_template = store.upsert_report_template(
+            None,
+            "Scoped incident package".to_string(),
+            "incident_package".to_string(),
+            "incidents".to_string(),
+            "json".to_string(),
+            "ready".to_string(),
+            "analyst".to_string(),
+            "Scoped preset".to_string(),
+            Some(scoped_context.clone()),
+        );
+
+        assert_eq!(
+            scoped_template
+                .execution_context
+                .as_ref()
+                .and_then(|context| context.case_id.as_deref()),
+            Some("42")
+        );
+
+        let reloaded = SupportStore::new(&path);
+        let filtered = reloaded.report_templates_filtered(&ReportExecutionContextFilter {
+            case_id: Some("42".to_string()),
+            incident_id: Some("7".to_string()),
+            investigation_id: Some("inv-7".to_string()),
+            source: Some("case".to_string()),
+            scope: ReportExecutionScopeFilter::Scoped,
+        });
+        assert_eq!(filtered.len(), 1);
+        assert_eq!(filtered[0].name, "Scoped incident package");
+
+        let unscoped = reloaded.report_templates_filtered(&ReportExecutionContextFilter {
+            scope: ReportExecutionScopeFilter::Unscoped,
+            ..ReportExecutionContextFilter::default()
+        });
+        assert!(unscoped.iter().any(|template| template.id == "tpl-executive-status"));
+
+        let _ = std::fs::remove_file(path);
     }
 }

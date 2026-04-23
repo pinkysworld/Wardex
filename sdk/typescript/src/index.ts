@@ -1,5 +1,5 @@
 /**
- * Wardex SentinelEdge TypeScript SDK
+ * Wardex TypeScript SDK
  *
  * Full-typed client for the Wardex XDR REST API.
  */
@@ -84,6 +84,82 @@ export interface ScanMatch {
   source: string;
   name: string;
   severity: string;
+}
+
+export interface DetectionEvidence {
+  kind: string;
+  label: string;
+  value: string;
+  confidence?: number;
+  source?: string;
+}
+
+export interface DetectionFeedback {
+  id: number;
+  event_id?: number;
+  alert_id?: string;
+  rule_id?: string;
+  analyst: string;
+  verdict: string;
+  reason_pattern?: string;
+  notes: string;
+  evidence: DetectionEvidence[];
+  created_at: string;
+}
+
+export interface EntityRiskScore {
+  entity_kind: string;
+  entity_id: string;
+  score: number;
+  confidence: number;
+  rationale: string[];
+}
+
+export interface OnboardingReadinessCheck {
+  key: string;
+  label: string;
+  ready: boolean;
+  status: string;
+  detail: string;
+}
+
+export interface OnboardingReadiness {
+  generated_at: string;
+  ready: boolean;
+  completed: number;
+  total: number;
+  estimated_minutes: number;
+  checks: OnboardingReadinessCheck[];
+}
+
+export interface MalwareStaticProfile {
+  file_type: string;
+  platform_hint: string;
+  executable_format: boolean;
+  archive_format: boolean;
+  script_like: boolean;
+  magic: string;
+  probable_signed: boolean;
+  imports: string[];
+  section_hints: string[];
+  suspicious_traits: string[];
+  trusted_publisher_match?: string;
+  internal_tool_match?: string;
+  analyst_summary: string[];
+}
+
+export interface MalwareBehaviorProfile {
+  observed_tactics: string[];
+  severity: string;
+  allowlist_match?: string;
+  recommended_actions: string[];
+}
+
+export interface DeepScanResult {
+  scan: unknown;
+  static_profile: MalwareStaticProfile;
+  behavior_profile: MalwareBehaviorProfile;
+  analyst_summary: string[];
 }
 
 export interface MalwareStats {
@@ -300,6 +376,24 @@ export class WardexClient {
 
   async scanHash(hash: string): Promise<ScanResult> {
     return this.request("POST", "/api/scan/hash", { hash });
+  }
+
+  async scanBufferV2(
+    data: Uint8Array | string,
+    filename?: string,
+    behavior?: Record<string, unknown>,
+    allowlist?: Record<string, unknown>
+  ): Promise<DeepScanResult> {
+    const b64 =
+      typeof data === "string"
+        ? data
+        : Buffer.from(data).toString("base64");
+    return this.request("POST", "/api/scan/buffer/v2", {
+      data: b64,
+      filename: filename ?? "upload",
+      behavior,
+      allowlist,
+    });
   }
 
   async malwareStats(): Promise<MalwareStats> {
@@ -582,6 +676,38 @@ export class WardexClient {
     return this.request("POST", "/api/events", { agent_id: agentId, events });
   }
 
+  async onboardingReadiness(): Promise<OnboardingReadiness> {
+    return this.request("GET", "/api/onboarding/readiness");
+  }
+
+  async managerQueueDigest(): Promise<unknown> {
+    return this.request("GET", "/api/manager/queue-digest");
+  }
+
+  async detectionExplain(
+    params: { event_id?: number; alert_id?: string } = {}
+  ): Promise<unknown> {
+    const qs = new URLSearchParams();
+    if (params.event_id != null) qs.set("event_id", String(params.event_id));
+    if (params.alert_id) qs.set("alert_id", params.alert_id);
+    return this.request("GET", `/api/detection/explain${qs.toString() ? `?${qs.toString()}` : ""}`);
+  }
+
+  async detectionFeedback(eventId?: number): Promise<{ items: DetectionFeedback[] }> {
+    const qs = new URLSearchParams();
+    if (eventId != null) qs.set("event_id", String(eventId));
+    return this.request(
+      "GET",
+      `/api/detection/feedback${qs.toString() ? `?${qs.toString()}` : ""}`
+    );
+  }
+
+  async recordDetectionFeedback(
+    feedback: Omit<DetectionFeedback, "id" | "created_at">
+  ): Promise<DetectionFeedback> {
+    return this.request("POST", "/api/detection/feedback", feedback);
+  }
+
   // ── Threat Intel ─────────────────────────────────────────────────
 
   async threatIntelStatus(): Promise<unknown> {
@@ -590,6 +716,30 @@ export class WardexClient {
 
   async addIoc(ioc: Record<string, unknown>): Promise<unknown> {
     return this.request("POST", "/api/threat-intel/ioc", ioc);
+  }
+
+  async threatIntelLibraryV2(): Promise<unknown> {
+    return this.request("GET", "/api/threat-intel/library/v2");
+  }
+
+  async threatIntelSightings(limit: number = 50): Promise<unknown> {
+    return this.request("GET", `/api/threat-intel/sightings?limit=${limit}`);
+  }
+
+  async mlModelStatus(): Promise<unknown> {
+    return this.request("GET", "/api/ml/models/status");
+  }
+
+  async mlRollback(): Promise<unknown> {
+    return this.request("POST", "/api/ml/models/rollback");
+  }
+
+  async mlShadowRecent(limit: number = 20): Promise<unknown> {
+    return this.request("GET", `/api/ml/shadow/recent?limit=${limit}`);
+  }
+
+  async mlTriageV2(features: Record<string, unknown>): Promise<unknown> {
+    return this.request("POST", "/api/ml/triage/v2", features);
   }
 
   // ── Campaigns ────────────────────────────────────────────────────

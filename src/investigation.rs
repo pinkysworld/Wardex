@@ -44,20 +44,61 @@ pub struct InvestigationWorkflow {
 /// Investigation progress tracker.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct InvestigationProgress {
+    pub id: String,
     pub workflow_id: String,
     pub case_id: Option<String>,
     pub analyst: String,
     pub started_at: String,
+    pub updated_at: String,
     pub completed_steps: Vec<usize>,
     pub notes: HashMap<usize, String>,
     pub status: String,
     pub findings: Vec<String>,
+    pub handoff: Option<InvestigationHandoff>,
+}
+
+/// Structured analyst handoff attached to an active investigation.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct InvestigationHandoff {
+    pub from_analyst: String,
+    pub to_analyst: String,
+    pub summary: String,
+    pub next_actions: Vec<String>,
+    pub questions: Vec<String>,
+    pub updated_at: String,
+}
+
+/// Investigation progress enriched with workflow metadata for UI consumption.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct InvestigationSnapshot {
+    pub id: String,
+    pub workflow_id: String,
+    pub workflow_name: String,
+    pub workflow_description: String,
+    pub workflow_severity: String,
+    pub mitre_techniques: Vec<String>,
+    pub estimated_minutes: u32,
+    pub case_id: Option<String>,
+    pub analyst: String,
+    pub started_at: String,
+    pub updated_at: String,
+    pub completed_steps: Vec<usize>,
+    pub notes: HashMap<usize, String>,
+    pub status: String,
+    pub findings: Vec<String>,
+    pub handoff: Option<InvestigationHandoff>,
+    pub total_steps: usize,
+    pub completion_percent: u8,
+    pub next_step: Option<InvestigationStep>,
+    pub steps: Vec<InvestigationStep>,
+    pub completion_criteria: Vec<String>,
 }
 
 /// Investigation workflow store.
 pub struct WorkflowStore {
     workflows: Vec<InvestigationWorkflow>,
     progress: Vec<InvestigationProgress>,
+    next_progress_id: u64,
 }
 
 impl Default for WorkflowStore {
@@ -71,6 +112,7 @@ impl WorkflowStore {
         Self {
             workflows: builtin_workflows(),
             progress: Vec::new(),
+            next_progress_id: 1,
         }
     }
 
@@ -89,16 +131,21 @@ impl WorkflowStore {
         case_id: Option<String>,
     ) -> Option<InvestigationProgress> {
         if self.workflows.iter().any(|w| w.id == workflow_id) {
+            let now = chrono::Utc::now().to_rfc3339();
             let progress = InvestigationProgress {
+                id: format!("inv-{}", self.next_progress_id),
                 workflow_id: workflow_id.to_string(),
                 case_id,
                 analyst: analyst.to_string(),
-                started_at: chrono::Utc::now().to_rfc3339(),
+                started_at: now.clone(),
+                updated_at: now,
                 completed_steps: Vec::new(),
                 notes: HashMap::new(),
                 status: "in-progress".into(),
                 findings: Vec::new(),
+                handoff: None,
             };
+            self.next_progress_id += 1;
             self.progress.push(progress.clone());
             Some(progress)
         } else {
@@ -118,18 +165,150 @@ impl WorkflowStore {
         }) {
             if !p.completed_steps.contains(&step) {
                 p.completed_steps.push(step);
+                p.completed_steps.sort_unstable();
             }
             if let Some(n) = note {
                 p.notes.insert(step, n);
             }
+            p.updated_at = chrono::Utc::now().to_rfc3339();
         }
     }
 
     pub fn active_investigations(&self) -> Vec<&InvestigationProgress> {
         self.progress
             .iter()
-            .filter(|p| p.status == "in-progress")
+            .filter(|p| is_active_status(&p.status))
             .collect()
+    }
+
+    pub fn active_snapshots(&self) -> Vec<InvestigationSnapshot> {
+        self.progress
+            .iter()
+            .filter(|progress| is_active_status(&progress.status))
+            .filter_map(|progress| self.snapshot_for_progress(progress))
+            .collect()
+    }
+
+    pub fn get_snapshot(&self, investigation_id: &str) -> Option<InvestigationSnapshot> {
+        self.progress
+            .iter()
+            .find(|progress| progress.id == investigation_id)
+            .and_then(|progress| self.snapshot_for_progress(progress))
+    }
+
+    pub fn update_investigation(
+        &mut self,
+        investigation_id: &str,
+        step: Option<usize>,
+        completed: Option<bool>,
+        note: Option<String>,
+        status: Option<String>,
+        finding: Option<String>,
+    ) -> Option<InvestigationSnapshot> {
+        let progress_index = self
+            .progress
+            .iter()
+            .position(|progress| progress.id == investigation_id)?;
+        let workflow_id = self.progress[progress_index].workflow_id.clone();
+        let valid_steps = self
+            .get_workflow(&workflow_id)?
+            .steps
+            .iter()
+            .map(|entry| entry.order)
+            .collect::<Vec<_>>();
+        let status_provided = status.is_some();
+
+        {
+            let progress = &mut self.progress[progress_index];
+            if let Some(step_order) = step {
+                if !valid_steps.contains(&step_order) {
+                    return None;
+                }
+
+                if let Some(is_completed) = completed {
+                    if is_completed {
+                        if !progress.completed_steps.contains(&step_order) {
+                            progress.completed_steps.push(step_order);
+                        }
+                        progress.completed_steps.sort_unstable();
+                    } else {
+                        progress.completed_steps.retain(|entry| *entry != step_order);
+                    }
+                }
+
+                if let Some(step_note) = note {
+                    let trimmed = step_note.trim().to_string();
+                    if trimmed.is_empty() {
+                        progress.notes.remove(&step_order);
+                    } else {
+                        progress.notes.insert(step_order, trimmed);
+                    }
+                }
+            }
+
+            if let Some(status_value) = status
+                && !status_value.trim().is_empty()
+            {
+                progress.status = status_value.trim().to_string();
+            }
+
+            if let Some(finding_text) = finding {
+                let trimmed = finding_text.trim().to_string();
+                if !trimmed.is_empty()
+                    && !progress
+                        .findings
+                        .iter()
+                        .any(|entry| entry.eq_ignore_ascii_case(&trimmed))
+                {
+                    progress.findings.push(trimmed);
+                }
+            }
+
+            if !status_provided {
+                let all_completed = !valid_steps.is_empty()
+                    && valid_steps
+                        .iter()
+                        .all(|step_order| progress.completed_steps.contains(step_order));
+                progress.status = if all_completed {
+                    "completed".into()
+                } else {
+                    "in-progress".into()
+                };
+            }
+
+            progress.updated_at = chrono::Utc::now().to_rfc3339();
+        }
+
+        self.get_snapshot(investigation_id)
+    }
+
+    pub fn record_handoff(
+        &mut self,
+        investigation_id: &str,
+        to_analyst: String,
+        summary: String,
+        next_actions: Vec<String>,
+        questions: Vec<String>,
+    ) -> Option<InvestigationSnapshot> {
+        let progress = self
+            .progress
+            .iter_mut()
+            .find(|progress| progress.id == investigation_id)?;
+        let now = chrono::Utc::now().to_rfc3339();
+        let from_analyst = progress.analyst.clone();
+        let next_owner = to_analyst.trim().to_string();
+        progress.handoff = Some(InvestigationHandoff {
+            from_analyst,
+            to_analyst: next_owner.clone(),
+            summary: summary.trim().to_string(),
+            next_actions,
+            questions,
+            updated_at: now.clone(),
+        });
+        progress.analyst = next_owner;
+        progress.status = "handoff-ready".into();
+        progress.updated_at = now;
+        self.get_snapshot(investigation_id)
     }
 
     pub fn workflow_count(&self) -> usize {
@@ -151,6 +330,53 @@ impl WorkflowStore {
             })
             .collect()
     }
+
+    fn snapshot_for_progress(
+        &self,
+        progress: &InvestigationProgress,
+    ) -> Option<InvestigationSnapshot> {
+        let workflow = self.get_workflow(&progress.workflow_id)?;
+        let total_steps = workflow.steps.len();
+        let completed_count = progress.completed_steps.len().min(total_steps);
+        let completion_percent = if total_steps == 0 {
+            0
+        } else {
+            ((completed_count * 100) / total_steps) as u8
+        };
+        let next_step = workflow
+            .steps
+            .iter()
+            .find(|step| !progress.completed_steps.contains(&step.order))
+            .cloned();
+
+        Some(InvestigationSnapshot {
+            id: progress.id.clone(),
+            workflow_id: progress.workflow_id.clone(),
+            workflow_name: workflow.name.clone(),
+            workflow_description: workflow.description.clone(),
+            workflow_severity: workflow.severity.clone(),
+            mitre_techniques: workflow.mitre_techniques.clone(),
+            estimated_minutes: workflow.estimated_minutes,
+            case_id: progress.case_id.clone(),
+            analyst: progress.analyst.clone(),
+            started_at: progress.started_at.clone(),
+            updated_at: progress.updated_at.clone(),
+            completed_steps: progress.completed_steps.clone(),
+            notes: progress.notes.clone(),
+            status: progress.status.clone(),
+            findings: progress.findings.clone(),
+            handoff: progress.handoff.clone(),
+            total_steps,
+            completion_percent,
+            next_step,
+            steps: workflow.steps.clone(),
+            completion_criteria: workflow.completion_criteria.clone(),
+        })
+    }
+}
+
+fn is_active_status(status: &str) -> bool {
+    !matches!(status, "completed" | "closed" | "resolved")
 }
 
 fn builtin_workflows() -> Vec<InvestigationWorkflow> {
@@ -420,6 +646,7 @@ mod tests {
         let mut store = WorkflowStore::new();
         let progress = store.start_investigation("credential-storm", "analyst-1", None);
         assert!(progress.is_some());
+        assert_eq!(progress.as_ref().map(|entry| entry.id.as_str()), Some("inv-1"));
         store.complete_step(
             "credential-storm",
             "analyst-1",
@@ -429,5 +656,65 @@ mod tests {
         let active = store.active_investigations();
         assert_eq!(active.len(), 1);
         assert!(active[0].completed_steps.contains(&1));
+        assert!(active[0].updated_at >= active[0].started_at);
+    }
+
+    #[test]
+    fn snapshot_includes_progress_and_workflow_metadata() {
+        let mut store = WorkflowStore::new();
+        let progress = store
+            .start_investigation("credential-storm", "analyst-1", Some("42".into()))
+            .expect("investigation started");
+
+        let snapshot = store
+            .update_investigation(
+                &progress.id,
+                Some(1),
+                Some(true),
+                Some("Scoped three targeted accounts".into()),
+                None,
+                Some("Targeting stayed inside finance admins".into()),
+            )
+            .expect("snapshot after progress update");
+
+        assert_eq!(snapshot.id, progress.id);
+        assert_eq!(snapshot.workflow_id, "credential-storm");
+        assert_eq!(snapshot.workflow_name, "Investigate Credential Storm");
+        assert_eq!(snapshot.case_id.as_deref(), Some("42"));
+        assert_eq!(snapshot.completion_percent, 25);
+        assert!(snapshot.completed_steps.contains(&1));
+        assert_eq!(snapshot.notes.get(&1).map(String::as_str), Some("Scoped three targeted accounts"));
+        assert!(snapshot
+            .findings
+            .iter()
+            .any(|finding| finding.contains("finance admins")));
+        assert_eq!(snapshot.total_steps, 4);
+        assert!(snapshot.next_step.is_some());
+    }
+
+    #[test]
+    fn record_handoff_updates_active_investigation_owner() {
+        let mut store = WorkflowStore::new();
+        let progress = store
+            .start_investigation("credential-storm", "analyst-1", Some("99".into()))
+            .expect("investigation started");
+
+        let snapshot = store
+            .record_handoff(
+                &progress.id,
+                "analyst-2".into(),
+                "Awaiting identity team validation on two suspicious sign-ins".into(),
+                vec!["Confirm MFA coverage".into(), "Review VPN geolocation anomalies".into()],
+                vec!["Did any of the targets reuse a service credential?".into()],
+            )
+            .expect("handoff snapshot");
+
+        assert_eq!(snapshot.analyst, "analyst-2");
+        assert_eq!(snapshot.status, "handoff-ready");
+        assert!(snapshot.handoff.is_some());
+        let handoff = snapshot.handoff.expect("handoff attached");
+        assert_eq!(handoff.from_analyst, "analyst-1");
+        assert_eq!(handoff.to_analyst, "analyst-2");
+        assert_eq!(handoff.next_actions.len(), 2);
     }
 }

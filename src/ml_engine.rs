@@ -779,6 +779,235 @@ impl InferenceEngine for OnnxEngine {
     }
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ConfidenceCalibration {
+    pub raw_confidence: f64,
+    pub calibrated_confidence: f64,
+    pub band: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ShadowInferenceRecord {
+    pub slot: String,
+    pub timestamp: String,
+    pub active_backend: String,
+    pub active_label: String,
+    pub active_confidence: f64,
+    pub shadow_backend: Option<String>,
+    pub shadow_label: Option<String>,
+    pub shadow_confidence: Option<f64>,
+    pub confidence_delta: Option<f64>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ManagedTriageOutcome {
+    pub result: TriageResult,
+    #[serde(default)]
+    pub shadow: Option<TriageResult>,
+    pub fallback_used: bool,
+    pub active_backend: String,
+    #[serde(default)]
+    pub shadow_backend: Option<String>,
+    pub calibration: ConfidenceCalibration,
+    #[serde(default)]
+    pub rationale: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ModelRegistryStatus {
+    pub slot: String,
+    pub active_backend: String,
+    #[serde(default)]
+    pub shadow_backend: Option<String>,
+    pub shadow_mode: bool,
+    pub onnx_loaded: bool,
+    pub last_refreshed_at: String,
+    pub discovered_models: Vec<String>,
+    pub loaded_models: Vec<ModelInfo>,
+    pub available_models: Vec<ModelInfo>,
+    #[serde(default)]
+    pub recent_shadow_reports: Vec<ShadowInferenceRecord>,
+}
+
+#[derive(Debug)]
+pub struct ModelRegistry {
+    fallback: StubEngine,
+    onnx: OnnxEngine,
+    shadow_mode: bool,
+    prefer_onnx_primary: bool,
+    last_refreshed_at: String,
+    recent_shadow_reports: Vec<ShadowInferenceRecord>,
+}
+
+impl ModelRegistry {
+    pub fn new(model_dir: &str) -> Self {
+        let mut registry = Self {
+            fallback: StubEngine::new(),
+            onnx: OnnxEngine::new(model_dir),
+            shadow_mode: true,
+            prefer_onnx_primary: false,
+            last_refreshed_at: chrono::Utc::now().to_rfc3339(),
+            recent_shadow_reports: Vec::new(),
+        };
+        registry.refresh();
+        registry
+    }
+
+    pub fn refresh(&mut self) {
+        for result in self.onnx.load_all_discovered() {
+            let _ = result;
+        }
+        self.prefer_onnx_primary = self.onnx.status("alert_triage_v1") == ModelStatus::Ready;
+        self.last_refreshed_at = chrono::Utc::now().to_rfc3339();
+    }
+
+    pub fn rollback_alert_triage(&mut self) -> bool {
+        let changed = self.prefer_onnx_primary;
+        self.prefer_onnx_primary = false;
+        changed
+    }
+
+    pub fn enable_shadow_mode(&mut self, enabled: bool) {
+        self.shadow_mode = enabled;
+    }
+
+    pub fn status(&self) -> ModelRegistryStatus {
+        let discovered_models = self.onnx.discover_models();
+        let loaded_models = {
+            let mut models = self.onnx.list_models();
+            if models.is_empty() {
+                models = self.fallback.list_models();
+            }
+            models
+        };
+        ModelRegistryStatus {
+            slot: "alert_triage".to_string(),
+            active_backend: if self.prefer_onnx_primary && self.onnx.status("alert_triage_v1") == ModelStatus::Ready {
+                "onnx".to_string()
+            } else {
+                "random_forest_fallback".to_string()
+            },
+            shadow_backend: if self.shadow_mode
+                && self.onnx.status("alert_triage_v1") == ModelStatus::Ready
+            {
+                Some(if self.prefer_onnx_primary {
+                    "random_forest_fallback".to_string()
+                } else {
+                    "onnx".to_string()
+                })
+            } else {
+                None
+            },
+            shadow_mode: self.shadow_mode,
+            onnx_loaded: self.onnx.status("alert_triage_v1") == ModelStatus::Ready,
+            last_refreshed_at: self.last_refreshed_at.clone(),
+            discovered_models,
+            loaded_models,
+            available_models: StubEngine::planned_models(),
+            recent_shadow_reports: self.recent_shadow_reports.iter().rev().take(20).cloned().collect(),
+        }
+    }
+
+    pub fn triage_alert(&mut self, features: &TriageFeatures) -> ManagedTriageOutcome {
+        let onnx_ready = self.onnx.status("alert_triage_v1") == ModelStatus::Ready;
+        let fallback = self.fallback.triage_alert(features);
+        let use_onnx_primary = self.prefer_onnx_primary && onnx_ready;
+        let primary = if use_onnx_primary {
+            self.onnx.triage_alert(features)
+        } else {
+            fallback.clone()
+        };
+        let shadow = if self.shadow_mode && onnx_ready {
+            Some(if use_onnx_primary {
+                fallback.clone()
+            } else {
+                self.onnx.triage_alert(features)
+            })
+        } else {
+            None
+        };
+        if let Some(ref shadow_result) = shadow {
+            self.record_shadow_report(
+                if use_onnx_primary { "onnx" } else { "random_forest_fallback" },
+                shadow_result,
+                &primary,
+                if use_onnx_primary {
+                    Some("random_forest_fallback")
+                } else {
+                    Some("onnx")
+                },
+            );
+        }
+        let calibrated_confidence = 1.0 / (1.0 + (-4.0 * (primary.confidence - 0.5)).exp());
+        let band = if calibrated_confidence >= 0.85 {
+            "high"
+        } else if calibrated_confidence >= 0.6 {
+            "medium"
+        } else {
+            "low"
+        };
+        let mut rationale = Vec::new();
+        rationale.push(format!(
+            "primary backend: {}",
+            if use_onnx_primary { "onnx" } else { "random_forest_fallback" }
+        ));
+        if shadow.is_some() {
+            rationale.push("shadow inference captured for calibration comparison".to_string());
+        } else {
+            rationale.push("fallback-only decision because no ONNX triage model is loaded".to_string());
+        }
+        ManagedTriageOutcome {
+            result: primary.clone(),
+            shadow,
+            fallback_used: !use_onnx_primary,
+            active_backend: if use_onnx_primary {
+                "onnx".to_string()
+            } else {
+                "random_forest_fallback".to_string()
+            },
+            shadow_backend: if self.shadow_mode && onnx_ready {
+                Some(if use_onnx_primary {
+                    "random_forest_fallback".to_string()
+                } else {
+                    "onnx".to_string()
+                })
+            } else {
+                None
+            },
+            calibration: ConfidenceCalibration {
+                raw_confidence: primary.confidence,
+                calibrated_confidence,
+                band: band.to_string(),
+            },
+            rationale,
+        }
+    }
+
+    fn record_shadow_report(
+        &mut self,
+        active_backend: &str,
+        shadow: &TriageResult,
+        primary: &TriageResult,
+        shadow_backend: Option<&str>,
+    ) {
+        self.recent_shadow_reports.push(ShadowInferenceRecord {
+            slot: "alert_triage".to_string(),
+            timestamp: chrono::Utc::now().to_rfc3339(),
+            active_backend: active_backend.to_string(),
+            active_label: format!("{:?}", primary.label),
+            active_confidence: primary.confidence,
+            shadow_backend: shadow_backend.map(str::to_string),
+            shadow_label: Some(format!("{:?}", shadow.label)),
+            shadow_confidence: Some(shadow.confidence),
+            confidence_delta: Some((primary.confidence - shadow.confidence).abs()),
+        });
+        if self.recent_shadow_reports.len() > 200 {
+            let keep_from = self.recent_shadow_reports.len() - 200;
+            self.recent_shadow_reports.drain(0..keep_from);
+        }
+    }
+}
+
 #[cfg(test)]
 mod onnx_tests {
     use super::*;
@@ -938,5 +1167,25 @@ mod onnx_tests {
         let back: ModelInfo = serde_json::from_str(&json).unwrap();
         assert_eq!(back.name, "test");
         assert_eq!(back.input_shape, vec![1, 7]);
+    }
+
+    #[test]
+    fn model_registry_falls_back_without_onnx_model() {
+        let mut registry = ModelRegistry::new("/nonexistent/models");
+        let features = TriageFeatures {
+            anomaly_score: 0.8,
+            confidence: 0.9,
+            suspicious_axes: 3,
+            hour_of_day: 2,
+            day_of_week: 1,
+            alert_frequency_1h: 3,
+            device_risk_score: 0.7,
+        };
+        let outcome = registry.triage_alert(&features);
+        assert_eq!(outcome.active_backend, "random_forest_fallback");
+        assert!(outcome.calibration.calibrated_confidence > 0.0);
+        let status = registry.status();
+        assert!(!status.onnx_loaded);
+        assert_eq!(status.available_models.len(), 3);
     }
 }

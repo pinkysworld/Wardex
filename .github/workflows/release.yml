@@ -195,7 +195,7 @@ jobs:
             --name wardex \
             --version "${{ steps.version.outputs.tag }}" \
             --architecture amd64 \
-            --description "Wardex SentinelEdge XDR platform" \
+            --description "Wardex XDR platform" \
             --url "https://github.com/${{ github.repository }}" \
             --license "BSL-1.1" \
             --maintainer "${{ github.repository_owner }}" \
@@ -213,7 +213,7 @@ jobs:
             --name wardex \
             --version "${{ steps.version.outputs.tag }}" \
             --architecture x86_64 \
-            --description "Wardex SentinelEdge XDR platform" \
+            --description "Wardex XDR platform" \
             --url "https://github.com/${{ github.repository }}" \
             --license "BSL-1.1" \
             --maintainer "${{ github.repository_owner }}" \

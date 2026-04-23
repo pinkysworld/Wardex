@@ -22,6 +22,15 @@ const SCIM_MODE_OPTIONS = [
   { value: 'manual', label: 'Manual' },
   { value: 'automatic', label: 'Automatic' },
 ];
+const SIEM_TYPE_OPTIONS = [
+  { value: 'generic', label: 'Generic JSON' },
+  { value: 'splunk', label: 'Splunk HEC' },
+  { value: 'elastic', label: 'Elastic Bulk' },
+  { value: 'elastic-ecs', label: 'Elastic ECS' },
+  { value: 'sentinel', label: 'Microsoft Sentinel' },
+  { value: 'google', label: 'Google SecOps UDM' },
+  { value: 'qradar', label: 'IBM QRadar' },
+];
 
 function parseStructuredConfig(config) {
   if (!config) return null;
@@ -180,6 +189,10 @@ function formatApiError(error, fallback) {
 }
 
 function createIdpDraft(provider = null) {
+  const defaultRedirectUri =
+    typeof window === 'undefined'
+      ? 'http://localhost:8080/api/auth/sso/callback'
+      : `${window.location.origin}/api/auth/sso/callback`;
   return {
     id: provider?.id || '',
     kind: String(provider?.kind || 'oidc').toLowerCase(),
@@ -187,6 +200,8 @@ function createIdpDraft(provider = null) {
     issuer_url: provider?.issuer_url || '',
     sso_url: provider?.sso_url || '',
     client_id: provider?.client_id || '',
+    client_secret: '',
+    redirect_uri: provider?.redirect_uri || defaultRedirectUri,
     entity_id: provider?.entity_id || '',
     enabled: provider?.enabled ?? true,
     mappings_text: formatGroupRoleMappings(provider?.group_role_mappings),
@@ -201,6 +216,122 @@ function createScimDraft(config = null) {
     provisioning_mode: String(config?.provisioning_mode || 'manual').toLowerCase(),
     default_role: String(config?.default_role || 'viewer').toLowerCase(),
     mappings_text: formatGroupRoleMappings(config?.group_role_mappings),
+  };
+}
+
+function createSiemDraft(config = null) {
+  return {
+    enabled: Boolean(config?.enabled),
+    siem_type: config?.siem_type || 'generic',
+    endpoint: config?.endpoint || '',
+    auth_token: '',
+    index: config?.index || 'wardex',
+    source_type: config?.source_type || 'wardex:xdr',
+    poll_interval_secs: config?.poll_interval_secs ?? 60,
+    pull_enabled: Boolean(config?.pull_enabled),
+    pull_query: config?.pull_query || '',
+    batch_size: config?.batch_size ?? 50,
+    verify_tls: config?.verify_tls ?? true,
+  };
+}
+
+function parseListInput(value) {
+  return value
+    .split('\n')
+    .map((entry) => entry.trim())
+    .filter(Boolean);
+}
+
+function createRetentionDraft(status = null) {
+  return {
+    audit_max_records: status?.audit_max_records ?? 100000,
+    alert_max_records: status?.alert_max_records ?? 50000,
+    event_max_records: status?.event_max_records ?? 100000,
+    audit_max_age_days: Math.round((status?.audit_max_age_secs ?? 0) / 86400),
+    remote_syslog_endpoint: status?.remote_syslog_endpoint || '',
+  };
+}
+
+function createAwsCollectorDraft(data = null) {
+  const config = data?.config ?? data ?? {};
+  return {
+    enabled: Boolean(config.enabled),
+    region: config.region || 'us-east-1',
+    access_key_id: config.access_key_id || '',
+    secret_access_key: '',
+    session_token: '',
+    poll_interval_secs: config.poll_interval_secs ?? 60,
+    max_results: config.max_results ?? 50,
+    event_name_filter: Array.isArray(config.event_name_filter)
+      ? config.event_name_filter.join('\n')
+      : '',
+  };
+}
+
+function createAzureCollectorDraft(data = null) {
+  const config = data?.config ?? data ?? {};
+  return {
+    enabled: Boolean(config.enabled),
+    tenant_id: config.tenant_id || '',
+    client_id: config.client_id || '',
+    client_secret: '',
+    subscription_id: config.subscription_id || '',
+    poll_interval_secs: config.poll_interval_secs ?? 60,
+    categories: Array.isArray(config.categories) ? config.categories.join('\n') : '',
+  };
+}
+
+function createGcpCollectorDraft(data = null) {
+  const config = data?.config ?? data ?? {};
+  return {
+    enabled: Boolean(config.enabled),
+    project_id: config.project_id || '',
+    service_account_email: config.service_account_email || '',
+    key_file_path: config.key_file_path || '',
+    private_key_pem: '',
+    poll_interval_secs: config.poll_interval_secs ?? 60,
+    log_filter: config.log_filter || '',
+    page_size: config.page_size ?? 100,
+  };
+}
+
+function createOktaCollectorDraft(data = null) {
+  const config = data?.config ?? data ?? {};
+  return {
+    enabled: Boolean(config.enabled),
+    domain: config.domain || '',
+    api_token: '',
+    poll_interval_secs: config.poll_interval_secs ?? 30,
+    event_type_filter: Array.isArray(config.event_type_filter)
+      ? config.event_type_filter.join('\n')
+      : '',
+  };
+}
+
+function createEntraCollectorDraft(data = null) {
+  const config = data?.config ?? data ?? {};
+  return {
+    enabled: Boolean(config.enabled),
+    tenant_id: config.tenant_id || '',
+    client_id: config.client_id || '',
+    client_secret: '',
+    poll_interval_secs: config.poll_interval_secs ?? 30,
+  };
+}
+
+function createSecretsDraft(data = null) {
+  const config = data?.config ?? data ?? {};
+  const vault = config.vault ?? {};
+  return {
+    enabled: Boolean(vault.enabled),
+    address: vault.address || 'http://127.0.0.1:8200',
+    token: '',
+    mount: vault.mount || 'secret',
+    namespace: vault.namespace || '',
+    cache_ttl_secs: vault.cache_ttl_secs ?? 300,
+    env_prefix: config.env_prefix || '',
+    secrets_dir: config.secrets_dir || '',
+    test_reference: '',
   };
 }
 
@@ -317,7 +448,7 @@ function NumberInput({ label, value, onChange, min, max, step, unit, description
   );
 }
 
-function TextInput({ label, value, onChange, placeholder, description }) {
+function TextInput({ label, value, onChange, placeholder, description, type = 'text' }) {
   const inputId = useId();
   return (
     <div style={{ marginBottom: 10 }}>
@@ -330,7 +461,7 @@ function TextInput({ label, value, onChange, placeholder, description }) {
       <input
         id={inputId}
         name={label.toLowerCase().replace(/\s+/g, '_')}
-        type="text"
+        type={type}
         value={value ?? ''}
         onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}
@@ -432,6 +563,26 @@ function TextAreaInput({ label, value, onChange, placeholder, rows = 5, descript
   );
 }
 
+function ValidationIssues({ validation, style }) {
+  const normalized = normalizeValidation(validation);
+  if (!normalized.issues.length) return null;
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 6, ...style }}>
+      {normalized.issues.map((issue, index) => (
+        <div key={`${issue.field}-${index}`} className="stat-box" style={{ fontSize: 12 }}>
+          <span
+            className={`badge ${issue.level === 'error' ? 'badge-err' : 'badge-warn'}`}
+            style={{ marginRight: 8 }}
+          >
+            {issue.level}
+          </span>
+          <strong>{issue.field}:</strong> {issue.message}
+        </div>
+      ))}
+    </div>
+  );
+}
+
 export default function Settings() {
   const toast = useToast();
   const [confirm, confirmUI] = useConfirm();
@@ -445,8 +596,8 @@ export default function Settings() {
   const { data: monOpts } = useApi(api.monitoringOptions);
   const { data: monPaths } = useApi(api.monitoringPaths);
   const { data: flags } = useApi(api.featureFlags);
-  const { data: siemSt } = useApi(api.siemStatus);
-  const { data: siemCfg } = useApi(api.siemConfig);
+  const { data: siemSt, reload: rSiemStatus } = useApi(api.siemStatus);
+  const { data: siemCfg, reload: rSiemConfig } = useApi(api.siemConfig);
   const { data: taxiiSt } = useApi(api.taxiiStatus);
   const { data: taxiiCfg } = useApi(api.taxiiConfig);
   const { data: enrichConn } = useApi(api.enrichmentConnectors);
@@ -457,6 +608,49 @@ export default function Settings() {
   const { data: dlqData } = useApi(api.dlqStats);
   const { data: dbSizes, reload: rSizes } = useApi(api.adminDbSizes);
   const { data: storageStats, reload: rStats } = useApi(api.storageStats);
+  const { data: retentionData, reload: rRetention } = useApi(api.retentionStatus, [], {
+    skip: tab !== 'admin',
+  });
+  const [historicalDraft, setHistoricalDraft] = useState({
+    since: '',
+    until: '',
+    tenant_id: '',
+    device_id: '',
+    user_name: '',
+    src_ip: '',
+    severity_min: '',
+    event_class: '',
+    limit: 25,
+  });
+  const [historicalQuery, setHistoricalQuery] = useState({ limit: 25 });
+  const {
+    data: historicalEventsData,
+    loading: historicalEventsLoading,
+    reload: rHistoricalEvents,
+  } = useApi(() => api.historicalStorageEvents(historicalQuery), [JSON.stringify(historicalQuery)], {
+    skip: tab !== 'admin',
+  });
+  const { data: collectorsSummary, reload: rCollectorsSummary } = useApi(api.collectorsStatus, [], {
+    skip: tab !== 'integrations',
+  });
+  const { data: awsCollectorData, reload: rAwsCollector } = useApi(api.collectorsAws, [], {
+    skip: tab !== 'integrations',
+  });
+  const { data: azureCollectorData, reload: rAzureCollector } = useApi(api.collectorsAzure, [], {
+    skip: tab !== 'integrations',
+  });
+  const { data: gcpCollectorData, reload: rGcpCollector } = useApi(api.collectorsGcp, [], {
+    skip: tab !== 'integrations',
+  });
+  const { data: oktaCollectorData, reload: rOktaCollector } = useApi(api.collectorsOkta, [], {
+    skip: tab !== 'integrations',
+  });
+  const { data: entraCollectorData, reload: rEntraCollector } = useApi(api.collectorsEntra, [], {
+    skip: tab !== 'integrations',
+  });
+  const { data: secretsData, reload: rSecrets } = useApi(api.secretsStatus, [], {
+    skip: tab !== 'integrations',
+  });
   const auditQueryValue = auditQuery.trim();
   const auditMethodValue = auditMethod !== 'all' ? auditMethod : undefined;
   const auditStatusValue = auditStatus !== 'all' ? auditStatus : undefined;
@@ -505,6 +699,31 @@ export default function Settings() {
   const [scimEditing, setScimEditing] = useState(false);
   const [scimSaving, setScimSaving] = useState(false);
   const [scimFormError, setScimFormError] = useState(null);
+  const [retentionDraft, setRetentionDraft] = useState(() => createRetentionDraft());
+  const [retentionSaving, setRetentionSaving] = useState(false);
+  const [retentionApplying, setRetentionApplying] = useState(false);
+  const [lastRetentionApply, setLastRetentionApply] = useState(null);
+  const [siemDraft, setSiemDraft] = useState(() => createSiemDraft());
+  const [awsCollectorDraft, setAwsCollectorDraft] = useState(() => createAwsCollectorDraft());
+  const [azureCollectorDraft, setAzureCollectorDraft] = useState(() => createAzureCollectorDraft());
+  const [gcpCollectorDraft, setGcpCollectorDraft] = useState(() => createGcpCollectorDraft());
+  const [oktaCollectorDraft, setOktaCollectorDraft] = useState(() => createOktaCollectorDraft());
+  const [entraCollectorDraft, setEntraCollectorDraft] = useState(() => createEntraCollectorDraft());
+  const [secretsDraft, setSecretsDraft] = useState(() => createSecretsDraft());
+  const [siemSaving, setSiemSaving] = useState(false);
+  const [awsCollectorSaving, setAwsCollectorSaving] = useState(false);
+  const [azureCollectorSaving, setAzureCollectorSaving] = useState(false);
+  const [gcpCollectorSaving, setGcpCollectorSaving] = useState(false);
+  const [oktaCollectorSaving, setOktaCollectorSaving] = useState(false);
+  const [entraCollectorSaving, setEntraCollectorSaving] = useState(false);
+  const [secretsSaving, setSecretsSaving] = useState(false);
+  const [siemValidationResult, setSiemValidationResult] = useState(null);
+  const [awsCollectorValidationResult, setAwsCollectorValidationResult] = useState(null);
+  const [azureCollectorValidationResult, setAzureCollectorValidationResult] = useState(null);
+  const [gcpCollectorValidationResult, setGcpCollectorValidationResult] = useState(null);
+  const [oktaCollectorValidationResult, setOktaCollectorValidationResult] = useState(null);
+  const [entraCollectorValidationResult, setEntraCollectorValidationResult] = useState(null);
+  const [secretValidationResult, setSecretValidationResult] = useState(null);
 
   // ── Team (RBAC) ──
   const { data: teamUsers, reload: rTeam } = useApi(api.rbacUsers);
@@ -628,23 +847,112 @@ export default function Settings() {
     }));
   }, [idp]);
 
+  const siemConfigData = useMemo(() => {
+    const candidate = siemCfg?.config ?? siemCfg;
+    if (!candidate || typeof candidate !== 'object' || Array.isArray(candidate)) return null;
+    return candidate;
+  }, [siemCfg]);
+
+  const siemStatusData = useMemo(() => {
+    if (!siemSt || typeof siemSt !== 'object' || Array.isArray(siemSt)) return null;
+    return siemSt;
+  }, [siemSt]);
+
   const scimConfigData = useMemo(() => {
     const candidate = scim?.config ?? scim;
     if (!candidate || typeof candidate !== 'object' || Array.isArray(candidate)) return null;
     return candidate;
   }, [scim]);
 
+  const siemValidation = useMemo(() => normalizeValidation(siemCfg?.validation), [siemCfg]);
   const scimValidation = useMemo(() => normalizeValidation(scim?.validation), [scim]);
+  const retentionConfig = useMemo(
+    () => (retentionData && typeof retentionData === 'object' ? retentionData : null),
+    [retentionData],
+  );
+  const historicalEvents = useMemo(
+    () => (Array.isArray(historicalEventsData?.events) ? historicalEventsData.events : []),
+    [historicalEventsData],
+  );
+  const collectorRows = useMemo(
+    () =>
+      Array.isArray(collectorsSummary?.collectors)
+        ? collectorsSummary.collectors.map((entry) => ({
+            ...entry,
+            validation: normalizeValidation(entry?.validation),
+          }))
+        : [],
+    [collectorsSummary],
+  );
+  const awsCollectorValidation = useMemo(
+    () => normalizeValidation(awsCollectorData?.validation),
+    [awsCollectorData],
+  );
+  const azureCollectorValidation = useMemo(
+    () => normalizeValidation(azureCollectorData?.validation),
+    [azureCollectorData],
+  );
+  const gcpCollectorValidation = useMemo(
+    () => normalizeValidation(gcpCollectorData?.validation),
+    [gcpCollectorData],
+  );
+  const oktaCollectorValidation = useMemo(
+    () => normalizeValidation(oktaCollectorData?.validation),
+    [oktaCollectorData],
+  );
+  const entraCollectorValidation = useMemo(
+    () => normalizeValidation(entraCollectorData?.validation),
+    [entraCollectorData],
+  );
+  const secretsManagerValidation = useMemo(
+    () => normalizeValidation(secretsData?.validation),
+    [secretsData],
+  );
 
   useEffect(() => {
     if (idpRows.length === 0) setIdpEditorOpen(true);
   }, [idpRows.length]);
 
   useEffect(() => {
+    setSiemDraft(createSiemDraft(siemConfigData));
+  }, [siemConfigData]);
+
+  useEffect(() => {
     if (scimEditing) return;
     setScimDraft(createScimDraft(scimConfigData));
     setScimFormError(null);
   }, [scimConfigData, scimEditing]);
+
+  useEffect(() => {
+    setRetentionDraft(createRetentionDraft(retentionConfig));
+  }, [retentionConfig]);
+
+  useEffect(() => {
+    setAwsCollectorDraft(createAwsCollectorDraft(awsCollectorData));
+  }, [awsCollectorData]);
+
+  useEffect(() => {
+    setAzureCollectorDraft(createAzureCollectorDraft(azureCollectorData));
+  }, [azureCollectorData]);
+
+  useEffect(() => {
+    setGcpCollectorDraft(createGcpCollectorDraft(gcpCollectorData));
+  }, [gcpCollectorData]);
+
+  useEffect(() => {
+    setOktaCollectorDraft(createOktaCollectorDraft(oktaCollectorData));
+  }, [oktaCollectorData]);
+
+  useEffect(() => {
+    setEntraCollectorDraft(createEntraCollectorDraft(entraCollectorData));
+  }, [entraCollectorData]);
+
+  useEffect(() => {
+    setSecretsDraft((prev) => ({
+      ...createSecretsDraft(secretsData),
+      test_reference: prev.test_reference,
+    }));
+  }, [secretsData]);
 
   const flagEntries = useMemo(() => {
     if (!flags || typeof flags !== 'object' || Array.isArray(flags)) return [];
@@ -721,6 +1029,8 @@ export default function Settings() {
         issuer_url: optionalTextValue(idpDraft.issuer_url),
         sso_url: optionalTextValue(idpDraft.sso_url),
         client_id: optionalTextValue(idpDraft.client_id),
+        client_secret: optionalTextValue(idpDraft.client_secret),
+        redirect_uri: optionalTextValue(idpDraft.redirect_uri),
         entity_id: optionalTextValue(idpDraft.entity_id),
         enabled: idpDraft.enabled,
         group_role_mappings: mappings,
@@ -792,6 +1102,334 @@ export default function Settings() {
       toast(message, 'error');
     } finally {
       setScimSaving(false);
+    }
+  };
+
+  const saveRetentionSettings = async () => {
+    const nextRetention = {
+      audit_max_records: Number(retentionDraft.audit_max_records),
+      alert_max_records: Number(retentionDraft.alert_max_records),
+      event_max_records: Number(retentionDraft.event_max_records),
+      audit_max_age_secs: Math.max(0, Number(retentionDraft.audit_max_age_days) || 0) * 86400,
+      remote_syslog_endpoint: optionalTextValue(retentionDraft.remote_syslog_endpoint),
+    };
+
+    if (
+      [
+        nextRetention.audit_max_records,
+        nextRetention.alert_max_records,
+        nextRetention.event_max_records,
+      ].some((value) => Number.isNaN(value) || value < 0)
+    ) {
+      toast('Retention record limits must be zero or positive numbers.', 'error');
+      return;
+    }
+
+    setRetentionSaving(true);
+    try {
+      await api.configSave({ retention: nextRetention });
+      await Promise.all([rConfig(), rRetention()]);
+      toast('Retention settings saved', 'success');
+    } catch (error) {
+      toast(formatApiError(error, 'Failed to save retention settings'), 'error');
+    } finally {
+      setRetentionSaving(false);
+    }
+  };
+
+  const applyRetentionNow = async () => {
+    const ok = await confirm({
+      title: 'Apply retention now?',
+      message:
+        'This trims in-memory alerts and retained events using the current retention settings. The operation cannot be undone.',
+      confirmLabel: 'Apply retention',
+      tone: 'warning',
+    });
+    if (!ok) return;
+
+    setRetentionApplying(true);
+    try {
+      const result = await api.retentionApply({});
+      setLastRetentionApply(result);
+      await Promise.all([rRetention(), rStats(), rHistoricalEvents()]);
+      toast(
+        `Retention applied: ${result.trimmed_alerts ?? 0} alerts and ${result.trimmed_events ?? 0} events trimmed`,
+        'success',
+      );
+    } catch (error) {
+      toast(formatApiError(error, 'Failed to apply retention settings'), 'error');
+    } finally {
+      setRetentionApplying(false);
+    }
+  };
+
+  const runHistoricalSearch = async () => {
+    setHistoricalQuery({
+      ...historicalDraft,
+      limit: Number(historicalDraft.limit) || 25,
+    });
+  };
+
+  const buildSiemPayload = () => ({
+    enabled: siemDraft.enabled,
+    siem_type: siemDraft.siem_type,
+    endpoint: siemDraft.endpoint,
+    auth_token: optionalTextValue(siemDraft.auth_token),
+    index: siemDraft.index,
+    source_type: siemDraft.source_type,
+    poll_interval_secs: Number(siemDraft.poll_interval_secs),
+    pull_enabled: siemDraft.pull_enabled,
+    pull_query: siemDraft.pull_query,
+    batch_size: Number(siemDraft.batch_size),
+    verify_tls: siemDraft.verify_tls,
+  });
+
+  const saveSiemConfig = async () => {
+    setSiemSaving(true);
+    try {
+      await api.setSiemConfig(buildSiemPayload());
+      setSiemValidationResult(null);
+      await Promise.all([rSiemConfig(), rSiemStatus()]);
+      toast('SIEM setup saved', 'success');
+    } catch (error) {
+      toast(formatApiError(error, 'Failed to save SIEM setup'), 'error');
+    } finally {
+      setSiemSaving(false);
+    }
+  };
+
+  const validateSiemConfig = async () => {
+    try {
+      const result = await api.validateSiemConfig(buildSiemPayload());
+      setSiemValidationResult(result);
+      toast(
+        result.success ? 'SIEM configuration validated' : result.error || 'SIEM validation needs attention',
+        result.success ? 'success' : 'warning',
+      );
+    } catch (error) {
+      toast(formatApiError(error, 'SIEM validation failed'), 'error');
+    }
+  };
+
+  const saveAwsCollector = async () => {
+    setAwsCollectorSaving(true);
+    try {
+      await api.saveAwsCollectorConfig({
+        enabled: awsCollectorDraft.enabled,
+        region: awsCollectorDraft.region,
+        access_key_id: awsCollectorDraft.access_key_id,
+        secret_access_key: optionalTextValue(awsCollectorDraft.secret_access_key),
+        session_token: awsCollectorDraft.session_token,
+        poll_interval_secs: Number(awsCollectorDraft.poll_interval_secs),
+        max_results: Number(awsCollectorDraft.max_results),
+        event_name_filter: parseListInput(awsCollectorDraft.event_name_filter),
+      });
+      setAwsCollectorValidationResult(null);
+      await Promise.all([rAwsCollector(), rCollectorsSummary()]);
+      toast('AWS CloudTrail setup saved', 'success');
+    } catch (error) {
+      toast(formatApiError(error, 'Failed to save AWS CloudTrail setup'), 'error');
+    } finally {
+      setAwsCollectorSaving(false);
+    }
+  };
+
+  const validateAwsCollector = async () => {
+    try {
+      const result = await api.validateAwsCollector();
+      setAwsCollectorValidationResult(result);
+      toast(
+        result.success
+          ? `AWS validation returned ${result.event_count ?? 0} event${result.event_count === 1 ? '' : 's'}`
+          : result.error || 'AWS validation needs attention',
+        result.success ? 'success' : 'warning',
+      );
+    } catch (error) {
+      toast(formatApiError(error, 'AWS validation failed'), 'error');
+    }
+  };
+
+  const saveAzureCollector = async () => {
+    setAzureCollectorSaving(true);
+    try {
+      await api.saveAzureCollectorConfig({
+        enabled: azureCollectorDraft.enabled,
+        tenant_id: azureCollectorDraft.tenant_id,
+        client_id: azureCollectorDraft.client_id,
+        client_secret: optionalTextValue(azureCollectorDraft.client_secret),
+        subscription_id: azureCollectorDraft.subscription_id,
+        poll_interval_secs: Number(azureCollectorDraft.poll_interval_secs),
+        categories: parseListInput(azureCollectorDraft.categories),
+      });
+      setAzureCollectorValidationResult(null);
+      await Promise.all([rAzureCollector(), rCollectorsSummary()]);
+      toast('Azure Activity setup saved', 'success');
+    } catch (error) {
+      toast(formatApiError(error, 'Failed to save Azure Activity setup'), 'error');
+    } finally {
+      setAzureCollectorSaving(false);
+    }
+  };
+
+  const validateAzureCollector = async () => {
+    try {
+      const result = await api.validateAzureCollector();
+      setAzureCollectorValidationResult(result);
+      toast(
+        result.success
+          ? `Azure validation returned ${result.event_count ?? 0} event${result.event_count === 1 ? '' : 's'}`
+          : result.error || 'Azure validation needs attention',
+        result.success ? 'success' : 'warning',
+      );
+    } catch (error) {
+      toast(formatApiError(error, 'Azure validation failed'), 'error');
+    }
+  };
+
+  const saveGcpCollector = async () => {
+    setGcpCollectorSaving(true);
+    try {
+      await api.saveGcpCollectorConfig({
+        enabled: gcpCollectorDraft.enabled,
+        project_id: gcpCollectorDraft.project_id,
+        service_account_email: gcpCollectorDraft.service_account_email,
+        key_file_path: gcpCollectorDraft.key_file_path,
+        private_key_pem: optionalTextValue(gcpCollectorDraft.private_key_pem),
+        poll_interval_secs: Number(gcpCollectorDraft.poll_interval_secs),
+        log_filter: gcpCollectorDraft.log_filter,
+        page_size: Number(gcpCollectorDraft.page_size),
+      });
+      setGcpCollectorValidationResult(null);
+      await Promise.all([rGcpCollector(), rCollectorsSummary()]);
+      toast('GCP Audit setup saved', 'success');
+    } catch (error) {
+      toast(formatApiError(error, 'Failed to save GCP Audit setup'), 'error');
+    } finally {
+      setGcpCollectorSaving(false);
+    }
+  };
+
+  const validateGcpCollector = async () => {
+    try {
+      const result = await api.validateGcpCollector();
+      setGcpCollectorValidationResult(result);
+      toast(
+        result.success
+          ? `GCP validation returned ${result.event_count ?? 0} event${result.event_count === 1 ? '' : 's'}`
+          : result.error || 'GCP validation needs attention',
+        result.success ? 'success' : 'warning',
+      );
+    } catch (error) {
+      toast(formatApiError(error, 'GCP validation failed'), 'error');
+    }
+  };
+
+  const saveOktaCollector = async () => {
+    setOktaCollectorSaving(true);
+    try {
+      await api.saveOktaCollectorConfig({
+        enabled: oktaCollectorDraft.enabled,
+        domain: oktaCollectorDraft.domain,
+        api_token: optionalTextValue(oktaCollectorDraft.api_token),
+        poll_interval_secs: Number(oktaCollectorDraft.poll_interval_secs),
+        event_type_filter: parseListInput(oktaCollectorDraft.event_type_filter),
+      });
+      setOktaCollectorValidationResult(null);
+      await Promise.all([rOktaCollector(), rCollectorsSummary()]);
+      toast('Okta identity setup saved', 'success');
+    } catch (error) {
+      toast(formatApiError(error, 'Failed to save Okta identity setup'), 'error');
+    } finally {
+      setOktaCollectorSaving(false);
+    }
+  };
+
+  const validateOktaCollector = async () => {
+    try {
+      const result = await api.validateOktaCollector();
+      setOktaCollectorValidationResult(result);
+      toast(
+        result.success
+          ? `Okta validation returned ${result.event_count ?? 0} event${result.event_count === 1 ? '' : 's'}`
+          : result.error || 'Okta validation needs attention',
+        result.success ? 'success' : 'warning',
+      );
+    } catch (error) {
+      toast(formatApiError(error, 'Okta validation failed'), 'error');
+    }
+  };
+
+  const saveEntraCollector = async () => {
+    setEntraCollectorSaving(true);
+    try {
+      await api.saveEntraCollectorConfig({
+        enabled: entraCollectorDraft.enabled,
+        tenant_id: entraCollectorDraft.tenant_id,
+        client_id: entraCollectorDraft.client_id,
+        client_secret: optionalTextValue(entraCollectorDraft.client_secret),
+        poll_interval_secs: Number(entraCollectorDraft.poll_interval_secs),
+      });
+      setEntraCollectorValidationResult(null);
+      await Promise.all([rEntraCollector(), rCollectorsSummary()]);
+      toast('Microsoft Entra identity setup saved', 'success');
+    } catch (error) {
+      toast(formatApiError(error, 'Failed to save Microsoft Entra identity setup'), 'error');
+    } finally {
+      setEntraCollectorSaving(false);
+    }
+  };
+
+  const validateEntraCollector = async () => {
+    try {
+      const result = await api.validateEntraCollector();
+      setEntraCollectorValidationResult(result);
+      toast(
+        result.success
+          ? `Entra validation returned ${result.event_count ?? 0} event${result.event_count === 1 ? '' : 's'}`
+          : result.error || 'Entra validation needs attention',
+        result.success ? 'success' : 'warning',
+      );
+    } catch (error) {
+      toast(formatApiError(error, 'Entra validation failed'), 'error');
+    }
+  };
+
+  const saveSecretsManager = async () => {
+    setSecretsSaving(true);
+    try {
+      await api.saveSecretsConfig({
+        vault: {
+          enabled: secretsDraft.enabled,
+          address: secretsDraft.address,
+          token: optionalTextValue(secretsDraft.token),
+          mount: secretsDraft.mount,
+          namespace: secretsDraft.namespace,
+          cache_ttl_secs: Number(secretsDraft.cache_ttl_secs),
+        },
+        env_prefix: secretsDraft.env_prefix,
+        secrets_dir: secretsDraft.secrets_dir,
+      });
+      await rSecrets();
+      toast('Secrets manager setup saved', 'success');
+    } catch (error) {
+      toast(formatApiError(error, 'Failed to save secrets manager setup'), 'error');
+    } finally {
+      setSecretsSaving(false);
+    }
+  };
+
+  const validateSecretsReference = async () => {
+    if (!secretsDraft.test_reference.trim()) {
+      toast('Enter a secret reference to validate.', 'error');
+      return;
+    }
+
+    try {
+      const result = await api.validateSecretReference({ reference: secretsDraft.test_reference });
+      setSecretValidationResult(result);
+      toast(result.ok ? 'Secret reference resolved' : result.error || 'Secret validation failed', result.ok ? 'success' : 'warning');
+    } catch (error) {
+      toast(formatApiError(error, 'Secret validation failed'), 'error');
     }
   };
 
@@ -1344,20 +1982,138 @@ export default function Settings() {
             <div className="card">
               <div className="card-header">
                 <span className="card-title">SIEM Integration</span>
-                <span className={`badge ${siemSt?.connected ? 'badge-ok' : 'badge-warn'}`}>
-                  {siemSt?.connected ? 'Connected' : 'Not connected'}
-                </span>
+                <div className="btn-group">
+                  <span className={`badge ${validationBadgeClass(siemValidation.status)}`}>
+                    {validationStatusLabel(siemValidation.status)}
+                  </span>
+                  <span
+                    className={`badge ${
+                      !siemStatusData?.enabled
+                        ? 'badge-info'
+                        : siemStatusData?.last_error
+                          ? 'badge-warn'
+                          : 'badge-ok'
+                    }`}
+                  >
+                    {!siemStatusData?.enabled
+                      ? 'Disabled'
+                      : siemStatusData?.last_error
+                        ? 'Runtime issue'
+                        : 'Active'}
+                  </span>
+                </div>
               </div>
-              {siemCfg && typeof siemCfg === 'object' ? (
-                <>
-                  <SummaryGrid data={siemCfg} limit={10} />
-                  <JsonDetails data={siemCfg} />
-                </>
-              ) : (
-                <>
-                  <div className="empty">No SIEM configuration available.</div>
-                  <JsonDetails data={siemCfg} />
-                </>
+              {siemConfigData?.has_auth_token && (
+                <div style={{ fontSize: 12, opacity: 0.75, marginBottom: 12 }}>
+                  A SIEM auth token or secret reference is already stored. Leave the token field
+                  blank to keep it.
+                </div>
+              )}
+              <ToggleSwitch
+                label="Enable SIEM"
+                checked={siemDraft.enabled}
+                onChange={(value) => setSiemDraft((prev) => ({ ...prev, enabled: value }))}
+                description="Enable this when alerts should be pushed to the configured SIEM endpoint."
+              />
+              <SelectInput
+                label="SIEM Type"
+                value={siemDraft.siem_type}
+                onChange={(value) => setSiemDraft((prev) => ({ ...prev, siem_type: value }))}
+                options={SIEM_TYPE_OPTIONS}
+                description="Choose the payload format expected by your downstream SIEM or data lake."
+              />
+              <TextInput
+                label="SIEM Endpoint"
+                value={siemDraft.endpoint}
+                onChange={(value) => setSiemDraft((prev) => ({ ...prev, endpoint: value }))}
+                placeholder="https://siem.example.com/hec"
+              />
+              <TextInput
+                label="Auth Token"
+                type="password"
+                value={siemDraft.auth_token}
+                onChange={(value) => setSiemDraft((prev) => ({ ...prev, auth_token: value }))}
+                placeholder="Leave blank to keep the current token or reference"
+                description="Supports literal values or secret references already resolved by the server."
+              />
+              <TextInput
+                label="Index or Stream"
+                value={siemDraft.index}
+                onChange={(value) => setSiemDraft((prev) => ({ ...prev, index: value }))}
+                placeholder="wardex"
+              />
+              <TextInput
+                label="Source Type"
+                value={siemDraft.source_type}
+                onChange={(value) => setSiemDraft((prev) => ({ ...prev, source_type: value }))}
+                placeholder="wardex:xdr"
+              />
+              <NumberInput
+                label="Poll Interval"
+                value={siemDraft.poll_interval_secs}
+                onChange={(value) =>
+                  setSiemDraft((prev) => ({ ...prev, poll_interval_secs: value }))
+                }
+                min={1}
+                unit="seconds"
+              />
+              <NumberInput
+                label="Batch Size"
+                value={siemDraft.batch_size}
+                onChange={(value) => setSiemDraft((prev) => ({ ...prev, batch_size: value }))}
+                min={1}
+                max={1000}
+              />
+              <ToggleSwitch
+                label="Enable Pull Queries"
+                checked={siemDraft.pull_enabled}
+                onChange={(value) => setSiemDraft((prev) => ({ ...prev, pull_enabled: value }))}
+                description="Enable saved-search or threat-intel pulls when the connector should also read back from the SIEM."
+              />
+              <TextAreaInput
+                label="Pull Query"
+                value={siemDraft.pull_query}
+                onChange={(value) => setSiemDraft((prev) => ({ ...prev, pull_query: value }))}
+                placeholder={'search index=wardex sourcetype=wardex:xdr'}
+                description="Optional query used by pull-enabled workflows."
+                rows={4}
+              />
+              <ToggleSwitch
+                label="Verify TLS"
+                checked={siemDraft.verify_tls}
+                onChange={(value) => setSiemDraft((prev) => ({ ...prev, verify_tls: value }))}
+                description="Disable only for lab environments with self-signed certificates."
+              />
+              <ValidationIssues validation={siemValidation} style={{ marginTop: 12 }} />
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 12 }}>
+                <button
+                  className="btn btn-primary"
+                  type="button"
+                  disabled={siemSaving}
+                  onClick={saveSiemConfig}
+                >
+                  {siemSaving ? 'Saving…' : 'Save SIEM Setup'}
+                </button>
+                <button className="btn" type="button" onClick={validateSiemConfig}>
+                  Validate SIEM
+                </button>
+              </div>
+              {siemStatusData && (
+                <div className="stat-box" style={{ marginTop: 12 }}>
+                  <div style={{ fontWeight: 600, marginBottom: 6 }}>Runtime Status</div>
+                  <SummaryGrid data={siemStatusData} limit={6} />
+                </div>
+              )}
+              {siemValidationResult && (
+                <div className="stat-box" style={{ marginTop: 12 }}>
+                  <div style={{ fontWeight: 600, marginBottom: 6 }}>Last validation</div>
+                  <div style={{ fontSize: 12 }}>
+                    {siemValidationResult.success
+                      ? 'SIEM configuration is valid and ready to save.'
+                      : siemValidationResult.error || 'SIEM validation needs attention.'}
+                  </div>
+                  <JsonDetails data={siemValidationResult} label="SIEM validation details" />
+                </div>
               )}
             </div>
             <div className="card">
@@ -1567,6 +2323,25 @@ export default function Settings() {
                               }
                               placeholder="wardex-admin"
                             />
+                            <TextInput
+                              label="Client Secret"
+                              type="password"
+                              value={idpDraft.client_secret}
+                              onChange={(value) =>
+                                setIdpDraft((prev) => ({ ...prev, client_secret: value }))
+                              }
+                              placeholder="Leave blank to keep the current secret"
+                              description="Only required when creating a new OIDC provider or rotating the secret."
+                            />
+                            <TextInput
+                              label="Redirect URI"
+                              value={idpDraft.redirect_uri}
+                              onChange={(value) =>
+                                setIdpDraft((prev) => ({ ...prev, redirect_uri: value }))
+                              }
+                              placeholder="https://console.example.com/api/auth/sso/callback"
+                              description="This must match the callback URI registered with your identity provider."
+                            />
                           </>
                         ) : (
                           <>
@@ -1670,6 +2445,25 @@ export default function Settings() {
                                 setIdpDraft((prev) => ({ ...prev, client_id: value }))
                               }
                               placeholder="wardex-admin"
+                            />
+                            <TextInput
+                              label="Client Secret"
+                              type="password"
+                              value={idpDraft.client_secret}
+                              onChange={(value) =>
+                                setIdpDraft((prev) => ({ ...prev, client_secret: value }))
+                              }
+                              placeholder="Leave blank to keep the current secret"
+                              description="Only required when creating a new OIDC provider or rotating the secret."
+                            />
+                            <TextInput
+                              label="Redirect URI"
+                              value={idpDraft.redirect_uri}
+                              onChange={(value) =>
+                                setIdpDraft((prev) => ({ ...prev, redirect_uri: value }))
+                              }
+                              placeholder="https://console.example.com/api/auth/sso/callback"
+                              description="This must match the callback URI registered with your identity provider."
                             />
                           </>
                         ) : (
@@ -1844,6 +2638,677 @@ export default function Settings() {
                       </button>
                     )}
                   </div>
+                </div>
+              )}
+            </div>
+          </div>
+
+          <div className="card" style={{ marginTop: 16 }}>
+            <div className="card-header">
+              <span className="card-title">Cloud Collectors &amp; Secrets</span>
+              <button
+                className="btn btn-sm"
+                type="button"
+                onClick={() => {
+                  rCollectorsSummary();
+                  rAwsCollector();
+                  rAzureCollector();
+                  rGcpCollector();
+                  rSecrets();
+                }}
+              >
+                ↻ Refresh
+              </button>
+            </div>
+            <div
+              style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))',
+                gap: 12,
+              }}
+            >
+              <div className="stat-box">
+                <div className="stat-label">Enabled Collectors</div>
+                <div className="stat-value">
+                  {collectorRows.filter((entry) => entry.enabled).length}
+                </div>
+              </div>
+              <div className="stat-box">
+                <div className="stat-label">Ready Collectors</div>
+                <div className="stat-value">
+                  {collectorRows.filter((entry) => entry.validation?.status === 'ready').length}
+                </div>
+              </div>
+              <div className="stat-box">
+                <div className="stat-label">Review Required</div>
+                <div className="stat-value">
+                  {collectorRows.filter((entry) => entry.validation?.status === 'warning').length}
+                </div>
+              </div>
+              <div className="stat-box">
+                <div className="stat-label">Secrets Manager</div>
+                <div className="stat-value">
+                  {validationStatusLabel(secretsManagerValidation.status)}
+                </div>
+              </div>
+            </div>
+            <JsonDetails
+              data={{ collectors: collectorRows, secrets: secretsData }}
+              label="Collector and secret diagnostics"
+            />
+          </div>
+
+          <div className="card-grid" style={{ marginTop: 16 }}>
+            <div className="card">
+              <div className="card-header">
+                <span className="card-title">AWS CloudTrail</span>
+                <span className={`badge ${validationBadgeClass(awsCollectorValidation.status)}`}>
+                  {validationStatusLabel(awsCollectorValidation.status)}
+                </span>
+              </div>
+              {awsCollectorData?.config?.has_secret_access_key && (
+                <div style={{ fontSize: 12, opacity: 0.75, marginBottom: 12 }}>
+                  A secret or secret reference is already stored. Leave the secret field blank to
+                  keep it.
+                </div>
+              )}
+              <ToggleSwitch
+                label="Enable AWS collector"
+                checked={awsCollectorDraft.enabled}
+                onChange={(value) => setAwsCollectorDraft((prev) => ({ ...prev, enabled: value }))}
+                description="Use this when CloudTrail should be polled from the browser-configured setup."
+              />
+              <TextInput
+                label="Region"
+                value={awsCollectorDraft.region}
+                onChange={(value) => setAwsCollectorDraft((prev) => ({ ...prev, region: value }))}
+                placeholder="us-east-1"
+              />
+              <TextInput
+                label="Access Key ID"
+                value={awsCollectorDraft.access_key_id}
+                onChange={(value) =>
+                  setAwsCollectorDraft((prev) => ({ ...prev, access_key_id: value }))
+                }
+                placeholder="AKIA... or ${AWS_ACCESS_KEY_ID}"
+              />
+              <TextInput
+                label="Secret Access Key"
+                type="password"
+                value={awsCollectorDraft.secret_access_key}
+                onChange={(value) =>
+                  setAwsCollectorDraft((prev) => ({ ...prev, secret_access_key: value }))
+                }
+                placeholder="Leave blank to keep the current secret or reference"
+                description="Supports literal values or secret references such as ${AWS_SECRET_ACCESS_KEY} or vault://secret/path#key."
+              />
+              <TextInput
+                label="Session Token"
+                value={awsCollectorDraft.session_token}
+                onChange={(value) =>
+                  setAwsCollectorDraft((prev) => ({ ...prev, session_token: value }))
+                }
+                placeholder="Optional STS token"
+              />
+              <NumberInput
+                label="Poll Interval"
+                value={awsCollectorDraft.poll_interval_secs}
+                onChange={(value) =>
+                  setAwsCollectorDraft((prev) => ({ ...prev, poll_interval_secs: value }))
+                }
+                min={1}
+                unit="seconds"
+              />
+              <NumberInput
+                label="Max Results"
+                value={awsCollectorDraft.max_results}
+                onChange={(value) =>
+                  setAwsCollectorDraft((prev) => ({ ...prev, max_results: value }))
+                }
+                min={1}
+                max={500}
+              />
+              <TextAreaInput
+                label="Event Name Filter"
+                value={awsCollectorDraft.event_name_filter}
+                onChange={(value) =>
+                  setAwsCollectorDraft((prev) => ({ ...prev, event_name_filter: value }))
+                }
+                placeholder={'ConsoleLogin\nAssumeRole\nCreateAccessKey'}
+                description="One event name per line. Leave empty to query the full CloudTrail stream."
+                rows={5}
+              />
+              <ValidationIssues validation={awsCollectorValidation} style={{ marginTop: 12 }} />
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 12 }}>
+                <button
+                  className="btn btn-primary"
+                  type="button"
+                  disabled={awsCollectorSaving}
+                  onClick={saveAwsCollector}
+                >
+                  {awsCollectorSaving ? 'Saving…' : 'Save AWS Setup'}
+                </button>
+                <button className="btn" type="button" onClick={validateAwsCollector}>
+                  Validate AWS
+                </button>
+              </div>
+              {awsCollectorValidationResult && (
+                <div className="stat-box" style={{ marginTop: 12 }}>
+                  <div style={{ fontWeight: 600, marginBottom: 6 }}>Last validation</div>
+                  <div style={{ fontSize: 12 }}>
+                    {awsCollectorValidationResult.success
+                      ? `Collected ${awsCollectorValidationResult.event_count || 0} event${awsCollectorValidationResult.event_count === 1 ? '' : 's'}.`
+                      : awsCollectorValidationResult.error || 'Validation needs attention.'}
+                  </div>
+                  <JsonDetails
+                    data={awsCollectorValidationResult}
+                    label="AWS validation details"
+                  />
+                </div>
+              )}
+            </div>
+
+            <div className="card">
+              <div className="card-header">
+                <span className="card-title">Azure Activity</span>
+                <span className={`badge ${validationBadgeClass(azureCollectorValidation.status)}`}>
+                  {validationStatusLabel(azureCollectorValidation.status)}
+                </span>
+              </div>
+              {azureCollectorData?.config?.has_client_secret && (
+                <div style={{ fontSize: 12, opacity: 0.75, marginBottom: 12 }}>
+                  A client secret or secret reference is already stored. Leave the secret field
+                  blank to keep it.
+                </div>
+              )}
+              <ToggleSwitch
+                label="Enable Azure collector"
+                checked={azureCollectorDraft.enabled}
+                onChange={(value) =>
+                  setAzureCollectorDraft((prev) => ({ ...prev, enabled: value }))
+                }
+                description="Use this when Azure Activity Logs should be validated or polled from the saved setup."
+              />
+              <TextInput
+                label="Tenant ID"
+                value={azureCollectorDraft.tenant_id}
+                onChange={(value) =>
+                  setAzureCollectorDraft((prev) => ({ ...prev, tenant_id: value }))
+                }
+                placeholder="tenant-guid"
+              />
+              <TextInput
+                label="Client ID"
+                value={azureCollectorDraft.client_id}
+                onChange={(value) =>
+                  setAzureCollectorDraft((prev) => ({ ...prev, client_id: value }))
+                }
+                placeholder="application-guid"
+              />
+              <TextInput
+                label="Client Secret"
+                type="password"
+                value={azureCollectorDraft.client_secret}
+                onChange={(value) =>
+                  setAzureCollectorDraft((prev) => ({ ...prev, client_secret: value }))
+                }
+                placeholder="Leave blank to keep the current secret or reference"
+                description="Supports literal values or secret references such as ${AZURE_CLIENT_SECRET}."
+              />
+              <TextInput
+                label="Subscription ID"
+                value={azureCollectorDraft.subscription_id}
+                onChange={(value) =>
+                  setAzureCollectorDraft((prev) => ({ ...prev, subscription_id: value }))
+                }
+                placeholder="subscription-guid"
+              />
+              <NumberInput
+                label="Poll Interval"
+                value={azureCollectorDraft.poll_interval_secs}
+                onChange={(value) =>
+                  setAzureCollectorDraft((prev) => ({ ...prev, poll_interval_secs: value }))
+                }
+                min={1}
+                unit="seconds"
+              />
+              <TextAreaInput
+                label="Categories"
+                value={azureCollectorDraft.categories}
+                onChange={(value) =>
+                  setAzureCollectorDraft((prev) => ({ ...prev, categories: value }))
+                }
+                placeholder={'Administrative\nSecurity\nAlert'}
+                description="One Azure Activity category per line."
+                rows={4}
+              />
+              <ValidationIssues validation={azureCollectorValidation} style={{ marginTop: 12 }} />
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 12 }}>
+                <button
+                  className="btn btn-primary"
+                  type="button"
+                  disabled={azureCollectorSaving}
+                  onClick={saveAzureCollector}
+                >
+                  {azureCollectorSaving ? 'Saving…' : 'Save Azure Setup'}
+                </button>
+                <button className="btn" type="button" onClick={validateAzureCollector}>
+                  Validate Azure
+                </button>
+              </div>
+              {azureCollectorValidationResult && (
+                <div className="stat-box" style={{ marginTop: 12 }}>
+                  <div style={{ fontWeight: 600, marginBottom: 6 }}>Last validation</div>
+                  <div style={{ fontSize: 12 }}>
+                    {azureCollectorValidationResult.success
+                      ? `Collected ${azureCollectorValidationResult.event_count || 0} event${azureCollectorValidationResult.event_count === 1 ? '' : 's'}.`
+                      : azureCollectorValidationResult.error || 'Validation needs attention.'}
+                  </div>
+                  <JsonDetails
+                    data={azureCollectorValidationResult}
+                    label="Azure validation details"
+                  />
+                </div>
+              )}
+            </div>
+
+            <div className="card">
+              <div className="card-header">
+                <span className="card-title">GCP Audit</span>
+                <span className={`badge ${validationBadgeClass(gcpCollectorValidation.status)}`}>
+                  {validationStatusLabel(gcpCollectorValidation.status)}
+                </span>
+              </div>
+              {(gcpCollectorData?.config?.has_private_key_pem || gcpCollectorData?.config?.key_file_path) && (
+                <div style={{ fontSize: 12, opacity: 0.75, marginBottom: 12 }}>
+                  A key path or private key is already stored. Leave the private key field blank to
+                  keep it.
+                </div>
+              )}
+              <ToggleSwitch
+                label="Enable GCP collector"
+                checked={gcpCollectorDraft.enabled}
+                onChange={(value) => setGcpCollectorDraft((prev) => ({ ...prev, enabled: value }))}
+                description="Use this when Cloud Audit Logs should be validated or polled from the saved setup."
+              />
+              <TextInput
+                label="Project ID"
+                value={gcpCollectorDraft.project_id}
+                onChange={(value) =>
+                  setGcpCollectorDraft((prev) => ({ ...prev, project_id: value }))
+                }
+                placeholder="wardex-prod"
+              />
+              <TextInput
+                label="Service Account Email"
+                value={gcpCollectorDraft.service_account_email}
+                onChange={(value) =>
+                  setGcpCollectorDraft((prev) => ({ ...prev, service_account_email: value }))
+                }
+                placeholder="collector@project.iam.gserviceaccount.com"
+              />
+              <TextInput
+                label="Key File Path"
+                value={gcpCollectorDraft.key_file_path}
+                onChange={(value) =>
+                  setGcpCollectorDraft((prev) => ({ ...prev, key_file_path: value }))
+                }
+                placeholder="/secure/path/service-account.json"
+                description="Optional when a private key PEM or secret reference is used instead."
+              />
+              <TextAreaInput
+                label="Private Key PEM"
+                value={gcpCollectorDraft.private_key_pem}
+                onChange={(value) =>
+                  setGcpCollectorDraft((prev) => ({ ...prev, private_key_pem: value }))
+                }
+                placeholder="Leave blank to keep the current PEM or reference"
+                description="Supports literal PEM blocks or secret references such as vault://secret/path#private_key."
+                rows={4}
+              />
+              <NumberInput
+                label="Poll Interval"
+                value={gcpCollectorDraft.poll_interval_secs}
+                onChange={(value) =>
+                  setGcpCollectorDraft((prev) => ({ ...prev, poll_interval_secs: value }))
+                }
+                min={1}
+                unit="seconds"
+              />
+              <NumberInput
+                label="Page Size"
+                value={gcpCollectorDraft.page_size}
+                onChange={(value) =>
+                  setGcpCollectorDraft((prev) => ({ ...prev, page_size: value }))
+                }
+                min={1}
+                max={1000}
+              />
+              <TextAreaInput
+                label="Log Filter"
+                value={gcpCollectorDraft.log_filter}
+                onChange={(value) =>
+                  setGcpCollectorDraft((prev) => ({ ...prev, log_filter: value }))
+                }
+                placeholder='logName:"cloudaudit.googleapis.com"'
+                description="Cloud Logging filter syntax used during validation and polling."
+                rows={4}
+              />
+              <ValidationIssues validation={gcpCollectorValidation} style={{ marginTop: 12 }} />
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 12 }}>
+                <button
+                  className="btn btn-primary"
+                  type="button"
+                  disabled={gcpCollectorSaving}
+                  onClick={saveGcpCollector}
+                >
+                  {gcpCollectorSaving ? 'Saving…' : 'Save GCP Setup'}
+                </button>
+                <button className="btn" type="button" onClick={validateGcpCollector}>
+                  Validate GCP
+                </button>
+              </div>
+              {gcpCollectorValidationResult && (
+                <div className="stat-box" style={{ marginTop: 12 }}>
+                  <div style={{ fontWeight: 600, marginBottom: 6 }}>Last validation</div>
+                  <div style={{ fontSize: 12 }}>
+                    {gcpCollectorValidationResult.success
+                      ? `Collected ${gcpCollectorValidationResult.event_count || 0} event${gcpCollectorValidationResult.event_count === 1 ? '' : 's'}.`
+                      : gcpCollectorValidationResult.error || 'Validation needs attention.'}
+                  </div>
+                  <JsonDetails data={gcpCollectorValidationResult} label="GCP validation details" />
+                </div>
+              )}
+            </div>
+
+            <div className="card">
+              <div className="card-header">
+                <span className="card-title">Okta Identity</span>
+                <span className={`badge ${validationBadgeClass(oktaCollectorValidation.status)}`}>
+                  {validationStatusLabel(oktaCollectorValidation.status)}
+                </span>
+              </div>
+              {oktaCollectorData?.config?.has_api_token && (
+                <div style={{ fontSize: 12, opacity: 0.75, marginBottom: 12 }}>
+                  An Okta API token or secret reference is already stored. Leave the token field
+                  blank to keep it.
+                </div>
+              )}
+              <ToggleSwitch
+                label="Enable Okta collector"
+                checked={oktaCollectorDraft.enabled}
+                onChange={(value) => setOktaCollectorDraft((prev) => ({ ...prev, enabled: value }))}
+                description="Use this when Okta system log events should be validated or polled from the saved setup."
+              />
+              <TextInput
+                label="Okta Domain"
+                value={oktaCollectorDraft.domain}
+                onChange={(value) => setOktaCollectorDraft((prev) => ({ ...prev, domain: value }))}
+                placeholder="dev-123456.okta.com"
+              />
+              <TextInput
+                label="API Token"
+                type="password"
+                value={oktaCollectorDraft.api_token}
+                onChange={(value) => setOktaCollectorDraft((prev) => ({ ...prev, api_token: value }))}
+                placeholder="Leave blank to keep the current token or reference"
+                description="Supports literal values or secret references such as ${OKTA_API_TOKEN}."
+              />
+              <NumberInput
+                label="Poll Interval"
+                value={oktaCollectorDraft.poll_interval_secs}
+                onChange={(value) =>
+                  setOktaCollectorDraft((prev) => ({ ...prev, poll_interval_secs: value }))
+                }
+                min={1}
+                unit="seconds"
+              />
+              <TextAreaInput
+                label="Event Type Filter"
+                value={oktaCollectorDraft.event_type_filter}
+                onChange={(value) =>
+                  setOktaCollectorDraft((prev) => ({ ...prev, event_type_filter: value }))
+                }
+                placeholder={'user.session.start\nuser.account.lock\nuser.mfa.factor.deactivate'}
+                description="One Okta system log event type per line. Leave empty to query the full stream."
+                rows={5}
+              />
+              <ValidationIssues validation={oktaCollectorValidation} style={{ marginTop: 12 }} />
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 12 }}>
+                <button
+                  className="btn btn-primary"
+                  type="button"
+                  disabled={oktaCollectorSaving}
+                  onClick={saveOktaCollector}
+                >
+                  {oktaCollectorSaving ? 'Saving…' : 'Save Okta Setup'}
+                </button>
+                <button className="btn" type="button" onClick={validateOktaCollector}>
+                  Validate Okta
+                </button>
+              </div>
+              {oktaCollectorValidationResult && (
+                <div className="stat-box" style={{ marginTop: 12 }}>
+                  <div style={{ fontWeight: 600, marginBottom: 6 }}>Last validation</div>
+                  <div style={{ fontSize: 12 }}>
+                    {oktaCollectorValidationResult.success
+                      ? `Collected ${oktaCollectorValidationResult.event_count || 0} event${oktaCollectorValidationResult.event_count === 1 ? '' : 's'}.`
+                      : oktaCollectorValidationResult.error || 'Validation needs attention.'}
+                  </div>
+                  <JsonDetails
+                    data={oktaCollectorValidationResult}
+                    label="Okta validation details"
+                  />
+                </div>
+              )}
+            </div>
+
+            <div className="card">
+              <div className="card-header">
+                <span className="card-title">Microsoft Entra ID</span>
+                <span className={`badge ${validationBadgeClass(entraCollectorValidation.status)}`}>
+                  {validationStatusLabel(entraCollectorValidation.status)}
+                </span>
+              </div>
+              {entraCollectorData?.config?.has_client_secret && (
+                <div style={{ fontSize: 12, opacity: 0.75, marginBottom: 12 }}>
+                  A client secret or secret reference is already stored. Leave the secret field
+                  blank to keep it.
+                </div>
+              )}
+              <ToggleSwitch
+                label="Enable Entra collector"
+                checked={entraCollectorDraft.enabled}
+                onChange={(value) =>
+                  setEntraCollectorDraft((prev) => ({ ...prev, enabled: value }))
+                }
+                description="Use this when Entra sign-in logs should be validated or polled from the saved setup."
+              />
+              <TextInput
+                label="Tenant ID"
+                value={entraCollectorDraft.tenant_id}
+                onChange={(value) =>
+                  setEntraCollectorDraft((prev) => ({ ...prev, tenant_id: value }))
+                }
+                placeholder="tenant-guid"
+              />
+              <TextInput
+                label="Client ID"
+                value={entraCollectorDraft.client_id}
+                onChange={(value) =>
+                  setEntraCollectorDraft((prev) => ({ ...prev, client_id: value }))
+                }
+                placeholder="application-guid"
+              />
+              <TextInput
+                label="Client Secret"
+                type="password"
+                value={entraCollectorDraft.client_secret}
+                onChange={(value) =>
+                  setEntraCollectorDraft((prev) => ({ ...prev, client_secret: value }))
+                }
+                placeholder="Leave blank to keep the current secret or reference"
+                description="Supports literal values or secret references such as ${ENTRA_CLIENT_SECRET}."
+              />
+              <NumberInput
+                label="Poll Interval"
+                value={entraCollectorDraft.poll_interval_secs}
+                onChange={(value) =>
+                  setEntraCollectorDraft((prev) => ({ ...prev, poll_interval_secs: value }))
+                }
+                min={1}
+                unit="seconds"
+              />
+              <ValidationIssues validation={entraCollectorValidation} style={{ marginTop: 12 }} />
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 12 }}>
+                <button
+                  className="btn btn-primary"
+                  type="button"
+                  disabled={entraCollectorSaving}
+                  onClick={saveEntraCollector}
+                >
+                  {entraCollectorSaving ? 'Saving…' : 'Save Entra Setup'}
+                </button>
+                <button className="btn" type="button" onClick={validateEntraCollector}>
+                  Validate Entra
+                </button>
+              </div>
+              {entraCollectorValidationResult && (
+                <div className="stat-box" style={{ marginTop: 12 }}>
+                  <div style={{ fontWeight: 600, marginBottom: 6 }}>Last validation</div>
+                  <div style={{ fontSize: 12 }}>
+                    {entraCollectorValidationResult.success
+                      ? `Collected ${entraCollectorValidationResult.event_count || 0} event${entraCollectorValidationResult.event_count === 1 ? '' : 's'}.`
+                      : entraCollectorValidationResult.error || 'Validation needs attention.'}
+                  </div>
+                  <JsonDetails
+                    data={entraCollectorValidationResult}
+                    label="Entra validation details"
+                  />
+                </div>
+              )}
+            </div>
+
+            <div className="card">
+              <div className="card-header">
+                <span className="card-title">Secrets Manager</span>
+                <span className={`badge ${validationBadgeClass(secretsManagerValidation.status)}`}>
+                  {validationStatusLabel(secretsManagerValidation.status)}
+                </span>
+              </div>
+              {secretsData?.config?.vault?.has_token && (
+                <div style={{ fontSize: 12, opacity: 0.75, marginBottom: 12 }}>
+                  A Vault token or secret reference is already stored. Leave the token field blank
+                  to keep it.
+                </div>
+              )}
+              <ToggleSwitch
+                label="Enable Vault"
+                checked={secretsDraft.enabled}
+                onChange={(value) => setSecretsDraft((prev) => ({ ...prev, enabled: value }))}
+                description="Leave disabled to use only environment variables or local secret files."
+              />
+              <TextInput
+                label="Vault Address"
+                value={secretsDraft.address}
+                onChange={(value) => setSecretsDraft((prev) => ({ ...prev, address: value }))}
+                placeholder="http://127.0.0.1:8200"
+              />
+              <TextInput
+                label="Vault Token"
+                type="password"
+                value={secretsDraft.token}
+                onChange={(value) => setSecretsDraft((prev) => ({ ...prev, token: value }))}
+                placeholder="Leave blank to keep the current token or reference"
+                description="Supports literal values or secret references when Vault access is delegated through another source."
+              />
+              <TextInput
+                label="Vault Mount"
+                value={secretsDraft.mount}
+                onChange={(value) => setSecretsDraft((prev) => ({ ...prev, mount: value }))}
+                placeholder="secret"
+              />
+              <TextInput
+                label="Vault Namespace"
+                value={secretsDraft.namespace}
+                onChange={(value) => setSecretsDraft((prev) => ({ ...prev, namespace: value }))}
+                placeholder="Optional enterprise namespace"
+              />
+              <NumberInput
+                label="Cache TTL"
+                value={secretsDraft.cache_ttl_secs}
+                onChange={(value) =>
+                  setSecretsDraft((prev) => ({ ...prev, cache_ttl_secs: value }))
+                }
+                min={0}
+                unit="seconds"
+              />
+              <TextInput
+                label="Environment Prefix"
+                value={secretsDraft.env_prefix}
+                onChange={(value) => setSecretsDraft((prev) => ({ ...prev, env_prefix: value }))}
+                placeholder="WARDEX_"
+                description="When set, ${API_KEY} resolves against prefixed variables such as WARDEX_API_KEY."
+              />
+              <TextInput
+                label="Secrets Directory"
+                value={secretsDraft.secrets_dir}
+                onChange={(value) => setSecretsDraft((prev) => ({ ...prev, secrets_dir: value }))}
+                placeholder="/run/secrets"
+                description="Optional directory boundary for file:// secret references."
+              />
+              <TextAreaInput
+                label="Test Secret Reference"
+                value={secretsDraft.test_reference}
+                onChange={(value) =>
+                  setSecretsDraft((prev) => ({ ...prev, test_reference: value }))
+                }
+                placeholder={'${API_TOKEN}\nfile:///run/secrets/token\nvault://secret/wardex/api#token'}
+                description="Enter one reference at a time when validating."
+                rows={3}
+              />
+              {Array.isArray(secretsData?.config?.supported_sources) &&
+              secretsData.config.supported_sources.length > 0 ? (
+                <div className="chip-row" style={{ marginTop: 4 }}>
+                  {secretsData.config.supported_sources.map((source) => (
+                    <span key={source} className="badge badge-info">
+                      {source}
+                    </span>
+                  ))}
+                </div>
+              ) : null}
+              <ValidationIssues validation={secretsManagerValidation} style={{ marginTop: 12 }} />
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 12 }}>
+                <button
+                  className="btn btn-primary"
+                  type="button"
+                  disabled={secretsSaving}
+                  onClick={saveSecretsManager}
+                >
+                  {secretsSaving ? 'Saving…' : 'Save Secrets Setup'}
+                </button>
+                <button className="btn" type="button" onClick={validateSecretsReference}>
+                  Validate Secret Reference
+                </button>
+              </div>
+              {secretsData?.status && (
+                <div className="stat-box" style={{ marginTop: 12 }}>
+                  <div style={{ fontWeight: 600, marginBottom: 6 }}>Resolver Status</div>
+                  <SummaryGrid data={secretsData.status} limit={6} />
+                </div>
+              )}
+              {secretValidationResult && (
+                <div className="stat-box" style={{ marginTop: 12 }}>
+                  <div style={{ fontWeight: 600, marginBottom: 6 }}>Last validation</div>
+                  <div style={{ fontSize: 12 }}>
+                    {secretValidationResult.ok
+                      ? `Resolved ${secretValidationResult.reference_kind} secret with length ${secretValidationResult.resolved_length}.`
+                      : secretValidationResult.error || 'Secret validation needs attention.'}
+                  </div>
+                  <JsonDetails
+                    data={secretValidationResult}
+                    label="Secret validation details"
+                  />
                 </div>
               )}
             </div>
@@ -2088,6 +3553,284 @@ export default function Settings() {
                 </div>
               </div>
             )}
+          </div>
+
+          <div className="card" style={{ marginTop: 16 }}>
+            <div className="card-header">
+              <span className="card-title">Long-Retention History</span>
+              <div className="btn-group">
+                <span
+                  className={`badge ${historicalEventsData?.enabled || storageStats?.clickhouse_enabled ? 'badge-ok' : 'badge-warn'}`}
+                >
+                  {historicalEventsData?.enabled || storageStats?.clickhouse_enabled
+                    ? 'ClickHouse Ready'
+                    : 'Not Configured'}
+                </span>
+                <button className="btn btn-sm" onClick={() => Promise.all([rRetention(), rHistoricalEvents(), rStats()])}>
+                  ↻ Refresh
+                </button>
+              </div>
+            </div>
+
+            <div
+              style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))',
+                gap: 12,
+                marginBottom: 16,
+              }}
+            >
+              <div className="stat-box">
+                <div className="stat-label">Retained Events</div>
+                <div className="stat-value">{retentionConfig?.current_counts?.events ?? '—'}</div>
+              </div>
+              <div className="stat-box">
+                <div className="stat-label">Buffered Inserts</div>
+                <div className="stat-value">{storageStats?.clickhouse_buffer_len ?? '—'}</div>
+              </div>
+              <div className="stat-box">
+                <div className="stat-label">Inserted To ClickHouse</div>
+                <div className="stat-value">{storageStats?.clickhouse_total_inserted ?? '—'}</div>
+              </div>
+              <div className="stat-box">
+                <div className="stat-label">Database</div>
+                <div className="stat-value">{storageStats?.clickhouse_database || '—'}</div>
+              </div>
+            </div>
+
+            <div className="card-grid" style={{ marginBottom: 16 }}>
+              <div className="card" style={{ padding: 14 }}>
+                <div className="card-title" style={{ marginBottom: 10 }}>
+                  Retention Controls
+                </div>
+                <NumberInput
+                  label="Audit Records"
+                  value={retentionDraft.audit_max_records}
+                  onChange={(value) =>
+                    setRetentionDraft((prev) => ({ ...prev, audit_max_records: value }))
+                  }
+                  min={0}
+                />
+                <NumberInput
+                  label="Alert Records"
+                  value={retentionDraft.alert_max_records}
+                  onChange={(value) =>
+                    setRetentionDraft((prev) => ({ ...prev, alert_max_records: value }))
+                  }
+                  min={0}
+                />
+                <NumberInput
+                  label="Event Records"
+                  value={retentionDraft.event_max_records}
+                  onChange={(value) =>
+                    setRetentionDraft((prev) => ({ ...prev, event_max_records: value }))
+                  }
+                  min={0}
+                />
+                <NumberInput
+                  label="Audit Max Age"
+                  value={retentionDraft.audit_max_age_days}
+                  onChange={(value) =>
+                    setRetentionDraft((prev) => ({ ...prev, audit_max_age_days: value }))
+                  }
+                  min={0}
+                  unit="days"
+                />
+                <TextInput
+                  label="Remote Syslog Endpoint"
+                  value={retentionDraft.remote_syslog_endpoint}
+                  onChange={(value) =>
+                    setRetentionDraft((prev) => ({ ...prev, remote_syslog_endpoint: value }))
+                  }
+                  placeholder="udp://syslog.example.com:514"
+                />
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 12 }}>
+                  <button
+                    className="btn btn-primary"
+                    disabled={retentionSaving}
+                    onClick={saveRetentionSettings}
+                  >
+                    {retentionSaving ? 'Saving…' : 'Save Retention Settings'}
+                  </button>
+                  <button className="btn" disabled={retentionApplying} onClick={applyRetentionNow}>
+                    {retentionApplying ? 'Applying…' : 'Apply Retention Now'}
+                  </button>
+                </div>
+                {lastRetentionApply && (
+                  <div className="stat-box" style={{ marginTop: 12 }}>
+                    <div style={{ fontWeight: 600, marginBottom: 6 }}>Last apply</div>
+                    <div style={{ fontSize: 12 }}>
+                      Trimmed {lastRetentionApply.trimmed_alerts ?? 0} alerts and{' '}
+                      {lastRetentionApply.trimmed_events ?? 0} events.
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              <div className="card" style={{ padding: 14 }}>
+                <div className="card-title" style={{ marginBottom: 10 }}>
+                  Historical Search
+                </div>
+                <div style={{ display: 'grid', gap: 10 }}>
+                  <div
+                    style={{
+                      display: 'grid',
+                      gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
+                      gap: 10,
+                    }}
+                  >
+                    <TextInput
+                      label="Since"
+                      value={historicalDraft.since}
+                      onChange={(value) =>
+                        setHistoricalDraft((prev) => ({ ...prev, since: value }))
+                      }
+                      placeholder="2026-04-01T00:00:00Z"
+                    />
+                    <TextInput
+                      label="Until"
+                      value={historicalDraft.until}
+                      onChange={(value) =>
+                        setHistoricalDraft((prev) => ({ ...prev, until: value }))
+                      }
+                      placeholder="2026-04-21T23:59:59Z"
+                    />
+                    <TextInput
+                      label="Tenant"
+                      value={historicalDraft.tenant_id}
+                      onChange={(value) =>
+                        setHistoricalDraft((prev) => ({ ...prev, tenant_id: value }))
+                      }
+                      placeholder="default"
+                    />
+                    <TextInput
+                      label="Device"
+                      value={historicalDraft.device_id}
+                      onChange={(value) =>
+                        setHistoricalDraft((prev) => ({ ...prev, device_id: value }))
+                      }
+                      placeholder="agent-01"
+                    />
+                    <TextInput
+                      label="User"
+                      value={historicalDraft.user_name}
+                      onChange={(value) =>
+                        setHistoricalDraft((prev) => ({ ...prev, user_name: value }))
+                      }
+                      placeholder="analyst@example.com"
+                    />
+                    <TextInput
+                      label="Source IP"
+                      value={historicalDraft.src_ip}
+                      onChange={(value) =>
+                        setHistoricalDraft((prev) => ({ ...prev, src_ip: value }))
+                      }
+                      placeholder="203.0.113.10"
+                    />
+                    <NumberInput
+                      label="Severity Min"
+                      value={historicalDraft.severity_min}
+                      onChange={(value) =>
+                        setHistoricalDraft((prev) => ({ ...prev, severity_min: value }))
+                      }
+                      min={0}
+                      max={10}
+                    />
+                    <NumberInput
+                      label="Event Class"
+                      value={historicalDraft.event_class}
+                      onChange={(value) =>
+                        setHistoricalDraft((prev) => ({ ...prev, event_class: value }))
+                      }
+                      min={0}
+                    />
+                    <NumberInput
+                      label="Limit"
+                      value={historicalDraft.limit}
+                      onChange={(value) =>
+                        setHistoricalDraft((prev) => ({ ...prev, limit: value }))
+                      }
+                      min={1}
+                      max={200}
+                    />
+                  </div>
+
+                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                    <button className="btn btn-primary" onClick={runHistoricalSearch}>
+                      Search Retained Events
+                    </button>
+                    <span style={{ fontSize: 12, opacity: 0.75, alignSelf: 'center' }}>
+                      {historicalEventsLoading
+                        ? 'Searching retained events…'
+                        : `Showing ${historicalEvents.length} of ${historicalEventsData?.total ?? 0} matching events`}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {historicalEventsData?.error && (
+              <div className="stat-box" style={{ marginBottom: 12, fontSize: 12 }}>
+                {historicalEventsData.error}
+              </div>
+            )}
+
+            {historicalEvents.length > 0 ? (
+              <div className="table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Timestamp</th>
+                      <th>Severity</th>
+                      <th>Class</th>
+                      <th>Device</th>
+                      <th>User</th>
+                      <th>Source</th>
+                      <th>Destination</th>
+                      <th>Payload</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {historicalEvents.map((event, index) => (
+                      <tr key={`${event.timestamp || 'ts'}-${event.device_id || 'device'}-${index}`}>
+                        <td>{formatAuditTimestamp(event.timestamp)}</td>
+                        <td>{event.severity ?? '—'}</td>
+                        <td>{event.event_class ?? '—'}</td>
+                        <td>{event.device_id || '—'}</td>
+                        <td>{event.user_name || '—'}</td>
+                        <td>{event.src_ip || '—'}</td>
+                        <td>{event.dst_ip || '—'}</td>
+                        <td>
+                          <details>
+                            <summary style={{ cursor: 'pointer', fontSize: 12 }}>Raw event</summary>
+                            <pre
+                              style={{
+                                marginTop: 8,
+                                whiteSpace: 'pre-wrap',
+                                fontSize: 11,
+                                maxWidth: 360,
+                              }}
+                            >
+                              {event.raw_json || 'No raw payload available.'}
+                            </pre>
+                          </details>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : historicalEventsLoading ? (
+              <div className="empty">Searching retained events...</div>
+            ) : (
+              <div className="empty">
+                {historicalEventsData?.enabled === false
+                  ? historicalEventsData?.error || 'ClickHouse long-retention storage is not configured.'
+                  : 'No retained events match the current filters.'}
+              </div>
+            )}
+
+            <JsonDetails data={historicalEventsData} label="Historical storage diagnostics" />
           </div>
 
           <div className="card" style={{ marginTop: 16 }}>

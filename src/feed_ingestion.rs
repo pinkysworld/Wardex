@@ -403,6 +403,8 @@ fn parse_abusech_feed(data: &str) -> AbusechParsed {
                         })
                         .unwrap_or_default(),
                     related_iocs: vec![],
+                    metadata: crate::threat_intel::IndicatorMetadata::default(),
+                    sightings: Vec::new(),
                 });
                 let signature = entry
                     .get("signature")
@@ -455,6 +457,8 @@ fn parse_abusech_feed(data: &str) -> AbusechParsed {
                     last_seen: now.clone(),
                     tags: vec!["malware-distribution".to_string()],
                     related_iocs: vec![],
+                    metadata: crate::threat_intel::IndicatorMetadata::default(),
+                    sightings: Vec::new(),
                 });
             }
         }

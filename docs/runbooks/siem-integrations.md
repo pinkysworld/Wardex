@@ -51,7 +51,7 @@ curl -X POST http://localhost:9090/api/config/save \
 ### Setup in Splunk
 
 1. Settings → Data Inputs → HTTP Event Collector
-2. Create new token, set sourcetype to `sentineledge`
+2. Create new token, set sourcetype to `wardex`
 3. Note the HEC token and endpoint URL
 
 ### Config
@@ -73,8 +73,8 @@ token = "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
     "reasons": ["brute_force_detected", "lateral_movement"],
     "mitre": [{"technique_id": "T1110", "tactic": "Credential Access"}]
   },
-  "sourcetype": "sentineledge",
-  "source": "sentineledge-xdr"
+  "sourcetype": "wardex",
+  "source": "wardex-xdr"
 }
 ```
 
@@ -82,11 +82,11 @@ token = "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
 
 ### Setup in Elasticsearch
 
-1. Create an index template for SentinelEdge:
+1. Create an index template for Wardex:
 ```json
-PUT _index_template/sentineledge
+PUT _index_template/wardex
 {
-  "index_patterns": ["sentineledge-*"],
+  "index_patterns": ["wardex-*"],
   "template": {
     "mappings": {
       "properties": {
@@ -113,7 +113,7 @@ PUT _index_template/sentineledge
 ```toml
 [siem]
 format = "ecs"
-endpoint = "https://elastic.example.com:9200/sentineledge-alerts/_bulk"
+endpoint = "https://elastic.example.com:9200/wardex-alerts/_bulk"
 token = "base64-encoded-api-key"
 ```
 
@@ -123,14 +123,14 @@ token = "base64-encoded-api-key"
 
 1. Create a Log Analytics workspace
 2. Create a Data Collection Endpoint (DCE)
-3. Create a Data Collection Rule (DCR) with custom table `SentinelEdge_CL`
+3. Create a Data Collection Rule (DCR) with custom table `Wardex_CL`
 
 ### Config
 
 ```toml
 [siem]
 format = "sentinel"
-endpoint = "https://<dce-endpoint>.ingest.monitor.azure.com/dataCollectionRules/<dcr-id>/streams/Custom-SentinelEdge_CL"
+endpoint = "https://<dce-endpoint>.ingest.monitor.azure.com/dataCollectionRules/<dcr-id>/streams/Custom-Wardex_CL"
 token = "Bearer <azure-ad-token>"
 ```
 
@@ -151,7 +151,7 @@ token = "Bearer <service-account-token>"
 
 1. Admin → Log Sources → Add
 2. Log Source Type: Universal REST API
-3. Configure the REST API protocol with SentinelEdge endpoint
+3. Configure the REST API protocol with Wardex endpoint
 
 ### Config
 

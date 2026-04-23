@@ -85,6 +85,15 @@ const COMMANDS = [
     kind: 'action',
   },
   {
+    title: 'Ask Assistant',
+    subtitle: 'Open the analyst assistant with case-aware context',
+    icon: 'CMD',
+    action: 'open-assistant',
+    path: '/assistant',
+    category: 'Command',
+    kind: 'action',
+  },
+  {
     title: 'Review Offline Agents',
     subtitle: 'Open fleet with the offline status view',
     icon: 'CMD',

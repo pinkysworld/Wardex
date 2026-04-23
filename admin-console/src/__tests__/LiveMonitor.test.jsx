@@ -1,4 +1,5 @@
 import { act, render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { MemoryRouter } from 'react-router-dom';
 import LiveMonitor from '../components/LiveMonitor.jsx';
@@ -23,6 +24,11 @@ describe('LiveMonitor', () => {
       if (String(url).includes('/api/alerts/count')) {
         return Promise.resolve(jsonOk({ total: 0, critical: 0, severe: 0, elevated: 0 }));
       }
+      if (String(url).includes('/api/ws/stats')) {
+        return Promise.resolve(
+          jsonOk({ connected_clients: 1, total_events: 2, subscribers: 1, connections: [] }),
+        );
+      }
       if (String(url).includes('/api/alerts/grouped')) return Promise.resolve(jsonOk([]));
       if (String(url).includes('/api/alerts')) return Promise.resolve(jsonOk([]));
       if (String(url).includes('/api/processes/live')) {
@@ -38,6 +44,7 @@ describe('LiveMonitor', () => {
   });
 
   it('renders alert events pushed over the live feed', async () => {
+    const user = userEvent.setup();
     const sockets = [];
 
     globalThis.WebSocket = class MockWebSocket {
@@ -91,10 +98,26 @@ describe('LiveMonitor', () => {
           },
         }),
       );
+      sockets[0].emitMessage(
+        JSON.stringify({
+          event_type: 'incident',
+          timestamp: new Date().toISOString(),
+          data: {
+            id: 'inc-17',
+            title: 'Credential misuse follow-up',
+            severity: 'high',
+          },
+        }),
+      );
     });
 
     expect((await screen.findAllByText('network burst detected')).length).toBeGreaterThan(0);
     expect(screen.getByText('Live feed: WebSocket')).toBeInTheDocument();
+    expect(screen.getByText('Transport and Recovery')).toBeInTheDocument();
     expect(screen.getAllByText('critical').length).toBeGreaterThan(0);
+
+    await user.click(screen.getByRole('button', { name: /incident \(1\)/i }));
+
+    expect(await screen.findByText('Credential misuse follow-up')).toBeInTheDocument();
   });
 });

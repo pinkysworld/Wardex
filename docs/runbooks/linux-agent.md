@@ -4,7 +4,7 @@
 
 - Linux kernel 4.15+ (5.x+ recommended for eBPF)
 - Root or sudo access for installation
-- Network access to the SentinelEdge server (default port 9090)
+- Network access to the Wardex server (default port 9090)
 - systemd (for service management)
 
 ## Deployment
@@ -12,15 +12,15 @@
 ### 1. Download Agent Binary
 
 ```bash
-curl -o /tmp/sentineledge-agent \
-  "https://<server>:9090/api/updates/download/sentineledge-agent-linux-amd64"
-chmod +x /tmp/sentineledge-agent
+curl -o /tmp/wardex-agent \
+  "https://<server>:9090/api/updates/download/wardex-agent-linux-amd64"
+chmod +x /tmp/wardex-agent
 ```
 
 ### 2. Enroll Agent
 
 ```bash
-sudo /tmp/sentineledge-agent enroll \
+sudo /tmp/wardex-agent enroll \
   --server https://<server>:9090 \
   --token <enrollment-token> \
   --hostname $(hostname) \
@@ -30,17 +30,17 @@ sudo /tmp/sentineledge-agent enroll \
 ### 3. Install as systemd Service
 
 ```bash
-sudo cp /tmp/sentineledge-agent /usr/local/bin/
-sudo mkdir -p /etc/sentineledge /var/lib/sentineledge
+sudo cp /tmp/wardex-agent /usr/local/bin/
+sudo mkdir -p /etc/wardex /var/lib/wardex
 
-cat << 'EOF' | sudo tee /etc/systemd/system/sentineledge-agent.service
+cat << 'EOF' | sudo tee /etc/systemd/system/wardex-agent.service
 [Unit]
-Description=SentinelEdge XDR Agent
+Description=Wardex XDR Agent
 After=network.target auditd.service
 
 [Service]
 Type=simple
-ExecStart=/usr/local/bin/sentineledge-agent --run --config /etc/sentineledge/config.toml
+ExecStart=/usr/local/bin/wardex-agent --run --config /etc/wardex/config.toml
 Restart=always
 RestartSec=10
 User=root
@@ -51,7 +51,7 @@ WantedBy=multi-user.target
 EOF
 
 sudo systemctl daemon-reload
-sudo systemctl enable --now sentineledge-agent
+sudo systemctl enable --now wardex-agent
 ```
 
 ## Telemetry Sources
@@ -70,19 +70,19 @@ sudo systemctl enable --now sentineledge-agent
 For comprehensive auditing, add these rules:
 
 ```bash
-cat << 'EOF' | sudo tee /etc/audit/rules.d/sentineledge.rules
+cat << 'EOF' | sudo tee /etc/audit/rules.d/wardex.rules
 # Process execution
--a always,exit -F arch=b64 -S execve -k sentineledge_exec
+-a always,exit -F arch=b64 -S execve -k wardex_exec
 # File modifications in sensitive paths
--w /etc/passwd -p wa -k sentineledge_identity
--w /etc/shadow -p wa -k sentineledge_identity
--w /etc/sudoers -p wa -k sentineledge_priv
--w /etc/crontab -p wa -k sentineledge_persist
--w /var/spool/cron/ -p wa -k sentineledge_persist
+-w /etc/passwd -p wa -k wardex_identity
+-w /etc/shadow -p wa -k wardex_identity
+-w /etc/sudoers -p wa -k wardex_priv
+-w /etc/crontab -p wa -k wardex_persist
+-w /var/spool/cron/ -p wa -k wardex_persist
 # Kernel module loading
--a always,exit -F arch=b64 -S init_module -S finit_module -k sentineledge_kernel
+-a always,exit -F arch=b64 -S init_module -S finit_module -k wardex_kernel
 # Privilege escalation
--a always,exit -F arch=b64 -S setuid -S setgid -k sentineledge_priv_esc
+-a always,exit -F arch=b64 -S setuid -S setgid -k wardex_priv_esc
 EOF
 
 sudo augenrules --load
@@ -119,14 +119,14 @@ ls -la /var/run/docker.sock
 
 # If running agent in a container, mount required paths:
 docker run -d \
-  --name sentineledge-agent \
+  --name wardex-agent \
   --privileged \
   --pid=host \
   --net=host \
   -v /proc:/host/proc:ro \
   -v /sys:/host/sys:ro \
   -v /var/run/docker.sock:/var/run/docker.sock:ro \
-  sentineledge/agent:latest
+  wardex/agent:latest
 ```
 
 ### Kubernetes
@@ -137,19 +137,19 @@ Deploy as a DaemonSet:
 apiVersion: apps/v1
 kind: DaemonSet
 metadata:
-  name: sentineledge-agent
+  name: wardex-agent
   namespace: security
 spec:
   selector:
     matchLabels:
-      app: sentineledge-agent
+      app: wardex-agent
   template:
     spec:
       hostPID: true
       hostNetwork: true
       containers:
       - name: agent
-        image: sentineledge/agent:latest
+        image: wardex/agent:latest
         securityContext:
           privileged: true
         volumeMounts:
@@ -183,16 +183,16 @@ The agent monitors:
 
 ```bash
 # Check service status
-sudo systemctl status sentineledge-agent
+sudo systemctl status wardex-agent
 # View logs
-sudo journalctl -u sentineledge-agent -f --no-pager | tail -50
+sudo journalctl -u wardex-agent -f --no-pager | tail -50
 ```
 
 ### Permission Denied Errors
 
 ```bash
 # Verify agent runs as root
-ps aux | grep sentineledge
+ps aux | grep wardex
 # Check SELinux (if applicable)
 getenforce
 # Temporarily set permissive for testing
@@ -211,10 +211,10 @@ network_scan_interval_secs = 15
 ## Uninstallation
 
 ```bash
-sudo systemctl stop sentineledge-agent
-sudo systemctl disable sentineledge-agent
-sudo rm /etc/systemd/system/sentineledge-agent.service
+sudo systemctl stop wardex-agent
+sudo systemctl disable wardex-agent
+sudo rm /etc/systemd/system/wardex-agent.service
 sudo systemctl daemon-reload
-sudo rm /usr/local/bin/sentineledge-agent
-sudo rm -rf /etc/sentineledge /var/lib/sentineledge
+sudo rm /usr/local/bin/wardex-agent
+sudo rm -rf /etc/wardex /var/lib/wardex
 ```

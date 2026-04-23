@@ -35,6 +35,10 @@ pub struct IoC {
     pub last_seen: String,
     pub tags: Vec<String>,
     pub related_iocs: Vec<String>,
+    #[serde(default)]
+    pub metadata: IndicatorMetadata,
+    #[serde(default)]
+    pub sightings: Vec<IndicatorSighting>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -46,6 +50,51 @@ pub struct ThreatFeed {
     pub last_updated: String,
     pub ioc_count: usize,
     pub active: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct IndicatorMetadata {
+    pub normalized_value: String,
+    pub ttl_days: u64,
+    pub source_weight: f32,
+    pub confidence_decay: f32,
+    #[serde(default)]
+    pub last_sighting: Option<String>,
+    #[serde(default)]
+    pub sightings: u64,
+}
+
+impl Default for IndicatorMetadata {
+    fn default() -> Self {
+        Self {
+            normalized_value: String::new(),
+            ttl_days: 90,
+            source_weight: 1.0,
+            confidence_decay: 0.98,
+            last_sighting: None,
+            sightings: 0,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct IndicatorSighting {
+    pub timestamp: String,
+    pub source: String,
+    pub context: String,
+    pub weight: f32,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct IndicatorSightingRecord {
+    pub ioc_type: IoCType,
+    pub value: String,
+    pub severity: String,
+    pub confidence: f32,
+    pub timestamp: String,
+    pub source: String,
+    pub context: String,
+    pub weight: f32,
 }
 
 // ── IoC Store & Matching ─────────────────────────────────────────────────────
@@ -94,15 +143,21 @@ impl ThreatIntelStore {
     }
 
     /// Add an IoC to the store.
-    pub fn add_ioc(&mut self, ioc: IoC) {
-        let key = format!("{:?}:{}", ioc.ioc_type, ioc.value);
+    pub fn add_ioc(&mut self, mut ioc: IoC) {
+        hydrate_ioc_metadata(&mut ioc);
+        let key = format!(
+            "{:?}:{}",
+            ioc.ioc_type,
+            normalize_ioc_value(&ioc.ioc_type, &ioc.value)
+        );
         self.iocs.insert(key, ioc);
     }
 
     /// Check a value against all IoCs of a given type.
     pub fn check(&mut self, ioc_type: &IoCType, value: &str) -> MatchResult {
-        let key = format!("{ioc_type:?}:{value}");
-        let result = if let Some(ioc) = self.iocs.get(&key) {
+        let key = format!("{ioc_type:?}:{}", normalize_ioc_value(ioc_type, value));
+        let result = if let Some(ioc) = self.iocs.get_mut(&key) {
+            record_ioc_sighting(ioc, "match", &format!("matched {ioc_type:?} indicator: {value}"));
             MatchResult {
                 matched: true,
                 ioc: Some(ioc.clone()),
@@ -117,14 +172,20 @@ impl ThreatIntelStore {
                 ioc_type,
                 IoCType::BehaviorPattern | IoCType::NetworkSignature
             ) {
-                self.iocs.values().find(|ioc| {
-                    ioc.ioc_type == *ioc_type
+                self.iocs.iter_mut().find_map(|(_, ioc)| {
+                    if ioc.ioc_type == *ioc_type
                         && (value.contains(&ioc.value) || ioc.value.contains(value))
+                    {
+                        Some(ioc)
+                    } else {
+                        None
+                    }
                 })
             } else {
                 None
             };
             if let Some(ioc) = partial {
+                record_ioc_sighting(ioc, "partial_match", &format!("partial match on {ioc_type:?}: {value}"));
                 MatchResult {
                     matched: true,
                     ioc: Some(ioc.clone()),
@@ -186,6 +247,31 @@ impl ThreatIntelStore {
 
     pub fn all_iocs(&self) -> Vec<IoC> {
         self.iocs.values().cloned().collect()
+    }
+
+    pub fn recent_sightings(&self, limit: usize) -> Vec<IndicatorSightingRecord> {
+        let mut sightings = self.all_sightings();
+        sightings.sort_by(|left, right| right.timestamp.cmp(&left.timestamp));
+        sightings.into_iter().take(limit).collect()
+    }
+
+    pub fn all_sightings(&self) -> Vec<IndicatorSightingRecord> {
+        let mut records = Vec::new();
+        for ioc in self.iocs.values() {
+            for sighting in &ioc.sightings {
+                records.push(IndicatorSightingRecord {
+                    ioc_type: ioc.ioc_type.clone(),
+                    value: ioc.value.clone(),
+                    severity: ioc.severity.clone(),
+                    confidence: ioc.confidence,
+                    timestamp: sighting.timestamp.clone(),
+                    source: sighting.source.clone(),
+                    context: sighting.context.clone(),
+                    weight: sighting.weight,
+                });
+            }
+        }
+        records
     }
 
     pub fn match_history(&self) -> &[MatchResult] {
@@ -254,6 +340,8 @@ impl ThreatIntelStore {
                     })
                     .unwrap_or_default(),
                 related_iocs: vec![],
+                metadata: IndicatorMetadata::default(),
+                sightings: Vec::new(),
             };
             self.add_ioc(ioc);
             count += 1;
@@ -347,6 +435,69 @@ impl ThreatIntelStore {
             match_history_size: self.match_history.len(),
         }
     }
+}
+
+fn normalize_ioc_value(ioc_type: &IoCType, value: &str) -> String {
+    let trimmed = value.trim();
+    match ioc_type {
+        IoCType::Domain
+        | IoCType::FileHash
+        | IoCType::ProcessName
+        | IoCType::BehaviorPattern
+        | IoCType::NetworkSignature
+        | IoCType::RegistryKey
+        | IoCType::Certificate => trimmed.to_ascii_lowercase(),
+        IoCType::IpAddress => trimmed.to_string(),
+    }
+}
+
+fn default_source_weight(source: &str) -> f32 {
+    let normalized = source.trim().to_ascii_lowercase();
+    if normalized.contains("internal") || normalized.contains("misp") {
+        1.2
+    } else if normalized.contains("community") || normalized.contains("public") {
+        0.9
+    } else {
+        1.0
+    }
+}
+
+fn hydrate_ioc_metadata(ioc: &mut IoC) {
+    if ioc.metadata.normalized_value.is_empty() {
+        ioc.metadata.normalized_value = normalize_ioc_value(&ioc.ioc_type, &ioc.value);
+    }
+    if ioc.metadata.ttl_days == 0 {
+        ioc.metadata.ttl_days = 90;
+    }
+    if ioc.metadata.source_weight <= 0.0 {
+        ioc.metadata.source_weight = default_source_weight(&ioc.source);
+    }
+    if ioc.metadata.confidence_decay <= 0.0 {
+        ioc.metadata.confidence_decay = 0.98;
+    }
+    if ioc.metadata.sightings == 0 && !ioc.sightings.is_empty() {
+        ioc.metadata.sightings = ioc.sightings.len() as u64;
+    }
+}
+
+fn record_ioc_sighting(ioc: &mut IoC, source: &str, context: &str) {
+    hydrate_ioc_metadata(ioc);
+    let now = chrono::Utc::now().to_rfc3339();
+    ioc.last_seen = now.clone();
+    ioc.metadata.last_sighting = Some(now.clone());
+    ioc.metadata.sightings = ioc.metadata.sightings.saturating_add(1);
+    ioc.sightings.push(IndicatorSighting {
+        timestamp: now,
+        source: source.to_string(),
+        context: context.to_string(),
+        weight: ioc.metadata.source_weight,
+    });
+    if ioc.sightings.len() > 64 {
+        let drop_count = ioc.sightings.len() - 64;
+        ioc.sightings.drain(0..drop_count);
+    }
+    let confidence_boost = 0.02 * ioc.metadata.source_weight.max(0.2);
+    ioc.confidence = (ioc.confidence + confidence_boost).clamp(0.0, 1.0);
 }
 
 /// Parse a simple STIX 2.1 indicator pattern.
@@ -687,6 +838,8 @@ mod tests {
             last_seen: "T1".into(),
             tags: vec!["c2".into()],
             related_iocs: vec![],
+            metadata: IndicatorMetadata::default(),
+            sightings: Vec::new(),
         });
 
         let result = store.check(&IoCType::IpAddress, "10.0.0.99");
@@ -714,6 +867,8 @@ mod tests {
             last_seen: "T1".into(),
             tags: vec![],
             related_iocs: vec![],
+            metadata: IndicatorMetadata::default(),
+            sightings: Vec::new(),
         });
 
         let result = store.check(&IoCType::BehaviorPattern, "auth_burst_detected");
@@ -823,6 +978,8 @@ mod tests {
             last_seen: "T1".into(),
             tags: vec!["crypto-mining".into()],
             related_iocs: vec![],
+            metadata: IndicatorMetadata::default(),
+            sightings: Vec::new(),
         });
 
         let signals = vec![("cpu_load".to_string(), 95.0)];
@@ -975,6 +1132,8 @@ mod tests {
             last_seen: "t1".into(),
             tags: vec![],
             related_iocs: vec![],
+            metadata: IndicatorMetadata::default(),
+            sightings: Vec::new(),
         });
 
         let checks = vec![
@@ -1000,6 +1159,8 @@ mod tests {
             last_seen: "2026-04-04T01:00:00+02:00".into(),
             tags: vec![],
             related_iocs: vec![],
+            metadata: IndicatorMetadata::default(),
+            sightings: Vec::new(),
         });
 
         let expiring = store.expiring_iocs("2026-04-03T23:30:00Z");
@@ -1023,6 +1184,8 @@ mod tests {
             last_seen: "garbage".into(),
             tags: vec![],
             related_iocs: vec![],
+            metadata: IndicatorMetadata::default(),
+            sightings: Vec::new(),
         });
 
         let expiring = store.expiring_iocs("2026-04-03T23:30:00Z");
@@ -1045,6 +1208,8 @@ mod tests {
             last_seen: "2026-01-01T00:00:00Z".into(),
             tags: vec![],
             related_iocs: vec![],
+            metadata: IndicatorMetadata::default(),
+            sightings: Vec::new(),
         });
         store.add_ioc(IoC {
             ioc_type: IoCType::IpAddress,
@@ -1056,6 +1221,8 @@ mod tests {
             last_seen: "2026-04-01T00:00:00Z".into(),
             tags: vec![],
             related_iocs: vec![],
+            metadata: IndicatorMetadata::default(),
+            sightings: Vec::new(),
         });
         assert_eq!(store.ioc_count(), 2);
         let purged = store.purge_expired("2026-04-05T00:00:00Z", 30);
@@ -1076,6 +1243,8 @@ mod tests {
             last_seen: "t1".into(),
             tags: vec![],
             related_iocs: vec![],
+            metadata: IndicatorMetadata::default(),
+            sightings: Vec::new(),
         });
         store.add_ioc(IoC {
             ioc_type: IoCType::Domain,
@@ -1087,6 +1256,8 @@ mod tests {
             last_seen: "t1".into(),
             tags: vec![],
             related_iocs: vec![],
+            metadata: IndicatorMetadata::default(),
+            sightings: Vec::new(),
         });
         let stats = store.enrichment_stats();
         assert_eq!(stats.total_iocs, 2);

@@ -1,5 +1,5 @@
-# ── SentinelEdge / Wardex — Developer Makefile ────────────────
-.PHONY: build run test lint fmt check clean release dev admin fuzz bench doc
+# ── Wardex — Developer Makefile ────────────────────────
+.PHONY: build run test lint fmt check clean release dev admin fuzz bench doc release-acceptance
 
 # ── Build ──
 build:
@@ -76,3 +76,6 @@ clean:
 
 # ── CI convenience ──
 ci: fmt-check lint test admin-test
+
+release-acceptance:
+	bash ./scripts/release_acceptance.sh

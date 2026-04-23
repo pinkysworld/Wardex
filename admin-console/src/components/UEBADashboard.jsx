@@ -1,6 +1,9 @@
-import { useState, useMemo } from 'react';
+import { useMemo } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useApi, useInterval } from '../hooks.jsx';
 import * as api from '../api.js';
+import WorkflowGuidance from './WorkflowGuidance.jsx';
+import { buildHref } from './workflowPivots.js';
 
 const RISK_THRESHOLDS = { critical: 80, high: 60, medium: 40, low: 20 };
 const ANOMALY_TYPES = [
@@ -111,10 +114,21 @@ function PeerSparkBar({ entityRisk, peerAvg }) {
 }
 
 export default function UEBADashboard() {
-  const [timeRange, setTimeRange] = useState(TIME_RANGES[2]);
-  const [selectedEntity, setSelectedEntity] = useState(null);
-  const [anomalyFilter, setAnomalyFilter] = useState('all');
-  const [sortBy, setSortBy] = useState('risk_score');
+  const [searchParams, setSearchParams] = useSearchParams();
+  const timeRange =
+    TIME_RANGES.find((entry) => entry.label === searchParams.get('range')) || TIME_RANGES[2];
+  const selectedEntity = searchParams.get('entity') || '';
+  const anomalyFilter = searchParams.get('anomaly') || 'all';
+  const sortBy = searchParams.get('sort') || 'risk_score';
+
+  const updateParams = (changes) => {
+    const next = new URLSearchParams(searchParams);
+    Object.entries(changes).forEach(([key, value]) => {
+      if (value == null || value === '' || value === 'all') next.delete(key);
+      else next.set(key, value);
+    });
+    setSearchParams(next, { replace: true });
+  };
 
   const {
     data: riskyEntities,
@@ -168,6 +182,71 @@ export default function UEBADashboard() {
   }, [anomalies]);
 
   const topRiskCount = entities.filter((e) => (e.risk_score || 0) >= RISK_THRESHOLDS.high).length;
+  const focusEntity = selectedEntity || entities[0]?.entity_id || '';
+  const workflowItems = useMemo(() => {
+    const focalEntity = focusEntity || 'the highest-risk entity';
+    const focalKind =
+      entityDetail?.entity_kind ||
+      entities.find((entry) => entry.entity_id === focusEntity)?.entity_kind ||
+      'entity';
+    return [
+      {
+        id: 'soc-investigate',
+        title: 'Escalate Into SOC Workbench',
+        description: `Move ${focalEntity} into investigation planning and active case workflows.`,
+        to: '/soc#investigations',
+        minRole: 'analyst',
+        tone: 'primary',
+        badge: 'Investigate',
+      },
+      {
+        id: 'attack-graph',
+        title: 'Validate Attack Paths',
+        description: `Check whether ${focalEntity} is connected to lateral movement or campaign edges.`,
+        to: buildHref('/attack-graph', { params: { node: focusEntity } }),
+        minRole: 'analyst',
+        badge: 'Graph',
+      },
+      {
+        id: 'threat-detection',
+        title: 'Launch A Focused Hunt',
+        description: `Seed a hunt with ${focalKind} risk context and current anomaly pressure.`,
+        to: buildHref('/detection', {
+          params: {
+            intent: 'run-hunt',
+            huntQuery: focusEntity ? `${focalKind}:${focusEntity} ueba anomaly` : 'ueba anomaly',
+            huntName: focusEntity ? `Hunt ${focusEntity}` : 'Hunt risky entity activity',
+          },
+        }),
+        minRole: 'analyst',
+        badge: 'Detect',
+      },
+      {
+        id: 'infrastructure',
+        title: 'Cross-Check Asset Health',
+        description: `Review exposure, drift, and observability evidence tied to ${focalEntity}.`,
+        to: buildHref('/infrastructure', {
+          params: { tab: 'assets', q: focusEntity },
+        }),
+        minRole: 'analyst',
+        badge: 'Asset',
+      },
+      {
+        id: 'reports',
+        title: 'Capture Privacy And Evidence',
+        description: 'Export analyst context into privacy-budget and evidence review workflows.',
+        to: buildHref('/reports', {
+          params: {
+            tab: 'privacy',
+            source: 'ueba',
+            target: focusEntity || undefined,
+          },
+        }),
+        minRole: 'viewer',
+        badge: 'Report',
+      },
+    ];
+  }, [entities, entityDetail, focusEntity]);
 
   return (
     <div className="ueba-dashboard" style={{ display: 'grid', gap: 16 }}>
@@ -222,7 +301,7 @@ export default function UEBADashboard() {
           <button
             key={tr.label}
             className={`btn btn-sm ${tr.label === timeRange.label ? 'btn-primary' : ''}`}
-            onClick={() => setTimeRange(tr)}
+            onClick={() => updateParams({ range: tr.label })}
           >
             {tr.label}
           </button>
@@ -232,7 +311,7 @@ export default function UEBADashboard() {
           className="auth-input"
           style={{ width: 'auto', fontSize: 12, padding: '4px 8px' }}
           value={sortBy}
-          onChange={(e) => setSortBy(e.target.value)}
+          onChange={(e) => updateParams({ sort: e.target.value })}
           aria-label="Sort entities by"
         >
           <option value="risk_score">Risk Score</option>
@@ -240,6 +319,12 @@ export default function UEBADashboard() {
           <option value="entity_id">Entity ID</option>
         </select>
       </div>
+
+      <WorkflowGuidance
+        title="Entity Pivots"
+        description="Carry the selected UEBA context into investigation, hunt, graph, and reporting workflows without rebuilding the query."
+        items={workflowItems}
+      />
 
       <div
         style={{
@@ -300,7 +385,7 @@ export default function UEBADashboard() {
                       return (
                         <tr
                           key={e.entity_id || i}
-                          onClick={() => setSelectedEntity(e.entity_id)}
+                          onClick={() => updateParams({ entity: e.entity_id })}
                           style={{
                             cursor: 'pointer',
                             background:
@@ -346,7 +431,7 @@ export default function UEBADashboard() {
               <div className="card-title">Entity: {selectedEntity}</div>
               <button
                 className="btn btn-sm"
-                onClick={() => setSelectedEntity(null)}
+                onClick={() => updateParams({ entity: null })}
                 aria-label="Close entity detail"
               >
                 ✕
@@ -447,7 +532,7 @@ export default function UEBADashboard() {
           <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
             <button
               className={`btn btn-sm ${anomalyFilter === 'all' ? 'btn-primary' : ''}`}
-              onClick={() => setAnomalyFilter('all')}
+              onClick={() => updateParams({ anomaly: 'all' })}
             >
               All ({(Array.isArray(anomalies) ? anomalies : anomalies?.items || []).length})
             </button>
@@ -455,7 +540,7 @@ export default function UEBADashboard() {
               <button
                 key={t}
                 className={`btn btn-sm ${anomalyFilter === t ? 'btn-primary' : ''}`}
-                onClick={() => setAnomalyFilter(t)}
+                onClick={() => updateParams({ anomaly: t })}
               >
                 {t.replace(/([A-Z])/g, ' $1').trim()} ({anomalyStats[t]})
               </button>
@@ -492,7 +577,7 @@ export default function UEBADashboard() {
                   filteredAnomalies.slice(0, 100).map((a, i) => (
                     <tr
                       key={i}
-                      onClick={() => setSelectedEntity(a.entity_id)}
+                      onClick={() => updateParams({ entity: a.entity_id })}
                       style={{ cursor: 'pointer' }}
                     >
                       <td>

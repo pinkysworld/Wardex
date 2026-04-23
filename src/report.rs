@@ -5,6 +5,7 @@ use std::path::Path;
 use crate::event_forward::EventStore;
 use crate::incident::{Incident, IncidentStore};
 use crate::runtime::{RunResult, RunSummary};
+use crate::support::ReportExecutionContext;
 use crate::telemetry::MitreAttack;
 
 fn html_escape(s: &str) -> String {
@@ -168,6 +169,25 @@ pub struct StoredReport {
     pub report: JsonReport,
     pub generated_at: String,
     pub report_type: String,
+    #[serde(default)]
+    pub execution_context: Option<ReportExecutionContext>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum ReportScopeFilter {
+    #[default]
+    All,
+    Scoped,
+    Unscoped,
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct ReportListFilter {
+    pub case_id: Option<String>,
+    pub incident_id: Option<String>,
+    pub investigation_id: Option<String>,
+    pub source: Option<String>,
+    pub scope: ReportScopeFilter,
 }
 
 pub struct ReportStore {
@@ -225,6 +245,15 @@ impl ReportStore {
     }
 
     pub fn store(&mut self, report: JsonReport, report_type: &str) -> u64 {
+        self.store_with_context(report, report_type, None)
+    }
+
+    pub fn store_with_context(
+        &mut self,
+        report: JsonReport,
+        report_type: &str,
+        execution_context: Option<ReportExecutionContext>,
+    ) -> u64 {
         let id = self.next_id;
         self.next_id += 1;
         let stored = StoredReport {
@@ -232,6 +261,7 @@ impl ReportStore {
             generated_at: report.generated_at.clone(),
             report,
             report_type: report_type.to_string(),
+            execution_context,
         };
         self.reports.push(stored);
         // Keep last 100 reports
@@ -243,8 +273,13 @@ impl ReportStore {
     }
 
     pub fn list(&self) -> Vec<serde_json::Value> {
+        self.list_filtered(&ReportListFilter::default())
+    }
+
+    pub fn list_filtered(&self, filter: &ReportListFilter) -> Vec<serde_json::Value> {
         self.reports
             .iter()
+            .filter(|report| report_matches_filter(report, filter))
             .map(|r| {
                 serde_json::json!({
                     "id": r.id,
@@ -253,6 +288,7 @@ impl ReportStore {
                     "total_samples": r.report.summary.total_samples,
                     "alert_count": r.report.summary.alert_count,
                     "critical_count": r.report.summary.critical_count,
+                    "execution_context": r.execution_context,
                 })
             })
             .collect()
@@ -271,6 +307,18 @@ impl ReportStore {
         } else {
             false
         }
+    }
+
+    pub fn set_execution_context(
+        &mut self,
+        id: u64,
+        execution_context: Option<ReportExecutionContext>,
+    ) -> Option<StoredReport> {
+        let report = self.reports.iter_mut().find(|report| report.id == id)?;
+        report.execution_context = execution_context;
+        let updated = report.clone();
+        self.persist();
+        Some(updated)
     }
 
     pub fn executive_summary(&self, incident_store: &IncidentStore) -> serde_json::Value {
@@ -447,10 +495,46 @@ impl IncidentReport {
     }
 }
 
+fn report_matches_filter(report: &StoredReport, filter: &ReportListFilter) -> bool {
+    match filter.scope {
+        ReportScopeFilter::Unscoped => return report.execution_context.is_none(),
+        ReportScopeFilter::Scoped if report.execution_context.is_none() => return false,
+        ReportScopeFilter::All | ReportScopeFilter::Scoped => {}
+    }
+
+    let requires_context_match = filter.case_id.is_some()
+        || filter.incident_id.is_some()
+        || filter.investigation_id.is_some()
+        || filter.source.is_some();
+    if !requires_context_match {
+        return true;
+    }
+
+    let Some(context) = report.execution_context.as_ref() else {
+        return false;
+    };
+
+    fn field_matches(actual: Option<&String>, expected: Option<&String>) -> bool {
+        match expected {
+            Some(expected_value) => actual.is_some_and(|actual_value| actual_value == expected_value),
+            None => true,
+        }
+    }
+
+    field_matches(context.case_id.as_ref(), filter.case_id.as_ref())
+        && field_matches(context.incident_id.as_ref(), filter.incident_id.as_ref())
+        && field_matches(
+            context.investigation_id.as_ref(),
+            filter.investigation_id.as_ref(),
+        )
+        && field_matches(context.source.as_ref(), filter.source.as_ref())
+}
+
 #[cfg(test)]
 mod tests {
-    use super::JsonReport;
+    use super::{JsonReport, JsonSummary, ReportListFilter, ReportScopeFilter, ReportStore};
     use crate::runtime::{demo_samples, execute};
+    use crate::support::ReportExecutionContext;
 
     #[test]
     fn from_run_result_produces_report() {
@@ -470,5 +554,135 @@ mod tests {
 
         assert!(json.contains("total_samples"));
         assert!(json.contains("generated_at"));
+    }
+
+    #[test]
+    fn stored_reports_preserve_execution_context_updates() {
+        let path = std::env::temp_dir()
+            .join(format!(
+                "sentineledge-report-store-{}.json",
+                std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .expect("system time after unix epoch")
+                    .as_nanos()
+            ))
+            .to_string_lossy()
+            .to_string();
+        let mut store = ReportStore::new(&path);
+        let report = JsonReport {
+            generated_at: "2026-04-23T08:00:00Z".to_string(),
+            summary: JsonSummary {
+                total_samples: 5,
+                alert_count: 2,
+                critical_count: 1,
+                average_score: 60.0,
+                max_score: 95.0,
+            },
+            samples: Vec::new(),
+        };
+        let report_id = store.store(report, "legacy_runtime_report");
+        let context = ReportExecutionContext {
+            case_id: Some("42".to_string()),
+            incident_id: Some("7".to_string()),
+            investigation_id: Some("inv-7".to_string()),
+            source: Some("case".to_string()),
+        };
+
+        let updated = store
+            .set_execution_context(report_id, Some(context.clone()))
+            .expect("report should update");
+
+        assert_eq!(
+            updated
+                .execution_context
+                .as_ref()
+                .and_then(|value| value.case_id.as_deref()),
+            Some("42")
+        );
+
+        let reloaded = ReportStore::new(&path);
+        let persisted = reloaded.get(report_id).expect("report should persist");
+        assert_eq!(
+            persisted
+                .execution_context
+                .as_ref()
+                .and_then(|value| value.investigation_id.as_deref()),
+            Some("inv-7")
+        );
+
+        let _ = std::fs::remove_file(path);
+    }
+
+    #[test]
+    fn list_filtered_matches_execution_context_and_unscoped_modes() {
+        let path = std::env::temp_dir()
+            .join(format!(
+                "sentineledge-report-filter-store-{}.json",
+                std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .expect("system time after unix epoch")
+                    .as_nanos()
+            ))
+            .to_string_lossy()
+            .to_string();
+        let mut store = ReportStore::new(&path);
+        let sample_report = |generated_at: &str| JsonReport {
+            generated_at: generated_at.to_string(),
+            summary: JsonSummary {
+                total_samples: 3,
+                alert_count: 1,
+                critical_count: 0,
+                average_score: 42.0,
+                max_score: 77.0,
+            },
+            samples: Vec::new(),
+        };
+
+        store.store(sample_report("2026-04-23T08:00:00Z"), "legacy_runtime_report");
+        store.store_with_context(
+            sample_report("2026-04-23T09:00:00Z"),
+            "incident_package",
+            Some(ReportExecutionContext {
+                case_id: Some("42".to_string()),
+                incident_id: Some("7".to_string()),
+                investigation_id: Some("inv-7".to_string()),
+                source: Some("case".to_string()),
+            }),
+        );
+        store.store_with_context(
+            sample_report("2026-04-23T10:00:00Z"),
+            "incident_package",
+            Some(ReportExecutionContext {
+                case_id: Some("84".to_string()),
+                incident_id: Some("9".to_string()),
+                investigation_id: Some("inv-9".to_string()),
+                source: Some("incident".to_string()),
+            }),
+        );
+
+        let scoped = store.list_filtered(&ReportListFilter {
+            case_id: Some("42".to_string()),
+            incident_id: Some("7".to_string()),
+            investigation_id: Some("inv-7".to_string()),
+            source: Some("case".to_string()),
+            scope: ReportScopeFilter::Scoped,
+        });
+        assert_eq!(scoped.len(), 1);
+        assert_eq!(scoped[0]["execution_context"]["case_id"], serde_json::json!("42"));
+
+        let unscoped = store.list_filtered(&ReportListFilter {
+            scope: ReportScopeFilter::Unscoped,
+            ..ReportListFilter::default()
+        });
+        assert_eq!(unscoped.len(), 1);
+        assert_eq!(unscoped[0]["report_type"], serde_json::json!("legacy_runtime_report"));
+
+        let any_scoped = store.list_filtered(&ReportListFilter {
+            scope: ReportScopeFilter::Scoped,
+            ..ReportListFilter::default()
+        });
+        assert_eq!(any_scoped.len(), 2);
+
+        let _ = std::fs::remove_file(path);
     }
 }

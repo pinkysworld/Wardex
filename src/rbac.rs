@@ -339,6 +339,14 @@ pub fn endpoint_permission(method: &str, path: &str) -> Permission {
             Permission::ViewIncidents
         }
         ("POST", "/api/investigation/graph") => Permission::ViewIncidents,
+        ("GET", "/api/assistant/status") => Permission::ViewIncidents,
+        ("POST", "/api/assistant/query") => Permission::ViewIncidents,
+        ("GET", p) if p.starts_with("/api/investigations/workflows") => Permission::ViewIncidents,
+        ("GET", "/api/investigations/active") => Permission::ViewIncidents,
+        ("POST", "/api/investigations/suggest") => Permission::ViewIncidents,
+        ("POST", "/api/investigations/start")
+        | ("POST", "/api/investigations/progress")
+        | ("POST", "/api/investigations/handoff") => Permission::ManageIncidents,
         ("GET", p) if p.starts_with("/api/playbooks") => Permission::ViewIncidents,
         ("POST", "/api/playbooks/execute") => Permission::ExecuteResponses,
         ("GET", p) if p.starts_with("/api/live-response/") => Permission::ViewAuditLog,
@@ -404,6 +412,8 @@ pub fn endpoint_permission(method: &str, path: &str) -> Permission {
                 || p.starts_with("/api/coverage/mitre")
                 || p.starts_with("/api/suppressions")
                 || p == "/api/threat-intel/status"
+                || p == "/api/threat-intel/library"
+                || p == "/api/threat-intel/stats"
                 || p.starts_with("/api/entities/")
                 || p.ends_with("/storyline") =>
         {
@@ -811,6 +821,14 @@ mod tests {
             Permission::ManageAlerts
         );
         assert_eq!(
+            endpoint_permission("GET", "/api/assistant/status"),
+            Permission::ViewIncidents
+        );
+        assert_eq!(
+            endpoint_permission("POST", "/api/assistant/query"),
+            Permission::ViewIncidents
+        );
+        assert_eq!(
             endpoint_permission("GET", "/api/playbooks"),
             Permission::ViewIncidents
         );
@@ -949,6 +967,7 @@ mod tests {
             "/api/cases",
             "/api/cases/stats",
             "/api/queue/alerts",
+            "/api/assistant/status",
             "/api/playbooks",
             "/api/timeline/host?hostname=demo",
             "/api/updates/releases",
@@ -975,6 +994,11 @@ mod tests {
         assert!(
             store
                 .check_api_access("analyst-token", "POST", "/api/events/search")
+                .is_allowed()
+        );
+        assert!(
+            store
+                .check_api_access("analyst-token", "POST", "/api/assistant/query")
                 .is_allowed()
         );
         assert!(

@@ -1,6 +1,6 @@
 {
   "name": "wardex-admin-console",
-  "version": "0.52.5",
+  "version": "0.53.3",
   "private": true,
   "type": "module",
   "scripts": {

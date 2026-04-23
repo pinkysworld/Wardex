@@ -49,13 +49,38 @@ function Providers({ children }) {
 }
 
 describe('AuthProvider', () => {
-  it('starts unauthenticated', () => {
+  it('starts unauthenticated', async () => {
     const { result } = renderHook(() => useAuth(), { wrapper: Providers });
+
+    await waitFor(() => {
+      expect(result.current.checking).toBe(false);
+    });
+
     expect(result.current.authenticated).toBe(false);
+  });
+
+  it('restores an existing authenticated session', async () => {
+    fetchMock.mockImplementation((url) => {
+      if (url === '/api/auth/session') {
+        return Promise.resolve(jsonOk({ authenticated: true, role: 'analyst', source: 'session' }));
+      }
+      return Promise.resolve(jsonOk({}));
+    });
+
+    const { result } = renderHook(() => useAuth(), { wrapper: Providers });
+
+    await waitFor(() => {
+      expect(result.current.authenticated).toBe(true);
+    });
   });
 
   it('connect sets authenticated on success', async () => {
     const { result } = renderHook(() => useAuth(), { wrapper: Providers });
+
+    await waitFor(() => {
+      expect(result.current.checking).toBe(false);
+    });
+
     expect(result.current.authenticated).toBe(false);
 
     await act(async () => {
@@ -66,6 +91,11 @@ describe('AuthProvider', () => {
 
   it('disconnect clears authentication', async () => {
     const { result } = renderHook(() => useAuth(), { wrapper: Providers });
+
+    await waitFor(() => {
+      expect(result.current.checking).toBe(false);
+    });
+
     await act(async () => {
       await result.current.connect('tok');
     });
@@ -79,19 +109,33 @@ describe('AuthProvider', () => {
 });
 
 describe('ThemeProvider', () => {
-  it('defaults to system preference', () => {
-    const { result } = renderHook(() => useTheme(), { wrapper: Providers });
-    expect(typeof result.current.dark).toBe('boolean');
+  it('defaults to system preference', async () => {
+    const { result } = renderHook(() => ({ auth: useAuth(), theme: useTheme() }), {
+      wrapper: Providers,
+    });
+
+    await waitFor(() => {
+      expect(result.current.auth.checking).toBe(false);
+    });
+
+    expect(typeof result.current.theme.dark).toBe('boolean');
   });
 
-  it('toggle flips dark mode', () => {
-    const { result } = renderHook(() => useTheme(), { wrapper: Providers });
-    const initial = result.current.dark;
+  it('toggle flips dark mode', async () => {
+    const { result } = renderHook(() => ({ auth: useAuth(), theme: useTheme() }), {
+      wrapper: Providers,
+    });
+
+    await waitFor(() => {
+      expect(result.current.auth.checking).toBe(false);
+    });
+
+    const initial = result.current.theme.dark;
 
     act(() => {
-      result.current.toggle();
+      result.current.theme.toggle();
     });
-    const toggled = result.current.dark;
+    const toggled = result.current.theme.dark;
     expect(toggled).not.toBe(initial);
   });
 
@@ -119,9 +163,16 @@ describe('ThemeProvider', () => {
 
 describe('ToastProvider', () => {
   it('renders toast messages', async () => {
-    const { result } = renderHook(() => useToast(), { wrapper: Providers });
+    const { result } = renderHook(() => ({ auth: useAuth(), toast: useToast() }), {
+      wrapper: Providers,
+    });
+
+    await waitFor(() => {
+      expect(result.current.auth.checking).toBe(false);
+    });
+
     act(() => {
-      result.current('Test notification', 'info');
+      result.current.toast('Test notification', 'info');
     });
     expect(screen.getByText('Test notification')).toBeInTheDocument();
   });
@@ -134,11 +185,13 @@ describe('useWebSocket', () => {
   });
 
   function WebSocketProbe({ interval = 2000 }) {
-    const { connected, events } = useWebSocket(interval);
+    const { connected, events, status, recoveryAttempts } = useWebSocket(interval);
     return (
       <>
         <div data-testid="ws-connected">{String(connected)}</div>
         <div data-testid="ws-events">{String(events.length)}</div>
+        <div data-testid="ws-status">{status}</div>
+        <div data-testid="ws-recovery-attempts">{String(recoveryAttempts)}</div>
       </>
     );
   }
@@ -182,6 +235,8 @@ describe('useWebSocket', () => {
 
     const connectCalls = fetchMock.mock.calls.filter(([url]) => url === '/api/ws/connect');
     expect(connectCalls).toHaveLength(1);
+    expect(screen.getByTestId('ws-status').textContent).toBe('connected');
+    expect(Number(screen.getByTestId('ws-recovery-attempts').textContent)).toBeGreaterThan(0);
   });
 
   it('falls back to polling after a later websocket reconnect failure', async () => {
@@ -242,6 +297,7 @@ describe('useWebSocket', () => {
 
     const connectCalls = fetchMock.mock.calls.filter(([url]) => url === '/api/ws/connect');
     expect(connectCalls).toHaveLength(1);
+    expect(screen.getByTestId('ws-status').textContent).toBe('connected');
   });
 
   it('releases a polling subscriber when the component unmounts during connect', async () => {

@@ -27,8 +27,31 @@ const ALERT_VIEWS = [
   { id: 'all', label: 'All alerts', severity: 'all', host: 'all', source: 'all', query: '' },
 ];
 
+const MONITOR_VIEW_META = {
+  stream: {
+    title: 'Live Alert Stream',
+    description:
+      'Track current queue pressure, transport recovery, and live event flow without leaving the active alert scope.',
+  },
+  grouped: {
+    title: 'Grouped Alert Patterns',
+    description:
+      'Review recurring fingerprints, score concentration, and first-to-last seen windows before promoting or suppressing rules.',
+  },
+  analysis: {
+    title: 'Alert Analysis',
+    description:
+      'Run an operator-facing pattern summary and isolation guidance across the current queue instead of comparing raw rows by hand.',
+  },
+  processes: {
+    title: 'Running Processes',
+    description:
+      'Inspect live process inventory and suspicious findings directly inside the monitor so empty collectors and real process risk look distinct.',
+  },
+};
+
 function alertIdFor(alert, index) {
-  return alert.id ?? alert.alert_id ?? alert._index ?? `${alert.timestamp}-${index}`;
+  return String(alert.id ?? alert.alert_id ?? alert._index ?? `${alert.timestamp}-${index}`);
 }
 
 function normalizeAlert(alert, fallbackIndex) {
@@ -61,6 +84,67 @@ function alertDedupKey(alert, index) {
   const primaryId = alert.id ?? alert.alert_id ?? alert._index;
   if (primaryId != null) return String(primaryId);
   return `${alert.timestamp || alert.time || 'unknown'}:${alert.hostname || 'host'}:${alert.message || alert.description || index}`;
+}
+
+function normalizeLiveEvent(event, index) {
+  const eventType = String(event?.type || event?.event_type || 'event').toLowerCase();
+  const data = event?.data || {};
+  const timestamp = event?.timestamp || data?.timestamp || data?.time || null;
+
+  if (eventType === 'alert') {
+    const alert = normalizeAlert(data, index);
+    return {
+      id: `${eventType}-${alertDedupKey(alert, index)}`,
+      eventType,
+      timestamp: timestamp || alert.timestamp || alert.time || null,
+      summary: alert.message || alert.description || 'Alert event',
+      subject: alert.hostname || alert.origin_agent_id || alert.source || 'local monitor',
+      severity: alert.severity || 'unknown',
+    };
+  }
+
+  if (eventType === 'incident') {
+    return {
+      id: `${eventType}-${data.id || index}`,
+      eventType,
+      timestamp,
+      summary: data.title || 'Incident update',
+      subject: data.id || data.severity || 'incident',
+      severity: data.severity || 'info',
+    };
+  }
+
+  if (eventType === 'agent') {
+    return {
+      id: `${eventType}-${data.agent_id || index}`,
+      eventType,
+      timestamp,
+      summary: data.action ? `Agent ${data.action}` : 'Agent activity',
+      subject: data.agent_id || data.hostname || 'agent',
+      severity: 'info',
+    };
+  }
+
+  if (eventType === 'heartbeat') {
+    return {
+      id: `${eventType}-${index}`,
+      eventType,
+      timestamp,
+      summary: 'Transport heartbeat',
+      subject: 'stream',
+      severity: 'info',
+    };
+  }
+
+  return {
+    id: `${eventType}-${index}`,
+    eventType,
+    timestamp,
+    summary:
+      data.message || data.title || data.action || `${eventType.replace(/_/g, ' ')} event`,
+    subject: data.hostname || data.device_id || data.agent_id || data.id || 'stream',
+    severity: data.severity || 'info',
+  };
 }
 
 function TriageEmptyState({ title, description, actionLabel, onAction }) {
@@ -141,15 +225,25 @@ export default function LiveMonitor() {
     events: streamEvents,
     connected: streamConnected,
     transport: streamTransport,
+    status: streamStatus,
+    subscriberId: pollingSubscriberId,
+    recoveryAttempts,
+    lastEventAt,
+    lastConnectAt,
+    lastDisconnectAt,
+    lastError,
+    clearEvents: clearStreamEvents,
+    reconnect: reconnectStream,
   } = useWebSocket(2000);
   const { data: alertData, loading, reload } = useApi(api.alerts);
   const { data: countData, reload: reloadCount } = useApi(api.alertsCount);
   const { data: grouped, reload: reloadGrouped } = useApi(api.alertsGrouped);
+  const { data: wsStats, reload: reloadWsStats } = useApi(api.wsStats);
   const { data: hp } = useApi(api.health);
   const { data: procData, reload: reloadProcs } = useApi(api.processesLive);
   const { data: procAnalysis, reload: reloadPA } = useApi(api.processesAnalysis);
   const { data: fpStats, reload: reloadFP } = useApi(api.fpFeedbackStats);
-  const [selectedId, setSelectedId] = useState(null);
+  const [selectedId, setSelectedId] = useState(() => searchParams.get('alert'));
   const [hoveredId, setHoveredId] = useState(null);
   const [analysisResult, setAnalysisResult] = useState(null);
   const [tab, setTab] = useState(() => searchParams.get('monitorTab') || 'stream');
@@ -159,6 +253,10 @@ export default function LiveMonitor() {
   const [sourceFilter, setSourceFilter] = useState(() => searchParams.get('source') || 'all');
   const [hostFilter, setHostFilter] = useState(() => searchParams.get('host') || 'all');
   const [searchFilter, setSearchFilter] = useState(() => searchParams.get('q') || '');
+  const [liveEventTypeFilter, setLiveEventTypeFilter] = useState(
+    () => searchParams.get('eventType') || 'all',
+  );
+  const [liveEventQuery, setLiveEventQuery] = useState(() => searchParams.get('eventQuery') || '');
   const [selectedAlerts, setSelectedAlerts] = useState(new Set());
   const [bulkAction, setBulkAction] = useState('');
   const [selectedProcess, setSelectedProcess] = useState(null);
@@ -171,6 +269,18 @@ export default function LiveMonitor() {
     });
     setSearchParams(next, { replace: true });
   };
+
+  useEffect(() => {
+    const alertParam = searchParams.get('alert');
+    setSelectedId((current) => (current === alertParam ? current : alertParam));
+  }, [searchParams]);
+
+  useEffect(() => {
+    const currentParam = searchParams.get('alert');
+    const nextParam = selectedId == null ? null : String(selectedId);
+    if ((currentParam ?? null) === nextParam) return;
+    updateMonitorParams({ alert: nextParam });
+  }, [searchParams, selectedId]);
 
   const reloadAll = () => {
     reload();
@@ -190,6 +300,10 @@ export default function LiveMonitor() {
 
   const liveAlertEvents = useMemo(
     () => streamEvents.filter((event) => (event?.type || event?.event_type) === 'alert'),
+    [streamEvents],
+  );
+  const liveEvents = useMemo(
+    () => streamEvents.map((event, index) => normalizeLiveEvent(event, index)),
     [streamEvents],
   );
   const streamAlertList = useMemo(
@@ -218,7 +332,54 @@ export default function LiveMonitor() {
     if (!latestStreamAlertKey) return;
     reloadCount();
     reloadGrouped();
-  }, [latestStreamAlertKey, reloadCount, reloadGrouped]);
+    reloadWsStats();
+  }, [latestStreamAlertKey, reloadCount, reloadGrouped, reloadWsStats]);
+
+  useInterval(() => {
+    if (tab === 'stream') reloadWsStats();
+  }, tab === 'stream' ? 10000 : null);
+
+  const liveEventTypeCounts = useMemo(
+    () =>
+      liveEvents.reduce((counts, event) => {
+        counts[event.eventType] = (counts[event.eventType] || 0) + 1;
+        return counts;
+      }, {}),
+    [liveEvents],
+  );
+  const liveEventTypeOptions = useMemo(
+    () => ['all', ...Object.keys(liveEventTypeCounts)],
+    [liveEventTypeCounts],
+  );
+  const filteredLiveEvents = useMemo(() => {
+    const query = liveEventQuery.trim().toLowerCase();
+    return liveEvents.filter((event) => {
+      const typeMatch = liveEventTypeFilter === 'all' || event.eventType === liveEventTypeFilter;
+      const queryMatch =
+        !query ||
+        `${event.summary} ${event.subject} ${event.eventType}`.toLowerCase().includes(query);
+      return typeMatch && queryMatch;
+    });
+  }, [liveEventQuery, liveEventTypeFilter, liveEvents]);
+
+  const streamStatusLabel =
+    streamStatus === 'connected'
+      ? 'Connected'
+      : streamStatus === 'reconnecting'
+        ? 'Recovering'
+        : 'Connecting';
+  const streamTransportLabel =
+    streamTransport === 'websocket'
+      ? 'WebSocket'
+      : streamTransport === 'polling'
+        ? 'Polling'
+        : 'Negotiating';
+  const streamStatusBadgeClass = streamConnected
+    ? 'badge-ok'
+    : streamStatus === 'reconnecting'
+      ? 'badge-warn'
+      : 'badge-info';
+  const wsConnectionCount = Array.isArray(wsStats?.connections) ? wsStats.connections.length : 0;
 
   const sourceOptions = ['all', ...new Set(alertList.map((alert) => alert.source).filter(Boolean))];
   const hostOptions = ['all', ...new Set(alertList.map((alert) => alert.hostname).filter(Boolean))];
@@ -332,6 +493,8 @@ export default function LiveMonitor() {
     else if (procSort === 'pid') list = [...list].sort((a, b) => a.pid - b.pid);
     return list;
   })();
+  const currentTabMeta = MONITOR_VIEW_META[tab] || MONITOR_VIEW_META.stream;
+  const hasProcessSnapshot = procData?.count != null || procList.length > 0;
 
   const currentView = ALERT_VIEWS.find(
     (view) =>
@@ -437,17 +600,18 @@ export default function LiveMonitor() {
   return (
     <div>
       <div className="section-header">
-        <h2>Live Alert Stream</h2>
+        <div>
+          <h2>{currentTabMeta.title}</h2>
+          <div className="hint" style={{ marginTop: 4 }}>
+            {currentTabMeta.description}
+          </div>
+        </div>
         <div className="btn-group">
           <span className={`badge ${hp?.status === 'ok' ? 'badge-ok' : 'badge-err'}`}>
             {hp?.status === 'ok' ? 'System Healthy' : 'Degraded'}
           </span>
-          <span className={`badge ${streamConnected ? 'badge-ok' : 'badge-warn'}`}>
-            {streamConnected
-              ? streamTransport === 'websocket'
-                ? 'Live feed: WebSocket'
-                : 'Live feed: Polling'
-              : 'Live feed reconnecting'}
+          <span className={`badge ${streamStatusBadgeClass}`}>
+            {streamConnected ? `Live feed: ${streamTransportLabel}` : `Live feed ${streamStatusLabel.toLowerCase()}`}
           </span>
           <span className="badge badge-info">
             {countData == null
@@ -517,7 +681,143 @@ export default function LiveMonitor() {
       )}
 
       {tab === 'stream' && !loading && (
-        <div className="triage-layout">
+        <>
+          <div className="card" style={{ marginBottom: 16 }}>
+            <div className="card-header">
+              <span className="card-title">Transport and Recovery</span>
+              <div className="btn-group">
+                <button
+                  className="btn btn-sm"
+                  onClick={() => {
+                    reconnectStream();
+                    reloadWsStats();
+                  }}
+                >
+                  Reconnect now
+                </button>
+                <button
+                  className="btn btn-sm"
+                  onClick={() => {
+                    clearStreamEvents();
+                    reloadWsStats();
+                  }}
+                >
+                  Clear live buffer
+                </button>
+              </div>
+            </div>
+            <div className="summary-grid triage-summary-grid">
+              <div className="summary-card">
+                <div className="summary-label">Transport State</div>
+                <div className="summary-value">{streamStatusLabel}</div>
+                <div className="summary-meta">{streamTransportLabel} transport is currently active.</div>
+              </div>
+              <div className="summary-card">
+                <div className="summary-label">Recovery Attempts</div>
+                <div className="summary-value">{recoveryAttempts}</div>
+                <div className="summary-meta">Reconnects attempted since this monitor mounted.</div>
+              </div>
+              <div className="summary-card">
+                <div className="summary-label">Live Buffer</div>
+                <div className="summary-value">{liveEvents.length}</div>
+                <div className="summary-meta">Buffered live events awaiting analyst review.</div>
+              </div>
+              <div className="summary-card">
+                <div className="summary-label">Polling Session</div>
+                <div className="summary-value">{pollingSubscriberId ?? 'n/a'}</div>
+                <div className="summary-meta">Active only when the transport is using authenticated polling.</div>
+              </div>
+              <div className="summary-card">
+                <div className="summary-label">Server Subscribers</div>
+                <div className="summary-value">{wsStats?.subscribers ?? 0}</div>
+                <div className="summary-meta">{wsConnectionCount} native websocket client{wsConnectionCount === 1 ? '' : 's'} connected.</div>
+              </div>
+              <div className="summary-card">
+                <div className="summary-label">Last Live Event</div>
+                <div className="summary-value">{lastEventAt ? formatRelativeTime(lastEventAt) : 'None yet'}</div>
+                <div className="summary-meta">
+                  {lastConnectAt ? `Connected ${formatRelativeTime(lastConnectAt)}.` : 'No successful connection yet.'}
+                  {lastDisconnectAt ? ` Last disconnect ${formatRelativeTime(lastDisconnectAt)}.` : ''}
+                </div>
+              </div>
+            </div>
+            <div className="triage-toolbar" style={{ marginTop: 16 }}>
+              <div className="triage-toolbar-group">
+                {liveEventTypeOptions.map((eventType) => (
+                  <button
+                    key={eventType}
+                    className={`btn btn-sm ${liveEventTypeFilter === eventType ? 'btn-primary' : ''}`}
+                    onClick={() => {
+                      setLiveEventTypeFilter(eventType);
+                      updateMonitorParams({ eventType });
+                    }}
+                  >
+                    {eventType === 'all'
+                      ? `All live events (${liveEvents.length})`
+                      : `${eventType} (${liveEventTypeCounts[eventType] || 0})`}
+                  </button>
+                ))}
+              </div>
+              <div className="triage-toolbar-group triage-toolbar-group-right">
+                <input
+                  className="form-input triage-search"
+                  placeholder="Filter live event summaries, hosts, or ids…"
+                  value={liveEventQuery}
+                  onChange={(event) => {
+                    const value = event.target.value;
+                    setLiveEventQuery(value);
+                    updateMonitorParams({ eventQuery: value });
+                  }}
+                />
+              </div>
+            </div>
+            {filteredLiveEvents.length === 0 ? (
+              <TriageEmptyState
+                title="No live events match the current scope"
+                description="The transport is healthy, but the current live-event filter removed every buffered event from view. Clear the live scope or wait for the next event batch."
+              />
+            ) : (
+              <div className="table-wrap" style={{ marginTop: 16 }}>
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Type</th>
+                      <th>Time</th>
+                      <th>Summary</th>
+                      <th>Subject</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filteredLiveEvents.slice(0, 8).map((event) => (
+                      <tr key={event.id}>
+                        <td>
+                          <span className="badge badge-info">{event.eventType}</span>
+                        </td>
+                        <td>
+                          <div className="row-primary">
+                            {event.timestamp ? formatRelativeTime(event.timestamp) : 'No timestamp'}
+                          </div>
+                          <div className="row-secondary">
+                            {event.timestamp ? formatDateTime(event.timestamp) : 'Unknown'}
+                          </div>
+                        </td>
+                        <td>{event.summary}</td>
+                        <td>{event.subject}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+            {lastError && (
+              <div className="detail-callout" style={{ marginTop: 16 }}>
+                <strong>Last transport error</strong>
+                <div style={{ marginTop: 6 }}>{lastError}</div>
+              </div>
+            )}
+          </div>
+
+          <div className="triage-layout">
           <section className="triage-list card">
             <div className="card-header">
               <span className="card-title">Alert Queue ({filteredAlerts.length})</span>
@@ -887,7 +1187,8 @@ export default function LiveMonitor() {
               />
             )}
           </aside>
-        </div>
+          </div>
+        </>
       )}
 
       {tab === 'grouped' && (
@@ -1137,14 +1438,16 @@ export default function LiveMonitor() {
             >
               <div className="card" style={{ padding: 10 }}>
                 <div className="metric-label">Process Count</div>
-                <div style={{ fontSize: 22, fontWeight: 700 }}>{procData?.count ?? '—'}</div>
+                <div style={{ fontSize: 22, fontWeight: 700 }}>{procData?.count ?? procList.length}</div>
               </div>
               <div className="card" style={{ padding: 10 }}>
                 <div className="metric-label">Total CPU</div>
                 <div style={{ fontSize: 22, fontWeight: 700 }}>
                   {procData?.total_cpu_percent != null
                     ? `${procData.total_cpu_percent.toFixed(1)}%`
-                    : '—'}
+                    : hasProcessSnapshot
+                      ? '0.0%'
+                      : 'Pending'}
                 </div>
               </div>
               <div className="card" style={{ padding: 10 }}>
@@ -1152,7 +1455,9 @@ export default function LiveMonitor() {
                 <div style={{ fontSize: 22, fontWeight: 700 }}>
                   {procData?.total_mem_percent != null
                     ? `${procData.total_mem_percent.toFixed(1)}%`
-                    : '—'}
+                    : hasProcessSnapshot
+                      ? '0.0%'
+                      : 'Pending'}
                 </div>
               </div>
               <div className="card" style={{ padding: 10 }}>
@@ -1288,7 +1593,24 @@ export default function LiveMonitor() {
               )}
             </div>
             {procList.length === 0 ? (
-              <div className="empty">{procData?.message || 'No process data available'}</div>
+              <TriageEmptyState
+                title={procFilter ? 'No processes match this filter' : 'No process inventory yet'}
+                description={
+                  procFilter
+                    ? 'The current process filter removed every row from view. Clear the filter or wait for the next live snapshot.'
+                    : procData?.message ||
+                      'The local collector has not returned a current process snapshot yet. Refresh this view once telemetry is available.'
+                }
+                actionLabel={procFilter ? 'Clear Filter' : 'Refresh Processes'}
+                onAction={
+                  procFilter
+                    ? () => setProcFilter('')
+                    : () => {
+                        reloadProcs();
+                        reloadPA();
+                      }
+                }
+              />
             ) : (
               <div className="table-wrap" style={{ maxHeight: 500, overflowY: 'auto' }}>
                 <table>

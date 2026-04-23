@@ -179,6 +179,14 @@ impl SessionStore {
         session_id
     }
 
+    /// Insert or replace a session using a caller-supplied session ID.
+    pub fn insert_session(&self, session_id: String, session: Session) {
+        let mut store = self.sessions.lock().unwrap_or_else(|e| e.into_inner());
+        store.insert(session_id, session);
+        drop(store);
+        self.save();
+    }
+
     /// Retrieve a session by ID. Returns `None` if missing or expired.
     /// Expired sessions are removed on access.
     pub fn get_session(&self, id: &str) -> Option<Session> {
@@ -371,6 +379,29 @@ mod tests {
         assert_eq!(session.email, "u1@example.com");
         assert_eq!(session.role, "admin");
         assert_eq!(session.groups, vec!["soc-admins", "credential-routing"]);
+    }
+
+    #[test]
+    fn session_insert_preserves_expiry() {
+        let store = SessionStore::new();
+        let expires_at = Utc::now() + Duration::minutes(45);
+        store.insert_session(
+            "oidc-session".into(),
+            Session {
+                user_id: "sso-user".into(),
+                email: "sso@example.com".into(),
+                role: "analyst".into(),
+                groups: vec!["Security".into()],
+                created_at: Utc::now(),
+                expires_at,
+            },
+        );
+
+        let session = store
+            .get_session("oidc-session")
+            .expect("inserted session should exist");
+        assert_eq!(session.user_id, "sso-user");
+        assert_eq!(session.expires_at.timestamp(), expires_at.timestamp());
     }
 
     #[test]

@@ -1,9 +1,11 @@
-import { useEffect } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useApi, useToast } from '../hooks.jsx';
 import * as api from '../api.js';
 import { JsonDetails, SummaryGrid } from './operator.jsx';
 import { formatDateTime, formatRelativeTime } from './operatorUtils.js';
+import WorkflowGuidance from './WorkflowGuidance.jsx';
+import { buildHref } from './workflowPivots.js';
 
 const TABS = ['overview', 'assets', 'exposure', 'integrity', 'observability'];
 const SAVED_VIEWS = [
@@ -16,6 +18,81 @@ const SAVED_VIEWS = [
   { id: 'containers', label: 'Container Risks', match: (item) => item.type === 'container' },
   { id: 'drifted', label: 'Drifted Systems', match: (item) => item.type === 'drift' },
 ];
+
+const DEFAULT_SCAN_BEHAVIOR = {
+  suspicious_process_tree: false,
+  defense_evasion: false,
+  persistence_installed: false,
+  c2_beaconing_detected: false,
+  credential_access: false,
+};
+
+function splitListInput(value) {
+  return String(value || '')
+    .split('\n')
+    .map((entry) => entry.trim())
+    .filter(Boolean);
+}
+
+function encodeBase64Utf8(value) {
+  const bytes = new TextEncoder().encode(String(value || ''));
+  let binary = '';
+  bytes.forEach((byte) => {
+    binary += String.fromCharCode(byte);
+  });
+  if (typeof btoa === 'function') return btoa(binary);
+  if (typeof Buffer !== 'undefined') return Buffer.from(bytes).toString('base64');
+  return binary;
+}
+
+function verdictBadgeClass(value) {
+  switch (String(value || '').toLowerCase()) {
+    case 'critical':
+    case 'high':
+    case 'malicious':
+    case 'ransomware':
+      return 'badge-err';
+    case 'medium':
+    case 'suspicious':
+      return 'badge-warn';
+    default:
+      return 'badge-ok';
+  }
+}
+
+function scoreBandBadgeClass(value) {
+  switch (String(value || '').toLowerCase()) {
+    case 'malicious':
+    case 'likely_malicious':
+      return 'badge-err';
+    case 'suspicious':
+      return 'badge-warn';
+    default:
+      return 'badge-info';
+  }
+}
+
+function normalizeRecentMalwareEntries(malwareRecent) {
+  const items =
+    Array.isArray(malwareRecent) ? malwareRecent : malwareRecent?.matches || malwareRecent?.recent || malwareRecent?.items || [];
+  return items.map((entry, index) => ({
+    id: entry.id || entry.sha256 || entry.hash || `malware-${index}`,
+    title: entry.name || entry.family || entry.file || entry.hash || `Malware finding ${index + 1}`,
+    subtitle:
+      [
+        entry.family && entry.family !== entry.name ? entry.family : null,
+        entry.source || null,
+        entry.detected_at ? `Detected ${formatRelativeTime(entry.detected_at)}` : null,
+      ]
+        .filter(Boolean)
+        .join(' • ') || 'Recent malware activity',
+    type: 'malware',
+    status: entry.status || 'detected',
+    severity: entry.severity || 'high',
+    priority: entry.severity === 'critical' ? 'critical' : 'high',
+    evidence: entry,
+  }));
+}
 
 function normalizeAssets(
   assetSummary,
@@ -70,18 +147,20 @@ function normalizeAssets(
     });
   });
 
-  const malwareItems =
-    malwareRecent?.matches || malwareRecent?.recent || malwareRecent?.items || [];
+  const malwareItems = Array.isArray(malwareRecent)
+    ? malwareRecent
+    : malwareRecent?.matches || malwareRecent?.recent || malwareRecent?.items || [];
   malwareItems.forEach((entry, index) => {
     items.push({
-      id: entry.id || entry.hash || `malware-${index}`,
-      title: entry.file || entry.hash || `Malware finding ${index + 1}`,
-      subtitle: entry.hostname || entry.signature || 'Recent malware activity',
+      id: entry.id || entry.sha256 || entry.hash || `malware-${index}`,
+      title:
+        entry.title || entry.name || entry.family || entry.file || entry.hash || `Malware finding ${index + 1}`,
+      subtitle: entry.subtitle || entry.hostname || entry.signature || 'Recent malware activity',
       type: 'malware',
-      status: entry.status || 'detected',
+      status: entry.status || entry.verdict || 'detected',
       severity: entry.severity || 'high',
       priority: entry.severity === 'critical' ? 'critical' : 'high',
-      evidence: entry,
+      evidence: entry.evidence || entry,
     });
   });
 
@@ -131,22 +210,34 @@ export default function Infrastructure() {
   const { data: certSummary, reload: reloadCerts } = useApi(api.certsSummary);
   const { data: certAlerts } = useApi(api.certsAlerts);
   const { data: assetSummary, reload: reloadAssets } = useApi(api.assetsSummary);
-  const { data: malwareStatsData } = useApi(api.malwareStats);
+  const { data: malwareStatsData, reload: reloadMalwareStats } = useApi(api.malwareStats);
   const { data: malwareRecentData, reload: reloadMalware } = useApi(api.malwareRecent);
   const { data: compData } = useApi(api.complianceSummary);
   const { data: analyticsData } = useApi(api.apiAnalytics);
   const { data: tracesData } = useApi(api.traces);
+  const [scanFilename, setScanFilename] = useState('sample.bin');
+  const [scanSample, setScanSample] = useState('');
+  const [scanBehavior, setScanBehavior] = useState(DEFAULT_SCAN_BEHAVIOR);
+  const [trustedPublishersText, setTrustedPublishersText] = useState('');
+  const [internalToolsText, setInternalToolsText] = useState('');
+  const [runningDeepScan, setRunningDeepScan] = useState(false);
+  const [deepScanResult, setDeepScanResult] = useState(null);
+  const [focusedMalwareId, setFocusedMalwareId] = useState('');
 
   const activeTab = TABS.includes(searchParams.get('tab')) ? searchParams.get('tab') : 'overview';
   const savedView = searchParams.get('view') || 'critical';
   const query = searchParams.get('q') || '';
   const typeFilter = searchParams.get('type') || 'all';
+  const recentMalware = useMemo(
+    () => normalizeRecentMalwareEntries(malwareRecentData),
+    [malwareRecentData],
+  );
   const assets = normalizeAssets(
     assetSummary,
     vulnSummary,
     certSummary,
     certAlerts,
-    malwareRecentData,
+    recentMalware,
     drift,
     containerSt,
   );
@@ -169,6 +260,39 @@ export default function Infrastructure() {
     filteredAssets[0] ||
     assets[0] ||
     null;
+  const focusedMalware =
+    recentMalware.find((item) => item.id === focusedMalwareId) ||
+    (selectedAsset?.type === 'malware' ? selectedAsset : null) ||
+    recentMalware[0] ||
+    null;
+  const deepScanSummary = deepScanResult
+    ? {
+        verdict: deepScanResult.scan?.verdict || 'unknown',
+        confidence: `${Math.round((Number(deepScanResult.scan?.confidence) || 0) * 100)}%`,
+        family: deepScanResult.scan?.malware_family || 'Unclassified',
+        file_type: deepScanResult.static_profile?.file_type || 'unknown',
+        execution_surface: deepScanResult.static_profile?.platform_hint || 'generic',
+        behavior_severity: deepScanResult.behavior_profile?.severity || 'none',
+        score_band: deepScanResult.scan?.static_score?.band || 'unknown',
+        static_score: deepScanResult.scan?.static_score?.score ?? 0,
+      }
+    : null;
+  const whySafeOrNoisy = deepScanResult
+    ? [
+        deepScanResult.static_profile?.trusted_publisher_match
+          ? `Trusted publisher allowlist matched "${deepScanResult.static_profile.trusted_publisher_match}".`
+          : null,
+        deepScanResult.static_profile?.internal_tool_match
+          ? `Internal tool allowlist matched "${deepScanResult.static_profile.internal_tool_match}".`
+          : null,
+        deepScanResult.static_profile?.probable_signed
+          ? 'Probable signing artefacts were detected in the sample.'
+          : null,
+        (deepScanResult.behavior_profile?.observed_tactics || []).length === 0
+          ? 'No runtime tactics were supplied, so this verdict is driven by static evidence only.'
+          : null,
+      ].filter(Boolean)
+    : [];
 
   useEffect(() => {
     if (!selectedAsset || selectedAsset.id === selectedAssetId) return;
@@ -176,6 +300,11 @@ export default function Infrastructure() {
     next.set('asset', selectedAsset.id);
     setSearchParams(next, { replace: true });
   }, [selectedAsset, selectedAssetId, searchParams, setSearchParams]);
+
+  useEffect(() => {
+    if (focusedMalwareId && recentMalware.some((item) => item.id === focusedMalwareId)) return;
+    setFocusedMalwareId(recentMalware[0]?.id || '');
+  }, [focusedMalwareId, recentMalware]);
 
   const counts = {
     critical: assets.filter((item) => item.priority === 'critical').length,
@@ -185,6 +314,63 @@ export default function Infrastructure() {
     containers: assets.filter((item) => item.type === 'container').length,
     malware: assets.filter((item) => item.type === 'malware').length,
   };
+  const focalAsset = selectedAsset?.title || selectedAsset?.id || 'critical assets';
+  const focalQuery = selectedAsset?.id || selectedAsset?.title || query;
+  const workflowItems = [
+    {
+      id: 'ndr',
+      title: 'Validate Network Impact',
+      description: `Use NDR to confirm whether ${focalAsset} is tied to unusual destinations, TLS issues, or beaconing.`,
+      to: buildHref('/ndr', { params: { tab: 'overview' } }),
+      minRole: 'analyst',
+      tone: 'primary',
+      badge: 'Network',
+    },
+    {
+      id: 'threat-detection',
+      title: 'Launch Asset-Focused Hunt',
+      description: `Carry ${focalAsset} into Threat Detection for hunt and suppression workflows.`,
+      to: buildHref('/detection', {
+        params: {
+          intent: 'run-hunt',
+          huntQuery: `${selectedAsset?.type || 'asset'} ${focalQuery} drift vulnerability malware`,
+          huntName: `Hunt ${focalAsset}`,
+        },
+      }),
+      minRole: 'analyst',
+      badge: 'Detect',
+    },
+    {
+      id: 'soc-workbench',
+      title: 'Escalate Into Cases',
+      description: 'Move the selected asset context into case triage, approvals, and response tracking.',
+      to: '/soc#cases',
+      minRole: 'analyst',
+      badge: 'Investigate',
+    },
+    {
+      id: 'attack-graph',
+      title: 'Check Campaign Linkage',
+      description: 'Cross-check whether infrastructure findings align with active attack paths or propagation chains.',
+      to: '/attack-graph',
+      minRole: 'analyst',
+      badge: 'Graph',
+    },
+    {
+      id: 'reports',
+      title: 'Open Compliance And Evidence',
+      description: 'Use reporting workflows to package compliance, attestation, and evidence for the current backlog.',
+      to: buildHref('/reports', {
+        params: {
+          tab: 'compliance',
+          source: 'infrastructure',
+          target: focalQuery || undefined,
+        },
+      }),
+      minRole: 'viewer',
+      badge: 'Report',
+    },
+  ];
 
   const updateParams = (changes) => {
     const next = new URLSearchParams(searchParams);
@@ -193,6 +379,45 @@ export default function Infrastructure() {
       else next.set(key, value);
     });
     setSearchParams(next, { replace: true });
+  };
+
+  const refreshInfrastructure = () => {
+    reloadAssets();
+    reloadVuln();
+    reloadCerts();
+    reloadContainers();
+    reloadMalware();
+    reloadMalwareStats();
+    reloadDrift();
+  };
+
+  const runDeepMalwareScan = async () => {
+    if (!String(scanSample || '').trim()) {
+      toast('Paste a sample or command trace before running a deep malware scan.', 'warning');
+      return;
+    }
+
+    setRunningDeepScan(true);
+    try {
+      const result = await api.scanBufferV2({
+        data: encodeBase64Utf8(scanSample),
+        filename: String(scanFilename || '').trim() || 'sample.bin',
+        behavior: scanBehavior,
+        allowlist: {
+          trusted_publishers: splitListInput(trustedPublishersText),
+          internal_tools: splitListInput(internalToolsText),
+        },
+      });
+      setDeepScanResult(result);
+      reloadMalware();
+      reloadMalwareStats();
+      toast('Deep malware scan completed.', 'success');
+    } catch {
+      setDeepScanResult(null);
+      toast('Unable to complete the deep malware scan.', 'error');
+    } finally {
+      setRunningDeepScan(false);
+    }
   };
 
   return (
@@ -208,6 +433,12 @@ export default function Infrastructure() {
           </button>
         ))}
       </div>
+
+      <WorkflowGuidance
+        title="Infrastructure Pivots"
+        description="Move from asset health into hunts, cases, network validation, graph review, and evidence workflows without dropping the current filter context."
+        items={workflowItems}
+      />
 
       {activeTab === 'overview' && (
         <>
@@ -367,13 +598,7 @@ export default function Infrastructure() {
                 <div className="triage-toolbar-group">
                   <button
                     className="btn btn-sm"
-                    onClick={() => {
-                      reloadAssets();
-                      reloadVuln();
-                      reloadCerts();
-                      reloadContainers();
-                      reloadMalware();
-                    }}
+                    onClick={refreshInfrastructure}
                   >
                     Refresh
                   </button>
@@ -604,10 +829,13 @@ export default function Infrastructure() {
             </div>
             <div className="card">
               <div className="card-title" style={{ marginBottom: 12 }}>
-                Recent Malware
+                Malware Queue Snapshot
               </div>
               <SummaryGrid data={{ ...malwareStatsData, recent_hits: counts.malware }} limit={10} />
-              <JsonDetails data={malwareRecentData} label="Recent malware evidence" />
+              <div className="hint" style={{ marginTop: 12 }}>
+                Recent detections, deep-scan verdicts, and allowlist context stay together here so
+                analysts can explain why something fired and what to do next.
+              </div>
             </div>
             <div className="card">
               <div className="card-title" style={{ marginBottom: 12 }}>
@@ -615,6 +843,406 @@ export default function Infrastructure() {
               </div>
               <SummaryGrid data={compData} limit={10} />
               <JsonDetails data={compData} />
+            </div>
+          </div>
+
+          <div className="card-grid" style={{ marginTop: 16 }}>
+            <div className="card">
+              <div className="card-header">
+                <div>
+                  <span className="card-title">Recent Malware Triage</span>
+                  <div className="hint" style={{ marginTop: 6 }}>
+                    Review the latest detections with family, source, and timing context before
+                    pivoting to cases or response.
+                  </div>
+                </div>
+                <button className="btn btn-sm" onClick={reloadMalware}>
+                  Refresh
+                </button>
+              </div>
+              {recentMalware.length === 0 ? (
+                <div className="empty">No recent malware detections have been recorded yet.</div>
+              ) : (
+                <div style={{ display: 'grid', gap: 10 }}>
+                  {recentMalware.slice(0, 6).map((entry) => (
+                    <button
+                      key={entry.id}
+                      className="card"
+                      style={{
+                        textAlign: 'left',
+                        padding: 14,
+                        borderColor:
+                          focusedMalware?.id === entry.id ? 'var(--accent)' : 'var(--border)',
+                        background:
+                          focusedMalware?.id === entry.id ? 'var(--bg)' : 'var(--bg-card)',
+                      }}
+                      onClick={() => setFocusedMalwareId(entry.id)}
+                    >
+                      <div
+                        style={{
+                          display: 'flex',
+                          justifyContent: 'space-between',
+                          gap: 12,
+                          alignItems: 'flex-start',
+                        }}
+                      >
+                        <div>
+                          <div className="row-primary">{entry.title}</div>
+                          <div className="row-secondary">{entry.subtitle}</div>
+                        </div>
+                        <span className={`badge ${verdictBadgeClass(entry.severity)}`}>
+                          {entry.severity}
+                        </span>
+                      </div>
+                      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 10 }}>
+                        <span className="badge badge-info">
+                          {entry.evidence?.source || 'unknown source'}
+                        </span>
+                        <span className="badge badge-info">
+                          {entry.evidence?.family || 'unknown family'}
+                        </span>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              )}
+              {focusedMalware ? (
+                <>
+                  <div className="card-title" style={{ marginTop: 18, marginBottom: 10 }}>
+                    Focused Detection
+                  </div>
+                  <SummaryGrid
+                    data={{
+                      name: focusedMalware.title,
+                      family: focusedMalware.evidence?.family || 'unknown',
+                      severity: focusedMalware.severity,
+                      source: focusedMalware.evidence?.source || 'unknown',
+                      detected_at: focusedMalware.evidence?.detected_at || null,
+                      sha256: focusedMalware.evidence?.sha256 || null,
+                    }}
+                    limit={6}
+                  />
+                  <div className="btn-group" style={{ marginTop: 12, flexWrap: 'wrap' }}>
+                    <button
+                      className="btn btn-sm"
+                      onClick={() => updateParams({ tab: 'assets', asset: focusedMalware.id })}
+                    >
+                      Open In Asset Explorer
+                    </button>
+                    <button className="btn btn-sm" onClick={() => updateParams({ tab: 'observability' })}>
+                      Check Telemetry Context
+                    </button>
+                    <button className="btn btn-sm btn-primary" onClick={() => updateParams({ tab: 'integrity' })}>
+                      Stay In Integrity
+                    </button>
+                  </div>
+                  <JsonDetails
+                    data={focusedMalware.evidence}
+                    label="Focused malware detection payload"
+                  />
+                </>
+              ) : null}
+            </div>
+
+            <div className="card">
+              <div className="card-header">
+                <div>
+                  <span className="card-title">Deep Malware Scan</span>
+                  <div className="hint" style={{ marginTop: 6 }}>
+                    Combine static content, runtime behavior, and allowlist context to explain why
+                    a sample is malicious, noisy, or likely safe.
+                  </div>
+                </div>
+                <button className="btn btn-sm" onClick={() => setDeepScanResult(null)}>
+                  Clear Result
+                </button>
+              </div>
+
+              <div className="form-group">
+                <label className="form-label" htmlFor="deep-scan-filename">
+                  Sample filename
+                </label>
+                <input
+                  id="deep-scan-filename"
+                  className="form-input"
+                  value={scanFilename}
+                  onChange={(event) => setScanFilename(event.target.value)}
+                  placeholder="invoice_update.ps1"
+                />
+              </div>
+              <div className="form-group">
+                <label className="form-label" htmlFor="deep-scan-sample">
+                  Sample content or script body
+                </label>
+                <textarea
+                  id="deep-scan-sample"
+                  className="form-input"
+                  rows={8}
+                  value={scanSample}
+                  onChange={(event) => setScanSample(event.target.value)}
+                  placeholder="Paste a suspicious script snippet, command line, or decoded sample here."
+                />
+              </div>
+
+              <div
+                style={{
+                  display: 'grid',
+                  gap: 12,
+                  gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
+                }}
+              >
+                <div>
+                  <div className="form-label" style={{ marginBottom: 8 }}>
+                    Runtime behavior
+                  </div>
+                  <div style={{ display: 'grid', gap: 8 }}>
+                    {[
+                      ['suspicious_process_tree', 'Suspicious process tree'],
+                      ['defense_evasion', 'Defense evasion'],
+                      ['persistence_installed', 'Persistence installed'],
+                      ['c2_beaconing_detected', 'C2 beaconing'],
+                      ['credential_access', 'Credential access'],
+                    ].map(([key, label]) => (
+                      <label
+                        key={key}
+                        style={{ display: 'flex', gap: 8, alignItems: 'center', fontSize: 13 }}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={Boolean(scanBehavior[key])}
+                          onChange={(event) =>
+                            setScanBehavior((current) => ({
+                              ...current,
+                              [key]: event.target.checked,
+                            }))
+                          }
+                        />
+                        {label}
+                      </label>
+                    ))}
+                  </div>
+                </div>
+
+                <div>
+                  <label className="form-label" htmlFor="deep-scan-trusted-publishers">
+                    Trusted publishers
+                  </label>
+                  <textarea
+                    id="deep-scan-trusted-publishers"
+                    className="form-input"
+                    rows={5}
+                    value={trustedPublishersText}
+                    onChange={(event) => setTrustedPublishersText(event.target.value)}
+                    placeholder="microsoft&#10;adobe"
+                  />
+                </div>
+
+                <div>
+                  <label className="form-label" htmlFor="deep-scan-internal-tools">
+                    Internal tools
+                  </label>
+                  <textarea
+                    id="deep-scan-internal-tools"
+                    className="form-input"
+                    rows={5}
+                    value={internalToolsText}
+                    onChange={(event) => setInternalToolsText(event.target.value)}
+                    placeholder="corp-updater&#10;internal-deployer"
+                  />
+                </div>
+              </div>
+
+              <div className="btn-group" style={{ marginTop: 16, flexWrap: 'wrap' }}>
+                <button
+                  className="btn btn-sm btn-primary"
+                  disabled={runningDeepScan}
+                  onClick={runDeepMalwareScan}
+                >
+                  {runningDeepScan ? 'Scanning…' : 'Run Deep Scan'}
+                </button>
+                <button
+                  className="btn btn-sm"
+                  onClick={() => {
+                    setScanBehavior(DEFAULT_SCAN_BEHAVIOR);
+                    setTrustedPublishersText('');
+                    setInternalToolsText('');
+                  }}
+                >
+                  Reset Context
+                </button>
+              </div>
+
+              {!deepScanResult ? (
+                <div className="detail-callout" style={{ marginTop: 16 }}>
+                  Use deep scan when you need analyst-facing provenance: static traits, runtime
+                  tactics, allowlist influence, and recommended follow-up actions in one view.
+                </div>
+              ) : (
+                <>
+                  <div style={{ marginTop: 18 }}>
+                    <SummaryGrid data={deepScanSummary} limit={8} />
+                  </div>
+
+                  <div className="card-title" style={{ marginTop: 18, marginBottom: 10 }}>
+                    Why this fired
+                  </div>
+                  <div style={{ display: 'grid', gap: 8 }}>
+                    {(deepScanResult.analyst_summary || []).map((line, index) => (
+                      <div
+                        key={`analyst-summary-${index}`}
+                        style={{
+                          border: '1px solid var(--border)',
+                          borderRadius: 10,
+                          padding: 12,
+                          background: 'var(--bg)',
+                        }}
+                      >
+                        {line}
+                      </div>
+                    ))}
+                    {(deepScanResult.scan?.matches || []).map((match, index) => (
+                      <div
+                        key={`scan-match-${index}`}
+                        style={{
+                          border: '1px solid var(--border)',
+                          borderRadius: 10,
+                          padding: 12,
+                          background: 'var(--bg)',
+                        }}
+                      >
+                        <div
+                          style={{
+                            display: 'flex',
+                            justifyContent: 'space-between',
+                            gap: 10,
+                            alignItems: 'flex-start',
+                          }}
+                        >
+                          <div>
+                            <div className="row-primary">{match.rule_name}</div>
+                            <div className="row-secondary">{match.detail}</div>
+                          </div>
+                          <span className={`badge ${verdictBadgeClass(match.severity)}`}>
+                            {match.severity}
+                          </span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+
+                  <div
+                    style={{
+                      display: 'grid',
+                      gap: 14,
+                      gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))',
+                      marginTop: 18,
+                    }}
+                  >
+                    <div
+                      style={{
+                        border: '1px solid var(--border)',
+                        borderRadius: 12,
+                        padding: 14,
+                        background: 'var(--bg-card)',
+                      }}
+                    >
+                      <div className="card-title" style={{ marginBottom: 10 }}>
+                        Why this might be safe or noisy
+                      </div>
+                      {whySafeOrNoisy.length === 0 ? (
+                        <div className="empty">
+                          No allowlist or signing context reduced the verdict confidence.
+                        </div>
+                      ) : (
+                        <div style={{ display: 'grid', gap: 8 }}>
+                          {whySafeOrNoisy.map((line) => (
+                            <div key={line}>{line}</div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+
+                    <div
+                      style={{
+                        border: '1px solid var(--border)',
+                        borderRadius: 12,
+                        padding: 14,
+                        background: 'var(--bg-card)',
+                      }}
+                    >
+                      <div className="card-title" style={{ marginBottom: 10 }}>
+                        What to do next
+                      </div>
+                      <div style={{ display: 'grid', gap: 8 }}>
+                        {(deepScanResult.behavior_profile?.recommended_actions || []).map(
+                          (line, index) => (
+                            <div key={`recommended-action-${index}`}>{line}</div>
+                          ),
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="card-title" style={{ marginTop: 18, marginBottom: 10 }}>
+                    Static and behavior profiles
+                  </div>
+                  <div
+                    style={{
+                      display: 'grid',
+                      gap: 14,
+                      gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))',
+                    }}
+                  >
+                    <div>
+                      <SummaryGrid
+                        data={{
+                          file_type: deepScanResult.static_profile?.file_type,
+                          platform_hint: deepScanResult.static_profile?.platform_hint,
+                          probable_signed: deepScanResult.static_profile?.probable_signed,
+                          trusted_publisher:
+                            deepScanResult.static_profile?.trusted_publisher_match || 'none',
+                          internal_tool:
+                            deepScanResult.static_profile?.internal_tool_match || 'none',
+                        }}
+                        limit={6}
+                      />
+                    </div>
+                    <div>
+                      <SummaryGrid
+                        data={{
+                          observed_tactics:
+                            deepScanResult.behavior_profile?.observed_tactics?.length || 0,
+                          behavior_severity: deepScanResult.behavior_profile?.severity || 'none',
+                          allowlist_match:
+                            deepScanResult.behavior_profile?.allowlist_match || 'none',
+                          score_band: deepScanResult.scan?.static_score?.band || 'unknown',
+                        }}
+                        limit={6}
+                      />
+                    </div>
+                  </div>
+
+                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 14 }}>
+                    <span className={`badge ${verdictBadgeClass(deepScanResult.scan?.verdict)}`}>
+                      {deepScanResult.scan?.verdict || 'unknown'}
+                    </span>
+                    <span
+                      className={`badge ${scoreBandBadgeClass(
+                        deepScanResult.scan?.static_score?.band,
+                      )}`}
+                    >
+                      {deepScanResult.scan?.static_score?.band || 'unknown band'}
+                    </span>
+                    {(deepScanResult.behavior_profile?.observed_tactics || []).map((tactic) => (
+                      <span key={tactic} className="badge badge-info">
+                        {tactic}
+                      </span>
+                    ))}
+                  </div>
+
+                  <JsonDetails data={deepScanResult} label="Deep malware scan payload" />
+                </>
+              )}
             </div>
           </div>
         </>

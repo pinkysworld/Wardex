@@ -2,7 +2,58 @@
 
 All notable changes to Wardex are documented in this file.
 
+## [0.53.3] — Scoped Artifact Persistence & Response-Aware Reporting
+
+### Reporting workflow closure
+- **Persisted export artifacts** — Compliance JSON/markdown exports, evidence bundles, audit CSV exports, privacy snapshots, and backend-native alert exports can now be saved into report run history with active `case_id`, `incident_id`, `investigation_id`, and `source` context attached.
+- **Original-payload artifact downloads** — Stored run-history artifacts now reopen with their original payload and content type when possible instead of always falling back to generic JSON downloads.
+- **Response approval snapshots** — Reports & Exports now captures pending approvals, response requests, and response audit evidence into a dedicated scoped artifact, including target-specific filtering and response-target metadata.
+
+### Investigation handoff consistency
+- **Target-aware report pivots** — SOC Workbench, NDR, UEBA, Threat Detection, Attack Graph, and Infrastructure now pass `source` and `target` context into `/reports` so evidence and delivery workflows reopen with the exact operational slice that launched them.
+- **Response-aware deep links** — Report links back into SOC, assistant, and investigation views now preserve response target scope so analysts can move between approval review and evidence packaging without losing context.
+
+### Verification and release sync
+- **Focused admin-console coverage** — Added regression coverage for persisted compliance markdown artifacts, backend-native alert export artifacts, and target-scoped response approval snapshot persistence.
+- **Release-document refresh** — README, status, roadmap, SDK guide, reproducibility notes, and OpenAPI metadata now reflect the scoped artifact persistence and response-aware reporting closure delivered in `v0.53.3`.
+
+## [0.53.2] — Explainable Detection, Incident-First Workflows & Scoped Reporting
+
+### Detection trust and analyst confidence
+- **Model-registry controls** — Added model status, shadow-mode inference visibility, rollback support, and a safer heuristic fallback posture so experimental ML paths can be introduced without breaking triage.
+- **Analyst feedback capture** — New detection-feedback APIs persist analyst judgments and feed explainability views with concrete investigation context instead of ephemeral UI-only notes.
+- **Explainable detections** — Detection detail surfaces now expose API-backed rationale, evidence summaries, and "why this fired" style context to improve analyst trust in alert scoring.
+
+### Onboarding and operator readiness
+- **Server-driven readiness checks** — Added onboarding-readiness APIs that validate token state, first-agent presence, telemetry flow, first-alert visibility, threat-intel health, malware scan readiness, and response approval dry-run coverage.
+- **Readiness-first onboarding UX** — The admin-console onboarding wizard now consumes those readiness checks directly so operators can distinguish missing data from degraded setup instead of stepping through a static checklist.
+- **Manager morning brief** — Dashboard surfaces now include a manager-oriented queue digest for queue health, stale investigations, suppression drift, and operational watch items.
+
+### Incident-first SOC workflow depth
+- **Focused case workspace** — SOC Workbench now centers cases as investigation workspaces with narrative context, evidence, case notes, linked incidents/events, ATT&CK context, and direct pivots into assistant, reports, investigations, and response.
+- **URL-backed investigation state** — Alert, case, incident, queue-filter, and drawer state is now preserved in route/query parameters across SOC, Assistant, and Reports so analysts can share or reopen exact triage context.
+- **Assistant handoff context** — Assistant queries now retain case / incident / investigation scope and can pivot directly back into matching SOC drawers and investigation routes.
+
+### Threat-intel and malware analysis depth
+- **Threat-intel `v2` library** — Added normalized indicator metadata, TTL/source weighting/decay visibility, and sightings APIs so threat enrichment includes provenance and recency instead of flat indicator matches.
+- **Deep malware scan `v2`** — Added richer malware static and behavior profiles, preserving hash/YARA fast paths while exposing deeper analyst-facing scan context through the API and console.
+- **Provenance-first triage UI** — Threat Intel operations now surface indicator metadata and recent sightings directly in the workspace, making enrichment quality easier to inspect during triage.
+
+### Reporting and workflow closure
+- **Execution-context-aware reporting** — Report runs, schedules, stored reports, templates, and report previews can now persist `case_id`, `incident_id`, `investigation_id`, and `source` context across backend storage and UI workflows.
+- **Scoped artifact library** — Reports & Exports now supports scoped and unscoped artifact filtering, republishing older reports into scoped artifacts, and backend-native filtering for reports, runs, schedules, and templates.
+- **Reusable scoped templates** — Analysts can save scoped report templates tied to the active case/incident/investigation workflow and reopen only the relevant preset library later.
+
+### API, SDK, and verification
+- **New operator APIs** — Added detection feedback, explainability, model status, onboarding readiness, manager queue digest, threat-intel sightings, deep malware scan `v2`, and scoped report/report-template filtering endpoints.
+- **SDK surface expansion** — The TypeScript SDK now includes the new explainability, onboarding, reporting, threat-intel, and malware-analysis endpoints used by the admin console.
+- **Focused regression coverage** — Added Rust and admin-console coverage for onboarding readiness, explainability feedback, deep malware scan profiles, threat-intel sightings, and execution-context persistence/filtering across reports, runs, schedules, and templates.
+
 ## [0.53.1] — Hunt Maturity, SOC UX Throughput, and Case Automation
+
+### Release confidence
+- **Release acceptance gate** — Added `scripts/release_acceptance.sh` and `make release-acceptance` to build the shipped admin console and Rust binary, validate published site links, and run the live routed Playwright suite (`live_release_smoke`, `advanced_console_workflows`, `enterprise_console_smoke`, and `mobile_topbar_smoke`) against a real Wardex instance before sign-off.
+- **API contract alignment** — Normalized the admin-console to the canonical backend payloads for response audit entries (`audit_log`), fleet dashboard summaries (`fleet.total_agents` and `fleet.status_counts`), and SOC queue items (`queue`), and updated the affected Playwright mocks to match the shipped server contract.
 
 ### Threat hunting workflow upgrades
 - **Hypothesis-first hunts** — Saved hunts now persist `hypothesis` and `expected_outcome` (`confirm`, `refute`, `explore`) and expose them in the Threat Detection hunt workflow.
@@ -25,10 +76,6 @@ All notable changes to Wardex are documented in this file.
 
 ### Automation depth
 - **Dedup incident auto-create path** — New `POST /api/alerts/dedup/auto-create` creates incidents from high-cardinality dedup groups (3+ related alerts in a 5-minute window).
-
-### Release hardening
-- **SDK version mapping self-test** — `sdk/generate.sh` now includes a built-in version conversion self-test so Cargo-to-PEP-440 drift fails fast in CI before SDK artifacts are regenerated.
-- **Fleet keyboard regression coverage** — FleetAgents now has focused tests for keyboard selection after filter and pagination changes, reducing the risk of stale row focus opening the wrong endpoint.
 
 ### API additions
 - `POST /api/hunts/{id}/escalate`

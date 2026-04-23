@@ -1,6 +1,9 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useApi } from '../hooks.jsx';
 import * as api from '../api.js';
+import WorkflowGuidance from './WorkflowGuidance.jsx';
+import { buildHref } from './workflowPivots.js';
 
 // ── Simple Force-Directed Graph Renderer ─────────────────────
 // Renders attack paths as a canvas-based force-directed graph
@@ -184,7 +187,7 @@ function drawGraph(ctx, nodes, edges, width, height, hoveredNode, isDark) {
 export default function AttackGraph() {
   const canvasRef = useRef(null);
   const [hoveredNode, setHoveredNode] = useState(null);
-  const [selectedNode, setSelectedNode] = useState(null);
+  const [searchParams, setSearchParams] = useSearchParams();
 
   const { data: lateralData } = useApi(api.campaigns);
   const { data: coverageGaps } = useApi(api.coverageGaps);
@@ -201,6 +204,26 @@ export default function AttackGraph() {
     if (nodes.length === 0) return [];
     return forceSimulation([...nodes.map((n) => ({ ...n }))], edges, CANVAS_WIDTH, CANVAS_HEIGHT);
   }, [nodes, edges]);
+  const selectedNodeId = searchParams.get('node') || '';
+  const selectedNode = useMemo(
+    () =>
+      layoutNodes.find((node) => node.id === selectedNodeId) ||
+      nodes.find((node) => node.id === selectedNodeId) ||
+      null,
+    [layoutNodes, nodes, selectedNodeId],
+  );
+
+  const updateParams = useCallback(
+    (changes) => {
+      const next = new URLSearchParams(searchParams);
+      Object.entries(changes).forEach(([key, value]) => {
+        if (value == null || value === '') next.delete(key);
+        else next.set(key, value);
+      });
+      setSearchParams(next, { replace: true });
+    },
+    [searchParams, setSearchParams],
+  );
 
   const render = useCallback(() => {
     const canvas = canvasRef.current;
@@ -240,15 +263,82 @@ export default function AttackGraph() {
       const found = layoutNodes.find(
         (n) => Math.sqrt((n.x - mx) ** 2 + (n.y - my) ** 2) < NODE_RADIUS + 4,
       );
-      setSelectedNode(found || null);
+      updateParams({ node: found?.id || null });
     },
-    [layoutNodes],
+    [layoutNodes, updateParams],
   );
 
   const selectedEdges = useMemo(() => {
     if (!selectedNode) return [];
     return edges.filter((e) => e.source === selectedNode.id || e.target === selectedNode.id);
   }, [selectedNode, edges]);
+  const workflowItems = useMemo(() => {
+    const focalNode = selectedNode?.id || nodes[0]?.id || '';
+    const focalType = selectedNode?.type || 'node';
+    return [
+      {
+        id: 'soc-campaigns',
+        title: 'Open Campaign Investigation',
+        description: `${selectedEdges.length || edges.length} graph edge${selectedEdges.length === 1 ? '' : 's'} can be reviewed in campaign and investigation workflows.`,
+        to: '/soc#campaigns',
+        minRole: 'analyst',
+        tone: 'primary',
+        badge: 'Investigate',
+      },
+      {
+        id: 'hunt-graph-node',
+        title: 'Seed A Detection Hunt',
+        description: `Turn ${focalNode || 'the selected graph path'} into a hunt query and response-ready workflow.`,
+        to: buildHref('/detection', {
+          params: {
+            intent: 'run-hunt',
+            huntQuery: focalNode ? `${focalType}:${focalNode} attack graph path` : 'attack graph campaign',
+            huntName: focalNode ? `Hunt ${focalNode}` : 'Hunt attack graph signals',
+          },
+        }),
+        minRole: 'analyst',
+        badge: 'Detect',
+      },
+      {
+        id: 'ueba-entity',
+        title: 'Inspect UEBA Risk',
+        description: `Carry ${focalNode || 'the selected identity'} into entity-risk scoring and anomaly review.`,
+        to: buildHref('/ueba', { params: { entity: focalNode } }),
+        minRole: 'analyst',
+        badge: 'Entity',
+      },
+      {
+        id: 'infrastructure',
+        title: 'Cross-Check Asset Evidence',
+        description: `Open infrastructure drift, exposure, or observability context for ${focalNode || 'the selected node'}.`,
+        to: buildHref('/infrastructure', { params: { tab: 'assets', q: focalNode } }),
+        minRole: 'analyst',
+        badge: 'Asset',
+      },
+      {
+        id: 'ndr',
+        title: 'Validate Network Side',
+        description: 'Use NDR to confirm whether graph relationships align with current network anomalies.',
+        to: buildHref('/ndr', { params: { tab: 'overview' } }),
+        minRole: 'analyst',
+        badge: 'Network',
+      },
+      {
+        id: 'reports',
+        title: 'Export Evidence Bundle',
+        description: 'Package graph context into evidence and executive reporting workflows.',
+        to: buildHref('/reports', {
+          params: {
+            tab: 'evidence',
+            source: 'attack-graph',
+            target: focalNode || undefined,
+          },
+        }),
+        minRole: 'viewer',
+        badge: 'Report',
+      },
+    ];
+  }, [edges.length, nodes, selectedEdges.length, selectedNode]);
 
   return (
     <div style={{ display: 'grid', gap: 16 }}>
@@ -282,6 +372,12 @@ export default function AttackGraph() {
             ))}
         </div>
       </div>
+
+      <WorkflowGuidance
+        title="Attack Graph Pivots"
+        description="Move from graph context into hunts, campaigns, entity analytics, network validation, and evidence workflows without losing the selected node."
+        items={workflowItems}
+      />
 
       <div
         style={{
@@ -327,7 +423,7 @@ export default function AttackGraph() {
               <div className="card-title">Node Detail</div>
               <button
                 className="btn btn-sm"
-                onClick={() => setSelectedNode(null)}
+                onClick={() => updateParams({ node: null })}
                 aria-label="Close node detail"
               >
                 ✕

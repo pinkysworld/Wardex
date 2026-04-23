@@ -1,7 +1,7 @@
 require "json"
 
 class Wardex < Formula
-  desc "SentinelEdge XDR — AI-powered endpoint detection & response"
+  desc "Wardex XDR — AI-powered endpoint detection & response"
   homepage "https://github.com/pinkysworld/Wardex"
   url "https://github.com/pinkysworld/Wardex/archive/refs/tags/v0.52.5.tar.gz"
   sha256 "68da2b9a429420936434d5c621d213dc3eea18ca6c19682ab382eaa067f603a9"

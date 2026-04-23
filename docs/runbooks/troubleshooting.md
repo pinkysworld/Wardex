@@ -6,16 +6,16 @@
 
 ```bash
 # Check binary exists and is executable
-ls -la ./target/release/sentineledge
+ls -la ./target/release/wardex
 
 # Check port availability
 lsof -i :8080
 
 # Run with verbose logging
-RUST_LOG=debug ./target/release/sentineledge serve 2>&1 | head -50
+RUST_LOG=debug ./target/release/wardex serve 2>&1 | head -50
 
 # Verify config syntax
-cargo run -- validate-config --config /etc/sentineledge/config.toml
+cargo run -- validate-config --config /etc/wardex/config.toml
 ```
 
 ### 2. Agent Can't Connect to Server
@@ -31,10 +31,10 @@ cargo run -- validate-config --config /etc/sentineledge/config.toml
 
 ```bash
 # Check process memory
-ps aux | grep sentineledge
+ps aux | grep wardex
 
 # Check storage file sizes
-du -sh /var/lib/sentineledge/storage/
+du -sh /var/lib/wardex/storage/
 
 # Trigger retention purge (reduces stored alerts)
 curl -X POST http://localhost:8080/api/admin/purge-retention
@@ -75,7 +75,7 @@ curl -s http://localhost:8080/api/update/status | jq .
 sha256sum /path/to/new-binary
 
 # Manual rollback if API unavailable
-cp /var/lib/sentineledge/staging/backup/sentineledge /usr/local/bin/sentineledge
+cp /var/lib/wardex/staging/backup/wardex /usr/local/bin/wardex
 ```
 
 ---
@@ -97,13 +97,13 @@ cp /var/lib/sentineledge/staging/backup/sentineledge /usr/local/bin/sentineledge
 
 ```bash
 # Tail last 100 log lines
-tail -100 /var/log/sentineledge/server.log
+tail -100 /var/log/wardex/server.log
 
 # Filter for errors only
-grep -i "error\|panic\|fatal" /var/log/sentineledge/server.log
+grep -i "error\|panic\|fatal" /var/log/wardex/server.log
 
 # Count alerts by severity in last hour
-grep "alert" /var/log/sentineledge/server.log | \
+grep "alert" /var/log/wardex/server.log | \
   grep "$(date -u +%Y-%m-%dT%H)" | \
   grep -oP '"level":"[^"]*"' | sort | uniq -c | sort -rn
 

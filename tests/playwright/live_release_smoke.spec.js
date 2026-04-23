@@ -20,18 +20,33 @@ test('wardex live admin smoke', async ({ page }) => {
     }
   });
 
-  await page.goto(`${BASE}/admin.html`, { waitUntil: 'domcontentloaded' });
+  await page.goto(`${BASE}/admin/`, { waitUntil: 'domcontentloaded' });
   await expect(page).toHaveURL(/\/admin\/?$/);
 
   await page.getByPlaceholder('API token').fill(TOKEN);
   await page.getByRole('button', { name: 'Connect' }).click();
   await expect(page.locator('.auth-badge')).toContainText(/Connected/i);
+
+  const onboardingDialog = page.getByRole('dialog', {
+    name: 'Set up the Wardex admin console',
+  });
+  if (await onboardingDialog.isVisible().catch(() => false)) {
+    await onboardingDialog.getByRole('button', { name: 'Skip for now' }).click();
+    await expect(onboardingDialog).toBeHidden();
+  }
+
+  consoleErrors.length = 0;
+  badResponses.length = 0;
+  pageErrors.length = 0;
+
+  const sidebar = page.locator('#sidebar-nav');
+
   await expect(page.getByRole('heading', { name: 'Security Overview' })).toBeVisible();
 
-  await page.getByRole('button', { name: 'Live Monitor' }).click();
+  await sidebar.getByRole('link', { name: 'Live Monitor', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Live Alert Stream' })).toBeVisible();
-  await page.getByRole('button', { name: 'Processes' }).click();
-  await expect(page.getByText('Running Processes')).toBeVisible();
+  await page.getByRole('tab', { name: 'Processes', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'Running Processes' })).toBeVisible();
   await expect(page.getByText('Process Count')).toBeVisible();
 
   await page.screenshot({

@@ -4,7 +4,7 @@
 
 - macOS 12 (Monterey) or later
 - Administrator account
-- Network access to SentinelEdge server (default port 9090)
+- Network access to Wardex server (default port 9090)
 - Full Disk Access (FDA) TCC approval for complete telemetry
 
 ## Deployment
@@ -12,9 +12,9 @@
 ### 1. Download Agent Binary
 
 ```bash
-curl -o /tmp/sentineledge-agent \
-  "https://<server>:9090/api/updates/download/sentineledge-agent-macos-universal"
-chmod +x /tmp/sentineledge-agent
+curl -o /tmp/wardex-agent \
+  "https://<server>:9090/api/updates/download/wardex-agent-macos-universal"
+chmod +x /tmp/wardex-agent
 ```
 
 ### 2. Code Signing Verification
@@ -23,15 +23,15 @@ The agent binary must be signed and notarized for Gatekeeper:
 
 ```bash
 # Verify code signature
-codesign -dvvv /tmp/sentineledge-agent
+codesign -dvvv /tmp/wardex-agent
 # Verify notarization
-spctl --assess --type execute /tmp/sentineledge-agent
+spctl --assess --type execute /tmp/wardex-agent
 ```
 
 ### 3. Enroll Agent
 
 ```bash
-sudo /tmp/sentineledge-agent enroll \
+sudo /tmp/wardex-agent enroll \
   --server https://<server>:9090 \
   --token <enrollment-token> \
   --hostname $(hostname -s) \
@@ -41,36 +41,36 @@ sudo /tmp/sentineledge-agent enroll \
 ### 4. Install as LaunchDaemon
 
 ```bash
-sudo cp /tmp/sentineledge-agent /usr/local/bin/
-sudo mkdir -p /Library/Application\ Support/SentinelEdge
+sudo cp /tmp/wardex-agent /usr/local/bin/
+sudo mkdir -p /Library/Application\ Support/Wardex
 
-cat << 'EOF' | sudo tee /Library/LaunchDaemons/com.wardex.sentineledge-agent.plist
+cat << 'EOF' | sudo tee /Library/LaunchDaemons/com.wardex.agent.plist
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
     <key>Label</key>
-    <string>com.wardex.sentineledge-agent</string>
+    <string>com.wardex.agent</string>
     <key>ProgramArguments</key>
     <array>
-        <string>/usr/local/bin/sentineledge-agent</string>
+        <string>/usr/local/bin/wardex-agent</string>
         <string>--run</string>
         <string>--config</string>
-        <string>/Library/Application Support/SentinelEdge/config.toml</string>
+        <string>/Library/Application Support/Wardex/config.toml</string>
     </array>
     <key>RunAtLoad</key>
     <true/>
     <key>KeepAlive</key>
     <true/>
     <key>StandardOutPath</key>
-    <string>/Library/Logs/SentinelEdge/agent.log</string>
+    <string>/Library/Logs/Wardex/agent.log</string>
     <key>StandardErrorPath</key>
-    <string>/Library/Logs/SentinelEdge/agent-error.log</string>
+    <string>/Library/Logs/Wardex/agent-error.log</string>
 </dict>
 </plist>
 EOF
 
-sudo launchctl load /Library/LaunchDaemons/com.wardex.sentineledge-agent.plist
+sudo launchctl load /Library/LaunchDaemons/com.wardex.agent.plist
 ```
 
 ## TCC (Transparency, Consent, and Control)
@@ -79,7 +79,7 @@ sudo launchctl load /Library/LaunchDaemons/com.wardex.sentineledge-agent.plist
 
 The agent requires FDA for complete telemetry. Deploy via MDM profile or manually:
 
-**Manual**: System Settings → Privacy & Security → Full Disk Access → Add `/usr/local/bin/sentineledge-agent`
+**Manual**: System Settings → Privacy & Security → Full Disk Access → Add `/usr/local/bin/wardex-agent`
 
 **MDM (Configuration Profile)**:
 ```xml
@@ -89,11 +89,11 @@ The agent requires FDA for complete telemetry. Deploy via MDM profile or manuall
     <array>
         <dict>
             <key>Identifier</key>
-            <string>com.wardex.sentineledge-agent</string>
+            <string>com.wardex.agent</string>
             <key>IdentifierType</key>
             <string>bundleID</string>
             <key>CodeRequirement</key>
-            <string>identifier "com.wardex.sentineledge-agent" and anchor apple generic</string>
+            <string>identifier "com.wardex.agent" and anchor apple generic</string>
             <key>Allowed</key>
             <true/>
         </dict>
@@ -156,11 +156,11 @@ spctl --status
 
 ```bash
 # Check LaunchDaemon status
-sudo launchctl list | grep sentineledge
+sudo launchctl list | grep wardex
 # Try manual start
-sudo launchctl kickstart system/com.wardex.sentineledge-agent
+sudo launchctl kickstart system/com.wardex.agent
 # View logs
-log show --predicate 'processImagePath contains "sentineledge"' --last 1h
+log show --predicate 'processImagePath contains "wardex"' --last 1h
 ```
 
 ### TCC Permissions Missing
@@ -168,7 +168,7 @@ log show --predicate 'processImagePath contains "sentineledge"' --last 1h
 ```bash
 # Check current TCC database (requires FDA or SIP disabled)
 sqlite3 /Library/Application\ Support/com.apple.TCC/TCC.db \
-  "SELECT service, client FROM access WHERE client LIKE '%sentineledge%';"
+  "SELECT service, client FROM access WHERE client LIKE '%wardex%';"
 ```
 
 ### Network Monitoring Incomplete
@@ -184,9 +184,9 @@ ls -la $(which lsof)
 ## Uninstallation
 
 ```bash
-sudo launchctl unload /Library/LaunchDaemons/com.wardex.sentineledge-agent.plist
-sudo rm /Library/LaunchDaemons/com.wardex.sentineledge-agent.plist
-sudo rm /usr/local/bin/sentineledge-agent
-sudo rm -rf "/Library/Application Support/SentinelEdge"
-sudo rm -rf /Library/Logs/SentinelEdge
+sudo launchctl unload /Library/LaunchDaemons/com.wardex.agent.plist
+sudo rm /Library/LaunchDaemons/com.wardex.agent.plist
+sudo rm /usr/local/bin/wardex-agent
+sudo rm -rf "/Library/Application Support/Wardex"
+sudo rm -rf /Library/Logs/Wardex
 ```
