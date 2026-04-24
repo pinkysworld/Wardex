@@ -795,10 +795,6 @@ export default function Settings() {
   const { data: dbVer } = useApi(api.adminDbVersion);
   const { data: dlqData } = useApi(api.dlqStats);
   const { data: dbSizes, reload: rSizes } = useApi(api.adminDbSizes);
-  const { data: storageStats, reload: rStats } = useApi(api.storageStats);
-  const { data: retentionData, reload: rRetention } = useApi(api.retentionStatus, [], {
-    skip: tab !== 'admin',
-  });
   const [historicalDraft, setHistoricalDraft] = useState({
     since: '',
     until: '',
@@ -812,16 +808,21 @@ export default function Settings() {
   });
   const [historicalQuery, setHistoricalQuery] = useState({ limit: 25 });
   const {
-    data: historicalEventsData,
+    data: adminRetentionWorkspaceData,
     loading: historicalEventsLoading,
-    reload: rHistoricalEvents,
-  } = useApi(
-    () => api.historicalStorageEvents(historicalQuery),
-    [JSON.stringify(historicalQuery)],
+    reload: reloadAdminRetentionWorkspace,
+  } = useApiGroup(
+    {
+      storageStats: api.storageStats,
+      retentionData: api.retentionStatus,
+      historicalEventsData: () => api.historicalStorageEvents(historicalQuery),
+    },
+    [tab, JSON.stringify(historicalQuery)],
     {
       skip: tab !== 'admin',
     },
   );
+  const { storageStats, retentionData, historicalEventsData } = adminRetentionWorkspaceData;
   const auditQueryValue = auditQuery.trim();
   const auditMethodValue = auditMethod !== 'all' ? auditMethod : undefined;
   const auditStatusValue = auditStatus !== 'all' ? auditStatus : undefined;
@@ -1387,7 +1388,7 @@ export default function Settings() {
     setRetentionSaving(true);
     try {
       await api.configSave({ retention: nextRetention });
-      await Promise.all([rConfig(), rRetention()]);
+      await Promise.all([rConfig(), refreshAdminRetentionWorkspace()]);
       toast('Retention settings saved', 'success');
     } catch (error) {
       toast(formatApiError(error, 'Failed to save retention settings'), 'error');
@@ -1410,7 +1411,7 @@ export default function Settings() {
     try {
       const result = await api.retentionApply({});
       setLastRetentionApply(result);
-      await Promise.all([rRetention(), rStats(), rHistoricalEvents()]);
+      await refreshAdminRetentionWorkspace();
       toast(
         `Retention applied: ${result.trimmed_alerts ?? 0} alerts and ${result.trimmed_events ?? 0} events trimmed`,
         'success',
@@ -1428,6 +1429,8 @@ export default function Settings() {
       limit: Number(historicalDraft.limit) || 25,
     });
   };
+
+  const refreshAdminRetentionWorkspace = () => reloadAdminRetentionWorkspace();
 
   const buildSiemPayload = () => ({
     enabled: siemDraft.enabled,
@@ -4289,10 +4292,7 @@ export default function Settings() {
                     ? 'ClickHouse Ready'
                     : 'Not Configured'}
                 </span>
-                <button
-                  className="btn btn-sm"
-                  onClick={() => Promise.all([rRetention(), rHistoricalEvents(), rStats()])}
-                >
+                <button className="btn btn-sm" onClick={refreshAdminRetentionWorkspace}>
                   ↻ Refresh
                 </button>
               </div>
@@ -4856,7 +4856,7 @@ export default function Settings() {
                         'success',
                       );
                       rSizes();
-                      rStats();
+                      refreshAdminRetentionWorkspace();
                     } catch {
                       toast('Purge failed', 'error');
                     }
@@ -4926,7 +4926,7 @@ export default function Settings() {
                     const r = await api.adminDbReset({ confirm: 'RESET_ALL_DATA' });
                     toast(`Database reset: ${r.records_purged} records purged`, 'warning');
                     rSizes();
-                    rStats();
+                    refreshAdminRetentionWorkspace();
                   } catch {
                     toast('Reset failed', 'error');
                   }

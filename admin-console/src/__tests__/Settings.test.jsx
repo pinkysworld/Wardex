@@ -1414,6 +1414,63 @@ describe('Settings', () => {
     });
   });
 
+  it('refreshes grouped long-retention workspace data from the admin card', async () => {
+    const user = userEvent.setup();
+
+    render(
+      <ToastProvider>
+        <Settings />
+      </ToastProvider>,
+    );
+
+    await user.click(screen.getByRole('button', { name: 'Admin' }));
+    expect(await screen.findByText('Long-Retention History')).toBeInTheDocument();
+
+    const countGetCalls = (pathname, matches = () => true) =>
+      globalThis.fetch.mock.calls.filter(([url, options]) => {
+        const parsed = new URL(String(url), 'http://localhost');
+        return (
+          parsed.pathname === pathname && (options?.method || 'GET') === 'GET' && matches(parsed)
+        );
+      }).length;
+
+    await waitFor(() => {
+      expect(countGetCalls('/api/retention/status')).toBeGreaterThan(0);
+      expect(countGetCalls('/api/storage/stats')).toBeGreaterThan(0);
+      expect(
+        countGetCalls(
+          '/api/storage/events/historical',
+          (parsed) => parsed.searchParams.get('limit') === '25',
+        ),
+      ).toBeGreaterThan(0);
+    });
+
+    const initialRetentionCalls = countGetCalls('/api/retention/status');
+    const initialStorageStatsCalls = countGetCalls('/api/storage/stats');
+    const initialHistoricalCalls = countGetCalls(
+      '/api/storage/events/historical',
+      (parsed) => parsed.searchParams.get('limit') === '25',
+    );
+
+    const longRetentionCard = screen.getByText('Long-Retention History').closest('.card');
+    if (!longRetentionCard) {
+      throw new Error('Long-Retention History card not found');
+    }
+
+    await user.click(within(longRetentionCard).getByRole('button', { name: '↻ Refresh' }));
+
+    await waitFor(() => {
+      expect(countGetCalls('/api/retention/status')).toBe(initialRetentionCalls + 1);
+      expect(countGetCalls('/api/storage/stats')).toBe(initialStorageStatsCalls + 1);
+      expect(
+        countGetCalls(
+          '/api/storage/events/historical',
+          (parsed) => parsed.searchParams.get('limit') === '25',
+        ),
+      ).toBe(initialHistoricalCalls + 1);
+    });
+  });
+
   it('saves SIEM, collector and secrets setup flows from the integrations tab', async () => {
     const user = userEvent.setup();
 
