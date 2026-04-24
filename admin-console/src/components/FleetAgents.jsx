@@ -1,6 +1,6 @@
 import { useState, useMemo, useCallback, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { useApi, useInterval, useToast } from '../hooks.jsx';
+import { useApi, useApiGroup, useInterval, useToast } from '../hooks.jsx';
 import * as api from '../api.js';
 import { ConfirmDialog, JsonDetails, SummaryGrid } from './operator.jsx';
 import EmptyState from './EmptyState.jsx';
@@ -116,15 +116,18 @@ export default function FleetAgents() {
   const [statusFilter, setStatusFilter] = useState(() => searchParams.get('status') || 'all');
   const [osFilter, setOsFilter] = useState(() => searchParams.get('os') || 'all');
   const [nowMs, setNowMs] = useState(() => Date.now());
-  const { data: fleetSt, reload: rFleet } = useApi(api.fleetStatus);
-  const { data: dash } = useApi(api.fleetDashboard);
-  const { data: agentList, reload: rAgents } = useApi(api.agents);
+  const { data: fleetSurfaceData, reload: reloadFleetSurface } = useApiGroup({
+    fleetSt: api.fleetStatus,
+    dash: api.fleetDashboard,
+    agentList: api.agents,
+    wsStats: api.wsStats,
+  });
+  const { fleetSt, dash, agentList, wsStats } = fleetSurfaceData;
   const { data: swarm } = useApi(api.swarmPosture);
   const { data: swarmIntelData } = useApi(api.swarmIntel);
   const { data: plat } = useApi(api.platform);
   const { data: evts, reload: rEvents } = useApi(api.events);
   const { data: evtSum } = useApi(api.eventsSummary);
-  const { data: wsStats } = useApi(api.wsStats);
   const { data: policyHist } = useApi(api.policyHistory);
   const { data: releases } = useApi(api.updatesReleases);
   const { data: rollout } = useApi(api.rolloutConfig);
@@ -174,8 +177,7 @@ export default function FleetAgents() {
   );
 
   useInterval(() => {
-    rFleet();
-    rAgents();
+    reloadFleetSurface();
     setNowMs(Date.now());
   }, 15000);
 
@@ -269,11 +271,18 @@ export default function FleetAgents() {
             : [],
     [releases],
   );
-  const latestRelease =
-    releaseItems[0] ||
-    (releases?.latest_version
-      ? { version: releases.latest_version, notes: releases?.notes, channel: releases?.channel }
-      : null);
+  const latestRelease = useMemo(
+    () =>
+      releaseItems[0] ||
+      (releases?.latest_version
+        ? {
+            version: releases.latest_version,
+            notes: releases?.notes,
+            channel: releases?.channel,
+          }
+        : null),
+    [releaseItems, releases],
+  );
   const driftAgents = useMemo(() => {
     if (!latestRelease?.version) return [];
     return agentArr.filter((agent) => agent.version && agent.version !== latestRelease.version);
@@ -371,7 +380,7 @@ export default function FleetAgents() {
         setAgentDetail(null);
       }
       setPendingDelete(null);
-      rAgents();
+      reloadFleetSurface();
     }, 5000);
     setPendingDelete({ ids: removableIds, timer });
     toast('Delete queued. Undo within 5 seconds.', 'warning');
@@ -483,13 +492,7 @@ export default function FleetAgents() {
                     ? `Live (${wsStats.connected_subscribers})`
                     : 'Live idle'}
                 </span>
-                <button
-                  className="btn btn-sm"
-                  onClick={() => {
-                    rAgents();
-                    rFleet();
-                  }}
-                >
+                <button className="btn btn-sm" onClick={reloadFleetSurface}>
                   Refresh
                 </button>
                 <button

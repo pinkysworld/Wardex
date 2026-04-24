@@ -63,6 +63,9 @@ function installFleetFetchMock(agents = AGENTS) {
     if (u.includes('/api/fleet/dashboard')) {
       return Promise.resolve(jsonOk({ total_agents: agents.length, agents: agents.length }));
     }
+    if (u.includes('/api/ws/stats')) {
+      return Promise.resolve(jsonOk({ connected_subscribers: 2, events_emitted: 7 }));
+    }
     if (u.includes('/api/swarm')) return Promise.resolve(jsonOk({}));
     if (u.includes('/api/events')) return Promise.resolve(jsonOk([]));
     if (u.includes('/api/platform')) return Promise.resolve(jsonOk({ os: 'linux' }));
@@ -239,7 +242,6 @@ describe('FleetAgents', () => {
 
   it('clamps keyboard focus to the last visible row after pagination narrows the page', async () => {
     const { container, table } = await renderAgentsView(createAgents(26));
-    const desktopTable = container.querySelector('.desktop-table-only');
 
     await act(async () => {
       fireEvent.change(screen.getByLabelText('Rows per page'), {
@@ -294,5 +296,86 @@ describe('FleetAgents', () => {
 
     expect(screen.getByText(/Registered Agents/)).toBeInTheDocument();
     expect(screen.getByText('Status: offline')).toBeInTheDocument();
+  });
+
+  it('refreshes grouped fleet surface data from the agents workspace', async () => {
+    const callCounts = {
+      fleetStatus: 0,
+      fleetDashboard: 0,
+      agents: 0,
+      wsStats: 0,
+    };
+
+    globalThis.fetch = vi.fn((url) => {
+      const u = String(url);
+      if (u.includes('/api/fleet/status')) {
+        callCounts.fleetStatus += 1;
+        return Promise.resolve(jsonOk({ status: 'ok' }));
+      }
+      if (u.includes('/api/fleet/dashboard')) {
+        callCounts.fleetDashboard += 1;
+        return Promise.resolve(jsonOk({ total_agents: AGENTS.length, agents: AGENTS.length }));
+      }
+      if (u.includes('/api/agents')) {
+        callCounts.agents += 1;
+        return Promise.resolve(jsonOk(AGENTS));
+      }
+      if (u.includes('/api/ws/stats')) {
+        callCounts.wsStats += 1;
+        return Promise.resolve(jsonOk({ connected_subscribers: 2, events_emitted: 7 }));
+      }
+      if (u.includes('/api/swarm')) return Promise.resolve(jsonOk({}));
+      if (u.includes('/api/events')) return Promise.resolve(jsonOk([]));
+      if (u.includes('/api/platform')) return Promise.resolve(jsonOk({ os: 'linux' }));
+      if (u.includes('/api/updates')) {
+        return Promise.resolve(
+          jsonOk({
+            items: [{ version: '0.53.5', channel: 'stable', notes: 'Current release train' }],
+          }),
+        );
+      }
+      if (u.includes('/api/rollout')) {
+        return Promise.resolve(
+          jsonOk({
+            rollout_targets: 2,
+            rollback_events: 1,
+            last_rollout_at: '2026-04-22T10:00:00Z',
+            recent_history: [],
+          }),
+        );
+      }
+      if (u.includes('/api/policy')) return Promise.resolve(jsonOk({ recent_history: [] }));
+      return Promise.resolve(jsonOk({}));
+    });
+
+    await act(async () => {
+      render(<FleetAgents />, { wrapper: Wrapper });
+    });
+
+    const agentsTab = screen.getAllByText('Agents').find((el) => el.classList.contains('tab'));
+    await act(async () => {
+      fireEvent.click(agentsTab);
+    });
+
+    expect(screen.getByText('Live (2)')).toBeInTheDocument();
+
+    const initialFleetStatusCalls = callCounts.fleetStatus;
+    const initialFleetDashboardCalls = callCounts.fleetDashboard;
+    const initialAgentCalls = callCounts.agents;
+    const initialWsStatsCalls = callCounts.wsStats;
+
+    expect(initialFleetStatusCalls).toBeGreaterThan(0);
+    expect(initialFleetDashboardCalls).toBeGreaterThan(0);
+    expect(initialAgentCalls).toBeGreaterThan(0);
+    expect(initialWsStatsCalls).toBeGreaterThan(0);
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Refresh' }));
+    });
+
+    expect(callCounts.fleetStatus).toBe(initialFleetStatusCalls + 1);
+    expect(callCounts.fleetDashboard).toBe(initialFleetDashboardCalls + 1);
+    expect(callCounts.agents).toBe(initialAgentCalls + 1);
+    expect(callCounts.wsStats).toBe(initialWsStatsCalls + 1);
   });
 });
