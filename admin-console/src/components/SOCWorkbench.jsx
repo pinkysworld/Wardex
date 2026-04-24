@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect, useRef } from 'react';
+import { useState, useCallback, useEffect, useRef, useMemo } from 'react';
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { useApi, useApiGroup, useInterval, useToast } from '../hooks.jsx';
 import * as api from '../api.js';
@@ -662,9 +662,10 @@ export default function SOCWorkbench() {
   const caseArr = Array.isArray(caseList) ? caseList : caseList?.cases || [];
   const queueArr = Array.isArray(queue) ? queue : queue?.queue || queue?.alerts || [];
   const rbacArr = Array.isArray(rbacData) ? rbacData : rbacData?.users || [];
-  const activeInvestigationArr = Array.isArray(activeInvestigations)
-    ? activeInvestigations
-    : activeInvestigations?.items || [];
+  const activeInvestigationArr = useMemo(() => {
+    if (Array.isArray(activeInvestigations)) return activeInvestigations;
+    return Array.isArray(activeInvestigations?.items) ? activeInvestigations.items : [];
+  }, [activeInvestigations]);
   const filteredQueueArr = queueArr.filter((alert) => {
     const q = queueFilterText.trim().toLowerCase();
     if (!q) return true;
@@ -704,6 +705,8 @@ export default function SOCWorkbench() {
     activeInvestigationArr.find((entry) => entry.id === selectedInvestigationId) ||
     activeInvestigationArr[0] ||
     null;
+  const selectedInvestigationIdentity = selectedInvestigation?.id || '';
+  const selectedInvestigationHandoff = selectedInvestigation?.handoff || null;
   const selectedInvestigationCase = selectedInvestigation?.case_id
     ? casesById[String(selectedInvestigation.case_id)] || null
     : null;
@@ -980,23 +983,27 @@ export default function SOCWorkbench() {
   }, [activeInvestigationArr, focusedInvestigationParam, selectedInvestigationId]);
 
   useEffect(() => {
-    if (!selectedInvestigation) {
+    if (!selectedInvestigationIdentity) {
       setFindingDraft('');
       setHandoffDraft({ toAnalyst: '', summary: '', nextActions: '', questions: '' });
       return;
     }
 
-    const handoff = selectedInvestigation.handoff || null;
     setFindingDraft('');
     setHandoffDraft({
-      toAnalyst: handoff?.to_analyst || selectedInvestigationCase?.assignee || '',
-      summary: handoff?.summary || '',
-      nextActions: Array.isArray(handoff?.next_actions) ? handoff.next_actions.join('\n') : '',
-      questions: Array.isArray(handoff?.questions) ? handoff.questions.join('\n') : '',
+      toAnalyst:
+        selectedInvestigationHandoff?.to_analyst || selectedInvestigationCase?.assignee || '',
+      summary: selectedInvestigationHandoff?.summary || '',
+      nextActions: Array.isArray(selectedInvestigationHandoff?.next_actions)
+        ? selectedInvestigationHandoff.next_actions.join('\n')
+        : '',
+      questions: Array.isArray(selectedInvestigationHandoff?.questions)
+        ? selectedInvestigationHandoff.questions.join('\n')
+        : '',
     });
   }, [
-    selectedInvestigation?.id,
-    selectedInvestigationCase?.id,
+    selectedInvestigationIdentity,
+    selectedInvestigationHandoff,
     selectedInvestigationCase?.assignee,
   ]);
 
