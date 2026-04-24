@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { useApi, useInterval, useToast, useWebSocket } from '../hooks.jsx';
+import { useApi, useApiGroup, useInterval, useToast, useWebSocket } from '../hooks.jsx';
 import * as api from '../api.js';
 import AlertDrawer from './AlertDrawer.jsx';
 import ProcessDrawer from './ProcessDrawer.jsx';
@@ -235,12 +235,18 @@ export default function LiveMonitor() {
     reconnect: reconnectStream,
   } = useWebSocket(2000);
   const { data: alertData, loading, reload } = useApi(api.alerts);
-  const { data: countData, reload: reloadCount } = useApi(api.alertsCount);
-  const { data: grouped, reload: reloadGrouped } = useApi(api.alertsGrouped);
+  const { data: alertSummaryData, reload: reloadAlertSummary } = useApiGroup({
+    countData: api.alertsCount,
+    grouped: api.alertsGrouped,
+  });
+  const { countData, grouped } = alertSummaryData;
   const { data: wsStats, reload: reloadWsStats } = useApi(api.wsStats);
   const { data: hp } = useApi(api.health);
-  const { data: procData, reload: reloadProcs } = useApi(api.processesLive);
-  const { data: procAnalysis, reload: reloadPA } = useApi(api.processesAnalysis);
+  const { data: processData, reload: reloadProcessData } = useApiGroup({
+    procData: api.processesLive,
+    procAnalysis: api.processesAnalysis,
+  });
+  const { procData, procAnalysis } = processData;
   const { data: fpStats, reload: reloadFP } = useApi(api.fpFeedbackStats);
   const [selectedId, setSelectedId] = useState(() => searchParams.get('alert'));
   const [hoveredId, setHoveredId] = useState(null);
@@ -260,14 +266,17 @@ export default function LiveMonitor() {
   const [bulkAction, setBulkAction] = useState('');
   const [selectedProcess, setSelectedProcess] = useState(null);
 
-  const updateMonitorParams = (updates) => {
-    const next = new URLSearchParams(searchParams);
-    Object.entries(updates).forEach(([key, value]) => {
-      if (!value || value === 'all') next.delete(key);
-      else next.set(key, value);
-    });
-    setSearchParams(next, { replace: true });
-  };
+  const updateMonitorParams = useCallback(
+    (updates) => {
+      const next = new URLSearchParams(searchParams);
+      Object.entries(updates).forEach(([key, value]) => {
+        if (!value || value === 'all') next.delete(key);
+        else next.set(key, value);
+      });
+      setSearchParams(next, { replace: true });
+    },
+    [searchParams, setSearchParams],
+  );
 
   useEffect(() => {
     const alertParam = searchParams.get('alert');
@@ -279,19 +288,17 @@ export default function LiveMonitor() {
     const nextParam = selectedId == null ? null : String(selectedId);
     if ((currentParam ?? null) === nextParam) return;
     updateMonitorParams({ alert: nextParam });
-  }, [searchParams, selectedId]);
+  }, [searchParams, selectedId, updateMonitorParams]);
 
   const reloadAll = () => {
     reload();
-    reloadCount();
-    reloadGrouped();
+    reloadAlertSummary();
   };
   useInterval(reloadAll, 10000);
   useInterval(
     () => {
       if (tab === 'processes') {
-        reloadProcs();
-        reloadPA();
+        reloadProcessData();
       }
     },
     tab === 'processes' ? 10000 : null,
@@ -329,10 +336,9 @@ export default function LiveMonitor() {
 
   useEffect(() => {
     if (!latestStreamAlertKey) return;
-    reloadCount();
-    reloadGrouped();
+    reloadAlertSummary();
     reloadWsStats();
-  }, [latestStreamAlertKey, reloadCount, reloadGrouped, reloadWsStats]);
+  }, [latestStreamAlertKey, reloadAlertSummary, reloadWsStats]);
 
   useInterval(
     () => {
@@ -1432,13 +1438,7 @@ export default function LiveMonitor() {
             <div className="card-header">
               <span className="card-title">Running Processes</span>
               <div className="btn-group">
-                <button
-                  className="btn btn-sm"
-                  onClick={() => {
-                    reloadProcs();
-                    reloadPA();
-                  }}
-                >
+                <button className="btn btn-sm" onClick={reloadProcessData}>
                   ↻ Refresh
                 </button>
                 <button className="btn btn-sm" onClick={() => exportProcesses('json')}>
@@ -1625,14 +1625,7 @@ export default function LiveMonitor() {
                       'The local collector has not returned a current process snapshot yet. Refresh this view once telemetry is available.'
                 }
                 actionLabel={procFilter ? 'Clear Filter' : 'Refresh Processes'}
-                onAction={
-                  procFilter
-                    ? () => setProcFilter('')
-                    : () => {
-                        reloadProcs();
-                        reloadPA();
-                      }
-                }
+                onAction={procFilter ? () => setProcFilter('') : reloadProcessData}
               />
             ) : (
               <div className="table-wrap" style={{ maxHeight: 500, overflowY: 'auto' }}>
@@ -1743,10 +1736,7 @@ export default function LiveMonitor() {
           const currentIndex = procList.findIndex((proc) => proc.pid === selectedProcess?.pid);
           return currentIndex === -1 ? null : `${currentIndex + 1} of ${procList.length}`;
         })()}
-        onUpdated={() => {
-          reloadProcs();
-          reloadPA();
-        }}
+        onUpdated={reloadProcessData}
       />
     </div>
   );
