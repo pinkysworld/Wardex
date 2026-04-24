@@ -212,6 +212,90 @@ export function JsonDetails({ data, label = 'Expanded details' }) {
   );
 }
 
+export function WorkspaceEmptyState({ title, description, icon, actions, compact = false }) {
+  return (
+    <div
+      className="empty"
+      role="status"
+      aria-live="polite"
+      style={{
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        gap: 8,
+        padding: compact ? '16px 12px' : '32px 20px',
+        textAlign: 'center',
+      }}
+    >
+      {icon ? (
+        <div aria-hidden="true" style={{ fontSize: 28 }}>
+          {icon}
+        </div>
+      ) : null}
+      {title ? <div style={{ fontWeight: 600, fontSize: 14 }}>{title}</div> : null}
+      {description ? (
+        <div className="hint" style={{ maxWidth: 480 }}>
+          {description}
+        </div>
+      ) : null}
+      {actions ? (
+        <div className="btn-group" style={{ marginTop: 4 }}>
+          {actions}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+export function WorkspaceErrorState({
+  title = 'Something went wrong',
+  description,
+  error,
+  onRetry,
+  retryLabel = 'Retry',
+}) {
+  const message =
+    description ||
+    (typeof error?.message === 'string' && error.message) ||
+    'The workspace could not load the requested data.';
+  const requestId = typeof error?.requestId === 'string' ? error.requestId : null;
+  return (
+    <div
+      className="empty"
+      role="alert"
+      aria-live="assertive"
+      style={{
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        gap: 8,
+        padding: '32px 20px',
+        textAlign: 'center',
+        border: '1px solid var(--err)',
+        borderRadius: 8,
+      }}
+    >
+      <div aria-hidden="true" style={{ fontSize: 28 }}>
+        ⚠
+      </div>
+      <div style={{ fontWeight: 700, fontSize: 14, color: 'var(--err)' }}>{title}</div>
+      <div className="hint" style={{ maxWidth: 480 }}>
+        {message}
+      </div>
+      {requestId ? (
+        <div className="hint" style={{ fontFamily: 'var(--font-mono)', fontSize: 11 }}>
+          Request ID: {requestId}
+        </div>
+      ) : null}
+      {onRetry ? (
+        <button className="btn btn-sm" onClick={onRetry} type="button">
+          {retryLabel}
+        </button>
+      ) : null}
+    </div>
+  );
+}
+
 export function RawJsonDetails({ data, label = 'Raw JSON' }) {
   if (data == null) return null;
   return (

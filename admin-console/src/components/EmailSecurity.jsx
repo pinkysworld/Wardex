@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useApi, useInterval } from '../hooks.jsx';
 import * as api from '../api.js';
+import { WorkspaceEmptyState } from './operator.jsx';
 
 function PhishingBadge({ score }) {
   if (score >= 0.7)
@@ -347,9 +348,10 @@ export default function EmailSecurity() {
               ))}
             </div>
           ) : (
-            <div className="empty" style={{ padding: 20 }}>
-              No policies configured
-            </div>
+            <WorkspaceEmptyState
+              title="No policies configured"
+              description="Email security policies will appear here once configured."
+            />
           )}
         </div>
       )}
