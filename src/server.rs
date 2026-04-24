@@ -21614,9 +21614,46 @@ mod tests {
             let handle = std::thread::spawn(move || {
                 for _ in 0..3 {
                     let (mut stream, _) = listener.accept().expect("accept mock oidc request");
-                    let mut buffer = [0u8; 8192];
-                    let read = stream.read(&mut buffer).expect("read mock oidc request");
-                    let request = String::from_utf8_lossy(&buffer[..read]);
+                    let mut request_bytes = Vec::new();
+                    let mut buffer = [0u8; 2048];
+                    let mut header_end = None;
+                    let mut content_length = 0usize;
+
+                    loop {
+                        let read = stream.read(&mut buffer).expect("read mock oidc request");
+                        if read == 0 {
+                            break;
+                        }
+                        request_bytes.extend_from_slice(&buffer[..read]);
+
+                        if header_end.is_none() {
+                            header_end = request_bytes
+                                .windows(4)
+                                .position(|window| window == b"\r\n\r\n");
+                            if let Some(end) = header_end {
+                                let headers = String::from_utf8_lossy(&request_bytes[..end]);
+                                content_length = headers
+                                    .lines()
+                                    .find_map(|line| {
+                                        let (name, value) = line.split_once(':')?;
+                                        name.eq_ignore_ascii_case("Content-Length")
+                                            .then(|| value.trim().parse::<usize>().ok())
+                                            .flatten()
+                                    })
+                                    .unwrap_or(0);
+                            }
+                        }
+
+                        if let Some(end) = header_end {
+                            // Drain POST bodies before replying; some platforms can surface
+                            // client-side read errors when the server responds too early.
+                            if request_bytes.len() >= end + 4 + content_length {
+                                break;
+                            }
+                        }
+                    }
+
+                    let request = String::from_utf8_lossy(&request_bytes);
                     let path = request
                         .lines()
                         .next()
@@ -21674,6 +21711,7 @@ mod tests {
                     stream
                         .write_all(response.as_bytes())
                         .expect("write mock oidc response");
+                    stream.flush().expect("flush mock oidc response");
                 }
             });
             (issuer_url, handle)
