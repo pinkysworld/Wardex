@@ -4,6 +4,7 @@ import * as api from '../api.js';
 import { JsonDetails, SummaryGrid } from './operator.jsx';
 import { useConfirm } from './useConfirm.jsx';
 import { downloadData } from './operatorUtils.js';
+import { formatApiError } from '../utils/errors.js';
 
 const AUDIT_PAGE_SIZE = 25;
 const AUDIT_METHOD_OPTIONS = ['all', 'GET', 'POST', 'PUT', 'DELETE'];
@@ -266,19 +267,6 @@ function parseGroupRoleMappings(value) {
     mappings[group] = role;
   }
   return { mappings, error: null };
-}
-
-function formatApiError(error, fallback) {
-  if (error?.body) {
-    try {
-      const parsed = JSON.parse(error.body);
-      if (typeof parsed?.error === 'string' && parsed.error) return parsed.error;
-    } catch {
-      /* ignore invalid error bodies */
-    }
-  }
-  if (typeof error?.message === 'string' && error.message) return error.message;
-  return fallback;
 }
 
 function createIdpDraft(provider = null) {
