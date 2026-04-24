@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1777026684654,
+  "lastUpdate": 1777034877556,
   "repoUrl": "https://github.com/pinkysworld/Wardex",
   "entries": {
     "Wardex criterion benches": [
@@ -2327,6 +2327,96 @@ window.BENCHMARK_DATA = {
             "name": "sigma_evaluate_20_rules",
             "value": 25458,
             "range": "± 78",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "85413447+pinkysworld@users.noreply.github.com",
+            "name": "pinkysworld",
+            "username": "pinkysworld"
+          },
+          "committer": {
+            "email": "85413447+pinkysworld@users.noreply.github.com",
+            "name": "pinkysworld",
+            "username": "pinkysworld"
+          },
+          "distinct": true,
+          "id": "0cb07af6188a116270a1a74c87ca5678a3955a36",
+          "message": "Implement route-aware console and CI contract updates",
+          "timestamp": "2026-04-24T14:39:18+02:00",
+          "tree_id": "f6f8d4d7032b1cd72660562d4dc27a757a313d06",
+          "url": "https://github.com/pinkysworld/Wardex/commit/0cb07af6188a116270a1a74c87ca5678a3955a36"
+        },
+        "date": 1777034876627,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "full_pipeline/5",
+            "value": 49241,
+            "range": "± 945",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "full_pipeline/50",
+            "value": 415893,
+            "range": "± 10314",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "full_pipeline/200",
+            "value": 1909387,
+            "range": "± 17462",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "full_pipeline/1000",
+            "value": 17400773,
+            "range": "± 392907",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "detector_evaluate_single",
+            "value": 613,
+            "range": "± 18",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "policy_evaluate_single",
+            "value": 244,
+            "range": "± 0",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "throughput/1000_samples",
+            "value": 17576590,
+            "range": "± 235182",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "search_500_events",
+            "value": 108874,
+            "range": "± 558",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "hunt_field_query",
+            "value": 94217,
+            "range": "± 243",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "ml_triage_rf",
+            "value": 55,
+            "range": "± 1",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "sigma_evaluate_20_rules",
+            "value": 30462,
+            "range": "± 1260",
             "unit": "ns/iter"
           }
         ]
