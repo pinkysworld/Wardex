@@ -361,14 +361,14 @@ export default function ReportsExports() {
         scope: 'scoped',
       }
     : {};
-  const { data: runData, reload: reloadRuns } = useApi(
-    () => api.reportRuns(scopedHistoryQuery),
+  const { data: reportHistoryData, reload: reloadReportHistory } = useApiGroup(
+    {
+      runData: () => api.reportRuns(scopedHistoryQuery),
+      scheduleData: () => api.reportSchedules(scopedHistoryQuery),
+    },
     [activeCaseId, activeIncidentId, activeInvestigationId, activeSource],
   );
-  const { data: scheduleData, reload: reloadSchedules } = useApi(
-    () => api.reportSchedules(scopedHistoryQuery),
-    [activeCaseId, activeIncidentId, activeInvestigationId, activeSource],
-  );
+  const { runData, scheduleData } = reportHistoryData;
   const { data: caseList } = useApi(api.cases);
   const { data: incidentDetail } = useApi(
     () => api.incidentById(activeIncidentId),
@@ -754,7 +754,7 @@ export default function ReportsExports() {
         ...activeExecutionContext,
       });
       toast('Report run created.', 'success');
-      reloadRuns();
+      reloadReportHistory();
       reloadTemplates();
       switchTab('runs');
     } catch {
@@ -799,7 +799,7 @@ export default function ReportsExports() {
         ...activeExecutionContext,
       });
       toast('Schedule saved.', 'success');
-      reloadSchedules();
+      reloadReportHistory();
     } catch {
       toast('Unable to save schedule.', 'error');
     }
@@ -817,7 +817,7 @@ export default function ReportsExports() {
         ...(run.execution_context || activeExecutionContext),
       });
       toast('Run queued again.', 'success');
-      reloadRuns();
+      reloadReportHistory();
     } catch {
       toast('Unable to rerun report.', 'error');
     }
@@ -865,7 +865,7 @@ export default function ReportsExports() {
         preview_override: previewOverride,
         ...activeExecutionContext,
       });
-      reloadRuns();
+      reloadReportHistory();
       reloadArtifactReports();
       setArtifactScopeFilter('current');
       toast('Legacy report republished into the scoped artifact library.', 'success');
@@ -937,7 +937,7 @@ export default function ReportsExports() {
         },
         ...activeExecutionContext,
       });
-      reloadRuns();
+      reloadReportHistory();
       if (hasActiveScope) setArtifactScopeFilter('current');
       toast('Artifact saved to report run history.', 'success');
     } catch {
@@ -1093,7 +1093,7 @@ export default function ReportsExports() {
         },
         ...activeExecutionContext,
       });
-      reloadRuns();
+      reloadReportHistory();
       if (hasActiveScope) setArtifactScopeFilter('current');
       toast(`Alert export saved to run history in ${activeAlertExport.label}.`, 'success');
     } catch {
@@ -1141,7 +1141,7 @@ export default function ReportsExports() {
         },
         ...activeExecutionContext,
       });
-      reloadRuns();
+      reloadReportHistory();
       if (hasActiveScope) setArtifactScopeFilter('current');
       toast('Audit export saved to run history.', 'success');
     } catch {
@@ -1578,7 +1578,7 @@ export default function ReportsExports() {
           <div className="card" style={{ marginBottom: 16 }}>
             <div className="card-header">
               <span className="card-title">Run History</span>
-              <button className="btn btn-sm" onClick={reloadRuns}>
+              <button className="btn btn-sm" onClick={reloadReportHistory}>
                 Refresh
               </button>
             </div>

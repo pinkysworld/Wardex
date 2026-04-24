@@ -925,6 +925,47 @@ describe('ReportsExports', () => {
     });
   });
 
+  it('refreshes grouped report history data from the runs workspace', async () => {
+    const callCounts = {
+      reportRuns: 0,
+      reportSchedules: 0,
+    };
+    const defaultImplementation = globalThis.fetch.getMockImplementation();
+
+    globalThis.fetch.mockImplementation(async (url, options = {}) => {
+      const parsed = new URL(String(url), 'http://localhost');
+      const { pathname } = parsed;
+
+      if (pathname === '/api/report-runs') {
+        callCounts.reportRuns += 1;
+      }
+      if (pathname === '/api/report-schedules') {
+        callCounts.reportSchedules += 1;
+      }
+
+      return defaultImplementation(url, options);
+    });
+
+    renderWithProviders('/reports?tab=runs');
+
+    const runHistoryCard = (await screen.findByText('Run History')).closest('.card');
+    expect(runHistoryCard).toBeTruthy();
+
+    await waitFor(() => {
+      expect(callCounts.reportRuns).toBeGreaterThan(0);
+      expect(callCounts.reportSchedules).toBeGreaterThan(0);
+    });
+
+    const initialCounts = { ...callCounts };
+
+    fireEvent.click(within(runHistoryCard).getByRole('button', { name: 'Refresh' }));
+
+    await waitFor(() => {
+      expect(callCounts.reportRuns).toBe(initialCounts.reportRuns + 1);
+      expect(callCounts.reportSchedules).toBe(initialCounts.reportSchedules + 1);
+    });
+  });
+
   it('keeps case and investigation handoff context attached to the reporting workspace', async () => {
     renderWithProviders('/reports?tab=evidence&case=42&incident=7&investigation=inv-7&source=case');
 
