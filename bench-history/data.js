@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1777022616974,
+  "lastUpdate": 1777026684654,
   "repoUrl": "https://github.com/pinkysworld/Wardex",
   "entries": {
     "Wardex criterion benches": [
@@ -2237,6 +2237,96 @@ window.BENCHMARK_DATA = {
             "name": "sigma_evaluate_20_rules",
             "value": 25520,
             "range": "± 348",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "85413447+pinkysworld@users.noreply.github.com",
+            "name": "pinkysworld",
+            "username": "pinkysworld"
+          },
+          "committer": {
+            "email": "85413447+pinkysworld@users.noreply.github.com",
+            "name": "pinkysworld",
+            "username": "pinkysworld"
+          },
+          "distinct": true,
+          "id": "a9be2dd4fd103dc740f1847560f48d060cf40bbf",
+          "message": "fix: restore ci lanes after v0.53.5",
+          "timestamp": "2026-04-24T12:25:12+02:00",
+          "tree_id": "ce5a17cb682f4487e5da77c4ab27bb8cffb8e1a4",
+          "url": "https://github.com/pinkysworld/Wardex/commit/a9be2dd4fd103dc740f1847560f48d060cf40bbf"
+        },
+        "date": 1777026683730,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "full_pipeline/5",
+            "value": 37402,
+            "range": "± 906",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "full_pipeline/50",
+            "value": 321545,
+            "range": "± 29021",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "full_pipeline/200",
+            "value": 1475931,
+            "range": "± 33603",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "full_pipeline/1000",
+            "value": 14486553,
+            "range": "± 197049",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "detector_evaluate_single",
+            "value": 486,
+            "range": "± 10",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "policy_evaluate_single",
+            "value": 201,
+            "range": "± 0",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "throughput/1000_samples",
+            "value": 14276443,
+            "range": "± 269640",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "search_500_events",
+            "value": 82543,
+            "range": "± 250",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "hunt_field_query",
+            "value": 69735,
+            "range": "± 6934",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "ml_triage_rf",
+            "value": 39,
+            "range": "± 0",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "sigma_evaluate_20_rules",
+            "value": 25458,
+            "range": "± 78",
             "unit": "ns/iter"
           }
         ]
