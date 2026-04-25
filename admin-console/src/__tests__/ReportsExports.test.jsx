@@ -756,7 +756,7 @@ describe('ReportsExports', () => {
       );
     });
 
-    fireEvent.click(screen.getByRole('button', { name: 'Runs' }));
+    fireEvent.click(screen.getByRole('tab', { name: 'Runs' }));
     const runHistoryCard = screen.getByText('Run History').closest('.card');
     expect(runHistoryCard).toBeTruthy();
     const artifactRow = (
@@ -1096,7 +1096,7 @@ describe('ReportsExports', () => {
       '/assistant?case=42&incident=7&investigation=inv-7&source=case',
     );
 
-    fireEvent.click(screen.getByRole('button', { name: 'Delivery' }));
+    fireEvent.click(screen.getByRole('tab', { name: 'Delivery' }));
 
     expect(await screen.findByText('Create Delivery Schedule')).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Open Case Drawer' })).toHaveAttribute(
@@ -1170,7 +1170,7 @@ describe('ReportsExports', () => {
       );
     });
 
-    fireEvent.click(screen.getByRole('button', { name: 'Delivery' }));
+    fireEvent.click(screen.getByRole('tab', { name: 'Delivery' }));
     expect(await screen.findByText('Create Delivery Schedule')).toBeInTheDocument();
     fireEvent.click(screen.getByText('Save Schedule'));
 
@@ -1242,7 +1242,7 @@ describe('ReportsExports', () => {
       ).toBe(true);
     });
 
-    fireEvent.click(screen.getByRole('button', { name: 'Delivery' }));
+    fireEvent.click(screen.getByRole('tab', { name: 'Delivery' }));
     expect(await screen.findByText('Delivery History')).toBeInTheDocument();
     const deliveryHistoryCard = screen.getByText('Delivery History').closest('.card');
     expect(deliveryHistoryCard).toBeTruthy();

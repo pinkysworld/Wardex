@@ -1155,7 +1155,7 @@ describe('Settings', () => {
       </ToastProvider>,
     );
 
-    await user.click(screen.getByRole('button', { name: 'Admin' }));
+    await user.click(screen.getByRole('tab', { name: 'Admin' }));
 
     expect(await screen.findByText('API Audit Trail')).toBeInTheDocument();
     expect(await screen.findByText('/api/platform')).toBeInTheDocument();
@@ -1191,7 +1191,7 @@ describe('Settings', () => {
       </ToastProvider>,
     );
 
-    await user.click(screen.getByRole('button', { name: 'Admin' }));
+    await user.click(screen.getByRole('tab', { name: 'Admin' }));
     await screen.findByText('API Audit Trail');
 
     await user.type(screen.getByLabelText('Search'), 'alerts');
@@ -1226,7 +1226,7 @@ describe('Settings', () => {
       </ToastProvider>,
     );
 
-    await user.click(screen.getByRole('button', { name: 'Integrations' }));
+    await user.click(screen.getByRole('tab', { name: 'Integrations' }));
 
     const idpCard = (await screen.findByText('IdP Providers')).closest('.card');
     expect(idpCard).not.toBeNull();
@@ -1297,7 +1297,7 @@ describe('Settings', () => {
       </ToastProvider>,
     );
 
-    await user.click(screen.getByRole('button', { name: 'Integrations' }));
+    await user.click(screen.getByRole('tab', { name: 'Integrations' }));
     await screen.findByText('IdP Providers');
 
     await user.click(screen.getByRole('button', { name: 'Edit Provider' }));
@@ -1369,7 +1369,7 @@ describe('Settings', () => {
       </ToastProvider>,
     );
 
-    await user.click(screen.getByRole('button', { name: 'Admin' }));
+    await user.click(screen.getByRole('tab', { name: 'Admin' }));
     expect(await screen.findByText('Long-Retention History')).toBeInTheDocument();
 
     const auditRecordsInput = screen.getByLabelText('Audit Records');
@@ -1423,7 +1423,7 @@ describe('Settings', () => {
       </ToastProvider>,
     );
 
-    await user.click(screen.getByRole('button', { name: 'Admin' }));
+    await user.click(screen.getByRole('tab', { name: 'Admin' }));
     expect(await screen.findByText('Long-Retention History')).toBeInTheDocument();
 
     const countGetCalls = (pathname, matches = () => true) =>
@@ -1480,7 +1480,7 @@ describe('Settings', () => {
       </ToastProvider>,
     );
 
-    await user.click(screen.getByRole('button', { name: 'Integrations' }));
+    await user.click(screen.getByRole('tab', { name: 'Integrations' }));
     expect(await screen.findByText('Cloud Collectors & Secrets')).toBeInTheDocument();
 
     const siemEndpointInput = screen.getByLabelText('SIEM Endpoint');

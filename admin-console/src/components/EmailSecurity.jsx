@@ -85,7 +85,11 @@ export default function EmailSecurity() {
       </div>
 
       {/* Tab Bar */}
-      <div style={{ display: 'flex', gap: 4, borderBottom: '2px solid var(--border)' }}>
+      <div
+        style={{ display: 'flex', gap: 4, borderBottom: '2px solid var(--border)' }}
+        role="tablist"
+        aria-label="Email security sections"
+      >
         {['quarantine', 'analyze', 'policies'].map((t) => (
           <button
             key={t}

@@ -359,6 +359,8 @@ export default function NDRDashboard() {
           borderBottom: '2px solid var(--border)',
           paddingBottom: 0,
         }}
+        role="tablist"
+        aria-label="NDR sections"
       >
         {tabs.map((t) => (
           <button

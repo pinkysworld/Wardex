@@ -1294,12 +1294,14 @@ export default function ReportsExports() {
 
   return (
     <div>
-      <div className="tabs">
+      <div className="tabs" role="tablist" aria-label="Reports & exports sections">
         {TABS.map((tab) => (
           <button
             key={tab}
             className={`tab ${activeTab === tab ? 'active' : ''}`}
             onClick={() => switchTab(tab)}
+            role="tab"
+            aria-selected={activeTab === tab}
           >
             {TAB_LABELS[tab]}
           </button>

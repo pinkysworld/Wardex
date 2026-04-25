@@ -1802,9 +1802,15 @@ export default function Settings() {
 
   return (
     <div>
-      <div className="tabs">
+      <div className="tabs" role="tablist" aria-label="Settings sections">
         {['config', 'monitoring', 'integrations', 'flags', 'team', 'admin'].map((t) => (
-          <button key={t} className={`tab ${tab === t ? 'active' : ''}`} onClick={() => setTab(t)}>
+          <button
+            key={t}
+            className={`tab ${tab === t ? 'active' : ''}`}
+            onClick={() => setTab(t)}
+            role="tab"
+            aria-selected={tab === t}
+          >
             {t.charAt(0).toUpperCase() + t.slice(1)}
           </button>
         ))}

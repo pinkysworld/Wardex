@@ -619,12 +619,19 @@ export default function Infrastructure() {
 
   return (
     <div>
-      <div className="tabs" style={{ flexWrap: 'wrap' }}>
+      <div
+        className="tabs"
+        role="tablist"
+        aria-label="Infrastructure sections"
+        style={{ flexWrap: 'wrap' }}
+      >
         {TABS.map((tab) => (
           <button
             key={tab}
             className={`tab ${activeTab === tab ? 'active' : ''}`}
             onClick={() => updateParams({ tab })}
+            role="tab"
+            aria-selected={activeTab === tab}
           >
             {tab.charAt(0).toUpperCase() + tab.slice(1)}
           </button>
