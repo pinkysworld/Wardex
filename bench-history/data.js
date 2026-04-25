@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1777092416818,
+  "lastUpdate": 1777114552046,
   "repoUrl": "https://github.com/pinkysworld/Wardex",
   "entries": {
     "Wardex criterion benches": [
@@ -2685,6 +2685,96 @@ window.BENCHMARK_DATA = {
             "name": "sigma_evaluate_20_rules",
             "value": 36448,
             "range": "± 234",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "85413447+pinkysworld@users.noreply.github.com",
+            "name": "pinkysworld",
+            "username": "pinkysworld"
+          },
+          "committer": {
+            "email": "85413447+pinkysworld@users.noreply.github.com",
+            "name": "pinkysworld",
+            "username": "pinkysworld"
+          },
+          "distinct": true,
+          "id": "73b61fae29650283257a27231940b09716e14f89",
+          "message": "Release v0.53.6 — admin-console quality sweep & panic-policy guard",
+          "timestamp": "2026-04-25T12:47:31+02:00",
+          "tree_id": "3d299ab121f2e67c32e85e6a078df0ce60670c93",
+          "url": "https://github.com/pinkysworld/Wardex/commit/73b61fae29650283257a27231940b09716e14f89"
+        },
+        "date": 1777114551743,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "full_pipeline/5",
+            "value": 49307,
+            "range": "± 1038",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "full_pipeline/50",
+            "value": 420955,
+            "range": "± 4636",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "full_pipeline/200",
+            "value": 1943172,
+            "range": "± 16674",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "full_pipeline/1000",
+            "value": 18051972,
+            "range": "± 365693",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "detector_evaluate_single",
+            "value": 608,
+            "range": "± 1",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "policy_evaluate_single",
+            "value": 235,
+            "range": "± 0",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "throughput/1000_samples",
+            "value": 18058790,
+            "range": "± 164022",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "search_500_events",
+            "value": 107651,
+            "range": "± 368",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "hunt_field_query",
+            "value": 88065,
+            "range": "± 1817",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "ml_triage_rf",
+            "value": 51,
+            "range": "± 0",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "sigma_evaluate_20_rules",
+            "value": 32848,
+            "range": "± 195",
             "unit": "ns/iter"
           }
         ]
