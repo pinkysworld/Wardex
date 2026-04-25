@@ -7,7 +7,7 @@ import {
   validationStatusLabel,
 } from './helpers.js';
 
-export function CollectorTimelineList({ timeline }) {
+function CollectorTimelineList({ timeline }) {
   if (!Array.isArray(timeline) || timeline.length === 0) return null;
   return (
     <div style={{ display: 'grid', gap: 8, marginTop: 10 }}>
