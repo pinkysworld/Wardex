@@ -37,6 +37,25 @@ export default defineConfig({
     setupFiles: ['./src/__tests__/setup.js'],
     include: ['src/**/*.test.{js,jsx}'],
     css: false,
+    testTimeout: 30000,
+    hookTimeout: 30000,
+    coverage: {
+      provider: 'v8',
+      reporter: ['text', 'json-summary', 'html'],
+      include: ['src/**/*.{js,jsx}'],
+      exclude: [
+        'src/**/*.test.{js,jsx}',
+        'src/__tests__/**',
+        'src/main.jsx',
+        'src/api.js',
+      ],
+      thresholds: {
+        statements: 60,
+        branches: 55,
+        functions: 55,
+        lines: 60,
+      },
+    },
   },
   server: {
     port: 5173,

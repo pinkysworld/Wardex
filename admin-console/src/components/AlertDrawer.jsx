@@ -123,6 +123,7 @@ export default function AlertDrawer({
   useEffect(() => {
     let cancelled = false;
     if (!alert) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setExplainData(null);
       setExplainLoading(false);
       return undefined;

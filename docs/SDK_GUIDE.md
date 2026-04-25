@@ -117,4 +117,4 @@ The full API is documented at `docs/openapi.yaml`. Key areas include:
 | Feature flags     | `/api/feature-flags/*`                 |
 | Health            | `/api/healthz/*`, `/api/status-json`   |
 
-Recent 0.53.6 additions reflected in the generated SDKs include the same surface as 0.53.5 (replay-corpus platform/signal-type delta breakdowns, enriched collector-status timeline metadata, detection feedback and explainability responses, campaign correlation, onboarding-readiness and manager queue-digest models, threat-intel `v2` library and sightings endpoints, deep malware scan `v2` profiles, and execution-context-aware reporting endpoints). The 0.53.6 release is admin-console scoped — no API surface changes.
+Recent 0.53.7 additions reflected in the generated SDKs include the same surface as 0.53.6 — no API surface changes. The 0.53.7 release is admin-console and CI-quality scoped (zero-warnings ESLint, vitest coverage gate, knip dead-code gate, panic-policy baseline lowered to 6, and continued empty-state primitive migration).

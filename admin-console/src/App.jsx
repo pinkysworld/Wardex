@@ -252,11 +252,6 @@ export default function App() {
   const showTopbarActions = showTopbarActionsLocationKey === location.key;
 
   useEffect(() => {
-    setShowInboxLocationKey(null);
-    setShowTopbarActionsLocationKey(null);
-  }, [location.key]);
-
-  useEffect(() => {
     pinnedSectionsRef.current = pinnedSections;
   }, [pinnedSections]);
 
@@ -287,6 +282,9 @@ export default function App() {
     const params = new URLSearchParams(location.search);
     const error = params.get('sso_error');
     if (error) {
+      // SSO redirect surfaces auth errors via URL params; mirroring into state
+      // is the only way to display them in the auth form below.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setAuthError(error);
     }
   }, [authenticated, location.search]);

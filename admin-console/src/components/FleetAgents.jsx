@@ -2,7 +2,7 @@ import { useState, useMemo, useCallback, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useApi, useApiGroup, useInterval, useToast } from '../hooks.jsx';
 import * as api from '../api.js';
-import { ConfirmDialog, JsonDetails, SummaryGrid } from './operator.jsx';
+import { ConfirmDialog, JsonDetails, SummaryGrid, WorkspaceEmptyState } from './operator.jsx';
 import EmptyState from './EmptyState.jsx';
 import { formatDateTime, formatRelativeTime } from './operatorUtils.js';
 import LocalConsoleInventory from './LocalConsoleInventory.jsx';
@@ -1013,7 +1013,7 @@ export default function FleetAgents() {
             </div>
           )}
           {eventArr.length === 0 ? (
-            <div className="empty">No events</div>
+            <WorkspaceEmptyState compact description="No events" />
           ) : (
             <div className="table-wrap">
               <table>

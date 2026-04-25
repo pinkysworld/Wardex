@@ -324,6 +324,16 @@ This backlog lists the next concrete tasks in build order.
 - [x] T265: Run a `knip` dead-code audit and remove three unused admin-console files and two over-exported helpers.
 - [x] T266: Refresh README, STATUS, ROADMAP, REPRODUCIBILITY, installation runbook, OpenAPI metadata, helm and otlp manifests, SDK notes, website footers, and version metadata for `v0.53.6`.
 
+## Phase 38 — Lint, coverage, knip & panic-policy tightening
+
+- [x] T267: Resolve the 11 long-standing `react-hooks/exhaustive-deps` and `react-hooks/set-state-in-effect` warnings in NDR Dashboard, Onboarding wizard, App.jsx, and AlertDrawer.
+- [x] T268: Tighten the admin-console lint script to `--max-warnings=0` so new warnings cannot land.
+- [x] T269: Add a vitest v8 coverage gate with global thresholds (statements ≥ 60, branches ≥ 55, functions ≥ 55, lines ≥ 60) and wire it into CI.
+- [x] T270: Install `knip`, add `admin-console/knip.json`, expose `npm run knip`, wire it into CI, and remove the dead `useDraftAutosave` hook plus the over-exported `LOCAL_AGENT` test fixture.
+- [x] T271: Lower the panic-policy baseline from 19 to 6 by replacing `unwrap`/`expect` calls in `event_forward.rs`, `incident.rs`, `lateral.rs`, `feed_ingestion.rs`, `oidc.rs`, and `benchmark.rs` with `let-else` / `match` / `ok_or_else?` patterns.
+- [x] T272: Continue the `WorkspaceEmptyState` migration into Assistant Workspace (5 sites), Fleet Agents, and Threat Detection rule list / detail.
+- [x] T273: Refresh release docs, OpenAPI metadata, helm/otlp values, status, roadmap, SDK notes, and website surfaces for `v0.53.7`.
+
 ## Recommended next build order
 
 Phases 0–36 are complete. Routed browser regression coverage, the repeatable release-acceptance gate, admin-console API contract audit, entity-centric explainability, campaign clustering, replay-corpus promotion gates, replay delta analysis, collector ingestion timelines, and expanded live workflow smoke coverage are all in place.

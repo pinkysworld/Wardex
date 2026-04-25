@@ -389,52 +389,6 @@ export function useInterval(callback, delayMs) {
   }, [delayMs]);
 }
 
-// ── useDraftAutosave hook ────────────────────────────────────
-
-/**
- * Persist draft state to localStorage with debounced writes.
- * @param {string} key - Unique storage key (prefixed with `wardex_draft_`)
- * @param {*} initialValue - Default value if no draft exists
- * @returns {[value, setValue, clearDraft]}
- */
-export function useDraftAutosave(key, initialValue) {
-  const storageKey = `wardex_draft_${key}`;
-  const [value, setValue] = useState(() => {
-    try {
-      const saved = localStorage.getItem(storageKey);
-      return saved ? JSON.parse(saved) : initialValue;
-    } catch {
-      return initialValue;
-    }
-  });
-  const timerRef = useRef(null);
-
-  useEffect(() => {
-    if (timerRef.current) clearTimeout(timerRef.current);
-    timerRef.current = setTimeout(() => {
-      try {
-        if (value === initialValue || value === null || value === undefined) {
-          localStorage.removeItem(storageKey);
-        } else {
-          localStorage.setItem(storageKey, JSON.stringify(value));
-        }
-      } catch {
-        /* quota exceeded — ignore */
-      }
-    }, 500);
-    return () => {
-      if (timerRef.current) clearTimeout(timerRef.current);
-    };
-  }, [value, storageKey, initialValue]);
-
-  const clearDraft = useCallback(() => {
-    localStorage.removeItem(storageKey);
-    setValue(initialValue);
-  }, [storageKey, initialValue]);
-
-  return [value, setValue, clearDraft];
-}
-
 // ── useWebSocket hook (long-poll fallback) ───────────────────
 
 /**

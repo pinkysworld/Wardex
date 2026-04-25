@@ -252,9 +252,10 @@ impl LateralMovementDetector {
                             // Sequential compromise: all hops within 10 minutes
                             let timestamps: Vec<u64> =
                                 new_hops.iter().map(|h| h.timestamp_ms).collect();
-                            if timestamps.len() >= 2 {
-                                let span = timestamps.iter().max().unwrap()
-                                    - timestamps.iter().min().unwrap();
+                            if let (Some(min), Some(max)) =
+                                (timestamps.iter().min(), timestamps.iter().max())
+                            {
+                                let span = max - min;
                                 if span < 600_000 {
                                     patterns.push(LateralPattern::SequentialCompromise);
                                 }
@@ -271,10 +272,10 @@ impl LateralMovementDetector {
                             patterns.sort_by_key(|p| format!("{p:?}"));
                             patterns.dedup();
 
-                            let duration = if timestamps.is_empty() {
-                                0
-                            } else {
-                                timestamps.iter().max().unwrap() - timestamps.iter().min().unwrap()
+                            let duration = match (timestamps.iter().min(), timestamps.iter().max())
+                            {
+                                (Some(min), Some(max)) => max - min,
+                                _ => 0,
                             };
 
                             let base_risk = new_hops.len() as f32 * 15.0;

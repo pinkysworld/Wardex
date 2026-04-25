@@ -2,7 +2,7 @@
 
 ## Current release
 
-- **Version:** `0.53.6`
+- **Version:** `0.53.7`
 - **Positioning:** private-cloud XDR and SIEM platform with enterprise detection engineering, malware scanning, analyst workflows, fleet operations, behavioural analytics, and automated incident response
 - **Source footprint:** 139 Rust source modules
 - **API contract:** versioned OpenAPI surface with REST, GraphQL, live `/api/openapi.json` export, and generated SDK parity diagnostics that surface alignment drift directly in the operator console
@@ -98,6 +98,14 @@ The current release has been verified with:
 ## Current product posture
 
 Wardex is now positioned as a professional XDR/SIEM control plane with incident-first analyst workflows, explainable detections, and context-preserving reporting. The runtime, admin console, release process, and website are aligned around operator trust, workflow closure, and deployment readiness.
+
+## Recently shipped (v0.53.7)
+
+- **Zero-warnings ESLint gate** — all 11 long-standing `react-hooks` warnings (NDR Dashboard derived arrays, Onboarding wizard checklist, App.jsx redundant location-key reset effect, AlertDrawer / SSO error mirroring) are resolved or surgically annotated, and `npm run lint` runs with `--max-warnings=0` to block regressions.
+- **Vitest coverage gate** — a v8-backed coverage report runs in CI with global thresholds (statements ≥ 60, branches ≥ 55, functions ≥ 55, lines ≥ 60) so coverage cannot silently regress.
+- **Knip dead-code gate** — `knip` is installed, configured, and wired into CI as `npm run knip`; `useDraftAutosave` and the over-exported `LOCAL_AGENT` test fixture were removed in the same pass.
+- **Panic-policy baseline lowered 19 → 6** — 13 production `unwrap`/`expect` calls in `event_forward.rs`, `incident.rs`, `lateral.rs`, `feed_ingestion.rs`, `oidc.rs`, and `benchmark.rs` were replaced with `let-else` / `match` / `ok_or_else?` patterns, and the panic-policy floor was ratcheted down accordingly.
+- **Empty-state migration continues** — Assistant Workspace (5 sites), FleetAgents (1), and ThreatDetection rule list / detail (2) now use `WorkspaceEmptyState` for consistent `role="status"` semantics.
 
 ## Recently shipped (v0.53.6)
 

@@ -47,19 +47,27 @@ export default function NDRDashboard() {
   useInterval(reload, 30000);
 
   const r = report || {};
-  const topTalkers = r.top_talkers || [];
-  const unusualDests = r.unusual_destinations || [];
+  const topTalkers = useMemo(() => r.top_talkers || [], [r.top_talkers]);
+  const unusualDests = useMemo(() => r.unusual_destinations || [], [r.unusual_destinations]);
   const protoAnomalies = r.protocol_anomalies || [];
   const encStats = r.encrypted_traffic || {};
-  const tlsList = Array.isArray(tlsAnomalies)
-    ? tlsAnomalies
-    : tlsAnomalies?.items || r.tls_anomalies || [];
-  const dpiList = Array.isArray(dpiAnomalies)
-    ? dpiAnomalies
-    : dpiAnomalies?.items || r.dpi_anomalies || [];
-  const entropyList = r.entropy_anomalies || [];
-  const beaconingList = r.beaconing_anomalies || [];
-  const selfSignedList = r.self_signed_certs || [];
+  const tlsList = useMemo(
+    () =>
+      Array.isArray(tlsAnomalies)
+        ? tlsAnomalies
+        : tlsAnomalies?.items || r.tls_anomalies || [],
+    [tlsAnomalies, r.tls_anomalies],
+  );
+  const dpiList = useMemo(
+    () =>
+      Array.isArray(dpiAnomalies)
+        ? dpiAnomalies
+        : dpiAnomalies?.items || r.dpi_anomalies || [],
+    [dpiAnomalies, r.dpi_anomalies],
+  );
+  const entropyList = useMemo(() => r.entropy_anomalies || [], [r.entropy_anomalies]);
+  const beaconingList = useMemo(() => r.beaconing_anomalies || [], [r.beaconing_anomalies]);
+  const selfSignedList = useMemo(() => r.self_signed_certs || [], [r.self_signed_certs]);
 
   const tabs = [
     { id: 'overview', label: 'Overview' },

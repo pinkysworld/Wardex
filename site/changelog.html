@@ -88,6 +88,11 @@
           </div>
           <div class="start-grid">
             <article class="start-card">
+              <p class="label">v0.53.7</p>
+              <h3>Lint, coverage, knip and panic-policy tightening.</h3>
+              <p>Cleared the last 11 admin-console <code>react-hooks</code> warnings and locked lint to <code>--max-warnings=0</code>, added a vitest v8 coverage gate with global thresholds, wired <code>knip</code> dead-code auditing into CI, lowered the production <code>unwrap</code>/<code>expect</code> baseline from 19 to 6, and migrated more workspaces to the shared empty-state primitive.</p>
+            </article>
+            <article class="start-card">
               <p class="label">v0.53.6</p>
               <h3>Admin-console quality sweep and panic-policy guard.</h3>
               <p>Centralized API error formatting, surfaced backend <code>X-Request-Id</code> on operator failures, added reusable empty/error workspace primitives, brought tablist semantics to five workspaces, split <code>Settings.jsx</code> into helpers and widgets, removed three dead files, and added a CI guard that blocks regressions in non-test <code>unwrap</code>/<code>expect</code> density.</p>
@@ -96,11 +101,6 @@
               <p class="label">v0.53.5</p>
               <h3>Replay drift, collector timelines, and broader release gate.</h3>
               <p>Added platform and signal-type delta breakdowns to the replay-corpus gate, staged ingestion-health timelines for cloud, identity, and SaaS collectors, and broader live Playwright smoke coverage across response, fleet rollout, collector health, and infrastructure remediation workflows.</p>
-            </article>
-            <article class="start-card">
-              <p class="label">v0.53.4</p>
-              <h3>Detection quality, campaign intelligence, and operator closure.</h3>
-              <p>Shipped route-backed detection drilldowns, campaign correlation, replay-corpus acceptance gate, federated SSO readiness, SaaS collector closure, UEBA / NDR / infrastructure response playbooks, and route-backed reporting handoffs.</p>
             </article>
           </div>
         </div>
@@ -135,7 +135,7 @@
             <div class="footer-col footer-about">
               <span class="nav-logo footer-logo">WX</span>
               <p>Private-cloud XDR &amp; SIEM built in Rust. One binary. Full data sovereignty.</p>
-              <p class="footer-version"><span id="footer-version">v0.53.6</span> · BSL 1.1</p>
+              <p class="footer-version"><span id="footer-version">v0.53.7</span> · BSL 1.1</p>
             </div>
             <div class="footer-col">
               <h4>Product</h4>

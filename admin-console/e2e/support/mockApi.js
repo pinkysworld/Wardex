@@ -5,7 +5,7 @@ export const VERSION = '0.53.0';
 
 const NOW = '2026-04-20T06:27:45.809Z';
 
-export const LOCAL_AGENT = {
+const LOCAL_AGENT = {
   id: 'local-console',
   hostname: 'playwright-host.local',
   platform: 'macOS',

@@ -1,0 +1,7 @@
+{
+  "$schema": "https://unpkg.com/knip@5/schema.json",
+  "entry": ["e2e/**/*.spec.js"],
+  "project": ["src/**/*.{js,jsx}", "e2e/**/*.{js,jsx}"],
+  "ignore": ["src/api.js"],
+  "ignoreDependencies": ["axe-core", "playwright"]
+}

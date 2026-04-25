@@ -2,7 +2,7 @@
 
 ## Current release baseline
 
-`v0.53.6` delivers the current private-cloud XDR and SIEM control-plane baseline:
+`v0.53.7` delivers the current private-cloud XDR and SIEM control-plane baseline:
 
 - SOC Workbench for queue, cases, investigations, guided workflows, response approvals, escalation management, and incident-first case/incident drawers
 - Analyst Assistant for case-aware questions, citations, ticket-sync pivots, and investigation-scope handoffs inside analyst workflows
@@ -51,7 +51,7 @@
 
 ## Success criteria
 
-| Metric | Current (`v0.53.6`) | Target |
+| Metric | Current (`v0.53.7`) | Target |
 |---|---|---|
 | Automated tests | 1272 lib + 190 integration + focused browser/admin regressions | maintained and expanded on every release |
 | OpenAPI and SDK contract | versioned OpenAPI plus generated Python and TypeScript SDKs | kept in lockstep on every release |

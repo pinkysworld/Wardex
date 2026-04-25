@@ -231,8 +231,11 @@ impl IncidentStore {
             if timestamps.len() < 2 {
                 continue;
             }
-            let min_ts = timestamps.iter().min().unwrap();
-            let max_ts = timestamps.iter().max().unwrap();
+            let (Some(min_ts), Some(max_ts)) =
+                (timestamps.iter().min(), timestamps.iter().max())
+            else {
+                continue;
+            };
             let span = max_ts.signed_duration_since(*min_ts);
             if span.num_seconds() > 300 {
                 continue;
@@ -321,8 +324,11 @@ impl IncidentStore {
             if timestamps.len() < 2 {
                 continue;
             }
-            let min_ts = timestamps.iter().min().unwrap();
-            let max_ts = timestamps.iter().max().unwrap();
+            let (Some(min_ts), Some(max_ts)) =
+                (timestamps.iter().min(), timestamps.iter().max())
+            else {
+                continue;
+            };
             if max_ts.signed_duration_since(*min_ts).num_seconds() > 120 {
                 continue;
             }

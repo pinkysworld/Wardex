@@ -236,8 +236,10 @@ jobs:
         run: npm run lint
       - name: Format check
         run: npm run format:check
+      - name: Dead-code audit (knip)
+        run: npm run knip
       - name: Unit tests
-        run: npm test -- --run
+        run: npm test -- --run --coverage
       - name: Audit dependencies
         run: npm audit --audit-level=high
       - name: Install Playwright browsers

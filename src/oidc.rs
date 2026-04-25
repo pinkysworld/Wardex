@@ -191,7 +191,9 @@ impl OidcProvider {
             .into_json()
             .map_err(|e| format!("OIDC discovery parse failed: {e}"))?;
         self.discovery = Some(discovery);
-        Ok(self.discovery.as_ref().unwrap())
+        self.discovery
+            .as_ref()
+            .ok_or_else(|| "OIDC discovery state missing after assignment".to_string())
     }
 
     /// Generate an authorization URL for the user to visit.

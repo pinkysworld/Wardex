@@ -73,7 +73,10 @@ export default function OnboardingWizard({ onComplete }) {
     }, {});
   }, [readiness]);
 
-  const readinessItem = (key, fallbackLabel) => readinessChecks[key] || { label: fallbackLabel };
+  const readinessItem = useCallback(
+    (key, fallbackLabel) => readinessChecks[key] || { label: fallbackLabel },
+    [readinessChecks],
+  );
 
   const checklist = useMemo(
     () => [
@@ -189,7 +192,7 @@ export default function OnboardingWizard({ onComplete }) {
         busy: readinessCheck.busy,
       },
     ],
-    [readinessCheck.busy, readinessChecks, refreshReadiness, role, token, tokenCheck],
+    [readinessCheck.busy, readinessItem, refreshReadiness, role, token, tokenCheck],
   );
 
   const completedCount = checklist.filter((item) => item.complete).length;

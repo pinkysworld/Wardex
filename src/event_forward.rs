@@ -397,8 +397,12 @@ impl EventStore {
                 continue;
             }
 
-            let min_ts = timestamps.iter().map(|t| t.1).min().unwrap();
-            let max_ts = timestamps.iter().map(|t| t.1).max().unwrap();
+            let (Some(min_ts), Some(max_ts)) = (
+                timestamps.iter().map(|t| t.1).min(),
+                timestamps.iter().map(|t| t.1).max(),
+            ) else {
+                continue;
+            };
 
             if max_ts - min_ts <= window {
                 let correlated_agents: Vec<String> = agent_groups.keys().cloned().collect();

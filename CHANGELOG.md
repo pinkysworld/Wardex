@@ -4,6 +4,24 @@ All notable changes to Wardex are documented in this file.
 
 ## [Unreleased]
 
+## [0.53.7] — Lint, Coverage & Panic-Policy Tightening
+
+### Quality gates
+- **Zero-warnings ESLint gate** — All 11 long-standing `react-hooks/exhaustive-deps` and `react-hooks/set-state-in-effect` warnings (NDR Dashboard derived arrays, Onboarding wizard checklist, App.jsx redundant location-key reset effect, AlertDrawer / SSO error mirroring) have been resolved or surgically annotated. The admin-console lint script now runs with `--max-warnings=0`, blocking new warnings from landing.
+- **Vitest coverage gate** — A v8-backed coverage report runs in CI with global thresholds (statements ≥ 60, branches ≥ 55, functions ≥ 55, lines ≥ 60) so coverage cannot silently regress. Local `npm test -- --coverage` reproduces the gate.
+- **Knip dead-code gate** — `knip` is now installed, configured (`admin-console/knip.json`), and wired into CI as `npm run knip` so unused exports, files, and dependencies fail the build instead of accreting between releases. Removed `useDraftAutosave` and demoted `LOCAL_AGENT` test fixture to module-private.
+
+### Panic policy
+- **Baseline lowered 19 → 6** — Eliminated 13 production `unwrap`/`expect` calls in `event_forward.rs`, `incident.rs`, `lateral.rs`, `feed_ingestion.rs`, `oidc.rs`, and `benchmark.rs` by switching to `let-else`/`match` patterns and `.ok_or_else(...)?`. The `scripts/panic-baseline.txt` floor moves to 6, ratcheting future regressions tighter.
+
+### Operator experience
+- **Empty-state migration continues** — `AssistantWorkspace` (5 sites), `FleetAgents` (1 site), and `ThreatDetection` rule-list / detail (2 sites) now use `WorkspaceEmptyState` for proper `role="status"` semantics and consistent layout, extending the v0.53.6 a11y story.
+
+### Verification
+- 208/208 vitest with coverage clean.
+- 1409/1409 cargo lib tests pass.
+- `cargo check` clean; panic-policy guard at new baseline 6.
+
 ## [0.53.6] — Admin-Console Quality Sweep & Panic-Policy Guard
 
 ### Operator-experience hardening

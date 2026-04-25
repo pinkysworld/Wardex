@@ -200,7 +200,11 @@ impl FeedIngestionEngine {
         result.poll_time_ms = start.elapsed().as_millis() as u64;
 
         // Update source metadata
-        let source = self.sources.iter_mut().find(|s| s.id == feed_id).unwrap();
+        let source = self
+            .sources
+            .iter_mut()
+            .find(|s| s.id == feed_id)
+            .ok_or_else(|| format!("feed source '{feed_id}' vanished mid-poll"))?;
         source.last_poll = Some(result.timestamp.clone());
         source.last_success = Some(result.timestamp.clone());
         source.iocs_ingested += result.new_iocs;

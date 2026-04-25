@@ -4,6 +4,7 @@ var/
 *.code-workspace
 admin-console/node_modules/
 admin-console/dist/
+admin-console/coverage/
 xdr_ai_handoff_pack/
 xdr_ai_handoff_pack.zip
 release/

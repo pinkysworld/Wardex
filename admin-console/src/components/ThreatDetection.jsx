@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useApi, useApiGroup, useToast } from '../hooks.jsx';
 import * as api from '../api.js';
-import { JsonDetails, SummaryGrid, SideDrawer } from './operator.jsx';
+import { JsonDetails, SummaryGrid, SideDrawer, WorkspaceEmptyState } from './operator.jsx';
 import { formatDateTime, formatRelativeTime } from './operatorUtils.js';
 import { useConfirm } from './useConfirm.jsx';
 import ThreatIntelOperations from './ThreatIntelOperations.jsx';
@@ -2563,9 +2563,7 @@ export default function ThreatDetection() {
                   {filteredRules.length === 0 ? (
                     <tr>
                       <td colSpan="5">
-                        <div className="empty" style={{ padding: 24 }}>
-                          No rules match this queue and filter scope.
-                        </div>
+                        <WorkspaceEmptyState description="No rules match this queue and filter scope." />
                       </td>
                     </tr>
                   ) : (
@@ -2617,9 +2615,7 @@ export default function ThreatDetection() {
         <aside className="triage-detail">
           <div className="card">
             {!selectedRule ? (
-              <div className="empty">
-                Select a rule to inspect lifecycle, validation, and related suppressions.
-              </div>
+              <WorkspaceEmptyState description="Select a rule to inspect lifecycle, validation, and related suppressions." />
             ) : (
               <>
                 <div className="detail-hero">

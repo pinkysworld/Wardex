@@ -4,6 +4,7 @@ import { useApi, useToast } from '../hooks.jsx';
 import * as api from '../api.js';
 import { formatDateTime, formatRelativeTime } from './operatorUtils.js';
 import { buildHref } from './workflowPivots.js';
+import { WorkspaceEmptyState } from './operator.jsx';
 
 function formatCaseValue(value) {
   return String(value || '—').replaceAll('_', ' ');
@@ -376,10 +377,10 @@ export default function AssistantWorkspace() {
             ) : null}
           </div>
         ) : (
-          <div className="empty">
-            Open the assistant from a case, incident, or investigation to preserve investigation
-            state.
-          </div>
+          <WorkspaceEmptyState
+            compact
+            description="Open the assistant from a case, incident, or investigation to preserve investigation state."
+          />
         )}
       </div>
 
@@ -461,7 +462,7 @@ export default function AssistantWorkspace() {
               </div>
             </div>
           ) : (
-            <div className="empty">No assistant response yet.</div>
+            <WorkspaceEmptyState compact description="No assistant response yet." />
           )}
         </div>
 
@@ -483,7 +484,10 @@ export default function AssistantWorkspace() {
                 ))}
               </div>
             ) : (
-              <div className="empty">Citations will appear here after a query runs.</div>
+              <WorkspaceEmptyState
+                compact
+                description="Citations will appear here after a query runs."
+              />
             )}
           </div>
 
@@ -530,7 +534,10 @@ export default function AssistantWorkspace() {
                 </div>
               </div>
             ) : (
-              <div className="empty">Select a case to attach case-aware context.</div>
+              <WorkspaceEmptyState
+                compact
+                description="Select a case to attach case-aware context."
+              />
             )}
           </div>
         </div>
@@ -563,7 +570,10 @@ export default function AssistantWorkspace() {
               ))}
             </div>
           ) : (
-            <div className="empty">Assistant context events will appear here.</div>
+            <WorkspaceEmptyState
+              compact
+              description="Assistant context events will appear here."
+            />
           )}
         </div>
 
@@ -592,7 +602,10 @@ export default function AssistantWorkspace() {
               ))}
             </div>
           ) : (
-            <div className="empty">Assistant history will appear here for this session.</div>
+            <WorkspaceEmptyState
+              compact
+              description="Assistant history will appear here for this session."
+            />
           )}
         </div>
       </div>

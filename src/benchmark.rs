@@ -137,7 +137,7 @@ impl LatencyStats {
                 max_us: 0.0,
             };
         }
-        durations.sort_by(|a, b| a.partial_cmp(b).unwrap());
+        durations.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
         let sum: f64 = durations.iter().sum();
         let mean_us = sum / count as f64;
         let median_us = if count.is_multiple_of(2) {
