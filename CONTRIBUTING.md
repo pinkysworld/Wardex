@@ -98,6 +98,27 @@ docs: add TLS configuration examples
 test: add integration tests for LEEF export
 ```
 
+### Panic Policy
+
+Production code under `src/` should not introduce new `.unwrap()` or
+`.expect(` calls. The CI job `panic-policy` counts these in non-test
+regions of `src/` and fails any pull request that increases the count
+above the baseline in `scripts/panic-baseline.txt`.
+
+If a new call site is provably infallible:
+
+1. Add a same-line `// SAFETY:` or `// INTENTIONAL:` comment that
+   explains why the panic cannot fire (e.g. "non-empty checked above",
+   "startup-only path, runtime exit on failure is acceptable").
+2. Bump the integer in `scripts/panic-baseline.txt` by one in the same
+   commit so reviewers see the policy override.
+
+Run the guard locally with:
+
+```bash
+python3 scripts/check_panic_policy.py
+```
+
 ## Project Structure
 
 | Directory | Contents |
