@@ -52,11 +52,7 @@ def main() -> int:
         parser.error("changelog is missing a `## [Unreleased]` heading")
 
     suffix = f" — {args.title}" if args.title else ""
-    new_heading = f"## [Unreleased]\n\n## [{version}] — {args.date}{suffix}".replace(
-        f"— {args.date} — ", f"— {args.date} — "
-    )
-    if not args.title:
-        new_heading = f"## [Unreleased]\n\n## [{version}] — {args.date}"
+    new_heading = f"## [Unreleased]\n\n## [{version}] — {args.date}{suffix}"
     updated = text.replace("## [Unreleased]", new_heading, 1)
     CHANGELOG_PATH.write_text(updated, encoding="utf-8")
     print(f"changelog reset: opened section {version} ({args.date}) and reseeded [Unreleased]")
