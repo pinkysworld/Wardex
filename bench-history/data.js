@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1777230690253,
+  "lastUpdate": 1777233569871,
   "repoUrl": "https://github.com/pinkysworld/Wardex",
   "entries": {
     "Wardex criterion benches": [
@@ -3277,6 +3277,114 @@ window.BENCHMARK_DATA = {
             "name": "sigma_evaluate_20_rules",
             "value": 35447,
             "range": "± 537",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "85413447+pinkysworld@users.noreply.github.com",
+            "name": "pinkysworld",
+            "username": "pinkysworld"
+          },
+          "committer": {
+            "email": "85413447+pinkysworld@users.noreply.github.com",
+            "name": "pinkysworld",
+            "username": "pinkysworld"
+          },
+          "distinct": true,
+          "id": "2b75178bb042742702c0b0daf18c86500be9e4c4",
+          "message": "Release v0.55.0: per-lane Command APIs, drawer deep-links, actionlint CI, DX scripts",
+          "timestamp": "2026-04-26T21:52:13+02:00",
+          "tree_id": "2a1888d3594c0d9e3a2a198b6d8d4d2f567776fc",
+          "url": "https://github.com/pinkysworld/Wardex/commit/2b75178bb042742702c0b0daf18c86500be9e4c4"
+        },
+        "date": 1777233569051,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "full_pipeline/5",
+            "value": 49585,
+            "range": "± 209",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "full_pipeline/50",
+            "value": 420483,
+            "range": "± 8154",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "full_pipeline/200",
+            "value": 1916238,
+            "range": "± 19083",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "full_pipeline/1000",
+            "value": 17293863,
+            "range": "± 102879",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "detector_evaluate_single",
+            "value": 631,
+            "range": "± 3",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "detector_window_stream_256",
+            "value": 779498,
+            "range": "± 3074",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "shared_storage_observed_schema_read",
+            "value": 127,
+            "range": "± 0",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "shared_storage_4_threads_64_alerts",
+            "value": 170272,
+            "range": "± 2380",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "policy_evaluate_single",
+            "value": 246,
+            "range": "± 1",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "throughput/1000_samples",
+            "value": 17453688,
+            "range": "± 44363",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "search_500_events",
+            "value": 114759,
+            "range": "± 742",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "hunt_field_query",
+            "value": 94963,
+            "range": "± 444",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "ml_triage_rf",
+            "value": 55,
+            "range": "± 1",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "sigma_evaluate_20_rules",
+            "value": 35392,
+            "range": "± 300",
             "unit": "ns/iter"
           }
         ]
