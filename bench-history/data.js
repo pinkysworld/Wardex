@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1777116943142,
+  "lastUpdate": 1777179190228,
   "repoUrl": "https://github.com/pinkysworld/Wardex",
   "entries": {
     "Wardex criterion benches": [
@@ -2865,6 +2865,94 @@ window.BENCHMARK_DATA = {
             "name": "sigma_evaluate_20_rules",
             "value": 30911,
             "range": "± 787",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "name": "pinkysworld",
+            "username": "pinkysworld",
+            "email": "85413447+pinkysworld@users.noreply.github.com"
+          },
+          "committer": {
+            "name": "pinkysworld",
+            "username": "pinkysworld",
+            "email": "85413447+pinkysworld@users.noreply.github.com"
+          },
+          "id": "d61e377d08a9cbbb04fa59d1a6d3a40dacd9f626",
+          "message": "Release v0.53.7 — lint, coverage, knip & panic-policy tightening",
+          "timestamp": "2026-04-25T11:28:51Z",
+          "url": "https://github.com/pinkysworld/Wardex/commit/d61e377d08a9cbbb04fa59d1a6d3a40dacd9f626"
+        },
+        "date": 1777179189924,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "full_pipeline/5",
+            "value": 49163,
+            "range": "± 343",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "full_pipeline/50",
+            "value": 418470,
+            "range": "± 2752",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "full_pipeline/200",
+            "value": 1915071,
+            "range": "± 16699",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "full_pipeline/1000",
+            "value": 17289059,
+            "range": "± 67459",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "detector_evaluate_single",
+            "value": 677,
+            "range": "± 3",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "policy_evaluate_single",
+            "value": 237,
+            "range": "± 1",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "throughput/1000_samples",
+            "value": 17281756,
+            "range": "± 59508",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "search_500_events",
+            "value": 111119,
+            "range": "± 865",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "hunt_field_query",
+            "value": 95807,
+            "range": "± 900",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "ml_triage_rf",
+            "value": 55,
+            "range": "± 0",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "sigma_evaluate_20_rules",
+            "value": 33742,
+            "range": "± 269",
             "unit": "ns/iter"
           }
         ]
