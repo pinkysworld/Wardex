@@ -123,6 +123,7 @@ Wardex is a self-hosted XDR and SIEM platform built in Rust for teams that want 
   - OIDC/SAML SSO with session management (config, login, callback, session, logout)
   - Cloud collectors for AWS CloudTrail (SigV4), Azure Activity Log (OAuth2), and GCP Audit Log (JWT/RS256) with live polling
   - Collector lifecycle history with last-success/error checkpoints, retry/backoff context, freshness, failure-streak analytics, and 24h ingestion counters
+  - Collector ingestion evidence with SOC Workbench and Infrastructure pivots for cloud, identity, and SaaS lanes
   - Full-text search index with Tantivy persistent event store, query parsing, and faceted results
   - SigmaHQ YAML rule import from the community repository
   - Usage metering with plan limits and overage calculation
@@ -159,6 +160,7 @@ Wardex is a self-hosted XDR and SIEM platform built in Rust for teams that want 
 - Alert severity filter (all/critical/severe/elevated/low) on Dashboard and Live Monitor
 - Fully structured displays across all tabs — zero raw JSON dumps
 - Remediation change-review and recovery-history cards for malware verdicts and infrastructure remediation candidates
+- Signed multi-approver remediation approvals with approval-chain digests and rollback proof cards
 - Production demo lab seeding from Help & Docs for evaluation-ready telemetry, case, response, report, and evidence workflows
 
 ## Product posture

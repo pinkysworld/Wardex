@@ -612,12 +612,28 @@ export default function Infrastructure() {
         risk: asset.severity || 'medium',
         approval_status: 'pending_review',
         recovery_status: 'not_started',
+        required_approvers:
+          ['critical', 'high'].includes(String(asset.severity || '').toLowerCase()) ? 2 : 1,
         evidence: asset.evidence || asset,
       });
       await reloadRemediationReviews();
       toast('Change review recorded.', 'success');
     } catch {
       toast('Unable to record change review.', 'error');
+    }
+  };
+
+  const approveChangeReview = async (review) => {
+    if (!review?.id) return;
+    try {
+      await api.approveRemediationChangeReview(review.id, {
+        decision: 'approve',
+        comment: 'Approved from Infrastructure change-review workflow.',
+      });
+      await reloadRemediationReviews();
+      toast('Signed approval recorded.', 'success');
+    } catch {
+      toast('Unable to record signed approval.', 'error');
     }
   };
 
@@ -779,6 +795,18 @@ export default function Infrastructure() {
                   </div>
                   <div className="summary-meta">Changes with rollback or recovery evidence.</div>
                 </div>
+                <div className="summary-card">
+                  <div className="summary-label">Signed Reviews</div>
+                  <div className="summary-value">{remediationReviewsData?.summary?.signed || 0}</div>
+                  <div className="summary-meta">Approval chains with tamper-evident digests.</div>
+                </div>
+                <div className="summary-card">
+                  <div className="summary-label">Rollback Proofs</div>
+                  <div className="summary-value">
+                    {remediationReviewsData?.summary?.rollback_proofs || 0}
+                  </div>
+                  <div className="summary-meta">Approved changes with recovery plans attached.</div>
+                </div>
               </div>
               <div style={{ display: 'grid', gap: 8 }}>
                 {(remediationReviewsData?.reviews || []).slice(0, 4).map((review) => (
@@ -789,11 +817,40 @@ export default function Infrastructure() {
                       </span>
                       <span className="scope-chip">{review.approval_status}</span>
                       <span className="scope-chip">{review.recovery_status}</span>
+                      <span className="scope-chip">
+                        {(review.approvals || []).filter((entry) => entry.decision === 'approve')
+                          .length || 0}
+                        /{review.required_approvers || 1} approvals
+                      </span>
                     </div>
                     <div style={{ fontWeight: 600 }}>{review.title}</div>
                     <div className="hint">
                       {review.asset_id} • {formatRelativeTime(review.requested_at)}
                     </div>
+                    {review.approval_chain_digest && (
+                      <div className="hint">
+                        Chain {String(review.approval_chain_digest).slice(0, 16)}
+                        {review.rollback_proof?.proof_id
+                          ? ` • ${review.rollback_proof.proof_id}`
+                          : ''}
+                      </div>
+                    )}
+                    {review.rollback_proof?.recovery_plan?.length > 0 && (
+                      <div className="hint">
+                        Rollback: {review.rollback_proof.recovery_plan[0]}
+                      </div>
+                    )}
+                    {review.approval_status === 'pending_review' && (
+                      <div className="btn-group" style={{ marginTop: 8 }}>
+                        <button
+                          className="btn btn-sm btn-primary"
+                          type="button"
+                          onClick={() => approveChangeReview(review)}
+                        >
+                          Sign Approval
+                        </button>
+                      </div>
+                    )}
                   </div>
                 ))}
                 {(!remediationReviewsData?.reviews ||

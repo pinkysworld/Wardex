@@ -231,8 +231,7 @@ impl IncidentStore {
             if timestamps.len() < 2 {
                 continue;
             }
-            let (Some(min_ts), Some(max_ts)) =
-                (timestamps.iter().min(), timestamps.iter().max())
+            let (Some(min_ts), Some(max_ts)) = (timestamps.iter().min(), timestamps.iter().max())
             else {
                 continue;
             };
@@ -324,8 +323,7 @@ impl IncidentStore {
             if timestamps.len() < 2 {
                 continue;
             }
-            let (Some(min_ts), Some(max_ts)) =
-                (timestamps.iter().min(), timestamps.iter().max())
+            let (Some(min_ts), Some(max_ts)) = (timestamps.iter().min(), timestamps.iter().max())
             else {
                 continue;
             };

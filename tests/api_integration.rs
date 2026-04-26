@@ -773,6 +773,14 @@ fn first_run_proof_creates_reopenable_evidence() {
             .as_str()
             .is_some_and(|value| !value.is_empty())
     );
+    assert_eq!(
+        body["proof"]["demo_surfaces"]["identity"]["provider"],
+        serde_json::json!("okta_identity")
+    );
+    assert_eq!(
+        body["proof"]["demo_surfaces"]["attack_graph"]["campaign"],
+        serde_json::json!("first-run-proof-lateral-path")
+    );
 }
 
 // ── Checkpoint round-trip ──────────────────────────────────────
@@ -1136,13 +1144,75 @@ fn remediation_change_reviews_can_be_recorded_and_listed() {
     let created_body: serde_json::Value = created.into_json().unwrap();
     assert_eq!(created_body["status"], "recorded");
     assert_eq!(created_body["review"]["requested_by"], "admin");
+    assert_eq!(
+        created_body["review"]["required_approvers"],
+        serde_json::json!(2)
+    );
+
+    let review_id = created_body["review"]["id"].as_str().unwrap();
+    let first_approval = ureq::post(&format!(
+        "{}/api/remediation/change-reviews/{}/approval",
+        base(port),
+        review_id
+    ))
+    .set("Authorization", &auth_header(&token))
+    .send_json(serde_json::json!({
+        "approver": "primary-reviewer",
+        "decision": "approve",
+        "comment": "Blast radius validated."
+    }))
+    .expect("first signed approval")
+    .into_json::<serde_json::Value>()
+    .unwrap();
+    assert_eq!(
+        first_approval["review"]["approval_status"],
+        serde_json::json!("pending_review")
+    );
+
+    let second_approval = ureq::post(&format!(
+        "{}/api/remediation/change-reviews/{}/approval",
+        base(port),
+        review_id
+    ))
+    .set("Authorization", &auth_header(&token))
+    .send_json(serde_json::json!({
+        "approver": "secondary-reviewer",
+        "decision": "approve",
+        "comment": "Rollback checkpoint verified."
+    }))
+    .expect("second signed approval")
+    .into_json::<serde_json::Value>()
+    .unwrap();
+    assert_eq!(
+        second_approval["review"]["approval_status"],
+        serde_json::json!("approved")
+    );
+    assert!(
+        second_approval["review"]["approval_chain_digest"]
+            .as_str()
+            .is_some_and(|value| !value.is_empty())
+    );
+    assert_eq!(
+        second_approval["review"]["rollback_proof"]["status"],
+        serde_json::json!("ready")
+    );
 
     let listed = ureq::get(&format!("{}/api/remediation/change-reviews", base(port)))
         .set("Authorization", &auth_header(&token))
         .call()
         .expect("list remediation reviews");
     let listed_body: serde_json::Value = listed.into_json().unwrap();
-    assert_eq!(listed_body["summary"]["pending"].as_u64().unwrap(), 1);
+    assert_eq!(listed_body["summary"]["pending"].as_u64().unwrap(), 0);
+    assert_eq!(
+        listed_body["summary"]["multi_approver_ready"]
+            .as_u64()
+            .unwrap(),
+        1
+    );
+    assert_eq!(
+        listed_body["summary"]["rollback_proofs"].as_u64().unwrap(),
+        1
+    );
     assert_eq!(listed_body["reviews"][0]["asset_id"], "host-a:/tmp/dropper");
 }
 

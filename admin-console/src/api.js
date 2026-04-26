@@ -290,6 +290,8 @@ export const remediationStats = () => get('/api/remediation/stats');
 export const remediationChangeReviews = () => get('/api/remediation/change-reviews');
 export const recordRemediationChangeReview = (body) =>
   post('/api/remediation/change-reviews', body);
+export const approveRemediationChangeReview = (id, body) =>
+  post(`/api/remediation/change-reviews/${encodeURIComponent(id)}/approval`, body);
 
 // ── Energy & Edge ────────────────────────────────────────────
 export const energyStatus = () => get('/api/energy/status');

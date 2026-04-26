@@ -107,6 +107,14 @@ Wardex is now positioned as a professional XDR/SIEM control plane with incident-
 - **Production demo lab** — Help & Docs can seed an evaluation-ready scenario via `/api/demo/lab`, including telemetry, case context, response dry-run approval, report artifacts, and evidence metadata.
 - **SDK and release-document alignment** — the TypeScript SDK is cookie/session-aware, release-doc validation guards historical-plan drift, and website/docs/package metadata are aligned on the `v0.53.8` baseline.
 
+## Roadmap completion in progress
+
+- **Signed multi-approver remediation** — change reviews now require risk-aware approver counts, record signed approval-chain digests, and attach rollback proof with recovery plans when approval quorum is reached.
+- **Collector ingestion evidence pivots** — collector lifecycle status now carries SOC Workbench and Infrastructure pivots plus recent ingestion evidence for cloud, identity, and SaaS lanes.
+- **Expanded production demo lab** — demo seeding now includes cloud, identity, SaaS, UEBA, NDR, and attack-graph evidence alongside case, response, report, and artifact proof.
+- **IdP lifecycle validation depth** — identity-provider summaries now expose launch checks for metadata, callback route alignment, client credentials, group mappings, and test-login paths.
+- **SDK parity continuation** — Python and TypeScript SDKs include collector status, remediation review creation, and signed remediation approval helpers used by console workflows.
+
 ## Recently shipped (v0.53.7)
 
 - **Zero-warnings ESLint gate** — all 11 long-standing `react-hooks` warnings (NDR Dashboard derived arrays, Onboarding wizard checklist, App.jsx redundant location-key reset effect, AlertDrawer / SSO error mirroring) are resolved or surgically annotated, and `npm run lint` runs with `--max-warnings=0` to block regressions.
@@ -146,10 +154,9 @@ Wardex is now positioned as a professional XDR/SIEM control plane with incident-
 
 ## Next release priorities
 
-- deepen remediation approval decisions into signed multi-approver workflows and rollback execution evidence
-- continue migrating console API calls toward generated SDK-backed contracts
-- broaden production demo lab data across cloud, identity, SaaS, UEBA, NDR, and attack-graph workflows
-- continue federated IdP lifecycle validation and regression depth as SSO providers evolve
+- continue browser regression depth for signed remediation approvals, collector pivots, and IdP launch validation
+- keep console API helpers and generated SDK methods aligned as new workflow endpoints are added
+- expand rollback proof from planned recovery evidence into adapter-backed execution where platform permissions allow it
 
 ## Recently shipped (v0.43.1)
 

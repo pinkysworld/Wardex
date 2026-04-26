@@ -87,6 +87,19 @@ export function CollectorLaneCard({
                       streak {entry.lifecycle_analytics.recent_failure_streak || 0}
                     </div>
                   )}
+                  {entry.ingestion_evidence?.pivots?.length > 0 && (
+                    <div className="btn-group" style={{ marginTop: 8, flexWrap: 'wrap' }}>
+                      {entry.ingestion_evidence.pivots.map((pivot) => (
+                        <a
+                          key={`${collectorIdentifier(entry)}-${pivot.surface}`}
+                          className="btn btn-sm"
+                          href={pivot.href}
+                        >
+                          {pivot.surface}
+                        </a>
+                      ))}
+                    </div>
+                  )}
                 </div>
                 <span className={`badge ${validationBadgeClass(entry.validation?.status)}`}>
                   {validationStatusLabel(entry.validation?.status)}

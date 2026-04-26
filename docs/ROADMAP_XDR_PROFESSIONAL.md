@@ -44,10 +44,10 @@
 
 ## Current gaps
 
-- Federated SSO launch and callback validation is now exposed in both the login shell and Settings, but broader IdP lifecycle coverage still needs continued regression depth as providers evolve.
-- Collector routing, readiness, and validation dashboards now include staged ingestion-health timelines, persisted lifecycle history, last-success/error checkpoints, retry/backoff context, freshness, and failure-streak analytics across the shipped cloud, identity, and SaaS lanes. The next gap is richer ingestion evidence and cross-surface pivots from collector health into active SOC and Infrastructure workflows.
+- Federated SSO launch and callback validation now includes provider launch checks for metadata, callback route alignment, client credentials, group mappings, and test-login paths. The remaining work is regression depth as providers evolve.
+- Collector routing, readiness, and validation dashboards now include staged ingestion-health timelines, persisted lifecycle history, last-success/error checkpoints, retry/backoff context, freshness, failure-streak analytics, ingestion evidence, and cross-surface SOC/Infrastructure pivots across the shipped cloud, identity, and SaaS lanes.
 - Detection Engineering, Fleet & Agents, SOC Workbench response, collector health, and infrastructure malware/remediation routes are now covered by the live release-gate smoke. The remaining work is keeping that live coverage aligned as those workflows continue to evolve.
-- Malware analysis and infrastructure remediation now have route-aware verdict, integrity, guided-remediation, change-review, approval, and recovery-history views. The next gap is signed multi-approver review, rollback proof, and deeper recovery evidence for high-risk remediation.
+- Malware analysis and infrastructure remediation now have route-aware verdict, integrity, guided-remediation, signed multi-approver change reviews, approval-chain digests, rollback proof, and recovery-history views. The next gap is adapter-backed rollback execution for environments that permit active recovery.
 
 ## Success criteria
 

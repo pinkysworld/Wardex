@@ -592,6 +592,32 @@ class WardexClient:
     def malware_import(self, data: str) -> dict[str, Any]:
         return self._post("/api/malware/signatures/import", data)
 
+    def collectors_status(self) -> dict[str, Any]:
+        return self._get("/api/collectors/status")
+
+    def remediation_change_reviews(self) -> dict[str, Any]:
+        return self._get("/api/remediation/change-reviews")
+
+    def record_remediation_change_review(self, review: dict[str, Any]) -> dict[str, Any]:
+        return self._post("/api/remediation/change-reviews", review)
+
+    def approve_remediation_change_review(
+        self,
+        review_id: str,
+        decision: str = "approve",
+        comment: str | None = None,
+        approver: str | None = None,
+    ) -> dict[str, Any]:
+        payload: dict[str, Any] = {"decision": decision}
+        if comment:
+            payload["comment"] = comment
+        if approver:
+            payload["approver"] = approver
+        return self._post(
+            f"/api/remediation/change-reviews/{quote(review_id, safe='')}/approval",
+            payload,
+        )
+
     # ── threat hunting ───────────────────────────────────────────────
 
     def hunt(self, query: str) -> dict[str, Any]:

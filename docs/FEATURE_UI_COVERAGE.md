@@ -16,14 +16,14 @@ Status legend:
 | Dashboard customization and shared views | `Dashboard` | Implemented | Keep the new priority-alert-aware report-center handoffs and persisted personal/shared layouts covered as the overview evolves |
 | UEBA, NDR, graph analytics | `UEBA`, `NDR`, `Attack Graph` | Ready | Broaden regression coverage around the shipped entity/network playbooks, enriched explainability scoring, and stored-event campaign clustering, then keep tightening deeper evidence correlation and analyst narrative quality |
 | Fleet, rollout, and release operations | `Fleet & Agents` | Ready | Keep the route-aware rollout history, recovery watchlists, and deployment-health actions aligned as fleet workflows deepen and live release telemetry expands |
-| Vulnerability, exposure, drift, certificates, assets | `Infrastructure` | Ready | Keep the shipped malware verdict, guided remediation, change-review, approval, and recovery-history workflows covered while expanding rollback evidence and multi-approver depth |
+| Vulnerability, exposure, drift, certificates, assets | `Infrastructure` | Ready | Keep the shipped malware verdict, guided remediation, signed approval-chain, rollback-proof, and recovery-history workflows covered while expanding adapter-backed rollback execution |
 | Security policy and advanced controls | `Security Policy` | Implemented | Structured policy composition, digital twin simulation, adversarial harness, deception deployment, and enforcement quarantine workflows are available in the browser console |
 | Enterprise controls (RBAC, SSO, SCIM, settings) | `Settings`, login shell | Ready | Keep the new federated sign-in readiness center, launch validation, and SCIM handoff coverage aligned as broader IdP lifecycle validation evolves |
 | Supportability, documentation, and contract verification | `Help & Docs` | Implemented | Keep the shipped parity diagnostics, embedded docs index/content, and operator API/GraphQL explorer aligned with future runtime and SDK releases |
 | Reports, compliance, evidence, exports | `Reports & Exports`, `Security Policy` | Implemented | Structured compliance review, evidence bundle export, backend SIEM export formats, GDPR erase, PII scan, and privacy-budget checks are available in the browser console |
 | Threat intelligence, enrichment, deception | `Threat Detection`, `Settings`, `Security Policy` | Implemented | Threat Detection now provides browse/filter/action workflows for indicator libraries, enrichment connectors, feed context, recent matches, and deception deployment |
 | Long-retention history and search | `Settings` | Ready | Add cross-surface pivots from analyst workflows into the shipped ClickHouse-backed retained-event search and retention controls |
-| Cloud, SaaS, and identity collectors | `Settings`, `Infrastructure`, `SOC Workbench` | Ready | Keep the routed collector-health lanes covered while deepening per-provider analytics, ingestion evidence, and cross-surface analyst pivots |
+| Cloud, SaaS, and identity collectors | `Settings`, `Infrastructure`, `SOC Workbench` | Ready | Keep the routed collector-health lanes covered while regression-testing per-provider analytics, ingestion evidence, and cross-surface analyst pivots |
 | AI assistant and RAG analyst workflows | `Analyst Assistant`, `SOC Workbench` | Implemented | Deepen retrieval quality, provider coverage, and analyst handoff workflows on top of the shipped case-aware assistant with citations and ticket-sync pivots |
 
 ## Release acceptance gate
@@ -32,5 +32,5 @@ Use `make release-acceptance` before release sign-off. The command builds the sh
 
 ## Immediate execution order
 
-1. Add signed multi-approver remediation reviews, rollback proof, and richer recovery evidence on top of the shipped change-review ledger.
-2. Expand per-provider collector lifecycle analytics with operator-facing ingestion evidence and cross-surface pivots into SOC and Infrastructure workflows.
+1. Add browser regression coverage for signed remediation approvals, rollback-proof display, collector pivots, and IdP launch validation.
+2. Expand rollback proof from planned recovery evidence into adapter-backed execution where platform permissions allow it.

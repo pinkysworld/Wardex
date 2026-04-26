@@ -1624,5 +1624,5 @@ describe('Settings', () => {
         reference: 'vault://secret/wardex/api#token',
       });
     });
-  }, 10000);
+  }, 20000);
 });

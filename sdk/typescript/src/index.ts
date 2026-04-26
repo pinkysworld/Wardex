@@ -444,6 +444,14 @@ export class WardexClient {
     return this.request("POST", "/api/remediation/change-reviews", review);
   }
 
+  async approveRemediationChangeReview(id: string, approval: unknown): Promise<unknown> {
+    return this.request(
+      "POST",
+      `/api/remediation/change-reviews/${encodeURIComponent(id)}/approval`,
+      approval,
+    );
+  }
+
   async malwareImport(data: string): Promise<{ imported: number }> {
     return this.request("POST", "/api/malware/signatures/import", { data });
   }

@@ -2824,7 +2824,9 @@ fn session_cookie_header(session_id: &str, expires_at: chrono::DateTime<chrono::
         .and_then(|value| parse_bool_query(&value))
         .unwrap_or(false);
     let secure_attr = if secure { "; Secure" } else { "" };
-    format!("{SESSION_COOKIE_NAME}={session_id}; Path=/; HttpOnly; SameSite=Lax; Max-Age={max_age}{secure_attr}")
+    format!(
+        "{SESSION_COOKIE_NAME}={session_id}; Path=/; HttpOnly; SameSite=Lax; Max-Age={max_age}{secure_attr}"
+    )
 }
 
 fn clear_session_cookie_header() -> String {
@@ -2901,6 +2903,23 @@ fn auth_redirect_response(location: &str) -> Response<Body> {
 fn idp_provider_public_json(
     provider: &crate::enterprise::IdentityProviderConfig,
 ) -> serde_json::Value {
+    let redirect_uri = provider.redirect_uri.as_deref().unwrap_or("").trim();
+    let launch_checks = serde_json::json!({
+        "metadata_configured": match provider.kind.as_str() {
+            "oidc" => provider.issuer_url.as_deref().is_some_and(|value| !value.trim().is_empty()),
+            "saml" => provider.sso_url.as_deref().is_some_and(|value| !value.trim().is_empty())
+                && provider.entity_id.as_deref().is_some_and(|value| !value.trim().is_empty()),
+            _ => false,
+        },
+        "callback_configured": !redirect_uri.is_empty(),
+        "callback_route": "/api/auth/sso/callback",
+        "callback_matches_console_route": redirect_uri.ends_with("/api/auth/sso/callback"),
+        "client_credentials_present": provider.kind != "oidc"
+            || (provider.client_id.as_deref().is_some_and(|value| !value.trim().is_empty())
+                && provider.client_secret.as_deref().is_some_and(|value| !value.trim().is_empty())),
+        "group_mappings": provider.group_role_mappings.len(),
+        "test_login_path": format!("/api/auth/sso/login?provider_id={}", provider.id),
+    });
     serde_json::json!({
         "id": provider.id,
         "kind": provider.kind,
@@ -2914,6 +2933,7 @@ fn idp_provider_public_json(
         "status": provider.status,
         "group_role_mappings": provider.group_role_mappings,
         "updated_at": provider.updated_at,
+        "launch_validation": launch_checks,
         "has_client_secret": provider
             .client_secret
             .as_deref()
@@ -6830,7 +6850,39 @@ struct RemediationChangeReview {
     recovery_status: String,
     requested_by: String,
     requested_at: String,
+    #[serde(default = "default_required_approvers")]
+    required_approvers: usize,
+    #[serde(default)]
+    approvals: Vec<RemediationReviewApproval>,
+    #[serde(default)]
+    approval_chain_digest: Option<String>,
+    #[serde(default)]
+    rollback_proof: Option<RemediationRollbackProof>,
     evidence: serde_json::Value,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, Default)]
+struct RemediationReviewApproval {
+    approver: String,
+    decision: String,
+    comment: Option<String>,
+    signed_at: String,
+    signature: String,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, Default)]
+struct RemediationRollbackProof {
+    proof_id: String,
+    generated_at: String,
+    status: String,
+    pre_change_digest: String,
+    recovery_plan: Vec<String>,
+    verification_digest: String,
+    verified_by: Option<String>,
+}
+
+fn default_required_approvers() -> usize {
+    1
 }
 
 impl Default for RemediationChangeReview {
@@ -6847,6 +6899,10 @@ impl Default for RemediationChangeReview {
             recovery_status: "not_started".to_string(),
             requested_by: "system".to_string(),
             requested_at: chrono::Utc::now().to_rfc3339(),
+            required_approvers: default_required_approvers(),
+            approvals: Vec::new(),
+            approval_chain_digest: None,
+            rollback_proof: None,
             evidence: serde_json::json!({}),
         }
     }
@@ -7280,6 +7336,174 @@ fn save_remediation_change_reviews(
     save_stored_json(storage, REMEDIATION_CHANGE_REVIEWS_KEY, &reviews)
 }
 
+fn remediation_required_approvers(risk: &str, requested: Option<u64>) -> usize {
+    let minimum = match risk.trim().to_ascii_lowercase().as_str() {
+        "critical" | "high" => 2,
+        _ => 1,
+    };
+    requested
+        .unwrap_or(minimum as u64)
+        .max(minimum as u64)
+        .min(5) as usize
+}
+
+fn remediation_approval_signature(
+    review_id: &str,
+    approver: &str,
+    decision: &str,
+    signed_at: &str,
+    comment: Option<&str>,
+    evidence_digest: &str,
+) -> String {
+    crate::audit::sha256_hex(
+        format!(
+            "{review_id}|{approver}|{decision}|{signed_at}|{}|{evidence_digest}",
+            comment.unwrap_or("")
+        )
+        .as_bytes(),
+    )
+}
+
+fn remediation_approval_chain_digest(review: &RemediationChangeReview) -> Option<String> {
+    if review.approvals.is_empty() {
+        return None;
+    }
+    let chain = review
+        .approvals
+        .iter()
+        .map(|approval| approval.signature.as_str())
+        .collect::<Vec<_>>()
+        .join("|");
+    Some(crate::audit::sha256_hex(
+        format!("{}|{chain}", review.id).as_bytes(),
+    ))
+}
+
+fn remediation_recovery_plan(review: &RemediationChangeReview) -> Vec<String> {
+    let mut steps = vec![
+        format!("Capture pre-change state for {}", review.asset_id),
+        "Execute remediation through the approved response workflow".to_string(),
+        "Validate service health and telemetry recovery after the change".to_string(),
+    ];
+    match review.change_type.as_str() {
+        "malware_containment" => steps.push(
+            "Retain quarantine artifact hash and restore from clean backup if validation fails"
+                .to_string(),
+        ),
+        "infrastructure_remediation" => steps.push(
+            "Apply the saved configuration checkpoint or redeploy the previous known-good bundle"
+                .to_string(),
+        ),
+        _ => steps
+            .push("Revert using the recorded pre-change checkpoint if risk increases".to_string()),
+    }
+    steps
+}
+
+fn build_remediation_rollback_proof(review: &RemediationChangeReview) -> RemediationRollbackProof {
+    let generated_at = chrono::Utc::now().to_rfc3339();
+    let pre_change_digest = crate::audit::sha256_hex(
+        serde_json::json!({
+            "asset_id": review.asset_id,
+            "change_type": review.change_type,
+            "evidence": review.evidence,
+        })
+        .to_string()
+        .as_bytes(),
+    );
+    let recovery_plan = remediation_recovery_plan(review);
+    let verification_digest = crate::audit::sha256_hex(
+        serde_json::json!({
+            "review_id": review.id,
+            "pre_change_digest": pre_change_digest,
+            "approval_chain_digest": review.approval_chain_digest,
+            "recovery_plan": recovery_plan,
+        })
+        .to_string()
+        .as_bytes(),
+    );
+    RemediationRollbackProof {
+        proof_id: format!("rollback-proof-{}", &verification_digest[..12]),
+        generated_at,
+        status: "ready".to_string(),
+        pre_change_digest,
+        recovery_plan,
+        verification_digest,
+        verified_by: None,
+    }
+}
+
+fn apply_remediation_review_approval(
+    mut review: RemediationChangeReview,
+    payload: serde_json::Value,
+    actor: &str,
+) -> Result<RemediationChangeReview, String> {
+    let decision = payload
+        .get("decision")
+        .and_then(serde_json::Value::as_str)
+        .unwrap_or("approve")
+        .trim()
+        .to_ascii_lowercase();
+    if !matches!(decision.as_str(), "approve" | "deny") {
+        return Err("decision must be approve or deny".to_string());
+    }
+    let approver = payload
+        .get("approver")
+        .and_then(serde_json::Value::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .unwrap_or(actor)
+        .to_string();
+    let comment = payload
+        .get("comment")
+        .and_then(serde_json::Value::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(str::to_string);
+    let signed_at = chrono::Utc::now().to_rfc3339();
+    let evidence_digest = crate::audit::sha256_hex(review.evidence.to_string().as_bytes());
+    let approval = RemediationReviewApproval {
+        signature: remediation_approval_signature(
+            &review.id,
+            &approver,
+            &decision,
+            &signed_at,
+            comment.as_deref(),
+            &evidence_digest,
+        ),
+        approver,
+        decision: decision.clone(),
+        comment,
+        signed_at,
+    };
+    review
+        .approvals
+        .retain(|entry| entry.approver != approval.approver);
+    review.approvals.push(approval);
+    review.approval_chain_digest = remediation_approval_chain_digest(&review);
+    let approved_count = review
+        .approvals
+        .iter()
+        .filter(|entry| entry.decision == "approve")
+        .count();
+    let denied = review
+        .approvals
+        .iter()
+        .any(|entry| entry.decision == "deny");
+    review.approval_status = if denied {
+        "denied".to_string()
+    } else if approved_count >= review.required_approvers {
+        "approved".to_string()
+    } else {
+        "pending_review".to_string()
+    };
+    if review.approval_status == "approved" && review.rollback_proof.is_none() {
+        review.rollback_proof = Some(build_remediation_rollback_proof(&review));
+        review.recovery_status = "ready".to_string();
+    }
+    Ok(review)
+}
+
 fn remediation_review_from_payload(
     payload: serde_json::Value,
     actor: &str,
@@ -7293,6 +7517,18 @@ fn remediation_review_from_payload(
         return Err("title is required".to_string());
     }
     let now = chrono::Utc::now().to_rfc3339();
+    let risk = payload
+        .get("risk")
+        .and_then(serde_json::Value::as_str)
+        .unwrap_or("medium")
+        .trim()
+        .to_string();
+    let required_approvers = remediation_required_approvers(
+        &risk,
+        payload
+            .get("required_approvers")
+            .and_then(serde_json::Value::as_u64),
+    );
     let mut review = RemediationChangeReview {
         id: payload
             .get("id")
@@ -7331,12 +7567,7 @@ fn remediation_review_from_payload(
             .unwrap_or("")
             .trim()
             .to_string(),
-        risk: payload
-            .get("risk")
-            .and_then(serde_json::Value::as_str)
-            .unwrap_or("medium")
-            .trim()
-            .to_string(),
+        risk,
         approval_status: payload
             .get("approval_status")
             .and_then(serde_json::Value::as_str)
@@ -7351,6 +7582,10 @@ fn remediation_review_from_payload(
             .to_string(),
         requested_by: actor.to_string(),
         requested_at: now,
+        required_approvers,
+        approvals: Vec::new(),
+        approval_chain_digest: None,
+        rollback_proof: None,
         evidence: payload
             .get("evidence")
             .cloned()
@@ -7358,6 +7593,14 @@ fn remediation_review_from_payload(
     };
     if review.summary.is_empty() {
         review.summary = format!("Review {} for {}.", review.change_type, review.asset_id);
+    }
+    if let Some(approvals) = payload
+        .get("approvals")
+        .and_then(serde_json::Value::as_array)
+    {
+        for approval in approvals {
+            review = apply_remediation_review_approval(review, approval.clone(), actor)?;
+        }
     }
     Ok(review)
 }
@@ -7425,7 +7668,9 @@ fn collector_lifecycle_analytics(history: &[serde_json::Value]) -> serde_json::V
     let events_last_24h = history
         .iter()
         .filter_map(|entry| {
-            let recorded_at = entry.get("recorded_at").and_then(serde_json::Value::as_str)?;
+            let recorded_at = entry
+                .get("recorded_at")
+                .and_then(serde_json::Value::as_str)?;
             let parsed = chrono::DateTime::parse_from_rfc3339(recorded_at).ok()?;
             (chrono::Utc::now().signed_duration_since(parsed.with_timezone(&chrono::Utc))
                 <= chrono::Duration::hours(24))
@@ -8180,6 +8425,28 @@ fn collector_status_entry(
     let lag_seconds =
         checkpoint_lag_seconds(reliability.last_success_at.as_deref()).or(reliability.lag_seconds);
     let lifecycle_analytics = collector_lifecycle_analytics(&lifecycle);
+    let ingestion_evidence = serde_json::json!({
+        "provider": name,
+        "checkpoint_id": reliability.checkpoint_id,
+        "events_ingested": reliability.events_ingested,
+        "last_success_at": reliability.last_success_at,
+        "last_error_at": reliability.last_error_at,
+        "freshness": if !enabled {
+            "disabled"
+        } else if reliability.last_success_at.is_none() && reliability.last_error_at.is_some() {
+            "error"
+        } else if lag_seconds.is_some_and(|lag| lag > poll_interval_secs.saturating_mul(3).max(300)) {
+            "stale"
+        } else if reliability.last_success_at.is_some() {
+            "fresh"
+        } else {
+            "unknown"
+        },
+        "pivots": [
+            {"surface": "SOC Workbench", "href": format!("/soc?collector={name}&lane={}", collector_lane(name)), "label": "Open SOC collector context"},
+            {"surface": "Infrastructure", "href": format!("/infrastructure?tab=observability&collector={name}"), "label": "Open infrastructure evidence"}
+        ],
+    });
     serde_json::json!({
         "name": name,
         "provider": name,
@@ -8208,6 +8475,7 @@ fn collector_status_entry(
             "unknown"
         },
         "route_targets": collector_route_targets(name),
+        "ingestion_evidence": ingestion_evidence,
         "lifecycle": lifecycle.iter().rev().take(8).cloned().collect::<Vec<_>>(),
         "lifecycle_analytics": lifecycle_analytics,
         "summary": summary,
@@ -8251,6 +8519,7 @@ fn collector_readiness_summary(state: &AppState) -> serde_json::Value {
         .iter()
         .map(|(provider, enabled)| {
             let checkpoint = load_collector_checkpoint(&state.storage, provider);
+            let lifecycle = load_collector_lifecycle(&state.storage, provider);
             serde_json::json!({
                 "provider": provider,
                 "label": collector_display_label(provider),
@@ -8264,6 +8533,14 @@ fn collector_readiness_summary(state: &AppState) -> serde_json::Value {
                 "checkpoint_id": checkpoint.checkpoint_id,
                 "retry_count": checkpoint.retry_count,
                 "backoff_seconds": checkpoint.backoff_seconds,
+                "lifecycle_analytics": collector_lifecycle_analytics(&lifecycle),
+                "ingestion_evidence": {
+                    "pivots": [
+                        {"surface": "SOC Workbench", "href": format!("/soc?collector={provider}&lane={}", collector_lane(provider)), "label": "Open SOC collector context"},
+                        {"surface": "Infrastructure", "href": format!("/infrastructure?tab=observability&collector={provider}"), "label": "Open infrastructure evidence"}
+                    ],
+                    "recent_runs": lifecycle.iter().rev().take(3).cloned().collect::<Vec<_>>(),
+                },
             })
         })
         .collect::<Vec<_>>();
@@ -8522,6 +8799,23 @@ fn first_run_operator_proof(state: &Arc<Mutex<AppState>>, auth: &AuthIdentity) -
                 .unwrap_or(ApprovalStatus::Pending)
         });
     let response_record = s.response_orchestrator.get_request(&stored_response_id);
+    let demo_collectors = [
+        ("aws_cloudtrail", 18_u64, None),
+        ("okta_identity", 11_u64, None),
+        ("m365_saas", 7_u64, None),
+        ("workspace_saas", 5_u64, None),
+    ];
+    for (provider, event_count, error) in demo_collectors {
+        let _ = record_collector_checkpoint(&s.storage, provider, true, event_count, error);
+    }
+    let demo_surface_evidence = serde_json::json!({
+        "cloud": {"provider": "aws_cloudtrail", "events": 18, "pivot": "/settings?tab=integrations"},
+        "identity": {"provider": "okta_identity", "events": 11, "pivot": "/soc?collector=okta_identity"},
+        "saas": {"provider": "m365_saas", "events": 7, "pivot": "/settings?tab=integrations"},
+        "ueba": {"entity": "demo-user@example.com", "risk": "elevated", "pivot": "/ueba?entity=demo-user@example.com"},
+        "ndr": {"flow": "10.10.4.22 -> 198.51.100.44", "risk": "c2-beacon", "pivot": "/ndr?host=first-run-demo-host"},
+        "attack_graph": {"campaign": "first-run-proof-lateral-path", "nodes": 4, "pivot": "/attack-graph?campaign=first-run-proof"}
+    });
 
     let preview = serde_json::json!({
         "summary": report.summary.clone(),
@@ -8529,8 +8823,11 @@ fn first_run_operator_proof(state: &Arc<Mutex<AppState>>, auth: &AuthIdentity) -
         "report_id": report_id,
         "response_request_id": stored_response_id,
         "response_status": format!("{:?}", response_status),
+        "demo_surfaces": demo_surface_evidence,
         "steps": [
             "ingest_sample",
+            "seed_cloud_identity_saas_collectors",
+            "seed_ueba_ndr_attack_graph_context",
             "triage_alert",
             "open_case",
             "approve_response_dry_run",
@@ -8557,6 +8854,14 @@ fn first_run_operator_proof(state: &Arc<Mutex<AppState>>, auth: &AuthIdentity) -
         ("report", report_id.to_string()),
         ("report_run", report_run.id.clone()),
         ("response_request", stored_response_id.clone()),
+        (
+            "cloud_identity_saas_collectors",
+            "aws_cloudtrail,okta_identity,m365_saas,workspace_saas".to_string(),
+        ),
+        (
+            "ueba_ndr_attack_graph_context",
+            "demo-user@example.com,first-run-proof-lateral-path".to_string(),
+        ),
     ];
     for (kind, reference_id) in evidence_refs {
         let _ = s.case_store.add_evidence(
@@ -8591,9 +8896,12 @@ fn first_run_operator_proof(state: &Arc<Mutex<AppState>>, auth: &AuthIdentity) -
             "report": report_artifact_metadata,
             "support_run": report_run.artifact_metadata,
         },
+        "demo_surfaces": demo_surface_evidence,
         "response_history": response_record.as_ref().map(response_request_json),
         "steps": [
             {"name": "ingest_sample", "status": "completed"},
+            {"name": "seed_cloud_identity_saas_collectors", "status": "completed"},
+            {"name": "seed_ueba_ndr_attack_graph_context", "status": "completed"},
             {"name": "triage_alert", "status": "completed"},
             {"name": "open_case", "status": "completed"},
             {"name": "approve_response_dry_run", "status": "completed"},
@@ -9317,6 +9625,9 @@ fn handle_api(
         || (method == Method::Get && route_path == "/api/remediation/stats")
         || (method == Method::Get && route_path == "/api/remediation/change-reviews")
         || (method == Method::Post && route_path == "/api/remediation/change-reviews")
+        || (method == Method::Post
+            && route_path.starts_with("/api/remediation/change-reviews/")
+            && route_path.ends_with("/approval"))
         || (method == Method::Get && route_path == "/api/escalation/policies")
         || (method == Method::Post && route_path == "/api/escalation/policies")
         || (method == Method::Post && route_path == "/api/escalation/start")
@@ -16144,6 +16455,9 @@ fn handle_api(
                     "pending": reviews.iter().filter(|review| review.approval_status == "pending_review").count(),
                     "approved": reviews.iter().filter(|review| review.approval_status == "approved").count(),
                     "recovery_ready": reviews.iter().filter(|review| review.recovery_status == "ready" || review.recovery_status == "verified").count(),
+                    "signed": reviews.iter().filter(|review| review.approval_chain_digest.is_some()).count(),
+                    "multi_approver_ready": reviews.iter().filter(|review| review.approvals.iter().filter(|approval| approval.decision == "approve").count() >= review.required_approvers).count(),
+                    "rollback_proofs": reviews.iter().filter(|review| review.rollback_proof.is_some()).count(),
                 });
                 let body = serde_json::json!({
                     "summary": summary,
@@ -16167,6 +16481,50 @@ fn handle_api(
                                     Ok(()) => json_response(
                                         &serde_json::json!({
                                             "status": "recorded",
+                                            "review": review,
+                                        })
+                                        .to_string(),
+                                        200,
+                                    ),
+                                    Err(error) => error_json(&error, 500),
+                                }
+                            }
+                            Err(error) => error_json(&error, 400),
+                        }
+                    }
+                    Err(error) => error_json(&error, 400),
+                }
+            } else if method == Method::Post
+                && url_path.starts_with("/api/remediation/change-reviews/")
+                && url_path.ends_with("/approval")
+            {
+                let review_id = url_path
+                    .trim_start_matches("/api/remediation/change-reviews/")
+                    .trim_end_matches("/approval")
+                    .trim_matches('/');
+                match read_json_value(body, 16 * 1024) {
+                    Ok(payload) => {
+                        let s = state.lock().unwrap_or_else(|e| e.into_inner());
+                        let mut reviews = load_remediation_change_reviews(&s.storage);
+                        let Some(position) = reviews.iter().position(|entry| entry.id == review_id)
+                        else {
+                            return error_json("remediation change review not found", 404);
+                        };
+                        let review = reviews.remove(position);
+                        match apply_remediation_review_approval(
+                            review,
+                            payload,
+                            auth_identity.actor(),
+                        ) {
+                            Ok(review) => {
+                                reviews.push(review.clone());
+                                reviews.sort_by(|left, right| {
+                                    left.requested_at.cmp(&right.requested_at)
+                                });
+                                match save_remediation_change_reviews(&s.storage, &reviews) {
+                                    Ok(()) => json_response(
+                                        &serde_json::json!({
+                                            "status": "approved",
                                             "review": review,
                                         })
                                         .to_string(),
