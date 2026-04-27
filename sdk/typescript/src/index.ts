@@ -356,6 +356,10 @@ export class WardexClient {
     return this.request("GET", "/api/health");
   }
 
+  async wsStats(): Promise<unknown> {
+    return this.request("GET", "/api/ws/stats");
+  }
+
   async authSession(): Promise<unknown> {
     return this.request("GET", "/api/auth/session");
   }

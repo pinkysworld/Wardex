@@ -16,6 +16,8 @@ FEATURE_COVERAGE_DOC = ROOT / "docs/FEATURE_UI_COVERAGE.md"
 RELEASE_ACCEPTANCE_DOC = ROOT / "docs/RELEASE_ACCEPTANCE.md"
 IMPLEMENTATION_PLAN_DOC = ROOT / "docs/IMPLEMENTATION_PLAN.md"
 RELEASE_ACCEPTANCE_SCRIPT = ROOT / "scripts/release_acceptance.sh"
+HELM_CHART = ROOT / "deploy/helm/wardex/Chart.yaml"
+HELM_VALUES = ROOT / "deploy/helm/wardex/values.yaml"
 
 VALID_FEATURE_STATUSES = {"Implemented", "Ready", "Partial", "Missing"}
 
@@ -57,6 +59,28 @@ def read(path: pathlib.Path) -> str:
     return path.read_text(encoding="utf-8")
 
 
+def yaml_scalar(text: str, key: str) -> str | None:
+    match = re.search(rf"^{re.escape(key)}:\s*([^#\n]+)", text, flags=re.MULTILINE)
+    if not match:
+        return None
+    return match.group(1).strip().strip("'\"")
+
+
+def helm_image_tag() -> str | None:
+    in_image = False
+    for raw_line in read(HELM_VALUES).splitlines():
+        if not raw_line.strip() or raw_line.lstrip().startswith("#"):
+            continue
+        indent = len(raw_line) - len(raw_line.lstrip())
+        stripped = raw_line.strip()
+        if indent == 0:
+            in_image = stripped == "image:"
+            continue
+        if in_image and stripped.startswith("tag:"):
+            return stripped.split(":", 1)[1].strip().strip("'\"")
+    return None
+
+
 def release_smoke_specs() -> set[str]:
     script = read(RELEASE_ACCEPTANCE_SCRIPT)
     return set(re.findall(r"tests/playwright/([A-Za-z0-9_.-]+\.spec\.js)", script))
@@ -92,12 +116,27 @@ def main() -> int:
     feature_coverage = read(FEATURE_COVERAGE_DOC)
     release_acceptance = read(RELEASE_ACCEPTANCE_DOC)
     implementation_plan = read(IMPLEMENTATION_PLAN_DOC)
+    helm_chart = read(HELM_CHART)
     smoke_specs = release_smoke_specs()
+
+    chart_version = yaml_scalar(helm_chart, "version")
+    chart_app_version = yaml_scalar(helm_chart, "appVersion")
+    values_image_tag = helm_image_tag()
 
     if f"`{version}`" not in status:
         failures.append(f"docs/STATUS.md does not mention current Cargo version `{version}`")
     if f"v{version}" not in roadmap:
         failures.append(f"docs/ROADMAP_XDR_PROFESSIONAL.md does not mention v{version}")
+    if chart_version != version:
+        failures.append(f"deploy/helm/wardex/Chart.yaml version {chart_version!r} != Cargo version `{version}`")
+    if chart_app_version != version:
+        failures.append(
+            f"deploy/helm/wardex/Chart.yaml appVersion {chart_app_version!r} != Cargo version `{version}`"
+        )
+    if values_image_tag != version:
+        failures.append(
+            f"deploy/helm/wardex/values.yaml image.tag {values_image_tag!r} != Cargo version `{version}`"
+        )
     if "Historical note" not in implementation_plan:
         failures.append("docs/IMPLEMENTATION_PLAN.md is not marked as a historical archive")
     if "Current release state and priorities live in" not in implementation_plan:
@@ -139,7 +178,7 @@ def main() -> int:
             print(f"release-docs: {failure}", file=sys.stderr)
         return 1
 
-    print(f"release-docs: status, roadmap, UI coverage, and release gate align for v{version}")
+    print(f"release-docs: status, roadmap, Helm chart, UI coverage, and release gate align for v{version}")
     return 0
 
 

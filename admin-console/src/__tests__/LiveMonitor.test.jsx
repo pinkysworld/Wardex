@@ -5,6 +5,7 @@ import { MemoryRouter } from 'react-router-dom';
 import LiveMonitor from '../components/LiveMonitor.jsx';
 import { AuthProvider, RoleProvider, ThemeProvider, ToastProvider } from '../hooks.jsx';
 import { setToken } from '../api.js';
+import { wsStatsFixture } from './wsFixtures.js';
 
 const jsonOk = (data) => ({
   ok: true,
@@ -25,15 +26,7 @@ describe('LiveMonitor', () => {
         return Promise.resolve(jsonOk({ total: 0, critical: 0, severe: 0, elevated: 0 }));
       }
       if (String(url).includes('/api/ws/stats')) {
-        return Promise.resolve(
-          jsonOk({
-            connected_clients: 1,
-            total_events: 2,
-            subscribers: 1,
-            connections: [],
-            native_websocket_supported: true,
-          }),
-        );
+        return Promise.resolve(jsonOk(wsStatsFixture()));
       }
       if (String(url).includes('/api/alerts/grouped')) return Promise.resolve(jsonOk([]));
       if (String(url).includes('/api/alerts')) return Promise.resolve(jsonOk([]));
@@ -211,15 +204,7 @@ describe('LiveMonitor', () => {
         );
       }
       if (href.includes('/api/ws/stats')) {
-        return Promise.resolve(
-          jsonOk({
-            connected_clients: 1,
-            total_events: 2,
-            subscribers: 1,
-            connections: [],
-            native_websocket_supported: true,
-          }),
-        );
+        return Promise.resolve(jsonOk(wsStatsFixture()));
       }
       if (href.includes('/api/fp-feedback/stats')) return Promise.resolve(jsonOk([]));
       if (href.includes('/api/health')) return Promise.resolve(jsonOk({ status: 'ok' }));

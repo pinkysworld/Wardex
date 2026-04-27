@@ -561,6 +561,7 @@ impl AlertBroadcaster {
             "connected_clients": self.connections.len(),
             "total_events": self.bus.event_count(),
             "subscribers": self.bus.subscriber_count(),
+            "native_websocket_supported": false,
             "connections": self.connections.iter().map(|c| serde_json::json!({
                 "subscriber_id": c.subscriber_id,
                 "uptime_secs": c.uptime_secs(),
@@ -766,6 +767,17 @@ mod tests {
         assert_eq!(events.len(), 1);
         assert_eq!(events[0].event_type, "alert");
         assert_eq!(events[0].data["id"], serde_json::json!(7));
+    }
+
+    #[test]
+    fn alert_broadcaster_stats_include_transport_capability() {
+        let broadcaster = AlertBroadcaster::new();
+        let stats = broadcaster.stats();
+        assert_eq!(stats["connected_clients"], serde_json::json!(0));
+        assert_eq!(
+            stats["native_websocket_supported"],
+            serde_json::json!(false)
+        );
     }
 
     #[test]

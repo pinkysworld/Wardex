@@ -140,6 +140,21 @@ fn command_lane_endpoint_returns_per_lane_slice() {
 }
 
 #[test]
+fn websocket_stats_exposes_transport_capability() {
+    let (port, token) = spawn_test_server();
+    let resp = ureq::get(&format!("{}/api/ws/stats", base(port)))
+        .set("Authorization", &auth_header(&token))
+        .call()
+        .expect("websocket stats request");
+    assert_eq!(resp.status(), 200);
+
+    let body: serde_json::Value = resp.into_json().unwrap();
+    assert_eq!(body["connected_clients"].as_u64().unwrap(), 0);
+    assert_eq!(body["subscribers"].as_u64().unwrap(), 0);
+    assert_eq!(body["native_websocket_supported"].as_bool(), Some(false));
+}
+
+#[test]
 fn planned_connector_config_and_validation_persist() {
     let (port, token) = spawn_test_server();
     let config = serde_json::json!({

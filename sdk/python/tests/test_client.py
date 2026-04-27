@@ -102,6 +102,23 @@ def test_status(monkeypatch):
     assert calls[0]["kwargs"]["timeout"] == 30.0
 
 
+def test_ws_stats(monkeypatch):
+    calls = install_stub(
+        monkeypatch,
+        {
+            ("GET", f"{BASE}/api/ws/stats"): DummyResponse(
+                url=f"{BASE}/api/ws/stats",
+                json_data={"native_websocket_supported": True, "connected_clients": 1},
+                headers={"content-type": "application/json"},
+            )
+        },
+    )
+    client = WardexClient(BASE, token="tok")
+    data = client.ws_stats()
+    assert data["native_websocket_supported"] is True
+    assert calls[0]["method"] == "GET"
+
+
 def test_auth_check_and_rotate_token(monkeypatch):
     calls = install_stub(
         monkeypatch,

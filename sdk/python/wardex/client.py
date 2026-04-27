@@ -230,6 +230,9 @@ class WardexClient:
     def health(self) -> dict[str, Any]:
         return self._get("/api/health")
 
+    def ws_stats(self) -> dict[str, Any]:
+        return self._get("/api/ws/stats")
+
     # ── alerts ────────────────────────────────────────────────────────────
 
     def list_alerts(self, limit: int = 50, offset: int = 0) -> list[dict[str, Any]]:

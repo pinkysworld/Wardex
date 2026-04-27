@@ -914,6 +914,15 @@ pub fn wardex_openapi_spec(version: &str) -> OpenApiSpec {
             ),
         )
         .path(
+            "/api/ws/stats",
+            "get",
+            op_public(
+                "getWsStats",
+                "Realtime stream transport capability and subscriber statistics",
+                &["observability"],
+            ),
+        )
+        .path(
             "/api/policy/current",
             "get",
             op_public("getCurrentPolicy", "Get current active policy", &["policy"]),
@@ -2378,6 +2387,7 @@ mod tests {
         assert!(spec.paths.contains_key("/api/playbooks"));
         assert!(spec.paths.contains_key("/api/fleet/dashboard"));
         assert!(spec.paths.contains_key("/api/events/search"));
+        assert!(spec.paths.contains_key("/api/ws/stats"));
         assert!(spec.paths.contains_key("/api/rollout/config"));
         assert!(spec.paths.contains_key("/api/support/readiness-evidence"));
         assert!(spec.paths.contains_key("/api/support/first-run-proof"));

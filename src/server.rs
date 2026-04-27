@@ -1395,7 +1395,8 @@ pub async fn run_server(
         response_orchestrator: ResponseOrchestrator::new(),
         feature_flags: FeatureFlagRegistry::new(),
         process_tree: ProcessTree::new("localhost"),
-        spool: EncryptedSpool::new(&spool_key, 10_000),
+        spool: EncryptedSpool::try_new(&spool_key, 10_000)
+            .map_err(|err| format!("failed to initialise encrypted spool: {err}"))?,
         rbac: RbacStore::new(),
         case_store: CaseStore::new("var/cases.json"),
         alert_queue: AlertQueue::new(),

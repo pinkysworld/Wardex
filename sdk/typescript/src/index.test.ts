@@ -101,6 +101,19 @@ describe("WardexClient", () => {
     expect(result).toEqual(body);
   });
 
+  it("wsStats() calls GET /api/ws/stats", async () => {
+    const body = { native_websocket_supported: true, connected_clients: 1 };
+    const mock = mockFetch(200, body);
+    globalThis.fetch = mock;
+    const client = new WardexClient({ baseUrl: "http://localhost:8080" });
+    const result = await client.wsStats();
+    expect(result).toEqual(body);
+    expect(mock).toHaveBeenCalledWith(
+      "http://localhost:8080/api/ws/stats",
+      expect.objectContaining({ method: "GET" })
+    );
+  });
+
   it("alerts() calls GET /api/alerts", async () => {
     const alerts = [{ timestamp: "2026-01-01", hostname: "h", score: 5 }];
     const mock = mockFetch(200, alerts);
