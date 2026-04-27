@@ -26,7 +26,13 @@ describe('LiveMonitor', () => {
       }
       if (String(url).includes('/api/ws/stats')) {
         return Promise.resolve(
-          jsonOk({ connected_clients: 1, total_events: 2, subscribers: 1, connections: [] }),
+          jsonOk({
+            connected_clients: 1,
+            total_events: 2,
+            subscribers: 1,
+            connections: [],
+            native_websocket_supported: true,
+          }),
         );
       }
       if (String(url).includes('/api/alerts/grouped')) return Promise.resolve(jsonOk([]));
@@ -77,7 +83,9 @@ describe('LiveMonitor', () => {
         </AuthProvider>
       </MemoryRouter>,
     );
-    expect(sockets).toHaveLength(1);
+    await waitFor(() => {
+      expect(sockets).toHaveLength(1);
+    });
 
     await act(async () => {
       sockets[0].emitOpen();
@@ -204,7 +212,13 @@ describe('LiveMonitor', () => {
       }
       if (href.includes('/api/ws/stats')) {
         return Promise.resolve(
-          jsonOk({ connected_clients: 1, total_events: 2, subscribers: 1, connections: [] }),
+          jsonOk({
+            connected_clients: 1,
+            total_events: 2,
+            subscribers: 1,
+            connections: [],
+            native_websocket_supported: true,
+          }),
         );
       }
       if (href.includes('/api/fp-feedback/stats')) return Promise.resolve(jsonOk([]));
