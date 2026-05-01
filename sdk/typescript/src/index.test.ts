@@ -145,6 +145,117 @@ describe("WardexClient", () => {
     );
   });
 
+  it("commandSummary() calls GET /api/command/summary", async () => {
+    const body = {
+      generated_at: "2026-05-01T19:00:00Z",
+      metrics: {
+        open_incidents: 3,
+        active_cases: 1,
+        pending_remediation_reviews: 2,
+        rollback_ready_reviews: 1,
+        connector_issues: 1,
+        noisy_rules: 4,
+        stale_rules: 2,
+        release_candidates: 1,
+        compliance_packs: 2,
+        offline_agents: 0,
+      },
+      lanes: {
+        incidents: {
+          status: "attention",
+          count: 3,
+          annotation:
+            "Active incidents need operator attention before additional pivots or rollout work.",
+          next_step:
+            "Use the SOC workspace to confirm ownership, response pressure, and evidence export state.",
+        },
+        remediation: {
+          status: "approval_required",
+          pending: 2,
+          rollback_ready: 1,
+          annotation:
+            "Pending approvals and rollback proofs are waiting for signed operator review.",
+          next_step:
+            "Review blast radius, approval quorum, and rollback proof before any live rollback request.",
+        },
+        connectors: {
+          status: "setup_required",
+          issues: 1,
+          annotation:
+            "One or more collector lanes still need credentials, validation, or fresh ingestion proof.",
+          next_step:
+            "Validate connector credentials and recent evidence before operators depend on the lane.",
+          readiness: { collectors: [] },
+        },
+        rule_tuning: {
+          status: "review_required",
+          noisy: 4,
+          stale: 2,
+          active_suppressions: 1,
+          annotation:
+            "Detection lanes have replay or suppression debt that should be resolved before promotion.",
+          next_step:
+            "Run replay, review suppressions, and update lifecycle evidence before enabling broader rollout.",
+        },
+        release: {
+          status: "ready",
+          candidates: 1,
+          current_version: "0.55.1",
+          annotation:
+            "Candidate metadata is available for rollout review, SBOM checks, and rollback planning.",
+          next_step:
+            "Review candidate notes, SBOM context, and rollout readiness before promotion.",
+        },
+        evidence: {
+          status: "ready",
+          score: 91,
+          templates: 2,
+          annotation:
+            "Compliance evidence is strong enough to package alongside operational proof and release context.",
+          next_step:
+            "Generate packs from live incidents, release metadata, and report templates when auditors ask.",
+        },
+      },
+    };
+    const mock = mockFetch(200, body);
+    globalThis.fetch = mock;
+    const client = new WardexClient({ baseUrl: "http://localhost:8080" });
+    const result = await client.commandSummary();
+    expect(result.metrics.open_incidents).toBe(3);
+    expect(result.lanes.connectors.annotation).toContain("collector lanes");
+    expect(result.lanes.release.current_version).toBe("0.55.1");
+    expect(mock).toHaveBeenCalledWith(
+      "http://localhost:8080/api/command/summary",
+      expect.objectContaining({ method: "GET" })
+    );
+  });
+
+  it("commandLane() calls GET /api/command/lanes/{lane}", async () => {
+    const body = {
+      lane: "release",
+      metric_key: "release_candidates",
+      metric_value: 1,
+      payload: {
+        status: "ready",
+        annotation:
+          "Candidate metadata is available for rollout review, SBOM checks, and rollback planning.",
+        next_step:
+          "Review candidate notes, SBOM context, and rollout readiness before promotion.",
+      },
+    };
+    const mock = mockFetch(200, body);
+    globalThis.fetch = mock;
+    const client = new WardexClient({ baseUrl: "http://localhost:8080" });
+    const result = await client.commandLane("release");
+    expect(result.lane).toBe("release");
+    expect(result.metric_key).toBe("release_candidates");
+    expect(result.payload.annotation).toContain("Candidate metadata");
+    expect(mock).toHaveBeenCalledWith(
+      "http://localhost:8080/api/command/lanes/release",
+      expect.objectContaining({ method: "GET" })
+    );
+  });
+
   it("authSession() calls GET /api/auth/session", async () => {
     const body = {
       user_id: "analyst@example.com",

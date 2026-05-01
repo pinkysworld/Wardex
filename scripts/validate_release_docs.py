@@ -22,6 +22,11 @@ HELM_VALUES = ROOT / "deploy/helm/wardex/values.yaml"
 VALID_FEATURE_STATUSES = {"Implemented", "Ready", "Partial", "Missing"}
 
 CAPABILITY_SPEC_REQUIREMENTS = {
+    "Cross-product command and workflow federation": {
+        "enterprise_console_smoke.spec.js",
+        "advanced_console_workflows.spec.js",
+        "assistant_ticketing_live.spec.js",
+    },
     "Detection engineering": {"advanced_console_workflows.spec.js"},
     "SOC operations": {"advanced_console_workflows.spec.js", "live_release_smoke.spec.js"},
     "Dashboard customization": {"live_release_smoke.spec.js"},

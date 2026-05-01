@@ -9444,17 +9444,47 @@ fn command_summary_payload(state: &mut AppState) -> serde_json::Value {
             "incidents": {
                 "status": if open_incidents > 0 { "attention" } else { "ready" },
                 "count": open_incidents,
+                "annotation": if open_incidents > 0 {
+                    "Active incidents need operator attention before additional pivots or rollout work."
+                } else {
+                    "Incident backlog is clear enough for proactive hunts and change review."
+                },
+                "next_step": if open_incidents > 0 {
+                    "Use the SOC workspace to confirm ownership, response pressure, and evidence export state."
+                } else {
+                    "Keep the incident lane warm with attack-story pivots and case follow-ups."
+                },
                 "href": "/soc",
             },
             "remediation": {
                 "status": remediation_lane.status,
                 "pending": remediation_lane.pending_reviews,
                 "rollback_ready": remediation_lane.rollback_ready,
+                "annotation": if remediation_lane.pending_reviews > 0 {
+                    "Pending approvals and rollback proofs are waiting for signed operator review."
+                } else {
+                    "Remediation approvals are current; keep typed-host safeguards in place for live execution."
+                },
+                "next_step": if remediation_lane.pending_reviews > 0 {
+                    "Review blast radius, approval quorum, and rollback proof before any live rollback request."
+                } else {
+                    "Exercise the rollback path only after confirm_hostname and execution-policy checks are verified."
+                },
                 "href": "/infrastructure?tab=remediation",
             },
             "connectors": {
                 "status": if connector_issues > 0 { "setup_required" } else { "ready" },
                 "issues": connector_issues,
+                "annotation": if connector_issues > 0 {
+                    "One or more collector lanes still need credentials, validation, or fresh ingestion proof."
+                } else {
+                    "Collector onboarding proof is current across the shipped cloud, identity, SaaS, EDR, and syslog lanes."
+                },
+                "next_step": if connector_issues > 0 {
+                    "Validate connector credentials and recent evidence before operators depend on the lane."
+                } else {
+                    "Keep summary-driven lane status aligned as new collector workflows are added."
+                },
                 "readiness": connectors,
                 "planned": ["github_audit", "crowdstrike_falcon", "generic_syslog"],
             },
@@ -9463,18 +9493,48 @@ fn command_summary_payload(state: &mut AppState) -> serde_json::Value {
                 "noisy": noisy_rules,
                 "stale": stale_rules,
                 "active_suppressions": state.enterprise.active_suppression_count(),
+                "annotation": if noisy_rules > 0 || stale_rules > 0 {
+                    "Detection lanes have replay or suppression debt that should be resolved before promotion."
+                } else {
+                    "Rule replay, suppression, and promotion queues are ready for the next release candidate."
+                },
+                "next_step": if noisy_rules > 0 || stale_rules > 0 {
+                    "Run replay, review suppressions, and update lifecycle evidence before enabling broader rollout."
+                } else {
+                    "Keep ATT&CK coverage and false-positive debt visible as rules evolve."
+                },
                 "href": "/detection",
             },
             "release": {
                 "status": if release_candidates > 0 { "ready" } else { "missing_catalog" },
                 "candidates": release_candidates,
                 "current_version": env!("CARGO_PKG_VERSION"),
+                "annotation": if release_candidates > 0 {
+                    "Candidate metadata is available for rollout review, SBOM checks, and rollback planning."
+                } else {
+                    "Release metadata is missing, so rollout review and evidence export are blocked."
+                },
+                "next_step": if release_candidates > 0 {
+                    "Review candidate notes, SBOM context, and rollout readiness before promotion."
+                } else {
+                    "Publish release metadata so the command lane can verify rollout readiness in the acceptance gate."
+                },
                 "href": "/infrastructure?tab=rollouts",
             },
             "evidence": {
                 "status": if compliance_report.score >= 80.0 { "ready" } else { "attention" },
                 "score": compliance_report.score,
                 "templates": report_templates.len(),
+                "annotation": if compliance_report.score >= 80.0 {
+                    "Compliance evidence is strong enough to package alongside operational proof and release context."
+                } else {
+                    "Evidence packs still need stronger compliance posture before audit export."
+                },
+                "next_step": if compliance_report.score >= 80.0 {
+                    "Generate packs from live incidents, release metadata, and report templates when auditors ask."
+                } else {
+                    "Close posture gaps before promoting the next pack as auditor-ready evidence."
+                },
                 "href": "/reports",
             }
         }
@@ -17388,23 +17448,20 @@ fn handle_api(
 
             // Remediation
             } else if method == Method::Post && url_path == "/api/remediation/plan" {
-                let body = read_body_limited(body, 8192);
-                match body.and_then(|b| {
-                    serde_json::from_str::<serde_json::Value>(&b).map_err(|e| e.to_string())
-                }) {
-                    Ok(v) => {
+                match read_json_value(body, crate::remediation::REMEDIATION_PLAN_BODY_LIMIT) {
+                    Ok(payload) => {
                         let s = state.lock().unwrap_or_else(|e| e.into_inner());
-                        match crate::remediation::remediation_plan_from_payload(
+                        match crate::remediation::remediation_plan_json_from_payload(
                             &s.remediation_engine,
-                            v,
+                            payload,
                         ) {
-                            Ok(plan) => {
-                                json_response(&crate::remediation::remediation_plan_json(&plan), 200)
+                            Ok(json) => json_response(&json, 200),
+                            Err(error) => {
+                                error_json(error.response_message(), error.http_status())
                             }
-                            Err(error) => error_json(&error, 400),
                         }
                     }
-                    Err(e) => error_json(&e, 400),
+                    Err(error) => error_json(&error, 400),
                 }
             } else if method == Method::Get && url_path == "/api/remediation/results" {
                 let s = state.lock().unwrap_or_else(|e| e.into_inner());
@@ -17414,24 +17471,20 @@ fn handle_api(
                 json_response(&crate::remediation::remediation_stats_json(&s.remediation_engine), 200)
             } else if method == Method::Get && url_path == "/api/remediation/change-reviews" {
                 let s = state.lock().unwrap_or_else(|e| e.into_inner());
-                let body = crate::remediation::remediation_change_review_list(&s.storage);
                 json_response(
-                    &serde_json::to_string(&body).unwrap_or_else(|_| "{}".to_string()),
+                    &crate::remediation::remediation_change_review_list_json(&s.storage),
                     200,
                 )
             } else if method == Method::Post && url_path == "/api/remediation/change-reviews" {
-                match read_json_value(body, 64 * 1024) {
+                match read_json_value(body, crate::remediation::REMEDIATION_CHANGE_REVIEW_BODY_LIMIT) {
                     Ok(payload) => {
                         let s = state.lock().unwrap_or_else(|e| e.into_inner());
-                        match crate::remediation::record_remediation_change_review(
+                        match crate::remediation::record_remediation_change_review_json(
                             &s.storage,
                             payload,
                             auth_identity.actor(),
                         ) {
-                            Ok(review) => json_response(
-                                &crate::remediation::review_recorded_response(review).to_string(),
-                                200,
-                            ),
+                            Ok(json) => json_response(&json, 200),
                             Err(error) => {
                                 error_json(error.response_message(), error.http_status())
                             }
@@ -17440,26 +17493,27 @@ fn handle_api(
                     Err(error) => error_json(&error, 400),
                 }
             } else if method == Method::Post
-                && url_path.starts_with("/api/remediation/change-reviews/")
-                && url_path.ends_with("/approval")
+                && crate::remediation::remediation_change_review_route_id(
+                    url_path,
+                    crate::remediation::RemediationChangeReviewRouteAction::Approval,
+                )
+                .is_some()
             {
-                let review_id = url_path
-                    .trim_start_matches("/api/remediation/change-reviews/")
-                    .trim_end_matches("/approval")
-                    .trim_matches('/');
-                match read_json_value(body, 16 * 1024) {
+                let review_id = crate::remediation::remediation_change_review_route_id(
+                    url_path,
+                    crate::remediation::RemediationChangeReviewRouteAction::Approval,
+                )
+                .unwrap_or_default();
+                match read_json_value(body, crate::remediation::REMEDIATION_CHANGE_REVIEW_ACTION_BODY_LIMIT) {
                     Ok(payload) => {
                         let s = state.lock().unwrap_or_else(|e| e.into_inner());
-                        match crate::remediation::approve_remediation_change_review(
+                        match crate::remediation::approve_remediation_change_review_json(
                             &s.storage,
-                            review_id,
+                            &review_id,
                             payload,
                             auth_identity.actor(),
                         ) {
-                            Ok(review) => json_response(
-                                &crate::remediation::review_approval_response(review).to_string(),
-                                200,
-                            ),
+                            Ok(json) => json_response(&json, 200),
                             Err(error) => {
                                 error_json(error.response_message(), error.http_status())
                             }
@@ -17468,35 +17522,34 @@ fn handle_api(
                     Err(error) => error_json(&error, 400),
                 }
             } else if method == Method::Post
-                && url_path.starts_with("/api/remediation/change-reviews/")
-                && url_path.ends_with("/rollback")
+                && crate::remediation::remediation_change_review_route_id(
+                    url_path,
+                    crate::remediation::RemediationChangeReviewRouteAction::Rollback,
+                )
+                .is_some()
             {
-                let review_id = url_path
-                    .trim_start_matches("/api/remediation/change-reviews/")
-                    .trim_end_matches("/rollback")
-                    .trim_matches('/');
-                match read_json_value(body, 16 * 1024) {
+                let review_id = crate::remediation::remediation_change_review_route_id(
+                    url_path,
+                    crate::remediation::RemediationChangeReviewRouteAction::Rollback,
+                )
+                .unwrap_or_default();
+                match read_json_value(body, crate::remediation::REMEDIATION_CHANGE_REVIEW_ACTION_BODY_LIMIT) {
                     Ok(payload) => {
                         let mut s = state.lock().unwrap_or_else(|e| e.into_inner());
                         let storage = s.storage.clone();
-                        let allow_live_rollback = s.config.remediation.allow_live_rollback;
-                        let execute_live_commands =
-                            s.config.remediation.execute_live_rollback_commands;
-                        match crate::remediation::execute_and_record_review_rollback(
+                        let policy = crate::remediation::RemediationRollbackPolicy::new(
+                            s.config.remediation.allow_live_rollback,
+                            s.config.remediation.execute_live_rollback_commands,
+                        );
+                        match crate::remediation::execute_review_rollback_json_with_policy(
                             &storage,
                             &mut s.remediation_engine,
-                            crate::remediation::ExecuteReviewRollbackRequest {
-                                review_id: review_id.to_string(),
-                                payload,
-                                actor: auth_identity.actor().to_string(),
-                                allow_live_rollback,
-                                execute_live_commands,
-                            },
+                            &review_id,
+                            payload,
+                            auth_identity.actor(),
+                            policy,
                         ) {
-                            Ok(review) => json_response(
-                                &crate::remediation::review_rollback_response(review).to_string(),
-                                200,
-                            ),
+                            Ok(json) => json_response(&json, 200),
                             Err(error) => {
                                 error_json(error.response_message(), error.http_status())
                             }

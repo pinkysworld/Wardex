@@ -611,6 +611,51 @@ impl ExecuteReviewRollbackError {
     }
 }
 
+pub const REMEDIATION_PLAN_BODY_LIMIT: usize = 8 * 1024;
+pub const REMEDIATION_CHANGE_REVIEW_BODY_LIMIT: usize = 64 * 1024;
+pub const REMEDIATION_CHANGE_REVIEW_ACTION_BODY_LIMIT: usize = 16 * 1024;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RemediationChangeReviewRouteAction {
+    Approval,
+    Rollback,
+}
+
+impl RemediationChangeReviewRouteAction {
+    fn suffix(self) -> &'static str {
+        match self {
+            Self::Approval => "/approval",
+            Self::Rollback => "/rollback",
+        }
+    }
+}
+
+pub fn remediation_change_review_route_id(
+    path: &str,
+    action: RemediationChangeReviewRouteAction,
+) -> Option<String> {
+    path.strip_prefix("/api/remediation/change-reviews/")
+        .and_then(|tail| tail.strip_suffix(action.suffix()))
+        .map(|review_id| review_id.trim_matches('/'))
+        .filter(|review_id| !review_id.is_empty() && !review_id.contains('/'))
+        .map(str::to_string)
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct RemediationRollbackPolicy {
+    pub allow_live_rollback: bool,
+    pub execute_live_commands: bool,
+}
+
+impl RemediationRollbackPolicy {
+    pub fn new(allow_live_rollback: bool, execute_live_commands: bool) -> Self {
+        Self {
+            allow_live_rollback,
+            execute_live_commands,
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct ExecuteReviewRollbackRequest {
     pub review_id: String,
@@ -642,6 +687,56 @@ pub fn review_rollback_response(review: RemediationChangeReview) -> serde_json::
     remediation_change_review_response("rollback_recorded", review)
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RemediationApiError {
+    status: u16,
+    message: String,
+}
+
+impl RemediationApiError {
+    fn bad_request(message: impl Into<String>) -> Self {
+        Self {
+            status: 400,
+            message: message.into(),
+        }
+    }
+
+    pub fn http_status(&self) -> u16 {
+        self.status
+    }
+
+    pub fn response_message(&self) -> &str {
+        &self.message
+    }
+}
+
+impl From<RemediationChangeReviewStoreError> for RemediationApiError {
+    fn from(error: RemediationChangeReviewStoreError) -> Self {
+        Self {
+            status: error.http_status(),
+            message: error.response_message().to_string(),
+        }
+    }
+}
+
+impl From<RecordRemediationChangeReviewError> for RemediationApiError {
+    fn from(error: RecordRemediationChangeReviewError) -> Self {
+        Self {
+            status: error.http_status(),
+            message: error.response_message().to_string(),
+        }
+    }
+}
+
+impl From<ExecuteReviewRollbackError> for RemediationApiError {
+    fn from(error: ExecuteReviewRollbackError) -> Self {
+        Self {
+            status: error.http_status(),
+            message: error.response_message().to_string(),
+        }
+    }
+}
+
 fn serialize_json<T>(value: &T) -> String
 where
     T: Serialize,
@@ -653,6 +748,14 @@ pub fn remediation_plan_json(plan: &RemediationPlan) -> String {
     serialize_json(plan)
 }
 
+pub fn remediation_plan_json_from_payload(
+    engine: &RemediationEngine,
+    payload: serde_json::Value,
+) -> Result<String, RemediationApiError> {
+    let plan = remediation_plan_from_payload(engine, payload).map_err(RemediationApiError::bad_request)?;
+    Ok(remediation_plan_json(&plan))
+}
+
 pub fn remediation_results_json(engine: &RemediationEngine, limit: usize) -> String {
     let results: Vec<RemediationResult> = engine.recent_results(limit).into_iter().cloned().collect();
     serialize_json(&results)
@@ -660,6 +763,59 @@ pub fn remediation_results_json(engine: &RemediationEngine, limit: usize) -> Str
 
 pub fn remediation_stats_json(engine: &RemediationEngine) -> String {
     serialize_json(&engine.stats())
+}
+
+pub fn remediation_change_review_list_json(storage: &SharedStorage) -> String {
+    serialize_json(&remediation_change_review_list(storage))
+}
+
+pub fn record_remediation_change_review_json(
+    storage: &SharedStorage,
+    payload: serde_json::Value,
+    actor: &str,
+) -> Result<String, RemediationApiError> {
+    let review = record_remediation_change_review(storage, payload, actor)?;
+    Ok(serialize_json(&review_recorded_response(review)))
+}
+
+pub fn approve_remediation_change_review_json(
+    storage: &SharedStorage,
+    review_id: &str,
+    payload: serde_json::Value,
+    actor: &str,
+) -> Result<String, RemediationApiError> {
+    let review = approve_remediation_change_review(storage, review_id, payload, actor)?;
+    Ok(serialize_json(&review_approval_response(review)))
+}
+
+pub fn execute_review_rollback_json(
+    storage: &SharedStorage,
+    engine: &mut RemediationEngine,
+    request: ExecuteReviewRollbackRequest,
+) -> Result<String, RemediationApiError> {
+    let review = execute_and_record_review_rollback(storage, engine, request)?;
+    Ok(serialize_json(&review_rollback_response(review)))
+}
+
+pub fn execute_review_rollback_json_with_policy(
+    storage: &SharedStorage,
+    engine: &mut RemediationEngine,
+    review_id: &str,
+    payload: serde_json::Value,
+    actor: &str,
+    policy: RemediationRollbackPolicy,
+) -> Result<String, RemediationApiError> {
+    execute_review_rollback_json(
+        storage,
+        engine,
+        ExecuteReviewRollbackRequest {
+            review_id: review_id.to_string(),
+            payload,
+            actor: actor.to_string(),
+            allow_live_rollback: policy.allow_live_rollback,
+            execute_live_commands: policy.execute_live_commands,
+        },
+    )
 }
 
 pub fn remediation_platform_from_payload(payload: &serde_json::Value) -> RemediationPlatform {
@@ -2006,6 +2162,45 @@ mod tests {
     use super::*;
     use serde_json::json;
 
+    fn temp_shared_storage() -> (tempfile::TempDir, SharedStorage) {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let storage = SharedStorage::open(dir.path().to_str().expect("utf8 temp path"))
+            .expect("shared storage");
+        (dir, storage)
+    }
+
+    #[test]
+    fn remediation_change_review_route_id_parses_action_paths() {
+        assert_eq!(
+            remediation_change_review_route_id(
+                "/api/remediation/change-reviews/review-123/approval",
+                RemediationChangeReviewRouteAction::Approval,
+            ),
+            Some("review-123".to_string())
+        );
+        assert_eq!(
+            remediation_change_review_route_id(
+                "/api/remediation/change-reviews/review-123/rollback",
+                RemediationChangeReviewRouteAction::Rollback,
+            ),
+            Some("review-123".to_string())
+        );
+        assert_eq!(
+            remediation_change_review_route_id(
+                "/api/remediation/change-reviews/review-123/rollback",
+                RemediationChangeReviewRouteAction::Approval,
+            ),
+            None
+        );
+        assert_eq!(
+            remediation_change_review_route_id(
+                "/api/remediation/change-reviews/nested/review/approval",
+                RemediationChangeReviewRouteAction::Approval,
+            ),
+            None
+        );
+    }
+
     #[test]
     fn remediation_review_payload_defaults_summary_and_required_approvers() {
         let review = remediation_review_from_payload(
@@ -2072,6 +2267,81 @@ mod tests {
         assert_eq!(
             review.rollback_proof.as_ref().map(|proof| proof.status.as_str()),
             Some("ready")
+        );
+    }
+
+    #[test]
+    fn remediation_change_review_json_wrappers_record_approve_and_rollback() {
+        let (_dir, storage) = temp_shared_storage();
+        let mut engine = RemediationEngine::new();
+
+        let created = record_remediation_change_review_json(
+            &storage,
+            json!({
+                "id": "review-json-1",
+                "title": "Review rollback wrapper",
+                "asset_id": "host-json",
+                "risk": "low",
+                "evidence": {
+                    "path": "/tmp/payload",
+                    "rollback_source": "/tmp/clean"
+                }
+            }),
+            "operator",
+        )
+        .expect("record review json");
+        let created: serde_json::Value = serde_json::from_str(&created).expect("created json");
+        assert_eq!(created["status"], json!("recorded"));
+        assert_eq!(created["review"]["id"], json!("review-json-1"));
+
+        let listed = remediation_change_review_list_json(&storage);
+        let listed: serde_json::Value = serde_json::from_str(&listed).expect("list json");
+        assert_eq!(listed["summary"]["total"], json!(1));
+
+        let approved = approve_remediation_change_review_json(
+            &storage,
+            "review-json-1",
+            json!({"approver": "primary-reviewer", "decision": "approve"}),
+            "operator",
+        )
+        .expect("approve review json");
+        let approved: serde_json::Value = serde_json::from_str(&approved).expect("approved json");
+        assert_eq!(approved["status"], json!("approved"));
+        assert_eq!(approved["review"]["approval_status"], json!("approved"));
+
+        let rollback = execute_review_rollback_json_with_policy(
+            &storage,
+            &mut engine,
+            "review-json-1",
+            json!({"dry_run": true, "platform": "linux"}),
+            "operator",
+            RemediationRollbackPolicy::new(false, false),
+        )
+        .expect("rollback review json");
+        let rollback: serde_json::Value = serde_json::from_str(&rollback).expect("rollback json");
+        assert_eq!(rollback["status"], json!("rollback_recorded"));
+        assert_eq!(rollback["review"]["recovery_status"], json!("verified"));
+        assert_eq!(
+            rollback["review"]["rollback_proof"]["status"],
+            json!("dry_run_verified")
+        );
+    }
+
+    #[test]
+    fn remediation_change_review_json_wrappers_map_missing_review_to_not_found() {
+        let (_dir, storage) = temp_shared_storage();
+        let error = approve_remediation_change_review_json(
+            &storage,
+            "missing-review",
+            json!({"decision": "approve"}),
+            "operator",
+        )
+        .expect_err("missing review should map to API error");
+
+        assert_eq!(error.http_status(), 404);
+        assert_eq!(
+            error.response_message(),
+            "remediation change review not found"
         );
     }
 
@@ -2246,6 +2516,26 @@ mod tests {
             RemediationAction::BlockIp { ref addr } if addr == "203.0.113.20"
         ));
         assert_eq!(plan.commands[0].program, "pfctl");
+    }
+
+    #[test]
+    fn remediation_plan_json_from_payload_maps_plan_response() {
+        let engine = RemediationEngine::new();
+        let body = remediation_plan_json_from_payload(
+            &engine,
+            json!({
+                "platform": "linux",
+                "action": "kill_process",
+                "pid": 42,
+                "name": "payload"
+            }),
+        )
+        .expect("plan json should parse");
+        let body: serde_json::Value = serde_json::from_str(&body).expect("plan json");
+
+        assert_eq!(body["platform"], json!("Linux"));
+        assert_eq!(body["action"]["KillProcess"]["pid"], json!(42));
+        assert_eq!(body["commands"][0]["program"], json!("kill"));
     }
 
     #[test]

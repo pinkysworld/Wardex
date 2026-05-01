@@ -2598,6 +2598,78 @@ components:
           items: { type: string }
       required: [generated_at, runtime, rest, graphql, sdk, issues]
 
+    CommandCenterMetrics:
+      type: object
+      properties:
+        open_incidents: { type: integer }
+        active_cases: { type: integer }
+        pending_remediation_reviews: { type: integer }
+        rollback_ready_reviews: { type: integer }
+        connector_issues: { type: integer }
+        noisy_rules: { type: integer }
+        stale_rules: { type: integer }
+        release_candidates: { type: integer }
+        compliance_packs: { type: integer }
+        offline_agents: { type: integer }
+      required: [open_incidents, active_cases, pending_remediation_reviews, rollback_ready_reviews, connector_issues, noisy_rules, stale_rules, release_candidates, compliance_packs, offline_agents]
+
+    CommandCenterLanePayload:
+      type: object
+      properties:
+        status: { type: string }
+        annotation: { type: string }
+        next_step: { type: string }
+        href: { type: string }
+        count: { type: integer }
+        pending: { type: integer }
+        rollback_ready: { type: integer }
+        issues: { type: integer }
+        readiness: { type: object }
+        planned:
+          type: array
+          items: { type: string }
+        noisy: { type: integer }
+        stale: { type: integer }
+        active_suppressions: { type: integer }
+        candidates: { type: integer }
+        current_version: { type: string }
+        score: { type: number }
+        templates: { type: integer }
+      required: [status, annotation, next_step]
+
+    CommandCenterLanes:
+      type: object
+      properties:
+        incidents: { $ref: "#/components/schemas/CommandCenterLanePayload" }
+        remediation: { $ref: "#/components/schemas/CommandCenterLanePayload" }
+        connectors: { $ref: "#/components/schemas/CommandCenterLanePayload" }
+        rule_tuning: { $ref: "#/components/schemas/CommandCenterLanePayload" }
+        release: { $ref: "#/components/schemas/CommandCenterLanePayload" }
+        evidence: { $ref: "#/components/schemas/CommandCenterLanePayload" }
+      required: [incidents, remediation, connectors, rule_tuning, release, evidence]
+
+    CommandCenterSummaryResponse:
+      type: object
+      properties:
+        generated_at: { type: string, format: date-time }
+        metrics: { $ref: "#/components/schemas/CommandCenterMetrics" }
+        lanes: { $ref: "#/components/schemas/CommandCenterLanes" }
+      required: [generated_at, metrics, lanes]
+
+    CommandCenterLaneResponse:
+      type: object
+      properties:
+        lane:
+          type: string
+          enum: [incidents, remediation, connectors, rule_tuning, release, evidence]
+        generated_at: { type: string, format: date-time }
+        metric_key:
+          type: string
+          enum: [open_incidents, pending_remediation_reviews, connector_issues, noisy_rules, release_candidates, compliance_packs]
+        metric_value: { type: integer }
+        payload: { $ref: "#/components/schemas/CommandCenterLanePayload" }
+      required: [lane, generated_at, metric_key, metric_value, payload]
+
     SupportReadinessVersion:
       type: object
       properties:
@@ -10916,23 +10988,18 @@ paths:
 
   /api/command/summary:
     get:
-      tags: [Incidents]
+      tags: [Command]
       summary: Command Center lane-health summary
       responses:
         "200":
           description: Lane health across incidents, approvals, connectors, rule tuning, releases, and evidence packs
           content:
             application/json:
-              schema:
-                type: object
-                properties:
-                  generated_at: { type: string, format: date-time }
-                  metrics: { type: object }
-                  lanes: { type: object }
+              schema: { $ref: "#/components/schemas/CommandCenterSummaryResponse" }
 
   "/api/command/lanes/{lane}":
     get:
-      tags: [Incidents]
+      tags: [Command]
       summary: Per-lane Command Center slice
       parameters:
         - name: lane
@@ -10946,14 +11013,7 @@ paths:
           description: Single-lane payload with metric key, value, and shared timestamp
           content:
             application/json:
-              schema:
-                type: object
-                properties:
-                  lane: { type: string }
-                  generated_at: { type: string, format: date-time }
-                  metric_key: { type: string, nullable: true }
-                  metric_value: { type: integer, nullable: true }
-                  payload: { type: object }
+              schema: { $ref: "#/components/schemas/CommandCenterLaneResponse" }
         "404":
           description: Lane not found
 

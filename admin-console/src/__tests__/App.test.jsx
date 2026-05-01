@@ -242,7 +242,17 @@ describe('App', () => {
                 compliance_packs: 1,
               },
               lanes: {
+                incidents: {
+                  annotation:
+                    'Active incidents need operator attention before additional pivots or rollout work.',
+                  next_step:
+                    'Use the SOC workspace to confirm ownership, response pressure, and evidence export state.',
+                },
                 connectors: {
+                  annotation:
+                    'One or more collector lanes still need credentials, validation, or fresh ingestion proof.',
+                  next_step:
+                    'Validate connector credentials and recent evidence before operators depend on the lane.',
                   readiness: {
                     collectors: [
                       {
@@ -270,6 +280,12 @@ describe('App', () => {
                       },
                     ],
                   },
+                },
+                release: {
+                  annotation:
+                    'Candidate metadata is available for rollout review, SBOM checks, and rollback planning.',
+                  next_step:
+                    'Review candidate notes, SBOM context, and rollout readiness before promotion.',
                 },
               },
             };
@@ -334,6 +350,14 @@ describe('App', () => {
     expect(screen.getAllByText('AWS CloudTrail').length).toBeGreaterThan(0);
     expect(screen.getAllByText('GitHub Audit Log').length).toBeGreaterThan(0);
     expect(screen.getAllByText('Guided Remediation Approval Flow').length).toBeGreaterThan(0);
+    expect(
+      screen.getByText(
+        'One or more collector lanes still need credentials, validation, or fresh ingestion proof.',
+      ),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText('Review candidate notes, SBOM context, and rollout readiness before promotion.'),
+    ).toBeInTheDocument();
     await userEvent.click(screen.getByRole('button', { name: /Connector gaps/i }));
     expect(await screen.findByText('Connector Validation')).toBeInTheDocument();
     expect(requestedUrls).toContain('/api/incidents');

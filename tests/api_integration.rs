@@ -122,6 +122,46 @@ fn current_block_ip_command() -> &'static str {
     }
 }
 
+fn nonmatching_live_rollback_platform() -> &'static str {
+    if cfg!(target_os = "windows") { "linux" } else { "windows" }
+}
+
+fn disable_account_command_for_platform(platform: &str) -> &'static str {
+    match platform {
+        "macos" => "dscl",
+        "windows" => "net",
+        _ => "usermod",
+    }
+}
+
+fn flush_dns_command_for_platform(platform: &str) -> &'static str {
+    match platform {
+        "macos" => "dscacheutil",
+        "windows" => "ipconfig",
+        _ => "systemd-resolve",
+    }
+}
+
+fn current_disable_account_command() -> &'static str {
+    if cfg!(target_os = "macos") {
+        "dscl"
+    } else if cfg!(target_os = "windows") {
+        "net"
+    } else {
+        "usermod"
+    }
+}
+
+fn current_flush_dns_command() -> &'static str {
+    if cfg!(target_os = "macos") {
+        "dscacheutil"
+    } else if cfg!(target_os = "windows") {
+        "ipconfig"
+    } else {
+        "systemd-resolve"
+    }
+}
+
 fn with_stubbed_commands_path<T>(commands: &[(&str, &str)], test: impl FnOnce() -> T) -> T {
     let _guard = COMMAND_PATH_MUTEX
         .get_or_init(|| Mutex::new(()))
@@ -1971,6 +2011,261 @@ fn live_rollback_executes_block_ip_action_when_execution_policy_is_enabled() {
         assert!(logged.contains(blocked_ip));
         assert!(logged.contains("-j DROP"));
     }
+}
+
+#[test]
+fn live_rollback_executes_disable_account_action_when_execution_policy_is_enabled() {
+    let (port, token) = spawn_test_server_with_live_rollback_execution_enabled();
+    let platform = current_live_rollback_platform();
+    let command_name = current_disable_account_command();
+    let username = "wardex-disabled";
+    let temp = tempfile::tempdir().expect("tempdir");
+    let log_path = temp.path().join("disable-account.log");
+    let script = if cfg!(windows) {
+        format!(
+            "@echo off\r\necho %*>>\"{}\"\r\nexit /b 0\r\n",
+            log_path.display()
+        )
+    } else {
+        format!(
+            "#!/bin/sh\nprintf '%s\\n' \"$*\" >> \"{}\"\nexit 0\n",
+            log_path.display()
+        )
+    };
+
+    let rollback = with_stubbed_command_path(command_name, &script, || {
+        let review_id = create_approved_remediation_review(
+            port,
+            &token,
+            "host-live-disable-account",
+            serde_json::json!({
+                "rollback_action": {
+                    "type": "disable_account",
+                    "username": username
+                }
+            }),
+        );
+
+        ureq::post(&format!(
+            "{}/api/remediation/change-reviews/{}/rollback",
+            base(port),
+            review_id
+        ))
+        .set("Authorization", &auth_header(&token))
+        .send_json(serde_json::json!({
+            "dry_run": false,
+            "platform": platform,
+            "confirm_hostname": "host-live-disable-account"
+        }))
+        .expect("execute disable-account live rollback")
+        .into_json::<serde_json::Value>()
+        .unwrap()
+    });
+
+    assert_eq!(rollback["status"], "rollback_recorded");
+    assert_eq!(rollback["review"]["rollback_proof"]["status"], "executed");
+    assert_eq!(rollback["review"]["recovery_status"], "executed");
+    assert_eq!(
+        rollback["review"]["rollback_proof"]["execution_result"]["live_execution"],
+        serde_json::json!("executed")
+    );
+    assert_eq!(
+        rollback["review"]["rollback_proof"]["execution_result"]["commands"][0]["program"],
+        serde_json::json!(command_name)
+    );
+    assert_eq!(
+        rollback["review"]["rollback_proof"]["execution_result"]["command_executions"][0]["exit_code"],
+        serde_json::json!(0)
+    );
+
+    let logged = std::fs::read_to_string(&log_path).expect("read disable-account log");
+    if cfg!(target_os = "macos") {
+        assert!(logged.contains(&format!("-create /Users/{username} AuthenticationAuthority ;DisabledUser;")));
+    } else if cfg!(target_os = "windows") {
+        assert!(logged.contains(&format!("user {username} /active:no")));
+    } else {
+        assert!(logged.contains(&format!("-L {username}")));
+    }
+}
+
+#[test]
+fn live_rollback_executes_flush_dns_action_when_execution_policy_is_enabled() {
+    let (port, token) = spawn_test_server_with_live_rollback_execution_enabled();
+    let platform = current_live_rollback_platform();
+    let command_name = current_flush_dns_command();
+    let temp = tempfile::tempdir().expect("tempdir");
+    let log_path = temp.path().join("flush-dns.log");
+    let script = if cfg!(windows) {
+        format!(
+            "@echo off\r\necho %*>>\"{}\"\r\nexit /b 0\r\n",
+            log_path.display()
+        )
+    } else {
+        format!(
+            "#!/bin/sh\nprintf '%s\\n' \"$*\" >> \"{}\"\nexit 0\n",
+            log_path.display()
+        )
+    };
+
+    let rollback = with_stubbed_command_path(command_name, &script, || {
+        let review_id = create_approved_remediation_review(
+            port,
+            &token,
+            "host-live-flush-dns",
+            serde_json::json!({
+                "rollback_action": {
+                    "type": "flush_dns"
+                }
+            }),
+        );
+
+        ureq::post(&format!(
+            "{}/api/remediation/change-reviews/{}/rollback",
+            base(port),
+            review_id
+        ))
+        .set("Authorization", &auth_header(&token))
+        .send_json(serde_json::json!({
+            "dry_run": false,
+            "platform": platform,
+            "confirm_hostname": "host-live-flush-dns"
+        }))
+        .expect("execute flush-dns live rollback")
+        .into_json::<serde_json::Value>()
+        .unwrap()
+    });
+
+    assert_eq!(rollback["status"], "rollback_recorded");
+    assert_eq!(rollback["review"]["rollback_proof"]["status"], "executed");
+    assert_eq!(rollback["review"]["recovery_status"], "executed");
+    assert_eq!(
+        rollback["review"]["rollback_proof"]["execution_result"]["live_execution"],
+        serde_json::json!("executed")
+    );
+    assert_eq!(
+        rollback["review"]["rollback_proof"]["execution_result"]["commands"][0]["program"],
+        serde_json::json!(command_name)
+    );
+    assert_eq!(
+        rollback["review"]["rollback_proof"]["execution_result"]["command_executions"][0]["exit_code"],
+        serde_json::json!(0)
+    );
+
+    let logged = std::fs::read_to_string(&log_path).expect("read flush-dns log");
+    if cfg!(target_os = "macos") {
+        assert!(logged.contains("-flushcache"));
+    } else if cfg!(target_os = "windows") {
+        assert!(logged.contains("/flushdns"));
+    } else {
+        assert!(logged.contains("--flush-caches"));
+    }
+}
+
+#[test]
+fn live_rollback_records_new_adapters_when_requested_platform_does_not_match_host() {
+    let (port, token) = spawn_test_server_with_live_rollback_execution_enabled();
+    let platform = nonmatching_live_rollback_platform();
+
+    let disable_account = {
+        let review_id = create_approved_remediation_review(
+            port,
+            &token,
+            "host-live-disable-account-mismatch",
+            serde_json::json!({
+                "rollback_action": {
+                    "type": "disable_account",
+                    "username": "wardex-disabled"
+                }
+            }),
+        );
+
+        ureq::post(&format!(
+            "{}/api/remediation/change-reviews/{}/rollback",
+            base(port),
+            review_id
+        ))
+        .set("Authorization", &auth_header(&token))
+        .send_json(serde_json::json!({
+            "dry_run": false,
+            "platform": platform,
+            "confirm_hostname": "host-live-disable-account-mismatch"
+        }))
+        .expect("record disable-account rollback when platform mismatches host")
+        .into_json::<serde_json::Value>()
+        .unwrap()
+    };
+
+    assert_eq!(disable_account["status"], "rollback_recorded");
+    assert_eq!(disable_account["review"]["rollback_proof"]["status"], "executed");
+    assert_eq!(disable_account["review"]["recovery_status"], "executed");
+    assert_eq!(
+        disable_account["review"]["rollback_proof"]["execution_result"]["live_execution"],
+        serde_json::json!("recorded_platform_unavailable")
+    );
+    assert_eq!(
+        disable_account["review"]["rollback_proof"]["execution_result"]["commands"][0]["program"],
+        serde_json::json!(disable_account_command_for_platform(platform))
+    );
+    assert!(disable_account["review"]["rollback_proof"]["execution_result"]["command_executions"]
+        .as_array()
+        .expect("disable-account command executions array")
+        .is_empty());
+    assert_eq!(
+        disable_account["review"]["rollback_proof"]["execution_result"]["result"]["output"],
+        serde_json::json!(
+            "rollback execution recorded; local remediation executor unavailable for requested platform"
+        )
+    );
+
+    let flush_dns = {
+        let review_id = create_approved_remediation_review(
+            port,
+            &token,
+            "host-live-flush-dns-mismatch",
+            serde_json::json!({
+                "rollback_action": {
+                    "type": "flush_dns"
+                }
+            }),
+        );
+
+        ureq::post(&format!(
+            "{}/api/remediation/change-reviews/{}/rollback",
+            base(port),
+            review_id
+        ))
+        .set("Authorization", &auth_header(&token))
+        .send_json(serde_json::json!({
+            "dry_run": false,
+            "platform": platform,
+            "confirm_hostname": "host-live-flush-dns-mismatch"
+        }))
+        .expect("record flush-dns rollback when platform mismatches host")
+        .into_json::<serde_json::Value>()
+        .unwrap()
+    };
+
+    assert_eq!(flush_dns["status"], "rollback_recorded");
+    assert_eq!(flush_dns["review"]["rollback_proof"]["status"], "executed");
+    assert_eq!(flush_dns["review"]["recovery_status"], "executed");
+    assert_eq!(
+        flush_dns["review"]["rollback_proof"]["execution_result"]["live_execution"],
+        serde_json::json!("recorded_platform_unavailable")
+    );
+    assert_eq!(
+        flush_dns["review"]["rollback_proof"]["execution_result"]["commands"][0]["program"],
+        serde_json::json!(flush_dns_command_for_platform(platform))
+    );
+    assert!(flush_dns["review"]["rollback_proof"]["execution_result"]["command_executions"]
+        .as_array()
+        .expect("flush-dns command executions array")
+        .is_empty());
+    assert_eq!(
+        flush_dns["review"]["rollback_proof"]["execution_result"]["result"]["output"],
+        serde_json::json!(
+            "rollback execution recorded; local remediation executor unavailable for requested platform"
+        )
+    );
 }
 
 #[test]

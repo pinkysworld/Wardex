@@ -106,7 +106,11 @@ by including `confirm_hostname` in the request body — the value must equal the
 requests still record the rollback proof and planned commands but do not execute OS commands. Setting
 `execute_live_rollback_commands = true` allows local command execution for matching-platform rollbacks; the
 response payload then includes per-command execution results. The Infrastructure console enforces the same
-hostname-confirmation handshake via the "Live Rollback…" button.
+hostname-confirmation handshake via the "Live Rollback…" button. Focused regression coverage now exercises
+matching-platform true execution for restore-file, kill-process, restart-service, block-ip, remove-persistence,
+disable-account, and flush-dns adapters. Recommended operator posture is to keep
+`execute_live_rollback_commands = false` outside controlled maintenance windows and only enable it after verifying
+the typed-hostname confirmation flow plus the platform-specific command set on the target host.
 
 ## API Versioning
 

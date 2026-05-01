@@ -927,6 +927,78 @@ export interface WsStatsResponse {
   connections: WsConnectionStats[];
 }
 
+export type CommandCenterLaneName =
+  | "incidents"
+  | "remediation"
+  | "connectors"
+  | "rule_tuning"
+  | "release"
+  | "evidence";
+
+export type CommandCenterMetricKey =
+  | "open_incidents"
+  | "pending_remediation_reviews"
+  | "connector_issues"
+  | "noisy_rules"
+  | "release_candidates"
+  | "compliance_packs";
+
+export interface CommandCenterMetrics {
+  open_incidents: number;
+  active_cases: number;
+  pending_remediation_reviews: number;
+  rollback_ready_reviews: number;
+  connector_issues: number;
+  noisy_rules: number;
+  stale_rules: number;
+  release_candidates: number;
+  compliance_packs: number;
+  offline_agents: number;
+}
+
+export interface CommandCenterLanePayload {
+  status: string;
+  annotation: string;
+  next_step: string;
+  href?: string;
+  count?: number;
+  pending?: number;
+  rollback_ready?: number;
+  issues?: number;
+  readiness?: Record<string, unknown>;
+  planned?: string[];
+  noisy?: number;
+  stale?: number;
+  active_suppressions?: number;
+  candidates?: number;
+  current_version?: string;
+  score?: number;
+  templates?: number;
+}
+
+export interface CommandCenterLanes {
+  incidents: CommandCenterLanePayload;
+  remediation: CommandCenterLanePayload;
+  connectors: CommandCenterLanePayload;
+  rule_tuning: CommandCenterLanePayload;
+  release: CommandCenterLanePayload;
+  evidence: CommandCenterLanePayload;
+}
+
+export interface CommandSummaryResponse {
+  generated_at: string;
+  metrics: CommandCenterMetrics;
+  lanes: CommandCenterLanes;
+}
+
+export interface CommandLaneResponse {
+  lane: CommandCenterLaneName;
+  generated_at: string;
+  metric_key: CommandCenterMetricKey;
+  metric_value: number;
+  payload: CommandCenterLanePayload;
+}
+
 export interface QueueAlertSummary {
   event_id: number;
   agent_id: string | null;
@@ -4921,6 +4993,14 @@ export class WardexClient {
 
   async wsStats(): Promise<WsStatsResponse> {
     return this.request("GET", "/api/ws/stats");
+  }
+
+  async commandSummary(): Promise<CommandSummaryResponse> {
+    return this.request("GET", "/api/command/summary");
+  }
+
+  async commandLane(lane: string): Promise<CommandLaneResponse> {
+    return this.request("GET", `/api/command/lanes/${encodeURIComponent(lane)}`);
   }
 
   async authCheck(): Promise<AuthCheckResponse> {

@@ -364,12 +364,27 @@ Phases 0–40 are complete. Routed browser regression coverage, the repeatable r
 - [x] T289: Add backend summary endpoints for Command Center lane health so the UI can reduce client-side fan-out as the workspace becomes the default operator entry point.
 - [x] T290: Mirror detection tuning/scoring, remote fleet install, process-thread, and backup endpoints across the live OpenAPI builder plus Python and TypeScript SDK surfaces.
 
-Recommended next sequence:
+## Phase 42 — Remediation module extraction and rollback execution depth
 
-1. Build the Command Center action drawers and link them to existing SOC, Settings, Detection, Infrastructure, Assistant, Attack Graph, and Reports workflows.
-2. Add routed Playwright smoke for the new Command Center lanes before making it the default analyst landing surface.
-3. Keep admin-console API helpers and generated SDK methods aligned as Command Center summary endpoints are added.
-4. Extend dry-run rollback verification into live adapter execution where platform permissions and operator policy allow it.
+- [x] T291: Move remediation change-review JSON response envelopes and HTTP error mapping into `remediation.rs` so `server.rs` only owns route dispatch and response wiring.
+- [x] T292: Extract remaining remediation route parsing and policy assembly from `server.rs` into a focused remediation API adapter.
+- [x] T293: Broaden live rollback execution coverage for additional safe, platform-matched remediation actions and document operator safeguards.
+
+## Phase 43 — Command Center parity and workflow depth (completed)
+
+- [x] T294: Add Python and TypeScript SDK helpers for `/api/command/summary` so Command Center summary contracts are available outside admin-console fetch helpers.
+- [x] T295: Broaden Command Center lane annotations and release-gate coverage as new workflows land.
+- [x] T296: Keep remediation operator safeguards and matching-platform rollback regressions aligned as additional adapters are introduced.
+
+## Phase 44 — Command Center contract hardening and release-doc alignment (completed)
+
+- [x] T297: Replace the generic OpenAPI documentation for `/api/command/summary` and `/api/command/lanes/{lane}` with explicit Command Center response schemas, including lane annotations and next-step guidance.
+- [x] T298: Add Python and TypeScript SDK helpers for `/api/command/lanes/{lane}` so focused lane-refresh contracts are available outside admin-console fetch helpers.
+- [x] T299: Refresh feature-coverage, SDK guide, and release-doc tracking text so the shipped Command Center and remediation workflow state no longer reads as pre-action-drawer or pre-live-adapter work.
+
+## Phase 45 — Command Center typed SDK contracts (completed)
+
+- [x] T300: Replace the generic TypeScript SDK record responses for `/api/command/summary` and `/api/command/lanes/{lane}` with explicit Command Center interfaces so consumers can rely on typed lane metrics and payload fields.
 
 See `docs/ROADMAP_XDR_PROFESSIONAL.md` for the broader professional roadmap beyond the current implementation order.
 

@@ -156,6 +156,20 @@ export default function CommandCenter() {
     releaseCandidates: summaryMetrics.release_candidates ?? releases.length,
     compliancePacks: summaryMetrics.compliance_packs ?? reportTemplates.length,
   };
+  const laneSummaries = data.commandSummary?.lanes || {};
+
+  const renderLaneAnnotation = (laneKey, fallbackAnnotation, fallbackNextStep) => {
+    const lane = laneSummaries?.[laneKey] || {};
+    return (
+      <WorkItem
+        key={`annotation-${laneKey}`}
+        title={lane.annotation || fallbackAnnotation}
+        detail={lane.next_step || fallbackNextStep}
+        badge="lane note"
+        tone={statusBadge(lane.status || 'info')}
+      />
+    );
+  };
 
   const openDrawer = useCallback(
     (type, item = null) => {
@@ -291,6 +305,11 @@ export default function CommandCenter() {
             </Link>
           }
         >
+          {renderLaneAnnotation(
+            'incidents',
+            'Keep the incident lane staffed before you fan out to release or remediation work.',
+            'Use the SOC workspace to verify ownership, pressure, and export readiness.',
+          )}
           {activeIncidents.length > 0 ? (
             activeIncidents
               .slice(0, 4)
@@ -327,6 +346,11 @@ export default function CommandCenter() {
             </button>
           }
         >
+          {renderLaneAnnotation(
+            'connectors',
+            'Every shipped connector should expose saved config, validation, and proof-of-life context.',
+            'Validate credentials and ingestion proof before downstream workflows depend on the lane.',
+          )}
           <div className="table-wrap">
             <table className="data-table compact-table">
               <thead>
@@ -378,6 +402,11 @@ export default function CommandCenter() {
             </button>
           }
         >
+          {renderLaneAnnotation(
+            'rule_tuning',
+            'Detection quality stays credible only when replay debt and suppressions remain visible.',
+            'Run replay and update promotion evidence before pushing noisy content wider.',
+          )}
           <SummaryGrid
             data={{
               total_rules: rules.length,
@@ -410,6 +439,11 @@ export default function CommandCenter() {
             </button>
           }
         >
+          {renderLaneAnnotation(
+            'release',
+            'Release readiness should stay tied to candidate metadata, SBOM context, and rollback posture.',
+            'Review rollout evidence before any deploy handoff leaves the Command Center.',
+          )}
           <SummaryGrid
             data={{
               current_version:
@@ -447,6 +481,11 @@ export default function CommandCenter() {
             </button>
           }
         >
+          {renderLaneAnnotation(
+            'remediation',
+            'Blast radius, approval state, and rollback proof belong together before live execution.',
+            'Verify typed-host confirmation and approval quorum before approving rollback execution.',
+          )}
           {reviews.length > 0 ? (
             reviews
               .slice(0, 5)
@@ -604,6 +643,11 @@ export default function CommandCenter() {
             </button>
           }
         >
+          {renderLaneAnnotation(
+            'evidence',
+            'Evidence exports should reflect operational truth, not detached checklist state.',
+            'Generate packs only after compliance posture and release context are current.',
+          )}
           <SummaryGrid
             data={{
               compliance_status: complianceStatus,

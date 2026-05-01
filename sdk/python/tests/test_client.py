@@ -119,6 +119,54 @@ def test_ws_stats(monkeypatch):
     assert calls[0]["method"] == "GET"
 
 
+def test_command_summary(monkeypatch):
+    calls = install_stub(
+        monkeypatch,
+        {
+            ("GET", f"{BASE}/api/command/summary"): DummyResponse(
+                url=f"{BASE}/api/command/summary",
+                json_data={
+                    "generated_at": "2026-05-01T19:00:00Z",
+                    "metrics": {"open_incidents": 3},
+                    "lanes": {"connectors": {"readiness": {"collectors": []}}},
+                },
+                headers={"content-type": "application/json"},
+            )
+        },
+    )
+    client = WardexClient(BASE, token="tok")
+    data = client.command_summary()
+    assert data["metrics"]["open_incidents"] == 3
+    assert calls[0]["method"] == "GET"
+
+
+def test_command_lane(monkeypatch):
+    calls = install_stub(
+        monkeypatch,
+        {
+            ("GET", f"{BASE}/api/command/lanes/release"): DummyResponse(
+                url=f"{BASE}/api/command/lanes/release",
+                json_data={
+                    "lane": "release",
+                    "metric_key": "release_candidates",
+                    "metric_value": 1,
+                    "payload": {
+                        "status": "ready",
+                        "annotation": "Candidate metadata is available for rollout review, SBOM checks, and rollback planning.",
+                        "next_step": "Review candidate notes, SBOM context, and rollout readiness before promotion.",
+                    },
+                },
+                headers={"content-type": "application/json"},
+            )
+        },
+    )
+    client = WardexClient(BASE, token="tok")
+    data = client.command_lane("release")
+    assert data["lane"] == "release"
+    assert data["metric_key"] == "release_candidates"
+    assert calls[0]["method"] == "GET"
+
+
 def test_auth_check_and_rotate_token(monkeypatch):
     calls = install_stub(
         monkeypatch,

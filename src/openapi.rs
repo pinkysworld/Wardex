@@ -299,6 +299,46 @@ fn string_schema() -> SchemaRef {
     })
 }
 
+fn string_datetime_schema() -> SchemaRef {
+    SchemaRef::Inline(Schema {
+        schema_type: Some("string".into()),
+        format: Some("date-time".into()),
+        ..Default::default()
+    })
+}
+
+fn integer_schema() -> SchemaRef {
+    SchemaRef::Inline(Schema {
+        schema_type: Some("integer".into()),
+        format: Some("int64".into()),
+        ..Default::default()
+    })
+}
+
+fn number_schema() -> SchemaRef {
+    SchemaRef::Inline(Schema {
+        schema_type: Some("number".into()),
+        format: Some("double".into()),
+        ..Default::default()
+    })
+}
+
+fn string_array_schema() -> SchemaRef {
+    SchemaRef::Inline(Schema {
+        schema_type: Some("array".into()),
+        items: Some(Box::new(string_schema())),
+        ..Default::default()
+    })
+}
+
+fn string_enum_schema(values: &[&str]) -> SchemaRef {
+    SchemaRef::Inline(Schema {
+        schema_type: Some("string".into()),
+        enum_values: Some(values.iter().map(|value| value.to_string()).collect()),
+        ..Default::default()
+    })
+}
+
 fn content_response_status(
     status: &str,
     desc: &str,
@@ -768,6 +808,151 @@ pub fn wardex_openapi_spec(version: &str) -> OpenApiSpec {
                 ..Default::default()
             },
         )
+        .schema(
+            "CommandCenterMetrics",
+            Schema {
+                schema_type: Some("object".into()),
+                properties: {
+                    let mut p = BTreeMap::new();
+                    p.insert("open_incidents".into(), integer_schema());
+                    p.insert("active_cases".into(), integer_schema());
+                    p.insert("pending_remediation_reviews".into(), integer_schema());
+                    p.insert("rollback_ready_reviews".into(), integer_schema());
+                    p.insert("connector_issues".into(), integer_schema());
+                    p.insert("noisy_rules".into(), integer_schema());
+                    p.insert("stale_rules".into(), integer_schema());
+                    p.insert("release_candidates".into(), integer_schema());
+                    p.insert("compliance_packs".into(), integer_schema());
+                    p.insert("offline_agents".into(), integer_schema());
+                    p
+                },
+                required: vec![
+                    "open_incidents".into(),
+                    "active_cases".into(),
+                    "pending_remediation_reviews".into(),
+                    "rollback_ready_reviews".into(),
+                    "connector_issues".into(),
+                    "noisy_rules".into(),
+                    "stale_rules".into(),
+                    "release_candidates".into(),
+                    "compliance_packs".into(),
+                    "offline_agents".into(),
+                ],
+                ..Default::default()
+            },
+        )
+        .schema(
+            "CommandCenterLanePayload",
+            Schema {
+                schema_type: Some("object".into()),
+                properties: {
+                    let mut p = BTreeMap::new();
+                    p.insert("status".into(), string_schema());
+                    p.insert("annotation".into(), string_schema());
+                    p.insert("next_step".into(), string_schema());
+                    p.insert("href".into(), string_schema());
+                    p.insert("count".into(), integer_schema());
+                    p.insert("pending".into(), integer_schema());
+                    p.insert("rollback_ready".into(), integer_schema());
+                    p.insert("issues".into(), integer_schema());
+                    p.insert("readiness".into(), object_schema());
+                    p.insert("planned".into(), string_array_schema());
+                    p.insert("noisy".into(), integer_schema());
+                    p.insert("stale".into(), integer_schema());
+                    p.insert("active_suppressions".into(), integer_schema());
+                    p.insert("candidates".into(), integer_schema());
+                    p.insert("current_version".into(), string_schema());
+                    p.insert("score".into(), number_schema());
+                    p.insert("templates".into(), integer_schema());
+                    p
+                },
+                required: vec!["status".into(), "annotation".into(), "next_step".into()],
+                ..Default::default()
+            },
+        )
+        .schema(
+            "CommandCenterLanes",
+            Schema {
+                schema_type: Some("object".into()),
+                properties: {
+                    let mut p = BTreeMap::new();
+                    p.insert("incidents".into(), schema_ref("CommandCenterLanePayload"));
+                    p.insert("remediation".into(), schema_ref("CommandCenterLanePayload"));
+                    p.insert("connectors".into(), schema_ref("CommandCenterLanePayload"));
+                    p.insert("rule_tuning".into(), schema_ref("CommandCenterLanePayload"));
+                    p.insert("release".into(), schema_ref("CommandCenterLanePayload"));
+                    p.insert("evidence".into(), schema_ref("CommandCenterLanePayload"));
+                    p
+                },
+                required: vec![
+                    "incidents".into(),
+                    "remediation".into(),
+                    "connectors".into(),
+                    "rule_tuning".into(),
+                    "release".into(),
+                    "evidence".into(),
+                ],
+                ..Default::default()
+            },
+        )
+        .schema(
+            "CommandCenterSummaryResponse",
+            Schema {
+                schema_type: Some("object".into()),
+                properties: {
+                    let mut p = BTreeMap::new();
+                    p.insert("generated_at".into(), string_datetime_schema());
+                    p.insert("metrics".into(), schema_ref("CommandCenterMetrics"));
+                    p.insert("lanes".into(), schema_ref("CommandCenterLanes"));
+                    p
+                },
+                required: vec!["generated_at".into(), "metrics".into(), "lanes".into()],
+                ..Default::default()
+            },
+        )
+        .schema(
+            "CommandCenterLaneResponse",
+            Schema {
+                schema_type: Some("object".into()),
+                properties: {
+                    let mut p = BTreeMap::new();
+                    p.insert(
+                        "lane".into(),
+                        string_enum_schema(&[
+                            "incidents",
+                            "remediation",
+                            "connectors",
+                            "rule_tuning",
+                            "release",
+                            "evidence",
+                        ]),
+                    );
+                    p.insert("generated_at".into(), string_datetime_schema());
+                    p.insert(
+                        "metric_key".into(),
+                        string_enum_schema(&[
+                            "open_incidents",
+                            "pending_remediation_reviews",
+                            "connector_issues",
+                            "noisy_rules",
+                            "release_candidates",
+                            "compliance_packs",
+                        ]),
+                    );
+                    p.insert("metric_value".into(), integer_schema());
+                    p.insert("payload".into(), schema_ref("CommandCenterLanePayload"));
+                    p
+                },
+                required: vec![
+                    "lane".into(),
+                    "generated_at".into(),
+                    "metric_key".into(),
+                    "metric_value".into(),
+                    "payload".into(),
+                ],
+                ..Default::default()
+            },
+        )
         // Auth
         .path(
             "/api/auth/check",
@@ -1181,19 +1366,50 @@ pub fn wardex_openapi_spec(version: &str) -> OpenApiSpec {
         .path(
             "/api/command/summary",
             "get",
-            op(
+            op_with_responses(
                 "getCommandSummary",
                 "Command Center lane-health summary",
                 &["command"],
+                content_response_status(
+                    "200",
+                    "Lane health across incidents, approvals, connectors, rule tuning, releases, and evidence packs",
+                    "application/json",
+                    schema_ref("CommandCenterSummaryResponse"),
+                ),
             ),
         )
         .path(
             "/api/command/lanes/{lane}",
             "get",
-            op(
-                "getCommandLane",
-                "Per-lane slice of the Command Center summary",
-                &["command"],
+            with_parameters(
+                op_with_responses(
+                    "getCommandLane",
+                    "Per-lane slice of the Command Center summary",
+                    &["command"],
+                    content_response_status(
+                        "200",
+                        "Single-lane payload with metric key, value, and shared timestamp",
+                        "application/json",
+                        schema_ref("CommandCenterLaneResponse"),
+                    ),
+                ),
+                vec![Parameter {
+                    name: "lane".into(),
+                    location: "path".into(),
+                    description: Some(
+                        "Command Center lane name (incidents, remediation, connectors, rule_tuning, release, evidence)"
+                            .into(),
+                    ),
+                    required: true,
+                    schema: string_enum_schema(&[
+                        "incidents",
+                        "remediation",
+                        "connectors",
+                        "rule_tuning",
+                        "release",
+                        "evidence",
+                    ]),
+                }],
             ),
         )
         // Config
@@ -2551,10 +2767,55 @@ mod tests {
         assert!(spec.components.schemas.contains_key("Incident"));
         assert!(spec.components.schemas.contains_key("Agent"));
         assert!(spec.components.schemas.contains_key("Error"));
+        assert!(spec.components.schemas.contains_key("CommandCenterSummaryResponse"));
+        assert!(spec.components.schemas.contains_key("CommandCenterLaneResponse"));
         let error_schema = spec.components.schemas.get("Error").unwrap();
         assert!(error_schema.required.contains(&"error".to_string()));
         assert!(error_schema.required.contains(&"code".to_string()));
         assert!(error_schema.properties.contains_key("code"));
+    }
+
+    #[test]
+    fn command_center_paths_use_explicit_response_schemas() {
+        let spec = wardex_openapi_spec("0.35.0");
+
+        let summary = spec
+            .paths
+            .get("/api/command/summary")
+            .and_then(|item| item.get.as_ref())
+            .expect("summary path");
+        let summary_schema = summary
+            .responses
+            .get("200")
+            .and_then(|response| response.content.as_ref())
+            .and_then(|content| content.get("application/json"))
+            .map(|media| &media.schema)
+            .expect("summary response schema");
+        match summary_schema {
+            SchemaRef::Ref { reference } => {
+                assert_eq!(reference, "#/components/schemas/CommandCenterSummaryResponse")
+            }
+            SchemaRef::Inline(_) => panic!("expected command summary schema ref"),
+        }
+
+        let lane = spec
+            .paths
+            .get("/api/command/lanes/{lane}")
+            .and_then(|item| item.get.as_ref())
+            .expect("lane path");
+        let lane_schema = lane
+            .responses
+            .get("200")
+            .and_then(|response| response.content.as_ref())
+            .and_then(|content| content.get("application/json"))
+            .map(|media| &media.schema)
+            .expect("lane response schema");
+        match lane_schema {
+            SchemaRef::Ref { reference } => {
+                assert_eq!(reference, "#/components/schemas/CommandCenterLaneResponse")
+            }
+            SchemaRef::Inline(_) => panic!("expected command lane schema ref"),
+        }
     }
 
     #[test]

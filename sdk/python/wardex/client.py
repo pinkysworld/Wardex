@@ -233,6 +233,12 @@ class WardexClient:
     def ws_stats(self) -> dict[str, Any]:
         return self._get("/api/ws/stats")
 
+    def command_summary(self) -> dict[str, Any]:
+        return self._get("/api/command/summary")
+
+    def command_lane(self, lane: str) -> dict[str, Any]:
+        return self._get(f"/api/command/lanes/{quote(lane, safe='')}")
+
     # ── alerts ────────────────────────────────────────────────────────────
 
     def list_alerts(self, limit: int = 50, offset: int = 0) -> list[dict[str, Any]]:

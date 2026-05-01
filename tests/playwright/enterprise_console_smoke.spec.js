@@ -43,6 +43,11 @@ test('enterprise admin console smoke', async ({ page }) => {
   await expect(page.getByRole('heading', { name: 'Security Overview' })).toBeVisible();
   await expect(page.getByText(/Process Analysis/i)).toBeVisible();
 
+  await sidebar.getByRole('link', { name: 'Command Center', exact: true }).click();
+  await expect(page.getByRole('heading', { name: /Operate incidents/i })).toBeVisible();
+  await expect(page.getByText('Connector Onboarding Wizard')).toBeVisible();
+  await expect(page.getByText('Release and Upgrade Center')).toBeVisible();
+
   await sidebar.getByRole('link', { name: 'Live Monitor', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Live Alert Stream' })).toBeVisible();
   await page.getByRole('tab', { name: 'Processes', exact: true }).click();
