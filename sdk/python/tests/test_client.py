@@ -287,6 +287,46 @@ def test_list_agents_and_get_agent_use_current_routes(monkeypatch):
     assert calls[1]["url"].endswith("/api/agents/a-1/details")
 
 
+def test_fleet_install_and_process_thread_helpers_use_current_routes(monkeypatch):
+    calls = install_stub(
+        monkeypatch,
+        {
+            ("GET", f"{BASE}/api/fleet/installs"): DummyResponse(
+                url=f"{BASE}/api/fleet/installs",
+                json_data={"attempts": [], "total": 0},
+                headers={"content-type": "application/json"},
+            ),
+            ("POST", f"{BASE}/api/fleet/install/ssh"): DummyResponse(
+                url=f"{BASE}/api/fleet/install/ssh",
+                json_data={"status": "awaiting_heartbeat"},
+                headers={"content-type": "application/json"},
+            ),
+            ("POST", f"{BASE}/api/fleet/install/winrm"): DummyResponse(
+                url=f"{BASE}/api/fleet/install/winrm",
+                json_data={"status": "awaiting_heartbeat"},
+                headers={"content-type": "application/json"},
+            ),
+            (
+                "GET",
+                f"{BASE}/api/processes/threads",
+                (("pid", "4242"),),
+            ): DummyResponse(
+                url=f"{BASE}/api/processes/threads",
+                json_data={"pid": 4242, "threads": []},
+                headers={"content-type": "application/json"},
+            ),
+        },
+    )
+    client = WardexClient(BASE, token="tok")
+    assert client.fleet_installs()["total"] == 0
+    client.fleet_install_ssh({"hostname": "edge-1"})
+    client.fleet_install_winrm({"hostname": "win-1"})
+    assert client.process_threads(4242)["pid"] == 4242
+    assert calls[1]["kwargs"]["json"] == {"hostname": "edge-1"}
+    assert calls[2]["kwargs"]["json"] == {"hostname": "win-1"}
+    assert calls[3]["kwargs"]["params"] == {"pid": 4242}
+
+
 def test_isolate_agent_submits_response_request(monkeypatch):
     calls = install_stub(
         monkeypatch,
@@ -425,6 +465,47 @@ def test_metrics_returns_text(monkeypatch):
     assert "wardex_up" in text
 
 
+def test_backup_helpers_cover_listing_creation_status_and_crypto(monkeypatch):
+    calls = install_stub(
+        monkeypatch,
+        {
+            ("POST", f"{BASE}/api/backup/encrypt"): DummyResponse(
+                url=f"{BASE}/api/backup/encrypt",
+                json_data={"encrypted": "ciphertext"},
+                headers={"content-type": "application/json"},
+            ),
+            ("POST", f"{BASE}/api/backup/decrypt"): DummyResponse(
+                url=f"{BASE}/api/backup/decrypt",
+                json_data={"data": "plaintext"},
+                headers={"content-type": "application/json"},
+            ),
+            ("GET", f"{BASE}/api/backups"): DummyResponse(
+                url=f"{BASE}/api/backups",
+                json_data=[{"name": "wardex_backup_20260430_223500.db"}],
+                headers={"content-type": "application/json"},
+            ),
+            ("POST", f"{BASE}/api/backups"): DummyResponse(
+                url=f"{BASE}/api/backups",
+                json_data={"name": "wardex_backup_20260501_101500.db"},
+                headers={"content-type": "application/json"},
+            ),
+            ("GET", f"{BASE}/api/backup/status"): DummyResponse(
+                url=f"{BASE}/api/backup/status",
+                json_data={"enabled": True, "retention_count": 7},
+                headers={"content-type": "application/json"},
+            ),
+        },
+    )
+    client = WardexClient(BASE, token="tok")
+    assert client.backup_encrypt("plain", "pass")["encrypted"] == "ciphertext"
+    assert client.backup_decrypt("cipher", "pass")["data"] == "plaintext"
+    assert client.list_backups()[0]["name"].endswith(".db")
+    assert client.create_backup()["name"].startswith("wardex_backup_")
+    assert client.backup_status()["retention_count"] == 7
+    assert calls[0]["kwargs"]["json"] == {"data": "plain", "passphrase": "pass"}
+    assert calls[1]["kwargs"]["json"] == {"data": "cipher", "passphrase": "pass"}
+
+
 def test_openapi_spec_uses_json_endpoint(monkeypatch):
     install_stub(
         monkeypatch,
@@ -438,6 +519,86 @@ def test_openapi_spec_uses_json_endpoint(monkeypatch):
     )
     client = WardexClient(BASE, token="tok")
     assert client.openapi_spec()["openapi"] == "3.0.3"
+
+
+def test_detection_helpers_cover_explain_feedback_profile_and_scoring(monkeypatch):
+    calls = install_stub(
+        monkeypatch,
+        {
+            ("GET", f"{BASE}/api/detection/replay-corpus"): DummyResponse(
+                url=f"{BASE}/api/detection/replay-corpus",
+                json_data={"precision": 0.98},
+                headers={"content-type": "application/json"},
+            ),
+            ("POST", f"{BASE}/api/detection/replay-corpus"): DummyResponse(
+                url=f"{BASE}/api/detection/replay-corpus",
+                json_data={"accepted": True},
+                headers={"content-type": "application/json"},
+            ),
+            (
+                "GET",
+                f"{BASE}/api/detection/explain",
+                (("alert_id", "42"), ("event_id", "42")),
+            ): DummyResponse(
+                url=f"{BASE}/api/detection/explain",
+                json_data={"alert_id": "42", "event_id": 42},
+                headers={"content-type": "application/json"},
+            ),
+            (
+                "GET",
+                f"{BASE}/api/detection/feedback",
+                (("event_id", "42"), ("limit", "25")),
+            ): DummyResponse(
+                url=f"{BASE}/api/detection/feedback",
+                json_data={"items": [], "summary": {"total": 0}},
+                headers={"content-type": "application/json"},
+            ),
+            ("POST", f"{BASE}/api/detection/feedback"): DummyResponse(
+                url=f"{BASE}/api/detection/feedback",
+                json_data={"id": 1},
+                headers={"content-type": "application/json"},
+            ),
+            ("GET", f"{BASE}/api/detection/profile"): DummyResponse(
+                url=f"{BASE}/api/detection/profile",
+                json_data={"profile": "balanced"},
+                headers={"content-type": "application/json"},
+            ),
+            ("PUT", f"{BASE}/api/detection/profile"): DummyResponse(
+                url=f"{BASE}/api/detection/profile",
+                json_data={"profile": "quiet", "applied": True},
+                headers={"content-type": "application/json"},
+            ),
+            ("GET", f"{BASE}/api/detection/weights"): DummyResponse(
+                url=f"{BASE}/api/detection/weights",
+                json_data={"cpu": 1.0},
+                headers={"content-type": "application/json"},
+            ),
+            ("POST", f"{BASE}/api/detection/weights"): DummyResponse(
+                url=f"{BASE}/api/detection/weights",
+                json_data={"status": "updated"},
+                headers={"content-type": "application/json"},
+            ),
+            ("GET", f"{BASE}/api/detection/score/normalize"): DummyResponse(
+                url=f"{BASE}/api/detection/score/normalize",
+                json_data={"normalized": 95, "severity": "critical"},
+                headers={"content-type": "application/json"},
+            ),
+        },
+    )
+    client = WardexClient(BASE, token="tok")
+    assert client.detection_replay_corpus()["precision"] == 0.98
+    assert client.evaluate_detection_replay_corpus({"source": "built_in"})["accepted"] is True
+    assert client.detection_explain(event_id=42, alert_id="42")["event_id"] == 42
+    assert client.detection_feedback(42, 25)["summary"]["total"] == 0
+    assert client.record_detection_feedback({"verdict": "true_positive"})["id"] == 1
+    assert client.detection_profile()["profile"] == "balanced"
+    assert client.set_detection_profile("quiet")["applied"] is True
+    assert client.detection_weights()["cpu"] == 1.0
+    assert client.set_detection_weights({"cpu": 1.2})["status"] == "updated"
+    assert client.normalize_score()["severity"] == "critical"
+    assert calls[1]["kwargs"]["json"] == {"source": "built_in"}
+    assert calls[6]["kwargs"]["json"] == {"profile": "quiet"}
+    assert calls[8]["kwargs"]["json"] == {"cpu": 1.2}
 
 
 def test_list_all_alerts_auto_paginates(monkeypatch):

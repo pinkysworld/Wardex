@@ -140,9 +140,8 @@ fn extract_from_text(text: &str) -> Vec<ExtractedEntity> {
     }
 
     // MITRE technique IDs (T1xxx, T1xxx.xxx)
-    let mut idx = 0;
-    while idx < text.len().saturating_sub(4) {
-        if text[idx..].starts_with('T')
+    for (idx, ch) in text.char_indices() {
+        if ch == 'T'
             && let Some(end) = try_parse_mitre(text, idx)
         {
             results.push(ExtractedEntity {
@@ -151,10 +150,7 @@ fn extract_from_text(text: &str) -> Vec<ExtractedEntity> {
                 start: idx,
                 end,
             });
-            idx = end;
-            continue;
         }
-        idx += 1;
     }
 
     // Port numbers (port NNNN or :NNNN)
@@ -382,6 +378,35 @@ mod tests {
             ents.iter()
                 .any(|e| e.entity_type == EntityType::MitreTechnique && e.value == "T1059.001")
         );
+    }
+
+    #[test]
+    fn extracts_mitre_technique_after_unicode_punctuation() {
+        let reasons = vec!["[SAMPLE] Test alert — elevated anomaly score near T1059".into()];
+        let ents = extract_entities(&reasons);
+        assert!(
+            ents.iter()
+                .any(|e| e.entity_type == EntityType::MitreTechnique && e.value == "T1059")
+        );
+    }
+
+    #[test]
+    fn extractor_does_not_panic_on_unicode_inputs() {
+        // Each string mixes a real entity with Unicode punctuation/scripts to ensure
+        // no extractor branch slices on a non-char-boundary byte index.
+        let reasons: Vec<String> = vec![
+            "reason — connection from 10.0.0.99 flagged 🚨".into(),
+            "path “/tmp/привет.sh” touched by powershell".into(),
+            "alert · port 4444 · technique T1059.001".into(),
+            "hôte=evil.example.com — hash a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2".into(),
+            "…domain test.example seen alongside curl 🐚".into(),
+            "ＷＩＮＤＯＷＳ path C:\\Users\\漢字\\bad.exe — process cmd.exe".into(),
+            "".into(),
+            "—".into(),
+            "T".into(),
+        ];
+        // The contract is just "does not panic"; we accept any entity set.
+        let _ = extract_entities(&reasons);
     }
 
     #[test]

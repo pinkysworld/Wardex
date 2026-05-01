@@ -11,7 +11,7 @@ import {
   IMPROVEMENT_LANES,
   asArray,
   compactTimestamp,
-  connectorStatus,
+  connectorStatusFromReadiness,
   formatCount,
   normalizedStatus,
   riskBadge,
@@ -35,18 +35,6 @@ export default function CommandCenter() {
     queueStats: api.queueStats,
     responseStats: api.responseStats,
     remediationReviews: api.remediationChangeReviews,
-    onboardingReadiness: api.onboardingReadiness,
-    collectorsSummary: api.collectorsStatus,
-    awsCollector: api.collectorsAws,
-    azureCollector: api.collectorsAzure,
-    gcpCollector: api.collectorsGcp,
-    oktaCollector: api.collectorsOkta,
-    entraCollector: api.collectorsEntra,
-    m365Collector: api.collectorsM365,
-    workspaceCollector: api.collectorsWorkspace,
-    githubCollector: api.collectorsGithub,
-    crowdstrikeCollector: api.collectorsCrowdStrike,
-    syslogCollector: api.collectorsSyslog,
     efficacySummary: api.efficacySummary,
     contentRulesData: api.contentRules,
     suppressionsData: api.suppressions,
@@ -122,9 +110,21 @@ export default function CommandCenter() {
   const activeCases = cases.filter(
     (caseEntry) => !['closed', 'resolved'].includes(normalizedStatus(caseEntry.status)),
   );
+  const connectorReadiness = useMemo(
+    () =>
+      asArray(data.commandSummary?.lanes?.connectors?.readiness, ['collectors']).reduce(
+        (accumulator, item) => {
+          const provider = String(item?.provider || '').trim();
+          if (provider) accumulator[provider] = item;
+          return accumulator;
+        },
+        {},
+      ),
+    [data.commandSummary],
+  );
   const connectorRows = CONNECTOR_LANES.map((connector) => ({
     ...connector,
-    ...connectorStatus(connector, data),
+    ...connectorStatusFromReadiness(connector, connectorReadiness[connector.provider]),
   }));
   const connectorIssues = connectorRows.filter(
     (connector) =>
@@ -362,7 +362,10 @@ export default function CommandCenter() {
               </tbody>
             </table>
           </div>
-          <JsonDetails data={data.onboardingReadiness} label="Readiness evidence" />
+          <JsonDetails
+            data={data.commandSummary?.lanes?.connectors?.readiness || { collectors: [] }}
+            label="Readiness evidence"
+          />
         </CommandSection>
 
         <CommandSection

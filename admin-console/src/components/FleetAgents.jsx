@@ -10,11 +10,29 @@ import LocalConsoleInventory from './LocalConsoleInventory.jsx';
 const AGENT_COLUMNS = ['id', 'hostname', 'os', 'version', 'status', 'last_seen'];
 const PAGE_SIZE_OPTIONS = [10, 25, 50, 100];
 const DEFAULT_PAGE_SIZE = 25;
+const DEFAULT_INSTALL_TTL_SECS = 24 * 60 * 60;
+const SSH_REMOTE_INSTALLABLE_PLATFORMS = new Set(['linux', 'macos']);
+const WINRM_REMOTE_INSTALLABLE_PLATFORMS = new Set(['windows']);
 const SAVED_VIEWS = [
   { id: 'all', label: 'All Agents', filters: { status: 'all', q: '', os: 'all' } },
   { id: 'offline', label: 'Offline Agents > 1h', filters: { status: 'offline', q: '', os: 'all' } },
   { id: 'linux', label: 'Linux Fleet', filters: { status: 'all', q: '', os: 'linux' } },
 ];
+
+const INSTALL_ARTIFACTS = {
+  linux: {
+    fileName: 'wardex-agent-linux-amd64',
+    installPath: '/usr/local/bin/wardex-agent',
+  },
+  macos: {
+    fileName: 'wardex-agent-macos-universal',
+    installPath: '/usr/local/bin/wardex-agent',
+  },
+  windows: {
+    fileName: 'wardex-agent-windows.exe',
+    installPath: 'C:\\Program Files\\Wardex\\wardex-agent.exe',
+  },
+};
 
 const UPDATE_PANELS = [
   {
@@ -37,6 +55,68 @@ const UPDATE_PANELS = [
 
 const normalizePanelId = (value, panels, fallback) =>
   panels.some((panel) => panel.id === value) ? value : fallback;
+
+function normalizeInstallPlatform(platform) {
+  const value = String(platform || '')
+    .trim()
+    .toLowerCase();
+  if (value.includes('darwin') || value.includes('mac')) return 'macos';
+  if (value.includes('win')) return 'windows';
+  return 'linux';
+}
+
+function defaultManagerUrl() {
+  if (typeof window === 'undefined') return '';
+  return window.location.origin;
+}
+
+function quoteShell(value) {
+  return `'${String(value || '').replace(/'/g, `'"'"'`)}'`;
+}
+
+function quotePowerShell(value) {
+  return `'${String(value || '').replace(/'/g, "''")}'`;
+}
+
+function quoteToml(value) {
+  return `"${String(value || '')
+    .replace(/\\/g, '\\\\')
+    .replace(/"/g, '\\"')
+    .replace(/\n/g, '\\n')}"`;
+}
+
+function buildInstallCommand({ hostname, address, managerUrl, platform, token, expiresAt }) {
+  const targetPlatform = normalizeInstallPlatform(platform);
+  const artifact = INSTALL_ARTIFACTS[targetPlatform] || INSTALL_ARTIFACTS.linux;
+  const baseUrl = String(managerUrl || '').replace(/\/$/, '');
+  const downloadUrl = `${baseUrl}/api/updates/download/${artifact.fileName}`;
+  const metadata = [
+    `# Host: ${hostname}`,
+    address ? `# Address: ${address}` : null,
+    expiresAt ? `# Token expires: ${expiresAt}` : null,
+  ]
+    .filter(Boolean)
+    .join('\n');
+
+  if (targetPlatform === 'windows') {
+    return `${metadata}\nNew-Item -ItemType Directory -Force -Path 'C:\\Program Files\\Wardex', 'C:\\ProgramData\\Wardex' | Out-Null\nInvoke-WebRequest -Uri ${quotePowerShell(downloadUrl)} -OutFile '$env:TEMP\\wardex-agent.exe'\nCopy-Item '$env:TEMP\\wardex-agent.exe' ${quotePowerShell(artifact.installPath)} -Force\n@'\n[agent]\nserver_url = ${quoteToml(managerUrl)}\nenrollment_token = ${quoteToml(token)}\n'@ | Set-Content -Path 'C:\\ProgramData\\Wardex\\agent.toml' -Encoding UTF8\nif (Get-Service -Name 'WardexAgent' -ErrorAction SilentlyContinue) {\n  Stop-Service -Name 'WardexAgent' -Force -ErrorAction SilentlyContinue\n  sc.exe delete WardexAgent | Out-Null\n  Start-Sleep -Seconds 2\n}\nNew-Service -Name 'WardexAgent' -BinaryPathName ${quotePowerShell(`${artifact.installPath} agent --config C:\\ProgramData\\Wardex\\agent.toml`)} -DisplayName ${quotePowerShell('Wardex XDR Agent')} -StartupType Automatic\nStart-Service -Name 'WardexAgent'`;
+  }
+
+  if (targetPlatform === 'macos') {
+    return `${metadata}\ncurl -fsSL -o /tmp/wardex-agent ${quoteShell(downloadUrl)}\nchmod +x /tmp/wardex-agent\nsudo install -m 755 /tmp/wardex-agent ${quoteShell(artifact.installPath)}\nsudo mkdir -p /Library/Application\\ Support/Wardex /Library/Logs/Wardex\ncat <<'EOF' | sudo tee '/Library/Application Support/Wardex/agent.toml' >/dev/null\n[agent]\nserver_url = ${quoteToml(managerUrl)}\nenrollment_token = ${quoteToml(token)}\nEOF\ncat <<'EOF' | sudo tee /Library/LaunchDaemons/com.wardex.agent.plist >/dev/null\n<?xml version="1.0" encoding="UTF-8"?>\n<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">\n<plist version="1.0">\n<dict>\n  <key>Label</key>\n  <string>com.wardex.agent</string>\n  <key>ProgramArguments</key>\n  <array>\n    <string>${artifact.installPath}</string>\n    <string>agent</string>\n  </array>\n  <key>EnvironmentVariables</key>\n  <dict>\n    <key>WARDEX_CONFIG_PATH</key>\n    <string>/Library/Application Support/Wardex/agent.toml</string>\n  </dict>\n  <key>RunAtLoad</key>\n  <true/>\n  <key>KeepAlive</key>\n  <true/>\n  <key>StandardOutPath</key>\n  <string>/Library/Logs/Wardex/agent.log</string>\n  <key>StandardErrorPath</key>\n  <string>/Library/Logs/Wardex/agent-error.log</string>\n</dict>\n</plist>\nEOF\nsudo launchctl unload /Library/LaunchDaemons/com.wardex.agent.plist >/dev/null 2>&1 || true\nsudo launchctl load /Library/LaunchDaemons/com.wardex.agent.plist`;
+  }
+
+  return `${metadata}\ncurl -fsSL -o /tmp/wardex-agent ${quoteShell(downloadUrl)}\nchmod +x /tmp/wardex-agent\nsudo install -m 755 /tmp/wardex-agent ${quoteShell(artifact.installPath)}\nsudo mkdir -p /etc/wardex /var/lib/wardex\ncat <<'EOF' | sudo tee /etc/wardex/agent.toml >/dev/null\n[agent]\nserver_url = ${quoteToml(managerUrl)}\nenrollment_token = ${quoteToml(token)}\nEOF\ncat <<'EOF' | sudo tee /etc/systemd/system/wardex-agent.service >/dev/null\n[Unit]\nDescription=Wardex XDR Agent\nAfter=network.target auditd.service\n\n[Service]\nType=simple\nEnvironment=WARDEX_CONFIG_PATH=/etc/wardex/agent.toml\nExecStart=${artifact.installPath} agent\nRestart=always\nRestartSec=10\nUser=root\nLimitNOFILE=65536\n\n[Install]\nWantedBy=multi-user.target\nEOF\nsudo systemctl daemon-reload\nsudo systemctl enable --now wardex-agent`;
+}
+
+function parseApiErrorPayload(error) {
+  if (typeof error?.body !== 'string' || !error.body) return null;
+  try {
+    return JSON.parse(error.body);
+  } catch {
+    return null;
+  }
+}
 
 function MobileAgentCard({ agent, active, onOpen, onCopy }) {
   return (
@@ -131,6 +211,7 @@ export default function FleetAgents() {
   const { data: policyHist } = useApi(api.policyHistory);
   const { data: releases } = useApi(api.updatesReleases);
   const { data: rollout } = useApi(api.rolloutConfig);
+  const { data: installHistory, reload: reloadInstallHistory } = useApi(api.fleetInstalls);
   const [selectedAgent, setSelectedAgent] = useState(null);
   const [hoveredAgent, setHoveredAgent] = useState(null);
   const [agentDetail, setAgentDetail] = useState(null);
@@ -140,6 +221,27 @@ export default function FleetAgents() {
   const [confirmState, setConfirmState] = useState(null);
   const [pendingDelete, setPendingDelete] = useState(null);
   const [focusedRowIndex, setFocusedRowIndex] = useState(0);
+  const [installForm, setInstallForm] = useState(() => ({
+    hostname: '',
+    address: '',
+    platform: 'linux',
+    managerUrl: defaultManagerUrl(),
+    sshUser: 'root',
+    sshPort: '22',
+    sshIdentityFile: '',
+    sshAcceptNewHostKey: true,
+    useSudo: true,
+    winrmUsername: 'Administrator',
+    winrmPassword: '',
+    winrmPort: '5985',
+    winrmUseTls: false,
+    winrmSkipCertCheck: false,
+  }));
+  const [installBundle, setInstallBundle] = useState(null);
+  const [isGeneratingInstallBundle, setIsGeneratingInstallBundle] = useState(false);
+  const [latestRemoteInstall, setLatestRemoteInstall] = useState(null);
+  const [isRemoteInstalling, setIsRemoteInstalling] = useState(false);
+  const [isAssigningRelease, setIsAssigningRelease] = useState(false);
   const [visibleColumns, setVisibleColumns] = useState(() => {
     try {
       const parsed = JSON.parse(localStorage.getItem('wardex_fleet_columns') || 'null');
@@ -300,7 +402,34 @@ export default function FleetAgents() {
     if (!latestRelease?.version) return [];
     return agentArr.filter((agent) => agent.version && agent.version !== latestRelease.version);
   }, [agentArr, latestRelease]);
+  const remoteInstallHistory = useMemo(
+    () =>
+      Array.isArray(installHistory?.attempts)
+        ? installHistory.attempts
+        : Array.isArray(installHistory)
+          ? installHistory
+          : [],
+    [installHistory],
+  );
+  const installPlatform = normalizeInstallPlatform(installForm.platform);
+  const isSshRemoteInstall = SSH_REMOTE_INSTALLABLE_PLATFORMS.has(installPlatform);
+  const isWinRmRemoteInstall = WINRM_REMOTE_INSTALLABLE_PLATFORMS.has(installPlatform);
+  const canRemoteInstall = isSshRemoteInstall || isWinRmRemoteInstall;
+  const visibleRemoteInstallHistory = useMemo(() => {
+    if (!latestRemoteInstall) return remoteInstallHistory;
+    return [
+      latestRemoteInstall,
+      ...remoteInstallHistory.filter((attempt) => attempt.id !== latestRemoteInstall.id),
+    ];
+  }, [latestRemoteInstall, remoteInstallHistory]);
   const activeUpdatesPanel = UPDATE_PANELS.find((panel) => panel.id === updatesPanel);
+  const selectedDeployableAgent =
+    currentPreview && !currentPreview.isLocalConsole ? currentPreview : null;
+  const selectedAgentNeedsUpgrade = Boolean(
+    selectedDeployableAgent &&
+    latestRelease?.version &&
+    selectedDeployableAgent.version !== latestRelease.version,
+  );
 
   const clearFleetFilters = useCallback(() => {
     setQuery('');
@@ -343,6 +472,198 @@ export default function FleetAgents() {
     },
     [toast],
   );
+
+  const copyInstallBundle = useCallback(() => {
+    if (!installBundle) return;
+    navigator.clipboard.writeText(installBundle.command).then(() => {
+      toast('Install command copied', 'success');
+    });
+  }, [installBundle, toast]);
+
+  const handleInstallFormChange = useCallback((field, value) => {
+    setInstallForm((current) => ({ ...current, [field]: value }));
+  }, []);
+
+  const generateInstallBundle = useCallback(
+    async (event) => {
+      event.preventDefault();
+      const hostname = installForm.hostname.trim();
+      const managerUrl = installForm.managerUrl.trim() || defaultManagerUrl();
+      if (!hostname) {
+        toast('Host name is required before generating an install bundle.', 'warning');
+        return;
+      }
+      if (!managerUrl) {
+        toast('Manager URL is required before generating an install bundle.', 'warning');
+        return;
+      }
+
+      setIsGeneratingInstallBundle(true);
+      try {
+        const enrollmentToken = await api.agentsToken({
+          max_uses: 1,
+          ttl_secs: DEFAULT_INSTALL_TTL_SECS,
+        });
+        const platform = normalizeInstallPlatform(installForm.platform);
+        const address = installForm.address.trim();
+        const expiresAt = enrollmentToken.expires_at || null;
+        setInstallBundle({
+          hostname,
+          address,
+          platform,
+          managerUrl,
+          token: enrollmentToken.token,
+          expiresAt,
+          command: buildInstallCommand({
+            hostname,
+            address,
+            managerUrl,
+            platform,
+            token: enrollmentToken.token,
+            expiresAt,
+          }),
+        });
+        toast(`Install bundle ready for ${hostname}.`, 'success');
+      } catch {
+        toast('Failed to create an install bundle.', 'error');
+      } finally {
+        setIsGeneratingInstallBundle(false);
+      }
+    },
+    [installForm, toast],
+  );
+
+  const runRemoteInstall = useCallback(async () => {
+    const hostname = installForm.hostname.trim();
+    const address = installForm.address.trim();
+    const managerUrl = installForm.managerUrl.trim() || defaultManagerUrl();
+    const platform = normalizeInstallPlatform(installForm.platform);
+
+    if (!canRemoteInstall) {
+      toast('Remote install is not available for the selected platform.', 'warning');
+      return;
+    }
+    if (!hostname) {
+      toast('Host name is required before running a remote install.', 'warning');
+      return;
+    }
+    if (!address) {
+      toast('Address or DNS name is required before running a remote install.', 'warning');
+      return;
+    }
+    if (!managerUrl) {
+      toast('Manager URL is required before running a remote install.', 'warning');
+      return;
+    }
+    setIsRemoteInstalling(true);
+    try {
+      let result;
+      if (isSshRemoteInstall) {
+        const sshUser = installForm.sshUser.trim();
+        const sshPort = Number.parseInt(String(installForm.sshPort || '').trim(), 10);
+        if (!sshUser) {
+          toast('SSH user is required before running a remote install.', 'warning');
+          return;
+        }
+        if (!Number.isInteger(sshPort) || sshPort <= 0) {
+          toast('SSH port must be a positive integer.', 'warning');
+          return;
+        }
+        result = await api.fleetInstallSsh({
+          hostname,
+          address,
+          platform,
+          manager_url: managerUrl,
+          ssh_user: sshUser,
+          ssh_port: sshPort,
+          ssh_identity_file: installForm.sshIdentityFile.trim() || undefined,
+          ssh_accept_new_host_key: Boolean(installForm.sshAcceptNewHostKey),
+          use_sudo: Boolean(installForm.useSudo),
+          ttl_secs: DEFAULT_INSTALL_TTL_SECS,
+        });
+      } else {
+        const winrmUsername = installForm.winrmUsername.trim();
+        const winrmPassword = installForm.winrmPassword;
+        const winrmPort = Number.parseInt(String(installForm.winrmPort || '').trim(), 10);
+        if (!winrmUsername) {
+          toast('WinRM username is required before running a remote install.', 'warning');
+          return;
+        }
+        if (!winrmPassword) {
+          toast('WinRM password is required before running a remote install.', 'warning');
+          return;
+        }
+        if (!Number.isInteger(winrmPort) || winrmPort <= 0) {
+          toast('WinRM port must be a positive integer.', 'warning');
+          return;
+        }
+        result = await api.fleetInstallWinrm({
+          hostname,
+          address,
+          platform,
+          manager_url: managerUrl,
+          winrm_username: winrmUsername,
+          winrm_password: winrmPassword,
+          winrm_port: winrmPort,
+          winrm_use_tls: Boolean(installForm.winrmUseTls),
+          winrm_skip_cert_check: Boolean(installForm.winrmSkipCertCheck),
+          ttl_secs: DEFAULT_INSTALL_TTL_SECS,
+        });
+      }
+      setLatestRemoteInstall(result);
+      await reloadInstallHistory();
+      toast(
+        `Remote ${isWinRmRemoteInstall ? 'WinRM' : 'SSH'} install dispatched to ${hostname}; awaiting first heartbeat.`,
+        'success',
+      );
+    } catch (error) {
+      const payload = parseApiErrorPayload(error);
+      if (payload?.record) {
+        setLatestRemoteInstall(payload.record);
+      }
+      toast(
+        payload?.error || payload?.message || payload?.record?.error || 'Remote install failed.',
+        'error',
+      );
+    } finally {
+      if (isWinRmRemoteInstall) {
+        setInstallForm((current) => ({ ...current, winrmPassword: '' }));
+      }
+      setIsRemoteInstalling(false);
+    }
+  }, [
+    canRemoteInstall,
+    installForm,
+    isSshRemoteInstall,
+    isWinRmRemoteInstall,
+    reloadInstallHistory,
+    toast,
+  ]);
+
+  const assignLatestRelease = useCallback(async () => {
+    if (!selectedDeployableAgent || !latestRelease?.version) {
+      return;
+    }
+    setIsAssigningRelease(true);
+    try {
+      await api.updatesDeploy({
+        agent_id: selectedDeployableAgent.id,
+        version: latestRelease.version,
+        platform: normalizeInstallPlatform(selectedDeployableAgent.os),
+      });
+      toast(
+        selectedDeployableAgent.status === 'offline'
+          ? `Assigned ${latestRelease.version}; the agent will upgrade after the next heartbeat.`
+          : `Assigned ${latestRelease.version} to ${selectedDeployableAgent.hostname}.`,
+        'success',
+      );
+      reloadFleetSurface();
+    } catch {
+      toast('Failed to assign the selected release.', 'error');
+    } finally {
+      setIsAssigningRelease(false);
+    }
+  }, [latestRelease, reloadFleetSurface, selectedDeployableAgent, toast]);
 
   const toggleSelect = useCallback((agent) => {
     if (agent.isLocalConsole) {
@@ -866,6 +1187,19 @@ export default function FleetAgents() {
               </span>
               {currentPreview && (
                 <div className="btn-group">
+                  {!currentPreview.isLocalConsole && latestRelease?.version && (
+                    <button
+                      className="btn btn-sm btn-primary"
+                      disabled={isAssigningRelease || !selectedAgentNeedsUpgrade}
+                      onClick={assignLatestRelease}
+                    >
+                      {selectedAgentNeedsUpgrade
+                        ? isAssigningRelease
+                          ? 'Assigning…'
+                          : `Assign ${latestRelease.version}`
+                        : 'Current release'}
+                    </button>
+                  )}
                   <button className="btn btn-sm" onClick={() => copyRow(currentPreview)}>
                     Copy
                   </button>
@@ -970,6 +1304,16 @@ export default function FleetAgents() {
                       ? 'This endpoint is offline. Review recent heartbeat time and recovery readiness before rolling out changes.'
                       : 'This endpoint is healthy. Use this panel to verify version, platform, and detailed inventory quickly.'}
                 </div>
+                {!currentPreview.isLocalConsole && latestRelease?.version && (
+                  <div className="detail-callout" style={{ marginTop: 12 }}>
+                    <strong>Remote upgrade</strong>
+                    <div style={{ marginTop: 6 }}>
+                      {selectedAgentNeedsUpgrade
+                        ? `This agent is behind the latest release reference (${latestRelease.version}). Assigning it queues the upgrade for the next agent update check.`
+                        : `This agent already matches the latest release reference (${latestRelease.version}).`}
+                    </div>
+                  </div>
+                )}
                 {currentPreview.isLocalConsole && <LocalConsoleInventory />}
                 <JsonDetails
                   data={agentDetail || currentPreview.raw}
@@ -1126,6 +1470,361 @@ export default function FleetAgents() {
             <div className="detail-callout" style={{ marginTop: 16 }}>
               <strong>URL-backed updates focus</strong>
               <div style={{ marginTop: 6 }}>{activeUpdatesPanel?.description}</div>
+            </div>
+          </div>
+
+          <div className="card-grid" style={{ marginBottom: 16 }}>
+            <div className="card">
+              <div className="card-title" style={{ marginBottom: 12 }}>
+                Enroll New Host
+              </div>
+              <div className="detail-callout" style={{ marginBottom: 16 }}>
+                Linux and macOS hosts can now be bootstrapped over SSH from this console. Wardex
+                still keeps the manual bundle below for RMM, MDM, Windows, or any environment where
+                you do not want the manager host to open an SSH session directly.
+              </div>
+              <form onSubmit={generateInstallBundle}>
+                <div
+                  style={{
+                    display: 'grid',
+                    gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
+                    gap: 12,
+                  }}
+                >
+                  <label style={{ display: 'grid', gap: 6 }}>
+                    <span className="row-primary">Host or agent name</span>
+                    <input
+                      aria-label="Host or agent name"
+                      className="form-input"
+                      value={installForm.hostname}
+                      onChange={(event) => handleInstallFormChange('hostname', event.target.value)}
+                      placeholder="edge-02"
+                    />
+                  </label>
+                  <label style={{ display: 'grid', gap: 6 }}>
+                    <span className="row-primary">Address or DNS name</span>
+                    <input
+                      aria-label="Address or DNS name"
+                      className="form-input"
+                      value={installForm.address}
+                      onChange={(event) => handleInstallFormChange('address', event.target.value)}
+                      placeholder="10.0.4.12"
+                    />
+                  </label>
+                  <label style={{ display: 'grid', gap: 6 }}>
+                    <span className="row-primary">Platform</span>
+                    <select
+                      aria-label="Platform"
+                      className="form-select"
+                      value={installForm.platform}
+                      onChange={(event) => handleInstallFormChange('platform', event.target.value)}
+                    >
+                      <option value="linux">Linux</option>
+                      <option value="macos">macOS</option>
+                      <option value="windows">Windows</option>
+                    </select>
+                  </label>
+                  <label style={{ display: 'grid', gap: 6 }}>
+                    <span className="row-primary">Manager URL</span>
+                    <input
+                      aria-label="Manager URL"
+                      className="form-input"
+                      value={installForm.managerUrl}
+                      onChange={(event) =>
+                        handleInstallFormChange('managerUrl', event.target.value)
+                      }
+                      placeholder="https://manager.example.com:9090"
+                    />
+                  </label>
+                  {isSshRemoteInstall && (
+                    <>
+                      <label style={{ display: 'grid', gap: 6 }}>
+                        <span className="row-primary">SSH user</span>
+                        <input
+                          aria-label="SSH user"
+                          className="form-input"
+                          value={installForm.sshUser}
+                          onChange={(event) =>
+                            handleInstallFormChange('sshUser', event.target.value)
+                          }
+                          placeholder="root"
+                        />
+                      </label>
+                      <label style={{ display: 'grid', gap: 6 }}>
+                        <span className="row-primary">SSH port</span>
+                        <input
+                          aria-label="SSH port"
+                          className="form-input"
+                          inputMode="numeric"
+                          value={installForm.sshPort}
+                          onChange={(event) =>
+                            handleInstallFormChange('sshPort', event.target.value)
+                          }
+                          placeholder="22"
+                        />
+                      </label>
+                      <label style={{ display: 'grid', gap: 6 }}>
+                        <span className="row-primary">Identity file</span>
+                        <input
+                          aria-label="Identity file"
+                          className="form-input"
+                          value={installForm.sshIdentityFile}
+                          onChange={(event) =>
+                            handleInstallFormChange('sshIdentityFile', event.target.value)
+                          }
+                          placeholder="~/.ssh/wardex-fleet"
+                        />
+                      </label>
+                    </>
+                  )}
+                  {isWinRmRemoteInstall && (
+                    <>
+                      <label style={{ display: 'grid', gap: 6 }}>
+                        <span className="row-primary">WinRM username</span>
+                        <input
+                          aria-label="WinRM username"
+                          className="form-input"
+                          value={installForm.winrmUsername}
+                          onChange={(event) =>
+                            handleInstallFormChange('winrmUsername', event.target.value)
+                          }
+                          placeholder="Administrator"
+                        />
+                      </label>
+                      <label style={{ display: 'grid', gap: 6 }}>
+                        <span className="row-primary">WinRM password</span>
+                        <input
+                          aria-label="WinRM password"
+                          className="form-input"
+                          type="password"
+                          value={installForm.winrmPassword}
+                          onChange={(event) =>
+                            handleInstallFormChange('winrmPassword', event.target.value)
+                          }
+                          placeholder="Enter the remote administrator password"
+                        />
+                      </label>
+                      <label style={{ display: 'grid', gap: 6 }}>
+                        <span className="row-primary">WinRM port</span>
+                        <input
+                          aria-label="WinRM port"
+                          className="form-input"
+                          inputMode="numeric"
+                          value={installForm.winrmPort}
+                          onChange={(event) =>
+                            handleInstallFormChange('winrmPort', event.target.value)
+                          }
+                          placeholder={installForm.winrmUseTls ? '5986' : '5985'}
+                        />
+                      </label>
+                    </>
+                  )}
+                </div>
+                {isSshRemoteInstall ? (
+                  <div className="detail-callout" style={{ marginTop: 16 }}>
+                    Remote SSH install uses the manager host&apos;s local `ssh` client with batch
+                    mode enabled. Use a reachable SSH target, a valid key in your SSH agent or
+                    identity file, and either `root` or passwordless `sudo`.
+                    <div style={{ marginTop: 10, display: 'flex', gap: 16, flexWrap: 'wrap' }}>
+                      <label style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+                        <input
+                          type="checkbox"
+                          checked={Boolean(installForm.useSudo)}
+                          onChange={(event) =>
+                            handleInstallFormChange('useSudo', event.target.checked)
+                          }
+                        />
+                        Use `sudo -n` for service install
+                      </label>
+                      <label style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+                        <input
+                          type="checkbox"
+                          checked={Boolean(installForm.sshAcceptNewHostKey)}
+                          onChange={(event) =>
+                            handleInstallFormChange('sshAcceptNewHostKey', event.target.checked)
+                          }
+                        />
+                        Accept new host key on first contact
+                      </label>
+                    </div>
+                  </div>
+                ) : isWinRmRemoteInstall ? (
+                  <div className="detail-callout" style={{ marginTop: 16 }}>
+                    Remote WinRM install uses the manager host&apos;s local `pwsh` runtime. On macOS
+                    or Linux managers, install PowerShell 7 plus the `PSWSMan` module before using
+                    this path, then provide a Windows account that is allowed to connect over WinRM.
+                    <div style={{ marginTop: 10, display: 'flex', gap: 16, flexWrap: 'wrap' }}>
+                      <label style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+                        <input
+                          type="checkbox"
+                          checked={Boolean(installForm.winrmUseTls)}
+                          onChange={(event) =>
+                            handleInstallFormChange('winrmUseTls', event.target.checked)
+                          }
+                        />
+                        Use WinRM over HTTPS
+                      </label>
+                      <label style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+                        <input
+                          type="checkbox"
+                          checked={Boolean(installForm.winrmSkipCertCheck)}
+                          disabled={!installForm.winrmUseTls}
+                          onChange={(event) =>
+                            handleInstallFormChange('winrmSkipCertCheck', event.target.checked)
+                          }
+                        />
+                        Allow self-signed WinRM TLS certificates
+                      </label>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="detail-callout" style={{ marginTop: 16 }}>
+                    Generate the manual install bundle for environments where you do not want the
+                    manager host to open a remote session directly.
+                  </div>
+                )}
+                <div className="btn-group" style={{ marginTop: 16 }}>
+                  <button className="btn btn-sm btn-primary" disabled={isGeneratingInstallBundle}>
+                    {isGeneratingInstallBundle ? 'Generating…' : 'Generate Install Bundle'}
+                  </button>
+                  {canRemoteInstall && (
+                    <button
+                      className="btn btn-sm btn-primary"
+                      disabled={isRemoteInstalling}
+                      onClick={runRemoteInstall}
+                      type="button"
+                    >
+                      {isRemoteInstalling ? 'Installing…' : 'Install Remotely'}
+                    </button>
+                  )}
+                  {installBundle && (
+                    <button className="btn btn-sm" onClick={copyInstallBundle} type="button">
+                      Copy Command
+                    </button>
+                  )}
+                </div>
+              </form>
+              {visibleRemoteInstallHistory.length > 0 && (
+                <div style={{ marginTop: 16 }}>
+                  <div className="row-primary" style={{ marginBottom: 8 }}>
+                    Recent Remote Install Attempts
+                  </div>
+                  {visibleRemoteInstallHistory.slice(0, 4).map((attempt) => (
+                    <div
+                      key={attempt.id || `${attempt.hostname}-${attempt.started_at}`}
+                      style={{ padding: '10px 0', borderBottom: '1px solid var(--border)' }}
+                    >
+                      <div className="row-primary">
+                        {attempt.hostname || 'Unknown host'}
+                        {' • '}
+                        {attempt.transport || 'ssh'}
+                        {' • '}
+                        {attempt.status || 'unknown'}
+                      </div>
+                      <div className="row-secondary">
+                        {attempt.transport === 'winrm'
+                          ? `${attempt.winrm_username || 'winrm'}@${attempt.address || '—'}:${attempt.winrm_port || (attempt.winrm_use_tls ? '5986' : '5985')}`
+                          : `${attempt.ssh_user || 'ssh'}@${attempt.address || '—'}:${attempt.ssh_port || '22'}`}
+                        {' • '}
+                        {formatDateTime(attempt.completed_at || attempt.started_at)}
+                      </div>
+                      {(attempt.agent_id || attempt.first_heartbeat_at) && (
+                        <div className="hint" style={{ marginTop: 6 }}>
+                          {attempt.agent_id
+                            ? `Agent ${attempt.agent_id}`
+                            : 'First heartbeat received'}
+                          {attempt.first_heartbeat_at
+                            ? ` • first heartbeat ${formatDateTime(attempt.first_heartbeat_at)}`
+                            : ''}
+                        </div>
+                      )}
+                      {(attempt.error || attempt.output_excerpt) && (
+                        <div className="hint" style={{ marginTop: 6, whiteSpace: 'pre-wrap' }}>
+                          {attempt.error || attempt.output_excerpt}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+              {installBundle && (
+                <div style={{ marginTop: 16 }}>
+                  <SummaryGrid
+                    data={{
+                      target_host: installBundle.hostname,
+                      target_address: installBundle.address || '—',
+                      platform: installBundle.platform,
+                      manager_url: installBundle.managerUrl,
+                      token_expires: installBundle.expiresAt || 'single use',
+                    }}
+                    limit={10}
+                  />
+                  <label
+                    htmlFor="fleet-generated-install-command"
+                    className="row-primary"
+                    style={{ display: 'block', margin: '16px 0 8px' }}
+                  >
+                    Generated install command
+                  </label>
+                  <textarea
+                    id="fleet-generated-install-command"
+                    aria-label="Generated install command"
+                    className="form-input"
+                    readOnly
+                    rows={16}
+                    value={installBundle.command}
+                    style={{ fontFamily: 'var(--font-mono)', whiteSpace: 'pre' }}
+                  />
+                </div>
+              )}
+            </div>
+            <div className="card">
+              <div className="card-title" style={{ marginBottom: 12 }}>
+                Upgrade Selected Agent
+              </div>
+              {selectedDeployableAgent ? (
+                <>
+                  <SummaryGrid
+                    data={{
+                      hostname: selectedDeployableAgent.hostname,
+                      agent_id: selectedDeployableAgent.id,
+                      status: selectedDeployableAgent.status,
+                      current_version: selectedDeployableAgent.version,
+                      target_version: latestRelease?.version || '—',
+                    }}
+                    limit={10}
+                  />
+                  <div className="detail-callout" style={{ marginTop: 16 }}>
+                    {latestRelease?.version
+                      ? selectedAgentNeedsUpgrade
+                        ? 'Use the deploy action to assign the latest release to this agent. Offline agents will apply it after they reconnect and send a heartbeat.'
+                        : 'This agent already matches the latest release reference.'
+                      : 'Publish or sync a release before assigning upgrades from the console.'}
+                  </div>
+                  <div className="btn-group" style={{ marginTop: 16 }}>
+                    <button
+                      className="btn btn-sm btn-primary"
+                      disabled={!selectedAgentNeedsUpgrade || isAssigningRelease}
+                      onClick={assignLatestRelease}
+                    >
+                      {isAssigningRelease
+                        ? 'Assigning…'
+                        : latestRelease?.version
+                          ? `Assign ${latestRelease.version}`
+                          : 'No release available'}
+                    </button>
+                    <button className="btn btn-sm" onClick={() => handleTabChange('agents')}>
+                      Open Agent Details
+                    </button>
+                  </div>
+                </>
+              ) : (
+                <EmptyState
+                  title="No agent selected"
+                  message="Pick an endpoint in the Agents workspace, then return here to queue a remote upgrade assignment."
+                  primaryCta={{ label: 'Open Agents', onClick: () => handleTabChange('agents') }}
+                />
+              )}
             </div>
           </div>
 

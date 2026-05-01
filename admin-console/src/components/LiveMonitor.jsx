@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useApi, useApiGroup, useInterval, useToast, useWebSocket } from '../hooks.jsx';
 import * as api from '../api.js';
@@ -50,6 +50,36 @@ const MONITOR_VIEW_META = {
   },
 };
 
+const MONITOR_SHORTCUTS = [
+  {
+    title: 'Queue navigation',
+    items: [
+      ['/', 'Focus the alert search box'],
+      ['↑ ↓', 'Move through the queue while keeping the current scope visible'],
+      ['j / k', 'Vim-style movement between alerts'],
+      ['Enter', 'Open or close the active alert drawer'],
+      ['Esc', 'Close the active preview or drawer selection'],
+    ],
+  },
+  {
+    title: 'Selection and triage',
+    items: [
+      ['x', 'Toggle the active alert in the bulk selection set'],
+      ['t', 'Acknowledge the selected alerts or the active alert'],
+      ['f', 'Mark the active alert as false positive'],
+      ['i', 'Create an incident from the active alert or current selection'],
+    ],
+  },
+  {
+    title: 'Reference',
+    items: [
+      ['?', 'Open this shortcut guide on the Alert Stream view'],
+      ['Mouse hover', 'Keep queue context visible in the side preview'],
+      ['Bulk bar', 'Apply FP, triage, or incident actions to the current selection'],
+    ],
+  },
+];
+
 function alertIdFor(alert, index) {
   return String(alert.id ?? alert.alert_id ?? alert._index ?? `${alert.timestamp}-${index}`);
 }
@@ -84,6 +114,44 @@ function alertDedupKey(alert, index) {
   const primaryId = alert.id ?? alert.alert_id ?? alert._index;
   if (primaryId != null) return String(primaryId);
   return `${alert.timestamp || alert.time || 'unknown'}:${alert.hostname || 'host'}:${alert.message || alert.description || index}`;
+}
+
+function normalizeProcessTreeNodes(treeData) {
+  const items = Array.isArray(treeData?.processes)
+    ? treeData.processes
+    : Array.isArray(treeData?.nodes)
+      ? treeData.nodes
+      : [];
+  return items.filter((process) => process?.pid != null);
+}
+
+function normalizeProcessDeepChains(chainData) {
+  const items = Array.isArray(chainData?.deep_chains)
+    ? chainData.deep_chains
+    : Array.isArray(chainData?.chains)
+      ? chainData.chains
+      : [];
+
+  return items.map((chain, index) => {
+    if (Array.isArray(chain?.chain)) {
+      return {
+        pid: chain.pid ?? null,
+        depth: chain.depth ?? chain.chain.length,
+        summary: chain.chain.join(' → '),
+        name: chain.name || chain.chain.at(-1) || `Chain ${index + 1}`,
+      };
+    }
+
+    return {
+      ...chain,
+      pid: chain?.pid ?? null,
+      depth: chain?.depth ?? null,
+      summary:
+        chain?.summary ||
+        [chain?.name, chain?.cmd_line].filter(Boolean).join(' · ') ||
+        `Suspicious chain ${index + 1}`,
+    };
+  });
 }
 
 function normalizeLiveEvent(event, index) {
@@ -160,6 +228,68 @@ function TriageEmptyState({ title, description, actionLabel, onAction }) {
   );
 }
 
+function MonitorShortcutDialog({ onClose }) {
+  return (
+    <div className="search-palette-overlay" onClick={() => onClose?.()}>
+      <div
+        className="search-palette"
+        role="dialog"
+        aria-modal="true"
+        aria-label="Keyboard shortcuts"
+        onClick={(event) => event.stopPropagation()}
+        style={{ width: 'min(720px, 92vw)' }}
+      >
+        <div className="drawer-header">
+          <div>
+            <div className="drawer-title">Keyboard Shortcuts</div>
+            <div className="drawer-subtitle">
+              Alert Stream triage works fastest when navigation, selection, and escalation stay on
+              the keyboard.
+            </div>
+          </div>
+          <div className="drawer-actions">
+            <button className="btn btn-sm" onClick={() => onClose?.()}>
+              Close
+            </button>
+          </div>
+        </div>
+        <div className="drawer-body">
+          <div className="card-grid">
+            {MONITOR_SHORTCUTS.map((section) => (
+              <div key={section.title} className="card" style={{ display: 'grid', gap: 10 }}>
+                <div className="card-title">{section.title}</div>
+                <div style={{ display: 'grid', gap: 8 }}>
+                  {section.items.map(([keys, description]) => (
+                    <div key={keys} style={{ display: 'grid', gridTemplateColumns: '96px 1fr', gap: 10 }}>
+                      <kbd
+                        style={{
+                          fontSize: 11,
+                          padding: '4px 8px',
+                          borderRadius: 6,
+                          background: 'var(--bg)',
+                          border: '1px solid var(--border)',
+                          width: 'fit-content',
+                          fontFamily: 'var(--font-mono)',
+                        }}
+                      >
+                        {keys}
+                      </kbd>
+                      <div className="hint">{description}</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+          <div className="detail-callout" style={{ marginTop: 16 }}>
+            Press <strong>?</strong> on the Alert Stream at any time to reopen this guide.
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function MobileAlertCard({ alert, index, active, onPreview, onOpen, onMarkFP }) {
   const alertId = alertIdFor(alert, index);
   return (
@@ -220,6 +350,7 @@ function MobileAlertCard({ alert, index, active, onPreview, onOpen, onMarkFP }) 
 export default function LiveMonitor() {
   const toast = useToast();
   const [searchParams, setSearchParams] = useSearchParams();
+  const alertSearchRef = useRef(null);
   const { data: wsStats, reload: reloadWsStats } = useApi(api.wsStats);
   const nativeStreamSupported = Boolean(wsStats?.native_websocket_supported);
   const {
@@ -246,13 +377,16 @@ export default function LiveMonitor() {
   const { data: processData, reload: reloadProcessData } = useApiGroup({
     procData: api.processesLive,
     procAnalysis: api.processesAnalysis,
+    procTree: api.processTree,
+    procDeepChains: api.deepChains,
   });
-  const { procData, procAnalysis } = processData;
+  const { procData, procAnalysis, procTree, procDeepChains } = processData;
   const { data: fpStats, reload: reloadFP } = useApi(api.fpFeedbackStats);
   const [selectedId, setSelectedId] = useState(() => searchParams.get('alert'));
   const [hoveredId, setHoveredId] = useState(null);
   const [analysisResult, setAnalysisResult] = useState(null);
   const [tab, setTab] = useState(() => searchParams.get('monitorTab') || 'stream');
+  const [showShortcutHelp, setShowShortcutHelp] = useState(false);
   const [procSort, setProcSort] = useState('cpu');
   const [procFilter, setProcFilter] = useState('');
   const [sevFilter, setSevFilter] = useState(() => searchParams.get('sev') || 'all');
@@ -458,23 +592,9 @@ export default function LiveMonitor() {
       }
       toast(`Marked ${ids.length} alerts as false positive`, 'success');
     } else if (bulkAction === 'triage') {
-      try {
-        await api.bulkTriage({ event_ids: ids, verdict: 'acknowledged' });
-        toast(`Triaged ${ids.length} alerts`, 'success');
-      } catch {
-        toast('Bulk triage failed', 'error');
-      }
+      await triageAlerts(ids, `Triaged ${ids.length} alerts`);
     } else if (bulkAction === 'incident') {
-      try {
-        await api.createIncident({
-          title: `Bulk incident (${ids.length} alerts)`,
-          severity: 'medium',
-          event_ids: ids,
-        });
-        toast('Incident created from selected alerts', 'success');
-      } catch {
-        toast('Incident creation failed', 'error');
-      }
+      await createIncidentFromAlerts(ids);
     }
     setSelectedAlerts(new Set());
     setBulkAction('');
@@ -502,6 +622,17 @@ export default function LiveMonitor() {
     else if (procSort === 'pid') list = [...list].sort((a, b) => a.pid - b.pid);
     return list;
   })();
+  const processTreeNodes = useMemo(() => normalizeProcessTreeNodes(procTree), [procTree]);
+  const processDeepChains = useMemo(
+    () => normalizeProcessDeepChains(procDeepChains),
+    [procDeepChains],
+  );
+  const highestRiskProcess = procAnalysis?.findings?.[0] || null;
+  const topDeepChain = processDeepChains[0] || null;
+  const deepestChainDepth = processDeepChains.reduce(
+    (maxDepth, chain) => Math.max(maxDepth, Number(chain.depth || 0)),
+    0,
+  );
   const currentTabMeta = MONITOR_VIEW_META[tab] || MONITOR_VIEW_META.stream;
   const hasProcessSnapshot = procData?.count != null || procList.length > 0;
 
@@ -545,6 +676,43 @@ export default function LiveMonitor() {
     setSelectedAlerts(new Set());
     updateMonitorParams({ sev: 'all', source: 'all', host: 'all', q: '' });
   };
+
+  const triageAlerts = useCallback(
+    async (ids, successMessage) => {
+      if (!ids.length) return false;
+      try {
+        await api.bulkTriage({ event_ids: ids, verdict: 'acknowledged' });
+        toast(successMessage || `Triaged ${ids.length} alerts`, 'success');
+        return true;
+      } catch {
+        toast(ids.length > 1 ? 'Bulk triage failed' : 'Triage failed', 'error');
+        return false;
+      }
+    },
+    [toast],
+  );
+
+  const createIncidentFromAlerts = useCallback(
+    async (ids) => {
+      if (!ids.length) return false;
+      try {
+        await api.createIncident({
+          title: ids.length === 1 ? 'Alert escalation' : `Bulk incident (${ids.length} alerts)`,
+          severity: 'medium',
+          event_ids: ids,
+        });
+        toast(
+          ids.length === 1 ? 'Incident created from alert' : 'Incident created from selected alerts',
+          'success',
+        );
+        return true;
+      } catch {
+        toast(ids.length > 1 ? 'Incident creation failed' : 'Alert escalation failed', 'error');
+        return false;
+      }
+    },
+    [toast],
+  );
 
   const moveAlert = (direction, pinned = selectedId != null) => {
     if (filteredAlerts.length === 0) return;
@@ -605,6 +773,132 @@ export default function LiveMonitor() {
   };
 
   const openProcess = (process) => setSelectedProcess(process ? { ...process } : null);
+
+  useEffect(() => {
+    if (tab !== 'stream') return;
+
+    const isEditableTarget = (target) => {
+      if (!(target instanceof HTMLElement)) return false;
+      return (
+        target.isContentEditable ||
+        ['INPUT', 'TEXTAREA', 'SELECT', 'BUTTON'].includes(target.tagName)
+      );
+    };
+
+    const handleKeyDown = (event) => {
+      if (event.defaultPrevented || event.metaKey || event.ctrlKey || event.altKey) return;
+      if (showShortcutHelp) {
+        if (event.key === 'Escape') {
+          event.preventDefault();
+          setShowShortcutHelp(false);
+        }
+        return;
+      }
+      if (event.key === '?' && !isEditableTarget(event.target)) {
+        event.preventDefault();
+        setShowShortcutHelp(true);
+        return;
+      }
+      if (event.key === '/' && !isEditableTarget(event.target)) {
+        event.preventDefault();
+        alertSearchRef.current?.focus();
+        alertSearchRef.current?.select();
+        return;
+      }
+
+      if (isEditableTarget(event.target) || filteredAlerts.length === 0) return;
+
+      const activeAlert = previewAlert || filteredAlerts[0];
+      const activeAlertId = previewAlert
+        ? alertIdFor(previewAlert, previewAlertIndex)
+        : alertIdFor(filteredAlerts[0], 0);
+
+      if (!activeAlert || !activeAlertId) return;
+
+      switch (event.key) {
+        case 'ArrowDown':
+        case 'j':
+          event.preventDefault();
+          moveAlert(1, selectedAlert != null);
+          break;
+        case 'ArrowUp':
+        case 'k':
+          event.preventDefault();
+          moveAlert(-1, selectedAlert != null);
+          break;
+        case 'Enter':
+          event.preventDefault();
+          setSelectedId((current) => (current === activeAlertId ? null : activeAlertId));
+          break;
+        case 'Escape':
+          event.preventDefault();
+          if (selectedAlert) {
+            setSelectedId(null);
+          } else if (hoveredId) {
+            setHoveredId(null);
+          }
+          break;
+        case 'x':
+          event.preventDefault();
+          toggleSelect(activeAlertId);
+          break;
+        case 'f':
+          event.preventDefault();
+          void markFP(activeAlert);
+          break;
+        case 't':
+          event.preventDefault();
+          if (selectedAlerts.size > 0) {
+            void triageAlerts([...selectedAlerts], `Triaged ${selectedAlerts.size} alerts`).then(
+              (ok) => {
+                if (ok) {
+                  setSelectedAlerts(new Set());
+                  reload();
+                }
+              },
+            );
+          } else {
+            void triageAlerts([activeAlertId], 'Triaged alert').then((ok) => {
+              if (ok) reload();
+            });
+          }
+          break;
+        case 'i':
+          event.preventDefault();
+          if (selectedAlerts.size > 0) {
+            void createIncidentFromAlerts([...selectedAlerts]).then((ok) => {
+              if (ok) {
+                setSelectedAlerts(new Set());
+                reload();
+              }
+            });
+          } else {
+            void createIncidentFromAlerts([activeAlertId]).then((ok) => {
+              if (ok) reload();
+            });
+          }
+          break;
+        default:
+          break;
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [
+    createIncidentFromAlerts,
+    filteredAlerts,
+    hoveredId,
+    moveAlert,
+    previewAlert,
+    previewAlertIndex,
+    reload,
+    selectedAlert,
+    selectedAlerts,
+    showShortcutHelp,
+    tab,
+    triageAlerts,
+  ]);
 
   return (
     <div>
@@ -879,6 +1173,7 @@ export default function LiveMonitor() {
                 </div>
                 <div className="triage-toolbar-group triage-toolbar-group-right">
                   <input
+                    ref={alertSearchRef}
                     className="form-input triage-search"
                     placeholder="Search message, host, user, category…"
                     value={searchFilter}
@@ -967,16 +1262,26 @@ export default function LiveMonitor() {
                 )}
               </div>
               <div className="triage-meta-bar">
-                <div className="hint">
-                  {filteredAlerts.length} alert{filteredAlerts.length === 1 ? '' : 's'} in scope.{' '}
-                  {criticalAlertCount} critical.{' '}
-                  {currentView?.label ? `Preset: ${currentView.label}.` : 'Custom scope active.'}
+                <div>
+                  <div className="hint">
+                    {filteredAlerts.length} alert{filteredAlerts.length === 1 ? '' : 's'} in scope.{' '}
+                    {criticalAlertCount} critical.{' '}
+                    {currentView?.label ? `Preset: ${currentView.label}.` : 'Custom scope active.'}
+                  </div>
+                  <div className="hint" style={{ marginTop: 4 }}>
+                    Shortcuts: `/` search, ↑↓ or j/k navigate, Enter drawer, x select, t triage, f mark FP, i incident, Esc close.
+                  </div>
                 </div>
-                {hasAlertFilters && (
-                  <button className="btn btn-sm" onClick={clearAlertFilters}>
-                    Clear Scope
+                <div className="btn-group">
+                  <button className="btn btn-sm" onClick={() => setShowShortcutHelp(true)}>
+                    Shortcut Help (?)
                   </button>
-                )}
+                  {hasAlertFilters && (
+                    <button className="btn btn-sm" onClick={clearAlertFilters}>
+                      Clear Scope
+                    </button>
+                  )}
+                </div>
               </div>
               <div className="sticky-bulk-bar">
                 <div>{selectedAlerts.size} selected</div>
@@ -1040,9 +1345,19 @@ export default function LiveMonitor() {
                               key={aid}
                               className={isActive ? 'row-active' : ''}
                               tabIndex={0}
+                              aria-keyshortcuts="Enter Space X"
                               onMouseEnter={() => setHoveredId(aid)}
                               onFocus={() => setHoveredId(aid)}
                               onClick={() => setSelectedId(selectedId === aid ? null : aid)}
+                              onKeyDown={(event) => {
+                                if (event.key === 'Enter' || event.key === ' ') {
+                                  event.preventDefault();
+                                  setSelectedId(selectedId === aid ? null : aid);
+                                } else if (event.key.toLowerCase() === 'x') {
+                                  event.preventDefault();
+                                  toggleSelect(aid);
+                                }
+                              }}
                             >
                               <td onClick={(event) => event.stopPropagation()}>
                                 <input
@@ -1543,6 +1858,80 @@ export default function LiveMonitor() {
             </div>
           </div>
 
+          {(processTreeNodes.length > 0 || processDeepChains.length > 0) && (
+            <div className="card" style={{ marginBottom: 16 }}>
+              <div className="card-header">
+                <span className="card-title">Process Graph Context</span>
+                <div className="hint">
+                  Use live tree context to confirm suspicious ancestry before you isolate or kill a process.
+                </div>
+              </div>
+              <div className="card-grid" style={{ marginBottom: 16 }}>
+                <div className="card" style={{ padding: 10 }}>
+                  <div className="metric-label">Tree Nodes</div>
+                  <div style={{ fontSize: 22, fontWeight: 700 }}>{processTreeNodes.length}</div>
+                  <div className="metric-sub">Published by the live process tree endpoint</div>
+                </div>
+                <div className="card" style={{ padding: 10 }}>
+                  <div className="metric-label">Deep Chains</div>
+                  <div style={{ fontSize: 22, fontWeight: 700 }}>{processDeepChains.length}</div>
+                  <div className="metric-sub">
+                    {processDeepChains.length > 0
+                      ? `Deepest chain depth ${deepestChainDepth}`
+                      : 'No suspicious chains currently flagged'}
+                  </div>
+                </div>
+                <div className="card" style={{ padding: 10 }}>
+                  <div className="metric-label">Priority Process</div>
+                  <div style={{ fontSize: 16, fontWeight: 700 }}>
+                    {highestRiskProcess?.name || topDeepChain?.name || 'No current priority process'}
+                  </div>
+                  <div className="metric-sub">
+                    {highestRiskProcess?.reason || topDeepChain?.summary || 'Awaiting live analysis'}
+                  </div>
+                </div>
+              </div>
+              <div
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
+                  gap: 12,
+                }}
+              >
+                {topDeepChain && (
+                  <div className="card">
+                    <div className="metric-label">Top Deep Chain</div>
+                    <div className="row-primary" style={{ marginTop: 6 }}>
+                      {topDeepChain.summary}
+                    </div>
+                    <div className="row-secondary">Depth {topDeepChain.depth || '—'}</div>
+                    {topDeepChain.pid != null && (
+                      <div className="btn-group" style={{ marginTop: 12 }}>
+                        <button className="btn btn-sm" onClick={() => openProcess(topDeepChain)}>
+                          Investigate Chain Leaf
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                )}
+                {highestRiskProcess && (
+                  <div className="card">
+                    <div className="metric-label">Top Risk Finding</div>
+                    <div className="row-primary" style={{ marginTop: 6 }}>
+                      {highestRiskProcess.name}
+                    </div>
+                    <div className="row-secondary">{highestRiskProcess.reason}</div>
+                    <div className="btn-group" style={{ marginTop: 12 }}>
+                      <button className="btn btn-sm" onClick={() => openProcess(highestRiskProcess)}>
+                        Investigate Finding
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
           {/* Security findings */}
           {procAnalysis?.findings?.length > 0 && (
             <div className="card" style={{ marginBottom: 16 }}>
@@ -1703,10 +2092,15 @@ export default function LiveMonitor() {
           </div>
         </div>
       )}
+      {showShortcutHelp && <MonitorShortcutDialog onClose={() => setShowShortcutHelp(false)} />}
       <AlertDrawer
         alert={selectedAlert}
         onClose={() => setSelectedId(null)}
         onUpdated={reloadAll}
+        onSelectProcess={(process) => {
+          setSelectedId(null);
+          setSelectedProcess(process ? { ...process } : null);
+        }}
         onPrevious={() => moveAlert(-1, true)}
         onNext={() => moveAlert(1, true)}
         canPrevious={selectedAlertIndex > 0}
@@ -1719,6 +2113,7 @@ export default function LiveMonitor() {
         pid={selectedProcess?.pid}
         snapshot={selectedProcess}
         onClose={() => setSelectedProcess(null)}
+        onSelectProcess={openProcess}
         onPrevious={() => {
           const currentIndex = procList.findIndex((proc) => proc.pid === selectedProcess?.pid);
           if (currentIndex > 0) openProcess(procList[currentIndex - 1]);

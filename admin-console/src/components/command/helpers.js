@@ -183,6 +183,33 @@ export const connectorStatus = (connector, data) => {
   };
 };
 
+export const connectorStatusFromReadiness = (connector, readiness = {}) => {
+  const lastSuccess = readiness.last_success_at || null;
+  const hasError = Boolean(readiness.last_error_at || readiness.error_category);
+  const status = hasError
+    ? 'warning'
+    : readiness.enabled
+      ? 'configured'
+      : connector.newLane
+        ? 'setup_ready'
+        : 'not configured';
+  return {
+    status,
+    detail: hasError
+      ? `Last collector error ${compactTimestamp(readiness.last_error_at)}${readiness.error_category ? ` (${readiness.error_category})` : ''}.`
+      : lastSuccess
+        ? `Last successful collection ${compactTimestamp(lastSuccess)}.`
+        : connector.newLane
+          ? 'Guided setup is available with saved config, validation, and sample-event proof.'
+          : 'Awaiting validation.',
+    sample:
+      readiness.checkpoint_id ||
+      readiness.sample_event_type ||
+      connector.sampleEvent ||
+      'Sample preview pending',
+  };
+};
+
 export const defaultPlannedConnectorConfig = (connectorId) => {
   switch (connectorId) {
     case 'github':

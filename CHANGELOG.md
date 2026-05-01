@@ -99,6 +99,7 @@ All notable changes to Wardex are documented in this file.
 ### Live rollback hardening
 - **`remediation.allow_live_rollback` gate** — New config flag (default `false`). Live (`dry_run = false`) rollback requests are rejected with `403` and an audit-warn log unless the operator opts in.
 - **Typed-host confirmation** — When live rollback is enabled, requests must include `confirm_hostname` matching the change-review's `asset_id` (case-insensitive); mismatches are rejected with `400`. The Infrastructure console adds a "Live Rollback…" danger button that prompts the operator to type the hostname before submitting.
+- **`remediation.execute_live_rollback_commands` gate** — Second config flag (default `false`). Accepted live rollback requests continue to record proof and command plans by default; setting this flag enables local matching-platform command execution and returns per-command execution results in the rollback proof payload.
 
 ### Verification
 - `python3 scripts/check_panic_policy.py` (reports `0`)

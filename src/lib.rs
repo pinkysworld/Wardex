@@ -93,6 +93,7 @@ pub mod cluster;
 pub mod edge_cloud;
 pub mod enforcement;
 pub mod enrollment;
+pub mod fleet_install;
 pub mod policy;
 pub mod policy_dist;
 pub mod prevention;

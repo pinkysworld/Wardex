@@ -241,6 +241,37 @@ describe('App', () => {
                 release_candidates: 1,
                 compliance_packs: 1,
               },
+              lanes: {
+                connectors: {
+                  readiness: {
+                    collectors: [
+                      {
+                        provider: 'aws_cloudtrail',
+                        label: 'AWS CloudTrail',
+                        enabled: true,
+                        last_success_at: '2026-04-28T09:00:00Z',
+                      },
+                      {
+                        provider: 'github_audit',
+                        label: 'GitHub Audit Log',
+                        enabled: true,
+                        last_error_at: '2026-04-28T09:10:00Z',
+                        error_category: 'credentials',
+                      },
+                      {
+                        provider: 'crowdstrike_falcon',
+                        label: 'CrowdStrike Falcon',
+                        enabled: true,
+                      },
+                      {
+                        provider: 'generic_syslog',
+                        label: 'Generic Syslog',
+                        enabled: true,
+                      },
+                    ],
+                  },
+                },
+              },
             };
           }
           if (url === '/api/incidents') {
@@ -290,24 +321,6 @@ describe('App', () => {
           if (url === '/api/report-templates') {
             return { templates: [{ id: 'soc2', name: 'SOC 2 evidence pack' }] };
           }
-          if (url === '/api/collectors/github') {
-            return {
-              config: { provider: 'github_audit', organization: 'wardex-labs', enabled: true },
-              validation: { status: 'ready', issues: [] },
-            };
-          }
-          if (url === '/api/collectors/crowdstrike') {
-            return {
-              config: { provider: 'crowdstrike_falcon', enabled: true },
-              validation: { status: 'warning', issues: [{ field: 'client_secret_ref' }] },
-            };
-          }
-          if (url === '/api/collectors/syslog') {
-            return {
-              config: { provider: 'generic_syslog', enabled: true },
-              validation: { status: 'ready', issues: [] },
-            };
-          }
           return {};
         },
       };
@@ -327,8 +340,9 @@ describe('App', () => {
     expect(requestedUrls).toContain('/api/command/summary');
     expect(requestedUrls).toContain('/api/remediation/change-reviews');
     expect(requestedUrls).toContain('/api/content/rules');
-    expect(requestedUrls).toContain('/api/onboarding/readiness');
-    expect(requestedUrls).toContain('/api/collectors/github');
+    expect(requestedUrls).not.toContain('/api/collectors/github');
+    expect(requestedUrls).not.toContain('/api/collectors/crowdstrike');
+    expect(requestedUrls).not.toContain('/api/collectors/syslog');
   });
 
   it('preserves route scope through mobile help and share actions', async () => {

@@ -6,6 +6,9 @@ use serde::{Deserialize, Serialize};
 use std::env;
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::sync::OnceLock;
+
+static RUNTIME_CONFIG_OVERRIDE: OnceLock<PathBuf> = OnceLock::new();
 
 fn looks_like_runtime_root(path: &Path) -> bool {
     path.join("var/wardex.toml").exists()
@@ -19,6 +22,23 @@ fn explicit_runtime_config_path() -> Option<PathBuf> {
     env::var_os("WARDEX_CONFIG_PATH")
         .filter(|value| !value.is_empty())
         .map(PathBuf::from)
+        .or_else(|| RUNTIME_CONFIG_OVERRIDE.get().cloned())
+}
+
+pub fn set_runtime_config_override(path: PathBuf) -> Result<(), String> {
+    if let Some(current) = RUNTIME_CONFIG_OVERRIDE.get() {
+        if current == &path {
+            return Ok(());
+        }
+        return Err(format!(
+            "runtime config override already set to {}",
+            current.display()
+        ));
+    }
+
+    RUNTIME_CONFIG_OVERRIDE.set(path).map_err(|_| {
+        "failed to set runtime config override".to_string()
+    })
 }
 
 pub fn runtime_root_dir() -> PathBuf {
@@ -419,6 +439,14 @@ pub struct RemediationSettings {
     /// `asset_id` (case-insensitive) to be accepted.
     #[serde(default)]
     pub allow_live_rollback: bool,
+    /// Allow the rollback handler to execute planned remediation commands
+    /// locally when live rollback is enabled and the requested platform
+    /// matches the current OS. Default `false`.
+    ///
+    /// When `false`, accepted live rollback requests still record the command
+    /// plan and proof metadata, but they do not invoke OS commands.
+    #[serde(default)]
+    pub execute_live_rollback_commands: bool,
 }
 
 /// Compliance evaluation configuration.
@@ -487,6 +515,9 @@ pub struct AgentSettings {
     pub server_url: String,
     /// Enrollment token for initial registration.
     pub enrollment_token: String,
+    /// Persisted agent identity used after the first successful enrollment.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub agent_id: Option<String>,
     /// Enable auto-update checking.
     #[serde(default = "default_auto_update")]
     pub auto_update: bool,
@@ -552,6 +583,7 @@ impl Default for AgentSettings {
         Self {
             server_url: "http://localhost:8080".into(),
             enrollment_token: String::new(),
+            agent_id: None,
             auto_update: true,
             update_check_interval_secs: 300,
         }

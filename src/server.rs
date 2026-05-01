@@ -84,6 +84,10 @@ use crate::enterprise::{
     build_entity_timeline, build_incident_storyline, build_mitre_coverage,
 };
 use crate::event_forward::{EventAnalytics, EventStore, StoredEvent};
+use crate::fleet_install::{
+    RemoteInstallRecord, SshInstallRequest, WinRmInstallRequest, execute_ssh_install,
+    execute_winrm_install,
+};
 use crate::fingerprint::DeviceFingerprint;
 use crate::graphql::{AggregateOp, GqlExecutor, GqlRequest, aggregate, wardex_schema};
 use crate::incident::IncidentStore;
@@ -1599,7 +1603,7 @@ pub async fn run_server(
                                 s.local_telemetry.iter().cloned().collect();
                             let mut alert = AlertRecord {
                                 timestamp: chrono::Utc::now().to_rfc3339(),
-                                hostname: host.hostname,
+                                hostname: host.hostname.clone(),
                                 platform: host.platform.to_string(),
                                 score: signal.score,
                                 confidence: signal.confidence,
@@ -1620,8 +1624,14 @@ pub async fn run_server(
                                 s.alerts.pop_front();
                             }
                             s.alerts.push_back(alert.clone());
-                            let alert_event =
-                                alert_json_value(&alert, s.alerts.len().saturating_sub(1));
+                            let process_catalog =
+                                assemble_alert_process_catalog(&host.hostname, &s.process_tree);
+                            let alert_event = alert_json_value(
+                                &alert,
+                                s.alerts.len().saturating_sub(1),
+                                &host.hostname,
+                                &process_catalog,
+                            );
                             s.alert_broadcaster.broadcast_alert(alert_event);
 
                             // Phase 33: broadcast high-severity intel to swarm
@@ -2084,6 +2094,54 @@ pub fn spawn_test_server() -> (u16, String) {
     (port, token)
 }
 
+#[doc(hidden)]
+pub fn spawn_test_server_with_seeded_alerts(alerts: Vec<AlertRecord>) -> (u16, String) {
+    let (port, token, state) = spawn_test_server_with_state();
+    if !alerts.is_empty() {
+        let mut s = state.lock().unwrap_or_else(|e| e.into_inner());
+        for alert in alerts {
+            if s.alerts.len() >= 10_000 {
+                s.alerts.pop_front();
+            }
+            s.alerts.push_back(alert);
+        }
+    }
+    (port, token)
+}
+
+#[doc(hidden)]
+pub fn spawn_test_server_with_seeded_remote_installs(
+    installs: Vec<RemoteInstallRecord>,
+) -> (u16, String) {
+    let (port, token, state) = spawn_test_server_with_state();
+    if !installs.is_empty() {
+        let s = state.lock().unwrap_or_else(|e| e.into_inner());
+        let _ = save_stored_json(&s.storage, FLEET_REMOTE_INSTALLS_KEY, &installs);
+    }
+    (port, token)
+}
+
+#[doc(hidden)]
+pub fn spawn_test_server_with_live_rollback_enabled() -> (u16, String) {
+    let (port, token, state) = spawn_test_server_with_state();
+    {
+        let mut s = state.lock().unwrap_or_else(|e| e.into_inner());
+        s.config.remediation.allow_live_rollback = true;
+    }
+    (port, token)
+}
+
+#[doc(hidden)]
+pub fn spawn_test_server_with_live_rollback_execution_enabled() -> (u16, String) {
+    let (port, token, state) = spawn_test_server_with_state();
+    {
+        let mut s = state.lock().unwrap_or_else(|e| e.into_inner());
+        s.config.remediation.allow_live_rollback = true;
+        s.config.remediation.execute_live_rollback_commands = true;
+    }
+    (port, token)
+}
+
 /// Flush in-memory alerts, audit entries, and event store to the SQLite
 /// storage backend so nothing is lost on shutdown.
 fn flush_to_storage(state: &Arc<Mutex<AppState>>) {
@@ -2184,6 +2242,26 @@ fn generate_token() -> String {
     let mut rng = rand::thread_rng();
     let bytes: Vec<u8> = (0..32).map(|_| rng.r#gen()).collect();
     hex::encode(bytes)
+}
+
+fn backup_file_record(path: &Path) -> Result<crate::backup::BackupRecord, String> {
+    let metadata = fs::metadata(path).map_err(|e| format!("failed to read backup metadata: {e}"))?;
+    let contents = fs::read(path).map_err(|e| format!("failed to read backup file: {e}"))?;
+    let name = path
+        .file_name()
+        .and_then(|value| value.to_str())
+        .ok_or_else(|| "invalid backup file name".to_string())?
+        .to_string();
+    let modified = metadata.modified().unwrap_or(std::time::UNIX_EPOCH);
+    let timestamp = chrono::DateTime::<chrono::Utc>::from(modified).to_rfc3339();
+
+    Ok(crate::backup::BackupRecord {
+        name,
+        timestamp,
+        size_bytes: metadata.len(),
+        checksum: crate::audit::sha256_hex(&contents),
+        verified: true,
+    })
 }
 
 /// Scan text for common PII patterns (email, IPv4, SSN, credit card).
@@ -2364,28 +2442,304 @@ fn csv_response(body: &str, status: u16) -> Response<Body> {
     )
 }
 
+#[derive(Debug, Clone, serde::Serialize, PartialEq)]
+struct AlertProcessPivot {
+    pid: u32,
+    ppid: Option<u32>,
+    name: String,
+    display_name: String,
+    user: Option<String>,
+    group: Option<String>,
+    cpu_percent: Option<f32>,
+    mem_percent: Option<f32>,
+    hostname: String,
+    platform: String,
+    cmd_line: Option<String>,
+    exe_path: Option<String>,
+}
+
+fn normalized_process_token(value: &str) -> String {
+    let token = value.split_whitespace().next().unwrap_or(value).trim_matches('"');
+    let base = token
+        .rsplit(['/', '\\'])
+        .next()
+        .unwrap_or(token)
+        .trim_end_matches(':');
+    base.trim_end_matches(".exe").to_ascii_lowercase()
+}
+
+fn host_matches_local(alert_hostname: &str, local_hostname: &str) -> bool {
+    if alert_hostname.eq_ignore_ascii_case(local_hostname) {
+        return true;
+    }
+    let alert_short = alert_hostname.split('.').next().unwrap_or(alert_hostname);
+    let local_short = local_hostname.split('.').next().unwrap_or(local_hostname);
+    alert_short.eq_ignore_ascii_case(local_short)
+}
+
+fn extract_alert_process_names(
+    entities: &[crate::entity_extract::ExtractedEntity],
+) -> Vec<String> {
+    let mut seen = HashSet::new();
+    entities
+        .iter()
+        .filter(|entity| {
+            matches!(
+                entity.entity_type,
+                crate::entity_extract::EntityType::ProcessName
+            )
+        })
+        .filter_map(|entity| {
+            let normalized = normalized_process_token(&entity.value);
+            if normalized.is_empty() || !seen.insert(normalized.clone()) {
+                None
+            } else {
+                Some(normalized)
+            }
+        })
+        .collect()
+}
+
+fn alert_process_matches_name(process: &AlertProcessPivot, process_name: &str) -> bool {
+    let target = normalized_process_token(process_name);
+    if target.is_empty() {
+        return false;
+    }
+    [
+        process.display_name.as_str(),
+        process.name.as_str(),
+        process.exe_path.as_deref().unwrap_or(""),
+        process.cmd_line.as_deref().unwrap_or(""),
+    ]
+    .iter()
+    .map(|value| normalized_process_token(value))
+    .any(|candidate| !candidate.is_empty() && candidate == target)
+}
+
+fn resolve_alert_process_pivots(
+    process_names: &[String],
+    catalog: &[AlertProcessPivot],
+    alert_hostname: &str,
+) -> Vec<AlertProcessPivot> {
+    let mut matched = catalog
+        .iter()
+        .filter(|process| host_matches_local(&process.hostname, alert_hostname))
+        .filter(|process| {
+            process_names
+                .iter()
+                .any(|process_name| alert_process_matches_name(process, process_name))
+        })
+        .cloned()
+        .collect::<Vec<_>>();
+    matched.sort_by(|left, right| {
+        right
+            .cpu_percent
+            .unwrap_or(0.0)
+            .partial_cmp(&left.cpu_percent.unwrap_or(0.0))
+            .unwrap_or(std::cmp::Ordering::Equal)
+            .then_with(|| {
+                right
+                    .mem_percent
+                    .unwrap_or(0.0)
+                    .partial_cmp(&left.mem_percent.unwrap_or(0.0))
+                    .unwrap_or(std::cmp::Ordering::Equal)
+            })
+            .then_with(|| left.display_name.cmp(&right.display_name))
+    });
+    matched.dedup_by_key(|process| process.pid);
+    matched.truncate(4);
+    matched
+}
+
+#[cfg(target_os = "macos")]
+fn live_alert_process_catalog(local_hostname: &str) -> Vec<AlertProcessPivot> {
+    crate::collector_macos::collect_processes()
+        .into_iter()
+        .map(|process| {
+            let name = process.name;
+            let display_name = process_basename(&name).to_string();
+            let exe_path = if name.contains('/') {
+                Some(name.clone())
+            } else {
+                None
+            };
+            AlertProcessPivot {
+                pid: process.pid,
+                ppid: Some(process.ppid),
+                name,
+                display_name,
+                user: Some(process.user),
+                group: Some(process.group),
+                cpu_percent: Some(process.cpu_percent),
+                mem_percent: Some(process.mem_percent),
+                hostname: local_hostname.to_string(),
+                platform: "macos".to_string(),
+                cmd_line: None,
+                exe_path,
+            }
+        })
+        .collect()
+}
+
+#[cfg(target_os = "linux")]
+fn live_alert_process_catalog(local_hostname: &str) -> Vec<AlertProcessPivot> {
+    crate::collector_linux::collect_processes()
+        .into_iter()
+        .map(|process| {
+            let display_name = process_basename(&process.name).to_string();
+            AlertProcessPivot {
+                pid: process.pid,
+                ppid: Some(process.ppid),
+                name: process.name,
+                display_name,
+                user: Some(if process.uid == 0 {
+                    "root".to_string()
+                } else {
+                    format!("uid:{}", process.uid)
+                }),
+                group: Some(format!("gid:{}", process.gid)),
+                cpu_percent: None,
+                mem_percent: None,
+                hostname: local_hostname.to_string(),
+                platform: "linux".to_string(),
+                cmd_line: (!process.cmd_line.is_empty()).then_some(process.cmd_line),
+                exe_path: (!process.exe_path.is_empty()).then_some(process.exe_path),
+            }
+        })
+        .collect()
+}
+
+#[cfg(not(any(target_os = "macos", target_os = "linux")))]
+fn live_alert_process_catalog(_local_hostname: &str) -> Vec<AlertProcessPivot> {
+    Vec::new()
+}
+
+/// Build alert process pivots for processes tracked from remote hosts via the
+/// central process tree. Local-host nodes are skipped — they are already covered
+/// by `live_alert_process_catalog`. Returns up to 256 alive remote nodes.
+fn remote_alert_process_catalog(
+    process_tree: &crate::process_tree::ProcessTree,
+    local_hostname: &str,
+) -> Vec<AlertProcessPivot> {
+    process_tree
+        .alive_processes()
+        .into_iter()
+        .filter(|node| !host_matches_local(&node.hostname, local_hostname))
+        .take(256)
+        .map(|node| {
+            let display_name = process_basename(&node.name).to_string();
+            AlertProcessPivot {
+                pid: node.pid,
+                ppid: Some(node.ppid),
+                name: node.name.clone(),
+                display_name,
+                user: node.user.clone(),
+                group: None,
+                cpu_percent: None,
+                mem_percent: None,
+                hostname: node.hostname.clone(),
+                platform: "remote".to_string(),
+                cmd_line: node.cmd_line.clone(),
+                exe_path: node.exe_path.clone(),
+            }
+        })
+        .collect()
+}
+
+/// Combine the local-host live process catalog with remote process-tree pivots
+/// so alerts originating on any tracked host can be resolved to a process.
+fn assemble_alert_process_catalog(
+    local_hostname: &str,
+    process_tree: &crate::process_tree::ProcessTree,
+) -> Vec<AlertProcessPivot> {
+    let mut catalog = live_alert_process_catalog(local_hostname);
+    catalog.extend(remote_alert_process_catalog(process_tree, local_hostname));
+    catalog
+}
+
+fn alert_process_resolution(
+    alert_hostname: &str,
+    local_hostname: &str,
+    process_names: &[String],
+    process_candidates: &[AlertProcessPivot],
+) -> &'static str {
+    if process_names.is_empty() {
+        "none"
+    } else if process_candidates.len() == 1 {
+        "unique"
+    } else if process_candidates.len() > 1 {
+        "multiple"
+    } else if !host_matches_local(alert_hostname, local_hostname) {
+        "remote_host"
+    } else {
+        "unresolved"
+    }
+}
+
 fn recent_alerts_json(
     alerts: &[AlertRecord],
     limit: usize,
     offset: usize,
+    local_hostname: &str,
+    process_tree: &crate::process_tree::ProcessTree,
 ) -> Result<String, String> {
     let capped_limit = limit.min(1000);
+    let process_catalog = assemble_alert_process_catalog(local_hostname, process_tree);
     let recent: Vec<_> = alerts
         .iter()
         .enumerate()
         .rev()
         .skip(offset)
         .take(capped_limit)
-        .map(|(i, a)| alert_json_value(a, i))
+        .map(|(i, a)| alert_json_value(a, i, local_hostname, &process_catalog))
         .collect();
     serde_json::to_string(&recent).map_err(|e| format!("serialization error: {e}"))
 }
 
-fn alert_json_value(alert: &AlertRecord, index: usize) -> serde_json::Value {
+fn alert_json_value(
+    alert: &AlertRecord,
+    index: usize,
+    local_hostname: &str,
+    process_catalog: &[AlertProcessPivot],
+) -> serde_json::Value {
     let mut obj = serde_json::to_value(alert).unwrap_or_default();
+    let entities = crate::entity_extract::extract_entities(&alert.reasons);
+    let process_names = extract_alert_process_names(&entities);
+    let process_candidates =
+        resolve_alert_process_pivots(&process_names, process_catalog, &alert.hostname);
     if let Some(map) = obj.as_object_mut() {
         map.insert("id".to_string(), serde_json::json!(index));
         map.insert("_index".to_string(), serde_json::json!(index));
+        map.insert(
+            "entities".to_string(),
+            serde_json::to_value(&entities).unwrap_or_else(|_| serde_json::json!([])),
+        );
+        map.insert(
+            "process_resolution".to_string(),
+            serde_json::json!(alert_process_resolution(
+                &alert.hostname,
+                local_hostname,
+                &process_names,
+                &process_candidates,
+            )),
+        );
+        if !process_names.is_empty() {
+            map.insert("process_names".to_string(), serde_json::json!(process_names));
+        }
+        if !process_candidates.is_empty() {
+            map.insert(
+                "process_candidates".to_string(),
+                serde_json::to_value(&process_candidates)
+                    .unwrap_or_else(|_| serde_json::json!([])),
+            );
+            if process_candidates.len() == 1 {
+                map.insert(
+                    "process".to_string(),
+                    serde_json::to_value(&process_candidates[0])
+                        .unwrap_or_else(|_| serde_json::json!({})),
+                );
+            }
+        }
     }
     obj
 }
@@ -2952,22 +3306,6 @@ fn idp_provider_summary_public_json(
     value
 }
 
-fn siem_config_public_json(config: &crate::siem::SiemConfig) -> serde_json::Value {
-    serde_json::json!({
-        "enabled": config.enabled,
-        "siem_type": config.siem_type,
-        "endpoint": config.endpoint,
-        "has_auth_token": !config.auth_token.trim().is_empty(),
-        "index": config.index,
-        "source_type": config.source_type,
-        "poll_interval_secs": config.poll_interval_secs,
-        "pull_enabled": config.pull_enabled,
-        "pull_query": config.pull_query,
-        "batch_size": config.batch_size,
-        "verify_tls": config.verify_tls,
-    })
-}
-
 fn validate_siem_config(config: &crate::siem::SiemConfig) -> Result<(), String> {
     if config.enabled
         && !config.endpoint.trim().is_empty()
@@ -3502,6 +3840,444 @@ fn process_recommendations(
         );
     }
     items
+}
+
+fn thread_state_label(state: &str) -> &'static str {
+    match state.chars().next().unwrap_or('?') {
+        'R' => "running",
+        'S' => "sleeping",
+        'I' => "idle",
+        'D' | 'U' => "blocked",
+        'T' => "stopped",
+        'Z' => "zombie",
+        _ => "unknown",
+    }
+}
+
+#[cfg(any(target_os = "macos", test))]
+fn parse_macos_process_threads_output(output: &str, pid: u32) -> Vec<serde_json::Value> {
+    let lines: Vec<&str> = output
+        .lines()
+        .map(str::trim_end)
+        .filter(|line| !line.trim().is_empty())
+        .collect();
+    if lines.len() < 3 {
+        return Vec::new();
+    }
+
+    lines
+        .into_iter()
+        .skip(2)
+        .enumerate()
+        .filter_map(|(index, line)| {
+            let fields: Vec<&str> = line.split_whitespace().collect();
+            if fields.len() < 6 {
+                return None;
+            }
+            let row_pid = fields[0].parse::<u32>().ok()?;
+            if row_pid != pid {
+                return None;
+            }
+            let cpu_percent = fields[1].parse::<f64>().unwrap_or(0.0);
+            let state = fields[2].to_string();
+            let priority = fields[3].to_string();
+            let system_time = fields[4].to_string();
+            let user_time = fields[5].to_string();
+            Some(serde_json::json!({
+                "thread_id": (index + 1) as u32,
+                "os_thread_id": serde_json::Value::Null,
+                "identifier_type": "row_slot",
+                "state": state,
+                "state_label": thread_state_label(&state),
+                "priority": priority,
+                "cpu_percent": (cpu_percent * 10.0).round() / 10.0,
+                "system_time": system_time,
+                "user_time": user_time,
+                "wait_reason": serde_json::Value::Null,
+            }))
+        })
+        .collect()
+}
+
+#[allow(dead_code)]
+#[cfg(any(target_os = "linux", test))]
+fn parse_linux_process_threads_output(output: &str) -> Vec<serde_json::Value> {
+    output
+        .lines()
+        .map(str::trim)
+        .filter(|line| !line.is_empty())
+        .filter_map(|line| {
+            let fields: Vec<&str> = line.split_whitespace().collect();
+            if fields.len() < 6 {
+                return None;
+            }
+            let thread_id = fields[0].parse::<u32>().ok()?;
+            let state = fields[1].to_string();
+            let cpu_time = fields[2].to_string();
+            let cpu_percent = fields[3].parse::<f64>().unwrap_or(0.0);
+            let priority = fields[4].to_string();
+            let wait_reason = match fields[5] {
+                "-" | "?" => None,
+                value => Some(value.to_string()),
+            };
+            let command = if fields.len() > 6 {
+                Some(fields[6..].join(" "))
+            } else {
+                None
+            };
+            Some(serde_json::json!({
+                "thread_id": thread_id,
+                "os_thread_id": thread_id,
+                "identifier_type": "tid",
+                "state": state,
+                "state_label": thread_state_label(&state),
+                "priority": priority,
+                "cpu_percent": (cpu_percent * 10.0).round() / 10.0,
+                "cpu_time": cpu_time,
+                "wait_reason": wait_reason,
+                "command": command,
+            }))
+        })
+        .collect()
+}
+
+fn build_process_threads_response(
+    pid: u32,
+    hostname: &str,
+    platform: &str,
+    identifier_type: &str,
+    note: Option<&str>,
+    threads: Vec<serde_json::Value>,
+    message: Option<&str>,
+) -> serde_json::Value {
+    let mut hot_threads = threads.clone();
+    hot_threads.sort_by(|left, right| {
+        right["cpu_percent"]
+            .as_f64()
+            .unwrap_or(0.0)
+            .partial_cmp(&left["cpu_percent"].as_f64().unwrap_or(0.0))
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
+    hot_threads.truncate(3);
+    let blocked_threads = threads
+        .iter()
+        .filter(|thread| {
+            matches!(
+                thread["state_label"].as_str(),
+                Some("blocked") | Some("stopped")
+            )
+        })
+        .cloned()
+        .take(4)
+        .collect::<Vec<_>>();
+    let wait_reason_count = threads
+        .iter()
+        .filter(|thread| {
+            thread["wait_reason"]
+                .as_str()
+                .map(|value| !value.trim().is_empty())
+                .unwrap_or(false)
+        })
+        .count();
+    let running_count = threads
+        .iter()
+        .filter(|thread| thread["state_label"].as_str() == Some("running"))
+        .count();
+    let sleeping_count = threads
+        .iter()
+        .filter(|thread| {
+            matches!(
+                thread["state_label"].as_str(),
+                Some("sleeping") | Some("idle")
+            )
+        })
+        .count();
+    let blocked_count = threads
+        .iter()
+        .filter(|thread| {
+            matches!(
+                thread["state_label"].as_str(),
+                Some("blocked") | Some("stopped")
+            )
+        })
+        .count();
+    let hot_thread_count = threads
+        .iter()
+        .filter(|thread| thread["cpu_percent"].as_f64().unwrap_or(0.0) >= 5.0)
+        .count();
+    let top_cpu_percent = threads
+        .iter()
+        .filter_map(|thread| thread["cpu_percent"].as_f64())
+        .fold(0.0_f64, f64::max);
+
+    serde_json::json!({
+        "pid": pid,
+        "hostname": hostname,
+        "platform": platform,
+        "identifier_type": identifier_type,
+        "note": note,
+        "message": message,
+        "thread_count": threads.len(),
+        "running_count": running_count,
+        "sleeping_count": sleeping_count,
+        "blocked_count": blocked_count,
+        "hot_thread_count": hot_thread_count,
+        "top_cpu_percent": (top_cpu_percent * 10.0).round() / 10.0,
+        "wait_reason_count": wait_reason_count,
+        "hot_threads": hot_threads,
+        "blocked_threads": blocked_threads,
+        "threads": threads,
+    })
+}
+
+fn process_threads_json(pid: u32, hostname: &str) -> Option<serde_json::Value> {
+    #[cfg(target_os = "macos")]
+    {
+        let pid_arg = pid.to_string();
+        let output = run_command_text("ps", &["-M", "-p", &pid_arg])?;
+        let threads = parse_macos_process_threads_output(&output, pid);
+        if output.lines().count() < 2 {
+            return None;
+        }
+        return Some(build_process_threads_response(
+            pid,
+            hostname,
+            "macos",
+            "row_slot",
+            Some(
+                "macOS exposes real per-thread rows here, but the default CLI surface does not provide stable thread IDs. Thread numbers are collection-time row slots.",
+            ),
+            threads,
+            None,
+        ));
+    }
+    #[cfg(target_os = "linux")]
+    {
+        let pid_arg = pid.to_string();
+        let output = run_command_text(
+            "ps",
+            &[
+                "-L",
+                "-p",
+                &pid_arg,
+                "-o",
+                "lwp=,state=,time=,%cpu=,pri=,wchan=,comm=",
+            ],
+        )?;
+        let threads = parse_linux_process_threads_output(&output);
+        if threads.is_empty() {
+            return None;
+        }
+        return Some(build_process_threads_response(
+            pid,
+            hostname,
+            "linux",
+            "tid",
+            Some("Linux thread IDs are native task IDs from the local task table; wait_reason reflects the current wait channel when the kernel exposes one."),
+            threads,
+            None,
+        ));
+    }
+    #[cfg(target_os = "windows")]
+    {
+        return Some(build_process_threads_response(
+            pid,
+            hostname,
+            "windows",
+            "unsupported",
+            None,
+            Vec::new(),
+            Some("Per-process OS-thread collection is not implemented on Windows yet."),
+        ));
+    }
+    #[cfg(not(any(target_os = "macos", target_os = "linux", target_os = "windows")))]
+    {
+        Some(build_process_threads_response(
+            pid,
+            hostname,
+            std::env::consts::OS,
+            "unsupported",
+            None,
+            Vec::new(),
+            Some("Per-process OS-thread collection is not supported on this platform."),
+        ))
+    }
+}
+
+#[cfg(test)]
+mod process_thread_parsing_tests {
+    use super::*;
+
+    fn sample_alert() -> AlertRecord {
+        AlertRecord {
+            timestamp: "2026-04-27T10:00:00Z".to_string(),
+            hostname: "edge-1".to_string(),
+            platform: "linux".to_string(),
+            score: 8.4,
+            confidence: 0.93,
+            level: "Critical".to_string(),
+            action: "monitor".to_string(),
+            reasons: vec![
+                "Suspicious python3 execution from /usr/bin/python3 with outbound network activity"
+                    .to_string(),
+            ],
+            sample: crate::telemetry::TelemetrySample {
+                timestamp_ms: 1,
+                cpu_load_pct: 75.0,
+                memory_load_pct: 61.0,
+                temperature_c: 0.0,
+                network_kbps: 220.0,
+                auth_failures: 0,
+                battery_pct: 100.0,
+                integrity_drift: 0.0,
+                process_count: 123,
+                disk_pressure_pct: 10.0,
+            },
+            enforced: false,
+            mitre: vec![],
+            narrative: None,
+        }
+    }
+
+    #[test]
+    fn parses_macos_process_thread_rows() {
+        let output = concat!(
+            "USER           PID   TT   %CPU STAT PRI     STIME     UTIME COMMAND\n",
+            "michelpicker  1788   ??    3.1 S    47T   8:53.17  44:02.77 /Applications/Visual Studio Code.app/Contents/MacOS/Code Helper\n",
+            "              1788         0.0 S    37T   0:00.00   0:00.00 \n",
+            "              1788         1.4 S    47T   5:46.80  23:35.52 \n",
+            "              1788         0.0 R    54R   0:00.24   0:00.16 \n"
+        );
+
+        let threads = parse_macos_process_threads_output(output, 1788);
+
+        assert_eq!(threads.len(), 3);
+        assert_eq!(threads[0]["thread_id"].as_u64(), Some(1));
+        assert_eq!(threads[1]["cpu_percent"].as_f64(), Some(1.4));
+        assert_eq!(threads[2]["state_label"].as_str(), Some("running"));
+        assert!(threads[0]["wait_reason"].is_null());
+    }
+
+    #[test]
+    fn parses_linux_process_thread_rows() {
+        let output = concat!(
+            "4242 R 00:00:01 12.5 40 - python3\n",
+            "4243 S 00:00:00 0.0 20 futex_wait_queue_me python3\n"
+        );
+
+        let threads = parse_linux_process_threads_output(output);
+
+        assert_eq!(threads.len(), 2);
+        assert_eq!(threads[0]["thread_id"].as_u64(), Some(4242));
+        assert_eq!(threads[0]["state_label"].as_str(), Some("running"));
+        assert_eq!(threads[1]["cpu_time"].as_str(), Some("00:00:00"));
+        assert_eq!(threads[1]["wait_reason"].as_str(), Some("futex_wait_queue_me"));
+    }
+
+    #[test]
+    fn alert_json_value_adds_entities_and_resolved_process() {
+        let alert = sample_alert();
+        let catalog = vec![AlertProcessPivot {
+            pid: 4242,
+            ppid: Some(321),
+            name: "/usr/bin/python3".to_string(),
+            display_name: "python3".to_string(),
+            user: Some("analyst".to_string()),
+            group: Some("staff".to_string()),
+            cpu_percent: Some(12.5),
+            mem_percent: Some(2.4),
+            hostname: "edge-1".to_string(),
+            platform: "linux".to_string(),
+            cmd_line: Some("/usr/bin/python3 suspicious.py".to_string()),
+            exe_path: Some("/usr/bin/python3".to_string()),
+        }];
+
+        let payload = alert_json_value(&alert, 7, "edge-1", &catalog);
+
+        assert_eq!(payload["id"].as_u64(), Some(7));
+        assert_eq!(payload["process_resolution"].as_str(), Some("unique"));
+        assert_eq!(payload["process"]["pid"].as_u64(), Some(4242));
+        assert!(payload["process_names"]
+            .as_array()
+            .unwrap_or(&vec![])
+            .iter()
+            .filter_map(|value| value.as_str())
+            .any(|name| name.contains("python")));
+        assert!(payload["entities"]
+            .as_array()
+            .unwrap_or(&vec![])
+            .iter()
+            .any(|entity| entity["entity_type"].as_str() == Some("ProcessName")));
+    }
+
+    #[test]
+    fn alert_json_value_resolves_remote_host_processes_via_combined_catalog() {
+        let mut alert = sample_alert();
+        alert.hostname = "edge-7".to_string();
+        let combined_catalog = vec![
+            AlertProcessPivot {
+                pid: 1111,
+                ppid: Some(1),
+                name: "bash".to_string(),
+                display_name: "bash".to_string(),
+                user: None,
+                group: None,
+                cpu_percent: None,
+                mem_percent: None,
+                hostname: "console-host".to_string(),
+                platform: "linux".to_string(),
+                cmd_line: None,
+                exe_path: None,
+            },
+            AlertProcessPivot {
+                pid: 9090,
+                ppid: Some(1),
+                name: "/usr/bin/python3".to_string(),
+                display_name: "python3".to_string(),
+                user: Some("svc".to_string()),
+                group: None,
+                cpu_percent: None,
+                mem_percent: None,
+                hostname: "edge-7".to_string(),
+                platform: "remote".to_string(),
+                cmd_line: Some("/usr/bin/python3 worker.py".to_string()),
+                exe_path: Some("/usr/bin/python3".to_string()),
+            },
+        ];
+
+        let payload = alert_json_value(&alert, 0, "console-host", &combined_catalog);
+
+        assert_eq!(payload["process_resolution"].as_str(), Some("unique"));
+        assert_eq!(payload["process"]["pid"].as_u64(), Some(9090));
+        assert_eq!(payload["process"]["hostname"].as_str(), Some("edge-7"));
+    }
+
+    #[test]
+    fn alert_json_value_falls_back_to_remote_host_when_no_pivots_match() {
+        let mut alert = sample_alert();
+        alert.hostname = "edge-9".to_string();
+        // Catalog has no entries for edge-9, only for the local console host.
+        let catalog = vec![AlertProcessPivot {
+            pid: 1111,
+            ppid: Some(1),
+            name: "bash".to_string(),
+            display_name: "bash".to_string(),
+            user: None,
+            group: None,
+            cpu_percent: None,
+            mem_percent: None,
+            hostname: "console-host".to_string(),
+            platform: "linux".to_string(),
+            cmd_line: None,
+            exe_path: None,
+        }];
+
+        let payload = alert_json_value(&alert, 0, "console-host", &catalog);
+
+        assert_eq!(payload["process_resolution"].as_str(), Some("remote_host"));
+        assert!(payload.get("process_candidates").is_none());
+        assert!(payload.get("process").is_none());
+    }
 }
 
 #[cfg(target_os = "macos")]
@@ -5283,6 +6059,13 @@ fn build_campaign_correlation_view(events: &[StoredEvent]) -> serde_json::Value 
     let fleet_alerts = events.iter().map(campaign_fleet_alert).collect::<Vec<_>>();
     let mut detector = crate::campaign::CampaignDetector::default();
     let report = detector.detect(&fleet_alerts);
+    let campaign_count = report.campaigns.len();
+    let temporal_chain_count = report.temporal_chains.len();
+    let temporal_chain_alerts = report
+        .temporal_chains
+        .iter()
+        .map(|chain| chain.alert_count)
+        .sum::<usize>();
     let event_by_alert_id = events
         .iter()
         .map(|event| (event.id.to_string(), event))
@@ -5376,8 +6159,11 @@ fn build_campaign_correlation_view(events: &[StoredEvent]) -> serde_json::Value 
 
     serde_json::json!({
         "campaigns": report.campaigns,
+        "temporal_chains": report.temporal_chains,
         "summary": {
-            "campaign_count": report.campaigns.len(),
+            "campaign_count": campaign_count,
+            "temporal_chain_count": temporal_chain_count,
+            "temporal_chain_alerts": temporal_chain_alerts,
             "total_alerts": report.total_alerts,
             "unclustered_alerts": report.unclustered_alerts,
             "fleet_coverage": report.fleet_coverage,
@@ -6824,7 +7610,6 @@ const GITHUB_COLLECTOR_SETUP_KEY: &str = "integrations.collectors.github";
 const CROWDSTRIKE_COLLECTOR_SETUP_KEY: &str = "integrations.collectors.crowdstrike";
 const SYSLOG_COLLECTOR_SETUP_KEY: &str = "integrations.collectors.syslog";
 const SECRETS_MANAGER_SETUP_KEY: &str = "integrations.secrets.manager";
-const REMEDIATION_CHANGE_REVIEWS_KEY: &str = "remediation.change_reviews";
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize, Default)]
 struct CollectorCheckpoint {
@@ -6836,81 +7621,6 @@ struct CollectorCheckpoint {
     checkpoint_id: Option<String>,
     retry_count: u32,
     backoff_seconds: u64,
-}
-
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
-struct RemediationChangeReview {
-    id: String,
-    title: String,
-    asset_id: String,
-    change_type: String,
-    source: String,
-    summary: String,
-    risk: String,
-    approval_status: String,
-    recovery_status: String,
-    requested_by: String,
-    requested_at: String,
-    #[serde(default = "default_required_approvers")]
-    required_approvers: usize,
-    #[serde(default)]
-    approvals: Vec<RemediationReviewApproval>,
-    #[serde(default)]
-    approval_chain_digest: Option<String>,
-    #[serde(default)]
-    rollback_proof: Option<RemediationRollbackProof>,
-    evidence: serde_json::Value,
-}
-
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, Default)]
-struct RemediationReviewApproval {
-    approver: String,
-    decision: String,
-    comment: Option<String>,
-    signed_at: String,
-    signature: String,
-}
-
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, Default)]
-struct RemediationRollbackProof {
-    proof_id: String,
-    generated_at: String,
-    status: String,
-    pre_change_digest: String,
-    recovery_plan: Vec<String>,
-    verification_digest: String,
-    verified_by: Option<String>,
-    #[serde(default)]
-    executed_at: Option<String>,
-    #[serde(default)]
-    execution_result: Option<serde_json::Value>,
-}
-
-fn default_required_approvers() -> usize {
-    1
-}
-
-impl Default for RemediationChangeReview {
-    fn default() -> Self {
-        Self {
-            id: String::new(),
-            title: String::new(),
-            asset_id: String::new(),
-            change_type: "remediation".to_string(),
-            source: "infrastructure".to_string(),
-            summary: String::new(),
-            risk: "medium".to_string(),
-            approval_status: "pending_review".to_string(),
-            recovery_status: "not_started".to_string(),
-            requested_by: "system".to_string(),
-            requested_at: chrono::Utc::now().to_rfc3339(),
-            required_approvers: default_required_approvers(),
-            approvals: Vec::new(),
-            approval_chain_digest: None,
-            rollback_proof: None,
-            evidence: serde_json::json!({}),
-        }
-    }
 }
 
 fn assistant_provider_from_env(value: &str) -> crate::llm_analyst::LlmProvider {
@@ -7330,344 +8040,77 @@ where
         .map_err(|e| e.safe_message().to_string())
 }
 
-fn load_remediation_change_reviews(storage: &SharedStorage) -> Vec<RemediationChangeReview> {
-    load_stored_json(storage, REMEDIATION_CHANGE_REVIEWS_KEY)
+const FLEET_REMOTE_INSTALLS_KEY: &str = "fleet_remote_installs";
+const MAX_FLEET_REMOTE_INSTALLS: usize = 100;
+
+fn load_fleet_remote_installs(storage: &SharedStorage) -> Vec<RemoteInstallRecord> {
+    load_stored_json(storage, FLEET_REMOTE_INSTALLS_KEY)
 }
 
-fn save_remediation_change_reviews(
+fn append_fleet_remote_install(
     storage: &SharedStorage,
-    reviews: &[RemediationChangeReview],
+    record: RemoteInstallRecord,
 ) -> Result<(), String> {
-    save_stored_json(storage, REMEDIATION_CHANGE_REVIEWS_KEY, &reviews)
+    let mut installs = load_fleet_remote_installs(storage);
+    installs.insert(0, record);
+    installs.truncate(MAX_FLEET_REMOTE_INSTALLS);
+    save_stored_json(storage, FLEET_REMOTE_INSTALLS_KEY, &installs)
 }
 
-fn remediation_required_approvers(risk: &str, requested: Option<u64>) -> usize {
-    let minimum = match risk.trim().to_ascii_lowercase().as_str() {
-        "critical" | "high" => 2,
-        _ => 1,
-    };
-    requested
-        .unwrap_or(minimum as u64)
-        .max(minimum as u64)
-        .min(5) as usize
-}
-
-fn remediation_approval_signature(
-    review_id: &str,
-    approver: &str,
-    decision: &str,
-    signed_at: &str,
-    comment: Option<&str>,
-    evidence_digest: &str,
-) -> String {
-    crate::audit::sha256_hex(
-        format!(
-            "{review_id}|{approver}|{decision}|{signed_at}|{}|{evidence_digest}",
-            comment.unwrap_or("")
-        )
-        .as_bytes(),
-    )
-}
-
-fn remediation_approval_chain_digest(review: &RemediationChangeReview) -> Option<String> {
-    if review.approvals.is_empty() {
-        return None;
-    }
-    let chain = review
-        .approvals
-        .iter()
-        .map(|approval| approval.signature.as_str())
-        .collect::<Vec<_>>()
-        .join("|");
-    Some(crate::audit::sha256_hex(
-        format!("{}|{chain}", review.id).as_bytes(),
-    ))
-}
-
-fn remediation_recovery_plan(review: &RemediationChangeReview) -> Vec<String> {
-    let mut steps = vec![
-        format!("Capture pre-change state for {}", review.asset_id),
-        "Execute remediation through the approved response workflow".to_string(),
-        "Validate service health and telemetry recovery after the change".to_string(),
-    ];
-    match review.change_type.as_str() {
-        "malware_containment" => steps.push(
-            "Retain quarantine artifact hash and restore from clean backup if validation fails"
-                .to_string(),
-        ),
-        "infrastructure_remediation" => steps.push(
-            "Apply the saved configuration checkpoint or redeploy the previous known-good bundle"
-                .to_string(),
-        ),
-        _ => steps
-            .push("Revert using the recorded pre-change checkpoint if risk increases".to_string()),
-    }
-    steps
-}
-
-fn build_remediation_rollback_proof(review: &RemediationChangeReview) -> RemediationRollbackProof {
-    let generated_at = chrono::Utc::now().to_rfc3339();
-    let pre_change_digest = crate::audit::sha256_hex(
-        serde_json::json!({
-            "asset_id": review.asset_id,
-            "change_type": review.change_type,
-            "evidence": review.evidence,
-        })
-        .to_string()
-        .as_bytes(),
-    );
-    let recovery_plan = remediation_recovery_plan(review);
-    let verification_digest = crate::audit::sha256_hex(
-        serde_json::json!({
-            "review_id": review.id,
-            "pre_change_digest": pre_change_digest,
-            "approval_chain_digest": review.approval_chain_digest,
-            "recovery_plan": recovery_plan,
-        })
-        .to_string()
-        .as_bytes(),
-    );
-    RemediationRollbackProof {
-        proof_id: format!("rollback-proof-{}", &verification_digest[..12]),
-        generated_at,
-        status: "ready".to_string(),
-        pre_change_digest,
-        recovery_plan,
-        verification_digest,
-        verified_by: None,
-        executed_at: None,
-        execution_result: None,
-    }
-}
-
-fn remediation_review_platform(
-    payload: &serde_json::Value,
-) -> crate::remediation::RemediationPlatform {
-    match payload
-        .get("platform")
-        .and_then(serde_json::Value::as_str)
-        .unwrap_or("linux")
-        .trim()
-        .to_ascii_lowercase()
-        .as_str()
-    {
-        "macos" | "darwin" => crate::remediation::RemediationPlatform::MacOs,
-        "windows" | "win32" => crate::remediation::RemediationPlatform::Windows,
-        _ => crate::remediation::RemediationPlatform::Linux,
-    }
-}
-
-fn remediation_review_evidence_string(
-    review: &RemediationChangeReview,
-    key: &str,
-) -> Option<String> {
-    review
-        .evidence
-        .get(key)
-        .and_then(serde_json::Value::as_str)
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
-        .map(str::to_string)
-}
-
-fn rollback_action_for_review(
-    review: &RemediationChangeReview,
-) -> crate::remediation::RemediationAction {
-    if let Some(path) = remediation_review_evidence_string(review, "path")
-        .or_else(|| remediation_review_evidence_string(review, "file"))
-    {
-        return crate::remediation::RemediationAction::RestoreFile {
-            path: path.clone(),
-            source: format!(
-                "/var/quarantine/{}",
-                path.replace(['/', '\\'], "_").trim_start_matches('_')
-            ),
-        };
-    }
-    if let Some(addr) = remediation_review_evidence_string(review, "addr")
-        .or_else(|| remediation_review_evidence_string(review, "ip"))
-        .or_else(|| remediation_review_evidence_string(review, "src_ip"))
-    {
-        return crate::remediation::RemediationAction::BlockIp { addr };
-    }
-    if let Some(service_name) = remediation_review_evidence_string(review, "service")
-        .or_else(|| remediation_review_evidence_string(review, "service_name"))
-    {
-        return crate::remediation::RemediationAction::RestartService { service_name };
-    }
-    crate::remediation::RemediationAction::FlushDns
-}
-
-fn apply_remediation_review_approval(
-    mut review: RemediationChangeReview,
-    payload: serde_json::Value,
-    actor: &str,
-) -> Result<RemediationChangeReview, String> {
-    let decision = payload
-        .get("decision")
-        .and_then(serde_json::Value::as_str)
-        .unwrap_or("approve")
-        .trim()
-        .to_ascii_lowercase();
-    if !matches!(decision.as_str(), "approve" | "deny") {
-        return Err("decision must be approve or deny".to_string());
-    }
-    let approver = payload
-        .get("approver")
-        .and_then(serde_json::Value::as_str)
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
-        .unwrap_or(actor)
-        .to_string();
-    let comment = payload
-        .get("comment")
-        .and_then(serde_json::Value::as_str)
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
-        .map(str::to_string);
-    let signed_at = chrono::Utc::now().to_rfc3339();
-    let evidence_digest = crate::audit::sha256_hex(review.evidence.to_string().as_bytes());
-    let approval = RemediationReviewApproval {
-        signature: remediation_approval_signature(
-            &review.id,
-            &approver,
-            &decision,
-            &signed_at,
-            comment.as_deref(),
-            &evidence_digest,
-        ),
-        approver,
-        decision: decision.clone(),
-        comment,
-        signed_at,
-    };
-    review
-        .approvals
-        .retain(|entry| entry.approver != approval.approver);
-    review.approvals.push(approval);
-    review.approval_chain_digest = remediation_approval_chain_digest(&review);
-    let approved_count = review
-        .approvals
-        .iter()
-        .filter(|entry| entry.decision == "approve")
-        .count();
-    let denied = review
-        .approvals
-        .iter()
-        .any(|entry| entry.decision == "deny");
-    review.approval_status = if denied {
-        "denied".to_string()
-    } else if approved_count >= review.required_approvers {
-        "approved".to_string()
+fn normalized_remote_install_platform(value: &str) -> &'static str {
+    let value = value.trim().to_ascii_lowercase();
+    if value.contains("darwin") || value.contains("mac") {
+        "macos"
+    } else if value.contains("win") {
+        "windows"
     } else {
-        "pending_review".to_string()
-    };
-    if review.approval_status == "approved" && review.rollback_proof.is_none() {
-        review.rollback_proof = Some(build_remediation_rollback_proof(&review));
-        review.recovery_status = "ready".to_string();
+        "linux"
     }
-    Ok(review)
 }
 
-fn remediation_review_from_payload(
-    payload: serde_json::Value,
-    actor: &str,
-) -> Result<RemediationChangeReview, String> {
-    let title = payload
-        .get("title")
-        .and_then(serde_json::Value::as_str)
-        .unwrap_or("")
-        .trim();
-    if title.is_empty() {
-        return Err("title is required".to_string());
+fn mark_remote_install_first_heartbeat(
+    installs: &mut [RemoteInstallRecord],
+    agent_id: &str,
+    hostname: &str,
+    platform: &str,
+    heartbeat_at: &str,
+) -> Option<RemoteInstallRecord> {
+    let normalized_platform = normalized_remote_install_platform(platform);
+    let attempt = installs.iter_mut().find(|attempt| {
+        attempt.status == "awaiting_heartbeat"
+            && host_matches_local(&attempt.hostname, hostname)
+            && normalized_remote_install_platform(&attempt.platform) == normalized_platform
+    })?;
+
+    attempt.status = "heartbeat_received".to_string();
+    if attempt.agent_id.is_none() {
+        attempt.agent_id = Some(agent_id.to_string());
     }
-    let now = chrono::Utc::now().to_rfc3339();
-    let risk = payload
-        .get("risk")
-        .and_then(serde_json::Value::as_str)
-        .unwrap_or("medium")
-        .trim()
-        .to_string();
-    let required_approvers = remediation_required_approvers(
-        &risk,
-        payload
-            .get("required_approvers")
-            .and_then(serde_json::Value::as_u64),
+    if attempt.first_heartbeat_at.is_none() {
+        attempt.first_heartbeat_at = Some(heartbeat_at.to_string());
+    }
+    Some(attempt.clone())
+}
+
+fn reconcile_fleet_remote_install_heartbeat(
+    storage: &SharedStorage,
+    agent_id: &str,
+    hostname: &str,
+    platform: &str,
+    heartbeat_at: &str,
+) -> Result<Option<RemoteInstallRecord>, String> {
+    let mut installs = load_fleet_remote_installs(storage);
+    let matched = mark_remote_install_first_heartbeat(
+        &mut installs,
+        agent_id,
+        hostname,
+        platform,
+        heartbeat_at,
     );
-    let mut review = RemediationChangeReview {
-        id: payload
-            .get("id")
-            .and_then(serde_json::Value::as_str)
-            .map(str::trim)
-            .filter(|value| !value.is_empty())
-            .map(str::to_string)
-            .unwrap_or_else(|| {
-                format!(
-                    "review-{}",
-                    chrono::Utc::now().timestamp_millis().unsigned_abs()
-                )
-            }),
-        title: title.to_string(),
-        asset_id: payload
-            .get("asset_id")
-            .and_then(serde_json::Value::as_str)
-            .unwrap_or("unscoped")
-            .trim()
-            .to_string(),
-        change_type: payload
-            .get("change_type")
-            .and_then(serde_json::Value::as_str)
-            .unwrap_or("remediation")
-            .trim()
-            .to_string(),
-        source: payload
-            .get("source")
-            .and_then(serde_json::Value::as_str)
-            .unwrap_or("infrastructure")
-            .trim()
-            .to_string(),
-        summary: payload
-            .get("summary")
-            .and_then(serde_json::Value::as_str)
-            .unwrap_or("")
-            .trim()
-            .to_string(),
-        risk,
-        approval_status: payload
-            .get("approval_status")
-            .and_then(serde_json::Value::as_str)
-            .unwrap_or("pending_review")
-            .trim()
-            .to_string(),
-        recovery_status: payload
-            .get("recovery_status")
-            .and_then(serde_json::Value::as_str)
-            .unwrap_or("not_started")
-            .trim()
-            .to_string(),
-        requested_by: actor.to_string(),
-        requested_at: now,
-        required_approvers,
-        approvals: Vec::new(),
-        approval_chain_digest: None,
-        rollback_proof: None,
-        evidence: payload
-            .get("evidence")
-            .cloned()
-            .unwrap_or_else(|| serde_json::json!({})),
-    };
-    if review.summary.is_empty() {
-        review.summary = format!("Review {} for {}.", review.change_type, review.asset_id);
+    if matched.is_some() {
+        save_stored_json(storage, FLEET_REMOTE_INSTALLS_KEY, &installs)?;
     }
-    if let Some(approvals) = payload
-        .get("approvals")
-        .and_then(serde_json::Value::as_array)
-    {
-        for approval in approvals {
-            review = apply_remediation_review_approval(review, approval.clone(), actor)?;
-        }
-    }
-    Ok(review)
+    Ok(matched)
 }
 
 fn load_aws_collector_setup(storage: &SharedStorage) -> AwsCollectorSetup {
@@ -8917,20 +9360,7 @@ fn command_summary_payload(state: &mut AppState) -> serde_json::Value {
             )
         })
         .count();
-    let reviews = load_remediation_change_reviews(&state.storage);
-    let pending_reviews = reviews
-        .iter()
-        .filter(|review| {
-            matches!(
-                review.approval_status.as_str(),
-                "pending_review" | "pending" | "requested"
-            )
-        })
-        .count();
-    let rollback_ready = reviews
-        .iter()
-        .filter(|review| review.rollback_proof.is_some())
-        .count();
+    let remediation_lane = crate::remediation::remediation_lane_summary(&state.storage);
     let rule_metadata = state
         .enterprise
         .builtin_rules()
@@ -9001,8 +9431,8 @@ fn command_summary_payload(state: &mut AppState) -> serde_json::Value {
         "metrics": {
             "open_incidents": open_incidents,
             "active_cases": active_cases,
-            "pending_remediation_reviews": pending_reviews,
-            "rollback_ready_reviews": rollback_ready,
+            "pending_remediation_reviews": remediation_lane.pending_reviews,
+            "rollback_ready_reviews": remediation_lane.rollback_ready,
             "connector_issues": connector_issues,
             "noisy_rules": noisy_rules,
             "stale_rules": stale_rules,
@@ -9017,9 +9447,9 @@ fn command_summary_payload(state: &mut AppState) -> serde_json::Value {
                 "href": "/soc",
             },
             "remediation": {
-                "status": if pending_reviews > 0 { "approval_required" } else { "ready" },
-                "pending": pending_reviews,
-                "rollback_ready": rollback_ready,
+                "status": remediation_lane.status,
+                "pending": remediation_lane.pending_reviews,
+                "rollback_ready": remediation_lane.rollback_ready,
                 "href": "/infrastructure?tab=remediation",
             },
             "connectors": {
@@ -9899,6 +10329,9 @@ fn handle_api(
                 | (Method::Post, "/api/control/checkpoint")
                 | (Method::Post, "/api/control/restore-checkpoint")
                 | (Method::Post, "/api/fleet/register")
+                | (Method::Get, "/api/fleet/installs")
+                | (Method::Post, "/api/fleet/install/ssh")
+                | (Method::Post, "/api/fleet/install/winrm")
                 | (Method::Post, "/api/enforcement/quarantine")
                 | (Method::Get, "/api/threat-intel/status")
                 | (Method::Get, "/api/threat-intel/library")
@@ -10097,6 +10530,7 @@ fn handle_api(
         || (method == Method::Get && route_path == "/api/processes/live")
         || (method == Method::Get && route_path == "/api/processes/analysis")
         || (method == Method::Get && route_path == "/api/processes/detail")
+        || (method == Method::Get && route_path == "/api/processes/threads")
         || (method == Method::Get && route_path == "/api/host/apps")
         || (method == Method::Get && route_path == "/api/host/inventory")
         || (method == Method::Get && route_path == "/api/spool/stats")
@@ -10202,6 +10636,8 @@ fn handle_api(
         || (method == Method::Get && route_path == "/api/prevention/stats")
         // Pipeline & backup
         || (method == Method::Get && route_path == "/api/pipeline/status")
+        || (method == Method::Get && route_path == "/api/backups")
+        || (method == Method::Post && route_path == "/api/backups")
         || (method == Method::Get && route_path == "/api/backup/status")
         // Auth (session/logout require auth; SSO login/callback/config are pre-auth)
         || (method == Method::Get && route_path == "/api/auth/session")
@@ -11589,7 +12025,13 @@ fn handle_api(
                 .min(100_000);
             let s = state.lock().unwrap_or_else(|e| e.into_inner());
             let alerts_vec: Vec<_> = s.alerts.iter().cloned().collect();
-            match recent_alerts_json(&alerts_vec, limit, offset) {
+            match recent_alerts_json(
+                &alerts_vec,
+                limit,
+                offset,
+                &s.local_host_info.hostname,
+                &s.process_tree,
+            ) {
                 Ok(json) => json_response(&json, 200),
                 Err(e) => error_json(&e, 500),
             }
@@ -11643,6 +12085,10 @@ fn handle_api(
                 let s = state.lock().unwrap_or_else(|e| e.into_inner());
                 s.local_host_info.hostname.clone()
             };
+            let process_catalog = {
+                let s = state.lock().unwrap_or_else(|e| e.into_inner());
+                assemble_alert_process_catalog(&host, &s.process_tree)
+            };
             let sample = crate::telemetry::TelemetrySample {
                 timestamp_ms: std::time::SystemTime::now()
                     .duration_since(std::time::UNIX_EPOCH)
@@ -11672,7 +12118,7 @@ fn handle_api(
             };
             let alert = crate::collector::AlertRecord {
                 timestamp: now,
-                hostname: host,
+                hostname: host.clone(),
                 platform: "sample".into(),
                 score,
                 confidence: 0.85,
@@ -11689,7 +12135,12 @@ fn handle_api(
                 s.alerts.pop_front();
             }
             s.alerts.push_back(alert.clone());
-            let alert_event = alert_json_value(&alert, s.alerts.len().saturating_sub(1));
+            let alert_event = alert_json_value(
+                &alert,
+                s.alerts.len().saturating_sub(1),
+                &host,
+                &process_catalog,
+            );
             s.alert_broadcaster.broadcast_alert(alert_event);
             json_response(
                 &format!(r#"{{"status":"injected","severity":"{severity}","score":{score:.2}}}"#),
@@ -12193,6 +12644,7 @@ fn handle_api(
                 {"method": "GET", "path": "/api/processes/live", "auth": true, "description": "Live process list from local host"},
                 {"method": "GET", "path": "/api/processes/analysis", "auth": true, "description": "Analyse running processes for suspicious behaviour"},
                 {"method": "GET", "path": "/api/processes/detail?pid=<pid>", "auth": true, "description": "Detailed local process investigation view for a specific PID"},
+                {"method": "GET", "path": "/api/processes/threads?pid=<pid>", "auth": true, "description": "Per-process OS thread snapshot with live state, CPU, and priority context"},
                 {"method": "GET", "path": "/api/host/apps", "auth": true, "description": "Enumerate installed applications"},
                 {"method": "GET", "path": "/api/host/inventory", "auth": true, "description": "Full system inventory (hardware, software, services, users)"},
                 {"method": "POST", "path": "/api/policy-vm/execute", "auth": true, "description": "Execute a policy VM program"},
@@ -12222,6 +12674,9 @@ fn handle_api(
                 {"method": "GET", "path": "/api/tls/status", "auth": true, "description": "TLS listener and certificate status"},
                 {"method": "POST", "path": "/api/agents/token", "auth": true, "description": "Create an agent enrollment token"},
                 {"method": "POST", "path": "/api/agents/enroll", "auth": false, "description": "Enroll an agent with a valid enrollment token"},
+                {"method": "GET", "path": "/api/fleet/installs", "auth": true, "description": "Recent remote install attempts and outcomes"},
+                {"method": "POST", "path": "/api/fleet/install/ssh", "auth": true, "description": "Run a remote agent install over SSH for Linux or macOS hosts"},
+                {"method": "POST", "path": "/api/fleet/install/winrm", "auth": true, "description": "Run a remote agent install over WinRM for Windows hosts"},
                 {"method": "POST", "path": "/api/control/mode", "auth": true, "description": "Set the device control mode"},
                 {"method": "POST", "path": "/api/control/reset-baseline", "auth": true, "description": "Reset the anomaly detection baseline"},
                 {"method": "POST", "path": "/api/control/checkpoint", "auth": true, "description": "Create a control checkpoint"},
@@ -12261,6 +12716,13 @@ fn handle_api(
         // ── XDR Agent Management ──────────────────────────────────
         (Method::Post, "/api/agents/enroll") => handle_agent_enroll(body, state),
         (Method::Post, "/api/agents/token") => handle_agent_create_token(body, state),
+        (Method::Get, "/api/fleet/installs") => handle_fleet_install_history(state),
+        (Method::Post, "/api/fleet/install/ssh") => {
+            handle_fleet_install_ssh(body, state, &auth_identity)
+        }
+        (Method::Post, "/api/fleet/install/winrm") => {
+            handle_fleet_install_winrm(body, state, &auth_identity)
+        }
         (Method::Get, "/api/agents") => {
             let mut s = state.lock().unwrap_or_else(|e| e.into_inner());
             s.agent_registry.refresh_staleness();
@@ -12935,7 +13397,7 @@ fn handle_api(
             let status = s.siem_connector.status();
             let cfg = s.siem_connector.config();
             let payload = serde_json::json!({
-                "config": siem_config_public_json(cfg),
+                "config": crate::siem::public_config_json(cfg),
                 "validation": siem_config_validation_json(cfg, status.last_error.as_deref()),
             });
             match serde_json::to_string(&payload) {
@@ -12962,7 +13424,7 @@ fn handle_api(
                             s.siem_connector.update_config(new_cfg.clone());
                             let payload = serde_json::json!({
                                 "status": "saved",
-                                "config": siem_config_public_json(&new_cfg),
+                                "config": crate::siem::public_config_json(&new_cfg),
                                 "validation": siem_config_validation_json(&new_cfg, None),
                             });
                             json_response(&payload.to_string(), 200)
@@ -12983,7 +13445,7 @@ fn handle_api(
                             Ok(config) => {
                                 let payload = serde_json::json!({
                                     "success": true,
-                                    "config": siem_config_public_json(&config),
+                                    "config": crate::siem::public_config_json(&config),
                                     "validation": siem_config_validation_json(&config, None),
                                 });
                                 json_response(&payload.to_string(), 200)
@@ -14549,6 +15011,20 @@ fn handle_api(
                     s.local_host_info.hostname.clone()
                 };
                 match process_detail_json(pid, &hostname) {
+                    Some(detail) => json_response(&detail.to_string(), 200),
+                    None => error_json("process not found", 404),
+                }
+            } else {
+                error_json("pid query parameter required", 400)
+            }
+        }
+        (Method::Get, "/api/processes/threads") => {
+            if let Some(pid) = url_param(&url, "pid").and_then(|value| value.parse::<u32>().ok()) {
+                let hostname = {
+                    let s = state.lock().unwrap_or_else(|e| e.into_inner());
+                    s.local_host_info.hostname.clone()
+                };
+                match process_threads_json(pid, &hostname) {
                     Some(detail) => json_response(&detail.to_string(), 200),
                     None => error_json("process not found", 404),
                 }
@@ -16917,109 +17393,48 @@ fn handle_api(
                     serde_json::from_str::<serde_json::Value>(&b).map_err(|e| e.to_string())
                 }) {
                     Ok(v) => {
-                        let platform = match v["platform"].as_str().unwrap_or("linux") {
-                            "macos" => crate::remediation::RemediationPlatform::MacOs,
-                            "windows" => crate::remediation::RemediationPlatform::Windows,
-                            _ => crate::remediation::RemediationPlatform::Linux,
-                        };
-                        let action_type = v["action"].as_str().unwrap_or("");
-                        let action = match action_type {
-                            "flush_dns" => crate::remediation::RemediationAction::FlushDns,
-                            "block_ip" => crate::remediation::RemediationAction::BlockIp {
-                                addr: v["addr"].as_str().unwrap_or("").to_string(),
-                            },
-                            "kill_process" => crate::remediation::RemediationAction::KillProcess {
-                                pid: v["pid"].as_u64().unwrap_or(0) as u32,
-                                name: v["name"].as_str().unwrap_or("").to_string(),
-                            },
-                            "disable_account" => {
-                                crate::remediation::RemediationAction::DisableAccount {
-                                    username: v["username"].as_str().unwrap_or("").to_string(),
-                                }
-                            }
-                            "quarantine_file" => {
-                                crate::remediation::RemediationAction::QuarantineFile {
-                                    path: v["path"].as_str().unwrap_or("").to_string(),
-                                }
-                            }
-                            _ => {
-                                return respond_api(
-                                    state,
-                                    &method,
-                                    &url,
-                                    remote_addr,
-                                    auth_used,
-                                    error_json("unknown remediation action", 400),
-                                );
-                            }
-                        };
                         let s = state.lock().unwrap_or_else(|e| e.into_inner());
-                        let plan = s.remediation_engine.plan(&action, &platform);
-                        json_response(
-                            &serde_json::to_string(&plan).unwrap_or_else(|_| "{}".to_string()),
-                            200,
-                        )
+                        match crate::remediation::remediation_plan_from_payload(
+                            &s.remediation_engine,
+                            v,
+                        ) {
+                            Ok(plan) => {
+                                json_response(&crate::remediation::remediation_plan_json(&plan), 200)
+                            }
+                            Err(error) => error_json(&error, 400),
+                        }
                     }
                     Err(e) => error_json(&e, 400),
                 }
             } else if method == Method::Get && url_path == "/api/remediation/results" {
                 let s = state.lock().unwrap_or_else(|e| e.into_inner());
-                let results = s.remediation_engine.recent_results(50);
-                json_response(
-                    &serde_json::to_string(&results).unwrap_or_else(|_| "{}".to_string()),
-                    200,
-                )
+                json_response(&crate::remediation::remediation_results_json(&s.remediation_engine, 50), 200)
             } else if method == Method::Get && url_path == "/api/remediation/stats" {
                 let s = state.lock().unwrap_or_else(|e| e.into_inner());
-                let stats = s.remediation_engine.stats();
-                json_response(
-                    &serde_json::to_string(&stats).unwrap_or_else(|_| "{}".to_string()),
-                    200,
-                )
+                json_response(&crate::remediation::remediation_stats_json(&s.remediation_engine), 200)
             } else if method == Method::Get && url_path == "/api/remediation/change-reviews" {
                 let s = state.lock().unwrap_or_else(|e| e.into_inner());
-                let mut reviews = load_remediation_change_reviews(&s.storage);
-                reviews.sort_by(|left, right| right.requested_at.cmp(&left.requested_at));
-                let summary = serde_json::json!({
-                    "total": reviews.len(),
-                    "pending": reviews.iter().filter(|review| review.approval_status == "pending_review").count(),
-                    "approved": reviews.iter().filter(|review| review.approval_status == "approved").count(),
-                    "recovery_ready": reviews.iter().filter(|review| review.recovery_status == "ready" || review.recovery_status == "verified").count(),
-                    "signed": reviews.iter().filter(|review| review.approval_chain_digest.is_some()).count(),
-                    "multi_approver_ready": reviews.iter().filter(|review| review.approvals.iter().filter(|approval| approval.decision == "approve").count() >= review.required_approvers).count(),
-                    "rollback_proofs": reviews.iter().filter(|review| review.rollback_proof.is_some()).count(),
-                });
-                let body = serde_json::json!({
-                    "summary": summary,
-                    "reviews": reviews,
-                });
-                json_response(&body.to_string(), 200)
+                let body = crate::remediation::remediation_change_review_list(&s.storage);
+                json_response(
+                    &serde_json::to_string(&body).unwrap_or_else(|_| "{}".to_string()),
+                    200,
+                )
             } else if method == Method::Post && url_path == "/api/remediation/change-reviews" {
                 match read_json_value(body, 64 * 1024) {
                     Ok(payload) => {
                         let s = state.lock().unwrap_or_else(|e| e.into_inner());
-                        match remediation_review_from_payload(payload, auth_identity.actor()) {
-                            Ok(review) => {
-                                let mut reviews = load_remediation_change_reviews(&s.storage);
-                                reviews.retain(|entry| entry.id != review.id);
-                                reviews.push(review.clone());
-                                if reviews.len() > 100 {
-                                    let overflow = reviews.len() - 100;
-                                    reviews.drain(0..overflow);
-                                }
-                                match save_remediation_change_reviews(&s.storage, &reviews) {
-                                    Ok(()) => json_response(
-                                        &serde_json::json!({
-                                            "status": "recorded",
-                                            "review": review,
-                                        })
-                                        .to_string(),
-                                        200,
-                                    ),
-                                    Err(error) => error_json(&error, 500),
-                                }
+                        match crate::remediation::record_remediation_change_review(
+                            &s.storage,
+                            payload,
+                            auth_identity.actor(),
+                        ) {
+                            Ok(review) => json_response(
+                                &crate::remediation::review_recorded_response(review).to_string(),
+                                200,
+                            ),
+                            Err(error) => {
+                                error_json(error.response_message(), error.http_status())
                             }
-                            Err(error) => error_json(&error, 400),
                         }
                     }
                     Err(error) => error_json(&error, 400),
@@ -17035,35 +17450,19 @@ fn handle_api(
                 match read_json_value(body, 16 * 1024) {
                     Ok(payload) => {
                         let s = state.lock().unwrap_or_else(|e| e.into_inner());
-                        let mut reviews = load_remediation_change_reviews(&s.storage);
-                        let Some(position) = reviews.iter().position(|entry| entry.id == review_id)
-                        else {
-                            return error_json("remediation change review not found", 404);
-                        };
-                        let review = reviews.remove(position);
-                        match apply_remediation_review_approval(
-                            review,
+                        match crate::remediation::approve_remediation_change_review(
+                            &s.storage,
+                            review_id,
                             payload,
                             auth_identity.actor(),
                         ) {
-                            Ok(review) => {
-                                reviews.push(review.clone());
-                                reviews.sort_by(|left, right| {
-                                    left.requested_at.cmp(&right.requested_at)
-                                });
-                                match save_remediation_change_reviews(&s.storage, &reviews) {
-                                    Ok(()) => json_response(
-                                        &serde_json::json!({
-                                            "status": "approved",
-                                            "review": review,
-                                        })
-                                        .to_string(),
-                                        200,
-                                    ),
-                                    Err(error) => error_json(&error, 500),
-                                }
+                            Ok(review) => json_response(
+                                &crate::remediation::review_approval_response(review).to_string(),
+                                200,
+                            ),
+                            Err(error) => {
+                                error_json(error.response_message(), error.http_status())
                             }
-                            Err(error) => error_json(&error, 400),
                         }
                     }
                     Err(error) => error_json(&error, 400),
@@ -17079,141 +17478,28 @@ fn handle_api(
                 match read_json_value(body, 16 * 1024) {
                     Ok(payload) => {
                         let mut s = state.lock().unwrap_or_else(|e| e.into_inner());
-                        let mut reviews = load_remediation_change_reviews(&s.storage);
-                        let Some(position) = reviews.iter().position(|entry| entry.id == review_id)
-                        else {
-                            return error_json("remediation change review not found", 404);
-                        };
-                        let mut review = reviews.remove(position);
-                        if review.approval_status != "approved" {
-                            return error_json("rollback requires approved change review", 400);
-                        }
-                        if review.rollback_proof.is_none() {
-                            review.rollback_proof = Some(build_remediation_rollback_proof(&review));
-                        }
-                        let platform = remediation_review_platform(&payload);
-                        let dry_run = payload
-                            .get("dry_run")
-                            .and_then(serde_json::Value::as_bool)
-                            .unwrap_or(true);
-                        // Live rollback execution policy: gated by config flag
-                        // AND a typed-hostname confirmation matching the
-                        // change-review's asset_id (case-insensitive). Any
-                        // non-dry-run path that fails these checks is rejected
-                        // and an audit-log entry is recorded for forensics.
-                        if !dry_run {
-                            let allow_live = s.config.remediation.allow_live_rollback;
-                            let confirm_hostname = payload
-                                .get("confirm_hostname")
-                                .and_then(serde_json::Value::as_str)
-                                .map(str::trim)
-                                .unwrap_or("");
-                            let asset_id = review.asset_id.trim();
-                            let host_match = !confirm_hostname.is_empty()
-                                && !asset_id.is_empty()
-                                && confirm_hostname.eq_ignore_ascii_case(asset_id);
-                            if !allow_live {
-                                log::warn!(
-                                    "remediation.rollback.live_blocked actor={} review={} reason=allow_live_rollback_disabled",
-                                    auth_identity.actor(),
-                                    review.id,
-                                );
-                                return error_json(
-                                    "live rollback execution is disabled; set remediation.allow_live_rollback = true to enable",
-                                    403,
-                                );
-                            }
-                            if !host_match {
-                                log::warn!(
-                                    "remediation.rollback.live_blocked actor={} review={} reason=hostname_confirmation_mismatch",
-                                    auth_identity.actor(),
-                                    review.id,
-                                );
-                                return error_json(
-                                    "live rollback requires confirm_hostname matching change-review asset_id",
-                                    400,
-                                );
-                            }
-                        }
-                        log::info!(
-                            "remediation.rollback.{} actor={} review={} platform={:?}",
-                            if dry_run { "dry_run" } else { "live" },
-                            auth_identity.actor(),
-                            review.id,
-                            platform,
-                        );
-                        let action = rollback_action_for_review(&review);
-                        let commands = crate::remediation::platform_commands(&action, &platform);
-                        let now_ms = chrono::Utc::now().timestamp_millis().max(0) as u64;
-                        let snapshot_id = s.remediation_engine.record_snapshot(
-                            action.clone(),
-                            platform.clone(),
-                            review.asset_id.as_str(),
-                            Vec::new(),
-                            HashMap::from([
-                                ("review_id".to_string(), review.id.clone()),
-                                (
-                                    "approval_chain_digest".to_string(),
-                                    review.approval_chain_digest.clone().unwrap_or_default(),
-                                ),
-                            ]),
-                            now_ms,
-                        );
-                        let result = crate::remediation::RemediationResult {
-                            action,
-                            status: crate::remediation::RemediationStatus::RolledBack,
-                            commands_run: commands.clone(),
-                            snapshot_id: Some(snapshot_id.clone()),
-                            output: Some(if dry_run {
-                                "rollback dry-run planned through remediation adapter".to_string()
-                            } else {
-                                "rollback execution recorded through remediation adapter"
-                                    .to_string()
-                            }),
-                            error: None,
-                            duration_ms: 0,
-                        };
-                        s.remediation_engine.record_result(result.clone());
-                        let executed_at = chrono::Utc::now().to_rfc3339();
-                        if review.rollback_proof.is_none() {
-                            let generated_proof = build_remediation_rollback_proof(&review);
-                            review.rollback_proof = Some(generated_proof);
-                        }
-                        let proof = review
-                            .rollback_proof
-                            .as_mut()
-                            .expect("rollback proof present");
-                        proof.status = if dry_run {
-                            "dry_run_verified".to_string()
-                        } else {
-                            "executed".to_string()
-                        };
-                        proof.verified_by = Some(auth_identity.actor().to_string());
-                        proof.executed_at = Some(executed_at);
-                        proof.execution_result = Some(serde_json::json!({
-                            "dry_run": dry_run,
-                            "platform": platform,
-                            "snapshot_id": snapshot_id,
-                            "commands": commands,
-                            "result": result,
-                        }));
-                        review.recovery_status = if dry_run {
-                            "verified".to_string()
-                        } else {
-                            "executed".to_string()
-                        };
-                        reviews.push(review.clone());
-                        reviews.sort_by(|left, right| left.requested_at.cmp(&right.requested_at));
-                        match save_remediation_change_reviews(&s.storage, &reviews) {
-                            Ok(()) => json_response(
-                                &serde_json::json!({
-                                    "status": "rollback_recorded",
-                                    "review": review,
-                                })
-                                .to_string(),
+                        let storage = s.storage.clone();
+                        let allow_live_rollback = s.config.remediation.allow_live_rollback;
+                        let execute_live_commands =
+                            s.config.remediation.execute_live_rollback_commands;
+                        match crate::remediation::execute_and_record_review_rollback(
+                            &storage,
+                            &mut s.remediation_engine,
+                            crate::remediation::ExecuteReviewRollbackRequest {
+                                review_id: review_id.to_string(),
+                                payload,
+                                actor: auth_identity.actor().to_string(),
+                                allow_live_rollback,
+                                execute_live_commands,
+                            },
+                        ) {
+                            Ok(review) => json_response(
+                                &crate::remediation::review_rollback_response(review).to_string(),
                                 200,
                             ),
-                            Err(error) => error_json(&error, 500),
+                            Err(error) => {
+                                error_json(error.response_message(), error.http_status())
+                            }
                         }
                     }
                     Err(error) => error_json(&error, 400),
@@ -17971,6 +18257,69 @@ fn handle_api(
                     },
                 });
                 json_response(&body.to_string(), 200)
+
+            // ── Backups ───────────────────────────────────────────
+            } else if method == Method::Get && url_path == "/api/backups" {
+                let backup_dir = Path::new("var/backups");
+                if !backup_dir.exists() {
+                    return json_response("[]", 200);
+                }
+
+                let entries = match fs::read_dir(backup_dir) {
+                    Ok(entries) => entries,
+                    Err(e) => return error_json(&format!("failed to list backups: {e}"), 500),
+                };
+
+                let mut backups = Vec::new();
+                for entry in entries {
+                    let entry = match entry {
+                        Ok(entry) => entry,
+                        Err(e) => {
+                            return error_json(&format!("failed to read backup entry: {e}"), 500);
+                        }
+                    };
+                    let path = entry.path();
+                    if !path.is_file() {
+                        continue;
+                    }
+                    let file_name = match path.file_name().and_then(|value| value.to_str()) {
+                        Some(value) => value,
+                        None => continue,
+                    };
+                    if !file_name.starts_with("wardex_backup_") || !file_name.ends_with(".db") {
+                        continue;
+                    }
+                    let record = match backup_file_record(&path) {
+                        Ok(record) => record,
+                        Err(e) => return error_json(&e, 500),
+                    };
+                    backups.push(record);
+                }
+
+                backups.sort_by(|a, b| b.timestamp.cmp(&a.timestamp));
+                json_response(&serde_json::to_string(&backups).unwrap_or_default(), 200)
+
+            } else if method == Method::Post && url_path == "/api/backups" {
+                let backup_dir = Path::new("var/backups");
+                if let Err(e) = fs::create_dir_all(backup_dir) {
+                    return error_json(&format!("failed to create backup dir: {e}"), 500);
+                }
+                let timestamp = chrono::Utc::now().format("%Y%m%d_%H%M%S");
+                let backup_path = backup_dir.join(format!("wardex_backup_{timestamp}.db"));
+                let backup_path_str = backup_path.to_string_lossy().to_string();
+                let s = match state.lock() {
+                    Ok(g) => g,
+                    Err(e) => e.into_inner(),
+                };
+                match s.storage.with(|store| store.backup(&backup_path_str)) {
+                    Ok(()) => match backup_file_record(&backup_path) {
+                        Ok(record) => {
+                            json_response(&serde_json::to_string(&record).unwrap_or_default(), 200)
+                        }
+                        Err(e) => error_json(&e, 500),
+                    },
+                    Err(e) => error_json(e.safe_message(), 500),
+                }
 
             // ── Backup status ─────────────────────────────────────
             } else if method == Method::Get && url_path == "/api/backup/status" {
@@ -21691,6 +22040,209 @@ fn handle_agent_create_token(body: &[u8], state: &Arc<Mutex<AppState>>) -> Respo
     }
 }
 
+fn handle_fleet_install_history(state: &Arc<Mutex<AppState>>) -> Response<Body> {
+    let storage = {
+        let s = state.lock().unwrap_or_else(|e| e.into_inner());
+        s.storage.clone()
+    };
+    let installs = load_fleet_remote_installs(&storage);
+    let body = serde_json::json!({
+        "attempts": installs,
+        "total": installs.len(),
+    });
+    match serde_json::to_string(&body) {
+        Ok(json) => json_response(&json, 200),
+        Err(e) => error_json(&format!("serialization error: {e}"), 500),
+    }
+}
+
+fn handle_fleet_install_ssh(
+    body: &[u8],
+    state: &Arc<Mutex<AppState>>,
+    auth_identity: &AuthIdentity,
+) -> Response<Body> {
+    let body = match read_body_limited(body, 64 * 1024) {
+        Ok(body) => body,
+        Err(e) => return error_json(&e, 400),
+    };
+    let request: SshInstallRequest = match serde_json::from_str(&body) {
+        Ok(request) => request,
+        Err(e) => return error_json(&format!("invalid JSON: {e}"), 400),
+    };
+    if let Err(e) = request.validate() {
+        return error_json(&e, 400);
+    }
+
+    let started_at = chrono::Utc::now().to_rfc3339();
+    let (storage, token, actor) = {
+        let mut s = state.lock().unwrap_or_else(|e| e.into_inner());
+        let token = s
+            .agent_registry
+            .create_token_with_ttl(1, request.effective_ttl_secs());
+        (s.storage.clone(), token, auth_identity.actor().to_string())
+    };
+
+    let mut record = RemoteInstallRecord {
+        id: generate_request_id().unwrap_or_else(|_| {
+            let random_suffix = rand::random::<u64>();
+            format!("req-fallback-{random_suffix:016x}")
+        }),
+        transport: "ssh".to_string(),
+        hostname: request.hostname.trim().to_string(),
+        address: request.address.trim().to_string(),
+        platform: request.normalized_platform().to_string(),
+        manager_url: request.manager_url.trim_end_matches('/').to_string(),
+        agent_id: None,
+        ssh_user: request.ssh_user.trim().to_string(),
+        ssh_port: request.ssh_port,
+        ssh_identity_file: request.validated_identity_file(),
+        ssh_accept_new_host_key: request.ssh_accept_new_host_key,
+        use_sudo: request.use_sudo,
+        winrm_username: None,
+        winrm_port: None,
+        winrm_use_tls: None,
+        winrm_skip_cert_check: None,
+        actor,
+        status: "pending".to_string(),
+        started_at,
+        completed_at: None,
+        first_heartbeat_at: None,
+        token_expires_at: token.expires_at.clone(),
+        exit_code: None,
+        output_excerpt: None,
+        error: None,
+    };
+
+    let response_status = match execute_ssh_install(&request, &token.token) {
+        Ok(result) => {
+            record.status = "awaiting_heartbeat".to_string();
+            record.completed_at = Some(chrono::Utc::now().to_rfc3339());
+            record.exit_code = result.exit_code;
+            record.output_excerpt = result.output_excerpt;
+            202
+        }
+        Err(error) => {
+            record.status = "failed".to_string();
+            record.completed_at = Some(chrono::Utc::now().to_rfc3339());
+            record.error = Some(error);
+            502
+        }
+    };
+
+    if let Err(storage_error) = append_fleet_remote_install(&storage, record.clone()) {
+        let body = serde_json::json!({
+            "message": "remote install finished but audit persistence failed",
+            "storage_error": storage_error,
+            "record": record,
+        });
+        return match serde_json::to_string(&body) {
+            Ok(json) => json_response(&json, 500),
+            Err(e) => error_json(&format!("serialization error: {e}"), 500),
+        };
+    }
+
+    match serde_json::to_string(&record) {
+        Ok(json) => json_response(&json, response_status),
+        Err(e) => error_json(&format!("serialization error: {e}"), 500),
+    }
+}
+
+fn handle_fleet_install_winrm(
+    body: &[u8],
+    state: &Arc<Mutex<AppState>>,
+    auth_identity: &AuthIdentity,
+) -> Response<Body> {
+    let body = match read_body_limited(body, 64 * 1024) {
+        Ok(body) => body,
+        Err(e) => return error_json(&e, 400),
+    };
+    let request: WinRmInstallRequest = match serde_json::from_str(&body) {
+        Ok(request) => request,
+        Err(e) => return error_json(&format!("invalid JSON: {e}"), 400),
+    };
+    if let Err(e) = request.validate() {
+        return error_json(&e, 400);
+    }
+
+    let started_at = chrono::Utc::now().to_rfc3339();
+    let (storage, token, actor) = {
+        let mut s = state.lock().unwrap_or_else(|e| e.into_inner());
+        let token = s
+            .agent_registry
+            .create_token_with_ttl(1, request.effective_ttl_secs());
+        (s.storage.clone(), token, auth_identity.actor().to_string())
+    };
+
+    let mut record = RemoteInstallRecord {
+        id: generate_request_id().unwrap_or_else(|_| {
+            let random_suffix = rand::random::<u64>();
+            format!("req-fallback-{random_suffix:016x}")
+        }),
+        transport: "winrm".to_string(),
+        hostname: request.hostname.trim().to_string(),
+        address: request.address.trim().to_string(),
+        platform: request.normalized_platform().to_string(),
+        manager_url: request.manager_url.trim_end_matches('/').to_string(),
+        agent_id: None,
+        ssh_user: String::new(),
+        ssh_port: 0,
+        ssh_identity_file: None,
+        ssh_accept_new_host_key: false,
+        use_sudo: false,
+        winrm_username: Some(request.winrm_username.trim().to_string()),
+        winrm_port: Some(request.effective_port()),
+        winrm_use_tls: Some(request.winrm_use_tls),
+        winrm_skip_cert_check: Some(request.winrm_skip_cert_check),
+        actor,
+        status: "pending".to_string(),
+        started_at,
+        completed_at: None,
+        first_heartbeat_at: None,
+        token_expires_at: token.expires_at.clone(),
+        exit_code: None,
+        output_excerpt: None,
+        error: None,
+    };
+
+    let response_status = match execute_winrm_install(&request, &token.token) {
+        Ok(result) => {
+            record.status = "awaiting_heartbeat".to_string();
+            record.completed_at = Some(chrono::Utc::now().to_rfc3339());
+            record.exit_code = result.exit_code;
+            record.output_excerpt = result.output_excerpt;
+            202
+        }
+        Err(error) => {
+            record.status = "failed".to_string();
+            record.completed_at = Some(chrono::Utc::now().to_rfc3339());
+            let status = if error.starts_with("transport unavailable:") {
+                503
+            } else {
+                502
+            };
+            record.error = Some(error);
+            status
+        }
+    };
+
+    if let Err(storage_error) = append_fleet_remote_install(&storage, record.clone()) {
+        let body = serde_json::json!({
+            "message": "remote install finished but audit persistence failed",
+            "storage_error": storage_error,
+            "record": record,
+        });
+        return match serde_json::to_string(&body) {
+            Ok(json) => json_response(&json, 500),
+            Err(e) => error_json(&format!("serialization error: {e}"), 500),
+        };
+    }
+
+    match serde_json::to_string(&record) {
+        Ok(json) => json_response(&json, response_status),
+        Err(e) => error_json(&format!("serialization error: {e}"), 500),
+    }
+}
+
 fn handle_agent_heartbeat(
     body: &[u8],
     state: &Arc<Mutex<AppState>>,
@@ -21719,6 +22271,15 @@ fn handle_agent_heartbeat(
         Ok(()) => {
             let mut target_version = None;
             let now = chrono::Utc::now().to_rfc3339();
+            if let Some(agent) = s.agent_registry.get(agent_id).cloned() {
+                let _ = reconcile_fleet_remote_install_heartbeat(
+                    &s.storage,
+                    agent_id,
+                    &agent.hostname,
+                    &agent.platform,
+                    &now,
+                );
+            }
             if let Some(deployment) = s.remote_deployments.get_mut(agent_id) {
                 deployment.last_heartbeat_at = Some(now.clone());
                 if let Some(health) = &req.health

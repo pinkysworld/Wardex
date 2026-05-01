@@ -359,9 +359,10 @@ Phases 0–40 are complete. Routed browser regression coverage, the repeatable r
 ## Phase 41 — Product Command Center and workflow federation
 
 - [x] T286: Add an analyst-facing `/command` workspace that federates incidents, cases, connectors, detection quality, release metadata, remediation approvals, assistant guardrails, attack storytelling, RBAC posture, rule tuning debt, and compliance evidence packs.
-- [ ] T287: Add direct Command Center action drawers for connector validation, remediation approval review, rule replay, release rollout readiness, and evidence-pack export.
-- [ ] T288: Add routed Playwright smoke coverage for Command Center deep links, mobile layout, lane refresh behavior, and high-risk remediation/release handoffs.
-- [ ] T289: Add backend summary endpoints for Command Center lane health so the UI can reduce client-side fan-out as the workspace becomes the default operator entry point.
+- [x] T287: Add direct Command Center action drawers for connector validation, remediation approval review, rule replay, release rollout readiness, and evidence-pack export.
+- [x] T288: Add routed Playwright smoke coverage for Command Center deep links, mobile layout, lane refresh behavior, and high-risk remediation/release handoffs.
+- [x] T289: Add backend summary endpoints for Command Center lane health so the UI can reduce client-side fan-out as the workspace becomes the default operator entry point.
+- [x] T290: Mirror detection tuning/scoring, remote fleet install, process-thread, and backup endpoints across the live OpenAPI builder plus Python and TypeScript SDK surfaces.
 
 Recommended next sequence:
 

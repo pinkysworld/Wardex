@@ -35,10 +35,27 @@ pub struct Campaign {
     pub alert_ids: Vec<String>,
 }
 
+/// A temporally adjacent alert burst on a single host.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TemporalChain {
+    pub chain_id: String,
+    pub host: String,
+    pub alert_count: usize,
+    pub first_seen_ms: u64,
+    pub last_seen_ms: u64,
+    pub avg_score: f32,
+    pub max_score: f32,
+    pub severity: String,
+    pub shared_techniques: Vec<String>,
+    pub shared_reasons: Vec<String>,
+    pub alert_ids: Vec<String>,
+}
+
 /// Result of campaign analysis.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CampaignReport {
     pub campaigns: Vec<Campaign>,
+    pub temporal_chains: Vec<TemporalChain>,
     pub unclustered_alerts: usize,
     pub total_alerts: usize,
     pub fleet_coverage: f32,
@@ -81,6 +98,7 @@ impl CampaignDetector {
         if alerts.is_empty() {
             return CampaignReport {
                 campaigns: Vec::new(),
+                temporal_chains: Vec::new(),
                 unclustered_alerts: 0,
                 total_alerts: 0,
                 fleet_coverage: 0.0,
@@ -229,12 +247,115 @@ impl CampaignDetector {
             campaign_hosts.len() as f32 / all_hosts.len() as f32
         };
 
+        let temporal_chains = self.detect_temporal_chains(&sorted);
+
         CampaignReport {
             campaigns,
+            temporal_chains,
             unclustered_alerts: alerts.len() - clustered,
             total_alerts: alerts.len(),
             fleet_coverage,
         }
+    }
+
+    fn detect_temporal_chains(&mut self, alerts: &[&FleetAlert]) -> Vec<TemporalChain> {
+        let same_host_window_ms = self.time_window_ms.clamp(60_000, 600_000);
+        let same_host_similarity = (self.min_similarity * 0.5).clamp(0.1, 1.0);
+        let mut by_host: HashMap<&str, Vec<&FleetAlert>> = HashMap::new();
+        for alert in alerts {
+            by_host.entry(alert.hostname.as_str()).or_default().push(*alert);
+        }
+
+        let mut chains = Vec::new();
+        for (host, mut host_alerts) in by_host {
+            host_alerts.sort_by_key(|alert| alert.timestamp_ms);
+            let mut current_chain: Vec<&FleetAlert> = Vec::new();
+
+            for alert in host_alerts {
+                let should_extend = match current_chain.last() {
+                    Some(last) => {
+                        let gap_ms = alert.timestamp_ms.saturating_sub(last.timestamp_ms);
+                        let similarity = current_chain
+                            .iter()
+                            .map(|existing| alert_similarity(existing, alert))
+                            .fold(0.0_f32, f32::max);
+                        let severe_burst = current_chain
+                            .iter()
+                            .any(|existing| is_high_severity(&existing.level))
+                            && is_high_severity(&alert.level);
+                        gap_ms <= same_host_window_ms
+                            && (similarity >= same_host_similarity || severe_burst)
+                    }
+                    None => true,
+                };
+
+                if should_extend {
+                    current_chain.push(alert);
+                } else {
+                    if let Some(chain) = self.build_temporal_chain(host, &current_chain) {
+                        chains.push(chain);
+                    }
+                    current_chain = vec![alert];
+                }
+            }
+
+            if let Some(chain) = self.build_temporal_chain(host, &current_chain) {
+                chains.push(chain);
+            }
+        }
+
+        chains.sort_by(|left, right| {
+            right
+                .last_seen_ms
+                .cmp(&left.last_seen_ms)
+                .then_with(|| right.alert_count.cmp(&left.alert_count))
+        });
+        chains
+    }
+
+    fn build_temporal_chain(
+        &mut self,
+        host: &str,
+        alerts: &[&FleetAlert],
+    ) -> Option<TemporalChain> {
+        if alerts.len() < 2 {
+            return None;
+        }
+
+        let shared_techniques = find_shared_strings(
+            &alerts
+                .iter()
+                .map(|alert| &alert.mitre_techniques)
+                .collect::<Vec<_>>(),
+        );
+        let shared_reasons =
+            find_shared_strings(&alerts.iter().map(|alert| &alert.reasons).collect::<Vec<_>>());
+        let scores = alerts.iter().map(|alert| alert.score).collect::<Vec<_>>();
+        let avg_score = scores.iter().sum::<f32>() / scores.len() as f32;
+        let max_score = scores.iter().copied().fold(0.0_f32, f32::max);
+        let severity = if max_score >= 5.0 {
+            "Critical"
+        } else if max_score >= 3.5 {
+            "Severe"
+        } else {
+            "Elevated"
+        };
+        let chain_id = format!("chain-{}", self.next_id);
+        self.next_id += 1;
+
+        Some(TemporalChain {
+            chain_id,
+            host: host.to_string(),
+            alert_count: alerts.len(),
+            first_seen_ms: alerts.first().map(|alert| alert.timestamp_ms).unwrap_or(0),
+            last_seen_ms: alerts.last().map(|alert| alert.timestamp_ms).unwrap_or(0),
+            avg_score,
+            max_score,
+            severity: severity.to_string(),
+            shared_techniques,
+            shared_reasons,
+            alert_ids: alerts.iter().map(|alert| alert.alert_id.clone()).collect(),
+        })
     }
 }
 
@@ -284,6 +405,10 @@ fn find_shared_strings(groups: &[&Vec<String>]) -> Vec<String> {
         .collect();
     shared.sort();
     shared
+}
+
+fn is_high_severity(level: &str) -> bool {
+    matches!(level, "Critical" | "Severe")
 }
 
 // ── Tests ─────────────────────────────────────────────────────────────────────
@@ -359,6 +484,51 @@ mod tests {
         let mut detector = CampaignDetector::default();
         let report = detector.detect(&alerts);
         assert!(report.campaigns.is_empty());
+    }
+
+    #[test]
+    fn detects_same_host_temporal_chain() {
+        let alerts = vec![
+            FleetAlert {
+                alert_id: "a1".into(),
+                hostname: "host-a".into(),
+                timestamp_ms: 1_000,
+                score: 3.7,
+                level: "Severe".into(),
+                reasons: vec!["credential burst".into()],
+                mitre_techniques: vec!["T1110".into()],
+            },
+            FleetAlert {
+                alert_id: "a2".into(),
+                hostname: "host-a".into(),
+                timestamp_ms: 40_000,
+                score: 4.2,
+                level: "Critical".into(),
+                reasons: vec!["credential burst".into(), "suspicious process".into()],
+                mitre_techniques: vec!["T1110".into(), "T1059".into()],
+            },
+            FleetAlert {
+                alert_id: "a3".into(),
+                hostname: "host-a".into(),
+                timestamp_ms: 80_000,
+                score: 4.1,
+                level: "Severe".into(),
+                reasons: vec!["suspicious process".into()],
+                mitre_techniques: vec!["T1059".into()],
+            },
+        ];
+        let mut detector = CampaignDetector::default();
+        let report = detector.detect(&alerts);
+        assert!(report.campaigns.is_empty());
+        assert_eq!(report.temporal_chains.len(), 1);
+        assert_eq!(report.temporal_chains[0].host, "host-a");
+        assert_eq!(report.temporal_chains[0].alert_count, 3);
+        assert_eq!(report.temporal_chains[0].severity, "Severe");
+        assert!(
+            report.temporal_chains[0]
+                .shared_techniques
+                .contains(&"T1110".into())
+        );
     }
 
     #[test]

@@ -673,13 +673,20 @@ export default function Infrastructure() {
       return;
     }
     try {
-      await api.executeRemediationRollback(review.id, {
+      const rollback = await api.executeRemediationRollback(review.id, {
         dry_run: false,
         platform: 'linux',
         confirm_hostname: assetId,
       });
       await reloadRemediationReviews();
-      toast('Live rollback executed.', 'success');
+      if (rollback?.review?.rollback_proof?.execution_result?.live_execution === 'executed') {
+        toast('Live rollback executed.', 'success');
+      } else {
+        toast(
+          'Live rollback recorded. Set remediation.execute_live_rollback_commands = true for local command execution.',
+          'warning',
+        );
+      }
     } catch (err) {
       const status = err?.status;
       if (status === 403) {
@@ -926,7 +933,7 @@ export default function Infrastructure() {
                             className="btn btn-sm btn-danger"
                             type="button"
                             onClick={() => executeLiveRollback(review)}
-                            title="Execute live rollback (requires server allow_live_rollback + typed hostname)"
+                            title="Execute live rollback (requires remediation.allow_live_rollback + typed hostname; actual local execution also needs remediation.execute_live_rollback_commands)"
                           >
                             Live Rollback…
                           </button>

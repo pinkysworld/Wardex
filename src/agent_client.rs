@@ -2,6 +2,7 @@
 
 use serde::{Deserialize, Serialize};
 use std::io::Read;
+use std::path::Path;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::thread;
@@ -29,6 +30,9 @@ struct AgentRuntimeStatus {
     last_update_error: Option<String>,
     last_update_at: Option<String>,
 }
+
+const DEFAULT_AGENT_HEARTBEAT_INTERVAL_SECS: u64 = 30;
+const DEFAULT_AGENT_POLICY_POLL_INTERVAL_SECS: u64 = 60;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct HeartbeatPayload {
@@ -435,24 +439,47 @@ pub fn run_agent(
     );
     log::info!("  Server: {}", server_url);
 
-    // Enroll
     let mut client = AgentClient::new(server_url);
     let runtime_status = Arc::new(Mutex::new(AgentRuntimeStatus::default()));
     client.attach_runtime_status(runtime_status.clone());
-    let resp = client.enroll(
-        enrollment_token,
-        &host_info.hostname,
-        &host_info.platform.to_string(),
-    )?;
-    log::info!("  Enrolled as: {}", resp.agent_id);
-    log::info!("  Heartbeat interval: {}s", resp.heartbeat_interval_secs);
-    log::info!("");
+    let persisted_agent_id = config
+        .agent
+        .agent_id
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(ToOwned::to_owned);
+
+    let (agent_id, heartbeat_interval, policy_poll_interval) =
+        if let Some(agent_id) = persisted_agent_id {
+            log::info!("  Resuming enrolled agent: {agent_id}");
+            client.agent_id = Some(agent_id.clone());
+            (
+                agent_id,
+                DEFAULT_AGENT_HEARTBEAT_INTERVAL_SECS,
+                DEFAULT_AGENT_POLICY_POLL_INTERVAL_SECS,
+            )
+        } else {
+            let resp = client.enroll(
+                enrollment_token,
+                &host_info.hostname,
+                &host_info.platform.to_string(),
+            )?;
+            persist_agent_runtime_config(config, server_url, &resp.agent_id)?;
+            log::info!("  Enrolled as: {}", resp.agent_id);
+            log::info!("  Heartbeat interval: {}s", resp.heartbeat_interval_secs);
+            log::info!("");
+            (
+                resp.agent_id,
+                resp.heartbeat_interval_secs,
+                resp.policy_poll_interval_secs,
+            )
+        };
 
     // Background heartbeat thread
-    let heartbeat_interval = resp.heartbeat_interval_secs;
     let heartbeat_shutdown = shutdown.clone();
     let heartbeat_server = server_url.to_string();
-    let heartbeat_agent_id = resp.agent_id.clone();
+    let heartbeat_agent_id = agent_id.clone();
     let heartbeat_runtime_status = runtime_status.clone();
     thread::spawn(move || {
         let mut hb_client = AgentClient::new(&heartbeat_server);
@@ -480,8 +507,9 @@ pub fn run_agent(
     // Background update check thread
     let update_shutdown = shutdown.clone();
     let update_server = server_url.to_string();
-    let update_agent_id = resp.agent_id.clone();
+    let update_agent_id = agent_id.clone();
     let update_runtime_status = runtime_status.clone();
+    let update_interval_secs = config.agent.update_check_interval_secs.max(60);
     thread::spawn(move || {
         let mut upd_client = AgentClient::new(&update_server);
         upd_client.agent_id = Some(update_agent_id);
@@ -490,8 +518,7 @@ pub fn run_agent(
             if update_shutdown.load(Ordering::Relaxed) {
                 break;
             }
-            // Check for updates every 5 minutes
-            thread::sleep(Duration::from_secs(300));
+            thread::sleep(Duration::from_secs(update_interval_secs));
             if update_shutdown.load(Ordering::Relaxed) {
                 break;
             }
@@ -512,10 +539,9 @@ pub fn run_agent(
     // Background policy enforcement thread
     let policy_shutdown = shutdown.clone();
     let policy_server = server_url.to_string();
-    let policy_agent_id = resp.agent_id.clone();
+    let policy_agent_id = agent_id.clone();
     let policy_threshold = active_threshold.clone();
     let policy_interval_secs = active_interval.clone();
-    let policy_poll = resp.policy_poll_interval_secs;
     thread::spawn(move || {
         let mut pol_client = AgentClient::new(&policy_server);
         pol_client.agent_id = Some(policy_agent_id);
@@ -524,7 +550,7 @@ pub fn run_agent(
             if policy_shutdown.load(Ordering::Relaxed) {
                 break;
             }
-            thread::sleep(Duration::from_secs(policy_poll));
+            thread::sleep(Duration::from_secs(policy_poll_interval));
             if policy_shutdown.load(Ordering::Relaxed) {
                 break;
             }
@@ -674,7 +700,7 @@ pub fn run_agent(
                 log::error!("[agent] Inventory report failed: {e}");
             }
             if let Some(ref mut siem) = siem_connector {
-                siem.push_inventory(&inv, client.agent_id().unwrap_or("unknown"));
+                        siem.push_inventory(&inv, client.agent_id().unwrap_or("unknown"));
             }
         }
 
@@ -723,6 +749,36 @@ fn apply_update(binary: &[u8], version: &str) -> Result<(), String> {
     Ok(())
 }
 
+fn persist_agent_runtime_config(
+    config: &Config,
+    server_url: &str,
+    agent_id: &str,
+) -> Result<(), String> {
+    let path = crate::config::runtime_config_path();
+    persist_agent_runtime_config_at_path(config, server_url, agent_id, &path)
+}
+
+fn persist_agent_runtime_config_at_path(
+    config: &Config,
+    server_url: &str,
+    agent_id: &str,
+    path: &Path,
+) -> Result<(), String> {
+    let mut next = config.clone();
+    next.agent.server_url = server_url.to_string();
+    next.agent.enrollment_token.clear();
+    next.agent.agent_id = Some(agent_id.to_string());
+
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent)
+            .map_err(|e| format!("failed to create agent config directory: {e}"))?;
+    }
+
+    let raw = toml::to_string_pretty(&next)
+        .map_err(|e| format!("failed to serialize agent config: {e}"))?;
+    std::fs::write(path, raw).map_err(|e| format!("failed to write agent config: {e}"))
+}
+
 // ── Tests ────────────────────────────────────────────────────────────
 
 #[cfg(test)]
@@ -763,5 +819,27 @@ mod tests {
         let info: UpdateInfo = serde_json::from_str(json).unwrap();
         assert_eq!(info.version, "0.16.0");
         assert!(!info.mandatory);
+    }
+
+    #[test]
+    fn persist_agent_runtime_config_clears_token_and_stores_agent_id() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("agent.toml");
+        let mut config = Config::default();
+        config.agent.server_url = "http://old.example.com:8080".into();
+        config.agent.enrollment_token = "single-use-token".into();
+
+        persist_agent_runtime_config_at_path(
+            &config,
+            "https://manager.example.com:9090",
+            "agent-123",
+            &path,
+        )
+        .unwrap();
+
+        let saved = std::fs::read_to_string(path).unwrap();
+        assert!(saved.contains("server_url = \"https://manager.example.com:9090\""));
+        assert!(saved.contains("agent_id = \"agent-123\""));
+        assert!(saved.contains("enrollment_token = \"\""));
     }
 }

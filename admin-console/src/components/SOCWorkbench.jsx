@@ -5319,6 +5319,7 @@ export default function SOCWorkbench() {
         onUpdated={() => {
           reloadProcessTreeData();
         }}
+        onSelectProcess={(process) => setSelectedProcess(process ? { ...process } : null)}
       />
     </div>
   );

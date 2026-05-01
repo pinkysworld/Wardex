@@ -58,6 +58,7 @@ const SEV_COLORS = {
 
 const DASHBOARD_WIDGETS = [
   'system-health',
+  'collector-health',
   'telemetry',
   'threat-overview',
   'charts',
@@ -80,6 +81,7 @@ const SHARED_DASHBOARD_PRESETS = [
       'threat-overview',
       'recent-alerts',
       'detection-engine',
+      'collector-health',
       'charts',
       'process-security',
       'system-health',
@@ -99,6 +101,7 @@ const SHARED_DASHBOARD_PRESETS = [
       'Balance platform health, telemetry, lifecycle, and response readiness for operators.',
     widgets: [
       'system-health',
+      'collector-health',
       'telemetry',
       'lifecycle',
       'threat-overview',
@@ -120,6 +123,7 @@ const SHARED_DASHBOARD_PRESETS = [
       'Keep the wallboard focused on posture, alert pressure, and broad telemetry trends.',
     widgets: [
       'system-health',
+      'collector-health',
       'threat-overview',
       'telemetry',
       'charts',
@@ -206,6 +210,44 @@ function alertReportTarget(alert) {
   );
 }
 
+function formatLagDuration(seconds) {
+  const value = Number(seconds);
+  if (!Number.isFinite(value) || value < 0) return '—';
+  if (value < 60) return `${Math.round(value)}s`;
+  if (value < 3600) return `${Math.round(value / 60)}m`;
+  const hours = value / 3600;
+  return `${hours >= 10 ? Math.round(hours) : hours.toFixed(1)}h`;
+}
+
+function collectorFreshnessRank(freshness) {
+  switch (freshness) {
+    case 'error':
+      return 3;
+    case 'stale':
+      return 2;
+    case 'unknown':
+      return 1;
+    default:
+      return 0;
+  }
+}
+
+function collectorTimelineSeverityClass(status) {
+  switch (String(status || '').toLowerCase()) {
+    case 'error':
+      return 'sev-critical';
+    case 'warning':
+    case 'review':
+      return 'sev-severe';
+    case 'disabled':
+      return 'sev-low';
+    case 'ready':
+      return 'sev-info';
+    default:
+      return 'sev-elevated';
+  }
+}
+
 export default function Dashboard() {
   const toast = useToast();
   const navigate = useNavigate();
@@ -229,6 +271,7 @@ export default function Dashboard() {
   const { data: hostInf } = useApi(api.hostInfo);
   const { data: telemHistory } = useApi(api.telemetryHistory);
   const { data: userPrefs } = useApi(api.userPreferences);
+  const { data: collectorsStatus, reload: reloadCollectorsStatus } = useApi(api.collectorsStatus);
   const { data: dashboardSignalsData, reload: reloadDashboardSignals } = useApiGroup({
     detSum: api.detectionSummary,
     tiStatus: api.threatIntelStatus,
@@ -449,6 +492,7 @@ export default function Dashboard() {
     await Promise.allSettled([
       reloadDashboardOverview(),
       reloadDashboardAlerts(),
+      reloadCollectorsStatus(),
       reloadDashboardSignals(),
     ]);
     setRefreshing(false);
@@ -537,6 +581,40 @@ export default function Dashboard() {
       sevFilter === 'all' ? alertList : alertList.filter((a) => alertSeverity(a) === sevFilter),
     [alertList, sevFilter],
   );
+  const collectorList = useMemo(
+    () => (Array.isArray(collectorsStatus?.collectors) ? collectorsStatus.collectors : []),
+    [collectorsStatus],
+  );
+  const enabledCollectors = useMemo(
+    () => collectorList.filter((collector) => collector.enabled),
+    [collectorList],
+  );
+  const collectorFreshnessCounts = useMemo(() => {
+    return enabledCollectors.reduce((counts, collector) => {
+      const key = collector.freshness || 'unknown';
+      counts[key] = (counts[key] || 0) + 1;
+      return counts;
+    }, {});
+  }, [enabledCollectors]);
+  const degradedCollectors = useMemo(
+    () => enabledCollectors.filter((collector) => ['error', 'stale'].includes(collector.freshness)),
+    [enabledCollectors],
+  );
+  const totalCollectorEvents = useMemo(
+    () => enabledCollectors.reduce((sum, collector) => sum + Number(collector.events_ingested || 0), 0),
+    [enabledCollectors],
+  );
+  const atRiskCollectors = useMemo(() => {
+    return [...enabledCollectors].sort((left, right) => {
+      const freshnessDelta =
+        collectorFreshnessRank(right.freshness) - collectorFreshnessRank(left.freshness);
+      if (freshnessDelta !== 0) return freshnessDelta;
+      const lagDelta = Number(right.lag_seconds || 0) - Number(left.lag_seconds || 0);
+      if (lagDelta !== 0) return lagDelta;
+      return Number(right.retry_count || 0) - Number(left.retry_count || 0);
+    });
+  }, [enabledCollectors]);
+  const topCollector = atRiskCollectors[0] || null;
   const selectedAlert =
     expandedAlert == null
       ? null
@@ -925,6 +1003,162 @@ export default function Dashboard() {
                   value={qStats?.pending ?? qStats?.total ?? '—'}
                   sub={qStats?.assigned ? `${qStats.assigned} assigned` : undefined}
                 />
+              </div>
+            </DashboardWidget>
+          );
+        if (wid === 'collector-health' && collectorList.length > 0)
+          return (
+            <DashboardWidget
+              key={wid}
+              id={wid}
+              title="Collector Health"
+              index={order.indexOf(wid)}
+              onMove={moveWidget}
+              onRemove={removeWidget}
+              paused={widgetPaused}
+              onTogglePause={toggleWidgetRefresh}
+            >
+              <div className="card-grid">
+                <Metric
+                  label="Fresh Collectors"
+                  value={collectorFreshnessCounts.fresh ?? 0}
+                  sub={enabledCollectors.length ? `${enabledCollectors.length} enabled` : 'None enabled'}
+                />
+                <Metric
+                  label="Degraded"
+                  value={degradedCollectors.length}
+                  sub={`${collectorFreshnessCounts.error ?? 0} error · ${collectorFreshnessCounts.stale ?? 0} stale`}
+                  accent={degradedCollectors.length > 0}
+                />
+                <Metric
+                  label="Max Lag"
+                  value={formatLagDuration(topCollector?.lag_seconds)}
+                  sub={topCollector ? `${topCollector.label} ${topCollector.freshness}` : 'No collector lag'}
+                  accent={collectorFreshnessRank(topCollector?.freshness) > 0}
+                />
+                <Metric
+                  label="Events Ingested"
+                  value={formatNumber(totalCollectorEvents)}
+                  sub={`${enabledCollectors.filter((collector) => Number(collector.events_ingested || 0) > 0).length} collectors reporting`}
+                />
+              </div>
+              <div
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
+                  gap: 12,
+                  marginTop: 16,
+                }}
+              >
+                {(degradedCollectors.length > 0 ? degradedCollectors : atRiskCollectors)
+                  .slice(0, 3)
+                  .map((collector) => {
+                    const pivots = Array.isArray(collector.ingestion_evidence?.pivots)
+                      ? collector.ingestion_evidence.pivots
+                      : [];
+                    const readinessTimeline = Array.isArray(collector.timeline)
+                      ? collector.timeline
+                      : [];
+                    const lifecycleAnalytics = collector.lifecycle_analytics || {};
+                    const successRate = Math.round(Number(lifecycleAnalytics.success_rate || 0) * 100);
+                    return (
+                      <div key={collector.name} className="card">
+                        <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
+                          <div>
+                            <div className="card-title">{collector.label}</div>
+                            <div className="hint">{collector.lane || collector.provider}</div>
+                          </div>
+                          <span
+                            className={`badge ${collector.freshness === 'fresh' ? 'badge-ok' : collector.freshness === 'error' ? 'badge-err' : 'badge-warn'}`}
+                          >
+                            {collector.freshness}
+                          </span>
+                        </div>
+                        <div className="chip-row" style={{ marginTop: 8 }}>
+                          <span className="scope-chip">Lag {formatLagDuration(collector.lag_seconds)}</span>
+                          <span className="scope-chip">Retries {collector.retry_count ?? 0}</span>
+                          {collector.backoff_seconds ? (
+                            <span className="scope-chip">
+                              Backoff {formatLagDuration(collector.backoff_seconds)}
+                            </span>
+                          ) : null}
+                        </div>
+                        <div className="chip-row" style={{ marginTop: 8 }}>
+                          <span className="scope-chip">Success {successRate}%</span>
+                          <span className="scope-chip">
+                            24h events {formatNumber(lifecycleAnalytics.events_last_24h ?? 0)}
+                          </span>
+                          {(lifecycleAnalytics.recent_failure_streak ?? 0) > 0 ? (
+                            <span className="scope-chip">
+                              Failure streak {lifecycleAnalytics.recent_failure_streak}
+                            </span>
+                          ) : null}
+                        </div>
+                        {Array.isArray(collector.route_targets) && collector.route_targets.length > 0 && (
+                          <div className="chip-row" style={{ marginTop: 8 }}>
+                            {collector.route_targets.map((target) => (
+                              <span key={target} className="scope-chip">
+                                {target}
+                              </span>
+                            ))}
+                          </div>
+                        )}
+                        <div className="hint" style={{ marginTop: 8 }}>
+                          {collector.last_error_at
+                            ? `Last error ${formatRelativeTime(collector.last_error_at)}`
+                            : collector.last_success_at
+                              ? `Last success ${formatRelativeTime(collector.last_success_at)}`
+                              : 'No successful run recorded yet.'}
+                        </div>
+                        {pivots.length > 0 && (
+                          <div className="btn-group" style={{ marginTop: 12 }}>
+                            {pivots.slice(0, 2).map((pivot) => (
+                              <button
+                                key={pivot.href}
+                                className="btn btn-sm"
+                                onClick={() => navigate(pivot.href)}
+                              >
+                                {pivot.label || 'Open collector context'}
+                              </button>
+                            ))}
+                          </div>
+                        )}
+                        {readinessTimeline.length > 0 && (
+                          <div style={{ marginTop: 14 }}>
+                            <div className="hint" style={{ marginBottom: 8 }}>
+                              Readiness timeline
+                            </div>
+                            <div className="timeline">
+                              {readinessTimeline.slice(0, 4).map((entry, index) => (
+                                <div
+                                  key={`${collector.name}-${entry.stage || entry.title}-${index}`}
+                                  className="timeline-event"
+                                >
+                                  <div className="timeline-marker">
+                                    <span
+                                      className={`timeline-dot ${collectorTimelineSeverityClass(entry.status)}`}
+                                    />
+                                    {index < readinessTimeline.slice(0, 4).length - 1 ? (
+                                      <span className="timeline-line" />
+                                    ) : null}
+                                  </div>
+                                  <div className="timeline-body" style={{ cursor: 'default' }}>
+                                    <div className="timeline-header">
+                                      <strong>{entry.title || entry.stage || 'Collector stage'}</strong>
+                                      <span className="timeline-sev">{entry.status || 'info'}</span>
+                                    </div>
+                                    <div className="hint" style={{ marginTop: 8 }}>
+                                      {entry.detail || 'No detail published for this collector stage yet.'}
+                                    </div>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
               </div>
             </DashboardWidget>
           );
@@ -1556,12 +1790,17 @@ export default function Dashboard() {
         alert={selectedAlert}
         onClose={() => setExpandedAlert(null)}
         onUpdated={reloadAll}
+        onSelectProcess={(process) => {
+          setExpandedAlert(null);
+          setSelectedProcess(process ? { ...process } : null);
+        }}
       />
       <ProcessDrawer
         pid={selectedProcess?.pid}
         snapshot={selectedProcess}
         onClose={() => setSelectedProcess(null)}
         onUpdated={reloadAll}
+        onSelectProcess={(process) => setSelectedProcess(process ? { ...process } : null)}
       />
     </div>
   );

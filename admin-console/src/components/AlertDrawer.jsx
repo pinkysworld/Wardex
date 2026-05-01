@@ -89,12 +89,111 @@ function suggestNextSteps(alert, mitre) {
   return steps;
 }
 
+const HASH_VALUE_PATTERN = /\b(?:[a-fA-F0-9]{64}|[a-fA-F0-9]{32})\b/g;
+
+function extractAlertHashes(alert, reasons) {
+  if (!alert) return [];
+
+  const directCandidates = [
+    alert.sha256,
+    alert.md5,
+    alert.hash,
+    alert.file_hash,
+    alert.artifact_hash,
+    alert.indicator_hash,
+  ];
+  const textCandidates = [alert.message, alert.description, ...reasons]
+    .filter(Boolean)
+    .flatMap((value) => String(value).match(HASH_VALUE_PATTERN) || []);
+
+  return [...new Set([...directCandidates, ...textCandidates])]
+    .map((value) => String(value || '').trim().toLowerCase())
+    .filter((value) => /^[a-f0-9]{32}$|^[a-f0-9]{64}$/.test(value));
+}
+
+function normalizeAlertProcessCandidate(source, alert) {
+  if (!source && !alert) return null;
+
+  const process = source?.process || source?.process_detail || source?.process_snapshot || source || {};
+  const pidCandidate = [
+    source?.pid,
+    source?.process_pid,
+    process?.pid,
+    alert?.pid,
+    alert?.process_pid,
+    alert?.process?.pid,
+    alert?.process_detail?.pid,
+    alert?.process_snapshot?.pid,
+    alert?.sample?.pid,
+  ]
+    .map((value) => Number(value))
+    .find((value) => Number.isFinite(value) && value > 0);
+
+  if (!pidCandidate) return null;
+
+  const name =
+    source?.name ||
+    process?.name ||
+    source?.process_name ||
+    alert?.process_name ||
+    source?.display_name ||
+    process?.display_name ||
+    source?.exe_path ||
+    process?.exe_path ||
+    source?.cmd_line ||
+    process?.cmd_line ||
+    `PID ${pidCandidate}`;
+
+  return {
+    pid: pidCandidate,
+    ppid: Number(source?.ppid ?? process?.ppid ?? alert?.ppid ?? process?.parent_pid) || null,
+    name,
+    display_name:
+      source?.display_name ||
+      process?.display_name ||
+      String(name).split('/').pop() ||
+      `PID ${pidCandidate}`,
+    user: source?.user || process?.user || alert?.user || null,
+    group: source?.group || process?.group || alert?.group || null,
+    hostname: source?.hostname || process?.hostname || alert?.hostname || null,
+    platform: source?.platform || process?.platform || alert?.platform || null,
+    cmd_line: source?.cmd_line || process?.cmd_line || alert?.cmd_line || null,
+    exe_path: source?.exe_path || process?.exe_path || alert?.exe_path || null,
+    cwd: source?.cwd || process?.cwd || alert?.cwd || null,
+    start_time: source?.start_time || process?.start_time || null,
+    reason: source?.reason || alert?.reasons?.[0] || alert?.message || alert?.description || null,
+  };
+}
+
+function extractAlertProcessCandidate(alert) {
+  return normalizeAlertProcessCandidate(alert, alert);
+}
+
+function extractAlertProcessCandidates(alert) {
+  if (!alert) return [];
+
+  const items = [extractAlertProcessCandidate(alert)];
+  if (Array.isArray(alert.process_candidates)) {
+    items.push(
+      ...alert.process_candidates.map((candidate) => normalizeAlertProcessCandidate(candidate, alert)),
+    );
+  }
+
+  const seen = new Set();
+  return items.filter((candidate) => {
+    if (!candidate || seen.has(candidate.pid)) return false;
+    seen.add(candidate.pid);
+    return true;
+  });
+}
+
 /* ── AlertDrawer component ──────────────────────────────────── */
 
 export default function AlertDrawer({
   alert,
   onClose,
   onUpdated,
+  onSelectProcess,
   onPrevious,
   onNext,
   canPrevious = false,
@@ -105,6 +204,12 @@ export default function AlertDrawer({
   const [explainOpen, setExplainOpen] = useState(false);
   const [explainData, setExplainData] = useState(null);
   const [explainLoading, setExplainLoading] = useState(false);
+  const [artifactContext, setArtifactContext] = useState({
+    hashMatch: null,
+    recentDetections: [],
+    sightings: [],
+  });
+  const [artifactContextLoading, setArtifactContextLoading] = useState(false);
 
   const summary = useMemo(() => {
     if (!alert) return null;
@@ -119,6 +224,33 @@ export default function AlertDrawer({
       timestamp: alert.timestamp || alert.time,
     };
   }, [alert]);
+  const reasons = useMemo(() => {
+    if (!alert) return [];
+    return Array.isArray(alert.reasons)
+      ? alert.reasons
+      : alert.reasons
+        ? [alert.reasons]
+        : [];
+  }, [alert]);
+  const alertHashes = useMemo(() => extractAlertHashes(alert, reasons), [alert, reasons]);
+  const processCandidate = useMemo(() => extractAlertProcessCandidate(alert), [alert]);
+  const processCandidates = useMemo(() => extractAlertProcessCandidates(alert), [alert]);
+  const processNames = useMemo(
+    () => (Array.isArray(alert?.process_names) ? alert.process_names.filter(Boolean) : []),
+    [alert],
+  );
+  const processResolution = useMemo(() => {
+    const value = alert?.process_resolution;
+    if (typeof value !== 'string' || value.length === 0) return null;
+    const labels = {
+      unique: { label: '1 live match', tone: 'success' },
+      multiple: { label: `${processCandidates.length} candidates`, tone: 'warning' },
+      remote_host: { label: 'Remote host — switch agent', tone: 'info' },
+      unresolved: { label: 'No live match', tone: 'muted' },
+      none: { label: 'No process names', tone: 'muted' },
+    };
+    return { code: value, ...(labels[value] || { label: value, tone: 'muted' }) };
+  }, [alert, processCandidates]);
 
   useEffect(() => {
     let cancelled = false;
@@ -148,13 +280,57 @@ export default function AlertDrawer({
     };
   }, [alert]);
 
-  if (!alert) return null;
+  useEffect(() => {
+    let cancelled = false;
 
-  const reasons = Array.isArray(alert.reasons)
-    ? alert.reasons
-    : alert.reasons
-      ? [alert.reasons]
-      : [];
+    if (!alert || alertHashes.length === 0) {
+      setArtifactContext({ hashMatch: null, recentDetections: [], sightings: [] });
+      setArtifactContextLoading(false);
+      return undefined;
+    }
+
+    setArtifactContextLoading(true);
+    Promise.allSettled([
+      api.scanHash({ hash: alertHashes[0] }),
+      api.malwareRecent(),
+      api.threatIntelSightings(25),
+    ])
+      .then(([hashMatchResult, recentDetectionsResult, sightingsResult]) => {
+        if (cancelled) return;
+
+        const recentDetections = Array.isArray(recentDetectionsResult.value)
+          ? recentDetectionsResult.value.filter((item) =>
+              alertHashes.includes(String(item.sha256 || '').toLowerCase()),
+            )
+          : [];
+        const sightingsItems = Array.isArray(sightingsResult.value?.items)
+          ? sightingsResult.value.items
+          : [];
+        const sightings = sightingsItems.filter((item) =>
+          alertHashes.includes(String(item.value || '').toLowerCase()),
+        );
+
+        setArtifactContext({
+          hashMatch: hashMatchResult.status === 'fulfilled' ? hashMatchResult.value : null,
+          recentDetections,
+          sightings,
+        });
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setArtifactContext({ hashMatch: null, recentDetections: [], sightings: [] });
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setArtifactContextLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [alert, alertHashes]);
+
+  if (!alert) return null;
 
   const mitre = inferMitre(alert);
   const fallbackExplanation = buildExplanation(alert, mitre, reasons);
@@ -167,6 +343,11 @@ export default function AlertDrawer({
   const nextSteps = explainData?.next_steps?.length ? explainData.next_steps : fallbackNextSteps;
   const analystFeedback = Array.isArray(explainData?.feedback) ? explainData.feedback : [];
   const entityScores = Array.isArray(explainData?.entity_scores) ? explainData.entity_scores : [];
+  const processLinkState = processCandidates.length
+    ? 'Process-linked'
+    : processNames.length
+      ? 'Process-attributed'
+      : 'PID-free';
 
   const submitFeedback = async (verdict) => {
     try {
@@ -240,7 +421,7 @@ export default function AlertDrawer({
       open={!!alert}
       onClose={onClose}
       title={alert.message || alert.description || alert.category || 'Alert detail'}
-      subtitle={`PID-free alert context · ${(alert.severity || 'unknown').toUpperCase()}`}
+      subtitle={`${processLinkState} alert context · ${(alert.severity || 'unknown').toUpperCase()}`}
       actions={
         <>
           {(onPrevious || onNext || positionLabel) && (
@@ -279,6 +460,91 @@ export default function AlertDrawer({
       }
     >
       <SummaryGrid data={summary} limit={8} />
+
+      {(processCandidates.length > 0 || processNames.length > 0) && (
+        <div className="card" style={{ marginTop: 16 }}>
+          <div
+            className="card-title"
+            style={{
+              marginBottom: 8,
+              display: 'flex',
+              alignItems: 'center',
+              gap: 8,
+              flexWrap: 'wrap',
+            }}
+          >
+            <span>Process Pivot</span>
+            {processResolution && (
+              <span
+                data-testid="alert-process-resolution"
+                data-resolution={processResolution.code}
+                className={`badge badge-${processResolution.tone}`}
+                style={{ fontSize: 11, fontWeight: 500 }}
+              >
+                {processResolution.label}
+              </span>
+            )}
+          </div>
+          {processNames.length > 0 && (
+            <div style={{ marginBottom: 12 }}>
+              <div className="metric-label" style={{ marginBottom: 6 }}>
+                Extracted Process Names
+              </div>
+              <div className="chip-row">
+                {processNames.map((name) => (
+                  <span key={name} className="scope-chip">
+                    {name}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+          {processCandidates.length > 0 ? (
+            <div style={{ display: 'grid', gap: 12 }}>
+              {processCandidates.map((candidate) => (
+                <div key={candidate.pid} className="drawer-copy-grid">
+                  <div>
+                    <div className="metric-label">Process</div>
+                    <div className="row-primary">
+                      {candidate.display_name} (PID {candidate.pid})
+                    </div>
+                    <div className="row-secondary">
+                      {candidate.hostname || 'Local host'}
+                      {candidate.user ? ` · ${candidate.user}` : ''}
+                    </div>
+                  </div>
+                  <div>
+                    <div className="metric-label">Command</div>
+                    <div
+                      style={{ fontFamily: 'var(--font-mono)', fontSize: 12, wordBreak: 'break-all' }}
+                    >
+                      {candidate.cmd_line || candidate.exe_path || candidate.name}
+                    </div>
+                  </div>
+                  {onSelectProcess && (
+                    <div className="btn-group" style={{ marginTop: 4 }}>
+                      <button
+                        className="btn btn-sm"
+                        onClick={() => onSelectProcess(candidate)}
+                      >
+                        {processCandidates.length === 1
+                          ? 'Investigate Process'
+                          : `Inspect ${candidate.display_name}`}
+                      </button>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="hint">
+              {alert.process_resolution === 'remote_host'
+                ? 'Wardex extracted process names, but this alert originated on a different host so no local PID was resolved.'
+                : 'Wardex extracted process names for this alert, but no live process matched them at collection time.'}
+            </div>
+          )}
+        </div>
+      )}
 
       <AlertNarrative narrative={alert.narrative} />
 
@@ -485,6 +751,84 @@ export default function AlertDrawer({
               </span>
             ))}
           </div>
+        </div>
+      )}
+      {alertHashes.length > 0 && (
+        <div className="card" style={{ marginTop: 16 }}>
+          <div className="card-title" style={{ marginBottom: 8 }}>
+            Malware &amp; Threat Intel
+          </div>
+          <div className="chip-row" style={{ marginBottom: 12 }}>
+            {alertHashes.slice(0, 2).map((hash) => (
+              <span key={hash} className="scope-chip">
+                {hash}
+              </span>
+            ))}
+          </div>
+          {artifactContextLoading ? (
+            <div className="hint">Loading hash reputation and recent sightings.</div>
+          ) : (
+            <div style={{ display: 'grid', gap: 12 }}>
+              <div className="card" style={{ margin: 0, padding: 12, background: 'var(--surface-muted)' }}>
+                <div className="metric-label">Hash Reputation</div>
+                {artifactContext.hashMatch ? (
+                  <>
+                    <div className="row-primary" style={{ marginTop: 6 }}>
+                      {artifactContext.hashMatch.rule_name}
+                    </div>
+                    <div className="row-secondary">{artifactContext.hashMatch.detail}</div>
+                    <div style={{ marginTop: 8 }}>
+                      <span
+                        className={`badge ${artifactContext.hashMatch.severity === 'high' || artifactContext.hashMatch.severity === 'critical' ? 'badge-err' : 'badge-info'}`}
+                      >
+                        {artifactContext.hashMatch.severity || 'unknown'}
+                      </span>
+                    </div>
+                  </>
+                ) : (
+                  <div className="hint">No direct malware hash match was returned for this artifact.</div>
+                )}
+              </div>
+              <div
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
+                  gap: 12,
+                }}
+              >
+                <div className="card" style={{ margin: 0, padding: 12, background: 'var(--surface-muted)' }}>
+                  <div className="metric-label">Recent Hash Detections</div>
+                  {artifactContext.recentDetections.length > 0 ? (
+                    artifactContext.recentDetections.slice(0, 2).map((detection) => (
+                      <div key={`${detection.sha256}-${detection.detected_at}`} style={{ marginTop: 8 }}>
+                        <div className="row-primary">{detection.name || detection.family || detection.sha256}</div>
+                        <div className="row-secondary">
+                          {detection.family || 'unknown family'} · {detection.source || 'unknown source'}
+                        </div>
+                      </div>
+                    ))
+                  ) : (
+                    <div className="hint">No matching detections were found in the recent malware history.</div>
+                  )}
+                </div>
+                <div className="card" style={{ margin: 0, padding: 12, background: 'var(--surface-muted)' }}>
+                  <div className="metric-label">Recent Threat Intel Sightings</div>
+                  {artifactContext.sightings.length > 0 ? (
+                    artifactContext.sightings.slice(0, 2).map((sighting, index) => (
+                      <div key={`${sighting.timestamp || 'sighting'}-${index}`} style={{ marginTop: 8 }}>
+                        <div className="row-primary">{sighting.context || sighting.value}</div>
+                        <div className="row-secondary">
+                          {sighting.source || 'unknown source'} · {sighting.severity || 'unknown'}
+                        </div>
+                      </div>
+                    ))
+                  ) : (
+                    <div className="hint">No recent threat-intel sighting matches were found for this artifact.</div>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       )}
       <JsonDetails data={alert} label="Full alert context" />

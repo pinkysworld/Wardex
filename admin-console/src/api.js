@@ -184,6 +184,9 @@ export const fleetStatus = () => get('/api/fleet/status');
 export const fleetDashboard = () => get('/api/fleet/dashboard');
 export const fleetInventory = () => get('/api/fleet/inventory');
 export const fleetRegister = (body) => post('/api/fleet/register', body);
+export const fleetInstalls = () => get('/api/fleet/installs');
+export const fleetInstallSsh = (body) => post('/api/fleet/install/ssh', body);
+export const fleetInstallWinrm = (body) => post('/api/fleet/install/winrm', body);
 export const agents = () => get('/api/agents');
 export const agentsEnroll = (body) => post('/api/agents/enroll', body);
 export const agentsToken = (body) => post('/api/agents/token', body);
@@ -493,9 +496,6 @@ export const deleteRbacUser = (u) => del(`/api/rbac/users/${encodeURIComponent(u
 // ── UEBA & Entity ────────────────────────────────────────────
 export const uebaEntity = (id) => get(`/api/ueba/entity/${encodeURIComponent(id)}`);
 export const uebaRiskyEntities = (minRisk = 10) => get(`/api/ueba/risky?min_risk=${minRisk}`);
-export const uebaAnomalies = (limit = 100) => get(`/api/ueba/anomalies?limit=${limit}`);
-export const uebaPeerGroups = () => get('/api/ueba/peer-groups');
-export const uebaTimeline = (entityId) => get(`/api/ueba/timeline/${encodeURIComponent(entityId)}`);
 export const entityById = (id) => get(`/api/entities/${encodeURIComponent(id)}`);
 
 // ── Process Tree ─────────────────────────────────────────────
@@ -504,6 +504,7 @@ export const deepChains = () => get('/api/process-tree/deep-chains');
 export const processesLive = () => get('/api/processes/live');
 export const processesAnalysis = () => get('/api/processes/analysis');
 export const processDetail = (pid) => get(`/api/processes/detail?pid=${encodeURIComponent(pid)}`);
+export const processThreads = (pid) => get(`/api/processes/threads?pid=${encodeURIComponent(pid)}`);
 
 // ── Host Info & Inventory ────────────────────────────────────
 export const hostApps = () => get('/api/host/apps');

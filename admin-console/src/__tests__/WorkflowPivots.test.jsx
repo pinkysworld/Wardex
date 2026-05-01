@@ -172,28 +172,14 @@ describe('Workflow pivots', () => {
           },
         ],
       }),
-      '/api/ueba/anomalies': jsonOk({
-        items: [
-          {
-            entity_id: 'user-b',
-            anomaly_type: 'ImpossibleTravel',
-            score: 81,
-            description: 'Unusual travel detected',
-            mitre_technique: 'T1078',
-          },
-        ],
-      }),
-      '/api/ueba/peer-groups': jsonOk([{ group: 'engineering', entity_count: 12, avg_risk: 23 }]),
       '/api/ueba/entity/user-b': jsonOk({
         entity_id: 'user-b',
         entity_kind: 'user',
         risk_score: 67,
         observation_count: 12,
+        last_seen_ms: 1714392000000,
+        anomaly_count: 2,
         peer_group: 'engineering',
-        peer_avg_risk: 22,
-        anomalies: [
-          { anomaly_type: 'ImpossibleTravel', score: 81, description: 'Unusual travel detected' },
-        ],
       }),
     });
 
@@ -210,7 +196,7 @@ describe('Workflow pivots', () => {
   it('refreshes grouped UEBA overview data from the risky entities workspace', async () => {
     const callCounts = {
       risky: 0,
-      anomalies: 0,
+      entity: 0,
     };
     const user = userEvent.setup();
 
@@ -229,21 +215,18 @@ describe('Workflow pivots', () => {
           ],
         });
       },
-      '/api/ueba/anomalies': () => {
-        callCounts.anomalies += 1;
+      '/api/ueba/entity/user-a': () => {
+        callCounts.entity += 1;
         return jsonOk({
-          items: [
-            {
-              entity_id: 'user-a',
-              anomaly_type: 'ImpossibleTravel',
-              score: 81,
-              description: 'Unusual travel detected',
-              mitre_technique: 'T1078',
-            },
-          ],
+          entity_id: 'user-a',
+          entity_kind: 'user',
+          risk_score: 92,
+          observation_count: 15,
+          last_seen_ms: 1714392000000,
+          anomaly_count: 4,
+          peer_group: 'admins',
         });
       },
-      '/api/ueba/peer-groups': jsonOk([{ group: 'admins', entity_count: 4, avg_risk: 51 }]),
     });
 
     renderWithProviders(<UEBADashboard />, { route: '/ueba' });
@@ -252,7 +235,7 @@ describe('Workflow pivots', () => {
 
     await waitFor(() => {
       expect(callCounts.risky).toBeGreaterThan(0);
-      expect(callCounts.anomalies).toBeGreaterThan(0);
+      expect(callCounts.entity).toBeGreaterThan(0);
     });
 
     const initialCounts = { ...callCounts };
@@ -261,7 +244,7 @@ describe('Workflow pivots', () => {
 
     await waitFor(() => {
       expect(callCounts.risky).toBe(initialCounts.risky + 1);
-      expect(callCounts.anomalies).toBe(initialCounts.anomalies + 1);
+      expect(callCounts.entity).toBe(initialCounts.entity + 1);
     });
   });
 
@@ -365,10 +348,12 @@ describe('Workflow pivots', () => {
   });
 
   it('restores selected attack-graph node from the route and renders graph pivots', async () => {
+    const user = userEvent.setup();
     mockSharedRoutes({
       '/api/correlation/campaigns': jsonOk({
         summary: {
           campaign_count: 1,
+          temporal_chain_count: 2,
           total_alerts: 2,
           unclustered_alerts: 0,
           fleet_coverage: 0.5,
@@ -382,6 +367,34 @@ describe('Workflow pivots', () => {
             alert_count: 2,
             shared_techniques: ['T1078'],
             sequence_signals: ['Credential-access precursor observed in the detection reasons.'],
+          },
+        ],
+        temporal_chains: [
+          {
+            chain_id: 'chain-1',
+            host: 'host-1',
+            alert_count: 2,
+            first_seen_ms: 1714226400000,
+            last_seen_ms: 1714226760000,
+            avg_score: 4.2,
+            max_score: 4.9,
+            severity: 'Critical',
+            shared_techniques: ['T1078'],
+            shared_reasons: ['Credential-access precursor observed'],
+            alert_ids: ['alert-1', 'alert-2'],
+          },
+          {
+            chain_id: 'chain-2',
+            host: 'host-2',
+            alert_count: 3,
+            first_seen_ms: 1714227000000,
+            last_seen_ms: 1714227360000,
+            avg_score: 3.8,
+            max_score: 4.1,
+            severity: 'Severe',
+            shared_techniques: ['T1059'],
+            shared_reasons: ['Privilege escalation fan-out'],
+            alert_ids: ['alert-3', 'alert-4', 'alert-5'],
           },
         ],
         graph: {
@@ -402,8 +415,15 @@ describe('Workflow pivots', () => {
     expect(await screen.findByText('Attack Graph Pivots')).toBeInTheDocument();
     expect(screen.getByText('Campaign Intelligence')).toBeInTheDocument();
     expect(screen.getByText('Credential campaign across 2 hosts')).toBeInTheDocument();
+    expect(screen.getByText('Temporal Chain Drilldown')).toBeInTheDocument();
+    expect(screen.getAllByText('Credential-access precursor observed').length).toBeGreaterThan(0);
     expect(screen.getByText('Node Detail')).toBeInTheDocument();
     expect(screen.getAllByText('user-1').length).toBeGreaterThan(0);
     expect(screen.getByText('Export Evidence Bundle')).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: /Focus host-2 burst/i }));
+
+    expect(await screen.findByText('Privilege escalation fan-out')).toBeInTheDocument();
+    expect(screen.getByText('alert-5')).toBeInTheDocument();
   });
 });

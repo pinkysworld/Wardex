@@ -238,7 +238,36 @@ function buildResponses() {
         compliance_packs: 1,
       },
       lanes: {
-        connectors: { planned: ['github_audit', 'crowdstrike_falcon', 'generic_syslog'] },
+        connectors: {
+          planned: ['github_audit', 'crowdstrike_falcon', 'generic_syslog'],
+          readiness: {
+            collectors: [
+              {
+                provider: 'aws_cloudtrail',
+                label: 'AWS CloudTrail',
+                enabled: true,
+                last_success_at: NOW,
+              },
+              {
+                provider: 'github_audit',
+                label: 'GitHub Audit Log',
+                enabled: true,
+                last_error_at: NOW,
+                error_category: 'credentials',
+              },
+              {
+                provider: 'crowdstrike_falcon',
+                label: 'CrowdStrike Falcon',
+                enabled: true,
+              },
+              {
+                provider: 'generic_syslog',
+                label: 'Generic Syslog',
+                enabled: true,
+              },
+            ],
+          },
+        },
       },
     },
     'GET /api/rollout/config': {},
@@ -602,7 +631,9 @@ export async function installAppMocks(page, options = {}) {
     }
 
     if (key === 'GET /api/session/info') {
-      await route.fulfill(json({ authenticated: sessionAuthenticated, role: sessionPayload().role }));
+      await route.fulfill(
+        json({ authenticated: sessionAuthenticated, role: sessionPayload().role }),
+      );
       return;
     }
 
@@ -639,33 +670,39 @@ export async function installAppMocks(page, options = {}) {
 
 export async function resetStoredSession(page, { onboarded = true } = {}) {
   await page.goto('./');
-  await page.evaluate(({ onboarded }) => {
-    localStorage.removeItem('wardex_token');
-    localStorage.removeItem('wardex_recent');
-    localStorage.removeItem('wardex_saved_searches');
-    localStorage.removeItem('wardex_pinned_sections');
-    if (onboarded) {
-      localStorage.setItem('wardex_onboarded', '1');
-    } else {
-      localStorage.removeItem('wardex_onboarded');
-    }
-  }, { onboarded });
+  await page.evaluate(
+    ({ onboarded }) => {
+      localStorage.removeItem('wardex_token');
+      localStorage.removeItem('wardex_recent');
+      localStorage.removeItem('wardex_saved_searches');
+      localStorage.removeItem('wardex_pinned_sections');
+      if (onboarded) {
+        localStorage.setItem('wardex_onboarded', '1');
+      } else {
+        localStorage.removeItem('wardex_onboarded');
+      }
+    },
+    { onboarded },
+  );
   await page.reload({ waitUntil: 'load' });
 }
 
 export async function seedAuthenticatedSession(page, { token = TOKEN, onboarded = true } = {}) {
   await page.goto('./');
-  await page.evaluate(({ token, onboarded }) => {
-    localStorage.setItem('wardex_token', token);
-    localStorage.removeItem('wardex_recent');
-    localStorage.removeItem('wardex_saved_searches');
-    localStorage.removeItem('wardex_pinned_sections');
-    if (onboarded) {
-      localStorage.setItem('wardex_onboarded', '1');
-    } else {
-      localStorage.removeItem('wardex_onboarded');
-    }
-  }, { token, onboarded });
+  await page.evaluate(
+    ({ token, onboarded }) => {
+      localStorage.setItem('wardex_token', token);
+      localStorage.removeItem('wardex_recent');
+      localStorage.removeItem('wardex_saved_searches');
+      localStorage.removeItem('wardex_pinned_sections');
+      if (onboarded) {
+        localStorage.setItem('wardex_onboarded', '1');
+      } else {
+        localStorage.removeItem('wardex_onboarded');
+      }
+    },
+    { token, onboarded },
+  );
   await page.reload({ waitUntil: 'load' });
   await expect(page.locator('.auth-badge')).toContainText('Connected');
   await expect(page.locator('.role-badge')).toContainText('admin');

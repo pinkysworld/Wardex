@@ -40,6 +40,7 @@ describe('Dashboard refresh', () => {
       fleetDashboard: 0,
       alerts: 0,
       telemetryCurrent: 0,
+      collectorsStatus: 0,
       health: 0,
       detectionSummary: 0,
       threatIntelStatus: 0,
@@ -89,6 +90,57 @@ describe('Dashboard refresh', () => {
         if (href.includes('/api/telemetry/current')) {
           callCounts.telemetryCurrent += 1;
           return jsonOk({ eps: 12, drops: 0 });
+        }
+        if (href.includes('/api/collectors/status')) {
+          callCounts.collectorsStatus += 1;
+          return jsonOk({
+            collectors: [
+              {
+                name: 'aws_cloudtrail',
+                label: 'AWS CloudTrail',
+                lane: 'cloud',
+                enabled: true,
+                freshness: 'stale',
+                lag_seconds: 900,
+                retry_count: 2,
+                backoff_seconds: 60,
+                events_ingested: 120,
+                last_success_at: new Date(Date.now() - 15 * 60 * 1000).toISOString(),
+                route_targets: ['Infrastructure', 'Attack Graph'],
+                lifecycle_analytics: {
+                  success_rate: 0.75,
+                  events_last_24h: 120,
+                  recent_failure_streak: 2,
+                },
+                timeline: [
+                  {
+                    stage: 'Configuration',
+                    status: 'ready',
+                    title: 'Collector enabled',
+                    detail: 'AWS CloudTrail is configured with a 300 second polling cadence.',
+                  },
+                  {
+                    stage: 'Validation',
+                    status: 'warning',
+                    title: 'Validation review',
+                    detail: 'Review access scope before the next polling cycle.',
+                  },
+                ],
+                ingestion_evidence: {
+                  pivots: [
+                    {
+                      href: '/soc?collector=aws_cloudtrail&lane=cloud',
+                      label: 'Open SOC collector context',
+                    },
+                    {
+                      href: '/infrastructure?tab=observability&collector=aws_cloudtrail',
+                      label: 'Open infrastructure evidence',
+                    },
+                  ],
+                },
+              },
+            ],
+          });
         }
         if (href.includes('/api/health')) {
           callCounts.health += 1;
@@ -187,12 +239,17 @@ describe('Dashboard refresh', () => {
     renderWithProviders(<Dashboard />);
 
     const refreshButton = await screen.findByRole('button', { name: '↻ Refresh' });
+    expect(await screen.findByText('Collector Health')).toBeInTheDocument();
+    expect(screen.getByText('Readiness timeline')).toBeInTheDocument();
+    expect(screen.getByText('Collector enabled')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Open infrastructure evidence' })).toBeInTheDocument();
 
     await waitFor(() => {
       expect(callCounts.status).toBeGreaterThan(0);
       expect(callCounts.fleetDashboard).toBeGreaterThan(0);
       expect(callCounts.alerts).toBeGreaterThan(0);
       expect(callCounts.telemetryCurrent).toBeGreaterThan(0);
+      expect(callCounts.collectorsStatus).toBeGreaterThan(0);
       expect(callCounts.health).toBeGreaterThan(0);
       expect(callCounts.detectionSummary).toBeGreaterThan(0);
       expect(callCounts.threatIntelStatus).toBeGreaterThan(0);
@@ -217,6 +274,7 @@ describe('Dashboard refresh', () => {
       expect(callCounts.fleetDashboard).toBe(initialCounts.fleetDashboard + 1);
       expect(callCounts.alerts).toBe(initialCounts.alerts + 1);
       expect(callCounts.telemetryCurrent).toBe(initialCounts.telemetryCurrent + 1);
+      expect(callCounts.collectorsStatus).toBe(initialCounts.collectorsStatus + 1);
       expect(callCounts.health).toBe(initialCounts.health + 1);
       expect(callCounts.detectionSummary).toBe(initialCounts.detectionSummary + 1);
       expect(callCounts.threatIntelStatus).toBe(initialCounts.threatIntelStatus + 1);

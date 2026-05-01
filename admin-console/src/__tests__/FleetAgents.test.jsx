@@ -50,10 +50,70 @@ const createAgents = (count) =>
     last_seen: new Date(Date.now() - index * 60_000).toISOString(),
   }));
 
-function installFleetFetchMock(agents = AGENTS) {
-  globalThis.fetch = vi.fn((url) => {
+function installFleetFetchMock(agents = AGENTS, installAttempts = []) {
+  globalThis.fetch = vi.fn((url, options = {}) => {
     const u = String(url);
     const detailMatch = u.match(/\/api\/agents\/([^/]+)\/details$/);
+    if (u.includes('/api/fleet/install/winrm')) {
+      const body = options.body ? JSON.parse(options.body) : {};
+      return Promise.resolve(
+        jsonOk({
+          id: 'install-winrm-1',
+          transport: 'winrm',
+          status: 'awaiting_heartbeat',
+          hostname: body.hostname,
+          address: body.address,
+          platform: body.platform,
+          winrm_username: body.winrm_username,
+          winrm_port: body.winrm_port,
+          winrm_use_tls: body.winrm_use_tls,
+          started_at: '2026-04-29T11:35:00Z',
+          completed_at: '2026-04-29T11:35:12Z',
+          output_excerpt: 'Start-Service -Name WardexAgent',
+        }),
+      );
+    }
+    if (u.includes('/api/fleet/install/ssh')) {
+      const body = options.body ? JSON.parse(options.body) : {};
+      return Promise.resolve(
+        jsonOk({
+          id: 'install-1',
+          transport: 'ssh',
+          status: 'awaiting_heartbeat',
+          hostname: body.hostname,
+          address: body.address,
+          platform: body.platform,
+          ssh_user: body.ssh_user,
+          ssh_port: body.ssh_port,
+          started_at: '2026-04-29T11:30:00Z',
+          completed_at: '2026-04-29T11:30:08Z',
+          output_excerpt: 'systemctl enable --now wardex-agent',
+        }),
+      );
+    }
+    if (u.includes('/api/fleet/installs')) {
+      return Promise.resolve(jsonOk({ attempts: installAttempts, total: installAttempts.length }));
+    }
+    if (u.includes('/api/agents/token')) {
+      return Promise.resolve(
+        jsonOk({
+          token: 'enroll-token-123',
+          expires_at: '2026-04-29T12:00:00Z',
+          uses_remaining: 1,
+          max_uses: 1,
+        }),
+      );
+    }
+    if (u.includes('/api/updates/deploy')) {
+      const body = options.body ? JSON.parse(options.body) : {};
+      return Promise.resolve(
+        jsonOk({
+          status: 'assigned',
+          agent_id: body.agent_id,
+          deployment: body,
+        }),
+      );
+    }
     if (detailMatch) {
       const agent = agents.find((candidate) => candidate.id === decodeURIComponent(detailMatch[1]));
       return Promise.resolve(jsonOk(agent ?? {}));
@@ -378,5 +438,190 @@ describe('FleetAgents', () => {
     expect(callCounts.fleetDashboard).toBe(initialFleetDashboardCalls + 1);
     expect(callCounts.agents).toBe(initialAgentCalls + 1);
     expect(callCounts.wsStats).toBe(initialWsStatsCalls + 1);
+  });
+
+  it('generates an install bundle for a new host from the updates workspace', async () => {
+    await act(async () => {
+      renderFleet('/?fleetTab=updates&updatesPanel=health');
+    });
+
+    await act(async () => {
+      fireEvent.change(screen.getByLabelText('Host or agent name'), {
+        target: { value: 'edge-02' },
+      });
+      fireEvent.change(screen.getByLabelText('Address or DNS name'), {
+        target: { value: '10.0.4.12' },
+      });
+      fireEvent.change(screen.getByLabelText('Platform'), {
+        target: { value: 'linux' },
+      });
+    });
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Generate Install Bundle' }));
+    });
+
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      expect.stringContaining('/api/agents/token'),
+      expect.objectContaining({ method: 'POST' }),
+    );
+
+    const command = screen.getByLabelText('Generated install command');
+    expect(command.value).toContain('WARDEX_CONFIG_PATH=/etc/wardex/agent.toml');
+    expect(command.value).toContain('ExecStart=/usr/local/bin/wardex-agent agent');
+    expect(command.value).toContain('enroll-token-123');
+    expect(command.value).toContain('/api/updates/download/wardex-agent-linux-amd64');
+  });
+
+  it('dispatches a remote SSH install for a Linux host from the updates workspace', async () => {
+    await act(async () => {
+      renderFleet('/?fleetTab=updates&updatesPanel=health');
+    });
+
+    await act(async () => {
+      fireEvent.change(screen.getByLabelText('Host or agent name'), {
+        target: { value: 'edge-02' },
+      });
+      fireEvent.change(screen.getByLabelText('Address or DNS name'), {
+        target: { value: '10.0.4.12' },
+      });
+      fireEvent.change(screen.getByLabelText('Platform'), {
+        target: { value: 'linux' },
+      });
+    });
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Install Remotely' }));
+    });
+
+    const installCall = globalThis.fetch.mock.calls.find(([url]) =>
+      String(url).includes('/api/fleet/install/ssh'),
+    );
+
+    expect(installCall).toBeTruthy();
+    expect(JSON.parse(installCall[1].body)).toEqual(
+      expect.objectContaining({
+        hostname: 'edge-02',
+        address: '10.0.4.12',
+        platform: 'linux',
+        manager_url: expect.stringContaining('http://localhost'),
+        ssh_user: 'root',
+        ssh_port: 22,
+        ssh_accept_new_host_key: true,
+        use_sudo: true,
+        ttl_secs: 86400,
+      }),
+    );
+
+    expect(screen.getByText('Recent Remote Install Attempts')).toBeInTheDocument();
+    expect(screen.getByText(/awaiting_heartbeat/)).toBeInTheDocument();
+  });
+
+  it('dispatches a remote WinRM install for a Windows host from the updates workspace', async () => {
+    await act(async () => {
+      renderFleet('/?fleetTab=updates&updatesPanel=health');
+    });
+
+    await act(async () => {
+      fireEvent.change(screen.getByLabelText('Host or agent name'), {
+        target: { value: 'win-02' },
+      });
+      fireEvent.change(screen.getByLabelText('Address or DNS name'), {
+        target: { value: '10.0.4.30' },
+      });
+      fireEvent.change(screen.getByLabelText('Platform'), {
+        target: { value: 'windows' },
+      });
+      fireEvent.change(screen.getByLabelText('WinRM password'), {
+        target: { value: 'Sup3rSecret!' },
+      });
+    });
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Install Remotely' }));
+    });
+
+    const installCall = globalThis.fetch.mock.calls.find(([url]) =>
+      String(url).includes('/api/fleet/install/winrm'),
+    );
+
+    expect(installCall).toBeTruthy();
+    expect(JSON.parse(installCall[1].body)).toEqual(
+      expect.objectContaining({
+        hostname: 'win-02',
+        address: '10.0.4.30',
+        platform: 'windows',
+        manager_url: expect.stringContaining('http://localhost'),
+        winrm_username: 'Administrator',
+        winrm_password: 'Sup3rSecret!',
+        winrm_port: 5985,
+        winrm_use_tls: false,
+        winrm_skip_cert_check: false,
+        ttl_secs: 86400,
+      }),
+    );
+
+    expect(screen.getByText('Recent Remote Install Attempts')).toBeInTheDocument();
+    expect(screen.getByText(/Remote WinRM install dispatched to win-02/)).toBeInTheDocument();
+  });
+
+  it('renders first heartbeat details for completed remote installs', async () => {
+    installFleetFetchMock(AGENTS, [
+      {
+        id: 'install-1',
+        transport: 'ssh',
+        status: 'heartbeat_received',
+        hostname: 'edge-02',
+        address: '10.0.4.12',
+        platform: 'linux',
+        ssh_user: 'root',
+        ssh_port: 22,
+        started_at: '2026-04-29T11:30:00Z',
+        completed_at: '2026-04-29T11:30:08Z',
+        agent_id: 'a-99',
+        first_heartbeat_at: '2026-04-29T11:31:00Z',
+      },
+    ]);
+
+    await act(async () => {
+      renderFleet('/?fleetTab=updates&updatesPanel=health');
+    });
+
+    expect(screen.getByText('Recent Remote Install Attempts')).toBeInTheDocument();
+    expect(screen.getByText(/heartbeat_received/)).toBeInTheDocument();
+    expect(screen.getByText(/Agent a-99/)).toBeInTheDocument();
+    expect(screen.getByText(/first heartbeat/i)).toBeInTheDocument();
+  });
+
+  it('assigns the latest release to the selected agent from the detail panel', async () => {
+    await act(async () => {
+      render(<FleetAgents />, { wrapper: Wrapper });
+    });
+
+    const agentsTab = screen.getAllByText('Agents').find((el) => el.classList.contains('tab'));
+    await act(async () => {
+      fireEvent.click(agentsTab);
+    });
+
+    await act(async () => {
+      fireEvent.click(screen.getAllByText('db-01')[0]);
+    });
+
+    const assignButton = await screen.findByRole('button', { name: 'Assign 0.53.5' });
+
+    await act(async () => {
+      fireEvent.click(assignButton);
+    });
+
+    const deployCall = globalThis.fetch.mock.calls.find(([url]) =>
+      String(url).includes('/api/updates/deploy'),
+    );
+
+    expect(deployCall).toBeTruthy();
+    expect(JSON.parse(deployCall[1].body)).toEqual({
+      agent_id: 'a-2',
+      version: '0.53.5',
+      platform: 'linux',
+    });
   });
 });

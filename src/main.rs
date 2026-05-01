@@ -424,15 +424,23 @@ async fn run() -> Result<(), String> {
         }
         "agent" => {
             // XDR agent mode — enroll with server and run local monitoring
+            let raw_agent_args: Vec<String> = args.collect();
+            if let Some(config_path) = find_agent_config_override(&raw_agent_args)? {
+                wardex::config::set_runtime_config_override(config_path)?;
+            }
             let config = load_or_create_config();
 
             // Parse agent-specific args
             let mut server_url = config.agent.server_url.clone();
             let mut token = config.agent.enrollment_token.clone();
             let mut remaining_args = Vec::new();
+            let mut args = raw_agent_args.into_iter();
 
             while let Some(arg) = args.next() {
                 match arg.as_str() {
+                    "--config" => {
+                        let _ = args.next().ok_or("--config requires a path")?;
+                    }
                     "--server" => {
                         server_url = args.next().ok_or("--server requires a URL")?;
                     }
@@ -464,7 +472,14 @@ async fn run() -> Result<(), String> {
                 }
             }
 
-            if token.is_empty() {
+            let has_persisted_agent_id = config
+                .agent
+                .agent_id
+                .as_deref()
+                .map(str::trim)
+                .is_some_and(|value| !value.is_empty());
+
+            if token.is_empty() && !has_persisted_agent_id {
                 return Err("enrollment token required: use --token <TOKEN> or set agent.enrollment_token in config".into());
             }
 
@@ -483,6 +498,24 @@ async fn run() -> Result<(), String> {
     }
 
     Ok(())
+}
+
+fn find_agent_config_override(args: &[String]) -> Result<Option<PathBuf>, String> {
+    let mut index = 0;
+    while index < args.len() {
+        if args[index] == "--config" {
+            let value = args
+                .get(index + 1)
+                .ok_or_else(|| "--config requires a path".to_string())?;
+            let trimmed = value.trim();
+            if trimmed.is_empty() {
+                return Err("--config requires a path".into());
+            }
+            return Ok(Some(PathBuf::from(trimmed)));
+        }
+        index += 1;
+    }
+    Ok(None)
 }
 
 fn resolve_site_dir(site_dir: &Path) -> Result<PathBuf, String> {
@@ -592,6 +625,32 @@ fn load_or_create_config() -> Config {
         }
     }
     Config::default()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::find_agent_config_override;
+    use std::path::PathBuf;
+
+    #[test]
+    fn finds_agent_config_override_in_argument_list() {
+        let args = vec![
+            "--server".to_string(),
+            "https://manager.example.com:9090".to_string(),
+            "--config".to_string(),
+            "/tmp/wardex-agent.toml".to_string(),
+        ];
+
+        let path = find_agent_config_override(&args).unwrap();
+        assert_eq!(path, Some(PathBuf::from("/tmp/wardex-agent.toml")));
+    }
+
+    #[test]
+    fn rejects_missing_agent_config_override_value() {
+        let args = vec!["--config".to_string()];
+        let error = find_agent_config_override(&args).unwrap_err();
+        assert!(error.contains("requires a path"));
+    }
 }
 
 fn register_ctrlc(shutdown: Arc<AtomicBool>) -> Result<(), String> {

@@ -1,4 +1,4 @@
-import { act, render, screen, waitFor, within } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { MemoryRouter } from 'react-router-dom';
@@ -130,6 +130,8 @@ describe('LiveMonitor', () => {
       alertGroups: 0,
       processLive: 0,
       processAnalysis: 0,
+      processTree: 0,
+      processDeepChains: 0,
     };
 
     globalThis.fetch = vi.fn((url) => {
@@ -183,6 +185,32 @@ describe('LiveMonitor', () => {
                 cpu_percent: 8.4,
                 mem_percent: 2.1,
               },
+            ],
+          }),
+        );
+      }
+      if (href.includes('/api/process-tree/deep-chains')) {
+        callCounts.processDeepChains += 1;
+        return Promise.resolve(
+          jsonOk({
+            deep_chains: [
+              {
+                pid: 1337,
+                name: 'sshd',
+                cmd_line: 'sshd -> bash -> curl',
+                depth: 3,
+              },
+            ],
+          }),
+        );
+      }
+      if (href.includes('/api/process-tree')) {
+        callCounts.processTree += 1;
+        return Promise.resolve(
+          jsonOk({
+            processes: [
+              { pid: 1, ppid: 0, name: 'launchd', user: 'root' },
+              { pid: 1337, ppid: 1, name: 'sshd', user: 'root' },
             ],
           }),
         );
@@ -248,15 +276,168 @@ describe('LiveMonitor', () => {
 
     const initialProcessLive = callCounts.processLive;
     const initialProcessAnalysis = callCounts.processAnalysis;
+    const initialProcessTree = callCounts.processTree;
+    const initialProcessDeepChains = callCounts.processDeepChains;
 
     const processCard = screen.getByRole('button', { name: 'Export JSON' }).closest('.card');
     if (!processCard) throw new Error('running processes card not found');
+    expect(await screen.findByText('Process Graph Context')).toBeInTheDocument();
+    expect(screen.getByText('sshd · sshd -> bash -> curl')).toBeInTheDocument();
 
     await user.click(within(processCard).getByRole('button', { name: '↻ Refresh' }));
 
     await waitFor(() => {
       expect(callCounts.processLive).toBe(initialProcessLive + 1);
       expect(callCounts.processAnalysis).toBe(initialProcessAnalysis + 1);
+      expect(callCounts.processTree).toBe(initialProcessTree + 1);
+      expect(callCounts.processDeepChains).toBe(initialProcessDeepChains + 1);
     });
+  });
+
+  it('supports keyboard-first alert triage shortcuts', async () => {
+    const bulkTriageCalls = [];
+
+    globalThis.fetch = vi.fn((url, options = {}) => {
+      const href = String(url);
+      const method = options?.method || 'GET';
+
+      if (href.includes('/api/alerts/count')) {
+        return Promise.resolve(jsonOk({ total: 1, critical: 1, severe: 0, elevated: 0 }));
+      }
+      if (href.includes('/api/ws/stats')) {
+        return Promise.resolve(jsonOk(wsStatsFixture()));
+      }
+      if (href.includes('/api/alerts/grouped')) return Promise.resolve(jsonOk([]));
+      if (href.includes('/api/alerts')) {
+        return Promise.resolve(
+          jsonOk([
+            {
+              id: 'alert-1',
+              timestamp: new Date().toISOString(),
+              hostname: 'edge-1',
+              severity: 'critical',
+              source: 'sensor',
+              category: 'auth',
+              message: 'SSH burst detected',
+              reasons: ['Repeated SSH failures'],
+            },
+          ]),
+        );
+      }
+      if (href.includes('/api/processes/live')) {
+        return Promise.resolve(jsonOk({ processes: [] }));
+      }
+      if (href.includes('/api/processes/analysis')) {
+        return Promise.resolve(jsonOk({ findings: [] }));
+      }
+      if (href.includes('/api/fp-feedback/stats')) return Promise.resolve(jsonOk([]));
+      if (href.includes('/api/fp-feedback') && method === 'POST') {
+        return Promise.resolve(jsonOk({ status: 'ok' }));
+      }
+      if (href.includes('/api/events/bulk-triage') && method === 'POST') {
+        bulkTriageCalls.push(JSON.parse(options.body));
+        return Promise.resolve(jsonOk({ status: 'ok' }));
+      }
+      if (href.includes('/api/health')) return Promise.resolve(jsonOk({ status: 'ok' }));
+      return Promise.resolve(jsonOk({}));
+    });
+
+    render(
+      <MemoryRouter>
+        <AuthProvider>
+          <RoleProvider>
+            <ThemeProvider>
+              <ToastProvider>
+                <LiveMonitor />
+              </ToastProvider>
+            </ThemeProvider>
+          </RoleProvider>
+        </AuthProvider>
+      </MemoryRouter>,
+    );
+
+    const alertCheckbox = await screen.findByLabelText('Select alert alert-1');
+    expect(screen.getByText(/Shortcuts:/i)).toBeInTheDocument();
+
+    fireEvent.keyDown(window, { key: '/' });
+    expect(document.activeElement).toHaveAttribute('placeholder', 'Search message, host, user, category…');
+
+    document.activeElement.blur();
+    fireEvent.keyDown(window, { key: 'ArrowDown' });
+
+    await waitFor(() => {
+      expect(alertCheckbox.closest('tr')).toHaveClass('row-active');
+    });
+
+    fireEvent.keyDown(window, { key: 'x' });
+
+    await waitFor(() => {
+      expect(alertCheckbox).toBeChecked();
+    });
+
+    fireEvent.keyDown(window, { key: 't' });
+
+    await waitFor(() => {
+      expect(bulkTriageCalls).toHaveLength(1);
+      expect(bulkTriageCalls[0]).toEqual({ event_ids: ['alert-1'], verdict: 'acknowledged' });
+    });
+  });
+
+  it('opens the shortcut guide from the keyboard', async () => {
+    globalThis.fetch = vi.fn((url) => {
+      const href = String(url);
+      if (href.includes('/api/alerts/count')) {
+        return Promise.resolve(jsonOk({ total: 1, critical: 1, severe: 0, elevated: 0 }));
+      }
+      if (href.includes('/api/ws/stats')) {
+        return Promise.resolve(jsonOk(wsStatsFixture()));
+      }
+      if (href.includes('/api/alerts/grouped')) return Promise.resolve(jsonOk([]));
+      if (href.includes('/api/alerts')) {
+        return Promise.resolve(
+          jsonOk([
+            {
+              id: 'alert-1',
+              timestamp: new Date().toISOString(),
+              hostname: 'edge-1',
+              severity: 'critical',
+              source: 'sensor',
+              message: 'SSH burst detected',
+              reasons: ['Repeated SSH failures'],
+            },
+          ]),
+        );
+      }
+      if (href.includes('/api/processes/live')) {
+        return Promise.resolve(jsonOk({ processes: [] }));
+      }
+      if (href.includes('/api/processes/analysis')) {
+        return Promise.resolve(jsonOk({ findings: [] }));
+      }
+      if (href.includes('/api/fp-feedback/stats')) return Promise.resolve(jsonOk([]));
+      if (href.includes('/api/health')) return Promise.resolve(jsonOk({ status: 'ok' }));
+      return Promise.resolve(jsonOk({}));
+    });
+
+    render(
+      <MemoryRouter>
+        <AuthProvider>
+          <RoleProvider>
+            <ThemeProvider>
+              <ToastProvider>
+                <LiveMonitor />
+              </ToastProvider>
+            </ThemeProvider>
+          </RoleProvider>
+        </AuthProvider>
+      </MemoryRouter>,
+    );
+
+    await screen.findByLabelText('Select alert alert-1');
+    fireEvent.keyDown(window, { key: '?' });
+
+    expect(await screen.findByRole('dialog', { name: 'Keyboard shortcuts' })).toBeInTheDocument();
+    expect(screen.getByText('Queue navigation')).toBeInTheDocument();
+    expect(screen.getByText('Selection and triage')).toBeInTheDocument();
   });
 });

@@ -4,6 +4,7 @@ import { useApi } from '../hooks.jsx';
 import * as api from '../api.js';
 import WorkflowGuidance from './WorkflowGuidance.jsx';
 import { buildHref } from './workflowPivots.js';
+import { formatDateTime, formatRelativeTime } from './operatorUtils.js';
 
 // ── Simple Force-Directed Graph Renderer ─────────────────────
 // Renders attack paths as a canvas-based force-directed graph
@@ -184,6 +185,23 @@ function drawGraph(ctx, nodes, edges, width, height, hoveredNode, isDark) {
   }
 }
 
+function formatChainWindow(startMs, endMs) {
+  const start = Number(startMs || 0);
+  const end = Number(endMs || 0);
+  if (!start || !end || end <= start) return 'Single-stage burst';
+  const durationSeconds = Math.round((end - start) / 1000);
+  if (durationSeconds < 60) return `${durationSeconds}s window`;
+  if (durationSeconds < 3600) return `${Math.round(durationSeconds / 60)}m window`;
+  const durationHours = durationSeconds / 3600;
+  return `${durationHours >= 10 ? Math.round(durationHours) : durationHours.toFixed(1)}h window`;
+}
+
+function formatChainTimestamp(timestampMs) {
+  const timestamp = Number(timestampMs || 0);
+  if (!timestamp) return '—';
+  return formatDateTime(new Date(timestamp).toISOString());
+}
+
 export default function AttackGraph() {
   const canvasRef = useRef(null);
   const [hoveredNode, setHoveredNode] = useState(null);
@@ -195,6 +213,14 @@ export default function AttackGraph() {
   const sequenceSummaries = Array.isArray(lateralData?.sequence_summaries)
     ? lateralData.sequence_summaries
     : [];
+  const temporalChains = Array.isArray(lateralData?.temporal_chains)
+    ? lateralData.temporal_chains
+    : [];
+  const selectedChainId = searchParams.get('chain') || temporalChains[0]?.chain_id || '';
+  const selectedChain = useMemo(
+    () => temporalChains.find((chain) => chain.chain_id === selectedChainId) || temporalChains[0] || null,
+    [selectedChainId, temporalChains],
+  );
 
   const { nodes, edges } = useMemo(() => {
     if (!lateralData) return { nodes: [], edges: [] };
@@ -415,6 +441,12 @@ export default function AttackGraph() {
           </div>
           <div className="metric-label">Fleet coverage</div>
         </div>
+        <div>
+          <div className="metric-value">
+            {campaignSummary.temporal_chain_count ?? temporalChains.length}
+          </div>
+          <div className="metric-label">Local temporal chains</div>
+        </div>
         {sequenceSummaries[0] && (
           <div style={{ gridColumn: '1 / -1' }}>
             <div style={{ fontWeight: 700, marginBottom: 6 }}>{sequenceSummaries[0].name}</div>
@@ -435,7 +467,148 @@ export default function AttackGraph() {
             ))}
           </div>
         )}
+        {temporalChains[0] && (
+          <div style={{ gridColumn: '1 / -1' }}>
+            <div style={{ fontWeight: 700, marginBottom: 6 }}>
+              {temporalChains[0].host} temporal chain
+            </div>
+            <div className="chip-row" style={{ marginBottom: 8 }}>
+              <span className="badge badge-warn">{temporalChains[0].severity}</span>
+              <span className="scope-chip">{temporalChains[0].alert_count} alerts</span>
+              {(temporalChains[0].shared_techniques || []).slice(0, 2).map((technique) => (
+                <span key={technique} className="scope-chip">
+                  {technique}
+                </span>
+              ))}
+            </div>
+            {(temporalChains[0].shared_reasons || []).slice(0, 2).map((reason) => (
+              <div key={reason} className="hint">
+                {reason}
+              </div>
+            ))}
+          </div>
+        )}
+        {temporalChains.length > 0 && (
+          <div style={{ gridColumn: '1 / -1' }}>
+            <div style={{ fontWeight: 700, marginBottom: 6 }}>Temporal chain queue</div>
+            <div className="hint" style={{ marginBottom: 10 }}>
+              Select a local host burst to inspect timing, shared techniques, and impacted alerts.
+            </div>
+            <div style={{ display: 'grid', gap: 8 }}>
+              {temporalChains.slice(0, 5).map((chain) => {
+                const isSelected = selectedChain?.chain_id === chain.chain_id;
+                return (
+                  <button
+                    key={chain.chain_id}
+                    type="button"
+                    className="card"
+                    aria-pressed={isSelected}
+                    onClick={() => updateParams({ chain: chain.chain_id })}
+                    style={{
+                      textAlign: 'left',
+                      display: 'grid',
+                      gap: 6,
+                      borderColor: isSelected ? 'var(--accent)' : 'var(--border)',
+                      boxShadow: isSelected ? '0 0 0 1px rgba(59, 130, 246, 0.18)' : 'none',
+                    }}
+                  >
+                    <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}>
+                      <strong>Focus {chain.host} burst</strong>
+                      <span className={`badge ${String(chain.severity || '').toLowerCase() === 'critical' ? 'badge-err' : 'badge-warn'}`}>
+                        {chain.severity}
+                      </span>
+                    </div>
+                    <div className="hint">
+                      {chain.alert_count} alerts · {formatChainWindow(chain.first_seen_ms, chain.last_seen_ms)}
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
       </div>
+
+      {selectedChain && (
+        <div className="card" style={{ display: 'grid', gap: 16 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'flex-start' }}>
+            <div>
+              <div className="card-title">Temporal Chain Drilldown</div>
+              <div className="hint">
+                {selectedChain.host} burst from {formatChainTimestamp(selectedChain.first_seen_ms)} to{' '}
+                {formatChainTimestamp(selectedChain.last_seen_ms)}.
+              </div>
+            </div>
+            <div className="chip-row">
+              <span className={`badge ${String(selectedChain.severity || '').toLowerCase() === 'critical' ? 'badge-err' : 'badge-warn'}`}>
+                {selectedChain.severity}
+              </span>
+              <span className="scope-chip">{selectedChain.alert_count} alerts</span>
+              <span className="scope-chip">{formatChainWindow(selectedChain.first_seen_ms, selectedChain.last_seen_ms)}</span>
+            </div>
+          </div>
+
+          <div className="card-grid">
+            <div className="card">
+              <div className="metric-label">Average score</div>
+              <div className="metric-value">{Number(selectedChain.avg_score || 0).toFixed(2)}</div>
+              <div className="metric-sub">Max {Number(selectedChain.max_score || 0).toFixed(2)}</div>
+            </div>
+            <div className="card">
+              <div className="metric-label">First seen</div>
+              <div className="metric-value">{formatRelativeTime(new Date(selectedChain.first_seen_ms).toISOString())}</div>
+              <div className="metric-sub">{formatChainTimestamp(selectedChain.first_seen_ms)}</div>
+            </div>
+            <div className="card">
+              <div className="metric-label">Last seen</div>
+              <div className="metric-value">{formatRelativeTime(new Date(selectedChain.last_seen_ms).toISOString())}</div>
+              <div className="metric-sub">{formatChainTimestamp(selectedChain.last_seen_ms)}</div>
+            </div>
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 12 }}>
+            <div className="card">
+              <div className="card-title" style={{ marginBottom: 8 }}>Shared techniques</div>
+              <div className="chip-row">
+                {(selectedChain.shared_techniques || []).length > 0 ? (
+                  selectedChain.shared_techniques.map((technique) => (
+                    <span key={technique} className="scope-chip">
+                      {technique}
+                    </span>
+                  ))
+                ) : (
+                  <span className="hint">No shared MITRE technique markers were inferred for this burst.</span>
+                )}
+              </div>
+            </div>
+            <div className="card">
+              <div className="card-title" style={{ marginBottom: 8 }}>Signal overlap</div>
+              <div style={{ display: 'grid', gap: 6 }}>
+                {(selectedChain.shared_reasons || []).length > 0 ? (
+                  selectedChain.shared_reasons.map((reason) => (
+                    <div key={reason} className="hint">
+                      {reason}
+                    </div>
+                  ))
+                ) : (
+                  <span className="hint">No repeated reason strings were shared across the local burst.</span>
+                )}
+              </div>
+            </div>
+          </div>
+
+          <div>
+            <div className="card-title" style={{ marginBottom: 8 }}>Impacted alerts</div>
+            <div className="chip-row">
+              {(selectedChain.alert_ids || []).map((alertId) => (
+                <span key={alertId} className="scope-chip">
+                  {alertId}
+                </span>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
 
       <div
         style={{

@@ -93,6 +93,7 @@ channel = "stable"             # "stable", "beta", or "nightly"
 ```toml
 [remediation]
 allow_live_rollback = false    # default; reject any dry_run = false rollback with 403
+execute_live_rollback_commands = false  # default; record accepted live rollback plans without running local commands
 ```
 
 When `allow_live_rollback = false` (the default), `POST /api/remediation/change-reviews/:id/rollback` rejects any
@@ -101,8 +102,11 @@ audit-warn log. To enable live recovery, set the flag to `true` **and** require 
 by including `confirm_hostname` in the request body — the value must equal the change-review's `asset_id`
 (case-insensitive). Mismatches are rejected with `400` and audit-logged as
 `remediation.rollback.live_blocked … reason=hostname_confirmation_mismatch`. Accepted live rollbacks emit
-`remediation.rollback.live`. The Infrastructure console enforces the same handshake via the "Live Rollback…"
-button, which prompts for the hostname before issuing the request.
+`remediation.rollback.live`. When `execute_live_rollback_commands = false` (the default), those accepted live
+requests still record the rollback proof and planned commands but do not execute OS commands. Setting
+`execute_live_rollback_commands = true` allows local command execution for matching-platform rollbacks; the
+response payload then includes per-command execution results. The Infrastructure console enforces the same
+hostname-confirmation handshake via the "Live Rollback…" button.
 
 ## API Versioning
 

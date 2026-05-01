@@ -443,6 +443,12 @@ fn op_post(id: &str, summary: &str, tags: &[&str], body_desc: &str) -> Operation
     operation(id, summary, tags, json_body(body_desc), resp, bearer_auth())
 }
 
+fn op_put(id: &str, summary: &str, tags: &[&str], body_desc: &str) -> Operation {
+    let mut resp = json_response(summary);
+    resp.extend(error_responses());
+    operation(id, summary, tags, json_body(body_desc), resp, bearer_auth())
+}
+
 fn op_post_status(
     status: &str,
     id: &str,
@@ -1542,6 +1548,34 @@ pub fn wardex_openapi_spec(version: &str) -> OpenApiSpec {
             ),
         )
         .path(
+            "/api/detection/profile",
+            "get",
+            op(
+                "getDetectionProfile",
+                "Current detection tuning profile and sensitivity thresholds",
+                &["detection"],
+            ),
+        )
+        .path(
+            "/api/detection/profile",
+            "put",
+            op_put(
+                "setDetectionProfile",
+                "Set the active detection tuning profile",
+                &["detection"],
+                "Detection tuning profile payload",
+            ),
+        )
+        .path(
+            "/api/detection/score/normalize",
+            "get",
+            op(
+                "normalizeDetectionScore",
+                "Normalized 0-100 threat score with severity and confidence labels",
+                &["detection"],
+            ),
+        )
+        .path(
             "/api/detection/feedback",
             "get",
             op(
@@ -1704,6 +1738,37 @@ pub fn wardex_openapi_spec(version: &str) -> OpenApiSpec {
             "/api/agents/{id}/inventory",
             "get",
             op("getAgentInventory", "Retrieve agent inventory", &["fleet"]),
+        )
+        .path(
+            "/api/fleet/installs",
+            "get",
+            op(
+                "listFleetRemoteInstalls",
+                "Recent remote install attempts and heartbeat outcomes",
+                &["fleet"],
+            ),
+        )
+        .path(
+            "/api/fleet/install/ssh",
+            "post",
+            op_post_status(
+                "202",
+                "runFleetSshInstall",
+                "Run a remote Linux or macOS agent install over SSH",
+                &["fleet"],
+                "SSH remote install request",
+            ),
+        )
+        .path(
+            "/api/fleet/install/winrm",
+            "post",
+            op_post_status(
+                "202",
+                "runFleetWinrmInstall",
+                "Run a remote Windows agent install over WinRM",
+                &["fleet"],
+                "WinRM remote install request",
+            ),
         )
         .path(
             "/api/fleet/inventory",
@@ -2227,6 +2292,23 @@ pub fn wardex_openapi_spec(version: &str) -> OpenApiSpec {
             ),
         )
         .path(
+            "/api/processes/threads",
+            "get",
+            with_parameters(
+                op(
+                    "getProcessThreads",
+                    "Per-process OS thread snapshot with live state, CPU, and wait context",
+                    &["observability"],
+                ),
+                vec![integer_parameter(
+                    "pid",
+                    "query",
+                    "Process identifier to inspect",
+                    true,
+                )],
+            ),
+        )
+        .path(
             "/api/audit/admin",
             "get",
             op(
@@ -2242,6 +2324,53 @@ pub fn wardex_openapi_spec(version: &str) -> OpenApiSpec {
                 "getAuditLog",
                 "Recent API audit log entries",
                 &["observability"],
+            ),
+        )
+        .path(
+            "/api/backups",
+            "get",
+            op(
+                "listBackups",
+                "List available database backups",
+                &["observability"],
+            ),
+        )
+        .path(
+            "/api/backups",
+            "post",
+            op_post_without_body(
+                "createBackup",
+                "Create a database backup",
+                &["observability"],
+            ),
+        )
+        .path(
+            "/api/backup/status",
+            "get",
+            op(
+                "getBackupStatus",
+                "Backup configuration and retention status",
+                &["observability"],
+            ),
+        )
+        .path(
+            "/api/backup/encrypt",
+            "post",
+            op_post(
+                "encryptBackupPayload",
+                "Encrypt a backup payload with a passphrase",
+                &["observability"],
+                "Backup encryption payload",
+            ),
+        )
+        .path(
+            "/api/backup/decrypt",
+            "post",
+            op_post(
+                "decryptBackupPayload",
+                "Decrypt a backup payload with a passphrase",
+                &["observability"],
+                "Backup decryption payload",
             ),
         )
         .path(
@@ -2386,6 +2515,11 @@ mod tests {
         assert!(spec.paths.contains_key("/api/config/current"));
         assert!(spec.paths.contains_key("/api/playbooks"));
         assert!(spec.paths.contains_key("/api/fleet/dashboard"));
+        assert!(spec.paths.contains_key("/api/fleet/installs"));
+        assert!(spec.paths.contains_key("/api/detection/profile"));
+        assert!(spec.paths.contains_key("/api/detection/score/normalize"));
+        assert!(spec.paths.contains_key("/api/processes/threads"));
+        assert!(spec.paths.contains_key("/api/backups"));
         assert!(spec.paths.contains_key("/api/events/search"));
         assert!(spec.paths.contains_key("/api/ws/stats"));
         assert!(spec.paths.contains_key("/api/rollout/config"));

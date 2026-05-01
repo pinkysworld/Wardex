@@ -127,11 +127,11 @@ Wardex is now positioned as a professional XDR/SIEM control plane with incident-
 
 ## Roadmap completion in progress
 
-- **Signed multi-approver remediation** — change reviews now require risk-aware approver counts, record signed approval-chain digests, attach rollback proof with recovery plans when approval quorum is reached, and can verify rollback through the remediation adapter in dry-run-first mode.
+- **Signed multi-approver remediation** — change reviews now require risk-aware approver counts, record signed approval-chain digests, attach rollback proof with recovery plans when approval quorum is reached, verify rollback through the remediation module in dry-run-first mode, and optionally execute matching-platform restore-file or explicit kill-process rollback actions when both live rollback flags are enabled.
 - **Collector ingestion evidence pivots** — collector lifecycle status now carries SOC Workbench and Infrastructure pivots plus recent ingestion evidence for cloud, identity, and SaaS lanes.
 - **Expanded production demo lab** — demo seeding now includes cloud, identity, SaaS, UEBA, NDR, and attack-graph evidence alongside case, response, report, and artifact proof.
 - **IdP lifecycle validation depth** — identity-provider summaries now expose launch checks for metadata, callback route alignment, client credentials, group mappings, and test-login paths.
-- **SDK parity continuation** — Python and TypeScript SDKs include collector status, remediation review creation, and signed remediation approval helpers used by console workflows.
+- **SDK parity continuation** — Python and TypeScript SDKs include collector status, remediation review creation, signed remediation approval, detection tuning/scoring, remote fleet install, process-thread, and backup helpers used by console workflows.
 - **Command Center expansion** — the cross-product workspace now has action drawers, routed browser smoke coverage, and a backend summary contract; next depth targets are richer per-lane annotations and broader release-gate coverage as new workflows land.
 
 ## Recently shipped (v0.53.7)
@@ -173,9 +173,8 @@ Wardex is now positioned as a professional XDR/SIEM control plane with incident-
 
 ## Next release priorities
 
-- continue live routed Playwright coverage for signed remediation approvals, collector pivots, and IdP launch validation
-- keep console API helpers and generated SDK methods aligned as new workflow endpoints are added
-- extend dry-run rollback verification into live adapter execution where platform permissions and operator policy allow it
+- keep extending generated SDK and OpenAPI contract coverage as additional workflow endpoints are added, with detection tuning, remote install, process-thread, and backup surfaces now mirrored across the live OpenAPI builder and SDKs
+- continue extracting the remaining remediation review persistence/audit glue out of `server.rs` and broaden true live adapter execution beyond the current restore-file and explicit kill-process slices where platform permissions and operator policy allow it
 
 ## Recently shipped (v0.43.1)
 

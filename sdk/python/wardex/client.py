@@ -333,6 +333,18 @@ class WardexClient:
     def get_agent_activity(self, agent_id: str) -> dict[str, Any]:
         return self._get(f"/api/agents/{quote(agent_id, safe='')}/activity")
 
+    def fleet_installs(self) -> dict[str, Any]:
+        return self._get("/api/fleet/installs")
+
+    def fleet_install_ssh(self, request: dict[str, Any]) -> dict[str, Any]:
+        return self._post("/api/fleet/install/ssh", request)
+
+    def fleet_install_winrm(self, request: dict[str, Any]) -> dict[str, Any]:
+        return self._post("/api/fleet/install/winrm", request)
+
+    def process_threads(self, pid: int | str) -> dict[str, Any]:
+        return self._get("/api/processes/threads", pid=pid)
+
     def isolate_agent(
         self,
         agent_id: str,
@@ -370,6 +382,52 @@ class WardexClient:
 
     def run_detection(self) -> dict[str, Any]:
         return self._get("/api/detection/summary")
+
+    def detection_replay_corpus(self) -> dict[str, Any]:
+        return self._get("/api/detection/replay-corpus")
+
+    def evaluate_detection_replay_corpus(self, payload: dict[str, Any]) -> dict[str, Any]:
+        return self._post("/api/detection/replay-corpus", payload)
+
+    def detection_explain(
+        self,
+        *,
+        event_id: int | None = None,
+        alert_id: str | None = None,
+    ) -> dict[str, Any]:
+        params: dict[str, Any] = {}
+        if event_id is not None:
+            params["event_id"] = event_id
+        if alert_id:
+            params["alert_id"] = alert_id
+        return self._get("/api/detection/explain", **params)
+
+    def detection_feedback(self, event_id: int | None = None, limit: int | None = None) -> dict[str, Any]:
+        params: dict[str, Any] = {}
+        if event_id is not None:
+            params["event_id"] = event_id
+        if limit is not None:
+            params["limit"] = limit
+        return self._get("/api/detection/feedback", **params)
+
+    def record_detection_feedback(self, feedback: dict[str, Any]) -> dict[str, Any]:
+        return self._post("/api/detection/feedback", feedback)
+
+    def detection_profile(self) -> dict[str, Any]:
+        return self._get("/api/detection/profile")
+
+    def set_detection_profile(self, profile: str | dict[str, Any]) -> dict[str, Any]:
+        payload = profile if isinstance(profile, dict) else {"profile": profile}
+        return self._put("/api/detection/profile", payload)
+
+    def detection_weights(self) -> dict[str, Any]:
+        return self._get("/api/detection/weights")
+
+    def set_detection_weights(self, weights: dict[str, Any]) -> dict[str, Any]:
+        return self._post("/api/detection/weights", weights)
+
+    def normalize_score(self) -> dict[str, Any]:
+        return self._get("/api/detection/score/normalize")
 
     def get_baseline(self) -> dict[str, Any]:
         return self._get("/api/report")
@@ -626,10 +684,16 @@ class WardexClient:
         review_id: str,
         dry_run: bool = True,
         platform: str = "linux",
+        confirm_hostname: str | None = None,
+        **extra: Any,
     ) -> dict[str, Any]:
+        payload: dict[str, Any] = {"dry_run": dry_run, "platform": platform}
+        if confirm_hostname:
+            payload["confirm_hostname"] = confirm_hostname
+        payload.update(extra)
         return self._post(
             f"/api/remediation/change-reviews/{quote(review_id, safe='')}/rollback",
-            {"dry_run": dry_run, "platform": platform},
+            payload,
         )
 
     # ── threat hunting ───────────────────────────────────────────────
@@ -689,6 +753,15 @@ class WardexClient:
 
     def backup_decrypt(self, data: str, passphrase: str) -> dict[str, Any]:
         return self._post("/api/backup/decrypt", {"data": data, "passphrase": passphrase})
+
+    def list_backups(self) -> list[dict[str, Any]]:
+        return self._get("/api/backups")
+
+    def create_backup(self) -> dict[str, Any]:
+        return self._post("/api/backups")
+
+    def backup_status(self) -> dict[str, Any]:
+        return self._get("/api/backup/status")
 
     # ── detection rules ──────────────────────────────────────────────
 

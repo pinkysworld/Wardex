@@ -96,6 +96,22 @@ impl SiemConfig {
     }
 }
 
+pub fn public_config_json(config: &SiemConfig) -> serde_json::Value {
+    serde_json::json!({
+        "enabled": config.enabled,
+        "siem_type": config.siem_type,
+        "endpoint": config.endpoint,
+        "has_auth_token": !config.auth_token.trim().is_empty(),
+        "index": config.index,
+        "source_type": config.source_type,
+        "poll_interval_secs": config.poll_interval_secs,
+        "pull_enabled": config.pull_enabled,
+        "pull_query": config.pull_query,
+        "batch_size": config.batch_size,
+        "verify_tls": config.verify_tls,
+    })
+}
+
 /// SIEM connector that pushes alerts and optionally pulls threat intel.
 pub struct SiemConnector {
     config: SiemConfig,
@@ -1383,6 +1399,30 @@ mod tests {
         conn.update_config(new_cfg);
         assert!(conn.config().enabled);
         assert_eq!(conn.config().siem_type, "elastic");
+    }
+
+    #[test]
+    fn siem_public_config_json_masks_auth_token() {
+        let cfg = SiemConfig {
+            enabled: true,
+            siem_type: "splunk".into(),
+            endpoint: "https://siem.example.com".into(),
+            auth_token: "secret-token".into(),
+            index: "wardex-alerts".into(),
+            source_type: "wardex:xdr".into(),
+            poll_interval_secs: 120,
+            pull_enabled: true,
+            pull_query: "search index=wardex".into(),
+            batch_size: 250,
+            verify_tls: false,
+        };
+
+        let payload = public_config_json(&cfg);
+        assert_eq!(payload["enabled"].as_bool(), Some(true));
+        assert_eq!(payload["has_auth_token"].as_bool(), Some(true));
+        assert_eq!(payload["endpoint"].as_str(), Some("https://siem.example.com"));
+        assert_eq!(payload["batch_size"].as_u64(), Some(250));
+        assert_eq!(payload.get("auth_token"), None);
     }
 
     #[test]

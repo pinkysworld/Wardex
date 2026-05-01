@@ -6,18 +6,6 @@ import WorkflowGuidance from './WorkflowGuidance.jsx';
 import { buildHref } from './workflowPivots.js';
 
 const RISK_THRESHOLDS = { critical: 80, high: 60, medium: 40, low: 20 };
-const ANOMALY_TYPES = [
-  'ImpossibleTravel',
-  'UnusualLoginTime',
-  'AnomalousAccess',
-  'PrivilegeEscalationChain',
-  'DataExfiltrationPattern',
-  'LateralMovement',
-  'AnomalousProcess',
-  'ServiceAnomaly',
-  'DataVolumeAnomaly',
-  'FirstTimeActivity',
-];
 const TIME_RANGES = [
   { label: '1h', hours: 1 },
   { label: '6h', hours: 6 },
@@ -31,6 +19,13 @@ function riskLevel(score) {
   if (score >= RISK_THRESHOLDS.medium) return { label: 'Medium', cls: 'badge-warn' };
   if (score >= RISK_THRESHOLDS.low) return { label: 'Low', cls: 'badge-info' };
   return { label: 'Nominal', cls: 'badge-ok' };
+}
+
+function formatTimestamp(timestampMs) {
+  if (!timestampMs) return '—';
+  const date = new Date(timestampMs);
+  if (Number.isNaN(date.getTime())) return '—';
+  return date.toISOString();
 }
 
 // ── Risk Score Bar ──────────────────────────────────────────
@@ -72,53 +67,11 @@ function RiskBar({ score, max = 100 }) {
   );
 }
 
-// ── Peer Comparison Spark ───────────────────────────────────
-function PeerSparkBar({ entityRisk, peerAvg }) {
-  const maxVal = Math.max(entityRisk, peerAvg, 1);
-  return (
-    <div style={{ display: 'flex', gap: 6, alignItems: 'center', fontSize: 12 }}>
-      <div style={{ flex: 1 }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 2 }}>
-          <span>Entity</span>
-          <span>{entityRisk.toFixed(1)}</span>
-        </div>
-        <div style={{ height: 6, borderRadius: 3, background: 'var(--bg)' }}>
-          <div
-            style={{
-              width: `${(entityRisk / maxVal) * 100}%`,
-              height: '100%',
-              borderRadius: 3,
-              background: entityRisk > peerAvg * 1.5 ? 'var(--err)' : 'var(--primary)',
-            }}
-          />
-        </div>
-      </div>
-      <div style={{ flex: 1 }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 2 }}>
-          <span>Peer avg</span>
-          <span>{peerAvg.toFixed(1)}</span>
-        </div>
-        <div style={{ height: 6, borderRadius: 3, background: 'var(--bg)' }}>
-          <div
-            style={{
-              width: `${(peerAvg / maxVal) * 100}%`,
-              height: '100%',
-              borderRadius: 3,
-              background: 'var(--text-secondary)',
-            }}
-          />
-        </div>
-      </div>
-    </div>
-  );
-}
-
 export default function UEBADashboard() {
   const [searchParams, setSearchParams] = useSearchParams();
   const timeRange =
     TIME_RANGES.find((entry) => entry.label === searchParams.get('range')) || TIME_RANGES[2];
   const selectedEntity = searchParams.get('entity') || '';
-  const anomalyFilter = searchParams.get('anomaly') || 'all';
   const sortBy = searchParams.get('sort') || 'risk_score';
 
   const updateParams = (changes) => {
@@ -136,23 +89,9 @@ export default function UEBADashboard() {
     reload: reloadUebaOverview,
   } = useApiGroup({
     riskyEntities: () => api.uebaRiskyEntities(10),
-    anomalies: () => api.uebaAnomalies(200),
   });
-  const { riskyEntities, anomalies } = uebaOverviewData;
+  const { riskyEntities } = uebaOverviewData;
   const loadingRisky = loadingUebaOverview;
-  const loadingAnomalies = loadingUebaOverview;
-  const { data: peerGroups } = useApi(api.uebaPeerGroups);
-  const { data: entityDetail, loading: loadingDetail } = useApi(
-    () => (selectedEntity ? api.uebaEntity(selectedEntity) : Promise.resolve(null)),
-    [selectedEntity],
-    { skip: !selectedEntity },
-  );
-
-  const refreshUebaOverview = () => reloadUebaOverview();
-
-  useInterval(() => {
-    refreshUebaOverview();
-  }, 30000);
 
   const entities = useMemo(() => {
     if (!riskyEntities) return [];
@@ -166,41 +105,73 @@ export default function UEBADashboard() {
     return sorted;
   }, [riskyEntities, sortBy]);
 
-  const filteredAnomalies = useMemo(() => {
-    if (!anomalies) return [];
-    const list = Array.isArray(anomalies) ? anomalies : anomalies.items || [];
-    if (anomalyFilter === 'all') return list;
-    return list.filter((a) => a.anomaly_type === anomalyFilter);
-  }, [anomalies, anomalyFilter]);
+  const activeEntity = selectedEntity || entities[0]?.entity_id || '';
+  const {
+    data: entityDetail,
+    loading: loadingDetail,
+    reload: reloadEntityDetail,
+  } = useApi(() => (activeEntity ? api.uebaEntity(activeEntity) : Promise.resolve(null)), [activeEntity], {
+    skip: !activeEntity,
+  });
 
-  const anomalyStats = useMemo(() => {
-    if (!anomalies) return {};
-    const list = Array.isArray(anomalies) ? anomalies : anomalies.items || [];
-    const counts = {};
-    for (const a of list) {
-      counts[a.anomaly_type] = (counts[a.anomaly_type] || 0) + 1;
+  const refreshUebaOverview = () => {
+    void reloadUebaOverview();
+    if (activeEntity) void reloadEntityDetail();
+  };
+
+  useInterval(() => {
+    refreshUebaOverview();
+  }, 30000);
+
+  const peerGroups = useMemo(() => {
+    const groups = new Map();
+    for (const entity of entities) {
+      if (!entity?.peer_group) continue;
+      const current = groups.get(entity.peer_group) || {
+        group: entity.peer_group,
+        entity_count: 0,
+        total_risk: 0,
+        total_anomalies: 0,
+      };
+      current.entity_count += 1;
+      current.total_risk += Number(entity.risk_score) || 0;
+      current.total_anomalies += Number(entity.anomaly_count) || 0;
+      groups.set(entity.peer_group, current);
     }
-    return counts;
-  }, [anomalies]);
+    return Array.from(groups.values())
+      .map((group) => ({
+        group: group.group,
+        entity_count: group.entity_count,
+        avg_risk: group.total_risk / Math.max(group.entity_count, 1),
+        total_anomalies: group.total_anomalies,
+      }))
+      .sort((left, right) => right.avg_risk - left.avg_risk);
+  }, [entities]);
+
+  const totalAnomalyCount = useMemo(
+    () => entities.reduce((sum, entity) => sum + (Number(entity?.anomaly_count) || 0), 0),
+    [entities],
+  );
 
   const topRiskCount = entities.filter((e) => (e.risk_score || 0) >= RISK_THRESHOLDS.high).length;
-  const focusEntity = selectedEntity || entities[0]?.entity_id || '';
-  const entityAnomalies = entityDetail?.anomalies || [];
-  const topEntityAnomaly = entityAnomalies[0] || null;
+  const focusEntity = activeEntity;
   const entityPlaybook = useMemo(() => {
-    if (!selectedEntity) return null;
+    if (!activeEntity) return null;
     const riskScore = Number(entityDetail?.risk_score) || 0;
-    const peerAvg =
-      entityDetail?.peer_avg_risk === undefined
-        ? riskScore
-        : Number(entityDetail?.peer_avg_risk) || 0;
-    const peerDelta = riskScore - peerAvg;
-    const anomalyCount = entityAnomalies.length;
-    const primaryAnomaly = topEntityAnomaly?.anomaly_type || 'Entity pressure';
+    const anomalyCount =
+      Number(entityDetail?.anomaly_count) ||
+      Number(entities.find((entry) => entry.entity_id === activeEntity)?.anomaly_count) ||
+      0;
+    const observationCount = Number(entityDetail?.observation_count) || 0;
+    const entityKind = String(
+      entityDetail?.entity_kind ||
+        entities.find((entry) => entry.entity_id === activeEntity)?.entity_kind ||
+        'entity',
+    ).toLowerCase();
     const suggestedOwner =
-      entityDetail?.entity_kind === 'user'
+      entityKind === 'user'
         ? 'Identity or IAM owner'
-        : entityDetail?.entity_kind === 'service'
+        : entityKind === 'service'
           ? 'Service owner'
           : 'Endpoint or platform owner';
     const escalationLane =
@@ -208,21 +179,20 @@ export default function UEBADashboard() {
         ? 'Immediate case escalation'
         : 'Analyst validation';
     const narrative =
-      peerDelta >= 25
-        ? `${selectedEntity} is operating well outside peer baseline and should be validated for account takeover, privilege misuse, or unusual access chaining.`
-        : `${selectedEntity} is elevated but still close enough to peer behavior that rapid validation and noise review should happen before broad containment.`;
-    const nextStep = topEntityAnomaly?.mitre_technique
-      ? `Validate the ${topEntityAnomaly.mitre_technique} signal against recent authentication, privilege, and host telemetry.`
-      : `Validate recent authentication and endpoint telemetry for ${selectedEntity}.`;
+      anomalyCount > 0
+        ? `${activeEntity} is above the risky-entity threshold with ${anomalyCount} anomaly flags across ${observationCount} observations and should be validated against recent identity, network, and endpoint telemetry.`
+        : `${activeEntity} is above the risky-entity threshold and should be validated against recent identity, network, and endpoint telemetry before broad containment.`;
+    const nextStep = `Validate the latest authentication, process, and network activity tied to ${activeEntity}.`;
     return {
       narrative,
-      primaryAnomaly,
-      peerDelta,
+      primaryPressure:
+        anomalyCount > 0 ? `${anomalyCount} anomaly flags` : 'Elevated behavior score',
+      observationCount,
       suggestedOwner,
       escalationLane,
       nextStep,
     };
-  }, [entityAnomalies.length, entityDetail, selectedEntity, topEntityAnomaly]);
+  }, [activeEntity, entities, entityDetail]);
   const workflowItems = useMemo(() => {
     const focalEntity = focusEntity || 'the highest-risk entity';
     const focalKind =
@@ -319,17 +289,15 @@ export default function UEBADashboard() {
             style={{
               fontSize: 28,
               fontWeight: 700,
-              color: filteredAnomalies.length > 20 ? 'var(--warn)' : 'var(--text)',
+              color: totalAnomalyCount > 20 ? 'var(--warn)' : 'var(--text)',
             }}
           >
-            {filteredAnomalies.length}
+            {totalAnomalyCount}
           </div>
           <div className="hint">Anomalies Detected</div>
         </div>
         <div className="card" style={{ padding: 16, textAlign: 'center' }}>
-          <div style={{ fontSize: 28, fontWeight: 700 }}>
-            {Array.isArray(peerGroups) ? peerGroups.length : 0}
-          </div>
+          <div style={{ fontSize: 28, fontWeight: 700 }}>{peerGroups.length}</div>
           <div className="hint">Peer Groups</div>
         </div>
       </div>
@@ -497,16 +465,16 @@ export default function UEBADashboard() {
                     <strong>Observations:</strong> {entityDetail.observation_count || 0}
                   </div>
                   <div>
+                    <strong>Anomaly Flags:</strong> {entityDetail.anomaly_count || 0}
+                  </div>
+                  <div>
                     <strong>Peer Group:</strong> {entityDetail.peer_group || '—'}
+                  </div>
+                  <div>
+                    <strong>Last Seen:</strong> {formatTimestamp(entityDetail.last_seen_ms)}
                   </div>
                 </div>
                 <RiskBar score={entityDetail.risk_score || 0} />
-                {entityDetail.peer_avg_risk !== undefined && (
-                  <PeerSparkBar
-                    entityRisk={entityDetail.risk_score || 0}
-                    peerAvg={entityDetail.peer_avg_risk || 0}
-                  />
-                )}
                 {entityPlaybook && (
                   <div
                     className="card"
@@ -525,19 +493,16 @@ export default function UEBADashboard() {
                     <div className="summary-grid" style={{ marginBottom: 14 }}>
                       <div className="summary-card">
                         <div className="summary-label">Primary pressure</div>
-                        <div className="summary-value">{entityPlaybook.primaryAnomaly}</div>
+                        <div className="summary-value">{entityPlaybook.primaryPressure}</div>
                         <div className="summary-meta">
-                          Lead signal driving this entity selection.
+                          Current UEBA pressure on this entity.
                         </div>
                       </div>
                       <div className="summary-card">
-                        <div className="summary-label">Peer drift</div>
-                        <div className="summary-value">
-                          {entityPlaybook.peerDelta >= 0 ? '+' : ''}
-                          {entityPlaybook.peerDelta.toFixed(1)}
-                        </div>
+                        <div className="summary-label">Observations</div>
+                        <div className="summary-value">{entityPlaybook.observationCount}</div>
                         <div className="summary-meta">
-                          Difference versus the current peer baseline.
+                          Total observations retained for this entity.
                         </div>
                       </div>
                       <div className="summary-card">
@@ -579,44 +544,6 @@ export default function UEBADashboard() {
                     </div>
                   </div>
                 )}
-                {entityDetail.anomalies && entityDetail.anomalies.length > 0 && (
-                  <div>
-                    <div style={{ fontWeight: 600, fontSize: 13, marginBottom: 6 }}>
-                      Recent Anomalies
-                    </div>
-                    <div style={{ maxHeight: 250, overflowY: 'auto', display: 'grid', gap: 6 }}>
-                      {entityDetail.anomalies.slice(0, 20).map((a, i) => {
-                        const rl = riskLevel(a.score || 0);
-                        return (
-                          <div
-                            key={i}
-                            style={{
-                              padding: 8,
-                              borderRadius: 8,
-                              border: '1px solid var(--border)',
-                              fontSize: 12,
-                            }}
-                          >
-                            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                              <span className={`badge ${rl.cls}`}>{a.anomaly_type}</span>
-                              <span style={{ color: 'var(--text-secondary)' }}>
-                                {a.score?.toFixed(1)}
-                              </span>
-                            </div>
-                            <div style={{ marginTop: 4, color: 'var(--text-secondary)' }}>
-                              {a.description}
-                            </div>
-                            {a.mitre_technique && (
-                              <div style={{ marginTop: 2 }}>
-                                <span className="badge badge-info">{a.mitre_technique}</span>
-                              </div>
-                            )}
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-                )}
               </div>
             ) : (
               <div className="empty" style={{ padding: 20 }}>
@@ -627,106 +554,8 @@ export default function UEBADashboard() {
         )}
       </div>
 
-      {/* Anomaly Feed */}
-      <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
-        <div
-          style={{
-            padding: '12px 16px',
-            borderBottom: '1px solid var(--border)',
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center',
-            flexWrap: 'wrap',
-            gap: 8,
-          }}
-        >
-          <div className="card-title">Anomaly Feed</div>
-          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-            <button
-              className={`btn btn-sm ${anomalyFilter === 'all' ? 'btn-primary' : ''}`}
-              onClick={() => updateParams({ anomaly: 'all' })}
-            >
-              All ({(Array.isArray(anomalies) ? anomalies : anomalies?.items || []).length})
-            </button>
-            {ANOMALY_TYPES.filter((t) => anomalyStats[t]).map((t) => (
-              <button
-                key={t}
-                className={`btn btn-sm ${anomalyFilter === t ? 'btn-primary' : ''}`}
-                onClick={() => updateParams({ anomaly: t })}
-              >
-                {t.replace(/([A-Z])/g, ' $1').trim()} ({anomalyStats[t]})
-              </button>
-            ))}
-          </div>
-        </div>
-        {loadingAnomalies ? (
-          <div className="loading" style={{ padding: 20 }}>
-            Loading…
-          </div>
-        ) : (
-          <div style={{ maxHeight: 400, overflowY: 'auto' }}>
-            <table className="data-table" style={{ width: '100%' }}>
-              <thead>
-                <tr>
-                  <th>Type</th>
-                  <th>Entity</th>
-                  <th>Score</th>
-                  <th>Description</th>
-                  <th>MITRE</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filteredAnomalies.length === 0 ? (
-                  <tr>
-                    <td
-                      colSpan={5}
-                      style={{ textAlign: 'center', padding: 20, color: 'var(--text-secondary)' }}
-                    >
-                      No anomalies in this period
-                    </td>
-                  </tr>
-                ) : (
-                  filteredAnomalies.slice(0, 100).map((a, i) => (
-                    <tr
-                      key={i}
-                      onClick={() => updateParams({ entity: a.entity_id })}
-                      style={{ cursor: 'pointer' }}
-                    >
-                      <td>
-                        <span className={`badge ${riskLevel(a.score || 0).cls}`}>
-                          {a.anomaly_type?.replace(/([A-Z])/g, ' $1').trim()}
-                        </span>
-                      </td>
-                      <td style={{ fontWeight: 600 }}>{a.entity_id}</td>
-                      <td>{(a.score || 0).toFixed(1)}</td>
-                      <td
-                        style={{
-                          maxWidth: 300,
-                          overflow: 'hidden',
-                          textOverflow: 'ellipsis',
-                          whiteSpace: 'nowrap',
-                        }}
-                      >
-                        {a.description}
-                      </td>
-                      <td>
-                        {a.mitre_technique ? (
-                          <span className="badge badge-info">{a.mitre_technique}</span>
-                        ) : (
-                          '—'
-                        )}
-                      </td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </div>
-
       {/* Peer Group Comparison */}
-      {Array.isArray(peerGroups) && peerGroups.length > 0 && (
+      {peerGroups.length > 0 && (
         <div className="card" style={{ padding: 16 }}>
           <div className="card-title" style={{ marginBottom: 12 }}>
             Peer Group Baselines
@@ -751,8 +580,7 @@ export default function UEBADashboard() {
                     Avg Risk: <strong>{(pg.avg_risk || 0).toFixed(1)}</strong>
                   </div>
                   <div>
-                    Avg Data Volume:{' '}
-                    <strong>{((pg.avg_data_bytes || 0) / 1024).toFixed(1)} KB</strong>
+                    Flagged anomalies: <strong>{pg.total_anomalies || 0}</strong>
                   </div>
                 </div>
               </div>
