@@ -63,6 +63,22 @@ test('enterprise admin console smoke', async ({ page }) => {
   await expect(page).toHaveURL(/\/admin\/infrastructure/);
   await expect(page.getByRole('tablist', { name: 'Infrastructure sections' })).toBeVisible();
 
+  await sidebar.getByRole('link', { name: 'Command Center', exact: true }).click();
+  await page.getByRole('button', { name: 'Check readiness' }).click();
+  const releaseDrawer = page.getByRole('dialog', { name: 'Release Readiness' });
+  await expect(releaseDrawer).toBeVisible();
+  await releaseDrawer.getByRole('link', { name: 'Open rollouts' }).click();
+  await expect(page).toHaveURL(/\/admin\/infrastructure/);
+  await expect(page.getByRole('tablist', { name: 'Infrastructure sections' })).toBeVisible();
+
+  await sidebar.getByRole('link', { name: 'Command Center', exact: true }).click();
+  await page.getByRole('button', { name: 'Create evidence pack' }).click();
+  const evidenceDrawer = page.getByRole('dialog', { name: 'Compliance Evidence Pack' });
+  await expect(evidenceDrawer).toBeVisible();
+  await evidenceDrawer.getByRole('link', { name: 'Open reports' }).click();
+  await expect(page).toHaveURL(/\/admin\/reports/);
+  await expect(page.getByRole('tablist', { name: 'Reports & exports sections' })).toBeVisible();
+
   await sidebar.getByRole('link', { name: 'Live Monitor', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Live Alert Stream' })).toBeVisible();
   await page.getByRole('tab', { name: 'Processes', exact: true }).click();

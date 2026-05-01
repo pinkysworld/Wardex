@@ -19,7 +19,7 @@ Status legend:
 | Fleet, rollout, and release operations | `Fleet & Agents` | Ready | Keep the route-aware rollout history, recovery watchlists, and deployment-health actions aligned as fleet workflows deepen and live release telemetry expands |
 | Vulnerability, exposure, drift, certificates, assets | `Infrastructure` | Ready | Keep the shipped malware verdict, guided remediation, signed approval-chain, rollback-proof verification, and recovery-history workflows covered while expanding live rollback execution |
 | Security policy and advanced controls | `Security Policy` | Implemented | Structured policy composition, digital twin simulation, adversarial harness, deception deployment, and enforcement quarantine workflows are available in the browser console |
-| Enterprise controls (RBAC, SSO, SCIM, settings) | `Settings`, login shell | Ready | Keep the new federated sign-in readiness center, launch validation, and SCIM handoff coverage aligned as broader IdP lifecycle validation evolves |
+| Enterprise controls (RBAC, SSO, SCIM, settings) | `Settings`, login shell | Ready | Execute the next federated SSO regression tranche around ready-provider launch paths, callback/session recovery, and login-shell coherence as IdP lifecycle validation evolves |
 | Supportability, documentation, and contract verification | `Help & Docs` | Implemented | Keep the shipped parity diagnostics, embedded docs index/content, and operator API/GraphQL explorer aligned with future runtime and SDK releases |
 | Reports, compliance, evidence, exports | `Reports & Exports`, `Security Policy` | Implemented | Structured compliance review, evidence bundle export, backend SIEM export formats, GDPR erase, PII scan, and privacy-budget checks are available in the browser console |
 | Threat intelligence, enrichment, deception | `Threat Detection`, `Settings`, `Security Policy` | Implemented | Threat Detection now provides browse/filter/action workflows for indicator libraries, enrichment connectors, feed context, recent matches, and deception deployment |
@@ -33,6 +33,6 @@ Use `make release-acceptance` before release sign-off. The command builds the sh
 
 ## Immediate execution order
 
-1. Keep the explicit Command Center OpenAPI schemas, typed Python and TypeScript SDK models, per-lane SDK helpers, and release-gate drawer coverage aligned as new command workflows land.
-2. Keep the Python package exports, TypeScript interfaces, and Command Center drawer handoffs aligned whenever lane fields, metric keys, or destination routes change.
-3. Continue broadening live Command Center smoke depth only when new routed workflows or operator actions actually ship.
+1. Add routed Settings coverage for ready SSO providers so launch-path and callback-destination regressions fail before release.
+2. Add post-callback session-recovery coverage for the unauthenticated shell and SSO affordances that depend on `/api/auth/check` and `/api/auth/session`.
+3. Refresh release-doc tracking when the broader federated SSO regression slice lands.

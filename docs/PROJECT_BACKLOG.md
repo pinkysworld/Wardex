@@ -394,6 +394,16 @@ Phases 0–40 are complete. Routed browser regression coverage, the repeatable r
 
 - [x] T302: Extend the live enterprise Playwright smoke to open shipped Command Center drawers and verify stable handoffs into Settings and Infrastructure before the broader route sweep continues.
 
+## Phase 48 — Live Command Center release and evidence handoffs (completed)
+
+- [x] T303: Extend the live enterprise Playwright smoke to open the shipped Command Center release and evidence drawers and verify stable handoffs into Infrastructure rollouts and Reports & Exports.
+
+## Phase 49 — Federated SSO regression depth
+
+- [ ] T304: Add routed browser coverage for launching ready SSO providers from Settings and verify the computed backend login path and callback destination remain aligned with the console route.
+- [ ] T305: Add regression coverage for post-callback session recovery and unauthenticated-shell error handling so `/api/auth/check`, `/api/auth/session`, and login-shell SSO affordances stay coherent after provider changes.
+- [ ] T306: Refresh status, feature-coverage, and release-doc tracking once the expanded federated SSO launch/callback regression slice lands.
+
 See `docs/ROADMAP_XDR_PROFESSIONAL.md` for the broader professional roadmap beyond the current implementation order.
 
 ## Code-quality sweep (post-Phase 7)
