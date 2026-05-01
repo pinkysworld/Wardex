@@ -390,6 +390,10 @@ Phases 0–40 are complete. Routed browser regression coverage, the repeatable r
 
 - [x] T301: Add exported Python `TypedDict` contracts for `/api/command/summary` and `/api/command/lanes/{lane}` so SDK consumers can rely on the same stable Command Center fields without dropping to untyped dictionaries.
 
+## Phase 47 — Live Command Center drawer handoff smoke (completed)
+
+- [x] T302: Extend the live enterprise Playwright smoke to open shipped Command Center drawers and verify stable handoffs into Settings and Infrastructure before the broader route sweep continues.
+
 See `docs/ROADMAP_XDR_PROFESSIONAL.md` for the broader professional roadmap beyond the current implementation order.
 
 ## Code-quality sweep (post-Phase 7)

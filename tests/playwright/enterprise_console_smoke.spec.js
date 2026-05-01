@@ -48,6 +48,21 @@ test('enterprise admin console smoke', async ({ page }) => {
   await expect(page.getByText('Connector Onboarding Wizard')).toBeVisible();
   await expect(page.getByText('Release and Upgrade Center')).toBeVisible();
 
+  await page.getByRole('button', { name: 'Validate connectors' }).click();
+  const connectorDrawer = page.getByRole('dialog', { name: 'Connector Validation' });
+  await expect(connectorDrawer).toBeVisible();
+  await connectorDrawer.getByRole('link', { name: 'Open settings' }).click();
+  await expect(page).toHaveURL(/\/admin\/settings/);
+  await expect(page.getByRole('tablist', { name: 'Settings sections' })).toBeVisible();
+
+  await sidebar.getByRole('link', { name: 'Command Center', exact: true }).click();
+  await page.getByRole('button', { name: 'Review changes' }).click();
+  const remediationDrawer = page.getByRole('dialog', { name: 'Remediation Approval' });
+  await expect(remediationDrawer).toBeVisible();
+  await remediationDrawer.getByRole('link', { name: 'Open infrastructure' }).click();
+  await expect(page).toHaveURL(/\/admin\/infrastructure/);
+  await expect(page.getByRole('tablist', { name: 'Infrastructure sections' })).toBeVisible();
+
   await sidebar.getByRole('link', { name: 'Live Monitor', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Live Alert Stream' })).toBeVisible();
   await page.getByRole('tab', { name: 'Processes', exact: true }).click();

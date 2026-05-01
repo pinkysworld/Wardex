@@ -132,7 +132,7 @@ Wardex is now positioned as a professional XDR/SIEM control plane with incident-
 - **Expanded production demo lab** — demo seeding now includes cloud, identity, SaaS, UEBA, NDR, and attack-graph evidence alongside case, response, report, and artifact proof.
 - **IdP lifecycle validation depth** — identity-provider summaries now expose launch checks for metadata, callback route alignment, client credentials, group mappings, and test-login paths.
 - **SDK parity continuation** — Python and TypeScript SDKs include Command Center summary and per-lane refresh helpers, explicit Command Center response models in both SDKs, collector status, remediation review creation, signed remediation approval, detection tuning/scoring, remote fleet install, process-thread, and backup helpers used by console workflows.
-- **Command Center expansion** — the cross-product workspace now has action drawers, routed browser smoke coverage, live enterprise-smoke route coverage in the release gate, a backend summary contract, and per-lane annotations with next-step guidance across incident, remediation, connector, rule-tuning, release, and evidence workflows.
+- **Command Center expansion** — the cross-product workspace now has action drawers, routed browser smoke coverage, live enterprise-smoke route and drawer-handoff coverage in the release gate, a backend summary contract, and per-lane annotations with next-step guidance across incident, remediation, connector, rule-tuning, release, and evidence workflows.
 - **Remediation module extraction** — remediation change-review JSON envelopes, HTTP error mapping, route-id parsing, body limits, plan JSON wrapping, and rollback policy assembly now live in `remediation.rs`, leaving `server.rs` focused on route dispatch and response wiring.
 
 ## Recently shipped (v0.53.7)
@@ -174,7 +174,7 @@ Wardex is now positioned as a professional XDR/SIEM control plane with incident-
 
 ## Next release priorities
 
-- formal Phase 46 backlog is complete; define the next parity or workflow-depth tranche from release planning after this cut
+- formal Phase 47 backlog is complete; define the next parity or workflow-depth tranche from release planning after this cut
 
 ## Recently shipped (v0.43.1)
 

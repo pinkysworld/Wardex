@@ -11,7 +11,7 @@ Status legend:
 
 | Capability area | Primary UI surface | Status | Next closure target |
 |---|---|---|---|
-| Cross-product command and workflow federation | `Command Center`, `SOC Workbench`, `Settings`, `Threat Detection`, `Infrastructure`, `Analyst Assistant`, `Reports & Exports` | Ready | Keep the shipped action drawers, live release-gate route coverage, lane annotations, and focused lane-refresh contracts aligned as new workflows land |
+| Cross-product command and workflow federation | `Command Center`, `SOC Workbench`, `Settings`, `Threat Detection`, `Infrastructure`, `Analyst Assistant`, `Reports & Exports` | Ready | Keep the shipped action drawers, live release-gate route and drawer-handoff coverage, lane annotations, and focused lane-refresh contracts aligned as new workflows land |
 | Detection engineering (rules, hunts, suppressions, packs) | `Threat Detection`, `Dashboard`, `Attack Graph` | Ready | Keep the URL-backed drilldowns, replay-corpus gate, and rule-panel handoffs covered as efficacy, ATT&CK gap, suppression-noise, and rollout workflows continue to evolve |
 | SOC operations (queue, cases, timelines, approvals) | `SOC Workbench`, `Live Monitor` | Implemented | Keep the route-aware queue, case, investigation, and response pivots aligned as deeper escalation, approval, and playbook detail grows |
 | Dashboard customization and shared views | `Dashboard` | Implemented | Keep the new priority-alert-aware report-center handoffs and persisted personal/shared layouts covered as the overview evolves |
@@ -33,6 +33,6 @@ Use `make release-acceptance` before release sign-off. The command builds the sh
 
 ## Immediate execution order
 
-1. Keep the explicit Command Center OpenAPI schemas, typed Python and TypeScript SDK models, per-lane SDK helpers, and release-gate coverage aligned as new command workflows land.
-2. Keep the Python package exports and the TypeScript interfaces aligned whenever Command Center lane fields or metric keys change.
+1. Keep the explicit Command Center OpenAPI schemas, typed Python and TypeScript SDK models, per-lane SDK helpers, and release-gate drawer coverage aligned as new command workflows land.
+2. Keep the Python package exports, TypeScript interfaces, and Command Center drawer handoffs aligned whenever lane fields, metric keys, or destination routes change.
 3. Continue broadening live Command Center smoke depth only when new routed workflows or operator actions actually ship.
