@@ -18401,7 +18401,7 @@ fn handle_api(
                                 "kind": summary.provider.kind,
                                 "status": summary.provider.status,
                                 "validation_status": summary.validation.status,
-                                "login_path": format!("/api/auth/sso/login?provider={}", summary.provider.id),
+                                "login_path": format!("/api/auth/sso/login?provider_id={}", summary.provider.id),
                             })
                         })
                         .collect::<Vec<_>>();
@@ -18424,7 +18424,7 @@ fn handle_api(
                         "kind": "oidc",
                         "status": "ready",
                         "validation_status": "ready",
-                        "login_path": "/api/auth/sso/login?provider=oidc",
+                        "login_path": "/api/auth/sso/login?provider_id=oidc",
                     }));
                 }
                 let body = serde_json::json!({
@@ -24609,6 +24609,13 @@ mod tests {
         assert_eq!(
             sso_config["providers"][0]["display_name"],
             serde_json::json!("Corporate SSO")
+        );
+        let provider_id = saved["provider"]["id"]
+            .as_str()
+            .expect("saved provider id should be present");
+        assert_eq!(
+            sso_config["providers"][0]["login_path"],
+            serde_json::json!(format!("/api/auth/sso/login?provider_id={provider_id}"))
         );
 
         match ureq::post(&format!("{base_url}/api/idp/providers"))

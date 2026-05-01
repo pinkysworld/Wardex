@@ -74,6 +74,33 @@ describe('AuthProvider', () => {
     });
   });
 
+  it('falls back to a cookie-backed session when a saved token no longer passes authCheck', async () => {
+    localStorage.setItem('wardex_token', 'stale-token');
+    fetchMock.mockImplementation((url) => {
+      if (url === '/api/auth/check') {
+        return Promise.resolve({
+          ok: false,
+          status: 401,
+          statusText: 'Unauthorized',
+          headers: { get: () => 'application/json' },
+          json: async () => ({ error: 'unauthorized' }),
+          text: async () => '{"error":"unauthorized"}',
+        });
+      }
+      if (url === '/api/auth/session') {
+        return Promise.resolve(jsonOk({ authenticated: true, role: 'analyst', source: 'session' }));
+      }
+      return Promise.resolve(jsonOk({}));
+    });
+
+    const { result } = renderHook(() => useAuth(), { wrapper: Providers });
+
+    await waitFor(() => {
+      expect(result.current.authenticated).toBe(true);
+    });
+    expect(localStorage.getItem('wardex_token')).toBeNull();
+  });
+
   it('connect sets authenticated on success', async () => {
     const { result } = renderHook(() => useAuth(), { wrapper: Providers });
 

@@ -19,12 +19,12 @@ Status legend:
 | Fleet, rollout, and release operations | `Fleet & Agents` | Ready | Keep the route-aware rollout history, recovery watchlists, and deployment-health actions aligned as fleet workflows deepen and live release telemetry expands |
 | Vulnerability, exposure, drift, certificates, assets | `Infrastructure` | Ready | Keep the shipped malware verdict, guided remediation, signed approval-chain, rollback-proof verification, and recovery-history workflows covered while expanding live rollback execution |
 | Security policy and advanced controls | `Security Policy` | Implemented | Structured policy composition, digital twin simulation, adversarial harness, deception deployment, and enforcement quarantine workflows are available in the browser console |
-| Enterprise controls (RBAC, SSO, SCIM, settings) | `Settings`, login shell | Ready | Execute the next federated SSO regression tranche around ready-provider launch paths, callback/session recovery, and login-shell coherence as IdP lifecycle validation evolves |
+| Enterprise controls (RBAC, SSO, SCIM, settings) | `Settings`, login shell | Ready | Keep the shipped ready-provider launch coverage, callback/session recovery, and login-shell SSO affordances aligned as IdP lifecycle validation evolves |
 | Supportability, documentation, and contract verification | `Help & Docs` | Implemented | Keep the shipped parity diagnostics, embedded docs index/content, and operator API/GraphQL explorer aligned with future runtime and SDK releases |
 | Reports, compliance, evidence, exports | `Reports & Exports`, `Security Policy` | Implemented | Structured compliance review, evidence bundle export, backend SIEM export formats, GDPR erase, PII scan, and privacy-budget checks are available in the browser console |
 | Threat intelligence, enrichment, deception | `Threat Detection`, `Settings`, `Security Policy` | Implemented | Threat Detection now provides browse/filter/action workflows for indicator libraries, enrichment connectors, feed context, recent matches, and deception deployment |
 | Long-retention history and search | `Settings` | Ready | Add cross-surface pivots from analyst workflows into the shipped ClickHouse-backed retained-event search and retention controls |
-| Cloud, SaaS, and identity collectors | `Settings`, `Infrastructure`, `SOC Workbench` | Ready | Keep the routed collector-health lanes covered while regression-testing per-provider analytics, ingestion evidence, and cross-surface analyst pivots |
+| Cloud, SaaS, and identity collectors | `Settings`, `Infrastructure`, `SOC Workbench` | Ready | Execute the next collector lifecycle regression tranche around routed analytics pivots, ingestion evidence, freshness/failure telemetry, and cross-surface analyst handoffs |
 | AI assistant and RAG analyst workflows | `Analyst Assistant`, `SOC Workbench` | Implemented | Deepen retrieval quality, provider coverage, and analyst handoff workflows on top of the shipped case-aware assistant with citations and ticket-sync pivots |
 
 ## Release acceptance gate
@@ -33,6 +33,6 @@ Use `make release-acceptance` before release sign-off. The command builds the sh
 
 ## Immediate execution order
 
-1. Add routed Settings coverage for ready SSO providers so launch-path and callback-destination regressions fail before release.
-2. Add post-callback session-recovery coverage for the unauthenticated shell and SSO affordances that depend on `/api/auth/check` and `/api/auth/session`.
-3. Refresh release-doc tracking when the broader federated SSO regression slice lands.
+1. Add routed collector analytics and readiness-pivot coverage from Settings and Infrastructure.
+2. Add collector regression coverage for staged ingestion evidence, freshness, failure streaks, and retry/backoff context.
+3. Refresh release-doc tracking when the broader collector lifecycle regression slice lands.

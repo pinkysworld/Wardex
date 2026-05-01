@@ -59,24 +59,34 @@ export function AuthProvider({ children }) {
     const saved = localStorage.getItem('wardex_token');
     let cancelled = false;
 
-    if (saved) {
-      void connect(saved);
-      return undefined;
-    }
-
-    setChecking(true);
-    authSession()
-      .then((session) => {
+    const restoreSession = async () => {
+      setChecking(true);
+      try {
+        const session = await authSession();
         if (!cancelled) {
           setAuthenticated((current) => current || Boolean(session?.authenticated));
         }
-      })
-      .catch(() => {})
-      .finally(() => {
+      } catch {
+        if (!cancelled) {
+          setAuthenticated(false);
+        }
+      } finally {
         if (!cancelled) {
           setChecking(false);
         }
+      }
+    };
+
+    if (saved) {
+      void connect(saved).then((connected) => {
+        if (!connected && !cancelled) {
+          void restoreSession();
+        }
       });
+      return undefined;
+    }
+
+    void restoreSession();
 
     return () => {
       cancelled = true;

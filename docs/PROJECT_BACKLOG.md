@@ -398,11 +398,17 @@ Phases 0–40 are complete. Routed browser regression coverage, the repeatable r
 
 - [x] T303: Extend the live enterprise Playwright smoke to open the shipped Command Center release and evidence drawers and verify stable handoffs into Infrastructure rollouts and Reports & Exports.
 
-## Phase 49 — Federated SSO regression depth
+## Phase 49 — Federated SSO regression depth (completed)
 
-- [ ] T304: Add routed browser coverage for launching ready SSO providers from Settings and verify the computed backend login path and callback destination remain aligned with the console route.
-- [ ] T305: Add regression coverage for post-callback session recovery and unauthenticated-shell error handling so `/api/auth/check`, `/api/auth/session`, and login-shell SSO affordances stay coherent after provider changes.
-- [ ] T306: Refresh status, feature-coverage, and release-doc tracking once the expanded federated SSO launch/callback regression slice lands.
+- [x] T304: Add routed browser coverage for launching ready SSO providers from Settings and verify the computed backend login path and callback destination remain aligned with the console route.
+- [x] T305: Add regression coverage for post-callback session recovery and unauthenticated-shell error handling so `/api/auth/check`, `/api/auth/session`, and login-shell SSO affordances stay coherent after provider changes.
+- [x] T306: Refresh status, feature-coverage, and release-doc tracking once the expanded federated SSO launch/callback regression slice lands.
+
+## Phase 50 — Collector lifecycle regression depth
+
+- [ ] T307: Add routed browser coverage for collector-specific analytics and readiness pivots from Settings and Infrastructure so shipped cloud, identity, SaaS, and syslog lanes keep stable deep links as provider workflows evolve.
+- [ ] T308: Add regression coverage for staged ingestion evidence, freshness, failure-streak analytics, and retry/backoff context so collector health details remain operator-usable across the shipped lanes.
+- [ ] T309: Refresh roadmap, status, and feature-coverage tracking once the broader collector lifecycle regression tranche lands.
 
 See `docs/ROADMAP_XDR_PROFESSIONAL.md` for the broader professional roadmap beyond the current implementation order.
 

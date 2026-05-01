@@ -169,7 +169,7 @@ test.describe('Routed workflow coverage', () => {
               id: 'corp-sso',
               display_name: 'Corporate SSO',
               kind: 'oidc',
-              login_path: '/api/auth/sso/login?provider_id=corp-sso&return_to=%2Fsettings',
+              login_path: '/api/auth/sso/login?provider_id=corp-sso',
             },
           ],
           scim: {
@@ -207,6 +207,8 @@ test.describe('Routed workflow coverage', () => {
 
     const providerCard = page.locator('.stat-box').filter({ hasText: 'Corporate SSO' }).first();
     await expect(providerCard).toContainText('ready for callback validation');
+  await expect(providerCard).toContainText('/api/auth/sso/login?provider_id=corp-sso&redirect=%2Fsettings');
+  await expect(page.getByText(/\/api\/auth\/sso\/callback$/).first()).toBeVisible();
     await providerCard.getByRole('button', { name: 'Start SSO Test' }).click();
     await page.waitForURL(/\/api\/auth\/sso\/login/);
 

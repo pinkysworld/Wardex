@@ -1494,7 +1494,7 @@ export default function Settings() {
                         Start SSO Test
                       </button>
                       <code style={{ fontSize: 11 }}>
-                        {provider.login_path || buildSsoLoginPath(provider.id)}
+                        {buildSsoLoginPath(provider.id, '/settings')}
                       </code>
                     </div>
                   </div>

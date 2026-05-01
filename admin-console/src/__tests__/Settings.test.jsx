@@ -563,7 +563,7 @@ describe('Settings', () => {
                 kind: provider.kind,
                 status: 'ready',
                 validation_status: 'ready',
-                login_path: `/api/auth/sso/login?provider=${provider.id}`,
+                login_path: `/api/auth/sso/login?provider_id=${provider.id}`,
               })),
             scim: {
               enabled: Boolean(scimState.config?.enabled),

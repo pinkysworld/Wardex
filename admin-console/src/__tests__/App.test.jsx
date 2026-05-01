@@ -85,6 +85,84 @@ describe('App', () => {
     expect(screen.getByText('2 group mappings ready for lifecycle sync.')).toBeInTheDocument();
   });
 
+  it('recovers an existing SSO session after a stale saved token fails authCheck', async () => {
+    localStorage.setItem('wardex_token', 'stale-token');
+    fetchMock.mockImplementation(async (url) => {
+      if (url === '/api/auth/check') {
+        return {
+          ok: false,
+          status: 401,
+          statusText: 'Unauthorized',
+          headers: { get: () => 'application/json' },
+          json: async () => ({ error: 'unauthorized' }),
+          text: async () => '{"error":"unauthorized"}',
+        };
+      }
+      if (url === '/api/auth/session') {
+        return {
+          ok: true,
+          headers: { get: () => 'application/json' },
+          json: async () => ({ authenticated: true, role: 'admin', user_id: 'sso-user@example.com' }),
+        };
+      }
+      return {
+        ok: true,
+        headers: { get: () => 'application/json' },
+        json: async () => ({}),
+      };
+    });
+
+    await renderApp('/settings?tab=integrations');
+
+    expect(await screen.findByRole('heading', { name: 'Settings' })).toBeInTheDocument();
+    expect(screen.queryByText('Welcome to Wardex Admin Console')).not.toBeInTheDocument();
+    expect(localStorage.getItem('wardex_token')).toBeNull();
+  });
+
+  it('keeps SSO entry points visible when authCheck fails and no session can be restored', async () => {
+    localStorage.setItem('wardex_token', 'stale-token');
+    fetchMock.mockImplementation(async (url) => {
+      if (url === '/api/auth/check') {
+        return {
+          ok: false,
+          status: 401,
+          statusText: 'Unauthorized',
+          headers: { get: () => 'application/json' },
+          json: async () => ({ error: 'unauthorized' }),
+          text: async () => '{"error":"unauthorized"}',
+        };
+      }
+      if (url === '/api/auth/session') {
+        return {
+          ok: true,
+          headers: { get: () => 'application/json' },
+          json: async () => ({ authenticated: false }),
+        };
+      }
+      if (url === '/api/auth/sso/config') {
+        return {
+          ok: true,
+          headers: { get: () => 'application/json' },
+          json: async () => ({
+            providers: [{ id: 'idp-1', display_name: 'Corporate SSO' }],
+            scim: { enabled: false, status: 'disabled', mapping_count: 0 },
+          }),
+        };
+      }
+      return {
+        ok: true,
+        headers: { get: () => 'application/json' },
+        json: async () => ({}),
+      };
+    });
+
+    await renderApp();
+
+    expect(await screen.findByText('Welcome to Wardex Admin Console')).toBeInTheDocument();
+    expect((await screen.findAllByText('Sign in with Corporate SSO')).length).toBeGreaterThan(0);
+    expect(localStorage.getItem('wardex_token')).toBeNull();
+  });
+
   it('renders sidebar navigation items', async () => {
     await renderApp();
     // Check that navigation labels exist
