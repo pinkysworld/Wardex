@@ -33,6 +33,6 @@ Use `make release-acceptance` before release sign-off. The command builds the sh
 
 ## Immediate execution order
 
-1. Keep the explicit Command Center OpenAPI schemas, typed TypeScript SDK models, per-lane SDK helpers, and release-gate coverage aligned as new command workflows land.
-2. Decide whether Python-side typed wrappers are worth introducing later; the current Python SDK still follows the repo-wide `dict[str, Any]` response convention.
+1. Keep the explicit Command Center OpenAPI schemas, typed Python and TypeScript SDK models, per-lane SDK helpers, and release-gate coverage aligned as new command workflows land.
+2. Keep the Python package exports and the TypeScript interfaces aligned whenever Command Center lane fields or metric keys change.
 3. Continue broadening live Command Center smoke depth only when new routed workflows or operator actions actually ship.

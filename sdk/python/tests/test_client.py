@@ -8,6 +8,8 @@ import pytest
 
 from wardex import (
     AuthenticationError,
+    CommandCenterLaneResponse,
+    CommandCenterSummaryResponse,
     NotFoundError,
     RateLimitError,
     ServerError,
@@ -17,6 +19,11 @@ from wardex import (
 
 
 BASE = "http://localhost:9077"
+
+
+def test_command_center_types_are_exported():
+    assert "generated_at" in CommandCenterSummaryResponse.__annotations__
+    assert "metric_key" in CommandCenterLaneResponse.__annotations__
 
 
 class DummyResponse:

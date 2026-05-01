@@ -7,7 +7,7 @@ from email.utils import parsedate_to_datetime
 import logging
 import random
 import time
-from typing import Any, Generator
+from typing import Any, Generator, Literal, TypedDict
 
 import requests
 from urllib.parse import quote
@@ -35,6 +35,84 @@ INCIDENT_SEVERITY_ALIASES = {
     "high": "High",
     "critical": "Critical",
 }
+
+
+CommandCenterLaneName = Literal[
+    "incidents",
+    "remediation",
+    "connectors",
+    "rule_tuning",
+    "release",
+    "evidence",
+]
+
+CommandCenterMetricKey = Literal[
+    "open_incidents",
+    "pending_remediation_reviews",
+    "connector_issues",
+    "noisy_rules",
+    "release_candidates",
+    "compliance_packs",
+]
+
+
+class CommandCenterMetrics(TypedDict):
+    open_incidents: int
+    active_cases: int
+    pending_remediation_reviews: int
+    rollback_ready_reviews: int
+    connector_issues: int
+    noisy_rules: int
+    stale_rules: int
+    release_candidates: int
+    compliance_packs: int
+    offline_agents: int
+
+
+class CommandCenterLanePayloadRequired(TypedDict):
+    status: str
+    annotation: str
+    next_step: str
+
+
+class CommandCenterLanePayload(CommandCenterLanePayloadRequired, total=False):
+    href: str
+    count: int
+    pending: int
+    rollback_ready: int
+    issues: int
+    readiness: dict[str, Any]
+    planned: list[str]
+    noisy: int
+    stale: int
+    active_suppressions: int
+    candidates: int
+    current_version: str
+    score: float
+    templates: int
+
+
+class CommandCenterLanes(TypedDict):
+    incidents: CommandCenterLanePayload
+    remediation: CommandCenterLanePayload
+    connectors: CommandCenterLanePayload
+    rule_tuning: CommandCenterLanePayload
+    release: CommandCenterLanePayload
+    evidence: CommandCenterLanePayload
+
+
+class CommandCenterSummaryResponse(TypedDict):
+    generated_at: str
+    metrics: CommandCenterMetrics
+    lanes: CommandCenterLanes
+
+
+class CommandCenterLaneResponse(TypedDict):
+    lane: CommandCenterLaneName
+    generated_at: str
+    metric_key: CommandCenterMetricKey
+    metric_value: int
+    payload: CommandCenterLanePayload
 
 
 class WardexClient:
@@ -233,10 +311,10 @@ class WardexClient:
     def ws_stats(self) -> dict[str, Any]:
         return self._get("/api/ws/stats")
 
-    def command_summary(self) -> dict[str, Any]:
+    def command_summary(self) -> CommandCenterSummaryResponse:
         return self._get("/api/command/summary")
 
-    def command_lane(self, lane: str) -> dict[str, Any]:
+    def command_lane(self, lane: str) -> CommandCenterLaneResponse:
         return self._get(f"/api/command/lanes/{quote(lane, safe='')}")
 
     # ── alerts ────────────────────────────────────────────────────────────

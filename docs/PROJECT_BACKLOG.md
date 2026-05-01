@@ -386,6 +386,10 @@ Phases 0–40 are complete. Routed browser regression coverage, the repeatable r
 
 - [x] T300: Replace the generic TypeScript SDK record responses for `/api/command/summary` and `/api/command/lanes/{lane}` with explicit Command Center interfaces so consumers can rely on typed lane metrics and payload fields.
 
+## Phase 46 — Python Command Center typed exports (completed)
+
+- [x] T301: Add exported Python `TypedDict` contracts for `/api/command/summary` and `/api/command/lanes/{lane}` so SDK consumers can rely on the same stable Command Center fields without dropping to untyped dictionaries.
+
 See `docs/ROADMAP_XDR_PROFESSIONAL.md` for the broader professional roadmap beyond the current implementation order.
 
 ## Code-quality sweep (post-Phase 7)
