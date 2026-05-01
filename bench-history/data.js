@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1777611922325,
+  "lastUpdate": 1777659609626,
   "repoUrl": "https://github.com/pinkysworld/Wardex",
   "entries": {
     "Wardex criterion benches": [
@@ -4131,6 +4131,114 @@ window.BENCHMARK_DATA = {
             "name": "sigma_evaluate_20_rules",
             "value": 34682,
             "range": "± 331",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "85413447+pinkysworld@users.noreply.github.com",
+            "name": "pinkysworld",
+            "username": "pinkysworld"
+          },
+          "committer": {
+            "email": "85413447+pinkysworld@users.noreply.github.com",
+            "name": "pinkysworld",
+            "username": "pinkysworld"
+          },
+          "distinct": true,
+          "id": "c73624bfb6f4fc47c28e6972af19ba78795030b6",
+          "message": "Expand API workflow parity and SDK coverage",
+          "timestamp": "2026-05-01T20:12:28+02:00",
+          "tree_id": "a01fcd37b4e046113c8e61df834367589f975477",
+          "url": "https://github.com/pinkysworld/Wardex/commit/c73624bfb6f4fc47c28e6972af19ba78795030b6"
+        },
+        "date": 1777659609264,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "full_pipeline/5",
+            "value": 49853,
+            "range": "± 146",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "full_pipeline/50",
+            "value": 427029,
+            "range": "± 5337",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "full_pipeline/200",
+            "value": 1971447,
+            "range": "± 19943",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "full_pipeline/1000",
+            "value": 18211606,
+            "range": "± 180806",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "detector_evaluate_single",
+            "value": 608,
+            "range": "± 1",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "detector_window_stream_256",
+            "value": 775480,
+            "range": "± 4507",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "shared_storage_observed_schema_read",
+            "value": 136,
+            "range": "± 0",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "shared_storage_4_threads_64_alerts",
+            "value": 147518,
+            "range": "± 1688",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "policy_evaluate_single",
+            "value": 265,
+            "range": "± 0",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "throughput/1000_samples",
+            "value": 18373047,
+            "range": "± 111348",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "search_500_events",
+            "value": 108059,
+            "range": "± 488",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "hunt_field_query",
+            "value": 87808,
+            "range": "± 254",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "ml_triage_rf",
+            "value": 50,
+            "range": "± 0",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "sigma_evaluate_20_rules",
+            "value": 34781,
+            "range": "± 329",
             "unit": "ns/iter"
           }
         ]
