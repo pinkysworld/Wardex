@@ -24,7 +24,7 @@ Status legend:
 | Reports, compliance, evidence, exports | `Reports & Exports`, `Security Policy` | Implemented | Structured compliance review, evidence bundle export, backend SIEM export formats, GDPR erase, PII scan, and privacy-budget checks are available in the browser console |
 | Threat intelligence, enrichment, deception | `Threat Detection`, `Settings`, `Security Policy` | Implemented | Threat Detection now provides browse/filter/action workflows for indicator libraries, enrichment connectors, feed context, recent matches, and deception deployment |
 | Long-retention history and search | `Settings` | Ready | Add cross-surface pivots from analyst workflows into the shipped ClickHouse-backed retained-event search and retention controls |
-| Cloud, SaaS, and identity collectors | `Settings`, `Infrastructure`, `SOC Workbench` | Ready | Execute the next collector lifecycle regression tranche around routed analytics pivots, ingestion evidence, freshness/failure telemetry, and cross-surface analyst handoffs |
+| Cloud, SaaS, and identity collectors | `Settings`, `Infrastructure`, `SOC Workbench` | Ready | Keep the shipped routed analytics pivots, ingestion evidence, freshness/failure telemetry, retry/backoff context, and cross-surface analyst handoffs aligned as provider workflows evolve |
 | AI assistant and RAG analyst workflows | `Analyst Assistant`, `SOC Workbench` | Implemented | Deepen retrieval quality, provider coverage, and analyst handoff workflows on top of the shipped case-aware assistant with citations and ticket-sync pivots |
 
 ## Release acceptance gate
@@ -33,6 +33,6 @@ Use `make release-acceptance` before release sign-off. The command builds the sh
 
 ## Immediate execution order
 
-1. Add routed collector analytics and readiness-pivot coverage from Settings and Infrastructure.
-2. Add collector regression coverage for staged ingestion evidence, freshness, failure streaks, and retry/backoff context.
-3. Refresh release-doc tracking when the broader collector lifecycle regression slice lands.
+1. Keep routed collector analytics and readiness pivots aligned as provider workflows evolve.
+2. Extend collector regression coverage when new lifecycle telemetry or operator handoffs land.
+3. Continue the next prioritized roadmap slice from `docs/PROJECT_BACKLOG.md`.

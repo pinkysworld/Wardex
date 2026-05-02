@@ -128,7 +128,7 @@ Wardex is now positioned as a professional XDR/SIEM control plane with incident-
 ## Roadmap completion in progress
 
 - **Signed multi-approver remediation** — change reviews now require risk-aware approver counts, record signed approval-chain digests, attach rollback proof with recovery plans when approval quorum is reached, verify rollback through the remediation module in dry-run-first mode, exercise matching-platform true execution for restore-file, kill-process, restart-service, block-ip, remove-persistence, disable-account, and flush-dns actions when both live rollback flags are enabled, and keep mismatched-platform requests recorded-only when the local executor cannot safely run them.
-- **Collector ingestion evidence pivots** — collector lifecycle status now carries SOC Workbench and Infrastructure pivots plus recent ingestion evidence for cloud, identity, and SaaS lanes.
+- **Collector ingestion evidence pivots** — collector lifecycle status now carries SOC Workbench and Infrastructure pivots plus recent ingestion evidence for cloud, identity, SaaS, EDR, and syslog lanes, and the Settings integrations workspace now keeps freshness, success rate, failure streak, retry/backoff, and recent-run evidence visible alongside those routed pivots.
 - **Expanded production demo lab** — demo seeding now includes cloud, identity, SaaS, UEBA, NDR, and attack-graph evidence alongside case, response, report, and artifact proof.
 - **IdP lifecycle validation depth** — identity-provider summaries now expose launch checks for metadata, callback route alignment, client credentials, group mappings, and test-login paths, while routed Settings and auth-shell regressions lock in ready-provider launch paths, callback/session recovery, and stale-token fallback behavior.
 - **SDK parity continuation** — Python and TypeScript SDKs include Command Center summary and per-lane refresh helpers, explicit Command Center response models in both SDKs, collector status, remediation review creation, signed remediation approval, detection tuning/scoring, remote fleet install, process-thread, and backup helpers used by console workflows.
@@ -174,9 +174,9 @@ Wardex is now positioned as a professional XDR/SIEM control plane with incident-
 
 ## Next release priorities
 
-- execute Phase 50 collector lifecycle regression depth, starting with routed collector analytics and readiness pivots from Settings and Infrastructure
-- add regression coverage for staged ingestion evidence, freshness, failure streaks, and retry/backoff context across the shipped collector lanes
-- refresh roadmap and feature-coverage tracking once the broader collector lifecycle regression slice lands
+- formalize the next roadmap tranche beyond the completed Phase 50 collector lifecycle regression depth
+- keep routed collector regressions and operator-facing lifecycle telemetry aligned as provider workflows evolve
+- continue the broader professional roadmap execution tracked in `docs/ROADMAP_XDR_PROFESSIONAL.md`
 
 ## Recently shipped (v0.43.1)
 

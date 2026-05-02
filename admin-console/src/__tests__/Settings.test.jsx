@@ -277,9 +277,13 @@ describe('Settings', () => {
           enabled: awsCollectorState.enabled,
           validation: awsCollectorState.validation,
           events_ingested: 24,
-          freshness: 'fresh',
+          freshness: 'stale',
           checkpoint_id: 'aws-checkpoint-123456',
           lag_seconds: 45,
+          retry_count: 2,
+          backoff_seconds: 60,
+          last_success_at: '2026-04-20T06:20:00.000Z',
+          last_error_at: '2026-04-20T06:24:00.000Z',
           total_collected: 2,
           ingestion_evidence: {
             pivots: [
@@ -294,6 +298,25 @@ describe('Settings', () => {
                 label: 'Open infrastructure evidence',
               },
             ],
+            recent_runs: [
+              {
+                recorded_at: '2026-04-20T06:24:00.000Z',
+                success: false,
+                error_category: 'credentials',
+                event_count: 0,
+              },
+              {
+                recorded_at: '2026-04-20T06:20:00.000Z',
+                success: true,
+                event_count: 24,
+              },
+            ],
+          },
+          lifecycle_analytics: {
+            total_runs: 4,
+            success_rate: 0.75,
+            events_last_24h: 120,
+            recent_failure_streak: 2,
           },
           timeline: [
             {
@@ -1272,6 +1295,12 @@ describe('Settings', () => {
     ).toBeGreaterThan(0);
     expect(screen.getByText(/24 events ingested/)).toBeInTheDocument();
     expect(screen.getByText(/Checkpoint aws-check/)).toBeInTheDocument();
+    expect(screen.getByText('Retries 2')).toBeInTheDocument();
+    expect(screen.getByText('Backoff 1m')).toBeInTheDocument();
+    expect(screen.getByText('Success 75%')).toBeInTheDocument();
+    expect(screen.getByText('Failure streak 2')).toBeInTheDocument();
+    expect(screen.getByText('Last success recorded')).toBeInTheDocument();
+    expect(screen.getByText(/credentials • 0 events/)).toBeInTheDocument();
     expect(
       screen.getAllByText('Microsoft 365 activity is ready for assistant and report pivots.')
         .length,

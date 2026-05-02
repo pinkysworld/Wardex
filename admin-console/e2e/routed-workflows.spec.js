@@ -175,10 +175,20 @@ test.describe('Routed workflow coverage', () => {
               provider: 'aws_cloudtrail',
               label: 'AWS CloudTrail',
               enabled: true,
-              freshness: 'fresh',
+              freshness: 'stale',
               events_ingested: 24,
               checkpoint_id: 'aws-checkpoint-123456',
+              retry_count: 2,
+              backoff_seconds: 60,
+              last_success_at: '2026-04-20T06:20:00.000Z',
+              last_error_at: '2026-04-20T06:24:00.000Z',
               validation: { status: 'ready', issues: [] },
+              lifecycle_analytics: {
+                total_runs: 4,
+                success_rate: 0.75,
+                events_last_24h: 120,
+                recent_failure_streak: 2,
+              },
               timeline: [
                 {
                   stage: 'Scope',
@@ -196,6 +206,14 @@ test.describe('Routed workflow coverage', () => {
                   {
                     surface: 'Infrastructure',
                     href: '/infrastructure?tab=observability&collector=aws_cloudtrail',
+                  },
+                ],
+                recent_runs: [
+                  {
+                    recorded_at: '2026-04-20T06:24:00.000Z',
+                    success: false,
+                    error_category: 'credentials',
+                    event_count: 0,
                   },
                 ],
               },
@@ -291,6 +309,13 @@ test.describe('Routed workflow coverage', () => {
 
     await expect(page.getByText('Collector Routing & Health')).toBeVisible();
     await expect(page.getByText('Endpoint & Syslog Lane')).toBeVisible();
+    const awsCard = page.locator('.stat-box').filter({ hasText: 'AWS CloudTrail' }).first();
+    await expect(awsCard).toContainText('stale');
+    await expect(awsCard).toContainText('Retries 2');
+    await expect(awsCard).toContainText('Backoff 1m');
+    await expect(awsCard).toContainText('Success 75%');
+    await expect(awsCard).toContainText('Failure streak 2');
+    await expect(awsCard).toContainText('credentials');
 
     const identityLane = collectorLaneCard(page, 'Identity Telemetry Lane').first();
     await identityLane.getByRole('link', { name: 'Review UEBA' }).click();
@@ -308,7 +333,6 @@ test.describe('Routed workflow coverage', () => {
     await openAuthenticatedRoute(page, './settings');
     await page.getByRole('tab', { name: 'Integrations' }).click();
 
-    const awsCard = page.locator('.stat-box').filter({ hasText: 'AWS CloudTrail' }).first();
     await awsCard.getByRole('link', { name: 'SOC Workbench' }).click();
     await expect(page).toHaveURL(/\/soc\?collector=aws_cloudtrail&lane=cloud/);
 

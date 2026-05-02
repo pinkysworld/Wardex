@@ -404,11 +404,11 @@ Phases 0–40 are complete. Routed browser regression coverage, the repeatable r
 - [x] T305: Add regression coverage for post-callback session recovery and unauthenticated-shell error handling so `/api/auth/check`, `/api/auth/session`, and login-shell SSO affordances stay coherent after provider changes.
 - [x] T306: Refresh status, feature-coverage, and release-doc tracking once the expanded federated SSO launch/callback regression slice lands.
 
-## Phase 50 — Collector lifecycle regression depth
+## Phase 50 — Collector lifecycle regression depth (completed)
 
 - [x] T307: Add routed browser coverage for collector-specific analytics and readiness pivots from Settings and Infrastructure so shipped cloud, identity, SaaS, and syslog lanes keep stable deep links as provider workflows evolve.
-- [ ] T308: Add regression coverage for staged ingestion evidence, freshness, failure-streak analytics, and retry/backoff context so collector health details remain operator-usable across the shipped lanes.
-- [ ] T309: Refresh roadmap, status, and feature-coverage tracking once the broader collector lifecycle regression tranche lands.
+- [x] T308: Add regression coverage for staged ingestion evidence, freshness, failure-streak analytics, and retry/backoff context so collector health details remain operator-usable across the shipped lanes.
+- [x] T309: Refresh roadmap, status, and feature-coverage tracking once the broader collector lifecycle regression tranche lands.
 
 See `docs/ROADMAP_XDR_PROFESSIONAL.md` for the broader professional roadmap beyond the current implementation order.
 

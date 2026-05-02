@@ -1,4 +1,5 @@
 import { useId } from 'react';
+import { formatNumber } from '../operatorUtils.js';
 import {
   collectorIdentifier,
   normalizeCollectorTimeline,
@@ -34,6 +35,15 @@ function CollectorTimelineList({ timeline }) {
   );
 }
 
+function formatCollectorDuration(seconds) {
+  const totalSeconds = Number(seconds);
+  if (!Number.isFinite(totalSeconds) || totalSeconds < 0) return '—';
+  if (totalSeconds < 60) return `${Math.round(totalSeconds)}s`;
+  if (totalSeconds < 3600) return `${Math.round(totalSeconds / 60)}m`;
+  if (totalSeconds < 86400) return `${Math.round(totalSeconds / 3600)}h`;
+  return `${Math.round(totalSeconds / 86400)}d`;
+}
+
 export function CollectorLaneCard({
   title,
   hint,
@@ -56,71 +66,105 @@ export function CollectorLaneCard({
         {rows.length === 0 ? (
           <div className="empty">{emptyText}</div>
         ) : (
-          rows.map((entry, index) => (
-            <div key={`${collectorIdentifier(entry)}-${index}`} className="stat-box">
-              <div
-                style={{
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  gap: 12,
-                  alignItems: 'flex-start',
-                }}
-              >
-                <div>
-                  <div style={{ fontWeight: 600 }}>
-                    {entry.label || entry.name || entry.provider}
-                  </div>
-                  <div style={{ fontSize: 12, opacity: 0.75, marginTop: 4 }}>
-                    {entry.events_ingested ?? entry.total_collected ?? 0} events ingested •{' '}
-                    {entry.freshness || validationStatusLabel(entry.validation?.status)}
-                  </div>
-                  <div style={{ fontSize: 12, opacity: 0.72, marginTop: 4 }}>
-                    Checkpoint{' '}
-                    {entry.checkpoint_id ? String(entry.checkpoint_id).slice(0, 10) : '—'}
-                    {entry.lag_seconds != null ? ` • lag ${entry.lag_seconds}s` : ''}
-                    {entry.error_category ? ` • ${entry.error_category}` : ''}
-                  </div>
-                  {entry.lifecycle_analytics && (
+          rows.map((entry, index) => {
+            const lifecycleAnalytics = entry.lifecycle_analytics || {};
+            const successRate = Number.isFinite(Number(lifecycleAnalytics.success_rate))
+              ? Math.round(Number(lifecycleAnalytics.success_rate) * 100)
+              : null;
+            const recentRuns = Array.isArray(entry.ingestion_evidence?.recent_runs)
+              ? entry.ingestion_evidence.recent_runs
+              : Array.isArray(entry.lifecycle)
+                ? entry.lifecycle
+                : [];
+
+            return (
+              <div key={`${collectorIdentifier(entry)}-${index}`} className="stat-box">
+                <div
+                  style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    gap: 12,
+                    alignItems: 'flex-start',
+                  }}
+                >
+                  <div>
+                    <div style={{ fontWeight: 600 }}>
+                      {entry.label || entry.name || entry.provider}
+                    </div>
+                    <div style={{ fontSize: 12, opacity: 0.75, marginTop: 4 }}>
+                      {entry.events_ingested ?? entry.total_collected ?? 0} events ingested •{' '}
+                      {entry.freshness || validationStatusLabel(entry.validation?.status)}
+                    </div>
                     <div style={{ fontSize: 12, opacity: 0.72, marginTop: 4 }}>
-                      {entry.lifecycle_analytics.total_runs || 0} validation run
-                      {(entry.lifecycle_analytics.total_runs || 0) === 1 ? '' : 's'} •{' '}
-                      {entry.lifecycle_analytics.events_last_24h || 0} events in 24h • failure
-                      streak {entry.lifecycle_analytics.recent_failure_streak || 0}
+                      Checkpoint{' '}
+                      {entry.checkpoint_id ? String(entry.checkpoint_id).slice(0, 10) : '—'}
+                      {entry.lag_seconds != null ? ` • lag ${entry.lag_seconds}s` : ''}
+                      {entry.error_category ? ` • ${entry.error_category}` : ''}
                     </div>
-                  )}
-                  {entry.ingestion_evidence?.pivots?.length > 0 && (
-                    <div className="btn-group" style={{ marginTop: 8, flexWrap: 'wrap' }}>
-                      {entry.ingestion_evidence.pivots.map((pivot) => (
-                        <a
-                          key={`${collectorIdentifier(entry)}-${pivot.surface}`}
-                          className="btn btn-sm"
-                          href={pivot.href}
-                        >
-                          {pivot.surface}
-                        </a>
-                      ))}
+                    <div className="chip-row" style={{ marginTop: 8 }}>
+                      <span className="scope-chip">Retries {entry.retry_count ?? 0}</span>
+                      {entry.backoff_seconds ? (
+                        <span className="scope-chip">
+                          Backoff {formatCollectorDuration(entry.backoff_seconds)}
+                        </span>
+                      ) : null}
+                      {entry.last_success_at ? (
+                        <span className="scope-chip">Last success recorded</span>
+                      ) : null}
                     </div>
-                  )}
+                    {entry.lifecycle_analytics && (
+                      <div className="chip-row" style={{ marginTop: 8 }}>
+                        {successRate != null ? (
+                          <span className="scope-chip">Success {successRate}%</span>
+                        ) : null}
+                        <span className="scope-chip">
+                          {entry.lifecycle_analytics.total_runs || 0} validation run
+                          {(entry.lifecycle_analytics.total_runs || 0) === 1 ? '' : 's'}
+                        </span>
+                        <span className="scope-chip">
+                          24h events {formatNumber(entry.lifecycle_analytics.events_last_24h || 0)}
+                        </span>
+                        {(entry.lifecycle_analytics.recent_failure_streak ?? 0) > 0 ? (
+                          <span className="scope-chip">
+                            Failure streak {entry.lifecycle_analytics.recent_failure_streak}
+                          </span>
+                        ) : null}
+                      </div>
+                    )}
+                    {entry.ingestion_evidence?.pivots?.length > 0 && (
+                      <div className="btn-group" style={{ marginTop: 8, flexWrap: 'wrap' }}>
+                        {entry.ingestion_evidence.pivots.map((pivot) => (
+                          <a
+                            key={`${collectorIdentifier(entry)}-${pivot.surface}`}
+                            className="btn btn-sm"
+                            href={pivot.href}
+                          >
+                            {pivot.surface}
+                          </a>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                  <span className={`badge ${validationBadgeClass(entry.validation?.status)}`}>
+                    {validationStatusLabel(entry.validation?.status)}
+                  </span>
                 </div>
-                <span className={`badge ${validationBadgeClass(entry.validation?.status)}`}>
-                  {validationStatusLabel(entry.validation?.status)}
-                </span>
+                <CollectorTimelineList timeline={normalizeCollectorTimeline(entry)} />
+                {recentRuns.length > 0 && (
+                  <div style={{ display: 'grid', gap: 6, marginTop: 10 }}>
+                    {recentRuns.slice(0, 3).map((run, runIndex) => (
+                      <div key={`${collectorIdentifier(entry)}-run-${runIndex}`} className="hint">
+                        {run.recorded_at || 'Recorded run'} •{' '}
+                        {run.success ? 'success' : run.error_category || 'failed'} •{' '}
+                        {run.event_count || 0} event
+                        {(run.event_count || 0) === 1 ? '' : 's'}
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
-              <CollectorTimelineList timeline={normalizeCollectorTimeline(entry)} />
-              {Array.isArray(entry.lifecycle) && entry.lifecycle.length > 0 && (
-                <div style={{ display: 'grid', gap: 6, marginTop: 10 }}>
-                  {entry.lifecycle.slice(0, 3).map((run, runIndex) => (
-                    <div key={`${collectorIdentifier(entry)}-run-${runIndex}`} className="hint">
-                      {run.recorded_at || 'Recorded run'} •{' '}
-                      {run.success ? 'success' : run.error_category || 'failed'} •{' '}
-                      {run.event_count || 0} event
-                      {(run.event_count || 0) === 1 ? '' : 's'}
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          ))
+            );
+          })
         )}
       </div>
       <div className="btn-group" style={{ marginTop: 12, flexWrap: 'wrap' }}>
