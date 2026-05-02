@@ -407,6 +407,10 @@ export default function Settings() {
     () => collectorRows.filter((entry) => collectorLane(entry) === 'saas'),
     [collectorRows],
   );
+  const edgeCollectorRows = useMemo(
+    () => collectorRows.filter((entry) => collectorLane(entry) === 'edge'),
+    [collectorRows],
+  );
   const awsCollectorValidation = useMemo(
     () => normalizeValidation(awsCollectorData?.validation),
     [awsCollectorData],
@@ -2155,6 +2159,16 @@ export default function Settings() {
                 primaryLabel="Open Assistant"
                 secondaryHref="/reports?source=collector-saas"
                 secondaryLabel="Open Reports"
+              />
+              <CollectorLaneCard
+                title="Endpoint & Syslog Lane"
+                hint="Route EDR and syslog collector evidence into infrastructure observability and SOC triage workflows before expanding automation coverage."
+                rows={edgeCollectorRows}
+                emptyText="No endpoint or syslog collectors have been configured yet."
+                primaryHref="/infrastructure?tab=observability"
+                primaryLabel="Open Infrastructure"
+                secondaryHref="/soc#queue"
+                secondaryLabel="Open SOC Queue"
               />
             </div>
           </div>

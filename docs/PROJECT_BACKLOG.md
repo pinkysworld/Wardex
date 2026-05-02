@@ -406,7 +406,7 @@ Phases 0–40 are complete. Routed browser regression coverage, the repeatable r
 
 ## Phase 50 — Collector lifecycle regression depth
 
-- [ ] T307: Add routed browser coverage for collector-specific analytics and readiness pivots from Settings and Infrastructure so shipped cloud, identity, SaaS, and syslog lanes keep stable deep links as provider workflows evolve.
+- [x] T307: Add routed browser coverage for collector-specific analytics and readiness pivots from Settings and Infrastructure so shipped cloud, identity, SaaS, and syslog lanes keep stable deep links as provider workflows evolve.
 - [ ] T308: Add regression coverage for staged ingestion evidence, freshness, failure-streak analytics, and retry/backoff context so collector health details remain operator-usable across the shipped lanes.
 - [ ] T309: Refresh roadmap, status, and feature-coverage tracking once the broader collector lifecycle regression tranche lands.
 

@@ -213,6 +213,7 @@ export function collectorLane(entry) {
   const id = collectorIdentifier(entry);
   if (id.includes('okta') || id.includes('entra')) return 'identity';
   if (
+    id.includes('github') ||
     id.includes('m365') ||
     id.includes('microsoft_365') ||
     id.includes('workspace') ||
@@ -221,6 +222,9 @@ export function collectorLane(entry) {
     return 'saas';
   }
   if (id.includes('aws') || id.includes('azure') || id.includes('gcp')) return 'cloud';
+  if (id.includes('crowdstrike') || id.includes('falcon') || id.includes('syslog')) {
+    return 'edge';
+  }
   return 'other';
 }
 

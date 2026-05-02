@@ -10,6 +10,12 @@ async function openAuthenticatedRoute(page, path) {
   await page.reload({ waitUntil: 'load' });
 }
 
+function collectorLaneCard(page, title) {
+  return page
+    .getByText(title, { exact: true })
+    .locator('xpath=ancestor::*[contains(concat(" ", normalize-space(@class), " "), " card ")][1]');
+}
+
 function createReviewState() {
   return {
     id: 'review-routed-e2e-1',
@@ -163,6 +169,93 @@ test.describe('Routed workflow coverage', () => {
   test('supports collector pivots and SSO validation from settings integrations', async ({ page }) => {
     await installAppMocks(page, {
       responses: {
+        'GET /api/collectors/status': {
+          collectors: [
+            {
+              provider: 'aws_cloudtrail',
+              label: 'AWS CloudTrail',
+              enabled: true,
+              freshness: 'fresh',
+              events_ingested: 24,
+              checkpoint_id: 'aws-checkpoint-123456',
+              validation: { status: 'ready', issues: [] },
+              timeline: [
+                {
+                  stage: 'Scope',
+                  status: 'ready',
+                  title: 'Collection scope',
+                  detail: 'CloudTrail management events are routed into infrastructure review.',
+                },
+              ],
+              ingestion_evidence: {
+                pivots: [
+                  {
+                    surface: 'SOC Workbench',
+                    href: '/soc?collector=aws_cloudtrail&lane=cloud',
+                  },
+                  {
+                    surface: 'Infrastructure',
+                    href: '/infrastructure?tab=observability&collector=aws_cloudtrail',
+                  },
+                ],
+              },
+            },
+            {
+              provider: 'okta_identity',
+              label: 'Okta Identity',
+              enabled: true,
+              total_collected: 3,
+              validation: { status: 'ready', issues: [] },
+              timeline: [
+                {
+                  stage: 'Routing',
+                  status: 'ready',
+                  title: 'Downstream pivots',
+                  detail: 'User session start telemetry is routed into UEBA and SOC triage workflows.',
+                },
+              ],
+            },
+            {
+              provider: 'github_audit',
+              label: 'GitHub Audit Log',
+              enabled: true,
+              total_collected: 8,
+              validation: { status: 'ready', issues: [] },
+              timeline: [
+                {
+                  stage: 'Routing',
+                  status: 'ready',
+                  title: 'Downstream pivots',
+                  detail: 'GitHub audit activity is ready for assistant and report pivots.',
+                },
+              ],
+            },
+            {
+              provider: 'generic_syslog',
+              label: 'Generic Syslog',
+              enabled: true,
+              freshness: 'fresh',
+              events_ingested: 12,
+              validation: { status: 'ready', issues: [] },
+              timeline: [
+                {
+                  stage: 'Routing',
+                  status: 'ready',
+                  title: 'Downstream pivots',
+                  detail: 'Syslog activity is routed into observability and triage workflows.',
+                },
+              ],
+              ingestion_evidence: {
+                pivots: [
+                  {
+                    surface: 'Infrastructure',
+                    href: '/infrastructure?tab=observability&collector=generic_syslog',
+                  },
+                ],
+              },
+            },
+          ],
+        },
         'GET /api/auth/sso/config': {
           providers: [
             {
@@ -197,18 +290,52 @@ test.describe('Routed workflow coverage', () => {
     await page.getByRole('tab', { name: 'Integrations' }).click();
 
     await expect(page.getByText('Collector Routing & Health')).toBeVisible();
+    await expect(page.getByText('Endpoint & Syslog Lane')).toBeVisible();
 
-    const cloudLane = page.locator('.card').filter({ hasText: 'Cloud Audit Lane' }).first();
+    const identityLane = collectorLaneCard(page, 'Identity Telemetry Lane').first();
+    await identityLane.getByRole('link', { name: 'Review UEBA' }).click();
+    await expect(page).toHaveURL(/\/ueba$/);
+
+    await openAuthenticatedRoute(page, './settings');
+    await page.getByRole('tab', { name: 'Integrations' }).click();
+
+    const saasLane = collectorLaneCard(page, 'SaaS Activity Lane').first();
+    await expect(saasLane).toContainText('GitHub Audit Log');
+    await saasLane.getByRole('link', { name: 'Open Assistant' }).click();
+    await expect(page).toHaveURL(/\/assistant\?source=collector-saas/);
+
+    const cloudLane = collectorLaneCard(page, 'Cloud Audit Lane').first();
+    await openAuthenticatedRoute(page, './settings');
+    await page.getByRole('tab', { name: 'Integrations' }).click();
+
+    const awsCard = page.locator('.stat-box').filter({ hasText: 'AWS CloudTrail' }).first();
+    await awsCard.getByRole('link', { name: 'SOC Workbench' }).click();
+    await expect(page).toHaveURL(/\/soc\?collector=aws_cloudtrail&lane=cloud/);
+
+    await openAuthenticatedRoute(page, './settings');
+    await page.getByRole('tab', { name: 'Integrations' }).click();
+
     await cloudLane.getByRole('link', { name: 'Open Infrastructure' }).click();
     await expect(page).toHaveURL(/\/infrastructure\?tab=observability/);
 
     await openAuthenticatedRoute(page, './settings');
     await page.getByRole('tab', { name: 'Integrations' }).click();
 
+    const edgeLane = collectorLaneCard(page, 'Endpoint & Syslog Lane').first();
+    await expect(edgeLane).toContainText('Generic Syslog');
+    const syslogCard = page.locator('.stat-box').filter({ hasText: 'Generic Syslog' }).first();
+    await syslogCard.getByRole('link', { name: 'Infrastructure' }).click();
+    await expect(page).toHaveURL(/\/infrastructure\?tab=observability&collector=generic_syslog/);
+
+    await openAuthenticatedRoute(page, './settings');
+    await page.getByRole('tab', { name: 'Integrations' }).click();
+
     const providerCard = page.locator('.stat-box').filter({ hasText: 'Corporate SSO' }).first();
     await expect(providerCard).toContainText('ready for callback validation');
-  await expect(providerCard).toContainText('/api/auth/sso/login?provider_id=corp-sso&redirect=%2Fsettings');
-  await expect(page.getByText(/\/api\/auth\/sso\/callback$/).first()).toBeVisible();
+    await expect(providerCard).toContainText(
+      '/api/auth/sso/login?provider_id=corp-sso&redirect=%2Fsettings',
+    );
+    await expect(page.getByText(/\/api\/auth\/sso\/callback$/).first()).toBeVisible();
     await providerCard.getByRole('button', { name: 'Start SSO Test' }).click();
     await page.waitForURL(/\/api\/auth\/sso\/login/);
 
