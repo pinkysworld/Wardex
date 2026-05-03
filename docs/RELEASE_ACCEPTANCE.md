@@ -14,7 +14,7 @@ The wrapper is implemented in `scripts/release_acceptance.sh` and runs these che
 
 1. `admin-console` production build via `npm run build`.
 2. Root `cargo build` so embedded assets and backend routes match the browser bundle.
-3. API/OpenAPI/SDK contract parity via `python3 scripts/check_contract_parity.py`.
+3. API/OpenAPI/SDK contract parity via `python3 scripts/check_contract_parity.py`, including the report template, report run, and report schedule workflow across runtime routing, the live OpenAPI builder, `docs/openapi.yaml`, and both SDK clients.
 4. Release-document consistency via `python3 scripts/validate_release_docs.py`, including `STATUS`, roadmap, feature UI coverage, and routed smoke mappings.
 5. Published marketing-site link validation across `site/*.html`.
 6. Managed mode only: start a temporary local Wardex instance on a loopback port with a cloned acceptance config that disables request throttling for the smoke run.
@@ -26,6 +26,19 @@ The wrapper is implemented in `scripts/release_acceptance.sh` and runs these che
    - `tests/playwright/assistant_ticketing_live.spec.js`
    - `tests/playwright/siem_settings_live.spec.js`
    - `tests/playwright/mobile_topbar_smoke.spec.js`
+
+## GitHub CI preflight
+
+The GitHub CI matrix also gates release branches with the Rust checks that are intentionally kept outside the browser-heavy acceptance wrapper:
+
+```bash
+cargo fmt -- --check
+cargo clippy --all-targets -- -D warnings
+cargo test --all-targets
+python3 scripts/check_panic_policy.py
+```
+
+The matrix runs Linux, macOS, and Windows without fail-fast cancellation so each platform reports its own failure context.
 
 ## Preconditions
 

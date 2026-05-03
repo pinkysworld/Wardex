@@ -20,21 +20,26 @@ jobs:
     env:
       TAP_REPOSITORY: pinkysworld/homebrew-wardex
     steps:
-      - name: Validate tap token
+      - name: Check tap token
+        id: tap-token
         env:
           HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
         run: |
           if [[ -z "$HOMEBREW_TAP_TOKEN" ]]; then
-            echo "HOMEBREW_TAP_TOKEN secret is required to push formula updates to ${TAP_REPOSITORY}." >&2
-            exit 1
+            echo "HOMEBREW_TAP_TOKEN secret is not configured; skipping Homebrew tap sync."
+            echo "available=false" >> "$GITHUB_OUTPUT"
+            exit 0
           fi
+          echo "available=true" >> "$GITHUB_OUTPUT"
 
       - name: Checkout default branch
+        if: steps.tap-token.outputs.available == 'true'
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           ref: ${{ github.event.repository.default_branch }}
 
       - name: Resolve release version
+        if: steps.tap-token.outputs.available == 'true'
         id: release
         env:
           EVENT_NAME: ${{ github.event_name }}
@@ -53,23 +58,27 @@ jobs:
           echo "version=${tag#v}" >> "$GITHUB_OUTPUT"
 
       - name: Download source archive
+        if: steps.tap-token.outputs.available == 'true'
         env:
           SOURCE_ARCHIVE_URL: https://github.com/${{ github.repository }}/archive/refs/tags/${{ steps.release.outputs.tag }}.tar.gz
         run: |
           curl --fail --location --retry 5 --retry-delay 5 --output wardex-source.tar.gz "$SOURCE_ARCHIVE_URL"
 
       - name: Compute source archive checksum
+        if: steps.tap-token.outputs.available == 'true'
         id: checksums
         run: |
           echo "source=$(sha256sum wardex-source.tar.gz | awk '{print $1}')" >> "$GITHUB_OUTPUT"
 
       - name: Clone tap repository
+        if: steps.tap-token.outputs.available == 'true'
         env:
           HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
         run: |
           git clone "https://x-access-token:${HOMEBREW_TAP_TOKEN}@github.com/${TAP_REPOSITORY}.git" tap-repo
 
       - name: Render tap formula
+        if: steps.tap-token.outputs.available == 'true'
         run: |
           bash deploy/homebrew/render_formula.sh \
             "${{ steps.release.outputs.version }}" \
@@ -78,9 +87,11 @@ jobs:
             tap-repo/Formula/wardex.rb
 
       - name: Validate formula syntax
+        if: steps.tap-token.outputs.available == 'true'
         run: ruby -c tap-repo/Formula/wardex.rb
 
       - name: Commit and push tap update
+        if: steps.tap-token.outputs.available == 'true'
         working-directory: tap-repo
         env:
           VERSION: ${{ steps.release.outputs.version }}

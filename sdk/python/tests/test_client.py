@@ -109,6 +109,37 @@ def test_status(monkeypatch):
     assert calls[0]["kwargs"]["timeout"] == 30.0
 
 
+def test_failover_drill(monkeypatch):
+    calls = install_stub(
+        monkeypatch,
+        {
+            ("POST", f"{BASE}/api/control/failover-drill"): DummyResponse(
+                url=f"{BASE}/api/control/failover-drill",
+                json_data={
+                    "digest": "failover-drill-digest",
+                    "drill": {
+                        "drill_type": "warm_standby_restore_dry_run",
+                        "orchestration_scope": "standalone_reference",
+                        "status": "passed",
+                        "last_run_at": "2026-04-30T12:02:00Z",
+                        "actor": "admin",
+                        "summary": "Validated durable event storage with checkpoint artifacts for the documented warm-standby restore path.",
+                        "artifact_source": "checkpoint",
+                        "durable_storage_verified": True,
+                        "backup_artifact_verified": False,
+                        "checkpoint_artifact_verified": True,
+                    },
+                },
+                headers={"content-type": "application/json"},
+            )
+        },
+    )
+    client = WardexClient(BASE, token="tok")
+    data = client.failover_drill()
+    assert data["drill"]["status"] == "passed"
+    assert calls[0]["method"] == "POST"
+
+
 def test_ws_stats(monkeypatch):
     calls = install_stub(
         monkeypatch,
@@ -481,6 +512,141 @@ def test_generate_report_uses_supported_endpoints(monkeypatch):
     assert client.generate_report("executive-summary")["reports"] == 3
     assert calls[0]["url"].endswith("/api/report")
     assert calls[1]["url"].endswith("/api/reports/executive-summary")
+
+
+def test_report_listing_endpoints_include_execution_context_filters(monkeypatch):
+    scoped_params = (
+        ("case_id", "42"),
+        ("incident_id", "7"),
+        ("investigation_id", "inv-7"),
+        ("scope", "scoped"),
+        ("source", "case"),
+    )
+    calls = install_stub(
+        monkeypatch,
+        {
+            ("GET", f"{BASE}/api/report-templates", scoped_params): DummyResponse(
+                url=f"{BASE}/api/report-templates",
+                json_data={"templates": [], "count": 0},
+                headers={"content-type": "application/json"},
+            ),
+            ("GET", f"{BASE}/api/report-runs", scoped_params): DummyResponse(
+                url=f"{BASE}/api/report-runs",
+                json_data={"runs": [], "count": 0},
+                headers={"content-type": "application/json"},
+            ),
+            ("GET", f"{BASE}/api/report-schedules", scoped_params): DummyResponse(
+                url=f"{BASE}/api/report-schedules",
+                json_data={"schedules": [], "count": 0},
+                headers={"content-type": "application/json"},
+            ),
+        },
+    )
+    client = WardexClient(BASE, token="tok")
+    assert client.report_templates(
+        case_id="42",
+        incident_id="7",
+        investigation_id="inv-7",
+        source="case",
+        scope="scoped",
+    )["count"] == 0
+    assert client.report_runs(
+        case_id="42",
+        incident_id="7",
+        investigation_id="inv-7",
+        source="case",
+        scope="scoped",
+    )["count"] == 0
+    assert client.report_schedules(
+        case_id="42",
+        incident_id="7",
+        investigation_id="inv-7",
+        source="case",
+        scope="scoped",
+    )["count"] == 0
+    assert calls[0]["method"] == "GET"
+    assert calls[1]["method"] == "GET"
+    assert calls[2]["method"] == "GET"
+
+
+def test_report_mutation_endpoints_post_failover_history_payloads(monkeypatch):
+    calls = install_stub(
+        monkeypatch,
+        {
+            ("POST", f"{BASE}/api/report-templates"): DummyResponse(
+                url=f"{BASE}/api/report-templates",
+                json_data={
+                    "status": "saved",
+                    "template": {
+                        "id": "tpl-failover-drill-history",
+                        "kind": "control_plane_failover_history",
+                    },
+                },
+                headers={"content-type": "application/json"},
+            ),
+            ("POST", f"{BASE}/api/report-runs"): DummyResponse(
+                url=f"{BASE}/api/report-runs",
+                json_data={
+                    "status": "created",
+                    "run": {
+                        "id": "run-1",
+                        "kind": "control_plane_failover_history",
+                        "preview": {"kind": "control_plane_failover_history"},
+                    },
+                },
+                headers={"content-type": "application/json"},
+            ),
+            ("POST", f"{BASE}/api/report-schedules"): DummyResponse(
+                url=f"{BASE}/api/report-schedules",
+                json_data={
+                    "status": "saved",
+                    "schedule": {
+                        "id": "sched-1",
+                        "kind": "control_plane_failover_history",
+                    },
+                },
+                headers={"content-type": "application/json"},
+            ),
+        },
+    )
+    client = WardexClient(BASE, token="tok")
+    template = client.save_report_template(
+        {
+            "name": "Control-plane Failover Drill History",
+            "kind": "control_plane_failover_history",
+            "scope": "control_plane",
+            "format": "json",
+        }
+    )
+    run = client.create_report_run(
+        {
+            "name": "Control-plane Failover Drill History",
+            "kind": "control_plane_failover_history",
+            "scope": "control_plane",
+            "format": "json",
+            "case_id": "42",
+            "incident_id": "7",
+            "investigation_id": "inv-7",
+            "source": "case",
+        }
+    )
+    schedule = client.save_report_schedule(
+        {
+            "name": "Weekly Control-plane Failover Drill History",
+            "kind": "control_plane_failover_history",
+            "scope": "control_plane",
+            "format": "json",
+            "cadence": "weekly",
+            "target": "audit@wardex.local",
+        }
+    )
+
+    assert template["template"]["kind"] == "control_plane_failover_history"
+    assert run["run"]["preview"]["kind"] == "control_plane_failover_history"
+    assert schedule["schedule"]["kind"] == "control_plane_failover_history"
+    assert calls[0]["kwargs"]["json"]["kind"] == "control_plane_failover_history"
+    assert calls[1]["kwargs"]["json"]["investigation_id"] == "inv-7"
+    assert calls[2]["kwargs"]["json"]["cadence"] == "weekly"
 
 
 def test_error_mapping(monkeypatch):

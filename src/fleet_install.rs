@@ -254,17 +254,16 @@ fn powershell_quote(value: &str) -> String {
 
 fn install_artifact(platform: &str) -> (&'static str, &'static str) {
     match platform {
-        "macos" => ("wardex-agent-macos-universal", "/usr/local/bin/wardex-agent"),
+        "macos" => (
+            "wardex-agent-macos-universal",
+            "/usr/local/bin/wardex-agent",
+        ),
         _ => ("wardex-agent-linux-amd64", "/usr/local/bin/wardex-agent"),
     }
 }
 
 fn sudo_prefix(request: &SshInstallRequest) -> &'static str {
-    if request.use_sudo {
-        "sudo -n "
-    } else {
-        ""
-    }
+    if request.use_sudo { "sudo -n " } else { "" }
 }
 
 fn combine_output(stdout: &[u8], stderr: &[u8]) -> Option<String> {
@@ -293,10 +292,7 @@ fn truncate_output(text: &str) -> String {
     format!("{head}\n... output truncated ...\n{tail}")
 }
 
-pub fn build_remote_install_script(
-    request: &SshInstallRequest,
-    enrollment_token: &str,
-) -> String {
+pub fn build_remote_install_script(request: &SshInstallRequest, enrollment_token: &str) -> String {
     let platform = request.normalized_platform();
     let (artifact_name, install_path) = install_artifact(platform);
     let manager_url = request.manager_url.trim_end_matches('/');
@@ -564,7 +560,8 @@ pub fn execute_ssh_install(
             .unwrap_or_default();
         Err(format!(
             "ssh transport exited with code {}{suffix}",
-            output.status
+            output
+                .status
                 .code()
                 .map(|code| code.to_string())
                 .unwrap_or_else(|| "unknown".to_string())
@@ -618,7 +615,8 @@ pub fn execute_winrm_install(
             .unwrap_or_default();
         Err(format!(
             "WinRM transport exited with code {}{suffix}",
-            output.status
+            output
+                .status
                 .code()
                 .map(|code| code.to_string())
                 .unwrap_or_else(|| "unknown".to_string())
@@ -684,7 +682,10 @@ mod tests {
         let spec = build_ssh_command_spec(&request, "echo ok");
         assert!(spec.args.contains(&"BatchMode=yes".to_string()));
         assert!(spec.args.contains(&"ConnectTimeout=20".to_string()));
-        assert!(spec.args.contains(&"StrictHostKeyChecking=accept-new".to_string()));
+        assert!(
+            spec.args
+                .contains(&"StrictHostKeyChecking=accept-new".to_string())
+        );
         assert!(spec.args.contains(&"-i".to_string()));
         assert!(spec.args.contains(&"/tmp/wardex-test-key".to_string()));
         assert!(spec.args.contains(&"root@10.0.4.12".to_string()));
@@ -698,7 +699,8 @@ mod tests {
 
     #[test]
     fn windows_script_uses_agent_config_and_service_args() {
-        let script = build_remote_windows_install_script(&sample_winrm_request("windows"), "token-123");
+        let script =
+            build_remote_windows_install_script(&sample_winrm_request("windows"), "token-123");
         assert!(script.contains(r#"server_url = "https://manager.example.com:9090""#));
         assert!(script.contains(r#"enrollment_token = "token-123""#));
         assert!(script.contains(r#"agent --config "C:\ProgramData\Wardex\agent.toml""#));
@@ -710,7 +712,10 @@ mod tests {
     fn build_winrm_command_spec_targets_wsman_uri() {
         let request = sample_winrm_request("windows");
         let spec = build_winrm_command_spec(&request, "Write-Host ok");
-        assert_eq!(spec.args, vec!["-NoLogo", "-NoProfile", "-NonInteractive", "-Command", "-"]);
+        assert_eq!(
+            spec.args,
+            vec!["-NoLogo", "-NoProfile", "-NonInteractive", "-Command", "-"]
+        );
         assert!(spec.script.contains("PSWSMan"));
         assert!(spec.script.contains("http://10.0.4.20:5985/wsman"));
         assert!(spec.script.contains("FromBase64String"));

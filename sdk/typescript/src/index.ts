@@ -644,7 +644,52 @@ export interface SupportReadinessBackup {
   enabled: boolean;
   path: string;
   retention_count: number;
+  schedule_cron: string;
   observed_backups: number;
+  latest_backup_at: string | null;
+}
+
+export interface ControlPlaneFailoverDrill {
+  drill_type: string;
+  orchestration_scope: string;
+  status: string;
+  last_run_at: string | null;
+  actor: string | null;
+  summary: string;
+  artifact_source: string;
+  durable_storage_verified: boolean;
+  backup_artifact_verified: boolean;
+  checkpoint_artifact_verified: boolean;
+}
+
+export interface ControlPlaneClusterState {
+  node_id: string;
+  role: string;
+  leader_id: string | null;
+  peers_total: number;
+  peers_reachable: number;
+  commit_index: number;
+  healthy: boolean;
+}
+
+export interface SupportReadinessControlPlane {
+  topology: string;
+  orchestration_scope: string;
+  ha_mode: string;
+  leader: boolean;
+  durable_storage: boolean;
+  event_store_path: string;
+  backup_schedule_cron: string;
+  observed_backups: number;
+  latest_backup_at: string | null;
+  checkpoint_count: number;
+  latest_checkpoint_at: string | null;
+  restore_ready: boolean;
+  recovery_status: string;
+  documented_failover: string;
+  cluster: ControlPlaneClusterState | null;
+  failover_drill: ControlPlaneFailoverDrill;
+  failover_drill_history: ControlPlaneFailoverDrill[];
 }
 
 export interface SupportReadinessAuditChain {
@@ -720,6 +765,7 @@ export interface SupportReadinessEvidence {
   storage: SupportReadinessStorage;
   retention: SupportReadinessRetention;
   backup: SupportReadinessBackup;
+  control_plane: SupportReadinessControlPlane;
   audit_chain: SupportReadinessAuditChain;
   collectors: SupportCollectorReadinessSummary;
   response_history: SupportReadinessResponseHistory;
@@ -732,6 +778,169 @@ export interface SupportReadinessEvidence {
 export interface SupportReadinessEvidenceResponse {
   digest: string;
   evidence: SupportReadinessEvidence;
+}
+
+export interface ControlPlaneFailoverDrillResponse {
+  digest: string;
+  drill: ControlPlaneFailoverDrill;
+}
+
+export type ReportKind =
+  | "executive_status"
+  | "audit_export"
+  | "control_plane_failover_history"
+  | "incident_package"
+  | "compliance_snapshot"
+  | "compliance_markdown"
+  | "alert_export"
+  | "response_approval_snapshot"
+  | (string & {});
+
+export type ReportExecutionScopeFilter = "all" | "scoped" | "unscoped";
+
+export interface ReportExecutionContext {
+  case_id: string | null;
+  incident_id: string | null;
+  investigation_id: string | null;
+  source: string | null;
+}
+
+export interface ReportArtifactMetadata {
+  scope: string;
+  source_run_id: string | null;
+  generated_by: string;
+  input_hash: string;
+  artifact_hash: string;
+  replayable_context_id: string | null;
+}
+
+export interface ReportTemplateRecord {
+  id: string;
+  name: string;
+  kind: ReportKind;
+  scope: string;
+  format: string;
+  last_run_at: string | null;
+  next_run_at: string | null;
+  status: string;
+  audience: string;
+  description: string;
+  execution_context: ReportExecutionContext | null;
+}
+
+export interface ReportRunRecord {
+  id: string;
+  name: string;
+  kind: ReportKind;
+  scope: string;
+  format: string;
+  last_run_at: string | null;
+  next_run_at: string | null;
+  status: string;
+  audience: string;
+  summary: string;
+  size_bytes: number;
+  preview: Record<string, unknown>;
+  execution_context: ReportExecutionContext | null;
+  artifact_metadata: ReportArtifactMetadata | null;
+}
+
+export interface ReportScheduleRecord {
+  id: string;
+  name: string;
+  kind: ReportKind;
+  scope: string;
+  format: string;
+  last_run_at: string | null;
+  next_run_at: string | null;
+  status: string;
+  cadence: string;
+  target: string;
+  execution_context: ReportExecutionContext | null;
+}
+
+export interface ReportExecutionContextQuery {
+  case_id?: string;
+  incident_id?: string;
+  investigation_id?: string;
+  source?: string;
+  scope?: ReportExecutionScopeFilter;
+}
+
+export interface SaveReportTemplateRequest {
+  id?: string;
+  name: string;
+  kind: ReportKind;
+  scope?: string;
+  format?: string;
+  status?: string;
+  audience?: string;
+  description?: string;
+  case_id?: string;
+  incident_id?: string;
+  investigation_id?: string;
+  source?: string;
+}
+
+export interface CreateReportRunRequest {
+  name: string;
+  kind: ReportKind;
+  scope?: string;
+  format?: string;
+  audience?: string;
+  status?: string;
+  summary?: string;
+  preview_override?: Record<string, unknown>;
+  case_id?: string;
+  incident_id?: string;
+  investigation_id?: string;
+  source?: string;
+}
+
+export interface SaveReportScheduleRequest {
+  id?: string;
+  name: string;
+  kind: ReportKind;
+  scope?: string;
+  format?: string;
+  cadence?: "daily" | "weekly";
+  target?: string;
+  next_run_at?: string;
+  status?: string;
+  case_id?: string;
+  incident_id?: string;
+  investigation_id?: string;
+  source?: string;
+}
+
+export interface ReportTemplateListResponse {
+  templates: ReportTemplateRecord[];
+  count: number;
+}
+
+export interface SaveReportTemplateResponse {
+  status: string;
+  template: ReportTemplateRecord;
+}
+
+export interface ReportRunListResponse {
+  runs: ReportRunRecord[];
+  count: number;
+}
+
+export interface CreateReportRunResponse {
+  status: string;
+  run: ReportRunRecord;
+}
+
+export interface ReportScheduleListResponse {
+  schedules: ReportScheduleRecord[];
+  count: number;
+}
+
+export interface SaveReportScheduleResponse {
+  status: string;
+  schedule: ReportScheduleRecord;
 }
 
 export interface SupportDiagnosticsSession {
@@ -880,8 +1089,20 @@ export interface SystemHealthStorage {
 
 export interface SystemHealthHaMode {
   mode: string;
+  topology: string;
+  orchestration_scope: string;
   status: string;
   leader: boolean;
+  recovery_status: string;
+  documented_failover: string;
+  observed_backups: number;
+  latest_backup_at: string | null;
+  checkpoint_count: number;
+  latest_checkpoint_at: string | null;
+  restore_ready: boolean;
+  cluster: ControlPlaneClusterState | null;
+  failover_drill_history_count: number;
+  failover_drill: ControlPlaneFailoverDrill;
 }
 
 export interface SystemHealthIdentity {
@@ -2430,6 +2651,8 @@ export interface BackupStatus {
   retention_count: number;
   path: string;
   schedule_cron: string;
+  observed_backups: number;
+  latest_backup_at: string | null;
 }
 
 export interface AdminBackupResponse {
@@ -4884,6 +5107,23 @@ interface RequestOptions {
   rawBody?: BodyInit;
 }
 
+function buildReportExecutionContextQuery(
+  params: ReportExecutionContextQuery = {}
+): string {
+  const query = new URLSearchParams();
+  if (params.case_id) query.set("case_id", String(params.case_id));
+  if (params.incident_id) query.set("incident_id", String(params.incident_id));
+  if (params.investigation_id) {
+    query.set("investigation_id", String(params.investigation_id));
+  }
+  if (params.source) query.set("source", String(params.source));
+  if (params.scope && params.scope !== "all") {
+    query.set("scope", String(params.scope));
+  }
+  const suffix = query.toString();
+  return suffix ? `?${suffix}` : "";
+}
+
 // ── Client ───────────────────────────────────────────────────────────────────
 
 export class WardexClient {
@@ -5043,8 +5283,51 @@ export class WardexClient {
     return this.request("POST", "/api/support/first-run-proof");
   }
 
+  async failoverDrill(): Promise<ControlPlaneFailoverDrillResponse> {
+    return this.request("POST", "/api/control/failover-drill");
+  }
+
   async productionDemoLab(): Promise<FirstRunProofResponse> {
     return this.request("POST", "/api/demo/lab");
+  }
+
+  async reportTemplates(
+    params: ReportExecutionContextQuery = {}
+  ): Promise<ReportTemplateListResponse> {
+    const suffix = buildReportExecutionContextQuery(params);
+    return this.request("GET", `/api/report-templates${suffix}`);
+  }
+
+  async saveReportTemplate(
+    request: SaveReportTemplateRequest
+  ): Promise<SaveReportTemplateResponse> {
+    return this.request("POST", "/api/report-templates", request);
+  }
+
+  async reportRuns(
+    params: ReportExecutionContextQuery = {}
+  ): Promise<ReportRunListResponse> {
+    const suffix = buildReportExecutionContextQuery(params);
+    return this.request("GET", `/api/report-runs${suffix}`);
+  }
+
+  async createReportRun(
+    request: CreateReportRunRequest
+  ): Promise<CreateReportRunResponse> {
+    return this.request("POST", "/api/report-runs", request);
+  }
+
+  async reportSchedules(
+    params: ReportExecutionContextQuery = {}
+  ): Promise<ReportScheduleListResponse> {
+    const suffix = buildReportExecutionContextQuery(params);
+    return this.request("GET", `/api/report-schedules${suffix}`);
+  }
+
+  async saveReportSchedule(
+    request: SaveReportScheduleRequest
+  ): Promise<SaveReportScheduleResponse> {
+    return this.request("POST", "/api/report-schedules", request);
   }
 
   async docsIndex(params: DocsIndexParams = {}): Promise<DocsIndexResponse> {

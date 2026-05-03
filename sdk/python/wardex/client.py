@@ -55,6 +55,8 @@ CommandCenterMetricKey = Literal[
     "compliance_packs",
 ]
 
+ReportExecutionScopeFilter = Literal["all", "scoped", "unscoped"]
+
 
 class CommandCenterMetrics(TypedDict):
     open_incidents: int
@@ -600,6 +602,81 @@ class WardexClient:
             return self._get("/api/reports/executive-summary")
         raise ValueError("report_type must be one of full/latest/analysis/executive-summary")
 
+    def report_templates(
+        self,
+        *,
+        case_id: str | None = None,
+        incident_id: str | None = None,
+        investigation_id: str | None = None,
+        source: str | None = None,
+        scope: ReportExecutionScopeFilter | None = None,
+    ) -> dict[str, Any]:
+        params: dict[str, Any] = {}
+        if case_id:
+            params["case_id"] = case_id
+        if incident_id:
+            params["incident_id"] = incident_id
+        if investigation_id:
+            params["investigation_id"] = investigation_id
+        if source:
+            params["source"] = source
+        if scope and scope != "all":
+            params["scope"] = scope
+        return self._get("/api/report-templates", **params)
+
+    def save_report_template(self, payload: dict[str, Any]) -> dict[str, Any]:
+        return self._post("/api/report-templates", payload)
+
+    def report_runs(
+        self,
+        *,
+        case_id: str | None = None,
+        incident_id: str | None = None,
+        investigation_id: str | None = None,
+        source: str | None = None,
+        scope: ReportExecutionScopeFilter | None = None,
+    ) -> dict[str, Any]:
+        params: dict[str, Any] = {}
+        if case_id:
+            params["case_id"] = case_id
+        if incident_id:
+            params["incident_id"] = incident_id
+        if investigation_id:
+            params["investigation_id"] = investigation_id
+        if source:
+            params["source"] = source
+        if scope and scope != "all":
+            params["scope"] = scope
+        return self._get("/api/report-runs", **params)
+
+    def create_report_run(self, payload: dict[str, Any]) -> dict[str, Any]:
+        return self._post("/api/report-runs", payload)
+
+    def report_schedules(
+        self,
+        *,
+        case_id: str | None = None,
+        incident_id: str | None = None,
+        investigation_id: str | None = None,
+        source: str | None = None,
+        scope: ReportExecutionScopeFilter | None = None,
+    ) -> dict[str, Any]:
+        params: dict[str, Any] = {}
+        if case_id:
+            params["case_id"] = case_id
+        if incident_id:
+            params["incident_id"] = incident_id
+        if investigation_id:
+            params["investigation_id"] = investigation_id
+        if source:
+            params["source"] = source
+        if scope and scope != "all":
+            params["scope"] = scope
+        return self._get("/api/report-schedules", **params)
+
+    def save_report_schedule(self, payload: dict[str, Any]) -> dict[str, Any]:
+        return self._post("/api/report-schedules", payload)
+
     # ── config ────────────────────────────────────────────────────────────
 
     def get_config(self) -> dict[str, Any]:
@@ -626,6 +703,9 @@ class WardexClient:
 
     def first_run_proof(self) -> dict[str, Any]:
         return self._post("/api/support/first-run-proof")
+
+    def failover_drill(self) -> dict[str, Any]:
+        return self._post("/api/control/failover-drill")
 
     # ── vulnerability scanner ─────────────────────────────────────────
 

@@ -627,32 +627,6 @@ fn load_or_create_config() -> Config {
     Config::default()
 }
 
-#[cfg(test)]
-mod tests {
-    use super::find_agent_config_override;
-    use std::path::PathBuf;
-
-    #[test]
-    fn finds_agent_config_override_in_argument_list() {
-        let args = vec![
-            "--server".to_string(),
-            "https://manager.example.com:9090".to_string(),
-            "--config".to_string(),
-            "/tmp/wardex-agent.toml".to_string(),
-        ];
-
-        let path = find_agent_config_override(&args).unwrap();
-        assert_eq!(path, Some(PathBuf::from("/tmp/wardex-agent.toml")));
-    }
-
-    #[test]
-    fn rejects_missing_agent_config_override_value() {
-        let args = vec!["--config".to_string()];
-        let error = find_agent_config_override(&args).unwrap_err();
-        assert!(error.contains("requires a path"));
-    }
-}
-
 fn register_ctrlc(shutdown: Arc<AtomicBool>) -> Result<(), String> {
     ctrlc::set_handler(move || {
         eprintln!("\nShutting down gracefully…");
@@ -761,4 +735,30 @@ fn run_bench(benign_path: &str, attack_path: &str, threshold: f32) -> Result<(),
     }
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::find_agent_config_override;
+    use std::path::PathBuf;
+
+    #[test]
+    fn finds_agent_config_override_in_argument_list() {
+        let args = vec![
+            "--server".to_string(),
+            "https://manager.example.com:9090".to_string(),
+            "--config".to_string(),
+            "/tmp/wardex-agent.toml".to_string(),
+        ];
+
+        let path = find_agent_config_override(&args).unwrap();
+        assert_eq!(path, Some(PathBuf::from("/tmp/wardex-agent.toml")));
+    }
+
+    #[test]
+    fn rejects_missing_agent_config_override_value() {
+        let args = vec!["--config".to_string()];
+        let error = find_agent_config_override(&args).unwrap_err();
+        assert!(error.contains("requires a path"));
+    }
 }

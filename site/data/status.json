@@ -1,13 +1,13 @@
 {
-  "updated_at": "2026-04-27",
-  "version": "0.55.1",
-  "backlog_completed": 160,
-  "backlog_total": 160,
-  "completed_phases": 28,
-  "phases_completed": 28,
-  "total_phases": 28,
-  "tasks_completed": 160,
-  "total_tasks": 160,
+  "updated_at": "2026-05-03",
+  "version": "0.56.0",
+  "backlog_completed": 163,
+  "backlog_total": 163,
+  "completed_phases": 29,
+  "phases_completed": 29,
+  "total_phases": 29,
+  "tasks_completed": 163,
+  "total_tasks": 163,
   "cli_commands": [
     "demo",
     "analyze",
@@ -150,7 +150,8 @@
     "Service-level objectives with error-budget instrumentation and GET /api/slo/status endpoint",
     "Deployment model documentation: standalone, multi-tenant, edge relay, regional federation",
     "Threat model promoted to primary docs: adversary profiles, abuse cases, trust boundaries",
-    "Production hardening checklist: 59-control scorecard derived from XDR AI handoff pack"
+    "Production hardening checklist: 59-control scorecard derived from XDR AI handoff pack",
+    "Control-plane posture evidence for active/passive recovery readiness surfaced in Help & Docs, support-readiness, dependency-health, and backup-status contracts"
   ],
   "partially_wired": [],
   "not_implemented": [],

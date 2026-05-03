@@ -258,6 +258,7 @@ export default function Infrastructure() {
   const { data: compData } = useApi(api.complianceSummary);
   const { data: analyticsData } = useApi(api.apiAnalytics);
   const { data: tracesData } = useApi(api.traces);
+  const traceSamples = Array.isArray(tracesData?.traces) ? tracesData.traces.slice(0, 6) : [];
   const [scanFilename, setScanFilename] = useState('sample.bin');
   const [scanSample, setScanSample] = useState('');
   const [scanBehavior, setScanBehavior] = useState(DEFAULT_SCAN_BEHAVIOR);
@@ -1920,6 +1921,35 @@ export default function Infrastructure() {
               }}
               limit={4}
             />
+            <div className="card-title" style={{ marginTop: 16, marginBottom: 8 }}>
+              Trace Samples
+            </div>
+            {traceSamples.length === 0 ? (
+              <div className="empty">No trace samples are available yet.</div>
+            ) : (
+              <div className="table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Trace ID</th>
+                      <th>Service</th>
+                      <th>Span</th>
+                      <th>Status</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {traceSamples.map((trace, index) => (
+                      <tr key={trace.id || trace.trace_id || `trace-sample-${index}`}>
+                        <td>{trace.id || trace.trace_id || `trace-${index + 1}`}</td>
+                        <td>{trace.service || trace.resource?.service?.name || 'unknown'}</td>
+                        <td>{trace.root_span || trace.span_name || trace.name || 'unknown'}</td>
+                        <td>{trace.status || trace.outcome || 'unknown'}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
             <JsonDetails data={tracesData} label="Trace collector detail" />
           </div>
         </>

@@ -478,13 +478,13 @@ export default function App() {
       setAuthError('');
       const redirectParams = new URLSearchParams(location.search);
       redirectParams.delete('sso_error');
-      const redirect = `${location.pathname}${redirectParams.toString() ? `?${redirectParams.toString()}` : ''}`;
+      const redirect = `${location.pathname}${redirectParams.toString() ? `?${redirectParams.toString()}` : ''}${location.hash || ''}`;
       const params = new URLSearchParams();
       if (providerId) params.set('provider_id', providerId);
       params.set('redirect', redirect || '/');
       window.location.assign(`/api/auth/sso/login?${params.toString()}`);
     },
-    [location.pathname, location.search],
+    [location.hash, location.pathname, location.search],
   );
 
   // Filter sidebar items by role
@@ -1062,7 +1062,7 @@ export default function App() {
               )}
             </div>
           ) : (
-            <Routes>
+            <Routes key={location.pathname}>
               <Route
                 path="/"
                 element={

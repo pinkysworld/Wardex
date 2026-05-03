@@ -27,6 +27,26 @@ export const SIEM_TYPE_OPTIONS = [
   { value: 'google', label: 'Google SecOps UDM' },
   { value: 'qradar', label: 'IBM QRadar' },
 ];
+export const SETTINGS_TAB_IDS = [
+  'config',
+  'monitoring',
+  'integrations',
+  'flags',
+  'team',
+  'admin',
+];
+
+const HISTORICAL_SEARCH_PARAM_KEYS = {
+  since: 'historical_since',
+  until: 'historical_until',
+  tenant_id: 'historical_tenant_id',
+  device_id: 'historical_device_id',
+  user_name: 'historical_user_name',
+  src_ip: 'historical_src_ip',
+  severity_min: 'historical_severity_min',
+  event_class: 'historical_event_class',
+  limit: 'historical_limit',
+};
 
 export function parseStructuredConfig(config) {
   if (!config) return null;
@@ -90,6 +110,11 @@ export function auditStatusClass(statusCode) {
 export function auditRangeLabel(page) {
   if (!page.count || !page.total) return 'No audit entries captured yet.';
   return `Showing ${page.offset + 1}-${page.offset + page.count} of ${page.total} entries`;
+}
+
+export function normalizeSettingsTab(value) {
+  const normalized = String(value || '').toLowerCase();
+  return SETTINGS_TAB_IDS.includes(normalized) ? normalized : 'config';
 }
 
 export function normalizeValidation(value) {
@@ -264,6 +289,78 @@ export function parseListInput(value) {
     .split('\n')
     .map((entry) => entry.trim())
     .filter(Boolean);
+}
+
+export function createHistoricalSearchDraft(query = null) {
+  return {
+    since: query?.since || '',
+    until: query?.until || '',
+    tenant_id: query?.tenant_id || '',
+    device_id: query?.device_id || '',
+    user_name: query?.user_name || '',
+    src_ip: query?.src_ip || '',
+    severity_min: query?.severity_min ?? '',
+    event_class: query?.event_class ?? '',
+    limit: query?.limit ?? 25,
+  };
+}
+
+export function parseHistoricalSearchParams(searchParams) {
+  const seeded = {};
+
+  Object.entries(HISTORICAL_SEARCH_PARAM_KEYS).forEach(([field, paramKey]) => {
+    const value = searchParams?.get?.(paramKey);
+    if (value === null || value === '') return;
+    if (field === 'limit') {
+      const parsed = Number.parseInt(value, 10);
+      seeded.limit = Number.isFinite(parsed) && parsed > 0 ? parsed : 25;
+      return;
+    }
+    seeded[field] = value;
+  });
+
+  return createHistoricalSearchDraft(seeded);
+}
+
+export function normalizeHistoricalSearchQuery(query = null) {
+  const draft = createHistoricalSearchDraft(query);
+  const next = {
+    limit: Math.max(1, Number.parseInt(String(draft.limit || 25), 10) || 25),
+  };
+
+  ['since', 'until', 'tenant_id', 'device_id', 'user_name', 'src_ip'].forEach((field) => {
+    const value = String(draft[field] || '').trim();
+    if (value) next[field] = value;
+  });
+
+  ['severity_min', 'event_class'].forEach((field) => {
+    const value = String(draft[field] ?? '').trim();
+    if (value) next[field] = value;
+  });
+
+  return next;
+}
+
+export function buildLongRetentionHistorySearchParams(query = {}, currentSearchParams = null) {
+  const next = new URLSearchParams(currentSearchParams || undefined);
+  const normalized = normalizeHistoricalSearchQuery(query);
+
+  next.set('tab', 'admin');
+  Object.values(HISTORICAL_SEARCH_PARAM_KEYS).forEach((paramKey) => next.delete(paramKey));
+
+  Object.entries(HISTORICAL_SEARCH_PARAM_KEYS).forEach(([field, paramKey]) => {
+    const value = normalized[field];
+    if (value !== undefined && value !== '') {
+      next.set(paramKey, String(value));
+    }
+  });
+
+  return next;
+}
+
+export function buildLongRetentionHistoryPath(query = {}, currentSearchParams = null) {
+  const params = buildLongRetentionHistorySearchParams(query, currentSearchParams);
+  return `/settings?${params.toString()}`;
 }
 
 export function createRetentionDraft(status = null) {

@@ -28,6 +28,8 @@ pub struct ClusterConfig {
     pub node_id: NodeId,
     pub bind_addr: String,
     pub peers: Vec<PeerConfig>,
+    #[serde(default)]
+    pub auth_token: Option<String>,
     pub heartbeat_interval_ms: u64,
     pub election_timeout_ms: u64,
     pub replication_batch_size: usize,
@@ -39,6 +41,7 @@ impl Default for ClusterConfig {
             node_id: NodeId("node-1".into()),
             bind_addr: "0.0.0.0:9078".into(),
             peers: Vec::new(),
+            auth_token: None,
             heartbeat_interval_ms: 1000,
             election_timeout_ms: 5000,
             replication_batch_size: 100,
@@ -334,6 +337,7 @@ impl ClusterNode {
         let mut inner = self.inner.lock().unwrap_or_else(|e| e.into_inner());
         inner.state.term += 1;
         inner.state.role = NodeRole::Candidate;
+        inner.state.leader_id = None;
         inner.state.voted_for = Some(inner.config.node_id.clone());
         inner.election_deadline =
             Instant::now() + Duration::from_millis(inner.config.election_timeout_ms);
@@ -365,6 +369,7 @@ impl ClusterNode {
         if req.term > inner.state.term {
             inner.state.term = req.term;
             inner.state.role = NodeRole::Follower;
+            inner.state.leader_id = None;
             inner.state.voted_for = None;
             inner.election_deadline =
                 Instant::now() + Duration::from_millis(inner.config.election_timeout_ms);
@@ -383,6 +388,10 @@ impl ClusterNode {
         let granted = can_vote && last_log_ok;
         if granted {
             inner.state.voted_for = Some(req.candidate_id.clone());
+        }
+        if let Some(status) = inner.peer_status.get_mut(&req.candidate_id) {
+            status.last_contact = Instant::now();
+            status.reachable = true;
         }
 
         VoteResponse {
@@ -441,6 +450,10 @@ impl ClusterNode {
         inner.state.last_heartbeat = Utc::now().to_rfc3339();
         inner.election_deadline =
             Instant::now() + Duration::from_millis(inner.config.election_timeout_ms);
+        if let Some(status) = inner.peer_status.get_mut(&req.leader_id) {
+            status.last_contact = Instant::now();
+            status.reachable = true;
+        }
 
         // Consistency check
         if req.prev_log_index > 0 {
@@ -543,6 +556,7 @@ impl ClusterNode {
         if resp.term > inner.state.term {
             inner.state.term = resp.term;
             inner.state.role = NodeRole::Follower;
+            inner.state.leader_id = None;
             inner.election_deadline =
                 Instant::now() + Duration::from_millis(inner.config.election_timeout_ms);
             return;
@@ -594,6 +608,8 @@ impl ClusterNode {
         let inner = self.inner.lock().unwrap_or_else(|e| e.into_inner());
         let reachable = inner.peer_status.values().filter(|s| s.reachable).count();
         let total = inner.peer_status.len();
+        let leader_visible = inner.state.role == NodeRole::Leader
+            || (inner.state.leader_id.is_some() && Instant::now() <= inner.election_deadline);
 
         ClusterHealth {
             node_id: inner.config.node_id.clone(),
@@ -604,7 +620,7 @@ impl ClusterNode {
             peers_total: total,
             commit_index: inner.state.commit_index,
             uptime_secs: inner.started_at.elapsed().as_secs_f64(),
-            healthy: inner.state.role == NodeRole::Leader || inner.state.leader_id.is_some(),
+            healthy: leader_visible,
         }
     }
 
@@ -676,6 +692,10 @@ impl ClusterNode {
             .commit_index
             .max(req.snapshot.last_included_index);
         inner.state.leader_id = Some(req.leader_id.clone());
+        if let Some(status) = inner.peer_status.get_mut(&req.leader_id) {
+            status.last_contact = Instant::now();
+            status.reachable = true;
+        }
         InstallSnapshotResponse {
             term: inner.state.term,
             success: true,
@@ -711,6 +731,7 @@ mod tests {
                     ),
                 })
                 .collect(),
+            auth_token: Some("cluster-test-token".to_string()),
             heartbeat_interval_ms: 100,
             election_timeout_ms: 500,
             replication_batch_size: 50,

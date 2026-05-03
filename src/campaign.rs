@@ -263,7 +263,10 @@ impl CampaignDetector {
         let same_host_similarity = (self.min_similarity * 0.5).clamp(0.1, 1.0);
         let mut by_host: HashMap<&str, Vec<&FleetAlert>> = HashMap::new();
         for alert in alerts {
-            by_host.entry(alert.hostname.as_str()).or_default().push(*alert);
+            by_host
+                .entry(alert.hostname.as_str())
+                .or_default()
+                .push(*alert);
         }
 
         let mut chains = Vec::new();
@@ -328,8 +331,12 @@ impl CampaignDetector {
                 .map(|alert| &alert.mitre_techniques)
                 .collect::<Vec<_>>(),
         );
-        let shared_reasons =
-            find_shared_strings(&alerts.iter().map(|alert| &alert.reasons).collect::<Vec<_>>());
+        let shared_reasons = find_shared_strings(
+            &alerts
+                .iter()
+                .map(|alert| &alert.reasons)
+                .collect::<Vec<_>>(),
+        );
         let scores = alerts.iter().map(|alert| alert.score).collect::<Vec<_>>();
         let avg_score = scores.iter().sum::<f32>() / scores.len() as f32;
         let max_score = scores.iter().copied().fold(0.0_f32, f32::max);

@@ -1034,6 +1034,17 @@ pub struct EnterpriseStore {
     store_path: String,
 }
 
+fn lifecycle_slug(lifecycle: &ContentLifecycle) -> &'static str {
+    match lifecycle {
+        ContentLifecycle::Draft => "draft",
+        ContentLifecycle::Test => "test",
+        ContentLifecycle::Canary => "canary",
+        ContentLifecycle::Active => "active",
+        ContentLifecycle::Deprecated => "deprecated",
+        ContentLifecycle::RolledBack => "rolled_back",
+    }
+}
+
 impl EnterpriseStore {
     pub fn new(store_path: &str) -> Self {
         let mut store = Self {
@@ -1841,13 +1852,15 @@ impl EnterpriseStore {
         actor: &str,
         reason: &str,
     ) -> Result<ManagedRuleMetadata, String> {
-        if let Some(rule) = self
+        let target_label = lifecycle_slug(&target).to_string();
+        let (updated, previous_label) = if let Some(rule) = self
             .snapshot
             .builtin_rules
             .iter_mut()
             .find(|rule| rule.id == rule_id)
         {
             let previous = rule.lifecycle.clone();
+            let previous_label = lifecycle_slug(&previous).to_string();
             rule.previous_lifecycle = Some(previous.clone());
             rule.lifecycle = target.clone();
             rule.version += 1;
@@ -1860,17 +1873,15 @@ impl EnterpriseStore {
                 to: target,
                 reason: reason.to_string(),
             });
-            let updated = rule.clone();
-            self.persist();
-            return Ok(updated);
-        }
-        if let Some(rule) = self
+            (rule.clone(), previous_label)
+        } else if let Some(rule) = self
             .snapshot
             .native_rules
             .iter_mut()
             .find(|rule| rule.metadata.id == rule_id)
         {
             let previous = rule.metadata.lifecycle.clone();
+            let previous_label = lifecycle_slug(&previous).to_string();
             rule.metadata.previous_lifecycle = Some(previous.clone());
             rule.metadata.lifecycle = target.clone();
             rule.metadata.version += 1;
@@ -1883,11 +1894,24 @@ impl EnterpriseStore {
                 to: target,
                 reason: reason.to_string(),
             });
-            let updated = rule.metadata.clone();
-            self.persist();
-            return Ok(updated);
-        }
-        Err("content rule not found".to_string())
+            (rule.metadata.clone(), previous_label)
+        } else {
+            return Err("content rule not found".to_string());
+        };
+        self.record_rollout_event(
+            "content-promote",
+            &format!("{} v{}", updated.title, updated.version),
+            Some("content-rule".to_string()),
+            Some(updated.id.clone()),
+            Some(target_label.clone()),
+            "succeeded",
+            actor,
+            Some(format!(
+                "Rule {} moved from {} to {}: {}",
+                updated.id, previous_label, target_label, reason
+            )),
+        );
+        Ok(updated)
     }
 
     pub fn rollback_rule(
@@ -1895,7 +1919,7 @@ impl EnterpriseStore {
         rule_id: &str,
         actor: &str,
     ) -> Result<ManagedRuleMetadata, String> {
-        if let Some(rule) = self
+        let (updated, current_label, target_label) = if let Some(rule) = self
             .snapshot
             .builtin_rules
             .iter_mut()
@@ -1906,6 +1930,8 @@ impl EnterpriseStore {
                 .clone()
                 .unwrap_or(ContentLifecycle::Test);
             let current = rule.lifecycle.clone();
+            let current_label = lifecycle_slug(&current).to_string();
+            let target_label = lifecycle_slug(&target).to_string();
             rule.lifecycle = target.clone();
             rule.previous_lifecycle = Some(current.clone());
             rule.updated_at = now_rfc3339();
@@ -1916,11 +1942,8 @@ impl EnterpriseStore {
                 to: target,
                 reason: "rollback".to_string(),
             });
-            let updated = rule.clone();
-            self.persist();
-            return Ok(updated);
-        }
-        if let Some(rule) = self
+            (rule.clone(), current_label, target_label)
+        } else if let Some(rule) = self
             .snapshot
             .native_rules
             .iter_mut()
@@ -1932,6 +1955,8 @@ impl EnterpriseStore {
                 .clone()
                 .unwrap_or(ContentLifecycle::Draft);
             let current = rule.metadata.lifecycle.clone();
+            let current_label = lifecycle_slug(&current).to_string();
+            let target_label = lifecycle_slug(&target).to_string();
             rule.metadata.lifecycle = target.clone();
             rule.metadata.previous_lifecycle = Some(current.clone());
             rule.metadata.updated_at = now_rfc3339();
@@ -1942,11 +1967,24 @@ impl EnterpriseStore {
                 to: target,
                 reason: "rollback".to_string(),
             });
-            let updated = rule.metadata.clone();
-            self.persist();
-            return Ok(updated);
-        }
-        Err("content rule not found".to_string())
+            (rule.metadata.clone(), current_label, target_label)
+        } else {
+            return Err("content rule not found".to_string());
+        };
+        self.record_rollout_event(
+            "content-rollback",
+            &format!("{} v{}", updated.title, updated.version),
+            Some("content-rule".to_string()),
+            Some(updated.id.clone()),
+            Some(target_label.clone()),
+            "succeeded",
+            actor,
+            Some(format!(
+                "Rule {} rolled back from {} to {}.",
+                updated.id, current_label, target_label
+            )),
+        );
+        Ok(updated)
     }
 
     /// Automatically promote canary rules to active and rollback degrading
@@ -3623,6 +3661,75 @@ mod tests {
         assert_eq!(
             store.rollout_history()[0].agent_id.as_deref(),
             Some("agent-7")
+        );
+
+        let _ = std::fs::remove_file(&path);
+    }
+
+    #[test]
+    fn content_rule_lifecycle_changes_record_rollout_history() {
+        let path = store_test_path("wardex_enterprise_content_rollout_test");
+        let mut store = EnterpriseStore::new(&path);
+        let rule = store.create_or_update_native_rule(
+            None,
+            "Suspicious PowerShell".to_string(),
+            "Detects suspicious PowerShell execution.".to_string(),
+            "secops".to_string(),
+            "high".to_string(),
+            Some("Replay evidence is stable".to_string()),
+            vec!["identity-attacks".to_string()],
+            vec![MitreAttack {
+                tactic: "Credential Access (TA0006)".to_string(),
+                technique_id: "T1110".to_string(),
+                technique_name: "Brute Force".to_string(),
+            }],
+            SearchQuery {
+                text: Some("powershell".to_string()),
+                hostname: None,
+                level: None,
+                agent_id: None,
+                from_ts: None,
+                to_ts: None,
+                limit: Some(100),
+            },
+        );
+
+        let promoted = store
+            .promote_rule(
+                &rule.metadata.id,
+                ContentLifecycle::Canary,
+                "analyst-1",
+                "Replay corpus passed for canary rollout",
+            )
+            .expect("promote rule");
+        assert_eq!(promoted.lifecycle, ContentLifecycle::Canary);
+
+        let rolled_back = store
+            .rollback_rule(&rule.metadata.id, "analyst-2")
+            .expect("rollback rule");
+        assert_eq!(rolled_back.lifecycle, ContentLifecycle::Draft);
+
+        assert_eq!(store.rollout_history().len(), 2);
+        assert_eq!(store.rollout_history()[0].action, "content-promote");
+        assert_eq!(
+            store.rollout_history()[0].agent_id.as_deref(),
+            Some(rule.metadata.id.as_str())
+        );
+        assert_eq!(
+            store.rollout_history()[0].rollout_group.as_deref(),
+            Some("canary")
+        );
+        assert!(
+            store.rollout_history()[0]
+                .notes
+                .as_deref()
+                .unwrap_or_default()
+                .contains("Replay corpus passed for canary rollout")
+        );
+        assert_eq!(store.rollout_history()[1].action, "content-rollback");
+        assert_eq!(
+            store.rollout_history()[1].rollout_group.as_deref(),
+            Some("draft")
         );
 
         let _ = std::fs::remove_file(&path);

@@ -1269,6 +1269,17 @@ pub fn wardex_openapi_spec(version: &str) -> OpenApiSpec {
             ),
         )
         .path(
+            "/api/report-templates",
+            "post",
+            op_post_status(
+                "201",
+                "saveReportTemplate",
+                "Create or update a reusable report template",
+                &["reports"],
+                "Report template upsert payload",
+            ),
+        )
+        .path(
             "/api/report-runs",
             "get",
             with_parameters(
@@ -1300,6 +1311,17 @@ pub fn wardex_openapi_spec(version: &str) -> OpenApiSpec {
                         false,
                     ),
                 ],
+            ),
+        )
+        .path(
+            "/api/report-runs",
+            "post",
+            op_post_status(
+                "201",
+                "createReportRun",
+                "Create a report run and persist its preview artifact",
+                &["reports"],
+                "Report run creation payload",
             ),
         )
         .path(
@@ -1343,6 +1365,17 @@ pub fn wardex_openapi_spec(version: &str) -> OpenApiSpec {
                         false,
                     ),
                 ],
+            ),
+        )
+        .path(
+            "/api/report-schedules",
+            "post",
+            op_post_status(
+                "201",
+                "saveReportSchedule",
+                "Create or update a report delivery schedule",
+                &["reports"],
+                "Report schedule upsert payload",
             ),
         )
         .path(
@@ -2626,6 +2659,15 @@ pub fn wardex_openapi_spec(version: &str) -> OpenApiSpec {
             ),
         )
         .path(
+            "/api/control/failover-drill",
+            "post",
+            op(
+                "runFailoverDrill",
+                "Run an automated control-plane failover drill against current recovery artifacts",
+                &["control"],
+            ),
+        )
+        .path(
             "/api/support/parity",
             "get",
             op(
@@ -2741,6 +2783,7 @@ mod tests {
         assert!(spec.paths.contains_key("/api/rollout/config"));
         assert!(spec.paths.contains_key("/api/support/readiness-evidence"));
         assert!(spec.paths.contains_key("/api/support/first-run-proof"));
+        assert!(spec.paths.contains_key("/api/control/failover-drill"));
     }
 
     #[test]
@@ -2767,8 +2810,16 @@ mod tests {
         assert!(spec.components.schemas.contains_key("Incident"));
         assert!(spec.components.schemas.contains_key("Agent"));
         assert!(spec.components.schemas.contains_key("Error"));
-        assert!(spec.components.schemas.contains_key("CommandCenterSummaryResponse"));
-        assert!(spec.components.schemas.contains_key("CommandCenterLaneResponse"));
+        assert!(
+            spec.components
+                .schemas
+                .contains_key("CommandCenterSummaryResponse")
+        );
+        assert!(
+            spec.components
+                .schemas
+                .contains_key("CommandCenterLaneResponse")
+        );
         let error_schema = spec.components.schemas.get("Error").unwrap();
         assert!(error_schema.required.contains(&"error".to_string()));
         assert!(error_schema.required.contains(&"code".to_string()));
@@ -2793,7 +2844,10 @@ mod tests {
             .expect("summary response schema");
         match summary_schema {
             SchemaRef::Ref { reference } => {
-                assert_eq!(reference, "#/components/schemas/CommandCenterSummaryResponse")
+                assert_eq!(
+                    reference,
+                    "#/components/schemas/CommandCenterSummaryResponse"
+                )
             }
             SchemaRef::Inline(_) => panic!("expected command summary schema ref"),
         }

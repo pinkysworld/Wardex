@@ -2,7 +2,7 @@
 
 ## Current release
 
-- **Version:** `0.55.1`
+- **Version:** `0.56.0`
 - **Positioning:** private-cloud XDR and SIEM platform with enterprise detection engineering, malware scanning, analyst workflows, fleet operations, behavioural analytics, and automated incident response
 - **Source footprint:** 139 Rust source modules
 - **API contract:** versioned OpenAPI surface with REST, GraphQL, live `/api/openapi.json` export, and generated SDK parity diagnostics that surface alignment drift directly in the operator console
@@ -69,7 +69,7 @@
 
 - RBAC, session TTL, token rotation, HttpOnly console sessions, session-backed identity groups, audit and retention controls, ClickHouse-backed retained-event search, and retention apply workflows
 - IDP, SCIM, cloud collector, and secrets manager configuration surfaces with validation and health visibility, plus enterprise-provider discovery on the unauthenticated sign-in shell
-- Change control entries, admin audit export, diagnostics bundle, dependency health endpoints, persisted rollout history, and persisted playbook analytics history
+- Change control entries, admin audit export, diagnostics bundle, dependency health endpoints, persisted rollout history, persisted playbook analytics history, and operator-visible control-plane posture evidence for backup cadence, checkpoint coverage, and restore readiness
 
 ### Analyst assistance and case collaboration
 
@@ -78,7 +78,7 @@
 
 ### Supportability and documentation
 
-- Help & Docs support center with searchable embedded documentation, version-aware runbooks and deployment guidance, operator inbox context, production demo lab, support diagnostics, REST/OpenAPI/GraphQL/SDK parity diagnostics, live GraphQL query execution, and API endpoint exploration
+- Help & Docs support center with searchable embedded documentation, version-aware runbooks and deployment guidance, operator inbox context, production demo lab, support diagnostics, production-readiness control-plane posture, REST/OpenAPI/GraphQL/SDK parity diagnostics, live GraphQL query execution, and API endpoint exploration
 
 ### Integrations and evidence
 
@@ -91,13 +91,22 @@
 The current release has been verified with:
 
 - `cargo test` passing across unit and integration suites, including focused support-center parity/docs coverage, OpenAPI support-route coverage, retention-config coverage, and integration-setup persistence coverage
-- targeted admin-console unit coverage for the Help & Docs support center, embedded docs search/load, parity rendering, GraphQL query execution, the analyst assistant, and existing workspace shell flows
+- targeted admin-console unit coverage for auth-shell SSO redirect composition and hash-backed return paths, Threat Detection canary auto-promotion plus rollout-history and distribution analytics, the Help & Docs support center, route-backed Live Monitor tab/filter/drawer state, route-backed Fleet rollout/recovery focus and carried offline-scope pivots, route-backed contextual support state, embedded docs search/load, routed runbook pivots, parity rendering, GraphQL query execution, the analyst assistant, and the remaining workspace shell flows
 - targeted API regression coverage for session auth routing, hunt/content lifecycle, playbook execution shape, suppressions, storylines, governance, supportability, retention config patching, integration-setup persistence, assistant responses, and enterprise-provider exposure
-- deterministic browser regression coverage of dashboard preset persistence, Command Center action drawers and mobile layout, detection efficacy / ATT&CK gap / suppression / rollout drill-downs, run-hunt routing, hunt-result case promotion, saved-hunt reopen/update behavior, investigation planner start, active investigation progress and handoff workflows, queue-to-hunt pivots, workflow-to-response context handoffs, signed remediation approval and rollback-proof verification, expanded SOC workbench overview, assistant case queries, scoped reporting handoffs, long-retention history search, collector pivots, IdP launch validation, and collector/secrets setup validation
+- deterministic browser regression coverage of dashboard preset persistence, Command Center action drawers and mobile layout, detection efficacy / ATT&CK gap / suppression / rollout drill-downs, run-hunt routing, hunt-result case promotion, saved-hunt reopen/update behavior, investigation planner start, active investigation progress and handoff workflows, route-backed SOC response/escalation/playbook/process-tree/admin actions, route-backed infrastructure assets/integrity/exposure/observability actions, queue-to-hunt pivots, workflow-to-response context handoffs, signed remediation approval and rollback-proof verification, expanded SOC workbench overview, assistant case queries, scoped reporting handoffs, long-retention history search, collector pivots, IdP launch validation, and collector/secrets setup validation
 
 ## Current product posture
 
-Wardex is now positioned as a professional XDR/SIEM control plane with incident-first analyst workflows, explainable detections, and context-preserving reporting. The runtime, admin console, release process, and website are aligned around operator trust, workflow closure, and deployment readiness.
+Wardex is now positioned as a professional XDR/SIEM control plane with incident-first analyst workflows, explainable detections, context-preserving reporting, and operator-visible recovery posture. The runtime, admin console, release process, and website are aligned around operator trust, workflow closure, and deployment readiness.
+
+## Recently shipped (v0.56.0)
+
+- **Control-plane posture evidence** — support readiness, dependency health, and backup-status routes now expose active/passive reference status, backup cadence, observed backups, latest backup timestamps, checkpoint counts, latest checkpoint timestamps, and restore-readiness directly from live runtime state.
+- **Help & Docs recovery summary** — Production Readiness now renders a structured control-plane posture section with durable-storage, restore-artifact, and failover-model checks so operators can review recovery posture without reading raw JSON.
+- **HA guidance refresh** — deployment and disaster-recovery docs now tie the active/passive reference pattern to the shipped support/readiness APIs so failover drills have concrete runtime evidence to verify before and after restore.
+- **Release metadata aligned on v0.56.0** — Rust, admin-console, Python SDK, TypeScript SDK, Helm, OTLP, OpenAPI, installation/reproducibility docs, and website release surfaces now point to the same release baseline.
+- **GitHub CI release gate cleaned up** — the panic-policy baseline is back to zero production `unwrap`/`expect` calls, Rust formatting is clean, and the OS test matrix now reports each platform independently instead of cancelling sibling jobs after the first failure.
+- **GitHub release distribution hardened** — the tag release workflow now falls back to the repository token for Pages dispatch, skips optional Homebrew tap publishing when its token is absent, and lets Pages publish static content even when APT signing secrets are not configured.
 
 ## Recently shipped (v0.55.1)
 
@@ -130,7 +139,8 @@ Wardex is now positioned as a professional XDR/SIEM control plane with incident-
 - **Signed multi-approver remediation** — change reviews now require risk-aware approver counts, record signed approval-chain digests, attach rollback proof with recovery plans when approval quorum is reached, verify rollback through the remediation module in dry-run-first mode, exercise matching-platform true execution for restore-file, kill-process, restart-service, block-ip, remove-persistence, disable-account, and flush-dns actions when both live rollback flags are enabled, and keep mismatched-platform requests recorded-only when the local executor cannot safely run them.
 - **Collector ingestion evidence pivots** — collector lifecycle status now carries SOC Workbench and Infrastructure pivots plus recent ingestion evidence for cloud, identity, SaaS, EDR, and syslog lanes, and the Settings integrations workspace now keeps freshness, success rate, failure streak, retry/backoff, and recent-run evidence visible alongside those routed pivots.
 - **Expanded production demo lab** — demo seeding now includes cloud, identity, SaaS, UEBA, NDR, and attack-graph evidence alongside case, response, report, and artifact proof.
-- **IdP lifecycle validation depth** — identity-provider summaries now expose launch checks for metadata, callback route alignment, client credentials, group mappings, and test-login paths, while routed Settings and auth-shell regressions lock in ready-provider launch paths, callback/session recovery, and stale-token fallback behavior.
+- **IdP lifecycle validation depth** — identity-provider summaries now expose launch checks for metadata, callback route alignment, client credentials, group mappings, and test-login paths, while routed Settings and auth-shell regressions lock in ready-provider launch paths, callback/session recovery, hash-backed return paths, stale-token fallback behavior, and transient callback-error cleanup.
+- **Detection lifecycle distribution analytics** — Threat Detection now surfaces stored-efficacy canary auto-promotion outcomes, rollout-history evidence, lifecycle distribution analytics, routed delivery-lane summaries, and refreshed promotion evidence directly in the detection workspace so operators can review promote-or-rollback decisions without leaving the routed console.
 - **SDK parity continuation** — Python and TypeScript SDKs include Command Center summary and per-lane refresh helpers, explicit Command Center response models in both SDKs, collector status, remediation review creation, signed remediation approval, detection tuning/scoring, remote fleet install, process-thread, and backup helpers used by console workflows.
 - **Command Center expansion** — the cross-product workspace now has action drawers, routed browser smoke coverage, live enterprise-smoke route and drawer-handoff coverage in the release gate across connector, remediation, release, and evidence handoffs, a backend summary contract, and per-lane annotations with next-step guidance across incident, remediation, connector, rule-tuning, release, and evidence workflows.
 - **Remediation module extraction** — remediation change-review JSON envelopes, HTTP error mapping, route-id parsing, body limits, plan JSON wrapping, and rollback policy assembly now live in `remediation.rs`, leaving `server.rs` focused on route dispatch and response wiring.
@@ -174,9 +184,9 @@ Wardex is now positioned as a professional XDR/SIEM control plane with incident-
 
 ## Next release priorities
 
-- formalize the next roadmap tranche beyond the completed Phase 50 collector lifecycle regression depth
-- keep routed collector regressions and operator-facing lifecycle telemetry aligned as provider workflows evolve
+- extend the control-plane posture program beyond shipped runtime evidence into drill automation and broader failover validation
 - continue the broader professional roadmap execution tracked in `docs/ROADMAP_XDR_PROFESSIONAL.md`
+- keep shipped control-plane posture, detection rollout analytics, auth-shell, fleet, SOC, command, analytics, and long-retention handoffs aligned as surrounding workflows evolve
 
 ## Recently shipped (v0.43.1)
 

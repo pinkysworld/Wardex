@@ -6,6 +6,7 @@ on:
       - "v[0-9]+.[0-9]+.[0-9]+"
 
 permissions:
+  actions: write
   contents: write
   packages: write
   id-token: write
@@ -370,9 +371,11 @@ jobs:
         run: |
           set -euo pipefail
           cd release-assets
+          sums_tmp="$(mktemp)"
           find . -maxdepth 1 -type f ! -name SHA256SUMS -printf '%f\0' \
             | sort -z \
-            | xargs -0 sha256sum > SHA256SUMS
+            | xargs -0 sha256sum > "${sums_tmp}"
+          mv "${sums_tmp}" SHA256SUMS
           sha256sum -c SHA256SUMS
 
       # Extract the changelog section matching the pushed tag as the release body
@@ -412,18 +415,9 @@ jobs:
     if: success()
 
     steps:
-      - name: Validate workflow dispatch token
-        env:
-          RELEASE_WORKFLOW_TOKEN: ${{ secrets.RELEASE_WORKFLOW_TOKEN }}
-        run: |
-          if [[ -z "$RELEASE_WORKFLOW_TOKEN" ]]; then
-            echo "RELEASE_WORKFLOW_TOKEN secret is required to dispatch follow-up workflows from the release pipeline." >&2
-            exit 1
-          fi
-
       - name: Dispatch Pages publish
         env:
-          GH_TOKEN: ${{ secrets.RELEASE_WORKFLOW_TOKEN }}
+          GH_TOKEN: ${{ secrets.RELEASE_WORKFLOW_TOKEN || github.token }}
         run: |
           gh workflow run pages.yml \
             -R "${{ github.repository }}" \
@@ -432,8 +426,13 @@ jobs:
 
       - name: Dispatch Homebrew tap sync
         env:
-          GH_TOKEN: ${{ secrets.RELEASE_WORKFLOW_TOKEN }}
+          GH_TOKEN: ${{ secrets.RELEASE_WORKFLOW_TOKEN || github.token }}
+          HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
         run: |
+          if [[ -z "${HOMEBREW_TAP_TOKEN}" ]]; then
+            echo "HOMEBREW_TAP_TOKEN secret is not configured; skipping Homebrew tap sync dispatch."
+            exit 0
+          fi
           gh workflow run sync-homebrew-tap.yml \
             -R "${{ github.repository }}" \
             --ref "${{ github.event.repository.default_branch }}" \

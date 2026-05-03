@@ -4,9 +4,20 @@
 
 ## Scope
 
-This document covers backup, restore, and failover procedures for a single
-Wardex instance and its `var/` state directory.  Multi-node federation DR is
-out of scope until Phase 30+.
+This document covers backup, restore, and failover procedures for a Wardex
+primary node, its `var/` state directory, and the shipped warm-standby
+active/passive reference pattern, plus the config-backed external-standby or
+leader-handoff posture surfaced in runtime readiness evidence. Fully automated
+clustered control planes and federation-wide failover remain out of scope.
+
+Use `GET /api/support/readiness-evidence`, `GET /api/system/health/dependencies`,
+and `GET /api/backup/status` before and after a drill to confirm backup cadence,
+latest restore artifacts, checkpoint coverage, cluster role, and recent failover
+drill history from live runtime state.
+
+Run `POST /api/control/failover-drill` after seeding a backup or control
+checkpoint to record the latest automated failover drill result against the
+current recovery artifacts and append it to the persisted drill history.
 
 ## Critical State Inventory
 
@@ -17,6 +28,7 @@ out of scope until Phase 30+.
 | `var/cases.json` | Analyst case data | Critical — investigation continuity |
 | `var/incidents.json` | Incident records | Critical |
 | `var/reports/` | Generated reports | Medium — can regenerate |
+| `var/support.json` | Support-center state and persisted failover drill history | High — audit and recovery evidence continuity lost |
 | `var/spool/` | Encrypted telemetry backlog | High — undelivered events |
 | `var/deployments.json` | Agent deployment state | Medium |
 | `var/policy/` | Published policies | Medium — re-publishable |
@@ -56,8 +68,14 @@ backups.
    age -d -i key.txt backup.tar.gz.age | tar xzf - -C /opt/wardex/
    ```
 3. Start Wardex: `wardex serve --config var/config.toml`.
-4. Verify via `GET /api/health` and `GET /api/status`.
-5. If checkpoints are stale, trigger `POST /api/control/reset-baseline` and
+4. Verify via `GET /api/health`, `GET /api/status`, `GET /api/backup/status`,
+   and `GET /api/system/health/dependencies`.
+5. Run `POST /api/control/failover-drill` to validate durable storage and the
+   currently restored backup/checkpoint artifacts.
+6. Confirm `GET /api/support/readiness-evidence` reflects the expected backup,
+   checkpoint, restore-ready posture, cluster role or leader-handoff state, and
+   persisted recent failover drill history for the restored node.
+7. If checkpoints are stale, trigger `POST /api/control/reset-baseline` and
    allow 10 minutes of learning.
 
 ## Recovery Time Objectives
@@ -86,6 +104,8 @@ The test module `tests::disaster_recovery` validates:
 
 - [ ] Verify daily backup cron is active.
 - [ ] Test restore to a staging instance monthly.
+- [ ] Run `POST /api/control/failover-drill` after staging restores and planned failover rehearsals.
+- [ ] Review support/readiness evidence before and after every failover drill, including the cluster role and recent drill-history section.
 - [ ] Confirm key escrow is current after every `POST /api/quantum/rotate`.
 - [ ] Review RTO/RPO with stakeholders quarterly.
 

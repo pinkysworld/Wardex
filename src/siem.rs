@@ -1420,7 +1420,10 @@ mod tests {
         let payload = public_config_json(&cfg);
         assert_eq!(payload["enabled"].as_bool(), Some(true));
         assert_eq!(payload["has_auth_token"].as_bool(), Some(true));
-        assert_eq!(payload["endpoint"].as_str(), Some("https://siem.example.com"));
+        assert_eq!(
+            payload["endpoint"].as_str(),
+            Some("https://siem.example.com")
+        );
         assert_eq!(payload["batch_size"].as_u64(), Some(250));
         assert_eq!(payload.get("auth_token"), None);
     }

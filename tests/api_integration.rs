@@ -7,8 +7,7 @@ use wardex::config::Config;
 use wardex::fleet_install::RemoteInstallRecord;
 use wardex::server::{
     spawn_test_server, spawn_test_server_with_live_rollback_enabled,
-    spawn_test_server_with_live_rollback_execution_enabled,
-    spawn_test_server_with_seeded_alerts,
+    spawn_test_server_with_live_rollback_execution_enabled, spawn_test_server_with_seeded_alerts,
     spawn_test_server_with_seeded_remote_installs,
 };
 use wardex::telemetry::TelemetrySample;
@@ -123,7 +122,11 @@ fn current_block_ip_command() -> &'static str {
 }
 
 fn nonmatching_live_rollback_platform() -> &'static str {
-    if cfg!(target_os = "windows") { "linux" } else { "windows" }
+    if cfg!(target_os = "windows") {
+        "linux"
+    } else {
+        "windows"
+    }
 }
 
 fn disable_account_command_for_platform(platform: &str) -> &'static str {
@@ -1637,10 +1640,12 @@ fn live_rollback_requires_matching_confirm_hostname_when_enabled() {
     match mismatch {
         Err(ureq::Error::Status(400, resp)) => {
             let body: serde_json::Value = resp.into_json().unwrap();
-            assert!(body["error"]
-                .as_str()
-                .unwrap_or_default()
-                .contains("confirm_hostname"));
+            assert!(
+                body["error"]
+                    .as_str()
+                    .unwrap_or_default()
+                    .contains("confirm_hostname")
+            );
         }
         other => panic!("expected 400 for mismatched confirm_hostname, got {other:?}"),
     }
@@ -1865,7 +1870,9 @@ fn live_rollback_executes_explicit_kill_process_action_when_execution_policy_is_
     }
     if !terminated {
         let _ = child.kill();
-        let _ = child.wait();
+    }
+    let _ = child.wait();
+    if !terminated {
         panic!("expected live rollback to terminate spawned child process");
     }
 }
@@ -2080,7 +2087,9 @@ fn live_rollback_executes_disable_account_action_when_execution_policy_is_enable
 
     let logged = std::fs::read_to_string(&log_path).expect("read disable-account log");
     if cfg!(target_os = "macos") {
-        assert!(logged.contains(&format!("-create /Users/{username} AuthenticationAuthority ;DisabledUser;")));
+        assert!(logged.contains(&format!(
+            "-create /Users/{username} AuthenticationAuthority ;DisabledUser;"
+        )));
     } else if cfg!(target_os = "windows") {
         assert!(logged.contains(&format!("user {username} /active:no")));
     } else {
@@ -2196,7 +2205,10 @@ fn live_rollback_records_new_adapters_when_requested_platform_does_not_match_hos
     };
 
     assert_eq!(disable_account["status"], "rollback_recorded");
-    assert_eq!(disable_account["review"]["rollback_proof"]["status"], "executed");
+    assert_eq!(
+        disable_account["review"]["rollback_proof"]["status"],
+        "executed"
+    );
     assert_eq!(disable_account["review"]["recovery_status"], "executed");
     assert_eq!(
         disable_account["review"]["rollback_proof"]["execution_result"]["live_execution"],
@@ -2206,10 +2218,12 @@ fn live_rollback_records_new_adapters_when_requested_platform_does_not_match_hos
         disable_account["review"]["rollback_proof"]["execution_result"]["commands"][0]["program"],
         serde_json::json!(disable_account_command_for_platform(platform))
     );
-    assert!(disable_account["review"]["rollback_proof"]["execution_result"]["command_executions"]
-        .as_array()
-        .expect("disable-account command executions array")
-        .is_empty());
+    assert!(
+        disable_account["review"]["rollback_proof"]["execution_result"]["command_executions"]
+            .as_array()
+            .expect("disable-account command executions array")
+            .is_empty()
+    );
     assert_eq!(
         disable_account["review"]["rollback_proof"]["execution_result"]["result"]["output"],
         serde_json::json!(
@@ -2256,10 +2270,12 @@ fn live_rollback_records_new_adapters_when_requested_platform_does_not_match_hos
         flush_dns["review"]["rollback_proof"]["execution_result"]["commands"][0]["program"],
         serde_json::json!(flush_dns_command_for_platform(platform))
     );
-    assert!(flush_dns["review"]["rollback_proof"]["execution_result"]["command_executions"]
-        .as_array()
-        .expect("flush-dns command executions array")
-        .is_empty());
+    assert!(
+        flush_dns["review"]["rollback_proof"]["execution_result"]["command_executions"]
+            .as_array()
+            .expect("flush-dns command executions array")
+            .is_empty()
+    );
     assert_eq!(
         flush_dns["review"]["rollback_proof"]["execution_result"]["result"]["output"],
         serde_json::json!(
@@ -2428,8 +2444,8 @@ fn live_rollback_executes_remove_persistence_action_when_execution_policy_is_ena
 
 #[cfg(target_os = "linux")]
 #[test]
-fn live_rollback_executes_systemd_unit_removal_with_instance_name_when_execution_policy_is_enabled(
-) {
+fn live_rollback_executes_systemd_unit_removal_with_instance_name_when_execution_policy_is_enabled()
+{
     let (port, token) = spawn_test_server_with_live_rollback_execution_enabled();
     let service_name = "wardex-agent@blue.service";
     let temp = tempfile::tempdir().expect("tempdir");
@@ -2502,8 +2518,7 @@ fn live_rollback_executes_systemd_unit_removal_with_instance_name_when_execution
 
 #[cfg(target_os = "macos")]
 #[test]
-fn live_rollback_executes_launch_item_removal_with_spaced_path_when_execution_policy_is_enabled()
-{
+fn live_rollback_executes_launch_item_removal_with_spaced_path_when_execution_policy_is_enabled() {
     let (port, token) = spawn_test_server_with_live_rollback_execution_enabled();
     let temp = tempfile::tempdir().expect("tempdir");
     let launch_agents_dir = temp.path().join("Launch Agents");
@@ -2522,7 +2537,10 @@ fn live_rollback_executes_launch_item_removal_with_spaced_path_when_execution_po
         log_path.display()
     );
     let rollback = with_stubbed_commands_path(
-        &[("launchctl", launchctl_script.as_str()), ("mv", mv_script.as_str())],
+        &[
+            ("launchctl", launchctl_script.as_str()),
+            ("mv", mv_script.as_str()),
+        ],
         || {
             let review_id = create_approved_remediation_review(
                 port,
@@ -2745,10 +2763,12 @@ fn fleet_install_ssh_rejects_windows_platform() {
     match err {
         Err(ureq::Error::Status(400, response)) => {
             let body: serde_json::Value = response.into_json().unwrap();
-            assert!(body["error"]
-                .as_str()
-                .unwrap_or_default()
-                .contains("Linux and macOS only"));
+            assert!(
+                body["error"]
+                    .as_str()
+                    .unwrap_or_default()
+                    .contains("Linux and macOS only")
+            );
         }
         other => panic!("expected 400, got {other:?}"),
     }
@@ -2757,16 +2777,15 @@ fn fleet_install_ssh_rejects_windows_platform() {
 #[test]
 fn fleet_install_ssh_requires_auth() {
     let (port, _token) = spawn_test_server();
-    let err = ureq::post(&format!("{}/api/fleet/install/ssh", base(port))).send_json(
-        serde_json::json!({
+    let err =
+        ureq::post(&format!("{}/api/fleet/install/ssh", base(port))).send_json(serde_json::json!({
             "hostname": "edge-02",
             "address": "10.0.4.12",
             "platform": "linux",
             "manager_url": format!("http://127.0.0.1:{port}"),
             "ssh_user": "root",
             "ssh_port": 22
-        }),
-    );
+        }));
     match err {
         Err(ureq::Error::Status(401, _)) => {}
         other => panic!("expected 401, got {other:?}"),
@@ -2790,10 +2809,12 @@ fn fleet_install_winrm_rejects_linux_platform() {
     match err {
         Err(ureq::Error::Status(400, response)) => {
             let body: serde_json::Value = response.into_json().unwrap();
-            assert!(body["error"]
-                .as_str()
-                .unwrap_or_default()
-                .contains("Windows only"));
+            assert!(
+                body["error"]
+                    .as_str()
+                    .unwrap_or_default()
+                    .contains("Windows only")
+            );
         }
         other => panic!("expected 400, got {other:?}"),
     }
@@ -3833,23 +3854,29 @@ fn alerts_endpoint_returns_enriched_process_fields_for_seeded_alerts() {
 
     assert!(alert["entities"].is_array());
     assert_eq!(alert["process_resolution"].as_str(), Some("unresolved"));
-    assert!(alert["process_names"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .filter_map(|value| value.as_str())
-        .any(|name| name == "python3"));
-    assert!(alert["process_names"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .filter_map(|value| value.as_str())
-        .any(|name| name == "curl"));
-    assert!(alert["entities"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .any(|entity| entity["entity_type"].as_str() == Some("ProcessName")));
+    assert!(
+        alert["process_names"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter_map(|value| value.as_str())
+            .any(|name| name == "python3")
+    );
+    assert!(
+        alert["process_names"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter_map(|value| value.as_str())
+            .any(|name| name == "curl")
+    );
+    assert!(
+        alert["entities"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|entity| entity["entity_type"].as_str() == Some("ProcessName"))
+    );
     assert!(alert.get("process_candidates").is_none());
     assert!(alert.get("process").is_none());
 }
@@ -3881,8 +3908,7 @@ fn process_threads_endpoint_returns_snapshot_for_self_pid() {
 #[test]
 fn process_threads_endpoint_requires_auth() {
     let (port, _token) = spawn_test_server();
-    let resp =
-        ureq::get(&format!("{}/api/processes/threads?pid=1", base(port))).call();
+    let resp = ureq::get(&format!("{}/api/processes/threads?pid=1", base(port))).call();
     assert!(resp.is_err());
     if let Err(ureq::Error::Status(code, _)) = resp {
         assert_eq!(code, 401);
@@ -7049,6 +7075,43 @@ fn enterprise_governance_and_support_endpoints_enforce_roles() {
             .is_empty()
     );
 
+    let readiness: serde_json::Value =
+        ureq::get(&format!("{}/api/support/readiness-evidence", base(port)))
+            .set("Authorization", &auth_header(&token))
+            .call()
+            .expect("support readiness evidence")
+            .into_json()
+            .unwrap();
+    assert_eq!(
+        readiness["evidence"]["control_plane"]["ha_mode"]
+            .as_str()
+            .unwrap(),
+        "active_passive_reference"
+    );
+    assert_eq!(
+        readiness["evidence"]["backup"]["observed_backups"]
+            .as_u64()
+            .unwrap(),
+        0
+    );
+    assert!(
+        !readiness["evidence"]["control_plane"]["restore_ready"]
+            .as_bool()
+            .unwrap()
+    );
+    assert_eq!(
+        readiness["evidence"]["control_plane"]["orchestration_scope"]
+            .as_str()
+            .unwrap(),
+        "standalone_reference"
+    );
+    assert_eq!(
+        readiness["evidence"]["control_plane"]["failover_drill"]["status"]
+            .as_str()
+            .unwrap(),
+        "not_run"
+    );
+
     let dependencies: serde_json::Value =
         ureq::get(&format!("{}/api/system/health/dependencies", base(port)))
             .set("Authorization", &auth_header(&token))
@@ -7060,7 +7123,24 @@ fn enterprise_governance_and_support_endpoints_enforce_roles() {
         dependencies["identity"]["status"].as_str().unwrap(),
         "configured"
     );
+    assert_eq!(
+        dependencies["ha_mode"]["mode"].as_str().unwrap(),
+        "active_passive_reference"
+    );
     assert!(dependencies["ha_mode"]["leader"].as_bool().unwrap());
+    assert_eq!(
+        dependencies["ha_mode"]["checkpoint_count"]
+            .as_u64()
+            .unwrap(),
+        0
+    );
+    assert!(!dependencies["ha_mode"]["restore_ready"].as_bool().unwrap());
+    assert_eq!(
+        dependencies["ha_mode"]["failover_drill"]["status"]
+            .as_str()
+            .unwrap(),
+        "not_run"
+    );
 }
 
 // ── Chaos / Fault Injection Tests ──────────────────────────────

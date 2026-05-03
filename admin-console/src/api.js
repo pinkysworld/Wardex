@@ -114,6 +114,7 @@ export const sloStatus = () => get('/api/slo/status');
 export const supportDiag = () => get('/api/support/diagnostics');
 export const supportReadinessEvidence = () => get('/api/support/readiness-evidence');
 export const firstRunProof = () => post('/api/support/first-run-proof');
+export const failoverDrill = () => post('/api/control/failover-drill');
 export const productionDemoLab = () => post('/api/demo/lab');
 export const supportParity = () => get('/api/support/parity');
 export const docsIndex = ({ q, section, limit } = {}) => {
@@ -157,6 +158,7 @@ export const setDetectionProfile = (body) => put('/api/detection/profile', body)
 export const detectionSummary = () => get('/api/detection/summary');
 export const detectionReplayCorpus = () => get('/api/detection/replay-corpus');
 export const evaluateDetectionReplayCorpus = (body) => post('/api/detection/replay-corpus', body);
+export const efficacyCanaryPromote = () => post('/api/efficacy/canary-promote');
 export const detectionWeights = () => get('/api/detection/weights');
 export const setDetectionWeights = (body) => post('/api/detection/weights', body);
 export const normalizeScore = () => get('/api/detection/score/normalize');

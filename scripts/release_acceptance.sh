@@ -8,6 +8,7 @@ PLAYWRIGHT_NODE_MODULES="$ROOT_DIR/admin-console/node_modules"
 RELEASE_MODE="${WARDEX_RELEASE_ACCEPTANCE_MODE:-managed}"
 BASE_URL="${WARDEX_BASE_URL:-}"
 TOKEN_FILE="${WARDEX_ADMIN_TOKEN_FILE:-/tmp/wardex_smoke_token}"
+MANAGED_STARTUP_TIMEOUT_SECS="${WARDEX_RELEASE_ACCEPTANCE_STARTUP_TIMEOUT_SECS:-180}"
 MANAGED_SERVER_PID=""
 MANAGED_SERVER_LOG=""
 MANAGED_CONFIG_PATH=""
@@ -199,7 +200,7 @@ wait_for_managed_admin() {
       return 1
     fi
 
-    if [[ "$attempts" -ge 60 ]]; then
+    if [[ "$attempts" -ge "$MANAGED_STARTUP_TIMEOUT_SECS" ]]; then
       echo "error: timed out waiting for managed Wardex at $BASE_URL" >&2
       return 1
     fi

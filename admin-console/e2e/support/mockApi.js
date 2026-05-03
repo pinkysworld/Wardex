@@ -1,7 +1,7 @@
 import { expect } from '@playwright/test';
 
 export const TOKEN = 'playwright-local-token';
-export const VERSION = '0.55.1';
+export const VERSION = '0.56.0';
 
 const NOW = '2026-04-20T06:27:45.809Z';
 

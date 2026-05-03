@@ -319,6 +319,19 @@ describe('SecurityPolicy', () => {
     });
   });
 
+  it('renders structured attacker profiles and recent decoy interactions', async () => {
+    const user = userEvent.setup();
+    renderSecurityPolicy();
+
+    await user.click(screen.getByRole('button', { name: 'Deception' }));
+
+    expect((await screen.findAllByText('Attacker Profiles')).length).toBeGreaterThan(0);
+    expect(await screen.findByText('Recent Decoy Interactions')).toBeInTheDocument();
+    expect(screen.getAllByText('10.0.0.5').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('ssh-canary-01').length).toBeGreaterThan(0);
+    expect(screen.getByText('8.7')).toBeInTheDocument();
+  });
+
   it('quarantines a target through the enforcement workflow', async () => {
     const user = userEvent.setup();
     renderSecurityPolicy();

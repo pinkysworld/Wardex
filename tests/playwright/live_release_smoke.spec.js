@@ -50,10 +50,11 @@ test('wardex live admin smoke', async ({ page }) => {
 
   const sidebar = page.locator('#sidebar-nav');
 
-  await expect(page.getByRole('heading', { name: 'Security Overview' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Dashboard' })).toBeVisible();
 
   await sidebar.getByRole('link', { name: 'Live Monitor', exact: true }).click();
-  await expect(page.getByRole('heading', { name: 'Live Alert Stream' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Live Monitor' })).toBeVisible();
+  await expect(page.getByRole('tablist', { name: 'Monitor views' })).toBeVisible();
   await page.getByRole('tab', { name: 'Processes', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Running Processes' })).toBeVisible();
   await expect(page.getByText('Process Count')).toBeVisible();

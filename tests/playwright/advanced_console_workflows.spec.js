@@ -23,6 +23,51 @@ test('advanced admin console workflows smoke', async ({ page }) => {
     }
   });
 
+  await page.route(`${BASE}/api/storage/events/historical**`, async (route) => {
+    const url = new URL(route.request().url());
+    const userName = url.searchParams.get('user_name') || 'alice@example.com';
+
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        enabled: true,
+        count: 1,
+        total: 1,
+        limit: Number(url.searchParams.get('limit') || '25'),
+        offset: Number(url.searchParams.get('offset') || '0'),
+        events: [
+          {
+            timestamp: '2026-04-20T10:17:00Z',
+            severity: 7,
+            event_class: 401,
+            device_id: 'agent-01',
+            user_name: userName,
+            src_ip: '203.0.113.10',
+            dst_ip: '198.51.100.15',
+            raw_json: '{"event":"ConsoleLogin"}',
+          },
+        ],
+        clickhouse: {
+          database: 'wardex',
+        },
+      }),
+    });
+  });
+
+  await page.route(`${BASE}/api/incidents/7`, async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        id: '7',
+        title: 'Credential replay escalation',
+        severity: 'high',
+        status: 'investigating',
+      }),
+    });
+  });
+
   await page.goto(`${BASE}/admin/`, { waitUntil: 'domcontentloaded' });
   await expect(page).toHaveURL(/\/admin\/?$/);
   await page.getByPlaceholder('API token').fill(TOKEN);
@@ -52,6 +97,9 @@ test('advanced admin console workflows smoke', async ({ page }) => {
     `${BASE}/admin/detection?intent=run-hunt&huntName=${encodeURIComponent(huntName)}&huntQuery=${encodeURIComponent(huntQuery)}`,
     { waitUntil: 'domcontentloaded' },
   );
+  await expect(page.getByRole('heading', { name: 'Threat Detection' })).toBeVisible();
+  await expect(page.locator('.auth-badge')).toContainText(/Connected/);
+  await expect(page.locator('#hunt-name')).toBeVisible({ timeout: 15000 });
   await expect(page.locator('#hunt-name')).toHaveValue(huntName);
   await expect(page.locator('#hunt-query')).toHaveValue(huntQuery);
   await page.getByRole('button', { name: 'Run Hunt' }).click();
@@ -70,6 +118,19 @@ test('advanced admin console workflows smoke', async ({ page }) => {
   await page.getByRole('button', { name: 'Policy', exact: true }).click();
   await expect(page.getByText('Current Policy')).toBeVisible();
   await expect(page.getByRole('button', { name: 'Compose and Preview' })).toBeVisible();
+  await page.getByRole('button', { name: 'Deception', exact: true }).click();
+  const deceptionCard = page.locator('.card').filter({
+    has: page.getByText('Deception Posture', { exact: true }),
+  });
+  await expect(
+    deceptionCard.locator('.card-title').filter({ hasText: /^Attacker Profiles$/ }).first(),
+  ).toBeVisible();
+  await expect(
+    deceptionCard
+      .locator('.card-title')
+      .filter({ hasText: /^Recent Decoy Interactions$/ })
+      .first(),
+  ).toBeVisible();
   await page.getByRole('button', { name: 'Enforcement', exact: true }).click();
   await expect(page.getByRole('button', { name: 'Quarantine Target' })).toBeVisible();
 
@@ -82,6 +143,10 @@ test('advanced admin console workflows smoke', async ({ page }) => {
   await expect(page.getByText('SaaS Activity Lane')).toBeVisible();
   await page.getByRole('tab', { name: 'Admin' }).click();
   await expect(page.getByText('Long-Retention History')).toBeVisible();
+  const retentionCard = page.locator('.card').filter({
+    has: page.getByText('Long-Retention History', { exact: true }),
+  });
+  await expect(retentionCard.getByText('ConsoleLogin', { exact: true })).toBeVisible();
 
   await sidebar.getByRole('link', { name: 'Fleet & Agents', exact: true }).click();
   await page.getByRole('button', { name: 'Updates', exact: true }).click();
@@ -100,10 +165,34 @@ test('advanced admin console workflows smoke', async ({ page }) => {
   ).toBeVisible();
   await page.getByRole('tab', { name: 'Integrity', exact: true }).click();
   await expect(page.getByText('Recent Malware Triage', { exact: true })).toBeVisible();
+  await page.getByRole('tab', { name: 'Observability', exact: true }).click();
+  const telemetryCard = page.locator('.card').filter({
+    has: page.getByText('Telemetry Detail', { exact: true }),
+  });
+  await expect(telemetryCard.getByText('Trace Samples', { exact: true })).toBeVisible();
+
+  await page.goto(
+    `${BASE}/admin/reports?tab=templates&case=42&incident=7&investigation=inv-7&source=case`,
+    { waitUntil: 'domcontentloaded' },
+  );
+  await expect(page.getByText('Reusable Templates', { exact: true })).toBeVisible();
+  const reportPreviewCard = page.locator('.triage-detail .card').filter({
+    has: page.getByText('Preview Scope', { exact: true }),
+  });
+  await expect(reportPreviewCard.getByText('Case #42', { exact: true })).toBeVisible();
+  await expect(reportPreviewCard.getByText('Incident #7', { exact: true })).toBeVisible();
+  await page.getByRole('tab', { name: 'Compliance', exact: true }).click();
+  await expect(page.getByText('Compliance Snapshot', { exact: true })).toBeVisible();
+  await expect(page.getByText('Priority Findings Snapshot', { exact: true })).toBeVisible();
 
   await sidebar.getByRole('link', { name: 'Help & Docs', exact: true }).click();
   await expect(page.getByText('Documentation Center', { exact: true })).toBeVisible();
   await expect(page.getByText('GraphQL Explorer', { exact: true })).toBeVisible();
+  const parityCard = page.locator('.card').filter({
+    has: page.getByText('Contract Parity', { exact: true }),
+  });
+  await expect(parityCard.getByText('Report Workflow Coverage', { exact: true })).toBeVisible();
+  await expect(parityCard.getByText('Runtime routes', { exact: true })).toBeVisible();
   await page.getByLabel('Search docs').fill('sdk');
   await expect(page.getByRole('button', { name: 'Open SDK guide' })).toBeVisible();
   await page.getByRole('button', { name: 'Run Query' }).click();

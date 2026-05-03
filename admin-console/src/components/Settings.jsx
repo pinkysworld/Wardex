@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useApi, useApiGroup, useToast } from '../hooks.jsx';
 import * as api from '../api.js';
 import { JsonDetails, SummaryGrid } from './operator.jsx';
@@ -27,11 +28,16 @@ import {
   getDefaultSsoCallbackUri,
   createIdpDraft,
   buildSsoLoginPath,
+  buildLongRetentionHistorySearchParams,
   collectorLane,
+  createHistoricalSearchDraft,
   providerLoginKindLabel,
   createScimDraft,
   createSiemDraft,
+  normalizeHistoricalSearchQuery,
+  normalizeSettingsTab,
   parseListInput,
+  parseHistoricalSearchParams,
   createRetentionDraft,
   createAwsCollectorDraft,
   createAzureCollectorDraft,
@@ -56,10 +62,41 @@ import {
 import { ConfigTab } from './settings/ConfigTab.jsx';
 import { SettingsTabs } from './settings/tabs.jsx';
 
+function summarizeHistoricalEventPayload(rawPayload) {
+  if (!rawPayload) return 'No payload summary available.';
+
+  const compactFallback = String(rawPayload).replace(/\s+/g, ' ').trim();
+
+  try {
+    const parsed = typeof rawPayload === 'string' ? JSON.parse(rawPayload) : rawPayload;
+
+    if (!parsed || typeof parsed !== 'object') {
+      return compactFallback || 'No payload summary available.';
+    }
+
+    const summaryParts = [parsed.event, parsed.action, parsed.type, parsed.result, parsed.status]
+      .filter(Boolean)
+      .slice(0, 3);
+
+    if (summaryParts.length > 0) return summaryParts.join(' • ');
+
+    const firstMeaningfulEntry = Object.entries(parsed).find(([, value]) => value != null);
+    if (!firstMeaningfulEntry) return 'Structured payload captured.';
+
+    const [key, value] = firstMeaningfulEntry;
+    return `${key}: ${String(value)}`;
+  } catch {
+    if (!compactFallback) return 'No payload summary available.';
+    return compactFallback.length > 88 ? `${compactFallback.slice(0, 85)}...` : compactFallback;
+  }
+}
+
 export default function Settings() {
   const toast = useToast();
   const [confirm, confirmUI] = useConfirm();
-  const [tab, setTab] = useState('config');
+  const [searchParams, setSearchParams] = useSearchParams();
+  const searchParamsKey = searchParams.toString();
+  const tab = normalizeSettingsTab(searchParams.get('tab'));
   const [auditPage, setAuditPage] = useState(0);
   const [auditQuery, setAuditQuery] = useState('');
   const [auditMethod, setAuditMethod] = useState('all');
@@ -117,18 +154,17 @@ export default function Settings() {
   const { data: dbVer } = useApi(api.adminDbVersion);
   const { data: dlqData } = useApi(api.dlqStats);
   const { data: dbSizes, reload: rSizes } = useApi(api.adminDbSizes);
-  const [historicalDraft, setHistoricalDraft] = useState({
-    since: '',
-    until: '',
-    tenant_id: '',
-    device_id: '',
-    user_name: '',
-    src_ip: '',
-    severity_min: '',
-    event_class: '',
-    limit: 25,
-  });
-  const [historicalQuery, setHistoricalQuery] = useState({ limit: 25 });
+  const routeHistoricalDraft = useMemo(
+    () => parseHistoricalSearchParams(searchParams),
+    [searchParamsKey],
+  );
+  const historicalQuery = useMemo(
+    () => normalizeHistoricalSearchQuery(routeHistoricalDraft),
+    [routeHistoricalDraft],
+  );
+  const [historicalDraft, setHistoricalDraft] = useState(() =>
+    createHistoricalSearchDraft(routeHistoricalDraft),
+  );
   const {
     data: adminRetentionWorkspaceData,
     loading: historicalEventsLoading,
@@ -385,6 +421,14 @@ export default function Settings() {
     () => (Array.isArray(historicalEventsData?.events) ? historicalEventsData.events : []),
     [historicalEventsData],
   );
+  const historicalEventRows = useMemo(
+    () =>
+      historicalEvents.map((event) => ({
+        ...event,
+        payloadSummary: summarizeHistoricalEventPayload(event.raw_json),
+      })),
+    [historicalEvents],
+  );
   const collectorRows = useMemo(
     () =>
       Array.isArray(collectorsSummary?.collectors)
@@ -500,6 +544,10 @@ export default function Settings() {
   useEffect(() => {
     setRetentionDraft(createRetentionDraft(retentionConfig));
   }, [retentionConfig]);
+
+  useEffect(() => {
+    setHistoricalDraft(routeHistoricalDraft);
+  }, [routeHistoricalDraft]);
 
   useEffect(() => {
     setAwsCollectorDraft(createAwsCollectorDraft(awsCollectorData));
@@ -749,10 +797,20 @@ export default function Settings() {
     }
   };
 
-  const runHistoricalSearch = async () => {
-    setHistoricalQuery({
-      ...historicalDraft,
-      limit: Number(historicalDraft.limit) || 25,
+  const updateSettingsTab = (nextTab) => {
+    setSearchParams(
+      (current) => {
+        const next = new URLSearchParams(current);
+        next.set('tab', normalizeSettingsTab(nextTab));
+        return next;
+      },
+      { replace: true },
+    );
+  };
+
+  const runHistoricalSearch = () => {
+    setSearchParams(buildLongRetentionHistorySearchParams(historicalDraft, searchParams), {
+      replace: true,
     });
   };
 
@@ -1140,7 +1198,7 @@ export default function Settings() {
 
   return (
     <div>
-      <SettingsTabs activeTab={tab} onChange={setTab} />
+      <SettingsTabs activeTab={tab} onChange={updateSettingsTab} />
 
       {tab === 'config' && (
         <ConfigTab
@@ -3232,7 +3290,7 @@ export default function Settings() {
             )}
           </div>
 
-          <div className="card" style={{ marginTop: 16 }}>
+          <div id="long-retention-history" className="card" style={{ marginTop: 16 }}>
             <div className="card-header">
               <span className="card-title">Long-Retention History</span>
               <div className="btn-group">
@@ -3452,7 +3510,7 @@ export default function Settings() {
               </div>
             )}
 
-            {historicalEvents.length > 0 ? (
+            {historicalEventRows.length > 0 ? (
               <div className="table-wrap">
                 <table>
                   <thead>
@@ -3468,7 +3526,7 @@ export default function Settings() {
                     </tr>
                   </thead>
                   <tbody>
-                    {historicalEvents.map((event, index) => (
+                    {historicalEventRows.map((event, index) => (
                       <tr
                         key={`${event.timestamp || 'ts'}-${event.device_id || 'device'}-${index}`}
                       >
@@ -3480,6 +3538,7 @@ export default function Settings() {
                         <td>{event.src_ip || '—'}</td>
                         <td>{event.dst_ip || '—'}</td>
                         <td>
+                          <div className="row-primary">{event.payloadSummary}</div>
                           <details>
                             <summary style={{ cursor: 'pointer', fontSize: 12 }}>Raw event</summary>
                             <pre

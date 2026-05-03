@@ -1,9 +1,10 @@
 import { useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { useApi, useApiGroup, useToast } from '../hooks.jsx';
 import * as api from '../api.js';
 import { JsonDetails, SummaryGrid } from './operator.jsx';
 import { downloadData, formatDateTime, formatRelativeTime } from './operatorUtils.js';
+import { buildLongRetentionHistoryPath } from './settings/helpers.js';
 import WorkflowGuidance from './WorkflowGuidance.jsx';
 import { buildHref } from './workflowPivots.js';
 
@@ -130,6 +131,22 @@ function buildExecutionContextPayload({ caseId, incidentId, investigationId, sou
     incident_id: incidentId || undefined,
     investigation_id: investigationId || undefined,
     source: source || undefined,
+  };
+}
+
+function scheduleCadenceLabel(cadence) {
+  return cadence === 'daily' ? 'Daily' : 'Weekly';
+}
+
+function buildScheduleFormFromTemplate(template, previous = {}) {
+  const cadence = previous.cadence || 'weekly';
+  return {
+    name: `${scheduleCadenceLabel(cadence)} ${template?.name || 'Executive Status'}`,
+    kind: template?.kind || 'executive_status',
+    scope: template?.scope || 'global',
+    format: template?.format || 'json',
+    cadence,
+    target: previous.target || 'ops@wardex.local',
   };
 }
 
@@ -453,14 +470,7 @@ export default function ReportsExports() {
       : [];
   const [selectedTemplateId, setSelectedTemplateId] = useState(null);
   const [selectedComplianceId, setSelectedComplianceId] = useState(null);
-  const [scheduleForm, setScheduleForm] = useState({
-    name: 'Weekly Executive Status',
-    kind: 'executive_status',
-    scope: 'global',
-    format: 'json',
-    cadence: 'weekly',
-    target: 'ops@wardex.local',
-  });
+  const [scheduleForm, setScheduleForm] = useState(() => buildScheduleFormFromTemplate(null));
   const [alertExportFormat, setAlertExportFormat] = useState('json');
   const [exportingAlerts, setExportingAlerts] = useState(false);
   const [auditFilters, setAuditFilters] = useState({ q: '', method: '', status: '', auth: '' });
@@ -594,6 +604,12 @@ export default function ReportsExports() {
     (total, report) => total + Number(report.manual_review || 0),
     0,
   );
+  const previewExecutionContext = hasExecutionContext(selectedTemplate?.execution_context)
+    ? selectedTemplate.execution_context
+    : hasExecutionContext(activeExecutionContext)
+      ? activeExecutionContext
+      : null;
+  const previewExecutionLabels = describeExecutionContext(previewExecutionContext || {});
 
   const previewPayload = selectedTemplate
     ? {
@@ -603,8 +619,19 @@ export default function ReportsExports() {
         format: selectedTemplate.format,
         audience: selectedTemplate.audience,
         summary: selectedTemplate.description,
+        execution_context: previewExecutionContext || undefined,
         executive_summary: execSum,
-        estimated_size: `${JSON.stringify({ selectedTemplate, execSum }).length} bytes`,
+      }
+    : null;
+  const previewOverview = previewPayload
+    ? {
+        name: previewPayload.name,
+        kind: previewPayload.kind,
+        scope: previewPayload.scope,
+        format: previewPayload.format,
+        audience: previewPayload.audience,
+        summary: previewPayload.summary,
+        estimated_size: `${JSON.stringify(previewPayload).length} bytes`,
       }
     : null;
   const complianceOverview = {
@@ -706,6 +733,7 @@ export default function ReportsExports() {
   const reviewFindings = Array.isArray(selectedReport?.findings)
     ? selectedReport.findings.filter((finding) => finding.status === 'manual_review')
     : [];
+  const priorityFindings = [...failedFindings, ...reviewFindings].slice(0, 6);
 
   const switchTab = (tab) =>
     setSearchParams(mergeReportParams(searchParams, { tab }), { replace: true });
@@ -1563,7 +1591,15 @@ export default function ReportsExports() {
                       >
                         Download Preview
                       </button>
-                      <button className="btn btn-sm" onClick={() => switchTab('delivery')}>
+                      <button
+                        className="btn btn-sm"
+                        onClick={() => {
+                          setScheduleForm((form) =>
+                            buildScheduleFormFromTemplate(selectedTemplate, form),
+                          );
+                          switchTab('delivery');
+                        }}
+                      >
                         Schedule Delivery
                       </button>
                       {hasActiveScope ? (
@@ -1581,7 +1617,21 @@ export default function ReportsExports() {
 
                     {previewPayload && (
                       <div style={{ marginTop: 16 }}>
-                        <SummaryGrid data={previewPayload} limit={8} />
+                        <SummaryGrid data={previewOverview} limit={8} />
+                        {previewExecutionLabels.length > 0 ? (
+                          <div style={{ marginTop: 16 }}>
+                            <div className="card-title" style={{ marginBottom: 8 }}>
+                              Preview Scope
+                            </div>
+                            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                              {previewExecutionLabels.map((label) => (
+                                <span key={label} className="badge badge-info">
+                                  {label}
+                                </span>
+                              ))}
+                            </div>
+                          </div>
+                        ) : null}
                         <JsonDetails data={previewPayload} label="Preview payload" />
                       </div>
                     )}
@@ -1934,9 +1984,11 @@ export default function ReportsExports() {
                 id="schedule-kind"
                 className="form-select"
                 value={scheduleForm.kind}
-                onChange={(event) =>
-                  setScheduleForm((form) => ({ ...form, kind: event.target.value }))
-                }
+                onChange={(event) => {
+                  const template =
+                    templates.find((entry) => entry.kind === event.target.value) || null;
+                  setScheduleForm((form) => buildScheduleFormFromTemplate(template, form));
+                }}
               >
                 {templates.map((template) => (
                   <option key={template.id} value={template.kind}>
@@ -2099,6 +2151,35 @@ export default function ReportsExports() {
                 No response requests match the current target scope.
               </div>
             )}
+            {filteredResponseAudit.length > 0 ? (
+              <>
+                <div className="card-title" style={{ marginTop: 16, marginBottom: 8 }}>
+                  Recent Response Audit
+                </div>
+                <div className="table-wrap">
+                  <table aria-label="Recent response audit entries">
+                    <thead>
+                      <tr>
+                        <th>Request</th>
+                        <th>Action</th>
+                        <th>Outcome</th>
+                        <th>When</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {filteredResponseAudit.slice(0, 5).map((entry) => (
+                        <tr key={`${entry.request_id || entry.action}-${entry.timestamp || 'ts'}`}>
+                          <td>{entry.request_id || '—'}</td>
+                          <td>{entry.action || '—'}</td>
+                          <td>{entry.outcome || '—'}</td>
+                          <td>{entry.timestamp ? formatDateTime(entry.timestamp) : '—'}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </>
+            ) : null}
             <JsonDetails
               data={{
                 target: activeResponseTarget || null,
@@ -2289,6 +2370,57 @@ export default function ReportsExports() {
                         Prioritize failed controls first, then resolve manual review gaps before the
                         next evidence package leaves the team.
                       </div>
+                    </div>
+
+                    <div className="card" style={{ marginTop: 16 }}>
+                      <div className="card-title" style={{ marginBottom: 12 }}>
+                        Priority Findings Snapshot
+                      </div>
+                      <div className="hint" style={{ marginBottom: 12 }}>
+                        Failed and manual-review controls stay visible here so operators do not
+                        need the raw framework payload to decide what moves next.
+                      </div>
+                      {priorityFindings.length === 0 ? (
+                        <div className="empty">
+                          No failed or manual-review controls are queued for this framework.
+                        </div>
+                      ) : (
+                        <div className="table-wrap">
+                          <table aria-label="Priority compliance findings">
+                            <thead>
+                              <tr>
+                                <th>Control</th>
+                                <th>Status</th>
+                                <th>Current Signal</th>
+                                <th>Next Step</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {priorityFindings.map((finding) => (
+                                <tr key={`${finding.control_id}-priority`}>
+                                  <td>
+                                    <div className="row-primary">{finding.control_id}</div>
+                                    <div className="row-secondary">{finding.title}</div>
+                                  </td>
+                                  <td>
+                                    <span className={`badge ${findingBadgeClass(finding.status)}`}>
+                                      {findingStatusLabel(finding.status)}
+                                    </span>
+                                  </td>
+                                  <td>{finding.evidence || 'No evidence captured.'}</td>
+                                  <td>
+                                    {finding.status === 'fail'
+                                      ? finding.remediation ||
+                                        'Resolve before the next evidence package.'
+                                      : finding.remediation ||
+                                        'Collect operator-supplied evidence before export.'}
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      )}
                     </div>
 
                     <div className="btn-group" style={{ marginTop: 16 }}>
@@ -2593,6 +2725,13 @@ export default function ReportsExports() {
                 ? 'Saving Audit Artifact...'
                 : 'Save Audit Artifact'}
             </button>
+            <Link
+              className="btn btn-sm"
+              style={{ marginTop: 12 }}
+              to={`${buildLongRetentionHistoryPath()}#long-retention-history`}
+            >
+              Review Retention Controls
+            </Link>
           </div>
 
           <div className="card">

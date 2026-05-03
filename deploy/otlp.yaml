@@ -27,7 +27,7 @@ traces:
   # Span attributes added to every trace
   resource_attributes:
     service.name: wardex
-    service.version: "0.55.1"
+    service.version: "0.56.0"
     deployment.environment: production
 
 metrics:
@@ -37,7 +37,7 @@ metrics:
   latency_buckets: [1, 5, 10, 25, 50, 100, 250, 500, 1000, 2500, 5000]
   resource_attributes:
     service.name: wardex
-    service.version: "0.55.1"
+    service.version: "0.56.0"
 
 logs:
   enabled: false             # Enable OTLP log export (in addition to stdout)

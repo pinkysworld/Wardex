@@ -163,6 +163,7 @@ Wardex does not yet ship a fully automated clustered control plane, but the curr
 2. Keep `var/` on durable storage or ship scheduled backups using the existing backup/export workflows.
 3. Mirror configuration, admin secrets, and TLS assets through your secret manager instead of node-local files.
 4. Use a warm standby node for the same release version and restore checkpoints or backups during failover.
-5. In federation mode, keep each region autonomous and share posture/intel across regions instead of forwarding all raw events cross-region.
+5. Use Help & Docs `Production Readiness` or the `/api/support/readiness-evidence`, `/api/system/health/dependencies`, and `/api/backup/status` endpoints to confirm backup cadence, latest backup/checkpoint artifacts, and restore readiness before failover drills.
+6. In federation mode, keep each region autonomous and share posture/intel across regions instead of forwarding all raw events cross-region.
 
 For production planning, pair this document with `docs/DISASTER_RECOVERY.md` and `docs/PRODUCTION_HARDENING.md` so sizing, backup cadence, and failover drills are defined together.

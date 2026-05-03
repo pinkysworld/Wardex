@@ -1,12 +1,12 @@
-openapi: "3.0.3"
+openapi: 3.0.3
 info:
-  title: Wardex XDR Platform API
+  title: Wardex API
+  version: "0.56.0"
   description: |
-    Comprehensive REST API for the Wardex XDR/SIEM platform.
+    Versioned API surface for the Wardex private-cloud XDR / SIEM platform.
     All mutating endpoints and sensitive monitoring endpoints require
     Bearer token authentication via the `Authorization` header.
     Agent-facing enrollment and heartbeat endpoints bypass admin auth.
-  version: "0.55.1"
   contact:
     name: Wardex Project
   license:
@@ -632,7 +632,9 @@ components:
         retention_count: { type: integer, minimum: 0 }
         path: { type: string }
         schedule_cron: { type: string }
-      required: [enabled, retention_count, path, schedule_cron]
+        observed_backups: { type: integer, minimum: 0 }
+        latest_backup_at: { type: string, format: date-time, nullable: true }
+      required: [enabled, retention_count, path, schedule_cron, observed_backups, latest_backup_at]
 
     AdminBackupResponse:
       type: object
@@ -2736,8 +2738,71 @@ components:
         enabled: { type: boolean }
         path: { type: string }
         retention_count: { type: integer }
+        schedule_cron: { type: string }
         observed_backups: { type: integer }
-      required: [enabled, path, retention_count, observed_backups]
+        latest_backup_at: { type: string, format: date-time, nullable: true }
+      required: [enabled, path, retention_count, schedule_cron, observed_backups, latest_backup_at]
+
+    ControlPlaneFailoverDrill:
+      type: object
+      properties:
+        drill_type: { type: string }
+        orchestration_scope: { type: string }
+        status: { type: string }
+        last_run_at: { type: string, format: date-time, nullable: true }
+        actor: { type: string, nullable: true }
+        summary: { type: string }
+        artifact_source: { type: string }
+        durable_storage_verified: { type: boolean }
+        backup_artifact_verified: { type: boolean }
+        checkpoint_artifact_verified: { type: boolean }
+      required: [drill_type, orchestration_scope, status, last_run_at, actor, summary, artifact_source, durable_storage_verified, backup_artifact_verified, checkpoint_artifact_verified]
+
+    ControlPlaneFailoverDrillResponse:
+      type: object
+      properties:
+        digest: { type: string }
+        drill: { $ref: "#/components/schemas/ControlPlaneFailoverDrill" }
+      required: [digest, drill]
+
+    ControlPlaneClusterState:
+      type: object
+      properties:
+        node_id: { type: string }
+        role: { type: string }
+        leader_id: { type: string, nullable: true }
+        peers_total: { type: integer, minimum: 0 }
+        peers_reachable: { type: integer, minimum: 0 }
+        commit_index: { type: integer, minimum: 0 }
+        healthy: { type: boolean }
+      required: [node_id, role, leader_id, peers_total, peers_reachable, commit_index, healthy]
+
+    SupportReadinessControlPlane:
+      type: object
+      properties:
+        topology: { type: string }
+        orchestration_scope: { type: string }
+        ha_mode: { type: string }
+        leader: { type: boolean }
+        durable_storage: { type: boolean }
+        event_store_path: { type: string }
+        backup_schedule_cron: { type: string }
+        observed_backups: { type: integer, minimum: 0 }
+        latest_backup_at: { type: string, format: date-time, nullable: true }
+        checkpoint_count: { type: integer, minimum: 0 }
+        latest_checkpoint_at: { type: string, format: date-time, nullable: true }
+        restore_ready: { type: boolean }
+        recovery_status: { type: string }
+        documented_failover: { type: string }
+        cluster:
+          allOf:
+            - $ref: "#/components/schemas/ControlPlaneClusterState"
+          nullable: true
+        failover_drill: { $ref: "#/components/schemas/ControlPlaneFailoverDrill" }
+        failover_drill_history:
+          type: array
+          items: { $ref: "#/components/schemas/ControlPlaneFailoverDrill" }
+      required: [topology, orchestration_scope, ha_mode, leader, durable_storage, event_store_path, backup_schedule_cron, observed_backups, latest_backup_at, checkpoint_count, latest_checkpoint_at, restore_ready, recovery_status, documented_failover, cluster, failover_drill, failover_drill_history]
 
     SupportReadinessAuditChain:
       type: object
@@ -2842,6 +2907,7 @@ components:
         storage: { $ref: "#/components/schemas/SupportReadinessStorage" }
         retention: { $ref: "#/components/schemas/SupportReadinessRetention" }
         backup: { $ref: "#/components/schemas/SupportReadinessBackup" }
+        control_plane: { $ref: "#/components/schemas/SupportReadinessControlPlane" }
         audit_chain: { $ref: "#/components/schemas/SupportReadinessAuditChain" }
         collectors: { $ref: "#/components/schemas/SupportCollectorReadinessSummary" }
         response_history: { $ref: "#/components/schemas/SupportReadinessResponseHistory" }
@@ -2853,7 +2919,7 @@ components:
         known_limitations:
           type: array
           items: { type: string }
-      required: [generated_at, status, version, config_posture, auth, tls, storage, retention, backup, audit_chain, collectors, response_history, evidence, contracts, experimental_surfaces, known_limitations]
+      required: [generated_at, status, version, config_posture, auth, tls, storage, retention, backup, control_plane, audit_chain, collectors, response_history, evidence, contracts, experimental_surfaces, known_limitations]
 
     SupportReadinessEvidenceResponse:
       type: object
@@ -2861,6 +2927,194 @@ components:
         digest: { type: string }
         evidence: { $ref: "#/components/schemas/SupportReadinessEvidence" }
       required: [digest, evidence]
+
+    ReportKind:
+      type: string
+      description: Built-in report kinds include executive_status, audit_export, control_plane_failover_history, incident_package, compliance_snapshot, compliance_markdown, alert_export, and response_approval_snapshot.
+
+    ReportExecutionContext:
+      type: object
+      properties:
+        case_id: { type: string, nullable: true }
+        incident_id: { type: string, nullable: true }
+        investigation_id: { type: string, nullable: true }
+        source: { type: string, nullable: true }
+      required: [case_id, incident_id, investigation_id, source]
+
+    ReportArtifactMetadata:
+      type: object
+      properties:
+        scope: { type: string }
+        source_run_id: { type: string, nullable: true }
+        generated_by: { type: string }
+        input_hash: { type: string }
+        artifact_hash: { type: string }
+        replayable_context_id: { type: string, nullable: true }
+      required: [scope, source_run_id, generated_by, input_hash, artifact_hash, replayable_context_id]
+
+    ReportTemplateRecord:
+      type: object
+      properties:
+        id: { type: string }
+        name: { type: string }
+        kind: { $ref: "#/components/schemas/ReportKind" }
+        scope: { type: string }
+        format: { type: string }
+        last_run_at: { type: string, format: date-time, nullable: true }
+        next_run_at: { type: string, format: date-time, nullable: true }
+        status: { type: string }
+        audience: { type: string }
+        description: { type: string }
+        execution_context:
+          allOf:
+            - $ref: "#/components/schemas/ReportExecutionContext"
+          nullable: true
+      required: [id, name, kind, scope, format, last_run_at, next_run_at, status, audience, description, execution_context]
+
+    ReportRunRecord:
+      type: object
+      properties:
+        id: { type: string }
+        name: { type: string }
+        kind: { $ref: "#/components/schemas/ReportKind" }
+        scope: { type: string }
+        format: { type: string }
+        last_run_at: { type: string, format: date-time, nullable: true }
+        next_run_at: { type: string, format: date-time, nullable: true }
+        status: { type: string }
+        audience: { type: string }
+        summary: { type: string }
+        size_bytes: { type: integer, minimum: 0 }
+        preview:
+          type: object
+          additionalProperties: true
+        execution_context:
+          allOf:
+            - $ref: "#/components/schemas/ReportExecutionContext"
+          nullable: true
+        artifact_metadata:
+          allOf:
+            - $ref: "#/components/schemas/ReportArtifactMetadata"
+          nullable: true
+      required: [id, name, kind, scope, format, last_run_at, next_run_at, status, audience, summary, size_bytes, preview, execution_context, artifact_metadata]
+
+    ReportScheduleRecord:
+      type: object
+      properties:
+        id: { type: string }
+        name: { type: string }
+        kind: { $ref: "#/components/schemas/ReportKind" }
+        scope: { type: string }
+        format: { type: string }
+        last_run_at: { type: string, format: date-time, nullable: true }
+        next_run_at: { type: string, format: date-time, nullable: true }
+        status: { type: string }
+        cadence: { type: string, enum: [daily, weekly] }
+        target: { type: string }
+        execution_context:
+          allOf:
+            - $ref: "#/components/schemas/ReportExecutionContext"
+          nullable: true
+      required: [id, name, kind, scope, format, last_run_at, next_run_at, status, cadence, target, execution_context]
+
+    ReportTemplateUpsertRequest:
+      type: object
+      properties:
+        id: { type: string }
+        name: { type: string }
+        kind: { $ref: "#/components/schemas/ReportKind" }
+        scope: { type: string }
+        format: { type: string }
+        status: { type: string }
+        audience: { type: string }
+        description: { type: string }
+        case_id: { type: string }
+        incident_id: { type: string }
+        investigation_id: { type: string }
+        source: { type: string }
+
+    ReportRunCreateRequest:
+      type: object
+      properties:
+        name: { type: string }
+        kind: { $ref: "#/components/schemas/ReportKind" }
+        scope: { type: string }
+        format: { type: string }
+        audience: { type: string }
+        status: { type: string }
+        summary: { type: string }
+        preview_override:
+          type: object
+          additionalProperties: true
+        case_id: { type: string }
+        incident_id: { type: string }
+        investigation_id: { type: string }
+        source: { type: string }
+
+    ReportScheduleUpsertRequest:
+      type: object
+      properties:
+        id: { type: string }
+        name: { type: string }
+        kind: { $ref: "#/components/schemas/ReportKind" }
+        scope: { type: string }
+        format: { type: string }
+        cadence: { type: string, enum: [daily, weekly] }
+        target: { type: string }
+        next_run_at: { type: string, format: date-time, nullable: true }
+        status: { type: string }
+        case_id: { type: string }
+        incident_id: { type: string }
+        investigation_id: { type: string }
+        source: { type: string }
+
+    ReportTemplateListResponse:
+      type: object
+      properties:
+        templates:
+          type: array
+          items: { $ref: "#/components/schemas/ReportTemplateRecord" }
+        count: { type: integer, minimum: 0 }
+      required: [templates, count]
+
+    ReportTemplateMutationResponse:
+      type: object
+      properties:
+        status: { type: string, enum: [saved] }
+        template: { $ref: "#/components/schemas/ReportTemplateRecord" }
+      required: [status, template]
+
+    ReportRunListResponse:
+      type: object
+      properties:
+        runs:
+          type: array
+          items: { $ref: "#/components/schemas/ReportRunRecord" }
+        count: { type: integer, minimum: 0 }
+      required: [runs, count]
+
+    ReportRunMutationResponse:
+      type: object
+      properties:
+        status: { type: string, enum: [created] }
+        run: { $ref: "#/components/schemas/ReportRunRecord" }
+      required: [status, run]
+
+    ReportScheduleListResponse:
+      type: object
+      properties:
+        schedules:
+          type: array
+          items: { $ref: "#/components/schemas/ReportScheduleRecord" }
+        count: { type: integer, minimum: 0 }
+      required: [schedules, count]
+
+    ReportScheduleMutationResponse:
+      type: object
+      properties:
+        status: { type: string, enum: [saved] }
+        schedule: { $ref: "#/components/schemas/ReportScheduleRecord" }
+      required: [status, schedule]
 
     SupportDiagnosticsSession:
       type: object
@@ -3105,9 +3359,24 @@ components:
       type: object
       properties:
         mode: { type: string }
+        topology: { type: string }
+        orchestration_scope: { type: string }
         status: { type: string }
         leader: { type: boolean }
-      required: [mode, status, leader]
+        recovery_status: { type: string }
+        documented_failover: { type: string }
+        observed_backups: { type: integer, minimum: 0 }
+        latest_backup_at: { type: string, format: date-time, nullable: true }
+        checkpoint_count: { type: integer, minimum: 0 }
+        latest_checkpoint_at: { type: string, format: date-time, nullable: true }
+        restore_ready: { type: boolean }
+        cluster:
+          allOf:
+            - $ref: "#/components/schemas/ControlPlaneClusterState"
+          nullable: true
+        failover_drill_history_count: { type: integer, minimum: 0 }
+        failover_drill: { $ref: "#/components/schemas/ControlPlaneFailoverDrill" }
+      required: [mode, topology, orchestration_scope, status, leader, recovery_status, documented_failover, observed_backups, latest_backup_at, checkpoint_count, latest_checkpoint_at, restore_ready, cluster, failover_drill_history_count, failover_drill]
 
     SystemHealthIdentity:
       type: object
@@ -7689,7 +7958,7 @@ paths:
                   platform: { type: string }
               example:
                 status: ok
-                version: "0.55.1"
+                version: "0.56.0"
                 uptime: "4h 12m 3s"
                 platform: aarch64-apple-darwin
         "429": { $ref: "#/components/responses/TooManyRequests" }
@@ -7819,7 +8088,7 @@ paths:
       summary: Production readiness evidence summary
       responses:
         "200":
-          description: Readiness evidence pack covering config, auth, storage, collectors, contracts, and known limitations
+          description: Readiness evidence pack covering config, auth, storage, control-plane posture, collectors, contracts, and known limitations
           content:
             application/json:
               schema: { $ref: "#/components/schemas/SupportReadinessEvidenceResponse" }
@@ -8416,6 +8685,159 @@ paths:
         "200":
           description: Report with summary and alerts
 
+  /api/report-templates:
+    get:
+      tags: [Reports]
+      summary: List saved report templates
+      parameters:
+        - in: query
+          name: case_id
+          schema: { type: string }
+          description: Filter templates by attached case execution context.
+        - in: query
+          name: incident_id
+          schema: { type: string }
+          description: Filter templates by attached incident execution context.
+        - in: query
+          name: investigation_id
+          schema: { type: string }
+          description: Filter templates by attached investigation execution context.
+        - in: query
+          name: source
+          schema: { type: string }
+          description: Filter templates by the originating execution context source.
+        - in: query
+          name: scope
+          schema: { type: string, enum: [scoped, unscoped] }
+          description: Restrict results to scoped or unscoped templates. Omit for all templates.
+      responses:
+        "200":
+          description: Saved report templates with optional execution-context filtering.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ReportTemplateListResponse" }
+    post:
+      tags: [Reports]
+      summary: Save or update a report template
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ReportTemplateUpsertRequest" }
+      responses:
+        "201":
+          description: Saved template record.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ReportTemplateMutationResponse" }
+        "400":
+          description: Invalid report template payload.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+
+  /api/report-runs:
+    get:
+      tags: [Reports]
+      summary: List report runs and persisted artifact previews
+      parameters:
+        - in: query
+          name: case_id
+          schema: { type: string }
+          description: Filter runs by attached case execution context.
+        - in: query
+          name: incident_id
+          schema: { type: string }
+          description: Filter runs by attached incident execution context.
+        - in: query
+          name: investigation_id
+          schema: { type: string }
+          description: Filter runs by attached investigation execution context.
+        - in: query
+          name: source
+          schema: { type: string }
+          description: Filter runs by the originating execution context source.
+        - in: query
+          name: scope
+          schema: { type: string, enum: [scoped, unscoped] }
+          description: Restrict results to scoped or unscoped report runs. Omit for all runs.
+      responses:
+        "200":
+          description: Persisted report runs with preview payloads and optional artifact metadata.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ReportRunListResponse" }
+    post:
+      tags: [Reports]
+      summary: Create a report run and persist its preview artifact
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ReportRunCreateRequest" }
+      responses:
+        "201":
+          description: Created report run.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ReportRunMutationResponse" }
+        "400":
+          description: Invalid report run payload.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+
+  /api/report-schedules:
+    get:
+      tags: [Reports]
+      summary: List scheduled report deliveries
+      parameters:
+        - in: query
+          name: case_id
+          schema: { type: string }
+          description: Filter schedules by attached case execution context.
+        - in: query
+          name: incident_id
+          schema: { type: string }
+          description: Filter schedules by attached incident execution context.
+        - in: query
+          name: investigation_id
+          schema: { type: string }
+          description: Filter schedules by attached investigation execution context.
+        - in: query
+          name: source
+          schema: { type: string }
+          description: Filter schedules by the originating execution context source.
+        - in: query
+          name: scope
+          schema: { type: string, enum: [scoped, unscoped] }
+          description: Restrict results to scoped or unscoped schedules. Omit for all schedules.
+      responses:
+        "200":
+          description: Saved report delivery schedules.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ReportScheduleListResponse" }
+    post:
+      tags: [Reports]
+      summary: Save or update a scheduled report delivery
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ReportScheduleUpsertRequest" }
+      responses:
+        "201":
+          description: Saved report schedule.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ReportScheduleMutationResponse" }
+        "400":
+          description: Invalid schedule payload or cadence.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+
   # ── Control ────────────────────────────────────────────────
   /api/control/mode:
     post:
@@ -8466,6 +8888,17 @@ paths:
       responses:
         "200":
           description: Checkpoint restored
+
+  /api/control/failover-drill:
+    post:
+      tags: [Control]
+      summary: Run an automated control-plane failover drill
+      responses:
+        "200":
+          description: Latest control-plane failover drill result
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ControlPlaneFailoverDrillResponse" }
 
   /api/checkpoints:
     get:
@@ -8726,8 +9159,8 @@ paths:
                 - id: a1b2c3d4
                   hostname: prod-web-01
                   platform: x86_64-unknown-linux-musl
-                  version: "0.55.1"
-                  current_version: "0.55.1"
+                  version: "0.56.0"
+                  current_version: "0.56.0"
                   enrolled_at: "2026-04-08T11:58:00Z"
                   last_seen: "2026-04-08T12:01:30Z"
                   status: online
@@ -12441,11 +12874,11 @@ paths:
                   timestamp: 2026-05-01T10:20:00Z
                   tools:
                     - name: Wardex SBOM Generator
-                      version: 0.55.1
+                      version: 0.56.0
                   component:
                     type: application
                     name: wardex
-                    version: 0.55.1
+                    version: 0.56.0
                 components:
                   - type: library
                     name: serde
@@ -12473,11 +12906,11 @@ paths:
                   timestamp: 2026-05-01T10:20:00Z
                   tools:
                     - name: Wardex SBOM Generator
-                      version: 0.55.1
+                      version: 0.56.0
                   component:
                     type: application
                     name: wardex
-                    version: 0.55.1
+                    version: 0.56.0
                 components:
                   - type: device
                     name: Apple-M3
@@ -13616,6 +14049,8 @@ paths:
                 retention_count: 7
                 path: var/backups/
                 schedule_cron: 0 2 * * *
+                observed_backups: 0
+                latest_backup_at: null
 
   # ── v0.43.0 Backup Encryption ─────────────────────────────────────
 

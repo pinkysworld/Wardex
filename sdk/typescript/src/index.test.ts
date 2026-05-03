@@ -200,7 +200,7 @@ describe("WardexClient", () => {
         release: {
           status: "ready",
           candidates: 1,
-          current_version: "0.55.1",
+          current_version: "0.56.0",
           annotation:
             "Candidate metadata is available for rollout review, SBOM checks, and rollback planning.",
           next_step:
@@ -223,7 +223,7 @@ describe("WardexClient", () => {
     const result = await client.commandSummary();
     expect(result.metrics.open_incidents).toBe(3);
     expect(result.lanes.connectors.annotation).toContain("collector lanes");
-    expect(result.lanes.release.current_version).toBe("0.55.1");
+    expect(result.lanes.release.current_version).toBe("0.56.0");
     expect(mock).toHaveBeenCalledWith(
       "http://localhost:8080/api/command/summary",
       expect.objectContaining({ method: "GET" })
@@ -405,12 +405,12 @@ describe("WardexClient", () => {
     const body = {
       generated_at: "2026-04-30T12:00:00Z",
       runtime: {
-        version: "0.55.1-local",
-        release_version: "0.55.1",
-        docs_version: "0.55.1-local",
+        version: "0.56.0-local",
+        release_version: "0.56.0",
+        docs_version: "0.56.0-local",
       },
       rest: {
-        openapi_version: "0.55.1-local",
+        openapi_version: "0.56.0-local",
         openapi_path_count: 180,
         endpoint_catalog_count: 192,
         authenticated_endpoints: 168,
@@ -431,11 +431,11 @@ describe("WardexClient", () => {
         },
         typescript: {
           package: "@wardex/sdk",
-          version: "0.55.1",
+          version: "0.56.0",
           aligned: true,
         },
       },
-      issues: ["Python SDK version 0.55.0 differs from runtime release 0.55.1."],
+      issues: ["Python SDK version 0.55.0 differs from runtime release 0.56.0."],
     };
     const mock = mockFetch(200, body);
     globalThis.fetch = mock;
@@ -456,7 +456,7 @@ describe("WardexClient", () => {
         status: "review",
         version: {
           package: "wardex",
-          runtime: "0.55.1-local",
+          runtime: "0.56.0-local",
           edition: "private-cloud",
         },
         config_posture: {
@@ -497,7 +497,39 @@ describe("WardexClient", () => {
           enabled: true,
           path: "var/backups",
           retention_count: 7,
+          schedule_cron: "0 2 * * *",
           observed_backups: 1,
+          latest_backup_at: "2026-04-30T11:30:00Z",
+        },
+        control_plane: {
+          topology: "standalone",
+          orchestration_scope: "standalone_reference",
+          ha_mode: "active_passive_reference",
+          leader: true,
+          durable_storage: true,
+          event_store_path: "var/events.db",
+          backup_schedule_cron: "0 2 * * *",
+          observed_backups: 1,
+          latest_backup_at: "2026-04-30T11:30:00Z",
+          checkpoint_count: 2,
+          latest_checkpoint_at: "2026-04-30T11:55:00Z",
+          restore_ready: true,
+          recovery_status: "ready_for_documented_failover",
+          documented_failover: "warm_standby_restore",
+          cluster: null,
+          failover_drill: {
+            drill_type: "warm_standby_restore_dry_run",
+            orchestration_scope: "standalone_reference",
+            status: "not_run",
+            last_run_at: null,
+            actor: null,
+            summary: "No automated failover drill has been recorded yet.",
+            artifact_source: "none",
+            durable_storage_verified: false,
+            backup_artifact_verified: false,
+            checkpoint_artifact_verified: false,
+          },
+          failover_drill_history: [],
         },
         audit_chain: {
           status: "verified",
@@ -550,12 +582,12 @@ describe("WardexClient", () => {
           parity: {
             generated_at: "2026-04-30T12:00:00Z",
             runtime: {
-              version: "0.55.1-local",
-              release_version: "0.55.1",
-              docs_version: "0.55.1-local",
+              version: "0.56.0-local",
+              release_version: "0.56.0",
+              docs_version: "0.56.0-local",
             },
             rest: {
-              openapi_version: "0.55.1-local",
+              openapi_version: "0.56.0-local",
               openapi_path_count: 180,
               endpoint_catalog_count: 192,
               authenticated_endpoints: 168,
@@ -576,11 +608,11 @@ describe("WardexClient", () => {
               },
               typescript: {
                 package: "@wardex/sdk",
-                version: "0.55.1",
+                version: "0.56.0",
                 aligned: true,
               },
             },
-            issues: ["Python SDK version 0.55.0 differs from runtime release 0.55.1."],
+            issues: ["Python SDK version 0.55.0 differs from runtime release 0.56.0."],
           },
         },
         experimental_surfaces: [
@@ -676,6 +708,34 @@ describe("WardexClient", () => {
     );
   });
 
+  it("failoverDrill() calls POST /api/control/failover-drill", async () => {
+    const body = {
+      digest: "failover-drill-digest",
+      drill: {
+        drill_type: "warm_standby_restore_dry_run",
+        orchestration_scope: "standalone_reference",
+        status: "passed",
+        last_run_at: "2026-04-30T12:02:00Z",
+        actor: "admin",
+        summary:
+          "Validated durable event storage with checkpoint artifacts for the documented failover path.",
+        artifact_source: "checkpoint",
+        durable_storage_verified: true,
+        backup_artifact_verified: false,
+        checkpoint_artifact_verified: true,
+      },
+    };
+    const mock = mockFetch(200, body);
+    globalThis.fetch = mock;
+    const client = new WardexClient({ baseUrl: "http://localhost:8080" });
+    const result = await client.failoverDrill();
+    expect(result).toEqual(body);
+    expect(mock).toHaveBeenCalledWith(
+      "http://localhost:8080/api/control/failover-drill",
+      expect.objectContaining({ method: "POST" })
+    );
+  });
+
   it("productionDemoLab() calls POST /api/demo/lab", async () => {
     const body = {
       digest: "demo-lab-digest",
@@ -720,9 +780,184 @@ describe("WardexClient", () => {
     );
   });
 
+  it("reportTemplates(), reportRuns(), and reportSchedules() include execution-context filters", async () => {
+    const mock = vi
+      .fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        headers: { get: () => "application/json" },
+        json: () => Promise.resolve({ templates: [], count: 0 }),
+        text: () => Promise.resolve('{"templates":[],"count":0}'),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        headers: { get: () => "application/json" },
+        json: () => Promise.resolve({ runs: [], count: 0 }),
+        text: () => Promise.resolve('{"runs":[],"count":0}'),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        headers: { get: () => "application/json" },
+        json: () => Promise.resolve({ schedules: [], count: 0 }),
+        text: () => Promise.resolve('{"schedules":[],"count":0}'),
+      });
+    globalThis.fetch = mock;
+    const client = new WardexClient({ baseUrl: "http://localhost:8080" });
+
+    await client.reportTemplates({
+      case_id: "42",
+      incident_id: "7",
+      investigation_id: "inv-7",
+      source: "case",
+      scope: "scoped",
+    });
+    await client.reportRuns({
+      case_id: "42",
+      incident_id: "7",
+      investigation_id: "inv-7",
+      source: "case",
+      scope: "scoped",
+    });
+    await client.reportSchedules({
+      case_id: "42",
+      incident_id: "7",
+      investigation_id: "inv-7",
+      source: "case",
+      scope: "scoped",
+    });
+
+    expect(mock).toHaveBeenNthCalledWith(
+      1,
+      "http://localhost:8080/api/report-templates?case_id=42&incident_id=7&investigation_id=inv-7&source=case&scope=scoped",
+      expect.objectContaining({ method: "GET" })
+    );
+    expect(mock).toHaveBeenNthCalledWith(
+      2,
+      "http://localhost:8080/api/report-runs?case_id=42&incident_id=7&investigation_id=inv-7&source=case&scope=scoped",
+      expect.objectContaining({ method: "GET" })
+    );
+    expect(mock).toHaveBeenNthCalledWith(
+      3,
+      "http://localhost:8080/api/report-schedules?case_id=42&incident_id=7&investigation_id=inv-7&source=case&scope=scoped",
+      expect.objectContaining({ method: "GET" })
+    );
+  });
+
+  it("saveReportTemplate(), createReportRun(), and saveReportSchedule() post report payloads", async () => {
+    const mock = vi
+      .fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 201,
+        headers: { get: () => "application/json" },
+        json: () =>
+          Promise.resolve({
+            status: "saved",
+            template: {
+              id: "tpl-failover-drill-history",
+              name: "Control-plane Failover Drill History",
+              kind: "control_plane_failover_history",
+            },
+          }),
+        text: () => Promise.resolve('{"status":"saved"}'),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 201,
+        headers: { get: () => "application/json" },
+        json: () =>
+          Promise.resolve({
+            status: "created",
+            run: {
+              id: "run-1",
+              kind: "control_plane_failover_history",
+              preview: { kind: "control_plane_failover_history" },
+            },
+          }),
+        text: () => Promise.resolve('{"status":"created"}'),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 201,
+        headers: { get: () => "application/json" },
+        json: () =>
+          Promise.resolve({
+            status: "saved",
+            schedule: {
+              id: "sched-1",
+              kind: "control_plane_failover_history",
+              cadence: "weekly",
+            },
+          }),
+        text: () => Promise.resolve('{"status":"saved"}'),
+      });
+    globalThis.fetch = mock;
+    const client = new WardexClient({ baseUrl: "http://localhost:8080" });
+
+    const template = await client.saveReportTemplate({
+      name: "Control-plane Failover Drill History",
+      kind: "control_plane_failover_history",
+      scope: "control_plane",
+      format: "json",
+      audience: "audit",
+      description: "Persisted failover drill history artifact",
+    });
+    const run = await client.createReportRun({
+      name: "Control-plane Failover Drill History",
+      kind: "control_plane_failover_history",
+      scope: "control_plane",
+      format: "json",
+      audience: "audit",
+      case_id: "42",
+      incident_id: "7",
+      investigation_id: "inv-7",
+      source: "case",
+    });
+    const schedule = await client.saveReportSchedule({
+      name: "Weekly Control-plane Failover Drill History",
+      kind: "control_plane_failover_history",
+      scope: "control_plane",
+      format: "json",
+      cadence: "weekly",
+      target: "audit@wardex.local",
+    });
+
+    expect(template.template.kind).toBe("control_plane_failover_history");
+    expect(run.run.preview.kind).toBe("control_plane_failover_history");
+    expect(schedule.schedule.kind).toBe("control_plane_failover_history");
+
+    expect(mock.mock.calls[0][0]).toBe("http://localhost:8080/api/report-templates");
+    expect(JSON.parse(String(mock.mock.calls[0][1].body))).toEqual(
+      expect.objectContaining({
+        name: "Control-plane Failover Drill History",
+        kind: "control_plane_failover_history",
+        scope: "control_plane",
+      })
+    );
+    expect(mock.mock.calls[1][0]).toBe("http://localhost:8080/api/report-runs");
+    expect(JSON.parse(String(mock.mock.calls[1][1].body))).toEqual(
+      expect.objectContaining({
+        kind: "control_plane_failover_history",
+        case_id: "42",
+        investigation_id: "inv-7",
+      })
+    );
+    expect(mock.mock.calls[2][0]).toBe("http://localhost:8080/api/report-schedules");
+    expect(JSON.parse(String(mock.mock.calls[2][1].body))).toEqual(
+      expect.objectContaining({
+        name: "Weekly Control-plane Failover Drill History",
+        kind: "control_plane_failover_history",
+        cadence: "weekly",
+      })
+    );
+  });
+
   it("docsIndex() calls GET /api/docs/index with query params", async () => {
     const body = {
-      version: "0.55.1-local",
+      version: "0.56.0-local",
       generated_at: "2026-04-30T12:10:00Z",
       query: "sdk guide",
       section: "api",
@@ -753,7 +988,7 @@ describe("WardexClient", () => {
 
   it("docsContent() calls GET /api/docs/content with encoded path", async () => {
     const body = {
-      version: "0.55.1-local",
+      version: "0.56.0-local",
       generated_at: "2026-04-30T12:10:00Z",
       path: "SDK_GUIDE.md",
       title: "SDK Guide",
@@ -784,9 +1019,33 @@ describe("WardexClient", () => {
         event_count: 400,
       },
       ha_mode: {
-        mode: "standalone",
+        mode: "active_passive_reference",
+        topology: "standalone",
+        orchestration_scope: "standalone_reference",
         status: "ready_for_active_passive",
         leader: true,
+        recovery_status: "ready_for_documented_failover",
+        documented_failover: "warm_standby_restore",
+        observed_backups: 2,
+        latest_backup_at: "2026-04-30T11:50:00Z",
+        checkpoint_count: 3,
+        latest_checkpoint_at: "2026-04-30T11:58:00Z",
+        restore_ready: true,
+        cluster: null,
+        failover_drill_history_count: 1,
+        failover_drill: {
+          drill_type: "warm_standby_restore_dry_run",
+          orchestration_scope: "standalone_reference",
+          status: "passed",
+          last_run_at: "2026-04-30T12:02:00Z",
+          actor: "admin",
+          summary:
+            "Validated durable event storage with checkpoint artifacts for the documented failover path.",
+          artifact_source: "checkpoint",
+          durable_storage_verified: true,
+          backup_artifact_verified: false,
+          checkpoint_artifact_verified: true,
+        },
       },
       identity: {
         providers_enabled: 2,
@@ -5232,7 +5491,7 @@ describe("WardexClient", () => {
         {
           name: "Wardex Agent",
           path: "/Applications/Wardex Agent.app",
-          version: "0.55.1",
+          version: "0.56.0",
           bundle_id: "systems.minh.wardex.agent",
           size_mb: 42.5,
           last_modified: "2026-05-01T08:00:00Z",
@@ -5270,7 +5529,7 @@ describe("WardexClient", () => {
       software: [
         {
           name: "wardex-agent",
-          version: "0.55.1",
+          version: "0.56.0",
           source: "pkgutil",
         },
       ],
@@ -5984,8 +6243,8 @@ describe("WardexClient", () => {
         id: "local-console",
         hostname: "sentineledge.local",
         platform: "aarch64-apple-darwin",
-        version: "0.55.1",
-        current_version: "0.55.1",
+        version: "0.56.0",
+        current_version: "0.56.0",
         enrolled_at: "2026-04-30T19:00:00Z",
         last_seen: "2026-04-30T19:05:00Z",
         last_seen_age_secs: 0,
@@ -6032,7 +6291,7 @@ describe("WardexClient", () => {
         id: "agent-7",
         hostname: "prod-web-01",
         platform: "linux",
-        version: "0.55.1",
+        version: "0.56.0",
         enrolled_at: "2026-04-30T18:00:00Z",
         last_seen: "2026-04-30T20:00:00Z",
         status: "online",
@@ -6245,7 +6504,7 @@ describe("WardexClient", () => {
       openapi: "3.0.3",
       info: {
         title: "Wardex API",
-        version: "0.55.1",
+        version: "0.56.0",
         description: "Machine-readable REST API contract.",
         license: { name: "MIT", url: "https://example.test/license" },
         contact: { name: "Wardex", url: "https://example.test/support" },
@@ -6852,7 +7111,7 @@ describe("WardexClient", () => {
       {
         id: "sha256:abc123",
         repository: "registry.example.com/wardex/agent",
-        tag: "0.55.1",
+        tag: "0.56.0",
         digest: "sha256:abc123",
         size_mb: 128.5,
         created: "2026-05-01T10:00:00Z",
@@ -6902,7 +7161,7 @@ describe("WardexClient", () => {
       {
         id: "sha256:abc123",
         repository: "registry.example.com/wardex/agent",
-        tag: "0.55.1",
+        tag: "0.56.0",
         digest: "sha256:abc123",
         size_mb: 128.5,
         created: "2026-05-01T10:00:00Z",
@@ -7894,11 +8153,11 @@ describe("WardexClient", () => {
       version: 1,
       metadata: {
         timestamp: "2026-05-01T10:20:00Z",
-        tools: [{ name: "Wardex SBOM Generator", version: "0.55.1" }],
+        tools: [{ name: "Wardex SBOM Generator", version: "0.56.0" }],
         component: {
           type: "application",
           name: "wardex",
-          version: "0.55.1",
+          version: "0.56.0",
         },
       },
       components: [
@@ -7939,11 +8198,11 @@ describe("WardexClient", () => {
       version: 1,
       metadata: {
         timestamp: "2026-05-01T10:20:00Z",
-        tools: [{ name: "Wardex SBOM Generator", version: "0.55.1" }],
+        tools: [{ name: "Wardex SBOM Generator", version: "0.56.0" }],
         component: {
           type: "application",
           name: "wardex",
-          version: "0.55.1",
+          version: "0.56.0",
         },
       },
       components: [
@@ -8336,6 +8595,8 @@ describe("WardexClient", () => {
       retention_count: 7,
       path: "var/backups/",
       schedule_cron: "0 2 * * *",
+      observed_backups: 0,
+      latest_backup_at: null,
     };
     const mock = mockFetch(200, body);
     globalThis.fetch = mock;

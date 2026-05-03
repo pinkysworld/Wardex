@@ -7,6 +7,7 @@ import WorkflowGuidance from './WorkflowGuidance.jsx';
 import { JsonDetails, SideDrawer, SummaryGrid } from './operator.jsx';
 import InvestigationTimeline from './InvestigationTimeline.jsx';
 import { downloadData, formatDateTime, formatRelativeTime } from './operatorUtils.js';
+import { buildLongRetentionHistoryPath } from './settings/helpers.js';
 import { buildHref } from './workflowPivots.js';
 
 import PlaybookEditor from './PlaybookEditor.jsx';
@@ -93,6 +94,22 @@ const buildPlannerHuntQuery = (context) => {
 const buildPlannerHuntName = (context) => {
   const label = context?.title || context?.summary || context?.message || context?.id || 'Signal';
   return `Hunt ${label}`;
+};
+
+const retentionHistoryQueryFromRollout = (rollouts) => {
+  const recentEvent = Array.isArray(rollouts?.recent_history) ? rollouts.recent_history[0] : null;
+  const query = {
+    since: recentEvent?.recorded_at || rollouts?.last_rollout_at || '',
+    limit: 25,
+  };
+
+  // Content-rule rollout history stores rule ids in agent_id; only seed device filters for
+  // rollout events that actually target a deployable agent surface.
+  if (recentEvent?.agent_id && recentEvent?.platform !== 'content-rule') {
+    query.device_id = recentEvent.agent_id;
+  }
+
+  return query;
 };
 
 const splitMultilineList = (value) =>
@@ -1506,6 +1523,19 @@ export default function SOCWorkbench() {
                         ? formatRelativeTime(overview.rollouts.last_rollout_at)
                         : 'not recorded'}
                     </div>
+                    <button
+                      className="btn btn-sm"
+                      style={{ marginTop: 10 }}
+                      onClick={() =>
+                        navigate(
+                          buildLongRetentionHistoryPath(
+                            retentionHistoryQueryFromRollout(overview.rollouts),
+                          ),
+                        )
+                      }
+                    >
+                      Open retained events
+                    </button>
                   </div>
                 </div>
                 {Array.isArray(overview.rollouts?.recent_history) &&

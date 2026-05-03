@@ -17,6 +17,12 @@ REQUIRED_RUNTIME_OPENAPI_ENDPOINTS = {
     ("GET", "/api/support/parity"),
     ("GET", "/api/support/readiness-evidence"),
     ("POST", "/api/support/first-run-proof"),
+    ("GET", "/api/report-templates"),
+    ("POST", "/api/report-templates"),
+    ("GET", "/api/report-runs"),
+    ("POST", "/api/report-runs"),
+    ("GET", "/api/report-schedules"),
+    ("POST", "/api/report-schedules"),
     ("GET", "/api/alerts"),
     ("GET", "/api/alerts/grouped"),
     ("GET", "/api/queue/alerts"),
@@ -34,6 +40,9 @@ REQUIRED_SDK_ENDPOINTS = {
     "/api/support/parity",
     "/api/support/readiness-evidence",
     "/api/support/first-run-proof",
+    "/api/report-templates",
+    "/api/report-runs",
+    "/api/report-schedules",
     "/api/alerts",
     "/api/response/request",
     "/api/response/approve",
@@ -66,6 +75,23 @@ def openapi_operations(source: str) -> set[tuple[str, str]]:
     }
 
 
+def openapi_yaml_operations(source: str) -> set[tuple[str, str]]:
+    operations: set[tuple[str, str]] = set()
+    current_path: str | None = None
+    for line in source.splitlines():
+        path_match = re.match(r"^  (/api/[^:]+):\s*$", line)
+        if path_match:
+            current_path = path_match.group(1)
+            continue
+        if re.match(r"^[^ ].*", line):
+            current_path = None
+            continue
+        operation_match = re.match(r"^    (get|post|put|delete|patch):\s*$", line)
+        if operation_match and current_path:
+            operations.add((operation_match.group(1).upper(), current_path))
+    return operations
+
+
 def main() -> int:
     version = cargo_version()
     failures: list[str] = []
@@ -77,15 +103,19 @@ def main() -> int:
 
     endpoint_source = (ROOT / "src/server.rs").read_text(errors="ignore")
     openapi_source = (ROOT / "src/openapi.rs").read_text(errors="ignore")
+    docs_openapi_source = (ROOT / "docs/openapi.yaml").read_text(errors="ignore")
     ts_sdk_source = (ROOT / "sdk/typescript/src/index.ts").read_text(errors="ignore")
     py_sdk_source = (ROOT / "sdk/python/wardex/client.py").read_text(errors="ignore")
     openapi_inventory = openapi_operations(openapi_source)
+    docs_openapi_inventory = openapi_yaml_operations(docs_openapi_source)
 
     for method, endpoint in sorted(REQUIRED_RUNTIME_OPENAPI_ENDPOINTS):
         if endpoint not in endpoint_source:
             failures.append(f"{method} {endpoint} missing from runtime endpoint catalog/auth routing")
         if (method, endpoint) not in openapi_inventory:
             failures.append(f"{method} {endpoint} missing from OpenAPI builder")
+        if (method, endpoint) not in docs_openapi_inventory:
+            failures.append(f"{method} {endpoint} missing from docs/openapi.yaml")
 
     for endpoint in sorted(REQUIRED_SDK_ENDPOINTS):
         if endpoint not in ts_sdk_source:
@@ -97,6 +127,10 @@ def main() -> int:
         failures.append(
             f"OpenAPI operation inventory looks unexpectedly small ({len(openapi_inventory)} < {MIN_OPENAPI_OPERATIONS})"
         )
+    if len(docs_openapi_inventory) < MIN_OPENAPI_OPERATIONS:
+        failures.append(
+            f"docs/openapi.yaml operation inventory looks unexpectedly small ({len(docs_openapi_inventory)} < {MIN_OPENAPI_OPERATIONS})"
+        )
 
     operation_ids = re.findall(r'"(get|post|put|delete)[A-Z][A-Za-z0-9]+"', openapi_source)
     if len(operation_ids) < 50:
@@ -107,7 +141,7 @@ def main() -> int:
             print(f"contract-parity: {failure}", file=sys.stderr)
         return 1
     print(
-        f"contract-parity: runtime, OpenAPI ({len(openapi_inventory)} operations), GraphQL, and SDK versions aligned at {version}"
+        f"contract-parity: runtime, OpenAPI builder ({len(openapi_inventory)} operations), docs/openapi.yaml ({len(docs_openapi_inventory)} operations), GraphQL, and SDK versions aligned at {version}"
     )
     return 0
 

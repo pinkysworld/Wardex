@@ -57,7 +57,7 @@ test("mobile topbar more-menu smoke", async ({ page }) => {
   expect(authBadgeBox).not.toBeNull();
   expect(authBadgeBox.width).toBeLessThan(84);
 
-  const moreButton = page.getByRole("button", { name: "More" });
+  const moreButton = page.getByRole("button", { name: "More", exact: true });
   await expect(moreButton).toBeVisible();
   await moreButton.click();
 
@@ -100,7 +100,7 @@ test("mobile help action preserves threat-detection route scope", async ({
   );
   await expect(page).toHaveURL(/\/admin\/detection\?.*rule=/);
 
-  await page.getByRole("button", { name: "More" }).click();
+  await page.getByRole("button", { name: "More", exact: true }).click();
   await expect(page.getByRole("menu", { name: "More actions" })).toBeVisible();
   await Promise.all([
     page.waitForURL(/\/admin\/help\?/),

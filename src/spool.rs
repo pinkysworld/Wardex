@@ -99,7 +99,10 @@ impl EncryptedSpool {
     /// # Panics
     /// Panics if `key` is empty. Prefer `try_new` for fallible construction.
     pub fn new(key: &[u8], max_entries: usize) -> Self {
-        Self::try_new(key, max_entries).expect("spool encryption key must not be empty")
+        match Self::try_new(key, max_entries) {
+            Ok(spool) => spool,
+            Err(message) => panic!("{message}"),
+        }
     }
 
     /// Fallible constructor — returns Err if the key is empty.

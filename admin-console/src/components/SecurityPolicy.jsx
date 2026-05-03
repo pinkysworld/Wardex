@@ -269,6 +269,14 @@ export default function SecurityPolicy() {
   const attackerProfiles = Array.isArray(deception?.attacker_profiles)
     ? deception.attacker_profiles
     : [];
+  const recentDeceptionActivity = deceptionDecoys
+    .filter((decoy) => decoy.last_interaction?.timestamp)
+    .sort(
+      (left, right) =>
+        Date.parse(right.last_interaction?.timestamp || 0) -
+        Date.parse(left.last_interaction?.timestamp || 0),
+    )
+    .slice(0, 6);
   const recentHistory = Array.isArray(enforcement?.recent_history)
     ? enforcement.recent_history
     : [];
@@ -945,6 +953,51 @@ export default function SecurityPolicy() {
               rows={deceptionDecoys}
               emptyMessage="No decoys have been deployed yet."
               rowKey={(row) => row.id}
+            />
+
+            <div className="card-title" style={{ marginTop: 16, marginBottom: 8 }}>
+              Attacker Profiles
+            </div>
+            <DataTable
+              columns={[
+                { label: 'Source', key: 'source_id' },
+                { label: 'Interactions', key: 'interaction_count' },
+                {
+                  label: 'Threat Score',
+                  render: (row) => Number(row.threat_score || 0).toFixed(1),
+                },
+                {
+                  label: 'Decoys Touched',
+                  render: (row) =>
+                    Array.isArray(row.decoys_touched) && row.decoys_touched.length > 0
+                      ? row.decoys_touched.join(', ')
+                      : '—',
+                },
+              ]}
+              rows={attackerProfiles}
+              emptyMessage="No attacker profiles have been grouped yet."
+              rowKey={(row) => row.source_id}
+            />
+
+            <div className="card-title" style={{ marginTop: 16, marginBottom: 8 }}>
+              Recent Decoy Interactions
+            </div>
+            <DataTable
+              columns={[
+                { label: 'Decoy', key: 'name' },
+                {
+                  label: 'Last Seen',
+                  render: (row) => formatDateTime(row.last_interaction?.timestamp),
+                },
+                { label: 'Interactions', key: 'interaction_count' },
+                {
+                  label: 'Average Threat',
+                  render: (row) => Number(row.avg_threat_score || 0).toFixed(1),
+                },
+              ]}
+              rows={recentDeceptionActivity}
+              emptyMessage="No recent decoy interactions have been recorded yet."
+              rowKey={(row) => `${row.id}-${row.last_interaction?.timestamp || 'none'}`}
             />
             <JsonDetails data={deception} label="Deception details" />
           </div>

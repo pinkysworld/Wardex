@@ -85,6 +85,40 @@ describe('App', () => {
     expect(screen.getByText('2 group mappings ready for lifecycle sync.')).toBeInTheDocument();
   });
 
+  it('preserves hash-backed route scope in SSO launch redirects while stripping callback errors', async () => {
+    const assignSpy = vi.spyOn(window.location, 'assign').mockImplementation(() => {});
+
+    try {
+      fetchMock.mockImplementation(async (url) => ({
+        ok: true,
+        headers: { get: () => 'application/json' },
+        json: async () => {
+          if (url === '/api/auth/session') return { authenticated: false };
+          if (url === '/api/auth/sso/config') {
+            return {
+              providers: [{ id: 'idp-1', display_name: 'Corporate SSO' }],
+              scim: { enabled: true, status: 'ready', mapping_count: 2 },
+            };
+          }
+          return {};
+        },
+      }));
+
+      await renderApp('/soc?case=42&sso_error=Callback%20failed#cases');
+
+      await userEvent.click((await screen.findAllByRole('button', { name: 'Sign in with Corporate SSO' }))[0]);
+
+      expect(assignSpy).toHaveBeenCalledTimes(1);
+
+      const loginUrl = new URL(assignSpy.mock.calls[0][0], 'http://localhost');
+      expect(loginUrl.pathname).toBe('/api/auth/sso/login');
+      expect(loginUrl.searchParams.get('provider_id')).toBe('idp-1');
+      expect(loginUrl.searchParams.get('redirect')).toBe('/soc?case=42#cases');
+    } finally {
+      assignSpy.mockRestore();
+    }
+  });
+
   it('recovers an existing SSO session after a stale saved token fails authCheck', async () => {
     localStorage.setItem('wardex_token', 'stale-token');
     fetchMock.mockImplementation(async (url) => {

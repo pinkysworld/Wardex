@@ -36,9 +36,9 @@ pub fn set_runtime_config_override(path: PathBuf) -> Result<(), String> {
         ));
     }
 
-    RUNTIME_CONFIG_OVERRIDE.set(path).map_err(|_| {
-        "failed to set runtime config override".to_string()
-    })
+    RUNTIME_CONFIG_OVERRIDE
+        .set(path)
+        .map_err(|_| "failed to set runtime config override".to_string())
 }
 
 pub fn runtime_root_dir() -> PathBuf {
@@ -240,6 +240,8 @@ pub struct Config {
     pub tracing: TracingSettings,
     #[serde(default)]
     pub server: ServerSettings,
+    #[serde(default)]
+    pub cluster: crate::cluster::ClusterConfig,
     #[serde(default)]
     pub clickhouse: Option<crate::storage_clickhouse::ClickHouseConfig>,
 }
@@ -701,6 +703,41 @@ impl Config {
             return Err("output.checkpoint_interval must be >= 1".into());
         }
 
+        let cluster = &self.cluster;
+        if cluster.node_id.0.trim().is_empty() {
+            return Err("cluster.node_id must not be empty".into());
+        }
+        if cluster.heartbeat_interval_ms == 0 {
+            return Err("cluster.heartbeat_interval_ms must be >= 1".into());
+        }
+        if cluster.election_timeout_ms <= cluster.heartbeat_interval_ms {
+            return Err(format!(
+                "cluster.election_timeout_ms ({}) must be greater than heartbeat_interval_ms ({})",
+                cluster.election_timeout_ms, cluster.heartbeat_interval_ms
+            ));
+        }
+        if cluster.replication_batch_size == 0 {
+            return Err("cluster.replication_batch_size must be >= 1".into());
+        }
+        let mut peer_ids = std::collections::HashSet::new();
+        for peer in &cluster.peers {
+            if peer.node_id == cluster.node_id {
+                return Err("cluster.peers must not contain the local node_id".into());
+            }
+            if peer.addr.trim().is_empty() {
+                return Err(format!(
+                    "cluster peer {} must have a non-empty addr",
+                    peer.node_id
+                ));
+            }
+            if !peer_ids.insert(peer.node_id.0.clone()) {
+                return Err(format!(
+                    "cluster peer {} is configured more than once",
+                    peer.node_id
+                ));
+            }
+        }
+
         Ok(())
     }
 }
@@ -750,6 +787,8 @@ pub struct ConfigPatch {
     pub rollout: Option<RolloutSettings>,
     #[serde(default)]
     pub retention: Option<RetentionSettings>,
+    #[serde(default)]
+    pub cluster: Option<crate::cluster::ClusterConfig>,
 }
 
 impl ConfigPatch {
@@ -787,6 +826,11 @@ impl ConfigPatch {
             previous.insert("retention".into(), format!("{:?}", config.retention));
             config.retention = retention.clone();
             applied.push("retention".into());
+        }
+        if let Some(ref cluster) = self.cluster {
+            previous.insert("cluster".into(), format!("{:?}", config.cluster));
+            config.cluster = cluster.clone();
+            applied.push("cluster".into());
         }
 
         if let Some(v) = self.warmup_samples {

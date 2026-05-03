@@ -42,7 +42,6 @@ jobs:
 
       - name: Assemble site artifact
         env:
-          APT_GPG_PASSPHRASE: ${{ secrets.APT_GPG_PASSPHRASE }}
           APT_GPG_PRIVATE_KEY: ${{ secrets.APT_GPG_PRIVATE_KEY }}
           RELEASE_TAG: ${{ github.event.release.tag_name }}
           INPUT_TAG: ${{ github.event.inputs.tag }}
@@ -79,25 +78,24 @@ jobs:
 
             if [[ ${#deb_urls[@]} -gt 0 ]]; then
               if [[ -z "${APT_GPG_PRIVATE_KEY:-}" ]]; then
-                echo "APT_GPG_PRIVATE_KEY secret is required when publishing Debian packages to the APT repository." >&2
-                exit 1
-              fi
+                echo "APT_GPG_PRIVATE_KEY secret is not configured; skipping APT repository generation."
+              else
+                rm -rf /tmp/wardex-apt-assets
+                mkdir -p /tmp/wardex-apt-assets
 
-              rm -rf /tmp/wardex-apt-assets
-              mkdir -p /tmp/wardex-apt-assets
+                for deb_url in "${deb_urls[@]}"; do
+                  curl --fail --silent --show-error --location --retry 5 --retry-delay 5 \
+                    --output "/tmp/wardex-apt-assets/$(basename "$deb_url")" \
+                    "$deb_url"
+                done
 
-              for deb_url in "${deb_urls[@]}"; do
-                curl --fail --silent --show-error --location --retry 5 --retry-delay 5 \
-                  --output "/tmp/wardex-apt-assets/$(basename "$deb_url")" \
-                  "$deb_url"
-              done
+                shopt -s nullglob
+                debs=(/tmp/wardex-apt-assets/*.deb)
+                shopt -u nullglob
 
-              shopt -s nullglob
-              debs=(/tmp/wardex-apt-assets/*.deb)
-              shopt -u nullglob
-
-              if [[ ${#debs[@]} -gt 0 ]]; then
-                bash deploy/scripts/render_apt_repo.sh site-build/apt stable main "${debs[@]}"
+                if [[ ${#debs[@]} -gt 0 ]]; then
+                  bash deploy/scripts/render_apt_repo.sh site-build/apt stable main "${debs[@]}"
+                fi
               fi
             else
               echo "No Debian release assets found; skipping APT repo generation."

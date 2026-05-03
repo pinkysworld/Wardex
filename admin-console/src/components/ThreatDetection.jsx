@@ -4,6 +4,7 @@ import { useApi, useApiGroup, useToast } from '../hooks.jsx';
 import * as api from '../api.js';
 import { JsonDetails, SummaryGrid, SideDrawer, WorkspaceEmptyState } from './operator.jsx';
 import { formatDateTime, formatRelativeTime } from './operatorUtils.js';
+import { buildLongRetentionHistoryPath } from './settings/helpers.js';
 import { useConfirm } from './useConfirm.jsx';
 import ThreatIntelOperations from './ThreatIntelOperations.jsx';
 import WorkflowGuidance from './WorkflowGuidance.jsx';
@@ -132,6 +133,47 @@ const replayDeltaTone = (value, lowerIsBetter = false) => {
   if (!Number.isFinite(numeric) || Math.abs(numeric) < 0.001) return 'badge-info';
   const improves = lowerIsBetter ? numeric < 0 : numeric > 0;
   return improves ? 'badge-ok' : 'badge-err';
+};
+
+const canaryActionTone = (action) => {
+  switch (String(action || '').toLowerCase()) {
+    case 'promoted':
+      return 'badge-ok';
+    case 'rolled_back':
+      return 'badge-err';
+    default:
+      return 'badge-info';
+  }
+};
+
+const canaryActionLabel = (action) => {
+  switch (String(action || '').toLowerCase()) {
+    case 'promoted':
+      return 'Promoted';
+    case 'rolled_back':
+      return 'Rolled Back';
+    default:
+      return 'No Change';
+  }
+};
+
+const formatHumanLabel = (value, fallback = 'Unknown') => {
+  const normalized = String(value || '').trim();
+  if (!normalized) return fallback;
+  return normalized
+    .split(/[_-]+/)
+    .filter(Boolean)
+    .map((token) => token.charAt(0).toUpperCase() + token.slice(1))
+    .join(' ');
+};
+
+const formatLifecycleLabel = (lifecycle) => formatHumanLabel(lifecycle, 'Unknown');
+
+const formatRolloutActionLabel = (action) => {
+  const normalized = normalizeText(action);
+  if (normalized === 'content-promote') return 'Rule Promotion';
+  if (normalized === 'content-rollback') return 'Rule Rollback';
+  return formatHumanLabel(action, 'Lifecycle Update');
 };
 
 function ReplayDeltaSection({ title, hint, rows }) {
@@ -521,6 +563,9 @@ export default function ThreatDetection() {
   const { data: replayCorpus } = useApi(api.detectionReplayCorpus);
   const { data: efficacySummary } = useApi(api.efficacySummary);
   const { data: fpStats } = useApi(api.fpFeedbackStats);
+  const { data: workbenchOverview, reload: reloadWorkbenchOverview } = useApi(
+    api.workbenchOverview,
+  );
   const { data: detectionContentData, reload: reloadDetectionContent } = useApiGroup({
     weights: api.detectionWeights,
     contentRulesData: api.contentRules,
@@ -581,6 +626,7 @@ export default function ThreatDetection() {
     ruleIds: [],
   });
   const [huntResult, setHuntResult] = useState(null);
+  const [canaryPromotionResults, setCanaryPromotionResults] = useState([]);
   const [replayMode, setReplayMode] = useState('retained_events');
   const [replayPackName, setReplayPackName] = useState('retained-last-alerts');
   const [replayThreshold, setReplayThreshold] = useState('2');
@@ -588,6 +634,7 @@ export default function ThreatDetection() {
   const [replayPackText, setReplayPackText] = useState('');
   const [replayPackResult, setReplayPackResult] = useState(null);
   const [replayRunning, setReplayRunning] = useState(false);
+  const [runningCanaryPromotion, setRunningCanaryPromotion] = useState(false);
   const [huntRunning, setHuntRunning] = useState(false);
   const [huntSaving, setHuntSaving] = useState(false);
   const [packSaving, setPackSaving] = useState(false);
@@ -683,6 +730,16 @@ export default function ThreatDetection() {
     () => packs.filter((pack) => (selectedRule?.pack_ids || []).includes(pack.id)),
     [packs, selectedRule],
   );
+  const selectedRuleLifecycleHistory = useMemo(() => {
+    const history = Array.isArray(selectedRule?.lifecycle_history)
+      ? selectedRule.lifecycle_history
+      : [];
+    return [...history].slice(-4).reverse();
+  }, [selectedRule]);
+  const selectedRuleLinkedHunts = useMemo(() => {
+    const packIds = new Set(selectedPacks.map((pack) => pack.id));
+    return hunts.filter((hunt) => packIds.has(hunt.pack_id));
+  }, [hunts, selectedPacks]);
   const currentWeight = Number(
     weights?.weights?.[selectedRule?.id] ?? weights?.[selectedRule?.id] ?? 0.5,
   );
@@ -916,6 +973,29 @@ export default function ThreatDetection() {
     }
   };
 
+  const runCanaryPromotion = async () => {
+    setRunningCanaryPromotion(true);
+    try {
+      const result = await api.efficacyCanaryPromote();
+      const results = Array.isArray(result) ? result : [];
+      const changedCount = results.filter((entry) =>
+        ['promoted', 'rolled_back'].includes(String(entry?.action || '').toLowerCase()),
+      ).length;
+      setCanaryPromotionResults(results);
+      toast(
+        changedCount > 0
+          ? `Canary automation updated ${changedCount} rule${changedCount === 1 ? '' : 's'}.`
+          : 'Canary automation completed with no lifecycle changes.',
+        changedCount > 0 ? 'success' : 'info',
+      );
+      await Promise.all([reloadRules(), reloadWorkbenchOverview()]);
+    } catch {
+      toast('Canary automation failed.', 'error');
+    } finally {
+      setRunningCanaryPromotion(false);
+    }
+  };
+
   const promoteRule = async (target) => {
     if (!selectedRule) return;
     try {
@@ -924,7 +1004,7 @@ export default function ThreatDetection() {
         reason: `Promoted from workspace to ${target}`,
       });
       toast(`Rule moved to ${target}.`, 'success');
-      reloadRules();
+      await Promise.all([reloadRules(), reloadWorkbenchOverview()]);
     } catch {
       toast('Rule promotion failed.', 'error');
     }
@@ -935,7 +1015,7 @@ export default function ThreatDetection() {
     try {
       await api.contentRuleRollback(selectedRule.id);
       toast('Rule rolled back.', 'success');
-      reloadRules();
+      await Promise.all([reloadRules(), reloadWorkbenchOverview()]);
     } catch {
       toast('Rule rollback failed.', 'error');
     }
@@ -1541,6 +1621,75 @@ export default function ThreatDetection() {
   const stalePackCount = packRolloutRows.filter(
     (pack) => pack.rollout.label === 'Review stale',
   ).length;
+  const rolloutOverview = workbenchOverview?.rollouts || null;
+  const lifecycleDistributionRows = useMemo(() => {
+    const ruleCounts = new Map();
+    const huntCounts = new Map();
+    allRules.forEach((rule) => {
+      const key = normalizeText(rule.lifecycle || 'draft') || 'draft';
+      ruleCounts.set(key, (ruleCounts.get(key) || 0) + 1);
+    });
+    hunts.forEach((hunt) => {
+      const key = normalizeText(hunt.lifecycle || 'draft') || 'draft';
+      huntCounts.set(key, (huntCounts.get(key) || 0) + 1);
+    });
+    return ['draft', 'test', 'canary', 'active', 'rolled_back', 'deprecated']
+      .map((lifecycle) => {
+        const rules = ruleCounts.get(lifecycle) || 0;
+        const huntsForLifecycle = huntCounts.get(lifecycle) || 0;
+        return {
+          id: lifecycle,
+          label: formatLifecycleLabel(lifecycle),
+          tone: lifecycleTone(lifecycle),
+          total: rules + huntsForLifecycle,
+          rules,
+          hunts: huntsForLifecycle,
+        };
+      })
+      .filter((row) => row.total > 0);
+  }, [allRules, hunts]);
+  const targetGroupDistributionRows = useMemo(() => {
+    const groups = new Map();
+    const ensureGroup = (value) => {
+      const key = String(value || '').trim() || 'unassigned';
+      if (!groups.has(key)) {
+        groups.set(key, { group: key, packs: 0, hunts: 0, canaryHunts: 0, linkedRules: 0 });
+      }
+      return groups.get(key);
+    };
+    packs.forEach((pack) => {
+      const entry = ensureGroup(pack.target_group);
+      entry.packs += 1;
+      entry.linkedRules += Array.isArray(pack.rule_ids) ? pack.rule_ids.length : 0;
+    });
+    hunts.forEach((hunt) => {
+      const entry = ensureGroup(hunt.target_group);
+      entry.hunts += 1;
+      if (normalizeText(hunt.lifecycle) === 'canary') entry.canaryHunts += 1;
+    });
+    return Array.from(groups.values()).sort(
+      (left, right) =>
+        right.packs + right.hunts - (left.packs + left.hunts) ||
+        String(left.group).localeCompare(String(right.group)),
+    );
+  }, [packs, hunts]);
+  const contentRolloutHistory = useMemo(() => {
+    const history = Array.isArray(rolloutOverview?.recent_history)
+      ? rolloutOverview.recent_history
+      : [];
+    return history.filter(
+      (event) =>
+        normalizeText(event.platform) === 'content-rule' ||
+        normalizeText(event.action).startsWith('content-'),
+    );
+  }, [rolloutOverview]);
+  const selectedRuleRolloutHistory = useMemo(
+    () => contentRolloutHistory.filter((event) => event.agent_id === selectedRule?.id),
+    [contentRolloutHistory, selectedRule],
+  );
+  const routedDeliveryLaneCount = targetGroupDistributionRows.filter(
+    (entry) => entry.group !== 'unassigned',
+  ).length;
   const replayPlatformDeltas = Array.isArray(replayCorpus?.platform_deltas)
     ? replayCorpus.platform_deltas
     : [];
@@ -1919,6 +2068,20 @@ export default function ThreatDetection() {
             >
               {replayRunning ? 'Running…' : 'Run Replay Validation'}
             </button>
+            {replayMode === 'retained_events' && (
+              <button
+                className="btn btn-sm"
+                onClick={() =>
+                  navigate(
+                    buildLongRetentionHistoryPath({
+                      limit: Math.max(1, Number.parseInt(replayLimit, 10) || 25),
+                    }),
+                  )
+                }
+              >
+                Open retained events
+              </button>
+            )}
             {replayPackResult?.summary && (
               <span className="scope-chip">
                 Last run: {replayPackResult.summary.total_samples || 0} samples • precision{' '}
@@ -2382,6 +2545,25 @@ export default function ThreatDetection() {
                 Includes saved-search and workflow-routed content bundles.
               </div>
             </div>
+            <div className="summary-card">
+              <div className="summary-label">Delivery Lanes</div>
+              <div className="summary-value">{routedDeliveryLaneCount}</div>
+              <div className="summary-meta">
+                {contentRolloutHistory.length} recent lifecycle event
+                {contentRolloutHistory.length === 1 ? '' : 's'} across assigned analyst groups.
+              </div>
+            </div>
+            <div className="summary-card">
+              <div className="summary-label">Historical Events</div>
+              <div className="summary-value">{rolloutOverview?.historical_events || 0}</div>
+              <div className="summary-meta">
+                {rolloutOverview?.rollback_events || 0} rollback event
+                {(rolloutOverview?.rollback_events || 0) === 1 ? '' : 's'} • latest{' '}
+                {rolloutOverview?.last_rollout_at
+                  ? formatRelativeTime(rolloutOverview.last_rollout_at)
+                  : 'not recorded'}
+              </div>
+            </div>
           </div>
           <div style={{ marginTop: 12 }}>
             {packRolloutRows.length === 0 ? (
@@ -2417,6 +2599,115 @@ export default function ThreatDetection() {
                     <button className="btn btn-sm" onClick={() => openPackEditor(pack)}>
                       Open Bundle
                     </button>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+          <div style={{ marginTop: 16 }}>
+            <div className="card-title" style={{ marginBottom: 10 }}>
+              Lifecycle Distribution
+            </div>
+            {lifecycleDistributionRows.length === 0 ? (
+              <div className="hint">No lifecycle-tracked rules or hunts are available yet.</div>
+            ) : (
+              lifecycleDistributionRows.map((row) => (
+                <div
+                  key={row.id}
+                  style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    gap: 12,
+                    padding: '10px 0',
+                    borderBottom: '1px solid var(--border)',
+                  }}
+                >
+                  <div style={{ flex: 1 }}>
+                    <div className="row-primary">{row.label}</div>
+                    <div className="row-secondary">
+                      {row.rules} rule{row.rules === 1 ? '' : 's'} • {row.hunts} hunt
+                      {row.hunts === 1 ? '' : 's'}
+                    </div>
+                  </div>
+                  <span className={`badge ${row.tone}`}>{row.total}</span>
+                </div>
+              ))
+            )}
+          </div>
+          <div style={{ marginTop: 16 }}>
+            <div className="card-title" style={{ marginBottom: 10 }}>
+              Target Group Distribution
+            </div>
+            {targetGroupDistributionRows.length === 0 ? (
+              <div className="hint">Assign a target group to packs or hunts to track delivery lanes.</div>
+            ) : (
+              targetGroupDistributionRows.slice(0, 6).map((entry) => (
+                <div
+                  key={entry.group}
+                  style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    gap: 12,
+                    padding: '10px 0',
+                    borderBottom: '1px solid var(--border)',
+                  }}
+                >
+                  <div style={{ flex: 1 }}>
+                    <div className="row-primary">{entry.group}</div>
+                    <div className="row-secondary">
+                      {entry.packs} pack{entry.packs === 1 ? '' : 's'} • {entry.hunts} hunt
+                      {entry.hunts === 1 ? '' : 's'} • {entry.linkedRules} linked rule
+                      {entry.linkedRules === 1 ? '' : 's'}
+                    </div>
+                    {entry.canaryHunts > 0 && (
+                      <div className="hint" style={{ marginTop: 4 }}>
+                        {entry.canaryHunts} canary hunt{entry.canaryHunts === 1 ? '' : 's'} still staged in this lane.
+                      </div>
+                    )}
+                  </div>
+                  <span
+                    className={`badge ${entry.group === 'unassigned' ? 'badge-warn' : 'badge-info'}`}
+                  >
+                    {entry.group === 'unassigned' ? 'Needs routing' : 'Routed'}
+                  </span>
+                </div>
+              ))
+            )}
+          </div>
+          <div style={{ marginTop: 16 }}>
+            <div className="card-title" style={{ marginBottom: 10 }}>
+              Recent Rollout Activity
+            </div>
+            {contentRolloutHistory.length === 0 ? (
+              <div className="hint">
+                Recent content lifecycle activity will appear here once promotions or rollbacks are recorded.
+              </div>
+            ) : (
+              contentRolloutHistory.map((event) => (
+                <div
+                  key={event.id}
+                  style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    gap: 12,
+                    padding: '10px 0',
+                    borderBottom: '1px solid var(--border)',
+                  }}
+                >
+                  <div style={{ flex: 1 }}>
+                    <div className="row-primary">
+                      {formatRolloutActionLabel(event.action)} • {event.version}
+                    </div>
+                    <div className="row-secondary">
+                      {formatLifecycleLabel(event.rollout_group)} lane • {formatHumanLabel(event.status)}
+                    </div>
+                    <div className="hint" style={{ marginTop: 4 }}>
+                      {event.notes || 'No operator notes recorded.'}
+                    </div>
+                  </div>
+                  <div className="hint" style={{ textAlign: 'right' }}>
+                    {formatRelativeTime(event.recorded_at)}
+                    <div>{formatDateTime(event.recorded_at)}</div>
                   </div>
                 </div>
               ))
@@ -2992,6 +3283,170 @@ export default function ThreatDetection() {
                     ) : (
                       <div className="hint">
                         Run a rule test to preview impact before tuning or promotion.
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {rulePanel === 'promotion' && (
+                  <div
+                    className="card"
+                    style={{ marginTop: 16, padding: 16, background: 'var(--bg)' }}
+                  >
+                    <div className="card-title" style={{ marginBottom: 10 }}>
+                      Canary Rollout Automation
+                    </div>
+                    <div className="hint" style={{ marginBottom: 12 }}>
+                      Run the stored efficacy gate to promote healthy canary rules and roll back
+                      degrading ones without leaving the detection workspace.
+                    </div>
+                    <div className="btn-group" style={{ marginBottom: 12 }}>
+                      <button
+                        className="btn btn-sm"
+                        onClick={runCanaryPromotion}
+                        disabled={runningCanaryPromotion}
+                      >
+                        {runningCanaryPromotion ? 'Running…' : 'Run Canary Auto-Promotion'}
+                      </button>
+                    </div>
+                    {canaryPromotionResults.length === 0 ? (
+                      <div className="hint">
+                        No canary automation results captured in this session yet.
+                      </div>
+                    ) : (
+                      canaryPromotionResults.slice(0, 6).map((result) => (
+                        <div
+                          key={`${result.rule_id || result.rule_name}-${result.action}`}
+                          style={{
+                            display: 'flex',
+                            justifyContent: 'space-between',
+                            alignItems: 'flex-start',
+                            gap: 12,
+                            padding: '10px 0',
+                            borderBottom: '1px solid var(--border)',
+                          }}
+                        >
+                          <div style={{ flex: 1 }}>
+                            <div className="row-primary">
+                              {result.rule_name || result.rule_id || 'Unnamed rule'}
+                            </div>
+                            <div className="row-secondary">{result.reason || 'No reason recorded.'}</div>
+                          </div>
+                          <span className={`badge ${canaryActionTone(result.action)}`}>
+                            {canaryActionLabel(result.action)}
+                          </span>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                )}
+
+                {rulePanel === 'promotion' && (
+                  <div
+                    className="card"
+                    style={{ marginTop: 16, padding: 16, background: 'var(--bg)' }}
+                  >
+                    <div className="card-title" style={{ marginBottom: 10 }}>
+                      Lifecycle Evidence
+                    </div>
+                    <div className="summary-grid" style={{ marginBottom: 12 }}>
+                      <div className="summary-card">
+                        <div className="summary-label">Current Lifecycle</div>
+                        <div className="summary-value">
+                          {formatLifecycleLabel(selectedRule.lifecycle)}
+                        </div>
+                        <div className="summary-meta">Version {selectedRule.version || 1}</div>
+                      </div>
+                      <div className="summary-card">
+                        <div className="summary-label">Last Promotion</div>
+                        <div className="summary-value">
+                          {selectedRule.last_promotion_at
+                            ? formatRelativeTime(selectedRule.last_promotion_at)
+                            : 'Not recorded'}
+                        </div>
+                        <div className="summary-meta">
+                          {selectedRule.last_promotion_at
+                            ? formatDateTime(selectedRule.last_promotion_at)
+                            : 'Promotion evidence appears after the first lifecycle change.'}
+                        </div>
+                      </div>
+                      <div className="summary-card">
+                        <div className="summary-label">Routed Bundles</div>
+                        <div className="summary-value">{selectedPacks.length}</div>
+                        <div className="summary-meta">
+                          {selectedRuleLinkedHunts.length} linked hunt
+                          {selectedRuleLinkedHunts.length === 1 ? '' : 's'} share this delivery lane.
+                        </div>
+                      </div>
+                      <div className="summary-card">
+                        <div className="summary-label">Analytics Events</div>
+                        <div className="summary-value">{selectedRuleRolloutHistory.length}</div>
+                        <div className="summary-meta">
+                          Recorded content rollout events tied to this rule id.
+                        </div>
+                      </div>
+                    </div>
+                    {selectedRuleLifecycleHistory.length === 0 ? (
+                      <div className="hint">
+                        Lifecycle transitions will appear here once the rule moves through promotion or rollback.
+                      </div>
+                    ) : (
+                      selectedRuleLifecycleHistory.map((change, index) => (
+                        <div
+                          key={`${change.changed_at}-${index}`}
+                          style={{
+                            display: 'flex',
+                            justifyContent: 'space-between',
+                            gap: 12,
+                            padding: '10px 0',
+                            borderBottom: '1px solid var(--border)',
+                          }}
+                        >
+                          <div style={{ flex: 1 }}>
+                            <div className="row-primary">
+                              {formatLifecycleLabel(change.from)} {'->'} {formatLifecycleLabel(change.to)}
+                            </div>
+                            <div className="row-secondary">
+                              {change.reason || 'No operator reason recorded.'} • {change.changed_by || 'system'}
+                            </div>
+                          </div>
+                          <div className="hint" style={{ textAlign: 'right' }}>
+                            {formatRelativeTime(change.changed_at)}
+                            <div>{formatDateTime(change.changed_at)}</div>
+                          </div>
+                        </div>
+                      ))
+                    )}
+                    {selectedRuleRolloutHistory.length > 0 && (
+                      <div style={{ marginTop: 12 }}>
+                        <div className="card-title" style={{ marginBottom: 8 }}>
+                          Recorded rollout analytics
+                        </div>
+                        {selectedRuleRolloutHistory.map((event) => (
+                          <div
+                            key={event.id}
+                            style={{
+                              display: 'flex',
+                              justifyContent: 'space-between',
+                              gap: 12,
+                              padding: '10px 0',
+                              borderBottom: '1px solid var(--border)',
+                            }}
+                          >
+                            <div style={{ flex: 1 }}>
+                              <div className="row-primary">{formatRolloutActionLabel(event.action)}</div>
+                              <div className="row-secondary">
+                                {formatLifecycleLabel(event.rollout_group)} lane • {formatHumanLabel(event.status)}
+                              </div>
+                              <div className="hint" style={{ marginTop: 4 }}>
+                                {event.notes || 'No operator notes recorded.'}
+                              </div>
+                            </div>
+                            <div className="hint" style={{ textAlign: 'right' }}>
+                              {formatRelativeTime(event.recorded_at)}
+                            </div>
+                          </div>
+                        ))}
                       </div>
                     )}
                   </div>

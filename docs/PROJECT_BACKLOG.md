@@ -410,6 +410,114 @@ Phases 0–40 are complete. Routed browser regression coverage, the repeatable r
 - [x] T308: Add regression coverage for staged ingestion evidence, freshness, failure-streak analytics, and retry/backoff context so collector health details remain operator-usable across the shipped lanes.
 - [x] T309: Refresh roadmap, status, and feature-coverage tracking once the broader collector lifecycle regression tranche lands.
 
+## Phase 51 — Long-retention pivot depth (completed)
+
+- [x] T310: Add routed pivots from SOC Workbench rollout context, Threat Detection retained-event replay context, and Reports & Exports retention workflows into Settings `Long-Retention History` so analysts can reopen retained-event search with seeded filters instead of re-entering query state.
+- [x] T311: Add regression coverage for route-seeded retained-event search state, refresh behavior, and cross-surface Settings admin pivots so long-retention history stays operator-usable as analyst workflows evolve.
+- [x] T312: Refresh roadmap, status, and feature-coverage tracking once the long-retention pivot tranche lands.
+
+## Phase 52 — UEBA, NDR, and graph analytics regression depth (completed)
+
+- [x] T313: Add focused route-aware regression coverage for UEBA entity playbooks, explainability/risk scoring, and NDR network playbooks so query-driven analytics context stays stable across refreshes, tab restores, and cross-surface handoffs.
+- [x] T314: Add dedicated regression coverage for Attack Graph stored-event campaign clustering, temporal-chain drilldowns, and graph-to-SOC/UEBA/NDR/report pivots so campaign intelligence remains operator-usable as analytics narratives deepen.
+- [x] T315: Refresh roadmap, status, and feature-coverage tracking once the UEBA/NDR/graph analytics regression tranche lands.
+
+## Phase 53 — Command Center drawer regression depth (completed)
+
+- [x] T316: Add focused regression coverage for route-addressable Command Center drawers and lane triggers so remediation, connector, rule, release, and evidence workflows reopen reliably from URL state and close cleanly without losing operator context.
+- [x] T317: Add action-path regression coverage for connector validation/setup drafts, remediation approvals, rule replay, evidence pack creation, and linked Settings/Infrastructure/Detection/Reports handoffs so drawer actions refresh the workspace and preserve downstream routing contracts.
+- [x] T318: Refresh roadmap, status, and feature-coverage tracking once the Command Center drawer tranche lands.
+
+## Phase 54 — Threat Detection workflow regression depth (completed)
+
+- [x] T319: Add a dedicated Threat Detection regression suite for route-backed workspace and rule-detail panels so efficacy, ATT&CK gap, suppression-noise, pack-rollout, and hunt-investigation drilldowns restore reliably from URL state without depending on broad shell coverage.
+- [x] T320: Add focused action-path coverage for replay validation, saved-hunt reopen and promote flows, suppression and pack-rollout drilldowns, and routed Detection handoffs so replay-corpus, hunt, and rule workflows preserve intent and refresh behavior as content engineering evolves.
+- [x] T321: Refresh roadmap, status, and feature-coverage tracking once the Threat Detection workflow tranche lands.
+
+## Phase 55 — SOC Workbench triage and investigation regression depth (completed)
+
+- [x] T322: Add a dedicated SOCWorkbench regression suite for route-backed queue filters, focused case workspaces, and URL-addressable incident and case drawers so triage context restores reliably from hash and search state without depending on broad shell coverage.
+- [x] T323: Add focused action-path coverage for grouped queue refresh, case note and ticket-sync flows, investigation progress and handoff, and response pivots so SOC triage workflows preserve refresh and routing contracts as operational detail evolves.
+- [x] T324: Refresh roadmap, status, and feature-coverage tracking once the SOC Workbench regression tranche lands.
+
+## Phase 56 — SOC Workbench response, escalation, and playbook regression depth (completed)
+
+- [x] T325: Extend the dedicated SOCWorkbench regression suite with route-backed response handoff context and playbooks-tab restore coverage so response approvals and playbook workflows reopen reliably from hash and search state without depending on broad shell coverage.
+- [x] T326: Add focused action-path coverage for grouped response refresh, escalation acknowledge/create/test flows, and selected playbook execution so SOC response operations preserve refresh and mutation contracts as workflow detail evolves.
+- [x] T327: Refresh roadmap, status, and feature-coverage tracking once the SOC response and escalation regression tranche lands.
+
+## Phase 57 — SOC Workbench process-tree and admin regression depth (completed)
+
+- [x] T328: Extend the dedicated SOCWorkbench regression suite with hash-restored process-tree and RBAC tab coverage so those operator workflows reopen from routed state without depending on broad shell coverage.
+- [x] T329: Add focused action-path coverage for grouped process-tree refresh, RBAC refresh and removal, and the RBAC-to-campaign pivot so SOC admin and process workflows preserve grouped reload and downstream navigation contracts as operational detail evolves.
+- [x] T330: Refresh roadmap, status, and feature-coverage tracking once the SOC process-tree and admin regression tranche lands.
+
+## Phase 58 — Infrastructure assets and integrity regression depth (completed)
+
+- [x] T331: Extend the dedicated Infrastructure regression suite with route-backed assets explorer and integrity workspace coverage so saved views, selected assets, and malware verdict context reopen reliably from URL state without depending on broad shell coverage.
+- [x] T332: Add focused action-path coverage for grouped infrastructure asset refresh and deep malware scan execution so asset explorer and integrity workflows preserve grouped reload and verdict-routing contracts as infrastructure detail evolves.
+- [x] T333: Refresh roadmap, status, and feature-coverage tracking once the Infrastructure assets and integrity regression tranche lands.
+
+## Phase 59 — Infrastructure exposure and observability regression depth (completed)
+
+- [x] T334: Extend the dedicated Infrastructure regression suite with route-backed exposure and observability tab coverage so selected asset context and downstream infrastructure pivots reopen reliably from URL state without depending on broad shell coverage.
+- [x] T335: Add focused action-path coverage for asset-to-exposure pivots and observability scope restoration so infrastructure exposure and telemetry workflows preserve tab-routing and selected-scope contracts as supporting detail evolves.
+- [x] T336: Refresh roadmap, status, and feature-coverage tracking once the Infrastructure exposure and observability regression tranche lands.
+
+## Phase 60 — HelpDocs contextual support regression depth (completed)
+
+- [x] T337: Extend the dedicated HelpDocs regression suite with route-backed contextual support coverage so seeded help context, docs filters, selected documents, and support explorer state restore from URL state without depending on broad shell coverage.
+- [x] T338: Add focused action-path coverage for routed runbook pivots and carried support scope so contextual help workflows preserve docs-routing and selected-scope contracts as guidance content evolves.
+- [x] T339: Refresh roadmap, status, and feature-coverage tracking once the HelpDocs contextual support regression tranche lands.
+
+## Phase 61 — LiveMonitor route-state regression depth (completed)
+
+- [x] T340: Extend the dedicated LiveMonitor regression suite with route-backed monitor tab, alert, and filter coverage so seeded queue scope and selected drawer context restore from URL state without depending on manual keyboard traversal.
+- [x] T341: Add focused action-path coverage for tab switches and drawer close actions so LiveMonitor preserves carried queue scope while mutating routed monitor state.
+- [x] T342: Refresh roadmap, status, and feature-coverage tracking once the LiveMonitor route-state regression tranche lands.
+
+## Phase 62 — Fleet rollout recovery route-state regression depth (completed)
+
+- [x] T343: Extend the dedicated FleetAgents regression suite with route-backed updates workspace focus coverage so seeded rollout and recovery panels reopen reliably from URL state without depending on manual tab traversal.
+- [x] T344: Add focused action-path coverage for recovery watchlist pivots and carried offline-scope filters so Fleet & Agents preserves routed rollout context when operators jump into filtered agent inventory and back.
+- [x] T345: Refresh roadmap, status, and feature-coverage tracking once the Fleet rollout and recovery regression tranche lands.
+
+## Phase 63 — Auth-shell SSO redirect regression depth (completed)
+
+- [x] T346: Extend the dedicated App auth-shell regression suite with route-backed SSO launch coverage so seeded console paths and hash-backed workspaces survive provider login handoffs instead of collapsing to bare routes.
+- [x] T347: Add focused action-path coverage for stripping transient `sso_error` params while preserving provider selection and carried route scope so auth-shell SSO affordances stay coherent as IdP routing evolves.
+- [x] T348: Refresh roadmap, status, and feature-coverage tracking once the auth-shell SSO redirect tranche lands.
+
+## Phase 64 — Detection canary auto-promotion visibility (completed)
+
+- [x] T349: Extend the Threat Detection promotion workflow with an operator-visible canary auto-promotion action so detection engineers can run the stored efficacy gate and review promote-or-rollback outcomes without leaving the routed workspace.
+- [x] T350: Add focused regression coverage for canary auto-promotion execution, lifecycle-result rendering, and grouped rule reload behavior so the promotion workflow stays operator-usable as detection content evolves.
+- [x] T351: Refresh roadmap, status, and feature-coverage tracking once the detection canary auto-promotion tranche lands.
+
+## Phase 65 — Detection rollout distribution analytics depth (completed)
+
+- [x] T352: Extend Threat Detection with rollout-history and distribution analytics so canary, promote, and distribute evidence stay visible alongside pack and hunt lifecycle state in one routed workspace.
+- [x] T353: Add focused regression coverage for rollout-history rendering, lifecycle evidence refresh, and routed distribution analytics so detection distribution workflows stay stable as content detail evolves.
+- [x] T354: Refresh roadmap, status, and feature-coverage tracking once the detection rollout distribution analytics tranche lands.
+
+## Phase 66 — Control-plane posture evidence and recovery readiness (completed)
+
+- [x] T355: Extend support readiness, dependency health, and backup-status contracts with derived control-plane posture, backup cadence, checkpoint counts, and restore-readiness fields so active/passive recovery state is surfaced from live runtime evidence instead of a hard-coded summary.
+- [x] T356: Surface the structured control-plane posture in Help & Docs `Production Readiness` and lock it in with focused frontend and TypeScript SDK regression coverage so operators can review recovery posture without dropping into raw JSON.
+- [x] T357: Refresh roadmap, status, deployment/disaster-recovery docs, feature-coverage tracking, OpenAPI, website status/changelog surfaces, and release metadata once the first control-plane posture tranche lands.
+
+## Phase 67 — Control-plane failover drill automation (completed)
+
+- [x] T358: Add an authenticated control-plane failover drill endpoint that validates the current warm-standby recovery inputs and records the latest drill outcome in support/readiness and dependency-health contracts.
+- [x] T359: Surface automated failover drill execution and latest drill status in Help & Docs plus the generated TypeScript and Python SDK wrappers, with focused regression coverage for the new operator action.
+- [x] T360: Refresh roadmap, backlog, OpenAPI, and disaster-recovery guidance so the remaining control-plane gap is explicitly the non-standalone orchestration path rather than missing drill automation.
+
+## Phase 68 — Non-standalone control-plane posture and persistent drill evidence (completed)
+
+- [x] T361: Derive control-plane topology, external standby or leader-handoff posture, and cluster health from configured cluster state so support/readiness and dependency-health contracts no longer hard-code standalone reference mode.
+- [x] T362: Persist recent automated failover drill history in support storage and surface it in readiness evidence plus Help & Docs so failover evidence survives restarts and remains exportable for audit review.
+- [x] T363: Refresh roadmap, backlog, OpenAPI, disaster-recovery guidance, and focused backend/frontend/TypeScript contract coverage once the non-standalone control-plane slice lands.
+
 See `docs/ROADMAP_XDR_PROFESSIONAL.md` for the broader professional roadmap beyond the current implementation order.
 
 ## Code-quality sweep (post-Phase 7)

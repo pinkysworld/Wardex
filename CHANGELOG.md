@@ -4,6 +4,22 @@ All notable changes to Wardex are documented in this file.
 
 ## [Unreleased]
 
+## [0.56.0] — Control-Plane Posture Evidence & Recovery Readiness
+
+### Backend
+- **Derived control-plane posture contracts** — `GET /api/support/readiness-evidence`, `GET /api/system/health/dependencies`, and `GET /api/backup/status` now expose backup schedule, observed backups, latest backup timestamp, checkpoint counts, latest checkpoint timestamp, restore readiness, and active/passive reference status from live runtime state rather than a hard-coded HA summary.
+
+### Frontend
+- **Production readiness posture summary** — Help & Docs now renders a structured control-plane posture section that shows durable storage, restore artifacts, and failover model checks alongside the existing readiness blockers.
+
+### Documentation and release metadata
+- **Control-plane tranche formalized** — backlog, roadmap, status, deployment/disaster-recovery docs, OpenAPI, Helm, OTLP, SDK metadata, README, and website status/changelog surfaces are aligned on the first control-plane posture slice and the `0.56.0` release baseline.
+
+### Verification
+- `cd admin-console && npm exec vitest run src/__tests__/HelpDocs.test.jsx`
+- `cargo test --test api_integration enterprise_governance_and_support_endpoints_enforce_roles -- --exact`
+- `cd sdk/typescript && npm exec vitest run src/index.test.ts -t 'readinessEvidence|systemDeps|backupStatus'`
+
 ## [0.55.1] — Release Guardrails, A11y Strictness & Node Baseline
 
 ### Release engineering

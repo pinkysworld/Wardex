@@ -1,9 +1,26 @@
 use include_dir::{Dir, include_dir};
 use serde::Serialize;
+use std::collections::BTreeSet;
 
 const EMBEDDED_DOCS: Dir<'_> = include_dir!("$CARGO_MANIFEST_DIR/docs");
 const TYPESCRIPT_SDK_PACKAGE: &str = include_str!("../sdk/typescript/package.json");
 const PYTHON_SDK_PROJECT: &str = include_str!("../sdk/python/pyproject.toml");
+const TYPESCRIPT_SDK_CLIENT: &str = include_str!("../sdk/typescript/src/index.ts");
+const PYTHON_SDK_CLIENT: &str = include_str!("../sdk/python/wardex/client.py");
+const OPENAPI_DOCS_SNAPSHOT: &str = include_str!("../docs/openapi.yaml");
+const REQUIRED_REPORT_WORKFLOW_OPERATIONS: &[(&str, &str)] = &[
+    ("GET", "/api/report-templates"),
+    ("POST", "/api/report-templates"),
+    ("GET", "/api/report-runs"),
+    ("POST", "/api/report-runs"),
+    ("GET", "/api/report-schedules"),
+    ("POST", "/api/report-schedules"),
+];
+const REQUIRED_REPORT_WORKFLOW_ENDPOINTS: &[&str] = &[
+    "/api/report-templates",
+    "/api/report-runs",
+    "/api/report-schedules",
+];
 
 #[derive(Debug, Clone, Serialize)]
 struct DocumentEntry {
@@ -275,6 +292,97 @@ fn load_python_sdk() -> Option<SdkParityEntry> {
     })
 }
 
+fn format_operation(method: &str, path: &str) -> String {
+    format!("{method} {path}")
+}
+
+fn runtime_openapi_operations(openapi_value: &serde_json::Value) -> BTreeSet<(String, String)> {
+    let mut operations = BTreeSet::new();
+    let Some(paths) = openapi_value
+        .get("paths")
+        .and_then(serde_json::Value::as_object)
+    else {
+        return operations;
+    };
+
+    for (path, item) in paths {
+        let Some(item) = item.as_object() else {
+            continue;
+        };
+        for method in ["get", "post", "put", "delete", "patch"] {
+            if item.contains_key(method) {
+                operations.insert((method.to_ascii_uppercase(), path.to_string()));
+            }
+        }
+    }
+
+    operations
+}
+
+fn docs_openapi_operations(source: &str) -> BTreeSet<(String, String)> {
+    let mut operations = BTreeSet::new();
+    let mut current_path: Option<String> = None;
+
+    for line in source.lines() {
+        if let Some(path) = line
+            .strip_prefix("  ")
+            .and_then(|value| value.strip_suffix(':'))
+            .filter(|value| value.starts_with("/api/"))
+        {
+            current_path = Some(path.to_string());
+            continue;
+        }
+        if !line.starts_with(' ') && !line.is_empty() {
+            current_path = None;
+            continue;
+        }
+        let Some(method) = line
+            .strip_prefix("    ")
+            .and_then(|value| value.strip_suffix(':'))
+            .filter(|value| matches!(*value, "get" | "post" | "put" | "delete" | "patch"))
+        else {
+            continue;
+        };
+        let Some(path) = current_path.as_ref() else {
+            continue;
+        };
+        operations.insert((method.to_ascii_uppercase(), path.clone()));
+    }
+
+    operations
+}
+
+fn report_operation_coverage(inventory: &BTreeSet<(String, String)>) -> (Vec<String>, Vec<String>) {
+    let mut present = Vec::new();
+    let mut missing = Vec::new();
+
+    for (method, path) in REQUIRED_REPORT_WORKFLOW_OPERATIONS {
+        let operation = format_operation(method, path);
+        if inventory.contains(&(method.to_string(), path.to_string())) {
+            present.push(operation);
+        } else {
+            missing.push(operation);
+        }
+    }
+
+    (present, missing)
+}
+
+fn report_endpoint_coverage(source: &str) -> (Vec<String>, Vec<String>) {
+    let mut present = Vec::new();
+    let mut missing = Vec::new();
+
+    for endpoint in REQUIRED_REPORT_WORKFLOW_ENDPOINTS {
+        if source.contains(endpoint) {
+            present.push(endpoint.to_string());
+        } else {
+            missing.push(endpoint.to_string());
+        }
+    }
+
+    (present, missing)
+}
+
 pub fn docs_index(
     version: &str,
     query: Option<&str>,
@@ -351,6 +459,7 @@ pub fn support_parity(version: &str) -> serde_json::Value {
         .and_then(serde_json::Value::as_object)
         .map(|paths| paths.len())
         .unwrap_or(0);
+    let runtime_openapi_inventory = runtime_openapi_operations(&openapi_value);
     let endpoint_catalog = crate::openapi::endpoint_catalog(version);
     let graphql_schema = crate::graphql::wardex_schema();
     let query_fields = graphql_schema
@@ -383,6 +492,26 @@ pub fn support_parity(version: &str) -> serde_json::Value {
         .and_then(serde_json::Value::as_object)
         .is_some_and(|paths| paths.contains_key("/api/graphql"));
 
+    let runtime_route_inventory = endpoint_catalog
+        .iter()
+        .map(|entry| (entry.method.to_ascii_uppercase(), entry.path.clone()))
+        .collect::<BTreeSet<_>>();
+    let docs_openapi_inventory = docs_openapi_operations(OPENAPI_DOCS_SNAPSHOT);
+    let (runtime_routes_present, runtime_routes_missing) =
+        report_operation_coverage(&runtime_route_inventory);
+    let (runtime_openapi_present, runtime_openapi_missing) =
+        report_operation_coverage(&runtime_openapi_inventory);
+    let (docs_openapi_present, docs_openapi_missing) =
+        report_operation_coverage(&docs_openapi_inventory);
+    let (typescript_sdk_present, typescript_sdk_missing) =
+        report_endpoint_coverage(TYPESCRIPT_SDK_CLIENT);
+    let (python_sdk_present, python_sdk_missing) = report_endpoint_coverage(PYTHON_SDK_CLIENT);
+    let report_workflow_aligned = runtime_routes_missing.is_empty()
+        && runtime_openapi_missing.is_empty()
+        && docs_openapi_missing.is_empty()
+        && typescript_sdk_missing.is_empty()
+        && python_sdk_missing.is_empty();
+
     let mut issues = Vec::new();
     if openapi_version != version {
         issues.push(format!(
@@ -403,6 +532,36 @@ pub fn support_parity(version: &str) -> serde_json::Value {
     }
     if !graphql_documented {
         issues.push("/api/graphql is not described in the runtime OpenAPI schema.".to_string());
+    }
+    if !runtime_routes_missing.is_empty() {
+        issues.push(format!(
+            "Report workflow missing from runtime endpoint catalog: {}.",
+            runtime_routes_missing.join(", ")
+        ));
+    }
+    if !runtime_openapi_missing.is_empty() {
+        issues.push(format!(
+            "Report workflow missing from runtime OpenAPI schema: {}.",
+            runtime_openapi_missing.join(", ")
+        ));
+    }
+    if !docs_openapi_missing.is_empty() {
+        issues.push(format!(
+            "Report workflow missing from docs/openapi.yaml: {}.",
+            docs_openapi_missing.join(", ")
+        ));
+    }
+    if !typescript_sdk_missing.is_empty() {
+        issues.push(format!(
+            "Report workflow missing from TypeScript SDK client: {}.",
+            typescript_sdk_missing.join(", ")
+        ));
+    }
+    if !python_sdk_missing.is_empty() {
+        issues.push(format!(
+            "Report workflow missing from Python SDK client: {}.",
+            python_sdk_missing.join(", ")
+        ));
     }
 
     serde_json::json!({
@@ -429,6 +588,34 @@ pub fn support_parity(version: &str) -> serde_json::Value {
         "sdk": {
             "python": python_sdk,
             "typescript": typescript_sdk,
+        },
+        "report_workflow": {
+            "aligned": report_workflow_aligned,
+            "required_operations": REQUIRED_REPORT_WORKFLOW_OPERATIONS
+                .iter()
+                .map(|(method, path)| format_operation(method, path))
+                .collect::<Vec<_>>(),
+            "required_sdk_endpoints": REQUIRED_REPORT_WORKFLOW_ENDPOINTS,
+            "runtime_routes": {
+                "present": runtime_routes_present,
+                "missing": runtime_routes_missing,
+            },
+            "runtime_openapi": {
+                "present": runtime_openapi_present,
+                "missing": runtime_openapi_missing,
+            },
+            "docs_openapi": {
+                "present": docs_openapi_present,
+                "missing": docs_openapi_missing,
+            },
+            "typescript_sdk": {
+                "present": typescript_sdk_present,
+                "missing": typescript_sdk_missing,
+            },
+            "python_sdk": {
+                "present": python_sdk_present,
+                "missing": python_sdk_missing,
+            },
         },
         "issues": issues,
     })
@@ -480,6 +667,44 @@ mod tests {
         assert!(!payload["sdk"]["python"]["aligned"].as_bool().unwrap());
         assert!(!payload["sdk"]["typescript"]["aligned"].as_bool().unwrap());
         assert!(payload["graphql"]["documented"].as_bool().unwrap());
+        assert!(payload["report_workflow"]["aligned"].as_bool().unwrap());
+        assert!(
+            payload["report_workflow"]["runtime_routes"]["missing"]
+                .as_array()
+                .unwrap()
+                .is_empty()
+        );
+        assert!(
+            payload["report_workflow"]["runtime_openapi"]["missing"]
+                .as_array()
+                .unwrap()
+                .is_empty()
+        );
+        assert!(
+            payload["report_workflow"]["docs_openapi"]["missing"]
+                .as_array()
+                .unwrap()
+                .is_empty()
+        );
+        assert!(
+            payload["report_workflow"]["typescript_sdk"]["missing"]
+                .as_array()
+                .unwrap()
+                .is_empty()
+        );
+        assert!(
+            payload["report_workflow"]["python_sdk"]["missing"]
+                .as_array()
+                .unwrap()
+                .is_empty()
+        );
+        assert!(
+            payload["report_workflow"]["required_operations"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|entry| entry.as_str() == Some("POST /api/report-runs"))
+        );
         assert!(payload["issues"].as_array().unwrap().iter().any(|issue| {
             issue
                 .as_str()

@@ -1,7 +1,7 @@
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { MemoryRouter } from 'react-router-dom';
+import { MemoryRouter, useLocation } from 'react-router-dom';
 import LiveMonitor from '../components/LiveMonitor.jsx';
 import { AuthProvider, RoleProvider, ThemeProvider, ToastProvider } from '../hooks.jsx';
 import { setToken } from '../api.js';
@@ -14,6 +14,32 @@ const jsonOk = (data) => ({
   json: async () => data,
   text: async () => JSON.stringify(data),
 });
+
+function LocationProbe() {
+  const location = useLocation();
+  return <div data-testid="location-probe">{`${location.pathname}${location.search}`}</div>;
+}
+
+function renderMonitor(route = '/monitor') {
+  return render(
+    <MemoryRouter initialEntries={[route]}>
+      <AuthProvider>
+        <RoleProvider>
+          <ThemeProvider>
+            <ToastProvider>
+              <LocationProbe />
+              <LiveMonitor />
+            </ToastProvider>
+          </ThemeProvider>
+        </RoleProvider>
+      </AuthProvider>
+    </MemoryRouter>,
+  );
+}
+
+function currentLocation() {
+  return new URL(screen.getByTestId('location-probe').textContent || '/monitor', 'http://localhost');
+}
 
 describe('LiveMonitor', () => {
   beforeEach(() => {
@@ -292,6 +318,150 @@ describe('LiveMonitor', () => {
       expect(callCounts.processTree).toBe(initialProcessTree + 1);
       expect(callCounts.processDeepChains).toBe(initialProcessDeepChains + 1);
     });
+  });
+
+  it('restores route-backed monitor scope and preserves filters across tab and drawer changes', async () => {
+    const user = userEvent.setup();
+
+    globalThis.fetch = vi.fn((url) => {
+      const href = String(url);
+
+      if (href.includes('/api/alerts/count')) {
+        return Promise.resolve(jsonOk({ total: 1, critical: 1, severe: 0, elevated: 0 }));
+      }
+      if (href.includes('/api/ws/stats')) {
+        return Promise.resolve(jsonOk(wsStatsFixture()));
+      }
+      if (href.includes('/api/alerts/grouped')) {
+        return Promise.resolve(
+          jsonOk([
+            {
+              fingerprint: 'ssh-burst',
+              alert_count: 1,
+              severity: 'critical',
+              reasons: ['Repeated SSH failures'],
+            },
+          ]),
+        );
+      }
+      if (href.includes('/api/alerts')) {
+        return Promise.resolve(
+          jsonOk([
+            {
+              id: 'alert-1',
+              timestamp: new Date().toISOString(),
+              hostname: 'edge-1',
+              severity: 'critical',
+              source: 'sensor',
+              category: 'auth',
+              message: 'SSH burst detected',
+              reasons: ['Repeated SSH failures'],
+            },
+          ]),
+        );
+      }
+      if (href.includes('/api/processes/live')) {
+        return Promise.resolve(
+          jsonOk({
+            count: 1,
+            processes: [
+              {
+                pid: 1337,
+                ppid: 1,
+                name: 'sshd',
+                user: 'root',
+                group: 'wheel',
+                cpu_percent: 8.4,
+                mem_percent: 2.1,
+              },
+            ],
+          }),
+        );
+      }
+      if (href.includes('/api/process-tree/deep-chains')) {
+        return Promise.resolve(
+          jsonOk({
+            deep_chains: [
+              {
+                pid: 1337,
+                name: 'sshd',
+                cmd_line: 'sshd -> bash -> curl',
+                depth: 3,
+              },
+            ],
+          }),
+        );
+      }
+      if (href.includes('/api/process-tree')) {
+        return Promise.resolve(
+          jsonOk({
+            processes: [
+              { pid: 1, ppid: 0, name: 'launchd', user: 'root' },
+              { pid: 1337, ppid: 1, name: 'sshd', user: 'root' },
+            ],
+          }),
+        );
+      }
+      if (href.includes('/api/processes/analysis')) {
+        return Promise.resolve(
+          jsonOk({
+            total: 1,
+            findings: [
+              {
+                pid: 1337,
+                name: 'sshd',
+                verdict: 'review',
+                reason: 'Unusual remote login burst',
+              },
+            ],
+          }),
+        );
+      }
+      if (href.includes('/api/fp-feedback/stats')) return Promise.resolve(jsonOk([]));
+      if (href.includes('/api/health')) return Promise.resolve(jsonOk({ status: 'ok' }));
+      return Promise.resolve(jsonOk({}));
+    });
+
+    renderMonitor(
+      '/monitor?monitorTab=processes&alert=alert-1&sev=critical&source=sensor&host=edge-1&q=SSH',
+    );
+
+    const processesTab = await screen.findByRole('tab', { name: 'Processes' });
+    expect(processesTab).toHaveAttribute('aria-selected', 'true');
+    expect(await screen.findByText('Process Graph Context')).toBeInTheDocument();
+
+    let params = currentLocation().searchParams;
+    expect(params.get('monitorTab')).toBe('processes');
+    expect(params.get('alert')).toBe('alert-1');
+    expect(params.get('sev')).toBe('critical');
+    expect(params.get('source')).toBe('sensor');
+    expect(params.get('host')).toBe('edge-1');
+    expect(params.get('q')).toBe('SSH');
+
+    await user.click(screen.getByRole('tab', { name: 'Alert Stream' }));
+
+    await waitFor(() => {
+      expect(currentLocation().searchParams.get('monitorTab')).toBe('stream');
+    });
+
+    expect(await screen.findByText('Source: sensor')).toBeInTheDocument();
+    expect(await screen.findByText('Host: edge-1')).toBeInTheDocument();
+    expect(await screen.findByText('Query: SSH')).toBeInTheDocument();
+    expect(await screen.findByRole('button', { name: 'Close Drawer' })).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Close Drawer' }));
+
+    await waitFor(() => {
+      const nextParams = currentLocation().searchParams;
+      expect(nextParams.get('monitorTab')).toBe('stream');
+      expect(nextParams.has('alert')).toBe(false);
+      expect(nextParams.get('sev')).toBe('critical');
+      expect(nextParams.get('source')).toBe('sensor');
+      expect(nextParams.get('host')).toBe('edge-1');
+      expect(nextParams.get('q')).toBe('SSH');
+    });
+
+    expect(screen.getByRole('button', { name: 'Open Drawer' })).toBeInTheDocument();
   });
 
   it('supports keyboard-first alert triage shortcuts', async () => {

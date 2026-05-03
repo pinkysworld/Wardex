@@ -270,6 +270,8 @@ export default function HelpDocs() {
   const [graphqlRunning, setGraphqlRunning] = useState(false);
   const [firstRunProof, setFirstRunProof] = useState(null);
   const [firstRunProofRunning, setFirstRunProofRunning] = useState(false);
+  const [failoverDrillResult, setFailoverDrillResult] = useState(null);
+  const [failoverDrillRunning, setFailoverDrillRunning] = useState(false);
 
   const { data: epList } = useApi(api.endpoints);
   const { data: research } = useApi(api.researchTracks);
@@ -279,7 +281,9 @@ export default function HelpDocs() {
   const { data: inboxData, reload: reloadInbox } = useApi(api.inbox);
   const { data: managerOverview } = useApi(api.managerOverview);
   const { data: supportDiagnostics } = useApi(api.supportDiag);
-  const { data: readinessEvidence } = useApi(api.supportReadinessEvidence);
+  const { data: readinessEvidence, reload: reloadReadinessEvidence } = useApi(
+    api.supportReadinessEvidence,
+  );
   const { data: parityData } = useApi(api.supportParity);
   const { data: docsIndexData } = useApi(
     () => api.docsIndex({ q: docsQuery, section: docsSection, limit: 40 }),
@@ -296,9 +300,116 @@ export default function HelpDocs() {
     [docsIndexData],
   );
   const parityIssues = Array.isArray(parityData?.issues) ? parityData.issues : [];
+  const reportWorkflow = parityData?.report_workflow || null;
+  const reportWorkflowSurfaces = [
+    ['runtime_routes', 'Runtime routes'],
+    ['runtime_openapi', 'Live OpenAPI'],
+    ['docs_openapi', 'Docs OpenAPI'],
+    ['typescript_sdk', 'TypeScript SDK'],
+    ['python_sdk', 'Python SDK'],
+  ].map(([key, label]) => {
+    const surface = reportWorkflow?.[key] || {};
+    const present = Array.isArray(surface.present) ? surface.present : [];
+    const missing = Array.isArray(surface.missing) ? surface.missing : [];
+    return { key, label, present, missing };
+  });
+  const reportWorkflowMissingCount = reportWorkflowSurfaces.reduce(
+    (count, surface) => count + surface.missing.length,
+    0,
+  );
   const readiness = readinessEvidence?.evidence || null;
   const readinessLimitations = Array.isArray(readiness?.known_limitations)
     ? readiness.known_limitations
+    : [];
+  const controlPlane = readiness?.control_plane || null;
+  const controlPlaneSummary = controlPlane
+    ? {
+        topology: controlPlane.topology,
+        orchestration_scope: String(controlPlane.orchestration_scope || 'standalone_reference')
+          .replace(/_/g, ' '),
+        ha_mode: controlPlane.ha_mode,
+        cluster_role: controlPlane.cluster
+          ? String(controlPlane.cluster.role || 'unknown').replace(/_/g, ' ')
+          : 'Local only',
+        cluster_leader: controlPlane.cluster?.leader_id || (controlPlane.cluster ? 'Pending' : 'Local'),
+        cluster_peers: controlPlane.cluster
+          ? `${controlPlane.cluster.peers_reachable || 0} / ${controlPlane.cluster.peers_total || 0}`
+          : '—',
+        recovery_status: controlPlane.recovery_status,
+        restore_ready: controlPlane.restore_ready ? 'Ready' : 'Review',
+        backup_schedule: controlPlane.backup_schedule_cron,
+        observed_backups: controlPlane.observed_backups,
+        checkpoint_count: controlPlane.checkpoint_count,
+        recent_drills: Array.isArray(controlPlane.failover_drill_history)
+          ? controlPlane.failover_drill_history.length
+          : 0,
+        failover_drill: String(controlPlane.failover_drill?.status || 'not_run').replace(
+          /_/g,
+          ' ',
+        ),
+        last_failover_drill: controlPlane.failover_drill?.last_run_at
+          ? formatDateTime(controlPlane.failover_drill.last_run_at)
+          : 'Not run',
+        latest_backup_at: controlPlane.latest_backup_at
+          ? formatDateTime(controlPlane.latest_backup_at)
+          : '—',
+        latest_checkpoint_at: controlPlane.latest_checkpoint_at
+          ? formatDateTime(controlPlane.latest_checkpoint_at)
+          : '—',
+      }
+    : null;
+  const controlPlaneChecks = controlPlane
+    ? [
+        {
+          label: 'Durable storage',
+          ok: controlPlane.durable_storage,
+          detail: controlPlane.durable_storage
+            ? controlPlane.event_store_path || 'Persistent event storage enabled.'
+            : 'Event persistence is disabled.',
+        },
+        {
+          label: 'Restore artifacts',
+          ok: controlPlane.restore_ready,
+          detail: `${controlPlane.observed_backups || 0} backups / ${
+            controlPlane.checkpoint_count || 0
+          } checkpoints`,
+        },
+        {
+          label: 'Failover model',
+          ok: String(controlPlane.recovery_status || '').startsWith('ready_'),
+          detail: String(
+            controlPlane.documented_failover || controlPlane.ha_mode || 'review_recovery_plan',
+          ).replace(/_/g, ' '),
+        },
+        ...(controlPlane.cluster
+          ? [
+              {
+                label: 'Cluster orchestration',
+                ok: Boolean(controlPlane.cluster.healthy),
+                detail: `${String(controlPlane.cluster.role || 'unknown').replace(/_/g, ' ')} · ${
+                  controlPlane.cluster.peers_reachable || 0
+                }/${controlPlane.cluster.peers_total || 0} peers reachable${
+                  controlPlane.cluster.leader_id ? ` · leader ${controlPlane.cluster.leader_id}` : ''
+                }`,
+              },
+            ]
+          : []),
+        {
+          label: 'Automated drill',
+          ok: controlPlane.failover_drill?.status === 'passed',
+          detail: controlPlane.failover_drill?.last_run_at
+            ? `${String(controlPlane.failover_drill?.status || 'review').replace(/_/g, ' ')}${
+                controlPlane.failover_drill?.actor
+                  ? ` by ${controlPlane.failover_drill.actor}`
+                  : ''
+              } at ${formatDateTime(controlPlane.failover_drill.last_run_at)}`
+            : controlPlane.failover_drill?.summary ||
+              'No automated failover drill has been recorded yet.',
+        },
+      ]
+    : [];
+  const failoverDrillHistory = Array.isArray(controlPlane?.failover_drill_history)
+    ? controlPlane.failover_drill_history.slice(0, 3)
     : [];
   const openApiSummary = openApi
     ? {
@@ -372,6 +483,26 @@ export default function HelpDocs() {
       toast('First-run proof failed.', 'error');
     } finally {
       setFirstRunProofRunning(false);
+    }
+  };
+
+  const runFailoverDrill = async () => {
+    setFailoverDrillRunning(true);
+    try {
+      const result = await api.failoverDrill();
+      setFailoverDrillResult(result);
+      await reloadReadinessEvidence();
+      if (result?.drill?.status === 'passed') {
+        toast('Control-plane failover drill passed.', 'success');
+      } else {
+        toast('Control-plane failover drill reported recovery gaps.', 'warning');
+      }
+    } catch (error) {
+      const message = error?.body || error?.message || 'Control-plane failover drill failed';
+      setFailoverDrillResult({ error: message });
+      toast('Control-plane failover drill failed.', 'error');
+    } finally {
+      setFailoverDrillRunning(false);
     }
   };
 
@@ -745,6 +876,14 @@ export default function HelpDocs() {
             <button
               type="button"
               className="btn btn-sm"
+              onClick={runFailoverDrill}
+              disabled={failoverDrillRunning}
+            >
+              {failoverDrillRunning ? 'Running drill...' : 'Run Failover Drill'}
+            </button>
+            <button
+              type="button"
+              className="btn btn-sm"
               onClick={runProductionDemoLab}
               disabled={firstRunProofRunning}
             >
@@ -778,8 +917,69 @@ export default function HelpDocs() {
               ))}
             </div>
           )}
+          {controlPlaneSummary ? (
+            <>
+              <div className="card-title" style={{ marginTop: 16, marginBottom: 12 }}>
+                Control-plane posture
+              </div>
+              <SummaryGrid data={controlPlaneSummary} limit={15} />
+              {controlPlaneChecks.length > 0 ? (
+                <div style={{ display: 'grid', gap: 8, marginTop: 12 }}>
+                  {controlPlaneChecks.map((item) => (
+                    <div key={item.label} className="stat-box" style={{ fontSize: 12 }}>
+                      <span
+                        className={`badge ${item.ok ? 'badge-ok' : 'badge-warn'}`}
+                        style={{ marginRight: 8 }}
+                      >
+                        {item.ok ? 'Ready' : 'Review'}
+                      </span>
+                      <strong>{item.label}</strong>
+                      <span style={{ marginLeft: 8 }}>{item.detail}</span>
+                    </div>
+                  ))}
+                </div>
+              ) : null}
+              {failoverDrillHistory.length > 0 ? (
+                <>
+                  <div className="card-title" style={{ marginTop: 16, marginBottom: 12 }}>
+                    Recent drill history
+                  </div>
+                  <div style={{ display: 'grid', gap: 8 }}>
+                    {failoverDrillHistory.map((drill, index) => (
+                      <div
+                        key={`${drill.last_run_at || 'not-run'}-${index}`}
+                        className="stat-box"
+                        style={{ fontSize: 12 }}
+                      >
+                        <span
+                          className={`badge ${
+                            drill.status === 'passed' ? 'badge-ok' : 'badge-warn'
+                          }`}
+                          style={{ marginRight: 8 }}
+                        >
+                          {String(drill.status || 'review').replace(/_/g, ' ')}
+                        </span>
+                        <strong>{String(drill.drill_type || 'failover_drill').replace(/_/g, ' ')}</strong>
+                        <span style={{ marginLeft: 8 }}>
+                          {String(drill.orchestration_scope || 'standalone_reference').replace(
+                            /_/g,
+                            ' ',
+                          )}
+                          {drill.actor ? ` · ${drill.actor}` : ''}
+                          {drill.last_run_at ? ` · ${formatDateTime(drill.last_run_at)}` : ''}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </>
+              ) : null}
+            </>
+          ) : null}
           {firstRunProof ? (
             <JsonDetails data={firstRunProof} label="First-run proof result" />
+          ) : null}
+          {failoverDrillResult ? (
+            <JsonDetails data={failoverDrillResult} label="Automated failover drill result" />
           ) : null}
           <JsonDetails data={readinessEvidence} label="Production readiness evidence pack" />
         </div>
@@ -825,6 +1025,55 @@ export default function HelpDocs() {
               ))}
             </div>
           )}
+          {reportWorkflow ? (
+            <div style={{ marginTop: 16 }}>
+              <div className="card-title" style={{ marginBottom: 12 }}>
+                Report Workflow Coverage
+              </div>
+              <SummaryGrid
+                data={{
+                  alignment: reportWorkflow.aligned ? 'Aligned' : 'Review',
+                  required_operations: Array.isArray(reportWorkflow.required_operations)
+                    ? reportWorkflow.required_operations.length
+                    : 0,
+                  sdk_endpoints: Array.isArray(reportWorkflow.required_sdk_endpoints)
+                    ? reportWorkflow.required_sdk_endpoints.length
+                    : 0,
+                  missing_checks: reportWorkflowMissingCount,
+                }}
+                limit={4}
+              />
+              <div style={{ display: 'grid', gap: 8, marginTop: 12 }}>
+                {reportWorkflowSurfaces.map((surface) => (
+                  <div key={surface.key} className="stat-box" style={{ fontSize: 12 }}>
+                    <div
+                      style={{
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center',
+                        gap: 8,
+                        flexWrap: 'wrap',
+                      }}
+                    >
+                      <strong>{surface.label}</strong>
+                      <span
+                        className={`badge ${surface.missing.length === 0 ? 'badge-ok' : 'badge-warn'}`}
+                      >
+                        {surface.missing.length === 0
+                          ? `Aligned (${surface.present.length})`
+                          : `${surface.missing.length} missing`}
+                      </span>
+                    </div>
+                    <div className="row-secondary" style={{ marginTop: 6 }}>
+                      {surface.missing.length === 0
+                        ? `${surface.present.length} checks covered for this surface.`
+                        : `Missing: ${surface.missing.join(', ')}`}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : null}
           <JsonDetails data={parityData} label="Parity payload" />
         </div>
       </div>

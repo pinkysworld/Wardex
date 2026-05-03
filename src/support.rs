@@ -115,6 +115,20 @@ pub struct ReportScheduleRecord {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FailoverDrillRecord {
+    pub drill_type: String,
+    pub orchestration_scope: String,
+    pub status: String,
+    pub last_run_at: Option<String>,
+    pub actor: Option<String>,
+    pub summary: String,
+    pub artifact_source: String,
+    pub durable_storage_verified: bool,
+    pub backup_artifact_verified: bool,
+    pub checkpoint_artifact_verified: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct InboxItem {
     pub id: String,
     pub kind: String,
@@ -132,6 +146,8 @@ struct SupportSnapshot {
     runs: Vec<ReportRunRecord>,
     schedules: Vec<ReportScheduleRecord>,
     inbox: Vec<InboxItem>,
+    #[serde(default)]
+    failover_drills: Vec<FailoverDrillRecord>,
     next_sequence: u64,
 }
 
@@ -142,6 +158,7 @@ impl Default for SupportSnapshot {
             runs: Vec::new(),
             schedules: Vec::new(),
             inbox: Vec::new(),
+            failover_drills: Vec::new(),
             next_sequence: 1,
         }
     }
@@ -175,6 +192,21 @@ fn default_templates() -> Vec<ReportTemplateRecord> {
             status: "ready".to_string(),
             audience: "security".to_string(),
             description: "Operational audit evidence for investigations and reviews.".to_string(),
+            execution_context: None,
+        },
+        ReportTemplateRecord {
+            id: "tpl-failover-drill-history".to_string(),
+            name: "Control-plane Failover Drill History".to_string(),
+            kind: "control_plane_failover_history".to_string(),
+            scope: "control_plane".to_string(),
+            format: "json".to_string(),
+            last_run_at: None,
+            next_run_at: None,
+            status: "ready".to_string(),
+            audience: "audit".to_string(),
+            description:
+                "Persisted control-plane failover drill history with cluster posture and recovery evidence."
+                    .to_string(),
             execution_context: None,
         },
         ReportTemplateRecord {
@@ -334,6 +366,14 @@ impl SupportStore {
 
     pub fn inbox_items(&self) -> &[InboxItem] {
         &self.snapshot.inbox
+    }
+
+    pub fn failover_drills(&self) -> &[FailoverDrillRecord] {
+        &self.snapshot.failover_drills
+    }
+
+    pub fn latest_failover_drill(&self) -> Option<FailoverDrillRecord> {
+        self.snapshot.failover_drills.first().cloned()
     }
 
     pub fn upsert_report_template(
@@ -504,6 +544,13 @@ impl SupportStore {
         created
     }
 
+    pub fn record_failover_drill(&mut self, drill: FailoverDrillRecord) -> FailoverDrillRecord {
+        self.snapshot.failover_drills.insert(0, drill.clone());
+        self.snapshot.failover_drills.truncate(20);
+        self.persist();
+        drill
+    }
+
     pub fn sync_inbox(&mut self, live_items: Vec<InboxItem>) -> Vec<InboxItem> {
         let previous = self.snapshot.inbox.clone();
         let merged = live_items
@@ -600,8 +647,8 @@ fn replayable_context_id(context: &ReportExecutionContext) -> Option<String> {
 #[cfg(test)]
 mod tests {
     use super::{
-        ReportExecutionContext, ReportExecutionContextFilter, ReportExecutionScopeFilter,
-        SupportStore,
+        FailoverDrillRecord, ReportExecutionContext, ReportExecutionContextFilter,
+        ReportExecutionScopeFilter, SupportStore,
     };
 
     fn temp_store_path(label: &str) -> String {
@@ -826,6 +873,52 @@ mod tests {
             unscoped
                 .iter()
                 .any(|template| template.id == "tpl-executive-status")
+        );
+
+        let _ = std::fs::remove_file(path);
+    }
+
+    #[test]
+    fn failover_drill_history_persists_recent_records() {
+        let path = temp_store_path("failover-drills");
+        let mut store = SupportStore::new(&path);
+
+        store.record_failover_drill(FailoverDrillRecord {
+            drill_type: "warm_standby_restore_dry_run".to_string(),
+            orchestration_scope: "standalone_reference".to_string(),
+            status: "passed".to_string(),
+            last_run_at: Some("2026-05-03T10:00:00Z".to_string()),
+            actor: Some("ops-1".to_string()),
+            summary: "Standalone failover drill passed.".to_string(),
+            artifact_source: "backup".to_string(),
+            durable_storage_verified: true,
+            backup_artifact_verified: true,
+            checkpoint_artifact_verified: false,
+        });
+        store.record_failover_drill(FailoverDrillRecord {
+            drill_type: "leader_handoff_restore_dry_run".to_string(),
+            orchestration_scope: "non_standalone_orchestrated".to_string(),
+            status: "passed".to_string(),
+            last_run_at: Some("2026-05-03T11:00:00Z".to_string()),
+            actor: Some("ops-2".to_string()),
+            summary: "Clustered failover drill passed.".to_string(),
+            artifact_source: "checkpoint".to_string(),
+            durable_storage_verified: true,
+            backup_artifact_verified: false,
+            checkpoint_artifact_verified: true,
+        });
+
+        let reloaded = SupportStore::new(&path);
+        assert_eq!(reloaded.failover_drills().len(), 2);
+        assert_eq!(
+            reloaded.failover_drills()[0].actor.as_deref(),
+            Some("ops-2")
+        );
+        assert_eq!(
+            reloaded
+                .latest_failover_drill()
+                .and_then(|drill| drill.last_run_at),
+            Some("2026-05-03T11:00:00Z".to_string())
         );
 
         let _ = std::fs::remove_file(path);

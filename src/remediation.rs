@@ -752,12 +752,14 @@ pub fn remediation_plan_json_from_payload(
     engine: &RemediationEngine,
     payload: serde_json::Value,
 ) -> Result<String, RemediationApiError> {
-    let plan = remediation_plan_from_payload(engine, payload).map_err(RemediationApiError::bad_request)?;
+    let plan =
+        remediation_plan_from_payload(engine, payload).map_err(RemediationApiError::bad_request)?;
     Ok(remediation_plan_json(&plan))
 }
 
 pub fn remediation_results_json(engine: &RemediationEngine, limit: usize) -> String {
-    let results: Vec<RemediationResult> = engine.recent_results(limit).into_iter().cloned().collect();
+    let results: Vec<RemediationResult> =
+        engine.recent_results(limit).into_iter().cloned().collect();
     serialize_json(&results)
 }
 
@@ -1113,7 +1115,10 @@ pub fn execute_and_record_review_rollback(
         .unwrap_or("");
 
     let mut reviews = load_remediation_change_reviews(storage);
-    let Some(position) = reviews.iter().position(|entry| entry.id == request.review_id) else {
+    let Some(position) = reviews
+        .iter()
+        .position(|entry| entry.id == request.review_id)
+    else {
         return Err(ExecuteReviewRollbackError::NotFound);
     };
     let mut review = reviews.remove(position);
@@ -1177,10 +1182,11 @@ pub fn execute_and_record_review_rollback(
     .map_err(ExecuteReviewRollbackError::Invalid)?;
 
     let executed_at = chrono::Utc::now().to_rfc3339();
-    let proof = review
-        .rollback_proof
-        .as_mut()
-        .expect("rollback proof present");
+    let Some(proof) = review.rollback_proof.as_mut() else {
+        return Err(ExecuteReviewRollbackError::Invalid(
+            "rollback proof could not be prepared".to_string(),
+        ));
+    };
     proof.status = rollback.proof_status.clone();
     proof.verified_by = Some(request.actor);
     proof.executed_at = Some(executed_at);
@@ -1379,7 +1385,10 @@ pub fn apply_remediation_review_approval(
         .iter()
         .filter(|entry| entry.decision == "approve")
         .count();
-    let denied = review.approvals.iter().any(|entry| entry.decision == "deny");
+    let denied = review
+        .approvals
+        .iter()
+        .any(|entry| entry.decision == "deny");
     review.approval_status = if denied {
         "denied".to_string()
     } else if approved_count >= review.required_approvers {
@@ -1436,7 +1445,10 @@ fn remediation_required_approvers(risk: &str, requested: Option<u64>) -> usize {
         "critical" | "high" => 2,
         _ => 1,
     };
-    requested.unwrap_or(minimum as u64).max(minimum as u64).min(5) as usize
+    requested
+        .unwrap_or(minimum as u64)
+        .max(minimum as u64)
+        .min(5) as usize
 }
 
 fn remediation_approval_signature(
@@ -1486,9 +1498,8 @@ fn remediation_recovery_plan(review: &RemediationChangeReview) -> Vec<String> {
             "Apply the saved configuration checkpoint or redeploy the previous known-good bundle"
                 .to_string(),
         ),
-        _ => steps.push(
-            "Revert using the recorded pre-change checkpoint if risk increases".to_string(),
-        ),
+        _ => steps
+            .push("Revert using the recorded pre-change checkpoint if risk increases".to_string()),
     }
     steps
 }
@@ -1503,7 +1514,9 @@ pub fn rollback_action_from_evidence(
     if let Some(explicit_action) = evidence.get("rollback_action") {
         return parse_explicit_rollback_action(explicit_action);
     }
-    if let Some(path) = evidence_string(evidence, "path").or_else(|| evidence_string(evidence, "file")) {
+    if let Some(path) =
+        evidence_string(evidence, "path").or_else(|| evidence_string(evidence, "file"))
+    {
         return Ok(RemediationAction::RestoreFile {
             path: path.clone(),
             source: evidence_string(evidence, "rollback_source")
@@ -1522,8 +1535,8 @@ pub fn rollback_action_from_evidence(
     {
         return Ok(RemediationAction::BlockIp { addr });
     }
-    if let Some(service_name) = evidence_string(evidence, "service")
-        .or_else(|| evidence_string(evidence, "service_name"))
+    if let Some(service_name) =
+        evidence_string(evidence, "service").or_else(|| evidence_string(evidence, "service_name"))
     {
         return Ok(RemediationAction::RestartService { service_name });
     }
@@ -1549,9 +1562,7 @@ pub fn execute_review_rollback(
         .iter()
         .filter(|entry| !entry.executed || entry.exit_code != Some(0))
         .count();
-    let execution_status = if request.dry_run || command_executions.is_empty() {
-        RemediationStatus::RolledBack
-    } else if execution_failures == 0 {
+    let execution_status = if execution_failures == 0 {
         RemediationStatus::RolledBack
     } else if execution_failures < command_executions.len() {
         RemediationStatus::PartialSuccess
@@ -1634,14 +1645,20 @@ pub fn execute_review_rollback(
         command_executions,
         proof_status: if request.dry_run {
             "dry_run_verified".to_string()
-        } else if matches!(result.status, RemediationStatus::Failed | RemediationStatus::PartialSuccess) {
+        } else if matches!(
+            result.status,
+            RemediationStatus::Failed | RemediationStatus::PartialSuccess
+        ) {
             "execution_failed".to_string()
         } else {
             "executed".to_string()
         },
         recovery_status: if request.dry_run {
             "verified".to_string()
-        } else if matches!(result.status, RemediationStatus::Failed | RemediationStatus::PartialSuccess) {
+        } else if matches!(
+            result.status,
+            RemediationStatus::Failed | RemediationStatus::PartialSuccess
+        ) {
             "failed".to_string()
         } else {
             "executed".to_string()
@@ -1703,8 +1720,7 @@ pub fn execute_commands(commands: &[RemediationCommand]) -> Vec<RemediationComma
 fn is_allowed_execution_program(program: &str) -> bool {
     matches!(
         program,
-        "cp"
-            | "mv"
+        "cp" | "mv"
             | "mkdir"
             | "chmod"
             | "kill"
@@ -1786,7 +1802,11 @@ fn parse_explicit_rollback_action(
 ) -> Result<RemediationAction, String> {
     let action_type = explicit_action
         .as_str()
-        .or_else(|| explicit_action.get("type").and_then(serde_json::Value::as_str))
+        .or_else(|| {
+            explicit_action
+                .get("type")
+                .and_then(serde_json::Value::as_str)
+        })
         .map(str::trim)
         .filter(|value| !value.is_empty())
         .ok_or_else(|| "rollback_action must provide a non-empty type".to_string())?
@@ -1823,7 +1843,8 @@ fn parse_explicit_rollback_action(
                 .and_then(|value| u32::try_from(value).ok())
                 .filter(|value| *value > 0)
                 .ok_or_else(|| "rollback_action.kill_process requires positive pid".to_string())?;
-            let name = evidence_string(explicit_action, "name").unwrap_or_else(|| "process".to_string());
+            let name =
+                evidence_string(explicit_action, "name").unwrap_or_else(|| "process".to_string());
             Ok(RemediationAction::KillProcess { pid, name })
         }
         "disable_account" => {
@@ -1832,15 +1853,14 @@ fn parse_explicit_rollback_action(
             Ok(RemediationAction::DisableAccount { username })
         }
         "remove_scheduled_task" => {
-            let task_name = evidence_string(explicit_action, "task_name")
-                .ok_or_else(|| {
-                    "rollback_action.remove_scheduled_task requires task_name".to_string()
-                })?;
+            let task_name = evidence_string(explicit_action, "task_name").ok_or_else(|| {
+                "rollback_action.remove_scheduled_task requires task_name".to_string()
+            })?;
             Ok(RemediationAction::RemoveScheduledTask { task_name })
         }
         "remove_persistence" => {
-            let mechanism_type = evidence_string(explicit_action, "mechanism_type")
-                .ok_or_else(|| {
+            let mechanism_type =
+                evidence_string(explicit_action, "mechanism_type").ok_or_else(|| {
                     "rollback_action.remove_persistence requires mechanism_type".to_string()
                 })?;
             let mechanism = match mechanism_type.to_ascii_lowercase().as_str() {
@@ -2265,7 +2285,10 @@ mod tests {
         assert_eq!(review.recovery_status, "ready");
         assert!(review.approval_chain_digest.is_some());
         assert_eq!(
-            review.rollback_proof.as_ref().map(|proof| proof.status.as_str()),
+            review
+                .rollback_proof
+                .as_ref()
+                .map(|proof| proof.status.as_str()),
             Some("ready")
         );
     }

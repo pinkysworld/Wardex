@@ -63,6 +63,7 @@ impl Method {
 use crate::actions::DeviceController;
 use crate::auto_update::UpdateManager;
 use crate::checkpoint::CheckpointStore;
+use crate::cluster::ClusterNode;
 use crate::collector::{
     AlertRecord, CollectorState, FileIntegrityMonitor, HostInfo, HostPlatform, detect_platform,
 };
@@ -84,11 +85,11 @@ use crate::enterprise::{
     build_entity_timeline, build_incident_storyline, build_mitre_coverage,
 };
 use crate::event_forward::{EventAnalytics, EventStore, StoredEvent};
+use crate::fingerprint::DeviceFingerprint;
 use crate::fleet_install::{
     RemoteInstallRecord, SshInstallRequest, WinRmInstallRequest, execute_ssh_install,
     execute_winrm_install,
 };
-use crate::fingerprint::DeviceFingerprint;
 use crate::graphql::{AggregateOp, GqlExecutor, GqlRequest, aggregate, wardex_schema};
 use crate::incident::IncidentStore;
 use crate::integration_setup::{
@@ -134,7 +135,7 @@ use crate::sigma::SigmaEngine;
 use crate::spool::EncryptedSpool;
 use crate::storage::SharedStorage;
 use crate::structured_log::generate_request_id;
-use crate::support::{InboxItem, ReportExecutionContext, SupportStore};
+use crate::support::{FailoverDrillRecord, InboxItem, ReportExecutionContext, SupportStore};
 use sha2::Digest;
 
 // ── Rate Limiter ────────────────────────────────────────────
@@ -535,12 +536,14 @@ struct AppState {
     replay: ReplayBuffer,
     proofs: ProofRegistry,
     last_report: Option<JsonReport>,
+    last_failover_drill: Option<FailoverDrillRecord>,
     token: String,
     token_issued_at: std::time::Instant,
     session_store: crate::auth::SessionStore,
     oidc_providers: HashMap<String, crate::oidc::OidcProvider>,
     user_preferences: UserPreferencesStore,
     swarm: SwarmNode,
+    cluster: ClusterNode,
     enforcement: EnforcementEngine,
     threat_intel: ThreatIntelStore,
     digital_twin: DigitalTwinEngine,
@@ -1324,12 +1327,14 @@ pub async fn run_server(
         replay: ReplayBuffer::new(200),
         proofs: ProofRegistry::new(),
         last_report: None,
+        last_failover_drill: None,
         token: token.clone(),
         token_issued_at: std::time::Instant::now(),
         session_store,
         oidc_providers: HashMap::new(),
         user_preferences,
         swarm: SwarmNode::new("gateway-0"),
+        cluster: ClusterNode::new(initial_config.cluster.clone()),
         enforcement: EnforcementEngine::new(),
         threat_intel: ThreatIntelStore::new(),
         digital_twin: DigitalTwinEngine::new(),
@@ -1485,6 +1490,7 @@ pub async fn run_server(
 
     spawn_enterprise_hunt_scheduler(&state);
     spawn_retention_purge_scheduler(&state);
+    spawn_cluster_runtime_loop(&state);
 
     // ── Spawn local host monitoring thread ──────────────────────────
     {
@@ -1864,12 +1870,14 @@ fn spawn_test_server_with_state() -> (u16, String, Arc<Mutex<AppState>>) {
         replay: ReplayBuffer::new(200),
         proofs: ProofRegistry::new(),
         last_report: None,
+        last_failover_drill: None,
         token: token.clone(),
         token_issued_at: std::time::Instant::now(),
         session_store,
         oidc_providers: HashMap::new(),
         user_preferences,
         swarm: SwarmNode::new("test-node-0"),
+        cluster: ClusterNode::new(Config::default().cluster.clone()),
         enforcement: EnforcementEngine::new(),
         threat_intel: ThreatIntelStore::new(),
         digital_twin: DigitalTwinEngine::new(),
@@ -1996,6 +2004,7 @@ fn spawn_test_server_with_state() -> (u16, String, Arc<Mutex<AppState>>) {
         s.sigma_engine.replace_rules(effective_rules);
     }
     spawn_enterprise_hunt_scheduler(&state);
+    spawn_cluster_runtime_loop(&state);
     let site_dir = PathBuf::from("site");
     let shutdown = {
         let s = state.lock().unwrap_or_else(|e| e.into_inner());
@@ -2245,7 +2254,8 @@ fn generate_token() -> String {
 }
 
 fn backup_file_record(path: &Path) -> Result<crate::backup::BackupRecord, String> {
-    let metadata = fs::metadata(path).map_err(|e| format!("failed to read backup metadata: {e}"))?;
+    let metadata =
+        fs::metadata(path).map_err(|e| format!("failed to read backup metadata: {e}"))?;
     let contents = fs::read(path).map_err(|e| format!("failed to read backup file: {e}"))?;
     let name = path
         .file_name()
@@ -2262,6 +2272,407 @@ fn backup_file_record(path: &Path) -> Result<crate::backup::BackupRecord, String
         checksum: crate::audit::sha256_hex(&contents),
         verified: true,
     })
+}
+
+fn is_runtime_backup_file(path: &Path) -> bool {
+    if !path.is_file() {
+        return false;
+    }
+
+    match path.file_name().and_then(|value| value.to_str()) {
+        Some(file_name) => file_name.starts_with("wardex_backup_") && file_name.ends_with(".db"),
+        None => false,
+    }
+}
+
+fn backup_records_in_dir(backup_path: &Path) -> Vec<crate::backup::BackupRecord> {
+    let mut records = fs::read_dir(backup_path)
+        .ok()
+        .into_iter()
+        .flat_map(|entries| entries.filter_map(Result::ok))
+        .map(|entry| entry.path())
+        .filter(|path| is_runtime_backup_file(path))
+        .filter_map(|path| backup_file_record(&path).ok())
+        .collect::<Vec<_>>();
+    records.sort_by(|a, b| b.timestamp.cmp(&a.timestamp));
+    records
+}
+
+#[derive(Debug, Clone, serde::Serialize)]
+struct BackupStatusSnapshot {
+    enabled: bool,
+    retention_count: u32,
+    path: String,
+    schedule_cron: String,
+    observed_backups: usize,
+    latest_backup_at: Option<String>,
+}
+
+impl BackupStatusSnapshot {
+    fn gather() -> Self {
+        let config = crate::backup::BackupConfig::default();
+        let backup_path = Path::new(&config.path);
+        let records = backup_records_in_dir(backup_path);
+
+        Self {
+            enabled: config.enabled,
+            retention_count: config.retention_count,
+            path: config.path,
+            schedule_cron: config.schedule_cron,
+            observed_backups: records.len(),
+            latest_backup_at: records.first().map(|record| record.timestamp.clone()),
+        }
+    }
+}
+
+#[derive(Debug, Clone, serde::Serialize)]
+struct ControlPlaneClusterSnapshot {
+    node_id: String,
+    role: String,
+    leader_id: Option<String>,
+    peers_total: usize,
+    peers_reachable: usize,
+    commit_index: u64,
+    healthy: bool,
+}
+
+fn control_plane_cluster_snapshot(state: &AppState) -> Option<ControlPlaneClusterSnapshot> {
+    let health = state.cluster.health();
+    if health.peers_total == 0 {
+        return None;
+    }
+
+    Some(ControlPlaneClusterSnapshot {
+        node_id: health.node_id.to_string(),
+        role: health.role.to_string(),
+        leader_id: health.leader_id.map(|leader_id| leader_id.to_string()),
+        peers_total: health.peers_total,
+        peers_reachable: health.peers_reachable,
+        commit_index: health.commit_index,
+        healthy: health.healthy,
+    })
+}
+
+fn control_plane_failover_history_preview(state: &AppState) -> serde_json::Value {
+    let backup_status = BackupStatusSnapshot::gather();
+    let control_plane = ControlPlanePostureSnapshot::gather(state, &backup_status);
+    let drills = control_plane.failover_drill_history.clone();
+    let passed = drills
+        .iter()
+        .filter(|drill| drill.status == "passed")
+        .count();
+    let failed = drills
+        .iter()
+        .filter(|drill| drill.status == "failed")
+        .count();
+
+    serde_json::json!({
+        "generated_at": chrono::Utc::now().to_rfc3339(),
+        "kind": "control_plane_failover_history",
+        "topology": control_plane.topology,
+        "orchestration_scope": control_plane.orchestration_scope,
+        "ha_mode": control_plane.ha_mode,
+        "documented_failover": control_plane.documented_failover,
+        "recovery_status": control_plane.recovery_status,
+        "cluster": control_plane.cluster,
+        "latest_drill": control_plane.failover_drill,
+        "drill_count": drills.len(),
+        "passed_count": passed,
+        "failed_count": failed,
+        "history": drills,
+    })
+}
+
+fn build_report_run_preview(
+    state: &mut AppState,
+    request: &serde_json::Value,
+    execution_context_json: serde_json::Value,
+) -> serde_json::Value {
+    let kind = request["kind"].as_str().unwrap_or("executive_status");
+    match kind {
+        "control_plane_failover_history" => control_plane_failover_history_preview(state),
+        _ => {
+            state.agent_registry.refresh_staleness();
+            let open_incidents = state
+                .incident_store
+                .list()
+                .iter()
+                .filter(|incident| {
+                    matches!(
+                        incident.status,
+                        crate::incident::IncidentStatus::Open
+                            | crate::incident::IncidentStatus::Investigating
+                    )
+                })
+                .count();
+            let offline_agents = state
+                .agent_registry
+                .list()
+                .iter()
+                .filter(|agent| {
+                    matches!(
+                        agent.status,
+                        crate::enrollment::AgentStatus::Offline
+                            | crate::enrollment::AgentStatus::Stale
+                    )
+                })
+                .count();
+            let queue_pending = state.alert_queue.pending().len();
+            serde_json::json!({
+                "generated_at": chrono::Utc::now().to_rfc3339(),
+                "kind": kind,
+                "scope": request["scope"].as_str().unwrap_or("global"),
+                "queue_pending": queue_pending,
+                "open_incidents": open_incidents,
+                "offline_agents": offline_agents,
+                "pending_approvals": state.response_orchestrator.pending_requests().len(),
+                "stored_reports": state.report_store.list().len(),
+                "execution_context": execution_context_json,
+                "executive_summary": state.report_store.executive_summary(&state.incident_store),
+            })
+        }
+    }
+}
+
+fn failover_drill_orchestration_scope(topology: &str) -> String {
+    if topology == "standalone" {
+        "standalone_reference".to_string()
+    } else {
+        "non_standalone_orchestrated".to_string()
+    }
+}
+
+fn failover_drill_type(topology: &str) -> &'static str {
+    if topology == "standalone" {
+        "warm_standby_restore_dry_run"
+    } else {
+        "leader_handoff_restore_dry_run"
+    }
+}
+
+fn control_plane_ha_mode(cluster: Option<&ControlPlaneClusterSnapshot>) -> &'static str {
+    match cluster.map(|cluster| cluster.role.as_str()) {
+        None => "active_passive_reference",
+        Some("leader") => "leader_handoff_primary",
+        Some("follower") => "external_standby",
+        Some("candidate") => "leader_election",
+        Some(_) => "non_standalone_orchestrated",
+    }
+}
+
+fn control_plane_recovery_status(
+    cluster: Option<&ControlPlaneClusterSnapshot>,
+    durable_storage: bool,
+    restore_ready: bool,
+) -> String {
+    if !durable_storage || !restore_ready {
+        return "review".to_string();
+    }
+
+    match cluster {
+        None => "ready_for_documented_failover".to_string(),
+        Some(cluster) if !cluster.healthy => "review".to_string(),
+        Some(cluster) if cluster.role == "leader" => "ready_for_leader_handoff".to_string(),
+        Some(cluster) if cluster.role == "follower" => "ready_as_external_standby".to_string(),
+        Some(_) => "leader_election_in_progress".to_string(),
+    }
+}
+
+fn control_plane_documented_failover(
+    cluster: Option<&ControlPlaneClusterSnapshot>,
+) -> &'static str {
+    if cluster.is_some() {
+        "leader_handoff_or_external_standby_restore"
+    } else {
+        "warm_standby_restore"
+    }
+}
+
+fn failover_drill_summary(
+    durable_storage_verified: bool,
+    backup_artifact_verified: bool,
+    checkpoint_artifact_verified: bool,
+) -> String {
+    match (
+        durable_storage_verified,
+        backup_artifact_verified,
+        checkpoint_artifact_verified,
+    ) {
+        (true, true, true) => "Validated durable event storage with both backup and checkpoint artifacts for the documented failover path.".to_string(),
+        (true, true, false) => "Validated durable event storage with backup artifacts for the documented failover path.".to_string(),
+        (true, false, true) => "Validated durable event storage with checkpoint artifacts for the documented failover path.".to_string(),
+        (false, false, false) => "Failover drill failed because durable event storage is disabled and no backup or checkpoint artifacts were available.".to_string(),
+        (false, _, _) => "Failover drill failed because durable event storage is disabled.".to_string(),
+        (true, false, false) => "Failover drill failed because no backup or checkpoint artifacts were available for recovery validation.".to_string(),
+    }
+}
+
+impl FailoverDrillRecord {
+    fn not_run(topology: &str) -> Self {
+        Self {
+            drill_type: failover_drill_type(topology).to_string(),
+            orchestration_scope: failover_drill_orchestration_scope(topology),
+            status: "not_run".to_string(),
+            last_run_at: None,
+            actor: None,
+            summary: "No automated failover drill has been recorded yet.".to_string(),
+            artifact_source: "none".to_string(),
+            durable_storage_verified: false,
+            backup_artifact_verified: false,
+            checkpoint_artifact_verified: false,
+        }
+    }
+
+    fn evaluate(state: &AppState, backup: &BackupStatusSnapshot, actor: &str) -> Self {
+        let topology = if control_plane_cluster_snapshot(state).is_some() {
+            "clustered"
+        } else {
+            "standalone"
+        };
+        let durable_storage_verified = state.event_store.has_persistence();
+        let backup_artifact_verified = backup.observed_backups > 0;
+        let checkpoint_artifact_verified = !state.checkpoints.is_empty();
+        let artifact_source = match (backup_artifact_verified, checkpoint_artifact_verified) {
+            (true, true) => "backup_and_checkpoint",
+            (true, false) => "backup",
+            (false, true) => "checkpoint",
+            (false, false) => "none",
+        };
+
+        Self {
+            drill_type: failover_drill_type(topology).to_string(),
+            orchestration_scope: failover_drill_orchestration_scope(topology),
+            status: if durable_storage_verified
+                && (backup_artifact_verified || checkpoint_artifact_verified)
+            {
+                "passed".to_string()
+            } else {
+                "failed".to_string()
+            },
+            last_run_at: Some(chrono::Utc::now().to_rfc3339()),
+            actor: Some(actor.to_string()),
+            summary: failover_drill_summary(
+                durable_storage_verified,
+                backup_artifact_verified,
+                checkpoint_artifact_verified,
+            ),
+            artifact_source: artifact_source.to_string(),
+            durable_storage_verified,
+            backup_artifact_verified,
+            checkpoint_artifact_verified,
+        }
+    }
+}
+
+#[derive(Debug, Clone, serde::Serialize)]
+struct ControlPlanePostureSnapshot {
+    topology: String,
+    orchestration_scope: String,
+    ha_mode: String,
+    leader: bool,
+    durable_storage: bool,
+    event_store_path: String,
+    backup_schedule_cron: String,
+    observed_backups: usize,
+    latest_backup_at: Option<String>,
+    checkpoint_count: usize,
+    latest_checkpoint_at: Option<String>,
+    restore_ready: bool,
+    recovery_status: String,
+    documented_failover: String,
+    cluster: Option<ControlPlaneClusterSnapshot>,
+    failover_drill: FailoverDrillRecord,
+    failover_drill_history: Vec<FailoverDrillRecord>,
+}
+
+impl ControlPlanePostureSnapshot {
+    fn gather(state: &AppState, backup: &BackupStatusSnapshot) -> Self {
+        let checkpoint_count = state.checkpoints.len();
+        let latest_checkpoint_at = state.checkpoints.latest().map(|entry| {
+            chrono::DateTime::<chrono::Utc>::from(
+                std::time::UNIX_EPOCH + std::time::Duration::from_millis(entry.timestamp_ms),
+            )
+            .to_rfc3339()
+        });
+        let durable_storage = state.event_store.has_persistence();
+        let restore_ready = backup.observed_backups > 0 || checkpoint_count > 0;
+        let cluster = control_plane_cluster_snapshot(state);
+        let topology = if cluster.is_some() {
+            "clustered".to_string()
+        } else {
+            "standalone".to_string()
+        };
+        let orchestration_scope = failover_drill_orchestration_scope(&topology);
+        let mut failover_drill_history = state.support_store.failover_drills().to_vec();
+        if failover_drill_history.is_empty()
+            && let Some(drill) = state.last_failover_drill.clone()
+        {
+            failover_drill_history.push(drill);
+        }
+        let failover_drill = state
+            .support_store
+            .latest_failover_drill()
+            .or_else(|| state.last_failover_drill.clone())
+            .unwrap_or_else(|| FailoverDrillRecord::not_run(&topology));
+
+        Self {
+            topology,
+            orchestration_scope,
+            ha_mode: control_plane_ha_mode(cluster.as_ref()).to_string(),
+            leader: cluster
+                .as_ref()
+                .map(|cluster| cluster.role == "leader")
+                .unwrap_or(true),
+            durable_storage,
+            event_store_path: state
+                .event_store
+                .storage_path()
+                .unwrap_or("memory")
+                .to_string(),
+            backup_schedule_cron: backup.schedule_cron.clone(),
+            observed_backups: backup.observed_backups,
+            latest_backup_at: backup.latest_backup_at.clone(),
+            checkpoint_count,
+            latest_checkpoint_at,
+            restore_ready,
+            recovery_status: control_plane_recovery_status(
+                cluster.as_ref(),
+                durable_storage,
+                restore_ready,
+            ),
+            documented_failover: control_plane_documented_failover(cluster.as_ref()).to_string(),
+            cluster,
+            failover_drill,
+            failover_drill_history,
+        }
+    }
+
+    fn ha_mode_payload(&self) -> serde_json::Value {
+        let status = match self.cluster.as_ref() {
+            Some(cluster) if self.durable_storage && self.restore_ready && cluster.healthy => {
+                "ready_for_orchestrated_failover"
+            }
+            None if self.durable_storage && self.restore_ready => "ready_for_active_passive",
+            _ => "review",
+        };
+        serde_json::json!({
+            "mode": self.ha_mode,
+            "topology": self.topology,
+            "orchestration_scope": self.orchestration_scope,
+            "status": status,
+            "leader": self.leader,
+            "recovery_status": self.recovery_status,
+            "documented_failover": self.documented_failover,
+            "observed_backups": self.observed_backups,
+            "latest_backup_at": self.latest_backup_at,
+            "checkpoint_count": self.checkpoint_count,
+            "latest_checkpoint_at": self.latest_checkpoint_at,
+            "restore_ready": self.restore_ready,
+            "cluster": self.cluster,
+            "failover_drill_history_count": self.failover_drill_history.len(),
+            "failover_drill": self.failover_drill.clone(),
+        })
+    }
 }
 
 /// Scan text for common PII patterns (email, IPv4, SSN, credit card).
@@ -2459,7 +2870,11 @@ struct AlertProcessPivot {
 }
 
 fn normalized_process_token(value: &str) -> String {
-    let token = value.split_whitespace().next().unwrap_or(value).trim_matches('"');
+    let token = value
+        .split_whitespace()
+        .next()
+        .unwrap_or(value)
+        .trim_matches('"');
     let base = token
         .rsplit(['/', '\\'])
         .next()
@@ -2477,9 +2892,7 @@ fn host_matches_local(alert_hostname: &str, local_hostname: &str) -> bool {
     alert_short.eq_ignore_ascii_case(local_short)
 }
 
-fn extract_alert_process_names(
-    entities: &[crate::entity_extract::ExtractedEntity],
-) -> Vec<String> {
+fn extract_alert_process_names(entities: &[crate::entity_extract::ExtractedEntity]) -> Vec<String> {
     let mut seen = HashSet::new();
     entities
         .iter()
@@ -2724,13 +3137,15 @@ fn alert_json_value(
             )),
         );
         if !process_names.is_empty() {
-            map.insert("process_names".to_string(), serde_json::json!(process_names));
+            map.insert(
+                "process_names".to_string(),
+                serde_json::json!(process_names),
+            );
         }
         if !process_candidates.is_empty() {
             map.insert(
                 "process_candidates".to_string(),
-                serde_json::to_value(&process_candidates)
-                    .unwrap_or_else(|_| serde_json::json!([])),
+                serde_json::to_value(&process_candidates).unwrap_or_else(|_| serde_json::json!([])),
             );
             if process_candidates.len() == 1 {
                 map.insert(
@@ -2928,6 +3343,50 @@ fn bearer_token(headers: &HeaderMap) -> Option<String> {
         }
     }
     None
+}
+
+fn secure_token_eq(provided: Option<&str>, expected: &str) -> bool {
+    let Some(provided) = provided else {
+        return false;
+    };
+    let a = provided.as_bytes();
+    let b = expected.as_bytes();
+    if a.len() != b.len() {
+        return false;
+    }
+    let mut diff = 0u8;
+    for (x, y) in a.iter().zip(b.iter()) {
+        diff |= x ^ y;
+    }
+    diff == 0
+}
+
+fn cluster_peer_auth_header(state: &AppState) -> String {
+    let token = state
+        .config
+        .cluster
+        .auth_token
+        .clone()
+        .unwrap_or_else(|| state.token.clone());
+    format!("Bearer {token}")
+}
+
+fn cluster_request_authorized(headers: &HeaderMap, state: &Arc<Mutex<AppState>>) -> bool {
+    let provided = bearer_token(headers);
+    let s = state.lock().unwrap_or_else(|e| e.into_inner());
+    if let Some(cluster_token) = s.config.cluster.auth_token.as_deref() {
+        return secure_token_eq(provided.as_deref(), cluster_token);
+    }
+    secure_token_eq(provided.as_deref(), &s.token)
+}
+
+fn cluster_peer_url(addr: &str, path: &str) -> String {
+    let trimmed = addr.trim().trim_end_matches('/');
+    if trimmed.starts_with("http://") || trimmed.starts_with("https://") {
+        format!("{trimmed}{path}")
+    } else {
+        format!("http://{trimmed}{path}")
+    }
 }
 
 const SESSION_COOKIE_NAME: &str = "wardex_session";
@@ -3967,8 +4426,8 @@ fn build_process_threads_response(
                 Some("blocked") | Some("stopped")
             )
         })
-        .cloned()
         .take(4)
+        .cloned()
         .collect::<Vec<_>>();
     let wait_reason_count = threads
         .iter()
@@ -4039,7 +4498,7 @@ fn process_threads_json(pid: u32, hostname: &str) -> Option<serde_json::Value> {
         if output.lines().count() < 2 {
             return None;
         }
-        return Some(build_process_threads_response(
+        Some(build_process_threads_response(
             pid,
             hostname,
             "macos",
@@ -4049,7 +4508,7 @@ fn process_threads_json(pid: u32, hostname: &str) -> Option<serde_json::Value> {
             ),
             threads,
             None,
-        ));
+        ))
     }
     #[cfg(target_os = "linux")]
     {
@@ -4068,19 +4527,21 @@ fn process_threads_json(pid: u32, hostname: &str) -> Option<serde_json::Value> {
         if threads.is_empty() {
             return None;
         }
-        return Some(build_process_threads_response(
+        Some(build_process_threads_response(
             pid,
             hostname,
             "linux",
             "tid",
-            Some("Linux thread IDs are native task IDs from the local task table; wait_reason reflects the current wait channel when the kernel exposes one."),
+            Some(
+                "Linux thread IDs are native task IDs from the local task table; wait_reason reflects the current wait channel when the kernel exposes one.",
+            ),
             threads,
             None,
-        ));
+        ))
     }
     #[cfg(target_os = "windows")]
     {
-        return Some(build_process_threads_response(
+        Some(build_process_threads_response(
             pid,
             hostname,
             "windows",
@@ -4088,7 +4549,7 @@ fn process_threads_json(pid: u32, hostname: &str) -> Option<serde_json::Value> {
             None,
             Vec::new(),
             Some("Per-process OS-thread collection is not implemented on Windows yet."),
-        ));
+        ))
     }
     #[cfg(not(any(target_os = "macos", target_os = "linux", target_os = "windows")))]
     {
@@ -4171,7 +4632,10 @@ mod process_thread_parsing_tests {
         assert_eq!(threads[0]["thread_id"].as_u64(), Some(4242));
         assert_eq!(threads[0]["state_label"].as_str(), Some("running"));
         assert_eq!(threads[1]["cpu_time"].as_str(), Some("00:00:00"));
-        assert_eq!(threads[1]["wait_reason"].as_str(), Some("futex_wait_queue_me"));
+        assert_eq!(
+            threads[1]["wait_reason"].as_str(),
+            Some("futex_wait_queue_me")
+        );
     }
 
     #[test]
@@ -4197,17 +4661,21 @@ mod process_thread_parsing_tests {
         assert_eq!(payload["id"].as_u64(), Some(7));
         assert_eq!(payload["process_resolution"].as_str(), Some("unique"));
         assert_eq!(payload["process"]["pid"].as_u64(), Some(4242));
-        assert!(payload["process_names"]
-            .as_array()
-            .unwrap_or(&vec![])
-            .iter()
-            .filter_map(|value| value.as_str())
-            .any(|name| name.contains("python")));
-        assert!(payload["entities"]
-            .as_array()
-            .unwrap_or(&vec![])
-            .iter()
-            .any(|entity| entity["entity_type"].as_str() == Some("ProcessName")));
+        assert!(
+            payload["process_names"]
+                .as_array()
+                .unwrap_or(&vec![])
+                .iter()
+                .filter_map(|value| value.as_str())
+                .any(|name| name.contains("python"))
+        );
+        assert!(
+            payload["entities"]
+                .as_array()
+                .unwrap_or(&vec![])
+                .iter()
+                .any(|entity| entity["entity_type"].as_str() == Some("ProcessName"))
+        );
     }
 
     #[test]
@@ -4898,7 +5366,7 @@ fn build_workbench_overview(
     let historical_rollout_events = rollout_history.len();
     let rollback_events = rollout_history
         .iter()
-        .filter(|event| event.action == "rollback")
+        .filter(|event| event.action.ends_with("rollback"))
         .count();
     let last_rollout_at = rollout_history
         .last()
@@ -9551,12 +10019,8 @@ fn production_readiness_evidence(state: &mut AppState) -> serde_json::Value {
         .unwrap_or(0);
     let storage_stats = state.storage.with(|store| Ok(store.stats())).ok();
     let audit_chain = state.storage.with(|store| store.verify_audit_chain()).ok();
-    let backup_config = crate::backup::BackupConfig::default();
-    let backup_path = Path::new(&backup_config.path);
-    let backup_count = fs::read_dir(backup_path)
-        .ok()
-        .map(|entries| entries.filter_map(Result::ok).count())
-        .unwrap_or(0);
+    let backup_status = BackupStatusSnapshot::gather();
+    let control_plane = ControlPlanePostureSnapshot::gather(state, &backup_status);
     let collectors = collector_readiness_summary(state);
     let enabled_collectors = collectors
         .get("enabled")
@@ -9595,6 +10059,39 @@ fn production_readiness_evidence(state: &mut AppState) -> serde_json::Value {
         (
             enabled_collectors == 0,
             "No cloud, identity, or SaaS collectors are enabled yet.".to_string(),
+        ),
+        (
+            !control_plane.durable_storage,
+            "Event persistence is disabled; enable durable storage before claiming a recovery-safe control-plane posture."
+                .to_string(),
+        ),
+        (
+            !backup_status.enabled,
+            "Scheduled backups are disabled; enable recurring backups before relying on the documented failover path."
+                .to_string(),
+        ),
+        (
+            !control_plane.restore_ready,
+            "No backup or checkpoint artifacts have been observed yet; run a backup or control checkpoint before failover drills."
+                .to_string(),
+        ),
+        (
+            control_plane
+                .cluster
+                .as_ref()
+                .is_some_and(|cluster| !cluster.healthy),
+            "Cluster orchestration is configured but no healthy leader or standby handoff state is currently visible."
+                .to_string(),
+        ),
+        (
+            control_plane.failover_drill.status != "passed",
+            if control_plane.failover_drill.status == "failed" {
+                "Latest automated failover drill failed; review durable storage and recovery artifacts before relying on the documented failover path."
+                    .to_string()
+            } else {
+                "No automated failover drill has been recorded yet; run the control-plane failover drill before relying on the documented failover path."
+                    .to_string()
+            },
         ),
     ]
     .into_iter()
@@ -9643,12 +10140,8 @@ fn production_readiness_evidence(state: &mut AppState) -> serde_json::Value {
             "audit_max_age_secs": state.config.retention.audit_max_age_secs,
             "remote_syslog_endpoint": state.config.retention.remote_syslog_endpoint.clone(),
         },
-        "backup": {
-            "enabled": backup_config.enabled,
-            "path": backup_config.path,
-            "retention_count": backup_config.retention_count,
-            "observed_backups": backup_count,
-        },
+        "backup": backup_status,
+        "control_plane": control_plane,
         "audit_chain": {
             "status": if audit_chain.is_some() { "verified" } else { "unverified" },
             "storage_chain_length": audit_chain,
@@ -9677,6 +10170,184 @@ fn production_readiness_evidence(state: &mut AppState) -> serde_json::Value {
         ],
         "known_limitations": blockers,
     })
+}
+
+fn run_failover_drill(state: &Arc<Mutex<AppState>>, auth: &AuthIdentity) -> Response<Body> {
+    let backup_status = BackupStatusSnapshot::gather();
+    let actor = response_requested_by(auth);
+    let mut s = state.lock().unwrap_or_else(|e| e.into_inner());
+    let drill = FailoverDrillRecord::evaluate(&s, &backup_status, &actor);
+    s.last_failover_drill = Some(drill.clone());
+    s.support_store.record_failover_drill(drill.clone());
+
+    let digest_input = serde_json::to_string(&drill).unwrap_or_default();
+    let digest = crate::audit::sha256_hex(digest_input.as_bytes());
+    json_response(
+        &serde_json::json!({
+            "drill": drill,
+            "digest": digest,
+        })
+        .to_string(),
+        200,
+    )
+}
+
+fn handle_cluster_vote(body: &[u8], state: &Arc<Mutex<AppState>>) -> Response<Body> {
+    match read_body_limited(body, 64 * 1024) {
+        Ok(raw) => match serde_json::from_str::<crate::cluster::VoteRequest>(&raw) {
+            Ok(request) => {
+                let response = {
+                    let s = state.lock().unwrap_or_else(|e| e.into_inner());
+                    s.cluster.handle_vote_request(&request)
+                };
+                match serde_json::to_string(&response) {
+                    Ok(json) => json_response(&json, 200),
+                    Err(e) => error_json(&format!("serialization error: {e}"), 500),
+                }
+            }
+            Err(e) => error_json(&format!("invalid JSON: {e}"), 400),
+        },
+        Err(e) => error_json(&e, 400),
+    }
+}
+
+fn handle_cluster_append(body: &[u8], state: &Arc<Mutex<AppState>>) -> Response<Body> {
+    match read_body_limited(body, 512 * 1024) {
+        Ok(raw) => match serde_json::from_str::<crate::cluster::AppendRequest>(&raw) {
+            Ok(request) => {
+                let response = {
+                    let s = state.lock().unwrap_or_else(|e| e.into_inner());
+                    s.cluster.handle_append(&request)
+                };
+                match serde_json::to_string(&response) {
+                    Ok(json) => json_response(&json, 200),
+                    Err(e) => error_json(&format!("serialization error: {e}"), 500),
+                }
+            }
+            Err(e) => error_json(&format!("invalid JSON: {e}"), 400),
+        },
+        Err(e) => error_json(&e, 400),
+    }
+}
+
+fn handle_cluster_snapshot(body: &[u8], state: &Arc<Mutex<AppState>>) -> Response<Body> {
+    match read_body_limited(body, 512 * 1024) {
+        Ok(raw) => match serde_json::from_str::<crate::cluster::InstallSnapshotRequest>(&raw) {
+            Ok(request) => {
+                let response = {
+                    let s = state.lock().unwrap_or_else(|e| e.into_inner());
+                    s.cluster.handle_install_snapshot(&request)
+                };
+                match serde_json::to_string(&response) {
+                    Ok(json) => json_response(&json, 200),
+                    Err(e) => error_json(&format!("serialization error: {e}"), 500),
+                }
+            }
+            Err(e) => error_json(&format!("invalid JSON: {e}"), 400),
+        },
+        Err(e) => error_json(&e, 400),
+    }
+}
+
+fn handle_cluster_health(state: &Arc<Mutex<AppState>>) -> Response<Body> {
+    let health = {
+        let s = state.lock().unwrap_or_else(|e| e.into_inner());
+        s.cluster.health()
+    };
+    match serde_json::to_string(&health) {
+        Ok(json) => json_response(&json, 200),
+        Err(e) => error_json(&format!("serialization error: {e}"), 500),
+    }
+}
+
+fn spawn_cluster_runtime_loop(state: &Arc<Mutex<AppState>>) {
+    let state = Arc::clone(state);
+    std::thread::spawn(move || {
+        loop {
+            let (shutdown, cluster, config, auth_header) = {
+                let s = state.lock().unwrap_or_else(|e| e.into_inner());
+                (
+                    s.shutdown.load(Ordering::Relaxed),
+                    s.cluster.clone(),
+                    s.config.cluster.clone(),
+                    cluster_peer_auth_header(&s),
+                )
+            };
+
+            if shutdown {
+                break;
+            }
+
+            if config.peers.is_empty() {
+                std::thread::sleep(std::time::Duration::from_millis(200));
+                continue;
+            }
+
+            if cluster.is_leader() {
+                for peer in &config.peers {
+                    let request = match cluster.prepare_append(&peer.node_id) {
+                        Some(request) => request,
+                        None => continue,
+                    };
+                    let url = cluster_peer_url(&peer.addr, "/api/cluster/append");
+                    let response = ureq::post(&url)
+                        .set("Authorization", &auth_header)
+                        .send_string(
+                            &serde_json::to_string(&request).unwrap_or_else(|_| "{}".to_string()),
+                        );
+
+                    match response {
+                        Ok(response) => {
+                            match response.into_json::<crate::cluster::AppendResponse>() {
+                                Ok(append_response) => {
+                                    cluster.handle_append_response(&peer.node_id, &append_response)
+                                }
+                                Err(_) => cluster.mark_peer_unreachable(&peer.node_id),
+                            }
+                        }
+                        Err(_) => cluster.mark_peer_unreachable(&peer.node_id),
+                    }
+                }
+                std::thread::sleep(std::time::Duration::from_millis(
+                    config.heartbeat_interval_ms.max(25),
+                ));
+                continue;
+            }
+
+            if cluster.should_start_election() {
+                let request = cluster.start_election();
+                let mut votes = 1usize;
+                let majority = config.peers.len().div_ceil(2) + 1;
+
+                for peer in &config.peers {
+                    let url = cluster_peer_url(&peer.addr, "/api/cluster/vote");
+                    match ureq::post(&url)
+                        .set("Authorization", &auth_header)
+                        .send_string(
+                            &serde_json::to_string(&request).unwrap_or_else(|_| "{}".to_string()),
+                        ) {
+                        Ok(response) => {
+                            match response.into_json::<crate::cluster::VoteResponse>() {
+                                Ok(vote_response) => {
+                                    if vote_response.vote_granted {
+                                        votes += 1;
+                                    }
+                                }
+                                Err(_) => cluster.mark_peer_unreachable(&peer.node_id),
+                            }
+                        }
+                        Err(_) => cluster.mark_peer_unreachable(&peer.node_id),
+                    }
+                }
+
+                if votes >= majority {
+                    cluster.become_leader();
+                }
+            }
+
+            std::thread::sleep(std::time::Duration::from_millis(50));
+        }
+    });
 }
 
 fn first_run_operator_proof(state: &Arc<Mutex<AppState>>, auth: &AuthIdentity) -> Response<Body> {
@@ -10309,6 +10980,8 @@ fn handle_api(
     };
     let route_path = url_path(&url);
 
+    let is_cluster_endpoint = route_path.starts_with("/api/cluster/");
+
     // ── Request body size limit (10 MB) ──
     const MAX_BODY_SIZE: usize = 10 * 1024 * 1024;
     if body.len() > MAX_BODY_SIZE {
@@ -10371,7 +11044,19 @@ fn handle_api(
         }
     }
 
+    if is_cluster_endpoint && !cluster_request_authorized(headers, state) {
+        return respond_api(
+            state,
+            &method,
+            &url,
+            remote_addr,
+            false,
+            error_json("cluster token required", 401),
+        );
+    }
+
     let needs_auth = !is_agent_endpoint
+        && !is_cluster_endpoint
         && matches!(
             (&method, route_path),
             (Method::Get, "/api/auth/check")
@@ -10384,6 +11069,7 @@ fn handle_api(
                 | (Method::Post, "/api/control/mode")
                 | (Method::Post, "/api/control/reset-baseline")
                 | (Method::Post, "/api/control/run-demo")
+                | (Method::Post, "/api/control/failover-drill")
                 | (Method::Post, "/api/demo/lab")
                 | (Method::Post, "/api/support/first-run-proof")
                 | (Method::Post, "/api/control/checkpoint")
@@ -10475,6 +11161,7 @@ fn handle_api(
         || (method == Method::Get && route_path == "/api/support/diagnostics")
         || (method == Method::Get && route_path == "/api/support/readiness-evidence")
         || (method == Method::Post && route_path == "/api/support/first-run-proof")
+        || (method == Method::Post && route_path == "/api/control/failover-drill")
         || (method == Method::Post && route_path == "/api/demo/lab")
         || (method == Method::Get && route_path == "/api/support/parity")
         || (method == Method::Get && route_path == "/api/docs/index")
@@ -11133,6 +11820,11 @@ fn handle_api(
                 error_json("no checkpoints available", 404)
             }
         }
+        (Method::Post, "/api/control/failover-drill") => run_failover_drill(state, &auth_identity),
+        (Method::Get, "/api/cluster/health") => handle_cluster_health(state),
+        (Method::Post, "/api/cluster/vote") => handle_cluster_vote(body, state),
+        (Method::Post, "/api/cluster/append") => handle_cluster_append(body, state),
+        (Method::Post, "/api/cluster/snapshot") => handle_cluster_snapshot(body, state),
         (Method::Get, "/api/checkpoints") => {
             let s = state.lock().unwrap_or_else(|e| e.into_inner());
             let info = serde_json::json!({
@@ -11842,6 +12534,7 @@ fn handle_api(
                             error_json(&e, 500)
                         } else {
                             s.config = next_config.clone();
+                            s.cluster = ClusterNode::new(next_config.cluster.clone());
                             s.siem_connector.update_config(next_config.siem.clone());
                             s.taxii_client.update_config(next_config.taxii.clone());
 
@@ -12741,6 +13434,7 @@ fn handle_api(
                 {"method": "POST", "path": "/api/control/reset-baseline", "auth": true, "description": "Reset the anomaly detection baseline"},
                 {"method": "POST", "path": "/api/control/checkpoint", "auth": true, "description": "Create a control checkpoint"},
                 {"method": "POST", "path": "/api/control/restore-checkpoint", "auth": true, "description": "Restore a control checkpoint"},
+                {"method": "POST", "path": "/api/control/failover-drill", "auth": true, "description": "Run an automated control-plane failover drill against current recovery artifacts"},
                 {"method": "POST", "path": "/api/control/run-demo", "auth": true, "description": "Run the built-in telemetry demo"},
                 {"method": "POST", "path": "/api/events/bulk-triage", "auth": true, "description": "Bulk update event triage state"},
                 {"method": "POST", "path": "/api/admin/db/compact", "auth": true, "description": "Compact database (VACUUM + WAL checkpoint)"},
@@ -13279,49 +13973,12 @@ fn handle_api(
                 let has_execution_context = execution_context_json
                     .as_object()
                     .is_some_and(|object| object.values().any(|value| !value.is_null()));
-                s.agent_registry.refresh_staleness();
-                let open_incidents = s
-                    .incident_store
-                    .list()
-                    .iter()
-                    .filter(|incident| {
-                        matches!(
-                            incident.status,
-                            crate::incident::IncidentStatus::Open
-                                | crate::incident::IncidentStatus::Investigating
-                        )
-                    })
-                    .count();
-                let offline_agents = s
-                    .agent_registry
-                    .list()
-                    .iter()
-                    .filter(|agent| {
-                        matches!(
-                            agent.status,
-                            crate::enrollment::AgentStatus::Offline
-                                | crate::enrollment::AgentStatus::Stale
-                        )
-                    })
-                    .count();
-                let queue_pending = s.alert_queue.pending().len();
                 let preview = v
                     .get("preview_override")
                     .filter(|value| value.is_object())
                     .cloned()
                     .unwrap_or_else(|| {
-                        serde_json::json!({
-                            "generated_at": chrono::Utc::now().to_rfc3339(),
-                            "kind": v["kind"].as_str().unwrap_or("executive_status"),
-                            "scope": v["scope"].as_str().unwrap_or("global"),
-                            "queue_pending": queue_pending,
-                            "open_incidents": open_incidents,
-                            "offline_agents": offline_agents,
-                            "pending_approvals": s.response_orchestrator.pending_requests().len(),
-                            "stored_reports": s.report_store.list().len(),
-                            "execution_context": execution_context_json,
-                            "executive_summary": s.report_store.executive_summary(&s.incident_store),
-                        })
+                        build_report_run_preview(&mut s, &v, execution_context_json)
                     });
                 let pretty_preview =
                     serde_json::to_string_pretty(&preview).unwrap_or_else(|_| preview.to_string());
@@ -14540,6 +15197,8 @@ fn handle_api(
                 .values()
                 .filter(|deployment| deployment_is_pending(deployment, &s.agent_registry))
                 .count();
+            let backup_status = BackupStatusSnapshot::gather();
+            let control_plane = ControlPlanePostureSnapshot::gather(&s, &backup_status);
             let payload = serde_json::json!({
                 "storage": {
                     "backend": if s.event_store.has_persistence() { "json_file" } else { "memory" },
@@ -14547,11 +15206,7 @@ fn handle_api(
                     "path": s.event_store.storage_path(),
                     "event_count": s.event_store.total_events(),
                 },
-                "ha_mode": {
-                    "mode": "standalone",
-                    "status": "ready_for_active_passive",
-                    "leader": true,
-                },
+                "ha_mode": control_plane.ha_mode_payload(),
                 "identity": {
                     "providers_enabled": s.enterprise.idp_providers().iter().filter(|provider| provider.enabled).count(),
                     "scim_enabled": s.enterprise.scim().enabled,
@@ -17456,19 +18111,23 @@ fn handle_api(
                             payload,
                         ) {
                             Ok(json) => json_response(&json, 200),
-                            Err(error) => {
-                                error_json(error.response_message(), error.http_status())
-                            }
+                            Err(error) => error_json(error.response_message(), error.http_status()),
                         }
                     }
                     Err(error) => error_json(&error, 400),
                 }
             } else if method == Method::Get && url_path == "/api/remediation/results" {
                 let s = state.lock().unwrap_or_else(|e| e.into_inner());
-                json_response(&crate::remediation::remediation_results_json(&s.remediation_engine, 50), 200)
+                json_response(
+                    &crate::remediation::remediation_results_json(&s.remediation_engine, 50),
+                    200,
+                )
             } else if method == Method::Get && url_path == "/api/remediation/stats" {
                 let s = state.lock().unwrap_or_else(|e| e.into_inner());
-                json_response(&crate::remediation::remediation_stats_json(&s.remediation_engine), 200)
+                json_response(
+                    &crate::remediation::remediation_stats_json(&s.remediation_engine),
+                    200,
+                )
             } else if method == Method::Get && url_path == "/api/remediation/change-reviews" {
                 let s = state.lock().unwrap_or_else(|e| e.into_inner());
                 json_response(
@@ -17476,7 +18135,10 @@ fn handle_api(
                     200,
                 )
             } else if method == Method::Post && url_path == "/api/remediation/change-reviews" {
-                match read_json_value(body, crate::remediation::REMEDIATION_CHANGE_REVIEW_BODY_LIMIT) {
+                match read_json_value(
+                    body,
+                    crate::remediation::REMEDIATION_CHANGE_REVIEW_BODY_LIMIT,
+                ) {
                     Ok(payload) => {
                         let s = state.lock().unwrap_or_else(|e| e.into_inner());
                         match crate::remediation::record_remediation_change_review_json(
@@ -17485,9 +18147,7 @@ fn handle_api(
                             auth_identity.actor(),
                         ) {
                             Ok(json) => json_response(&json, 200),
-                            Err(error) => {
-                                error_json(error.response_message(), error.http_status())
-                            }
+                            Err(error) => error_json(error.response_message(), error.http_status()),
                         }
                     }
                     Err(error) => error_json(&error, 400),
@@ -17504,7 +18164,10 @@ fn handle_api(
                     crate::remediation::RemediationChangeReviewRouteAction::Approval,
                 )
                 .unwrap_or_default();
-                match read_json_value(body, crate::remediation::REMEDIATION_CHANGE_REVIEW_ACTION_BODY_LIMIT) {
+                match read_json_value(
+                    body,
+                    crate::remediation::REMEDIATION_CHANGE_REVIEW_ACTION_BODY_LIMIT,
+                ) {
                     Ok(payload) => {
                         let s = state.lock().unwrap_or_else(|e| e.into_inner());
                         match crate::remediation::approve_remediation_change_review_json(
@@ -17514,9 +18177,7 @@ fn handle_api(
                             auth_identity.actor(),
                         ) {
                             Ok(json) => json_response(&json, 200),
-                            Err(error) => {
-                                error_json(error.response_message(), error.http_status())
-                            }
+                            Err(error) => error_json(error.response_message(), error.http_status()),
                         }
                     }
                     Err(error) => error_json(&error, 400),
@@ -17533,7 +18194,10 @@ fn handle_api(
                     crate::remediation::RemediationChangeReviewRouteAction::Rollback,
                 )
                 .unwrap_or_default();
-                match read_json_value(body, crate::remediation::REMEDIATION_CHANGE_REVIEW_ACTION_BODY_LIMIT) {
+                match read_json_value(
+                    body,
+                    crate::remediation::REMEDIATION_CHANGE_REVIEW_ACTION_BODY_LIMIT,
+                ) {
                     Ok(payload) => {
                         let mut s = state.lock().unwrap_or_else(|e| e.into_inner());
                         let storage = s.storage.clone();
@@ -17550,9 +18214,7 @@ fn handle_api(
                             policy,
                         ) {
                             Ok(json) => json_response(&json, 200),
-                            Err(error) => {
-                                error_json(error.response_message(), error.http_status())
-                            }
+                            Err(error) => error_json(error.response_message(), error.http_status()),
                         }
                     }
                     Err(error) => error_json(&error, 400),
@@ -18332,14 +18994,7 @@ fn handle_api(
                         }
                     };
                     let path = entry.path();
-                    if !path.is_file() {
-                        continue;
-                    }
-                    let file_name = match path.file_name().and_then(|value| value.to_str()) {
-                        Some(value) => value,
-                        None => continue,
-                    };
-                    if !file_name.starts_with("wardex_backup_") || !file_name.ends_with(".db") {
+                    if !is_runtime_backup_file(&path) {
                         continue;
                     }
                     let record = match backup_file_record(&path) {
@@ -18351,7 +19006,6 @@ fn handle_api(
 
                 backups.sort_by(|a, b| b.timestamp.cmp(&a.timestamp));
                 json_response(&serde_json::to_string(&backups).unwrap_or_default(), 200)
-
             } else if method == Method::Post && url_path == "/api/backups" {
                 let backup_dir = Path::new("var/backups");
                 if let Err(e) = fs::create_dir_all(backup_dir) {
@@ -18376,14 +19030,8 @@ fn handle_api(
 
             // ── Backup status ─────────────────────────────────────
             } else if method == Method::Get && url_path == "/api/backup/status" {
-                let cfg = crate::backup::BackupConfig::default();
-                let body = serde_json::json!({
-                    "enabled": cfg.enabled,
-                    "retention_count": cfg.retention_count,
-                    "path": cfg.path,
-                    "schedule_cron": cfg.schedule_cron,
-                });
-                json_response(&body.to_string(), 200)
+                let body = BackupStatusSnapshot::gather();
+                json_response(&serde_json::to_string(&body).unwrap_or_default(), 200)
 
             // ── SSO / Auth ────────────────────────────────────────
             } else if method == Method::Get && url_path == "/api/auth/sso/config" {
@@ -22000,6 +22648,9 @@ fn handle_config_reload(body: &[u8], state: &Arc<Mutex<AppState>>) -> Response<B
     };
     let mut s = state.lock().unwrap_or_else(|e| e.into_inner());
     let result = patch.apply(&mut s.config);
+    if result.success {
+        s.cluster = ClusterNode::new(s.config.cluster.clone());
+    }
     match serde_json::to_string_pretty(&result) {
         Ok(json) => {
             let status = if result.success { 200 } else { 400 };
@@ -23999,6 +24650,7 @@ mod tests {
     use crate::telemetry::TelemetrySample;
     use std::collections::HashMap as StdHashMap;
     use std::path::PathBuf;
+    use std::time::{Duration, Instant};
 
     fn temp_path(name: &str) -> PathBuf {
         let mut path = std::env::temp_dir();
@@ -24009,6 +24661,377 @@ mod tests {
             chrono::Utc::now().timestamp_nanos_opt().unwrap_or_default()
         ));
         path
+    }
+
+    fn wait_until(timeout: Duration, mut predicate: impl FnMut() -> bool) {
+        let deadline = Instant::now() + timeout;
+        loop {
+            if predicate() {
+                return;
+            }
+            assert!(
+                Instant::now() < deadline,
+                "condition not met before timeout"
+            );
+            std::thread::sleep(Duration::from_millis(25));
+        }
+    }
+
+    #[test]
+    fn backup_records_ignore_non_backup_files() {
+        let mut dir = std::env::temp_dir();
+        dir.push(format!(
+            "wardex_backup_status_{}_{}",
+            std::process::id(),
+            chrono::Utc::now().timestamp_nanos_opt().unwrap_or_default()
+        ));
+        fs::create_dir_all(&dir).expect("create backup status dir");
+
+        fs::write(dir.join(".DS_Store"), b"finder-noise").expect("write ds_store");
+        fs::write(dir.join("notes.txt"), b"operator notes").expect("write notes");
+        fs::write(
+            dir.join("wardex_backup_20260502_000000.db"),
+            b"sqlite-backup-artifact",
+        )
+        .expect("write backup artifact");
+
+        let records = backup_records_in_dir(&dir);
+        assert_eq!(records.len(), 1);
+        assert_eq!(records[0].name, "wardex_backup_20260502_000000.db");
+
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn failover_drill_endpoint_records_latest_result() {
+        let (port, token, state) = spawn_test_server_with_state();
+        {
+            let mut state = state.lock().unwrap_or_else(|e| e.into_inner());
+            state.detector.evaluate(&TelemetrySample {
+                timestamp_ms: 1_000,
+                cpu_load_pct: 21.0,
+                memory_load_pct: 34.0,
+                temperature_c: 41.0,
+                network_kbps: 18.0,
+                auth_failures: 0,
+                battery_pct: 96.0,
+                integrity_drift: 0.01,
+                process_count: 81,
+                disk_pressure_pct: 12.0,
+            });
+            let snapshot = state.detector.snapshot().expect("detector snapshot");
+            let device_state = state.device.snapshot();
+            state.checkpoints.push_snapshot(snapshot, device_state);
+        }
+
+        let base_url = format!("http://127.0.0.1:{port}");
+        let auth_header = format!("Bearer {token}");
+
+        let drill: serde_json::Value =
+            ureq::post(&format!("{base_url}/api/control/failover-drill"))
+                .set("Authorization", &auth_header)
+                .call()
+                .expect("run failover drill")
+                .into_json()
+                .expect("failover drill json");
+        assert_eq!(drill["drill"]["status"], serde_json::json!("passed"));
+        assert_eq!(
+            drill["drill"]["artifact_source"],
+            serde_json::json!("checkpoint")
+        );
+        assert_eq!(
+            drill["drill"]["orchestration_scope"],
+            serde_json::json!("standalone_reference")
+        );
+        assert!(drill["drill"]["last_run_at"].as_str().is_some());
+        assert!(drill["digest"].as_str().unwrap_or_default().len() >= 32);
+
+        let readiness: serde_json::Value =
+            ureq::get(&format!("{base_url}/api/support/readiness-evidence"))
+                .set("Authorization", &auth_header)
+                .call()
+                .expect("support readiness evidence")
+                .into_json()
+                .expect("support readiness json");
+        assert_eq!(
+            readiness["evidence"]["control_plane"]["failover_drill"]["status"],
+            serde_json::json!("passed")
+        );
+        assert_eq!(
+            readiness["evidence"]["control_plane"]["failover_drill"]["artifact_source"],
+            serde_json::json!("checkpoint")
+        );
+
+        let dependencies: serde_json::Value =
+            ureq::get(&format!("{base_url}/api/system/health/dependencies"))
+                .set("Authorization", &auth_header)
+                .call()
+                .expect("dependency health")
+                .into_json()
+                .expect("dependency health json");
+        assert_eq!(
+            dependencies["ha_mode"]["failover_drill"]["status"],
+            serde_json::json!("passed")
+        );
+    }
+
+    #[test]
+    fn clustered_failover_posture_surfaces_external_standby_and_history() {
+        let (leader_port, _leader_token, leader_state) = spawn_test_server_with_state();
+        let (port, token, state) = spawn_test_server_with_state();
+        let cluster_token = "cluster-runtime-token".to_string();
+
+        {
+            let mut leader = leader_state.lock().unwrap_or_else(|e| e.into_inner());
+            leader.config.cluster.node_id = crate::cluster::NodeId("cluster-node-1".to_string());
+            leader.config.cluster.auth_token = Some(cluster_token.clone());
+            leader.config.cluster.heartbeat_interval_ms = 25;
+            leader.config.cluster.election_timeout_ms = 90;
+            leader.config.cluster.peers = vec![crate::cluster::PeerConfig {
+                node_id: crate::cluster::NodeId("cluster-node-2".to_string()),
+                addr: format!("http://127.0.0.1:{port}"),
+            }];
+            leader.cluster = ClusterNode::new(leader.config.cluster.clone());
+        }
+
+        let support_store_path = {
+            let mut follower = state.lock().unwrap_or_else(|e| e.into_inner());
+            follower.config.cluster.node_id = crate::cluster::NodeId("cluster-node-2".to_string());
+            follower.config.cluster.auth_token = Some(cluster_token);
+            follower.config.cluster.heartbeat_interval_ms = 25;
+            follower.config.cluster.election_timeout_ms = 400;
+            follower.config.cluster.peers = vec![crate::cluster::PeerConfig {
+                node_id: crate::cluster::NodeId("cluster-node-1".to_string()),
+                addr: format!("http://127.0.0.1:{leader_port}"),
+            }];
+            follower.cluster = ClusterNode::new(follower.config.cluster.clone());
+
+            follower.detector.evaluate(&TelemetrySample {
+                timestamp_ms: 2_000,
+                cpu_load_pct: 25.0,
+                memory_load_pct: 39.0,
+                temperature_c: 43.0,
+                network_kbps: 21.0,
+                auth_failures: 0,
+                battery_pct: 94.0,
+                integrity_drift: 0.01,
+                process_count: 84,
+                disk_pressure_pct: 14.0,
+            });
+            let snapshot = follower.detector.snapshot().expect("detector snapshot");
+            let device_state = follower.device.snapshot();
+            follower.checkpoints.push_snapshot(snapshot, device_state);
+
+            follower
+                .config_path
+                .parent()
+                .expect("state root")
+                .join("support.json")
+        };
+
+        let base_url = format!("http://127.0.0.1:{port}");
+        let auth_header = format!("Bearer {token}");
+
+        wait_until(Duration::from_secs(3), || {
+            let response = ureq::get(&format!("{base_url}/api/support/readiness-evidence"))
+                .set("Authorization", &auth_header)
+                .call();
+            let Ok(response) = response else {
+                return false;
+            };
+            let Ok(readiness) = response.into_json::<serde_json::Value>() else {
+                return false;
+            };
+            readiness["evidence"]["control_plane"]["cluster"]["leader_id"]
+                == serde_json::json!("cluster-node-1")
+                && readiness["evidence"]["control_plane"]["cluster"]["peers_reachable"]
+                    == serde_json::json!(1)
+                && readiness["evidence"]["control_plane"]["cluster"]["healthy"]
+                    == serde_json::json!(true)
+        });
+
+        let drill: serde_json::Value =
+            ureq::post(&format!("{base_url}/api/control/failover-drill"))
+                .set("Authorization", &auth_header)
+                .call()
+                .expect("run clustered failover drill")
+                .into_json()
+                .expect("clustered failover drill json");
+        assert_eq!(
+            drill["drill"]["orchestration_scope"],
+            serde_json::json!("non_standalone_orchestrated")
+        );
+        assert_eq!(
+            drill["drill"]["drill_type"],
+            serde_json::json!("leader_handoff_restore_dry_run")
+        );
+
+        let readiness: serde_json::Value =
+            ureq::get(&format!("{base_url}/api/support/readiness-evidence"))
+                .set("Authorization", &auth_header)
+                .call()
+                .expect("clustered support readiness evidence")
+                .into_json()
+                .expect("clustered support readiness json");
+        assert_eq!(
+            readiness["evidence"]["control_plane"]["topology"],
+            serde_json::json!("clustered")
+        );
+        assert_eq!(
+            readiness["evidence"]["control_plane"]["ha_mode"],
+            serde_json::json!("external_standby")
+        );
+        assert_eq!(
+            readiness["evidence"]["control_plane"]["cluster"]["role"],
+            serde_json::json!("follower")
+        );
+        assert_eq!(
+            readiness["evidence"]["control_plane"]["cluster"]["leader_id"],
+            serde_json::json!("cluster-node-1")
+        );
+        assert_eq!(
+            readiness["evidence"]["control_plane"]["failover_drill_history"][0]["status"],
+            serde_json::json!("passed")
+        );
+        assert_eq!(
+            readiness["evidence"]["control_plane"]["failover_drill_history"][0]["orchestration_scope"],
+            serde_json::json!("non_standalone_orchestrated")
+        );
+
+        let dependencies: serde_json::Value =
+            ureq::get(&format!("{base_url}/api/system/health/dependencies"))
+                .set("Authorization", &auth_header)
+                .call()
+                .expect("clustered dependency health")
+                .into_json()
+                .expect("clustered dependency health json");
+        assert_eq!(
+            dependencies["ha_mode"]["mode"],
+            serde_json::json!("external_standby")
+        );
+        assert_eq!(
+            dependencies["ha_mode"]["topology"],
+            serde_json::json!("clustered")
+        );
+        assert_eq!(
+            dependencies["ha_mode"]["cluster"]["role"],
+            serde_json::json!("follower")
+        );
+        assert_eq!(
+            dependencies["ha_mode"]["cluster"]["peers_reachable"],
+            serde_json::json!(1)
+        );
+        assert_eq!(
+            dependencies["ha_mode"]["cluster"]["healthy"],
+            serde_json::json!(true)
+        );
+        assert_eq!(
+            dependencies["ha_mode"]["status"],
+            serde_json::json!("ready_for_orchestrated_failover")
+        );
+        assert_eq!(
+            dependencies["ha_mode"]["failover_drill_history_count"],
+            serde_json::json!(1)
+        );
+
+        let reloaded = SupportStore::new(&support_store_path.to_string_lossy());
+        assert_eq!(
+            reloaded
+                .latest_failover_drill()
+                .expect("persisted failover drill")
+                .orchestration_scope,
+            "non_standalone_orchestrated"
+        );
+    }
+
+    #[test]
+    fn failover_history_report_run_emits_standalone_artifact_preview() {
+        let (port, token, state) = spawn_test_server_with_state();
+        {
+            let mut state = state.lock().unwrap_or_else(|e| e.into_inner());
+            state.detector.evaluate(&TelemetrySample {
+                timestamp_ms: 3_000,
+                cpu_load_pct: 24.0,
+                memory_load_pct: 33.0,
+                temperature_c: 42.0,
+                network_kbps: 17.0,
+                auth_failures: 0,
+                battery_pct: 97.0,
+                integrity_drift: 0.01,
+                process_count: 82,
+                disk_pressure_pct: 11.0,
+            });
+            let snapshot = state.detector.snapshot().expect("detector snapshot");
+            let device_state = state.device.snapshot();
+            state.checkpoints.push_snapshot(snapshot, device_state);
+        }
+
+        let base_url = format!("http://127.0.0.1:{port}");
+        let auth_header = format!("Bearer {token}");
+
+        let drill: serde_json::Value =
+            ureq::post(&format!("{base_url}/api/control/failover-drill"))
+                .set("Authorization", &auth_header)
+                .call()
+                .expect("run failover drill for report preview")
+                .into_json()
+                .expect("failover drill json");
+        assert_eq!(drill["drill"]["status"], serde_json::json!("passed"));
+
+        let run_request = serde_json::json!({
+            "name": "Failover Drill History",
+            "kind": "control_plane_failover_history",
+            "scope": "control_plane",
+            "format": "json",
+            "audience": "audit"
+        });
+        let run: serde_json::Value = ureq::post(&format!("{base_url}/api/report-runs"))
+            .set("Authorization", &auth_header)
+            .send_string(&run_request.to_string())
+            .expect("create failover history report run")
+            .into_json()
+            .expect("report run json");
+
+        assert_eq!(
+            run["run"]["kind"],
+            serde_json::json!("control_plane_failover_history")
+        );
+        assert_eq!(
+            run["run"]["preview"]["kind"],
+            serde_json::json!("control_plane_failover_history")
+        );
+        assert_eq!(run["run"]["preview"]["drill_count"], serde_json::json!(1));
+        assert_eq!(
+            run["run"]["preview"]["latest_drill"]["status"],
+            serde_json::json!("passed")
+        );
+        assert_eq!(
+            run["run"]["preview"]["history"][0]["artifact_source"],
+            serde_json::json!("checkpoint")
+        );
+
+        let run_id = run["run"]["id"]
+            .as_str()
+            .expect("report run id")
+            .to_string();
+        let listed: serde_json::Value = ureq::get(&format!("{base_url}/api/report-runs"))
+            .set("Authorization", &auth_header)
+            .call()
+            .expect("list report runs")
+            .into_json()
+            .expect("report runs json");
+        assert!(
+            listed["runs"]
+                .as_array()
+                .expect("report runs array")
+                .iter()
+                .any(|entry| {
+                    entry["id"] == serde_json::json!(run_id)
+                        && entry["preview"]["kind"]
+                            == serde_json::json!("control_plane_failover_history")
+                        && entry["preview"]["history"][0]["status"] == serde_json::json!("passed")
+                })
+        );
     }
 
     fn sample_alert(hostname: &str, level: &str, score: f32, reason: &str) -> AlertRecord {
@@ -25489,6 +26512,7 @@ mod tests {
         assert!(overview.content.saved_searches > 0);
         assert_eq!(overview.automation.pending_approvals, 1);
         assert_eq!(overview.analytics.api_requests, 2);
+        assert_eq!(overview.rollouts.rollback_events, 0);
         assert!(
             overview
                 .recommendations
@@ -25499,6 +26523,64 @@ mod tests {
             || item.kind == "response"
             || item.kind == "automation"));
         assert_eq!(overview.hot_agents.len(), 1);
+
+        let _ = fs::remove_file(case_path);
+        let _ = fs::remove_file(incident_path);
+        let _ = fs::remove_file(agent_path);
+        let _ = fs::remove_file(enterprise_path);
+    }
+
+    #[test]
+    fn build_workbench_overview_counts_content_rollbacks() {
+        let case_path = temp_path("cases");
+        let incident_path = temp_path("incidents");
+        let agent_path = temp_path("agents");
+        let enterprise_path = temp_path("workbench_rollouts");
+
+        let queue = AlertQueue::new();
+        let case_store = CaseStore::new(case_path.to_str().unwrap());
+        let incident_store = IncidentStore::new(incident_path.to_str().unwrap());
+        let approvals = ApprovalLog::new();
+        let response = ResponseOrchestrator::new();
+        let events = EventStore::new(16);
+        let registry = AgentRegistry::new(agent_path.to_str().unwrap());
+        let mut enterprise = EnterpriseStore::new(enterprise_path.to_str().unwrap());
+        let playbook_engine = crate::playbook::PlaybookEngine::new();
+        let playbook_dsl = crate::playbook_dsl::PlaybookDslStore::new();
+        let workflow_store = crate::investigation::WorkflowStore::new();
+        let api_summary = crate::api_analytics::ApiAnalytics::new().summary();
+
+        enterprise.record_rollout_event(
+            "content-rollback",
+            "Suspicious PowerShell v3",
+            Some("content-rule".to_string()),
+            Some("rule-1".to_string()),
+            Some("test".to_string()),
+            "succeeded",
+            "analyst-1",
+            Some("Rule rule-1 rolled back from canary to test.".to_string()),
+        );
+
+        let overview = build_workbench_overview(
+            &queue,
+            &case_store,
+            &incident_store,
+            &response,
+            &approvals,
+            &events.analytics(),
+            &events,
+            &registry,
+            &StdHashMap::new(),
+            &enterprise,
+            &playbook_engine,
+            &playbook_dsl,
+            &workflow_store,
+            &api_summary,
+        );
+
+        assert_eq!(overview.rollouts.historical_events, 1);
+        assert_eq!(overview.rollouts.rollback_events, 1);
+        assert_eq!(overview.rollouts.recent_history.len(), 1);
 
         let _ = fs::remove_file(case_path);
         let _ = fs::remove_file(incident_path);

@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import * as api from '../../api.js';
 import { JsonDetails, SideDrawer, SummaryGrid, WorkspaceEmptyState } from '../operator.jsx';
@@ -47,6 +47,11 @@ function ConnectorDrawer({ drawer, connectorRows, onClose, onReload }) {
   const lane = CONNECTOR_LANES.find((connector) => connector.id === selected?.id) || selected;
   const canSaveSample = Boolean(SAVE_CONNECTOR[selected?.id]);
   const canValidate = Boolean(VALIDATE_CONNECTOR[selected?.id]);
+
+  useEffect(() => {
+    if (drawer?.type !== 'connectors') return;
+    setSelectedId(drawer?.item?.id || connectorRows[0]?.id || 'aws');
+  }, [drawer, connectorRows]);
 
   const runAction = async (kind) => {
     if (!selected) return;
@@ -159,6 +164,11 @@ function RemediationDrawer({ drawer, reviews, onClose, onReload }) {
   const [result, setResult] = useState(null);
   const selected = selectById(reviews, selectedId);
 
+  useEffect(() => {
+    if (drawer?.type !== 'remediation') return;
+    setSelectedId(drawer?.item?.id || reviews[0]?.id || '');
+  }, [drawer, reviews]);
+
   const submitDecision = async (decision) => {
     if (!selected?.id) return;
     setBusy(true);
@@ -264,6 +274,11 @@ function RuleReplayDrawer({ drawer, rules, suppressionCount, onClose, onReload }
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState(null);
   const selected = selectById(rules, selectedId);
+
+  useEffect(() => {
+    if (drawer?.type !== 'rules') return;
+    setSelectedId(drawer?.item?.id || rules[0]?.id || '');
+  }, [drawer, rules]);
 
   const runReplay = async () => {
     if (!selected?.id) return;
@@ -379,6 +394,11 @@ function EvidenceDrawer({ drawer, reportTemplates, complianceData, onClose, onRe
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState(null);
   const selected = selectById(reportTemplates, selectedId);
+
+  useEffect(() => {
+    if (drawer?.type !== 'evidence') return;
+    setSelectedId(drawer?.item?.id || reportTemplates[0]?.id || 'command-center-pack');
+  }, [drawer, reportTemplates]);
 
   const createEvidenceRun = async () => {
     setBusy(true);

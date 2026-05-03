@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
-import { MemoryRouter } from 'react-router-dom';
+import { MemoryRouter, useLocation } from 'react-router-dom';
 import { ToastProvider } from '../hooks.jsx';
 import ReportsExports from '../components/ReportsExports.jsx';
 import { downloadData } from '../components/operatorUtils.js';
@@ -14,6 +14,11 @@ vi.mock('../components/operatorUtils.js', async () => {
 });
 
 globalThis.fetch = vi.fn();
+
+function LocationProbe() {
+  const location = useLocation();
+  return <div data-testid="location-probe">{`${location.pathname}${location.search}${location.hash}`}</div>;
+}
 
 const complianceReports = [
   {
@@ -316,6 +321,7 @@ function textResponse(body, status = 200, contentType = 'text/plain') {
 function renderWithProviders(route = '/reports') {
   return render(
     <MemoryRouter initialEntries={[route]}>
+      <LocationProbe />
       <ToastProvider>
         <ReportsExports />
       </ToastProvider>
@@ -359,6 +365,17 @@ beforeEach(() => {
       status: 'ready',
       audience: 'compliance',
       description: 'Framework snapshot for audits',
+      execution_context: null,
+    },
+    {
+      id: 'tpl-failover-drill-history',
+      name: 'Control-plane Failover Drill History',
+      kind: 'control_plane_failover_history',
+      scope: 'control_plane',
+      format: 'json',
+      status: 'ready',
+      audience: 'audit',
+      description: 'Persisted control-plane failover drill history with cluster posture.',
       execution_context: null,
     },
   ];
@@ -630,6 +647,15 @@ describe('ReportsExports', () => {
 
     expect(await screen.findByText('Compliance Snapshot')).toBeInTheDocument();
     expect((await screen.findAllByText('CIS Controls')).length).toBeGreaterThan(0);
+    const priorityTable = await screen.findByRole('table', {
+      name: 'Priority compliance findings',
+    });
+    expect(within(priorityTable).getByText('CIS-8.2')).toBeInTheDocument();
+    expect(within(priorityTable).getByText('CIS-12.4')).toBeInTheDocument();
+    expect(within(priorityTable).queryByText('CIS-1.1')).not.toBeInTheDocument();
+    expect(
+      within(priorityTable).getByText('Collect operator-supplied evidence before export.'),
+    ).toBeInTheDocument();
     expect(await screen.findByText('Controls Requiring Remediation')).toBeInTheDocument();
     expect((await screen.findAllByText('Audit Log Retention')).length).toBeGreaterThan(0);
 
@@ -831,6 +857,12 @@ describe('ReportsExports', () => {
       0,
     );
     expect((await within(responseCard).findAllByText('Isolate host')).length).toBeGreaterThan(0);
+    expect(await within(responseCard).findByText('Recent Response Audit')).toBeInTheDocument();
+    const responseAuditTable = within(responseCard).getByRole('table', {
+      name: 'Recent response audit entries',
+    });
+    expect(within(responseAuditTable).getByText('resp-1')).toBeInTheDocument();
+    expect(within(responseAuditTable).getByText('Executed')).toBeInTheDocument();
     expect(within(responseCard).queryByText('dev-workstation-07')).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: 'Save Response Artifact' }));
@@ -1153,6 +1185,13 @@ describe('ReportsExports', () => {
       )[0],
     );
 
+    const previewScopeSection = (await screen.findByText('Preview Scope')).parentElement;
+    expect(previewScopeSection).toBeTruthy();
+    expect(within(previewScopeSection).getByText('Case #42')).toBeInTheDocument();
+    expect(within(previewScopeSection).getByText('Incident #7')).toBeInTheDocument();
+    expect(within(previewScopeSection).getByText('Investigation inv-7')).toBeInTheDocument();
+    expect(within(previewScopeSection).getByText('Case')).toBeInTheDocument();
+
     fireEvent.click(screen.getByText('Create Run'));
 
     await waitFor(() => {
@@ -1185,6 +1224,45 @@ describe('ReportsExports', () => {
           incident_id: '7',
           investigation_id: 'inv-7',
           source: 'case',
+        }),
+      );
+    });
+  });
+
+  it('prefills delivery scheduling from the control-plane failover history template', async () => {
+    renderWithProviders('/reports?tab=templates');
+
+    expect(await screen.findByText('Reusable Templates')).toBeInTheDocument();
+    const templateButton = (await screen.findAllByText('Control-plane Failover Drill History'))
+      .map((element) => element.closest('button'))
+      .find(Boolean);
+    expect(templateButton).toBeTruthy();
+
+    fireEvent.click(templateButton);
+    fireEvent.click(screen.getByRole('button', { name: 'Schedule Delivery' }));
+
+    expect(await screen.findByText('Create Delivery Schedule')).toBeInTheDocument();
+    expect(screen.getByLabelText('Schedule Name')).toHaveValue(
+      'Weekly Control-plane Failover Drill History',
+    );
+    expect(screen.getByLabelText('Template Kind')).toHaveValue(
+      'control_plane_failover_history',
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Save Schedule' }));
+
+    await waitFor(() => {
+      const scheduleRequest = globalThis.fetch.mock.calls.find(
+        ([url, options]) => String(url) === '/api/report-schedules' && options?.method === 'POST',
+      );
+      expect(scheduleRequest).toBeTruthy();
+      expect(JSON.parse(scheduleRequest[1].body)).toEqual(
+        expect.objectContaining({
+          name: 'Weekly Control-plane Failover Drill History',
+          kind: 'control_plane_failover_history',
+          scope: 'control_plane',
+          format: 'json',
+          cadence: 'weekly',
         }),
       );
     });
@@ -1386,6 +1464,23 @@ describe('ReportsExports', () => {
       '/api/audit/log/export?q=auth&method=GET&status=401&auth=anonymous',
       expect.objectContaining({ method: 'GET' }),
     );
+  });
+
+  it('pivots audit evidence workflows into retention controls', async () => {
+    renderWithProviders('/reports?tab=evidence');
+
+    expect(await screen.findByText('Audit Log Evidence Export')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('link', { name: 'Review Retention Controls' }));
+
+    await waitFor(() => {
+      const currentUrl = new URL(
+        screen.getByTestId('location-probe').textContent || '/',
+        'http://localhost',
+      );
+      expect(currentUrl.pathname).toBe('/settings');
+      expect(currentUrl.searchParams.get('tab')).toBe('admin');
+      expect(currentUrl.hash).toBe('#long-retention-history');
+    });
   });
 
   it('runs a pii scan with the supplied sample text', async () => {

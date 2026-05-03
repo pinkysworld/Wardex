@@ -700,7 +700,7 @@ pub fn run_agent(
                 log::error!("[agent] Inventory report failed: {e}");
             }
             if let Some(ref mut siem) = siem_connector {
-                        siem.push_inventory(&inv, client.agent_id().unwrap_or("unknown"));
+                siem.push_inventory(&inv, client.agent_id().unwrap_or("unknown"));
             }
         }
 

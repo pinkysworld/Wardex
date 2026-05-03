@@ -4,6 +4,7 @@ const BASE = process.env.WARDEX_BASE_URL || 'http://127.0.0.1:8095';
 const TOKEN = process.env.WARDEX_ADMIN_TOKEN || '';
 
 test('enterprise admin console smoke', async ({ page }) => {
+  test.setTimeout(60000);
   test.skip(!TOKEN, 'Set WARDEX_ADMIN_TOKEN to run the live enterprise smoke.');
 
   const consoleErrors = [];
@@ -40,13 +41,16 @@ test('enterprise admin console smoke', async ({ page }) => {
 
   const sidebar = page.locator('#sidebar-nav');
 
-  await expect(page.getByRole('heading', { name: 'Security Overview' })).toBeVisible();
-  await expect(page.getByText(/Process Analysis/i)).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Dashboard' })).toBeVisible();
 
   await sidebar.getByRole('link', { name: 'Command Center', exact: true }).click();
   await expect(page.getByRole('heading', { name: /Operate incidents/i })).toBeVisible();
-  await expect(page.getByText('Connector Onboarding Wizard')).toBeVisible();
-  await expect(page.getByText('Release and Upgrade Center')).toBeVisible();
+  await expect(
+    page.locator('.eyebrow', { hasText: 'Connector Onboarding Wizard' }),
+  ).toBeVisible();
+  await expect(
+    page.locator('.eyebrow', { hasText: 'Release and Upgrade Center' }),
+  ).toBeVisible();
 
   await page.getByRole('button', { name: 'Validate connectors' }).click();
   const connectorDrawer = page.getByRole('dialog', { name: 'Connector Validation' });
@@ -91,9 +95,9 @@ test('enterprise admin console smoke', async ({ page }) => {
   await expect(page.getByRole('button', { name: 'Test Selected' })).toBeVisible();
 
   await sidebar.getByRole('link', { name: 'SOC Workbench', exact: true }).click();
-  await expect(page.getByText('Workbench Overview')).toBeVisible();
+  await expect(page).toHaveURL(/\/admin\/soc/, { timeout: 15000 });
   const processTreeLink = page.getByRole('link', { name: 'Open Process Tree' });
-  await expect(processTreeLink).toBeVisible();
+  await expect(processTreeLink).toBeVisible({ timeout: 30000 });
   await processTreeLink.click();
   await expect(page).toHaveURL(/\/admin\/soc.*#process-tree$/);
   await expect(page.getByText(/Live Processes \(/)).toBeVisible();

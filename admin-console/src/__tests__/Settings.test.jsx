@@ -1,5 +1,6 @@
 import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { MemoryRouter, useLocation } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import Settings from '../components/Settings.jsx';
 import { ToastProvider } from '../hooks.jsx';
@@ -11,6 +12,22 @@ const jsonOk = (data) => ({
   json: async () => data,
   text: async () => JSON.stringify(data),
 });
+
+function LocationProbe() {
+  const location = useLocation();
+  return <div data-testid="location-probe">{`${location.pathname}${location.search}${location.hash}`}</div>;
+}
+
+function renderSettings(route = '/settings') {
+  return render(
+    <MemoryRouter initialEntries={[route]}>
+      <LocationProbe />
+      <ToastProvider>
+        <Settings />
+      </ToastProvider>
+    </MemoryRouter>,
+  );
+}
 
 describe('Settings', () => {
   beforeEach(() => {
@@ -1198,11 +1215,7 @@ describe('Settings', () => {
   it('renders paginated audit entries on the admin tab', async () => {
     const user = userEvent.setup();
 
-    render(
-      <ToastProvider>
-        <Settings />
-      </ToastProvider>,
-    );
+    renderSettings();
 
     await user.click(screen.getByRole('tab', { name: 'Admin' }));
 
@@ -1234,11 +1247,7 @@ describe('Settings', () => {
   it('filters the audit trail and exports the filtered csv', async () => {
     const user = userEvent.setup();
 
-    render(
-      <ToastProvider>
-        <Settings />
-      </ToastProvider>,
-    );
+    renderSettings();
 
     await user.click(screen.getByRole('tab', { name: 'Admin' }));
     await screen.findByText('API Audit Trail');
@@ -1269,11 +1278,7 @@ describe('Settings', () => {
   it('surfaces identity validation state on the integrations tab', async () => {
     const user = userEvent.setup();
 
-    render(
-      <ToastProvider>
-        <Settings />
-      </ToastProvider>,
-    );
+    renderSettings();
 
     await user.click(screen.getByRole('tab', { name: 'Integrations' }));
 
@@ -1353,11 +1358,7 @@ describe('Settings', () => {
   it('saves provider and scim edits from the integrations tab', async () => {
     const user = userEvent.setup();
 
-    render(
-      <ToastProvider>
-        <Settings />
-      </ToastProvider>,
-    );
+    renderSettings();
 
     await user.click(screen.getByRole('tab', { name: 'Integrations' }));
     await screen.findByText('IdP Providers');
@@ -1425,11 +1426,7 @@ describe('Settings', () => {
   it('saves retention settings and searches retained events from the admin tab', async () => {
     const user = userEvent.setup();
 
-    render(
-      <ToastProvider>
-        <Settings />
-      </ToastProvider>,
-    );
+    renderSettings();
 
     await user.click(screen.getByRole('tab', { name: 'Admin' }));
     expect(await screen.findByText('Long-Retention History')).toBeInTheDocument();
@@ -1462,6 +1459,7 @@ describe('Settings', () => {
 
     expect(await screen.findByText('Showing 1 of 1 matching events')).toBeInTheDocument();
     expect(screen.getAllByText('alice@example.com').length).toBeGreaterThan(0);
+    expect(screen.getByText('ConsoleLogin')).toBeInTheDocument();
 
     await waitFor(() => {
       const historyCall = globalThis.fetch.mock.calls.find(([url]) => {
@@ -1476,14 +1474,35 @@ describe('Settings', () => {
     });
   });
 
+  it('hydrates long-retention search from route params', async () => {
+    renderSettings(
+      '/settings?tab=admin&historical_device_id=agent-1&historical_since=2024-01-01T01:00:00Z&historical_limit=50',
+    );
+
+    expect(await screen.findByText('Long-Retention History')).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: 'Admin' })).toHaveAttribute('aria-selected', 'true');
+    expect(screen.getByLabelText('Device')).toHaveValue('agent-1');
+    expect(screen.getByLabelText('Since')).toHaveValue('2024-01-01T01:00:00Z');
+    expect(screen.getByLabelText('Limit')).toHaveValue(50);
+
+    await waitFor(() => {
+      const historyCall = globalThis.fetch.mock.calls.find(([url]) => {
+        const parsed = new URL(String(url), 'http://localhost');
+        return (
+          parsed.pathname === '/api/storage/events/historical' &&
+          parsed.searchParams.get('device_id') === 'agent-1' &&
+          parsed.searchParams.get('since') === '2024-01-01T01:00:00Z' &&
+          parsed.searchParams.get('limit') === '50'
+        );
+      });
+      expect(historyCall).toBeDefined();
+    });
+  });
+
   it('refreshes grouped long-retention workspace data from the admin card', async () => {
     const user = userEvent.setup();
 
-    render(
-      <ToastProvider>
-        <Settings />
-      </ToastProvider>,
-    );
+    renderSettings();
 
     await user.click(screen.getByRole('tab', { name: 'Admin' }));
     expect(await screen.findByText('Long-Retention History')).toBeInTheDocument();
@@ -1533,14 +1552,133 @@ describe('Settings', () => {
     });
   });
 
+  it('refreshes seeded long-retention search without dropping route filters', async () => {
+    const user = userEvent.setup();
+
+    renderSettings(
+      '/settings?tab=admin&historical_device_id=agent-1&historical_since=2024-01-01T01:00:00Z&historical_limit=50',
+    );
+
+    expect(await screen.findByText('Long-Retention History')).toBeInTheDocument();
+
+    const countGetCalls = (pathname, matches = () => true) =>
+      globalThis.fetch.mock.calls.filter(([url, options]) => {
+        const parsed = new URL(String(url), 'http://localhost');
+        return (
+          parsed.pathname === pathname && (options?.method || 'GET') === 'GET' && matches(parsed)
+        );
+      }).length;
+
+    const seededHistoryMatch = (parsed) =>
+      parsed.searchParams.get('device_id') === 'agent-1' &&
+      parsed.searchParams.get('since') === '2024-01-01T01:00:00Z' &&
+      parsed.searchParams.get('limit') === '50';
+
+    await waitFor(() => {
+      expect(countGetCalls('/api/retention/status')).toBeGreaterThan(0);
+      expect(countGetCalls('/api/storage/stats')).toBeGreaterThan(0);
+      expect(countGetCalls('/api/storage/events/historical', seededHistoryMatch)).toBeGreaterThan(0);
+    });
+
+    const initialRetentionCalls = countGetCalls('/api/retention/status');
+    const initialStorageStatsCalls = countGetCalls('/api/storage/stats');
+    const initialSeededHistoryCalls = countGetCalls(
+      '/api/storage/events/historical',
+      seededHistoryMatch,
+    );
+
+    const longRetentionCard = screen.getByText('Long-Retention History').closest('.card');
+    if (!longRetentionCard) {
+      throw new Error('Long-Retention History card not found');
+    }
+
+    await user.click(within(longRetentionCard).getByRole('button', { name: '↻ Refresh' }));
+
+    await waitFor(() => {
+      expect(countGetCalls('/api/retention/status')).toBe(initialRetentionCalls + 1);
+      expect(countGetCalls('/api/storage/stats')).toBe(initialStorageStatsCalls + 1);
+      expect(countGetCalls('/api/storage/events/historical', seededHistoryMatch)).toBe(
+        initialSeededHistoryCalls + 1,
+      );
+    });
+
+    expect(screen.getByLabelText('Device')).toHaveValue('agent-1');
+    expect(screen.getByLabelText('Since')).toHaveValue('2024-01-01T01:00:00Z');
+    expect(screen.getByLabelText('Limit')).toHaveValue(50);
+  });
+
+  it('preserves seeded long-retention params across settings tab pivots', async () => {
+    const user = userEvent.setup();
+
+    renderSettings(
+      '/settings?tab=admin&historical_device_id=agent-1&historical_since=2024-01-01T01:00:00Z&historical_limit=50',
+    );
+
+    expect(await screen.findByText('Long-Retention History')).toBeInTheDocument();
+
+    await user.click(screen.getByRole('tab', { name: 'Integrations' }));
+    await screen.findByText('IdP Providers');
+
+    await waitFor(() => {
+      const currentUrl = new URL(
+        screen.getByTestId('location-probe').textContent || '/',
+        'http://localhost',
+      );
+      expect(currentUrl.pathname).toBe('/settings');
+      expect(currentUrl.searchParams.get('tab')).toBe('integrations');
+      expect(currentUrl.searchParams.get('historical_device_id')).toBe('agent-1');
+      expect(currentUrl.searchParams.get('historical_since')).toBe('2024-01-01T01:00:00Z');
+      expect(currentUrl.searchParams.get('historical_limit')).toBe('50');
+    });
+
+    const historyCallsBeforeReturn = globalThis.fetch.mock.calls.filter(([url, options]) => {
+      const parsed = new URL(String(url), 'http://localhost');
+      return (
+        parsed.pathname === '/api/storage/events/historical' &&
+        (options?.method || 'GET') === 'GET' &&
+        parsed.searchParams.get('device_id') === 'agent-1' &&
+        parsed.searchParams.get('since') === '2024-01-01T01:00:00Z' &&
+        parsed.searchParams.get('limit') === '50'
+      );
+    }).length;
+
+    await user.click(screen.getByRole('tab', { name: 'Admin' }));
+    expect(await screen.findByText('Long-Retention History')).toBeInTheDocument();
+
+    await waitFor(() => {
+      const currentUrl = new URL(
+        screen.getByTestId('location-probe').textContent || '/',
+        'http://localhost',
+      );
+      expect(currentUrl.searchParams.get('tab')).toBe('admin');
+      expect(currentUrl.searchParams.get('historical_device_id')).toBe('agent-1');
+      expect(currentUrl.searchParams.get('historical_since')).toBe('2024-01-01T01:00:00Z');
+      expect(currentUrl.searchParams.get('historical_limit')).toBe('50');
+    });
+
+    await waitFor(() => {
+      const historyCallsAfterReturn = globalThis.fetch.mock.calls.filter(([url, options]) => {
+        const parsed = new URL(String(url), 'http://localhost');
+        return (
+          parsed.pathname === '/api/storage/events/historical' &&
+          (options?.method || 'GET') === 'GET' &&
+          parsed.searchParams.get('device_id') === 'agent-1' &&
+          parsed.searchParams.get('since') === '2024-01-01T01:00:00Z' &&
+          parsed.searchParams.get('limit') === '50'
+        );
+      }).length;
+      expect(historyCallsAfterReturn).toBeGreaterThan(historyCallsBeforeReturn);
+    });
+
+    expect(screen.getByLabelText('Device')).toHaveValue('agent-1');
+    expect(screen.getByLabelText('Since')).toHaveValue('2024-01-01T01:00:00Z');
+    expect(screen.getByLabelText('Limit')).toHaveValue(50);
+  });
+
   it('saves SIEM, collector and secrets setup flows from the integrations tab', async () => {
     const user = userEvent.setup();
 
-    render(
-      <ToastProvider>
-        <Settings />
-      </ToastProvider>,
-    );
+    renderSettings();
 
     await user.click(screen.getByRole('tab', { name: 'Integrations' }));
     expect(await screen.findByText('Cloud Collectors & Secrets')).toBeInTheDocument();

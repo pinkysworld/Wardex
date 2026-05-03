@@ -1,7 +1,7 @@
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { MemoryRouter } from 'react-router-dom';
+import { MemoryRouter, useLocation } from 'react-router-dom';
 import HelpDocs from '../components/HelpDocs.jsx';
 import { AuthProvider, ThemeProvider, ToastProvider } from '../hooks.jsx';
 
@@ -15,12 +15,18 @@ function jsonOk(data) {
   };
 }
 
+function LocationProbe() {
+  const location = useLocation();
+  return <div data-testid="location-probe">{`${location.pathname}${location.search}`}</div>;
+}
+
 function renderWithProviders(route = '/help') {
   return render(
     <MemoryRouter initialEntries={[route]}>
       <AuthProvider>
         <ThemeProvider>
           <ToastProvider>
+            <LocationProbe />
             <HelpDocs />
           </ToastProvider>
         </ThemeProvider>
@@ -29,9 +35,25 @@ function renderWithProviders(route = '/help') {
   );
 }
 
+function currentLocation() {
+  return new URL(screen.getByTestId('location-probe').textContent || '/', 'http://localhost');
+}
+
 describe('HelpDocs', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    let failoverDrill = {
+      drill_type: 'warm_standby_restore_dry_run',
+      orchestration_scope: 'standalone_reference',
+      status: 'not_run',
+      last_run_at: null,
+      actor: null,
+      summary: 'No automated failover drill has been recorded yet.',
+      artifact_source: 'none',
+      durable_storage_verified: false,
+      backup_artifact_verified: false,
+      checkpoint_artifact_verified: false,
+    };
     globalThis.fetch = vi.fn((url, options = {}) => {
       const parsed = new URL(String(url), 'http://localhost');
       const path = parsed.pathname;
@@ -126,11 +148,82 @@ describe('HelpDocs', () => {
               python: { version: '0.53.0' },
               typescript: { version: '0.53.0' },
             },
+            report_workflow: {
+              aligned: true,
+              required_operations: [
+                'GET /api/report-templates',
+                'POST /api/report-templates',
+                'GET /api/report-runs',
+                'POST /api/report-runs',
+                'GET /api/report-schedules',
+                'POST /api/report-schedules',
+              ],
+              required_sdk_endpoints: [
+                '/api/report-templates',
+                '/api/report-runs',
+                '/api/report-schedules',
+              ],
+              runtime_routes: {
+                present: [
+                  'GET /api/report-templates',
+                  'POST /api/report-templates',
+                  'GET /api/report-runs',
+                  'POST /api/report-runs',
+                  'GET /api/report-schedules',
+                  'POST /api/report-schedules',
+                ],
+                missing: [],
+              },
+              runtime_openapi: {
+                present: [
+                  'GET /api/report-templates',
+                  'POST /api/report-templates',
+                  'GET /api/report-runs',
+                  'POST /api/report-runs',
+                  'GET /api/report-schedules',
+                  'POST /api/report-schedules',
+                ],
+                missing: [],
+              },
+              docs_openapi: {
+                present: [
+                  'GET /api/report-templates',
+                  'POST /api/report-templates',
+                  'GET /api/report-runs',
+                  'POST /api/report-runs',
+                  'GET /api/report-schedules',
+                  'POST /api/report-schedules',
+                ],
+                missing: [],
+              },
+              typescript_sdk: {
+                present: [
+                  '/api/report-templates',
+                  '/api/report-runs',
+                  '/api/report-schedules',
+                ],
+                missing: [],
+              },
+              python_sdk: {
+                present: [
+                  '/api/report-templates',
+                  '/api/report-runs',
+                  '/api/report-schedules',
+                ],
+                missing: [],
+              },
+            },
             issues: ['TypeScript SDK version 0.53.0 differs from runtime release 0.53.1.'],
           }),
         );
       }
       if (path === '/api/support/readiness-evidence') {
+        const knownLimitations = ['No cloud, identity, or SaaS collectors are enabled yet.'];
+        if (failoverDrill.status !== 'passed') {
+          knownLimitations.unshift(
+            'No automated failover drill has been recorded yet; run the control-plane failover drill before relying on the documented failover path.',
+          );
+        }
         return Promise.resolve(
           jsonOk({
             digest: 'readiness-digest-123456',
@@ -142,8 +235,31 @@ describe('HelpDocs', () => {
               contracts: { status: 'aligned' },
               response_history: { closed_or_reopenable: 4 },
               evidence: { reports_with_artifact_metadata: 3 },
-              backup: { observed_backups: 1 },
-              known_limitations: ['No cloud, identity, or SaaS collectors are enabled yet.'],
+              backup: {
+                observed_backups: 2,
+                schedule_cron: '0 2 * * *',
+                latest_backup_at: '2026-04-30T11:40:00Z',
+              },
+              control_plane: {
+                topology: 'standalone',
+                orchestration_scope: 'standalone_reference',
+                ha_mode: 'active_passive_reference',
+                leader: true,
+                durable_storage: true,
+                event_store_path: 'var/events.db',
+                backup_schedule_cron: '0 2 * * *',
+                observed_backups: 2,
+                latest_backup_at: '2026-04-30T11:40:00Z',
+                checkpoint_count: 3,
+                latest_checkpoint_at: '2026-04-30T11:58:00Z',
+                restore_ready: true,
+                recovery_status: 'ready_for_documented_failover',
+                documented_failover: 'warm_standby_restore',
+                cluster: null,
+                failover_drill: failoverDrill,
+                failover_drill_history: failoverDrill.status === 'passed' ? [failoverDrill] : [],
+              },
+              known_limitations: knownLimitations,
             },
           }),
         );
@@ -158,6 +274,27 @@ describe('HelpDocs', () => {
               report_id: 7,
               response_request_id: 'resp-1',
             },
+          }),
+        );
+      }
+      if (path === '/api/control/failover-drill' && method === 'POST') {
+        failoverDrill = {
+          drill_type: 'warm_standby_restore_dry_run',
+          orchestration_scope: 'standalone_reference',
+          status: 'passed',
+          last_run_at: '2026-04-30T12:02:00Z',
+          actor: 'admin',
+          summary:
+            'Validated durable event storage with checkpoint artifacts for the documented failover path.',
+          artifact_source: 'checkpoint',
+          durable_storage_verified: true,
+          backup_artifact_verified: false,
+          checkpoint_artifact_verified: true,
+        };
+        return Promise.resolve(
+          jsonOk({
+            digest: 'failover-drill-digest',
+            drill: failoverDrill,
           }),
         );
       }
@@ -242,11 +379,41 @@ describe('HelpDocs', () => {
         )
       ).length,
     ).toBeGreaterThan(0);
+    expect(await screen.findByText('Report Workflow Coverage')).toBeInTheDocument();
+    expect((await screen.findAllByText('Runtime routes')).length).toBeGreaterThan(0);
+    expect((await screen.findAllByText('Live OpenAPI')).length).toBeGreaterThan(0);
+    expect((await screen.findAllByText('Docs OpenAPI')).length).toBeGreaterThan(0);
+    expect((await screen.findAllByText('TypeScript SDK')).length).toBeGreaterThan(0);
+    expect((await screen.findAllByText('Python SDK')).length).toBeGreaterThan(0);
+    expect((await screen.findAllByText('6 checks covered for this surface.')).length).toBe(3);
+    expect((await screen.findAllByText('3 checks covered for this surface.')).length).toBe(2);
     expect(await screen.findByText('Production Readiness')).toBeInTheDocument();
+    expect(await screen.findByText('Control-plane posture')).toBeInTheDocument();
+    expect(await screen.findByText('2 backups / 3 checkpoints')).toBeInTheDocument();
+    expect(
+      (
+        await screen.findAllByText(
+          'No automated failover drill has been recorded yet; run the control-plane failover drill before relying on the documented failover path.',
+        )
+      ).length,
+    ).toBeGreaterThan(0);
     expect(
       (await screen.findAllByText('No cloud, identity, or SaaS collectors are enabled yet.'))
         .length,
     ).toBeGreaterThan(0);
+
+    await user.click(screen.getByRole('button', { name: 'Run Failover Drill' }));
+    expect(await screen.findByText('Automated failover drill result')).toBeInTheDocument();
+    expect(await screen.findByText(/failover-drill-digest/)).toBeInTheDocument();
+    expect(await screen.findByText('Recent drill history')).toBeInTheDocument();
+    expect(await screen.findByText('warm standby restore dry run')).toBeInTheDocument();
+    await waitFor(() => {
+      expect(
+        screen.queryAllByText(
+          'No automated failover drill has been recorded yet; run the control-plane failover drill before relying on the documented failover path.',
+        ),
+      ).toHaveLength(0);
+    });
 
     await user.click(screen.getByRole('button', { name: 'Run Proof' }));
     expect(await screen.findByText('First-run proof result')).toBeInTheDocument();
@@ -280,5 +447,48 @@ describe('HelpDocs', () => {
         ),
       ).toBe(true);
     });
+  });
+
+  it('restores contextual support state from the route and preserves scope through runbook pivots', async () => {
+    const user = userEvent.setup();
+
+    renderWithProviders(
+      '/help?context=infrastructure&asset=Critical%20asset%20host&docs_q=deploy&docs_section=deployment&doc=runbooks/deployment.md&graphql_sample=alerts&api_q=graphql&api_auth=authenticated',
+    );
+
+    expect(await screen.findByText('Infrastructure Support')).toBeInTheDocument();
+    expect(await screen.findByText('Critical asset host')).toBeInTheDocument();
+    expect(screen.getByLabelText('Search docs')).toHaveValue('deploy');
+    expect(screen.getByLabelText('Docs section')).toHaveValue('deployment');
+    expect(
+      await screen.findByRole('heading', { name: 'Deployment & Upgrade Runbook' }),
+    ).toBeInTheDocument();
+    expect(screen.getByLabelText('GraphQL sample')).toHaveValue('alerts');
+    expect(screen.getByLabelText('GraphQL query').value).toContain('alerts(limit: 5)');
+    expect(screen.getByLabelText('Filter endpoints')).toHaveValue('graphql');
+    expect(screen.getByLabelText('Endpoint auth')).toHaveValue('authenticated');
+    expect(await screen.findByText('/api/graphql')).toBeInTheDocument();
+
+    expect(currentLocation().searchParams.get('context')).toBe('infrastructure');
+    expect(currentLocation().searchParams.get('asset')).toBe('Critical asset host');
+    expect(currentLocation().searchParams.get('doc')).toBe('runbooks/deployment.md');
+    expect(currentLocation().searchParams.get('graphql_sample')).toBe('alerts');
+
+    await user.click(screen.getByRole('button', { name: 'Open SDK guide' }));
+
+    await waitFor(() => {
+      expect(currentLocation().searchParams.get('context')).toBe('reports-exports');
+      expect(currentLocation().searchParams.get('asset')).toBe('Critical asset host');
+      expect(currentLocation().searchParams.get('docs_section')).toBe('api');
+      expect(currentLocation().searchParams.get('doc')).toBe('SDK_GUIDE.md');
+    });
+
+    expect(await screen.findByText('Reporting Support')).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'SDK Guide' })).toBeInTheDocument();
+    expect(
+      await screen.findByText((content, element) => {
+        return element?.tagName.toLowerCase() === 'h3' && content === 'TypeScript SDK';
+      }),
+    ).toBeInTheDocument();
   });
 });

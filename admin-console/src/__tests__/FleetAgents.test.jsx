@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent, act, within } from '@testing-library/react';
-import { MemoryRouter } from 'react-router-dom';
+import { render, screen, fireEvent, act, within, waitFor } from '@testing-library/react';
+import { MemoryRouter, useLocation } from 'react-router-dom';
 import { AuthProvider, RoleProvider, ThemeProvider, ToastProvider } from '../hooks.jsx';
 import { setToken } from '../api.js';
 import FleetAgents from '../components/FleetAgents.jsx';
@@ -201,6 +201,15 @@ function Wrapper({ children }) {
   );
 }
 
+function LocationProbe() {
+  const location = useLocation();
+  return <div data-testid="location-probe">{`${location.pathname}${location.search}${location.hash}`}</div>;
+}
+
+function currentLocation() {
+  return new URL(screen.getByTestId('location-probe').textContent || '/', 'http://localhost');
+}
+
 function renderFleet(route = '/') {
   return render(
     <MemoryRouter initialEntries={[route]}>
@@ -208,6 +217,7 @@ function renderFleet(route = '/') {
         <RoleProvider>
           <ThemeProvider>
             <ToastProvider>
+              <LocationProbe />
               <FleetAgents />
             </ToastProvider>
           </ThemeProvider>
@@ -357,6 +367,49 @@ describe('FleetAgents', () => {
 
     expect(screen.getByText(/Registered Agents/)).toBeInTheDocument();
     expect(screen.getByText('Status: offline')).toBeInTheDocument();
+  });
+
+  it('preserves updates focus and carried offline scope across the recovery pivot', async () => {
+    await act(async () => {
+      renderFleet('/?fleetTab=updates&updatesPanel=recovery');
+    });
+
+    expect(screen.getByText('Recovery Watchlist')).toBeInTheDocument();
+    expect(currentLocation().searchParams.get('fleetTab')).toBe('updates');
+    expect(currentLocation().searchParams.get('updatesPanel')).toBe('recovery');
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Open Offline Agents' }));
+    });
+
+    await waitFor(() => {
+      const params = currentLocation().searchParams;
+      expect(params.get('fleetTab')).toBe('agents');
+      expect(params.get('updatesPanel')).toBe('recovery');
+      expect(params.get('status')).toBe('offline');
+    });
+
+    expect(screen.getByText(/Registered Agents/)).toBeInTheDocument();
+    expect(screen.getByText('Status: offline')).toBeInTheDocument();
+
+    const updatesTab = screen.getAllByText('Updates').find((el) => el.classList.contains('tab'));
+    if (!updatesTab) {
+      throw new Error('Updates tab not found');
+    }
+
+    await act(async () => {
+      fireEvent.click(updatesTab);
+    });
+
+    await waitFor(() => {
+      const params = currentLocation().searchParams;
+      expect(params.get('fleetTab')).toBe('updates');
+      expect(params.get('updatesPanel')).toBe('recovery');
+      expect(params.get('status')).toBe('offline');
+    });
+
+    expect(screen.getByText('Recovery Watchlist')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Open Offline Agents' })).toBeInTheDocument();
   });
 
   it('refreshes grouped fleet surface data from the agents workspace', async () => {
