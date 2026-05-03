@@ -561,7 +561,7 @@ export default function LiveMonitor() {
   };
 
   // FP feedback handler
-  const markFP = async (alert) => {
+  const markFP = useCallback(async (alert) => {
     const pattern = (alert.reasons || [alert.category || alert.type || 'unknown']).join(', ');
     try {
       await api.fpFeedback({
@@ -574,7 +574,7 @@ export default function LiveMonitor() {
     } catch {
       toast('FP feedback failed', 'error');
     }
-  };
+  }, [reloadFP, toast]);
 
   // Bulk actions
   const executeBulk = async () => {
@@ -714,7 +714,7 @@ export default function LiveMonitor() {
     [toast],
   );
 
-  const moveAlert = (direction, pinned = selectedId != null) => {
+  const moveAlert = useCallback((direction, pinned = selectedId != null) => {
     if (filteredAlerts.length === 0) return;
     const currentIndex = pinned ? selectedAlertIndex : previewAlertIndex;
     const rawIndex =
@@ -727,7 +727,7 @@ export default function LiveMonitor() {
     const nextId = alertIdFor(filteredAlerts[nextIndex], nextIndex);
     setHoveredId(nextId);
     if (pinned) setSelectedId(nextId);
-  };
+  }, [filteredAlerts, previewAlertIndex, selectedAlertIndex, selectedId]);
 
   const exportAlerts = (format) => {
     if (format === 'csv') {
@@ -890,6 +890,7 @@ export default function LiveMonitor() {
     filteredAlerts,
     hoveredId,
     moveAlert,
+    markFP,
     previewAlert,
     previewAlertIndex,
     reload,

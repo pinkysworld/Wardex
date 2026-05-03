@@ -95,7 +95,6 @@ export default function Settings() {
   const toast = useToast();
   const [confirm, confirmUI] = useConfirm();
   const [searchParams, setSearchParams] = useSearchParams();
-  const searchParamsKey = searchParams.toString();
   const tab = normalizeSettingsTab(searchParams.get('tab'));
   const [auditPage, setAuditPage] = useState(0);
   const [auditQuery, setAuditQuery] = useState('');
@@ -156,7 +155,7 @@ export default function Settings() {
   const { data: dbSizes, reload: rSizes } = useApi(api.adminDbSizes);
   const routeHistoricalDraft = useMemo(
     () => parseHistoricalSearchParams(searchParams),
-    [searchParamsKey],
+    [searchParams],
   );
   const historicalQuery = useMemo(
     () => normalizeHistoricalSearchQuery(routeHistoricalDraft),
@@ -234,6 +233,7 @@ export default function Settings() {
   const [retentionApplying, setRetentionApplying] = useState(false);
   const [lastRetentionApply, setLastRetentionApply] = useState(null);
   const [siemDraft, setSiemDraft] = useState(() => createSiemDraft());
+  const [siemDraftDirty, setSiemDraftDirty] = useState(false);
   const [awsCollectorDraft, setAwsCollectorDraft] = useState(() => createAwsCollectorDraft());
   const [azureCollectorDraft, setAzureCollectorDraft] = useState(() => createAzureCollectorDraft());
   const [gcpCollectorDraft, setGcpCollectorDraft] = useState(() => createGcpCollectorDraft());
@@ -532,8 +532,9 @@ export default function Settings() {
   }, [idpRows.length]);
 
   useEffect(() => {
+    if (siemDraftDirty) return;
     setSiemDraft(createSiemDraft(siemConfigData));
-  }, [siemConfigData]);
+  }, [siemConfigData, siemDraftDirty]);
 
   useEffect(() => {
     if (scimEditing) return;
@@ -835,6 +836,7 @@ export default function Settings() {
     try {
       await api.setSiemConfig(buildSiemPayload());
       setSiemValidationResult(null);
+      setSiemDraftDirty(false);
       await rIntegrations();
       toast('SIEM setup saved', 'success');
     } catch (error) {
@@ -1339,20 +1341,29 @@ export default function Settings() {
               <ToggleSwitch
                 label="Enable SIEM"
                 checked={siemDraft.enabled}
-                onChange={(value) => setSiemDraft((prev) => ({ ...prev, enabled: value }))}
+                onChange={(value) => {
+                  setSiemDraftDirty(true);
+                  setSiemDraft((prev) => ({ ...prev, enabled: value }));
+                }}
                 description="Enable this when alerts should be pushed to the configured SIEM endpoint."
               />
               <SelectInput
                 label="SIEM Type"
                 value={siemDraft.siem_type}
-                onChange={(value) => setSiemDraft((prev) => ({ ...prev, siem_type: value }))}
+                onChange={(value) => {
+                  setSiemDraftDirty(true);
+                  setSiemDraft((prev) => ({ ...prev, siem_type: value }));
+                }}
                 options={SIEM_TYPE_OPTIONS}
                 description="Choose the payload format expected by your downstream SIEM or data lake."
               />
               <TextInput
                 label="SIEM Endpoint"
                 value={siemDraft.endpoint}
-                onChange={(value) => setSiemDraft((prev) => ({ ...prev, endpoint: value }))}
+                onChange={(value) => {
+                  setSiemDraftDirty(true);
+                  setSiemDraft((prev) => ({ ...prev, endpoint: value }));
+                }}
                 placeholder="https://siem.example.com/hec"
               />
               <TextInput

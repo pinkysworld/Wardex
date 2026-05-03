@@ -157,6 +157,7 @@ export default function CommandCenter() {
     compliancePacks: summaryMetrics.compliance_packs ?? reportTemplates.length,
   };
   const laneSummaries = data.commandSummary?.lanes || {};
+  const hasLoadedCommandData = Object.keys(data || {}).length > 0;
 
   const renderLaneAnnotation = (laneKey, fallbackAnnotation, fallbackNextStep) => {
     const lane = laneSummaries?.[laneKey] || {};
@@ -281,18 +282,20 @@ export default function CommandCenter() {
         />
       </div>
 
-      <CommandActionDrawers
-        drawer={drawer}
-        connectorRows={connectorRows}
-        reviews={reviews}
-        rules={rules}
-        releases={releases}
-        reportTemplates={reportTemplates}
-        suppressionCount={suppressionCount}
-        data={data}
-        onClose={closeDrawer}
-        onReload={reload}
-      />
+      {(!loading || hasLoadedCommandData) && (
+        <CommandActionDrawers
+          drawer={drawer}
+          connectorRows={connectorRows}
+          reviews={reviews}
+          rules={rules}
+          releases={releases}
+          reportTemplates={reportTemplates}
+          suppressionCount={suppressionCount}
+          data={data}
+          onClose={closeDrawer}
+          onReload={reload}
+        />
+      )}
 
       <div className="grid-2">
         <CommandSection

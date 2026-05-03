@@ -213,9 +213,10 @@ export default function AttackGraph() {
   const sequenceSummaries = Array.isArray(lateralData?.sequence_summaries)
     ? lateralData.sequence_summaries
     : [];
-  const temporalChains = Array.isArray(lateralData?.temporal_chains)
-    ? lateralData.temporal_chains
-    : [];
+  const temporalChains = useMemo(
+    () => (Array.isArray(lateralData?.temporal_chains) ? lateralData.temporal_chains : []),
+    [lateralData],
+  );
   const selectedChainId = searchParams.get('chain') || temporalChains[0]?.chain_id || '';
   const selectedChain = useMemo(
     () => temporalChains.find((chain) => chain.chain_id === selectedChainId) || temporalChains[0] || null,

@@ -8,6 +8,16 @@ use std::collections::HashMap;
 use std::path::Path;
 use std::sync::Mutex;
 
+#[cfg(unix)]
+fn harden_session_file_permissions(path: &str) {
+    use std::os::unix::fs::PermissionsExt;
+
+    let _ = std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o600));
+}
+
+#[cfg(not(unix))]
+fn harden_session_file_permissions(_path: &str) {}
+
 // ── Auth mode ───────────────────────────────────────────────────
 
 /// Authentication mode for the admin console.
@@ -143,7 +153,10 @@ impl SessionStore {
             }
             let tmp = format!("{path}.tmp");
             if std::fs::write(&tmp, &json).is_ok() {
-                let _ = std::fs::rename(&tmp, path);
+                harden_session_file_permissions(&tmp);
+                if std::fs::rename(&tmp, path).is_ok() {
+                    harden_session_file_permissions(path);
+                }
             }
         }
     }
@@ -598,5 +611,25 @@ mod tests {
 
         let _ = std::fs::remove_file(&path);
         let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn session_persistence_writes_owner_only_permissions() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let dir = tempfile::tempdir().expect("tempdir");
+        let path = dir.path().join("sessions.json");
+        let path_str = path.to_string_lossy().to_string();
+
+        let store = SessionStore::with_persistence(&path_str);
+        store.create_session("u10", "u10@example.com", "admin", &[], 8);
+
+        let mode = std::fs::metadata(&path)
+            .expect("session file metadata")
+            .permissions()
+            .mode()
+            & 0o777;
+        assert_eq!(mode, 0o600);
     }
 }

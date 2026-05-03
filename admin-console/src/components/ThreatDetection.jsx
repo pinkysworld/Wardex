@@ -566,7 +566,11 @@ export default function ThreatDetection() {
   const { data: workbenchOverview, reload: reloadWorkbenchOverview } = useApi(
     api.workbenchOverview,
   );
-  const { data: detectionContentData, reload: reloadDetectionContent } = useApiGroup({
+  const {
+    data: detectionContentData,
+    loading: detectionContentLoading,
+    reload: reloadDetectionContent,
+  } = useApiGroup({
     weights: api.detectionWeights,
     contentRulesData: api.contentRules,
     packsData: api.contentPacks,
@@ -1823,6 +1827,14 @@ export default function ThreatDetection() {
       'success',
     );
   };
+
+  if (detectionContentLoading && !contentRulesData && selectedRuleId) {
+    return (
+      <div className="loading" style={{ padding: 40 }}>
+        Loading detection content…
+      </div>
+    );
+  }
 
   return (
     <div>

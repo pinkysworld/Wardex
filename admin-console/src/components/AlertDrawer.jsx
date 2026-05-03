@@ -233,7 +233,6 @@ export default function AlertDrawer({
         : [];
   }, [alert]);
   const alertHashes = useMemo(() => extractAlertHashes(alert, reasons), [alert, reasons]);
-  const processCandidate = useMemo(() => extractAlertProcessCandidate(alert), [alert]);
   const processCandidates = useMemo(() => extractAlertProcessCandidates(alert), [alert]);
   const processNames = useMemo(
     () => (Array.isArray(alert?.process_names) ? alert.process_names.filter(Boolean) : []),
@@ -284,6 +283,7 @@ export default function AlertDrawer({
     let cancelled = false;
 
     if (!alert || alertHashes.length === 0) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setArtifactContext({ hashMatch: null, recentDetections: [], sightings: [] });
       setArtifactContextLoading(false);
       return undefined;

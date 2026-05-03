@@ -10,6 +10,7 @@ xdr_ai_handoff_pack.zip
 release/
 output/
 test-results/
+playwright-report/
 migrate_axum.py
 migrate_fixup.py
 *.bak

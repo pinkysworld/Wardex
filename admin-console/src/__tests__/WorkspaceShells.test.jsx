@@ -1,12 +1,11 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter, useLocation } from 'react-router-dom';
 import { AuthProvider, ToastProvider, ThemeProvider } from '../hooks.jsx';
 import ThreatDetection from '../components/ThreatDetection.jsx';
 import SOCWorkbench from '../components/SOCWorkbench.jsx';
 import Infrastructure from '../components/Infrastructure.jsx';
 import ReportsExports from '../components/ReportsExports.jsx';
-import HelpDocs from '../components/HelpDocs.jsx';
 
 globalThis.fetch = vi.fn();
 

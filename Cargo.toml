@@ -46,6 +46,12 @@ experimental-llm = []
 experimental-quantum = []
 experimental-proof = []
 
+[lib]
+# The crate currently has no Rust doctest examples, and `rustdoc --test`
+# must compile the full monolithic library with all default features. Keep
+# `cargo test --doc` reliable by avoiding that resource-heavy no-op pass.
+doctest = false
+
 [dev-dependencies]
 criterion = { version = "0.5", default-features = false, features = ["cargo_bench_support"] }
 tempfile = "3"

@@ -2,8 +2,12 @@
 // ADR-0004: Layered identity model.
 
 use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
 use std::collections::HashMap;
 use std::sync::Mutex;
+
+const TOKEN_HASH_PREFIX: &str = "sha256:";
+const REDACTED_TOKEN_HASH: &str = "[redacted]";
 
 // ── Roles and permissions ───────────────────────────────────────
 
@@ -128,7 +132,7 @@ pub fn role_permissions(role: Role) -> Vec<Permission> {
 pub struct User {
     pub username: String,
     pub role: Role,
-    /// API token (hashed in production).
+    /// API token digest. Raw tokens are accepted at insertion and normalized.
     pub token_hash: String,
     pub enabled: bool,
     pub created_at: String,
@@ -141,8 +145,27 @@ pub struct User {
 /// In-memory user and role store with permission checking.
 pub struct RbacStore {
     users: Mutex<HashMap<String, User>>,
-    /// Token -> username lookup for fast auth.
+    /// Token digest -> username lookup for fast auth.
     tokens: Mutex<HashMap<String, String>>,
+}
+
+fn hash_token(token: &str) -> String {
+    let mut hasher = Sha256::new();
+    hasher.update(token.as_bytes());
+    format!("{TOKEN_HASH_PREFIX}{}", hex::encode(hasher.finalize()))
+}
+
+fn token_lookup_key(token_or_hash: &str) -> String {
+    if token_or_hash.starts_with(TOKEN_HASH_PREFIX) {
+        token_or_hash.to_string()
+    } else {
+        hash_token(token_or_hash)
+    }
+}
+
+fn redact_user_token(mut user: User) -> User {
+    user.token_hash = REDACTED_TOKEN_HASH.to_string();
+    user
 }
 
 impl RbacStore {
@@ -153,11 +176,13 @@ impl RbacStore {
         }
     }
 
-    /// Register a user. The token should be pre-hashed for production.
+    /// Register a user. Raw tokens are hashed before storage.
     pub fn add_user(&self, user: User) {
         let mut users = self.users.lock().unwrap_or_else(|e| e.into_inner());
         let mut tokens = self.tokens.lock().unwrap_or_else(|e| e.into_inner());
 
+        let mut user = user;
+        user.token_hash = token_lookup_key(&user.token_hash);
         let token = user.token_hash.clone();
         let username = user.username.clone();
 
@@ -186,7 +211,8 @@ impl RbacStore {
     pub fn authenticate(&self, token: &str) -> Option<User> {
         let users = self.users.lock().unwrap_or_else(|e| e.into_inner());
         let tokens = self.tokens.lock().unwrap_or_else(|e| e.into_inner());
-        let username = tokens.get(token)?;
+        let lookup = token_lookup_key(token);
+        let username = tokens.get(&lookup)?;
         let user = users.get(username)?;
         if user.enabled {
             Some(user.clone())
@@ -228,6 +254,7 @@ impl RbacStore {
             .unwrap_or_else(|e| e.into_inner())
             .get(username)
             .cloned()
+            .map(redact_user_token)
     }
 
     pub fn list_users(&self) -> Vec<User> {
@@ -236,6 +263,7 @@ impl RbacStore {
             .unwrap_or_else(|e| e.into_inner())
             .values()
             .cloned()
+            .map(redact_user_token)
             .collect()
     }
 
@@ -618,6 +646,20 @@ mod tests {
         let user = store.authenticate("admin-token").unwrap();
         assert_eq!(user.username, "admin");
         assert_eq!(user.role, Role::Admin);
+        assert!(user.token_hash.starts_with(TOKEN_HASH_PREFIX));
+        assert_ne!(user.token_hash, "admin-token");
+    }
+
+    #[test]
+    fn authenticate_accepts_stored_digest_for_internal_checks() {
+        let store = setup_store();
+        let user = store.authenticate("admin-token").unwrap();
+        assert!(store.authenticate(&user.token_hash).is_some());
+        assert!(
+            store
+                .check_api_access(&user.token_hash, "POST", "/api/rbac/users")
+                .is_allowed()
+        );
     }
 
     #[test]
@@ -728,6 +770,18 @@ mod tests {
         let store = setup_store();
         let users = store.list_users();
         assert_eq!(users.len(), 4);
+        assert!(
+            users
+                .iter()
+                .all(|user| user.token_hash == REDACTED_TOKEN_HASH)
+        );
+    }
+
+    #[test]
+    fn get_user_redacts_token_hash() {
+        let store = setup_store();
+        let user = store.get_user("admin").unwrap();
+        assert_eq!(user.token_hash, REDACTED_TOKEN_HASH);
     }
 
     #[test]

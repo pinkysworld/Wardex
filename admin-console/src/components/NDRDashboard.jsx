@@ -225,6 +225,14 @@ export default function NDRDashboard() {
     [activeTab, beaconingList.length, dpiList.length, leadAddress, tlsList.length],
   );
 
+  if (loading && !report) {
+    return (
+      <div className="loading" style={{ padding: 40 }}>
+        Analyzing network flows…
+      </div>
+    );
+  }
+
   return (
     <div style={{ display: 'grid', gap: 16 }}>
       {/* Summary Cards */}

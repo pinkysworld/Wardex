@@ -1892,7 +1892,11 @@ mod tests {
         let shared = SharedStorage::open(dir.to_str().unwrap()).unwrap();
 
         let (version, observation) = shared
-            .with_observed(|store| Ok(store.schema_version()))
+            .with_observed(|store| {
+                let version = store.schema_version();
+                std::thread::sleep(Duration::from_millis(1));
+                Ok(version)
+            })
             .unwrap();
 
         assert!(version >= 1);
