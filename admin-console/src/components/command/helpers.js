@@ -90,6 +90,7 @@ export const CONNECTOR_LANES = [
 ];
 
 export const IMPROVEMENT_LANES = [
+  'Shift Command Board',
   'Incident Command Center',
   'Connector Onboarding Wizard',
   'Detection Quality Dashboard',

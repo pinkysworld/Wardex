@@ -9893,9 +9893,19 @@ fn command_summary_payload(state: &mut AppState) -> serde_json::Value {
             )
         })
         .count();
+    let shift_board = command_shift_board_payload(
+        state,
+        open_incidents,
+        active_cases,
+        remediation_lane.pending_reviews,
+        connector_issues,
+        noisy_rules,
+        stale_rules,
+    );
 
     serde_json::json!({
         "generated_at": chrono::Utc::now().to_rfc3339(),
+        "shift_board": shift_board,
         "metrics": {
             "open_incidents": open_incidents,
             "active_cases": active_cases,
@@ -10006,6 +10016,239 @@ fn command_summary_payload(state: &mut AppState) -> serde_json::Value {
                 "href": "/reports",
             }
         }
+    })
+}
+
+fn increment_owner_count(owners: &mut HashMap<String, usize>, owner: Option<&str>) {
+    let owner = owner
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .unwrap_or("unassigned");
+    *owners.entry(owner.to_string()).or_insert(0) += 1;
+}
+
+fn active_shift_owner(state: &AppState) -> serde_json::Value {
+    let mut owners = HashMap::new();
+    for item in state.alert_queue.all() {
+        increment_owner_count(&mut owners, item.assignee.as_deref());
+    }
+    for case in state.case_store.list() {
+        if !matches!(case.status, CaseStatus::Resolved | CaseStatus::Closed) {
+            increment_owner_count(&mut owners, case.assignee.as_deref());
+        }
+    }
+    for incident in state.incident_store.list() {
+        if matches!(
+            incident.status,
+            crate::incident::IncidentStatus::Open | crate::incident::IncidentStatus::Investigating
+        ) {
+            increment_owner_count(&mut owners, incident.assignee.as_deref());
+        }
+    }
+    let (name, work_items) = owners
+        .into_iter()
+        .filter(|(name, _)| name != "unassigned")
+        .max_by(|left, right| left.1.cmp(&right.1).then_with(|| right.0.cmp(&left.0)))
+        .unwrap_or_else(|| ("unassigned".to_string(), 0));
+    serde_json::json!({
+        "name": name,
+        "work_items": work_items,
+    })
+}
+
+fn shift_sla_age_buckets(state: &AppState) -> serde_json::Value {
+    let mut under_1h = 0usize;
+    let mut between_1h_4h = 0usize;
+    let mut between_4h_24h = 0usize;
+    let mut over_24h = 0usize;
+    let mut breached = 0usize;
+    for item in state.alert_queue.pending() {
+        let age = age_secs_since(&item.timestamp).unwrap_or_default();
+        if age < 60 * 60 {
+            under_1h += 1;
+        } else if age < 4 * 60 * 60 {
+            between_1h_4h += 1;
+        } else if age < 24 * 60 * 60 {
+            between_4h_24h += 1;
+        } else {
+            over_24h += 1;
+        }
+        let item_breached = item
+            .sla_deadline
+            .as_deref()
+            .and_then(|deadline| chrono::DateTime::parse_from_rfc3339(deadline).ok())
+            .map(|deadline| chrono::Utc::now() > deadline.with_timezone(&chrono::Utc))
+            .unwrap_or(false);
+        if item_breached {
+            breached += 1;
+        }
+    }
+    serde_json::json!({
+        "under_1h": under_1h,
+        "between_1h_4h": between_1h_4h,
+        "between_4h_24h": between_4h_24h,
+        "over_24h": over_24h,
+        "breached": breached,
+    })
+}
+
+fn command_shift_board_payload(
+    state: &AppState,
+    open_incidents: usize,
+    active_cases: usize,
+    pending_remediation_reviews: usize,
+    connector_issues: usize,
+    noisy_rules: usize,
+    stale_rules: usize,
+) -> serde_json::Value {
+    let pending_queue = state
+        .alert_queue
+        .all()
+        .iter()
+        .filter(|item| !item.acknowledged)
+        .count();
+    let unassigned_queue = state
+        .alert_queue
+        .all()
+        .iter()
+        .filter(|item| !item.acknowledged && item.assignee.is_none())
+        .count();
+    let unassigned_cases = state
+        .case_store
+        .list()
+        .iter()
+        .filter(|case| {
+            !matches!(case.status, CaseStatus::Resolved | CaseStatus::Closed)
+                && case.assignee.is_none()
+        })
+        .count();
+    let response_requests = state.response_orchestrator.all_requests();
+    let pending_response_approvals = response_requests
+        .iter()
+        .filter(|request| request.status == ApprovalStatus::Pending)
+        .count();
+    let ready_to_execute = response_requests
+        .iter()
+        .filter(|request| request.status == ApprovalStatus::Approved && !request.dry_run)
+        .count();
+    let sla_buckets = shift_sla_age_buckets(state);
+    let sla_breached = sla_buckets
+        .get("breached")
+        .and_then(serde_json::Value::as_u64)
+        .unwrap_or_default() as usize;
+    let mut blockers = Vec::new();
+    if unassigned_queue > 0 || unassigned_cases > 0 {
+        blockers.push(format!(
+            "{} queue item(s) and {} case(s) need an owner",
+            unassigned_queue, unassigned_cases
+        ));
+    }
+    if sla_breached > 0 {
+        blockers.push(format!("{sla_breached} alert(s) breached SLA"));
+    }
+    if pending_remediation_reviews + pending_response_approvals > 0 {
+        blockers.push(format!(
+            "{} approval(s) are pending",
+            pending_remediation_reviews + pending_response_approvals
+        ));
+    }
+    if connector_issues > 0 {
+        blockers.push(format!(
+            "{connector_issues} connector lane(s) need validation"
+        ));
+    }
+    if noisy_rules + stale_rules > 0 {
+        blockers.push(format!(
+            "{} detection review item(s) need replay or lifecycle evidence",
+            noisy_rules + stale_rules
+        ));
+    }
+    let board_status = if blockers.is_empty() {
+        "ready"
+    } else if sla_breached > 0 || open_incidents > 0 {
+        "attention"
+    } else {
+        "watch"
+    };
+    serde_json::json!({
+        "status": board_status,
+        "active_owner": active_shift_owner(state),
+        "open_incidents": open_incidents,
+        "active_cases": active_cases,
+        "unassigned_cases": unassigned_cases,
+        "unassigned_queue": unassigned_queue,
+        "pending_approvals": pending_remediation_reviews + pending_response_approvals,
+        "ready_to_execute": ready_to_execute,
+        "sla_age_buckets": sla_buckets,
+        "blockers": blockers,
+        "lanes": [
+            {
+                "id": "queue",
+                "label": "Alert queue",
+                "owner": "shift lead",
+                "open": pending_queue,
+                "unassigned": unassigned_queue,
+                "pending_approvals": 0,
+                "blockers": if unassigned_queue > 0 || sla_breached > 0 { unassigned_queue + sla_breached } else { 0 },
+                "next_action": if unassigned_queue > 0 { "Assign the oldest critical alert and confirm SLA pressure." } else { "Review assigned alert aging before the next handoff." },
+                "href": "/soc#queue",
+            },
+            {
+                "id": "cases",
+                "label": "Cases",
+                "owner": "case lead",
+                "open": active_cases,
+                "unassigned": unassigned_cases,
+                "pending_approvals": 0,
+                "blockers": unassigned_cases,
+                "next_action": if unassigned_cases > 0 { "Assign open cases and capture unresolved questions." } else { "Prepare handoff packets for cases near shift change." },
+                "href": "/soc#cases",
+            },
+            {
+                "id": "incidents",
+                "label": "Incidents",
+                "owner": "incident commander",
+                "open": open_incidents,
+                "unassigned": 0,
+                "pending_approvals": 0,
+                "blockers": open_incidents,
+                "next_action": if open_incidents > 0 { "Confirm owner, containment status, and evidence export path." } else { "Keep watch on new escalations and reopened cases." },
+                "href": "/soc",
+            },
+            {
+                "id": "approvals",
+                "label": "Approvals",
+                "owner": "approver",
+                "open": pending_remediation_reviews + pending_response_approvals,
+                "unassigned": 0,
+                "pending_approvals": pending_remediation_reviews + pending_response_approvals,
+                "blockers": pending_remediation_reviews + pending_response_approvals,
+                "next_action": if pending_remediation_reviews + pending_response_approvals > 0 { "Review blast radius, rollback proof, and approver quorum." } else { "Keep approval evidence ready for response execution." },
+                "href": "/infrastructure?tab=remediation",
+            },
+            {
+                "id": "connectors",
+                "label": "Connectors",
+                "owner": "platform owner",
+                "open": connector_issues,
+                "unassigned": 0,
+                "pending_approvals": 0,
+                "blockers": connector_issues,
+                "next_action": if connector_issues > 0 { "Validate credentials and last-good event proof for affected lanes." } else { "Keep collector proof fresh for downstream detections." },
+                "href": "/settings?settingsTab=collectors",
+            },
+            {
+                "id": "detections",
+                "label": "Detections",
+                "owner": "detection owner",
+                "open": noisy_rules + stale_rules,
+                "unassigned": 0,
+                "pending_approvals": 0,
+                "blockers": noisy_rules + stale_rules,
+                "next_action": if noisy_rules + stale_rules > 0 { "Run replay and update lifecycle evidence before promotion." } else { "Schedule the next owner review and replay check." },
+                "href": "/detection",
+            }
+        ],
     })
 }
 

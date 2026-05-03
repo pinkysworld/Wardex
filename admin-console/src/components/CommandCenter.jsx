@@ -146,6 +146,10 @@ export default function CommandCenter() {
   ];
   const failedRequests = Object.keys(errors || {}).length;
   const summaryMetrics = data.commandSummary?.metrics || {};
+  const shiftBoard = data.commandSummary?.shift_board || {};
+  const shiftLanes = asArray(shiftBoard, ['lanes']);
+  const shiftBlockers = asArray(shiftBoard, ['blockers']);
+  const shiftSlaBuckets = shiftBoard.sla_age_buckets || {};
   const commandMetrics = {
     incidents: summaryMetrics.open_incidents ?? activeIncidents.length,
     cases: summaryMetrics.active_cases ?? activeCases.length,
@@ -296,6 +300,78 @@ export default function CommandCenter() {
           onReload={reload}
         />
       )}
+
+      <CommandSection
+        eyebrow="Shift Command Board"
+        title="Keep ownership, blockers, and next actions clear"
+        description="The active shift view pulls owners, open incidents, unassigned work, SLA age, approvals, and lane actions into one handoff surface."
+        actions={
+          <Link className="btn btn-sm" to="/soc">
+            Open SOC board
+          </Link>
+        }
+      >
+        <SummaryGrid
+          data={{
+            active_owner: shiftBoard.active_owner?.name || 'unassigned',
+            open_incidents: shiftBoard.open_incidents ?? commandMetrics.incidents,
+            unassigned_cases: shiftBoard.unassigned_cases ?? 0,
+            pending_approvals: shiftBoard.pending_approvals ?? commandMetrics.pendingReviews,
+            sla_breached: shiftSlaBuckets.breached ?? 0,
+            ready_to_execute: shiftBoard.ready_to_execute ?? 0,
+          }}
+          limit={6}
+        />
+        {shiftBlockers.length > 0 ? (
+          shiftBlockers.slice(0, 3).map((blocker) => (
+            <WorkItem
+              key={blocker}
+              title={blocker}
+              detail="Resolve before the next case handoff or response approval."
+              badge="blocker"
+              tone="badge-warn"
+            />
+          ))
+        ) : (
+          <WorkItem
+            title="No shift blockers reported"
+            detail="Ownership and approval lanes are ready for normal handoff."
+            badge={shiftBoard.status || 'ready'}
+            tone={statusBadge(shiftBoard.status || 'ready')}
+          />
+        )}
+        <div className="table-wrap">
+          <table className="data-table compact-table">
+            <thead>
+              <tr>
+                <th>Lane</th>
+                <th>Open</th>
+                <th>Owner</th>
+                <th>Next action</th>
+              </tr>
+            </thead>
+            <tbody>
+              {shiftLanes.map((lane) => (
+                <tr key={lane.id || lane.label}>
+                  <td>
+                    <Link className="btn-link command-inline-action" to={lane.href || '/soc'}>
+                      {lane.label || lane.id}
+                    </Link>
+                  </td>
+                  <td>
+                    {formatCount(lane.open || 0)}
+                    {lane.unassigned > 0 && (
+                      <div className="hint">{formatCount(lane.unassigned)} unassigned</div>
+                    )}
+                  </td>
+                  <td>{lane.owner || 'shift lead'}</td>
+                  <td>{lane.next_action || 'Review lane state before handoff.'}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </CommandSection>
 
       <div className="grid-2">
         <CommandSection

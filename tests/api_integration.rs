@@ -270,6 +270,23 @@ fn command_summary_returns_lane_health() {
             .is_some()
     );
     assert!(body["metrics"]["connector_issues"].as_u64().is_some());
+    assert!(
+        body["shift_board"]["active_owner"]["name"]
+            .as_str()
+            .is_some()
+    );
+    assert!(
+        body["shift_board"]["sla_age_buckets"]["breached"]
+            .as_u64()
+            .is_some()
+    );
+    assert!(
+        body["shift_board"]["lanes"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|lane| lane["id"] == "cases" && lane["next_action"].as_str().is_some())
+    );
     assert_eq!(
         body["lanes"]["release"]["current_version"]
             .as_str()

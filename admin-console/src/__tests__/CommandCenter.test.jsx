@@ -44,6 +44,46 @@ function currentSearchParams() {
 
 const COMMAND_FIXTURES = {
   commandSummary: {
+    shift_board: {
+      status: 'attention',
+      active_owner: { name: 'analyst-1', work_items: 3 },
+      open_incidents: 1,
+      active_cases: 1,
+      unassigned_cases: 1,
+      unassigned_queue: 2,
+      pending_approvals: 2,
+      ready_to_execute: 1,
+      sla_age_buckets: {
+        under_1h: 1,
+        between_1h_4h: 1,
+        between_4h_24h: 0,
+        over_24h: 0,
+        breached: 1,
+      },
+      blockers: ['2 queue item(s) and 1 case(s) need an owner', '1 alert(s) breached SLA'],
+      lanes: [
+        {
+          id: 'queue',
+          label: 'Alert queue',
+          owner: 'shift lead',
+          open: 3,
+          unassigned: 2,
+          blockers: 3,
+          next_action: 'Assign the oldest critical alert and confirm SLA pressure.',
+          href: '/soc#queue',
+        },
+        {
+          id: 'cases',
+          label: 'Cases',
+          owner: 'case lead',
+          open: 1,
+          unassigned: 1,
+          blockers: 1,
+          next_action: 'Assign open cases and capture unresolved questions.',
+          href: '/soc#cases',
+        },
+      ],
+    },
     metrics: {
       open_incidents: 1,
       active_cases: 1,
@@ -291,6 +331,21 @@ describe('CommandCenter', () => {
       });
       expect(currentSearchParams().has('drawer')).toBe(false);
     }
+  });
+
+  it('renders the shift command board with ownership, blockers, and lane next actions', async () => {
+    renderWithProviders('/command');
+
+    expect(await screen.findByRole('heading', { name: /Keep ownership/i })).toBeInTheDocument();
+    expect(screen.getAllByText('analyst-1').length).toBeGreaterThan(0);
+    expect(screen.getByText('1 alert(s) breached SLA')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Alert queue' })).toHaveAttribute(
+      'href',
+      '/soc#queue',
+    );
+    expect(
+      screen.getByText('Assign the oldest critical alert and confirm SLA pressure.'),
+    ).toBeInTheDocument();
   });
 
   it('saves and validates GitHub connector drafts with settings handoff and reloads command data', async () => {
