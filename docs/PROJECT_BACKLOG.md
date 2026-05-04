@@ -13,12 +13,13 @@ Recently completed after the `v0.56.0` baseline:
 - [x] Connector Coverage Impact in SOC Workbench with collector risk, affected detections, stale assets, owners, and remediation pivots.
 - [x] Detection Ownership And Review Calendar in Threat Detection with overdue review planning, replay blockers, and promotion blockers.
 - [x] Compact Command Center detection review summary that surfaces the highest-priority review pressure before analysts pivot into `/detection`.
+- [x] Shared SOC/Threat Detection review history plus OIDC callback hardening with PKCE `S256`, JWKS-backed `id_token` validation, issuer/audience checks, and nonce enforcement.
 
 Recommended next backlog slices:
 
-- [ ] Carry the detection review calendar into a backend-backed SOC Workbench summary block so SOC, Threat Detection, and Command Center read the same derived contract.
-- [ ] Add rule-level analyst review history by exposing recent replay/test deltas and rule-keyed detection-feedback summaries from the backend.
-- [ ] Extend Command Center and Help & Docs runbooks with explicit shift-handoff and review-SLA operating guidance once the shared backend review contract lands.
+- [ ] Hard-validate OIDC sessions against JWKS key rotation and persisted-session integrity, including signed or tamper-evident session state beyond filesystem permissions.
+- [ ] Replace manual API auth allowlists with default-deny route metadata shared across routing, RBAC, OpenAPI, and SDK generation.
+- [ ] Sign agent update artifacts and enforce wrong-key, replay, downgrade, and tamper rejection during update assignment and install.
 
 ## Phase 0 - Foundation (completed)
 

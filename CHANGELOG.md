@@ -10,6 +10,7 @@ All notable changes to Wardex are documented in this file.
 
 ### Changed
 - **Shared review-history contract** — Rule-level replay/analyst review history now feeds both Threat Detection and SOC Workbench from the same backend derivation path, reducing cross-surface drift.
+- **OIDC callback hardening** — the federated sign-in flow now requires a validated `id_token`, enforces PKCE with `S256`, verifies JWT signatures against provider JWKS, checks issuer/audience/expiry/nbf claims, and rejects nonce or subject mismatches before creating a console session.
 
 ### Backend
 - **SOC workbench strengthening slices** — `GET /api/workbench/overview` now includes team load and ownership plus connector coverage impact signals, and `GET /api/cases/{id}/handoff-packet` returns structured case handoff packets for analyst turnover.

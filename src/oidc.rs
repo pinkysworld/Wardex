@@ -6,7 +6,13 @@
 //
 // Flow: /api/auth/oidc/login → redirect to IdP → callback → JWT session
 
+use base64::Engine;
+use jsonwebtoken::jwk::JwkSet;
+use jsonwebtoken::{DecodingKey, TokenData, Validation, decode, decode_header};
+use rand::RngCore;
+use rand::rngs::OsRng;
 use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
 use std::collections::HashMap;
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -149,6 +155,23 @@ pub struct SsoSession {
     pub provider: String,
 }
 
+#[derive(Debug, Clone, Deserialize)]
+struct OidcIdTokenClaims {
+    iss: String,
+    sub: String,
+    aud: OneOrManyStrings,
+    exp: u64,
+    #[serde(default)]
+    nonce: Option<String>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(untagged)]
+enum OneOrManyStrings {
+    One(String),
+    Many(Vec<String>),
+}
+
 // ── OIDC Provider ────────────────────────────────────────────────────────────
 
 /// OIDC provider that manages discovery, authorization, and token exchange.
@@ -165,6 +188,7 @@ pub struct OidcProvider {
 struct PendingAuth {
     state: String,
     nonce: String,
+    code_verifier: String,
     created_at: u64,
     redirect_after: Option<String>,
 }
@@ -201,6 +225,8 @@ impl OidcProvider {
         let discovery = self.discovery.as_ref().ok_or("OIDC not discovered yet")?;
         let state = generate_random_string(32);
         let nonce = generate_random_string(32);
+        let code_verifier = generate_pkce_code_verifier();
+        let code_challenge = pkce_code_challenge(&code_verifier);
 
         let now = SystemTime::now()
             .duration_since(UNIX_EPOCH)
@@ -216,6 +242,7 @@ impl OidcProvider {
             PendingAuth {
                 state: state.clone(),
                 nonce: nonce.clone(),
+                code_verifier: code_verifier.clone(),
                 created_at: now,
                 redirect_after,
             },
@@ -223,13 +250,14 @@ impl OidcProvider {
 
         let scopes = self.config.scopes.join(" ");
         let url = format!(
-            "{}?response_type=code&client_id={}&redirect_uri={}&scope={}&state={}&nonce={}",
+            "{}?response_type=code&client_id={}&redirect_uri={}&scope={}&state={}&nonce={}&code_challenge={}&code_challenge_method=S256",
             discovery.authorization_endpoint,
             urlencoded(&self.config.client_id),
             urlencoded(&self.config.redirect_uri),
             urlencoded(&scopes),
             urlencoded(&state),
             urlencoded(&nonce),
+            urlencoded(&code_challenge),
         );
 
         Ok(url)
@@ -264,11 +292,12 @@ impl OidcProvider {
 
         // Token exchange
         let form = format!(
-            "grant_type=authorization_code&code={}&redirect_uri={}&client_id={}&client_secret={}",
+            "grant_type=authorization_code&code={}&redirect_uri={}&client_id={}&client_secret={}&code_verifier={}",
             urlencoded(code),
             urlencoded(&self.config.redirect_uri),
             urlencoded(&self.config.client_id),
             urlencoded(&self.config.client_secret),
+            urlencoded(&pending.code_verifier),
         );
 
         let token_resp: TokenResponse = ureq::post(&discovery.token_endpoint)
@@ -277,6 +306,7 @@ impl OidcProvider {
             .map_err(|e| format!("Token exchange failed: {e}"))?
             .into_json()
             .map_err(|e| format!("Token parse failed: {e}"))?;
+        let id_token = self.validate_id_token(discovery, &token_resp, &pending)?;
 
         // Fetch user info
         let user_info: OidcUserInfo = ureq::get(&discovery.userinfo_endpoint)
@@ -288,6 +318,9 @@ impl OidcProvider {
             .map_err(|e| format!("UserInfo fetch failed: {e}"))?
             .into_json()
             .map_err(|e| format!("UserInfo parse failed: {e}"))?;
+        if user_info.sub != id_token.claims.sub {
+            return Err("OIDC userinfo subject did not match validated id_token".into());
+        }
 
         // Determine Wardex role from claims
         let role = self.resolve_role(&user_info);
@@ -365,6 +398,74 @@ impl OidcProvider {
         &self.config
     }
 
+    fn validate_id_token(
+        &self,
+        discovery: &OidcDiscovery,
+        token_resp: &TokenResponse,
+        pending: &PendingAuth,
+    ) -> Result<TokenData<OidcIdTokenClaims>, String> {
+        let id_token = token_resp
+            .id_token
+            .as_deref()
+            .ok_or("OIDC token response missing id_token")?;
+        let header =
+            decode_header(id_token).map_err(|e| format!("OIDC id_token header invalid: {e}"))?;
+        let jwks: JwkSet = ureq::get(&discovery.jwks_uri)
+            .call()
+            .map_err(|e| format!("OIDC JWKS fetch failed: {e}"))?
+            .into_json()
+            .map_err(|e| format!("OIDC JWKS parse failed: {e}"))?;
+        let jwk = match header.kid.as_deref() {
+            Some(kid) => jwks
+                .keys
+                .iter()
+                .find(|candidate| candidate.common.key_id.as_deref() == Some(kid))
+                .ok_or_else(|| format!("OIDC JWKS did not contain signing key '{kid}'"))?,
+            None => match jwks.keys.as_slice() {
+                [candidate] => candidate,
+                _ => {
+                    return Err(
+                        "OIDC id_token header omitted kid and JWKS contains multiple keys".into(),
+                    );
+                }
+            },
+        };
+        let decoding_key = DecodingKey::from_jwk(jwk)
+            .map_err(|e| format!("OIDC signing key could not be decoded from JWKS: {e}"))?;
+        let expected_issuer = normalize_issuer(&discovery.issuer);
+        let configured_issuer = normalize_issuer(&self.config.issuer);
+        if configured_issuer != expected_issuer {
+            return Err("OIDC discovery issuer did not match configured issuer".into());
+        }
+        let expected_audience = self
+            .config
+            .audience
+            .as_deref()
+            .filter(|value| !value.trim().is_empty())
+            .unwrap_or(self.config.client_id.as_str());
+        let mut validation = Validation::new(header.alg);
+        validation.validate_nbf = true;
+        validation.set_required_spec_claims(&["exp", "iss", "aud", "sub"]);
+        validation.set_issuer(&[expected_issuer.as_str()]);
+        validation.set_audience(&[expected_audience]);
+        let token = decode::<OidcIdTokenClaims>(id_token, &decoding_key, &validation)
+            .map_err(|e| format!("OIDC id_token validation failed: {e}"))?;
+        let claims = &token.claims;
+        if claims.nonce.as_deref() != Some(pending.nonce.as_str()) {
+            return Err("OIDC id_token nonce did not match the login request".into());
+        }
+        if normalize_issuer(&claims.iss) != expected_issuer {
+            return Err("OIDC id_token issuer did not match discovery issuer".into());
+        }
+        if !claims.aud.contains(expected_audience) {
+            return Err("OIDC id_token audience did not include the configured client".into());
+        }
+        if claims.exp == 0 {
+            return Err("OIDC id_token expiration claim was invalid".into());
+        }
+        Ok(token)
+    }
+
     fn resolve_role(&self, user_info: &OidcUserInfo) -> String {
         // Check role mapping first
         for role in &user_info.roles {
@@ -381,6 +482,15 @@ impl OidcProvider {
     }
 }
 
+impl OneOrManyStrings {
+    fn contains(&self, expected: &str) -> bool {
+        match self {
+            Self::One(value) => value == expected,
+            Self::Many(values) => values.iter().any(|value| value == expected),
+        }
+    }
+}
+
 /// SSO system status summary.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SsoStatus {
@@ -394,24 +504,25 @@ pub struct SsoStatus {
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
 fn generate_random_string(len: usize) -> String {
-    use std::collections::hash_map::DefaultHasher;
-    use std::hash::{Hash, Hasher};
-    let seed = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_nanos();
-    let mut hasher = DefaultHasher::new();
-    seed.hash(&mut hasher);
-    std::thread::current().id().hash(&mut hasher);
-    let hash = hasher.finish();
-    format!(
-        "{hash:016x}{:016x}",
-        hash.wrapping_mul(6364136223846793005)
-            .wrapping_add(1442695040888963407)
-    )
-    .chars()
-    .take(len)
-    .collect()
+    let mut bytes = vec![0u8; len.div_ceil(2)];
+    OsRng.fill_bytes(&mut bytes);
+    let encoded = hex::encode(bytes);
+    encoded.chars().take(len).collect()
+}
+
+fn generate_pkce_code_verifier() -> String {
+    let mut bytes = [0u8; 64];
+    OsRng.fill_bytes(&mut bytes);
+    base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(bytes)
+}
+
+fn pkce_code_challenge(code_verifier: &str) -> String {
+    let digest = Sha256::digest(code_verifier.as_bytes());
+    base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(digest)
+}
+
+fn normalize_issuer(value: &str) -> String {
+    value.trim().trim_end_matches('/').to_string()
 }
 
 fn urlencoded(s: &str) -> String {
@@ -551,6 +662,42 @@ mod tests {
     fn authorize_url_requires_discovery() {
         let mut provider = OidcProvider::new(test_config());
         assert!(provider.authorize_url(None).is_err());
+    }
+
+    #[test]
+    fn authorize_url_includes_pkce_parameters() {
+        let mut provider = OidcProvider::new(test_config());
+        provider.discovery = Some(OidcDiscovery {
+            issuer: "https://accounts.google.com".into(),
+            authorization_endpoint: "https://accounts.google.com/o/oauth2/v2/auth".into(),
+            token_endpoint: "https://oauth2.googleapis.com/token".into(),
+            userinfo_endpoint: "https://openidconnect.googleapis.com/v1/userinfo".into(),
+            jwks_uri: "https://www.googleapis.com/oauth2/v3/certs".into(),
+            end_session_endpoint: None,
+            response_types_supported: vec!["code".into()],
+            scopes_supported: vec!["openid".into(), "profile".into(), "email".into()],
+        });
+
+        let url = provider
+            .authorize_url(Some("/workbench".into()))
+            .expect("authorize url");
+        assert!(url.contains("code_challenge="));
+        assert!(url.contains("code_challenge_method=S256"));
+
+        let query = url.split('?').nth(1).expect("authorize url query");
+        let params = query
+            .split('&')
+            .filter_map(|pair| pair.split_once('='))
+            .collect::<HashMap<_, _>>();
+        let state = params.get("state").expect("state");
+        let pending = provider.pending_states.get(*state).expect("pending state");
+        assert_eq!(pending.state, *state);
+        assert_eq!(
+            params.get("code_challenge").copied(),
+            Some(pkce_code_challenge(&pending.code_verifier).as_str())
+        );
+        assert!(pending.nonce.len() >= 32);
+        assert!(pending.code_verifier.len() >= 43);
     }
 
     #[test]

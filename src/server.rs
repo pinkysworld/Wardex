@@ -26887,7 +26887,13 @@ mod tests {
 
     #[test]
     fn sso_login_callback_creates_cookie_backed_session() {
-        fn spawn_mock_oidc_provider() -> (String, std::thread::JoinHandle<()>) {
+        fn spawn_mock_oidc_provider() -> (
+            String,
+            std::sync::Arc<std::sync::Mutex<Vec<String>>>,
+            std::sync::Arc<std::sync::Mutex<Option<String>>>,
+            std::thread::JoinHandle<()>,
+        ) {
+            use base64::Engine;
             use std::io::{Read, Write};
 
             let listener =
@@ -26895,8 +26901,14 @@ mod tests {
             let port = listener.local_addr().expect("mock oidc addr").port();
             let issuer_url = format!("http://127.0.0.1:{port}");
             let server_base = issuer_url.clone();
+            let token_bodies = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+            let token_bodies_for_server = std::sync::Arc::clone(&token_bodies);
+            let expected_nonce = std::sync::Arc::new(std::sync::Mutex::new(None));
+            let expected_nonce_for_server = std::sync::Arc::clone(&expected_nonce);
+            let shared_secret = b"wardex-mock-oidc-signing-secret";
+            let jwk_secret = base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(shared_secret);
             let handle = std::thread::spawn(move || {
-                for _ in 0..3 {
+                for _ in 0..4 {
                     let (mut stream, _) = listener.accept().expect("accept mock oidc request");
                     let mut request_bytes = Vec::new();
                     let mut buffer = [0u8; 2048];
@@ -26943,51 +26955,101 @@ mod tests {
                         .next()
                         .and_then(|line| line.split_whitespace().nth(1))
                         .unwrap_or("/");
-                    let (status_line, body, content_type) =
-                        if path.starts_with("/.well-known/openid-configuration") {
-                            (
-                                "HTTP/1.1 200 OK",
-                                serde_json::json!({
-                                    "issuer": server_base,
-                                    "authorization_endpoint": format!("{}/authorize", server_base),
-                                    "token_endpoint": format!("{}/token", server_base),
-                                    "userinfo_endpoint": format!("{}/userinfo", server_base),
-                                    "jwks_uri": format!("{}/jwks", server_base),
-                                    "response_types_supported": ["code"],
-                                    "scopes_supported": ["openid", "profile", "email", "groups"],
-                                })
-                                .to_string(),
-                                "application/json",
-                            )
-                        } else if path.starts_with("/token") {
-                            (
-                                "HTTP/1.1 200 OK",
-                                serde_json::json!({
-                                    "access_token": "mock-access-token",
-                                    "token_type": "Bearer",
-                                    "expires_in": 3600,
-                                })
-                                .to_string(),
-                                "application/json",
-                            )
-                        } else if path.starts_with("/userinfo") {
-                            (
-                                "HTTP/1.1 200 OK",
-                                serde_json::json!({
-                                    "sub": "oidc-user-1",
-                                    "email": "sso-user@example.com",
-                                    "groups": ["Security"],
-                                })
-                                .to_string(),
-                                "application/json",
-                            )
-                        } else {
-                            (
-                                "HTTP/1.1 404 Not Found",
-                                "not found".to_string(),
-                                "text/plain; charset=utf-8",
-                            )
-                        };
+                    if path.starts_with("/token") {
+                        if let Some(end) = header_end {
+                            let body =
+                                String::from_utf8_lossy(&request_bytes[end + 4..]).to_string();
+                            token_bodies_for_server
+                                .lock()
+                                .expect("token body log")
+                                .push(body);
+                        }
+                    }
+                    let (status_line, body, content_type) = if path
+                        .starts_with("/.well-known/openid-configuration")
+                    {
+                        (
+                            "HTTP/1.1 200 OK",
+                            serde_json::json!({
+                                "issuer": server_base,
+                                "authorization_endpoint": format!("{}/authorize", server_base),
+                                "token_endpoint": format!("{}/token", server_base),
+                                "userinfo_endpoint": format!("{}/userinfo", server_base),
+                                "jwks_uri": format!("{}/jwks", server_base),
+                                "response_types_supported": ["code"],
+                                "scopes_supported": ["openid", "profile", "email", "groups"],
+                            })
+                            .to_string(),
+                            "application/json",
+                        )
+                    } else if path.starts_with("/token") {
+                        let now = std::time::SystemTime::now()
+                            .duration_since(std::time::UNIX_EPOCH)
+                            .unwrap_or_default()
+                            .as_secs() as usize;
+                        let nonce = expected_nonce_for_server
+                            .lock()
+                            .expect("expected nonce")
+                            .clone()
+                            .expect("nonce should be set before callback");
+                        let mut header = jsonwebtoken::Header::new(jsonwebtoken::Algorithm::HS256);
+                        header.kid = Some("mock-key-1".to_string());
+                        let id_token = jsonwebtoken::encode(
+                            &header,
+                            &serde_json::json!({
+                                "iss": server_base,
+                                "sub": "oidc-user-1",
+                                "aud": "wardex-admin",
+                                "exp": now + 3600,
+                                "iat": now,
+                                "nonce": nonce,
+                            }),
+                            &jsonwebtoken::EncodingKey::from_secret(shared_secret),
+                        )
+                        .expect("encode mock id token");
+                        (
+                            "HTTP/1.1 200 OK",
+                            serde_json::json!({
+                                "access_token": "mock-access-token",
+                                "token_type": "Bearer",
+                                "expires_in": 3600,
+                                "id_token": id_token,
+                            })
+                            .to_string(),
+                            "application/json",
+                        )
+                    } else if path.starts_with("/jwks") {
+                        (
+                            "HTTP/1.1 200 OK",
+                            serde_json::json!({
+                                "keys": [{
+                                    "kty": "oct",
+                                    "alg": "HS256",
+                                    "kid": "mock-key-1",
+                                    "k": jwk_secret,
+                                }]
+                            })
+                            .to_string(),
+                            "application/json",
+                        )
+                    } else if path.starts_with("/userinfo") {
+                        (
+                            "HTTP/1.1 200 OK",
+                            serde_json::json!({
+                                "sub": "oidc-user-1",
+                                "email": "sso-user@example.com",
+                                "groups": ["Security"],
+                            })
+                            .to_string(),
+                            "application/json",
+                        )
+                    } else {
+                        (
+                            "HTTP/1.1 404 Not Found",
+                            "not found".to_string(),
+                            "text/plain; charset=utf-8",
+                        )
+                    };
                     let response = format!(
                         "{status_line}\r\nContent-Type: {content_type}\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
                         body.len()
@@ -26998,10 +27060,11 @@ mod tests {
                     stream.flush().expect("flush mock oidc response");
                 }
             });
-            (issuer_url, handle)
+            (issuer_url, token_bodies, expected_nonce, handle)
         }
 
-        let (issuer_url, provider_handle) = spawn_mock_oidc_provider();
+        let (issuer_url, token_bodies, expected_nonce, provider_handle) =
+            spawn_mock_oidc_provider();
         let (port, token) = spawn_test_server();
         let base_url = format!("http://127.0.0.1:{port}");
         let auth_header = format!("Bearer {token}");
@@ -27047,10 +27110,17 @@ mod tests {
             .expect("login redirect location")
             .to_string();
         assert!(location.starts_with(&format!("{}/authorize?", issuer_url)));
+        assert!(location.contains("code_challenge="));
+        assert!(location.contains("code_challenge_method=S256"));
         let callback_state = parse_query_string(&location)
             .get("state")
             .cloned()
             .expect("authorization state");
+        let callback_nonce = parse_query_string(&location)
+            .get("nonce")
+            .cloned()
+            .expect("authorization nonce");
+        *expected_nonce.lock().expect("expected nonce") = Some(callback_nonce);
 
         let callback_response = match agent
             .get(&format!(
@@ -27091,6 +27161,11 @@ mod tests {
         assert_eq!(session_response["role"], serde_json::json!("admin"));
         assert_eq!(session_response["source"], serde_json::json!("session"));
         assert_eq!(session_response["groups"][0], serde_json::json!("Security"));
+        let recorded_token_bodies = token_bodies.lock().expect("token body log");
+        assert_eq!(recorded_token_bodies.len(), 1);
+        let token_body = &recorded_token_bodies[0];
+        assert!(token_body.contains("grant_type=authorization_code"));
+        assert!(token_body.contains("code_verifier="));
 
         provider_handle
             .join()
