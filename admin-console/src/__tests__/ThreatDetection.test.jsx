@@ -538,6 +538,32 @@ describe('ThreatDetection', () => {
     expect((await screen.findAllByText('Degrading')).length).toBeGreaterThan(0);
   });
 
+  it('surfaces detection ownership review planning and routes review actions back into the rule workspace', async () => {
+    renderWithProviders('/detection?rule=rule-1');
+
+    expect(await screen.findByText('Detection Ownership And Review Calendar')).toBeInTheDocument();
+    expect(screen.getByText('Overdue Reviews')).toBeInTheDocument();
+    expect(screen.getByText('Replay Blockers')).toBeInTheDocument();
+    expect(screen.getAllByText('Suspicious PowerShell').length).toBeGreaterThan(0);
+    expect(screen.getByText('secops • Test')).toBeInTheDocument();
+    expect(screen.getByText('Next Review')).toBeInTheDocument();
+    expect(screen.getByText('Promotion Blockers')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Review Rule' }));
+
+    await waitFor(() => {
+      expect(currentSearchParams().get('rule')).toBe('rule-1');
+      expect(currentSearchParams().get('rulePanel')).toBe('promotion');
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Open Hunt' }));
+
+    await waitFor(() => {
+      expect(currentSearchParams().get('rule')).toBe('rule-1');
+      expect(currentSearchParams().get('rulePanel')).toBe('hunts');
+    });
+  });
+
   it('runs replay validation and surfaces the latest replay corpus deltas', async () => {
     const tracker = {};
     installThreatDetectionFetchMock(tracker);

@@ -259,6 +259,140 @@ const ageInDays = (timestamp) => {
   return Math.max(0, Math.floor((Date.now() - parsed.getTime()) / (24 * 60 * 60 * 1000)));
 };
 
+const reviewIntervalDays = (rule) => {
+  const lifecycle = normalizeText(rule?.lifecycle);
+  if (rule?.enabled === false || lifecycle === 'deprecated') return null;
+  if (lifecycle === 'draft' || lifecycle === 'test') return 7;
+  if (lifecycle === 'canary') return 14;
+  if (lifecycle === 'active') return 30;
+  return 21;
+};
+
+const reviewAnchorAt = (rule) => {
+  const candidates = [rule?.last_promotion_at, rule?.last_test_at, rule?.updated_at, rule?.created_at]
+    .map((value) => {
+      const parsed = value ? new Date(value) : null;
+      return parsed && !Number.isNaN(parsed.getTime()) ? parsed : null;
+    })
+    .filter(Boolean)
+    .sort((left, right) => right.getTime() - left.getTime());
+  return candidates[0] || null;
+};
+
+const nextReviewAt = (rule) => {
+  const intervalDays = reviewIntervalDays(rule);
+  const anchor = reviewAnchorAt(rule);
+  if (intervalDays == null || !anchor) return null;
+  return new Date(anchor.getTime() + intervalDays * 24 * 60 * 60 * 1000).toISOString();
+};
+
+const daysUntil = (timestamp) => {
+  if (!timestamp) return null;
+  const parsed = new Date(timestamp);
+  if (Number.isNaN(parsed.getTime())) return null;
+  return Math.ceil((parsed.getTime() - Date.now()) / (24 * 60 * 60 * 1000));
+};
+
+const ruleReplayState = (rule, suppressionCount) => {
+  const hits = Number(rule?.last_test_match_count) || 0;
+  const suppressions = suppressionCount[rule?.id] || 0;
+  const ageDays = ageInDays(rule?.last_test_at);
+  if (!rule?.last_test_at) {
+    return {
+      label: 'Replay missing',
+      tone: 'badge-warn',
+      detail: 'Run replay validation before the next ownership review.',
+    };
+  }
+  if (ageDays != null && ageDays >= 14) {
+    return {
+      label: 'Replay stale',
+      tone: 'badge-warn',
+      detail: `Replay evidence is ${ageDays} day${ageDays === 1 ? '' : 's'} old.`,
+    };
+  }
+  if (hits >= 5 || suppressions > 0) {
+    return {
+      label: 'Noisy replay',
+      tone: 'badge-err',
+      detail: `${hits} replay hit${hits === 1 ? '' : 's'} and ${suppressions} live suppression${suppressions === 1 ? '' : 's'} need review.`,
+    };
+  }
+  return {
+    label: 'Replay ready',
+    tone: 'badge-ok',
+    detail: `${hits} replay hit${hits === 1 ? '' : 's'} from the latest validation run.`,
+  };
+};
+
+const rulePromotionBlockers = (rule, suppressionCount) => {
+  const blockers = [];
+  const owner = String(rule?.owner || '').trim().toLowerCase();
+  if (!owner || owner === 'system') blockers.push('Assign a named detection owner.');
+  if (!rule?.last_test_at) blockers.push('Run replay validation.');
+  const replayAgeDays = ageInDays(rule?.last_test_at);
+  if (replayAgeDays != null && replayAgeDays >= 14) blockers.push('Refresh stale replay evidence.');
+  if ((Number(rule?.last_test_match_count) || 0) >= 5)
+    blockers.push('Reduce replay hit volume before promotion.');
+  if ((suppressionCount[rule?.id] || 0) > 0) blockers.push('Review live suppressions and scope.');
+  if (!Array.isArray(rule?.pack_ids) || rule.pack_ids.length === 0)
+    blockers.push('Attach the rule to a content pack.');
+  return blockers;
+};
+
+const reviewStatusMeta = (rule, suppressionCount) => {
+  const dueAt = nextReviewAt(rule);
+  const dueInDays = daysUntil(dueAt);
+  const blockers = rulePromotionBlockers(rule, suppressionCount);
+  const replay = ruleReplayState(rule, suppressionCount);
+  if (rule?.enabled === false || normalizeText(rule?.lifecycle) === 'deprecated') {
+    return {
+      label: 'Inactive',
+      tone: 'badge-info',
+      rank: 3,
+      queue: 'disabled',
+      dueAt,
+      dueInDays,
+      blockers,
+      replay,
+    };
+  }
+  if (dueInDays != null && dueInDays < 0) {
+    return {
+      label: 'Overdue',
+      tone: 'badge-err',
+      rank: 0,
+      queue: 'review',
+      dueAt,
+      dueInDays,
+      blockers,
+      replay,
+    };
+  }
+  if (dueInDays != null && dueInDays <= 7) {
+    return {
+      label: 'Due this week',
+      tone: 'badge-warn',
+      rank: 1,
+      queue: 'recent',
+      dueAt,
+      dueInDays,
+      blockers,
+      replay,
+    };
+  }
+  return {
+    label: 'Scheduled',
+    tone: 'badge-ok',
+    rank: 2,
+    queue: replay.label === 'Noisy replay' ? 'noisy' : 'recent',
+    dueAt,
+    dueInDays,
+    blockers,
+    replay,
+  };
+};
+
 const summarizePackRollout = (pack, linkedHuntCount, ageDays) => {
   const savedSearchCount = Array.isArray(pack?.saved_searches) ? pack.saved_searches.length : 0;
   const workflowCount = Array.isArray(pack?.recommended_workflows)
@@ -744,6 +878,55 @@ export default function ThreatDetection() {
     const packIds = new Set(selectedPacks.map((pack) => pack.id));
     return hunts.filter((hunt) => packIds.has(hunt.pack_id));
   }, [hunts, selectedPacks]);
+  const detectionOwnershipCalendar = useMemo(() => {
+    const rows = allRules
+      .map((rule) => {
+        const review = reviewStatusMeta(rule, suppressionCount);
+        return {
+          id: rule.id,
+          title: rule.title || rule.id,
+          owner: rule.owner || 'system',
+          lifecycle: formatLifecycleLabel(rule.lifecycle),
+          dueAt: review.dueAt,
+          dueInDays: review.dueInDays,
+          reviewLabel: review.label,
+          reviewTone: review.tone,
+          reviewRank: review.rank,
+          reviewQueue: review.queue,
+          blockers: review.blockers,
+          replay: review.replay,
+          nextAction:
+            review.blockers.length > 0
+              ? 'Clear replay and ownership blockers before promoting new case or ticket workflows.'
+              : 'Keep the next owner review scheduled and use hunts to promote new findings into cases quickly.',
+        };
+      })
+      .sort((left, right) => {
+        if (left.reviewRank !== right.reviewRank) return left.reviewRank - right.reviewRank;
+        const leftDue = left.dueAt ? new Date(left.dueAt).getTime() : Number.MAX_SAFE_INTEGER;
+        const rightDue = right.dueAt ? new Date(right.dueAt).getTime() : Number.MAX_SAFE_INTEGER;
+        if (leftDue !== rightDue) return leftDue - rightDue;
+        return left.title.localeCompare(right.title);
+      });
+
+    const summary = {
+      overdue: rows.filter((row) => row.reviewLabel === 'Overdue').length,
+      dueThisWeek: rows.filter((row) => row.reviewLabel === 'Due this week').length,
+      replayBlockers: rows.filter((row) => row.blockers.length > 0).length,
+      noisyOwners: new Set(
+        rows
+          .filter((row) => row.replay.label === 'Noisy replay')
+          .map((row) => row.owner)
+          .filter(Boolean),
+      ).size,
+    };
+
+    return { rows, summary };
+  }, [allRules, suppressionCount]);
+  const selectedRuleCalendarEntry = useMemo(
+    () => detectionOwnershipCalendar.rows.find((row) => row.id === selectedRule?.id) || null,
+    [detectionOwnershipCalendar, selectedRule],
+  );
   const currentWeight = Number(
     weights?.weights?.[selectedRule?.id] ?? weights?.[selectedRule?.id] ?? 0.5,
   );
@@ -2779,6 +2962,103 @@ export default function ThreatDetection() {
 
       <ThreatIntelOperations />
 
+      <div className="card" style={{ marginBottom: 16 }}>
+        <div className="card-title" style={{ marginBottom: 10 }}>
+          Detection Ownership And Review Calendar
+        </div>
+        <div className="summary-grid">
+          <div className="summary-card">
+            <div className="summary-label">Overdue Reviews</div>
+            <div className="summary-value">{detectionOwnershipCalendar.summary.overdue}</div>
+            <div className="summary-meta">Rules that have slipped past their next owner review.</div>
+          </div>
+          <div className="summary-card">
+            <div className="summary-label">Due This Week</div>
+            <div className="summary-value">{detectionOwnershipCalendar.summary.dueThisWeek}</div>
+            <div className="summary-meta">Upcoming reviews that should stay inside the current shift plan.</div>
+          </div>
+          <div className="summary-card">
+            <div className="summary-label">Replay Blockers</div>
+            <div className="summary-value">{detectionOwnershipCalendar.summary.replayBlockers}</div>
+            <div className="summary-meta">Rules needing replay, suppression, or ownership cleanup before promotion.</div>
+          </div>
+          <div className="summary-card">
+            <div className="summary-label">Noisy Owners</div>
+            <div className="summary-value">{detectionOwnershipCalendar.summary.noisyOwners}</div>
+            <div className="summary-meta">Owners currently carrying replay noise or suppression cleanup.</div>
+          </div>
+        </div>
+        <div style={{ marginTop: 12 }}>
+          {detectionOwnershipCalendar.rows.length === 0 ? (
+            <div className="empty">No rules are available for ownership review yet.</div>
+          ) : (
+            detectionOwnershipCalendar.rows.slice(0, 5).map((row) => (
+              <div
+                key={row.id}
+                style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  gap: 12,
+                  padding: '10px 0',
+                  borderBottom: '1px solid var(--border)',
+                }}
+              >
+                <div style={{ flex: 1 }}>
+                  <div className="row-primary">{row.title}</div>
+                  <div className="row-secondary">
+                    {row.owner} • {row.lifecycle}
+                  </div>
+                  <div className="hint" style={{ marginTop: 4 }}>
+                    {row.dueAt
+                      ? `Next review ${formatRelativeTime(row.dueAt)} • ${row.replay.detail}`
+                      : `Review date unavailable • ${row.replay.detail}`}
+                  </div>
+                  <div className="hint" style={{ marginTop: 4 }}>
+                    {row.blockers.length > 0
+                      ? `${row.blockers.length} promotion blocker${row.blockers.length === 1 ? '' : 's'} • ${row.nextAction}`
+                      : row.nextAction}
+                  </div>
+                </div>
+                <div style={{ minWidth: 240, textAlign: 'right' }}>
+                  <div className="chip-row" style={{ justifyContent: 'flex-end', marginBottom: 8 }}>
+                    <span className={`badge ${row.reviewTone}`}>{row.reviewLabel}</span>
+                    <span className={`badge ${row.replay.tone}`}>{row.replay.label}</span>
+                  </div>
+                  <div className="btn-group" style={{ justifyContent: 'flex-end' }}>
+                    <button
+                      className="btn btn-sm"
+                      onClick={() =>
+                        updateSearchState({
+                          panel: 'overview',
+                          queue: row.reviewQueue,
+                          rule: row.id,
+                          rulePanel: 'promotion',
+                        })
+                      }
+                    >
+                      Review Rule
+                    </button>
+                    <button
+                      className="btn btn-sm"
+                      onClick={() =>
+                        updateSearchState({
+                          panel: 'overview',
+                          queue: row.reviewQueue,
+                          rule: row.id,
+                          rulePanel: 'hunts',
+                        })
+                      }
+                    >
+                      Open Hunt
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+      </div>
+
       <div className="triage-layout">
         <section className="triage-list">
           <div className="card" style={{ marginBottom: 16 }}>
@@ -2991,6 +3271,29 @@ export default function ThreatDetection() {
                       {selectedRule.last_test_at
                         ? formatDateTime(selectedRule.last_test_at)
                         : 'Run a validation replay before promotion.'}
+                    </div>
+                  </div>
+                  <div className="summary-card">
+                    <div className="summary-label">Next Review</div>
+                    <div className="summary-value">
+                      {selectedRuleCalendarEntry?.dueAt
+                        ? formatRelativeTime(selectedRuleCalendarEntry.dueAt)
+                        : 'Unscheduled'}
+                    </div>
+                    <div className="summary-meta">
+                      {selectedRuleCalendarEntry?.dueAt
+                        ? `${selectedRuleCalendarEntry.reviewLabel} • ${formatDateTime(selectedRuleCalendarEntry.dueAt)}`
+                        : 'Record validation or promotion evidence to schedule the next review.'}
+                    </div>
+                  </div>
+                  <div className="summary-card">
+                    <div className="summary-label">Promotion Blockers</div>
+                    <div className="summary-value">
+                      {selectedRuleCalendarEntry?.blockers.length || 0}
+                    </div>
+                    <div className="summary-meta">
+                      {selectedRuleCalendarEntry?.blockers?.[0] ||
+                        'No immediate replay or ownership blockers are open.'}
                     </div>
                   </div>
                   <div className="summary-card">
