@@ -5728,13 +5728,16 @@ fn case_handoff_packet_includes_linked_handoff_context() {
         }))
         .expect("handoff investigation");
 
-    let packet: serde_json::Value =
-        ureq::get(&format!("{}/api/cases/{}/handoff-packet", base(port), case_id))
-            .set("Authorization", &auth_header(&token))
-            .call()
-            .expect("fetch handoff packet")
-            .into_json()
-            .unwrap();
+    let packet: serde_json::Value = ureq::get(&format!(
+        "{}/api/cases/{}/handoff-packet",
+        base(port),
+        case_id
+    ))
+    .set("Authorization", &auth_header(&token))
+    .call()
+    .expect("fetch handoff packet")
+    .into_json()
+    .unwrap();
 
     assert_eq!(
         packet["case"]["summary"].as_str(),
@@ -5763,9 +5766,15 @@ fn case_handoff_packet_includes_linked_handoff_context() {
         packet["unresolved_questions"],
         serde_json::json!(["Was any successful login followed by privilege escalation?"])
     );
-    assert_eq!(packet["checklist_state"]["evidence_items"].as_u64(), Some(1));
+    assert_eq!(
+        packet["checklist_state"]["evidence_items"].as_u64(),
+        Some(1)
+    );
     assert_eq!(packet["checklist_state"]["analyst_notes"].as_u64(), Some(2));
-    assert_eq!(packet["checklist_state"]["linked_incidents"].as_u64(), Some(1));
+    assert_eq!(
+        packet["checklist_state"]["linked_incidents"].as_u64(),
+        Some(1)
+    );
     assert_eq!(packet["checklist_state"]["linked_events"].as_u64(), Some(2));
     assert_eq!(packet["checklist_state"]["next_actions"].as_u64(), Some(2));
     assert_eq!(
@@ -5774,10 +5783,7 @@ fn case_handoff_packet_includes_linked_handoff_context() {
     );
     assert_eq!(
         packet["reopen_case_url"].as_str(),
-        Some(
-            format!("/soc?case={case_id}&drawer=case-workspace&casePanel=handoff#cases")
-                .as_str()
-        )
+        Some(format!("/soc?case={case_id}&drawer=case-workspace&casePanel=handoff#cases").as_str())
     );
 }
 
@@ -5915,6 +5921,10 @@ fn workbench_overview_surfaces_queue_cases_incidents_and_ready_actions() {
         overview["response"]["ready_to_execute"].as_u64().unwrap(),
         1
     );
+    assert!(overview["team_load"]["active_owners"].is_u64());
+    assert!(overview["team_load"]["rebalance_hint"].is_string());
+    assert!(overview["connector_impact"]["collectors_at_risk"].is_u64());
+    assert!(overview["connector_impact"]["items"].is_array());
     assert!(!overview["urgent_items"].as_array().unwrap().is_empty());
 }
 

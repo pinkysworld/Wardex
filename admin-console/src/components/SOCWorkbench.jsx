@@ -1527,6 +1527,248 @@ export default function SOCWorkbench() {
 
               <div className="card">
                 <div className="card-title" style={{ marginBottom: 12 }}>
+                  Team Load And Ownership
+                </div>
+                <div className="summary-grid">
+                  <div className="summary-card">
+                    <div className="summary-label">Active Owners</div>
+                    <div className="summary-value">{overview.team_load?.active_owners || 0}</div>
+                    <div className="summary-meta">
+                      {overview.team_load?.available_owners || 0} available for rebalance
+                    </div>
+                  </div>
+                  <div className="summary-card">
+                    <div className="summary-label">Stale Ownership</div>
+                    <div className="summary-value">
+                      {overview.team_load?.stale_ownership_items || 0}
+                    </div>
+                    <div className="summary-meta">
+                      {overview.team_load?.unassigned_queue || 0} queue item
+                      {(overview.team_load?.unassigned_queue || 0) === 1 ? '' : 's'} and{' '}
+                      {overview.team_load?.unassigned_cases || 0} case
+                      {(overview.team_load?.unassigned_cases || 0) === 1 ? '' : 's'} unassigned
+                    </div>
+                  </div>
+                  <div className="summary-card">
+                    <div className="summary-label">Pending Approvals</div>
+                    <div className="summary-value">
+                      {overview.team_load?.pending_approvals || 0}
+                    </div>
+                    <div className="summary-meta">
+                      Load spread {overview.team_load?.balance_spread || 0} across the shift
+                    </div>
+                  </div>
+                  <div className="summary-card">
+                    <div className="summary-label">Average Load</div>
+                    <div className="summary-value">
+                      {Math.round(overview.team_load?.average_load_score || 0)}
+                    </div>
+                    <div className="summary-meta">
+                      Role lanes {(overview.team_load?.role_coverage || []).length || 0} tracked
+                    </div>
+                  </div>
+                </div>
+                <div className="hint" style={{ marginTop: 12 }}>
+                  {overview.team_load?.rebalance_hint ||
+                    'Keep ownership, queue balancing, and approval coverage current.'}
+                </div>
+                {Array.isArray(overview.team_load?.analysts) &&
+                overview.team_load.analysts.length > 0 ? (
+                  <div style={{ marginTop: 12 }}>
+                    {overview.team_load.analysts.map((owner) => (
+                      <div
+                        key={owner.username}
+                        style={{
+                          display: 'flex',
+                          justifyContent: 'space-between',
+                          gap: 12,
+                          padding: '10px 0',
+                          borderBottom: '1px solid var(--border)',
+                        }}
+                      >
+                        <div style={{ flex: 1 }}>
+                          <div className="row-primary">
+                            {owner.username} • {owner.role}
+                          </div>
+                          <div className="row-secondary">
+                            {owner.queue_assigned} queue • {owner.cases_open} case
+                            {owner.cases_open === 1 ? '' : 's'} • {owner.incidents_open} incident
+                            {owner.incidents_open === 1 ? '' : 's'}
+                          </div>
+                          <div className="hint" style={{ marginTop: 4 }}>
+                            {owner.next_action}
+                          </div>
+                        </div>
+                        <div style={{ minWidth: 190, textAlign: 'right' }}>
+                          <div className="row-primary">Load {owner.load_score}</div>
+                          <div className="row-secondary">
+                            {owner.last_case_update
+                              ? `Latest case ${formatRelativeTime(owner.last_case_update)}`
+                              : 'No owned case updates'}
+                          </div>
+                          <div
+                            className={`badge ${
+                              owner.status === 'overloaded'
+                                ? 'badge-err'
+                                : owner.status === 'available'
+                                  ? 'badge-ok'
+                                  : 'badge-info'
+                            }`}
+                            style={{ marginTop: 6 }}
+                          >
+                            {formatCompactLabel(owner.status)}
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="empty" style={{ marginTop: 12 }}>
+                    No assigned analysts or owners yet.
+                  </div>
+                )}
+                <div className="summary-grid" style={{ marginTop: 12 }}>
+                  <div className="summary-card">
+                    <div className="summary-label">Role Coverage</div>
+                    <div className="summary-meta">
+                      {(overview.team_load?.role_coverage || []).map((entry) => (
+                        <div key={entry.role} style={{ marginTop: 6 }}>
+                          {entry.role}: {entry.enabled}/{entry.count} enabled
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="summary-card">
+                    <div className="summary-label">Group Context</div>
+                    <div className="summary-meta">
+                      {(overview.team_load?.group_context || []).map((entry) => (
+                        <div key={entry.group} style={{ marginTop: 6 }}>
+                          {entry.group} • {entry.mapped_role || 'unmapped'} • {entry.status}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="card">
+                <div className="card-title" style={{ marginBottom: 12 }}>
+                  Connector Coverage Impact
+                </div>
+                <div className="summary-grid">
+                  <div className="summary-card">
+                    <div className="summary-label">Collectors At Risk</div>
+                    <div className="summary-value">
+                      {overview.connector_impact?.collectors_at_risk || 0}
+                    </div>
+                    <div className="summary-meta">
+                      {overview.connector_impact?.review_required || 0} need review before trust
+                    </div>
+                  </div>
+                  <div className="summary-card">
+                    <div className="summary-label">Impacted Detections</div>
+                    <div className="summary-value">
+                      {overview.connector_impact?.impacted_detections || 0}
+                    </div>
+                    <div className="summary-meta">
+                      Shared rules and packs depending on collector health
+                    </div>
+                  </div>
+                  <div className="summary-card">
+                    <div className="summary-label">Stale Assets</div>
+                    <div className="summary-value">
+                      {overview.connector_impact?.stale_assets || 0}
+                    </div>
+                    <div className="summary-meta">
+                      Assets whose freshness weakens connector confidence
+                    </div>
+                  </div>
+                </div>
+                {Array.isArray(overview.connector_impact?.items) &&
+                overview.connector_impact.items.length > 0 ? (
+                  <div style={{ marginTop: 12 }}>
+                    {overview.connector_impact.items.map((item) => (
+                      <div
+                        key={item.provider}
+                        style={{
+                          display: 'flex',
+                          justifyContent: 'space-between',
+                          gap: 12,
+                          padding: '10px 0',
+                          borderBottom: '1px solid var(--border)',
+                        }}
+                      >
+                        <div style={{ flex: 1 }}>
+                          <div className="row-primary">
+                            {item.label} • {item.lane}
+                          </div>
+                          <div className="row-secondary">
+                            {item.affected_detections} affected detection
+                            {item.affected_detections === 1 ? '' : 's'} • {item.stale_assets} stale
+                            asset{item.stale_assets === 1 ? '' : 's'} • owner {item.owner}
+                          </div>
+                          <div className="hint" style={{ marginTop: 4 }}>
+                            {item.next_action}
+                          </div>
+                          {item.sample_detections?.length ? (
+                            <div className="summary-meta" style={{ marginTop: 6 }}>
+                              {item.sample_detections.join(' • ')}
+                            </div>
+                          ) : null}
+                        </div>
+                        <div style={{ minWidth: 220, textAlign: 'right' }}>
+                          <div
+                            className={`badge ${
+                              item.status === 'review'
+                                ? 'badge-err'
+                                : item.status === 'watch'
+                                  ? 'badge-warn'
+                                  : item.status === 'disabled'
+                                    ? 'badge-info'
+                                    : 'badge-ok'
+                            }`}
+                          >
+                            {formatCompactLabel(item.status)}
+                          </div>
+                          <div className="row-secondary" style={{ marginTop: 6 }}>
+                            {item.last_good_event
+                              ? `Last good ${formatRelativeTime(item.last_good_event)}`
+                              : 'No last-good event yet'}
+                          </div>
+                          {item.validation_failure ? (
+                            <div className="hint" style={{ marginTop: 4 }}>
+                              {item.validation_failure}
+                            </div>
+                          ) : null}
+                          {Array.isArray(item.setup_pivots) && item.setup_pivots.length > 0 ? (
+                            <div
+                              className="btn-group"
+                              style={{ marginTop: 8, justifyContent: 'flex-end' }}
+                            >
+                              {item.setup_pivots.slice(0, 2).map((pivot) => (
+                                <button
+                                  key={`${item.provider}-${pivot.href}`}
+                                  className="btn btn-sm"
+                                  onClick={() => navigate(pivot.href)}
+                                >
+                                  {pivot.label || pivot.surface || 'Open'}
+                                </button>
+                              ))}
+                            </div>
+                          ) : null}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="empty" style={{ marginTop: 12 }}>
+                    No connector coverage issues are active right now.
+                  </div>
+                )}
+              </div>
+
+              <div className="card">
+                <div className="card-title" style={{ marginBottom: 12 }}>
                   Rollout Control
                 </div>
                 <div className="summary-grid">

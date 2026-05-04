@@ -56,6 +56,88 @@ const BASE_SOC_FIXTURES = {
       pending_approvals: 1,
       recent_history: [],
     },
+    team_load: {
+      active_owners: 1,
+      available_owners: 1,
+      pending_approvals: 2,
+      unassigned_queue: 1,
+      unassigned_cases: 1,
+      stale_ownership_items: 2,
+      average_load_score: 6.4,
+      balance_spread: 4,
+      rebalance_hint:
+        'Move unassigned queue work and open cases onto available analysts before the next shift.',
+      analysts: [
+        {
+          username: 'analyst-1',
+          role: 'Analyst',
+          enabled: true,
+          queue_assigned: 2,
+          queue_sla_breached: 1,
+          cases_open: 1,
+          incidents_open: 1,
+          stale_cases: 1,
+          stale_incidents: 0,
+          load_score: 10,
+          status: 'overloaded',
+          last_case_update: '2024-01-01T00:15:00Z',
+          next_action: 'Reassign breached queue work or clear the oldest SLA-risk alert.',
+        },
+        {
+          username: 'analyst-2',
+          role: 'Analyst',
+          enabled: true,
+          queue_assigned: 0,
+          queue_sla_breached: 0,
+          cases_open: 0,
+          incidents_open: 0,
+          stale_cases: 0,
+          stale_incidents: 0,
+          load_score: 0,
+          status: 'available',
+          last_case_update: null,
+          next_action: 'Pick up unassigned queue work or the next open case.',
+        },
+      ],
+      role_coverage: [{ role: 'Analyst', count: 2, enabled: 2 }],
+      group_context: [
+        { group: 'soc-analysts', mapped_role: 'analyst', automation_targets: 1, status: 'aligned' },
+      ],
+    },
+    connector_impact: {
+      collectors_at_risk: 1,
+      impacted_detections: 3,
+      stale_assets: 2,
+      review_required: 1,
+      items: [
+        {
+          provider: 'okta_identity',
+          label: 'Okta Identity',
+          lane: 'identity',
+          status: 'review',
+          enabled: true,
+          affected_detections: 3,
+          stale_assets: 2,
+          last_good_event: '2024-01-01T00:05:00Z',
+          validation_failure: 'Token rotation required.',
+          owner: 'identity owner',
+          sample_detections: [
+            'Impossible Travel (analyst-1)',
+            'Credential Abuse Burst (analyst-2)',
+          ],
+          rule_owners: ['analyst-1', 'analyst-2'],
+          route_targets: ['SOC Queue', 'UEBA'],
+          setup_pivots: [
+            {
+              surface: 'SOC Workbench',
+              href: '/soc?collector=okta_identity&lane=identity',
+              label: 'Open SOC collector context',
+            },
+          ],
+          next_action: 'Resolve validation issue: Token rotation required.',
+        },
+      ],
+    },
     rollouts: {
       canary_rules: 1,
       canary_hunts: 1,
@@ -685,6 +767,25 @@ describe('SOCWorkbench', () => {
     localStorage.clear();
     localStorage.setItem('wardex_token', 'soc-token');
     installSocWorkbenchFetchMock();
+  });
+
+  it('renders team load and ownership signals from the workbench overview', async () => {
+    renderWithProviders('/soc');
+
+    expect(await screen.findByText('Team Load And Ownership')).toBeInTheDocument();
+    expect(
+      screen.getAllByText(
+        'Move unassigned queue work and open cases onto available analysts before the next shift.',
+      ).length,
+    ).toBeGreaterThan(0);
+    expect(screen.getByText('analyst-1 • Analyst')).toBeInTheDocument();
+    expect(screen.getByText('Load 10')).toBeInTheDocument();
+    expect(screen.getByText('soc-analysts • analyst • aligned')).toBeInTheDocument();
+    expect(screen.getByText('Connector Coverage Impact')).toBeInTheDocument();
+    expect(screen.getByText('Okta Identity • identity')).toBeInTheDocument();
+    expect(
+      screen.getAllByText('Resolve validation issue: Token rotation required.').length,
+    ).toBeGreaterThan(0);
   });
 
   it('hydrates the queue filter from URL state and clears back to the full queue', async () => {

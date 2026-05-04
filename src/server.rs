@@ -899,6 +899,82 @@ struct WorkbenchAnalyticsOverview {
 }
 
 #[derive(Debug, Clone, serde::Serialize)]
+struct WorkbenchOwnerLoadSummary {
+    username: String,
+    role: String,
+    enabled: bool,
+    queue_assigned: usize,
+    queue_sla_breached: usize,
+    cases_open: usize,
+    incidents_open: usize,
+    stale_cases: usize,
+    stale_incidents: usize,
+    load_score: usize,
+    status: String,
+    last_case_update: Option<String>,
+    next_action: String,
+}
+
+#[derive(Debug, Clone, serde::Serialize)]
+struct WorkbenchRoleCoverage {
+    role: String,
+    count: usize,
+    enabled: usize,
+}
+
+#[derive(Debug, Clone, serde::Serialize)]
+struct WorkbenchGroupCoverage {
+    group: String,
+    mapped_role: Option<String>,
+    automation_targets: usize,
+    status: String,
+}
+
+#[derive(Debug, Clone, serde::Serialize)]
+struct WorkbenchTeamLoadOverview {
+    active_owners: usize,
+    available_owners: usize,
+    pending_approvals: usize,
+    unassigned_queue: usize,
+    unassigned_cases: usize,
+    stale_ownership_items: usize,
+    average_load_score: f64,
+    balance_spread: usize,
+    rebalance_hint: String,
+    analysts: Vec<WorkbenchOwnerLoadSummary>,
+    role_coverage: Vec<WorkbenchRoleCoverage>,
+    group_context: Vec<WorkbenchGroupCoverage>,
+}
+
+#[derive(Debug, Clone, serde::Serialize)]
+struct WorkbenchConnectorImpactEntry {
+    provider: String,
+    label: String,
+    lane: String,
+    status: String,
+    enabled: bool,
+    affected_detections: usize,
+    stale_assets: usize,
+    last_good_event: Option<String>,
+    validation_failure: Option<String>,
+    owner: String,
+    sample_detections: Vec<String>,
+    rule_owners: Vec<String>,
+    route_targets: Vec<String>,
+    setup_pivots: Vec<serde_json::Value>,
+    next_action: String,
+}
+
+#[derive(Debug, Clone, serde::Serialize)]
+struct WorkbenchConnectorImpactOverview {
+    collectors_at_risk: usize,
+    impacted_detections: usize,
+    stale_assets: usize,
+    review_required: usize,
+    items: Vec<WorkbenchConnectorImpactEntry>,
+}
+
+#[derive(Debug, Clone, serde::Serialize)]
 struct WorkbenchRecommendation {
     category: String,
     priority: String,
@@ -919,6 +995,8 @@ struct WorkbenchOverview {
     content: WorkbenchContentOverview,
     automation: WorkbenchAutomationOverview,
     analytics: WorkbenchAnalyticsOverview,
+    team_load: WorkbenchTeamLoadOverview,
+    connector_impact: WorkbenchConnectorImpactOverview,
     hot_agents: Vec<HotAgentSummary>,
     urgent_items: Vec<UrgentItem>,
     recommendations: Vec<WorkbenchRecommendation>,
@@ -5164,6 +5242,546 @@ fn build_hot_agent_summaries(
         .collect()
 }
 
+#[derive(Default)]
+struct OwnerLoadAccumulator {
+    username: String,
+    role: String,
+    enabled: bool,
+    queue_assigned: usize,
+    queue_sla_breached: usize,
+    cases_open: usize,
+    incidents_open: usize,
+    stale_cases: usize,
+    stale_incidents: usize,
+    last_case_update: Option<String>,
+}
+
+fn load_owner_status(load_score: usize, stale_items: usize, active_items: usize) -> &'static str {
+    if stale_items > 0 || load_score >= 9 {
+        "overloaded"
+    } else if active_items == 0 {
+        "available"
+    } else {
+        "balanced"
+    }
+}
+
+fn case_or_incident_is_open(status: &str) -> bool {
+    !matches!(
+        status,
+        "resolved" | "closed" | "falsepositive" | "false_positive"
+    )
+}
+
+fn stale_ownership(updated_at: &str, threshold_secs: u64) -> bool {
+    age_secs_since(updated_at).is_some_and(|age| age >= threshold_secs)
+}
+
+fn build_team_load_overview(
+    queue_items: &[QueueAlertSummary],
+    cases: &[&crate::analyst::Case],
+    incidents: &[crate::incident::Incident],
+    response_requests: &[ResponseRequest],
+    rbac: &crate::rbac::RbacStore,
+    mapped_role_context: &HashMap<String, String>,
+    automation_targets: &HashSet<String>,
+) -> WorkbenchTeamLoadOverview {
+    let mut owners: HashMap<String, OwnerLoadAccumulator> = HashMap::new();
+    let mut role_coverage: HashMap<String, (usize, usize)> = HashMap::new();
+
+    for user in rbac.list_users() {
+        let role = format!("{:?}", user.role);
+        let entry = owners.entry(user.username.clone()).or_default();
+        entry.username = user.username.clone();
+        entry.role = role.clone();
+        entry.enabled = user.enabled;
+        let coverage = role_coverage.entry(role).or_insert((0, 0));
+        coverage.0 += 1;
+        if user.enabled {
+            coverage.1 += 1;
+        }
+    }
+
+    for item in queue_items {
+        if let Some(assignee) = item.assignee.as_deref() {
+            let entry = owners.entry(assignee.to_string()).or_default();
+            if entry.username.is_empty() {
+                entry.username = assignee.to_string();
+                entry.role = "Unmapped".to_string();
+                entry.enabled = true;
+            }
+            entry.queue_assigned += 1;
+            if item.sla_breached {
+                entry.queue_sla_breached += 1;
+            }
+        }
+    }
+
+    for case in cases {
+        if !case_or_incident_is_open(&format!("{:?}", case.status).to_ascii_lowercase()) {
+            continue;
+        }
+        if let Some(assignee) = case.assignee.as_deref() {
+            let entry = owners.entry(assignee.to_string()).or_default();
+            if entry.username.is_empty() {
+                entry.username = assignee.to_string();
+                entry.role = "Unmapped".to_string();
+                entry.enabled = true;
+            }
+            entry.cases_open += 1;
+            if stale_ownership(&case.updated_at, 4 * 60 * 60) {
+                entry.stale_cases += 1;
+            }
+            if entry
+                .last_case_update
+                .as_ref()
+                .is_none_or(|current| current < &case.updated_at)
+            {
+                entry.last_case_update = Some(case.updated_at.clone());
+            }
+        }
+    }
+
+    for incident in incidents {
+        if !case_or_incident_is_open(&format!("{:?}", incident.status).to_ascii_lowercase()) {
+            continue;
+        }
+        if let Some(assignee) = incident.assignee.as_deref() {
+            let entry = owners.entry(assignee.to_string()).or_default();
+            if entry.username.is_empty() {
+                entry.username = assignee.to_string();
+                entry.role = "Unmapped".to_string();
+                entry.enabled = true;
+            }
+            entry.incidents_open += 1;
+            if stale_ownership(&incident.updated_at, 6 * 60 * 60) {
+                entry.stale_incidents += 1;
+            }
+        }
+    }
+
+    let pending_approvals = response_requests
+        .iter()
+        .filter(|request| request.status == ApprovalStatus::Pending)
+        .count();
+    let unassigned_queue = queue_items
+        .iter()
+        .filter(|item| item.status == "pending" && item.assignee.is_none())
+        .count();
+    let unassigned_cases = cases
+        .iter()
+        .filter(|case| {
+            case.assignee.is_none()
+                && case_or_incident_is_open(&format!("{:?}", case.status).to_ascii_lowercase())
+        })
+        .count();
+
+    let mut analysts = owners
+        .into_values()
+        .map(|entry| {
+            let stale_items = entry.queue_sla_breached + entry.stale_cases + entry.stale_incidents;
+            let active_items = entry.queue_assigned + entry.cases_open + entry.incidents_open;
+            let load_score = entry.queue_assigned * 2
+                + entry.cases_open * 3
+                + entry.incidents_open * 4
+                + stale_items * 2;
+            let status = load_owner_status(load_score, stale_items, active_items).to_string();
+            let next_action = if entry.queue_sla_breached > 0 {
+                "Reassign breached queue work or clear the oldest SLA-risk alert.".to_string()
+            } else if entry.stale_cases + entry.stale_incidents > 0 {
+                "Refresh ownership notes and move dormant investigations before handoff."
+                    .to_string()
+            } else if active_items == 0 {
+                "Pick up unassigned queue work or the next open case.".to_string()
+            } else {
+                "Keep case notes, queue ownership, and incident next steps current.".to_string()
+            };
+            WorkbenchOwnerLoadSummary {
+                username: entry.username,
+                role: entry.role,
+                enabled: entry.enabled,
+                queue_assigned: entry.queue_assigned,
+                queue_sla_breached: entry.queue_sla_breached,
+                cases_open: entry.cases_open,
+                incidents_open: entry.incidents_open,
+                stale_cases: entry.stale_cases,
+                stale_incidents: entry.stale_incidents,
+                load_score,
+                status,
+                last_case_update: entry.last_case_update,
+                next_action,
+            }
+        })
+        .collect::<Vec<_>>();
+
+    analysts.sort_by(|left, right| {
+        right
+            .load_score
+            .cmp(&left.load_score)
+            .then_with(|| left.username.cmp(&right.username))
+    });
+
+    let active_owners = analysts
+        .iter()
+        .filter(|entry| entry.queue_assigned + entry.cases_open + entry.incidents_open > 0)
+        .count();
+    let available_owners = analysts
+        .iter()
+        .filter(|entry| entry.status == "available" && entry.enabled)
+        .count();
+    let stale_ownership_items = analysts
+        .iter()
+        .map(|entry| entry.queue_sla_breached + entry.stale_cases + entry.stale_incidents)
+        .sum();
+    let load_scores = analysts
+        .iter()
+        .map(|entry| entry.load_score)
+        .collect::<Vec<_>>();
+    let average_load_score = if load_scores.is_empty() {
+        0.0
+    } else {
+        load_scores.iter().sum::<usize>() as f64 / load_scores.len() as f64
+    };
+    let max_load = load_scores.iter().copied().max().unwrap_or_default();
+    let min_load = load_scores.iter().copied().min().unwrap_or_default();
+    let overloaded_owners = analysts
+        .iter()
+        .filter(|entry| entry.status == "overloaded")
+        .count();
+
+    let rebalance_hint = if unassigned_queue + unassigned_cases > 0 && available_owners > 0 {
+        "Move unassigned queue work and open cases onto available analysts before the next shift."
+            .to_string()
+    } else if overloaded_owners > 0 && available_owners > 0 {
+        "Shift the oldest case or breached queue item away from overloaded owners.".to_string()
+    } else if pending_approvals > 0 {
+        "Pair the shift lead with an approver so response and remediation requests do not stall."
+            .to_string()
+    } else {
+        "Ownership looks balanced; keep role coverage and group routing aligned with current lanes."
+            .to_string()
+    };
+
+    let mut role_coverage = role_coverage
+        .into_iter()
+        .map(|(role, (count, enabled))| WorkbenchRoleCoverage {
+            role,
+            count,
+            enabled,
+        })
+        .collect::<Vec<_>>();
+    role_coverage.sort_by(|left, right| left.role.cmp(&right.role));
+
+    let mut group_context = mapped_role_context
+        .iter()
+        .map(|(group, mapped_role)| WorkbenchGroupCoverage {
+            group: group.clone(),
+            mapped_role: Some(mapped_role.clone()),
+            automation_targets: usize::from(automation_targets.contains(group)),
+            status: if automation_targets.contains(group) {
+                "aligned".to_string()
+            } else {
+                "mapped".to_string()
+            },
+        })
+        .collect::<Vec<_>>();
+    for group in automation_targets {
+        if group_context.iter().any(|entry| entry.group == *group) {
+            continue;
+        }
+        group_context.push(WorkbenchGroupCoverage {
+            group: group.clone(),
+            mapped_role: None,
+            automation_targets: 1,
+            status: "gap".to_string(),
+        });
+    }
+    group_context.sort_by(|left, right| left.group.cmp(&right.group));
+
+    WorkbenchTeamLoadOverview {
+        active_owners,
+        available_owners,
+        pending_approvals,
+        unassigned_queue,
+        unassigned_cases,
+        stale_ownership_items,
+        average_load_score,
+        balance_spread: max_load.saturating_sub(min_load),
+        rebalance_hint,
+        analysts,
+        role_coverage,
+        group_context,
+    }
+}
+
+fn collector_lane_keywords(lane: &str) -> &'static [&'static str] {
+    match lane {
+        "identity" => &[
+            "identity",
+            "auth",
+            "credential",
+            "okta",
+            "entra",
+            "mfa",
+            "login",
+        ],
+        "saas" => &["github", "workspace", "m365", "saas", "cloud app", "oauth"],
+        "edr" => &[
+            "process",
+            "endpoint",
+            "powershell",
+            "execution",
+            "edr",
+            "host",
+        ],
+        "network" => &["dns", "tls", "network", "beacon", "traffic", "c2"],
+        _ => &["cloud", "aws", "azure", "gcp", "iam", "bucket", "trail"],
+    }
+}
+
+fn rule_matches_collector_lane(rule: &crate::enterprise::ManagedRuleMetadata, lane: &str) -> bool {
+    let haystack = format!(
+        "{} {} {} {}",
+        rule.title,
+        rule.description,
+        rule.pack_ids.join(" "),
+        rule.owner
+    )
+    .to_ascii_lowercase();
+    collector_lane_keywords(lane)
+        .iter()
+        .any(|keyword| haystack.contains(keyword))
+}
+
+fn asset_matches_collector_lane(asset: &crate::cloud_inventory::UnifiedAsset, lane: &str) -> bool {
+    match lane {
+        "identity" => matches!(
+            asset.asset_type,
+            crate::cloud_inventory::AssetType::OnPremHost
+                | crate::cloud_inventory::AssetType::CloudService
+        ),
+        "saas" => matches!(
+            asset.asset_type,
+            crate::cloud_inventory::AssetType::CloudService
+                | crate::cloud_inventory::AssetType::StorageBucket
+        ),
+        "edr" => {
+            asset.agent_id.is_some()
+                || matches!(
+                    asset.asset_type,
+                    crate::cloud_inventory::AssetType::OnPremHost
+                        | crate::cloud_inventory::AssetType::Container
+                )
+        }
+        "network" => matches!(
+            asset.asset_type,
+            crate::cloud_inventory::AssetType::NetworkDevice
+                | crate::cloud_inventory::AssetType::LoadBalancer
+                | crate::cloud_inventory::AssetType::IoTDevice
+        ),
+        _ => matches!(
+            asset.asset_type,
+            crate::cloud_inventory::AssetType::CloudVm
+                | crate::cloud_inventory::AssetType::CloudService
+                | crate::cloud_inventory::AssetType::Database
+                | crate::cloud_inventory::AssetType::KubernetesCluster
+                | crate::cloud_inventory::AssetType::StorageBucket
+        ),
+    }
+}
+
+fn asset_is_stale(asset: &crate::cloud_inventory::UnifiedAsset) -> bool {
+    asset.status != crate::cloud_inventory::AssetStatus::Active
+        || age_secs_since(&asset.last_seen).is_some_and(|age| age >= 24 * 60 * 60)
+}
+
+fn default_connector_owner(lane: &str) -> &'static str {
+    match lane {
+        "identity" => "identity owner",
+        "saas" => "saas owner",
+        "edr" => "endpoint owner",
+        "network" => "network owner",
+        _ => "platform owner",
+    }
+}
+
+fn top_asset_owner(
+    assets: &[&crate::cloud_inventory::UnifiedAsset],
+    fallback: &str,
+) -> (String, usize) {
+    let mut counts: HashMap<String, usize> = HashMap::new();
+    for asset in assets {
+        let owner = asset
+            .owner
+            .as_deref()
+            .filter(|value| !value.trim().is_empty())
+            .unwrap_or(fallback);
+        *counts.entry(owner.to_string()).or_insert(0) += 1;
+    }
+    counts
+        .into_iter()
+        .max_by(|left, right| left.1.cmp(&right.1).then_with(|| left.0.cmp(&right.0)))
+        .unwrap_or_else(|| (fallback.to_string(), 0))
+}
+
+fn build_connector_impact_overview(
+    collectors: &[serde_json::Value],
+    rule_metadata: &[crate::enterprise::ManagedRuleMetadata],
+    assets: &[crate::cloud_inventory::UnifiedAsset],
+) -> WorkbenchConnectorImpactOverview {
+    let mut items = collectors
+        .iter()
+        .map(|collector| {
+            let provider = collector
+                .get("provider")
+                .and_then(serde_json::Value::as_str)
+                .unwrap_or("collector")
+                .to_string();
+            let label = collector
+                .get("label")
+                .and_then(serde_json::Value::as_str)
+                .unwrap_or("Collector")
+                .to_string();
+            let lane = collector
+                .get("lane")
+                .and_then(serde_json::Value::as_str)
+                .unwrap_or("cloud")
+                .to_string();
+            let enabled = collector
+                .get("enabled")
+                .and_then(serde_json::Value::as_bool)
+                .unwrap_or(false);
+            let freshness = collector
+                .get("freshness")
+                .and_then(serde_json::Value::as_str)
+                .unwrap_or("unknown");
+            let validation_failure = collector
+                .get("validation")
+                .and_then(|validation| validation.get("issues"))
+                .and_then(serde_json::Value::as_array)
+                .and_then(|issues| issues.first())
+                .and_then(|issue| issue.get("message"))
+                .and_then(serde_json::Value::as_str)
+                .map(str::to_string);
+            let rules = rule_metadata
+                .iter()
+                .filter(|rule| rule.enabled && rule_matches_collector_lane(rule, &lane))
+                .collect::<Vec<_>>();
+            let matched_assets = assets
+                .iter()
+                .filter(|asset| asset_matches_collector_lane(asset, &lane))
+                .collect::<Vec<_>>();
+            let stale_assets = matched_assets
+                .iter()
+                .filter(|asset| asset_is_stale(asset))
+                .count();
+            let (owner, _) = top_asset_owner(&matched_assets, default_connector_owner(&lane));
+            let mut rule_owners = rules
+                .iter()
+                .map(|rule| rule.owner.clone())
+                .filter(|owner| !owner.trim().is_empty())
+                .collect::<Vec<_>>();
+            rule_owners.sort();
+            rule_owners.dedup();
+            let sample_detections = rules
+                .iter()
+                .take(3)
+                .map(|rule| format!("{} ({})", rule.title, rule.owner))
+                .collect::<Vec<_>>();
+            let route_targets = collector
+                .get("route_targets")
+                .and_then(serde_json::Value::as_array)
+                .map(|targets| {
+                    targets
+                        .iter()
+                        .filter_map(serde_json::Value::as_str)
+                        .map(str::to_string)
+                        .collect::<Vec<_>>()
+                })
+                .unwrap_or_default();
+            let setup_pivots = collector
+                .get("ingestion_evidence")
+                .and_then(|evidence| evidence.get("pivots"))
+                .and_then(serde_json::Value::as_array)
+                .cloned()
+                .unwrap_or_default();
+            let status = if !enabled {
+                "disabled"
+            } else if freshness == "error" || validation_failure.is_some() {
+                "review"
+            } else if freshness == "stale" || stale_assets > 0 {
+                "watch"
+            } else {
+                "ready"
+            }
+            .to_string();
+            let next_action = if !enabled {
+                "Finish collector setup before depending on this lane for downstream detections."
+                    .to_string()
+            } else if let Some(message) = &validation_failure {
+                format!("Resolve validation issue: {message}")
+            } else if freshness == "stale" {
+                "Confirm the last-good event, refresh credentials, and replay the impacted lane."
+                    .to_string()
+            } else if stale_assets > 0 {
+                "Review stale assets and confirm the affected owner before dismissing connector drift."
+                    .to_string()
+            } else {
+                "Keep validation evidence and downstream detections current for this collector."
+                    .to_string()
+            };
+
+            WorkbenchConnectorImpactEntry {
+                provider,
+                label,
+                lane,
+                status,
+                enabled,
+                affected_detections: rules.len(),
+                stale_assets,
+                last_good_event: collector
+                    .get("last_success_at")
+                    .and_then(serde_json::Value::as_str)
+                    .map(str::to_string),
+                validation_failure,
+                owner,
+                sample_detections,
+                rule_owners,
+                route_targets,
+                setup_pivots,
+                next_action,
+            }
+        })
+        .collect::<Vec<_>>();
+
+    items.sort_by(|left, right| {
+        let status_rank = |status: &str| match status {
+            "review" => 3,
+            "watch" => 2,
+            "disabled" => 1,
+            _ => 0,
+        };
+        status_rank(&right.status)
+            .cmp(&status_rank(&left.status))
+            .then_with(|| right.affected_detections.cmp(&left.affected_detections))
+            .then_with(|| left.label.cmp(&right.label))
+    });
+
+    WorkbenchConnectorImpactOverview {
+        collectors_at_risk: items
+            .iter()
+            .filter(|item| item.status == "review" || item.status == "watch")
+            .count(),
+        impacted_detections: items.iter().map(|item| item.affected_detections).sum(),
+        stale_assets: items.iter().map(|item| item.stale_assets).sum(),
+        review_required: items
+            .iter()
+            .filter(|item| item.validation_failure.is_some() || !item.enabled)
+            .count(),
+        items,
+    }
+}
+
 fn build_workbench_overview(
     alert_queue: &AlertQueue,
     case_store: &CaseStore,
@@ -5174,6 +5792,9 @@ fn build_workbench_overview(
     event_store: &EventStore,
     agent_registry: &AgentRegistry,
     deployments: &HashMap<String, AgentDeployment>,
+    connector_status_entries: &[serde_json::Value],
+    assets: &[crate::cloud_inventory::UnifiedAsset],
+    rbac: &crate::rbac::RbacStore,
     enterprise: &crate::enterprise::EnterpriseStore,
     playbook_engine: &crate::playbook::PlaybookEngine,
     playbook_dsl: &crate::playbook_dsl::PlaybookDslStore,
@@ -5291,10 +5912,19 @@ fn build_workbench_overview(
         .count();
     let scim_validation = enterprise.scim_validation();
     let mut mapped_groups = HashSet::new();
+    let mut mapped_role_context = HashMap::new();
     for summary in &identity_summaries {
-        mapped_groups.extend(summary.provider.group_role_mappings.keys().cloned());
+        for (group, role) in &summary.provider.group_role_mappings {
+            mapped_groups.insert(group.clone());
+            mapped_role_context
+                .entry(group.clone())
+                .or_insert_with(|| role.clone());
+        }
     }
-    mapped_groups.extend(enterprise.scim().group_role_mappings.keys().cloned());
+    for (group, role) in &enterprise.scim().group_role_mappings {
+        mapped_groups.insert(group.clone());
+        mapped_role_context.insert(group.clone(), role.clone());
+    }
 
     let hunts = enterprise.hunts();
     let packs = enterprise.packs();
@@ -5452,8 +6082,30 @@ fn build_workbench_overview(
         .iter()
         .map(|endpoint| endpoint.p95_latency_ms.round() as u64)
         .max();
+    let rule_metadata = enterprise
+        .builtin_rules()
+        .iter()
+        .cloned()
+        .chain(
+            enterprise
+                .native_rules()
+                .iter()
+                .map(|rule| rule.metadata.clone()),
+        )
+        .collect::<Vec<_>>();
 
     let hot_agents = build_hot_agent_summaries(analytics, agent_registry, deployments);
+    let team_load = build_team_load_overview(
+        &queue_items,
+        &cases,
+        &incidents,
+        &requests,
+        rbac,
+        &mapped_role_context,
+        &automation_targets,
+    );
+    let connector_impact =
+        build_connector_impact_overview(connector_status_entries, &rule_metadata, assets);
 
     let mut urgent_items = Vec::new();
     for item in queue_items.iter().take(3) {
@@ -5725,6 +6377,8 @@ fn build_workbench_overview(
             last_hunt_latency_ms: enterprise_metrics.last_hunt_latency_ms,
             last_response_latency_ms: enterprise_metrics.last_response_latency_ms,
         },
+        team_load,
+        connector_impact,
         hot_agents,
         urgent_items,
         recommendations,
@@ -9917,90 +10571,131 @@ fn collector_status_entry(
     })
 }
 
-fn collector_readiness_summary(state: &AppState) -> serde_json::Value {
-    let providers = [
-        (
+fn full_collector_status_entries(state: &AppState) -> Vec<serde_json::Value> {
+    let aws = load_aws_collector_setup(&state.storage);
+    let azure = load_azure_collector_setup(&state.storage);
+    let gcp = load_gcp_collector_setup(&state.storage);
+    let okta = load_okta_collector_setup(&state.storage);
+    let entra = load_entra_collector_setup(&state.storage);
+    let m365 = load_m365_collector_setup(&state.storage);
+    let workspace = load_workspace_collector_setup(&state.storage);
+    let aws_validation = aws.validate();
+    let azure_validation = azure.validate();
+    let gcp_validation = gcp.validate();
+    let okta_validation = okta.validate();
+    let entra_validation = entra.validate();
+    let m365_validation = m365.validate();
+    let workspace_validation = workspace.validate();
+
+    vec![
+        collector_status_entry(
             "aws_cloudtrail",
-            load_aws_collector_setup(&state.storage).enabled,
-        ),
-        (
-            "azure_activity",
-            load_azure_collector_setup(&state.storage).enabled,
-        ),
-        (
-            "gcp_audit",
-            load_gcp_collector_setup(&state.storage).enabled,
-        ),
-        (
-            "okta_identity",
-            load_okta_collector_setup(&state.storage).enabled,
-        ),
-        (
-            "entra_identity",
-            load_entra_collector_setup(&state.storage).enabled,
-        ),
-        (
-            "m365_saas",
-            load_m365_collector_setup(&state.storage).enabled,
-        ),
-        (
-            "workspace_saas",
-            load_workspace_collector_setup(&state.storage).enabled,
-        ),
-        (
-            "github_audit",
-            planned_collector_enabled(&load_planned_collector_setup(
-                &state.storage,
-                "github_audit",
-            )),
-        ),
-        (
-            "crowdstrike_falcon",
-            planned_collector_enabled(&load_planned_collector_setup(
-                &state.storage,
-                "crowdstrike_falcon",
-            )),
-        ),
-        (
-            "generic_syslog",
-            planned_collector_enabled(&load_planned_collector_setup(
-                &state.storage,
-                "generic_syslog",
-            )),
-        ),
-    ];
-    let collectors = providers
-        .iter()
-        .map(|(provider, enabled)| {
-            let checkpoint = load_collector_checkpoint(&state.storage, provider);
-            let lifecycle = load_collector_lifecycle(&state.storage, provider);
+            aws.enabled,
+            aws.poll_interval_secs,
             serde_json::json!({
-                "provider": provider,
-                "label": collector_display_label(provider),
-                "lane": collector_lane(provider),
-                "enabled": enabled,
-                "last_success_at": checkpoint.last_success_at,
-                "last_error_at": checkpoint.last_error_at,
-                "error_category": checkpoint.error_category,
-                "events_ingested": checkpoint.events_ingested,
-                "lag_seconds": checkpoint_lag_seconds(checkpoint.last_success_at.as_deref()).or(checkpoint.lag_seconds),
-                "checkpoint_id": checkpoint.checkpoint_id,
-                "retry_count": checkpoint.retry_count,
-                "backoff_seconds": checkpoint.backoff_seconds,
-                "lifecycle_analytics": collector_lifecycle_analytics(&lifecycle),
-                "ingestion_evidence": {
-                    "pivots": [
-                        {"surface": "SOC Workbench", "href": format!("/soc?collector={provider}&lane={}", collector_lane(provider)), "label": "Open SOC collector context"},
-                        {"surface": "Infrastructure", "href": format!("/infrastructure?tab=observability&collector={provider}"), "label": "Open infrastructure evidence"}
-                    ],
-                    "recent_runs": lifecycle.iter().rev().take(3).cloned().collect::<Vec<_>>(),
-                },
-            })
-        })
-        .collect::<Vec<_>>();
+                "region": aws.region,
+                "access_key_id": aws.access_key_id,
+                "has_secret_access_key": !aws.secret_access_key.trim().is_empty(),
+                "has_session_token": aws.session_token.as_ref().is_some_and(|value| !value.trim().is_empty()),
+            }),
+            aws_validation,
+            load_collector_checkpoint(&state.storage, "aws_cloudtrail"),
+            load_collector_lifecycle(&state.storage, "aws_cloudtrail"),
+        ),
+        collector_status_entry(
+            "azure_activity",
+            azure.enabled,
+            azure.poll_interval_secs,
+            serde_json::json!({
+                "tenant_id": azure.tenant_id,
+                "client_id": azure.client_id,
+                "subscription_id": azure.subscription_id,
+                "has_client_secret": !azure.client_secret.trim().is_empty(),
+            }),
+            azure_validation,
+            load_collector_checkpoint(&state.storage, "azure_activity"),
+            load_collector_lifecycle(&state.storage, "azure_activity"),
+        ),
+        collector_status_entry(
+            "gcp_audit",
+            gcp.enabled,
+            gcp.poll_interval_secs,
+            serde_json::json!({
+                "project_id": gcp.project_id,
+                "service_account_email": gcp.service_account_email,
+                "key_file_path": gcp.key_file_path,
+                "has_private_key_pem": gcp.private_key_pem.as_ref().is_some_and(|value| !value.trim().is_empty()),
+            }),
+            gcp_validation,
+            load_collector_checkpoint(&state.storage, "gcp_audit"),
+            load_collector_lifecycle(&state.storage, "gcp_audit"),
+        ),
+        collector_status_entry(
+            "okta_identity",
+            okta.enabled,
+            okta.poll_interval_secs,
+            serde_json::json!({
+                "domain": okta.domain,
+                "event_type_count": okta.event_type_filter.len(),
+                "has_api_token": !okta.api_token.trim().is_empty(),
+            }),
+            okta_validation,
+            load_collector_checkpoint(&state.storage, "okta_identity"),
+            load_collector_lifecycle(&state.storage, "okta_identity"),
+        ),
+        collector_status_entry(
+            "entra_identity",
+            entra.enabled,
+            entra.poll_interval_secs,
+            serde_json::json!({
+                "tenant_id": entra.tenant_id,
+                "client_id": entra.client_id,
+                "has_client_secret": !entra.client_secret.trim().is_empty(),
+            }),
+            entra_validation,
+            load_collector_checkpoint(&state.storage, "entra_identity"),
+            load_collector_lifecycle(&state.storage, "entra_identity"),
+        ),
+        collector_status_entry(
+            "m365_saas",
+            m365.enabled,
+            m365.poll_interval_secs,
+            serde_json::json!({
+                "tenant_id": m365.tenant_id,
+                "client_id": m365.client_id,
+                "content_type_count": m365.content_types.len(),
+                "has_client_secret": !m365.client_secret.trim().is_empty(),
+            }),
+            m365_validation,
+            load_collector_checkpoint(&state.storage, "m365_saas"),
+            load_collector_lifecycle(&state.storage, "m365_saas"),
+        ),
+        collector_status_entry(
+            "workspace_saas",
+            workspace.enabled,
+            workspace.poll_interval_secs,
+            serde_json::json!({
+                "customer_id": workspace.customer_id,
+                "delegated_admin_email": workspace.delegated_admin_email,
+                "service_account_email": workspace.service_account_email,
+                "application_count": workspace.applications.len(),
+                "has_credentials_json": !workspace.credentials_json.trim().is_empty(),
+            }),
+            workspace_validation,
+            load_collector_checkpoint(&state.storage, "workspace_saas"),
+            load_collector_lifecycle(&state.storage, "workspace_saas"),
+        ),
+        planned_collector_status_entry(&state.storage, "github_audit"),
+        planned_collector_status_entry(&state.storage, "crowdstrike_falcon"),
+        planned_collector_status_entry(&state.storage, "generic_syslog"),
+    ]
+}
+
+fn collector_readiness_summary(state: &AppState) -> serde_json::Value {
+    let collectors = full_collector_status_entries(state);
     serde_json::json!({
-        "enabled": providers.iter().filter(|(_, enabled)| *enabled).count(),
-        "configured": providers.len(),
+        "enabled": collectors.iter().filter(|item| item.get("enabled").and_then(serde_json::Value::as_bool) == Some(true)).count(),
+        "configured": collectors.len(),
         "collectors": collectors,
     })
 }
@@ -14758,6 +15453,7 @@ fn handle_api(
             s.agent_registry.refresh_staleness();
             let analytics = s.event_store.analytics();
             let api_analytics = s.api_analytics.summary();
+            let connector_status_entries = full_collector_status_entries(&s);
             let overview = build_workbench_overview(
                 &s.alert_queue,
                 &s.case_store,
@@ -14768,6 +15464,9 @@ fn handle_api(
                 &s.event_store,
                 &s.agent_registry,
                 &s.remote_deployments,
+                &connector_status_entries,
+                s.asset_inventory.all(),
+                &s.rbac,
                 &s.enterprise,
                 &s.playbook_engine,
                 &s.playbook_dsl,
@@ -26720,6 +27419,7 @@ mod tests {
         let response = ResponseOrchestrator::new();
         let mut events = EventStore::new(100);
         let mut registry = AgentRegistry::new(agent_path.to_str().unwrap());
+        let rbac = crate::rbac::RbacStore::new();
         let mut enterprise = EnterpriseStore::new(enterprise_path.to_str().unwrap());
         let mut playbook_engine = crate::playbook::PlaybookEngine::new();
         let mut playbook_dsl = crate::playbook_dsl::PlaybookDslStore::new();
@@ -26809,6 +27509,22 @@ mod tests {
             "analyst-1".to_string(),
             "validated".to_string(),
         );
+        rbac.add_user(crate::rbac::User {
+            username: "analyst-1".to_string(),
+            role: crate::rbac::Role::Analyst,
+            token_hash: "analyst-1-token".to_string(),
+            enabled: true,
+            created_at: chrono::Utc::now().to_rfc3339(),
+            tenant_id: None,
+        });
+        rbac.add_user(crate::rbac::User {
+            username: "analyst-2".to_string(),
+            role: crate::rbac::Role::Analyst,
+            token_hash: "analyst-2-token".to_string(),
+            enabled: true,
+            created_at: chrono::Utc::now().to_rfc3339(),
+            tenant_id: None,
+        });
 
         let mut group_mappings = StdHashMap::new();
         group_mappings.insert("soc-analysts".to_string(), "analyst".to_string());
@@ -26958,6 +27674,26 @@ mod tests {
 
         let analytics = events.analytics();
         let api_summary = api_analytics.summary();
+        let connector_status_entries = vec![serde_json::json!({
+            "provider": "okta_identity",
+            "label": "Okta Identity",
+            "lane": "identity",
+            "enabled": true,
+            "freshness": "stale",
+            "last_success_at": "2024-01-01T00:00:00Z",
+            "validation": {
+                "status": "warning",
+                "issues": [
+                    {"field": "api_token", "level": "warning", "message": "Token rotation required."}
+                ]
+            },
+            "route_targets": ["SOC Queue", "UEBA"],
+            "ingestion_evidence": {
+                "pivots": [
+                    {"surface": "SOC Workbench", "href": "/soc?collector=okta_identity&lane=identity", "label": "Open SOC collector context"}
+                ]
+            }
+        })];
         let overview = build_workbench_overview(
             &queue,
             &case_store,
@@ -26968,6 +27704,9 @@ mod tests {
             &events,
             &registry,
             &StdHashMap::new(),
+            &connector_status_entries,
+            &[],
+            &rbac,
             &enterprise,
             &playbook_engine,
             &playbook_dsl,
@@ -26985,6 +27724,32 @@ mod tests {
         assert!(overview.content.saved_searches > 0);
         assert_eq!(overview.automation.pending_approvals, 1);
         assert_eq!(overview.analytics.api_requests, 2);
+        assert_eq!(overview.team_load.active_owners, 1);
+        assert_eq!(overview.team_load.available_owners, 1);
+        assert_eq!(overview.team_load.pending_approvals, 0);
+        assert_eq!(overview.team_load.analysts[0].username, "analyst-1");
+        assert!(
+            overview
+                .team_load
+                .role_coverage
+                .iter()
+                .any(|entry| entry.role == "Analyst" && entry.count == 2)
+        );
+        assert!(
+            overview
+                .team_load
+                .group_context
+                .iter()
+                .any(|entry| entry.group == "soc-analysts" && entry.status == "aligned")
+        );
+        assert_eq!(overview.connector_impact.collectors_at_risk, 1);
+        assert!(
+            overview
+                .connector_impact
+                .items
+                .iter()
+                .any(|item| item.provider == "okta_identity" && item.affected_detections > 0)
+        );
         assert_eq!(overview.rollouts.rollback_events, 0);
         assert!(
             overview
@@ -27017,11 +27782,23 @@ mod tests {
         let response = ResponseOrchestrator::new();
         let events = EventStore::new(16);
         let registry = AgentRegistry::new(agent_path.to_str().unwrap());
+        let rbac = crate::rbac::RbacStore::new();
         let mut enterprise = EnterpriseStore::new(enterprise_path.to_str().unwrap());
         let playbook_engine = crate::playbook::PlaybookEngine::new();
         let playbook_dsl = crate::playbook_dsl::PlaybookDslStore::new();
         let workflow_store = crate::investigation::WorkflowStore::new();
         let api_summary = crate::api_analytics::ApiAnalytics::new().summary();
+        let connector_status_entries = vec![serde_json::json!({
+            "provider": "aws_cloudtrail",
+            "label": "AWS CloudTrail",
+            "lane": "cloud",
+            "enabled": false,
+            "freshness": "disabled",
+            "last_success_at": serde_json::Value::Null,
+            "validation": {"status": "disabled", "issues": []},
+            "route_targets": ["Infrastructure", "Attack Graph"],
+            "ingestion_evidence": {"pivots": []}
+        })];
 
         enterprise.record_rollout_event(
             "content-rollback",
@@ -27044,6 +27821,9 @@ mod tests {
             &events,
             &registry,
             &StdHashMap::new(),
+            &connector_status_entries,
+            &[],
+            &rbac,
             &enterprise,
             &playbook_engine,
             &playbook_dsl,
