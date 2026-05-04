@@ -3534,6 +3534,14 @@ fn cluster_peer_url(addr: &str, path: &str) -> String {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ApiRouteAccess {
+    Public,
+    Agent,
+    Cluster,
+    Authenticated,
+}
+
 const SESSION_COOKIE_NAME: &str = "wardex_session";
 
 fn session_cookie_token(headers: &HeaderMap) -> Option<String> {
@@ -3603,6 +3611,63 @@ fn load_or_create_session_seal_key(config_path: &Path) -> Vec<u8> {
     let _ = std::fs::write(&path, &generated);
     harden_private_file_permissions(&path);
     generated.into_bytes()
+}
+
+fn is_public_api_endpoint(method: &Method, route_path: &str) -> bool {
+    matches!(
+        (method, route_path),
+        (&Method::Get, "/api/health")
+            | (&Method::Get, "/api/metrics")
+            | (&Method::Get, "/api/openapi.json")
+            | (&Method::Get, "/api/auth/sso/config")
+            | (&Method::Get, "/api/auth/sso/login")
+            | (&Method::Get, "/api/auth/sso/callback")
+            | (&Method::Post, "/api/auth/sso/callback")
+    )
+}
+
+fn is_agent_api_endpoint(method: &Method, route_path: &str) -> bool {
+    route_path.starts_with("/api/agents/enroll")
+        || route_path.starts_with("/api/agents/update")
+        || (route_path.contains("/heartbeat") && route_path.starts_with("/api/agents/"))
+        || (*method == Method::Post && route_path == "/api/events")
+        || route_path.starts_with("/api/policy/current")
+        || route_path.starts_with("/api/updates/download/")
+        || (*method == Method::Post
+            && route_path.starts_with("/api/agents/")
+            && route_path.ends_with("/logs"))
+        || (*method == Method::Post
+            && route_path.starts_with("/api/agents/")
+            && route_path.ends_with("/inventory"))
+}
+
+fn api_route_access(method: &Method, route_path: &str) -> ApiRouteAccess {
+    if !route_path.starts_with("/api/") {
+        return ApiRouteAccess::Public;
+    }
+    if route_path.starts_with("/api/cluster/") {
+        return ApiRouteAccess::Cluster;
+    }
+    if is_public_api_endpoint(method, route_path) {
+        return ApiRouteAccess::Public;
+    }
+    if is_agent_api_endpoint(method, route_path) {
+        return ApiRouteAccess::Agent;
+    }
+    ApiRouteAccess::Authenticated
+}
+
+fn method_from_name(value: &str) -> Option<Method> {
+    match value {
+        "GET" => Some(Method::Get),
+        "POST" => Some(Method::Post),
+        "PUT" => Some(Method::Put),
+        "DELETE" => Some(Method::Delete),
+        "PATCH" => Some(Method::Patch),
+        "OPTIONS" => Some(Method::Options),
+        "HEAD" => Some(Method::Head),
+        _ => None,
+    }
 }
 
 fn user_preferences_store_path(config_path: &Path) -> String {
@@ -12510,8 +12575,6 @@ fn handle_api(
     };
     let route_path = url_path(&url);
 
-    let is_cluster_endpoint = route_path.starts_with("/api/cluster/");
-
     // ── Request body size limit (10 MB) ──
     const MAX_BODY_SIZE: usize = 10 * 1024 * 1024;
     if body.len() > MAX_BODY_SIZE {
@@ -12525,28 +12588,17 @@ fn handle_api(
         );
     }
 
-    // Check auth for mutating endpoints before consuming the request body
-    // XDR agent endpoints that do NOT require admin auth (agents use enrollment tokens)
-    let is_agent_endpoint = route_path.starts_with("/api/agents/enroll")
-        || route_path.starts_with("/api/agents/update")
-        || (route_path.contains("/heartbeat") && route_path.starts_with("/api/agents/"))
-        || (method == Method::Post && route_path == "/api/events")
-        || route_path.starts_with("/api/policy/current")
-        || route_path.starts_with("/api/updates/download/")
-        || (method == Method::Post
-            && route_path.starts_with("/api/agents/")
-            && route_path.ends_with("/logs"))
-        || (method == Method::Post
-            && route_path.starts_with("/api/agents/")
-            && route_path.ends_with("/inventory"))
-        || (method == Method::Get && route_path == "/api/openapi.json");
+    // Check auth before consuming the request body. API routes are default-deny
+    // unless they are explicitly public, agent-token, or cluster-token routes.
+    let route_access = api_route_access(&method, route_path);
+    let is_agent_endpoint = matches!(route_access, ApiRouteAccess::Agent);
+    let is_cluster_endpoint = matches!(route_access, ApiRouteAccess::Cluster);
 
     // Agent endpoints still require a valid enrollment token when
     // WARDEX_AGENT_TOKEN is set. This prevents arbitrary clients from
     // enrolling rogue agents or submitting forged events.
     if is_agent_endpoint
         && !route_path.starts_with("/api/updates/download/")
-        && route_path != "/api/openapi.json"
         && let Ok(required_agent_token) = std::env::var("WARDEX_AGENT_TOKEN")
     {
         let provided = bearer_token(headers);
@@ -12585,489 +12637,7 @@ fn handle_api(
         );
     }
 
-    let needs_auth = !is_agent_endpoint
-        && !is_cluster_endpoint
-        && matches!(
-            (&method, route_path),
-            (Method::Get, "/api/auth/check")
-                | (Method::Post, "/api/auth/rotate")
-                | (Method::Get, "/api/session/info")
-                | (Method::Get, "/api/user/preferences")
-                | (Method::Put, "/api/user/preferences")
-                | (Method::Post, "/api/analyze")
-                | (Method::Post, "/api/graphql")
-                | (Method::Post, "/api/control/mode")
-                | (Method::Post, "/api/control/reset-baseline")
-                | (Method::Post, "/api/control/run-demo")
-                | (Method::Post, "/api/control/failover-drill")
-                | (Method::Post, "/api/demo/lab")
-                | (Method::Post, "/api/support/first-run-proof")
-                | (Method::Post, "/api/control/checkpoint")
-                | (Method::Post, "/api/control/restore-checkpoint")
-                | (Method::Post, "/api/fleet/register")
-                | (Method::Get, "/api/fleet/installs")
-                | (Method::Post, "/api/fleet/install/ssh")
-                | (Method::Post, "/api/fleet/install/winrm")
-                | (Method::Post, "/api/enforcement/quarantine")
-                | (Method::Get, "/api/threat-intel/status")
-                | (Method::Get, "/api/threat-intel/library")
-                | (Method::Get, "/api/threat-intel/library/v2")
-                | (Method::Post, "/api/threat-intel/ioc")
-                | (Method::Get, "/api/threat-intel/sightings")
-                | (Method::Get, "/api/threat-intel/stats")
-                | (Method::Post, "/api/threat-intel/purge")
-                | (Method::Get, "/api/mitre/coverage")
-                | (Method::Get, "/api/mitre/heatmap")
-                | (Method::Get, "/api/detection/profile")
-                | (Method::Get, "/api/detection/replay-corpus")
-                | (Method::Post, "/api/detection/replay-corpus")
-                | (Method::Put, "/api/detection/profile")
-                | (Method::Post, "/api/fp-feedback")
-                | (Method::Get, "/api/fp-feedback/stats")
-                | (Method::Get, "/api/detection/score/normalize")
-                | (Method::Post, "/api/digital-twin/simulate")
-                | (Method::Post, "/api/energy/consume")
-                | (Method::Post, "/api/quantum/rotate")
-                | (Method::Post, "/api/policy-vm/execute")
-                | (Method::Post, "/api/harness/run")
-                | (Method::Post, "/api/deception/deploy")
-                | (Method::Post, "/api/policy/compose")
-                | (Method::Post, "/api/drift/reset")
-                | (Method::Post, "/api/offload/decide")
-                | (Method::Post, "/api/energy/harvest")
-                | (Method::Post, "/api/config/reload")
-                | (Method::Post, "/api/config/save")
-                | (Method::Post, "/api/agents/token")
-                | (Method::Post, "/api/policy/publish")
-                | (Method::Post, "/api/updates/publish")
-                | (Method::Post, "/api/updates/deploy")
-                | (Method::Post, "/api/updates/rollback")
-                | (Method::Post, "/api/updates/cancel")
-                | (Method::Post, "/api/events/bulk-triage")
-                | (Method::Post, "/api/response/request")
-                | (Method::Post, "/api/response/approve")
-                | (Method::Post, "/api/response/execute")
-                | (Method::Post, "/api/shutdown")
-                | (Method::Post, "/api/mesh/heal")
-                | (Method::Delete, "/api/alerts")
-                | (Method::Post, "/api/alerts/sample")
-                | (Method::Post, "/api/alerts/analysis")
-                | (Method::Post, "/api/alerts/bulk/acknowledge")
-                | (Method::Post, "/api/alerts/bulk/resolve")
-                | (Method::Post, "/api/alerts/bulk/close")
-                | (Method::Get, "/api/webhooks")
-                | (Method::Post, "/api/webhooks")
-        )
-        || (!is_agent_endpoint
-            && ((method == Method::Get && route_path == "/api/fleet/dashboard")
-        || (method == Method::Get && route_path == "/api/workbench/overview")
-        || (method == Method::Get && route_path == "/api/manager/overview")
-        || (method == Method::Get && route_path == "/api/manager/queue-digest")
-        || (method == Method::Get && route_path == "/api/onboarding/readiness")
-        || (method == Method::Get && route_path == "/api/command/summary")
-        || (method == Method::Get && route_path.starts_with("/api/command/lanes/"))
-        || (method == Method::Get && route_path == "/api/hunts")
-        || (method == Method::Post && route_path == "/api/hunts")
-        || (method == Method::Get && route_path.starts_with("/api/hunts/"))
-        || (method == Method::Post && route_path.starts_with("/api/hunts/"))
-        || (method == Method::Get && route_path == "/api/content/rules")
-        || (method == Method::Post && route_path == "/api/content/rules")
-        || (method == Method::Post && route_path.starts_with("/api/content/rules/"))
-        || (method == Method::Get && route_path == "/api/content/packs")
-        || (method == Method::Post && route_path == "/api/content/packs")
-        || (method == Method::Get && route_path == "/api/coverage/mitre")
-        || (method == Method::Get && route_path == "/api/suppressions")
-        || (method == Method::Post && route_path == "/api/suppressions")
-        || (method == Method::Get && route_path.starts_with("/api/entities/"))
-        || (method == Method::Get && route_path.starts_with("/api/incidents/") && route_path.ends_with("/storyline"))
-        || (method == Method::Get && route_path == "/api/enrichments/connectors")
-        || (method == Method::Post && route_path == "/api/enrichments/connectors")
-        || (method == Method::Post && route_path == "/api/tickets/sync")
-        || (method == Method::Get && route_path == "/api/idp/providers")
-        || (method == Method::Post && route_path == "/api/idp/providers")
-        || (method == Method::Get && route_path == "/api/scim/config")
-        || (method == Method::Post && route_path == "/api/scim/config")
-        || (method == Method::Get && route_path == "/api/audit/admin")
-        || (method == Method::Get && route_path == "/api/support/diagnostics")
-        || (method == Method::Get && route_path == "/api/support/readiness-evidence")
-        || (method == Method::Post && route_path == "/api/support/first-run-proof")
-        || (method == Method::Post && route_path == "/api/control/failover-drill")
-        || (method == Method::Post && route_path == "/api/demo/lab")
-        || (method == Method::Get && route_path == "/api/support/parity")
-        || (method == Method::Get && route_path == "/api/docs/index")
-        || (method == Method::Get && route_path == "/api/docs/content")
-        || (method == Method::Get && route_path == "/api/system/health/dependencies")
-        || (method == Method::Get && route_path == "/api/siem/status")
-        || (method == Method::Get && route_path == "/api/siem/config")
-        || (method == Method::Post && route_path == "/api/siem/config")
-        || (method == Method::Post && route_path == "/api/siem/validate")
-        || (method == Method::Get && route_path == "/api/taxii/status")
-        || (method == Method::Get && route_path == "/api/taxii/config")
-        || (method == Method::Post && route_path == "/api/taxii/config")
-        || (method == Method::Post && route_path == "/api/taxii/pull")
-        || (method == Method::Get && route_path == "/api/agents")
-        || (method == Method::Get && route_path == "/api/events")
-        || (method == Method::Get && route_path == "/api/events/export")
-        || (method == Method::Get && route_path == "/api/events/summary")
-        || (method == Method::Get && route_path == "/api/policy/history")
-        || (method == Method::Get && route_path == "/api/telemetry/current")
-        || (method == Method::Get && route_path == "/api/telemetry/history")
-        || (method == Method::Get && route_path == "/api/host/info")
-        || (method == Method::Get && route_path == "/api/config/current")
-        || (method == Method::Get && route_path == "/api/checkpoints")
-        || (method == Method::Get && route_path == "/api/correlation")
-        || (method == Method::Get && route_path == "/api/correlation/campaigns")
-        || (method == Method::Get && route_path == "/api/alerts")
-        || (method == Method::Get && route_path == "/api/alerts/count")
-        || (method == Method::Get && route_path == "/api/alerts/analysis")
-        || (method == Method::Get && route_path == "/api/alerts/grouped")
-        || (method == Method::Get && route_path.starts_with("/api/alerts/") && route_path != "/api/alerts/count" && route_path != "/api/alerts/analysis" && route_path != "/api/alerts/grouped")
-        || (method == Method::Get && route_path == "/api/swarm/intel")
-        || (method == Method::Get && route_path == "/api/swarm/intel/stats")
-        || (method == Method::Get && route_path == "/api/report")
-        || (method == Method::Get && route_path == "/api/threads/status")
-        || (method == Method::Get && route_path == "/api/detection/summary")
-        || (method == Method::Get && route_path == "/api/detection/replay-corpus")
-        || (method == Method::Post && route_path == "/api/detection/replay-corpus")
-        || (method == Method::Get && route_path == "/api/monitoring/options")
-        || (method == Method::Get && route_path == "/api/monitoring/paths")
-        || (method == Method::Get && route_path == "/api/endpoints")
-        || (method == Method::Get && route_path == "/api/status")
-        || (method == Method::Get && route_path == "/api/export/tla")
-        || (method == Method::Get && route_path == "/api/export/alloy")
-        || (method == Method::Get && route_path == "/api/export/witnesses")
-        || (method == Method::Get && route_path == "/api/research-tracks")
-        || (method == Method::Get && route_path == "/api/attestation/status")
-        || (method == Method::Get && route_path == "/api/fleet/status")
-        || (method == Method::Get && route_path == "/api/enforcement/status")
-        || (method == Method::Get && route_path == "/api/digital-twin/status")
-        || (method == Method::Get && route_path == "/api/compliance/status")
-        || (method == Method::Get && route_path == "/api/energy/status")
-        || (method == Method::Get && route_path == "/api/tenants/count")
-        || (method == Method::Get && route_path == "/api/platform")
-        || (method == Method::Get && route_path == "/api/side-channel/status")
-        || (method == Method::Get && route_path == "/api/quantum/key-status")
-        || (method == Method::Get && route_path == "/api/privacy/budget")
-        || (method == Method::Get && route_path == "/api/fingerprint/status")
-        || (method == Method::Get && route_path == "/api/monitor/status")
-        || (method == Method::Get && route_path == "/api/monitor/violations")
-        || (method == Method::Get && route_path == "/api/deception/status")
-        || (method == Method::Get && route_path == "/api/drift/status")
-        || (method == Method::Get && route_path == "/api/causal/graph")
-        || (method == Method::Get && route_path == "/api/patches")
-        || (method == Method::Get && route_path == "/api/swarm/posture")
-        || (method == Method::Get && route_path == "/api/tls/status")
-        || (method == Method::Get && route_path == "/api/mesh/health")
-        || (method == Method::Get && route_path == "/api/rollout/config")
-        || (method == Method::Get && route_path.starts_with("/api/agents/") && route_path.ends_with("/details"))
-        || (method == Method::Get && route_path.starts_with("/api/agents/") && route_path.ends_with("/activity"))
-        || (method == Method::Get && route_path.starts_with("/api/agents/") && route_path.ends_with("/status"))
-        || (method == Method::Post && route_path.starts_with("/api/events/") && route_path.ends_with("/triage"))
-        || (method == Method::Post && route_path.starts_with("/api/agents/") && route_path.ends_with("/scope"))
-        || (method == Method::Get && route_path.starts_with("/api/agents/") && route_path.ends_with("/scope"))
-        || (method == Method::Get && route_path == "/api/audit/log")
-        || (method == Method::Get && route_path == "/api/audit/log/export")
-        || (method == Method::Get && route_path == "/api/incidents")
-        || (method == Method::Get && route_path.starts_with("/api/incidents/"))
-        || (method == Method::Post && route_path == "/api/incidents")
-        || (method == Method::Post && route_path.starts_with("/api/incidents/") && route_path.ends_with("/update"))
-        || (method == Method::Get && route_path.starts_with("/api/agents/") && route_path.ends_with("/logs"))
-        || (method == Method::Get && route_path.starts_with("/api/agents/") && route_path.ends_with("/inventory"))
-        || (method == Method::Get && route_path == "/api/fleet/inventory")
-        || (method == Method::Post && route_path == "/api/detection/weights")
-        || (method == Method::Get && route_path == "/api/detection/weights")
-        || (method == Method::Get && route_path == "/api/reports")
-        || (method == Method::Get && route_path == "/api/reports/executive-summary")
-        || (method == Method::Get && route_path.starts_with("/api/reports/"))
-        || (method == Method::Post
-            && route_path.starts_with("/api/reports/")
-            && route_path.ends_with("/context"))
-        || (method == Method::Delete && route_path.starts_with("/api/reports/"))
-        || (method == Method::Get && route_path == "/api/report-templates")
-        || (method == Method::Post && route_path == "/api/report-templates")
-        || (method == Method::Get && route_path == "/api/report-runs")
-        || (method == Method::Post && route_path == "/api/report-runs")
-        || (method == Method::Get && route_path == "/api/report-schedules")
-        || (method == Method::Post && route_path == "/api/report-schedules")
-        || (method == Method::Get && route_path == "/api/inbox")
-        || (method == Method::Post && route_path == "/api/inbox/ack")
-        || (method == Method::Get && route_path == "/api/updates/releases")
-        || (method == Method::Delete && route_path.starts_with("/api/agents/"))
-        || (method == Method::Delete && route_path.starts_with("/api/webhooks/"))
-        || (method == Method::Get && route_path == "/api/sigma/rules")
-        || (method == Method::Get && route_path == "/api/sigma/stats")
-        || (method == Method::Get && route_path == "/api/ocsf/schema")
-        || (method == Method::Get && route_path == "/api/response/pending")
-        || (method == Method::Get && route_path == "/api/response/requests")
-        || (method == Method::Get && route_path == "/api/response/audit")
-        || (method == Method::Get && route_path == "/api/response/stats")
-        || (method == Method::Get && route_path == "/api/feature-flags")
-        || (method == Method::Get && route_path == "/api/process-tree")
-        || (method == Method::Get && route_path == "/api/process-tree/deep-chains")
-        || (method == Method::Get && route_path == "/api/processes/live")
-        || (method == Method::Get && route_path == "/api/processes/analysis")
-        || (method == Method::Get && route_path == "/api/processes/detail")
-        || (method == Method::Get && route_path == "/api/processes/threads")
-        || (method == Method::Get && route_path == "/api/host/apps")
-        || (method == Method::Get && route_path == "/api/host/inventory")
-        || (method == Method::Get && route_path == "/api/spool/stats")
-        || (method == Method::Get && route_path == "/api/rbac/users")
-        || (method == Method::Post && route_path == "/api/rbac/users")
-        || (method == Method::Delete && route_path.starts_with("/api/rbac/users/"))
-        || (method == Method::Post && route_path == "/api/ueba/observe")
-        || (method == Method::Get && route_path == "/api/ueba/risky")
-        || (method == Method::Get && route_path.starts_with("/api/ueba/entity/"))
-        || (method == Method::Post && route_path == "/api/beacon/connection")
-        || (method == Method::Post && route_path == "/api/beacon/dns")
-        || (method == Method::Get && route_path == "/api/beacon/analyze")
-        || (method == Method::Post && route_path == "/api/killchain/reconstruct")
-        || (method == Method::Post && route_path == "/api/lateral/connection")
-        || (method == Method::Get && route_path == "/api/lateral/analyze")
-        || (method == Method::Post && route_path == "/api/kernel/event")
-        || (method == Method::Get && route_path == "/api/kernel/recent")
-        || (method == Method::Get && route_path == "/api/playbooks")
-        || (method == Method::Post && route_path == "/api/playbooks")
-        || (method == Method::Post && route_path == "/api/playbooks/execute")
-        || (method == Method::Get && route_path == "/api/playbooks/executions")
-        || (method == Method::Post && route_path == "/api/live-response/session")
-        || (method == Method::Post && route_path == "/api/live-response/command")
-        || (method == Method::Get && route_path == "/api/live-response/sessions")
-        || (method == Method::Get && route_path == "/api/live-response/audit")
-        || (method == Method::Post && route_path == "/api/remediation/plan")
-        || (method == Method::Get && route_path == "/api/remediation/results")
-        || (method == Method::Get && route_path == "/api/remediation/stats")
-        || (method == Method::Get && route_path == "/api/remediation/change-reviews")
-        || (method == Method::Post && route_path == "/api/remediation/change-reviews")
-        || (method == Method::Post
-            && route_path.starts_with("/api/remediation/change-reviews/")
-            && route_path.ends_with("/approval"))
-        || (method == Method::Post
-            && route_path.starts_with("/api/remediation/change-reviews/")
-            && route_path.ends_with("/rollback"))
-        || (method == Method::Get && route_path == "/api/escalation/policies")
-        || (method == Method::Post && route_path == "/api/escalation/policies")
-        || (method == Method::Post && route_path == "/api/escalation/start")
-        || (method == Method::Post && route_path == "/api/escalation/acknowledge")
-        || (method == Method::Get && route_path == "/api/escalation/active")
-        || (method == Method::Post && route_path == "/api/escalation/check-sla")
-        || (method == Method::Get && route_path == "/api/evidence/plan/linux")
-        || (method == Method::Get && route_path == "/api/evidence/plan/macos")
-        || (method == Method::Get && route_path == "/api/evidence/plan/windows")
-        || (method == Method::Post && route_path == "/api/containment/commands")
-        // Analyst console
-        || (method == Method::Get && route_path == "/api/cases")
-        || (method == Method::Post && route_path == "/api/cases")
-        || (method == Method::Get && route_path == "/api/cases/stats")
-        || (method == Method::Get && route_path.starts_with("/api/cases/"))
-        || (method == Method::Post && route_path.starts_with("/api/cases/"))
-        || (method == Method::Get && route_path == "/api/queue/alerts")
-        || (method == Method::Get && route_path == "/api/queue/stats")
-        || (method == Method::Post && route_path == "/api/queue/acknowledge")
-        || (method == Method::Post && route_path == "/api/queue/assign")
-        || (method == Method::Post && route_path == "/api/events/search")
-        || (method == Method::Get && route_path.starts_with("/api/timeline/"))
-        || (method == Method::Post && route_path == "/api/investigation/graph")
-        || (method == Method::Post && route_path == "/api/response/request")
-        || (method == Method::Post && route_path == "/api/response/approve")
-        || (method == Method::Post && route_path == "/api/response/execute")
-        || (method == Method::Get && route_path == "/api/response/approvals")
-        || (method == Method::Get && route_path == "/api/assistant/status")
-        || (method == Method::Post && route_path == "/api/assistant/query")
-        // Dead-letter queue & schema
-        || (method == Method::Get && route_path == "/api/dlq")
-        || (method == Method::Get && route_path == "/api/dlq/stats")
-        || (method == Method::Delete && route_path == "/api/dlq")
-        || (method == Method::Get && route_path == "/api/ocsf/schema/version")
-        || (method == Method::Get && route_path == "/api/slo/status")
-        || (method == Method::Get && route_path == "/api/audit/verify")
-        || (method == Method::Get && route_path == "/api/retention/status")
-        || (method == Method::Post && route_path == "/api/retention/apply")
-        || (method == Method::Get && route_path == "/api/storage/events/historical")
-        || (method == Method::Get && route_path == "/api/session/info")
-        || (method == Method::Get && route_path == "/api/user/preferences")
-        || (method == Method::Put && route_path == "/api/user/preferences")
-        // GDPR, backup, SBOM, PII — admin-only
-        || (method == Method::Delete && route_path.starts_with("/api/gdpr/forget/"))
-        || (method == Method::Post && route_path == "/api/admin/backup")
-        || (method == Method::Get && route_path == "/api/admin/db/version")
-        || (method == Method::Post && route_path == "/api/admin/db/rollback")
-        || (method == Method::Post && route_path == "/api/admin/db/compact")
-        || (method == Method::Post && route_path == "/api/admin/db/reset")
-        || (method == Method::Get && route_path == "/api/admin/db/sizes")
-        || (method == Method::Post && route_path == "/api/admin/cleanup-legacy")
-        || (method == Method::Post && route_path == "/api/admin/db/purge")
-        || (method == Method::Get && route_path == "/api/sbom")
-        || (method == Method::Post && route_path == "/api/pii/scan")
-        // License, search, metering, billing
-        || (method == Method::Get && route_path == "/api/license")
-        || (method == Method::Post && route_path == "/api/license/validate")
-        || (method == Method::Post && route_path == "/api/search")
-        || (method == Method::Get && route_path == "/api/metering/usage")
-        || (method == Method::Get && route_path == "/api/billing/subscription")
-        || (method == Method::Get && route_path == "/api/billing/invoices")
-        // Marketplace
-        || (method == Method::Get && route_path == "/api/marketplace/packs")
-        || (method == Method::Get && route_path.starts_with("/api/marketplace/packs/"))
-        // Prevention
-        || (method == Method::Get && route_path == "/api/prevention/policies")
-        || (method == Method::Get && route_path == "/api/prevention/stats")
-        // Pipeline & backup
-        || (method == Method::Get && route_path == "/api/pipeline/status")
-        || (method == Method::Get && route_path == "/api/backups")
-        || (method == Method::Post && route_path == "/api/backups")
-        || (method == Method::Get && route_path == "/api/backup/status")
-        // Auth (session/logout require auth; SSO login/callback/config are pre-auth)
-        || (method == Method::Get && route_path == "/api/auth/session")
-        || (method == Method::Post && route_path == "/api/auth/session")
-        || (method == Method::Post && route_path == "/api/auth/logout")
-        // Cloud collectors
-        || (method == Method::Get && route_path == "/api/collectors/status")
-        || (method == Method::Get && route_path == "/api/collectors/aws")
-        || (method == Method::Post && route_path == "/api/collectors/aws/config")
-        || (method == Method::Post && route_path == "/api/collectors/aws/validate")
-        || (method == Method::Get && route_path == "/api/collectors/azure")
-        || (method == Method::Post && route_path == "/api/collectors/azure/config")
-        || (method == Method::Post && route_path == "/api/collectors/azure/validate")
-        || (method == Method::Get && route_path == "/api/collectors/gcp")
-        || (method == Method::Post && route_path == "/api/collectors/gcp/config")
-        || (method == Method::Post && route_path == "/api/collectors/gcp/validate")
-        || (method == Method::Get && route_path == "/api/collectors/okta")
-        || (method == Method::Post && route_path == "/api/collectors/okta/config")
-        || (method == Method::Post && route_path == "/api/collectors/okta/validate")
-        || (method == Method::Get && route_path == "/api/collectors/entra")
-        || (method == Method::Post && route_path == "/api/collectors/entra/config")
-        || (method == Method::Post && route_path == "/api/collectors/entra/validate")
-        || (method == Method::Get && route_path == "/api/collectors/m365")
-        || (method == Method::Post && route_path == "/api/collectors/m365/config")
-        || (method == Method::Post && route_path == "/api/collectors/m365/validate")
-        || (method == Method::Get && route_path == "/api/collectors/workspace")
-        || (method == Method::Post && route_path == "/api/collectors/workspace/config")
-        || (method == Method::Post && route_path == "/api/collectors/workspace/validate")
-        || (method == Method::Get && route_path == "/api/collectors/github")
-        || (method == Method::Post && route_path == "/api/collectors/github/config")
-        || (method == Method::Post && route_path == "/api/collectors/github/validate")
-        || (method == Method::Get && route_path == "/api/collectors/crowdstrike")
-        || (method == Method::Post && route_path == "/api/collectors/crowdstrike/config")
-        || (method == Method::Post && route_path == "/api/collectors/crowdstrike/validate")
-        || (method == Method::Get && route_path == "/api/collectors/syslog")
-        || (method == Method::Post && route_path == "/api/collectors/syslog/config")
-        || (method == Method::Post && route_path == "/api/collectors/syslog/validate")
-        || (method == Method::Get && route_path == "/api/secrets/status")
-        || (method == Method::Post && route_path == "/api/secrets/config")
-        || (method == Method::Post && route_path == "/api/secrets/validate")
-        // ML engine
-        || (method == Method::Get && route_path == "/api/ml/models")
-        || (method == Method::Get && route_path == "/api/ml/models/status")
-        || (method == Method::Post && route_path == "/api/ml/models/rollback")
-        || (method == Method::Get && route_path == "/api/ml/shadow/recent")
-        || (method == Method::Post && route_path == "/api/ml/triage")
-        || (method == Method::Post && route_path == "/api/ml/triage/v2")
-        // Vulnerability scanner
-        || (method == Method::Get && route_path == "/api/vulnerability/scan")
-        || (method == Method::Get && route_path == "/api/vulnerability/summary")
-        // NDR engine
-        || (method == Method::Post && route_path == "/api/ndr/netflow")
-        || (method == Method::Get && route_path == "/api/ndr/report")
-        || (method == Method::Get && route_path == "/api/ndr/tls-anomalies")
-        || (method == Method::Get && route_path == "/api/ndr/dpi-anomalies")
-        || (method == Method::Get && route_path == "/api/ndr/entropy-anomalies")
-        || (method == Method::Get && route_path == "/api/ndr/self-signed-certs")
-        || (method == Method::Get && route_path == "/api/ndr/top-talkers")
-        || (method == Method::Get && route_path == "/api/ndr/beaconing")
-        || (method == Method::Get && route_path == "/api/ndr/protocol-distribution")
-        // Container detection
-        || (method == Method::Post && route_path == "/api/container/event")
-        || (method == Method::Get && route_path == "/api/container/alerts")
-        || (method == Method::Get && route_path == "/api/container/stats")
-        // Certificate monitor
-        || (method == Method::Post && route_path == "/api/certs/register")
-        || (method == Method::Get && route_path == "/api/certs/summary")
-        || (method == Method::Get && route_path == "/api/certs/alerts")
-        // Config drift detection
-        || (method == Method::Post && route_path == "/api/config-drift/check")
-        || (method == Method::Get && route_path == "/api/config-drift/baselines")
-        // Asset inventory
-        || (method == Method::Get && route_path == "/api/assets")
-        || (method == Method::Get && route_path == "/api/assets/summary")
-        || (method == Method::Post && route_path == "/api/assets/upsert")
-        || (method == Method::Get && route_path == "/api/assets/search")
-        // Detection efficacy
-        || (method == Method::Post && route_path == "/api/efficacy/triage")
-        || (method == Method::Get && route_path == "/api/efficacy/summary")
-        || (method == Method::Get && route_path.starts_with("/api/efficacy/rule/"))
-        || (method == Method::Post && route_path == "/api/efficacy/canary-promote")
-        // Investigation workflows
-        || (method == Method::Get && route_path == "/api/investigations/workflows")
-        || (method == Method::Get && route_path.starts_with("/api/investigations/workflows/"))
-        || (method == Method::Post && route_path == "/api/investigations/start")
-        || (method == Method::Get && route_path == "/api/investigations/active")
-        || (method == Method::Post && route_path == "/api/investigations/progress")
-        || (method == Method::Post && route_path == "/api/investigations/handoff")
-        || (method == Method::Post && route_path == "/api/investigations/suggest")
-        // Malware detection / AV scanning
-        || (method == Method::Post && route_path == "/api/scan/buffer")
-        || (method == Method::Post && route_path == "/api/scan/buffer/v2")
-        || (method == Method::Post && route_path == "/api/scan/hash")
-        || (method == Method::Get && route_path == "/api/malware/stats")
-        || (method == Method::Get && route_path == "/api/malware/recent")
-        || (method == Method::Post && route_path == "/api/malware/signatures/import")
-        || (method == Method::Get && route_path == "/api/detection/explain")
-        || (method == Method::Get && route_path == "/api/detection/feedback")
-        || (method == Method::Post && route_path == "/api/detection/feedback")
-        // Enhancement endpoints
-        || (method == Method::Post && route_path == "/api/hunt")
-        || (method == Method::Get && route_path == "/api/export/alerts")
-        || (method == Method::Get && route_path == "/api/compliance/report")
-        || (method == Method::Get && route_path == "/api/compliance/summary")
-        || (method == Method::Post && route_path == "/api/playbooks/run")
-        || (method == Method::Get && route_path == "/api/alerts/dedup")
-        || (method == Method::Get && route_path == "/api/analytics")
-        || (method == Method::Get && route_path == "/api/traces")
-        || (method == Method::Post && route_path == "/api/backup/encrypt")
-        || (method == Method::Post && route_path == "/api/backup/decrypt")
-        || (method == Method::Get && route_path == "/api/detection/rules")
-        || (method == Method::Post && route_path == "/api/detection/rules")
-        // Phase 44: feed ingestion, playbook DSL, coverage gaps, containers, quarantine, lifecycle, IoC decay, host SBOM
-        || (method == Method::Get && route_path == "/api/feeds")
-        || (method == Method::Post && route_path == "/api/feeds")
-        || (method == Method::Delete && route_path.starts_with("/api/feeds/"))
-        || (method == Method::Post && route_path.starts_with("/api/feeds/") && route_path.ends_with("/poll"))
-        || (method == Method::Get && route_path == "/api/feeds/stats")
-        || (method == Method::Post && route_path == "/api/feeds/hot-reload/hashes")
-        || (method == Method::Get && route_path == "/api/playbook-dsl")
-        || (method == Method::Post && route_path == "/api/playbook-dsl")
-        || (method == Method::Get && route_path.starts_with("/api/playbook-dsl/"))
-        || (method == Method::Delete && route_path.starts_with("/api/playbook-dsl/"))
-        || (method == Method::Get && route_path == "/api/coverage/gaps")
-        || (method == Method::Get && route_path == "/api/images")
-        || (method == Method::Get && route_path == "/api/images/summary")
-        || (method == Method::Post && route_path == "/api/images/collect")
-        || (method == Method::Get && route_path == "/api/quarantine")
-        || (method == Method::Post && route_path == "/api/quarantine")
-        || (method == Method::Get && route_path == "/api/quarantine/stats")
-        || (method == Method::Post && route_path.starts_with("/api/quarantine/") && route_path.ends_with("/release"))
-        || (method == Method::Delete && route_path.starts_with("/api/quarantine/"))
-        || (method == Method::Get && route_path == "/api/lifecycle")
-        || (method == Method::Get && route_path == "/api/lifecycle/stats")
-        || (method == Method::Post && route_path == "/api/lifecycle/sweep")
-        || (method == Method::Post && route_path == "/api/ioc-decay/apply")
-        || (method == Method::Get && route_path == "/api/ioc-decay/preview")
-        || (method == Method::Get && route_path == "/api/sbom/host")
-        // Phase 29: advanced detection
-        || (method == Method::Post && route_path == "/api/entropy/analyze")
-        || (method == Method::Post && route_path == "/api/dns-threat/analyze")
-        || (method == Method::Get && route_path == "/api/dns-threat/summary")
-        || (method == Method::Post && route_path == "/api/dns-threat/record")
-        || (method == Method::Post && route_path == "/api/process-scoring/assess")
-        || (method == Method::Post && route_path == "/api/email/analyze")
-        || (method == Method::Post && route_path == "/api/memory-indicators/scan-maps")
-        || (method == Method::Post && route_path == "/api/memory-indicators/scan-buffer")
-        // Phase 29: WebSocket alert streaming
-        || (method == Method::Post && route_path == "/api/ws/connect")
-        || (method == Method::Post && route_path == "/api/ws/disconnect")
-        || (method == Method::Post && route_path == "/api/ws/poll")
-        || (method == Method::Get && route_path == "/api/ws/stats")
-        || (method == Method::Post && route_path == "/api/ws/broadcast")));
+    let needs_auth = matches!(route_access, ApiRouteAccess::Authenticated);
 
     let auth_identity = authenticate_request(headers, state);
     if needs_auth && !auth_identity.is_authenticated() {
@@ -14699,9 +14269,9 @@ fn handle_api(
                 })
                 .collect::<BTreeSet<_>>();
             let supplemental = r#"[
-                {"method": "GET", "path": "/api/health", "auth": false, "description": "Server health, version, uptime, platform"},
-                {"method": "GET", "path": "/api/metrics", "auth": false, "description": "Prometheus-format product metrics"},
-                {"method": "GET", "path": "/api/host/info", "auth": true, "description": "Detailed host info + monitoring status"},
+                {"method": "GET", "path": "/api/health", "description": "Server health, version, uptime, platform"},
+                {"method": "GET", "path": "/api/metrics", "description": "Prometheus-format product metrics"},
+                {"method": "GET", "path": "/api/host/info", "description": "Detailed host info + monitoring status"},
                 {"method": "GET", "path": "/api/telemetry/current", "auth": true, "description": "Latest local telemetry sample"},
                 {"method": "GET", "path": "/api/telemetry/history", "auth": true, "description": "Last 120 local telemetry samples"},
                 {"method": "GET", "path": "/api/checkpoints", "auth": true, "description": "Saved checkpoint metadata"},
@@ -14833,11 +14403,11 @@ fn handle_api(
                 {"method": "GET", "path": "/api/inbox", "auth": true, "description": "Persistent operator inbox across approvals, fleet health, and delivery issues"},
                 {"method": "POST", "path": "/api/inbox/ack", "auth": true, "description": "Acknowledge an operator inbox item"},
                 {"method": "GET", "path": "/api/incidents/{id}/report", "auth": true, "description": "Generate incident report"},
-                {"method": "GET", "path": "/api/openapi.json", "auth": false, "description": "OpenAPI 3.0 specification"},
-                {"method": "GET", "path": "/api/slo/status", "auth": true, "description": "Service level objective metrics"},
-                {"method": "POST", "path": "/api/auth/rotate", "auth": true, "description": "Rotate admin token and reset TTL"},
-                {"method": "GET", "path": "/api/session/info", "auth": true, "description": "Session info with token TTL and expiry status"},
-                {"method": "GET", "path": "/api/user/preferences", "auth": true, "description": "Retrieve persisted theme and pinned-view preferences for the current actor"},
+                {"method": "GET", "path": "/api/openapi.json", "description": "OpenAPI 3.0 specification"},
+                {"method": "GET", "path": "/api/slo/status", "description": "Service level objective metrics"},
+                {"method": "POST", "path": "/api/auth/rotate", "description": "Rotate admin token and reset TTL"},
+                {"method": "GET", "path": "/api/session/info", "description": "Session info with token TTL and expiry status"},
+                {"method": "GET", "path": "/api/user/preferences", "description": "Retrieve persisted theme and pinned-view preferences for the current actor"},
                 {"method": "PUT", "path": "/api/user/preferences", "auth": true, "description": "Update persisted theme and pinned-view preferences for the current actor"},
                 {"method": "GET", "path": "/api/audit/verify", "auth": true, "description": "Verify integrity of the cryptographic audit chain"},
                 {"method": "GET", "path": "/api/retention/status", "auth": true, "description": "Current retention policy settings and record counts"},
@@ -14981,7 +14551,20 @@ fn handle_api(
                     (entry["method"].as_str(), entry["path"].as_str())
                     && seen.insert((method.to_string(), path.to_string()))
                 {
-                    endpoints.push(entry.clone());
+                    let auth = method_from_name(method)
+                        .map(|parsed| {
+                            matches!(
+                                api_route_access(&parsed, path),
+                                ApiRouteAccess::Authenticated
+                            )
+                        })
+                        .unwrap_or(entry["auth"].as_bool().unwrap_or(true));
+                    endpoints.push(serde_json::json!({
+                        "method": method,
+                        "path": path,
+                        "auth": auth,
+                        "description": entry["description"].as_str().unwrap_or(""),
+                    }));
                 }
             }
             endpoints.sort_by(|a, b| {
@@ -29028,6 +28611,38 @@ mod tests {
         assert_eq!(
             params.get("owner").map(String::as_str),
             Some("alice@example.com")
+        );
+    }
+
+    #[test]
+    fn api_route_access_defaults_api_routes_to_authenticated() {
+        assert_eq!(
+            api_route_access(&Method::Get, "/api/license"),
+            ApiRouteAccess::Authenticated
+        );
+        assert_eq!(
+            api_route_access(&Method::Post, "/api/search"),
+            ApiRouteAccess::Authenticated
+        );
+    }
+
+    #[test]
+    fn api_route_access_keeps_public_and_agent_routes_explicit() {
+        assert_eq!(
+            api_route_access(&Method::Get, "/api/health"),
+            ApiRouteAccess::Public
+        );
+        assert_eq!(
+            api_route_access(&Method::Get, "/api/auth/sso/login"),
+            ApiRouteAccess::Public
+        );
+        assert_eq!(
+            api_route_access(&Method::Post, "/api/events"),
+            ApiRouteAccess::Agent
+        );
+        assert_eq!(
+            api_route_access(&Method::Get, "/api/cluster/status"),
+            ApiRouteAccess::Cluster
         );
     }
 

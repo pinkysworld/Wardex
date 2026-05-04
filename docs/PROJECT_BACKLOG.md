@@ -15,11 +15,12 @@ Recently completed after the `v0.56.0` baseline:
 - [x] Compact Command Center detection review summary that surfaces the highest-priority review pressure before analysts pivot into `/detection`.
 - [x] Shared SOC/Threat Detection review history plus OIDC callback hardening with PKCE `S256`, JWKS-backed `id_token` validation, issuer/audience checks, and nonce enforcement.
 - [x] Persisted admin-session sealing with signed session envelopes, tamper rejection on reload, stable local seal-key persistence, and legacy unsigned-session compatibility.
+- [x] Default-deny API auth classification with explicit public, agent-token, and cluster-token exceptions plus shared supplemental endpoint auth derivation.
 
 Recommended next backlog slices:
 
 - [ ] Hard-validate OIDC sessions against JWKS key rotation, including key-cache refresh, stricter claim coverage, and failure-mode regression coverage for rotated or revoked signing keys.
-- [ ] Replace manual API auth allowlists with default-deny route metadata shared across routing, RBAC, OpenAPI, and SDK generation.
+- [ ] Extend the default-deny route contract into OpenAPI and SDK generation so route auth metadata becomes a single source of truth instead of split runtime/doc logic.
 - [ ] Sign agent update artifacts and enforce wrong-key, replay, downgrade, and tamper rejection during update assignment and install.
 
 ## Phase 0 - Foundation (completed)
