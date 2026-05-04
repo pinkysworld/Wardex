@@ -3,7 +3,7 @@ import { useSearchParams } from 'react-router-dom';
 import { useApi, useToast } from '../hooks.jsx';
 import * as api from '../api.js';
 import { JsonDetails, RawJsonDetails, SummaryGrid } from './operator.jsx';
-import { formatDateTime, formatRelativeTime } from './operatorUtils.js';
+import { downloadData, formatDateTime, formatRelativeTime } from './operatorUtils.js';
 
 const GUIDES = {
   'threat-detection': {
@@ -94,6 +94,15 @@ const GRAPHQL_SAMPLES = {
 }`,
   },
 };
+
+const asArray = (value) => (Array.isArray(value) ? value : []);
+
+const DEFAULT_RECOVERY_TARGETS = [
+  { scenario: 'Config corruption', rto: '< 5 min', rpo: 'Last backup' },
+  { scenario: 'Full disk loss', rto: '< 15 min', rpo: 'Daily backup (24 h)' },
+  { scenario: 'Key compromise', rto: '< 30 min', rpo: 'Rotate + re-enroll agents' },
+  { scenario: 'Binary corruption', rto: '< 10 min', rpo: 'Redeploy from CI artefact' },
+];
 
 function updateSearchParams(searchParams, setSearchParams, patch) {
   const next = new URLSearchParams(searchParams);
@@ -410,6 +419,78 @@ export default function HelpDocs() {
   const failoverDrillHistory = Array.isArray(controlPlane?.failover_drill_history)
     ? controlPlane.failover_drill_history.slice(0, 3)
     : [];
+  const recoveryTargets =
+    Array.isArray(controlPlane?.recovery_targets) && controlPlane.recovery_targets.length > 0
+      ? controlPlane.recovery_targets
+      : DEFAULT_RECOVERY_TARGETS;
+  const readinessDrillTimeline = useMemo(() => {
+    const entries = [];
+    if (controlPlane?.latest_backup_at) {
+      entries.push({
+        id: `backup-${controlPlane.latest_backup_at}`,
+        kind: 'backup',
+        title: 'Latest backup artifact',
+        status: Number(controlPlane.observed_backups || 0) > 0 ? 'ready' : 'review',
+        at: controlPlane.latest_backup_at,
+        meta: `${controlPlane.observed_backups || 0} observed backup${
+          Number(controlPlane.observed_backups || 0) === 1 ? '' : 's'
+        }`,
+        detail: controlPlane.backup_schedule_cron
+          ? `Scheduled ${controlPlane.backup_schedule_cron}`
+          : 'Backup schedule unavailable',
+      });
+    }
+    if (controlPlane?.latest_checkpoint_at) {
+      entries.push({
+        id: `checkpoint-${controlPlane.latest_checkpoint_at}`,
+        kind: 'checkpoint',
+        title: 'Latest checkpoint artifact',
+        status: Number(controlPlane.checkpoint_count || 0) > 0 ? 'ready' : 'review',
+        at: controlPlane.latest_checkpoint_at,
+        meta: `${controlPlane.checkpoint_count || 0} checkpoint${
+          Number(controlPlane.checkpoint_count || 0) === 1 ? '' : 's'
+        } retained`,
+        detail: controlPlane.restore_ready
+          ? 'Checkpoint material is available for restore rehearsal.'
+          : 'Checkpoint material has not been observed yet.',
+      });
+    }
+    asArray(controlPlane?.failover_drill_history)
+      .slice(0, 5)
+      .forEach((drill, index) => {
+        entries.push({
+          id: `drill-${drill.last_run_at || index}`,
+          kind: 'drill',
+          title: String(drill.drill_type || 'failover_drill').replace(/_/g, ' '),
+          status: drill.status === 'passed' ? 'ready' : 'review',
+          at: drill.last_run_at || null,
+          meta: `${String(drill.orchestration_scope || 'standalone_reference').replace(/_/g, ' ')}${
+            drill.actor ? ` • ${drill.actor}` : ''
+          }`,
+          detail: drill.summary || 'No summary recorded.',
+          checks: [
+            {
+              label: 'Durable storage',
+              ok: Boolean(drill.durable_storage_verified),
+            },
+            {
+              label: 'Backup artifact',
+              ok: Boolean(drill.backup_artifact_verified),
+            },
+            {
+              label: 'Checkpoint artifact',
+              ok: Boolean(drill.checkpoint_artifact_verified),
+            },
+          ],
+          artifact: drill.artifact_source || 'none',
+        });
+      });
+    return entries.sort((left, right) => {
+      const leftTs = left.at ? new Date(left.at).getTime() : 0;
+      const rightTs = right.at ? new Date(right.at).getTime() : 0;
+      return rightTs - leftTs;
+    });
+  }, [controlPlane]);
   const openApiSummary = openApi
     ? {
         title: openApi?.info?.title,
@@ -974,6 +1055,127 @@ export default function HelpDocs() {
                   </div>
                 </>
               ) : null}
+              <div className="card-title" style={{ marginTop: 16, marginBottom: 12 }}>
+                Operational Readiness Drill Timeline
+              </div>
+              <div className="summary-grid" style={{ marginBottom: 12 }}>
+                <div className="summary-card">
+                  <div className="summary-label">Recovery Targets</div>
+                  <div className="summary-value">{recoveryTargets.length}</div>
+                  <div className="summary-meta">Documented RTO/RPO scenarios</div>
+                </div>
+                <div className="summary-card">
+                  <div className="summary-label">Timeline Events</div>
+                  <div className="summary-value">{readinessDrillTimeline.length}</div>
+                  <div className="summary-meta">Backups, checkpoints, and drill evidence</div>
+                </div>
+                <div className="summary-card">
+                  <div className="summary-label">Latest Drill</div>
+                  <div className="summary-value">
+                    {controlPlane?.failover_drill?.status || 'not_run'}
+                  </div>
+                  <div className="summary-meta">
+                    {controlPlane?.failover_drill?.last_run_at
+                      ? formatDateTime(controlPlane.failover_drill.last_run_at)
+                      : 'No drill recorded yet'}
+                  </div>
+                </div>
+                <div className="summary-card">
+                  <div className="summary-label">Evidence Export</div>
+                  <button
+                    type="button"
+                    className="btn btn-sm"
+                    style={{ marginTop: 6 }}
+                    onClick={() =>
+                      downloadData(
+                        {
+                          generated_at: readiness?.generated_at || readinessEvidence?.generated_at,
+                          control_plane: controlPlane,
+                          recovery_targets: recoveryTargets,
+                          timeline: readinessDrillTimeline,
+                        },
+                        'operational-readiness-drill-timeline.json',
+                      )
+                    }
+                  >
+                    Export timeline
+                  </button>
+                </div>
+              </div>
+              <div style={{ display: 'grid', gap: 8 }}>
+                {recoveryTargets.map((target) => (
+                  <div key={target.scenario} className="stat-box" style={{ fontSize: 12 }}>
+                    <span className="badge badge-info" style={{ marginRight: 8 }}>
+                      Target
+                    </span>
+                    <strong>{target.scenario}</strong>
+                    <span style={{ marginLeft: 8 }}>
+                      RTO {target.rto} • RPO {target.rpo}
+                    </span>
+                  </div>
+                ))}
+              </div>
+              {readinessDrillTimeline.length > 0 ? (
+                <div style={{ display: 'grid', gap: 10, marginTop: 12 }}>
+                  {readinessDrillTimeline.map((entry) => (
+                    <div
+                      key={entry.id}
+                      style={{
+                        border: '1px solid var(--border)',
+                        borderRadius: 12,
+                        padding: 12,
+                      }}
+                    >
+                      <div
+                        style={{
+                          display: 'flex',
+                          justifyContent: 'space-between',
+                          gap: 12,
+                          alignItems: 'flex-start',
+                        }}
+                      >
+                        <div>
+                          <div className="row-primary">{entry.title}</div>
+                          <div className="row-secondary">
+                            {formatDateTime(entry.at) || 'Timestamp unavailable'}
+                            {entry.meta ? ` • ${entry.meta}` : ''}
+                          </div>
+                        </div>
+                        <span
+                          className={`badge ${entry.status === 'ready' ? 'badge-ok' : 'badge-warn'}`}
+                        >
+                          {entry.status === 'ready' ? 'Ready' : 'Review'}
+                        </span>
+                      </div>
+                      <div className="hint" style={{ marginTop: 8 }}>
+                        {entry.detail}
+                      </div>
+                      {entry.artifact ? (
+                        <div className="summary-meta" style={{ marginTop: 6 }}>
+                          Artifact source: {String(entry.artifact).replace(/_/g, ' ')}
+                        </div>
+                      ) : null}
+                      {Array.isArray(entry.checks) && entry.checks.length > 0 ? (
+                        <div className="chip-row" style={{ marginTop: 8 }}>
+                          {entry.checks.map((check) => (
+                            <span
+                              key={`${entry.id}-${check.label}`}
+                              className={`badge ${check.ok ? 'badge-ok' : 'badge-warn'}`}
+                            >
+                              {check.label}
+                            </span>
+                          ))}
+                        </div>
+                      ) : null}
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="empty" style={{ marginTop: 12 }}>
+                  Backup, checkpoint, and drill history will appear here once the control plane has
+                  recovery artifacts.
+                </div>
+              )}
             </>
           ) : null}
           {firstRunProof ? (

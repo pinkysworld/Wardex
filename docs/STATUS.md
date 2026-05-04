@@ -79,6 +79,7 @@
 ### Supportability and documentation
 
 - Help & Docs support center with searchable embedded documentation, version-aware runbooks and deployment guidance, operator inbox context, production demo lab, support diagnostics, production-readiness control-plane posture, REST/OpenAPI/GraphQL/SDK parity diagnostics, live GraphQL query execution, and API endpoint exploration
+- Help & Docs operational readiness drill timeline with documented RTO/RPO targets, backup/checkpoint evidence, persisted failover-drill history, pass/fail artifact checks, and exportable recovery review payloads
 
 ### Integrations and evidence
 
@@ -104,6 +105,8 @@ Wardex is now positioned as a professional XDR/SIEM control plane with incident-
 - **SOC workbench strengthening** — case handoff packets, team load and ownership, and connector coverage impact are now first-class workbench surfaces, so handoffs, queue balancing, and collector-to-detection trust gaps stay visible in the same overview.
 - **Detection review calendar** — Threat Detection now shows overdue ownership reviews, due-this-week items, replay blockers, noisy owners, and rule-level next-review timing plus promotion blockers.
 - **Command Center review pressure** — the Detection Quality Dashboard now surfaces a compact detection review calendar so shift leads can jump straight from `/command` into the exact rule promotion context that needs attention.
+- **Shared rule review history** — rule-level replay deltas and analyst verdict history now feed Threat Detection and SOC Workbench from the same backend review-history contract.
+- **Operational readiness drill timeline** — Help & Docs now turns recovery posture into an operator timeline with documented RTO/RPO targets, backup/checkpoint evidence, persisted failover drills, pass/fail checks, and timeline export.
 - **0.56.0 quality cleanup** — frontend race conditions, lint/build issues, storage-lock test flakiness, doctest SIGKILL noise, persisted session permissions, and RBAC token hashing/redaction were cleaned up before the strengthening slices were layered in.
 - **Control-plane posture evidence** — support readiness, dependency health, and backup-status routes now expose active/passive reference status, backup cadence, observed backups, latest backup timestamps, checkpoint counts, latest checkpoint timestamps, and restore-readiness directly from live runtime state.
 - **Help & Docs recovery summary** — Production Readiness now renders a structured control-plane posture section with durable-storage, restore-artifact, and failover-model checks so operators can review recovery posture without reading raw JSON.

@@ -75,7 +75,10 @@ backups.
 6. Confirm `GET /api/support/readiness-evidence` reflects the expected backup,
    checkpoint, restore-ready posture, cluster role or leader-handoff state, and
    persisted recent failover drill history for the restored node.
-7. If checkpoints are stale, trigger `POST /api/control/reset-baseline` and
+7. Review the Help & Docs `Operational Readiness Drill Timeline` to confirm the
+   documented RTO/RPO targets, latest backup/checkpoint evidence, and the most
+   recent pass/fail drill checks before signing off the rehearsal.
+8. If checkpoints are stale, trigger `POST /api/control/reset-baseline` and
    allow 10 minutes of learning.
 
 ## Recovery Time Objectives

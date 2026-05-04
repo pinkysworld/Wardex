@@ -1769,6 +1769,133 @@ export default function SOCWorkbench() {
 
               <div className="card">
                 <div className="card-title" style={{ marginBottom: 12 }}>
+                  Detection Review Calendar
+                </div>
+                <div className="summary-grid">
+                  <div className="summary-card">
+                    <div className="summary-label">Overdue Reviews</div>
+                    <div className="summary-value">
+                      {overview.detection_review?.overdue || 0}
+                    </div>
+                    <div className="summary-meta">
+                      Rules already past their next owner review checkpoint
+                    </div>
+                  </div>
+                  <div className="summary-card">
+                    <div className="summary-label">Due This Week</div>
+                    <div className="summary-value">
+                      {overview.detection_review?.due_this_week || 0}
+                    </div>
+                    <div className="summary-meta">
+                      Reviews that should stay inside this shift window
+                    </div>
+                  </div>
+                  <div className="summary-card">
+                    <div className="summary-label">Replay Blockers</div>
+                    <div className="summary-value">
+                      {overview.detection_review?.replay_blockers || 0}
+                    </div>
+                    <div className="summary-meta">
+                      Rules still carrying replay, suppression, or ownership debt
+                    </div>
+                  </div>
+                  <div className="summary-card">
+                    <div className="summary-label">Noisy Owners</div>
+                    <div className="summary-value">
+                      {overview.detection_review?.noisy_owners || 0}
+                    </div>
+                    <div className="summary-meta">
+                      Owners currently holding the loudest review pressure
+                    </div>
+                  </div>
+                </div>
+                {Array.isArray(overview.detection_review?.items) &&
+                overview.detection_review.items.length > 0 ? (
+                  <div style={{ marginTop: 12 }}>
+                    {overview.detection_review.items.map((item) => (
+                      <div
+                        key={item.id}
+                        style={{
+                          display: 'flex',
+                          justifyContent: 'space-between',
+                          gap: 12,
+                          padding: '10px 0',
+                          borderBottom: '1px solid var(--border)',
+                        }}
+                      >
+                        <div style={{ flex: 1 }}>
+                          <div className="row-primary">{item.title}</div>
+                          <div className="row-secondary">
+                            {item.owner} • {item.lifecycle} •{' '}
+                            {String(item.due_status || 'scheduled').replace(/_/g, ' ')}
+                          </div>
+                          <div className="hint" style={{ marginTop: 4 }}>
+                            {item.next_review_at
+                              ? `Next review ${formatRelativeTime(item.next_review_at)}`
+                              : 'Review date unavailable'}{' '}
+                            • {item.last_test_match_count || 0} replay hit
+                            {(item.last_test_match_count || 0) === 1 ? '' : 's'} •{' '}
+                            {item.active_suppressions || 0} suppression
+                            {(item.active_suppressions || 0) === 1 ? '' : 's'}
+                          </div>
+                          <div className="hint" style={{ marginTop: 4 }}>
+                            {`Latest replay delta +${item.latest_replay_new_match_count || 0} / -${item.latest_replay_cleared_match_count || 0} • ${item.latest_replay_suppressed_count || 0} suppressed`}
+                            {item.latest_replay_tested_at
+                              ? ` • tested ${formatRelativeTime(item.latest_replay_tested_at)}`
+                              : ''}
+                          </div>
+                          {item.latest_feedback_verdict ? (
+                            <div className="hint" style={{ marginTop: 4 }}>
+                              {`Latest analyst verdict ${formatCompactLabel(item.latest_feedback_verdict)} • ${item.latest_feedback_analyst || 'Analyst'}`}
+                              {item.latest_feedback_at
+                                ? ` • ${formatRelativeTime(item.latest_feedback_at)}`
+                                : ''}
+                            </div>
+                          ) : null}
+                          {item.latest_feedback_notes ? (
+                            <div className="summary-meta" style={{ marginTop: 4 }}>
+                              {item.latest_feedback_notes}
+                            </div>
+                          ) : null}
+                          <div className="hint" style={{ marginTop: 4 }}>
+                            {(item.promotion_blockers || []).length} promotion blocker
+                            {(item.promotion_blockers || []).length === 1 ? '' : 's'} open before
+                            broader rollout.
+                          </div>
+                        </div>
+                        <div style={{ minWidth: 220, textAlign: 'right' }}>
+                          <div
+                            className={`badge ${
+                              item.due_status === 'overdue'
+                                ? 'badge-err'
+                                : item.due_status === 'due_this_week'
+                                  ? 'badge-warn'
+                                  : 'badge-info'
+                            }`}
+                          >
+                            {formatCompactLabel(item.due_status || 'scheduled')}
+                          </div>
+                          <div className="btn-group" style={{ marginTop: 8, justifyContent: 'flex-end' }}>
+                            <button
+                              className="btn btn-sm"
+                              onClick={() => navigate(item.href || `/detection?rule=${item.id}`)}
+                            >
+                              Review Rule
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="empty" style={{ marginTop: 12 }}>
+                    No detection review pressure is active right now.
+                  </div>
+                )}
+              </div>
+
+              <div className="card">
+                <div className="card-title" style={{ marginBottom: 12 }}>
                   Rollout Control
                 </div>
                 <div className="summary-grid">

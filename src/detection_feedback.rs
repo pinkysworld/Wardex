@@ -145,6 +145,14 @@ impl DetectionFeedbackStore {
             .collect()
     }
 
+    pub fn for_rule(&self, rule_id: &str) -> Vec<DetectionFeedback> {
+        self.entries
+            .iter()
+            .filter(|entry| entry.rule_id.as_deref() == Some(rule_id))
+            .cloned()
+            .collect()
+    }
+
     pub fn summary(&self) -> DetectionFeedbackSummary {
         let mut by_verdict = HashMap::new();
         let mut analysts = std::collections::HashSet::new();
@@ -196,6 +204,7 @@ mod tests {
         assert_eq!(entry.id, 1);
         assert_eq!(store.list().len(), 1);
         assert_eq!(store.for_event(42).len(), 1);
+        assert_eq!(store.for_rule("rule-1").len(), 1);
 
         let summary = store.summary();
         assert_eq!(summary.total, 1);

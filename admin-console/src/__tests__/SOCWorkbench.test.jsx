@@ -138,6 +138,34 @@ const BASE_SOC_FIXTURES = {
         },
       ],
     },
+    detection_review: {
+      overdue: 1,
+      due_this_week: 1,
+      replay_blockers: 1,
+      noisy_owners: 1,
+      items: [
+        {
+          id: 'rule-ssh-burst',
+          title: 'SSH burst',
+          owner: 'detections',
+          lifecycle: 'test',
+          next_review_at: '2024-01-01T00:10:00Z',
+          due_status: 'overdue',
+          last_test_match_count: 6,
+          active_suppressions: 1,
+          promotion_blockers: ['replay_noise', 'suppression_review'],
+          latest_replay_new_match_count: 2,
+          latest_replay_cleared_match_count: 1,
+          latest_replay_suppressed_count: 1,
+          latest_replay_tested_at: '2024-01-01T00:08:00Z',
+          latest_feedback_verdict: 'true_positive',
+          latest_feedback_analyst: 'analyst-1',
+          latest_feedback_notes: 'Shift handoff confirmed the replay noise is expected.',
+          latest_feedback_at: '2024-01-01T00:09:00Z',
+          href: '/detection?rule=rule-ssh-burst&rulePanel=promotion',
+        },
+      ],
+    },
     rollouts: {
       canary_rules: 1,
       canary_hunts: 1,
@@ -786,6 +814,17 @@ describe('SOCWorkbench', () => {
     expect(
       screen.getAllByText('Resolve validation issue: Token rotation required.').length,
     ).toBeGreaterThan(0);
+    expect(screen.getByText('Detection Review Calendar')).toBeInTheDocument();
+    expect(screen.getByText('Overdue Reviews')).toBeInTheDocument();
+    expect(screen.getAllByText('SSH burst').length).toBeGreaterThan(0);
+    expect(screen.getByText('detections • test • overdue')).toBeInTheDocument();
+    expect(
+      screen.getByText((text) => text.includes('Latest replay delta +2 / -1 • 1 suppressed')),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText((text) => text.includes('Latest analyst verdict True Positive • analyst-1')),
+    ).toBeInTheDocument();
+    expect(screen.getAllByText('Shift handoff confirmed the replay noise is expected.').length).toBeGreaterThan(0);
   });
 
   it('hydrates the queue filter from URL state and clears back to the full queue', async () => {

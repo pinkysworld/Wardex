@@ -228,6 +228,22 @@ const formatTrendLabel = (trend) => {
   return trend || 'Unknown';
 };
 
+const formatVerdictLabel = (verdict) => {
+  const normalized = normalizeText(verdict).replace(/_/g, ' ');
+  if (!normalized) return 'No feedback';
+  return normalized.replace(/\b\w/g, (letter) => letter.toUpperCase());
+};
+
+const formatVerdictSummary = (byVerdict) => {
+  if (!byVerdict || typeof byVerdict !== 'object') return 'No analyst verdicts recorded yet.';
+  const entries = Object.entries(byVerdict)
+    .filter(([, count]) => Number(count) > 0)
+    .sort((left, right) => Number(right[1]) - Number(left[1]))
+    .slice(0, 3)
+    .map(([verdict, count]) => `${count} ${formatVerdictLabel(verdict)}`);
+  return entries.join(' • ') || 'No analyst verdicts recorded yet.';
+};
+
 const trendTone = (trend) => {
   const normalized = normalizeText(trend);
   if (normalized === 'improving') return 'badge-ok';
@@ -927,6 +943,9 @@ export default function ThreatDetection() {
     () => detectionOwnershipCalendar.rows.find((row) => row.id === selectedRule?.id) || null,
     [detectionOwnershipCalendar, selectedRule],
   );
+  const selectedRuleReviewHistory = selectedRule?.review_history || {};
+  const selectedRuleLatestReplay = selectedRuleReviewHistory?.latest_replay || null;
+  const selectedRuleAnalystFeedback = selectedRuleReviewHistory?.analyst_feedback || null;
   const currentWeight = Number(
     weights?.weights?.[selectedRule?.id] ?? weights?.[selectedRule?.id] ?? 0.5,
   );
@@ -3322,6 +3341,30 @@ export default function ThreatDetection() {
                     </div>
                   </div>
                   <div className="summary-card">
+                    <div className="summary-label">Replay Delta</div>
+                    <div className="summary-value">
+                      {selectedRuleLatestReplay
+                        ? `+${selectedRuleLatestReplay.new_match_count || 0} / -${selectedRuleLatestReplay.cleared_match_count || 0}`
+                        : 'Untracked'}
+                    </div>
+                    <div className="summary-meta">
+                      {selectedRuleLatestReplay
+                        ? `${selectedRuleLatestReplay.match_count || 0} matches • ${selectedRuleLatestReplay.suppressed_count || 0} suppressed`
+                        : 'Run repeat validations to track new and cleared replay evidence.'}
+                    </div>
+                  </div>
+                  <div className="summary-card">
+                    <div className="summary-label">Latest Analyst Verdict</div>
+                    <div className="summary-value">
+                      {formatVerdictLabel(selectedRuleAnalystFeedback?.latest_verdict)}
+                    </div>
+                    <div className="summary-meta">
+                      {selectedRuleAnalystFeedback?.latest_at
+                        ? `${selectedRuleAnalystFeedback.latest_analyst || 'Analyst'} • ${formatRelativeTime(selectedRuleAnalystFeedback.latest_at)}`
+                        : 'No analyst review history is attached to this rule yet.'}
+                    </div>
+                  </div>
+                  <div className="summary-card">
                     <div className="summary-label">Content Packs</div>
                     <div className="summary-value">{packNames.length}</div>
                     <div className="summary-meta">
@@ -3407,6 +3450,92 @@ export default function ThreatDetection() {
                           {ownerFilter === 'all'
                             ? 'Visible across every owner in the current detection queue.'
                             : `Filtered to ${ownerFilter} ownership for shared triage review.`}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="card" style={{ marginTop: 16, padding: 16 }}>
+                      <div className="card-title" style={{ marginBottom: 10 }}>
+                        Analyst Review History
+                      </div>
+                      <div className="summary-grid">
+                        <div className="summary-card">
+                          <div className="summary-label">Latest Replay Delta</div>
+                          <div className="summary-value">
+                            {selectedRuleLatestReplay
+                              ? `+${selectedRuleLatestReplay.new_match_count || 0} / -${selectedRuleLatestReplay.cleared_match_count || 0}`
+                              : 'No replays'}
+                          </div>
+                          <div className="summary-meta">
+                            {selectedRuleLatestReplay?.tested_at
+                              ? `${formatDateTime(selectedRuleLatestReplay.tested_at)} • ${selectedRuleLatestReplay.summary}`
+                              : 'Replay history appears here after the rule is tested more than once.'}
+                          </div>
+                        </div>
+                        <div className="summary-card">
+                          <div className="summary-label">Analyst Verdict Mix</div>
+                          <div className="summary-value">
+                            {selectedRuleAnalystFeedback?.total || 0}
+                          </div>
+                          <div className="summary-meta">
+                            {formatVerdictSummary(selectedRuleAnalystFeedback?.by_verdict)}
+                          </div>
+                        </div>
+                      </div>
+                      <div className="grid-2" style={{ marginTop: 12 }}>
+                        <div className="card" style={{ padding: 12 }}>
+                          <div className="section-title" style={{ marginBottom: 8 }}>
+                            Recent Replays
+                          </div>
+                          {Array.isArray(selectedRuleReviewHistory?.recent_replays) &&
+                          selectedRuleReviewHistory.recent_replays.length > 0 ? (
+                            selectedRuleReviewHistory.recent_replays.map((replay, index) => (
+                              <div
+                                key={`${selectedRule?.id || 'rule'}-replay-${index}`}
+                                className="list-row"
+                              >
+                                <div>
+                                  <div className="row-primary">
+                                    {formatDateTime(replay.tested_at)}
+                                  </div>
+                                  <div className="row-secondary">
+                                    {`${replay.match_count || 0} matches • ${replay.suppressed_count || 0} suppressed • +${replay.new_match_count || 0} / -${replay.cleared_match_count || 0}`}
+                                  </div>
+                                </div>
+                              </div>
+                            ))
+                          ) : (
+                            <div className="empty">Recent replay deltas will appear here.</div>
+                          )}
+                        </div>
+                        <div className="card" style={{ padding: 12 }}>
+                          <div className="section-title" style={{ marginBottom: 8 }}>
+                            Recent Analyst Feedback
+                          </div>
+                          {Array.isArray(selectedRuleAnalystFeedback?.recent) &&
+                          selectedRuleAnalystFeedback.recent.length > 0 ? (
+                            selectedRuleAnalystFeedback.recent.map((entry) => (
+                              <div key={entry.id} className="list-row">
+                                <div>
+                                  <div className="row-primary">
+                                    {formatVerdictLabel(entry.verdict)}
+                                  </div>
+                                  <div className="row-secondary">
+                                    {`${entry.analyst || 'Analyst'} • ${formatDateTime(entry.created_at)}`}
+                                  </div>
+                                  {entry.notes ? (
+                                    <div className="hint" style={{ marginTop: 4 }}>
+                                      {entry.notes}
+                                    </div>
+                                  ) : null}
+                                </div>
+                              </div>
+                            ))
+                          ) : (
+                            <div className="empty">
+                              Analyst review notes will appear here once feedback is recorded.
+                            </div>
+                          )}
                         </div>
                       </div>
                     </div>

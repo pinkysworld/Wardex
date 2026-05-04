@@ -975,6 +975,37 @@ struct WorkbenchConnectorImpactOverview {
 }
 
 #[derive(Debug, Clone, serde::Serialize)]
+struct WorkbenchDetectionReviewEntry {
+    id: String,
+    title: String,
+    owner: String,
+    lifecycle: String,
+    next_review_at: Option<String>,
+    due_status: String,
+    last_test_match_count: usize,
+    active_suppressions: usize,
+    promotion_blockers: Vec<String>,
+    latest_replay_new_match_count: usize,
+    latest_replay_cleared_match_count: usize,
+    latest_replay_suppressed_count: usize,
+    latest_replay_tested_at: Option<String>,
+    latest_feedback_verdict: Option<String>,
+    latest_feedback_analyst: Option<String>,
+    latest_feedback_notes: Option<String>,
+    latest_feedback_at: Option<String>,
+    href: String,
+}
+
+#[derive(Debug, Clone, serde::Serialize)]
+struct WorkbenchDetectionReviewOverview {
+    overdue: usize,
+    due_this_week: usize,
+    replay_blockers: usize,
+    noisy_owners: usize,
+    items: Vec<WorkbenchDetectionReviewEntry>,
+}
+
+#[derive(Debug, Clone, serde::Serialize)]
 struct WorkbenchRecommendation {
     category: String,
     priority: String,
@@ -997,6 +1028,7 @@ struct WorkbenchOverview {
     analytics: WorkbenchAnalyticsOverview,
     team_load: WorkbenchTeamLoadOverview,
     connector_impact: WorkbenchConnectorImpactOverview,
+    detection_review: WorkbenchDetectionReviewOverview,
     hot_agents: Vec<HotAgentSummary>,
     urgent_items: Vec<UrgentItem>,
     recommendations: Vec<WorkbenchRecommendation>,
@@ -2658,9 +2690,17 @@ struct ControlPlanePostureSnapshot {
     restore_ready: bool,
     recovery_status: String,
     documented_failover: String,
+    recovery_targets: Vec<RecoveryTargetEntry>,
     cluster: Option<ControlPlaneClusterSnapshot>,
     failover_drill: FailoverDrillRecord,
     failover_drill_history: Vec<FailoverDrillRecord>,
+}
+
+#[derive(Debug, Clone, serde::Serialize)]
+struct RecoveryTargetEntry {
+    scenario: String,
+    rto: String,
+    rpo: String,
 }
 
 impl ControlPlanePostureSnapshot {
@@ -2692,6 +2732,28 @@ impl ControlPlanePostureSnapshot {
             .latest_failover_drill()
             .or_else(|| state.last_failover_drill.clone())
             .unwrap_or_else(|| FailoverDrillRecord::not_run(&topology));
+        let recovery_targets = vec![
+            RecoveryTargetEntry {
+                scenario: "Config corruption".to_string(),
+                rto: "< 5 min".to_string(),
+                rpo: "Last backup".to_string(),
+            },
+            RecoveryTargetEntry {
+                scenario: "Full disk loss".to_string(),
+                rto: "< 15 min".to_string(),
+                rpo: "Daily backup (24 h)".to_string(),
+            },
+            RecoveryTargetEntry {
+                scenario: "Key compromise".to_string(),
+                rto: "< 30 min".to_string(),
+                rpo: "Rotate + re-enroll agents".to_string(),
+            },
+            RecoveryTargetEntry {
+                scenario: "Binary corruption".to_string(),
+                rto: "< 10 min".to_string(),
+                rpo: "Redeploy from CI artefact".to_string(),
+            },
+        ];
 
         Self {
             topology,
@@ -2719,6 +2781,7 @@ impl ControlPlanePostureSnapshot {
                 restore_ready,
             ),
             documented_failover: control_plane_documented_failover(cluster.as_ref()).to_string(),
+            recovery_targets,
             cluster,
             failover_drill,
             failover_drill_history,
@@ -5796,6 +5859,7 @@ fn build_workbench_overview(
     assets: &[crate::cloud_inventory::UnifiedAsset],
     rbac: &crate::rbac::RbacStore,
     enterprise: &crate::enterprise::EnterpriseStore,
+    detection_feedback: &crate::detection_feedback::DetectionFeedbackStore,
     playbook_engine: &crate::playbook::PlaybookEngine,
     playbook_dsl: &crate::playbook_dsl::PlaybookDslStore,
     workflow_store: &crate::investigation::WorkflowStore,
@@ -6106,6 +6170,12 @@ fn build_workbench_overview(
     );
     let connector_impact =
         build_connector_impact_overview(connector_status_entries, &rule_metadata, assets);
+    let detection_review = build_detection_review_overview(
+        enterprise,
+        &rule_metadata,
+        detection_feedback,
+        enterprise.active_suppression_count(),
+    );
 
     let mut urgent_items = Vec::new();
     for item in queue_items.iter().take(3) {
@@ -6379,6 +6449,7 @@ fn build_workbench_overview(
         },
         team_load,
         connector_impact,
+        detection_review,
         hot_agents,
         urgent_items,
         recommendations,
@@ -11086,6 +11157,116 @@ fn command_rule_review_calendar(
     })
 }
 
+fn build_detection_review_overview(
+    enterprise: &crate::enterprise::EnterpriseStore,
+    rule_metadata: &[crate::enterprise::ManagedRuleMetadata],
+    detection_feedback: &crate::detection_feedback::DetectionFeedbackStore,
+    active_suppressions: usize,
+) -> WorkbenchDetectionReviewOverview {
+    let now = chrono::Utc::now();
+    let mut overdue = 0usize;
+    let mut due_this_week = 0usize;
+    let mut replay_blockers = 0usize;
+    let mut noisy_owners = BTreeSet::new();
+    let mut items = rule_metadata
+        .iter()
+        .filter(|rule| {
+            rule.enabled && rule.lifecycle != crate::enterprise::ContentLifecycle::Deprecated
+        })
+        .map(|rule| {
+            let next_review_at = command_rule_next_review_at(rule).map(|value| value.to_rfc3339());
+            let review_history = crate::enterprise::build_rule_review_history(
+                enterprise,
+                detection_feedback,
+                &rule.id,
+            );
+            let latest_replay = &review_history["latest_replay"];
+            let analyst_feedback = &review_history["analyst_feedback"];
+            let due_status = match next_review_at
+                .as_deref()
+                .and_then(|value| chrono::DateTime::parse_from_rfc3339(value).ok())
+                .map(|value| value.with_timezone(&chrono::Utc))
+            {
+                Some(due_at) if due_at < now => {
+                    overdue += 1;
+                    "overdue"
+                }
+                Some(due_at) if due_at <= now + chrono::Duration::days(7) => {
+                    due_this_week += 1;
+                    "due_this_week"
+                }
+                Some(_) => "scheduled",
+                None => "unscheduled",
+            }
+            .to_string();
+            let blockers = command_rule_promotion_blockers(rule, active_suppressions);
+            if !blockers.is_empty() {
+                replay_blockers += 1;
+            }
+            if rule.last_test_match_count >= 5 || active_suppressions > 0 {
+                noisy_owners.insert(rule.owner.clone());
+            }
+            WorkbenchDetectionReviewEntry {
+                id: rule.id.clone(),
+                title: rule.title.clone(),
+                owner: rule.owner.clone(),
+                lifecycle: format!("{:?}", rule.lifecycle).to_ascii_lowercase(),
+                next_review_at,
+                due_status,
+                last_test_match_count: rule.last_test_match_count,
+                active_suppressions,
+                promotion_blockers: blockers,
+                latest_replay_new_match_count: latest_replay["new_match_count"]
+                    .as_u64()
+                    .unwrap_or(0) as usize,
+                latest_replay_cleared_match_count: latest_replay["cleared_match_count"]
+                    .as_u64()
+                    .unwrap_or(0) as usize,
+                latest_replay_suppressed_count: latest_replay["suppressed_count"]
+                    .as_u64()
+                    .unwrap_or(0) as usize,
+                latest_replay_tested_at: latest_replay["tested_at"]
+                    .as_str()
+                    .map(|value| value.to_string()),
+                latest_feedback_verdict: analyst_feedback["latest_verdict"]
+                    .as_str()
+                    .map(|value| value.to_string()),
+                latest_feedback_analyst: analyst_feedback["latest_analyst"]
+                    .as_str()
+                    .map(|value| value.to_string()),
+                latest_feedback_notes: analyst_feedback["latest_notes"]
+                    .as_str()
+                    .map(|value| value.to_string()),
+                latest_feedback_at: analyst_feedback["latest_at"]
+                    .as_str()
+                    .map(|value| value.to_string()),
+                href: format!("/detection?rule={}&rulePanel=promotion", rule.id),
+            }
+        })
+        .collect::<Vec<_>>();
+
+    let due_rank = |item: &WorkbenchDetectionReviewEntry| match item.due_status.as_str() {
+        "overdue" => 0,
+        "due_this_week" => 1,
+        "unscheduled" => 2,
+        _ => 3,
+    };
+    items.sort_by(|left, right| {
+        due_rank(left)
+            .cmp(&due_rank(right))
+            .then_with(|| left.next_review_at.cmp(&right.next_review_at))
+            .then_with(|| left.title.cmp(&right.title))
+    });
+
+    WorkbenchDetectionReviewOverview {
+        overdue,
+        due_this_week,
+        replay_blockers,
+        noisy_owners: noisy_owners.len(),
+        items: items.into_iter().take(10).collect(),
+    }
+}
+
 fn active_shift_owner(state: &AppState) -> serde_json::Value {
     let mut owners = HashMap::new();
     for item in state.alert_queue.all() {
@@ -15630,6 +15811,7 @@ fn handle_api(
                 s.asset_inventory.all(),
                 &s.rbac,
                 &s.enterprise,
+                &s.detection_feedback,
                 &s.playbook_engine,
                 &s.playbook_dsl,
                 &s.workflow_store,
@@ -15879,7 +16061,7 @@ fn handle_api(
         },
         (Method::Get, "/api/content/rules") => {
             let s = state.lock().unwrap_or_else(|e| e.into_inner());
-            let items = build_content_rules_view(&s.enterprise);
+            let items = build_content_rules_view(&s.enterprise, &s.detection_feedback);
             json_response(
                 &serde_json::json!({"rules": items, "count": items.len()}).to_string(),
                 200,
@@ -23217,6 +23399,7 @@ fn handle_detection_explain(url: &str, state: &Arc<Mutex<AppState>>) -> Response
 
 fn handle_detection_feedback_get(url: &str, state: &Arc<Mutex<AppState>>) -> Response<Body> {
     let event_id = url_param(url, "event_id").and_then(|value| value.parse::<u64>().ok());
+    let rule_id = url_param(url, "rule_id");
     let limit = url_param(url, "limit")
         .and_then(|value| value.parse::<usize>().ok())
         .unwrap_or(50)
@@ -23224,6 +23407,8 @@ fn handle_detection_feedback_get(url: &str, state: &Arc<Mutex<AppState>>) -> Res
     let s = state.lock().unwrap_or_else(|e| e.into_inner());
     let items = if let Some(event_id) = event_id {
         s.detection_feedback.for_event(event_id)
+    } else if let Some(rule_id) = rule_id {
+        s.detection_feedback.for_rule(&rule_id)
     } else {
         s.detection_feedback.list_recent(limit)
     };
@@ -26095,6 +26280,14 @@ mod tests {
             readiness["evidence"]["control_plane"]["failover_drill"]["artifact_source"],
             serde_json::json!("checkpoint")
         );
+        assert_eq!(
+            readiness["evidence"]["control_plane"]["recovery_targets"][0]["scenario"],
+            serde_json::json!("Config corruption")
+        );
+        assert_eq!(
+            readiness["evidence"]["control_plane"]["recovery_targets"][0]["rto"],
+            serde_json::json!("< 5 min")
+        );
 
         let dependencies: serde_json::Value =
             ureq::get(&format!("{base_url}/api/system/health/dependencies"))
@@ -27836,6 +28029,28 @@ mod tests {
 
         let analytics = events.analytics();
         let api_summary = api_analytics.summary();
+        let feedback_path = temp_path("workbench_feedback");
+        let mut detection_feedback =
+            crate::detection_feedback::DetectionFeedbackStore::new(feedback_path.to_str().unwrap());
+        let review_rule_ids = enterprise
+            .builtin_rules()
+            .iter()
+            .take(12)
+            .map(|rule| rule.id.clone())
+            .collect::<Vec<_>>();
+        for review_rule_id in &review_rule_ids {
+            let _ = enterprise.test_rule(review_rule_id, events.all_events());
+            let _ = detection_feedback.record(
+                None,
+                None,
+                Some(review_rule_id.clone()),
+                "analyst-1".to_string(),
+                "true_positive".to_string(),
+                None,
+                "Reviewed burst against shift handoff evidence.".to_string(),
+                Vec::new(),
+            );
+        }
         let connector_status_entries = vec![serde_json::json!({
             "provider": "okta_identity",
             "label": "Okta Identity",
@@ -27870,6 +28085,7 @@ mod tests {
             &[],
             &rbac,
             &enterprise,
+            &detection_feedback,
             &playbook_engine,
             &playbook_dsl,
             &workflow_store,
@@ -27912,6 +28128,19 @@ mod tests {
                 .iter()
                 .any(|item| item.provider == "okta_identity" && item.affected_detections > 0)
         );
+        assert!(!overview.detection_review.items.is_empty());
+        assert!(
+            overview
+                .detection_review
+                .items
+                .iter()
+                .any(|item| !item.promotion_blockers.is_empty())
+        );
+        assert!(overview.detection_review.items.iter().any(|item| {
+            item.latest_feedback_verdict.as_deref() == Some("true_positive")
+                && item.latest_feedback_notes.as_deref()
+                    == Some("Reviewed burst against shift handoff evidence.")
+        }));
         assert_eq!(overview.rollouts.rollback_events, 0);
         assert!(
             overview
@@ -27928,6 +28157,7 @@ mod tests {
         let _ = fs::remove_file(incident_path);
         let _ = fs::remove_file(agent_path);
         let _ = fs::remove_file(enterprise_path);
+        let _ = fs::remove_file(feedback_path);
     }
 
     #[test]
@@ -27950,6 +28180,9 @@ mod tests {
         let playbook_dsl = crate::playbook_dsl::PlaybookDslStore::new();
         let workflow_store = crate::investigation::WorkflowStore::new();
         let api_summary = crate::api_analytics::ApiAnalytics::new().summary();
+        let feedback_path = temp_path("workbench_rollouts_feedback");
+        let detection_feedback =
+            crate::detection_feedback::DetectionFeedbackStore::new(feedback_path.to_str().unwrap());
         let connector_status_entries = vec![serde_json::json!({
             "provider": "aws_cloudtrail",
             "label": "AWS CloudTrail",
@@ -27987,6 +28220,7 @@ mod tests {
             &[],
             &rbac,
             &enterprise,
+            &detection_feedback,
             &playbook_engine,
             &playbook_dsl,
             &workflow_store,
@@ -28001,6 +28235,7 @@ mod tests {
         let _ = fs::remove_file(incident_path);
         let _ = fs::remove_file(agent_path);
         let _ = fs::remove_file(enterprise_path);
+        let _ = fs::remove_file(feedback_path);
     }
 
     #[test]

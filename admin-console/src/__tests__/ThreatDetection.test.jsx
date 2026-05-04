@@ -104,6 +104,61 @@ const THREAT_FIXTURES = {
       last_test_match_count: 2,
       last_test_at: '2024-01-01T00:00:00Z',
       last_promotion_at: '2024-01-03T00:00:00Z',
+      review_history: {
+        latest_replay: {
+          tested_at: '2024-01-04T00:00:00Z',
+          match_count: 3,
+          suppressed_count: 1,
+          new_match_count: 2,
+          cleared_match_count: 1,
+          summary: 'Rule rule-1 matched 3 event(s) (1 suppressed)',
+        },
+        recent_replays: [
+          {
+            tested_at: '2024-01-04T00:00:00Z',
+            match_count: 3,
+            suppressed_count: 1,
+            new_match_count: 2,
+            cleared_match_count: 1,
+            summary: 'Rule rule-1 matched 3 event(s) (1 suppressed)',
+          },
+          {
+            tested_at: '2024-01-01T00:00:00Z',
+            match_count: 2,
+            suppressed_count: 0,
+            new_match_count: 2,
+            cleared_match_count: 0,
+            summary: 'Rule rule-1 matched 2 event(s)',
+          },
+        ],
+        analyst_feedback: {
+          total: 2,
+          by_verdict: {
+            true_positive: 1,
+            false_positive: 1,
+          },
+          latest_verdict: 'true_positive',
+          latest_analyst: 'alex',
+          latest_notes: 'Validated against host triage evidence.',
+          latest_at: '2024-01-04T00:15:00Z',
+          recent: [
+            {
+              id: 2,
+              analyst: 'alex',
+              verdict: 'true_positive',
+              notes: 'Validated against host triage evidence.',
+              created_at: '2024-01-04T00:15:00Z',
+            },
+            {
+              id: 1,
+              analyst: 'jordan',
+              verdict: 'false_positive',
+              notes: 'Admin maintenance generated the same script path.',
+              created_at: '2024-01-03T23:15:00Z',
+            },
+          ],
+        },
+      },
       lifecycle_history: [
         {
           changed_at: '2024-01-02T00:00:00Z',
@@ -548,6 +603,11 @@ describe('ThreatDetection', () => {
     expect(screen.getByText('secops • Test')).toBeInTheDocument();
     expect(screen.getByText('Next Review')).toBeInTheDocument();
     expect(screen.getByText('Promotion Blockers')).toBeInTheDocument();
+    expect(screen.getByText('Analyst Review History')).toBeInTheDocument();
+    expect(screen.getByText('Latest Replay Delta')).toBeInTheDocument();
+    expect(screen.getByText('Recent Analyst Feedback')).toBeInTheDocument();
+    expect(screen.getAllByText('True Positive').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('Validated against host triage evidence.').length).toBeGreaterThan(0);
 
     fireEvent.click(screen.getByRole('button', { name: 'Review Rule' }));
 

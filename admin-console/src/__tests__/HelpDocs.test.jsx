@@ -247,6 +247,10 @@ describe('HelpDocs', () => {
                 restore_ready: true,
                 recovery_status: 'ready_for_documented_failover',
                 documented_failover: 'warm_standby_restore',
+                recovery_targets: [
+                  { scenario: 'Config corruption', rto: '< 5 min', rpo: 'Last backup' },
+                  { scenario: 'Full disk loss', rto: '< 15 min', rpo: 'Daily backup (24 h)' },
+                ],
                 cluster: null,
                 failover_drill: failoverDrill,
                 failover_drill_history: failoverDrill.status === 'passed' ? [failoverDrill] : [],
@@ -381,6 +385,9 @@ describe('HelpDocs', () => {
     expect((await screen.findAllByText('3 checks covered for this surface.')).length).toBe(2);
     expect(await screen.findByText('Production Readiness')).toBeInTheDocument();
     expect(await screen.findByText('Control-plane posture')).toBeInTheDocument();
+    expect(await screen.findByText('Operational Readiness Drill Timeline')).toBeInTheDocument();
+    expect(await screen.findByText('RTO < 5 min • RPO Last backup')).toBeInTheDocument();
+    expect(await screen.findByRole('button', { name: 'Export timeline' })).toBeInTheDocument();
     expect(await screen.findByText('2 backups / 3 checkpoints')).toBeInTheDocument();
     expect(
       (
@@ -398,7 +405,8 @@ describe('HelpDocs', () => {
     expect(await screen.findByText('Automated failover drill result')).toBeInTheDocument();
     expect(await screen.findByText(/failover-drill-digest/)).toBeInTheDocument();
     expect(await screen.findByText('Recent drill history')).toBeInTheDocument();
-    expect(await screen.findByText('warm standby restore dry run')).toBeInTheDocument();
+    expect((await screen.findAllByText('warm standby restore dry run')).length).toBeGreaterThan(0);
+    expect(await screen.findByText('Artifact source: checkpoint')).toBeInTheDocument();
     await waitFor(() => {
       expect(
         screen.queryAllByText(

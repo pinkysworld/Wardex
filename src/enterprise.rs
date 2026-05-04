@@ -1,6 +1,7 @@
 use crate::analyst::{Case, SearchQuery};
 use crate::audit::sha256_hex;
 use crate::collector::AlertRecord;
+use crate::detection_feedback::DetectionFeedbackStore;
 use crate::event_forward::StoredEvent;
 use crate::incident::Incident;
 use crate::ocsf;
@@ -1244,6 +1245,10 @@ impl EnterpriseStore {
 
     pub fn native_rules(&self) -> &[NativeContentRule] {
         &self.snapshot.native_rules
+    }
+
+    pub fn rule_tests(&self) -> &[RuleTestResult] {
+        &self.snapshot.rule_tests
     }
 
     pub fn packs(&self) -> &[ContentPack] {
@@ -2837,9 +2842,81 @@ fn validate_scim_config(config: &ScimConfig) -> IdentityConfigValidation {
     }
 }
 
-pub fn build_content_rules_view(store: &EnterpriseStore) -> Vec<serde_json::Value> {
+pub fn build_rule_review_history(
+    store: &EnterpriseStore,
+    feedback_store: &DetectionFeedbackStore,
+    rule_id: &str,
+) -> serde_json::Value {
+    let mut recent_replays: Vec<&RuleTestResult> = store
+        .rule_tests()
+        .iter()
+        .filter(|result| result.rule_id == rule_id)
+        .collect();
+    recent_replays.sort_by(|left, right| right.tested_at.cmp(&left.tested_at));
+    let recent_replays: Vec<serde_json::Value> = recent_replays
+        .into_iter()
+        .take(3)
+        .map(|result| {
+            serde_json::json!({
+                "tested_at": result.tested_at,
+                "match_count": result.match_count,
+                "suppressed_count": result.suppressed_count,
+                "new_match_count": result.new_match_ids.len(),
+                "cleared_match_count": result.cleared_match_ids.len(),
+                "summary": result.summary,
+            })
+        })
+        .collect();
+    let latest_replay = recent_replays
+        .first()
+        .cloned()
+        .unwrap_or(serde_json::Value::Null);
+
+    let mut feedback = feedback_store.for_rule(rule_id);
+    feedback.sort_by(|left, right| right.created_at.cmp(&left.created_at));
+    let mut by_verdict = HashMap::new();
+    for entry in &feedback {
+        *by_verdict.entry(entry.verdict.clone()).or_insert(0usize) += 1;
+    }
+    let recent_feedback: Vec<serde_json::Value> = feedback
+        .iter()
+        .take(3)
+        .map(|entry| {
+            serde_json::json!({
+                "id": entry.id,
+                "analyst": entry.analyst,
+                "verdict": entry.verdict,
+                "notes": entry.notes,
+                "created_at": entry.created_at,
+            })
+        })
+        .collect();
+    let latest_feedback = feedback.first();
+
+    serde_json::json!({
+        "latest_replay": latest_replay,
+        "recent_replays": recent_replays,
+        "analyst_feedback": {
+            "total": feedback.len(),
+            "by_verdict": by_verdict,
+            "latest_verdict": latest_feedback.map(|entry| entry.verdict.clone()),
+            "latest_analyst": latest_feedback.map(|entry| entry.analyst.clone()),
+            "latest_notes": latest_feedback
+                .map(|entry| entry.notes.clone())
+                .filter(|notes| !notes.trim().is_empty()),
+            "latest_at": latest_feedback.map(|entry| entry.created_at.clone()),
+            "recent": recent_feedback,
+        }
+    })
+}
+
+pub fn build_content_rules_view(
+    store: &EnterpriseStore,
+    feedback_store: &DetectionFeedbackStore,
+) -> Vec<serde_json::Value> {
     let mut items = Vec::new();
     for rule in store.builtin_rules() {
+        let review_history = build_rule_review_history(store, feedback_store, &rule.id);
         items.push(serde_json::json!({
             "id": rule.id,
             "title": rule.title,
@@ -2856,9 +2933,11 @@ pub fn build_content_rules_view(store: &EnterpriseStore) -> Vec<serde_json::Valu
             "last_test_match_count": rule.last_test_match_count,
             "last_promotion_at": rule.last_promotion_at,
             "false_positive_review": rule.false_positive_review,
+            "review_history": review_history,
         }));
     }
     for rule in store.native_rules() {
+        let review_history = build_rule_review_history(store, feedback_store, &rule.metadata.id);
         items.push(serde_json::json!({
             "id": rule.metadata.id,
             "title": rule.metadata.title,
@@ -2877,6 +2956,7 @@ pub fn build_content_rules_view(store: &EnterpriseStore) -> Vec<serde_json::Valu
             "last_test_match_count": rule.metadata.last_test_match_count,
             "last_promotion_at": rule.metadata.last_promotion_at,
             "false_positive_review": rule.metadata.false_positive_review,
+            "review_history": review_history,
         }));
     }
     items.sort_by(|a, b| {

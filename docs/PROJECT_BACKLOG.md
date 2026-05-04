@@ -536,6 +536,12 @@ Phases 0–40 are complete. Routed browser regression coverage, the repeatable r
 - [x] T362: Persist recent automated failover drill history in support storage and surface it in readiness evidence plus Help & Docs so failover evidence survives restarts and remains exportable for audit review.
 - [x] T363: Refresh roadmap, backlog, OpenAPI, disaster-recovery guidance, and focused backend/frontend/TypeScript contract coverage once the non-standalone control-plane slice lands.
 
+## Phase 69 — Recovery timeline and shared detection review history (completed)
+
+- [x] T364: Extend Help & Docs `Production Readiness` with an operational readiness drill timeline that shows documented RTO/RPO targets, backup/checkpoint evidence, persisted failover-drill history, pass/fail artifact checks, and exportable recovery evidence.
+- [x] T365: Surface shared rule-review history in SOC Workbench so replay deltas and analyst verdict context match the Threat Detection detail view instead of staying pressure-only.
+- [x] T366: Refresh README, CHANGELOG, STATUS, and backlog tracking once the recovery timeline and shared review-history tranche lands.
+
 See `docs/ROADMAP_XDR_PROFESSIONAL.md` for the broader professional roadmap beyond the current implementation order.
 
 ## Code-quality sweep (post-Phase 7)

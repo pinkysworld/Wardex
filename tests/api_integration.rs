@@ -498,6 +498,7 @@ fn detection_feedback_roundtrip_and_explainability_include_feedback() {
         .send_string(
             &serde_json::json!({
                 "event_id": 1,
+                "rule_id": "builtin:sigma:credential-access",
                 "analyst": "alice",
                 "verdict": "true_positive",
                 "reason_pattern": "credential_dump_attempt, lsass_access",
@@ -524,6 +525,21 @@ fn detection_feedback_roundtrip_and_explainability_include_feedback() {
     assert_eq!(
         listed_body["items"][0]["analyst"].as_str().unwrap(),
         "alice"
+    );
+
+    let by_rule = ureq::get(&format!(
+        "{}/api/detection/feedback?rule_id={}",
+        base(port),
+        "builtin%3Asigma%3Acredential-access"
+    ))
+    .set("Authorization", &auth)
+    .call()
+    .expect("list feedback by rule");
+    let by_rule_body: serde_json::Value = by_rule.into_json().unwrap();
+    assert_eq!(by_rule_body["summary"]["total"].as_u64().unwrap(), 1);
+    assert_eq!(
+        by_rule_body["items"][0]["rule_id"].as_str().unwrap(),
+        "builtin:sigma:credential-access"
     );
 
     let explain = ureq::get(&format!("{}/api/detection/explain?event_id=1", base(port)))
@@ -5907,6 +5923,71 @@ fn workbench_overview_surfaces_queue_cases_incidents_and_ready_actions() {
         }))
         .expect("approve response request");
 
+    let content_rule: serde_json::Value = ureq::post(&format!("{}/api/content/rules", base(port)))
+        .set("Authorization", &auth_header(&token))
+        .send_json(serde_json::json!({
+            "title": "Workbench review rule",
+            "description": "Used to validate SOC workbench review history.",
+            "owner": "detections",
+            "severity_mapping": "high",
+            "pack_ids": ["identity-attacks"],
+            "query": {
+                "hostname": "workbench-host",
+                "text": "test_reason",
+                "limit": 100
+            }
+        }))
+        .expect("create review rule")
+        .into_json()
+        .unwrap();
+    let rule_id = content_rule["rule"]["metadata"]["id"]
+        .as_str()
+        .unwrap()
+        .to_string();
+
+    ureq::post(&format!(
+        "{}/api/content/rules/{}/test",
+        base(port),
+        rule_id
+    ))
+    .set("Authorization", &auth_header(&token))
+    .call()
+    .expect("test review rule");
+
+    ureq::post(&format!("{}/api/detection/feedback", base(port)))
+        .set("Authorization", &auth_header(&token))
+        .send_json(serde_json::json!({
+            "rule_id": rule_id,
+            "analyst": "analyst-1",
+            "verdict": "true_positive",
+            "notes": "SOC handoff confirmed the replay noise is expected."
+        }))
+        .expect("record review feedback");
+
+    let rules_catalog: serde_json::Value = ureq::get(&format!("{}/api/content/rules", base(port)))
+        .set("Authorization", &auth_header(&token))
+        .call()
+        .expect("content rules catalog")
+        .into_json()
+        .unwrap();
+    for seed_rule_id in rules_catalog["rules"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter_map(|item| item["id"].as_str())
+        .take(10)
+    {
+        ureq::post(&format!("{}/api/detection/feedback", base(port)))
+            .set("Authorization", &auth_header(&token))
+            .send_json(serde_json::json!({
+                "rule_id": seed_rule_id,
+                "analyst": "analyst-1",
+                "verdict": "true_positive",
+                "notes": "SOC handoff confirmed the replay noise is expected."
+            }))
+            .expect("seed review feedback");
+    }
+
     let overview: serde_json::Value = ureq::get(&format!("{}/api/workbench/overview", base(port)))
         .set("Authorization", &auth_header(&token))
         .call()
@@ -5926,6 +6007,18 @@ fn workbench_overview_surfaces_queue_cases_incidents_and_ready_actions() {
     assert!(overview["team_load"]["rebalance_hint"].is_string());
     assert!(overview["connector_impact"]["collectors_at_risk"].is_u64());
     assert!(overview["connector_impact"]["items"].is_array());
+    let detection_review_item = overview["detection_review"]["items"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|item| {
+            item["latest_feedback_verdict"].as_str() == Some("true_positive")
+                && item["latest_feedback_notes"].as_str()
+                    == Some("SOC handoff confirmed the replay noise is expected.")
+        })
+        .expect("review row with analyst history appears in workbench");
+    assert!(detection_review_item["latest_replay_new_match_count"].is_u64());
+    assert!(detection_review_item["latest_replay_cleared_match_count"].is_u64());
     assert!(!overview["urgent_items"].as_array().unwrap().is_empty());
 }
 
@@ -6978,6 +7071,52 @@ fn enterprise_content_rules_suppressions_and_coverage_work() {
     .into_json()
     .unwrap();
     assert_eq!(rolled_back["status"].as_str().unwrap(), "rolled_back");
+
+    let feedback = ureq::post(&format!("{}/api/detection/feedback", base(port)))
+        .set("Authorization", &auth_header(&token))
+        .set("Content-Type", "application/json")
+        .send_string(
+            &serde_json::json!({
+                "rule_id": rule_id,
+                "analyst": "detections",
+                "verdict": "true_positive",
+                "notes": "Shift review confirmed the replay delta is expected.",
+            })
+            .to_string(),
+        )
+        .expect("record rule feedback");
+    assert_eq!(feedback.status(), 200);
+
+    let content_rules: serde_json::Value = ureq::get(&format!("{}/api/content/rules", base(port)))
+        .set("Authorization", &auth_header(&token))
+        .call()
+        .expect("content rules")
+        .into_json()
+        .unwrap();
+    let rule_view = content_rules["rules"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|item| item["id"].as_str() == Some(rule_id.as_str()))
+        .expect("native rule present");
+    assert_eq!(
+        rule_view["review_history"]["latest_replay"]["suppressed_count"]
+            .as_u64()
+            .unwrap(),
+        retested["result"]["suppressed_count"].as_u64().unwrap()
+    );
+    assert_eq!(
+        rule_view["review_history"]["analyst_feedback"]["latest_verdict"]
+            .as_str()
+            .unwrap(),
+        "true_positive"
+    );
+    assert_eq!(
+        rule_view["review_history"]["analyst_feedback"]["total"]
+            .as_u64()
+            .unwrap(),
+        1
+    );
 
     let coverage: serde_json::Value = ureq::get(&format!("{}/api/coverage/mitre", base(port)))
         .set("Authorization", &auth_header(&token))

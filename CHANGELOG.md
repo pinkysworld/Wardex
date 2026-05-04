@@ -4,6 +4,13 @@ All notable changes to Wardex are documented in this file.
 
 ## [Unreleased]
 
+### Added
+- **Operational readiness drill timeline** — Help & Docs `Production Readiness` now renders documented recovery targets (RTO/RPO), backup and checkpoint evidence, persisted failover-drill history, pass/fail artifact checks, and exportable timeline evidence for recovery reviews.
+- **SOC detection review reasoning** — SOC Workbench detection-review rows now carry replay deltas plus the latest analyst verdict, note, and review timestamp so shift leads can understand review pressure before pivoting into Threat Detection.
+
+### Changed
+- **Shared review-history contract** — Rule-level replay/analyst review history now feeds both Threat Detection and SOC Workbench from the same backend derivation path, reducing cross-surface drift.
+
 ### Backend
 - **SOC workbench strengthening slices** — `GET /api/workbench/overview` now includes team load and ownership plus connector coverage impact signals, and `GET /api/cases/{id}/handoff-packet` returns structured case handoff packets for analyst turnover.
 - **Command Center review summary** — `GET /api/command/summary` now carries a compact detection review calendar inside the `rule_tuning` lane, surfacing overdue reviews, due-this-week items, replay blockers, noisy owners, and direct pivots into detection promotion views.
