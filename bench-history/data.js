@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1777875255879,
+  "lastUpdate": 1777894404108,
   "repoUrl": "https://github.com/pinkysworld/Wardex",
   "entries": {
     "Wardex criterion benches": [
@@ -5205,6 +5205,114 @@ window.BENCHMARK_DATA = {
             "name": "sigma_evaluate_20_rules",
             "value": 35424,
             "range": "± 564",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "85413447+pinkysworld@users.noreply.github.com",
+            "name": "pinkysworld",
+            "username": "pinkysworld"
+          },
+          "committer": {
+            "email": "85413447+pinkysworld@users.noreply.github.com",
+            "name": "pinkysworld",
+            "username": "pinkysworld"
+          },
+          "distinct": true,
+          "id": "15e422b5e1c67f4ff76501d02f8dab07f6f2a6e3",
+          "message": "Add connector coverage impact overview",
+          "timestamp": "2026-05-04T13:25:38+02:00",
+          "tree_id": "1e0a45ec10a70bbe95482cf0c8318159ae014ac7",
+          "url": "https://github.com/pinkysworld/Wardex/commit/15e422b5e1c67f4ff76501d02f8dab07f6f2a6e3"
+        },
+        "date": 1777894403279,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "full_pipeline/5",
+            "value": 49022,
+            "range": "± 919",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "full_pipeline/50",
+            "value": 422934,
+            "range": "± 1351",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "full_pipeline/200",
+            "value": 1938762,
+            "range": "± 23994",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "full_pipeline/1000",
+            "value": 18160418,
+            "range": "± 190747",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "detector_evaluate_single",
+            "value": 612,
+            "range": "± 3",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "detector_window_stream_256",
+            "value": 785091,
+            "range": "± 15962",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "shared_storage_observed_schema_read",
+            "value": 136,
+            "range": "± 0",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "shared_storage_4_threads_64_alerts",
+            "value": 149172,
+            "range": "± 2863",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "policy_evaluate_single",
+            "value": 238,
+            "range": "± 0",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "throughput/1000_samples",
+            "value": 18439160,
+            "range": "± 180769",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "search_500_events",
+            "value": 108228,
+            "range": "± 512",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "hunt_field_query",
+            "value": 87160,
+            "range": "± 313",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "ml_triage_rf",
+            "value": 50,
+            "range": "± 0",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "sigma_evaluate_20_rules",
+            "value": 34811,
+            "range": "± 636",
             "unit": "ns/iter"
           }
         ]
