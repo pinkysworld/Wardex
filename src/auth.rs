@@ -4,6 +4,7 @@
 use chrono::{DateTime, Duration, Utc};
 use rand::Rng;
 use serde::Deserialize;
+use sha2::{Digest, Sha256};
 use std::collections::HashMap;
 use std::path::Path;
 use std::sync::Mutex;
@@ -83,10 +84,18 @@ pub struct Session {
     pub expires_at: DateTime<Utc>,
 }
 
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+struct PersistedSessionEnvelope {
+    version: u8,
+    sessions: HashMap<String, Session>,
+    signature: String,
+}
+
 /// Thread-safe session store with optional file-backed persistence.
 pub struct SessionStore {
     sessions: Mutex<HashMap<String, Session>>,
     store_path: Option<String>,
+    persistence_key: Option<Vec<u8>>,
 }
 
 impl Default for SessionStore {
@@ -100,14 +109,22 @@ impl SessionStore {
         Self {
             sessions: Mutex::new(HashMap::new()),
             store_path: None,
+            persistence_key: None,
         }
     }
 
     /// Create a session store that persists to disk at the given path.
     pub fn with_persistence(path: &str) -> Self {
+        Self::with_persistence_key(path, None)
+    }
+
+    /// Create a session store that persists to disk at the given path and
+    /// seals the persisted payload with the provided key.
+    pub fn with_persistence_key(path: &str, key: Option<Vec<u8>>) -> Self {
         let store = Self {
             sessions: Mutex::new(HashMap::new()),
             store_path: Some(path.to_string()),
+            persistence_key: key,
         };
         store.load();
         store
@@ -121,7 +138,15 @@ impl SessionStore {
         let Ok(data) = std::fs::read_to_string(path) else {
             return;
         };
-        let Ok(map) = serde_json::from_str::<HashMap<String, Session>>(&data) else {
+        let map = if let Ok(envelope) = serde_json::from_str::<PersistedSessionEnvelope>(&data) {
+            let expected = self.session_signature(&envelope.sessions);
+            if !constant_time_eq(envelope.signature.as_bytes(), expected.as_bytes()) {
+                return;
+            }
+            envelope.sessions
+        } else if let Ok(legacy_map) = serde_json::from_str::<HashMap<String, Session>>(&data) {
+            legacy_map
+        } else {
             return;
         };
         let now = Utc::now();
@@ -144,7 +169,12 @@ impl SessionStore {
             return;
         };
         let store = self.sessions.lock().unwrap_or_else(|e| e.into_inner());
-        if let Ok(json) = serde_json::to_string(&*store) {
+        let envelope = PersistedSessionEnvelope {
+            version: 1,
+            sessions: store.clone(),
+            signature: self.session_signature(&store),
+        };
+        if let Ok(json) = serde_json::to_string(&envelope) {
             if let Some(parent) = Path::new(path).parent()
                 && !parent.as_os_str().is_empty()
                 && std::fs::create_dir_all(parent).is_err()
@@ -159,6 +189,17 @@ impl SessionStore {
                 }
             }
         }
+    }
+
+    fn session_signature(&self, sessions: &HashMap<String, Session>) -> String {
+        let payload = serde_json::to_vec(sessions).unwrap_or_default();
+        let mut digest = Sha256::new();
+        if let Some(key) = &self.persistence_key {
+            digest.update(key);
+            digest.update([0u8]);
+        }
+        digest.update(payload);
+        hex::encode(digest.finalize())
     }
 
     /// Create a new session and return an opaque session ID (random hex).
@@ -335,6 +376,17 @@ fn url_encode_component(input: &str) -> String {
         }
     }
     out
+}
+
+fn constant_time_eq(left: &[u8], right: &[u8]) -> bool {
+    if left.len() != right.len() {
+        return false;
+    }
+    let mut diff = 0u8;
+    for (&l, &r) in left.iter().zip(right.iter()) {
+        diff |= l ^ r;
+    }
+    diff == 0
 }
 
 // ── Tests ───────────────────────────────────────────────────────
@@ -553,10 +605,11 @@ mod tests {
         let dir = std::env::temp_dir();
         let path = dir.join("wardex_test_sessions.json");
         let path_str = path.to_string_lossy().to_string();
+        let key = b"session-persistence-test-key".to_vec();
 
         // Create store with a session, which triggers save
         {
-            let store = SessionStore::with_persistence(&path_str);
+            let store = SessionStore::with_persistence_key(&path_str, Some(key.clone()));
             store.create_session(
                 "u1",
                 "u1@example.com",
@@ -567,7 +620,7 @@ mod tests {
         }
 
         // Load into a new store and verify the session survived
-        let store2 = SessionStore::with_persistence(&path_str);
+        let store2 = SessionStore::with_persistence_key(&path_str, Some(key));
         let sessions = store2.sessions.lock().unwrap();
         assert_eq!(sessions.len(), 1);
         let session = sessions.values().next().unwrap();
@@ -577,6 +630,66 @@ mod tests {
         drop(sessions);
 
         let _ = std::fs::remove_file(&path);
+    }
+
+    #[test]
+    fn session_persistence_rejects_tampered_payload() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let path = dir.path().join("sessions.json");
+        let path_str = path.to_string_lossy().to_string();
+        let key = b"session-tamper-test-key".to_vec();
+
+        {
+            let store = SessionStore::with_persistence_key(&path_str, Some(key.clone()));
+            store.create_session("u2", "u2@example.com", "admin", &[], 8);
+        }
+
+        let contents = std::fs::read_to_string(&path).expect("read persisted sessions");
+        let mut envelope: PersistedSessionEnvelope =
+            serde_json::from_str(&contents).expect("parse persisted envelope");
+        let session = envelope
+            .sessions
+            .values_mut()
+            .next()
+            .expect("persisted session");
+        session.email = "tampered@example.com".into();
+        std::fs::write(
+            &path,
+            serde_json::to_string(&envelope).expect("serialize tampered envelope"),
+        )
+        .expect("rewrite tampered envelope");
+
+        let reloaded = SessionStore::with_persistence_key(&path_str, Some(key));
+        assert!(reloaded.sessions.lock().unwrap().is_empty());
+    }
+
+    #[test]
+    fn session_persistence_loads_legacy_unsigned_payload() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let path = dir.path().join("sessions.json");
+        let path_str = path.to_string_lossy().to_string();
+        let session = Session {
+            user_id: "legacy-user".into(),
+            email: "legacy@example.com".into(),
+            role: "analyst".into(),
+            groups: vec!["Security".into()],
+            created_at: Utc::now(),
+            expires_at: Utc::now() + Duration::hours(8),
+        };
+        let mut legacy = HashMap::new();
+        legacy.insert("legacy-session".to_string(), session);
+        std::fs::write(
+            &path,
+            serde_json::to_string(&legacy).expect("serialize legacy payload"),
+        )
+        .expect("write legacy payload");
+
+        let store =
+            SessionStore::with_persistence_key(&path_str, Some(b"legacy-migration-key".to_vec()));
+        let session = store
+            .get_session("legacy-session")
+            .expect("legacy session should load");
+        assert_eq!(session.email, "legacy@example.com");
     }
 
     #[test]
@@ -622,7 +735,10 @@ mod tests {
         let path = dir.path().join("sessions.json");
         let path_str = path.to_string_lossy().to_string();
 
-        let store = SessionStore::with_persistence(&path_str);
+        let store = SessionStore::with_persistence_key(
+            &path_str,
+            Some(b"session-permission-test-key".to_vec()),
+        );
         store.create_session("u10", "u10@example.com", "admin", &[], 8);
 
         let mode = std::fs::metadata(&path)

@@ -1424,8 +1424,10 @@ pub async fn run_server(
             sha2::Sha256::digest(format!("spool-key-{token}").as_bytes())
         }
     };
-    let session_store =
-        crate::auth::SessionStore::with_persistence(&session_store_path(&config_path));
+    let session_store = crate::auth::SessionStore::with_persistence_key(
+        &session_store_path(&config_path),
+        Some(load_or_create_session_seal_key(&config_path)),
+    );
     let user_preferences = UserPreferencesStore::new(&user_preferences_store_path(&config_path));
     let model_registry_dir = model_registry_path(&config_path);
     let detection_feedback_path = detection_feedback_store_path(&config_path);
@@ -1968,8 +1970,10 @@ fn spawn_test_server_with_state() -> (u16, String, Arc<Mutex<AppState>>) {
     let _ = std::fs::remove_dir_all(&state_root);
     std::fs::create_dir_all(&state_root).expect("create test state root");
     let config_path = state_root.join("wardex.toml");
-    let session_store =
-        crate::auth::SessionStore::with_persistence(&session_store_path(&config_path));
+    let session_store = crate::auth::SessionStore::with_persistence_key(
+        &session_store_path(&config_path),
+        Some(load_or_create_session_seal_key(&config_path)),
+    );
     let user_preferences = UserPreferencesStore::new(&user_preferences_store_path(&config_path));
     let model_registry_dir = model_registry_path(&config_path);
     let detection_feedback_path = detection_feedback_store_path(&config_path);
@@ -3556,6 +3560,49 @@ fn session_store_path(config_path: &Path) -> String {
         .join("sessions.json")
         .to_string_lossy()
         .to_string()
+}
+
+fn session_seal_key_path(config_path: &Path) -> String {
+    config_path
+        .parent()
+        .unwrap_or_else(|| Path::new("var"))
+        .join(".wardex_session_key")
+        .to_string_lossy()
+        .to_string()
+}
+
+fn harden_private_file_permissions(path: &str) {
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let _ = std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o600));
+    }
+}
+
+fn load_or_create_session_seal_key(config_path: &Path) -> Vec<u8> {
+    if let Ok(value) = std::env::var("WARDEX_SESSION_KEY") {
+        let trimmed = value.trim();
+        if !trimmed.is_empty() {
+            return trimmed.as_bytes().to_vec();
+        }
+    }
+
+    let path = session_seal_key_path(config_path);
+    if let Ok(existing) = std::fs::read_to_string(&path) {
+        let trimmed = existing.trim().to_string();
+        if !trimmed.is_empty() {
+            harden_private_file_permissions(&path);
+            return trimmed.into_bytes();
+        }
+    }
+
+    let generated = generate_token();
+    if let Some(parent) = Path::new(&path).parent() {
+        let _ = std::fs::create_dir_all(parent);
+    }
+    let _ = std::fs::write(&path, &generated);
+    harden_private_file_permissions(&path);
+    generated.into_bytes()
 }
 
 fn user_preferences_store_path(config_path: &Path) -> String {
