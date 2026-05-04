@@ -260,7 +260,10 @@ function MonitorShortcutDialog({ onClose }) {
                 <div className="card-title">{section.title}</div>
                 <div style={{ display: 'grid', gap: 8 }}>
                   {section.items.map(([keys, description]) => (
-                    <div key={keys} style={{ display: 'grid', gridTemplateColumns: '96px 1fr', gap: 10 }}>
+                    <div
+                      key={keys}
+                      style={{ display: 'grid', gridTemplateColumns: '96px 1fr', gap: 10 }}
+                    >
                       <kbd
                         style={{
                           fontSize: 11,
@@ -561,20 +564,23 @@ export default function LiveMonitor() {
   };
 
   // FP feedback handler
-  const markFP = useCallback(async (alert) => {
-    const pattern = (alert.reasons || [alert.category || alert.type || 'unknown']).join(', ');
-    try {
-      await api.fpFeedback({
-        alert_id: alert.id || alert.alert_id,
-        pattern,
-        is_false_positive: true,
-      });
-      toast(`Marked as FP: ${pattern}`, 'success');
-      reloadFP();
-    } catch {
-      toast('FP feedback failed', 'error');
-    }
-  }, [reloadFP, toast]);
+  const markFP = useCallback(
+    async (alert) => {
+      const pattern = (alert.reasons || [alert.category || alert.type || 'unknown']).join(', ');
+      try {
+        await api.fpFeedback({
+          alert_id: alert.id || alert.alert_id,
+          pattern,
+          is_false_positive: true,
+        });
+        toast(`Marked as FP: ${pattern}`, 'success');
+        reloadFP();
+      } catch {
+        toast('FP feedback failed', 'error');
+      }
+    },
+    [reloadFP, toast],
+  );
 
   // Bulk actions
   const executeBulk = async () => {
@@ -702,7 +708,9 @@ export default function LiveMonitor() {
           event_ids: ids,
         });
         toast(
-          ids.length === 1 ? 'Incident created from alert' : 'Incident created from selected alerts',
+          ids.length === 1
+            ? 'Incident created from alert'
+            : 'Incident created from selected alerts',
           'success',
         );
         return true;
@@ -714,20 +722,23 @@ export default function LiveMonitor() {
     [toast],
   );
 
-  const moveAlert = useCallback((direction, pinned = selectedId != null) => {
-    if (filteredAlerts.length === 0) return;
-    const currentIndex = pinned ? selectedAlertIndex : previewAlertIndex;
-    const rawIndex =
-      currentIndex === -1
-        ? direction > 0
-          ? 0
-          : filteredAlerts.length - 1
-        : currentIndex + direction;
-    const nextIndex = Math.max(0, Math.min(filteredAlerts.length - 1, rawIndex));
-    const nextId = alertIdFor(filteredAlerts[nextIndex], nextIndex);
-    setHoveredId(nextId);
-    if (pinned) setSelectedId(nextId);
-  }, [filteredAlerts, previewAlertIndex, selectedAlertIndex, selectedId]);
+  const moveAlert = useCallback(
+    (direction, pinned = selectedId != null) => {
+      if (filteredAlerts.length === 0) return;
+      const currentIndex = pinned ? selectedAlertIndex : previewAlertIndex;
+      const rawIndex =
+        currentIndex === -1
+          ? direction > 0
+            ? 0
+            : filteredAlerts.length - 1
+          : currentIndex + direction;
+      const nextIndex = Math.max(0, Math.min(filteredAlerts.length - 1, rawIndex));
+      const nextId = alertIdFor(filteredAlerts[nextIndex], nextIndex);
+      setHoveredId(nextId);
+      if (pinned) setSelectedId(nextId);
+    },
+    [filteredAlerts, previewAlertIndex, selectedAlertIndex, selectedId],
+  );
 
   const exportAlerts = (format) => {
     if (format === 'csv') {
@@ -1270,7 +1281,8 @@ export default function LiveMonitor() {
                     {currentView?.label ? `Preset: ${currentView.label}.` : 'Custom scope active.'}
                   </div>
                   <div className="hint" style={{ marginTop: 4 }}>
-                    Shortcuts: `/` search, ↑↓ or j/k navigate, Enter drawer, x select, t triage, f mark FP, i incident, Esc close.
+                    Shortcuts: `/` search, ↑↓ or j/k navigate, Enter drawer, x select, t triage, f
+                    mark FP, i incident, Esc close.
                   </div>
                 </div>
                 <div className="btn-group">
@@ -1864,7 +1876,8 @@ export default function LiveMonitor() {
               <div className="card-header">
                 <span className="card-title">Process Graph Context</span>
                 <div className="hint">
-                  Use live tree context to confirm suspicious ancestry before you isolate or kill a process.
+                  Use live tree context to confirm suspicious ancestry before you isolate or kill a
+                  process.
                 </div>
               </div>
               <div className="card-grid" style={{ marginBottom: 16 }}>
@@ -1885,10 +1898,14 @@ export default function LiveMonitor() {
                 <div className="card" style={{ padding: 10 }}>
                   <div className="metric-label">Priority Process</div>
                   <div style={{ fontSize: 16, fontWeight: 700 }}>
-                    {highestRiskProcess?.name || topDeepChain?.name || 'No current priority process'}
+                    {highestRiskProcess?.name ||
+                      topDeepChain?.name ||
+                      'No current priority process'}
                   </div>
                   <div className="metric-sub">
-                    {highestRiskProcess?.reason || topDeepChain?.summary || 'Awaiting live analysis'}
+                    {highestRiskProcess?.reason ||
+                      topDeepChain?.summary ||
+                      'Awaiting live analysis'}
                   </div>
                 </div>
               </div>
@@ -1923,7 +1940,10 @@ export default function LiveMonitor() {
                     </div>
                     <div className="row-secondary">{highestRiskProcess.reason}</div>
                     <div className="btn-group" style={{ marginTop: 12 }}>
-                      <button className="btn btn-sm" onClick={() => openProcess(highestRiskProcess)}>
+                      <button
+                        className="btn btn-sm"
+                        onClick={() => openProcess(highestRiskProcess)}
+                      >
                         Investigate Finding
                       </button>
                     </div>

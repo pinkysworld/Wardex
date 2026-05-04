@@ -27,14 +27,7 @@ export const SIEM_TYPE_OPTIONS = [
   { value: 'google', label: 'Google SecOps UDM' },
   { value: 'qradar', label: 'IBM QRadar' },
 ];
-export const SETTINGS_TAB_IDS = [
-  'config',
-  'monitoring',
-  'integrations',
-  'flags',
-  'team',
-  'admin',
-];
+export const SETTINGS_TAB_IDS = ['config', 'monitoring', 'integrations', 'flags', 'team', 'admin'];
 
 const HISTORICAL_SEARCH_PARAM_KEYS = {
   since: 'historical_since',

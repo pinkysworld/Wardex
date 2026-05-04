@@ -78,9 +78,7 @@ describe('ProcessDrawer', () => {
               listener_count: 1,
               recommendations: ['Inspect parent lineage before isolation.'],
             },
-            network_activity: [
-              { protocol: 'tcp', endpoint: '10.0.0.1:443', state: 'established' },
-            ],
+            network_activity: [{ protocol: 'tcp', endpoint: '10.0.0.1:443', state: 'established' }],
           }),
         );
       }
@@ -193,7 +191,12 @@ describe('ProcessDrawer', () => {
     const onSelectProcess = vi.fn();
 
     renderWithProviders(
-      <ProcessDrawer pid={4242} onClose={() => {}} onUpdated={() => {}} onSelectProcess={onSelectProcess} />,
+      <ProcessDrawer
+        pid={4242}
+        onClose={() => {}}
+        onUpdated={() => {}}
+        onSelectProcess={onSelectProcess}
+      />,
     );
 
     expect(await screen.findByText('Investigation Context')).toBeInTheDocument();
@@ -205,10 +208,16 @@ describe('ProcessDrawer', () => {
     expect(screen.getByText(/Matched a deep process chain with depth 4/i)).toBeInTheDocument();
     expect(screen.getByText('Thread Activity')).toBeInTheDocument();
     expect(screen.getByText('Peak Thread CPU')).toBeInTheDocument();
-    expect(screen.getByText('macOS exposes real per-thread rows here, but thread IDs are collection-time row slots.')).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        'macOS exposes real per-thread rows here, but thread IDs are collection-time row slots.',
+      ),
+    ).toBeInTheDocument();
     expect(screen.getAllByText('12.5%').length).toBeGreaterThan(0);
     expect(screen.getByText(/Hottest threads: T1 12.5%/i)).toBeInTheDocument();
-    expect(screen.getByText(/Blocked threads: T2 waiting on futex_wait_queue_me/i)).toBeInTheDocument();
+    expect(
+      screen.getByText(/Blocked threads: T2 waiting on futex_wait_queue_me/i),
+    ).toBeInTheDocument();
     expect(screen.getAllByText('futex_wait_queue_me').length).toBeGreaterThan(0);
     expect(screen.getByText('0:00.20 / 0:00.45')).toBeInTheDocument();
 

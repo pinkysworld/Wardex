@@ -118,6 +118,15 @@ const splitMultilineList = (value) =>
     .map((entry) => entry.trim())
     .filter(Boolean);
 
+const asArray = (value) => (Array.isArray(value) ? value : []);
+
+const formatCompactLabel = (value) =>
+  String(value || '')
+    .replace(/[_-]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .replace(/\b\w/g, (character) => character.toUpperCase());
+
 const investigationStatusBadgeClass = (status) => {
   switch (status) {
     case 'handoff-ready':
@@ -191,6 +200,7 @@ const INCIDENT_DRAWER_PANELS = [
 const CASE_DRAWER_PANELS = [
   { id: 'summary', label: 'Summary' },
   { id: 'evidence', label: 'Evidence' },
+  { id: 'handoff', label: 'Handoff Packet' },
   { id: 'actions', label: 'Actions' },
 ];
 
@@ -828,6 +838,26 @@ export default function SOCWorkbench() {
     focusedCaseId || focusedInvestigationParam || responseTarget || responseSource,
   );
   const caseDrawerOpen = drawerMode === 'case-workspace' && Boolean(focusedCaseId);
+  const {
+    data: caseDrawerData,
+    loading: caseDrawerDataLoading,
+    reload: reloadCaseDrawerData,
+  } = useApiGroup(
+    {
+      handoffPacket: () => api.caseHandoffPacket(focusedCaseId),
+    },
+    [focusedCaseId, caseDrawerOpen],
+    { skip: !caseDrawerOpen || !focusedCaseId },
+  );
+  const caseHandoffPacket = caseDrawerData.handoffPacket || null;
+  const handoffChecklistState = caseHandoffPacket?.checklist_state || {};
+  const handoffResponseStatus = caseHandoffPacket?.response_status || {};
+  const handoffTimeline = asArray(caseHandoffPacket?.timeline);
+  const handoffQuestions = asArray(caseHandoffPacket?.unresolved_questions);
+  const handoffNextActions = asArray(caseHandoffPacket?.next_actions);
+  const handoffTicketSync = caseHandoffPacket?.ticket_sync_result || null;
+  const handoffEvidenceLinks = asArray(caseHandoffPacket?.evidence_links);
+  const handoffLinkedInvestigation = caseHandoffPacket?.linked_investigation || null;
   const incidentDrawerOpen = drawerMode === 'incident-detail' && Boolean(focusedIncidentParam);
   const drawerIncidentEvents =
     drawerIncidentStoryline?.events ||
@@ -1240,6 +1270,7 @@ export default function SOCWorkbench() {
       if (snapshot?.id) setSelectedInvestigationId(snapshot.id);
       rInv();
       rCases();
+      reloadCaseDrawerData();
       toast('Investigation handed off', 'success');
     } catch {
       toast('Failed to hand off investigation', 'error');
@@ -1298,6 +1329,7 @@ export default function SOCWorkbench() {
       });
       setTicketSyncResult(result);
       setTicketSyncDraft((current) => ({ ...current, summary }));
+      reloadCaseDrawerData();
       toast('Ticket sync submitted', 'success');
     } catch {
       setTicketSyncResult(null);
@@ -1321,6 +1353,7 @@ export default function SOCWorkbench() {
       setCaseWorkspaceComment('');
       toast('Case note added', 'success');
       rCases();
+      reloadCaseDrawerData();
     } catch {
       toast('Failed to add case note', 'error');
     } finally {
@@ -4979,6 +5012,407 @@ export default function SOCWorkbench() {
                     </div>
                   </div>
                 </div>
+              </>
+            )}
+
+            {caseDrawerPanel === 'handoff' && (
+              <>
+                <div
+                  style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    gap: 12,
+                    flexWrap: 'wrap',
+                    marginBottom: 14,
+                  }}
+                >
+                  <div className="hint">
+                    Keep the shift handoff packet current with case notes, workflow handoffs, and
+                    ticket sync updates.
+                  </div>
+                  {caseHandoffPacket ? (
+                    <button
+                      className="btn btn-sm"
+                      onClick={() =>
+                        downloadData(
+                          caseHandoffPacket,
+                          `case-${activeWorkspaceCase.id}-handoff-packet.json`,
+                        )
+                      }
+                    >
+                      Export Packet
+                    </button>
+                  ) : null}
+                </div>
+
+                {caseDrawerDataLoading && !caseHandoffPacket ? (
+                  <div className="empty">Loading handoff packet…</div>
+                ) : !caseHandoffPacket ? (
+                  <div className="empty">No handoff packet is available for this case yet.</div>
+                ) : (
+                  <>
+                    <SummaryGrid
+                      data={{
+                        case_id: caseHandoffPacket.case?.id || activeWorkspaceCase.id,
+                        status:
+                          formatCompactLabel(caseHandoffPacket.case?.status) ||
+                          activeWorkspaceCase.status ||
+                          'Open',
+                        priority:
+                          formatCompactLabel(caseHandoffPacket.case?.priority) ||
+                          activeWorkspaceCase.priority ||
+                          'Medium',
+                        assignee: caseHandoffPacket.case?.assignee || 'Unassigned',
+                        evidence_items: handoffChecklistState.evidence_items || 0,
+                        analyst_notes: handoffChecklistState.analyst_notes || 0,
+                        ticket_syncs: handoffChecklistState.ticket_syncs || 0,
+                        next_actions: handoffChecklistState.next_actions || 0,
+                        open_questions: handoffChecklistState.unresolved_questions || 0,
+                        linked_workflow: handoffLinkedInvestigation?.workflow_name || 'Not linked',
+                      }}
+                      limit={10}
+                    />
+
+                    <div
+                      style={{
+                        marginTop: 14,
+                        display: 'grid',
+                        gap: 14,
+                        gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))',
+                      }}
+                    >
+                      <div
+                        style={{
+                          border: '1px solid var(--border)',
+                          borderRadius: 12,
+                          padding: 14,
+                          background: 'var(--bg-card)',
+                        }}
+                      >
+                        <div className="card-title" style={{ marginBottom: 8 }}>
+                          Summary
+                        </div>
+                        <div style={{ lineHeight: 1.5 }}>
+                          {caseHandoffPacket.case?.summary ||
+                            'No handoff summary has been captured yet.'}
+                        </div>
+                        {handoffLinkedInvestigation ? (
+                          <div className="hint" style={{ marginTop: 10 }}>
+                            {handoffLinkedInvestigation.workflow_name || 'Linked investigation'} ·{' '}
+                            {formatCompactLabel(handoffLinkedInvestigation.status) || 'Active'} ·{' '}
+                            {handoffLinkedInvestigation.completion_percent || 0}% complete
+                          </div>
+                        ) : null}
+                      </div>
+
+                      <div
+                        style={{
+                          border: '1px solid var(--border)',
+                          borderRadius: 12,
+                          padding: 14,
+                          background: 'var(--bg-card)',
+                        }}
+                      >
+                        <div className="card-title" style={{ marginBottom: 8 }}>
+                          Checklist
+                        </div>
+                        <div style={{ display: 'grid', gap: 8 }}>
+                          {[
+                            ['Evidence linked', handoffChecklistState.evidence_items],
+                            ['Analyst notes', handoffChecklistState.analyst_notes],
+                            ['Linked incidents', handoffChecklistState.linked_incidents],
+                            ['Linked events', handoffChecklistState.linked_events],
+                            ['MITRE techniques', handoffChecklistState.mitre_techniques],
+                            ['Ticket syncs', handoffChecklistState.ticket_syncs],
+                          ].map(([label, value]) => (
+                            <div
+                              key={label}
+                              style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}
+                            >
+                              <span>{label}</span>
+                              <strong>{value || 0}</strong>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+
+                      <div
+                        style={{
+                          border: '1px solid var(--border)',
+                          borderRadius: 12,
+                          padding: 14,
+                          background: 'var(--bg-card)',
+                        }}
+                      >
+                        <div className="card-title" style={{ marginBottom: 8 }}>
+                          Ticket Sync
+                        </div>
+                        {handoffTicketSync ? (
+                          <div style={{ display: 'grid', gap: 6 }}>
+                            <div>
+                              <strong>
+                                {handoffTicketSync.provider || 'Ticketing'}{' '}
+                                {handoffTicketSync.external_key || ''}
+                              </strong>
+                            </div>
+                            <div className="row-secondary">
+                              {formatCompactLabel(handoffTicketSync.status) || 'Synced'}
+                              {handoffTicketSync.queue_or_project
+                                ? ` · ${handoffTicketSync.queue_or_project}`
+                                : ''}
+                            </div>
+                            <div>{handoffTicketSync.summary || 'No sync summary provided.'}</div>
+                            <div className="row-secondary">
+                              {handoffTicketSync.synced_at
+                                ? `${formatRelativeTime(handoffTicketSync.synced_at)} · ${formatDateTime(handoffTicketSync.synced_at)}`
+                                : 'Sync time unavailable'}
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="empty">
+                            No ticket sync has been recorded for this case.
+                          </div>
+                        )}
+                      </div>
+
+                      <div
+                        style={{
+                          border: '1px solid var(--border)',
+                          borderRadius: 12,
+                          padding: 14,
+                          background: 'var(--bg-card)',
+                        }}
+                      >
+                        <div className="card-title" style={{ marginBottom: 8 }}>
+                          Response Status
+                        </div>
+                        <div style={{ display: 'grid', gap: 8 }}>
+                          <div
+                            style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}
+                          >
+                            <span>Related hosts</span>
+                            <strong>{handoffResponseStatus.related_host_count || 0}</strong>
+                          </div>
+                          <div
+                            style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}
+                          >
+                            <span>Pending</span>
+                            <strong>{handoffResponseStatus.pending || 0}</strong>
+                          </div>
+                          <div
+                            style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}
+                          >
+                            <span>Approved</span>
+                            <strong>{handoffResponseStatus.approved || 0}</strong>
+                          </div>
+                          <div
+                            style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}
+                          >
+                            <span>Executed</span>
+                            <strong>{handoffResponseStatus.executed || 0}</strong>
+                          </div>
+                        </div>
+                        {asArray(handoffResponseStatus.recent_actions).length > 0 ? (
+                          <div style={{ display: 'grid', gap: 8, marginTop: 12 }}>
+                            {asArray(handoffResponseStatus.recent_actions).map((entry, index) => (
+                              <div
+                                key={`${entry.request_id || entry.action || 'response'}-${index}`}
+                                style={{
+                                  border: '1px solid var(--border)',
+                                  borderRadius: 10,
+                                  padding: 10,
+                                  background: 'var(--bg)',
+                                }}
+                              >
+                                <div className="row-primary">
+                                  {entry.action || 'Response action'}
+                                </div>
+                                <div className="row-secondary">
+                                  {formatCompactLabel(entry.status) || 'Unknown status'}
+                                  {entry.target_hostname ? ` · ${entry.target_hostname}` : ''}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        ) : null}
+                      </div>
+                    </div>
+
+                    <div
+                      style={{
+                        marginTop: 14,
+                        display: 'grid',
+                        gap: 14,
+                        gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))',
+                      }}
+                    >
+                      <div
+                        style={{
+                          border: '1px solid var(--border)',
+                          borderRadius: 12,
+                          padding: 14,
+                          background: 'var(--bg-card)',
+                        }}
+                      >
+                        <div className="card-title" style={{ marginBottom: 8 }}>
+                          Unresolved Questions
+                        </div>
+                        {handoffQuestions.length === 0 ? (
+                          <div className="empty">No unresolved questions captured.</div>
+                        ) : (
+                          <ul style={{ margin: 0, paddingLeft: 18, display: 'grid', gap: 8 }}>
+                            {handoffQuestions.map((question, index) => (
+                              <li key={`handoff-question-${index}`}>{question}</li>
+                            ))}
+                          </ul>
+                        )}
+                      </div>
+
+                      <div
+                        style={{
+                          border: '1px solid var(--border)',
+                          borderRadius: 12,
+                          padding: 14,
+                          background: 'var(--bg-card)',
+                        }}
+                      >
+                        <div className="card-title" style={{ marginBottom: 8 }}>
+                          Next Actions
+                        </div>
+                        {handoffNextActions.length === 0 ? (
+                          <div className="empty">No next actions captured.</div>
+                        ) : (
+                          <ul style={{ margin: 0, paddingLeft: 18, display: 'grid', gap: 8 }}>
+                            {handoffNextActions.map((action, index) => (
+                              <li key={`handoff-action-${index}`}>{action}</li>
+                            ))}
+                          </ul>
+                        )}
+                      </div>
+                    </div>
+
+                    <div
+                      style={{
+                        marginTop: 14,
+                        display: 'grid',
+                        gap: 14,
+                        gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))',
+                      }}
+                    >
+                      <div
+                        style={{
+                          border: '1px solid var(--border)',
+                          borderRadius: 12,
+                          padding: 14,
+                          background: 'var(--bg-card)',
+                        }}
+                      >
+                        <div className="card-title" style={{ marginBottom: 8 }}>
+                          Timeline
+                        </div>
+                        {handoffTimeline.length === 0 ? (
+                          <div className="empty">No packet timeline is available yet.</div>
+                        ) : (
+                          <div style={{ display: 'grid', gap: 10 }}>
+                            {handoffTimeline.map((entry, index) => (
+                              <div
+                                key={`${entry.timestamp || entry.kind || 'timeline'}-${index}`}
+                                style={{
+                                  border: '1px solid var(--border)',
+                                  borderRadius: 10,
+                                  padding: 12,
+                                  background: 'var(--bg)',
+                                }}
+                              >
+                                <div className="row-primary">
+                                  {entry.summary ||
+                                    formatCompactLabel(entry.kind) ||
+                                    'Timeline item'}
+                                </div>
+                                <div className="row-secondary">
+                                  {entry.timestamp
+                                    ? `${formatRelativeTime(entry.timestamp)} · ${formatDateTime(entry.timestamp)}`
+                                    : formatCompactLabel(entry.kind) || 'Timestamp unavailable'}
+                                </div>
+                                {entry.detail ? (
+                                  <div style={{ marginTop: 6 }}>{entry.detail}</div>
+                                ) : null}
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+
+                      <div
+                        style={{
+                          border: '1px solid var(--border)',
+                          borderRadius: 12,
+                          padding: 14,
+                          background: 'var(--bg-card)',
+                        }}
+                      >
+                        <div className="card-title" style={{ marginBottom: 8 }}>
+                          Reopen URL
+                        </div>
+                        <div className="row-secondary" style={{ marginBottom: 10 }}>
+                          Route directly back into this handoff packet.
+                        </div>
+                        <div
+                          style={{
+                            padding: 10,
+                            border: '1px solid var(--border)',
+                            borderRadius: 10,
+                            background: 'var(--bg)',
+                            wordBreak: 'break-all',
+                          }}
+                        >
+                          {caseHandoffPacket.reopen_case_url || 'No reopen URL available.'}
+                        </div>
+                        {caseHandoffPacket.reopen_case_url ? (
+                          <div className="btn-group" style={{ marginTop: 10 }}>
+                            <button
+                              className="btn btn-sm"
+                              onClick={() => navigate(caseHandoffPacket.reopen_case_url)}
+                            >
+                              Open Packet Route
+                            </button>
+                          </div>
+                        ) : null}
+                        {handoffEvidenceLinks.length > 0 ? (
+                          <>
+                            <div className="card-title" style={{ marginTop: 14, marginBottom: 8 }}>
+                              Evidence Links
+                            </div>
+                            <div style={{ display: 'grid', gap: 8 }}>
+                              {handoffEvidenceLinks.map((entry, index) => (
+                                <div
+                                  key={`${entry.reference_id || entry.kind || 'handoff-evidence'}-${index}`}
+                                  style={{
+                                    border: '1px solid var(--border)',
+                                    borderRadius: 10,
+                                    padding: 10,
+                                    background: 'var(--bg)',
+                                  }}
+                                >
+                                  <div className="row-primary">
+                                    {entry.description || entry.reference_id || 'Evidence link'}
+                                  </div>
+                                  <div className="row-secondary">
+                                    {entry.kind || 'unknown'} ·{' '}
+                                    {entry.reference_id || 'no reference'}
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          </>
+                        ) : null}
+                      </div>
+                    </div>
+
+                    <JsonDetails data={caseHandoffPacket} label="Case handoff packet payload" />
+                  </>
+                )}
               </>
             )}
 

@@ -203,7 +203,9 @@ function Wrapper({ children }) {
 
 function LocationProbe() {
   const location = useLocation();
-  return <div data-testid="location-probe">{`${location.pathname}${location.search}${location.hash}`}</div>;
+  return (
+    <div data-testid="location-probe">{`${location.pathname}${location.search}${location.hash}`}</div>
+  );
 }
 
 function currentLocation() {

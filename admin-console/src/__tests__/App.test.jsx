@@ -106,7 +106,9 @@ describe('App', () => {
 
       await renderApp('/soc?case=42&sso_error=Callback%20failed#cases');
 
-      await userEvent.click((await screen.findAllByRole('button', { name: 'Sign in with Corporate SSO' }))[0]);
+      await userEvent.click(
+        (await screen.findAllByRole('button', { name: 'Sign in with Corporate SSO' }))[0],
+      );
 
       expect(assignSpy).toHaveBeenCalledTimes(1);
 
@@ -136,7 +138,11 @@ describe('App', () => {
         return {
           ok: true,
           headers: { get: () => 'application/json' },
-          json: async () => ({ authenticated: true, role: 'admin', user_id: 'sso-user@example.com' }),
+          json: async () => ({
+            authenticated: true,
+            role: 'admin',
+            user_id: 'sso-user@example.com',
+          }),
         };
       }
       return {
@@ -468,7 +474,9 @@ describe('App', () => {
       ),
     ).toBeInTheDocument();
     expect(
-      screen.getByText('Review candidate notes, SBOM context, and rollout readiness before promotion.'),
+      screen.getByText(
+        'Review candidate notes, SBOM context, and rollout readiness before promotion.',
+      ),
     ).toBeInTheDocument();
     await userEvent.click(screen.getByRole('button', { name: /Connector gaps/i }));
     expect(await screen.findByText('Connector Validation')).toBeInTheDocument();

@@ -325,13 +325,15 @@ export default function HelpDocs() {
   const controlPlaneSummary = controlPlane
     ? {
         topology: controlPlane.topology,
-        orchestration_scope: String(controlPlane.orchestration_scope || 'standalone_reference')
-          .replace(/_/g, ' '),
+        orchestration_scope: String(
+          controlPlane.orchestration_scope || 'standalone_reference',
+        ).replace(/_/g, ' '),
         ha_mode: controlPlane.ha_mode,
         cluster_role: controlPlane.cluster
           ? String(controlPlane.cluster.role || 'unknown').replace(/_/g, ' ')
           : 'Local only',
-        cluster_leader: controlPlane.cluster?.leader_id || (controlPlane.cluster ? 'Pending' : 'Local'),
+        cluster_leader:
+          controlPlane.cluster?.leader_id || (controlPlane.cluster ? 'Pending' : 'Local'),
         cluster_peers: controlPlane.cluster
           ? `${controlPlane.cluster.peers_reachable || 0} / ${controlPlane.cluster.peers_total || 0}`
           : '—',
@@ -343,10 +345,7 @@ export default function HelpDocs() {
         recent_drills: Array.isArray(controlPlane.failover_drill_history)
           ? controlPlane.failover_drill_history.length
           : 0,
-        failover_drill: String(controlPlane.failover_drill?.status || 'not_run').replace(
-          /_/g,
-          ' ',
-        ),
+        failover_drill: String(controlPlane.failover_drill?.status || 'not_run').replace(/_/g, ' '),
         last_failover_drill: controlPlane.failover_drill?.last_run_at
           ? formatDateTime(controlPlane.failover_drill.last_run_at)
           : 'Not run',
@@ -389,7 +388,9 @@ export default function HelpDocs() {
                 detail: `${String(controlPlane.cluster.role || 'unknown').replace(/_/g, ' ')} · ${
                   controlPlane.cluster.peers_reachable || 0
                 }/${controlPlane.cluster.peers_total || 0} peers reachable${
-                  controlPlane.cluster.leader_id ? ` · leader ${controlPlane.cluster.leader_id}` : ''
+                  controlPlane.cluster.leader_id
+                    ? ` · leader ${controlPlane.cluster.leader_id}`
+                    : ''
                 }`,
               },
             ]
@@ -399,9 +400,7 @@ export default function HelpDocs() {
           ok: controlPlane.failover_drill?.status === 'passed',
           detail: controlPlane.failover_drill?.last_run_at
             ? `${String(controlPlane.failover_drill?.status || 'review').replace(/_/g, ' ')}${
-                controlPlane.failover_drill?.actor
-                  ? ` by ${controlPlane.failover_drill.actor}`
-                  : ''
+                controlPlane.failover_drill?.actor ? ` by ${controlPlane.failover_drill.actor}` : ''
               } at ${formatDateTime(controlPlane.failover_drill.last_run_at)}`
             : controlPlane.failover_drill?.summary ||
               'No automated failover drill has been recorded yet.',
@@ -959,7 +958,9 @@ export default function HelpDocs() {
                         >
                           {String(drill.status || 'review').replace(/_/g, ' ')}
                         </span>
-                        <strong>{String(drill.drill_type || 'failover_drill').replace(/_/g, ' ')}</strong>
+                        <strong>
+                          {String(drill.drill_type || 'failover_drill').replace(/_/g, ' ')}
+                        </strong>
                         <span style={{ marginLeft: 8 }}>
                           {String(drill.orchestration_scope || 'standalone_reference').replace(
                             /_/g,

@@ -1894,6 +1894,15 @@ pub fn wardex_openapi_spec(version: &str) -> OpenApiSpec {
             op("getCase", "Get case detail", &["incidents"]),
         )
         .path(
+            "/api/cases/{id}/handoff-packet",
+            "get",
+            op(
+                "getCaseHandoffPacket",
+                "Get a structured handoff packet for a case",
+                &["incidents"],
+            ),
+        )
+        .path(
             "/api/incidents",
             "get",
             with_parameters(

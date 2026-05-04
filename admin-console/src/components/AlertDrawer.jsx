@@ -107,14 +107,19 @@ function extractAlertHashes(alert, reasons) {
     .flatMap((value) => String(value).match(HASH_VALUE_PATTERN) || []);
 
   return [...new Set([...directCandidates, ...textCandidates])]
-    .map((value) => String(value || '').trim().toLowerCase())
+    .map((value) =>
+      String(value || '')
+        .trim()
+        .toLowerCase(),
+    )
     .filter((value) => /^[a-f0-9]{32}$|^[a-f0-9]{64}$/.test(value));
 }
 
 function normalizeAlertProcessCandidate(source, alert) {
   if (!source && !alert) return null;
 
-  const process = source?.process || source?.process_detail || source?.process_snapshot || source || {};
+  const process =
+    source?.process || source?.process_detail || source?.process_snapshot || source || {};
   const pidCandidate = [
     source?.pid,
     source?.process_pid,
@@ -175,7 +180,9 @@ function extractAlertProcessCandidates(alert) {
   const items = [extractAlertProcessCandidate(alert)];
   if (Array.isArray(alert.process_candidates)) {
     items.push(
-      ...alert.process_candidates.map((candidate) => normalizeAlertProcessCandidate(candidate, alert)),
+      ...alert.process_candidates.map((candidate) =>
+        normalizeAlertProcessCandidate(candidate, alert),
+      ),
     );
   }
 
@@ -226,11 +233,7 @@ export default function AlertDrawer({
   }, [alert]);
   const reasons = useMemo(() => {
     if (!alert) return [];
-    return Array.isArray(alert.reasons)
-      ? alert.reasons
-      : alert.reasons
-        ? [alert.reasons]
-        : [];
+    return Array.isArray(alert.reasons) ? alert.reasons : alert.reasons ? [alert.reasons] : [];
   }, [alert]);
   const alertHashes = useMemo(() => extractAlertHashes(alert, reasons), [alert, reasons]);
   const processCandidates = useMemo(() => extractAlertProcessCandidates(alert), [alert]);
@@ -516,17 +519,18 @@ export default function AlertDrawer({
                   <div>
                     <div className="metric-label">Command</div>
                     <div
-                      style={{ fontFamily: 'var(--font-mono)', fontSize: 12, wordBreak: 'break-all' }}
+                      style={{
+                        fontFamily: 'var(--font-mono)',
+                        fontSize: 12,
+                        wordBreak: 'break-all',
+                      }}
                     >
                       {candidate.cmd_line || candidate.exe_path || candidate.name}
                     </div>
                   </div>
                   {onSelectProcess && (
                     <div className="btn-group" style={{ marginTop: 4 }}>
-                      <button
-                        className="btn btn-sm"
-                        onClick={() => onSelectProcess(candidate)}
-                      >
+                      <button className="btn btn-sm" onClick={() => onSelectProcess(candidate)}>
                         {processCandidates.length === 1
                           ? 'Investigate Process'
                           : `Inspect ${candidate.display_name}`}
@@ -769,7 +773,10 @@ export default function AlertDrawer({
             <div className="hint">Loading hash reputation and recent sightings.</div>
           ) : (
             <div style={{ display: 'grid', gap: 12 }}>
-              <div className="card" style={{ margin: 0, padding: 12, background: 'var(--surface-muted)' }}>
+              <div
+                className="card"
+                style={{ margin: 0, padding: 12, background: 'var(--surface-muted)' }}
+              >
                 <div className="metric-label">Hash Reputation</div>
                 {artifactContext.hashMatch ? (
                   <>
@@ -786,7 +793,9 @@ export default function AlertDrawer({
                     </div>
                   </>
                 ) : (
-                  <div className="hint">No direct malware hash match was returned for this artifact.</div>
+                  <div className="hint">
+                    No direct malware hash match was returned for this artifact.
+                  </div>
                 )}
               </div>
               <div
@@ -796,26 +805,43 @@ export default function AlertDrawer({
                   gap: 12,
                 }}
               >
-                <div className="card" style={{ margin: 0, padding: 12, background: 'var(--surface-muted)' }}>
+                <div
+                  className="card"
+                  style={{ margin: 0, padding: 12, background: 'var(--surface-muted)' }}
+                >
                   <div className="metric-label">Recent Hash Detections</div>
                   {artifactContext.recentDetections.length > 0 ? (
                     artifactContext.recentDetections.slice(0, 2).map((detection) => (
-                      <div key={`${detection.sha256}-${detection.detected_at}`} style={{ marginTop: 8 }}>
-                        <div className="row-primary">{detection.name || detection.family || detection.sha256}</div>
+                      <div
+                        key={`${detection.sha256}-${detection.detected_at}`}
+                        style={{ marginTop: 8 }}
+                      >
+                        <div className="row-primary">
+                          {detection.name || detection.family || detection.sha256}
+                        </div>
                         <div className="row-secondary">
-                          {detection.family || 'unknown family'} · {detection.source || 'unknown source'}
+                          {detection.family || 'unknown family'} ·{' '}
+                          {detection.source || 'unknown source'}
                         </div>
                       </div>
                     ))
                   ) : (
-                    <div className="hint">No matching detections were found in the recent malware history.</div>
+                    <div className="hint">
+                      No matching detections were found in the recent malware history.
+                    </div>
                   )}
                 </div>
-                <div className="card" style={{ margin: 0, padding: 12, background: 'var(--surface-muted)' }}>
+                <div
+                  className="card"
+                  style={{ margin: 0, padding: 12, background: 'var(--surface-muted)' }}
+                >
                   <div className="metric-label">Recent Threat Intel Sightings</div>
                   {artifactContext.sightings.length > 0 ? (
                     artifactContext.sightings.slice(0, 2).map((sighting, index) => (
-                      <div key={`${sighting.timestamp || 'sighting'}-${index}`} style={{ marginTop: 8 }}>
+                      <div
+                        key={`${sighting.timestamp || 'sighting'}-${index}`}
+                        style={{ marginTop: 8 }}
+                      >
                         <div className="row-primary">{sighting.context || sighting.value}</div>
                         <div className="row-secondary">
                           {sighting.source || 'unknown source'} · {sighting.severity || 'unknown'}
@@ -823,7 +849,9 @@ export default function AlertDrawer({
                       </div>
                     ))
                   ) : (
-                    <div className="hint">No recent threat-intel sighting matches were found for this artifact.</div>
+                    <div className="hint">
+                      No recent threat-intel sighting matches were found for this artifact.
+                    </div>
                   )}
                 </div>
               </div>

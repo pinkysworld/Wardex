@@ -17,7 +17,9 @@ globalThis.fetch = vi.fn();
 
 function LocationProbe() {
   const location = useLocation();
-  return <div data-testid="location-probe">{`${location.pathname}${location.search}${location.hash}`}</div>;
+  return (
+    <div data-testid="location-probe">{`${location.pathname}${location.search}${location.hash}`}</div>
+  );
 }
 
 const complianceReports = [
@@ -1245,9 +1247,7 @@ describe('ReportsExports', () => {
     expect(screen.getByLabelText('Schedule Name')).toHaveValue(
       'Weekly Control-plane Failover Drill History',
     );
-    expect(screen.getByLabelText('Template Kind')).toHaveValue(
-      'control_plane_failover_history',
-    );
+    expect(screen.getByLabelText('Template Kind')).toHaveValue('control_plane_failover_history');
 
     fireEvent.click(screen.getByRole('button', { name: 'Save Schedule' }));
 

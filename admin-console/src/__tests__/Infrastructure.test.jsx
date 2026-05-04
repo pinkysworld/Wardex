@@ -26,7 +26,9 @@ function renderInfrastructure(route = '/infrastructure') {
 
 function LocationProbe() {
   const location = useLocation();
-  return <div data-testid="location-probe">{`${location.pathname}${location.search}${location.hash}`}</div>;
+  return (
+    <div data-testid="location-probe">{`${location.pathname}${location.search}${location.hash}`}</div>
+  );
 }
 
 function currentLocation() {
@@ -527,7 +529,9 @@ describe('Infrastructure', () => {
         });
       }
       if (href.includes('/api/certs/summary')) {
-        return jsonOk({ certificates: [{ common_name: 'api.wardex.local', expires_at: '2026-05-12T00:00:00Z' }] });
+        return jsonOk({
+          certificates: [{ common_name: 'api.wardex.local', expires_at: '2026-05-12T00:00:00Z' }],
+        });
       }
       if (href.includes('/api/certs/alerts')) {
         return jsonOk({
@@ -622,7 +626,10 @@ describe('Infrastructure', () => {
         return jsonOk({ health_gate: 'green', error_budget_remaining: 99.2 });
       }
       if (href.includes('/api/analytics')) {
-        return jsonOk({ endpoints: [{ path: '/api/alerts', count: 12 }], busiest_endpoint: '/api/alerts' });
+        return jsonOk({
+          endpoints: [{ path: '/api/alerts', count: 12 }],
+          busiest_endpoint: '/api/alerts',
+        });
       }
       if (href.includes('/api/traces')) {
         return jsonOk({
@@ -648,7 +655,9 @@ describe('Infrastructure', () => {
     expect(await screen.findByText('Dependency Health')).toBeInTheDocument();
     expect(await screen.findByText('API Analytics')).toBeInTheDocument();
     expect(await screen.findByText('Telemetry Detail')).toBeInTheDocument();
-    expect(await screen.findByText(/Current scope: Critical asset host • asset/i)).toBeInTheDocument();
+    expect(
+      await screen.findByText(/Current scope: Critical asset host • asset/i),
+    ).toBeInTheDocument();
     expect(await screen.findByText('Trace Samples')).toBeInTheDocument();
     expect((await screen.findAllByText('trace-1')).length).toBeGreaterThan(0);
     expect((await screen.findAllByText('ingest_batch')).length).toBeGreaterThan(0);

@@ -323,15 +323,17 @@ export default function CommandCenter() {
           limit={6}
         />
         {shiftBlockers.length > 0 ? (
-          shiftBlockers.slice(0, 3).map((blocker) => (
-            <WorkItem
-              key={blocker}
-              title={blocker}
-              detail="Resolve before the next case handoff or response approval."
-              badge="blocker"
-              tone="badge-warn"
-            />
-          ))
+          shiftBlockers
+            .slice(0, 3)
+            .map((blocker) => (
+              <WorkItem
+                key={blocker}
+                title={blocker}
+                detail="Resolve before the next case handoff or response approval."
+                badge="blocker"
+                tone="badge-warn"
+              />
+            ))
         ) : (
           <WorkItem
             title="No shift blockers reported"

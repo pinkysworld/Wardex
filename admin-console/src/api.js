@@ -225,6 +225,7 @@ export const cases = () => get('/api/cases');
 export const createCase = (body) => post('/api/cases', body);
 export const casesStats = () => get('/api/cases/stats');
 export const caseById = (id) => get(`/api/cases/${encodeURIComponent(id)}`);
+export const caseHandoffPacket = (id) => get(`/api/cases/${encodeURIComponent(id)}/handoff-packet`);
 export const caseComment = (id, body) => post(`/api/cases/${encodeURIComponent(id)}/comment`, body);
 export const updateCase = (id, body) => post(`/api/cases/${encodeURIComponent(id)}/update`, body);
 export const closeCase = (id) => post(`/api/cases/${encodeURIComponent(id)}/close`);

@@ -2377,8 +2377,8 @@ export default function ReportsExports() {
                         Priority Findings Snapshot
                       </div>
                       <div className="hint" style={{ marginBottom: 12 }}>
-                        Failed and manual-review controls stay visible here so operators do not
-                        need the raw framework payload to decide what moves next.
+                        Failed and manual-review controls stay visible here so operators do not need
+                        the raw framework payload to decide what moves next.
                       </div>
                       {priorityFindings.length === 0 ? (
                         <div className="empty">

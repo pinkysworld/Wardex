@@ -110,9 +110,13 @@ export default function UEBADashboard() {
     data: entityDetail,
     loading: loadingDetail,
     reload: reloadEntityDetail,
-  } = useApi(() => (activeEntity ? api.uebaEntity(activeEntity) : Promise.resolve(null)), [activeEntity], {
-    skip: !activeEntity,
-  });
+  } = useApi(
+    () => (activeEntity ? api.uebaEntity(activeEntity) : Promise.resolve(null)),
+    [activeEntity],
+    {
+      skip: !activeEntity,
+    },
+  );
 
   const refreshUebaOverview = () => {
     void reloadUebaOverview();
@@ -494,9 +498,7 @@ export default function UEBADashboard() {
                       <div className="summary-card">
                         <div className="summary-label">Primary pressure</div>
                         <div className="summary-value">{entityPlaybook.primaryPressure}</div>
-                        <div className="summary-meta">
-                          Current UEBA pressure on this entity.
-                        </div>
+                        <div className="summary-meta">Current UEBA pressure on this entity.</div>
                       </div>
                       <div className="summary-card">
                         <div className="summary-label">Observations</div>

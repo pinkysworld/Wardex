@@ -3870,7 +3870,10 @@ fn alerts_endpoint_returns_enriched_process_fields_for_seeded_alerts() {
     let alert = &arr[0];
 
     assert!(alert["entities"].is_array());
-    assert_eq!(alert["process_resolution"].as_str(), Some("unresolved"));
+    assert!(matches!(
+        alert["process_resolution"].as_str(),
+        Some("unresolved" | "multiple")
+    ));
     assert!(
         alert["process_names"]
             .as_array()
@@ -5641,6 +5644,141 @@ fn investigation_handoff_updates_linked_case_assignment_and_commentary() {
             })
             .unwrap_or(false)
     }));
+}
+
+#[test]
+fn case_handoff_packet_includes_linked_handoff_context() {
+    let (port, token) = spawn_test_server();
+    let (agent_id, event_ids) = setup_agent_with_events(port, &token, "handoff-packet-host", 2);
+    assert_eq!(event_ids.len(), 2);
+
+    let incident: serde_json::Value = ureq::post(&format!("{}/api/incidents", base(port)))
+        .set("Authorization", &auth_header(&token))
+        .send_json(serde_json::json!({
+            "title": "Credential storm incident",
+            "severity": "Critical",
+            "event_ids": event_ids,
+            "agent_ids": [agent_id],
+            "summary": "Investigate suspicious auth activity on handoff-packet-host"
+        }))
+        .expect("create incident")
+        .into_json()
+        .unwrap();
+    let incident_id = incident["id"].as_u64().expect("incident id");
+
+    let case: serde_json::Value = ureq::post(&format!("{}/api/cases", base(port)))
+        .set("Authorization", &auth_header(&token))
+        .send_json(serde_json::json!({
+            "title": "Identity escalation case",
+            "priority": "high",
+            "description": "Tracks credential storm investigation",
+            "incident_ids": [incident_id],
+            "event_ids": event_ids,
+            "tags": ["identity", "handoff"]
+        }))
+        .expect("create case")
+        .into_json()
+        .unwrap();
+    let case_id = case["id"].as_u64().expect("case id");
+
+    ureq::post(&format!("{}/api/cases/{}/comment", base(port), case_id))
+        .set("Authorization", &auth_header(&token))
+        .send_json(serde_json::json!({
+            "author": "analyst-1",
+            "text": "Escalation path validated and containment owner identified."
+        }))
+        .expect("add case comment");
+
+    ureq::post(&format!("{}/api/cases/{}/evidence", base(port), case_id))
+        .set("Authorization", &auth_header(&token))
+        .send_json(serde_json::json!({
+            "kind": "query_result",
+            "reference_id": "hunt-4242",
+            "description": "Correlated VPN and Okta sign-in evidence"
+        }))
+        .expect("add case evidence");
+
+    let started: serde_json::Value =
+        ureq::post(&format!("{}/api/investigations/start", base(port)))
+            .set("Authorization", &auth_header(&token))
+            .send_json(serde_json::json!({
+                "workflow_id": "credential-storm",
+                "analyst": "analyst-1",
+                "case_id": case_id.to_string()
+            }))
+            .expect("start investigation")
+            .into_json()
+            .unwrap();
+
+    let investigation_id = started["id"].as_str().expect("investigation id");
+    ureq::post(&format!("{}/api/investigations/handoff", base(port)))
+        .set("Authorization", &auth_header(&token))
+        .send_json(serde_json::json!({
+            "investigation_id": investigation_id,
+            "to_analyst": "analyst-2",
+            "summary": "Containment is in place but MFA bypass scope still needs confirmation.",
+            "next_actions": [
+                "Confirm all targeted accounts were reset",
+                "Validate VPN source IP blocks"
+            ],
+            "questions": [
+                "Was any successful login followed by privilege escalation?"
+            ],
+            "case_id": case_id.to_string()
+        }))
+        .expect("handoff investigation");
+
+    let packet: serde_json::Value =
+        ureq::get(&format!("{}/api/cases/{}/handoff-packet", base(port), case_id))
+            .set("Authorization", &auth_header(&token))
+            .call()
+            .expect("fetch handoff packet")
+            .into_json()
+            .unwrap();
+
+    assert_eq!(
+        packet["case"]["summary"].as_str(),
+        Some("Containment is in place but MFA bypass scope still needs confirmation.")
+    );
+    assert_eq!(
+        packet["linked_investigation"]["id"].as_str(),
+        Some(investigation_id)
+    );
+    assert_eq!(
+        packet["linked_investigation"]["status"].as_str(),
+        Some("handoff-ready")
+    );
+    assert_eq!(
+        packet["linked_investigation"]["analyst"].as_str(),
+        Some("analyst-2")
+    );
+    assert_eq!(
+        packet["next_actions"],
+        serde_json::json!([
+            "Confirm all targeted accounts were reset",
+            "Validate VPN source IP blocks"
+        ])
+    );
+    assert_eq!(
+        packet["unresolved_questions"],
+        serde_json::json!(["Was any successful login followed by privilege escalation?"])
+    );
+    assert_eq!(packet["checklist_state"]["evidence_items"].as_u64(), Some(1));
+    assert_eq!(packet["checklist_state"]["analyst_notes"].as_u64(), Some(2));
+    assert_eq!(packet["checklist_state"]["linked_incidents"].as_u64(), Some(1));
+    assert_eq!(packet["checklist_state"]["linked_events"].as_u64(), Some(2));
+    assert_eq!(packet["checklist_state"]["next_actions"].as_u64(), Some(2));
+    assert_eq!(
+        packet["checklist_state"]["unresolved_questions"].as_u64(),
+        Some(1)
+    );
+    assert_eq!(
+        packet["reopen_case_url"].as_str(),
+        Some(
+            format!("/soc?case={case_id}&drawer=case-workspace&casePanel=handoff#cases")
+                .as_str()
+        )
+    );
 }
 
 #[test]

@@ -152,15 +152,14 @@ function buildProcessGraphContext(detail, nodes, chains) {
   }
 
   const byPid = new Map(nodes.map((node) => [Number(node.pid), node]));
-  const current =
-    byPid.get(pid) || {
-      pid,
-      ppid: processParentPid(detail),
-      name: detail?.name || detail?.display_name || `PID ${pid}`,
-      cmd_line: detail?.cmd_line || null,
-      user: detail?.user || 'unknown',
-      hostname: detail?.hostname || 'Local host',
-    };
+  const current = byPid.get(pid) || {
+    pid,
+    ppid: processParentPid(detail),
+    name: detail?.name || detail?.display_name || `PID ${pid}`,
+    cmd_line: detail?.cmd_line || null,
+    user: detail?.user || 'unknown',
+    hostname: detail?.hostname || 'Local host',
+  };
   const parentPid = processParentPid(current);
   const parent = parentPid ? byPid.get(parentPid) || null : null;
   const lineage = [];
@@ -176,9 +175,7 @@ function buildProcessGraphContext(detail, nodes, chains) {
 
   const children = nodes.filter((node) => processParentPid(node) === pid).slice(0, 6);
   const siblings = parentPid
-    ? nodes
-        .filter((node) => node.pid !== pid && processParentPid(node) === parentPid)
-        .slice(0, 6)
+    ? nodes.filter((node) => node.pid !== pid && processParentPid(node) === parentPid).slice(0, 6)
     : [];
   const suspiciousChain =
     chains.find((chain) => chain.pid != null && Number(chain.pid) === pid) || null;
@@ -327,7 +324,9 @@ export default function ProcessDrawer({
       blockedThreads:
         blockedThreads.length > 0
           ? blockedThreads
-          : processThreads.filter((thread) => ['blocked', 'stopped'].includes(thread.state_label)).slice(0, 4),
+          : processThreads
+              .filter((thread) => ['blocked', 'stopped'].includes(thread.state_label))
+              .slice(0, 4),
     };
   }, [processContextData.processThreads, processThreads]);
 
@@ -508,13 +507,19 @@ export default function ProcessDrawer({
                 <div>
                   <div className="metric-label">Related processes</div>
                   <div style={{ fontSize: 22, fontWeight: 700 }}>
-                    {Number(Boolean(graphContext.parent)) + graphContext.children.length + graphContext.siblings.length}
+                    {Number(Boolean(graphContext.parent)) +
+                      graphContext.children.length +
+                      graphContext.siblings.length}
                   </div>
                   <div className="row-secondary">
                     {graphContext.parent ? 'Parent available' : 'No parent'}
-                    {graphContext.children.length > 0 ? ` · ${graphContext.children.length} child` : ''}
+                    {graphContext.children.length > 0
+                      ? ` · ${graphContext.children.length} child`
+                      : ''}
                     {graphContext.children.length > 1 ? 'ren' : ''}
-                    {graphContext.siblings.length > 0 ? ` · ${graphContext.siblings.length} sibling` : ''}
+                    {graphContext.siblings.length > 0
+                      ? ` · ${graphContext.siblings.length} sibling`
+                      : ''}
                     {graphContext.siblings.length > 1 ? 's' : ''}
                   </div>
                 </div>
@@ -532,8 +537,8 @@ export default function ProcessDrawer({
                     </div>
                   ) : (
                     <div className="hint">
-                      Wardex has not published the current lineage for this PID yet. Refresh when the
-                      live process tree updates.
+                      Wardex has not published the current lineage for this PID yet. Refresh when
+                      the live process tree updates.
                     </div>
                   )}
                 </div>
@@ -664,7 +669,10 @@ export default function ProcessDrawer({
                 <div className="hint" style={{ marginTop: 12 }}>
                   Hottest threads:{' '}
                   {threadSummary.hotThreads
-                    .map((thread) => `T${thread.thread_id} ${Number(thread.cpu_percent || 0).toFixed(1)}%`)
+                    .map(
+                      (thread) =>
+                        `T${thread.thread_id} ${Number(thread.cpu_percent || 0).toFixed(1)}%`,
+                    )
                     .join(' · ')}
                 </div>
               )}
@@ -714,7 +722,11 @@ export default function ProcessDrawer({
                           <td>{Number(thread.cpu_percent || 0).toFixed(1)}%</td>
                           <td>{thread.priority || '—'}</td>
                           <td
-                            style={{ fontFamily: 'var(--font-mono)', fontSize: 12, wordBreak: 'break-all' }}
+                            style={{
+                              fontFamily: 'var(--font-mono)',
+                              fontSize: 12,
+                              wordBreak: 'break-all',
+                            }}
                           >
                             {thread.wait_reason || '—'}
                           </td>

@@ -15,7 +15,9 @@ const jsonOk = (data) => ({
 
 function LocationProbe() {
   const location = useLocation();
-  return <div data-testid="location-probe">{`${location.pathname}${location.search}${location.hash}`}</div>;
+  return (
+    <div data-testid="location-probe">{`${location.pathname}${location.search}${location.hash}`}</div>
+  );
 }
 
 function renderSettings(route = '/settings') {
@@ -1577,7 +1579,9 @@ describe('Settings', () => {
     await waitFor(() => {
       expect(countGetCalls('/api/retention/status')).toBeGreaterThan(0);
       expect(countGetCalls('/api/storage/stats')).toBeGreaterThan(0);
-      expect(countGetCalls('/api/storage/events/historical', seededHistoryMatch)).toBeGreaterThan(0);
+      expect(countGetCalls('/api/storage/events/historical', seededHistoryMatch)).toBeGreaterThan(
+        0,
+      );
     });
 
     const initialRetentionCalls = countGetCalls('/api/retention/status');

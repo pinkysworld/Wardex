@@ -1765,10 +1765,12 @@ fn resolve_execution_program(program: &str) -> PathBuf {
 }
 
 fn command_override_candidates(dir: &std::path::Path, program: &str) -> Vec<PathBuf> {
+    #[cfg(not(windows))]
     let candidates = vec![dir.join(program)];
+
     #[cfg(windows)]
     {
-        let mut candidates = candidates;
+        let mut candidates = vec![dir.join(program)];
         candidates.extend(
             ["exe", "cmd", "bat", "com"]
                 .into_iter()
@@ -1776,6 +1778,7 @@ fn command_override_candidates(dir: &std::path::Path, program: &str) -> Vec<Path
         );
         return candidates;
     }
+
     candidates
 }
 

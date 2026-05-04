@@ -16,7 +16,9 @@ function jsonOk(data) {
 
 function LocationProbe() {
   const location = useLocation();
-  return <div data-testid="location-probe">{`${location.pathname}${location.search}${location.hash}`}</div>;
+  return (
+    <div data-testid="location-probe">{`${location.pathname}${location.search}${location.hash}`}</div>
+  );
 }
 
 function RoutedTestHost() {
@@ -55,7 +57,10 @@ function renderWithProviders(route = '/detection', options = {}) {
 }
 
 function currentLocation() {
-  return new URL(screen.getByTestId('location-probe').textContent || '/detection', 'http://localhost');
+  return new URL(
+    screen.getByTestId('location-probe').textContent || '/detection',
+    'http://localhost',
+  );
 }
 
 function currentSearchParams() {

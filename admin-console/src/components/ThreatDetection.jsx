@@ -2651,7 +2651,9 @@ export default function ThreatDetection() {
               Target Group Distribution
             </div>
             {targetGroupDistributionRows.length === 0 ? (
-              <div className="hint">Assign a target group to packs or hunts to track delivery lanes.</div>
+              <div className="hint">
+                Assign a target group to packs or hunts to track delivery lanes.
+              </div>
             ) : (
               targetGroupDistributionRows.slice(0, 6).map((entry) => (
                 <div
@@ -2673,7 +2675,8 @@ export default function ThreatDetection() {
                     </div>
                     {entry.canaryHunts > 0 && (
                       <div className="hint" style={{ marginTop: 4 }}>
-                        {entry.canaryHunts} canary hunt{entry.canaryHunts === 1 ? '' : 's'} still staged in this lane.
+                        {entry.canaryHunts} canary hunt{entry.canaryHunts === 1 ? '' : 's'} still
+                        staged in this lane.
                       </div>
                     )}
                   </div>
@@ -2692,7 +2695,8 @@ export default function ThreatDetection() {
             </div>
             {contentRolloutHistory.length === 0 ? (
               <div className="hint">
-                Recent content lifecycle activity will appear here once promotions or rollbacks are recorded.
+                Recent content lifecycle activity will appear here once promotions or rollbacks are
+                recorded.
               </div>
             ) : (
               contentRolloutHistory.map((event) => (
@@ -2711,7 +2715,8 @@ export default function ThreatDetection() {
                       {formatRolloutActionLabel(event.action)} • {event.version}
                     </div>
                     <div className="row-secondary">
-                      {formatLifecycleLabel(event.rollout_group)} lane • {formatHumanLabel(event.status)}
+                      {formatLifecycleLabel(event.rollout_group)} lane •{' '}
+                      {formatHumanLabel(event.status)}
                     </div>
                     <div className="hint" style={{ marginTop: 4 }}>
                       {event.notes || 'No operator notes recorded.'}
@@ -3342,7 +3347,9 @@ export default function ThreatDetection() {
                             <div className="row-primary">
                               {result.rule_name || result.rule_id || 'Unnamed rule'}
                             </div>
-                            <div className="row-secondary">{result.reason || 'No reason recorded.'}</div>
+                            <div className="row-secondary">
+                              {result.reason || 'No reason recorded.'}
+                            </div>
                           </div>
                           <span className={`badge ${canaryActionTone(result.action)}`}>
                             {canaryActionLabel(result.action)}
@@ -3387,7 +3394,8 @@ export default function ThreatDetection() {
                         <div className="summary-value">{selectedPacks.length}</div>
                         <div className="summary-meta">
                           {selectedRuleLinkedHunts.length} linked hunt
-                          {selectedRuleLinkedHunts.length === 1 ? '' : 's'} share this delivery lane.
+                          {selectedRuleLinkedHunts.length === 1 ? '' : 's'} share this delivery
+                          lane.
                         </div>
                       </div>
                       <div className="summary-card">
@@ -3400,7 +3408,8 @@ export default function ThreatDetection() {
                     </div>
                     {selectedRuleLifecycleHistory.length === 0 ? (
                       <div className="hint">
-                        Lifecycle transitions will appear here once the rule moves through promotion or rollback.
+                        Lifecycle transitions will appear here once the rule moves through promotion
+                        or rollback.
                       </div>
                     ) : (
                       selectedRuleLifecycleHistory.map((change, index) => (
@@ -3416,10 +3425,12 @@ export default function ThreatDetection() {
                         >
                           <div style={{ flex: 1 }}>
                             <div className="row-primary">
-                              {formatLifecycleLabel(change.from)} {'->'} {formatLifecycleLabel(change.to)}
+                              {formatLifecycleLabel(change.from)} {'->'}{' '}
+                              {formatLifecycleLabel(change.to)}
                             </div>
                             <div className="row-secondary">
-                              {change.reason || 'No operator reason recorded.'} • {change.changed_by || 'system'}
+                              {change.reason || 'No operator reason recorded.'} •{' '}
+                              {change.changed_by || 'system'}
                             </div>
                           </div>
                           <div className="hint" style={{ textAlign: 'right' }}>
@@ -3446,9 +3457,12 @@ export default function ThreatDetection() {
                             }}
                           >
                             <div style={{ flex: 1 }}>
-                              <div className="row-primary">{formatRolloutActionLabel(event.action)}</div>
+                              <div className="row-primary">
+                                {formatRolloutActionLabel(event.action)}
+                              </div>
                               <div className="row-secondary">
-                                {formatLifecycleLabel(event.rollout_group)} lane • {formatHumanLabel(event.status)}
+                                {formatLifecycleLabel(event.rollout_group)} lane •{' '}
+                                {formatHumanLabel(event.status)}
                               </div>
                               <div className="hint" style={{ marginTop: 4 }}>
                                 {event.notes || 'No operator notes recorded.'}

@@ -227,23 +227,32 @@ function installCommandCenterFetchMock(tracker = {}) {
     }
     if (pathname === '/api/incidents') return Promise.resolve(jsonOk(COMMAND_FIXTURES.incidents));
     if (pathname === '/api/cases') return Promise.resolve(jsonOk(COMMAND_FIXTURES.cases));
-    if (pathname === '/api/queue/stats') return Promise.resolve(jsonOk(COMMAND_FIXTURES.queueStats));
-    if (pathname === '/api/response/stats') return Promise.resolve(jsonOk(COMMAND_FIXTURES.responseStats));
+    if (pathname === '/api/queue/stats')
+      return Promise.resolve(jsonOk(COMMAND_FIXTURES.queueStats));
+    if (pathname === '/api/response/stats')
+      return Promise.resolve(jsonOk(COMMAND_FIXTURES.responseStats));
     if (pathname === '/api/remediation/change-reviews') {
       return Promise.resolve(jsonOk(COMMAND_FIXTURES.remediationReviews));
     }
     if (pathname === '/api/detection/efficacy/summary') {
       return Promise.resolve(jsonOk(COMMAND_FIXTURES.efficacySummary));
     }
-    if (pathname === '/api/content/rules') return Promise.resolve(jsonOk(COMMAND_FIXTURES.contentRules));
-    if (pathname === '/api/suppressions') return Promise.resolve(jsonOk(COMMAND_FIXTURES.suppressions));
-    if (pathname === '/api/updates/releases') return Promise.resolve(jsonOk(COMMAND_FIXTURES.updatesReleases));
+    if (pathname === '/api/content/rules')
+      return Promise.resolve(jsonOk(COMMAND_FIXTURES.contentRules));
+    if (pathname === '/api/suppressions')
+      return Promise.resolve(jsonOk(COMMAND_FIXTURES.suppressions));
+    if (pathname === '/api/updates/releases')
+      return Promise.resolve(jsonOk(COMMAND_FIXTURES.updatesReleases));
     if (pathname === '/api/sbom') return Promise.resolve(jsonOk(COMMAND_FIXTURES.sbomData));
-    if (pathname === '/api/config/current') return Promise.resolve(jsonOk(COMMAND_FIXTURES.configData));
-    if (pathname === '/api/assistant/status') return Promise.resolve(jsonOk(COMMAND_FIXTURES.assistantStatus));
+    if (pathname === '/api/config/current')
+      return Promise.resolve(jsonOk(COMMAND_FIXTURES.configData));
+    if (pathname === '/api/assistant/status')
+      return Promise.resolve(jsonOk(COMMAND_FIXTURES.assistantStatus));
     if (pathname === '/api/rbac/users') return Promise.resolve(jsonOk(COMMAND_FIXTURES.rbacUsers));
-    if (pathname === '/api/compliance/status') return Promise.resolve(jsonOk(COMMAND_FIXTURES.complianceData));
-    if (pathname === '/api/report-templates') return Promise.resolve(jsonOk(COMMAND_FIXTURES.reportTemplates));
+    if (pathname === '/api/compliance/status')
+      return Promise.resolve(jsonOk(COMMAND_FIXTURES.complianceData));
+    if (pathname === '/api/report-templates')
+      return Promise.resolve(jsonOk(COMMAND_FIXTURES.reportTemplates));
 
     if (pathname === '/api/collectors/github/config' && method === 'POST') {
       tracker.githubConfigBodies = [...(tracker.githubConfigBodies || []), body];
@@ -254,9 +263,14 @@ function installCommandCenterFetchMock(tracker = {}) {
       return Promise.resolve(jsonOk({ status: 'validated', sample_event_type: 'git.push' }));
     }
 
-    if (pathname === '/api/remediation/change-reviews/review-credential-storm-1/approval' && method === 'POST') {
+    if (
+      pathname === '/api/remediation/change-reviews/review-credential-storm-1/approval' &&
+      method === 'POST'
+    ) {
       tracker.remediationApprovalBodies = [...(tracker.remediationApprovalBodies || []), body];
-      return Promise.resolve(jsonOk({ status: 'approved', review_id: 'review-credential-storm-1' }));
+      return Promise.resolve(
+        jsonOk({ status: 'approved', review_id: 'review-credential-storm-1' }),
+      );
     }
     if (pathname === '/api/content/rules/rule-ssh-burst/test' && method === 'POST') {
       tracker.ruleReplayBodies = [...(tracker.ruleReplayBodies || []), body];
@@ -339,10 +353,7 @@ describe('CommandCenter', () => {
     expect(await screen.findByRole('heading', { name: /Keep ownership/i })).toBeInTheDocument();
     expect(screen.getAllByText('analyst-1').length).toBeGreaterThan(0);
     expect(screen.getByText('1 alert(s) breached SLA')).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: 'Alert queue' })).toHaveAttribute(
-      'href',
-      '/soc#queue',
-    );
+    expect(screen.getByRole('link', { name: 'Alert queue' })).toHaveAttribute('href', '/soc#queue');
     expect(
       screen.getByText('Assign the oldest critical alert and confirm SLA pressure.'),
     ).toBeInTheDocument();
@@ -412,10 +423,9 @@ describe('CommandCenter', () => {
     renderWithProviders('/command?drawer=remediation');
 
     const remediationDrawer = await screen.findByRole('dialog', { name: 'Remediation Approval' });
-    expect(within(remediationDrawer).getByRole('link', { name: 'Open infrastructure' })).toHaveAttribute(
-      'href',
-      '/infrastructure',
-    );
+    expect(
+      within(remediationDrawer).getByRole('link', { name: 'Open infrastructure' }),
+    ).toHaveAttribute('href', '/infrastructure');
 
     const initialCommandSummaryCalls = tracker.commandSummaryCalls || 0;
 

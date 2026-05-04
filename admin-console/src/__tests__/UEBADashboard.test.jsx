@@ -149,7 +149,10 @@ describe('UEBADashboard', () => {
     );
 
     const packageEvidenceLink = screen.getByRole('link', { name: 'Package evidence' });
-    const packageEvidenceUrl = new URL(packageEvidenceLink.getAttribute('href'), 'http://localhost');
+    const packageEvidenceUrl = new URL(
+      packageEvidenceLink.getAttribute('href'),
+      'http://localhost',
+    );
     expect(packageEvidenceUrl.pathname).toBe('/reports');
     expect(packageEvidenceUrl.searchParams.get('tab')).toBe('delivery');
     expect(packageEvidenceUrl.searchParams.get('source')).toBe('ueba');

@@ -16,7 +16,9 @@ function jsonOk(data) {
 
 function LocationProbe() {
   const location = useLocation();
-  return <div data-testid="location-probe">{`${location.pathname}${location.search}${location.hash}`}</div>;
+  return (
+    <div data-testid="location-probe">{`${location.pathname}${location.search}${location.hash}`}</div>
+  );
 }
 
 function renderWithProviders(route = '/soc') {
@@ -357,6 +359,144 @@ function clone(value) {
 
 function installSocWorkbenchFetchMock(tracker = {}) {
   const fixtures = clone(BASE_SOC_FIXTURES);
+  const buildHandoffPacket = () => {
+    const activeCase = fixtures.cases[0];
+    const activeInvestigation = fixtures.activeInvestigations[0];
+    const handoff = activeInvestigation?.handoff || null;
+    const ticketSync = tracker.ticketBodies?.length
+      ? tracker.ticketBodies[tracker.ticketBodies.length - 1]
+      : null;
+    const responseRequests = Array.isArray(fixtures.responseRequests?.requests)
+      ? fixtures.responseRequests.requests
+      : [];
+    const responseAuditEntries = Array.isArray(fixtures.responseAudit?.entries)
+      ? fixtures.responseAudit.entries
+      : [];
+
+    const responseCounts = responseRequests.reduce(
+      (accumulator, request) => {
+        const status = String(request.status || '').toLowerCase();
+        if (status === 'pending') accumulator.pending += 1;
+        if (status === 'approved') accumulator.approved += 1;
+        if (status === 'executed') accumulator.executed += 1;
+        return accumulator;
+      },
+      { pending: 0, approved: 0, executed: 0 },
+    );
+
+    const timeline = [
+      {
+        timestamp: activeCase.created_at,
+        kind: 'case_created',
+        summary: `Case #${activeCase.id} created`,
+        detail: activeCase.title,
+      },
+      ...activeCase.comments.map((comment) => ({
+        timestamp: comment.timestamp,
+        kind: 'case_note',
+        summary: `Note from ${comment.author}`,
+        detail: comment.text,
+      })),
+      ...activeCase.evidence.map((evidence) => ({
+        timestamp: evidence.added_at,
+        kind: 'evidence',
+        summary: evidence.description,
+        detail: `${evidence.kind} · ${evidence.reference_id}`,
+      })),
+      ...(handoff
+        ? [
+            {
+              timestamp: handoff.updated_at,
+              kind: 'investigation_handoff',
+              summary: `Handoff from ${handoff.from_analyst} to ${handoff.to_analyst}`,
+              detail: handoff.summary,
+            },
+          ]
+        : []),
+      ...responseAuditEntries.map((entry) => ({
+        timestamp: entry.timestamp,
+        kind: 'response_action',
+        summary: entry.action,
+        detail: `${entry.action} on ${entry.target_hostname || 'unknown target'}`,
+      })),
+      ...(ticketSync
+        ? [
+            {
+              timestamp: '2024-01-01T00:25:00Z',
+              kind: 'ticket_sync',
+              summary: `${ticketSync.provider} CASE-42`,
+              detail: ticketSync.summary,
+            },
+          ]
+        : []),
+    ].sort((left, right) =>
+      String(right.timestamp || '').localeCompare(String(left.timestamp || '')),
+    );
+
+    return {
+      case: {
+        id: activeCase.id,
+        title: activeCase.title,
+        status: activeCase.status,
+        priority: activeCase.priority,
+        assignee: activeCase.assignee,
+        created_at: activeCase.created_at,
+        updated_at: activeCase.updated_at,
+        summary:
+          handoff?.summary ||
+          activeCase.description ||
+          `Case #${activeCase.id} is ready for shift handoff packaging.`,
+      },
+      linked_investigation: activeInvestigation
+        ? {
+            id: activeInvestigation.id,
+            workflow_name: activeInvestigation.workflow_name,
+            status: activeInvestigation.status,
+            analyst: activeInvestigation.analyst,
+            completion_percent: activeInvestigation.completion_percent,
+          }
+        : null,
+      timeline,
+      evidence_links: activeCase.evidence,
+      unresolved_questions: handoff?.questions || [],
+      next_actions: handoff?.next_actions || [],
+      response_status: {
+        related_host_count: 1,
+        pending: responseCounts.pending,
+        approved: responseCounts.approved,
+        executed: responseCounts.executed,
+        recent_actions: responseAuditEntries.map((entry, index) => ({
+          request_id: `req-${index + 1}`,
+          action: entry.action,
+          status: 'executed',
+          timestamp: entry.timestamp,
+          target_hostname: entry.target || 'host-1',
+        })),
+      },
+      checklist_state: {
+        evidence_items: activeCase.evidence.length,
+        analyst_notes: activeCase.comments.length,
+        linked_incidents: activeCase.incident_ids.length,
+        linked_events: activeCase.event_ids.length,
+        mitre_techniques: activeCase.mitre_techniques.length,
+        next_actions: handoff?.next_actions?.length || 0,
+        unresolved_questions: handoff?.questions?.length || 0,
+        ticket_syncs: ticketSync ? 1 : 0,
+      },
+      ticket_sync_result: ticketSync
+        ? {
+            provider: ticketSync.provider,
+            external_key: 'CASE-42',
+            status: 'synced',
+            queue_or_project: ticketSync.queue_or_project,
+            summary: ticketSync.summary,
+            synced_by: 'analyst-1',
+            synced_at: '2024-01-01T00:25:00Z',
+          }
+        : null,
+      reopen_case_url: `/soc?case=${activeCase.id}&drawer=case-workspace&casePanel=handoff#cases`,
+    };
+  };
 
   globalThis.fetch = vi.fn((url, options = {}) => {
     const requestUrl = new URL(String(url), 'http://localhost');
@@ -378,6 +518,10 @@ function installSocWorkbenchFetchMock(tracker = {}) {
     }
     if (pathname === '/api/workbench/overview') return Promise.resolve(jsonOk(fixtures.overview));
     if (pathname === '/api/cases/stats') return Promise.resolve(jsonOk(fixtures.casesStats));
+    if (pathname === '/api/cases/42/handoff-packet') {
+      tracker.handoffPacketFetches = (tracker.handoffPacketFetches || 0) + 1;
+      return Promise.resolve(jsonOk(buildHandoffPacket()));
+    }
     if (pathname === '/api/cases/42/comment' && method === 'POST') {
       tracker.caseCommentBodies = [...(tracker.caseCommentBodies || []), body];
       fixtures.cases[0].comments = [
@@ -395,12 +539,15 @@ function installSocWorkbenchFetchMock(tracker = {}) {
       return Promise.resolve(jsonOk(fixtures.incidentStoryline));
     }
     if (pathname === '/api/incidents/7') return Promise.resolve(jsonOk(fixtures.incidentDetail));
-    if (pathname === '/api/incidents') return Promise.resolve(jsonOk({ incidents: fixtures.incidents }));
+    if (pathname === '/api/incidents')
+      return Promise.resolve(jsonOk({ incidents: fixtures.incidents }));
     if (pathname === '/api/queue/alerts') return Promise.resolve(jsonOk(fixtures.queueAlerts));
     if (pathname === '/api/queue/stats') return Promise.resolve(jsonOk(fixtures.queueStats));
     if (pathname === '/api/ws/stats') return Promise.resolve(jsonOk(fixtures.wsStats));
-    if (pathname === '/api/response/pending') return Promise.resolve(jsonOk(fixtures.responsePending));
-    if (pathname === '/api/response/requests') return Promise.resolve(jsonOk(fixtures.responseRequests));
+    if (pathname === '/api/response/pending')
+      return Promise.resolve(jsonOk(fixtures.responsePending));
+    if (pathname === '/api/response/requests')
+      return Promise.resolve(jsonOk(fixtures.responseRequests));
     if (pathname === '/api/response/audit') return Promise.resolve(jsonOk(fixtures.responseAudit));
     if (pathname === '/api/response/stats') return Promise.resolve(jsonOk(fixtures.responseStats));
     if (pathname === '/api/escalation/acknowledge' && method === 'POST') {
@@ -422,29 +569,38 @@ function installSocWorkbenchFetchMock(tracker = {}) {
         jsonOk({ id: `policy-${fixtures.escalationPolicies.policies.length}`, status: 'created' }),
       );
     }
-    if (pathname === '/api/escalation/policies') return Promise.resolve(jsonOk(fixtures.escalationPolicies));
-    if (pathname === '/api/escalation/active') return Promise.resolve(jsonOk(fixtures.escalationActive));
+    if (pathname === '/api/escalation/policies')
+      return Promise.resolve(jsonOk(fixtures.escalationPolicies));
+    if (pathname === '/api/escalation/active')
+      return Promise.resolve(jsonOk(fixtures.escalationActive));
     if (pathname === '/api/process-tree') return Promise.resolve(jsonOk(fixtures.processTree));
-    if (pathname === '/api/process-tree/deep-chains') return Promise.resolve(jsonOk(fixtures.deepChains));
+    if (pathname === '/api/process-tree/deep-chains')
+      return Promise.resolve(jsonOk(fixtures.deepChains));
     if (pathname === '/api/processes/live') return Promise.resolve(jsonOk(fixtures.liveProcesses));
     if (pathname === '/api/processes/analysis') {
       return Promise.resolve(jsonOk(fixtures.processFindings));
     }
     if (pathname.startsWith('/api/rbac/users/') && method === 'DELETE') {
-      tracker.deletedUsers = [...(tracker.deletedUsers || []), decodeURIComponent(pathname.split('/').at(-1) || '')];
+      tracker.deletedUsers = [
+        ...(tracker.deletedUsers || []),
+        decodeURIComponent(pathname.split('/').at(-1) || ''),
+      ];
       fixtures.rbacUsers.users = fixtures.rbacUsers.users.filter(
-        (user) => (user.username || user.name) !== decodeURIComponent(pathname.split('/').at(-1) || ''),
+        (user) =>
+          (user.username || user.name) !== decodeURIComponent(pathname.split('/').at(-1) || ''),
       );
       return Promise.resolve(jsonOk({ status: 'deleted' }));
     }
     if (pathname === '/api/rbac/users') return Promise.resolve(jsonOk(fixtures.rbacUsers));
-    if (pathname === '/api/correlation/campaigns') return Promise.resolve(jsonOk(fixtures.campaigns));
+    if (pathname === '/api/correlation/campaigns')
+      return Promise.resolve(jsonOk(fixtures.campaigns));
     if (pathname === '/api/playbooks/credential-storm-playbook/run' && method === 'POST') {
       tracker.playbookRunIds = [...(tracker.playbookRunIds || []), 'credential-storm-playbook'];
       return Promise.resolve(jsonOk({ status: 'ok' }));
     }
     if (pathname === '/api/playbooks') return Promise.resolve(jsonOk(fixtures.playbooks));
-    if (pathname === '/api/investigations/workflows') return Promise.resolve(jsonOk(fixtures.workflows));
+    if (pathname === '/api/investigations/workflows')
+      return Promise.resolve(jsonOk(fixtures.workflows));
     if (pathname === '/api/investigations/active') {
       return Promise.resolve(jsonOk(fixtures.activeInvestigations));
     }
@@ -537,7 +693,9 @@ describe('SOCWorkbench', () => {
     expect(await screen.findByDisplayValue('password')).toBeInTheDocument();
     expect(await screen.findByText('Password spray against Okta tenant')).toBeInTheDocument();
     expect(screen.queryByText('Container drift detected on node-7')).not.toBeInTheDocument();
-    expect(await screen.findByText(/This queue filter is mirrored into the URL/i)).toBeInTheDocument();
+    expect(
+      await screen.findByText(/This queue filter is mirrored into the URL/i),
+    ).toBeInTheDocument();
     expect(currentSearchParams().get('queueFilter')).toBe('password');
     expect(currentLocation().hash).toBe('#queue');
 
@@ -640,7 +798,9 @@ describe('SOCWorkbench', () => {
   });
 
   it('opens a URL-addressable incident drawer from the case workspace', async () => {
-    renderWithProviders('/soc?case=42&incident=7&drawer=incident-detail&incidentPanel=storyline#cases');
+    renderWithProviders(
+      '/soc?case=42&incident=7&drawer=incident-detail&incidentPanel=storyline#cases',
+    );
 
     const drawer = await screen.findByRole('dialog', { name: /incident workspace/i });
     expect(
@@ -654,7 +814,9 @@ describe('SOCWorkbench', () => {
 
     fireEvent.click(within(drawer).getByRole('button', { name: 'Actions' }));
 
-    expect(await within(drawer).findByRole('button', { name: 'Open Linked Case' })).toBeInTheDocument();
+    expect(
+      await within(drawer).findByRole('button', { name: 'Open Linked Case' }),
+    ).toBeInTheDocument();
     expect(
       await within(drawer).findByRole('button', { name: 'Open Response Workspace' }),
     ).toBeInTheDocument();
@@ -702,6 +864,84 @@ describe('SOCWorkbench', () => {
     expect(currentSearchParams().get('casePanel')).toBe('evidence');
   });
 
+  it('renders and refreshes the case handoff packet after notes and investigation handoffs', async () => {
+    const tracker = {};
+    installSocWorkbenchFetchMock(tracker);
+
+    renderWithProviders(
+      '/soc?case=42&drawer=case-workspace&casePanel=handoff&investigation=inv-7#investigations',
+    );
+
+    const drawer = await screen.findByRole('dialog', { name: /case workspace/i });
+    expect(await within(drawer).findByText('Export Packet')).toBeInTheDocument();
+    expect(
+      (
+        await within(drawer).findAllByText(
+          /Unusual Okta password spray followed by MFA challenge failures/i,
+        )
+      ).length,
+    ).toBeGreaterThan(0);
+
+    const initialPacketFetches = tracker.handoffPacketFetches || 0;
+
+    fireEvent.click(within(drawer).getByRole('button', { name: 'Evidence' }));
+    fireEvent.change(within(drawer).getByLabelText('Add case note (drawer)'), {
+      target: { value: 'Shift packet note from drawer evidence panel.' },
+    });
+    fireEvent.click(within(drawer).getByRole('button', { name: 'Post Case Note' }));
+
+    await waitFor(() => {
+      expect(tracker.caseCommentBodies).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ comment: 'Shift packet note from drawer evidence panel.' }),
+        ]),
+      );
+      expect(tracker.handoffPacketFetches).toBeGreaterThan(initialPacketFetches);
+    });
+
+    fireEvent.click(within(drawer).getByRole('button', { name: 'Handoff Packet' }));
+    expect(
+      (await within(drawer).findAllByText(/Shift packet note from drawer evidence panel./i)).length,
+    ).toBeGreaterThan(0);
+
+    fireEvent.change(screen.getByLabelText('Handoff target'), {
+      target: { value: 'analyst-2' },
+    });
+    fireEvent.change(screen.getByLabelText('Summary'), {
+      target: { value: 'Containment is stable, but identity scope still needs confirmation.' },
+    });
+    fireEvent.change(screen.getByLabelText('Next actions'), {
+      target: { value: 'Confirm all resets\nValidate VPN blocks' },
+    });
+    fireEvent.change(screen.getByLabelText('Open questions'), {
+      target: { value: 'Was MFA bypassed?' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Hand Off Investigation' }));
+
+    await waitFor(() => {
+      expect(tracker.handoffBodies).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            to_analyst: 'analyst-2',
+            summary: 'Containment is stable, but identity scope still needs confirmation.',
+          }),
+        ]),
+      );
+      expect(tracker.handoffPacketFetches).toBeGreaterThan(initialPacketFetches + 1);
+    });
+
+    expect(
+      (
+        await within(drawer).findAllByText(
+          /Containment is stable, but identity scope still needs confirmation./i,
+        )
+      ).length,
+    ).toBeGreaterThan(0);
+    expect((await within(drawer).findAllByText('Was MFA bypassed?')).length).toBeGreaterThan(0);
+    expect((await within(drawer).findAllByText('Confirm all resets')).length).toBeGreaterThan(0);
+    expect(currentSearchParams().get('casePanel')).toBe('handoff');
+  });
+
   it('tracks investigation progress and handoff inside the SOC workbench', async () => {
     const tracker = {};
     installSocWorkbenchFetchMock(tracker);
@@ -719,7 +959,9 @@ describe('SOCWorkbench', () => {
     expect(currentSearchParams().get('investigation')).toBe('inv-7');
     expect(currentLocation().hash).toBe('#investigations');
 
-    const initialWorkflowCalls = countCalls((href) => href.includes('/api/investigations/workflows'));
+    const initialWorkflowCalls = countCalls((href) =>
+      href.includes('/api/investigations/workflows'),
+    );
     const initialActiveCalls = countCalls((href) => href.includes('/api/investigations/active'));
     const initialCaseCalls = countCalls(
       (href) => href.includes('/api/cases') && !href.includes('/api/cases/stats'),
@@ -804,11 +1046,15 @@ describe('SOCWorkbench', () => {
   });
 
   it('hydrates workflow handoff context from route-backed response state', async () => {
-    renderWithProviders('/soc?case=42&investigation=inv-7&source=investigation&target=host-9#response');
+    renderWithProviders(
+      '/soc?case=42&investigation=inv-7&source=investigation&target=host-9#response',
+    );
 
     expect(await screen.findByText('Workflow handoff context')).toBeInTheDocument();
     expect(await screen.findByText(/Identity escalation case/)).toBeInTheDocument();
-    expect(await screen.findByText(/Investigation Investigate Credential Storm is still active/i)).toBeInTheDocument();
+    expect(
+      await screen.findByText(/Investigation Investigate Credential Storm is still active/i),
+    ).toBeInTheDocument();
     expect(await screen.findByText(/Suggested response target: host-9/i)).toBeInTheDocument();
     expect(await screen.findByRole('button', { name: 'Open Case' })).toBeInTheDocument();
     expect(await screen.findByRole('button', { name: 'Open Investigation' })).toBeInTheDocument();

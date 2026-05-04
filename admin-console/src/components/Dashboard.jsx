@@ -601,7 +601,8 @@ export default function Dashboard() {
     [enabledCollectors],
   );
   const totalCollectorEvents = useMemo(
-    () => enabledCollectors.reduce((sum, collector) => sum + Number(collector.events_ingested || 0), 0),
+    () =>
+      enabledCollectors.reduce((sum, collector) => sum + Number(collector.events_ingested || 0), 0),
     [enabledCollectors],
   );
   const atRiskCollectors = useMemo(() => {
@@ -1022,7 +1023,11 @@ export default function Dashboard() {
                 <Metric
                   label="Fresh Collectors"
                   value={collectorFreshnessCounts.fresh ?? 0}
-                  sub={enabledCollectors.length ? `${enabledCollectors.length} enabled` : 'None enabled'}
+                  sub={
+                    enabledCollectors.length
+                      ? `${enabledCollectors.length} enabled`
+                      : 'None enabled'
+                  }
                 />
                 <Metric
                   label="Degraded"
@@ -1033,7 +1038,11 @@ export default function Dashboard() {
                 <Metric
                   label="Max Lag"
                   value={formatLagDuration(topCollector?.lag_seconds)}
-                  sub={topCollector ? `${topCollector.label} ${topCollector.freshness}` : 'No collector lag'}
+                  sub={
+                    topCollector
+                      ? `${topCollector.label} ${topCollector.freshness}`
+                      : 'No collector lag'
+                  }
                   accent={collectorFreshnessRank(topCollector?.freshness) > 0}
                 />
                 <Metric
@@ -1060,7 +1069,9 @@ export default function Dashboard() {
                       ? collector.timeline
                       : [];
                     const lifecycleAnalytics = collector.lifecycle_analytics || {};
-                    const successRate = Math.round(Number(lifecycleAnalytics.success_rate || 0) * 100);
+                    const successRate = Math.round(
+                      Number(lifecycleAnalytics.success_rate || 0) * 100,
+                    );
                     return (
                       <div key={collector.name} className="card">
                         <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
@@ -1075,7 +1086,9 @@ export default function Dashboard() {
                           </span>
                         </div>
                         <div className="chip-row" style={{ marginTop: 8 }}>
-                          <span className="scope-chip">Lag {formatLagDuration(collector.lag_seconds)}</span>
+                          <span className="scope-chip">
+                            Lag {formatLagDuration(collector.lag_seconds)}
+                          </span>
                           <span className="scope-chip">Retries {collector.retry_count ?? 0}</span>
                           {collector.backoff_seconds ? (
                             <span className="scope-chip">
@@ -1094,15 +1107,16 @@ export default function Dashboard() {
                             </span>
                           ) : null}
                         </div>
-                        {Array.isArray(collector.route_targets) && collector.route_targets.length > 0 && (
-                          <div className="chip-row" style={{ marginTop: 8 }}>
-                            {collector.route_targets.map((target) => (
-                              <span key={target} className="scope-chip">
-                                {target}
-                              </span>
-                            ))}
-                          </div>
-                        )}
+                        {Array.isArray(collector.route_targets) &&
+                          collector.route_targets.length > 0 && (
+                            <div className="chip-row" style={{ marginTop: 8 }}>
+                              {collector.route_targets.map((target) => (
+                                <span key={target} className="scope-chip">
+                                  {target}
+                                </span>
+                              ))}
+                            </div>
+                          )}
                         <div className="hint" style={{ marginTop: 8 }}>
                           {collector.last_error_at
                             ? `Last error ${formatRelativeTime(collector.last_error_at)}`
@@ -1144,11 +1158,14 @@ export default function Dashboard() {
                                   </div>
                                   <div className="timeline-body" style={{ cursor: 'default' }}>
                                     <div className="timeline-header">
-                                      <strong>{entry.title || entry.stage || 'Collector stage'}</strong>
+                                      <strong>
+                                        {entry.title || entry.stage || 'Collector stage'}
+                                      </strong>
                                       <span className="timeline-sev">{entry.status || 'info'}</span>
                                     </div>
                                     <div className="hint" style={{ marginTop: 8 }}>
-                                      {entry.detail || 'No detail published for this collector stage yet.'}
+                                      {entry.detail ||
+                                        'No detail published for this collector stage yet.'}
                                     </div>
                                   </div>
                                 </div>

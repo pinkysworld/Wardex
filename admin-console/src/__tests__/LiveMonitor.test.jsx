@@ -38,7 +38,10 @@ function renderMonitor(route = '/monitor') {
 }
 
 function currentLocation() {
-  return new URL(screen.getByTestId('location-probe').textContent || '/monitor', 'http://localhost');
+  return new URL(
+    screen.getByTestId('location-probe').textContent || '/monitor',
+    'http://localhost',
+  );
 }
 
 describe('LiveMonitor', () => {
@@ -530,7 +533,10 @@ describe('LiveMonitor', () => {
     expect(screen.getByText(/Shortcuts:/i)).toBeInTheDocument();
 
     fireEvent.keyDown(window, { key: '/' });
-    expect(document.activeElement).toHaveAttribute('placeholder', 'Search message, host, user, category…');
+    expect(document.activeElement).toHaveAttribute(
+      'placeholder',
+      'Search message, host, user, category…',
+    );
 
     document.activeElement.blur();
     fireEvent.keyDown(window, { key: 'ArrowDown' });

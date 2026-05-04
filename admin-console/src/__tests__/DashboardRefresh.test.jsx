@@ -242,7 +242,9 @@ describe('Dashboard refresh', () => {
     expect(await screen.findByText('Collector Health')).toBeInTheDocument();
     expect(screen.getByText('Readiness timeline')).toBeInTheDocument();
     expect(screen.getByText('Collector enabled')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Open infrastructure evidence' })).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: 'Open infrastructure evidence' }),
+    ).toBeInTheDocument();
 
     await waitFor(() => {
       expect(callCounts.status).toBeGreaterThan(0);

@@ -4153,9 +4153,12 @@ fn report_execution_context_filter_from_query(
     }
 }
 
-#[cfg(not(target_os = "windows"))]
 fn process_basename(value: &str) -> &str {
-    value.rsplit('/').next().unwrap_or(value)
+    value
+        .rsplit(['/', '\\'])
+        .next()
+        .filter(|segment| !segment.is_empty())
+        .unwrap_or(value)
 }
 
 #[cfg(not(target_os = "windows"))]
@@ -7547,6 +7550,205 @@ fn case_linked_events(
             })
         })
         .collect()
+}
+
+fn case_handoff_packet_json(
+    case: &crate::analyst::Case,
+    incident_store: &IncidentStore,
+    event_store: &EventStore,
+    workflow_store: &crate::investigation::WorkflowStore,
+    response_requests: &[crate::response::ResponseRequest],
+    response_audit: &[crate::response::ResponseAuditEntry],
+    ticket_syncs: &[crate::enterprise::TicketSyncRecord],
+) -> serde_json::Value {
+    let linked_incidents = case_linked_incidents(case, incident_store);
+    let linked_events = case_linked_events(case, event_store);
+    let related_hosts = linked_events
+        .iter()
+        .filter_map(|event| event.get("hostname").and_then(serde_json::Value::as_str))
+        .map(|host| host.to_ascii_lowercase())
+        .collect::<HashSet<_>>();
+    let linked_investigation = workflow_store
+        .active_snapshots()
+        .into_iter()
+        .find(|snapshot| snapshot.case_id.as_deref() == Some(&case.id.to_string()));
+    let handoff = linked_investigation
+        .as_ref()
+        .and_then(|snapshot| snapshot.handoff.clone());
+
+    let related_response_requests = response_requests
+        .iter()
+        .filter(|request| {
+            !related_hosts.is_empty()
+                && related_hosts.contains(&request.target.hostname.to_ascii_lowercase())
+        })
+        .collect::<Vec<_>>();
+    let related_response_audit = response_audit
+        .iter()
+        .filter(|entry| {
+            !related_hosts.is_empty()
+                && related_hosts.contains(&entry.target_hostname.to_ascii_lowercase())
+        })
+        .collect::<Vec<_>>();
+    let related_ticket_syncs = ticket_syncs
+        .iter()
+        .filter(|sync| {
+            sync.object_kind.eq_ignore_ascii_case("case") && sync.object_id == case.id.to_string()
+        })
+        .cloned()
+        .collect::<Vec<_>>();
+
+    let mut response_by_status = HashMap::new();
+    for request in &related_response_requests {
+        *response_by_status
+            .entry(format!("{:?}", request.status))
+            .or_insert(0usize) += 1;
+    }
+
+    let mut timeline = vec![serde_json::json!({
+        "timestamp": case.created_at,
+        "kind": "case_created",
+        "summary": format!("Case #{} created", case.id),
+        "detail": case.title,
+    })];
+    timeline.extend(case.comments.iter().map(|comment| {
+        serde_json::json!({
+            "timestamp": comment.timestamp,
+            "kind": "case_note",
+            "summary": format!("Note from {}", comment.author),
+            "detail": comment.text,
+        })
+    }));
+    timeline.extend(case.evidence.iter().map(|evidence| {
+        serde_json::json!({
+            "timestamp": evidence.added_at,
+            "kind": "evidence",
+            "summary": evidence.description,
+            "detail": format!("{} · {}", evidence.kind, evidence.reference_id),
+        })
+    }));
+    timeline.extend(linked_incidents.iter().map(|incident| {
+        serde_json::json!({
+            "timestamp": incident.get("updated_at").cloned().unwrap_or(serde_json::Value::Null),
+            "kind": "incident",
+            "summary": format!("Incident #{}", incident["id"].as_u64().unwrap_or_default()),
+            "detail": incident["title"].as_str().unwrap_or("Linked incident"),
+        })
+    }));
+    timeline.extend(linked_events.iter().map(|event| {
+        serde_json::json!({
+            "timestamp": event.get("received_at").cloned().unwrap_or(serde_json::Value::Null),
+            "kind": "event",
+            "summary": format!("Event #{}", event["id"].as_u64().unwrap_or_default()),
+            "detail": event["reasons"]
+                .as_array()
+                .map(|items| items.iter().filter_map(serde_json::Value::as_str).collect::<Vec<_>>().join(", "))
+                .unwrap_or_default(),
+        })
+    }));
+    if let Some(handoff) = &handoff {
+        timeline.push(serde_json::json!({
+            "timestamp": handoff.updated_at,
+            "kind": "investigation_handoff",
+            "summary": format!("Handoff from {} to {}", handoff.from_analyst, handoff.to_analyst),
+            "detail": handoff.summary,
+        }));
+    }
+    timeline.extend(related_response_audit.iter().map(|entry| {
+        serde_json::json!({
+            "timestamp": entry.timestamp,
+            "kind": "response_action",
+            "summary": entry.action,
+            "detail": format!("{:?} on {}", entry.status, entry.target_hostname),
+        })
+    }));
+    timeline.extend(related_ticket_syncs.iter().map(|sync| {
+        serde_json::json!({
+            "timestamp": sync.synced_at,
+            "kind": "ticket_sync",
+            "summary": format!("{} {}", sync.provider, sync.external_key),
+            "detail": sync.summary,
+        })
+    }));
+    timeline.sort_by(|left, right| {
+        right["timestamp"]
+            .as_str()
+            .unwrap_or("")
+            .cmp(left["timestamp"].as_str().unwrap_or(""))
+    });
+
+    let latest_ticket_sync = related_ticket_syncs
+        .iter()
+        .max_by(|left, right| left.synced_at.cmp(&right.synced_at))
+        .cloned();
+
+    serde_json::json!({
+        "case": {
+            "id": case.id,
+            "title": case.title,
+            "status": format!("{:?}", case.status),
+            "priority": format!("{:?}", case.priority),
+            "assignee": case.assignee,
+            "created_at": case.created_at,
+            "updated_at": case.updated_at,
+            "summary": if let Some(handoff) = &handoff {
+                handoff.summary.clone()
+            } else if !case.description.trim().is_empty() {
+                case.description.clone()
+            } else {
+                format!("Case #{} is ready for shift handoff packaging.", case.id)
+            },
+        },
+        "linked_investigation": linked_investigation.as_ref().map(|snapshot| serde_json::json!({
+            "id": snapshot.id,
+            "workflow_name": snapshot.workflow_name,
+            "status": snapshot.status,
+            "analyst": snapshot.analyst,
+            "completion_percent": snapshot.completion_percent,
+        })),
+        "timeline": timeline,
+        "evidence_links": case.evidence.iter().map(|evidence| serde_json::json!({
+            "kind": evidence.kind,
+            "reference_id": evidence.reference_id,
+            "description": evidence.description,
+            "added_at": evidence.added_at,
+        })).collect::<Vec<_>>(),
+        "unresolved_questions": handoff.as_ref().map(|entry| entry.questions.clone()).unwrap_or_default(),
+        "next_actions": handoff.as_ref().map(|entry| entry.next_actions.clone()).unwrap_or_default(),
+        "response_status": {
+            "related_host_count": related_hosts.len(),
+            "pending": response_by_status.get("Pending").copied().unwrap_or_default(),
+            "approved": response_by_status.get("Approved").copied().unwrap_or_default(),
+            "executed": response_by_status.get("Executed").copied().unwrap_or_default(),
+            "recent_actions": related_response_audit.iter().take(5).map(|entry| serde_json::json!({
+                "request_id": entry.request_id,
+                "action": entry.action,
+                "status": format!("{:?}", entry.status),
+                "timestamp": entry.timestamp,
+                "target_hostname": entry.target_hostname,
+            })).collect::<Vec<_>>(),
+        },
+        "checklist_state": {
+            "evidence_items": case.evidence.len(),
+            "analyst_notes": case.comments.len(),
+            "linked_incidents": case.incident_ids.len(),
+            "linked_events": case.event_ids.len(),
+            "mitre_techniques": case.mitre_techniques.len(),
+            "next_actions": handoff.as_ref().map(|entry| entry.next_actions.len()).unwrap_or_default(),
+            "unresolved_questions": handoff.as_ref().map(|entry| entry.questions.len()).unwrap_or_default(),
+            "ticket_syncs": related_ticket_syncs.len(),
+        },
+        "ticket_sync_result": latest_ticket_sync.as_ref().map(|sync| serde_json::json!({
+            "provider": sync.provider,
+            "external_key": sync.external_key,
+            "status": sync.status,
+            "queue_or_project": sync.queue_or_project,
+            "summary": sync.summary,
+            "synced_by": sync.synced_by,
+            "synced_at": sync.synced_at,
+        })),
+        "reopen_case_url": format!("/soc?case={}&drawer=case-workspace&casePanel=handoff#cases", case.id),
+    })
 }
 
 fn agent_summary_json(
@@ -13599,6 +13801,7 @@ fn handle_api(
                 {"method": "GET", "path": "/api/timeline/host", "auth": true, "description": "Host investigation timeline filtered by hostname query parameter"},
                 {"method": "GET", "path": "/api/timeline/agent", "auth": true, "description": "Agent investigation timeline filtered by agent_id query parameter"},
                 {"method": "GET", "path": "/api/cases/stats", "auth": true, "description": "Case backlog and status summary"},
+                {"method": "GET", "path": "/api/cases/{id}/handoff-packet", "auth": true, "description": "Structured case handoff packet with summary, timeline, evidence, and ticket context"},
                 {"method": "GET", "path": "/api/causal/graph", "auth": true, "description": "Causal graph status and model summary"},
                 {"method": "GET", "path": "/api/compliance/status", "auth": true, "description": "Compliance posture and control status"},
                 {"method": "GET", "path": "/api/deception/status", "auth": true, "description": "Deception engine status and artifact coverage"},
@@ -17878,6 +18081,33 @@ fn handle_api(
                     None => error_json("not found", 404),
                 }
             // ── Analyst Console: Dynamic case routes ─────────────────
+            } else if method == Method::Get
+                && url_path.starts_with("/api/cases/")
+                && url_path.ends_with("/handoff-packet")
+            {
+                match parse_numeric_path_between::<u64>(url_path, "/api/cases/", "/handoff-packet")
+                {
+                    Some(id) => {
+                        let s = state.lock().unwrap_or_else(|e| e.into_inner());
+                        match s.case_store.get(id) {
+                            Some(case) => json_response(
+                                &case_handoff_packet_json(
+                                    case,
+                                    &s.incident_store,
+                                    &s.event_store,
+                                    &s.workflow_store,
+                                    &s.response_orchestrator.all_requests(),
+                                    &s.response_orchestrator.audit_ledger(),
+                                    s.enterprise.ticket_syncs(),
+                                )
+                                .to_string(),
+                                200,
+                            ),
+                            None => error_json("case not found", 404),
+                        }
+                    }
+                    None => error_json("not found", 404),
+                }
             } else if method == Method::Get && url_path.starts_with("/api/cases/") {
                 match parse_numeric_path_suffix::<u64>(url_path, "/api/cases/") {
                     Some(id) => {

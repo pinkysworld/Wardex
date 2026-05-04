@@ -219,7 +219,10 @@ export default function AttackGraph() {
   );
   const selectedChainId = searchParams.get('chain') || temporalChains[0]?.chain_id || '';
   const selectedChain = useMemo(
-    () => temporalChains.find((chain) => chain.chain_id === selectedChainId) || temporalChains[0] || null,
+    () =>
+      temporalChains.find((chain) => chain.chain_id === selectedChainId) ||
+      temporalChains[0] ||
+      null,
     [selectedChainId, temporalChains],
   );
 
@@ -515,12 +518,15 @@ export default function AttackGraph() {
                   >
                     <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}>
                       <strong>Focus {chain.host} burst</strong>
-                      <span className={`badge ${String(chain.severity || '').toLowerCase() === 'critical' ? 'badge-err' : 'badge-warn'}`}>
+                      <span
+                        className={`badge ${String(chain.severity || '').toLowerCase() === 'critical' ? 'badge-err' : 'badge-warn'}`}
+                      >
                         {chain.severity}
                       </span>
                     </div>
                     <div className="hint">
-                      {chain.alert_count} alerts · {formatChainWindow(chain.first_seen_ms, chain.last_seen_ms)}
+                      {chain.alert_count} alerts ·{' '}
+                      {formatChainWindow(chain.first_seen_ms, chain.last_seen_ms)}
                     </div>
                   </button>
                 );
@@ -532,20 +538,31 @@ export default function AttackGraph() {
 
       {selectedChain && (
         <div className="card" style={{ display: 'grid', gap: 16 }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'flex-start' }}>
+          <div
+            style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              gap: 12,
+              alignItems: 'flex-start',
+            }}
+          >
             <div>
               <div className="card-title">Temporal Chain Drilldown</div>
               <div className="hint">
-                {selectedChain.host} burst from {formatChainTimestamp(selectedChain.first_seen_ms)} to{' '}
-                {formatChainTimestamp(selectedChain.last_seen_ms)}.
+                {selectedChain.host} burst from {formatChainTimestamp(selectedChain.first_seen_ms)}{' '}
+                to {formatChainTimestamp(selectedChain.last_seen_ms)}.
               </div>
             </div>
             <div className="chip-row">
-              <span className={`badge ${String(selectedChain.severity || '').toLowerCase() === 'critical' ? 'badge-err' : 'badge-warn'}`}>
+              <span
+                className={`badge ${String(selectedChain.severity || '').toLowerCase() === 'critical' ? 'badge-err' : 'badge-warn'}`}
+              >
                 {selectedChain.severity}
               </span>
               <span className="scope-chip">{selectedChain.alert_count} alerts</span>
-              <span className="scope-chip">{formatChainWindow(selectedChain.first_seen_ms, selectedChain.last_seen_ms)}</span>
+              <span className="scope-chip">
+                {formatChainWindow(selectedChain.first_seen_ms, selectedChain.last_seen_ms)}
+              </span>
             </div>
           </div>
 
@@ -553,23 +570,37 @@ export default function AttackGraph() {
             <div className="card">
               <div className="metric-label">Average score</div>
               <div className="metric-value">{Number(selectedChain.avg_score || 0).toFixed(2)}</div>
-              <div className="metric-sub">Max {Number(selectedChain.max_score || 0).toFixed(2)}</div>
+              <div className="metric-sub">
+                Max {Number(selectedChain.max_score || 0).toFixed(2)}
+              </div>
             </div>
             <div className="card">
               <div className="metric-label">First seen</div>
-              <div className="metric-value">{formatRelativeTime(new Date(selectedChain.first_seen_ms).toISOString())}</div>
+              <div className="metric-value">
+                {formatRelativeTime(new Date(selectedChain.first_seen_ms).toISOString())}
+              </div>
               <div className="metric-sub">{formatChainTimestamp(selectedChain.first_seen_ms)}</div>
             </div>
             <div className="card">
               <div className="metric-label">Last seen</div>
-              <div className="metric-value">{formatRelativeTime(new Date(selectedChain.last_seen_ms).toISOString())}</div>
+              <div className="metric-value">
+                {formatRelativeTime(new Date(selectedChain.last_seen_ms).toISOString())}
+              </div>
               <div className="metric-sub">{formatChainTimestamp(selectedChain.last_seen_ms)}</div>
             </div>
           </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 12 }}>
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))',
+              gap: 12,
+            }}
+          >
             <div className="card">
-              <div className="card-title" style={{ marginBottom: 8 }}>Shared techniques</div>
+              <div className="card-title" style={{ marginBottom: 8 }}>
+                Shared techniques
+              </div>
               <div className="chip-row">
                 {(selectedChain.shared_techniques || []).length > 0 ? (
                   selectedChain.shared_techniques.map((technique) => (
@@ -578,12 +609,16 @@ export default function AttackGraph() {
                     </span>
                   ))
                 ) : (
-                  <span className="hint">No shared MITRE technique markers were inferred for this burst.</span>
+                  <span className="hint">
+                    No shared MITRE technique markers were inferred for this burst.
+                  </span>
                 )}
               </div>
             </div>
             <div className="card">
-              <div className="card-title" style={{ marginBottom: 8 }}>Signal overlap</div>
+              <div className="card-title" style={{ marginBottom: 8 }}>
+                Signal overlap
+              </div>
               <div style={{ display: 'grid', gap: 6 }}>
                 {(selectedChain.shared_reasons || []).length > 0 ? (
                   selectedChain.shared_reasons.map((reason) => (
@@ -592,14 +627,18 @@ export default function AttackGraph() {
                     </div>
                   ))
                 ) : (
-                  <span className="hint">No repeated reason strings were shared across the local burst.</span>
+                  <span className="hint">
+                    No repeated reason strings were shared across the local burst.
+                  </span>
                 )}
               </div>
             </div>
           </div>
 
           <div>
-            <div className="card-title" style={{ marginBottom: 8 }}>Impacted alerts</div>
+            <div className="card-title" style={{ marginBottom: 8 }}>
+              Impacted alerts
+            </div>
             <div className="chip-row">
               {(selectedChain.alert_ids || []).map((alertId) => (
                 <span key={alertId} className="scope-chip">

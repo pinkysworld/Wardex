@@ -11,7 +11,9 @@ globalThis.fetch = vi.fn();
 
 function LocationProbe() {
   const location = useLocation();
-  return <div data-testid="location-probe">{`${location.pathname}${location.search}${location.hash}`}</div>;
+  return (
+    <div data-testid="location-probe">{`${location.pathname}${location.search}${location.hash}`}</div>
+  );
 }
 
 function jsonResponse(body) {
@@ -351,7 +353,8 @@ describe('workspace shells', () => {
               priority: 'high',
               title: 'Complete identity routing',
               summary: 'Provider or SCIM validation still blocks clean group-based routing.',
-              action_hint: 'Review IdP and SCIM mappings before widening automated response coverage.',
+              action_hint:
+                'Review IdP and SCIM mappings before widening automated response coverage.',
             },
           ],
         });

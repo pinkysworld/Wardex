@@ -197,19 +197,11 @@ describe('HelpDocs', () => {
                 missing: [],
               },
               typescript_sdk: {
-                present: [
-                  '/api/report-templates',
-                  '/api/report-runs',
-                  '/api/report-schedules',
-                ],
+                present: ['/api/report-templates', '/api/report-runs', '/api/report-schedules'],
                 missing: [],
               },
               python_sdk: {
-                present: [
-                  '/api/report-templates',
-                  '/api/report-runs',
-                  '/api/report-schedules',
-                ],
+                present: ['/api/report-templates', '/api/report-runs', '/api/report-schedules'],
                 missing: [],
               },
             },
