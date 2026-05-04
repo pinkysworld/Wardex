@@ -2,6 +2,24 @@
 
 This backlog lists the next concrete tasks in build order.
 
+## Current strengthening checkpoint (`v0.56.0`)
+
+Recently completed after the `v0.56.0` baseline:
+
+- [x] Phase 1 cleanup checkpoint: admin-console race/test failures, lint/build drift, doctest SIGKILL noise, session permission hardening, and RBAC token hashing/redaction.
+- [x] Shift Command Board in Command Center with ownership, blockers, SLA age buckets, and next-action lanes.
+- [x] Case Handoff Packets in SOC Workbench with summary, timeline, evidence, ticket sync result, and reopenable case URL.
+- [x] Team Load And Ownership in SOC Workbench with analyst load, stale ownership, approval pressure, and group/role context.
+- [x] Connector Coverage Impact in SOC Workbench with collector risk, affected detections, stale assets, owners, and remediation pivots.
+- [x] Detection Ownership And Review Calendar in Threat Detection with overdue review planning, replay blockers, and promotion blockers.
+- [x] Compact Command Center detection review summary that surfaces the highest-priority review pressure before analysts pivot into `/detection`.
+
+Recommended next backlog slices:
+
+- [ ] Carry the detection review calendar into a backend-backed SOC Workbench summary block so SOC, Threat Detection, and Command Center read the same derived contract.
+- [ ] Add rule-level analyst review history by exposing recent replay/test deltas and rule-keyed detection-feedback summaries from the backend.
+- [ ] Extend Command Center and Help & Docs runbooks with explicit shift-handoff and review-SLA operating guidance once the shared backend review contract lands.
+
 ## Phase 0 - Foundation (completed)
 
 - [x] T001: Bootstrap the Rust package and module layout.

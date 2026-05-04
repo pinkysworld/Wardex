@@ -41,7 +41,7 @@
 
 - Dashboard with Recharts visualizations (severity pie, 24h alert timeline, CPU/memory area chart), severity filter, and clickable alert drill-down
 - Dashboard with persisted personal presets plus shared analyst/admin layouts for role-specific starting views
-- SOC Workbench with queue, cases, guided investigation planning, active step tracking, analyst notes, auto-query pivots, case handoff workflows, storyline views, response approval flows, escalation management, planner-to-hunt handoffs, hunt-to-case promotion, focused case routing, workflow-to-response handoffs, identity-routing readiness, rollout history, content bundle posture, automation history, operational analytics recommendations, and URL-backed case/incident drawers
+- SOC Workbench with queue, cases, guided investigation planning, active step tracking, analyst notes, auto-query pivots, case handoff workflows, storyline views, response approval flows, escalation management, planner-to-hunt handoffs, hunt-to-case promotion, focused case routing, workflow-to-response handoffs, identity-routing readiness, rollout history, content bundle posture, automation history, operational analytics recommendations, shift command board, team load and ownership, connector coverage impact, and URL-backed case/incident drawers
 - Structured incident detail view with severity badge, storyline timeline, related events/agents, close/export actions
 - Event search, incident timelines, process-tree inspection, and evidence package export
 - Inline case title editing, saved queue-filter bookmarks, and bulk case status operations
@@ -50,7 +50,7 @@
 ### Detection engineering
 
 - Sigma and native managed rules
-- Rule testing, promotion, rollback, suppressions, content packs, MITRE coverage, inline false-positive advisor actions, and first-class efficacy / ATT&CK gap / suppression-noise / rollout drill-downs in the detection workspace
+- Rule testing, promotion, rollback, suppressions, content packs, MITRE coverage, inline false-positive advisor actions, first-class efficacy / ATT&CK gap / suppression-noise / rollout drill-downs, and a detection ownership/review calendar in the detection workspace
 - Detection explainability, persisted analyst feedback, model-registry status, and shadow/rollback visibility for ML-assisted scoring
 - Saved hunts with thresholds, schedules, owners, history, scheduled execution, lifecycle promotion state, canary percentages, target-group routing, and workflow recommendations
 - Content pack bundles with saved-search templates, workflow routes, target groups, and rollout notes directly editable from the detection workspace
@@ -97,10 +97,14 @@ The current release has been verified with:
 
 ## Current product posture
 
-Wardex is now positioned as a professional XDR/SIEM control plane with incident-first analyst workflows, explainable detections, context-preserving reporting, and operator-visible recovery posture. The runtime, admin console, release process, and website are aligned around operator trust, workflow closure, and deployment readiness.
+Wardex is now positioned as a professional XDR/SIEM control plane with incident-first analyst workflows, explainable detections, context-preserving reporting, operator-visible recovery posture, and explicit shift-lead surfaces for ownership, handoff, and detection-review pressure. The runtime, admin console, release process, and website are aligned around operator trust, workflow closure, and deployment readiness.
 
 ## Recently shipped (v0.56.0)
 
+- **SOC workbench strengthening** — case handoff packets, team load and ownership, and connector coverage impact are now first-class workbench surfaces, so handoffs, queue balancing, and collector-to-detection trust gaps stay visible in the same overview.
+- **Detection review calendar** — Threat Detection now shows overdue ownership reviews, due-this-week items, replay blockers, noisy owners, and rule-level next-review timing plus promotion blockers.
+- **Command Center review pressure** — the Detection Quality Dashboard now surfaces a compact detection review calendar so shift leads can jump straight from `/command` into the exact rule promotion context that needs attention.
+- **0.56.0 quality cleanup** — frontend race conditions, lint/build issues, storage-lock test flakiness, doctest SIGKILL noise, persisted session permissions, and RBAC token hashing/redaction were cleaned up before the strengthening slices were layered in.
 - **Control-plane posture evidence** — support readiness, dependency health, and backup-status routes now expose active/passive reference status, backup cadence, observed backups, latest backup timestamps, checkpoint counts, latest checkpoint timestamps, and restore-readiness directly from live runtime state.
 - **Help & Docs recovery summary** — Production Readiness now renders a structured control-plane posture section with durable-storage, restore-artifact, and failover-model checks so operators can review recovery posture without reading raw JSON.
 - **HA guidance refresh** — deployment and disaster-recovery docs now tie the active/passive reference pattern to the shipped support/readiness APIs so failover drills have concrete runtime evidence to verify before and after restore.

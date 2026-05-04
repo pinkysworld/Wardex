@@ -4,6 +4,19 @@ All notable changes to Wardex are documented in this file.
 
 ## [Unreleased]
 
+### Backend
+- **SOC workbench strengthening slices** — `GET /api/workbench/overview` now includes team load and ownership plus connector coverage impact signals, and `GET /api/cases/{id}/handoff-packet` returns structured case handoff packets for analyst turnover.
+- **Command Center review summary** — `GET /api/command/summary` now carries a compact detection review calendar inside the `rule_tuning` lane, surfacing overdue reviews, due-this-week items, replay blockers, noisy owners, and direct pivots into detection promotion views.
+
+### Frontend
+- **Threat Detection ownership review calendar** — the detection workspace now shows overdue reviews, due-this-week rules, replay blockers, noisy owners, rule-level next-review timing, and promotion blockers derived from lifecycle and replay state.
+- **Command Center detection review pressure** — the Detection Quality Dashboard now exposes compact review-calendar signals directly in `/command`, giving shift leads a fast path into the exact noisy or overdue rule.
+- **SOC Workbench operations expansion** — the workbench now includes case handoff packets, team load and ownership, and connector coverage impact surfaces for analyst handoff and queue balancing.
+
+### Quality and verification
+- **0.56.0 quality cleanup** — frontend race/test failures were fixed, Rust doctest SIGKILL noise was removed by disabling no-op doctests for the monolithic lib target, persisted auth sessions now enforce owner-only permissions on Unix, and RBAC token persistence/listing now uses hashed/redacted token values.
+- **CI stability** — command, SOC, detection, lint, build, and integration checks were refreshed so the current 0.56.0 strengthening slices land green across the local acceptance gates.
+
 ## [0.56.0] — Control-Plane Posture Evidence & Recovery Readiness
 
 ### Backend

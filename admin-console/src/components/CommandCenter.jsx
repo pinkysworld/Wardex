@@ -161,6 +161,8 @@ export default function CommandCenter() {
     compliancePacks: summaryMetrics.compliance_packs ?? reportTemplates.length,
   };
   const laneSummaries = data.commandSummary?.lanes || {};
+  const ruleReviewCalendar = laneSummaries?.rule_tuning?.review_calendar || {};
+  const ruleReviewItems = asArray(ruleReviewCalendar, ['items']);
   const hasLoadedCommandData = Object.keys(data || {}).length > 0;
 
   const renderLaneAnnotation = (laneKey, fallbackAnnotation, fallbackNextStep) => {
@@ -494,9 +496,30 @@ export default function CommandCenter() {
               noisy_rules: noisyRules.length,
               suppressions: suppressions.length,
               stale_rules: staleRules.length,
+              overdue_reviews: ruleReviewCalendar.overdue ?? 0,
+              due_this_week: ruleReviewCalendar.due_this_week ?? 0,
+              review_blockers: ruleReviewCalendar.replay_blockers ?? 0,
+              owners_under_noise: ruleReviewCalendar.noisy_owners ?? 0,
             }}
-            limit={4}
+            limit={8}
           />
+          {ruleReviewItems.slice(0, 3).map((item) => (
+            <WorkItem
+              key={`review-${item.id || item.title}`}
+              title={item.title || item.id}
+              detail={`${item.owner || 'system'} • ${item.lifecycle || 'draft'} • ${String(item.due_status || 'scheduled').replace(/_/g, ' ')}`}
+              badge={`${formatCount(item.promotion_blockers?.length || 0)} blocker(s) • ${formatCount(item.last_test_match_count || 0)} replay hits • ${formatCount(item.active_suppressions || 0)} suppression(s)`}
+              tone={statusBadge(
+                item.due_status === 'overdue'
+                  ? 'warning'
+                  : item.due_status === 'due_this_week'
+                    ? 'attention'
+                    : 'ready',
+              )}
+              to={item.href}
+              actionLabel="Review calendar"
+            />
+          ))}
           {noisyRules.slice(0, 4).map((rule) => (
             <WorkItem
               key={rule.id || rule.name}

@@ -2,6 +2,8 @@
 
 The Command Center is the default analyst workspace for coordinating incident triage, remediation approval, collector onboarding, rule tuning, release readiness, and compliance evidence export.
 
+It also acts as the fast executive surface for shift ownership and detection-review pressure: overdue rule reviews, replay blockers, noisy owners, and the most urgent pivots into Threat Detection should be visible here before an analyst opens a deeper workspace.
+
 ## When to use it
 
 Use `/command` at shift start, during incident response handoff, before approving remediation, and before exporting evidence for leadership or auditors.
@@ -45,6 +47,13 @@ Planned connector lanes currently covered by Command Center are GitHub audit log
 2. Review replay status, suppression count, and promotion readiness.
 3. Run replay before promoting rules or converting recurring false positives into suppressions.
 4. Open the Detection workspace for full rule editing, lifecycle changes, and pack ownership changes.
+
+## Detection review pressure
+
+1. In **Detection Quality Dashboard**, check overdue reviews, due-this-week items, replay blockers, and owners currently carrying noisy detections.
+2. Use the compact review rows to jump directly into the exact rule promotion context in `/detection`.
+3. Treat overdue or blocker-heavy rules as shift-handoff items, not background hygiene.
+4. Use the SOC Workbench and Threat Detection review calendar together when deciding whether a rule issue is ownership debt, replay debt, or a broader case/collector problem.
 
 ## Release readiness
 

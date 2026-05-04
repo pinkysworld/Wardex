@@ -119,6 +119,26 @@ const COMMAND_FIXTURES = {
         annotation: 'Replay debt is visible before any promotion decision.',
         next_step: 'Run replay against the noisiest active rule before widening rollout.',
         status: 'warning',
+        review_calendar: {
+          overdue: 1,
+          due_this_week: 1,
+          replay_blockers: 1,
+          noisy_owners: 1,
+          items: [
+            {
+              id: 'rule-ssh-burst',
+              title: 'SSH burst',
+              owner: 'detections',
+              lifecycle: 'test',
+              next_review_at: '2026-05-03T18:30:00Z',
+              due_status: 'overdue',
+              last_test_match_count: 6,
+              active_suppressions: 1,
+              promotion_blockers: ['replay_noise', 'suppression_review'],
+              href: '/detection?rule=rule-ssh-burst&rulePanel=promotion',
+            },
+          ],
+        },
       },
       release: {
         annotation: 'Release readiness stays tied to SBOM and rollback posture.',
@@ -357,6 +377,23 @@ describe('CommandCenter', () => {
     expect(
       screen.getByText('Assign the oldest critical alert and confirm SLA pressure.'),
     ).toBeInTheDocument();
+  });
+
+  it('surfaces compact detection review calendar signals with a pivot into detection', async () => {
+    renderWithProviders('/command');
+
+    expect((await screen.findAllByText('Detection Quality Dashboard')).length).toBeGreaterThan(0);
+    expect(screen.getByText('Overdue reviews')).toBeInTheDocument();
+    expect(screen.getByText('Owners under noise')).toBeInTheDocument();
+    expect(screen.getAllByText('SSH burst').length).toBeGreaterThan(0);
+    expect(screen.getByText('detections • test • overdue')).toBeInTheDocument();
+    expect(
+      screen.getByText('2 blocker(s) • 6 replay hits • 1 suppression(s)'),
+    ).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /SSH burst/ })).toHaveAttribute(
+      'href',
+      '/detection?rule=rule-ssh-burst&rulePanel=promotion',
+    );
   });
 
   it('saves and validates GitHub connector drafts with settings handoff and reloads command data', async () => {

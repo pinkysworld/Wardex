@@ -10868,6 +10868,10 @@ fn command_summary_payload(state: &mut AppState) -> serde_json::Value {
                 "noisy": noisy_rules,
                 "stale": stale_rules,
                 "active_suppressions": state.enterprise.active_suppression_count(),
+                "review_calendar": command_rule_review_calendar(
+                    &rule_metadata,
+                    state.enterprise.active_suppression_count(),
+                ),
                 "annotation": if noisy_rules > 0 || stale_rules > 0 {
                     "Detection lanes have replay or suppression debt that should be resolved before promotion."
                 } else {
@@ -10922,6 +10926,164 @@ fn increment_owner_count(owners: &mut HashMap<String, usize>, owner: Option<&str
         .filter(|value| !value.is_empty())
         .unwrap_or("unassigned");
     *owners.entry(owner.to_string()).or_insert(0) += 1;
+}
+
+fn command_rule_review_interval_days(rule: &crate::enterprise::ManagedRuleMetadata) -> Option<i64> {
+    if !rule.enabled || rule.lifecycle == crate::enterprise::ContentLifecycle::Deprecated {
+        return None;
+    }
+    Some(match rule.lifecycle {
+        crate::enterprise::ContentLifecycle::Draft | crate::enterprise::ContentLifecycle::Test => 7,
+        crate::enterprise::ContentLifecycle::Canary => 14,
+        crate::enterprise::ContentLifecycle::Active => 30,
+        crate::enterprise::ContentLifecycle::RolledBack => 14,
+        crate::enterprise::ContentLifecycle::Deprecated => return None,
+    })
+}
+
+fn command_rule_review_anchor(
+    rule: &crate::enterprise::ManagedRuleMetadata,
+) -> Option<chrono::DateTime<chrono::Utc>> {
+    [
+        rule.last_promotion_at.as_deref(),
+        rule.last_test_at.as_deref(),
+        Some(rule.updated_at.as_str()),
+        Some(rule.created_at.as_str()),
+    ]
+    .into_iter()
+    .flatten()
+    .filter_map(|value| chrono::DateTime::parse_from_rfc3339(value).ok())
+    .map(|value| value.with_timezone(&chrono::Utc))
+    .max()
+}
+
+fn command_rule_next_review_at(
+    rule: &crate::enterprise::ManagedRuleMetadata,
+) -> Option<chrono::DateTime<chrono::Utc>> {
+    let interval_days = command_rule_review_interval_days(rule)?;
+    let anchor = command_rule_review_anchor(rule)?;
+    Some(anchor + chrono::Duration::days(interval_days))
+}
+
+fn command_rule_replay_stale(rule: &crate::enterprise::ManagedRuleMetadata) -> bool {
+    rule.last_test_at
+        .as_deref()
+        .and_then(|value| chrono::DateTime::parse_from_rfc3339(value).ok())
+        .map(|tested_at| chrono::Utc::now() - tested_at.with_timezone(&chrono::Utc))
+        .map(|age| age >= chrono::Duration::days(14))
+        .unwrap_or(false)
+}
+
+fn command_rule_promotion_blockers(
+    rule: &crate::enterprise::ManagedRuleMetadata,
+    active_suppressions: usize,
+) -> Vec<String> {
+    let mut blockers = Vec::new();
+    if rule.owner.trim().is_empty() || rule.owner.eq_ignore_ascii_case("system") {
+        blockers.push("assign_owner".to_string());
+    }
+    if rule.last_test_at.is_none() {
+        blockers.push("replay_missing".to_string());
+    } else if command_rule_replay_stale(rule) {
+        blockers.push("replay_stale".to_string());
+    }
+    if rule.last_test_match_count >= 5 {
+        blockers.push("replay_noise".to_string());
+    }
+    if active_suppressions > 0 {
+        blockers.push("suppression_review".to_string());
+    }
+    if rule.pack_ids.is_empty() {
+        blockers.push("pack_unassigned".to_string());
+    }
+    blockers
+}
+
+fn command_rule_review_calendar(
+    rule_metadata: &[crate::enterprise::ManagedRuleMetadata],
+    active_suppressions: usize,
+) -> serde_json::Value {
+    let now = chrono::Utc::now();
+    let mut overdue = 0usize;
+    let mut due_this_week = 0usize;
+    let mut replay_blockers = 0usize;
+    let mut noisy_owners = BTreeSet::new();
+    let mut items = rule_metadata
+        .iter()
+        .filter(|rule| {
+            rule.enabled && rule.lifecycle != crate::enterprise::ContentLifecycle::Deprecated
+        })
+        .map(|rule| {
+            let next_review_at = command_rule_next_review_at(rule);
+            let due_status = match next_review_at {
+                Some(due_at) if due_at < now => {
+                    overdue += 1;
+                    "overdue"
+                }
+                Some(due_at) if due_at <= now + chrono::Duration::days(7) => {
+                    due_this_week += 1;
+                    "due_this_week"
+                }
+                Some(_) => "scheduled",
+                None => "unscheduled",
+            };
+            let blockers = command_rule_promotion_blockers(rule, active_suppressions);
+            if !blockers.is_empty() {
+                replay_blockers += 1;
+            }
+            if rule.last_test_match_count >= 5 || active_suppressions > 0 {
+                noisy_owners.insert(rule.owner.clone());
+            }
+            serde_json::json!({
+                "id": rule.id,
+                "title": rule.title,
+                "owner": rule.owner,
+                "lifecycle": format!("{:?}", rule.lifecycle).to_ascii_lowercase(),
+                "next_review_at": next_review_at.map(|value| value.to_rfc3339()),
+                "due_status": due_status,
+                "last_test_match_count": rule.last_test_match_count,
+                "active_suppressions": active_suppressions,
+                "promotion_blockers": blockers,
+                "href": format!("/detection?rule={}&rulePanel=promotion", rule.id),
+            })
+        })
+        .collect::<Vec<_>>();
+
+    let due_rank =
+        |item: &serde_json::Value| match item["due_status"].as_str().unwrap_or("scheduled") {
+            "overdue" => 0,
+            "due_this_week" => 1,
+            "unscheduled" => 2,
+            _ => 3,
+        };
+    items.sort_by(|left, right| {
+        due_rank(left)
+            .cmp(&due_rank(right))
+            .then_with(|| {
+                left["next_review_at"]
+                    .as_str()
+                    .unwrap_or("9999-99-99T99:99:99Z")
+                    .cmp(
+                        right["next_review_at"]
+                            .as_str()
+                            .unwrap_or("9999-99-99T99:99:99Z"),
+                    )
+            })
+            .then_with(|| {
+                left["title"]
+                    .as_str()
+                    .unwrap_or("")
+                    .cmp(right["title"].as_str().unwrap_or(""))
+            })
+    });
+
+    serde_json::json!({
+        "overdue": overdue,
+        "due_this_week": due_this_week,
+        "replay_blockers": replay_blockers,
+        "noisy_owners": noisy_owners.len(),
+        "items": items.into_iter().take(5).collect::<Vec<_>>(),
+    })
 }
 
 fn active_shift_owner(state: &AppState) -> serde_json::Value {

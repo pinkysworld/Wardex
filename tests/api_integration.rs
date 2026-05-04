@@ -297,6 +297,7 @@ fn command_summary_returns_lane_health() {
     assert!(planned.iter().any(|entry| entry == "github_audit"));
     assert!(planned.iter().any(|entry| entry == "crowdstrike_falcon"));
     assert!(planned.iter().any(|entry| entry == "generic_syslog"));
+    assert!(body["lanes"]["rule_tuning"]["review_calendar"]["items"].is_array());
 }
 
 #[test]
