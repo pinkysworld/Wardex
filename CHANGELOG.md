@@ -11,8 +11,11 @@ All notable changes to Wardex are documented in this file.
 ### Changed
 - **Shared review-history contract** — Rule-level replay/analyst review history now feeds both Threat Detection and SOC Workbench from the same backend derivation path, reducing cross-surface drift.
 - **OIDC callback hardening** — the federated sign-in flow now requires a validated `id_token`, enforces PKCE with `S256`, verifies JWT signatures against provider JWKS, checks issuer/audience/expiry/nbf claims, and rejects nonce or subject mismatches before creating a console session.
+- **OIDC JWKS rotation hardening** — ID token validation now refreshes provider JWKS before selecting a signing key, replaces stale cached keys, rejects revoked cached keys, requires `iat`, checks multi-audience `azp`, and refuses JWKS keys not marked for signature verification.
 - **Persisted session integrity** — file-backed console sessions now load from a signed envelope, reject tampered payloads on restart, keep backward compatibility for older unsigned session files, and seal runtime state with a persistent local session key or explicit `WARDEX_SESSION_KEY`.
 - **Default-deny API auth posture** — API auth enforcement now classifies routes as public, agent-token, cluster-token, or authenticated and defaults every other `/api/*` route to authenticated, reducing drift from hand-maintained auth allowlists. The runtime endpoint listing now derives supplemental auth flags from the same classifier.
+- **OpenAPI route-auth source of truth** — generated OpenAPI operations now derive security and `x-wardex-auth` from the runtime route classifier, the endpoint catalog reads the same classifier, and static contract parity fails when representative public, agent, or authenticated route metadata drifts.
+- **Signed agent update enforcement** — release metadata now carries Ed25519 signatures, signer keys, payload hashes, and monotonic counters; update publish/deploy/check/download/agent install paths enforce trusted signers, unsigned grace policy, replay counters, downgrade policy, and binary tamper checks.
 
 ### Backend
 - **SOC workbench strengthening slices** — `GET /api/workbench/overview` now includes team load and ownership plus connector coverage impact signals, and `GET /api/cases/{id}/handoff-packet` returns structured case handoff packets for analyst turnover.
@@ -25,6 +28,8 @@ All notable changes to Wardex are documented in this file.
 
 ### Quality and verification
 - **0.56.0 quality cleanup** — frontend race/test failures were fixed, Rust doctest SIGKILL noise was removed by disabling no-op doctests for the monolithic lib target, persisted auth sessions now enforce owner-only permissions on Unix, and RBAC token persistence/listing now uses hashed/redacted token values.
+- **OIDC rotation regressions** — focused Rust unit coverage now exercises rotated JWKS acceptance, revoked cached-key rejection, missing `iat` rejection, multi-audience `azp` enforcement, and non-signature JWKS key rejection.
+- **Update trust regressions** — focused Rust coverage now exercises signed update verification, wrong-key rejection, malformed signature rejection, tampered metadata/binary rejection, unsigned strict/grace behavior, replay-counter rejection, downgrade policy, and trusted installer history metadata.
 - **CI stability** — command, SOC, detection, lint, build, and integration checks were refreshed so the current 0.56.0 strengthening slices land green across the local acceptance gates.
 
 ## [0.56.0] — Control-Plane Posture Evidence & Recovery Readiness

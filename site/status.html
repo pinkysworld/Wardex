@@ -98,7 +98,7 @@
               <p class="status-note">CycloneDX SBOM attached to every tagged release.</p>
             </div>
           </div>
-          <p class="page-hero-desc">The current release also adds operator-visible control-plane posture evidence for backup cadence, latest backup and checkpoint artifacts, and restore readiness so active/passive recovery state can be verified from the product surface before failover drills.</p>
+          <p class="page-hero-desc">The current release also adds operator-visible control-plane posture evidence, runtime-derived OpenAPI route-auth metadata, and signed agent update enforcement with trusted signers, replay counters, downgrade policy, and tamper rejection.</p>
         </div>
       </section>
 
@@ -136,6 +136,12 @@ signed with cosign</code></pre>
               <p class="status-label">SBOM</p>
               <pre class="status-key"><code>wardex-&lt;version&gt;.cdx.json</code></pre>
               <p class="status-note">CycloneDX JSON attached to every release. Scan with <code>grype</code> or <code>trivy sbom</code>.</p>
+            </div>
+            <div class="status-card">
+              <p class="status-label">Agent updates</p>
+              <pre class="status-key"><code>x-wardex-auth + Ed25519
+update counters enforced</code></pre>
+              <p class="status-note">Agent release assignments now verify trusted signatures, reject replayed counters and downgrades, and re-check artifact integrity before install.</p>
             </div>
           </div>
         </div>

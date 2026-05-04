@@ -93,6 +93,8 @@ pub struct Operation {
     pub responses: BTreeMap<String, Response>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub security: Vec<BTreeMap<String, Vec<String>>>,
+    #[serde(rename = "x-wardex-auth", skip_serializing_if = "Option::is_none")]
+    pub wardex_auth: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -252,6 +254,9 @@ impl OpenApiBuilder {
     }
 
     pub fn path(mut self, path: &str, method: &str, mut op: Operation) -> Self {
+        let access = endpoint_route_access(method, path);
+        op.security = security_for_route_access(access);
+        op.wardex_auth = Some(access.as_str().to_string());
         for parameter in inferred_path_parameters(path) {
             let exists = op.parameters.iter().any(|existing| {
                 existing.location == parameter.location && existing.name == parameter.name
@@ -295,6 +300,14 @@ fn schema_ref(name: &str) -> SchemaRef {
 fn string_schema() -> SchemaRef {
     SchemaRef::Inline(Schema {
         schema_type: Some("string".into()),
+        ..Default::default()
+    })
+}
+
+fn binary_schema() -> SchemaRef {
+    SchemaRef::Inline(Schema {
+        schema_type: Some("string".into()),
+        format: Some("binary".into()),
         ..Default::default()
     })
 }
@@ -440,6 +453,30 @@ fn bearer_auth() -> Vec<BTreeMap<String, Vec<String>>> {
     }]
 }
 
+fn public_auth() -> Vec<BTreeMap<String, Vec<String>>> {
+    vec![BTreeMap::new()]
+}
+
+fn endpoint_route_access(method: &str, path: &str) -> crate::server::ApiRouteAccess {
+    crate::server::classify_api_route_access(method, path).unwrap_or_else(|| {
+        if path.starts_with("/api/") {
+            crate::server::ApiRouteAccess::Authenticated
+        } else {
+            crate::server::ApiRouteAccess::Public
+        }
+    })
+}
+
+fn security_for_route_access(
+    access: crate::server::ApiRouteAccess,
+) -> Vec<BTreeMap<String, Vec<String>>> {
+    if access.requires_bearer_auth() {
+        bearer_auth()
+    } else {
+        public_auth()
+    }
+}
+
 fn operation(
     id: &str,
     summary: &str,
@@ -457,6 +494,7 @@ fn operation(
         request_body,
         responses,
         security,
+        wardex_auth: None,
     }
 }
 
@@ -529,7 +567,7 @@ fn op_public(id: &str, summary: &str, tags: &[&str]) -> Operation {
         tags,
         None,
         resp,
-        vec![BTreeMap::new()], // explicit empty = no auth required
+        public_auth(), // explicit empty = no auth required
     )
 }
 
@@ -541,7 +579,7 @@ fn op_public_with_responses(
 ) -> Operation {
     let mut resp = responses;
     resp.extend(public_error_responses());
-    operation(id, summary, tags, None, resp, vec![BTreeMap::new()])
+    operation(id, summary, tags, None, resp, public_auth())
 }
 
 fn op_public_post_with_responses(
@@ -553,14 +591,7 @@ fn op_public_post_with_responses(
 ) -> Operation {
     let mut resp = responses;
     resp.extend(public_error_responses());
-    operation(
-        id,
-        summary,
-        tags,
-        json_body(body_desc),
-        resp,
-        vec![BTreeMap::new()],
-    )
+    operation(id, summary, tags, json_body(body_desc), resp, public_auth())
 }
 
 fn with_parameters(mut op: Operation, parameters: Vec<Parameter>) -> Operation {
@@ -2056,9 +2087,40 @@ pub fn wardex_openapi_spec(version: &str) -> OpenApiSpec {
             ),
         )
         .path(
+            "/api/agents/update",
+            "get",
+            with_parameters(
+                op(
+                    "checkAgentUpdate",
+                    "Check whether an agent update is available",
+                    &["updates"],
+                ),
+                vec![
+                    string_parameter("agent_id", "query", "Agent identifier", false),
+                    string_parameter("current_version", "query", "Current agent version", false),
+                    string_parameter("platform", "query", "Agent platform", false),
+                ],
+            ),
+        )
+        .path(
             "/api/updates/releases",
             "get",
             op("listReleases", "List published releases", &["updates"]),
+        )
+        .path(
+            "/api/updates/download/{file_name}",
+            "get",
+            op_with_responses(
+                "downloadRelease",
+                "Download an agent release artifact",
+                &["updates"],
+                content_response_status(
+                    "200",
+                    "Download an agent release artifact",
+                    "application/octet-stream",
+                    binary_schema(),
+                ),
+            ),
         )
         .path(
             "/api/updates/publish",
@@ -2730,8 +2792,8 @@ pub fn openapi_json(version: &str) -> String {
     serde_json::to_string_pretty(&spec).unwrap_or_else(|_| "{}".into())
 }
 
-fn endpoint_auth_required(op: &Operation) -> bool {
-    op.security.iter().any(|scheme| !scheme.is_empty())
+fn endpoint_auth_required(method: &str, path: &str) -> bool {
+    endpoint_route_access(method, path).requires_bearer_auth()
 }
 
 pub fn endpoint_catalog(version: &str) -> Vec<EndpointCatalogEntry> {
@@ -2749,7 +2811,7 @@ pub fn endpoint_catalog(version: &str) -> Vec<EndpointCatalogEntry> {
                 entries.push(EndpointCatalogEntry {
                     method: method.to_string(),
                     path: path.clone(),
-                    auth: endpoint_auth_required(&op),
+                    auth: endpoint_auth_required(method, &path),
                     description: op.summary,
                 });
             }
@@ -2923,9 +2985,70 @@ mod tests {
         let health_op = spec.paths.get("/api/health").unwrap().get.as_ref().unwrap();
         assert_eq!(health_op.security.len(), 1);
         assert!(health_op.security[0].is_empty());
+        assert_eq!(health_op.wardex_auth.as_deref(), Some("public"));
         let status_op = spec.paths.get("/api/status").unwrap().get.as_ref().unwrap();
         assert_eq!(status_op.security.len(), 1);
         assert!(status_op.security[0].contains_key("bearerAuth"));
+        assert_eq!(status_op.wardex_auth.as_deref(), Some("authenticated"));
+    }
+
+    #[test]
+    fn openapi_auth_metadata_matches_runtime_classifier() {
+        let spec = wardex_openapi_spec("0.35.0");
+        let catalog = endpoint_catalog("0.35.0")
+            .into_iter()
+            .map(|entry| ((entry.method, entry.path), entry.auth))
+            .collect::<BTreeMap<_, _>>();
+
+        for (path, item) in &spec.paths {
+            for (method, operation) in [
+                ("GET", item.get.as_ref()),
+                ("POST", item.post.as_ref()),
+                ("PUT", item.put.as_ref()),
+                ("DELETE", item.delete.as_ref()),
+                ("PATCH", item.patch.as_ref()),
+            ] {
+                let Some(operation) = operation else {
+                    continue;
+                };
+                let access = endpoint_route_access(method, path);
+                let has_security = operation.security.iter().any(|scheme| !scheme.is_empty());
+                assert_eq!(
+                    operation.wardex_auth.as_deref(),
+                    Some(access.as_str()),
+                    "{method} {path} should expose runtime auth metadata"
+                );
+                assert_eq!(
+                    has_security,
+                    access.requires_bearer_auth(),
+                    "{method} {path} security should match runtime classifier"
+                );
+                assert_eq!(
+                    catalog.get(&(method.to_string(), path.clone())).copied(),
+                    Some(access.requires_bearer_auth()),
+                    "{method} {path} catalog auth should match runtime classifier"
+                );
+            }
+        }
+
+        let events = spec
+            .paths
+            .get("/api/events")
+            .and_then(|item| item.post.as_ref())
+            .expect("events ingest path");
+        assert_eq!(events.wardex_auth.as_deref(), Some("agent"));
+        let update_check = spec
+            .paths
+            .get("/api/agents/update")
+            .and_then(|item| item.get.as_ref())
+            .expect("agent update-check path");
+        assert_eq!(update_check.wardex_auth.as_deref(), Some("agent"));
+        let update_download = spec
+            .paths
+            .get("/api/updates/download/{file_name}")
+            .and_then(|item| item.get.as_ref())
+            .expect("agent update download path");
+        assert_eq!(update_download.wardex_auth.as_deref(), Some("agent"));
     }
 
     #[test]

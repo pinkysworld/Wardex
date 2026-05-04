@@ -712,6 +712,14 @@ struct AgentDeployment {
     rollout_group: String,
     #[serde(default)]
     allow_downgrade: bool,
+    #[serde(default)]
+    signature_status: Option<String>,
+    #[serde(default)]
+    signer_pubkey: Option<String>,
+    #[serde(default)]
+    signature_payload_sha256: Option<String>,
+    #[serde(default)]
+    update_counter: Option<u64>,
     assigned_at: String,
     acknowledged_at: Option<String>,
     completed_at: Option<String>,
@@ -3535,11 +3543,26 @@ fn cluster_peer_url(addr: &str, path: &str) -> String {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum ApiRouteAccess {
+pub enum ApiRouteAccess {
     Public,
     Agent,
     Cluster,
     Authenticated,
+}
+
+impl ApiRouteAccess {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Public => "public",
+            Self::Agent => "agent",
+            Self::Cluster => "cluster",
+            Self::Authenticated => "authenticated",
+        }
+    }
+
+    pub fn requires_bearer_auth(self) -> bool {
+        !matches!(self, Self::Public)
+    }
 }
 
 const SESSION_COOKIE_NAME: &str = "wardex_session";
@@ -3658,7 +3681,8 @@ fn api_route_access(method: &Method, route_path: &str) -> ApiRouteAccess {
 }
 
 fn method_from_name(value: &str) -> Option<Method> {
-    match value {
+    let normalized = value.trim().to_ascii_uppercase();
+    match normalized.as_str() {
         "GET" => Some(Method::Get),
         "POST" => Some(Method::Post),
         "PUT" => Some(Method::Put),
@@ -3668,6 +3692,10 @@ fn method_from_name(value: &str) -> Option<Method> {
         "HEAD" => Some(Method::Head),
         _ => None,
     }
+}
+
+pub fn classify_api_route_access(method: &str, route_path: &str) -> Option<ApiRouteAccess> {
+    method_from_name(method).map(|parsed| api_route_access(&parsed, route_path))
 }
 
 fn user_preferences_store_path(config_path: &Path) -> String {
@@ -18305,12 +18333,28 @@ fn handle_api(
                     .unwrap_or("");
                 let s = state.lock().unwrap_or_else(|e| e.into_inner());
                 match s.update_manager.get_release_binary(file_name) {
-                    Ok(data) => Response::builder()
-                        .status(200)
-                        .header("Content-Type", "application/octet-stream")
-                        .header("Access-Control-Allow-Origin", cors_origin())
-                        .body(Body::from(data))
-                        .unwrap_or_else(|_| Response::new(Body::from("error"))),
+                    Ok(data) => {
+                        let mut builder = Response::builder()
+                            .status(200)
+                            .header("Content-Type", "application/octet-stream")
+                            .header("Access-Control-Allow-Origin", cors_origin());
+                        if let Some(release) = s.update_manager.get_release_by_file_name(file_name)
+                        {
+                            if let Some(signature) = &release.signature {
+                                builder = builder.header("X-Wardex-Update-Signature", signature);
+                            }
+                            if let Some(signer) = &release.signer_pubkey {
+                                builder = builder.header("X-Wardex-Update-Signer", signer);
+                            }
+                            if let Some(counter) = release.update_counter {
+                                builder =
+                                    builder.header("X-Wardex-Update-Counter", counter.to_string());
+                            }
+                        }
+                        builder
+                            .body(Body::from(data))
+                            .unwrap_or_else(|_| Response::new(Body::from("error")))
+                    }
                     Err(e) => error_json(&e, 404),
                 }
             } else if method == Method::Get
@@ -24249,6 +24293,10 @@ fn handle_agent_heartbeat(
                                 status_reason: Some(format!("auto_progress_{next_ring}")),
                                 rollout_group: next_ring.clone(),
                                 allow_downgrade: false,
+                                signature_status: None,
+                                signer_pubkey: None,
+                                signature_payload_sha256: None,
+                                update_counter: None,
                                 assigned_at: chrono::Utc::now().to_rfc3339(),
                                 acknowledged_at: None,
                                 completed_at: None,
@@ -24322,10 +24370,19 @@ fn handle_agent_update_check(
             let resp = crate::auto_update::UpdateCheckResponse {
                 update_available: true,
                 version: Some(release.version.clone()),
+                platform: Some(release.platform.clone()),
                 download_url: Some(format!("/api/updates/download/{}", release.file_name)),
+                file_name: Some(release.file_name.clone()),
+                file_size: Some(release.file_size),
                 sha256: Some(release.sha256.clone()),
                 release_notes: Some(release.release_notes.clone()),
                 mandatory: Some(release.mandatory),
+                allow_downgrade: Some(deployment.allow_downgrade),
+                signature: release.signature.clone(),
+                signer_pubkey: release.signer_pubkey.clone(),
+                signed_at: release.signed_at.clone(),
+                signature_payload_sha256: release.signature_payload_sha256.clone(),
+                update_counter: release.update_counter,
             };
             return match serde_json::to_string(&resp) {
                 Ok(json) => json_response(&json, 200),
@@ -24368,7 +24425,7 @@ fn handle_update_deploy(
 
     let mut s = state.lock().unwrap_or_else(|e| e.into_inner());
     let agent = match s.agent_registry.get(&req.agent_id) {
-        Some(agent) => agent,
+        Some(agent) => agent.clone(),
         None => return error_json("agent not found", 404),
     };
     if !req.allow_downgrade
@@ -24390,6 +24447,27 @@ fn handle_update_deploy(
         Some(release) => release.clone(),
         None => return error_json("release not found for agent platform", 404),
     };
+    let release_binary = match s.update_manager.get_release_binary(&release.file_name) {
+        Ok(binary) => binary,
+        Err(e) => return error_json(&format!("release artifact unavailable: {e}"), 409),
+    };
+    let policy =
+        crate::update_trust::UpdateTrustPolicy::from_settings(&s.config.security.update_signing);
+    let last_counter = s
+        .remote_deployments
+        .get(&req.agent_id)
+        .and_then(|deployment| deployment.update_counter);
+    let verification = match crate::update_trust::verify_release_artifact(
+        &release,
+        &release_binary,
+        &policy,
+        &agent.version,
+        last_counter,
+        req.allow_downgrade,
+    ) {
+        Ok(verification) => verification,
+        Err(e) => return error_json(&format!("release trust verification failed: {e}"), 409),
+    };
     let rollout_group = normalize_rollout_group(req.rollout_group.as_deref());
 
     let deployment = AgentDeployment {
@@ -24402,6 +24480,10 @@ fn handle_update_deploy(
         status_reason: None,
         rollout_group,
         allow_downgrade: req.allow_downgrade,
+        signature_status: Some(verification.signature_status),
+        signer_pubkey: verification.signer_pubkey,
+        signature_payload_sha256: verification.signature_payload_sha256,
+        update_counter: verification.update_counter,
         assigned_at: chrono::Utc::now().to_rfc3339(),
         acknowledged_at: None,
         completed_at: None,
@@ -24620,6 +24702,23 @@ fn handle_update_rollback(
         Some(r) => r.clone(),
         None => return error_json("release not found for agent platform", 404),
     };
+    let release_binary = match s.update_manager.get_release_binary(&release.file_name) {
+        Ok(binary) => binary,
+        Err(e) => return error_json(&format!("release artifact unavailable: {e}"), 409),
+    };
+    let policy =
+        crate::update_trust::UpdateTrustPolicy::from_settings(&s.config.security.update_signing);
+    let verification = match crate::update_trust::verify_release_artifact(
+        &release,
+        &release_binary,
+        &policy,
+        &agent.version,
+        None,
+        true,
+    ) {
+        Ok(verification) => verification,
+        Err(e) => return error_json(&format!("release trust verification failed: {e}"), 409),
+    };
     // Cancel any existing deployment
     if let Some(existing) = s.remote_deployments.get(&req.agent_id)
         && !is_terminal_deployment_status(&existing.status)
@@ -24636,6 +24735,10 @@ fn handle_update_rollback(
         status_reason: Some("rollback".to_string()),
         rollout_group: "direct".to_string(),
         allow_downgrade: true,
+        signature_status: Some(verification.signature_status),
+        signer_pubkey: verification.signer_pubkey,
+        signature_payload_sha256: verification.signature_payload_sha256,
+        update_counter: verification.update_counter,
         assigned_at: chrono::Utc::now().to_rfc3339(),
         acknowledged_at: None,
         completed_at: None,
@@ -24824,13 +24927,40 @@ fn handle_update_publish(
     };
 
     let mut s = state.lock().unwrap_or_else(|e| e.into_inner());
-    match s.update_manager.publish_release(
-        &req.version,
-        &req.platform,
-        &binary,
-        &req.release_notes,
-        req.mandatory,
-    ) {
+    let signing_key =
+        match crate::update_trust::load_update_signing_key(&s.config.security.update_signing) {
+            Ok(signing_key) => signing_key,
+            Err(e) => return error_json(&format!("update signing key invalid: {e}"), 400),
+        };
+    let trust_policy =
+        crate::update_trust::UpdateTrustPolicy::from_settings(&s.config.security.update_signing);
+    if signing_key.is_none() && trust_policy.signatures_required_now() {
+        return error_json(
+            "signed updates are required but no update signing key is configured",
+            409,
+        );
+    }
+
+    let published = if let Some(signing_key) = signing_key.as_deref() {
+        s.update_manager.publish_signed_release(
+            &req.version,
+            &req.platform,
+            &binary,
+            &req.release_notes,
+            req.mandatory,
+            signing_key,
+        )
+    } else {
+        s.update_manager.publish_release(
+            &req.version,
+            &req.platform,
+            &binary,
+            &req.release_notes,
+            req.mandatory,
+        )
+    };
+
+    match published {
         Ok(release) => {
             s.enterprise.record_rollout_event(
                 "publish",
@@ -28028,6 +28158,10 @@ mod tests {
                 status_reason: None,
                 rollout_group: "canary".to_string(),
                 allow_downgrade: false,
+                signature_status: None,
+                signer_pubkey: None,
+                signature_payload_sha256: None,
+                update_counter: None,
                 assigned_at: chrono::Utc::now().to_rfc3339(),
                 acknowledged_at: None,
                 completed_at: None,
@@ -28639,6 +28773,14 @@ mod tests {
         assert_eq!(
             api_route_access(&Method::Post, "/api/events"),
             ApiRouteAccess::Agent
+        );
+        assert_eq!(
+            classify_api_route_access("get", "/api/agents/update"),
+            Some(ApiRouteAccess::Agent)
+        );
+        assert_eq!(
+            classify_api_route_access("GET", "/api/updates/download/wardex-2.0.0-linux"),
+            Some(ApiRouteAccess::Agent)
         );
         assert_eq!(
             api_route_access(&Method::Get, "/api/cluster/status"),

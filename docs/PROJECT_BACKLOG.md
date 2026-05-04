@@ -14,14 +14,17 @@ Recently completed after the `v0.56.0` baseline:
 - [x] Detection Ownership And Review Calendar in Threat Detection with overdue review planning, replay blockers, and promotion blockers.
 - [x] Compact Command Center detection review summary that surfaces the highest-priority review pressure before analysts pivot into `/detection`.
 - [x] Shared SOC/Threat Detection review history plus OIDC callback hardening with PKCE `S256`, JWKS-backed `id_token` validation, issuer/audience checks, and nonce enforcement.
+- [x] OIDC JWKS rotation hardening with validation-time key-cache refresh, revoked-key rejection, stricter `iat` / multi-audience `azp` checks, and signing-key use enforcement.
 - [x] Persisted admin-session sealing with signed session envelopes, tamper rejection on reload, stable local seal-key persistence, and legacy unsigned-session compatibility.
 - [x] Default-deny API auth classification with explicit public, agent-token, and cluster-token exceptions plus shared supplemental endpoint auth derivation.
+- [x] Route auth contract parity with OpenAPI `x-wardex-auth`, endpoint catalog derivation, static contract checks, and documented agent update routes from the runtime classifier.
+- [x] Signed agent update trust enforcement with Ed25519 artifact metadata, bundled-plus-config trusted signers, unsigned grace policy, deployment/download/install verification, and wrong-key/replay/downgrade/tamper regressions.
 
 Recommended next backlog slices:
 
-- [ ] Hard-validate OIDC sessions against JWKS key rotation, including key-cache refresh, stricter claim coverage, and failure-mode regression coverage for rotated or revoked signing keys.
-- [ ] Extend the default-deny route contract into OpenAPI and SDK generation so route auth metadata becomes a single source of truth instead of split runtime/doc logic.
-- [ ] Sign agent update artifacts and enforce wrong-key, replay, downgrade, and tamper rejection during update assignment and install.
+- [x] Hard-validate OIDC sessions against JWKS key rotation, including key-cache refresh, stricter claim coverage, and failure-mode regression coverage for rotated or revoked signing keys.
+- [x] Extend the default-deny route contract into OpenAPI and SDK generation so route auth metadata becomes a single source of truth instead of split runtime/doc logic.
+- [x] Sign agent update artifacts and enforce wrong-key, replay, downgrade, and tamper rejection during update assignment and install.
 
 ## Phase 0 - Foundation (completed)
 

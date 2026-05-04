@@ -1752,6 +1752,10 @@ export interface AgentDeploymentDetails {
   status_reason?: string | null;
   rollout_group: string;
   allow_downgrade: boolean;
+  signature_status?: string | null;
+  signer_pubkey?: string | null;
+  signature_payload_sha256?: string | null;
+  update_counter?: number | null;
   assigned_at: string;
   acknowledged_at?: string | null;
   completed_at?: string | null;

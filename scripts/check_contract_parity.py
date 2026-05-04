@@ -50,6 +50,21 @@ REQUIRED_SDK_ENDPOINTS = {
     "/api/ws/stats",
 }
 
+REQUIRED_AUTH_METADATA = {
+    ("GET", "/api/health"): "public",
+    ("GET", "/api/metrics"): "public",
+    ("GET", "/api/openapi.json"): "public",
+    ("GET", "/api/auth/sso/login"): "public",
+    ("GET", "/api/auth/sso/callback"): "public",
+    ("POST", "/api/auth/sso/callback"): "public",
+    ("GET", "/api/agents/update"): "agent",
+    ("POST", "/api/events"): "agent",
+    ("GET", "/api/updates/download/{file_name}"): "agent",
+    ("GET", "/api/updates/releases"): "authenticated",
+    ("POST", "/api/updates/publish"): "authenticated",
+    ("POST", "/api/updates/deploy"): "authenticated",
+}
+
 MIN_OPENAPI_OPERATIONS = 80
 
 
@@ -92,6 +107,30 @@ def openapi_yaml_operations(source: str) -> set[tuple[str, str]]:
     return operations
 
 
+def openapi_yaml_auth_metadata(source: str) -> dict[tuple[str, str], str]:
+    metadata: dict[tuple[str, str], str] = {}
+    current_path: str | None = None
+    current_method: str | None = None
+    for line in source.splitlines():
+        path_match = re.match(r"^  (/api/[^:]+):\s*$", line)
+        if path_match:
+            current_path = path_match.group(1)
+            current_method = None
+            continue
+        if re.match(r"^[^ ].*", line):
+            current_path = None
+            current_method = None
+            continue
+        operation_match = re.match(r"^    (get|post|put|delete|patch):\s*$", line)
+        if operation_match and current_path:
+            current_method = operation_match.group(1).upper()
+            continue
+        auth_match = re.match(r"^      x-wardex-auth:\s*([a-z_]+)\s*$", line)
+        if auth_match and current_path and current_method:
+            metadata[(current_method, current_path)] = auth_match.group(1)
+    return metadata
+
+
 def main() -> int:
     version = cargo_version()
     failures: list[str] = []
@@ -108,6 +147,7 @@ def main() -> int:
     py_sdk_source = (ROOT / "sdk/python/wardex/client.py").read_text(errors="ignore")
     openapi_inventory = openapi_operations(openapi_source)
     docs_openapi_inventory = openapi_yaml_operations(docs_openapi_source)
+    docs_auth_metadata = openapi_yaml_auth_metadata(docs_openapi_source)
 
     for method, endpoint in sorted(REQUIRED_RUNTIME_OPENAPI_ENDPOINTS):
         if endpoint not in endpoint_source:
@@ -122,6 +162,16 @@ def main() -> int:
             failures.append(f"{endpoint} missing from TypeScript SDK client")
         if endpoint not in py_sdk_source:
             failures.append(f"{endpoint} missing from Python SDK client")
+
+    if "x-wardex-auth" not in openapi_source:
+        failures.append("OpenAPI builder missing x-wardex-auth operation metadata")
+    for operation, expected_auth in sorted(REQUIRED_AUTH_METADATA.items()):
+        if docs_auth_metadata.get(operation) != expected_auth:
+            method, endpoint = operation
+            actual = docs_auth_metadata.get(operation, "missing")
+            failures.append(
+                f"{method} {endpoint} docs/openapi.yaml x-wardex-auth {actual} != {expected_auth}"
+            )
 
     if len(openapi_inventory) < MIN_OPENAPI_OPERATIONS:
         failures.append(

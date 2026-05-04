@@ -19,6 +19,8 @@ pub struct AgentClient {
     heartbeat_interval: u64,
     policy_poll_interval: u64,
     runtime_status: Option<Arc<Mutex<AgentRuntimeStatus>>>,
+    update_trust_policy: crate::update_trust::UpdateTrustPolicy,
+    last_accepted_update_counter: Arc<Mutex<Option<u64>>>,
 }
 
 #[derive(Debug, Clone, Default)]
@@ -64,7 +66,18 @@ impl AgentClient {
             heartbeat_interval: 30,
             policy_poll_interval: 60,
             runtime_status: None,
+            update_trust_policy: crate::update_trust::UpdateTrustPolicy::default(),
+            last_accepted_update_counter: Arc::new(Mutex::new(None)),
         }
+    }
+
+    fn configure_update_trust(
+        &mut self,
+        policy: crate::update_trust::UpdateTrustPolicy,
+        last_accepted_update_counter: Arc<Mutex<Option<u64>>>,
+    ) {
+        self.update_trust_policy = policy;
+        self.last_accepted_update_counter = last_accepted_update_counter;
     }
 
     fn attach_runtime_status(&mut self, runtime_status: Arc<Mutex<AgentRuntimeStatus>>) {
@@ -220,14 +233,20 @@ impl AgentClient {
                     Ok(binary) => {
                         self.set_update_state("downloaded", Some(&info.version), None);
                         log::info!(
-                            "[update] Downloaded {} bytes, checksum verified",
+                            "[update] Downloaded {} bytes, checksum and trust metadata verified",
                             binary.len()
                         );
                         self.set_update_state("applying", Some(&info.version), None);
+                        if let Err(e) = self.verify_downloaded_update(&info, &binary) {
+                            self.set_update_state("failed", Some(&info.version), Some(e.clone()));
+                            log::error!("[update] Install verification failed: {e}");
+                            return;
+                        }
                         if let Err(e) = apply_update(&binary, &info.version) {
                             self.set_update_state("failed", Some(&info.version), Some(e.clone()));
                             log::error!("[update] Failed to apply: {e}");
                         } else {
+                            self.accept_update_counter(info.update_counter);
                             self.set_update_state("restart_pending", Some(&info.version), None);
                             log::info!("[update] Update applied — restart required");
                         }
@@ -349,7 +368,35 @@ impl AgentClient {
             ));
         }
 
+        self.verify_downloaded_update(info, &buf)?;
+
         Ok(buf)
+    }
+
+    fn verify_downloaded_update(&self, info: &UpdateInfo, binary: &[u8]) -> Result<(), String> {
+        let release = release_from_update_info(info, binary)?;
+        let last_counter = self
+            .last_accepted_update_counter
+            .lock()
+            .map(|counter| *counter)
+            .unwrap_or(None);
+        crate::update_trust::verify_release_artifact(
+            &release,
+            binary,
+            &self.update_trust_policy,
+            env!("CARGO_PKG_VERSION"),
+            last_counter,
+            info.allow_downgrade,
+        )
+        .map(|_| ())
+    }
+
+    fn accept_update_counter(&self, update_counter: Option<u64>) {
+        if let Some(update_counter) = update_counter
+            && let Ok(mut last_counter) = self.last_accepted_update_counter.lock()
+        {
+            *last_counter = Some(update_counter);
+        }
     }
 
     pub fn agent_id(&self) -> Option<&str> {
@@ -414,10 +461,69 @@ pub struct PolicyPayload {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct UpdateInfo {
     pub version: String,
+    #[serde(default)]
+    pub platform: Option<String>,
     pub download_url: String,
+    #[serde(default)]
+    pub file_name: Option<String>,
+    #[serde(default)]
+    pub file_size: Option<u64>,
     pub sha256: String,
     pub release_notes: String,
     pub mandatory: bool,
+    #[serde(default)]
+    pub allow_downgrade: bool,
+    #[serde(default)]
+    pub signature: Option<String>,
+    #[serde(default)]
+    pub signer_pubkey: Option<String>,
+    #[serde(default)]
+    pub signed_at: Option<String>,
+    #[serde(default)]
+    pub signature_payload_sha256: Option<String>,
+    #[serde(default)]
+    pub update_counter: Option<u64>,
+}
+
+fn release_from_update_info(
+    info: &UpdateInfo,
+    binary: &[u8],
+) -> Result<crate::auto_update::Release, String> {
+    Ok(crate::auto_update::Release {
+        version: info.version.clone(),
+        platform: info.platform.clone().unwrap_or_else(|| "universal".into()),
+        sha256: info.sha256.clone(),
+        file_name: info
+            .file_name
+            .clone()
+            .or_else(|| file_name_from_download_url(&info.download_url))
+            .ok_or_else(|| "update metadata missing file_name".to_string())?,
+        file_size: info.file_size.unwrap_or(binary.len() as u64),
+        release_notes: info.release_notes.clone(),
+        mandatory: info.mandatory,
+        published_at: info
+            .signed_at
+            .clone()
+            .unwrap_or_else(|| chrono::Utc::now().to_rfc3339()),
+        signature: info.signature.clone(),
+        signer_pubkey: info.signer_pubkey.clone(),
+        signed_at: info.signed_at.clone(),
+        signature_payload_sha256: info.signature_payload_sha256.clone(),
+        update_counter: info.update_counter,
+    })
+}
+
+fn file_name_from_download_url(download_url: &str) -> Option<String> {
+    download_url
+        .split('?')
+        .next()
+        .unwrap_or(download_url)
+        .trim_end_matches('/')
+        .rsplit('/')
+        .next()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(ToOwned::to_owned)
 }
 
 /// Run the agent main loop: heartbeat + monitor + event forwarding.
@@ -442,6 +548,14 @@ pub fn run_agent(
     let mut client = AgentClient::new(server_url);
     let runtime_status = Arc::new(Mutex::new(AgentRuntimeStatus::default()));
     client.attach_runtime_status(runtime_status.clone());
+    let update_trust_policy =
+        crate::update_trust::UpdateTrustPolicy::from_settings(&config.security.update_signing);
+    let last_accepted_update_counter =
+        Arc::new(Mutex::new(update_trust_policy.last_accepted_update_counter));
+    client.configure_update_trust(
+        update_trust_policy.clone(),
+        last_accepted_update_counter.clone(),
+    );
     let persisted_agent_id = config
         .agent
         .agent_id
@@ -481,10 +595,13 @@ pub fn run_agent(
     let heartbeat_server = server_url.to_string();
     let heartbeat_agent_id = agent_id.clone();
     let heartbeat_runtime_status = runtime_status.clone();
+    let heartbeat_update_trust_policy = update_trust_policy.clone();
+    let heartbeat_update_counter = last_accepted_update_counter.clone();
     thread::spawn(move || {
         let mut hb_client = AgentClient::new(&heartbeat_server);
         hb_client.agent_id = Some(heartbeat_agent_id);
         hb_client.attach_runtime_status(heartbeat_runtime_status);
+        hb_client.configure_update_trust(heartbeat_update_trust_policy, heartbeat_update_counter);
         loop {
             if heartbeat_shutdown.load(Ordering::Relaxed) {
                 break;
@@ -510,10 +627,13 @@ pub fn run_agent(
     let update_agent_id = agent_id.clone();
     let update_runtime_status = runtime_status.clone();
     let update_interval_secs = config.agent.update_check_interval_secs.max(60);
+    let periodic_update_trust_policy = update_trust_policy.clone();
+    let periodic_update_counter = last_accepted_update_counter.clone();
     thread::spawn(move || {
         let mut upd_client = AgentClient::new(&update_server);
         upd_client.agent_id = Some(update_agent_id);
         upd_client.attach_runtime_status(update_runtime_status);
+        upd_client.configure_update_trust(periodic_update_trust_policy, periodic_update_counter);
         loop {
             if update_shutdown.load(Ordering::Relaxed) {
                 break;

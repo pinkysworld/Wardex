@@ -151,7 +151,9 @@
     "Deployment model documentation: standalone, multi-tenant, edge relay, regional federation",
     "Threat model promoted to primary docs: adversary profiles, abuse cases, trust boundaries",
     "Production hardening checklist: 59-control scorecard derived from XDR AI handoff pack",
-    "Control-plane posture evidence for active/passive recovery readiness surfaced in Help & Docs, support-readiness, dependency-health, and backup-status contracts"
+    "Control-plane posture evidence for active/passive recovery readiness surfaced in Help & Docs, support-readiness, dependency-health, and backup-status contracts",
+    "OpenAPI route-auth metadata now derives from the runtime classifier via x-wardex-auth and static parity checks",
+    "Signed agent update trust with Ed25519 metadata, bundled-plus-config signers, replay counters, downgrade policy, and tamper rejection"
   ],
   "partially_wired": [],
   "not_implemented": [],

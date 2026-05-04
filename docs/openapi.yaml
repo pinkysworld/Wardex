@@ -79,6 +79,95 @@ paths:
                 $ref: '#/components/schemas/Error'
       security:
       - bearerAuth: []
+  /api/agents/update:
+    get:
+      summary: Check whether an agent update is available
+      operationId: checkAgentUpdate
+      tags:
+      - updates
+      parameters:
+      - name: agent_id
+        in: query
+        description: Agent identifier
+        required: false
+        schema:
+          type: string
+      - name: current_version
+        in: query
+        description: Current agent version
+        required: false
+        schema:
+          type: string
+      - name: platform
+        in: query
+        description: Agent platform
+        required: false
+        schema:
+          type: string
+      responses:
+        '200':
+          description: Check whether an agent update is available
+          content:
+            application/json:
+              schema:
+                type: object
+        '400':
+          description: Validation or request parsing error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: "Unauthorized \u2014 missing or invalid Bearer token"
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Resource not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: Conflict with existing resource state
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '413':
+          description: Payload too large
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '429':
+          description: Rate limit exceeded
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: Service unavailable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+      x-wardex-auth: agent
+      security:
+      - bearerAuth: []
   /api/agents/{id}/activity:
     get:
       summary: Deep activity snapshot for a single agent
@@ -1296,6 +1385,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+      x-wardex-auth: public
       security:
       - {}
     post:
@@ -1341,6 +1431,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+      x-wardex-auth: public
       security:
       - {}
   /api/auth/sso/login:
@@ -1395,6 +1486,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+      x-wardex-auth: public
       security:
       - {}
   /api/backup/decrypt:
@@ -5326,6 +5418,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+      x-wardex-auth: agent
       security:
       - bearerAuth: []
   /api/events/export:
@@ -6097,6 +6190,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+      x-wardex-auth: public
       security:
       - {}
   /api/host/info:
@@ -7721,6 +7815,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+      x-wardex-auth: public
       security:
       - {}
   /api/monitoring/options:
@@ -7898,6 +7993,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+      x-wardex-auth: public
       security:
       - {}
   /api/playbooks:
@@ -11805,6 +11901,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+      x-wardex-auth: authenticated
       security:
       - bearerAuth: []
   /api/updates/deploy:
@@ -11881,6 +11978,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+      x-wardex-auth: authenticated
       security:
       - bearerAuth: []
   /api/updates/publish:
@@ -11957,6 +12055,85 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+      x-wardex-auth: authenticated
+      security:
+      - bearerAuth: []
+  /api/updates/download/{file_name}:
+    get:
+      summary: Download an agent release artifact
+      operationId: downloadRelease
+      tags:
+      - updates
+      parameters:
+      - name: file_name
+        in: path
+        description: Path parameter `file_name`
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: Download an agent release artifact
+          content:
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+        '400':
+          description: Validation or request parsing error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: "Unauthorized \u2014 missing or invalid Bearer token"
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Resource not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: Conflict with existing resource state
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '413':
+          description: Payload too large
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '429':
+          description: Rate limit exceeded
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: Service unavailable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+      x-wardex-auth: agent
       security:
       - bearerAuth: []
   /api/updates/releases:
@@ -12026,6 +12203,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+      x-wardex-auth: authenticated
       security:
       - bearerAuth: []
   /api/updates/rollback:
@@ -12102,6 +12280,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+      x-wardex-auth: authenticated
       security:
       - bearerAuth: []
   /api/workbench/overview:

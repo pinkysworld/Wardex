@@ -261,6 +261,33 @@ pub struct SecuritySettings {
     /// Allowed CORS origins (empty = allow same-origin only).
     #[serde(default)]
     pub cors_allowed_origins: Vec<String>,
+    /// Agent update signing, trust anchors, and legacy unsigned grace policy.
+    #[serde(default)]
+    pub update_signing: UpdateSigningSettings,
+}
+
+/// Agent update artifact signing and verification policy.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct UpdateSigningSettings {
+    /// Reject unsigned update artifacts immediately when true.
+    #[serde(default)]
+    pub require_signed_updates: bool,
+    /// Additional trusted Ed25519 signer public keys, base64-encoded.
+    #[serde(default)]
+    pub trusted_update_signers: Vec<String>,
+    /// Optional file containing the Ed25519 signing key used by the server when publishing releases.
+    #[serde(default)]
+    pub signing_key_path: Option<String>,
+    /// Grace-period cutoff for accepting legacy unsigned releases.
+    #[serde(default = "default_legacy_unsigned_grace_until")]
+    pub legacy_unsigned_grace_until: Option<String>,
+    /// Last accepted update counter seed for agent-side replay protection.
+    #[serde(default)]
+    pub last_accepted_update_counter: Option<u64>,
+}
+
+fn default_legacy_unsigned_grace_until() -> Option<String> {
+    Some("2026-08-01T00:00:00Z".to_string())
 }
 
 fn default_token_ttl_secs() -> u64 {
@@ -317,6 +344,19 @@ impl Default for SecuritySettings {
             require_mtls_agents: false,
             agent_ca_cert_path: None,
             cors_allowed_origins: Vec::new(),
+            update_signing: UpdateSigningSettings::default(),
+        }
+    }
+}
+
+impl Default for UpdateSigningSettings {
+    fn default() -> Self {
+        Self {
+            require_signed_updates: false,
+            trusted_update_signers: Vec::new(),
+            signing_key_path: None,
+            legacy_unsigned_grace_until: default_legacy_unsigned_grace_until(),
+            last_accepted_update_counter: None,
         }
     }
 }

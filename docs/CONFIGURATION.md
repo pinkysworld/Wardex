@@ -10,6 +10,7 @@ This document covers all configuration options for the Wardex XDR agent and serv
 | `WARDEX_HOST` | `127.0.0.1` | HTTP server bind address |
 | `WARDEX_TOKEN` | *(required)* | Admin API authentication token |
 | `WARDEX_AGENT_TOKEN` | *(optional)* | Enrollment token for XDR agents |
+| `WARDEX_UPDATE_SIGNING_KEY_BASE64` | — | Base64 Ed25519 update signing key used by the server when publishing agent releases; overrides `security.update_signing.signing_key_path` when set |
 | `WARDEX_TLS_CERT` | — | Path to TLS certificate (PEM) |
 | `WARDEX_TLS_KEY` | — | Path to TLS private key (PEM) |
 | `WARDEX_DB_PATH` | `var/wardex.db` | SQLite database path |
@@ -39,7 +40,21 @@ shutdown_timeout_secs = 30
 token_ttl_secs = 86400        # Token lifetime (0 = no expiry)
 rate_limit_per_min = 120       # API rate limit per client IP
 brute_force_lockout = 5        # Lock IP after N failed auth attempts
+
+[security.update_signing]
+require_signed_updates = false # true = reject unsigned agent update releases immediately
+trusted_update_signers = []    # additional base64 Ed25519 public keys; bundled defaults remain trusted
+signing_key_path = ""          # optional file containing a base64, hex, or raw 32-byte Ed25519 signing key
+legacy_unsigned_grace_until = "2026-08-01T00:00:00Z"
+last_accepted_update_counter = 0 # optional agent-side replay counter seed
 ```
+
+Agent update releases are signed at publish time when `WARDEX_UPDATE_SIGNING_KEY_BASE64` or
+`security.update_signing.signing_key_path` is configured. Deployments verify the stored release binary against the
+signature payload before assignment, downloads expose signature headers, and agents verify checksum, signer trust,
+payload hash, replay counter, downgrade policy, and binary size before install. Leave `require_signed_updates = false`
+only during the legacy unsigned grace period; set it to `true` once every managed agent has been upgraded to the signed
+update verifier.
 
 ### `[collection]`
 

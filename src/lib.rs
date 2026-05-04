@@ -99,6 +99,7 @@ pub mod policy_dist;
 pub mod prevention;
 pub mod runtime;
 pub mod swarm;
+pub mod update_trust;
 
 // ── Storage & Persistence ────────────────────────────────────────────────────
 pub mod archival;
