@@ -4,6 +4,8 @@ All notable changes to Wardex are documented in this file.
 
 ## [Unreleased]
 
+## [0.56.1] — Route Auth & Signed Update Trust Hardening
+
 ### Added
 - **Operational readiness drill timeline** — Help & Docs `Production Readiness` now renders documented recovery targets (RTO/RPO), backup and checkpoint evidence, persisted failover-drill history, pass/fail artifact checks, and exportable timeline evidence for recovery reviews.
 - **SOC detection review reasoning** — SOC Workbench detection-review rows now carry replay deltas plus the latest analyst verdict, note, and review timestamp so shift leads can understand review pressure before pivoting into Threat Detection.
@@ -20,6 +22,7 @@ All notable changes to Wardex are documented in this file.
 ### Backend
 - **SOC workbench strengthening slices** — `GET /api/workbench/overview` now includes team load and ownership plus connector coverage impact signals, and `GET /api/cases/{id}/handoff-packet` returns structured case handoff packets for analyst turnover.
 - **Command Center review summary** — `GET /api/command/summary` now carries a compact detection review calendar inside the `rule_tuning` lane, surfacing overdue reviews, due-this-week items, replay blockers, noisy owners, and direct pivots into detection promotion views.
+- **Auto-progress update trust gate** — canary-to-ring rollout progression now verifies the signed release artifact before assigning the next ring, rejects untrusted signer keys, and carries verified signature metadata onto generated deployments.
 
 ### Frontend
 - **Threat Detection ownership review calendar** — the detection workspace now shows overdue reviews, due-this-week rules, replay blockers, noisy owners, rule-level next-review timing, and promotion blockers derived from lifecycle and replay state.
@@ -30,7 +33,8 @@ All notable changes to Wardex are documented in this file.
 - **0.56.0 quality cleanup** — frontend race/test failures were fixed, Rust doctest SIGKILL noise was removed by disabling no-op doctests for the monolithic lib target, persisted auth sessions now enforce owner-only permissions on Unix, and RBAC token persistence/listing now uses hashed/redacted token values.
 - **OIDC rotation regressions** — focused Rust unit coverage now exercises rotated JWKS acceptance, revoked cached-key rejection, missing `iat` rejection, multi-audience `azp` enforcement, and non-signature JWKS key rejection.
 - **Update trust regressions** — focused Rust coverage now exercises signed update verification, wrong-key rejection, malformed signature rejection, tampered metadata/binary rejection, unsigned strict/grace behavior, replay-counter rejection, downgrade policy, and trusted installer history metadata.
-- **CI stability** — command, SOC, detection, lint, build, and integration checks were refreshed so the current 0.56.0 strengthening slices land green across the local acceptance gates.
+- **Auto-progress trust regressions** — server coverage now exercises next-ring signature metadata propagation and wrong-signer rejection during automatic rollout progression.
+- **CI stability** — command, SOC, detection, lint, build, and integration checks were refreshed so the current 0.56.1 hardening slices land green across the local acceptance gates.
 
 ## [0.56.0] — Control-Plane Posture Evidence & Recovery Readiness
 

@@ -6,13 +6,14 @@
 
 Wardex is a Rust-based XDR and SIEM platform for private-cloud and self-hosted security operations. It combines cross-platform telemetry collection, detection engineering, analyst workflows, approval-gated response, agent lifecycle management, SIEM integrations, and tamper-evident evidence handling in a single deployable product.
 
-## What ships in `v0.56.0`
+## What ships in `v0.56.1`
 
 - 139 Rust source modules covering telemetry collection, detection engineering, hunt/search, SOC workflows, fleet operations, governance, and automated incident response.
 - A versioned OpenAPI contract with regenerated Python and TypeScript SDKs for authenticated admin-console workflows, explainability, onboarding readiness, threat-intel enrichment, malware analysis, reports, hunts, investigations, NDR, and enterprise support surfaces.
 - 1500+ automated tests and smoke checks spanning Rust, SDK, admin-console, and Playwright browser coverage.
 - **Control-plane posture evidence** — Help & Docs plus the support-readiness, dependency-health, and backup-status contracts now surface active/passive reference status, backup cadence, latest backup/checkpoint artifacts, and restore readiness so operators can verify recovery posture without reading raw backend JSON.
 - **Operational readiness drill timeline** — Help & Docs now renders documented RTO/RPO targets, backup/checkpoint evidence, persisted failover-drill history, pass/fail artifact checks, and one-click timeline export for recovery reviews.
+- **Route-auth and update trust hardening** — OpenAPI `x-wardex-auth`, endpoint catalog auth flags, and contract parity now derive from the runtime route classifier, while agent updates carry Ed25519 signatures, replay counters, trusted-signer policy, downgrade rejection, and verified auto-progress metadata.
 - **Release guardrails** — Node 22 contributor and CI alignment, checksummed release assets, Debian package install smoke coverage, strict Playwright a11y gates for onboarding and settings, and shared request-ID generation harden the release path.
 - **Product Command Center** — `/command` is the analyst default workspace, bringing incident pressure, cases, connector gaps, remediation approvals, rule tuning debt, release readiness, and compliance evidence into one routed surface with inline action drawers, drawer deep-links via `?drawer=<lane>`, and a per-lane `GET /api/command/lanes/{lane}` endpoint for focused refreshes.
 - **Guided connector onboarding** — GitHub Audit Log, CrowdStrike Falcon, and Generic Syslog now have saved setup contracts, validation endpoints, sample-event proof, collector status, OpenAPI coverage, and console onboarding flows.

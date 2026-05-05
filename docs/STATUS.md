@@ -2,7 +2,7 @@
 
 ## Current release
 
-- **Version:** `0.56.0`
+- **Version:** `0.56.1`
 - **Positioning:** private-cloud XDR and SIEM platform with enterprise detection engineering, malware scanning, analyst workflows, fleet operations, behavioural analytics, and automated incident response
 - **Source footprint:** 139 Rust source modules
 - **API contract:** versioned OpenAPI surface with REST, GraphQL, live `/api/openapi.json` export, and generated SDK parity diagnostics that surface alignment drift directly in the operator console
@@ -100,7 +100,7 @@ The current release has been verified with:
 
 Wardex is now positioned as a professional XDR/SIEM control plane with incident-first analyst workflows, explainable detections, context-preserving reporting, operator-visible recovery posture, and explicit shift-lead surfaces for ownership, handoff, and detection-review pressure. The runtime, admin console, release process, and website are aligned around operator trust, workflow closure, and deployment readiness.
 
-## Recently shipped (v0.56.0)
+## Recently shipped (v0.56.1)
 
 - **SOC workbench strengthening** — case handoff packets, team load and ownership, and connector coverage impact are now first-class workbench surfaces, so handoffs, queue balancing, and collector-to-detection trust gaps stay visible in the same overview.
 - **Detection review calendar** — Threat Detection now shows overdue ownership reviews, due-this-week items, replay blockers, noisy owners, and rule-level next-review timing plus promotion blockers.
@@ -114,10 +114,11 @@ Wardex is now positioned as a professional XDR/SIEM control plane with incident-
 - **Default-deny route auth classification** — API auth enforcement now runs through an explicit route-access classifier for public, agent-token, cluster-token, and authenticated paths, with authenticated as the default for all remaining `/api/*` routes and `/api/endpoints` deriving supplemental auth flags from that same contract.
 - **OpenAPI route-auth contract parity** — generated OpenAPI security, `x-wardex-auth`, the endpoint catalog, static `docs/openapi.yaml`, and parity checks now use the runtime classifier as the route-auth source of truth, including agent update-check and artifact-download routes.
 - **Signed agent update trust** — agent release artifacts now support Ed25519 signatures, signer trust from bundled defaults plus config, unsigned grace-period handling, replay counters, downgrade rejection, tamper detection, download headers, deployment metadata, and agent-side install re-verification.
+- **Auto-progress signed update review fix** — canary-to-next-ring rollout progression now performs the same artifact trust verification as manual deployment, rejects wrong-key signed releases, and records verified signature metadata on generated assignments.
 - **Control-plane posture evidence** — support readiness, dependency health, and backup-status routes now expose active/passive reference status, backup cadence, observed backups, latest backup timestamps, checkpoint counts, latest checkpoint timestamps, and restore-readiness directly from live runtime state.
 - **Help & Docs recovery summary** — Production Readiness now renders a structured control-plane posture section with durable-storage, restore-artifact, and failover-model checks so operators can review recovery posture without reading raw JSON.
 - **HA guidance refresh** — deployment and disaster-recovery docs now tie the active/passive reference pattern to the shipped support/readiness APIs so failover drills have concrete runtime evidence to verify before and after restore.
-- **Release metadata aligned on v0.56.0** — Rust, admin-console, Python SDK, TypeScript SDK, Helm, OTLP, OpenAPI, installation/reproducibility docs, and website release surfaces now point to the same release baseline.
+- **Release metadata aligned on v0.56.1** — Rust, admin-console, Python SDK, TypeScript SDK, Helm, OTLP, OpenAPI, installation/reproducibility docs, and website release surfaces now point to the same release baseline.
 - **GitHub CI release gate cleaned up** — the panic-policy baseline is back to zero production `unwrap`/`expect` calls, Rust formatting is clean, and the OS test matrix now reports each platform independently instead of cancelling sibling jobs after the first failure.
 - **GitHub release distribution hardened** — the tag release workflow now falls back to the repository token for Pages dispatch, skips optional Homebrew tap publishing when its token is absent, and lets Pages publish static content even when APT signing secrets are not configured.
 

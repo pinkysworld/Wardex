@@ -24262,9 +24262,33 @@ fn handle_agent_heartbeat(
                     }
                 }
                 // Auto-progress: deploy same version to next ring agents that don't already have a deployment
+                let update_trust_policy = crate::update_trust::UpdateTrustPolicy::from_settings(
+                    &s.config.security.update_signing,
+                );
                 for (version, platform, next_ring) in progress_candidates {
+                    let release = match s.update_manager.get_release(&version, &platform) {
+                        Some(release) => release.clone(),
+                        None => {
+                            log::warn!(
+                                "[updates] auto-progress skipped: release {version}/{platform} not found"
+                            );
+                            continue;
+                        }
+                    };
+                    let release_binary = match s
+                        .update_manager
+                        .get_release_binary(&release.file_name)
+                    {
+                        Ok(binary) => binary,
+                        Err(e) => {
+                            log::warn!(
+                                "[updates] auto-progress skipped for {version}/{platform}: release artifact unavailable: {e}"
+                            );
+                            continue;
+                        }
+                    };
                     // Find agents enrolled with matching platform that are in the next ring's eligible set
-                    let enrolled: Vec<String> = s
+                    let enrolled: Vec<(String, String)> = s
                         .agent_registry
                         .list()
                         .iter()
@@ -24272,15 +24296,35 @@ fn handle_agent_heartbeat(
                             a.platform == platform
                                 && a.status == crate::enrollment::AgentStatus::Online
                         })
-                        .map(|a| a.id.clone())
+                        .map(|a| (a.id.clone(), a.version.clone()))
                         .collect();
-                    for eid in enrolled {
+                    for (eid, agent_version) in enrolled {
                         let already_deployed = s
                             .remote_deployments
                             .get(&eid)
                             .map(|d| d.version == version)
                             .unwrap_or(false);
                         if !already_deployed {
+                            let last_counter = s
+                                .remote_deployments
+                                .get(&eid)
+                                .and_then(|deployment| deployment.update_counter);
+                            let verification = match crate::update_trust::verify_release_artifact(
+                                &release,
+                                &release_binary,
+                                &update_trust_policy,
+                                &agent_version,
+                                last_counter,
+                                false,
+                            ) {
+                                Ok(verification) => verification,
+                                Err(e) => {
+                                    log::warn!(
+                                        "[updates] auto-progress skipped for agent {eid} to {version}: release trust verification failed: {e}"
+                                    );
+                                    continue;
+                                }
+                            };
                             let new_dep = AgentDeployment {
                                 agent_id: eid.clone(),
                                 version: version.clone(),
@@ -24293,10 +24337,10 @@ fn handle_agent_heartbeat(
                                 status_reason: Some(format!("auto_progress_{next_ring}")),
                                 rollout_group: next_ring.clone(),
                                 allow_downgrade: false,
-                                signature_status: None,
-                                signer_pubkey: None,
-                                signature_payload_sha256: None,
-                                update_counter: None,
+                                signature_status: Some(verification.signature_status),
+                                signer_pubkey: verification.signer_pubkey,
+                                signature_payload_sha256: verification.signature_payload_sha256,
+                                update_counter: verification.update_counter,
                                 assigned_at: chrono::Utc::now().to_rfc3339(),
                                 acknowledged_at: None,
                                 completed_at: None,
@@ -26366,6 +26410,136 @@ mod tests {
             })
             .expect("enroll test agent")
             .agent_id
+    }
+
+    fn completed_canary_deployment(
+        agent_id: &str,
+        release: &crate::auto_update::Release,
+    ) -> AgentDeployment {
+        AgentDeployment {
+            agent_id: agent_id.to_string(),
+            version: release.version.clone(),
+            platform: release.platform.clone(),
+            mandatory: release.mandatory,
+            release_notes: release.release_notes.clone(),
+            status: "applied".to_string(),
+            status_reason: None,
+            rollout_group: "canary".to_string(),
+            allow_downgrade: false,
+            signature_status: Some("signed".to_string()),
+            signer_pubkey: release.signer_pubkey.clone(),
+            signature_payload_sha256: release.signature_payload_sha256.clone(),
+            update_counter: release.update_counter,
+            assigned_at: chrono::Utc::now().to_rfc3339(),
+            acknowledged_at: Some(chrono::Utc::now().to_rfc3339()),
+            completed_at: Some((chrono::Utc::now() - chrono::Duration::seconds(5)).to_rfc3339()),
+            last_heartbeat_at: None,
+        }
+    }
+
+    #[test]
+    fn auto_progress_records_verified_update_signature_metadata() {
+        let (_port, _token, state) = spawn_test_server_with_state();
+        let (canary_id, ring_id, signer_pubkey, payload_hash, counter) = {
+            let mut state = state.lock().unwrap_or_else(|e| e.into_inner());
+            state.config.rollout.auto_progress = true;
+            state.config.rollout.canary_soak_secs = 0;
+            state.config.security.update_signing.require_signed_updates = true;
+            let canary_id =
+                enroll_test_agent(&mut state.agent_registry, "canary-host", "linux", "1.0.0");
+            let ring_id =
+                enroll_test_agent(&mut state.agent_registry, "ring-host", "linux", "1.0.0");
+            let release = state
+                .update_manager
+                .publish_signed_release(
+                    "2.0.0",
+                    "linux",
+                    b"trusted update binary",
+                    "trusted rollout",
+                    true,
+                    &[7u8; 32],
+                )
+                .expect("signed release");
+            state.remote_deployments.insert(
+                canary_id.clone(),
+                completed_canary_deployment(&canary_id, &release),
+            );
+            (
+                canary_id,
+                ring_id,
+                release.signer_pubkey.clone(),
+                release.signature_payload_sha256.clone(),
+                release.update_counter,
+            )
+        };
+
+        let body = serde_json::json!({ "version": "2.0.0" }).to_string();
+        let response = handle_agent_heartbeat(body.as_bytes(), &state, &canary_id);
+        assert_eq!(response.status(), StatusCode::OK);
+
+        let state = state.lock().unwrap_or_else(|e| e.into_inner());
+        let deployment = state
+            .remote_deployments
+            .get(&ring_id)
+            .expect("next-ring deployment should be assigned");
+        assert_eq!(deployment.rollout_group, "ring-1");
+        assert_eq!(
+            deployment.status_reason.as_deref(),
+            Some("auto_progress_ring-1")
+        );
+        assert_eq!(deployment.signature_status.as_deref(), Some("signed"));
+        assert_eq!(deployment.signer_pubkey, signer_pubkey);
+        assert_eq!(deployment.signature_payload_sha256, payload_hash);
+        assert_eq!(deployment.update_counter, counter);
+    }
+
+    #[test]
+    fn auto_progress_rejects_untrusted_signed_release() {
+        let (_port, _token, state) = spawn_test_server_with_state();
+        let (canary_id, ring_id) = {
+            let mut state = state.lock().unwrap_or_else(|e| e.into_inner());
+            state.config.rollout.auto_progress = true;
+            state.config.rollout.canary_soak_secs = 0;
+            state.config.security.update_signing.require_signed_updates = true;
+            let canary_id = enroll_test_agent(
+                &mut state.agent_registry,
+                "canary-untrusted",
+                "linux",
+                "1.0.0",
+            );
+            let ring_id = enroll_test_agent(
+                &mut state.agent_registry,
+                "ring-untrusted",
+                "linux",
+                "1.0.0",
+            );
+            let release = state
+                .update_manager
+                .publish_signed_release(
+                    "2.0.0",
+                    "linux",
+                    b"untrusted update binary",
+                    "untrusted rollout",
+                    true,
+                    &[8u8; 32],
+                )
+                .expect("signed release");
+            state.remote_deployments.insert(
+                canary_id.clone(),
+                completed_canary_deployment(&canary_id, &release),
+            );
+            (canary_id, ring_id)
+        };
+
+        let body = serde_json::json!({ "version": "2.0.0" }).to_string();
+        let response = handle_agent_heartbeat(body.as_bytes(), &state, &canary_id);
+        assert_eq!(response.status(), StatusCode::OK);
+
+        let state = state.lock().unwrap_or_else(|e| e.into_inner());
+        assert!(
+            !state.remote_deployments.contains_key(&ring_id),
+            "auto-progress must not assign releases signed by untrusted keys"
+        );
     }
 
     #[test]

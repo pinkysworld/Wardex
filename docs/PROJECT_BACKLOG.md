@@ -2,9 +2,9 @@
 
 This backlog lists the next concrete tasks in build order.
 
-## Current strengthening checkpoint (`v0.56.0`)
+## Current strengthening checkpoint (`v0.56.1`)
 
-Recently completed after the `v0.56.0` baseline:
+Recently completed for the `v0.56.1` hardening release:
 
 - [x] Phase 1 cleanup checkpoint: admin-console race/test failures, lint/build drift, doctest SIGKILL noise, session permission hardening, and RBAC token hashing/redaction.
 - [x] Shift Command Board in Command Center with ownership, blockers, SLA age buckets, and next-action lanes.
@@ -19,6 +19,7 @@ Recently completed after the `v0.56.0` baseline:
 - [x] Default-deny API auth classification with explicit public, agent-token, and cluster-token exceptions plus shared supplemental endpoint auth derivation.
 - [x] Route auth contract parity with OpenAPI `x-wardex-auth`, endpoint catalog derivation, static contract checks, and documented agent update routes from the runtime classifier.
 - [x] Signed agent update trust enforcement with Ed25519 artifact metadata, bundled-plus-config trusted signers, unsigned grace policy, deployment/download/install verification, and wrong-key/replay/downgrade/tamper regressions.
+- [x] Auto-progress signed update review fix with next-ring trust verification, wrong-signer rejection, and verified signature metadata on generated rollout assignments.
 
 Recommended next backlog slices:
 
