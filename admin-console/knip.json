@@ -3,5 +3,5 @@
   "entry": ["e2e/**/*.spec.js"],
   "project": ["src/**/*.{js,jsx}", "e2e/**/*.{js,jsx}"],
   "ignore": ["src/api.js"],
-  "ignoreDependencies": ["axe-core", "playwright"]
+  "ignoreDependencies": ["axe-core"]
 }

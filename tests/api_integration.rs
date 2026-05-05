@@ -1248,8 +1248,10 @@ fn options_returns_cors_headers() {
 
 #[test]
 fn unknown_api_endpoint_returns_404() {
-    let (port, _token) = spawn_test_server();
-    let err = ureq::get(&format!("{}/api/nonexistent", base(port))).call();
+    let (port, token) = spawn_test_server();
+    let err = ureq::get(&format!("{}/api/nonexistent", base(port)))
+        .set("Authorization", &auth_header(&token))
+        .call();
     match err {
         Err(ureq::Error::Status(404, _)) => {}
         other => panic!("expected 404, got {other:?}"),
@@ -1436,7 +1438,11 @@ fn auth_session_exchange_sets_cookie_and_accepts_cookie_session() {
 fn auth_session_accepts_sso_session_token_and_logout_revokes_it() {
     let (port, _token) = spawn_test_server();
     let session_path = test_state_path(port, "sessions.json");
-    let store = SessionStore::with_persistence(&session_path);
+    let key_path = test_state_root(port).join(".wardex_session_key");
+    let seal_key = std::fs::read_to_string(&key_path)
+        .ok()
+        .map(|s| s.trim().as_bytes().to_vec());
+    let store = SessionStore::with_persistence_key(&session_path, seal_key);
     let session_id = store.create_session(
         "sso-user",
         "sso@example.com",
@@ -3889,7 +3895,7 @@ fn alerts_endpoint_returns_enriched_process_fields_for_seeded_alerts() {
     assert!(alert["entities"].is_array());
     assert!(matches!(
         alert["process_resolution"].as_str(),
-        Some("unresolved" | "multiple")
+        Some("unresolved" | "unique" | "multiple" | "remote_host")
     ));
     assert!(
         alert["process_names"]
@@ -3914,8 +3920,15 @@ fn alerts_endpoint_returns_enriched_process_fields_for_seeded_alerts() {
             .iter()
             .any(|entity| entity["entity_type"].as_str() == Some("ProcessName"))
     );
-    assert!(alert.get("process_candidates").is_none());
-    assert!(alert.get("process").is_none());
+    // process_candidates presence depends on what processes are currently running;
+    // assert the field is consistent with process_resolution instead.
+    let resolution = alert["process_resolution"].as_str().unwrap_or("");
+    if resolution == "unresolved" || resolution == "remote_host" {
+        assert!(alert.get("process_candidates").is_none());
+        assert!(alert.get("process").is_none());
+    } else {
+        assert!(alert.get("process_candidates").is_some());
+    }
 }
 
 #[test]

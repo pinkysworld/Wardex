@@ -3602,11 +3602,11 @@ fn session_seal_key_path(config_path: &Path) -> String {
         .to_string()
 }
 
-fn harden_private_file_permissions(path: &str) {
+fn harden_private_file_permissions(_path: &str) {
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;
-        let _ = std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o600));
+        let _ = std::fs::set_permissions(_path, std::fs::Permissions::from_mode(0o600));
     }
 }
 

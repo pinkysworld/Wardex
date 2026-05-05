@@ -148,7 +148,7 @@ export const compactTimestamp = (value) => {
   return formatRelativeTime(value) || formatDateTime(value);
 };
 
-export const connectorStatus = (connector, data) => {
+const connectorStatus = (connector, data) => {
   const details = data[connector.statusKey] || {};
   const setup = details.setup || details.config || details;
   const validation = details.validation || setup.validation || {};

@@ -5,6 +5,7 @@
 ignore = [
     { id = "RUSTSEC-2024-0384", reason = "Transitive via tantivy/measure_time; no safe upgrade is currently available in the shipped dependency graph." },
     { id = "RUSTSEC-2026-0097", reason = "rand 0.8 remains in the graph via tantivy dependencies; track upstream until the tree can move to a fixed release." },
+    { id = "RUSTSEC-2023-0071", reason = "Marvin Attack in rsa crate via jsonwebtoken; no patched version of jsonwebtoken is available that removes the rsa dependency." },
 ]
 
 [licenses]
