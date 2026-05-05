@@ -4,7 +4,7 @@ replicaCount: 2
 
 image:
   repository: wardex
-  tag: "0.56.2"
+  tag: "1.0.0"
   pullPolicy: IfNotPresent
 
 imagePullSecrets: []
@@ -115,3 +115,11 @@ serviceMonitor:
 nodeSelector: {}
 tolerations: []
 affinity: {}
+
+networkPolicy:
+  enabled: true
+  allowClickHouseEgress: false
+  # Additional ingress rules (list of NetworkPolicy IngressRule objects)
+  ingressRules: []
+  # Additional egress rules (list of NetworkPolicy EgressRule objects)
+  egressRules: []

@@ -1,36 +1,39 @@
-# Experimental Feature Flags
+# Feature Flags
 
-Wardex ships several experimental modules behind compile-time feature gates.
-All are enabled by default; disable them for a leaner build or to avoid
-pulling in heavy dependencies.
+## Compile-time features (v1.0)
 
-## Compile-time features
+From v1.0, all previously experimental modules are **graduated to stable**
+and compiled unconditionally. The `experimental-ml`, `experimental-llm`,
+`experimental-quantum`, and `experimental-proof` feature flags have been
+removed.
 
-| Feature                  | Module            | Description                                      |
-|--------------------------|-------------------|--------------------------------------------------|
-| `experimental-ml`        | `ml_engine`       | ONNX-based ML triage and anomaly scoring         |
-| `experimental-llm`       | `llm_analyst`     | LLM-assisted analyst (OpenAI, Anthropic, Ollama) |
-| `experimental-quantum`   | `quantum`         | Post-quantum key rotation (Kyber, Dilithium)     |
-| `experimental-proof`     | `proof`           | Zero-knowledge proofs for privacy forensics      |
+| Module          | Description                                       | Status   |
+|-----------------|---------------------------------------------------|----------|
+| `ml_engine`     | ONNX-based ML triage and anomaly scoring          | Stable ✓ |
+| `llm_analyst`   | LLM-assisted analyst (OpenAI, Anthropic, Ollama)  | Stable ✓ |
+| `quantum`       | Post-quantum key rotation (Kyber, Dilithium)      | Stable ✓ |
+| `proof`         | Zero-knowledge proofs for privacy forensics       | Stable ✓ |
 
-### Building without experimental features
+### Available compile-time features (v1.0)
 
-```bash
-# Minimal core build
-cargo build --release --no-default-features
-
-# Only ML triage
-cargo build --release --no-default-features --features experimental-ml
-
-# ML + LLM but no quantum/proof
-cargo build --release --no-default-features --features experimental-ml,experimental-llm
-```
-
-### Default build (all features)
+| Feature | Description |
+|---------|-------------|
+| `tls`   | Enables TLS support in the `ureq` HTTP client (opt-in) |
 
 ```bash
+# Standard build (all modules included)
 cargo build --release
+
+# With TLS for outbound ureq calls
+cargo build --release --features tls
 ```
+
+### Upgrading from 0.x
+
+If you previously used `--no-default-features --features experimental-*`,
+remove those flags. All modules are now unconditionally compiled. See
+`docs/UPGRADE_0_56_TO_1_0.md` for the full migration guide.
+
 
 ## Runtime feature flags
 

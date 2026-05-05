@@ -61,6 +61,24 @@ WARDEX_BASE_URL=http://127.0.0.1:8080 \
 bash scripts/release_acceptance.sh
 ```
 
+## API Stability Pledge (v1.0+)
+
+From v1.0, Wardex commits to a **12-month API stability guarantee**:
+
+- No breaking changes to the public HTTP API, CLI interface, TOML
+  configuration keys, or SDK method signatures within a major version series.
+- Breaking changes require a major-version bump (1.x → 2.0) with deprecation
+  notice in the prior minor release. See `docs/DEPRECATION_POLICY.md`.
+- New endpoints, optional fields, and additive SDK methods may appear in any
+  minor release.
+
+Major-version release acceptance additionally requires:
+
+1. `docs/UPGRADE_<prev>_TO_<major>.md` exists and covers all breaking changes.
+2. `docs/DEPRECATION_POLICY.md` and `docs/COMPATIBILITY.md` are current.
+3. No `deprecated: true` endpoints in `docs/openapi.yaml` without a
+   documented removal target version.
+
 ## Manual release review
 
 The automated gate does not replace operator review. Before cutting a release:

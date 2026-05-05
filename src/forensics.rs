@@ -1,11 +1,12 @@
+// aes-gcm 0.10 uses generic-array 0.14 which deprecated from_slice; suppressed until aes-gcm 0.11
+#![allow(deprecated)]
 use serde::Serialize;
 use std::fs;
 use std::path::Path;
 
 use crate::runtime::RunResult;
 
-use aes_gcm::aead::generic_array::GenericArray;
-use aes_gcm::{Aes256Gcm, KeyInit, aead::Aead};
+use aes_gcm::{Aes256Gcm, Key, Nonce, KeyInit, aead::Aead};
 use rand::RngCore;
 
 #[derive(Debug, Clone, Serialize)]
@@ -92,10 +93,10 @@ impl ForensicBundle {
         let json = serde_json::to_string_pretty(self)
             .map_err(|e| format!("failed to serialize forensic bundle: {e}"))?;
 
-        let cipher = Aes256Gcm::new(GenericArray::from_slice(key));
+        let cipher = Aes256Gcm::new(Key::<Aes256Gcm>::from_slice(key));
         let mut nonce_bytes = [0u8; 12];
         rand::rngs::OsRng.fill_bytes(&mut nonce_bytes);
-        let nonce = GenericArray::from_slice(&nonce_bytes);
+        let nonce = Nonce::from_slice(&nonce_bytes);
 
         let ciphertext = cipher
             .encrypt(nonce, json.as_bytes())
@@ -116,8 +117,8 @@ impl ForensicBundle {
             return Err("encrypted bundle too short".into());
         }
         let (nonce_bytes, ciphertext) = data.split_at(12);
-        let cipher = Aes256Gcm::new(GenericArray::from_slice(key));
-        let nonce = GenericArray::from_slice(nonce_bytes);
+        let cipher = Aes256Gcm::new(Key::<Aes256Gcm>::from_slice(key));
+        let nonce = Nonce::from_slice(nonce_bytes);
 
         let plaintext = cipher
             .decrypt(nonce, ciphertext)

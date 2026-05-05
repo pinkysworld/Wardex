@@ -32,7 +32,6 @@ pub mod fixed_threshold;
 pub mod ioc_decay;
 pub mod kill_chain;
 pub mod lateral;
-#[cfg(feature = "experimental-llm")]
 pub mod llm_analyst;
 pub mod ml_engine;
 pub mod pipeline;

@@ -6,7 +6,19 @@
 
 Wardex is a Rust-based XDR and SIEM platform for private-cloud and self-hosted security operations. It combines cross-platform telemetry collection, detection engineering, analyst workflows, approval-gated response, agent lifecycle management, SIEM integrations, and tamper-evident evidence handling in a single deployable product.
 
-## What ships in `v0.56.2`
+## What ships in `v1.0.0`
+
+- **Major GA release** — first stable version with a 12-month API stability pledge.
+- **AGPL-3.0 dual-license** — open-source under AGPL-3.0; commercial license available for production use without copyleft obligations. See [LICENSE](LICENSE) and [LICENSE.COMMERCIAL](LICENSE.COMMERCIAL).
+- **All experimental modules promoted to stable** — ML engine, LLM analyst, quantum key rotation, and ZK proof modules are now unconditionally compiled; the `experimental-*` Cargo feature flags are removed.
+- **HA failover runbook** — [docs/runbooks/HA_FAILOVER.md](docs/runbooks/HA_FAILOVER.md) with step-by-step active/passive failover, RPO/RTO targets, agent reconnection, and Kubernetes guidance.
+- **ClickHouse storage** — the recommended event backend for production-scale telemetry is now fully integrated and configurable via `[clickhouse]` in the server TOML.
+- **Compatibility matrix** — [docs/COMPATIBILITY.md](docs/COMPATIBILITY.md) defines MSRV (1.88.0), supported OS/arch (Linux x86_64/aarch64, macOS arm64/x64, Windows x86_64), Node ≥ 20.19.0, and support window.
+- **Deprecation policy** — [docs/DEPRECATION_POLICY.md](docs/DEPRECATION_POLICY.md) guarantees minimum sunset windows for all public API, CLI, config, and SDK changes.
+- **Compliance posture** — [docs/COMPLIANCE.md](docs/COMPLIANCE.md) explicitly states the FIPS/CC/SOC 2 roadmap and GDPR posture.
+- **0.x → 1.0 upgrade guide** — [docs/UPGRADE_0_56_TO_1_0.md](docs/UPGRADE_0_56_TO_1_0.md) covers all breaking changes, build-script updates, config changes, and rollback.
+- **Helm NetworkPolicy** — the Helm chart now ships a `NetworkPolicy` template (enabled by default) with configurable ingress/egress rules and ClickHouse egress toggle.
+- 139 Rust source modules, 1500+ automated tests, Playwright e2e on chromium and webkit, and all clippy/fmt/cargo deny gates green.
 
 - 139 Rust source modules covering telemetry collection, detection engineering, hunt/search, SOC workflows, fleet operations, governance, and automated incident response.
 - A versioned OpenAPI contract with regenerated Python and TypeScript SDKs for authenticated admin-console workflows, explainability, onboarding readiness, threat-intel enrichment, malware analysis, reports, hunts, investigations, NDR, and enterprise support surfaces.
@@ -144,14 +156,13 @@ Tagged releases are packaged by GitHub Actions into Linux, macOS, and Windows ar
 
 ## Support
 
-The public support page at [minh.systems/Wardex/donate.html](https://minh.systems/Wardex/donate.html) summarizes sponsorship, commercial licensing, and non-monetary ways to help. You can support ongoing development, release validation, documentation, and SDK maintenance through [GitHub Sponsors](https://github.com/sponsors/pinkysworld). For production deployment or commercial usage under the current BSL 1.1 terms, contact the author for a separate commercial license.
+The public support page at [minh.systems/Wardex/donate.html](https://minh.systems/Wardex/donate.html) summarizes sponsorship, commercial licensing, and non-monetary ways to help. You can support ongoing development, release validation, documentation, and SDK maintenance through [GitHub Sponsors](https://github.com/sponsors/pinkysworld). For production deployment or commercial usage, contact the author for a commercial license at **support@wardex.dev**.
 
 ## License
 
-Wardex is released under the **Business Source License 1.1** (BSL 1.1).
+Wardex is dual-licensed:
 
-- **Free for**: development, testing, evaluation, research, and non-commercial use.
-- **Production commercial use** requires a separate commercial license from the author.
-- **Converts to Apache 2.0** on 2029-04-01.
+- **Open-source**: [GNU Affero General Public License v3.0](LICENSE) (AGPL-3.0) — free to use, modify, and distribute with copyleft obligations.
+- **Commercial**: See [LICENSE.COMMERCIAL](LICENSE.COMMERCIAL) — for organisations that cannot comply with AGPL-3.0's network-service copyleft requirement.
 
-See [LICENSE](LICENSE) for the full terms.
+See [LICENSE](LICENSE) and [LICENSE.COMMERCIAL](LICENSE.COMMERCIAL) for full terms.

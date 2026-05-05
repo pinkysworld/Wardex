@@ -1,0 +1,50 @@
+Wardex XDR Platform — Commercial License Terms
+================================================
+
+Copyright (c) 2025–2026 Michel Picker. All rights reserved.
+
+PREAMBLE
+--------
+Wardex is dual-licensed. The open-source edition is available under the GNU
+Affero General Public License v3.0 (AGPL-3.0-only). This document describes
+the terms under which a separate commercial license may be obtained.
+
+A commercial license is required when AGPL-3.0 compliance is not acceptable
+for your organisation, including but not limited to:
+
+  • You wish to use Wardex in a proprietary product or service without
+    disclosing your modifications under AGPL-3.0.
+  • You distribute Wardex (or a derivative) as a hosted/SaaS service and
+    do not wish to open-source the network-service code.
+  • You require a contractual warranty, indemnification, or SLA beyond what
+    AGPL-3.0 provides.
+
+OBTAINING A COMMERCIAL LICENSE
+-------------------------------
+Contact the Licensor to discuss terms:
+
+  Email:   support@wardex.dev
+  GitHub:  https://github.com/pinkysworld/Wardex (open an issue or discussion)
+
+Commercial licences are granted on a per-organisation basis and include:
+
+  • The right to use, modify, and distribute Wardex without AGPL-3.0 copyleft
+    obligations.
+  • A defined support tier and agreed response-time SLAs.
+  • Access to private release channels and security advisories.
+
+PRICING
+-------
+Current pricing tiers are published at https://minh.systems/Wardex/pricing.html.
+Paid tiers include a 30-day evaluation period under a non-production commercial
+license.
+
+LIMITATION OF LIABILITY
+-----------------------
+TO THE MAXIMUM EXTENT PERMITTED BY APPLICABLE LAW, THE LICENSOR PROVIDES THE
+SOFTWARE "AS IS" WITHOUT WARRANTY OF ANY KIND. IN NO EVENT SHALL THE LICENSOR
+BE LIABLE FOR ANY INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+DAMAGES ARISING FROM THE USE OF THE SOFTWARE.
+
+This document does not constitute a binding contract. A commercial license
+agreement is a separate executed document signed by both parties.

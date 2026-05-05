@@ -4,7 +4,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Pricing &amp; Licensing — Wardex</title>
-    <meta name="description" content="Transparent Wardex pricing: free Community tier, €49/month Starter, per-endpoint Team and Business plans, and custom Enterprise. BSL 1.1 source-available.">
+    <meta name="description" content="Transparent Wardex pricing: free Community tier, €49/month Starter, per-endpoint Team and Business plans, and custom Enterprise. AGPL 3.0 open-source with commercial dual-license.">
     <meta property="og:type" content="website">
     <meta property="og:site_name" content="Wardex">
     <meta property="og:title" content="Pricing &amp; Licensing — Wardex">
@@ -86,7 +86,7 @@
                 <p class="tier-tag">Self-hosted, non-production</p>
               </div>
               <div class="tier-price"><span class="tier-amount">Free</span></div>
-              <p class="tier-limits">Up to <strong>10 endpoints</strong> · BSL 1.1 non-commercial</p>
+              <p class="tier-limits">Up to <strong>10 endpoints</strong> · AGPL 3.0 open-source</p>
               <ul class="tier-features">
                 <li>Full source access</li>
                 <li>All detection engines</li>
@@ -172,7 +172,7 @@
 
           </div>
 
-          <p class="pricing-footnote">Prices exclude VAT. Annual prepay saves ~17%. Paid tiers include a 30-day evaluation under non-production BSL terms. All deployments remain fully self-hosted — we never receive your telemetry. SSO, SAML, RBAC, HA reference guidance, and air-gapped distribution are available in every tier.</p>
+              <p class="pricing-footnote">Prices exclude VAT. Annual prepay saves ~17%. Paid tiers include a 30-day evaluation under non-production terms. All deployments remain fully self-hosted — we never receive your telemetry. SSO, SAML, RBAC, HA reference guidance, and air-gapped distribution are available in every tier.</p>
         </div>
       </section>
 
@@ -213,12 +213,12 @@
       <section class="section section-alt">
         <div class="container">
           <div class="license-notice">
-            <h3>How BSL 1.1 works in practice</h3>
-            <p><strong>Release version:</strong> <span id="license-version">v0.56.2</span></p>
-            <p><strong>Change Date:</strong> BSL 1.1 converts to Apache 2.0 on <strong>1 April 2029</strong>. After that date, historical releases become Apache 2.0 — no separate licence needed.</p>
-            <p><strong>Production use:</strong> Any commercial or production environment requires one of the paid tiers above. Non-production use — development, research, internal evaluation — is permitted under BSL 1.1 itself.</p>
+            <h3>How AGPL 3.0 + commercial dual-license works in practice</h3>
+            <p><strong>Release version:</strong> <span id="license-version">v1.0.0</span></p>
+            <p><strong>Open-source use (AGPL 3.0):</strong> Free for any use where you comply with the AGPL 3.0 network-service copyleft clause — including publishing your modifications if you run Wardex as a hosted service.</p>
+            <p><strong>Commercial license:</strong> Required when AGPL copyleft compliance is not acceptable — e.g. proprietary products, hosted services without source disclosure, or when you need contractual SLAs and indemnification. Contact <a href="mailto:support@wardex.dev">support@wardex.dev</a> or see <a href="https://github.com/pinkysworld/Wardex/blob/main/LICENSE.COMMERCIAL" target="_blank" rel="noopener">LICENSE.COMMERCIAL</a>.</p>
             <p><strong>Verification:</strong> Release archives and container images ship with SLSA provenance, CycloneDX SBOMs and cosign signatures — steps in <a href="https://github.com/pinkysworld/Wardex/blob/main/docs/REPRODUCIBILITY.md" target="_blank" rel="noopener">Reproducibility &amp; Supply-Chain Verification</a>.</p>
-            <p><strong>Questions?</strong> Licensing, commercial use, or partnerships — <a href="mailto:mip@gmx.biz">contact us directly</a>.</p>
+            <p><strong>Questions?</strong> Licensing, commercial use, or partnerships — <a href="mailto:support@wardex.dev">contact us directly</a>.</p>
           </div>
         </div>
       </section>
@@ -234,10 +234,10 @@
             <details class="faq-item"><summary>What exactly counts as &quot;production&quot; use?</summary><p>Any environment where Wardex is monitoring or protecting real business operations, customer data or live workloads. If a SOC depends on it to detect real attacks — that's production.</p></details>
             <details class="faq-item"><summary>Is the product the same across tiers?</summary><p>Yes. Every tier ships the same binary with all detection engines, SSO/SAML, RBAC, audit logs, HA reference guidance, air-gapped distribution, the full admin console, the complete API, and YARA/Sigma rule packs. Tiers differ on endpoint count, support SLA, and commercial support model — not on feature flags.</p></details>
             <details class="faq-item"><summary>Do you see my telemetry?</summary><p>Never. Wardex is 100% self-hosted. Agent events, alerts and analytics stay in your infrastructure. We don't operate a cloud backplane — there is nothing to phone home to.</p></details>
-            <details class="faq-item"><summary>Is Wardex truly open-source?</summary><p>The source is fully open, readable, forkable and modifiable. BSL 1.1 is source-available with a time-locked conversion to Apache 2.0. It's not OSI-certified open-source during the BSL window, but it's functionally open for every use case except commercial production deployment.</p></details>
+            <details class="faq-item"><summary>Is Wardex truly open-source?</summary><p>Yes. Wardex is licensed under AGPL-3.0, an OSI-approved open-source license. The full source is readable, forkable, and modifiable. A commercial license is available for organisations that cannot comply with AGPL's network-service copyleft requirement.</p></details>
             <details class="faq-item"><summary>Can I switch tiers or cancel?</summary><p>Yes. Monthly plans cancel at any time — you keep the right to run the version you licensed for the remainder of the period. Annual plans renew yearly. No lock-in — the source stays yours.</p></details>
             <details class="faq-item"><summary>Do you offer discounts?</summary><p>Yes. Academic, non-profit and early-stage startup discounts are available. Annual prepay is ~17% off monthly. Email us with context and we'll reply within 48h.</p></details>
-            <details class="faq-item"><summary>What happens after the Change Date?</summary><p>On 1 April 2029, every Wardex release up to that point converts automatically to Apache 2.0. Commercial tiers continue for newer releases, support and SLAs — but the core becomes traditional open-source.</p></details>
+            <details class="faq-item"><summary>What happens after the Change Date?</summary><p>With AGPL-3.0 dual-licensing, the source is already fully open-source from day one. There is no Change Date. Commercial licenses are perpetual per version and allow use without AGPL copyleft obligations.</p></details>
           </div>
         </div>
       </section>
@@ -263,7 +263,7 @@
             <div class="footer-col footer-about">
               <span class="nav-logo footer-logo">WX</span>
               <p>Private-cloud XDR &amp; SIEM built in Rust. One binary. Full data sovereignty.</p>
-              <p class="footer-version"><span id="footer-version">v0.56.2</span> · BSL 1.1</p>
+              <p class="footer-version"><span id="footer-version">v1.0.0</span> · AGPL 3.0</p>
             </div>
             <div class="footer-col">
               <h4>Product</h4>
@@ -288,7 +288,7 @@
             </div>
           </div>
           <div class="footer-bottom">
-            <p>Wardex · © 2024–2026 · <a href="../LICENSE" style="color:inherit;">BSL 1.1</a> · Commercial production use requires a <a href="pricing.html" style="color: var(--nav-accent);">separate licence</a>.</p>
+            <p>Wardex · © 2024–2026 · <a href="../LICENSE" style="color:inherit;">AGPL 3.0</a> · Commercial production use requires a <a href="pricing.html" style="color: var(--nav-accent);">separate licence</a>.</p>
           </div>
         </div>
       </footer>

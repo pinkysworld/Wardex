@@ -4,7 +4,24 @@ All notable changes to Wardex are documented in this file.
 
 ## [Unreleased]
 
-## [0.56.2] — Lint-Clean OIDC and SOC Workbench Code Paths
+## [1.0.0] — GA: AGPL-3.0 Dual-License, Stable Modules, HA Runbook, API Stability Pledge
+
+### Changed
+- **License**: Switched from BUSL-1.1 to **AGPL-3.0-only** with a commercial dual-license option (see [LICENSE.COMMERCIAL](LICENSE.COMMERCIAL)). Prior "Change Date" conversion to Apache 2.0 is no longer applicable.
+- **Experimental feature flags removed**: `experimental-ml`, `experimental-llm`, `experimental-quantum`, and `experimental-proof` Cargo features no longer exist. The corresponding modules (`ml_engine`, `llm_analyst`, `quantum_key_rotation`, `zk_proof_engine`) are now always compiled. See [docs/UPGRADE_0_56_TO_1_0.md](docs/UPGRADE_0_56_TO_1_0.md) for migration instructions.
+
+### Added
+- **API stability pledge** — a 12-month backward-compatibility guarantee for all v1.0 HTTP endpoints, CLI flags, config keys, and SDK public surface. Breaking changes require a major version bump. Documented in [docs/RELEASE_ACCEPTANCE.md](docs/RELEASE_ACCEPTANCE.md).
+- **HA failover runbook** — active/passive HA with RPO ≤ 15 min / RTO ≤ 30 min targets. Step-by-step planned and unplanned failover procedures, Kubernetes guidance, and failback. See [docs/runbooks/HA_FAILOVER.md](docs/runbooks/HA_FAILOVER.md).
+- **Upgrade guide (0.x → 1.0)** — covers license review, Cargo.toml feature-flag removal, schema migration, ClickHouse config section, SDK version bump, Helm values review, and rollback. See [docs/UPGRADE_0_56_TO_1_0.md](docs/UPGRADE_0_56_TO_1_0.md).
+- **Compatibility matrix** — MSRV 1.88.0, platform support tiers, browser support, SDK runtimes, and 12-month support window. See [docs/COMPATIBILITY.md](docs/COMPATIBILITY.md).
+- **Deprecation policy** — minimum sunset windows (1 minor release) for HTTP endpoints, CLI flags, config keys, and SDK symbols. Removal only in next major version. See [docs/DEPRECATION_POLICY.md](docs/DEPRECATION_POLICY.md).
+- **Compliance posture document** — explicit FIPS 140-2/3, Common Criteria, SOC 2, ISO 27001, GDPR, and supply-chain posture statements for v1.0. See [docs/COMPLIANCE.md](docs/COMPLIANCE.md).
+- **Helm NetworkPolicy template** — `deploy/helm/wardex/templates/networkpolicy.yaml`, enabled by default, with configurable ingress/egress rules and optional ClickHouse egress toggle.
+- **`[clickhouse]` server config section** — ClickHouse is now the recommended production event backend; configurable via `clickhouse.url`, `clickhouse.database`, and `clickhouse.max_pool_size`.
+- **`LICENSE.COMMERCIAL`** — explicit commercial license terms for organisations requiring proprietary use without AGPL-3.0 copyleft.
+
+
 
 ### Quality
 - **Clippy clean across all targets** — collapsed redundant `if let` guards in the OIDC JWKS validator (`validate_jwk_for_id_token`) and the OIDC test harness token-body branch, removed a needless borrow in `build_team_load_overview` for incident slices, and re-ran `cargo clippy --all-targets --no-deps -- -D warnings` to keep the release lint-clean.

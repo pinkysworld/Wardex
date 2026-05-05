@@ -157,13 +157,27 @@ The primary scaling pressure is retained event volume rather than raw CPU. If yo
 
 ## High Availability Reference Pattern
 
-Wardex does not yet ship a fully automated clustered control plane, but the current operationally sound pattern is active/passive or regional-active deployment with externalized recovery artifacts.
+Wardex v1.0 supports **active/passive HA** backed by durable shared storage
+or periodic backup replication. A fully automated clustered control plane
+(Raft leader election) is planned for v1.1; the current production pattern
+is described below.
 
 1. Place the HTTP/UI listener behind a load balancer or reverse proxy.
-2. Keep `var/` on durable storage or ship scheduled backups using the existing backup/export workflows.
-3. Mirror configuration, admin secrets, and TLS assets through your secret manager instead of node-local files.
-4. Use a warm standby node for the same release version and restore checkpoints or backups during failover.
-5. Use Help & Docs `Production Readiness` or the `/api/support/readiness-evidence`, `/api/system/health/dependencies`, and `/api/backup/status` endpoints to confirm backup cadence, latest backup/checkpoint artifacts, and restore readiness before failover drills.
-6. In federation mode, keep each region autonomous and share posture/intel across regions instead of forwarding all raw events cross-region.
+2. Keep `var/` on durable storage (NFS, cloud PVC, or equivalent) so the
+   standby node can mount the same data on failover.
+3. Mirror configuration, admin secrets, and TLS assets through your secret
+   manager instead of node-local files.
+4. Use a warm standby node running the same release version; apply
+   backup/checkpoint artifacts automatically via `wardex backup restore`
+   during unplanned failover.
+5. Monitor backup currency via `/api/backup/status` and recovery posture
+   via `/api/support/readiness-evidence` before every failover drill.
+6. In federation mode, keep each region autonomous and share posture/intel
+   across regions instead of forwarding all raw events cross-region.
 
-For production planning, pair this document with `docs/DISASTER_RECOVERY.md` and `docs/PRODUCTION_HARDENING.md` so sizing, backup cadence, and failover drills are defined together.
+For step-by-step failover procedures, RPO/RTO targets, and Kubernetes
+specifics, see the **[HA Failover Runbook](runbooks/HA_FAILOVER.md)**.
+
+For production planning, pair this document with `docs/DISASTER_RECOVERY.md`
+and `docs/PRODUCTION_HARDENING.md` so sizing, backup cadence, and failover
+drills are defined together.

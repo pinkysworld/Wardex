@@ -1,4 +1,6 @@
 //! AES-256-GCM encrypted backup and restore with passphrase-derived keys.
+// aes-gcm 0.10 uses generic-array 0.14 which deprecated from_slice; suppressed until aes-gcm 0.11
+#![allow(deprecated)]
 
 use chrono::Utc;
 use serde::{Deserialize, Serialize};
