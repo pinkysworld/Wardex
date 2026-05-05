@@ -1777,9 +1777,7 @@ export default function SOCWorkbench() {
                 <div className="summary-grid">
                   <div className="summary-card">
                     <div className="summary-label">Overdue Reviews</div>
-                    <div className="summary-value">
-                      {overview.detection_review?.overdue || 0}
-                    </div>
+                    <div className="summary-value">{overview.detection_review?.overdue || 0}</div>
                     <div className="summary-meta">
                       Rules already past their next owner review checkpoint
                     </div>
@@ -1878,7 +1876,10 @@ export default function SOCWorkbench() {
                           >
                             {formatCompactLabel(item.due_status || 'scheduled')}
                           </div>
-                          <div className="btn-group" style={{ marginTop: 8, justifyContent: 'flex-end' }}>
+                          <div
+                            className="btn-group"
+                            style={{ marginTop: 8, justifyContent: 'flex-end' }}
+                          >
                             <button
                               className="btn btn-sm"
                               onClick={() => navigate(item.href || `/detection?rule=${item.id}`)}
@@ -5056,12 +5057,16 @@ export default function SOCWorkbench() {
                 <div className="summary-grid" style={{ marginBottom: 12 }}>
                   <div className="summary-card">
                     <div className="summary-label">Nodes</div>
-                    <div className="summary-value">{graphData.node_count ?? (graphData.nodes?.length ?? 0)}</div>
+                    <div className="summary-value">
+                      {graphData.node_count ?? graphData.nodes?.length ?? 0}
+                    </div>
                     <div className="summary-meta">Graph entities</div>
                   </div>
                   <div className="summary-card">
                     <div className="summary-label">Edges</div>
-                    <div className="summary-value">{graphData.edge_count ?? (graphData.edges?.length ?? 0)}</div>
+                    <div className="summary-value">
+                      {graphData.edge_count ?? graphData.edges?.length ?? 0}
+                    </div>
                     <div className="summary-meta">Relationships</div>
                   </div>
                 </div>

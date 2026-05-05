@@ -2,7 +2,9 @@
 
 ## Current release baseline
 
-`v0.56.2` delivers the current private-cloud XDR and SIEM control-plane baseline:
+`v1.0.0` is the first stable release of Wardex, delivering a production-hardened private-cloud XDR and SIEM platform with full operator-usable UI for every shipped capability, HA-ready control-plane posture, and AGPL-3.0 open-source licensing.
+
+`v0.56.2` delivered the private-cloud XDR and SIEM control-plane baseline that `v1.0.0` graduates from:
 
 - SOC Workbench for queue, cases, investigations, guided workflows, response approvals, escalation management, and incident-first case/incident drawers
 - Product Command Center for incidents, cases, connector gaps, remediation approvals, rule tuning debt, release readiness, and compliance evidence packs with inline action drawers
@@ -74,7 +76,7 @@
 
 ## Success criteria
 
-| Metric | Current (`v0.56.2`) | Target |
+| Metric | Current (`v1.0.0`) | Target |
 |---|---|---|
 | Automated tests | 1413 lib + 212+ integration + focused browser/admin regressions | maintained and expanded on every release |
 | OpenAPI and SDK contract | versioned OpenAPI plus generated Python and TypeScript SDKs | kept in lockstep on every release |

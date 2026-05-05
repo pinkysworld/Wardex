@@ -387,9 +387,7 @@ describe('CommandCenter', () => {
     expect(screen.getByText('Owners under noise')).toBeInTheDocument();
     expect(screen.getAllByText('SSH burst').length).toBeGreaterThan(0);
     expect(screen.getByText('detections • test • overdue')).toBeInTheDocument();
-    expect(
-      screen.getByText('2 blocker(s) • 6 replay hits • 1 suppression(s)'),
-    ).toBeInTheDocument();
+    expect(screen.getByText('2 blocker(s) • 6 replay hits • 1 suppression(s)')).toBeInTheDocument();
     expect(screen.getByRole('link', { name: /SSH burst/ })).toHaveAttribute(
       'href',
       '/detection?rule=rule-ssh-burst&rulePanel=promotion',

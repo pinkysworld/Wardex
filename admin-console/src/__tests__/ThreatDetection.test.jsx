@@ -607,7 +607,9 @@ describe('ThreatDetection', () => {
     expect(screen.getByText('Latest Replay Delta')).toBeInTheDocument();
     expect(screen.getByText('Recent Analyst Feedback')).toBeInTheDocument();
     expect(screen.getAllByText('True Positive').length).toBeGreaterThan(0);
-    expect(screen.getAllByText('Validated against host triage evidence.').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('Validated against host triage evidence.').length).toBeGreaterThan(
+      0,
+    );
 
     fireEvent.click(screen.getByRole('button', { name: 'Review Rule' }));
 

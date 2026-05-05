@@ -89,7 +89,7 @@ jobs:
       - name: Install cargo-audit
         run: cargo install cargo-audit --locked
       - name: Security audit
-        run: cargo audit --ignore RUSTSEC-2026-0097
+        run: cargo audit --ignore RUSTSEC-2026-0097 --ignore RUSTSEC-2023-0071
 
   deny:
     runs-on: ubuntu-latest

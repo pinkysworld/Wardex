@@ -285,7 +285,12 @@ const reviewIntervalDays = (rule) => {
 };
 
 const reviewAnchorAt = (rule) => {
-  const candidates = [rule?.last_promotion_at, rule?.last_test_at, rule?.updated_at, rule?.created_at]
+  const candidates = [
+    rule?.last_promotion_at,
+    rule?.last_test_at,
+    rule?.updated_at,
+    rule?.created_at,
+  ]
     .map((value) => {
       const parsed = value ? new Date(value) : null;
       return parsed && !Number.isNaN(parsed.getTime()) ? parsed : null;
@@ -343,7 +348,9 @@ const ruleReplayState = (rule, suppressionCount) => {
 
 const rulePromotionBlockers = (rule, suppressionCount) => {
   const blockers = [];
-  const owner = String(rule?.owner || '').trim().toLowerCase();
+  const owner = String(rule?.owner || '')
+    .trim()
+    .toLowerCase();
   if (!owner || owner === 'system') blockers.push('Assign a named detection owner.');
   if (!rule?.last_test_at) blockers.push('Run replay validation.');
   const replayAgeDays = ageInDays(rule?.last_test_at);
@@ -2989,22 +2996,30 @@ export default function ThreatDetection() {
           <div className="summary-card">
             <div className="summary-label">Overdue Reviews</div>
             <div className="summary-value">{detectionOwnershipCalendar.summary.overdue}</div>
-            <div className="summary-meta">Rules that have slipped past their next owner review.</div>
+            <div className="summary-meta">
+              Rules that have slipped past their next owner review.
+            </div>
           </div>
           <div className="summary-card">
             <div className="summary-label">Due This Week</div>
             <div className="summary-value">{detectionOwnershipCalendar.summary.dueThisWeek}</div>
-            <div className="summary-meta">Upcoming reviews that should stay inside the current shift plan.</div>
+            <div className="summary-meta">
+              Upcoming reviews that should stay inside the current shift plan.
+            </div>
           </div>
           <div className="summary-card">
             <div className="summary-label">Replay Blockers</div>
             <div className="summary-value">{detectionOwnershipCalendar.summary.replayBlockers}</div>
-            <div className="summary-meta">Rules needing replay, suppression, or ownership cleanup before promotion.</div>
+            <div className="summary-meta">
+              Rules needing replay, suppression, or ownership cleanup before promotion.
+            </div>
           </div>
           <div className="summary-card">
             <div className="summary-label">Noisy Owners</div>
             <div className="summary-value">{detectionOwnershipCalendar.summary.noisyOwners}</div>
-            <div className="summary-meta">Owners currently carrying replay noise or suppression cleanup.</div>
+            <div className="summary-meta">
+              Owners currently carrying replay noise or suppression cleanup.
+            </div>
           </div>
         </div>
         <div style={{ marginTop: 12 }}>

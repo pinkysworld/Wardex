@@ -6,7 +6,7 @@ use std::path::Path;
 
 use crate::runtime::RunResult;
 
-use aes_gcm::{Aes256Gcm, Key, Nonce, KeyInit, aead::Aead};
+use aes_gcm::{Aes256Gcm, Key, KeyInit, Nonce, aead::Aead};
 use rand::RngCore;
 
 #[derive(Debug, Clone, Serialize)]

@@ -824,7 +824,9 @@ describe('SOCWorkbench', () => {
     expect(
       screen.getByText((text) => text.includes('Latest analyst verdict True Positive • analyst-1')),
     ).toBeInTheDocument();
-    expect(screen.getAllByText('Shift handoff confirmed the replay noise is expected.').length).toBeGreaterThan(0);
+    expect(
+      screen.getAllByText('Shift handoff confirmed the replay noise is expected.').length,
+    ).toBeGreaterThan(0);
   });
 
   it('hydrates the queue filter from URL state and clears back to the full queue', async () => {
