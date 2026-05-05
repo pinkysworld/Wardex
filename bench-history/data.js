@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1777973617297,
+  "lastUpdate": 1777975071514,
   "repoUrl": "https://github.com/pinkysworld/Wardex",
   "entries": {
     "Wardex criterion benches": [
@@ -6391,6 +6391,114 @@ window.BENCHMARK_DATA = {
             "name": "sigma_evaluate_20_rules",
             "value": 35430,
             "range": "± 400",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "85413447+pinkysworld@users.noreply.github.com",
+            "name": "pinkysworld",
+            "username": "pinkysworld"
+          },
+          "committer": {
+            "email": "85413447+pinkysworld@users.noreply.github.com",
+            "name": "pinkysworld",
+            "username": "pinkysworld"
+          },
+          "distinct": true,
+          "id": "16a2d77f61de9bfde7b40955a11bf99f213b6954",
+          "message": "ci: fix all failing CI jobs\n\n- forensics.rs: sort aes_gcm imports alphabetically (rustfmt)\n- ci.yml: ignore RUSTSEC-2023-0071 (rsa Marvin Attack, no fix available\n  in jsonwebtoken dependency tree)\n- ROADMAP_XDR_PROFESSIONAL.md: add v1.0.0 milestone (release-docs check)\n- admin-console: run prettier on SOCWorkbench, ThreatDetection,\n  CommandCenter, and SOCWorkbench test files (frontend format check)",
+          "timestamp": "2026-05-05T11:50:08+02:00",
+          "tree_id": "8e4344f331aae9be65dbfd7195243a3a7810492d",
+          "url": "https://github.com/pinkysworld/Wardex/commit/16a2d77f61de9bfde7b40955a11bf99f213b6954"
+        },
+        "date": 1777975070524,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "full_pipeline/5",
+            "value": 49128,
+            "range": "± 1732",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "full_pipeline/50",
+            "value": 413417,
+            "range": "± 3154",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "full_pipeline/200",
+            "value": 1899372,
+            "range": "± 16882",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "full_pipeline/1000",
+            "value": 17388043,
+            "range": "± 262732",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "detector_evaluate_single",
+            "value": 620,
+            "range": "± 1",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "detector_window_stream_256",
+            "value": 779040,
+            "range": "± 11352",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "shared_storage_observed_schema_read",
+            "value": 127,
+            "range": "± 0",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "shared_storage_4_threads_64_alerts",
+            "value": 158616,
+            "range": "± 2418",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "policy_evaluate_single",
+            "value": 237,
+            "range": "± 1",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "throughput/1000_samples",
+            "value": 17492996,
+            "range": "± 173776",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "search_500_events",
+            "value": 114470,
+            "range": "± 336",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "hunt_field_query",
+            "value": 96349,
+            "range": "± 252",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "ml_triage_rf",
+            "value": 54,
+            "range": "± 0",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "sigma_evaluate_20_rules",
+            "value": 35469,
+            "range": "± 160",
             "unit": "ns/iter"
           }
         ]
