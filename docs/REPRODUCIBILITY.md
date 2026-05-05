@@ -32,7 +32,7 @@ A successful verification confirms the archive was produced by
 ## Verify the container image
 
 ```bash
-IMAGE=ghcr.io/pinkysworld/wardex:0.56.1
+IMAGE=ghcr.io/pinkysworld/wardex:0.56.2
 
 # 1. Cosign keyless signature (subject is the release workflow run)
 cosign verify \

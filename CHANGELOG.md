@@ -4,6 +4,13 @@ All notable changes to Wardex are documented in this file.
 
 ## [Unreleased]
 
+## [0.56.2] — Lint-Clean OIDC and SOC Workbench Code Paths
+
+### Quality
+- **Clippy clean across all targets** — collapsed redundant `if let` guards in the OIDC JWKS validator (`validate_jwk_for_id_token`) and the OIDC test harness token-body branch, removed a needless borrow in `build_team_load_overview` for incident slices, and re-ran `cargo clippy --all-targets --no-deps -- -D warnings` to keep the release lint-clean.
+- **Live e2e re-verification** — admin-console Vitest unit suites (274 tests), full Rust library tests (1480 tests), `cargo build --release`, contract-parity, release-docs validators, and Playwright e2e on chromium and webkit (21 tests each) were re-run against the bumped release.
+- **Release metadata aligned on v0.56.2** — Rust, admin-console, Python SDK, TypeScript SDK, Helm, OTLP, OpenAPI, installation/reproducibility docs, and website release surfaces now point to the same release baseline.
+
 ## [0.56.1] — Route Auth & Signed Update Trust Hardening
 
 ### Added

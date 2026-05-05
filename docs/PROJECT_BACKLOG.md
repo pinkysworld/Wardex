@@ -2,7 +2,12 @@
 
 This backlog lists the next concrete tasks in build order.
 
-## Current strengthening checkpoint (`v0.56.1`)
+## Current strengthening checkpoint (`v0.56.2`)
+
+Recently completed for the `v0.56.2` lint-clean release:
+
+- [x] Clippy-clean OIDC and SOC workbench code paths: collapsed redundant `if let` guards in `validate_jwk_for_id_token` and the OIDC test harness token-body branch and removed a needless borrow in `build_team_load_overview`.
+- [x] Live release re-verification across admin-console Vitest, full Rust library suites, `cargo build --release`, contract-parity, release-docs validators, and Playwright e2e on chromium and webkit.
 
 Recently completed for the `v0.56.1` hardening release:
 

@@ -6,11 +6,12 @@
 
 Wardex is a Rust-based XDR and SIEM platform for private-cloud and self-hosted security operations. It combines cross-platform telemetry collection, detection engineering, analyst workflows, approval-gated response, agent lifecycle management, SIEM integrations, and tamper-evident evidence handling in a single deployable product.
 
-## What ships in `v0.56.1`
+## What ships in `v0.56.2`
 
 - 139 Rust source modules covering telemetry collection, detection engineering, hunt/search, SOC workflows, fleet operations, governance, and automated incident response.
 - A versioned OpenAPI contract with regenerated Python and TypeScript SDKs for authenticated admin-console workflows, explainability, onboarding readiness, threat-intel enrichment, malware analysis, reports, hunts, investigations, NDR, and enterprise support surfaces.
 - 1500+ automated tests and smoke checks spanning Rust, SDK, admin-console, and Playwright browser coverage.
+- **Lint-clean OIDC and SOC workbench code paths** — collapsed redundant `if let` guards in the OIDC JWKS validator and OIDC test harness, removed a needless borrow in the SOC workbench team-load builder, and re-verified the release with `cargo clippy --all-targets --no-deps -- -D warnings`, full Rust suites, admin-console Vitest, and Playwright e2e on chromium and webkit.
 - **Control-plane posture evidence** — Help & Docs plus the support-readiness, dependency-health, and backup-status contracts now surface active/passive reference status, backup cadence, latest backup/checkpoint artifacts, and restore readiness so operators can verify recovery posture without reading raw backend JSON.
 - **Operational readiness drill timeline** — Help & Docs now renders documented RTO/RPO targets, backup/checkpoint evidence, persisted failover-drill history, pass/fail artifact checks, and one-click timeline export for recovery reviews.
 - **Route-auth and update trust hardening** — OpenAPI `x-wardex-auth`, endpoint catalog auth flags, and contract parity now derive from the runtime route classifier, while agent updates carry Ed25519 signatures, replay counters, trusted-signer policy, downgrade rejection, and verified auto-progress metadata.

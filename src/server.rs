@@ -6302,7 +6302,7 @@ fn build_workbench_overview(
     let team_load = build_team_load_overview(
         &queue_items,
         &cases,
-        &incidents,
+        incidents,
         &requests,
         rbac,
         &mapped_role_context,
@@ -26889,15 +26889,14 @@ mod tests {
                         .next()
                         .and_then(|line| line.split_whitespace().nth(1))
                         .unwrap_or("/");
-                    if path.starts_with("/token") {
-                        if let Some(end) = header_end {
-                            let body =
-                                String::from_utf8_lossy(&request_bytes[end + 4..]).to_string();
-                            token_bodies_for_server
-                                .lock()
-                                .expect("token body log")
-                                .push(body);
-                        }
+                    if path.starts_with("/token")
+                        && let Some(end) = header_end
+                    {
+                        let body = String::from_utf8_lossy(&request_bytes[end + 4..]).to_string();
+                        token_bodies_for_server
+                            .lock()
+                            .expect("token body log")
+                            .push(body);
                     }
                     let (status_line, body, content_type) = if path
                         .starts_with("/.well-known/openid-configuration")

@@ -1,7 +1,7 @@
 openapi: 3.0.3
 info:
   title: Wardex XDR/SIEM API
-  version: 0.56.1
+  version: 0.56.2
   description: "Wardex XDR/SIEM REST API \u2014 detection, fleet management, incident response, and platform operations."
   license:
     name: BSL-1.1

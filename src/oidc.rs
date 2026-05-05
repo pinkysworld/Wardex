@@ -524,18 +524,17 @@ fn select_signing_jwk<'a>(jwks: &'a JwkSet, header: &Header) -> Result<&'a Jwk, 
 }
 
 fn validate_jwk_for_id_token(jwk: &Jwk, header: &Header) -> Result<(), String> {
-    if let Some(public_key_use) = &jwk.common.public_key_use {
-        if !matches!(public_key_use, PublicKeyUse::Signature) {
-            return Err("OIDC JWKS signing key is not marked for signature verification".into());
-        }
+    if let Some(public_key_use) = &jwk.common.public_key_use
+        && !matches!(public_key_use, PublicKeyUse::Signature)
+    {
+        return Err("OIDC JWKS signing key is not marked for signature verification".into());
     }
-    if let Some(key_operations) = &jwk.common.key_operations {
-        if !key_operations
+    if let Some(key_operations) = &jwk.common.key_operations
+        && !key_operations
             .iter()
             .any(|operation| matches!(operation, KeyOperations::Verify))
-        {
-            return Err("OIDC JWKS signing key does not allow verify operations".into());
-        }
+    {
+        return Err("OIDC JWKS signing key does not allow verify operations".into());
     }
     if let Some(key_algorithm) = jwk.common.key_algorithm {
         let key_algorithm = key_algorithm.to_string();
