@@ -1765,6 +1765,7 @@ fn resolve_execution_program(program: &str) -> PathBuf {
 }
 
 fn command_override_candidates(dir: &std::path::Path, program: &str) -> Vec<PathBuf> {
+    #[allow(unused_mut)]
     let mut candidates = vec![dir.join(program)];
     #[cfg(windows)]
     candidates.extend(

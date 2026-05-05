@@ -2,6 +2,8 @@
 
 ## Current release baseline
 
+`v1.0.1` is the current stable patch release of Wardex. It carries all capabilities of `v1.0.0` plus CI hardening: `cargo deny` advisory alignment, Windows-target clippy fixes, sealed session-store key propagation to integration tests, process-candidate test robustness, and `knip` dead-export cleanup.
+
 `v1.0.0` is the first stable release of Wardex, delivering a production-hardened private-cloud XDR and SIEM platform with full operator-usable UI for every shipped capability, HA-ready control-plane posture, and AGPL-3.0 open-source licensing.
 
 `v0.56.2` delivered the private-cloud XDR and SIEM control-plane baseline that `v1.0.0` graduates from:

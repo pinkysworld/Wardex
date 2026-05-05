@@ -4,6 +4,18 @@ All notable changes to Wardex are documented in this file.
 
 ## [Unreleased]
 
+## [1.0.1] — 2026-05-05: CI hardening and patch fixes
+
+### Fixed
+- **`cargo deny`**: added `RUSTSEC-2023-0071` (rsa Marvin Attack via jsonwebtoken) to the advisory ignore list; no patched upstream exists yet.
+- **Windows clippy**: refactored `command_override_candidates` in `src/remediation.rs` to use a single `mut candidates` binding with a `#[cfg(windows)]` extend block, eliminating the unreachable-code and out-of-scope-variable errors under `-D warnings`.
+- **Non-unix clippy**: renamed `path` to `_path` in `harden_private_file_permissions` (`src/server.rs`) to suppress the unused-variable warning on Windows/non-unix targets.
+- **Integration test — auth session**: `auth_session_accepts_sso_session_token_and_logout_revokes_it` now reads the server's seal key from disk and passes it to `SessionStore::with_persistence_key`, matching the HMAC signature the running server uses.
+- **Integration test — 404 vs 401**: `unknown_api_endpoint_returns_404` now sends an auth token; authenticated-only routes return 401 before 404 when no credentials are provided.
+- **Integration test — process candidates**: `alerts_endpoint_returns_enriched_process_fields_for_seeded_alerts` assertions on `process_candidates` are now conditional on `process_resolution`, since live processes like `python3` may genuinely be running on CI runners.
+- **knip dead exports**: removed `export` from `connectorStatus` (`src/components/command/helpers.js`) and `SETTINGS_TAB_IDS` (`src/components/settings/helpers.js`); both are used locally within their modules.
+- **knip config**: removed `playwright` from `ignoreDependencies` in `knip.json`; knip now correctly detects it as a direct Playwright dependency.
+
 ## [1.0.0] — GA: AGPL-3.0 Dual-License, Stable Modules, HA Runbook, API Stability Pledge
 
 ### Changed
