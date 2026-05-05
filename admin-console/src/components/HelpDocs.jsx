@@ -290,7 +290,6 @@ export default function HelpDocs() {
   const { data: inboxData, reload: reloadInbox } = useApi(api.inbox);
   const { data: managerOverview } = useApi(api.managerOverview);
   const { data: supportDiagnostics } = useApi(api.supportDiag);
-  const { data: clusterHealthData } = useApi(api.clusterHealth);
   const { data: spoolStatsData } = useApi(api.spoolStats);
   const { data: readinessEvidence, reload: reloadReadinessEvidence } = useApi(
     api.supportReadinessEvidence,
@@ -1189,46 +1188,46 @@ export default function HelpDocs() {
           <JsonDetails data={readinessEvidence} label="Production readiness evidence pack" />
         </div>
 
-        <div className="card">
-          <div className="card-title" style={{ marginBottom: 12 }}>
-            Cluster Health
+        {controlPlane?.cluster ? (
+          <div className="card">
+            <div className="card-title" style={{ marginBottom: 12 }}>
+              Cluster Health
+            </div>
+            <div className="summary-grid">
+              <div className="summary-card">
+                <div className="summary-label">Role</div>
+                <div className="summary-value" style={{ fontSize: 13 }}>
+                  {String(controlPlane.cluster.role || 'unknown').replace(/_/g, ' ')}
+                </div>
+                <div className="summary-meta">Current node role in the cluster</div>
+              </div>
+              <div className="summary-card">
+                <div className="summary-label">Peers Reachable</div>
+                <div className="summary-value">
+                  {controlPlane.cluster.peers_reachable ?? '—'}
+                  {controlPlane.cluster.peers_total != null
+                    ? ` / ${controlPlane.cluster.peers_total}`
+                    : ''}
+                </div>
+                <div className="summary-meta">Live peers in the cluster</div>
+              </div>
+              <div className="summary-card">
+                <div className="summary-label">Leader</div>
+                <div className="summary-value" style={{ fontSize: 12 }}>
+                  {controlPlane.cluster.leader_id || 'Pending'}
+                </div>
+                <div className="summary-meta">Current raft leader node</div>
+              </div>
+              <div className="summary-card">
+                <div className="summary-label">HA Mode</div>
+                <div className="summary-value" style={{ fontSize: 12 }}>
+                  {controlPlane.ha_mode || 'standalone'}
+                </div>
+                <div className="summary-meta">Deployment topology</div>
+              </div>
+            </div>
           </div>
-          <div className="summary-grid">
-            <div className="summary-card">
-              <div className="summary-label">Role</div>
-              <div className="summary-value" style={{ fontSize: 13 }}>
-                {clusterHealthData?.role || clusterHealthData?.cluster_role || 'standalone'}
-              </div>
-              <div className="summary-meta">Current node role in the cluster</div>
-            </div>
-            <div className="summary-card">
-              <div className="summary-label">Peers Reachable</div>
-              <div className="summary-value">
-                {clusterHealthData?.peers_reachable ?? clusterHealthData?.peers ?? '—'}
-              </div>
-              <div className="summary-meta">Live peers in the cluster</div>
-            </div>
-            <div className="summary-card">
-              <div className="summary-label">Leader</div>
-              <div className="summary-value" style={{ fontSize: 12 }}>
-                {clusterHealthData?.leader_id || clusterHealthData?.leader || 'local'}
-              </div>
-              <div className="summary-meta">Current raft leader node</div>
-            </div>
-            <div className="summary-card">
-              <div className="summary-label">Status</div>
-              <div className="summary-value" style={{ fontSize: 12 }}>
-                {clusterHealthData?.healthy === true
-                  ? 'Healthy'
-                  : clusterHealthData?.healthy === false
-                    ? 'Degraded'
-                    : clusterHealthData?.status || '—'}
-              </div>
-              <div className="summary-meta">Overall cluster health</div>
-            </div>
-          </div>
-          <JsonDetails data={clusterHealthData} label="Cluster health details" />
-        </div>
+        ) : null}
 
         <div className="card">
           <div className="card-title" style={{ marginBottom: 12 }}>
