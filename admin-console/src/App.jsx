@@ -1295,6 +1295,11 @@ export default function App() {
                 ['T', 'Go to Threat Detection'],
                 ['F', 'Go to Fleet & Agents'],
                 ['S', 'Go to SOC Workbench'],
+                ['C', 'Go to Command Center'],
+                ['U', 'Go to UEBA'],
+                ['N', 'Go to NDR'],
+                ['E', 'Go to Email Security'],
+                ['A', 'Go to Attack Graph'],
                 ['G', 'Go to Settings'],
                 ['⌘K', 'Open search palette'],
               ].map(([key, desc]) => (

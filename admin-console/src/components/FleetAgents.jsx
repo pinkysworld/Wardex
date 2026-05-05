@@ -199,10 +199,11 @@ export default function FleetAgents() {
   const { data: fleetSurfaceData, reload: reloadFleetSurface } = useApiGroup({
     fleetSt: api.fleetStatus,
     dash: api.fleetDashboard,
+    health: api.fleetHealth,
     agentList: api.agents,
     wsStats: api.wsStats,
   });
-  const { fleetSt, dash, agentList, wsStats } = fleetSurfaceData;
+  const { fleetSt, dash, health: fleetHealthData, agentList, wsStats } = fleetSurfaceData;
   const { data: swarm } = useApi(api.swarmPosture);
   const { data: swarmIntelData } = useApi(api.swarmIntel);
   const { data: plat } = useApi(api.platform);
@@ -795,6 +796,38 @@ export default function FleetAgents() {
               <div className="metric-label">Platform</div>
               <div className="metric-value">{plat?.os ?? plat?.platform ?? '—'}</div>
               <div className="metric-sub">Primary host environment</div>
+            </div>
+          </div>
+          <div className="card" style={{ marginTop: 16 }}>
+            <div className="card-title" style={{ marginBottom: 12 }}>
+              Fleet Health
+            </div>
+            <div className="summary-grid">
+              <div className="summary-card">
+                <div className="summary-label">Agent Count</div>
+                <div className="summary-value">{fleetHealthData?.total_agents ?? '—'}</div>
+                <div className="summary-meta">Including local console host</div>
+              </div>
+              <div className="summary-card">
+                <div className="summary-label">Online</div>
+                <div className="summary-value">{fleetHealthData?.online ?? '—'}</div>
+                <div className="summary-meta">Agents with live heartbeat</div>
+              </div>
+              <div className="summary-card">
+                <div className="summary-label">Stale</div>
+                <div className="summary-value">{fleetHealthData?.stale ?? '—'}</div>
+                <div className="summary-meta">Missed heartbeat window</div>
+              </div>
+              <div className="summary-card">
+                <div className="summary-label">Log Streams</div>
+                <div className="summary-value">{fleetHealthData?.logs_tracked ?? '—'}</div>
+                <div className="summary-meta">Agent log buffers tracked</div>
+              </div>
+              <div className="summary-card">
+                <div className="summary-label">Inventories</div>
+                <div className="summary-value">{fleetHealthData?.inventories_tracked ?? '—'}</div>
+                <div className="summary-meta">Inventory snapshots available</div>
+              </div>
             </div>
           </div>
           <div className="card" style={{ marginTop: 16 }}>

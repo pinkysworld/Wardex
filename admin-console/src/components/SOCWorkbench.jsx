@@ -657,6 +657,9 @@ export default function SOCWorkbench() {
   // ── Case Comments ──
   const [commentText, setCommentText] = useState('');
   const [caseComments, setCaseComments] = useState([]);
+  const [graphEventIdInput, setGraphEventIdInput] = useState('');
+  const [graphData, setGraphData] = useState(null);
+  const [graphLoading, setGraphLoading] = useState(false);
 
   const openOverviewAction = useCallback(
     (category) => {
@@ -5007,6 +5010,82 @@ export default function SOCWorkbench() {
                 )}
               </div>
             </aside>
+          </div>
+
+          <div className="card" style={{ marginTop: 16 }}>
+            <div className="card-header">
+              <span className="card-title">Investigation Graph</span>
+              <button
+                className="btn btn-sm"
+                onClick={async () => {
+                  const ids = graphEventIdInput
+                    .split(/[\s,]+/)
+                    .map((s) => Number(s.trim()))
+                    .filter((n) => Number.isFinite(n) && n > 0);
+                  if (ids.length === 0) return;
+                  setGraphLoading(true);
+                  setGraphData(null);
+                  try {
+                    const result = await api.investigationGraph({ event_ids: ids });
+                    setGraphData(result);
+                  } catch {
+                    setGraphData({ error: 'Failed to load graph' });
+                  } finally {
+                    setGraphLoading(false);
+                  }
+                }}
+                disabled={graphLoading || !graphEventIdInput.trim()}
+              >
+                {graphLoading ? 'Loading…' : 'Build Graph'}
+              </button>
+            </div>
+            <div className="form-group" style={{ marginBottom: 12 }}>
+              <label className="form-label" htmlFor="graph-event-ids-input">
+                Event IDs (comma or space-separated)
+              </label>
+              <input
+                id="graph-event-ids-input"
+                className="form-input"
+                value={graphEventIdInput}
+                placeholder="101, 202, 303"
+                onChange={(e) => setGraphEventIdInput(e.target.value)}
+              />
+            </div>
+            {graphData && !graphData.error ? (
+              <>
+                <div className="summary-grid" style={{ marginBottom: 12 }}>
+                  <div className="summary-card">
+                    <div className="summary-label">Nodes</div>
+                    <div className="summary-value">{graphData.node_count ?? (graphData.nodes?.length ?? 0)}</div>
+                    <div className="summary-meta">Graph entities</div>
+                  </div>
+                  <div className="summary-card">
+                    <div className="summary-label">Edges</div>
+                    <div className="summary-value">{graphData.edge_count ?? (graphData.edges?.length ?? 0)}</div>
+                    <div className="summary-meta">Relationships</div>
+                  </div>
+                </div>
+                {Array.isArray(graphData.nodes) && graphData.nodes.length > 0 ? (
+                  <div style={{ display: 'grid', gap: 6 }}>
+                    {graphData.nodes.map((node, i) => (
+                      <div key={node.id ?? i} className="stat-box" style={{ fontSize: 12 }}>
+                        <span className="badge badge-info" style={{ marginRight: 8 }}>
+                          {node.type || 'node'}
+                        </span>
+                        <strong>{node.id ?? i}</strong>
+                        {node.label ? <span style={{ marginLeft: 8 }}>{node.label}</span> : null}
+                      </div>
+                    ))}
+                  </div>
+                ) : null}
+              </>
+            ) : graphData?.error ? (
+              <div className="empty">{graphData.error}</div>
+            ) : (
+              <div className="empty">
+                Enter event IDs and click Build Graph to visualize the investigation graph.
+              </div>
+            )}
           </div>
         </>
       )}

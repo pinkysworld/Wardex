@@ -152,6 +152,7 @@ export const checkpoint = () => post('/api/control/checkpoint');
 export const restoreCheckpoint = (body) => post('/api/control/restore-checkpoint', body);
 export const commandSummary = () => get('/api/command/summary');
 export const commandLane = (lane) => get(`/api/command/lanes/${encodeURIComponent(lane)}`);
+export const clusterHealth = () => get('/api/cluster/health');
 export const checkpoints = () => get('/api/checkpoints');
 export const detectionProfile = () => get('/api/detection/profile');
 export const setDetectionProfile = (body) => put('/api/detection/profile', body);
@@ -183,6 +184,7 @@ export const mitreCoverageAlt = () => get('/api/coverage/mitre');
 
 // ── Fleet & Agents ───────────────────────────────────────────
 export const fleetStatus = () => get('/api/fleet/status');
+export const fleetHealth = () => get('/api/fleet/health');
 export const fleetDashboard = () => get('/api/fleet/dashboard');
 export const fleetInventory = () => get('/api/fleet/inventory');
 export const fleetRegister = (body) => post('/api/fleet/register', body);
@@ -548,6 +550,7 @@ export const adminDbSizes = () => get('/api/admin/db/sizes');
 export const adminCleanupLegacy = () => post('/api/admin/cleanup-legacy');
 export const adminDbPurge = (body) => post('/api/admin/db/purge', body);
 export const storageStats = () => get('/api/storage/stats');
+export const spoolStats = () => get('/api/spool/stats');
 export const sbom = () => get('/api/sbom');
 export const piiScan = (body) => post('/api/pii/scan', body);
 export const dlq = () => get('/api/dlq');
@@ -615,6 +618,7 @@ export const efficacyRule = (id) => get(`/api/efficacy/rule/${encodeURIComponent
 
 // ── Investigation Workflows ──────────────────────────────────
 export const investigationWorkflows = () => get('/api/investigations/workflows');
+export const investigationGraph = (body) => post('/api/investigation/graph', body);
 export const investigationWorkflow = (id) =>
   get(`/api/investigations/workflows/${encodeURIComponent(id)}`);
 export const investigationStart = (body) => post('/api/investigations/start', body);

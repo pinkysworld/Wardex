@@ -290,6 +290,8 @@ export default function HelpDocs() {
   const { data: inboxData, reload: reloadInbox } = useApi(api.inbox);
   const { data: managerOverview } = useApi(api.managerOverview);
   const { data: supportDiagnostics } = useApi(api.supportDiag);
+  const { data: clusterHealthData } = useApi(api.clusterHealth);
+  const { data: spoolStatsData } = useApi(api.spoolStats);
   const { data: readinessEvidence, reload: reloadReadinessEvidence } = useApi(
     api.supportReadinessEvidence,
   );
@@ -1185,6 +1187,91 @@ export default function HelpDocs() {
             <JsonDetails data={failoverDrillResult} label="Automated failover drill result" />
           ) : null}
           <JsonDetails data={readinessEvidence} label="Production readiness evidence pack" />
+        </div>
+
+        <div className="card">
+          <div className="card-title" style={{ marginBottom: 12 }}>
+            Cluster Health
+          </div>
+          <div className="summary-grid">
+            <div className="summary-card">
+              <div className="summary-label">Role</div>
+              <div className="summary-value" style={{ fontSize: 13 }}>
+                {clusterHealthData?.role || clusterHealthData?.cluster_role || 'standalone'}
+              </div>
+              <div className="summary-meta">Current node role in the cluster</div>
+            </div>
+            <div className="summary-card">
+              <div className="summary-label">Peers Reachable</div>
+              <div className="summary-value">
+                {clusterHealthData?.peers_reachable ?? clusterHealthData?.peers ?? '—'}
+              </div>
+              <div className="summary-meta">Live peers in the cluster</div>
+            </div>
+            <div className="summary-card">
+              <div className="summary-label">Leader</div>
+              <div className="summary-value" style={{ fontSize: 12 }}>
+                {clusterHealthData?.leader_id || clusterHealthData?.leader || 'local'}
+              </div>
+              <div className="summary-meta">Current raft leader node</div>
+            </div>
+            <div className="summary-card">
+              <div className="summary-label">Status</div>
+              <div className="summary-value" style={{ fontSize: 12 }}>
+                {clusterHealthData?.healthy === true
+                  ? 'Healthy'
+                  : clusterHealthData?.healthy === false
+                    ? 'Degraded'
+                    : clusterHealthData?.status || '—'}
+              </div>
+              <div className="summary-meta">Overall cluster health</div>
+            </div>
+          </div>
+          <JsonDetails data={clusterHealthData} label="Cluster health details" />
+        </div>
+
+        <div className="card">
+          <div className="card-title" style={{ marginBottom: 12 }}>
+            Event Spool
+          </div>
+          <div className="summary-grid">
+            <div className="summary-card">
+              <div className="summary-label">Queued</div>
+              <div className="summary-value">{spoolStatsData?.queued ?? '—'}</div>
+              <div className="summary-meta">Events currently in spool</div>
+            </div>
+            <div className="summary-card">
+              <div className="summary-label">Capacity</div>
+              <div className="summary-value">{spoolStatsData?.capacity ?? '—'}</div>
+              <div className="summary-meta">Maximum spool entries</div>
+            </div>
+            <div className="summary-card">
+              <div className="summary-label">Utilization</div>
+              <div className="summary-value">
+                {spoolStatsData?.utilization_pct != null
+                  ? `${spoolStatsData.utilization_pct}%`
+                  : '—'}
+              </div>
+              <div className="summary-meta">Current spool fill level</div>
+            </div>
+            <div className="summary-card">
+              <div className="summary-label">Backpressure</div>
+              <div className="summary-value" style={{ fontSize: 12 }}>
+                {spoolStatsData?.backpressure || '—'}
+              </div>
+              <div className="summary-meta">Spool backpressure state</div>
+            </div>
+            <div className="summary-card">
+              <div className="summary-label">Total Delivered</div>
+              <div className="summary-value">{spoolStatsData?.total_delivered ?? '—'}</div>
+              <div className="summary-meta">Events delivered since start</div>
+            </div>
+            <div className="summary-card">
+              <div className="summary-label">Total Dropped</div>
+              <div className="summary-value">{spoolStatsData?.total_dropped ?? '—'}</div>
+              <div className="summary-meta">Events dropped due to backpressure</div>
+            </div>
+          </div>
         </div>
 
         <div className="card">
