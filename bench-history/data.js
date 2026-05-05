@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1777965189716,
+  "lastUpdate": 1777973617297,
   "repoUrl": "https://github.com/pinkysworld/Wardex",
   "entries": {
     "Wardex criterion benches": [
@@ -6283,6 +6283,114 @@ window.BENCHMARK_DATA = {
             "name": "sigma_evaluate_20_rules",
             "value": 34704,
             "range": "± 214",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "85413447+pinkysworld@users.noreply.github.com",
+            "name": "pinkysworld",
+            "username": "pinkysworld"
+          },
+          "committer": {
+            "email": "85413447+pinkysworld@users.noreply.github.com",
+            "name": "pinkysworld",
+            "username": "pinkysworld"
+          },
+          "distinct": true,
+          "id": "dd9139bb9f70d0709437b90a94d13202092775ea",
+          "message": "Release v1.0.0: AGPL-3.0 dual-license, stable modules, HA runbook, Helm NetworkPolicy, API stability pledge\n\n- Switch from BUSL-1.1 to AGPL-3.0-only with commercial dual-license (LICENSE.COMMERCIAL)\n- Graduate experimental-ml, experimental-llm, experimental-quantum, experimental-proof to stable;\n  remove all experimental-* Cargo feature flags\n- Add 12-month API stability pledge (docs/RELEASE_ACCEPTANCE.md)\n- Add HA failover runbook with RPO≤15min/RTO≤30min targets (docs/runbooks/HA_FAILOVER.md)\n- Add 0.x→1.0 upgrade guide (docs/UPGRADE_0_56_TO_1_0.md)\n- Add compatibility matrix (docs/COMPATIBILITY.md), deprecation policy (docs/DEPRECATION_POLICY.md),\n  compliance posture (docs/COMPLIANCE.md)\n- Add Helm NetworkPolicy template (deploy/helm/wardex/templates/networkpolicy.yaml)\n- Bump all version surfaces to 1.0.0: Rust, admin-console, Python SDK, TS SDK, Helm, OTLP,\n  OpenAPI, site HTML, site/data/status.json\n- Fix deprecated GenericArray::from_slice in backup.rs and forensics.rs (aes-gcm 0.10 compat)\n- Update README, CHANGELOG, docs/STATUS, site/changelog.html for 1.0 GA",
+          "timestamp": "2026-05-05T11:23:47+02:00",
+          "tree_id": "f7fb0170378d2df5d869c0c786f900fc97d2e724",
+          "url": "https://github.com/pinkysworld/Wardex/commit/dd9139bb9f70d0709437b90a94d13202092775ea"
+        },
+        "date": 1777973616620,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "full_pipeline/5",
+            "value": 48862,
+            "range": "± 630",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "full_pipeline/50",
+            "value": 418438,
+            "range": "± 1808",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "full_pipeline/200",
+            "value": 1924158,
+            "range": "± 13512",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "full_pipeline/1000",
+            "value": 18310688,
+            "range": "± 151601",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "detector_evaluate_single",
+            "value": 609,
+            "range": "± 1",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "detector_window_stream_256",
+            "value": 781251,
+            "range": "± 1567",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "shared_storage_observed_schema_read",
+            "value": 136,
+            "range": "± 0",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "shared_storage_4_threads_64_alerts",
+            "value": 144942,
+            "range": "± 3290",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "policy_evaluate_single",
+            "value": 239,
+            "range": "± 10",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "throughput/1000_samples",
+            "value": 18437510,
+            "range": "± 816229",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "search_500_events",
+            "value": 108095,
+            "range": "± 601",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "hunt_field_query",
+            "value": 89106,
+            "range": "± 336",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "ml_triage_rf",
+            "value": 50,
+            "range": "± 4",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "sigma_evaluate_20_rules",
+            "value": 35430,
+            "range": "± 400",
             "unit": "ns/iter"
           }
         ]
