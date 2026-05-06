@@ -796,7 +796,7 @@ pub fn status_manifest() -> StatusManifest {
             "Professional dark-themed admin console with sidebar navigation and 10 sections".into(),
             "Telemetry sparklines with canvas-based real-time visualization".into(),
             "Demo mode with simulated escalating attack scenario (client-side only)".into(),
-            "BSL 1.1 license with scheduled Apache 2.0 conversion".into(),
+            "AGPL-3.0 open-source license with commercial dual-license option".into(),
             "Global collapsible activity log across all admin views".into(),
             "Responsive icon-only sidebar and keyboard shortcut (Ctrl+K / ⌘+K)".into(),
             "Velocity rate-of-change detector with first/second derivative analysis and σ-outlier flagging".into(),

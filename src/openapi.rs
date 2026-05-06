@@ -216,8 +216,8 @@ impl OpenApiBuilder {
                             .into(),
                     ),
                     license: Some(License {
-                        name: "BSL-1.1".into(),
-                        url: Some("https://mariadb.com/bsl11/".into()),
+                        name: "AGPL-3.0-only".into(),
+                        url: Some("https://www.gnu.org/licenses/agpl-3.0.html".into()),
                     }),
                     contact: None,
                 },

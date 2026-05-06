@@ -618,7 +618,7 @@ describe('App', () => {
           return { authenticated: true, role: 'admin', username: 'tester' };
         }
         if (url === '/api/health') {
-          return { status: 'ok', version: '1.0.4' };
+          return { status: 'ok', version: '1.0.5' };
         }
         return {};
       },

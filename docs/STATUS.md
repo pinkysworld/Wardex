@@ -2,11 +2,11 @@
 
 ## Current release
 
-- **Version:** `1.0.4`
+- **Version:** `1.0.5`
 - **Positioning:** private-cloud XDR and SIEM platform with enterprise detection engineering, malware scanning, analyst workflows, fleet operations, behavioural analytics, and automated incident response
 - **Source footprint:** 139 Rust source modules
 - **API contract:** versioned OpenAPI surface with REST, GraphQL, live `/api/openapi.json` export, and generated SDK parity diagnostics that surface alignment drift directly in the operator console
-- **Verification:** Rust integration coverage, focused session-cookie exchange tests, collector lifecycle tests, remediation change-review tests, Command Center summary/action-drawer tests, Help & Docs unit coverage, assistant/ticketing/enterprise API regression tests, SDK regeneration checks, release-contract validation, strict Playwright a11y smoke coverage, and focused admin-console regression coverage for auth routing, dashboard presets, detection drill-downs, workbench overview, assistant/reporting handoffs, scoped report artifacts/templates, persisted artifact downloads, response snapshots, long-retention history, and collector/secrets setup flows
+- **Verification:** Rust integration coverage, focused session-cookie exchange tests, collector lifecycle tests, remediation change-review tests, Command Center summary/action-drawer tests, Help & Docs unit coverage, assistant/ticketing/enterprise API regression tests, SDK regeneration checks, release-contract validation, strict Playwright a11y smoke coverage, local Developer ID `.p12` signing validation, and focused admin-console regression coverage for auth routing, dashboard presets, detection drill-downs, workbench overview, assistant/reporting handoffs, scoped report artifacts/templates, persisted artifact downloads, response snapshots, long-retention history, and collector/secrets setup flows
 - **Production hardening:** 100% (59/59 controls implemented)
 
 ## Shipped in the current platform
@@ -100,11 +100,11 @@ The current release has been verified with:
 
 Wardex is now positioned as a professional XDR/SIEM control plane with incident-first analyst workflows, explainable detections, context-preserving reporting, operator-visible recovery posture, and explicit shift-lead surfaces for ownership, handoff, and detection-review pressure. The runtime, admin console, release process, and website are aligned around operator trust, workflow closure, and deployment readiness.
 
-## Recently shipped (v0.56.2)
+## Recently shipped (v1.0.5)
 
-- **Clippy-clean OIDC and SOC workbench** — `validate_jwk_for_id_token` and the OIDC test harness token-body branch were collapsed onto idiomatic `if let && ...` form, the `build_team_load_overview` call site no longer takes a needless borrow on the incident slice, and `cargo clippy --all-targets --no-deps -- -D warnings` is green again.
-- **Live release re-verification** — admin-console Vitest unit suites (274 tests), full Rust library tests (1480 tests), `cargo build --release`, contract-parity, release-docs validators, and Playwright e2e on chromium and webkit (21 tests each) were re-run end-to-end on the bumped release.
-- **Release metadata aligned on v0.56.2** — Rust, admin-console, Python SDK, TypeScript SDK, Helm, OTLP, OpenAPI, installation/reproducibility docs, and website release surfaces now point to the same release baseline.
+- **Developer ID signing-secret repair** — release automation now has a checked-in helper that refreshes the GitHub Actions macOS certificate secrets from a locally exported Developer ID `.p12` without printing private material.
+- **Local signing validation** — the exported Developer ID Application identity was verified against a temporary macOS binary with timestamped hardened-runtime signing, confirming the `.p12` can drive CI signing once GitHub secrets are refreshed.
+- **Release metadata aligned on v1.0.5** — Rust, admin-console, Python SDK, TypeScript SDK, Helm, OTLP, OpenAPI, installation/reproducibility docs, and website release surfaces now point to the same release baseline.
 
 ## Recently shipped (v0.56.1)
 

@@ -20,3 +20,5 @@ scripts/__pycache__/
 DeveloperIDG2CA.cer
 developerID_application.cer
 development.cer
+*.p12
+*.pfx

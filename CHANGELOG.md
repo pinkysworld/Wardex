@@ -4,6 +4,14 @@ All notable changes to Wardex are documented in this file.
 
 ## [Unreleased]
 
+## [1.0.5] — 2026-05-06 — macOS CI signing secret repair and release validation
+
+### Fixed
+- **macOS release CI signing secrets**: adds a non-printing GitHub secret updater for the locally exported Developer ID `.p12`, supports path-based local `.p12` signing material, imports root certificate-chain files as context, and fails fast when a public `.cer` is accidentally used as a signing identity.
+- **Developer ID export validation**: verifies the exported Developer ID Application identity can sign a macOS binary without GUI keychain prompts, giving CI a known-good PKCS#12 source for signed and notarized macOS archives.
+- **License metadata drift**: aligns SDK manifests, OpenAPI metadata, Linux package workflow metadata, and the pricing page with the AGPL-3.0-only plus commercial dual-license posture introduced in `v1.0.0`.
+- **Release documentation drift**: refreshes README, status, roadmap, reproducibility, website, Helm, OpenAPI, SDK, OTLP, and admin-console version surfaces for the `v1.0.5` release baseline.
+
 ## [1.0.4] — 2026-05-06: macOS PKCS#12 signing import hardening
 
 ### Fixed

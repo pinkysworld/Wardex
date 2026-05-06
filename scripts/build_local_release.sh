@@ -56,12 +56,17 @@ package_unix() {
   tar -czf "release/${archive}" -C release "wardex-${platform}"
 }
 
+macos_signing_identity_configured() {
+  [[ -n "${WARDEX_MACOS_CERTIFICATE_BASE64:-}" || -n "${WARDEX_MACOS_CERTIFICATE_PATH:-}" ]]
+}
+
 macos_notarization_configured() {
-  [[ -n "${WARDEX_MACOS_CERTIFICATE_BASE64:-}" ]] && \
+  macos_signing_identity_configured && \
     [[ -n "${WARDEX_MACOS_CERTIFICATE_PASSWORD:-}" ]] && \
-    [[ -n "${WARDEX_MACOS_NOTARY_APPLE_ID:-}" ]] && \
-    [[ -n "${WARDEX_MACOS_NOTARY_PASSWORD:-}" ]] && \
-    [[ -n "${WARDEX_MACOS_NOTARY_TEAM_ID:-}" ]]
+    { [[ -n "${WARDEX_MACOS_NOTARY_KEYCHAIN_PROFILE:-}" ]] || \
+      { [[ -n "${WARDEX_MACOS_NOTARY_APPLE_ID:-}" ]] && \
+        [[ -n "${WARDEX_MACOS_NOTARY_PASSWORD:-}" ]] && \
+        [[ -n "${WARDEX_MACOS_NOTARY_TEAM_ID:-}" ]]; }; }
 }
 
 maybe_sign_notarize_macos() {
@@ -80,7 +85,7 @@ maybe_sign_notarize_macos() {
 
   if [[ "${WARDEX_REQUIRE_MACOS_NOTARIZATION:-0}" == "1" ]]; then
     echo "error: macOS notarization credentials are required for ${platform}" >&2
-    echo "set WARDEX_MACOS_CERTIFICATE_BASE64, WARDEX_MACOS_CERTIFICATE_PASSWORD, WARDEX_MACOS_NOTARY_APPLE_ID, WARDEX_MACOS_NOTARY_PASSWORD, and WARDEX_MACOS_NOTARY_TEAM_ID" >&2
+    echo "set WARDEX_MACOS_CERTIFICATE_BASE64 or WARDEX_MACOS_CERTIFICATE_PATH, plus WARDEX_MACOS_CERTIFICATE_PASSWORD, and either WARDEX_MACOS_NOTARY_KEYCHAIN_PROFILE or WARDEX_MACOS_NOTARY_APPLE_ID/WARDEX_MACOS_NOTARY_PASSWORD/WARDEX_MACOS_NOTARY_TEAM_ID" >&2
     exit 1
   fi
 

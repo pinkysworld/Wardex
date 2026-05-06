@@ -37,7 +37,8 @@ GitHub Releases from publishing unsigned binaries that macOS Gatekeeper blocks.
 Required GitHub Actions secrets:
 
 - `MACOS_DEVELOPER_ID_CERTIFICATE_BASE64` — base64-encoded Developer ID
-  Application `.p12` certificate.
+  Application `.p12` identity export that includes the private key. A `.cer`
+  public certificate is not sufficient for code signing.
 - `MACOS_DEVELOPER_ID_CERTIFICATE_PASSWORD` — password for that `.p12` file.
 - `MACOS_NOTARY_APPLE_ID` — Apple ID used with `xcrun notarytool`.
 - `MACOS_NOTARY_APP_PASSWORD` — app-specific password for notarization.
@@ -68,12 +69,44 @@ when these environment variables are present:
 ```bash
 export WARDEX_MACOS_CERTIFICATE_BASE64="$(base64 -i DeveloperIDApplication.p12)"
 export WARDEX_MACOS_CERTIFICATE_PASSWORD="<p12-password>"
-export WARDEX_MACOS_NOTARY_APPLE_ID="<apple-id>"
-export WARDEX_MACOS_NOTARY_PASSWORD="<app-specific-password>"
-export WARDEX_MACOS_NOTARY_TEAM_ID="<team-id>"
+export WARDEX_MACOS_NOTARY_KEYCHAIN_PROFILE="wardex"
 export WARDEX_REQUIRE_MACOS_NOTARIZATION=1
 bash scripts/build_local_release.sh
 ```
+
+When a local `notarytool` profile is not available, set
+`WARDEX_MACOS_NOTARY_APPLE_ID`, `WARDEX_MACOS_NOTARY_PASSWORD`, and
+`WARDEX_MACOS_NOTARY_TEAM_ID` instead of `WARDEX_MACOS_NOTARY_KEYCHAIN_PROFILE`.
+
+For local builds, `WARDEX_MACOS_CERTIFICATE_PATH` can be used instead of
+`WARDEX_MACOS_CERTIFICATE_BASE64` when the `.p12`/`.pfx` identity export is on
+disk:
+
+```bash
+export WARDEX_MACOS_CERTIFICATE_PATH="$PWD/DeveloperIDApplication.p12"
+export WARDEX_MACOS_CERTIFICATE_PASSWORD="<p12-password>"
+```
+
+Root-level `DeveloperIDG2CA.cer` and `developerID_application.cer` files are
+imported by the helper as certificate-chain context when present, but they do
+not contain the private key needed by `codesign`.
+
+When the local Developer ID `.p12` has been exported under `~/.wardex-signing/`
+and its password is stored in the login keychain item
+`wardex-developer-id-application-p12`, refresh the GitHub Actions certificate
+secrets with:
+
+```bash
+gh auth login -h github.com --web --git-protocol https --scopes repo,workflow
+scripts/update_github_macos_signing_secrets.sh
+```
+
+The updater reads `~/.wardex-signing/wardex_developer_id_application.p12`,
+base64-encodes it for `MACOS_DEVELOPER_ID_CERTIFICATE_BASE64`, reads the `.p12`
+password from Keychain, and sets `MACOS_KEYCHAIN_PASSWORD` to a deterministic
+temporary CI keychain password without printing any secret values. Existing
+notarization secrets are preserved unless matching `WARDEX_MACOS_NOTARY_*`
+environment variables are explicitly supplied.
 
 Without `WARDEX_REQUIRE_MACOS_NOTARIZATION=1`, local macOS archives may still be
 created for development smoke testing, but they are not suitable for GitHub

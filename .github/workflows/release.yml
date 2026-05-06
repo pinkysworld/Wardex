@@ -226,7 +226,7 @@ jobs:
             --architecture amd64 \
             --description "Wardex XDR platform" \
             --url "https://github.com/${{ github.repository }}" \
-            --license "BSL-1.1" \
+            --license "AGPL-3.0-only" \
             --maintainer "${{ github.repository_owner }}" \
             --after-install deploy/scripts/postinstall-linux-package.sh \
             --deb-systemd deploy/wardex.service \
@@ -244,7 +244,7 @@ jobs:
             --architecture x86_64 \
             --description "Wardex XDR platform" \
             --url "https://github.com/${{ github.repository }}" \
-            --license "BSL-1.1" \
+            --license "AGPL-3.0-only" \
             --maintainer "${{ github.repository_owner }}" \
             wardex-linux-x86_64/wardex=/usr/bin/wardex \
             examples/=/usr/share/wardex/examples/ \

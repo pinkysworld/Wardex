@@ -146,4 +146,5 @@ python3 scripts/check_panic_policy.py
 ## License
 
 By contributing, you agree that your contributions will be licensed under the
-[BSL 1.1](LICENSE) license (converts to Apache 2.0 on 2029-04-01).
+[AGPL-3.0-only](LICENSE) license. Commercial licensing terms are documented in
+[LICENSE.COMMERCIAL](LICENSE.COMMERCIAL).
