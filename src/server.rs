@@ -4586,6 +4586,7 @@ fn process_recommendations(
     items
 }
 
+#[cfg(any(target_os = "linux", target_os = "macos", test))]
 fn thread_state_label(state: &str) -> &'static str {
     match state.chars().next().unwrap_or('?') {
         'R' => "running",
