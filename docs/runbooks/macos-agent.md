@@ -23,10 +23,13 @@ The agent binary must be signed and notarized for Gatekeeper:
 
 ```bash
 # Verify code signature
+codesign --verify --strict --verbose=2 /tmp/wardex-agent
 codesign -dvvv /tmp/wardex-agent
-# Verify notarization
-spctl --assess --type execute /tmp/wardex-agent
 ```
+
+Confirm notarization from the release evidence or local `notarytool submit
+--wait` output. `spctl --assess --type execute` is app-bundle oriented and is
+not a reliable validation command for the standalone `wardex-agent` CLI.
 
 ### 3. Enroll Agent
 

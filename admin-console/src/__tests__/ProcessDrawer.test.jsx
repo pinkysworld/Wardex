@@ -13,6 +13,17 @@ function jsonOk(data) {
   };
 }
 
+function jsonError(status, data, statusText = 'Error') {
+  return {
+    ok: false,
+    status,
+    statusText,
+    headers: { get: (header) => (header === 'content-type' ? 'application/json' : null) },
+    json: async () => data,
+    text: async () => JSON.stringify(data),
+  };
+}
+
 function renderWithProviders(node) {
   return render(
     <AuthProvider>
@@ -229,5 +240,67 @@ describe('ProcessDrawer', () => {
 
     expect(screen.getByRole('button', { name: 'Inspect curl' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Inspect osascript' })).toBeInTheDocument();
+  });
+
+  it('falls back to the last visible snapshot when live detail inspection fails', async () => {
+    globalThis.fetch = vi.fn((url) => {
+      const href = String(url);
+
+      if (href.includes('/api/auth/check')) return Promise.resolve(jsonOk({ authenticated: true }));
+      if (href.includes('/api/auth/session')) {
+        return Promise.resolve(
+          jsonOk({
+            authenticated: true,
+            role: 'analyst',
+            user_id: 'analyst-1',
+            groups: ['soc-analysts'],
+            source: 'session',
+          }),
+        );
+      }
+      if (href.includes('/api/processes/detail')) {
+        return Promise.resolve(
+          jsonError(500, { error: 'live inspection unavailable' }, 'Internal Server Error'),
+        );
+      }
+      if (href.includes('/api/process-tree/deep-chains')) {
+        return Promise.resolve(jsonOk({ deep_chains: [] }));
+      }
+      if (href.includes('/api/processes/threads')) {
+        return Promise.resolve(jsonOk({ threads: [] }));
+      }
+      if (href.includes('/api/process-tree')) {
+        return Promise.resolve(jsonOk({ processes: [] }));
+      }
+
+      return Promise.resolve(jsonOk({}));
+    });
+
+    renderWithProviders(
+      <ProcessDrawer
+        pid={4242}
+        snapshot={{
+          pid: 4242,
+          ppid: 321,
+          name: '/usr/bin/python3',
+          display_name: 'python3',
+          user: 'analyst',
+          group: 'staff',
+          cpu_percent: 12.4,
+          mem_percent: 3.2,
+          hostname: 'edge-1',
+          platform: 'macos',
+          reason: 'Suspicious parent chain',
+        }}
+        onClose={() => {}}
+        onUpdated={() => {}}
+      />,
+    );
+
+    expect(
+      await screen.findByText(/Live inspection is temporarily unavailable/i),
+    ).toBeInTheDocument();
+    expect(screen.getByText('Investigation Context')).toBeInTheDocument();
+    expect(screen.queryByText('Failed to load process detail.')).not.toBeInTheDocument();
   });
 });

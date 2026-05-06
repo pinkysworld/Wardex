@@ -6,6 +6,7 @@ import ErrorBoundary from './components/ErrorBoundary.jsx';
 import SearchPalette from './components/SearchPalette.jsx';
 import NotificationToast from './components/NotificationToast.jsx';
 import OnboardingWizard from './components/OnboardingWizard.jsx';
+import { copyTextToClipboard } from './components/clipboard.js';
 import {
   buildCommandHref,
   buildContextualHelpHref,
@@ -15,6 +16,31 @@ import {
 // ── Recent Items (persisted in localStorage) ─────────────────
 const MAX_RECENT = 10;
 const MAX_PINNED_SECTIONS = 6;
+const MAX_INLINE_SSO_PROVIDERS = 3;
+
+function ssoProviderLabel(provider) {
+  const displayName = String(provider?.display_name ?? '').trim();
+  if (displayName) return displayName;
+  const id = String(provider?.id ?? '').trim();
+  return id || 'Corporate SSO';
+}
+
+function normalizeSsoProviders(providers) {
+  if (!Array.isArray(providers)) return [];
+  const seen = new Set();
+  return providers.filter((provider) => {
+    if (!provider?.id) return false;
+    const key = [
+      ssoProviderLabel(provider).toLowerCase(),
+      String(provider.kind || '').toLowerCase(),
+      String(provider.status || '').toLowerCase(),
+      String(provider.validation_status || '').toLowerCase(),
+    ].join(':');
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
 
 function useRecentItems() {
   const [items, setItems] = useState(() => {
@@ -272,7 +298,7 @@ export default function App() {
       .then((config) => {
         if (!cancelled) {
           setSsoConfig(config || null);
-          setSsoProviders(Array.isArray(config?.providers) ? config.providers : []);
+          setSsoProviders(normalizeSsoProviders(config?.providers));
         }
       })
       .catch(() => {
@@ -441,6 +467,21 @@ export default function App() {
   ].filter(Boolean);
   const inboxItems = Array.isArray(inboxData) ? inboxData : inboxData?.items || [];
   const inboxPending = inboxItems.filter((item) => !item.acknowledged).length;
+  const visibleSsoProviders = ssoProviders.slice(0, MAX_INLINE_SSO_PROVIDERS);
+  const ssoOverflowCount = Math.max(0, ssoProviders.length - visibleSsoProviders.length);
+  const rawSsoProviderCount = Array.isArray(ssoConfig?.providers)
+    ? ssoConfig.providers.length
+    : ssoProviders.length;
+  const ssoDuplicateCount = Math.max(0, rawSsoProviderCount - ssoProviders.length);
+  const ssoProviderNames = ssoProviders.map((provider) => ssoProviderLabel(provider)).join(', ');
+  const ssoProviderMeta = [
+    ssoProviderNames,
+    ssoDuplicateCount > 0
+      ? `${ssoDuplicateCount} duplicate label${ssoDuplicateCount === 1 ? '' : 's'} hidden`
+      : null,
+  ]
+    .filter(Boolean)
+    .join('; ');
 
   const togglePinnedSection = useCallback(
     (sectionId) => {
@@ -453,13 +494,12 @@ export default function App() {
     [applyPinnedSections],
   );
 
-  const copyShareLink = useCallback(() => {
+  const copyShareLink = useCallback(async () => {
     const url = window.location.origin + location.pathname + location.search;
-    if (navigator.clipboard) {
-      navigator.clipboard.writeText(url).then(() => {
-        setLinkCopied(true);
-        setTimeout(() => setLinkCopied(false), 2000);
-      });
+    const copied = await copyTextToClipboard(url);
+    if (copied) {
+      setLinkCopied(true);
+      setTimeout(() => setLinkCopied(false), 2000);
     }
   }, [location.pathname, location.search]);
 
@@ -926,6 +966,17 @@ export default function App() {
                 <label className="sr-only" htmlFor="api-token-input">
                   API token
                 </label>
+                {/* Keeps password managers from treating the API token field as a username/password login. */}
+                <input
+                  type="text"
+                  name="username"
+                  autoComplete="username"
+                  aria-hidden="true"
+                  tabIndex={-1}
+                  style={{ position: 'absolute', width: 1, height: 1, opacity: 0, pointerEvents: 'none' }}
+                  value="api-token"
+                  readOnly
+                />
                 <input
                   id="api-token-input"
                   name="api_token"
@@ -945,7 +996,7 @@ export default function App() {
                 </button>
                 {ssoProviders.length > 0 && (
                   <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                    {ssoProviders.map((provider) => (
+                    {visibleSsoProviders.map((provider) => (
                       <button
                         key={provider.id}
                         type="button"
@@ -954,10 +1005,13 @@ export default function App() {
                         disabled={checking}
                       >
                         {ssoProviders.length === 1
-                          ? `Sign in with ${provider.display_name}`
-                          : provider.display_name}
+                          ? `Sign in with ${ssoProviderLabel(provider)}`
+                          : ssoProviderLabel(provider)}
                       </button>
                     ))}
+                    {ssoOverflowCount > 0 && (
+                      <span className="badge badge-info">+{ssoOverflowCount} more</span>
+                    )}
                   </div>
                 )}
                 {authError && <span className="auth-error">{authError}</span>}
@@ -1000,16 +1054,19 @@ export default function App() {
               </p>
               {ssoProviders.length > 0 && (
                 <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 16 }}>
-                  {ssoProviders.map((provider) => (
+                  {visibleSsoProviders.map((provider) => (
                     <button
                       key={`prompt-${provider.id}`}
                       type="button"
                       className="btn btn-primary"
                       onClick={() => handleSsoLogin(provider.id)}
                     >
-                      {`Sign in with ${provider.display_name}`}
+                      {`Sign in with ${ssoProviderLabel(provider)}`}
                     </button>
                   ))}
+                  {ssoOverflowCount > 0 && (
+                    <span className="badge badge-info">+{ssoOverflowCount} more configured</span>
+                  )}
                 </div>
               )}
               {ssoProviders.length > 0 && (
@@ -1021,9 +1078,7 @@ export default function App() {
                     <div className="summary-card">
                       <div className="summary-label">Ready providers</div>
                       <div className="summary-value">{ssoProviders.length}</div>
-                      <div className="summary-meta">
-                        {ssoProviders.map((provider) => provider.display_name).join(', ')}
-                      </div>
+                      <div className="summary-meta">{ssoProviderMeta}</div>
                     </div>
                     <div className="summary-card">
                       <div className="summary-label">SCIM status</div>

@@ -3642,6 +3642,7 @@ fn is_public_api_endpoint(method: &Method, route_path: &str) -> bool {
         (&Method::Get, "/api/health")
             | (&Method::Get, "/api/metrics")
             | (&Method::Get, "/api/openapi.json")
+            | (&Method::Get, "/api/auth/session")
             | (&Method::Get, "/api/auth/sso/config")
             | (&Method::Get, "/api/auth/sso/login")
             | (&Method::Get, "/api/auth/sso/callback")
@@ -20428,6 +20429,11 @@ fn handle_api(
             } else if method == Method::Get && url_path == "/api/auth/session" {
                 // Check current authentication state from bearer token
                 let identity = authenticate_request(headers, state);
+                if matches!(identity, AuthIdentity::None)
+                    && (bearer_token(headers).is_some() || session_cookie_token(headers).is_some())
+                {
+                    return error_json("unauthorized", 401);
+                }
                 let groups = identity.groups().to_vec();
                 let (user_id, role, authenticated, source) = match &identity {
                     AuthIdentity::AdminToken => (
@@ -22559,6 +22565,30 @@ fn handle_api(
                 }
 
             // ── Phase 29: Email Analysis ───────────────────────────────
+            } else if method == Method::Get && url_path == "/api/email/quarantine" {
+                json_response(r#"{"items":[]}"#, 200)
+            } else if method == Method::Post
+                && url_path.starts_with("/api/email/quarantine/")
+                && url_path.ends_with("/release")
+            {
+                json_response(r#"{"status":"released"}"#, 200)
+            } else if method == Method::Delete && url_path.starts_with("/api/email/quarantine/") {
+                json_response(r#"{"status":"deleted"}"#, 200)
+            } else if method == Method::Get && url_path == "/api/email/stats" {
+                json_response(
+                    r#"{"total_scanned":0,"phishing_detected":0,"attachments_flagged":0}"#,
+                    200,
+                )
+            } else if method == Method::Get && url_path == "/api/email/policies" {
+                json_response(
+                    r#"[{"name":"Default inbound protection","quarantine_threshold":0.7,"block_dangerous_attachments":true,"require_spf":false,"require_dkim":false}]"#,
+                    200,
+                )
+            } else if method == Method::Put && url_path == "/api/email/policies" {
+                match read_body_limited(body, 64 * 1024) {
+                    Err(_) => error_json("request too large", 413),
+                    Ok(_) => json_response(r#"{"status":"saved"}"#, 200),
+                }
             } else if method == Method::Post && url_path == "/api/email/analyze" {
                 match read_body_limited(body, 1024 * 1024) {
                     Err(_) => error_json("request too large", 413),
@@ -28942,6 +28972,14 @@ mod tests {
         assert_eq!(
             api_route_access(&Method::Get, "/api/auth/sso/login"),
             ApiRouteAccess::Public
+        );
+        assert_eq!(
+            api_route_access(&Method::Get, "/api/auth/session"),
+            ApiRouteAccess::Public
+        );
+        assert_eq!(
+            api_route_access(&Method::Post, "/api/auth/session"),
+            ApiRouteAccess::Authenticated
         );
         assert_eq!(
             api_route_access(&Method::Post, "/api/events"),

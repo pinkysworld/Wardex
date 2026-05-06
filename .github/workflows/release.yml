@@ -76,6 +76,23 @@ jobs:
       - name: Build
         run: cargo build --release --target ${{ matrix.target }}
 
+      - name: Sign and notarize macOS binary
+        if: startsWith(matrix.platform, 'macos-')
+        env:
+          WARDEX_MACOS_CERTIFICATE_BASE64: ${{ secrets['MACOS_DEVELOPER_ID_CERTIFICATE_BASE64'] }}
+          WARDEX_MACOS_CERTIFICATE_PASSWORD: ${{ secrets['MACOS_DEVELOPER_ID_CERTIFICATE_PASSWORD'] }}
+          WARDEX_MACOS_CODESIGN_IDENTITY: ${{ secrets['MACOS_CODESIGN_IDENTITY'] }}
+          WARDEX_MACOS_KEYCHAIN_PASSWORD: ${{ secrets['MACOS_KEYCHAIN_PASSWORD'] }}
+          WARDEX_MACOS_NOTARY_APPLE_ID: ${{ secrets['MACOS_NOTARY_APPLE_ID'] }}
+          WARDEX_MACOS_NOTARY_PASSWORD: ${{ secrets['MACOS_NOTARY_APP_PASSWORD'] }}
+          WARDEX_MACOS_NOTARY_TEAM_ID: ${{ secrets['MACOS_NOTARY_TEAM_ID'] }}
+        run: |
+          set -euo pipefail
+          scripts/sign_notarize_macos_release.sh \
+            "target/${{ matrix.target }}/release/wardex" \
+            "${{ matrix.platform }}" \
+            2>&1 | tee "wardex-${{ matrix.platform }}-gatekeeper.txt"
+
       # ── Package (Linux / macOS) ──────────────────────────────────────────
       - name: Create package (Unix)
         if: runner.os != 'Windows'
@@ -111,6 +128,14 @@ jobs:
         with:
           name: ${{ matrix.archive }}
           path: ${{ matrix.archive }}
+          if-no-files-found: error
+
+      - name: Upload macOS Gatekeeper evidence
+        if: startsWith(matrix.platform, 'macos-')
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: wardex-${{ matrix.platform }}-gatekeeper.txt
+          path: wardex-${{ matrix.platform }}-gatekeeper.txt
           if-no-files-found: error
 
       # ── SLSA v1.0 provenance attestation ────────────────────────────────

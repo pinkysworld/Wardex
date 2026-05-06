@@ -9,7 +9,7 @@ const SETTINGS_TABS = [
 
 export function SettingsTabs({ activeTab, onChange }) {
   return (
-    <div className="tabs" role="tablist" aria-label="Settings sections">
+    <div className="tabs settings-tabs" role="tablist" aria-label="Settings sections">
       {SETTINGS_TABS.map((tab) => (
         <button
           key={tab.id}

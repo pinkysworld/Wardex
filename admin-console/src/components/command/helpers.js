@@ -148,42 +148,6 @@ export const compactTimestamp = (value) => {
   return formatRelativeTime(value) || formatDateTime(value);
 };
 
-const connectorStatus = (connector, data) => {
-  const details = data[connector.statusKey] || {};
-  const setup = details.setup || details.config || details;
-  const validation = details.validation || setup.validation || {};
-  const status =
-    validation.status ||
-    setup.status ||
-    details.status ||
-    (setup.enabled || details.enabled
-      ? 'configured'
-      : connector.newLane
-        ? 'setup_ready'
-        : 'not configured');
-  const lastSuccess =
-    setup.last_success_at || validation.last_success_at || details.last_success_at || null;
-  return {
-    status,
-    detail:
-      validation.message ||
-      setup.message ||
-      details.detail ||
-      (lastSuccess
-        ? `Last successful collection ${compactTimestamp(lastSuccess)}.`
-        : connector.newLane
-          ? 'Guided setup is available with saved config, validation, and sample-event proof.'
-          : 'Awaiting validation.'),
-    sample:
-      setup.sample_event_type ||
-      validation.sample_event_type ||
-      details.sample_event_type ||
-      setup.checkpoint_id ||
-      connector.sampleEvent ||
-      'Sample preview pending',
-  };
-};
-
 export const connectorStatusFromReadiness = (connector, readiness = {}) => {
   const lastSuccess = readiness.last_success_at || null;
   const hasError = Boolean(readiness.last_error_at || readiness.error_category);

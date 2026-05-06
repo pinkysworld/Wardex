@@ -179,9 +179,11 @@ async function login(page) {
   await page.goto('./');
   await page.evaluate(() => {
     localStorage.setItem('wardex_onboarded', '1');
-    localStorage.setItem('wardex_token', 'playwright-token');
+    localStorage.removeItem('wardex_token');
   });
   await page.reload({ waitUntil: 'load' });
+  await page.getByLabel('API token').fill('playwright-token');
+  await page.getByRole('button', { name: 'Connect' }).click();
   await expect(page.locator('.auth-badge')).toContainText(/connected/i);
   await expect(page.locator('.role-badge')).toContainText(/admin/i);
 }
@@ -378,5 +380,7 @@ test('visible process tree pivot opens the SOC process tree workspace', async ({
 
   await expect(page).toHaveURL(/\/soc(?:\?.*)?#process-tree$/);
   await expect(page.getByText('Live Processes (0)')).toBeVisible();
-  await expect(page.locator('.card-title').filter({ hasText: /^Deep Process Chains$/ })).toBeVisible();
+  await expect(
+    page.locator('.card-title').filter({ hasText: /^Deep Process Chains$/ }),
+  ).toBeVisible();
 });

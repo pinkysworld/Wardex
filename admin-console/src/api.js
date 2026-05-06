@@ -139,6 +139,7 @@ export const alerts = () => get('/api/alerts');
 export const alertsCount = () => get('/api/alerts/count');
 export const alertById = (id) => get(`/api/alerts/${encodeURIComponent(id)}`);
 export const alertsGrouped = () => get('/api/alerts/grouped');
+export const alertsAnalysisLatest = () => get('/api/alerts/analysis');
 export const alertsAnalysis = (body) => post('/api/alerts/analysis', body);
 export const alertsSample = (body) => post('/api/alerts/sample', body);
 export const alertsClear = () => del('/api/alerts');

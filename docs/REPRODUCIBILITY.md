@@ -10,7 +10,7 @@ For every tagged release (`vX.Y.Z`):
 | Artifact                                  | Provenance                                                       |
 |------------------------------------------ |----------------------------------------------------------------- |
 | `wardex-linux-x86_64.tar.gz`              | SLSA v1.0 build-provenance attestation (GitHub attestation API)  |
-| `wardex-macos-{aarch64,x86_64}.tar.gz`    | SLSA v1.0 build-provenance attestation                           |
+| `wardex-macos-{aarch64,x86_64}.tar.gz`    | SLSA v1.0 build-provenance attestation + Developer ID notarization |
 | `wardex-windows-x86_64.zip`               | SLSA v1.0 build-provenance attestation                           |
 | `wardex_<ver>_amd64.deb` / `.rpm`         | Shipped in the same release, signed with the release GPG key     |
 | `wardex-sbom.cdx.json`                    | CycloneDX SBOM generated from the release `Cargo.lock`           |
@@ -29,10 +29,30 @@ gh attestation verify wardex-linux-x86_64.tar.gz \
 A successful verification confirms the archive was produced by
 `.github/workflows/release.yml` on `pinkysworld/Wardex` for the expected tag.
 
+## Verify macOS Gatekeeper trust
+
+macOS release archives are signed with a Developer ID Application certificate
+and submitted to Apple notarization before they are published. After extracting
+the matching archive, verify the binary locally:
+
+```bash
+tar -xzf wardex-macos-aarch64.tar.gz
+codesign --verify --strict --verbose=2 wardex-macos-aarch64/wardex
+codesign -dv --verbose=4 wardex-macos-aarch64/wardex
+```
+
+For Intel Macs, replace `aarch64` with `x86_64`. The GitHub Release also
+includes `wardex-macos-*-gatekeeper.txt` evidence captured on the release
+runner, including the accepted `notarytool submit --wait` output. SLSA
+provenance proves where the archive was built; Apple notarization is the
+separate trust signal macOS Gatekeeper uses when a downloaded binary is
+opened. `spctl --assess --type execute` is intentionally not used for Wardex's
+standalone CLI binaries because it reports app-only validation errors.
+
 ## Verify the container image
 
 ```bash
-IMAGE=ghcr.io/pinkysworld/wardex:1.0.0
+IMAGE=ghcr.io/pinkysworld/wardex:1.0.2
 
 # 1. Cosign keyless signature (subject is the release workflow run)
 cosign verify \

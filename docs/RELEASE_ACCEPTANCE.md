@@ -27,6 +27,58 @@ The wrapper is implemented in `scripts/release_acceptance.sh` and runs these che
    - `tests/playwright/siem_settings_live.spec.js`
    - `tests/playwright/mobile_topbar_smoke.spec.js`
 
+## macOS release trust
+
+Tagged macOS release jobs must Developer ID sign and notarize the `wardex`
+binary before the `.tar.gz` archive is assembled. The release workflow fails
+the macOS matrix jobs when the Apple signing credentials are missing, preventing
+GitHub Releases from publishing unsigned binaries that macOS Gatekeeper blocks.
+
+Required GitHub Actions secrets:
+
+- `MACOS_DEVELOPER_ID_CERTIFICATE_BASE64` — base64-encoded Developer ID
+  Application `.p12` certificate.
+- `MACOS_DEVELOPER_ID_CERTIFICATE_PASSWORD` — password for that `.p12` file.
+- `MACOS_NOTARY_APPLE_ID` — Apple ID used with `xcrun notarytool`.
+- `MACOS_NOTARY_APP_PASSWORD` — app-specific password for notarization.
+- `MACOS_NOTARY_TEAM_ID` — Apple Developer Team ID.
+
+Optional secrets:
+
+- `MACOS_CODESIGN_IDENTITY` — exact `codesign` identity name when the default
+  `Developer ID Application` selector is ambiguous.
+- `MACOS_KEYCHAIN_PASSWORD` — password for the temporary CI keychain.
+
+Each macOS release asset must have matching `wardex-macos-*-gatekeeper.txt`
+evidence in the GitHub Release. A local spot-check after extraction should pass:
+
+```bash
+codesign --verify --strict --verbose=2 wardex-macos-aarch64/wardex
+codesign -dv --verbose=4 wardex-macos-aarch64/wardex
+```
+
+Apple notarization is confirmed by `xcrun notarytool submit --wait` returning
+`Accepted`. `spctl --assess --type execute` is app-bundle oriented and reports
+false negatives such as `does not seem to be an app` for standalone Wardex CLI
+binaries.
+
+Local archive builds use the same helper through `scripts/build_local_release.sh`
+when these environment variables are present:
+
+```bash
+export WARDEX_MACOS_CERTIFICATE_BASE64="$(base64 -i DeveloperIDApplication.p12)"
+export WARDEX_MACOS_CERTIFICATE_PASSWORD="<p12-password>"
+export WARDEX_MACOS_NOTARY_APPLE_ID="<apple-id>"
+export WARDEX_MACOS_NOTARY_PASSWORD="<app-specific-password>"
+export WARDEX_MACOS_NOTARY_TEAM_ID="<team-id>"
+export WARDEX_REQUIRE_MACOS_NOTARIZATION=1
+bash scripts/build_local_release.sh
+```
+
+Without `WARDEX_REQUIRE_MACOS_NOTARIZATION=1`, local macOS archives may still be
+created for development smoke testing, but they are not suitable for GitHub
+release publication.
+
 ## GitHub CI preflight
 
 The GitHub CI matrix also gates release branches with the Rust checks that are intentionally kept outside the browser-heavy acceptance wrapper:

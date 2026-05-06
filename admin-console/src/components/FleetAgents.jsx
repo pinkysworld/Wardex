@@ -3,6 +3,7 @@ import { useSearchParams } from 'react-router-dom';
 import { useApi, useApiGroup, useInterval, useToast } from '../hooks.jsx';
 import * as api from '../api.js';
 import { ConfirmDialog, JsonDetails, SummaryGrid, WorkspaceEmptyState } from './operator.jsx';
+import { copyTextToClipboard } from './clipboard.js';
 import EmptyState from './EmptyState.jsx';
 import { formatDateTime, formatRelativeTime } from './operatorUtils.js';
 import LocalConsoleInventory from './LocalConsoleInventory.jsx';
@@ -464,21 +465,24 @@ export default function FleetAgents() {
   };
 
   const copyRow = useCallback(
-    (agent) => {
+    async (agent) => {
       const text = AGENT_COLUMNS.map(
         (column) =>
           `${column}: ${agent.raw[column] || agent.raw[column === 'id' ? 'agent_id' : column] || '—'}`,
       ).join(', ');
-      navigator.clipboard.writeText(text).then(() => toast('Copied', 'success'));
+      const copied = await copyTextToClipboard(text);
+      toast(copied ? 'Copied' : 'Clipboard unavailable', copied ? 'success' : 'error');
     },
     [toast],
   );
 
-  const copyInstallBundle = useCallback(() => {
+  const copyInstallBundle = useCallback(async () => {
     if (!installBundle) return;
-    navigator.clipboard.writeText(installBundle.command).then(() => {
-      toast('Install command copied', 'success');
-    });
+    const copied = await copyTextToClipboard(installBundle.command);
+    toast(
+      copied ? 'Install command copied' : 'Clipboard unavailable',
+      copied ? 'success' : 'error',
+    );
   }, [installBundle, toast]);
 
   const handleInstallFormChange = useCallback((field, value) => {

@@ -262,7 +262,8 @@ export default function ProcessDrawer({
   );
   const processGone = error?.status === 404;
   const snapshotDetail = useMemo(() => buildSnapshotDetail(pid, snapshot), [pid, snapshot]);
-  const activeDetail = detail || (processGone ? snapshotDetail : null);
+  const usingSnapshotFallback = Boolean(snapshotDetail) && !detail && Boolean(error);
+  const activeDetail = detail || (usingSnapshotFallback ? snapshotDetail : null);
   const processNodes = useMemo(
     () => normalizeProcessNodes(processContextData.processTree),
     [processContextData.processTree],
@@ -466,13 +467,19 @@ export default function ProcessDrawer({
             <div className="spinner" />
           </div>
         )}
-        {processGone && (
+        {processGone && usingSnapshotFallback && (
           <div className="error-box">
             This process exited before Wardex could complete a live inspection. Showing the last
             known snapshot from the process table.
           </div>
         )}
-        {error && !processGone && <div className="error-box">Failed to load process detail.</div>}
+        {error && !processGone && usingSnapshotFallback && (
+          <div className="error-box">
+            Live inspection is temporarily unavailable. Showing the last known snapshot from the
+            process table while Wardex retries this PID.
+          </div>
+        )}
+        {error && !usingSnapshotFallback && <div className="error-box">Failed to load process detail.</div>}
         {activeDetail && (
           <>
             <SummaryGrid data={summary} limit={10} />

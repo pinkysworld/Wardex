@@ -354,6 +354,7 @@ export default function LiveMonitor() {
   const toast = useToast();
   const [searchParams, setSearchParams] = useSearchParams();
   const alertSearchRef = useRef(null);
+  const processTableRef = useRef(null);
   const { data: wsStats, reload: reloadWsStats } = useApi(api.wsStats);
   const nativeStreamSupported = Boolean(wsStats?.native_websocket_supported);
   const {
@@ -370,14 +371,14 @@ export default function LiveMonitor() {
     clearEvents: clearStreamEvents,
     reconnect: reconnectStream,
   } = useWebSocket(2000, { nativeSupported: nativeStreamSupported });
-  const { data: alertData, loading, reload } = useApi(api.alerts);
+  const { data: alertData, loading, reload: reloadAlerts } = useApi(api.alerts);
   const { data: alertSummaryData, reload: reloadAlertSummary } = useApiGroup({
     countData: api.alertsCount,
     grouped: api.alertsGrouped,
   });
   const { countData, grouped } = alertSummaryData;
   const { data: hp } = useApi(api.health);
-  const { data: processData, reload: reloadProcessData } = useApiGroup({
+  const { data: processData, reload: reloadProcessDataRaw } = useApiGroup({
     procData: api.processesLive,
     procAnalysis: api.processesAnalysis,
     procTree: api.processTree,
@@ -428,10 +429,45 @@ export default function LiveMonitor() {
     updateMonitorParams({ alert: nextParam });
   }, [searchParams, selectedId, updateMonitorParams]);
 
-  const reloadAll = () => {
-    reload();
-    reloadAlertSummary();
-  };
+  const withProcessScrollPreserved = useCallback(
+    async (work) => {
+      if (tab !== 'processes') return work();
+
+      const previousWindowY = typeof window !== 'undefined' ? window.scrollY : 0;
+      const previousTableScrollTop = processTableRef.current?.scrollTop ?? null;
+
+      try {
+        return await work();
+      } finally {
+        if (typeof window === 'undefined') return;
+
+        const restoreScroll = () => {
+          window.scrollTo(0, previousWindowY);
+          if (processTableRef.current && previousTableScrollTop != null) {
+            processTableRef.current.scrollTop = previousTableScrollTop;
+          }
+        };
+
+        if (typeof window.requestAnimationFrame === 'function') {
+          window.requestAnimationFrame(restoreScroll);
+        } else {
+          restoreScroll();
+        }
+      }
+    },
+    [tab],
+  );
+
+  const reloadAll = useCallback(
+    () => withProcessScrollPreserved(() => Promise.all([reloadAlerts(), reloadAlertSummary()])),
+    [reloadAlertSummary, reloadAlerts, withProcessScrollPreserved],
+  );
+  const reloadProcessData = useCallback(
+    () => withProcessScrollPreserved(() => reloadProcessDataRaw()),
+    [reloadProcessDataRaw, withProcessScrollPreserved],
+  );
+  const reload = reloadAlerts;
+
   useInterval(reloadAll, 10000);
   useInterval(
     () => {
@@ -477,6 +513,23 @@ export default function LiveMonitor() {
     reloadAlertSummary();
     reloadWsStats();
   }, [latestStreamAlertKey, reloadAlertSummary, reloadWsStats]);
+
+  const runAlertAnalysis = useCallback(async () => {
+    try {
+      const result = await api.alertsAnalysis({});
+      setAnalysisResult(result);
+      toast('Analysis complete', 'success');
+      return;
+    } catch {}
+
+    try {
+      const result = await api.alertsAnalysisLatest();
+      setAnalysisResult(result);
+      toast('Analysis complete', 'success');
+    } catch {
+      toast('Analysis failed', 'error');
+    }
+  }, [toast]);
 
   useInterval(
     () => {
@@ -1614,15 +1667,7 @@ export default function LiveMonitor() {
             <span className="card-title">Alert Analysis</span>
             <button
               className="btn btn-sm btn-primary"
-              onClick={async () => {
-                try {
-                  const r = await api.alertsAnalysis({});
-                  setAnalysisResult(r);
-                  toast('Analysis complete', 'success');
-                } catch {
-                  toast('Analysis failed', 'error');
-                }
-              }}
+              onClick={runAlertAnalysis}
             >
               Run Analysis
             </button>
@@ -2039,7 +2084,11 @@ export default function LiveMonitor() {
                 onAction={procFilter ? () => setProcFilter('') : reloadProcessData}
               />
             ) : (
-              <div className="table-wrap" style={{ maxHeight: 500, overflowY: 'auto' }}>
+              <div
+                className="table-wrap"
+                ref={processTableRef}
+                style={{ maxHeight: 500, overflowY: 'auto' }}
+              >
                 <table>
                   <thead
                     style={{ position: 'sticky', top: 0, background: 'var(--card-bg)', zIndex: 1 }}

@@ -85,6 +85,70 @@ describe('App', () => {
     expect(screen.getByText('2 group mappings ready for lifecycle sync.')).toBeInTheDocument();
   });
 
+  it('collapses duplicate SSO provider labels in the login UI', async () => {
+    fetchMock.mockImplementation(async (url) => ({
+      ok: true,
+      headers: { get: () => 'application/json' },
+      json: async () => {
+        if (url === '/api/auth/session') return { authenticated: false };
+        if (url === '/api/auth/sso/config') {
+          return {
+            providers: [
+              { id: 'idp-1', display_name: 'Corporate SSO', kind: 'oidc', status: 'configured' },
+              { id: 'idp-2', display_name: 'Corporate SSO', kind: 'oidc', status: 'configured' },
+              { id: 'idp-3', display_name: 'Corporate SSO', kind: 'oidc', status: 'configured' },
+            ],
+            scim: { enabled: false, status: 'disabled', mapping_count: 0 },
+          };
+        }
+        return {};
+      },
+    }));
+
+    await renderApp();
+
+    expect(
+      await screen.findAllByRole('button', { name: 'Sign in with Corporate SSO' }),
+    ).toHaveLength(2);
+    expect(screen.getByText('1')).toBeInTheDocument();
+    expect(screen.getByText('Corporate SSO; 2 duplicate labels hidden')).toBeInTheDocument();
+  });
+
+  it('caps SSO provider buttons and falls back to provider ids for blank labels', async () => {
+    fetchMock.mockImplementation(async (url) => ({
+      ok: true,
+      headers: { get: () => 'application/json' },
+      json: async () => {
+        if (url === '/api/auth/session') return { authenticated: false };
+        if (url === '/api/auth/sso/config') {
+          return {
+            providers: [
+              { id: 'idp-a', display_name: 'Northwind SSO', kind: 'oidc', status: 'configured' },
+              { id: 'idp-b', display_name: 'Fabrikam SSO', kind: 'oidc', status: 'configured' },
+              { id: 'idp-c', display_name: '   ', kind: 'saml', status: 'configured' },
+              { id: 'idp-d', display_name: 'Contoso SSO', kind: 'oidc', status: 'configured' },
+              { id: 'idp-e', display_name: 'Woodgrove SSO', kind: 'oidc', status: 'configured' },
+            ],
+            scim: { enabled: false, status: 'disabled', mapping_count: 0 },
+          };
+        }
+        return {};
+      },
+    }));
+
+    await renderApp();
+
+    expect(await screen.findAllByRole('button', { name: 'Northwind SSO' })).toHaveLength(1);
+    expect(screen.getAllByRole('button', { name: 'Fabrikam SSO' })).toHaveLength(1);
+    expect(screen.getAllByRole('button', { name: 'idp-c' })).toHaveLength(1);
+    expect(screen.queryByRole('button', { name: 'Contoso SSO' })).not.toBeInTheDocument();
+    expect(screen.getByText('+2 more')).toBeInTheDocument();
+    expect(screen.getByText('+2 more configured')).toBeInTheDocument();
+    expect(
+      screen.getByText('Northwind SSO, Fabrikam SSO, idp-c, Contoso SSO, Woodgrove SSO'),
+    ).toBeInTheDocument();
+  });
+
   it('preserves hash-backed route scope in SSO launch redirects while stripping callback errors', async () => {
     const assignSpy = vi.spyOn(window.location, 'assign').mockImplementation(() => {});
 
@@ -534,5 +598,39 @@ describe('App', () => {
       expect(currentUrl.searchParams.get('huntName')).toBe('Credential Storm Pivot');
       expect(currentUrl.searchParams.get('context')).toBe('threat-detection');
     });
+  });
+
+  it('falls back when clipboard permissions are denied during share', async () => {
+    localStorage.setItem('wardex_token', 'persisted-token');
+    const writeText = vi.fn().mockRejectedValue(new Error('denied'));
+    const execCommand = vi.fn().mockReturnValue(true);
+    Object.defineProperty(window.navigator, 'clipboard', {
+      configurable: true,
+      value: { writeText },
+    });
+    document.execCommand = execCommand;
+
+    fetchMock.mockImplementation(async (url) => ({
+      ok: true,
+      headers: { get: () => 'application/json' },
+      json: async () => {
+        if (url === '/api/auth/session') {
+          return { authenticated: true, role: 'admin', username: 'tester' };
+        }
+        if (url === '/api/health') {
+          return { status: 'ok', version: '1.0.2' };
+        }
+        return {};
+      },
+    }));
+
+    await renderApp('/reports');
+
+    await userEvent.click(await screen.findByRole('button', { name: 'More' }));
+    await userEvent.click(screen.getByRole('menuitem', { name: 'Share Link' }));
+
+    await waitFor(() => expect(writeText).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(execCommand).toHaveBeenCalledWith('copy'));
+    expect(screen.getByRole('button', { name: 'Copied' })).toBeInTheDocument();
   });
 });

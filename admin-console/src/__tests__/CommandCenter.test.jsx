@@ -201,7 +201,7 @@ const COMMAND_FIXTURES = {
     },
   ],
   sbomData: { component_count: 12 },
-  configData: { version: '0.56.0' },
+  configData: { version: '1.0.2' },
   assistantStatus: {
     mode: 'retrieval-only',
     model: 'local-rag',
@@ -385,9 +385,11 @@ describe('CommandCenter', () => {
     expect((await screen.findAllByText('Detection Quality Dashboard')).length).toBeGreaterThan(0);
     expect(screen.getByText('Overdue reviews')).toBeInTheDocument();
     expect(screen.getByText('Owners under noise')).toBeInTheDocument();
-    expect(screen.getAllByText('SSH burst').length).toBeGreaterThan(0);
-    expect(screen.getByText('detections • test • overdue')).toBeInTheDocument();
-    expect(screen.getByText('2 blocker(s) • 6 replay hits • 1 suppression(s)')).toBeInTheDocument();
+    expect((await screen.findAllByText('SSH burst')).length).toBeGreaterThan(0);
+    expect(await screen.findByText('detections • test • overdue')).toBeInTheDocument();
+    expect(
+      await screen.findByText('2 blocker(s) • 6 replay hits • 1 suppression(s)'),
+    ).toBeInTheDocument();
     expect(screen.getByRole('link', { name: /SSH burst/ })).toHaveAttribute(
       'href',
       '/detection?rule=rule-ssh-burst&rulePanel=promotion',

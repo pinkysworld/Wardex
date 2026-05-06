@@ -4,6 +4,11 @@ All notable changes to Wardex are documented in this file.
 
 ## [Unreleased]
 
+## [1.0.2] — 2026-05-05: macOS Gatekeeper release trust
+
+### Fixed
+- **macOS Gatekeeper trust**: tagged macOS release jobs now Developer ID sign and Apple-notarize the `wardex` binary before packaging, publish Gatekeeper verification evidence, and block unsigned macOS archives when signing credentials are missing.
+
 ## [1.0.1] — 2026-05-05: CI hardening and patch fixes
 
 ### Fixed

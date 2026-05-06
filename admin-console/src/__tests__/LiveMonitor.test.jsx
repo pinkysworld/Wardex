@@ -15,6 +15,15 @@ const jsonOk = (data) => ({
   text: async () => JSON.stringify(data),
 });
 
+const jsonError = (status, data, statusText = 'Error') => ({
+  ok: false,
+  status,
+  statusText,
+  headers: { get: (h) => (h === 'content-type' ? 'application/json' : null) },
+  json: async () => data,
+  text: async () => JSON.stringify(data),
+});
+
 function LocationProbe() {
   const location = useLocation();
   return <div data-testid="location-probe">{`${location.pathname}${location.search}`}</div>;
@@ -321,6 +330,124 @@ describe('LiveMonitor', () => {
       expect(callCounts.processTree).toBe(initialProcessTree + 1);
       expect(callCounts.processDeepChains).toBe(initialProcessDeepChains + 1);
     });
+  });
+
+  it('falls back to the GET alert analysis route when the POST request fails', async () => {
+    const user = userEvent.setup();
+    let postAttempts = 0;
+    let getAttempts = 0;
+
+    globalThis.fetch = vi.fn((url, options = {}) => {
+      const href = String(url);
+      const method = options?.method || 'GET';
+
+      if (href.includes('/api/alerts/analysis') && method === 'POST') {
+        postAttempts += 1;
+        return Promise.resolve(
+          jsonError(500, { error: 'analysis pipeline unavailable' }, 'Internal Server Error'),
+        );
+      }
+      if (href.includes('/api/alerts/analysis') && method === 'GET') {
+        getAttempts += 1;
+        return Promise.resolve(
+          jsonOk({
+            summary: 'Queue pressure is concentrated around repeated SSH failures.',
+            recommended_actions: ['Inspect the originating host.'],
+          }),
+        );
+      }
+      if (href.includes('/api/alerts/count')) {
+        return Promise.resolve(jsonOk({ total: 0, critical: 0, severe: 0, elevated: 0 }));
+      }
+      if (href.includes('/api/ws/stats')) return Promise.resolve(jsonOk(wsStatsFixture()));
+      if (href.includes('/api/alerts/grouped')) return Promise.resolve(jsonOk([]));
+      if (href.includes('/api/alerts')) return Promise.resolve(jsonOk([]));
+      if (href.includes('/api/processes/live')) return Promise.resolve(jsonOk({ processes: [] }));
+      if (href.includes('/api/processes/analysis')) return Promise.resolve(jsonOk({ findings: [] }));
+      if (href.includes('/api/fp-feedback/stats')) return Promise.resolve(jsonOk([]));
+      if (href.includes('/api/health')) return Promise.resolve(jsonOk({ status: 'ok' }));
+      return Promise.resolve(jsonOk({}));
+    });
+
+    renderMonitor('/monitor?monitorTab=analysis');
+
+    await user.click(await screen.findByRole('button', { name: 'Run Analysis' }));
+
+    expect(
+      await screen.findAllByText('Queue pressure is concentrated around repeated SSH failures.'),
+    ).toHaveLength(2);
+    expect(postAttempts).toBe(1);
+    expect(getAttempts).toBe(1);
+  });
+
+  it('restores the current monitor scroll position after refreshing process data', async () => {
+    const user = userEvent.setup();
+
+    globalThis.fetch = vi.fn((url) => {
+      const href = String(url);
+
+      if (href.includes('/api/alerts/count')) {
+        return Promise.resolve(jsonOk({ total: 1, critical: 1, severe: 0, elevated: 0 }));
+      }
+      if (href.includes('/api/ws/stats')) return Promise.resolve(jsonOk(wsStatsFixture()));
+      if (href.includes('/api/alerts/grouped')) return Promise.resolve(jsonOk([]));
+      if (href.includes('/api/alerts')) return Promise.resolve(jsonOk([]));
+      if (href.includes('/api/processes/live')) {
+        return Promise.resolve(
+          jsonOk({
+            count: 1,
+            processes: [
+              {
+                pid: 1337,
+                ppid: 1,
+                name: 'sshd',
+                user: 'root',
+                group: 'wheel',
+                cpu_percent: 8.4,
+                mem_percent: 2.1,
+              },
+            ],
+          }),
+        );
+      }
+      if (href.includes('/api/process-tree/deep-chains')) {
+        return Promise.resolve(jsonOk({ deep_chains: [] }));
+      }
+      if (href.includes('/api/process-tree')) {
+        return Promise.resolve(jsonOk({ processes: [{ pid: 1, ppid: 0, name: 'launchd' }] }));
+      }
+      if (href.includes('/api/processes/analysis')) {
+        return Promise.resolve(jsonOk({ total: 0, findings: [] }));
+      }
+      if (href.includes('/api/fp-feedback/stats')) return Promise.resolve(jsonOk([]));
+      if (href.includes('/api/health')) return Promise.resolve(jsonOk({ status: 'ok' }));
+      return Promise.resolve(jsonOk({}));
+    });
+
+    Object.defineProperty(window, 'scrollY', {
+      value: 420,
+      writable: true,
+      configurable: true,
+    });
+    window.scrollTo = vi.fn((x, y) => {
+      window.scrollY = typeof y === 'number' ? y : Number(x?.top ?? window.scrollY);
+    });
+
+    renderMonitor('/monitor?monitorTab=processes');
+
+    await screen.findByText('All Processes');
+    const refreshButton = screen.getAllByRole('button', { name: '↻ Refresh' })[0];
+    const processCard = screen.getByText('All Processes').closest('.card');
+    const processTable = processCard?.querySelector('.table-wrap');
+    if (!processTable) throw new Error('process table not found');
+
+    processTable.scrollTop = 215;
+    await user.click(refreshButton);
+
+    await waitFor(() => {
+      expect(window.scrollTo).toHaveBeenCalledWith(0, 420);
+    });
+    expect(processTable.scrollTop).toBe(215);
   });
 
   it('restores route-backed monitor scope and preserves filters across tab and drawer changes', async () => {
