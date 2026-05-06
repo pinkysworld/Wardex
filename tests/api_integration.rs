@@ -2387,7 +2387,7 @@ fn live_rollback_executes_remove_persistence_action_when_execution_policy_is_ena
                 "rollback_action": {
                     "type": "remove_persistence",
                     "mechanism_type": "registry_run_key",
-                    "hive": r"HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run",
+                    "hive": r"HKCU\Software\Microsoft\Windows\CurrentVersion\Run",
                     "value_name": "WardexAgent"
                 }
             }),
