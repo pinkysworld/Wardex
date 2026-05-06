@@ -100,6 +100,11 @@ if ! command -v gh >/dev/null 2>&1; then
   exit 1
 fi
 
+if ! command -v openssl >/dev/null 2>&1; then
+  echo "error: OpenSSL is required to validate the Developer ID .p12 password before uploading secrets" >&2
+  exit 1
+fi
+
 if ! gh auth status >/dev/null 2>&1; then
   echo "error: gh is not authenticated; run: gh auth login -h github.com --web --git-protocol https --scopes repo,workflow" >&2
   exit 1
@@ -121,6 +126,14 @@ fi
 certificate_password="${WARDEX_MACOS_CERTIFICATE_PASSWORD:-}"
 if [[ -z "$certificate_password" ]]; then
   certificate_password="$(keychain_password)"
+fi
+
+if ! openssl pkcs12 \
+  -in "$certificate_path" \
+  -nokeys \
+  -passin pass:"$certificate_password" >/dev/null 2>&1; then
+  echo "error: Developer ID .p12 password validation failed for ${certificate_path}; not updating GitHub secrets" >&2
+  exit 1
 fi
 
 certificate_base64="$(base64_one_line "$certificate_path")"
