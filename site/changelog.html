@@ -88,6 +88,11 @@
           </div>
           <div class="start-grid">
             <article class="start-card">
+              <p class="label">v1.0.4</p>
+              <h3>macOS signing import hardening for Developer ID notarized release archives.</h3>
+              <p>Imports the Developer ID <code>.p12</code> as a full PKCS#12 identity with explicit <code>codesign</code> access, prints imported identities before signing, and keeps keychain partition diagnostics visible on GitHub macOS runners.</p>
+            </article>
+            <article class="start-card">
               <p class="label">v1.0.3</p>
               <h3>Release CI and Live Monitor hardening for notarized macOS artifacts and process-analysis workflows.</h3>
               <p>Preserves GitHub runner keychains during Developer ID signing, resolves the imported identity before <code>codesign</code>, and adds a focused Chromium Playwright regression for token login, process detail fallback, process refresh scroll preservation, and alert-analysis failover.</p>
@@ -96,11 +101,6 @@
               <p class="label">v1.0.2</p>
               <h3>macOS release trust: Developer ID signing, Apple notarization, and Gatekeeper evidence for GitHub archives.</h3>
               <p>Signs the macOS command-line binary before packaging, submits it to Apple notarization, verifies local execution trust with <code>spctl</code>, publishes Gatekeeper evidence alongside release assets, and blocks unsigned macOS release archives when signing credentials are missing.</p>
-            </article>
-            <article class="start-card">
-              <p class="label">v1.0.1</p>
-              <h3>Patch hardening for CI, cross-target linting, release tests, and admin-console regressions.</h3>
-              <p>Aligned <code>cargo deny</code> advisory policy, fixed Windows and non-Unix clippy issues, hardened session-store integration tests, stabilized process-candidate assertions, removed dead exports, and refreshed the live validation suite around the 1.0 patch baseline.</p>
             </article>
           </div>
         </div>
@@ -135,7 +135,7 @@
             <div class="footer-col footer-about">
               <span class="nav-logo footer-logo">WX</span>
               <p>Private-cloud XDR &amp; SIEM built in Rust. One binary. Full data sovereignty.</p>
-              <p class="footer-version"><span id="footer-version">v1.0.3</span> · AGPL 3.0</p>
+              <p class="footer-version"><span id="footer-version">v1.0.4</span> · AGPL 3.0</p>
             </div>
             <div class="footer-col">
               <h4>Product</h4>

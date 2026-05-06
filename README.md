@@ -6,7 +6,7 @@
 
 Wardex is a Rust-based XDR and SIEM platform for private-cloud and self-hosted security operations. It combines cross-platform telemetry collection, detection engineering, analyst workflows, approval-gated response, agent lifecycle management, SIEM integrations, and tamper-evident evidence handling in a single deployable product.
 
-## What ships in `v1.0.3`
+## What ships in `v1.0.4`
 
 - **Release CI and Live Monitor hardening** — the macOS signing helper now preserves CI runner keychains while resolving the imported Developer ID identity, and the admin console ships a dedicated Playwright regression for token login, process analysis fallback, and process-refresh scroll preservation.
 - **Major GA release** — first stable version with a 12-month API stability pledge.

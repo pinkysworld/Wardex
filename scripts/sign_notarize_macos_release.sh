@@ -109,9 +109,10 @@ security unlock-keychain -p "$keychain_password" "$keychain_path"
 security import "$cert_path" \
   -P "$WARDEX_MACOS_CERTIFICATE_PASSWORD" \
   -A \
-  -t cert \
   -f pkcs12 \
-  -k "$keychain_path"
+  -k "$keychain_path" \
+  -T /usr/bin/codesign \
+  -T /usr/bin/security
 active_keychains=("$keychain_path")
 for keychain in "${original_keychains[@]}"; do
   if [[ "$keychain" != "$keychain_path" ]]; then
@@ -120,11 +121,7 @@ for keychain in "${original_keychains[@]}"; do
 done
 security list-keychains -d user -s "${active_keychains[@]}"
 security default-keychain -s "$keychain_path"
-security set-key-partition-list \
-  -S apple-tool:,apple:,codesign: \
-  -s \
-  -k "$keychain_password" \
-  "$keychain_path"
+echo "==> Imported codesigning identities"
 identity_output="$(security find-identity -v -p codesigning "$keychain_path")"
 printf '%s\n' "$identity_output"
 
@@ -135,6 +132,14 @@ fi
 if [[ -z "$codesign_identity" ]]; then
   echo "error: no Developer ID Application codesigning identity was imported into ${keychain_path}" >&2
   exit 1
+fi
+
+if ! security set-key-partition-list \
+  -S apple-tool:,apple:,codesign: \
+  -s \
+  -k "$keychain_password" \
+  "$keychain_path"; then
+  echo "warning: unable to update key partition list; continuing because the identity was imported with codesign access" >&2
 fi
 
 echo "==> Code sign ${binary_path}"

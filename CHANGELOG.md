@@ -4,6 +4,11 @@ All notable changes to Wardex are documented in this file.
 
 ## [Unreleased]
 
+## [1.0.4] — 2026-05-06: macOS PKCS#12 signing import hardening
+
+### Fixed
+- **macOS release CI signing**: imports the Developer ID `.p12` as a full PKCS#12 identity with explicit `codesign` access, prints imported identities before signing, and keeps key-partition setup from hiding useful diagnostics when GitHub runner keychain ACLs behave differently across macOS images.
+
 ## [1.0.3] — 2026-05-06: release CI and Live Monitor regression hardening
 
 ### Fixed
