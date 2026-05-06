@@ -5,11 +5,13 @@ on:
     branches: [main]
     paths:
       - 'site/**'
+      - 'CHANGELOG.md'
       - 'scripts/build_changelog.py'
       - '.github/workflows/site-quality.yml'
   pull_request:
     paths:
       - 'site/**'
+      - 'CHANGELOG.md'
       - 'scripts/build_changelog.py'
       - '.github/workflows/site-quality.yml'
   workflow_dispatch:
