@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1778063596973,
+  "lastUpdate": 1778087260307,
   "repoUrl": "https://github.com/pinkysworld/Wardex",
   "entries": {
     "Wardex criterion benches": [
@@ -7145,6 +7145,114 @@ window.BENCHMARK_DATA = {
             "name": "sigma_evaluate_20_rules",
             "value": 35762,
             "range": "± 562",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "85413447+pinkysworld@users.noreply.github.com",
+            "name": "pinkysworld",
+            "username": "pinkysworld"
+          },
+          "committer": {
+            "email": "85413447+pinkysworld@users.noreply.github.com",
+            "name": "pinkysworld",
+            "username": "pinkysworld"
+          },
+          "distinct": true,
+          "id": "f898fbf0ef96887dc7c61640981576938d6e4548",
+          "message": "Prepare v1.0.5 release",
+          "timestamp": "2026-05-06T18:58:21+02:00",
+          "tree_id": "e4eea3ee1d132a1c412c95ed512c3c4a562014eb",
+          "url": "https://github.com/pinkysworld/Wardex/commit/f898fbf0ef96887dc7c61640981576938d6e4548"
+        },
+        "date": 1778087259852,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "full_pipeline/5",
+            "value": 48922,
+            "range": "± 225",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "full_pipeline/50",
+            "value": 417504,
+            "range": "± 13818",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "full_pipeline/200",
+            "value": 1913596,
+            "range": "± 11452",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "full_pipeline/1000",
+            "value": 17266440,
+            "range": "± 97958",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "detector_evaluate_single",
+            "value": 684,
+            "range": "± 1",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "detector_window_stream_256",
+            "value": 786462,
+            "range": "± 3029",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "shared_storage_observed_schema_read",
+            "value": 127,
+            "range": "± 0",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "shared_storage_4_threads_64_alerts",
+            "value": 164958,
+            "range": "± 2841",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "policy_evaluate_single",
+            "value": 235,
+            "range": "± 2",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "throughput/1000_samples",
+            "value": 17410291,
+            "range": "± 41767",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "search_500_events",
+            "value": 111308,
+            "range": "± 596",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "hunt_field_query",
+            "value": 96302,
+            "range": "± 684",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "ml_triage_rf",
+            "value": 54,
+            "range": "± 0",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "sigma_evaluate_20_rules",
+            "value": 35306,
+            "range": "± 242",
             "unit": "ns/iter"
           }
         ]
