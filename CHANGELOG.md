@@ -1403,8 +1403,6 @@ All notable changes to Wardex are documented in this file.
 - `generate_admin.py` deprecated — edit `site/admin.html` directly.
 - Version bumped to 0.27.0; 160/160 backlog tasks complete; all 27 phases done.
 
-## [Unreleased]
-
 ## [0.26.0] — Phase 26: Security audit fixes
 
 ### Fixed
