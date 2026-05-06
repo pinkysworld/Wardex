@@ -78,9 +78,10 @@ keychain_path="${tmp_dir}/wardex-signing.keychain-db"
 cert_path="${tmp_dir}/developer-id-application.p12"
 notary_archive="${WARDEX_MACOS_NOTARY_ARCHIVE:-${tmp_dir}/wardex-${platform}-notary.zip}"
 keychain_password="${WARDEX_MACOS_KEYCHAIN_PASSWORD:-$(uuidgen 2>/dev/null || printf 'wardex-%s-%s' "$$" "$(date +%s)")}"
-codesign_identity="${WARDEX_MACOS_CODESIGN_IDENTITY:-Developer ID Application}"
+codesign_identity="${WARDEX_MACOS_CODESIGN_IDENTITY:-}"
 original_default_keychain="$(security default-keychain 2>/dev/null | sed 's/^[[:space:]]*//' | tr -d '"' || true)"
 original_keychains=()
+active_keychains=()
 while IFS= read -r keychain; do
   keychain="$(printf '%s' "$keychain" | sed 's/^[[:space:]]*//' | tr -d '"')"
   if [[ -n "$keychain" ]]; then
@@ -111,14 +112,30 @@ security import "$cert_path" \
   -t cert \
   -f pkcs12 \
   -k "$keychain_path"
-security list-keychains -d user -s "$keychain_path"
+active_keychains=("$keychain_path")
+for keychain in "${original_keychains[@]}"; do
+  if [[ "$keychain" != "$keychain_path" ]]; then
+    active_keychains+=("$keychain")
+  fi
+done
+security list-keychains -d user -s "${active_keychains[@]}"
 security default-keychain -s "$keychain_path"
 security set-key-partition-list \
   -S apple-tool:,apple:,codesign: \
   -s \
   -k "$keychain_password" \
   "$keychain_path"
-security find-identity -v -p codesigning "$keychain_path"
+identity_output="$(security find-identity -v -p codesigning "$keychain_path")"
+printf '%s\n' "$identity_output"
+
+if [[ -z "$codesign_identity" ]]; then
+  codesign_identity="$(printf '%s\n' "$identity_output" | awk '/Developer ID Application/ { print $2; exit }')"
+fi
+
+if [[ -z "$codesign_identity" ]]; then
+  echo "error: no Developer ID Application codesigning identity was imported into ${keychain_path}" >&2
+  exit 1
+fi
 
 echo "==> Code sign ${binary_path}"
 codesign \

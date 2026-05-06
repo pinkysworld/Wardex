@@ -17,3 +17,6 @@ migrate_fixup.py
 sdk/typescript/node_modules/
 scripts/__pycache__/
 **/__pycache__/
+DeveloperIDG2CA.cer
+developerID_application.cer
+development.cer

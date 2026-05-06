@@ -449,7 +449,10 @@ export default function LiveMonitor() {
         };
 
         if (typeof window.requestAnimationFrame === 'function') {
-          window.requestAnimationFrame(restoreScroll);
+          window.requestAnimationFrame(() => {
+            restoreScroll();
+            window.requestAnimationFrame(restoreScroll);
+          });
         } else {
           restoreScroll();
         }
