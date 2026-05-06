@@ -2,7 +2,7 @@
 
 ## Current release baseline
 
-`v1.0.2` is the current stable patch release of Wardex. It carries all capabilities of `v1.0.0`, the `v1.0.1` CI hardening fixes, and the macOS release-trust hardening that Developer ID signs, notarizes, and Gatekeeper-verifies GitHub macOS archives before publication.
+`v1.0.3` is the current stable patch release of Wardex. It carries all capabilities of `v1.0.0`, the `v1.0.1` CI hardening fixes, the `v1.0.2` macOS release-trust hardening, and the follow-up release CI plus Live Monitor process-analysis regression coverage.
 
 `v1.0.0` is the first stable release of Wardex, delivering a production-hardened private-cloud XDR and SIEM platform with full operator-usable UI for every shipped capability, HA-ready control-plane posture, and AGPL-3.0 open-source licensing.
 
@@ -78,7 +78,7 @@
 
 ## Success criteria
 
-| Metric | Current (`v1.0.2`) | Target |
+| Metric | Current (`v1.0.3`) | Target |
 |---|---|---|
 | Automated tests | 1413 lib + 212+ integration + focused browser/admin regressions | maintained and expanded on every release |
 | OpenAPI and SDK contract | versioned OpenAPI plus generated Python and TypeScript SDKs | kept in lockstep on every release |

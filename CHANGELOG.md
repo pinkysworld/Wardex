@@ -4,6 +4,12 @@ All notable changes to Wardex are documented in this file.
 
 ## [Unreleased]
 
+## [1.0.3] — 2026-05-06: release CI and Live Monitor regression hardening
+
+### Fixed
+- **macOS release CI signing**: preserves the runner keychain search list and resolves the imported Developer ID Application identity before `codesign`, hardening the notarized macOS artifact path for tagged GitHub releases.
+- **Live Monitor process analysis**: adds a focused Chromium Playwright regression covering token login, process refresh scroll preservation, process-detail fallback, and alert-analysis failover after the process-analysis failures seen in `v1.0.2` validation.
+
 ## [1.0.2] — 2026-05-05: macOS Gatekeeper release trust
 
 ### Fixed

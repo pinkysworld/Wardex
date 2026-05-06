@@ -6,8 +6,9 @@
 
 Wardex is a Rust-based XDR and SIEM platform for private-cloud and self-hosted security operations. It combines cross-platform telemetry collection, detection engineering, analyst workflows, approval-gated response, agent lifecycle management, SIEM integrations, and tamper-evident evidence handling in a single deployable product.
 
-## What ships in `v1.0.2`
+## What ships in `v1.0.3`
 
+- **Release CI and Live Monitor hardening** — the macOS signing helper now preserves CI runner keychains while resolving the imported Developer ID identity, and the admin console ships a dedicated Playwright regression for token login, process analysis fallback, and process-refresh scroll preservation.
 - **Major GA release** — first stable version with a 12-month API stability pledge.
 - **AGPL-3.0 dual-license** — open-source under AGPL-3.0; commercial license available for production use without copyleft obligations. See [LICENSE](LICENSE) and [LICENSE.COMMERCIAL](LICENSE.COMMERCIAL).
 - **All experimental modules promoted to stable** — ML engine, LLM analyst, quantum key rotation, and ZK proof modules are now unconditionally compiled; the `experimental-*` Cargo feature flags are removed.

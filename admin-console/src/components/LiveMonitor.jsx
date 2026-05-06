@@ -436,9 +436,7 @@ export default function LiveMonitor() {
       const previousWindowY = typeof window !== 'undefined' ? window.scrollY : 0;
       const previousTableScrollTop = processTableRef.current?.scrollTop ?? null;
 
-      try {
-        return await work();
-      } finally {
+      const restoreProcessScroll = () => {
         if (typeof window === 'undefined') return;
 
         const restoreScroll = () => {
@@ -456,6 +454,15 @@ export default function LiveMonitor() {
         } else {
           restoreScroll();
         }
+      };
+
+      try {
+        const result = await work();
+        restoreProcessScroll();
+        return result;
+      } catch (error) {
+        restoreProcessScroll();
+        throw error;
       }
     },
     [tab],
@@ -523,7 +530,9 @@ export default function LiveMonitor() {
       setAnalysisResult(result);
       toast('Analysis complete', 'success');
       return;
-    } catch {}
+    } catch {
+      // Some deployments expose alert analysis as read-only; try that shape next.
+    }
 
     try {
       const result = await api.alertsAnalysisLatest();
