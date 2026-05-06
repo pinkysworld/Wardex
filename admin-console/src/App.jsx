@@ -973,7 +973,13 @@ export default function App() {
                   autoComplete="username"
                   aria-hidden="true"
                   tabIndex={-1}
-                  style={{ position: 'absolute', width: 1, height: 1, opacity: 0, pointerEvents: 'none' }}
+                  style={{
+                    position: 'absolute',
+                    width: 1,
+                    height: 1,
+                    opacity: 0,
+                    pointerEvents: 'none',
+                  }}
                   value="api-token"
                   readOnly
                 />

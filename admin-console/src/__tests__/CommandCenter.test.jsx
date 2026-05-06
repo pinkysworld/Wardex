@@ -371,8 +371,8 @@ describe('CommandCenter', () => {
     renderWithProviders('/command');
 
     expect(await screen.findByRole('heading', { name: /Keep ownership/i })).toBeInTheDocument();
-    expect(screen.getAllByText('analyst-1').length).toBeGreaterThan(0);
-    expect(screen.getByText('1 alert(s) breached SLA')).toBeInTheDocument();
+    expect((await screen.findAllByText('analyst-1')).length).toBeGreaterThan(0);
+    expect(await screen.findByText('1 alert(s) breached SLA')).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Alert queue' })).toHaveAttribute('href', '/soc#queue');
     expect(
       screen.getByText('Assign the oldest critical alert and confirm SLA pressure.'),

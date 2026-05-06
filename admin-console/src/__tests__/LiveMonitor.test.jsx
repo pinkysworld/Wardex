@@ -363,7 +363,8 @@ describe('LiveMonitor', () => {
       if (href.includes('/api/alerts/grouped')) return Promise.resolve(jsonOk([]));
       if (href.includes('/api/alerts')) return Promise.resolve(jsonOk([]));
       if (href.includes('/api/processes/live')) return Promise.resolve(jsonOk({ processes: [] }));
-      if (href.includes('/api/processes/analysis')) return Promise.resolve(jsonOk({ findings: [] }));
+      if (href.includes('/api/processes/analysis'))
+        return Promise.resolve(jsonOk({ findings: [] }));
       if (href.includes('/api/fp-feedback/stats')) return Promise.resolve(jsonOk([]));
       if (href.includes('/api/health')) return Promise.resolve(jsonOk({ status: 'ok' }));
       return Promise.resolve(jsonOk({}));
@@ -435,11 +436,14 @@ describe('LiveMonitor', () => {
 
     renderMonitor('/monitor?monitorTab=processes');
 
-    await screen.findByText('All Processes');
+    await screen.findByText('sshd');
     const refreshButton = screen.getAllByRole('button', { name: '↻ Refresh' })[0];
     const processCard = screen.getByText('All Processes').closest('.card');
-    const processTable = processCard?.querySelector('.table-wrap');
-    if (!processTable) throw new Error('process table not found');
+    const processTable = await waitFor(() => {
+      const table = processCard?.querySelector('.table-wrap');
+      if (!table) throw new Error('process table not found');
+      return table;
+    });
 
     processTable.scrollTop = 215;
     await user.click(refreshButton);

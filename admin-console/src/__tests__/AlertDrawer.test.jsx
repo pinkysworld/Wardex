@@ -163,10 +163,8 @@ describe('AlertDrawer', () => {
       </ToastProvider>,
     );
 
-    await waitFor(() => {
-      expect(screen.getByText('Malware & Threat Intel')).toBeInTheDocument();
-    });
-    expect(screen.getByText('Hash Reputation')).toBeInTheDocument();
+    expect(await screen.findByText('Malware & Threat Intel')).toBeInTheDocument();
+    expect(await screen.findByText('Hash Reputation')).toBeInTheDocument();
     expect(screen.getAllByText('TrickBot Loader').length).toBeGreaterThan(0);
     expect(screen.getByText('TrickBot Loader (TrickBot)')).toBeInTheDocument();
     expect(screen.getByText('Recent Hash Detections')).toBeInTheDocument();

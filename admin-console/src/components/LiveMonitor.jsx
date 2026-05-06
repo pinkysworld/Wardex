@@ -1677,10 +1677,7 @@ export default function LiveMonitor() {
         <div className="card">
           <div className="card-header">
             <span className="card-title">Alert Analysis</span>
-            <button
-              className="btn btn-sm btn-primary"
-              onClick={runAlertAnalysis}
-            >
+            <button className="btn btn-sm btn-primary" onClick={runAlertAnalysis}>
               Run Analysis
             </button>
           </div>

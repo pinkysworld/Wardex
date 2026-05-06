@@ -1346,7 +1346,7 @@ describe('ReportsExports', () => {
     renderWithProviders('/reports?tab=runs&case=42&incident=7&investigation=inv-7&source=case');
 
     expect(await screen.findByText('Stored Report Artifacts')).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: 'Republish To Scope' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Republish To Scope' }));
 
     await waitFor(() => {
       const reportDetailRequest = globalThis.fetch.mock.calls.find(

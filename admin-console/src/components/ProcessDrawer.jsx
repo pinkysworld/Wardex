@@ -479,7 +479,9 @@ export default function ProcessDrawer({
             process table while Wardex retries this PID.
           </div>
         )}
-        {error && !usingSnapshotFallback && <div className="error-box">Failed to load process detail.</div>}
+        {error && !usingSnapshotFallback && (
+          <div className="error-box">Failed to load process detail.</div>
+        )}
         {activeDetail && (
           <>
             <SummaryGrid data={summary} limit={10} />
