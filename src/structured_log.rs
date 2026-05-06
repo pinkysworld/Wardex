@@ -590,7 +590,7 @@ mod tests {
 
     #[test]
     fn request_id_timestamp_rejects_clock_before_unix_epoch() {
-        let before_epoch = std::time::UNIX_EPOCH - std::time::Duration::from_nanos(1);
+        let before_epoch = std::time::UNIX_EPOCH - std::time::Duration::from_secs(1);
         let err = request_id_timestamp_nanos(before_epoch).expect_err("clock error is surfaced");
         assert!(matches!(err, RequestIdError::SystemClockBeforeUnixEpoch(_)));
     }
