@@ -13,6 +13,7 @@ WORKDIR /build
 COPY Cargo.toml Cargo.lock* ./
 COPY build.rs ./
 COPY src/ src/
+COPY scripts/ scripts/
 COPY docs/ docs/
 COPY admin-console/ admin-console/
 COPY sdk/ sdk/
