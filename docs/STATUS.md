@@ -2,10 +2,10 @@
 
 ## Current release
 
-- **Version:** `1.0.5`
+- **Version:** `1.0.7`
 - **Positioning:** private-cloud XDR and SIEM platform with enterprise detection engineering, malware scanning, analyst workflows, fleet operations, behavioural analytics, and automated incident response
 - **Source footprint:** 139 Rust source modules
-- **API contract:** versioned OpenAPI surface with REST, GraphQL, live `/api/openapi.json` export, and generated SDK parity diagnostics that surface alignment drift directly in the operator console
+- **API contract:** versioned OpenAPI surface with REST, GraphQL, live `/api/openapi.json` export, generated SDK parity diagnostics, cursor page contracts, release observability/preflight proof APIs, and production assurance endpoints that surface alignment drift directly in the operator console
 - **Verification:** Rust integration coverage, focused session-cookie exchange tests, collector lifecycle tests, remediation change-review tests, Command Center summary/action-drawer tests, Help & Docs unit coverage, assistant/ticketing/enterprise API regression tests, SDK regeneration checks, release-contract validation, strict Playwright a11y smoke coverage, local Developer ID `.p12` signing validation, and focused admin-console regression coverage for auth routing, dashboard presets, detection drill-downs, workbench overview, assistant/reporting handoffs, scoped report artifacts/templates, persisted artifact downloads, response snapshots, long-retention history, and collector/secrets setup flows
 - **Production hardening:** 100% (59/59 controls implemented)
 
@@ -99,6 +99,20 @@ The current release has been verified with:
 ## Current product posture
 
 Wardex is now positioned as a professional XDR/SIEM control plane with incident-first analyst workflows, explainable detections, context-preserving reporting, operator-visible recovery posture, and explicit shift-lead surfaces for ownership, handoff, and detection-review pressure. The runtime, admin console, release process, and website are aligned around operator trust, workflow closure, and deployment readiness.
+
+## Recently shipped (v1.0.7)
+
+- **Production assurance endpoints** — release provenance/SBOM, upgrade rehearsal, synthetic console monitor, incident timeline replay, detection trust score, fleet drift compliance, operator work queue, retention forecast, adversarial validation, and support bundle diffing are now exposed as authenticated product routes with persisted operational snapshot metadata.
+- **Launchpad assurance view** — the Operator Launchpad now summarizes those signals beside release doctor, workflow preflight, stream readiness, SDK parity, snapshot verification, and support bundle export actions.
+- **Contract discipline** — runtime OpenAPI, `docs/openapi.yaml`, RBAC, Python SDK, TypeScript SDK, contract-parity checks, and release-acceptance smoke coverage all include the new assurance routes.
+
+## Recently shipped (v1.0.6)
+
+- **Release observability gates** — release doctor now includes metrics, stream readiness, verified snapshot, and contract-parity gates, backed by new stream queue/drop Prometheus metrics.
+- **Workflow and rule preflight proof** — release workflows and content-rule promotion now attach preflight evidence for stream health, replay state, suppressions, content-pack ownership, approval queues, tenant isolation, and observability gates.
+- **Cursor pagination and proof APIs** — alerts, events, and audit logs now have cursor-page APIs, while tenant isolation, runtime thread baseline, and snapshot retention/redaction policies are exposed through OpenAPI and both SDKs.
+- **Console resilience cleanup** — admin-console API calls gained structured error messages, GET retry/timeout handling, safe browser storage usage, and drawer focus/body-scroll hardening.
+- **Release metadata aligned on v1.0.6** — Rust, admin-console, Python SDK, TypeScript SDK, Helm, OTLP, OpenAPI, installation/reproducibility docs, and website release surfaces now point to the same release baseline.
 
 ## Recently shipped (v1.0.5)
 

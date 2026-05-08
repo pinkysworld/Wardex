@@ -12,6 +12,9 @@ const HUMANIZED_VALUE_KEYS = new Set([
 ]);
 
 const COMMAND_ROUTE_CONFIG = {
+  'open-launchpad': {
+    path: '/launchpad',
+  },
   'create-incident': {
     path: '/soc',
     params: { intent: 'create-incident' },
@@ -24,12 +27,36 @@ const COMMAND_ROUTE_CONFIG = {
     path: '/detection',
     params: { intent: 'run-hunt' },
   },
+  'detection-quality': {
+    path: '/detection',
+    params: { panel: 'quality' },
+  },
+  'thread-evidence': {
+    path: '/monitor',
+    params: { monitorTab: 'processes' },
+  },
   'open-assistant': {
     path: '/assistant',
   },
   'review-offline-agents': {
     path: '/fleet',
     params: { status: 'offline' },
+  },
+  'integration-health': {
+    path: '/settings',
+    params: { tab: 'integrations' },
+  },
+  'release-diff': {
+    path: '/launchpad',
+    hash: 'release-trust',
+  },
+  'evidence-pack': {
+    path: '/reports',
+    params: { tab: 'evidence' },
+  },
+  'demo-lab': {
+    path: '/launchpad',
+    hash: 'demo-mode',
   },
 };
 
@@ -96,6 +123,15 @@ export function describeSearchScope(search = '') {
 
 export const SEARCH_COMMANDS = [
   {
+    title: 'Open Operator Launchpad',
+    subtitle: 'Review readiness, integrations, release trust, and evidence paths',
+    icon: 'OP',
+    action: 'open-launchpad',
+    path: buildCommandHref('open-launchpad'),
+    category: 'Command',
+    kind: 'action',
+  },
+  {
     title: 'Create Incident',
     subtitle: 'Open the SOC workbench with a create flow',
     icon: 'CMD',
@@ -123,6 +159,24 @@ export const SEARCH_COMMANDS = [
     kind: 'action',
   },
   {
+    title: 'Detection Quality',
+    subtitle: 'Open quality scoring, blockers, and promotion readiness',
+    icon: 'DQ',
+    action: 'detection-quality',
+    path: buildCommandHref('detection-quality'),
+    category: 'Command',
+    kind: 'action',
+  },
+  {
+    title: 'Thread Evidence',
+    subtitle: 'Open process telemetry for thread anomaly review',
+    icon: 'THR',
+    action: 'thread-evidence',
+    path: buildCommandHref('thread-evidence'),
+    category: 'Command',
+    kind: 'action',
+  },
+  {
     title: 'Ask Assistant',
     subtitle: 'Open the analyst assistant with case-aware context',
     icon: 'CMD',
@@ -137,6 +191,42 @@ export const SEARCH_COMMANDS = [
     icon: 'CMD',
     action: 'review-offline-agents',
     path: buildCommandHref('review-offline-agents'),
+    category: 'Command',
+    kind: 'action',
+  },
+  {
+    title: 'Integration Health',
+    subtitle: 'Open SIEM, SSO, SCIM, and collector readiness',
+    icon: 'INT',
+    action: 'integration-health',
+    path: buildCommandHref('integration-health'),
+    category: 'Command',
+    kind: 'action',
+  },
+  {
+    title: 'Release Diff',
+    subtitle: 'Review current version, latest catalog, and attestation state',
+    icon: 'REL',
+    action: 'release-diff',
+    path: buildCommandHref('release-diff'),
+    category: 'Command',
+    kind: 'action',
+  },
+  {
+    title: 'Evidence Pack',
+    subtitle: 'Open report evidence and readiness export workflow',
+    icon: 'EV',
+    action: 'evidence-pack',
+    path: buildCommandHref('evidence-pack'),
+    category: 'Command',
+    kind: 'action',
+  },
+  {
+    title: 'Demo Lab',
+    subtitle: 'Open evaluation scenarios and seeded telemetry controls',
+    icon: 'DEMO',
+    action: 'demo-lab',
+    path: buildCommandHref('demo-lab'),
     category: 'Command',
     kind: 'action',
   },

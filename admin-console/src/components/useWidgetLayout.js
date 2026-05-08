@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import { safeStorageGet, safeStorageJsonSet } from '../safeStorage.js';
 
 function normalizeOrder(defaultOrder, nextOrder) {
   const normalized = [];
@@ -26,7 +27,7 @@ function normalizeHidden(order, nextHidden) {
 function readStoredLayout(defaultOrder, storageKey) {
   let savedOrder = defaultOrder;
   try {
-    const rawOrder = localStorage.getItem(storageKey);
+    const rawOrder = safeStorageGet(storageKey);
     if (rawOrder) {
       savedOrder = normalizeOrder(defaultOrder, JSON.parse(rawOrder));
     }
@@ -36,7 +37,7 @@ function readStoredLayout(defaultOrder, storageKey) {
 
   let savedHidden = [];
   try {
-    const rawHidden = localStorage.getItem(`${storageKey}_hidden`);
+    const rawHidden = safeStorageGet(`${storageKey}_hidden`);
     if (rawHidden) {
       savedHidden = normalizeHidden(savedOrder, JSON.parse(rawHidden));
     }
@@ -56,11 +57,11 @@ export function useWidgetLayout(defaultOrder, storageKey = 'wardex_widget_layout
   const hidden = layout.hidden;
 
   useEffect(() => {
-    localStorage.setItem(storageKey, JSON.stringify(order));
+    safeStorageJsonSet(storageKey, order);
   }, [order, storageKey]);
 
   useEffect(() => {
-    localStorage.setItem(storageKey + '_hidden', JSON.stringify([...hidden]));
+    safeStorageJsonSet(storageKey + '_hidden', [...hidden]);
   }, [hidden, storageKey]);
 
   const moveWidget = useCallback((fromId, toId) => {

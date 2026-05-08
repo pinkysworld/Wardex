@@ -482,7 +482,12 @@ export interface SetDetectionProfileResponse {
   applied: boolean;
 }
 
-export type NormalizedScoreSeverity = "info" | "low" | "medium" | "high" | "critical";
+export type NormalizedScoreSeverity =
+  | "info"
+  | "low"
+  | "medium"
+  | "high"
+  | "critical";
 
 export type NormalizedScoreConfidence = "low" | "medium" | "high";
 
@@ -510,9 +515,17 @@ export interface OnboardingReadiness {
   checks: OnboardingReadinessCheck[];
 }
 
-export type AuthSessionRole = "admin" | "analyst" | "viewer" | "service_account";
+export type AuthSessionRole =
+  | "admin"
+  | "analyst"
+  | "viewer"
+  | "service_account";
 
-export type AuthSessionSource = "anonymous" | "admin_token" | "rbac_token" | "session";
+export type AuthSessionSource =
+  | "anonymous"
+  | "admin_token"
+  | "rbac_token"
+  | "session";
 
 export interface AuthCheckResponse {
   status: string;
@@ -1148,6 +1161,277 @@ export interface WsStatsResponse {
   connections: WsConnectionStats[];
 }
 
+export interface OperationalSnapshotMetadata {
+  persisted: boolean;
+  digest: string;
+  generated_at?: string;
+  storage_key?: string;
+  error?: string;
+  verified?: boolean;
+  size_bytes?: number;
+  kind?: string;
+}
+
+export interface OperationalSnapshotsResponse {
+  generated_at: string;
+  status: string;
+  count: number;
+  verified_count?: number;
+  snapshots: OperationalSnapshotMetadata[];
+}
+
+export interface OperationalSnapshotVerifyResponse {
+  generated_at: string;
+  status: string;
+  verified: boolean;
+  snapshot?: OperationalSnapshotMetadata & {
+    payload?: Record<string, unknown>;
+  };
+}
+
+export interface WsHealthResponse {
+  generated_at: string;
+  status: string;
+  stats: Record<string, unknown>;
+  readiness?: StreamReadinessResponse;
+}
+
+export interface StreamReadinessResponse {
+  generated_at: string;
+  status: "ready" | "degraded" | "backpressure" | string;
+  score: number;
+  queue_depth: number;
+  max_observed_queue_depth: number;
+  dropped_events: number;
+  promotion_guard: string;
+  next_action: string;
+  snapshot?: OperationalSnapshotMetadata;
+}
+
+export interface StreamReliabilityLabResponse {
+  generated_at: string;
+  status: string;
+  scenario_count?: number;
+  fail_count?: number;
+  warn_count?: number;
+  scenarios: Array<Record<string, unknown>>;
+  snapshot?: OperationalSnapshotMetadata;
+}
+
+export interface ReleaseDoctorResponse {
+  generated_at: string;
+  status: string;
+  runtime_version?: string;
+  fail_count?: number;
+  warn_count?: number;
+  checks: Array<Record<string, unknown>>;
+  next_action?: string;
+  snapshot?: OperationalSnapshotMetadata;
+}
+
+export interface SupportBundleResponse {
+  generated_at: string;
+  status: string;
+  digest: string;
+  bundle: Record<string, unknown>;
+  redaction?: Record<string, unknown>;
+  snapshot?: OperationalSnapshotMetadata;
+}
+
+export interface SdkContractStatusResponse {
+  generated_at: string;
+  runtime_version: string;
+  status: string;
+  drift_count?: number;
+  product_endpoint_inventory?: number;
+  missing_openapi_builder?: string[];
+  missing_docs_openapi?: string[];
+  missing_python_sdk?: string[];
+  missing_typescript_sdk?: string[];
+  missing_release_gate?: string[];
+  snapshot?: OperationalSnapshotMetadata;
+}
+
+export interface LaunchpadEvidencePackResponse {
+  evidence: Record<string, unknown>;
+  digest: string;
+  snapshot?: OperationalSnapshotMetadata;
+}
+
+export type LaunchpadReleaseDiffResponse = Record<string, unknown> & {
+  snapshot?: OperationalSnapshotMetadata;
+};
+
+export type LaunchpadDemoStatusResponse = Record<string, unknown> & {
+  snapshot?: OperationalSnapshotMetadata;
+};
+
+export interface LaunchpadDemoResetResponse {
+  status: string;
+  removed_transient_alerts?: number;
+  demo_status?: Record<string, unknown>;
+  snapshot?: OperationalSnapshotMetadata;
+}
+
+export interface AlertHistogramBucket {
+  timestamp: string;
+  count: number;
+  severity_breakdown: Record<string, number>;
+  max_score: number;
+}
+
+export interface AlertHistogramResponse {
+  generated_at: string;
+  window_secs: number;
+  bucket_secs: number;
+  severity_filter?: string | null;
+  total: number;
+  buckets: AlertHistogramBucket[];
+}
+
+export interface CursorPageResponse<T = Record<string, unknown>> {
+  generated_at: string;
+  collection: string;
+  cursor: string;
+  next_cursor: string;
+  limit: number;
+  count: number;
+  total: number;
+  has_more: boolean;
+  items: T[];
+}
+
+export interface RulePreflightResponse {
+  generated_at: string;
+  rule_id: string;
+  target_status: string;
+  status: string;
+  fail_count?: number;
+  warn_count?: number;
+  checks: Array<Record<string, unknown>>;
+  snapshot?: OperationalSnapshotMetadata;
+  [key: string]: unknown;
+}
+
+export type WorkflowPreflightResponse = Record<string, unknown> & {
+  generated_at?: string;
+  workflow?: string;
+  status?: string;
+  fail_count?: number;
+  warn_count?: number;
+  checks?: Array<Record<string, unknown>>;
+  snapshot?: OperationalSnapshotMetadata;
+};
+
+export type ReleaseObservabilityGatesResponse = Record<string, unknown> & {
+  generated_at?: string;
+  status?: string;
+  fail_count?: number;
+  warn_count?: number;
+  checks?: Array<Record<string, unknown>>;
+  snapshot?: OperationalSnapshotMetadata;
+};
+
+export type ProductionAssuranceResponse = Record<string, unknown> & {
+  generated_at?: string;
+  status?: string;
+  fail_count?: number;
+  warn_count?: number;
+  checks?: Array<Record<string, unknown>>;
+  snapshot?: OperationalSnapshotMetadata;
+};
+
+export type TenantIsolationProofResponse = Record<string, unknown> & {
+  generated_at?: string;
+  status?: string;
+  tenant_count?: number;
+  active_tenant_ids?: string[];
+  snapshot?: OperationalSnapshotMetadata;
+};
+
+export type ThreadDetectionProofResponse = Record<string, unknown> & {
+  generated_at?: string;
+  status?: string;
+  readiness?: string;
+  thread_count?: number;
+  snapshot?: OperationalSnapshotMetadata;
+};
+
+export type OperationalSnapshotPolicyResponse = Record<string, unknown> & {
+  generated_at?: string;
+  status?: string;
+  keep_latest_per_kind?: number;
+  snapshot_index?: OperationalSnapshotsResponse;
+};
+
+export type OperationalSnapshotPruneResponse = Record<string, unknown> & {
+  generated_at?: string;
+  status?: string;
+  dry_run?: boolean;
+  keep_latest_per_kind?: number;
+  candidate_count?: number;
+};
+
+export interface DetectionRecommendationsResponse {
+  generated_at: string;
+  recommendations: Array<Record<string, unknown>>;
+  snapshot?: OperationalSnapshotMetadata;
+  [key: string]: unknown;
+}
+
+export interface DetectionReadinessResponse {
+  generated_at: string;
+  rules: Array<Record<string, unknown>>;
+  snapshot?: OperationalSnapshotMetadata;
+  [key: string]: unknown;
+}
+
+export interface ResponseApprovalOverviewResponse {
+  generated_at: string;
+  pending_count?: number;
+  snapshot?: OperationalSnapshotMetadata;
+  [key: string]: unknown;
+}
+
+export interface RemediationSafetyResponse {
+  generated_at: string;
+  status?: string;
+  snapshot?: OperationalSnapshotMetadata;
+  [key: string]: unknown;
+}
+
+export interface SubscriptionCreateRequest {
+  lanes?: string[];
+  filters?: Record<string, unknown>;
+}
+
+export interface SubscriptionCreateResponse {
+  subscription: {
+    status: string;
+    subscription_id: string;
+    lanes: string[];
+    filters: Record<string, unknown>;
+    cursor: string;
+    durable?: boolean;
+    current_high_watermark?: number;
+  };
+  cursor_store?: Record<string, unknown>;
+  snapshot?: OperationalSnapshotMetadata;
+}
+
+export interface SubscriptionResumeResponse {
+  subscription_id: string;
+  cursor: string;
+  next_cursor: string;
+  events: Array<Record<string, unknown>>;
+  has_more: boolean;
+  requested_cursor?: string;
+  gap_detected?: boolean;
+  replay_gap?: number;
+  durable?: boolean;
+  cursor_store?: Record<string, unknown>;
+}
+
 export type CommandCenterLaneName =
   | "incidents"
   | "remediation"
@@ -1407,7 +1691,12 @@ export type AssistantCaseStatus =
   | "Resolved"
   | "Closed";
 
-export type AssistantCasePriority = "Critical" | "High" | "Medium" | "Low" | "Info";
+export type AssistantCasePriority =
+  | "Critical"
+  | "High"
+  | "Medium"
+  | "Low"
+  | "Info";
 
 export interface AssistantCaseComment {
   author: string;
@@ -1834,7 +2123,12 @@ export type AssetType =
   | "NetworkDevice"
   | "IoTDevice";
 
-export type CloudProvider = "None" | "Aws" | "Azure" | "Gcp" | { Custom: string };
+export type CloudProvider =
+  | "None"
+  | "Aws"
+  | "Azure"
+  | "Gcp"
+  | { Custom: string };
 
 export type AssetStatus = "Active" | "Inactive" | "Decommissioned" | "Unknown";
 
@@ -2429,7 +2723,11 @@ export interface ThreatIntelStatusResponse {
   ioc_count: number;
 }
 
-export type ResponseActionTier = "Auto" | "SingleApproval" | "DualApproval" | "BreakGlass";
+export type ResponseActionTier =
+  | "Auto"
+  | "SingleApproval"
+  | "DualApproval"
+  | "BreakGlass";
 
 export type ResponseRequestStatus =
   | "Pending"
@@ -2542,7 +2840,10 @@ export interface ResponseRequestCreateBase {
 }
 
 export type ResponseRequestCreateRequest = ResponseRequestCreateBase &
-  ({ hostname: string; target_hostname?: string } | { target_hostname: string; hostname?: string });
+  (
+    | { hostname: string; target_hostname?: string }
+    | { target_hostname: string; hostname?: string }
+  );
 
 export interface ResponseRequestSubmissionResponse {
   status: string;
@@ -2552,7 +2853,10 @@ export interface ResponseRequestSubmissionResponse {
 export interface ResponseApprovalResponse {
   request_id: string;
   decision: ResponseApprovalDecision;
-  status: Extract<ResponseRequestStatus, "Pending" | "Approved" | "Denied" | "DryRunCompleted">;
+  status: Extract<
+    ResponseRequestStatus,
+    "Pending" | "Approved" | "Denied" | "DryRunCompleted"
+  >;
   approvals: number;
 }
 
@@ -4967,7 +5271,13 @@ export type RemediationAction =
   | { QuarantineFile: { path: string } }
   | { RestoreFile: { path: string; source: string } }
   | { RemovePersistence: { mechanism: PersistenceMechanism } }
-  | { RevertRegistry: { key: string; value_name: string; original_data: string } }
+  | {
+      RevertRegistry: {
+        key: string;
+        value_name: string;
+        original_data: string;
+      };
+    }
   | { BlockIp: { addr: string } }
   | { DisableAccount: { username: string } }
   | { RevokeTokens: { username: string } }
@@ -5019,8 +5329,15 @@ export interface RemediationPlanRequestBase {
 export type RemediationPlanRequest =
   | (RemediationPlanRequestBase & { action: "flush_dns" })
   | (RemediationPlanRequestBase & { action: "block_ip"; addr: string })
-  | (RemediationPlanRequestBase & { action: "kill_process"; pid: number; name: string })
-  | (RemediationPlanRequestBase & { action: "disable_account"; username: string })
+  | (RemediationPlanRequestBase & {
+      action: "kill_process";
+      pid: number;
+      name: string;
+    })
+  | (RemediationPlanRequestBase & {
+      action: "disable_account";
+      username: string;
+    })
   | (RemediationPlanRequestBase & { action: "quarantine_file"; path: string });
 
 export interface RemediationRollbackExecutionResult {
@@ -5112,7 +5429,7 @@ interface RequestOptions {
 }
 
 function buildReportExecutionContextQuery(
-  params: ReportExecutionContextQuery = {}
+  params: ReportExecutionContextQuery = {},
 ): string {
   const query = new URLSearchParams();
   if (params.case_id) query.set("case_id", String(params.case_id));
@@ -5150,7 +5467,7 @@ export class WardexClient {
     method: string,
     path: string,
     body?: unknown,
-    options?: RequestOptions
+    options?: RequestOptions,
   ): Promise<T> {
     const url = `${this.baseUrl}${path}`;
     const headers: Record<string, string> = {
@@ -5211,7 +5528,7 @@ export class WardexClient {
         throw new WardexError(
           `Expected JSON response, got ${ct || "unknown"}`,
           resp.status,
-          text
+          text,
         );
       }
 
@@ -5239,12 +5556,244 @@ export class WardexClient {
     return this.request("GET", "/api/ws/stats");
   }
 
+  async wsHealth(): Promise<WsHealthResponse> {
+    return this.request("GET", "/api/ws/health");
+  }
+
+  async streamReadiness(): Promise<StreamReadinessResponse> {
+    return this.request("GET", "/api/stream/readiness");
+  }
+
+  async streamReliabilityLab(): Promise<StreamReliabilityLabResponse> {
+    return this.request("GET", "/api/stream/reliability-lab");
+  }
+
+  async sdkContractStatus(): Promise<SdkContractStatusResponse> {
+    return this.request("GET", "/api/sdk/contract-status");
+  }
+
+  async alertsPage(
+    params: { cursor?: string | number; limit?: number } = {},
+  ): Promise<CursorPageResponse> {
+    const qs = new URLSearchParams();
+    if (params.cursor != null) qs.set("cursor", String(params.cursor));
+    if (params.limit != null) qs.set("limit", String(params.limit));
+    return this.request("GET", `/api/alerts/page${qs.toString() ? `?${qs.toString()}` : ""}`);
+  }
+
+  async eventsPage(
+    params: {
+      cursor?: string | number;
+      limit?: number;
+      q?: string;
+      source?: string;
+      severity?: string;
+    } = {},
+  ): Promise<CursorPageResponse> {
+    const qs = new URLSearchParams();
+    if (params.cursor != null) qs.set("cursor", String(params.cursor));
+    if (params.limit != null) qs.set("limit", String(params.limit));
+    if (params.q) qs.set("q", params.q);
+    if (params.source) qs.set("source", params.source);
+    if (params.severity) qs.set("severity", params.severity);
+    return this.request("GET", `/api/events/page${qs.toString() ? `?${qs.toString()}` : ""}`);
+  }
+
+  async auditLogPage(
+    params: {
+      cursor?: string | number;
+      limit?: number;
+      q?: string;
+      method?: string;
+      status?: string;
+      auth?: string;
+    } = {},
+  ): Promise<CursorPageResponse> {
+    const qs = new URLSearchParams();
+    if (params.cursor != null) qs.set("cursor", String(params.cursor));
+    if (params.limit != null) qs.set("limit", String(params.limit));
+    if (params.q) qs.set("q", params.q);
+    if (params.method) qs.set("method", params.method);
+    if (params.status) qs.set("status", params.status);
+    if (params.auth) qs.set("auth", params.auth);
+    return this.request("GET", `/api/audit/log/page${qs.toString() ? `?${qs.toString()}` : ""}`);
+  }
+
+  async operationalSnapshots(
+    params: { kind?: string; limit?: number } = {},
+  ): Promise<OperationalSnapshotsResponse> {
+    const qs = new URLSearchParams();
+    if (params.kind) qs.set("kind", params.kind);
+    if (params.limit != null) qs.set("limit", String(params.limit));
+    return this.request(
+      "GET",
+      `/api/operational/snapshots${qs.toString() ? `?${qs.toString()}` : ""}`,
+    );
+  }
+
+  async operationalSnapshotPolicy(): Promise<OperationalSnapshotPolicyResponse> {
+    return this.request("GET", "/api/operational/snapshots/policy");
+  }
+
+  async pruneOperationalSnapshots(
+    request: { dry_run?: boolean; keep_latest_per_kind?: number } = { dry_run: true },
+  ): Promise<OperationalSnapshotPruneResponse> {
+    return this.request("POST", "/api/operational/snapshots/prune", request);
+  }
+
+  async verifyOperationalSnapshot(
+    params: { storageKey?: string; digest?: string } = {},
+  ): Promise<OperationalSnapshotVerifyResponse> {
+    const qs = new URLSearchParams();
+    if (params.storageKey) qs.set("storage_key", params.storageKey);
+    if (params.digest) qs.set("digest", params.digest);
+    return this.request(
+      "GET",
+      `/api/operational/snapshots/verify${qs.toString() ? `?${qs.toString()}` : ""}`,
+    );
+  }
+
+  async releaseDoctor(): Promise<ReleaseDoctorResponse> {
+    return this.request("GET", "/api/release/doctor");
+  }
+
+  async releaseObservabilityGates(): Promise<ReleaseObservabilityGatesResponse> {
+    return this.request("GET", "/api/release/observability-gates");
+  }
+
+  async releaseProvenance(): Promise<ProductionAssuranceResponse> {
+    return this.request("GET", "/api/release/provenance");
+  }
+
+  async releaseUpgradeRehearsal(
+    params: { targetVersion?: string } = {},
+  ): Promise<ProductionAssuranceResponse> {
+    const qs = new URLSearchParams();
+    if (params.targetVersion) qs.set("target_version", params.targetVersion);
+    return this.request(
+      "GET",
+      `/api/release/upgrade-rehearsal${qs.toString() ? `?${qs.toString()}` : ""}`,
+    );
+  }
+
+  async syntheticConsoleMonitor(): Promise<ProductionAssuranceResponse> {
+    return this.request("GET", "/api/monitoring/synthetic-console");
+  }
+
+  async incidentTimelineReplay(
+    params: { incidentId?: string | number } = {},
+  ): Promise<ProductionAssuranceResponse> {
+    const qs = new URLSearchParams();
+    if (params.incidentId !== undefined) qs.set("incident_id", String(params.incidentId));
+    return this.request(
+      "GET",
+      `/api/incidents/timeline-replay${qs.toString() ? `?${qs.toString()}` : ""}`,
+    );
+  }
+
+  async detectionTrustScore(): Promise<ProductionAssuranceResponse> {
+    return this.request("GET", "/api/detection/trust-score");
+  }
+
+  async fleetDriftCompliance(): Promise<ProductionAssuranceResponse> {
+    return this.request("GET", "/api/fleet/drift-compliance");
+  }
+
+  async operatorWorkQueue(): Promise<ProductionAssuranceResponse> {
+    return this.request("GET", "/api/operator/work-queue");
+  }
+
+  async retentionForecast(): Promise<ProductionAssuranceResponse> {
+    return this.request("GET", "/api/retention/forecast");
+  }
+
+  async adversarialValidation(): Promise<ProductionAssuranceResponse> {
+    return this.request("GET", "/api/validation/adversarial");
+  }
+
+  async supportBundleDiff(): Promise<ProductionAssuranceResponse> {
+    return this.request("GET", "/api/support/bundle-diff");
+  }
+
+  async workflowPreflight(
+    params: { workflow?: string } = {},
+  ): Promise<WorkflowPreflightResponse> {
+    const qs = new URLSearchParams();
+    if (params.workflow) qs.set("workflow", params.workflow);
+    return this.request("GET", `/api/workflows/preflight${qs.toString() ? `?${qs.toString()}` : ""}`);
+  }
+
+  async tenantIsolationProof(): Promise<TenantIsolationProofResponse> {
+    return this.request("GET", "/api/tenants/isolation-proof");
+  }
+
+  async threadDetectionProof(): Promise<ThreadDetectionProofResponse> {
+    return this.request("GET", "/api/processes/thread-proof");
+  }
+
+  async contentRulePreflight(
+    ruleId: string,
+    request: { target_status?: string } = {},
+  ): Promise<RulePreflightResponse> {
+    return this.request(
+      "POST",
+      `/api/content/rules/${encodeURIComponent(ruleId)}/preflight`,
+      request,
+    );
+  }
+
+  async supportBundle(): Promise<SupportBundleResponse> {
+    return this.request("GET", "/api/support/bundle");
+  }
+
+  async launchpadEvidencePack(): Promise<LaunchpadEvidencePackResponse> {
+    return this.request("GET", "/api/launchpad/evidence-pack");
+  }
+
+  async launchpadReleaseDiff(): Promise<LaunchpadReleaseDiffResponse> {
+    return this.request("GET", "/api/launchpad/release-diff");
+  }
+
+  async launchpadDemoStatus(): Promise<LaunchpadDemoStatusResponse> {
+    return this.request("GET", "/api/launchpad/demo-status");
+  }
+
+  async launchpadDemoReset(): Promise<LaunchpadDemoResetResponse> {
+    return this.request("POST", "/api/launchpad/demo-reset", {});
+  }
+
+  async createSubscription(
+    request: SubscriptionCreateRequest = { lanes: ["alerts"], filters: {} },
+  ): Promise<SubscriptionCreateResponse> {
+    return this.request("POST", "/api/subscriptions", request);
+  }
+
+  async resumeSubscription(
+    params: {
+      subscriptionId?: string;
+      cursor?: string | number;
+      limit?: number;
+    } = {},
+  ): Promise<SubscriptionResumeResponse> {
+    const qs = new URLSearchParams();
+    if (params.subscriptionId) qs.set("subscription_id", params.subscriptionId);
+    if (params.cursor != null) qs.set("cursor", String(params.cursor));
+    if (params.limit != null) qs.set("limit", String(params.limit));
+    return this.request(
+      "GET",
+      `/api/subscriptions/resume${qs.toString() ? `?${qs.toString()}` : ""}`,
+    );
+  }
+
   async commandSummary(): Promise<CommandSummaryResponse> {
     return this.request("GET", "/api/command/summary");
   }
 
   async commandLane(lane: string): Promise<CommandLaneResponse> {
-    return this.request("GET", `/api/command/lanes/${encodeURIComponent(lane)}`);
+    return this.request(
+      "GET",
+      `/api/command/lanes/${encodeURIComponent(lane)}`,
+    );
   }
 
   async authCheck(): Promise<AuthCheckResponse> {
@@ -5296,40 +5845,40 @@ export class WardexClient {
   }
 
   async reportTemplates(
-    params: ReportExecutionContextQuery = {}
+    params: ReportExecutionContextQuery = {},
   ): Promise<ReportTemplateListResponse> {
     const suffix = buildReportExecutionContextQuery(params);
     return this.request("GET", `/api/report-templates${suffix}`);
   }
 
   async saveReportTemplate(
-    request: SaveReportTemplateRequest
+    request: SaveReportTemplateRequest,
   ): Promise<SaveReportTemplateResponse> {
     return this.request("POST", "/api/report-templates", request);
   }
 
   async reportRuns(
-    params: ReportExecutionContextQuery = {}
+    params: ReportExecutionContextQuery = {},
   ): Promise<ReportRunListResponse> {
     const suffix = buildReportExecutionContextQuery(params);
     return this.request("GET", `/api/report-runs${suffix}`);
   }
 
   async createReportRun(
-    request: CreateReportRunRequest
+    request: CreateReportRunRequest,
   ): Promise<CreateReportRunResponse> {
     return this.request("POST", "/api/report-runs", request);
   }
 
   async reportSchedules(
-    params: ReportExecutionContextQuery = {}
+    params: ReportExecutionContextQuery = {},
   ): Promise<ReportScheduleListResponse> {
     const suffix = buildReportExecutionContextQuery(params);
     return this.request("GET", `/api/report-schedules${suffix}`);
   }
 
   async saveReportSchedule(
-    request: SaveReportScheduleRequest
+    request: SaveReportScheduleRequest,
   ): Promise<SaveReportScheduleResponse> {
     return this.request("POST", "/api/report-schedules", request);
   }
@@ -5344,7 +5893,10 @@ export class WardexClient {
   }
 
   async docsContent(path: string): Promise<DocContentResponse> {
-    return this.request("GET", `/api/docs/content?path=${encodeURIComponent(String(path ?? ""))}`);
+    return this.request(
+      "GET",
+      `/api/docs/content?path=${encodeURIComponent(String(path ?? ""))}`,
+    );
   }
 
   async systemDeps(): Promise<SystemHealthDependenciesResponse> {
@@ -5366,25 +5918,25 @@ export class WardexClient {
   }
 
   async sampleAlert(
-    request: SampleAlertRequest = {}
+    request: SampleAlertRequest = {},
   ): Promise<SampleAlertResponse> {
     return this.request("POST", "/api/alerts/sample", request);
   }
 
   async bulkAcknowledgeAlerts(
-    request: AlertBulkActionRequest
+    request: AlertBulkActionRequest,
   ): Promise<AlertBulkAcknowledgeResponse> {
     return this.request("POST", "/api/alerts/bulk/acknowledge", request);
   }
 
   async bulkResolveAlerts(
-    request: AlertBulkActionRequest
+    request: AlertBulkActionRequest,
   ): Promise<AlertBulkResolveResponse> {
     return this.request("POST", "/api/alerts/bulk/resolve", request);
   }
 
   async bulkCloseAlerts(
-    request: AlertBulkActionRequest
+    request: AlertBulkActionRequest,
   ): Promise<AlertBulkCloseResponse> {
     return this.request("POST", "/api/alerts/bulk/close", request);
   }
@@ -5394,7 +5946,7 @@ export class WardexClient {
   }
 
   async runAlertAnalysis(
-    request: AlertAnalysisRequest = {}
+    request: AlertAnalysisRequest = {},
   ): Promise<AlertAnalysis> {
     return this.request("POST", "/api/alerts/analysis", request);
   }
@@ -5403,8 +5955,28 @@ export class WardexClient {
     return this.request("GET", "/api/alerts/grouped");
   }
 
+  async alertHistogram(
+    params: {
+      window?: string;
+      bucket?: string;
+      severity?: string;
+    } = {},
+  ): Promise<AlertHistogramResponse> {
+    const qs = new URLSearchParams();
+    if (params.window) qs.set("window", params.window);
+    if (params.bucket) qs.set("bucket", params.bucket);
+    if (params.severity) qs.set("severity", params.severity);
+    return this.request(
+      "GET",
+      `/api/alerts/histogram${qs.toString() ? `?${qs.toString()}` : ""}`,
+    );
+  }
+
   async getAlert(index: number): Promise<AlertDetail> {
-    return this.request("GET", `/api/alerts/${encodeURIComponent(String(index))}`);
+    return this.request(
+      "GET",
+      `/api/alerts/${encodeURIComponent(String(index))}`,
+    );
   }
 
   async queueStats(): Promise<QueueStatsResponse> {
@@ -5427,12 +5999,10 @@ export class WardexClient {
 
   async scanBuffer(
     data: Uint8Array | string,
-    filename?: string
+    filename?: string,
   ): Promise<ScanResult> {
     const b64 =
-      typeof data === "string"
-        ? data
-        : Buffer.from(data).toString("base64");
+      typeof data === "string" ? data : Buffer.from(data).toString("base64");
     return this.request("POST", "/api/scan/buffer", {
       data: b64,
       filename: filename ?? "upload",
@@ -5447,12 +6017,10 @@ export class WardexClient {
     data: Uint8Array | string,
     filename?: string,
     behavior?: BehaviorSignals,
-    allowlist?: ScanAllowlist
+    allowlist?: ScanAllowlist,
   ): Promise<DeepScanResult> {
     const b64 =
-      typeof data === "string"
-        ? data
-        : Buffer.from(data).toString("base64");
+      typeof data === "string" ? data : Buffer.from(data).toString("base64");
     return this.request("POST", "/api/scan/buffer/v2", {
       data: b64,
       filename: filename ?? "upload",
@@ -5462,20 +6030,25 @@ export class WardexClient {
   }
 
   async memoryIndicatorsScanMaps(
-    request: MemoryIndicatorsScanMapsRequest
+    request: MemoryIndicatorsScanMapsRequest,
   ): Promise<MemoryIndicatorReport> {
     return this.request("POST", "/api/memory-indicators/scan-maps", request);
   }
 
   async memoryIndicatorsScanBuffer(
-    data: Uint8Array | string
+    data: Uint8Array | string,
   ): Promise<PatternMatch[]> {
     const body =
       typeof data === "string" ? data : Buffer.from(data).toString("base64");
-    return this.request("POST", "/api/memory-indicators/scan-buffer", undefined, {
-      contentType: "text/plain",
-      rawBody: body,
-    });
+    return this.request(
+      "POST",
+      "/api/memory-indicators/scan-buffer",
+      undefined,
+      {
+        contentType: "text/plain",
+        rawBody: body,
+      },
+    );
   }
 
   async malwareStats(): Promise<MalwareStats> {
@@ -5759,7 +6332,9 @@ export class WardexClient {
     });
   }
 
-  async analystQuery(query: AnalystSearchQuery): Promise<AnalystSearchResponse> {
+  async analystQuery(
+    query: AnalystSearchQuery,
+  ): Promise<AnalystSearchResponse> {
     return this.request("POST", "/api/events/search", query);
   }
 
@@ -5780,7 +6355,7 @@ export class WardexClient {
   async runPlaybook(
     playbookId: string,
     alertId?: string,
-    variables?: Record<string, string>
+    variables?: Record<string, string>,
   ): Promise<PlaybookExecution> {
     return this.request("POST", "/api/playbooks/run", {
       playbook_id: playbookId,
@@ -5790,7 +6365,10 @@ export class WardexClient {
   }
 
   async playbookExecution(executionId: string): Promise<PlaybookExecution> {
-    return this.request("GET", `/api/playbooks/executions/${encodeURIComponent(executionId)}`);
+    return this.request(
+      "GET",
+      `/api/playbooks/executions/${encodeURIComponent(executionId)}`,
+    );
   }
 
   // ── Compliance ───────────────────────────────────────────────────
@@ -5800,7 +6378,7 @@ export class WardexClient {
   }
 
   async complianceReport(
-    frameworkId?: string
+    frameworkId?: string,
   ): Promise<ComplianceReport | ComplianceReport[]> {
     const path = frameworkId
       ? `/api/compliance/report?framework=${encodeURIComponent(frameworkId)}`
@@ -5822,7 +6400,9 @@ export class WardexClient {
     return this.request("GET", "/api/siem/config");
   }
 
-  async saveSiemConfig(config: SiemConfigRequest): Promise<SaveSiemConfigResponse> {
+  async saveSiemConfig(
+    config: SiemConfigRequest,
+  ): Promise<SaveSiemConfigResponse> {
     return this.request("POST", "/api/siem/config", config);
   }
 
@@ -5840,7 +6420,9 @@ export class WardexClient {
     return this.request("GET", "/api/taxii/config");
   }
 
-  async saveTaxiiConfig(config: TaxiiConfig): Promise<TaxiiConfigMutationResponse> {
+  async saveTaxiiConfig(
+    config: TaxiiConfig,
+  ): Promise<TaxiiConfigMutationResponse> {
     return this.request("POST", "/api/taxii/config", config);
   }
 
@@ -5849,13 +6431,13 @@ export class WardexClient {
   }
 
   async exportAlerts(
-    format: "cef" | "syslog" | "leef" | "json" | "ecs" | "udm"
+    format: "cef" | "syslog" | "leef" | "json" | "ecs" | "udm",
   ): Promise<string> {
     return this.request(
       "GET",
       `/api/export/alerts?format=${encodeURIComponent(format)}`,
       undefined,
-      { responseType: "text" }
+      { responseType: "text" },
     );
   }
 
@@ -5906,13 +6488,13 @@ export class WardexClient {
   }
 
   async adminDbReset(
-    request: AdminDbResetRequest
+    request: AdminDbResetRequest,
   ): Promise<AdminDbResetResponse> {
     return this.request("POST", "/api/admin/db/reset", request);
   }
 
   async adminDbPurge(
-    request: AdminDbPurgeRequest
+    request: AdminDbPurgeRequest,
   ): Promise<AdminDbPurgeResponse> {
     return this.request("POST", "/api/admin/db/purge", request);
   }
@@ -5941,7 +6523,7 @@ export class WardexClient {
   }
 
   async validateLicense(
-    request: LicenseValidateRequest
+    request: LicenseValidateRequest,
   ): Promise<LicenseValidateResponse> {
     return this.request("POST", "/api/license/validate", request);
   }
@@ -5965,7 +6547,7 @@ export class WardexClient {
   async getMarketplacePack(packId: string): Promise<MarketplaceContentPack> {
     return this.request(
       "GET",
-      `/api/marketplace/packs/${encodeURIComponent(packId)}`
+      `/api/marketplace/packs/${encodeURIComponent(packId)}`,
     );
   }
 
@@ -6009,13 +6591,13 @@ export class WardexClient {
   }
 
   async backupEncrypt(
-    request: BackupEncryptRequest
+    request: BackupEncryptRequest,
   ): Promise<BackupEncryptResponse> {
     return this.request("POST", "/api/backup/encrypt", request);
   }
 
   async backupDecrypt(
-    request: BackupDecryptRequest
+    request: BackupDecryptRequest,
   ): Promise<BackupDecryptResponse> {
     return this.request("POST", "/api/backup/decrypt", request);
   }
@@ -6043,7 +6625,10 @@ export class WardexClient {
   }
 
   async uebaEntity(entityId: string): Promise<EntityRisk> {
-    return this.request("GET", `/api/ueba/entity/${encodeURIComponent(entityId)}`);
+    return this.request(
+      "GET",
+      `/api/ueba/entity/${encodeURIComponent(entityId)}`,
+    );
   }
 
   // ── NDR ──────────────────────────────────────────────────────────
@@ -6052,7 +6637,9 @@ export class WardexClient {
     return this.request("GET", "/api/ndr/report");
   }
 
-  async beaconConnection(connection: BeaconConnectionRecord): Promise<BeaconRecordResponse> {
+  async beaconConnection(
+    connection: BeaconConnectionRecord,
+  ): Promise<BeaconRecordResponse> {
     return this.request("POST", "/api/beacon/connection", connection);
   }
 
@@ -6085,8 +6672,12 @@ export class WardexClient {
   }
 
   async ndrTopTalkers(limit?: number): Promise<TopTalker[]> {
-    const talkers = await this.request<TopTalker[]>("GET", "/api/ndr/top-talkers");
-    const normalizedLimit = limit === undefined ? 20 : Math.max(0, Math.trunc(limit));
+    const talkers = await this.request<TopTalker[]>(
+      "GET",
+      "/api/ndr/top-talkers",
+    );
+    const normalizedLimit =
+      limit === undefined ? 20 : Math.max(0, Math.trunc(limit));
     return talkers.slice(0, normalizedLimit);
   }
 
@@ -6113,11 +6704,17 @@ export class WardexClient {
   }
 
   async emailQuarantineRelease(messageId: string): Promise<unknown> {
-    return this.request("POST", `/api/email/quarantine/${encodeURIComponent(messageId)}/release`);
+    return this.request(
+      "POST",
+      `/api/email/quarantine/${encodeURIComponent(messageId)}/release`,
+    );
   }
 
   async emailQuarantineDelete(messageId: string): Promise<unknown> {
-    return this.request("DELETE", `/api/email/quarantine/${encodeURIComponent(messageId)}`);
+    return this.request(
+      "DELETE",
+      `/api/email/quarantine/${encodeURIComponent(messageId)}`,
+    );
   }
 
   async emailStats(): Promise<unknown> {
@@ -6135,7 +6732,10 @@ export class WardexClient {
   }
 
   async getIncident(incidentId: string): Promise<Incident> {
-    return this.request("GET", `/api/incidents/${encodeURIComponent(incidentId)}`);
+    return this.request(
+      "GET",
+      `/api/incidents/${encodeURIComponent(incidentId)}`,
+    );
   }
 
   async createIncident(
@@ -6160,7 +6760,10 @@ export class WardexClient {
   }
 
   async getAgent(agentId: string): Promise<AgentActivitySnapshot> {
-    return this.request("GET", `/api/agents/${encodeURIComponent(agentId)}/details`);
+    return this.request(
+      "GET",
+      `/api/agents/${encodeURIComponent(agentId)}/details`,
+    );
   }
 
   // ── Policy ───────────────────────────────────────────────────────
@@ -6186,7 +6789,7 @@ export class WardexClient {
   async assetsSearch(query: string): Promise<UnifiedAsset[]> {
     return this.request(
       "GET",
-      `/api/assets/search?q=${encodeURIComponent(query)}`
+      `/api/assets/search?q=${encodeURIComponent(query)}`,
     );
   }
 
@@ -6219,7 +6822,7 @@ export class WardexClient {
   }
 
   async certsRegister(
-    certificate: CertificateRecord
+    certificate: CertificateRecord,
   ): Promise<CertRegisterResponse> {
     return this.request("POST", "/api/certs/register", certificate);
   }
@@ -6237,7 +6840,7 @@ export class WardexClient {
   }
 
   async quarantineAdd(
-    request: QuarantineAddRequest
+    request: QuarantineAddRequest,
   ): Promise<QuarantineAddResponse> {
     return this.request("POST", "/api/quarantine", request);
   }
@@ -6249,7 +6852,7 @@ export class WardexClient {
   async quarantineRelease(id: string): Promise<QuarantineReleaseResponse> {
     return this.request(
       "POST",
-      `/api/quarantine/${encodeURIComponent(id)}/release`
+      `/api/quarantine/${encodeURIComponent(id)}/release`,
     );
   }
 
@@ -6265,7 +6868,7 @@ export class WardexClient {
   }
 
   async dnsThreatAnalyze(
-    request: DnsThreatAnalyzeRequest | string
+    request: DnsThreatAnalyzeRequest | string,
   ): Promise<DnsThreatReport> {
     const body = typeof request === "string" ? { domain: request } : request;
     return this.request("POST", "/api/dns-threat/analyze", body);
@@ -6292,7 +6895,7 @@ export class WardexClient {
   }
 
   async configDriftCheck(
-    request: ConfigDriftCheckRequest
+    request: ConfigDriftCheckRequest,
   ): Promise<DriftReport> {
     return this.request("POST", "/api/config-drift/check", request);
   }
@@ -6380,20 +6983,20 @@ export class WardexClient {
   }
 
   async requestResponseAction(
-    action: ResponseRequestCreateRequest | Record<string, unknown>
+    action: ResponseRequestCreateRequest | Record<string, unknown>,
   ): Promise<ResponseRequestSubmissionResponse> {
     return this.request("POST", "/api/response/request", action);
   }
 
   async responseRequest(
-    action: ResponseRequestCreateRequest
+    action: ResponseRequestCreateRequest,
   ): Promise<ResponseRequestSubmissionResponse> {
     return this.request("POST", "/api/response/request", action);
   }
 
   async approveResponseAction(
     requestId: string,
-    approve: boolean = true
+    approve: boolean = true,
   ): Promise<ResponseApprovalResponse> {
     return this.request("POST", "/api/response/approve", {
       request_id: requestId,
@@ -6401,17 +7004,38 @@ export class WardexClient {
     });
   }
 
-  async executeApprovedActions(requestId?: string): Promise<ResponseExecuteResponse> {
-    return this.request("POST", "/api/response/execute", requestId ? { request_id: requestId } : {});
+  async executeApprovedActions(
+    requestId?: string,
+  ): Promise<ResponseExecuteResponse> {
+    return this.request(
+      "POST",
+      "/api/response/execute",
+      requestId ? { request_id: requestId } : {},
+    );
   }
 
   async responseExecute(requestId?: string): Promise<ResponseExecuteResponse> {
-    return this.request("POST", "/api/response/execute", requestId ? { request_id: requestId } : {});
+    return this.request(
+      "POST",
+      "/api/response/execute",
+      requestId ? { request_id: requestId } : {},
+    );
+  }
+
+  async responseApprovalOverview(): Promise<ResponseApprovalOverviewResponse> {
+    return this.request("GET", "/api/response/approval-overview");
+  }
+
+  async remediationSafety(): Promise<RemediationSafetyResponse> {
+    return this.request("GET", "/api/remediation/safety");
   }
 
   // ── Telemetry ────────────────────────────────────────────────────
 
-  async ingestEvents(agentId: string, events: EventAlertRecord[]): Promise<EventIngestResponse> {
+  async ingestEvents(
+    agentId: string,
+    events: EventAlertRecord[],
+  ): Promise<EventIngestResponse> {
     return this.request("POST", "/api/events", { agent_id: agentId, events });
   }
 
@@ -6439,34 +7063,39 @@ export class WardexClient {
     return this.request("GET", "/api/assistant/status");
   }
 
-  async assistantQuery(query: AssistantQueryRequest): Promise<AssistantQueryResponse> {
+  async assistantQuery(
+    query: AssistantQueryRequest,
+  ): Promise<AssistantQueryResponse> {
     return this.request("POST", "/api/assistant/query", query);
   }
 
   async detectionExplain(
-    params: { event_id?: number; alert_id?: string } = {}
+    params: { event_id?: number; alert_id?: string } = {},
   ): Promise<DetectionExplainability> {
     const qs = new URLSearchParams();
     if (params.event_id != null) qs.set("event_id", String(params.event_id));
     if (params.alert_id) qs.set("alert_id", params.alert_id);
-    return this.request("GET", `/api/detection/explain${qs.toString() ? `?${qs.toString()}` : ""}`);
+    return this.request(
+      "GET",
+      `/api/detection/explain${qs.toString() ? `?${qs.toString()}` : ""}`,
+    );
   }
 
   async detectionFeedback(
     eventId?: number,
-    limit?: number
+    limit?: number,
   ): Promise<DetectionFeedbackListResponse> {
     const qs = new URLSearchParams();
     if (eventId != null) qs.set("event_id", String(eventId));
     if (limit != null) qs.set("limit", String(limit));
     return this.request(
       "GET",
-      `/api/detection/feedback${qs.toString() ? `?${qs.toString()}` : ""}`
+      `/api/detection/feedback${qs.toString() ? `?${qs.toString()}` : ""}`,
     );
   }
 
   async recordDetectionFeedback(
-    feedback: Omit<DetectionFeedback, "id" | "created_at">
+    feedback: Omit<DetectionFeedback, "id" | "created_at">,
   ): Promise<DetectionFeedback> {
     return this.request("POST", "/api/detection/feedback", feedback);
   }
@@ -6475,8 +7104,30 @@ export class WardexClient {
     return this.request("GET", "/api/detection/profile");
   }
 
+  async detectionRecommendations(
+    limit?: number,
+  ): Promise<DetectionRecommendationsResponse> {
+    const qs = new URLSearchParams();
+    if (limit != null) qs.set("limit", String(limit));
+    return this.request(
+      "GET",
+      `/api/detection/recommendations${qs.toString() ? `?${qs.toString()}` : ""}`,
+    );
+  }
+
+  async detectionReadiness(
+    limit?: number,
+  ): Promise<DetectionReadinessResponse> {
+    const qs = new URLSearchParams();
+    if (limit != null) qs.set("limit", String(limit));
+    return this.request(
+      "GET",
+      `/api/detection/readiness${qs.toString() ? `?${qs.toString()}` : ""}`,
+    );
+  }
+
   async setDetectionProfile(
-    request: SetDetectionProfileRequest
+    request: SetDetectionProfileRequest,
   ): Promise<SetDetectionProfileResponse> {
     return this.request("PUT", "/api/detection/profile", request);
   }
@@ -6492,7 +7143,9 @@ export class WardexClient {
   }
 
   async metrics(): Promise<string> {
-    return this.request("GET", "/api/metrics", undefined, { responseType: "text" });
+    return this.request("GET", "/api/metrics", undefined, {
+      responseType: "text",
+    });
   }
 
   async threatIntelStatus(): Promise<ThreatIntelStatusResponse> {
@@ -6507,7 +7160,9 @@ export class WardexClient {
     return this.request("GET", "/api/threat-intel/library/v2");
   }
 
-  async threatIntelSightings(limit: number = 50): Promise<ThreatIntelSightingsResponse> {
+  async threatIntelSightings(
+    limit: number = 50,
+  ): Promise<ThreatIntelSightingsResponse> {
     return this.request("GET", `/api/threat-intel/sightings?limit=${limit}`);
   }
 
@@ -6530,12 +7185,12 @@ export class WardexClient {
   async investigationWorkflow(id: string): Promise<InvestigationWorkflow> {
     return this.request(
       "GET",
-      `/api/investigations/workflows/${encodeURIComponent(id)}`
+      `/api/investigations/workflows/${encodeURIComponent(id)}`,
     );
   }
 
   async investigationStart(
-    request: InvestigationStartRequest
+    request: InvestigationStartRequest,
   ): Promise<InvestigationSnapshot> {
     return this.request("POST", "/api/investigations/start", request);
   }
@@ -6545,25 +7200,25 @@ export class WardexClient {
   }
 
   async investigationProgress(
-    request: InvestigationProgressRequest
+    request: InvestigationProgressRequest,
   ): Promise<InvestigationSnapshot> {
     return this.request("POST", "/api/investigations/progress", request);
   }
 
   async investigationHandoff(
-    request: InvestigationHandoffRequest
+    request: InvestigationHandoffRequest,
   ): Promise<InvestigationSnapshot> {
     return this.request("POST", "/api/investigations/handoff", request);
   }
 
   async investigationSuggest(
-    request: InvestigationSuggestRequest
+    request: InvestigationSuggestRequest,
   ): Promise<InvestigationWorkflow[]> {
     return this.request("POST", "/api/investigations/suggest", request);
   }
 
   async investigationGraph(
-    request: InvestigationGraphRequest
+    request: InvestigationGraphRequest,
   ): Promise<InvestigationGraphResponse> {
     return this.request("POST", "/api/investigation/graph", request);
   }
@@ -6571,19 +7226,19 @@ export class WardexClient {
   async timelineHost(hostname: string): Promise<HostTimelineResponse> {
     return this.request(
       "GET",
-      `/api/timeline/host?hostname=${encodeURIComponent(hostname)}`
+      `/api/timeline/host?hostname=${encodeURIComponent(hostname)}`,
     );
   }
 
   async timelineAgent(agentId: string): Promise<AgentTimelineResponse> {
     return this.request(
       "GET",
-      `/api/timeline/agent?agent_id=${encodeURIComponent(agentId)}`
+      `/api/timeline/agent?agent_id=${encodeURIComponent(agentId)}`,
     );
   }
 
   async efficacyTriage(
-    record: EfficacyTriageRecord
+    record: EfficacyTriageRecord,
   ): Promise<EfficacyTriageRecordResponse> {
     return this.request("POST", "/api/efficacy/triage", record);
   }

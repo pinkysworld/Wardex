@@ -147,6 +147,163 @@ class WardexClient {
     async wsStats() {
         return this.request("GET", "/api/ws/stats");
     }
+    async wsHealth() {
+        return this.request("GET", "/api/ws/health");
+    }
+    async streamReadiness() {
+        return this.request("GET", "/api/stream/readiness");
+    }
+    async streamReliabilityLab() {
+        return this.request("GET", "/api/stream/reliability-lab");
+    }
+    async sdkContractStatus() {
+        return this.request("GET", "/api/sdk/contract-status");
+    }
+    async alertsPage(params = {}) {
+        const qs = new URLSearchParams();
+        if (params.cursor != null)
+            qs.set("cursor", String(params.cursor));
+        if (params.limit != null)
+            qs.set("limit", String(params.limit));
+        return this.request("GET", `/api/alerts/page${qs.toString() ? `?${qs.toString()}` : ""}`);
+    }
+    async eventsPage(params = {}) {
+        const qs = new URLSearchParams();
+        if (params.cursor != null)
+            qs.set("cursor", String(params.cursor));
+        if (params.limit != null)
+            qs.set("limit", String(params.limit));
+        if (params.q)
+            qs.set("q", params.q);
+        if (params.source)
+            qs.set("source", params.source);
+        if (params.severity)
+            qs.set("severity", params.severity);
+        return this.request("GET", `/api/events/page${qs.toString() ? `?${qs.toString()}` : ""}`);
+    }
+    async auditLogPage(params = {}) {
+        const qs = new URLSearchParams();
+        if (params.cursor != null)
+            qs.set("cursor", String(params.cursor));
+        if (params.limit != null)
+            qs.set("limit", String(params.limit));
+        if (params.q)
+            qs.set("q", params.q);
+        if (params.method)
+            qs.set("method", params.method);
+        if (params.status)
+            qs.set("status", params.status);
+        if (params.auth)
+            qs.set("auth", params.auth);
+        return this.request("GET", `/api/audit/log/page${qs.toString() ? `?${qs.toString()}` : ""}`);
+    }
+    async operationalSnapshots(params = {}) {
+        const qs = new URLSearchParams();
+        if (params.kind)
+            qs.set("kind", params.kind);
+        if (params.limit != null)
+            qs.set("limit", String(params.limit));
+        return this.request("GET", `/api/operational/snapshots${qs.toString() ? `?${qs.toString()}` : ""}`);
+    }
+    async operationalSnapshotPolicy() {
+        return this.request("GET", "/api/operational/snapshots/policy");
+    }
+    async pruneOperationalSnapshots(request = { dry_run: true }) {
+        return this.request("POST", "/api/operational/snapshots/prune", request);
+    }
+    async verifyOperationalSnapshot(params = {}) {
+        const qs = new URLSearchParams();
+        if (params.storageKey)
+            qs.set("storage_key", params.storageKey);
+        if (params.digest)
+            qs.set("digest", params.digest);
+        return this.request("GET", `/api/operational/snapshots/verify${qs.toString() ? `?${qs.toString()}` : ""}`);
+    }
+    async releaseDoctor() {
+        return this.request("GET", "/api/release/doctor");
+    }
+    async releaseObservabilityGates() {
+        return this.request("GET", "/api/release/observability-gates");
+    }
+    async releaseProvenance() {
+        return this.request("GET", "/api/release/provenance");
+    }
+    async releaseUpgradeRehearsal(params = {}) {
+        const qs = new URLSearchParams();
+        if (params.targetVersion)
+            qs.set("target_version", params.targetVersion);
+        return this.request("GET", `/api/release/upgrade-rehearsal${qs.toString() ? `?${qs.toString()}` : ""}`);
+    }
+    async syntheticConsoleMonitor() {
+        return this.request("GET", "/api/monitoring/synthetic-console");
+    }
+    async incidentTimelineReplay(params = {}) {
+        const qs = new URLSearchParams();
+        if (params.incidentId !== undefined)
+            qs.set("incident_id", String(params.incidentId));
+        return this.request("GET", `/api/incidents/timeline-replay${qs.toString() ? `?${qs.toString()}` : ""}`);
+    }
+    async detectionTrustScore() {
+        return this.request("GET", "/api/detection/trust-score");
+    }
+    async fleetDriftCompliance() {
+        return this.request("GET", "/api/fleet/drift-compliance");
+    }
+    async operatorWorkQueue() {
+        return this.request("GET", "/api/operator/work-queue");
+    }
+    async retentionForecast() {
+        return this.request("GET", "/api/retention/forecast");
+    }
+    async adversarialValidation() {
+        return this.request("GET", "/api/validation/adversarial");
+    }
+    async supportBundleDiff() {
+        return this.request("GET", "/api/support/bundle-diff");
+    }
+    async workflowPreflight(params = {}) {
+        const qs = new URLSearchParams();
+        if (params.workflow)
+            qs.set("workflow", params.workflow);
+        return this.request("GET", `/api/workflows/preflight${qs.toString() ? `?${qs.toString()}` : ""}`);
+    }
+    async tenantIsolationProof() {
+        return this.request("GET", "/api/tenants/isolation-proof");
+    }
+    async threadDetectionProof() {
+        return this.request("GET", "/api/processes/thread-proof");
+    }
+    async contentRulePreflight(ruleId, request = {}) {
+        return this.request("POST", `/api/content/rules/${encodeURIComponent(ruleId)}/preflight`, request);
+    }
+    async supportBundle() {
+        return this.request("GET", "/api/support/bundle");
+    }
+    async launchpadEvidencePack() {
+        return this.request("GET", "/api/launchpad/evidence-pack");
+    }
+    async launchpadReleaseDiff() {
+        return this.request("GET", "/api/launchpad/release-diff");
+    }
+    async launchpadDemoStatus() {
+        return this.request("GET", "/api/launchpad/demo-status");
+    }
+    async launchpadDemoReset() {
+        return this.request("POST", "/api/launchpad/demo-reset", {});
+    }
+    async createSubscription(request = { lanes: ["alerts"], filters: {} }) {
+        return this.request("POST", "/api/subscriptions", request);
+    }
+    async resumeSubscription(params = {}) {
+        const qs = new URLSearchParams();
+        if (params.subscriptionId)
+            qs.set("subscription_id", params.subscriptionId);
+        if (params.cursor != null)
+            qs.set("cursor", String(params.cursor));
+        if (params.limit != null)
+            qs.set("limit", String(params.limit));
+        return this.request("GET", `/api/subscriptions/resume${qs.toString() ? `?${qs.toString()}` : ""}`);
+    }
     async commandSummary() {
         return this.request("GET", "/api/command/summary");
     }
@@ -258,6 +415,16 @@ class WardexClient {
     async groupedAlerts() {
         return this.request("GET", "/api/alerts/grouped");
     }
+    async alertHistogram(params = {}) {
+        const qs = new URLSearchParams();
+        if (params.window)
+            qs.set("window", params.window);
+        if (params.bucket)
+            qs.set("bucket", params.bucket);
+        if (params.severity)
+            qs.set("severity", params.severity);
+        return this.request("GET", `/api/alerts/histogram${qs.toString() ? `?${qs.toString()}` : ""}`);
+    }
     async getAlert(index) {
         return this.request("GET", `/api/alerts/${encodeURIComponent(String(index))}`);
     }
@@ -275,9 +442,7 @@ class WardexClient {
     }
     // ── Malware Scanning ─────────────────────────────────────────────
     async scanBuffer(data, filename) {
-        const b64 = typeof data === "string"
-            ? data
-            : Buffer.from(data).toString("base64");
+        const b64 = typeof data === "string" ? data : Buffer.from(data).toString("base64");
         return this.request("POST", "/api/scan/buffer", {
             data: b64,
             filename: filename ?? "upload",
@@ -287,9 +452,7 @@ class WardexClient {
         return this.request("POST", "/api/scan/hash", { hash });
     }
     async scanBufferV2(data, filename, behavior, allowlist) {
-        const b64 = typeof data === "string"
-            ? data
-            : Buffer.from(data).toString("base64");
+        const b64 = typeof data === "string" ? data : Buffer.from(data).toString("base64");
         return this.request("POST", "/api/scan/buffer/v2", {
             data: b64,
             filename: filename ?? "upload",
@@ -923,6 +1086,12 @@ class WardexClient {
     async responseExecute(requestId) {
         return this.request("POST", "/api/response/execute", requestId ? { request_id: requestId } : {});
     }
+    async responseApprovalOverview() {
+        return this.request("GET", "/api/response/approval-overview");
+    }
+    async remediationSafety() {
+        return this.request("GET", "/api/remediation/safety");
+    }
     // ── Telemetry ────────────────────────────────────────────────────
     async ingestEvents(agentId, events) {
         return this.request("POST", "/api/events", { agent_id: agentId, events });
@@ -970,6 +1139,18 @@ class WardexClient {
     async detectionProfile() {
         return this.request("GET", "/api/detection/profile");
     }
+    async detectionRecommendations(limit) {
+        const qs = new URLSearchParams();
+        if (limit != null)
+            qs.set("limit", String(limit));
+        return this.request("GET", `/api/detection/recommendations${qs.toString() ? `?${qs.toString()}` : ""}`);
+    }
+    async detectionReadiness(limit) {
+        const qs = new URLSearchParams();
+        if (limit != null)
+            qs.set("limit", String(limit));
+        return this.request("GET", `/api/detection/readiness${qs.toString() ? `?${qs.toString()}` : ""}`);
+    }
     async setDetectionProfile(request) {
         return this.request("PUT", "/api/detection/profile", request);
     }
@@ -981,7 +1162,9 @@ class WardexClient {
         return this.request("GET", "/api/threat-intel/stats");
     }
     async metrics() {
-        return this.request("GET", "/api/metrics", undefined, { responseType: "text" });
+        return this.request("GET", "/api/metrics", undefined, {
+            responseType: "text",
+        });
     }
     async threatIntelStatus() {
         return this.request("GET", "/api/threat-intel/status");

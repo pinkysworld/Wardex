@@ -338,6 +338,9 @@ fn persistence_removal_commands(
         }
         PersistenceMechanism::RegistryRunKey { hive, value_name } => {
             if *platform == RemediationPlatform::Windows {
+                if !is_safe_registry_hive(hive) || !is_safe_command_argument(value_name) {
+                    return vec![];
+                }
                 vec![RemediationCommand::new(
                     "reg",
                     vec![
@@ -428,6 +431,30 @@ pub fn local_execution_supported(platform: &RemediationPlatform) -> bool {
             | (RemediationPlatform::MacOs, "macos")
             | (RemediationPlatform::Windows, "windows")
     )
+}
+
+fn is_safe_command_argument(value: &str) -> bool {
+    let trimmed = value.trim();
+    !trimmed.is_empty()
+        && !trimmed.contains('\0')
+        && !trimmed.contains('\n')
+        && !trimmed.contains('\r')
+        && !trimmed.contains('&')
+        && !trimmed.contains('|')
+        && !trimmed.contains(';')
+}
+
+fn is_safe_registry_hive(value: &str) -> bool {
+    let normalized = value.trim().to_ascii_uppercase();
+    is_safe_command_argument(value)
+        && [
+            "HKCU\\",
+            "HKLM\\",
+            "HKEY_CURRENT_USER\\",
+            "HKEY_LOCAL_MACHINE\\",
+        ]
+        .iter()
+        .any(|prefix| normalized.starts_with(prefix))
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -1746,7 +1773,7 @@ fn is_allowed_execution_program(program: &str) -> bool {
     )
 }
 
-fn resolve_execution_program(program: &str) -> PathBuf {
+fn resolve_execution_program(program: &str) -> Result<PathBuf, String> {
     let override_dir = EXECUTION_COMMAND_OVERRIDE_DIR
         .get_or_init(|| Mutex::new(None))
         .lock()
@@ -1756,12 +1783,34 @@ fn resolve_execution_program(program: &str) -> PathBuf {
     if let Some(dir) = override_dir {
         for candidate in command_override_candidates(&dir, program) {
             if candidate.exists() {
-                return candidate;
+                return Ok(candidate);
             }
         }
     }
 
-    PathBuf::from(program)
+    if program.contains(std::path::MAIN_SEPARATOR)
+        || program.contains('/')
+        || program.contains('\\')
+    {
+        return Err(format!(
+            "command path blocked by remediation safety filter: {program}"
+        ));
+    }
+
+    find_program_on_path(program)
+        .ok_or_else(|| format!("command not found in PATH for remediation execution: {program}"))
+}
+
+fn find_program_on_path(program: &str) -> Option<PathBuf> {
+    let path_var = std::env::var_os("PATH")?;
+    for dir in std::env::split_paths(&path_var) {
+        for candidate in command_override_candidates(&dir, program) {
+            if candidate.is_file() {
+                return Some(candidate);
+            }
+        }
+    }
+    None
 }
 
 fn command_override_candidates(dir: &std::path::Path, program: &str) -> Vec<PathBuf> {
@@ -1916,12 +1965,12 @@ fn run_remediation_command(command: &RemediationCommand) -> Result<(i32, String,
     let output = if matches!(command.program.as_str(), "copy" | "move") {
         let mut args = vec!["/C".to_string(), command.program.clone()];
         args.extend(command.args.clone());
-        Command::new(resolve_execution_program("cmd"))
+        Command::new(resolve_execution_program("cmd")?)
             .args(&args)
             .output()
             .map_err(|e| format!("failed to execute {}: {e}", command.program))?
     } else {
-        Command::new(resolve_execution_program(&command.program))
+        Command::new(resolve_execution_program(&command.program)?)
             .args(&command.args)
             .output()
             .map_err(|e| format!("failed to execute {}: {e}", command.program))?
@@ -1936,7 +1985,7 @@ fn run_remediation_command(command: &RemediationCommand) -> Result<(i32, String,
 #[cfg(not(windows))]
 fn run_remediation_command(command: &RemediationCommand) -> Result<(i32, String, String), String> {
     use std::process::Command;
-    let output = Command::new(resolve_execution_program(&command.program))
+    let output = Command::new(resolve_execution_program(&command.program)?)
         .args(&command.args)
         .output()
         .map_err(|e| format!("failed to execute {}: {e}", command.program))?;
@@ -2492,6 +2541,37 @@ mod tests {
         );
         assert_eq!(cmds.len(), 2);
         assert_eq!(cmds[0].program, "launchctl");
+    }
+
+    #[test]
+    fn registry_run_key_rejects_unsafe_hive_or_value() {
+        let unsafe_hive = platform_commands(
+            &RemediationAction::RemovePersistence {
+                mechanism: PersistenceMechanism::RegistryRunKey {
+                    hive: "HKLM\\Software\\Microsoft\\Windows\\CurrentVersion\\Run & calc".into(),
+                    value_name: "Updater".into(),
+                },
+            },
+            &RemediationPlatform::Windows,
+        );
+        assert!(unsafe_hive.is_empty());
+
+        let unsafe_value = platform_commands(
+            &RemediationAction::RemovePersistence {
+                mechanism: PersistenceMechanism::RegistryRunKey {
+                    hive: "HKLM\\Software\\Microsoft\\Windows\\CurrentVersion\\Run".into(),
+                    value_name: "Updater & calc".into(),
+                },
+            },
+            &RemediationPlatform::Windows,
+        );
+        assert!(unsafe_value.is_empty());
+    }
+
+    #[test]
+    fn execution_program_resolution_rejects_explicit_paths() {
+        let error = resolve_execution_program("/bin/kill").expect_err("path should be blocked");
+        assert!(error.contains("command path blocked"));
     }
 
     #[test]

@@ -327,6 +327,8 @@ export function SideDrawer({ open, title, subtitle, onClose, actions, children }
   useEffect(() => {
     if (!open || !panelRef.current) return;
     const panel = panelRef.current;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
     previousFocusRef.current =
       document.activeElement instanceof HTMLElement ? document.activeElement : null;
     const focusable = () =>
@@ -359,7 +361,10 @@ export function SideDrawer({ open, title, subtitle, onClose, actions, children }
     panel.addEventListener('keydown', trapFocus);
     return () => {
       panel.removeEventListener('keydown', trapFocus);
-      previousFocusRef.current?.focus?.();
+      document.body.style.overflow = previousOverflow;
+      if (previousFocusRef.current && document.contains(previousFocusRef.current)) {
+        previousFocusRef.current.focus?.();
+      }
     };
   }, [open]);
 
@@ -382,7 +387,7 @@ export function SideDrawer({ open, title, subtitle, onClose, actions, children }
           </div>
           <div className="drawer-actions">
             {actions}
-            <button className="btn btn-sm" onClick={onClose}>
+            <button className="btn btn-sm" onClick={onClose} aria-label={`Close ${title}`}>
               Close
             </button>
           </div>

@@ -4,9 +4,9 @@
 
 | Version | Supported |
 |---------|-----------|
-| 0.52.x  | Yes       |
-| 0.51.x  | Security fixes only |
-| < 0.51  | No        |
+| 1.0.x   | Yes       |
+| 0.56.x  | Security fixes only during the v1.0 migration window |
+| < 0.56  | No        |
 
 ## Reporting a Vulnerability
 
@@ -17,7 +17,7 @@ responsibly.
 
 ### How to report
 
-1. Email **security@wardex.dev** with a description of the vulnerability.
+1. Email **security@wardex.dev** with a description of the vulnerability, or open a private GitHub Security Advisory.
 2. Include steps to reproduce, affected versions, and potential impact.
 3. If possible, include a proof-of-concept or suggested fix.
 

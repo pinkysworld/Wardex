@@ -6,8 +6,19 @@
 
 Wardex is a Rust-based XDR and SIEM platform for private-cloud and self-hosted security operations. It combines cross-platform telemetry collection, detection engineering, analyst workflows, approval-gated response, agent lifecycle management, SIEM integrations, and tamper-evident evidence handling in a single deployable product.
 
-## What ships in `v1.0.5`
+## What ships in `v1.0.7`
 
+- **Production assurance surfaces** — the control plane now exposes release provenance/SBOM evidence, upgrade rehearsal, synthetic console monitoring, incident timeline replay, detection trust scoring, fleet drift compliance, operator work queue, retention risk forecast, adversarial validation, and support bundle diff endpoints.
+- **Operator Launchpad coverage** — `/admin/launchpad` now pulls those assurance signals into one compact readiness lane with persisted operational snapshot evidence, release-doctor state, workflow preflight, stream readiness, and support bundle exports.
+- **SDK and release-gate parity** — Python and TypeScript clients, static OpenAPI, runtime OpenAPI, RBAC, contract parity, and release-acceptance smoke checks all include the new production assurance routes.
+
+## Also included from the `v1.0.6` baseline
+
+- **Release observability gates** — `/api/release/observability-gates` now verifies required Prometheus metrics, stream health, operational snapshot proof, and SDK/OpenAPI contract drift before release approval.
+- **Workflow and rule preflight checks** — rule promotion and release workflows now have server-side preflight evidence for stream readiness, replay validation, suppressions, content-pack ownership, approval queues, tenant isolation, and release observability.
+- **Cursor pagination for large audit/event surfaces** — alerts, events, and audit logs now expose cursor page contracts alongside existing offset-compatible APIs for more reliable console and SDK traversal.
+- **Tenant, thread, and snapshot proof APIs** — operators can inspect tenant isolation proof, runtime thread-baseline proof, and operational snapshot retention/redaction policy from the console, SDKs, and OpenAPI contract.
+- **Admin-console resilience** — GET requests retry retryable failures and timeouts, structured API errors preserve useful messages/request IDs, browser storage uses the safe storage wrapper, and shared drawers restore focus/body scroll cleanly.
 - **macOS CI signing repair** — the release helper now accepts a local Developer ID `.p12` path, imports the root Apple certificate-chain files as context, rejects public `.cer` files before keychain import, and ships a safe GitHub secret updater for refreshing the broken Actions certificate secrets without printing private material.
 - **Release CI and Live Monitor hardening** — the macOS signing helper preserves CI runner keychains while resolving the imported Developer ID identity, and the admin console ships a dedicated Playwright regression for token login, process analysis fallback, and process-refresh scroll preservation.
 - **Major GA release** — first stable version with a 12-month API stability pledge.

@@ -73,6 +73,7 @@ Wardex is a self-hosted XDR and SIEM platform built in Rust for teams that want 
   - API usage analytics with per-endpoint request tracking, latency percentiles (p95), and error rates
   - OpenTelemetry-compatible tracing with span hierarchy, OTLP JSON export, and trace statistics
   - Backup encryption with AES-256-GCM and passphrase-derived keys
+  - Production assurance APIs for release provenance, upgrade rehearsal, synthetic console monitoring, incident replay, retention forecast, adversarial validation, and support bundle diffing
 
 - **Enterprise controls**
   - RBAC with endpoint-level enforcement
@@ -96,11 +97,11 @@ Wardex is a self-hosted XDR and SIEM platform built in Rust for teams that want 
   - Outbound notifications to Slack, Teams, PagerDuty, Webhook, and Email (real SMTP delivery with retry) with severity filtering
   - CycloneDX 1.5 and SPDX 2.3 SBOM generation from Cargo.lock for supply-chain compliance
   - Runbooks, OpenAPI contract, deployment models, disaster recovery guidance, and production hardening docs
-  - Python SDK with ~70 typed API methods and custom exception hierarchy
-  - TypeScript SDK (`@wardex/sdk`) with 20+ typed methods covering all API endpoints
+  - Python SDK with production assurance, cursor-page, preflight, snapshot, and release-proof helpers
+  - TypeScript SDK (`@wardex/sdk`) with typed production assurance, cursor-page, preflight, snapshot, and release-proof methods
   - GraphQL query layer for threat-hunting with aliases, sub-field selection, and introspection
   - Prometheus metrics endpoint with 20+ wardex_* counters, gauges, and histograms
-  - OpenAPI 3.0.3 machine-readable spec with 90+ endpoints and full schema definitions
+  - OpenAPI 3.0.3 machine-readable spec with 210 documented operations and full schema definitions
   - Homebrew formula for macOS/Linux with multi-platform binary selection and launchd/systemd integration
 
 - **Production hardening**
@@ -146,6 +147,7 @@ Wardex is a self-hosted XDR and SIEM platform built in Rust for teams that want 
   - Kubernetes readiness/liveness probes, X-Request-Id tracing, and database backup endpoint
   - TLS/HTTPS listener with opt-in rustls integration and mutual TLS (mTLS) for agent authentication
   - 10 chaos/fault-injection integration tests (token rotation stress, burst load, malformed payloads, invalid auth, path traversal, oversized headers/bodies, wrong methods, endpoint sweep)
+  - Operator work queue and fleet drift compliance summaries that synthesize release, response, detection, fleet, and retention pressure into actionable readiness items
 
 ## Admin console
 
@@ -162,13 +164,14 @@ Wardex is a self-hosted XDR and SIEM platform built in Rust for teams that want 
 - Remediation change-review and recovery-history cards for malware verdicts and infrastructure remediation candidates
 - Signed multi-approver remediation approvals with approval-chain digests, rollback proof cards, and adapter-backed rollback verification
 - Production demo lab seeding from Help & Docs for evaluation-ready telemetry, case, response, report, and evidence workflows
+- Operator Launchpad production assurance lane for provenance, upgrade rehearsal, synthetic monitor, incident replay, detection trust, fleet drift, retention forecast, adversarial validation, and support bundle diff signals
 
 ## Product posture
 
 - 135+ Rust source modules
-- 174 documented API paths
+- 210 documented OpenAPI operations
 - 1272 lib tests + 190 integration tests, all passing
-- 26 admin-console unit tests (Vitest)
+- 41 admin-console unit suites / 290 Vitest tests
 - Criterion micro-benchmarks for pipeline throughput
 - 6 libFuzzer fuzz targets for protocol/input fuzzing
 - Production hardening score: 98% (58/59 controls)

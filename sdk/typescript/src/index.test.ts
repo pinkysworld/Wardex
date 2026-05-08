@@ -11,7 +11,8 @@ import {
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
 function mockFetch(status: number, body: unknown, ok?: boolean) {
-  const contentType = typeof body === "string" ? "text/plain" : "application/json";
+  const contentType =
+    typeof body === "string" ? "text/plain" : "application/json";
   return vi.fn().mockResolvedValue({
     ok: ok ?? (status >= 200 && status < 300),
     status,
@@ -20,7 +21,8 @@ function mockFetch(status: number, body: unknown, ok?: boolean) {
         name.toLowerCase() === "content-type" ? contentType : null,
     },
     json: () => Promise.resolve(body),
-    text: () => Promise.resolve(typeof body === "string" ? body : JSON.stringify(body)),
+    text: () =>
+      Promise.resolve(typeof body === "string" ? body : JSON.stringify(body)),
   });
 }
 
@@ -87,7 +89,7 @@ describe("WardexClient", () => {
     client.health();
     expect(mock).toHaveBeenCalledWith(
       "http://localhost:8080/api/health",
-      expect.anything()
+      expect.anything(),
     );
   });
 
@@ -110,7 +112,7 @@ describe("WardexClient", () => {
     expect(result).toEqual(body);
     expect(mock).toHaveBeenCalledWith(
       "http://localhost:8080/api/healthz/live",
-      expect.objectContaining({ method: "GET" })
+      expect.objectContaining({ method: "GET" }),
     );
   });
 
@@ -123,7 +125,147 @@ describe("WardexClient", () => {
     expect(result).toEqual(body);
     expect(mock).toHaveBeenCalledWith(
       "http://localhost:8080/api/healthz/ready",
-      expect.objectContaining({ method: "GET" })
+      expect.objectContaining({ method: "GET" }),
+    );
+  });
+
+  it("product hardening methods call their API routes", async () => {
+    const body = {
+      status: "ready",
+      generated_at: "2026-05-08T12:00:00Z",
+      score: 99,
+      queue_depth: 0,
+      max_observed_queue_depth: 0,
+      dropped_events: 0,
+      promotion_guard: "clear",
+      next_action: "ok",
+      recommendations: [],
+      rules: [],
+      total: 0,
+      buckets: [],
+      subscription: {
+        subscription_id: "sub-1",
+        status: "created",
+        lanes: ["alerts"],
+        filters: {},
+        cursor: "0",
+      },
+      events: [],
+      has_more: false,
+      next_cursor: "0",
+      cursor: "0",
+      subscription_id: "sub-1",
+    };
+    const mock = mockFetch(200, body);
+    globalThis.fetch = mock;
+    const client = new WardexClient({
+      baseUrl: "http://localhost:8080",
+      apiKey: "tok",
+    });
+
+    await client.wsHealth();
+    await client.streamReadiness();
+    await client.streamReliabilityLab();
+    await client.sdkContractStatus();
+    await client.operationalSnapshots({ kind: "stream_readiness", limit: 3 });
+    await client.verifyOperationalSnapshot({ digest: "abc" });
+    await client.releaseDoctor();
+    await client.supportBundle();
+    await client.launchpadEvidencePack();
+    await client.launchpadReleaseDiff();
+    await client.launchpadDemoStatus();
+    await client.launchpadDemoReset();
+    await client.alertHistogram({
+      window: "24h",
+      bucket: "1h",
+      severity: "high",
+    });
+    await client.detectionRecommendations(3);
+    await client.detectionReadiness(5);
+    await client.responseApprovalOverview();
+    await client.remediationSafety();
+    await client.createSubscription();
+    await client.resumeSubscription({
+      subscriptionId: "sub-1",
+      cursor: 7,
+      limit: 2,
+    });
+
+    expect(mock).toHaveBeenCalledWith(
+      "http://localhost:8080/api/ws/health",
+      expect.objectContaining({ method: "GET" }),
+    );
+    expect(mock).toHaveBeenCalledWith(
+      "http://localhost:8080/api/stream/readiness",
+      expect.objectContaining({ method: "GET" }),
+    );
+    expect(mock).toHaveBeenCalledWith(
+      "http://localhost:8080/api/stream/reliability-lab",
+      expect.objectContaining({ method: "GET" }),
+    );
+    expect(mock).toHaveBeenCalledWith(
+      "http://localhost:8080/api/operational/snapshots?kind=stream_readiness&limit=3",
+      expect.objectContaining({ method: "GET" }),
+    );
+    expect(mock).toHaveBeenCalledWith(
+      "http://localhost:8080/api/operational/snapshots/verify?digest=abc",
+      expect.objectContaining({ method: "GET" }),
+    );
+    expect(mock).toHaveBeenCalledWith(
+      "http://localhost:8080/api/release/doctor",
+      expect.objectContaining({ method: "GET" }),
+    );
+    expect(mock).toHaveBeenCalledWith(
+      "http://localhost:8080/api/support/bundle",
+      expect.objectContaining({ method: "GET" }),
+    );
+    expect(mock).toHaveBeenCalledWith(
+      "http://localhost:8080/api/sdk/contract-status",
+      expect.objectContaining({ method: "GET" }),
+    );
+    expect(mock).toHaveBeenCalledWith(
+      "http://localhost:8080/api/launchpad/evidence-pack",
+      expect.objectContaining({ method: "GET" }),
+    );
+    expect(mock).toHaveBeenCalledWith(
+      "http://localhost:8080/api/launchpad/release-diff",
+      expect.objectContaining({ method: "GET" }),
+    );
+    expect(mock).toHaveBeenCalledWith(
+      "http://localhost:8080/api/launchpad/demo-status",
+      expect.objectContaining({ method: "GET" }),
+    );
+    expect(mock).toHaveBeenCalledWith(
+      "http://localhost:8080/api/launchpad/demo-reset",
+      expect.objectContaining({ method: "POST" }),
+    );
+    expect(mock).toHaveBeenCalledWith(
+      "http://localhost:8080/api/alerts/histogram?window=24h&bucket=1h&severity=high",
+      expect.objectContaining({ method: "GET" }),
+    );
+    expect(mock).toHaveBeenCalledWith(
+      "http://localhost:8080/api/detection/recommendations?limit=3",
+      expect.objectContaining({ method: "GET" }),
+    );
+    expect(mock).toHaveBeenCalledWith(
+      "http://localhost:8080/api/detection/readiness?limit=5",
+      expect.objectContaining({ method: "GET" }),
+    );
+    expect(mock).toHaveBeenCalledWith(
+      "http://localhost:8080/api/response/approval-overview",
+      expect.objectContaining({ method: "GET" }),
+    );
+    expect(mock).toHaveBeenCalledWith(
+      "http://localhost:8080/api/remediation/safety",
+      expect.objectContaining({ method: "GET" }),
+    );
+    expect(mock).toHaveBeenCalledWith(
+      "http://localhost:8080/api/subscriptions",
+      expect.objectContaining({ method: "POST" }),
+    );
+    expect(mock).toHaveBeenCalledWith(
+      "http://localhost:8080/api/subscriptions/resume?subscription_id=sub-1&cursor=7&limit=2",
+      expect.objectContaining({ method: "GET" }),
     );
   });
 
@@ -141,7 +283,7 @@ describe("WardexClient", () => {
     expect(result).toEqual(body);
     expect(mock).toHaveBeenCalledWith(
       "http://localhost:8080/api/auth/check",
-      expect.objectContaining({ method: "GET" })
+      expect.objectContaining({ method: "GET" }),
     );
   });
 
@@ -226,7 +368,7 @@ describe("WardexClient", () => {
     expect(result.lanes.release.current_version).toBe("0.56.0");
     expect(mock).toHaveBeenCalledWith(
       "http://localhost:8080/api/command/summary",
-      expect.objectContaining({ method: "GET" })
+      expect.objectContaining({ method: "GET" }),
     );
   });
 
@@ -252,7 +394,7 @@ describe("WardexClient", () => {
     expect(result.payload.annotation).toContain("Candidate metadata");
     expect(mock).toHaveBeenCalledWith(
       "http://localhost:8080/api/command/lanes/release",
-      expect.objectContaining({ method: "GET" })
+      expect.objectContaining({ method: "GET" }),
     );
   });
 
@@ -271,7 +413,7 @@ describe("WardexClient", () => {
     expect(result).toEqual(body);
     expect(mock).toHaveBeenCalledWith(
       "http://localhost:8080/api/auth/session",
-      expect.objectContaining({ method: "GET" })
+      expect.objectContaining({ method: "GET" }),
     );
   });
 
@@ -296,7 +438,7 @@ describe("WardexClient", () => {
     expect(result).toEqual(body);
     expect(mock).toHaveBeenCalledWith(
       "http://localhost:8080/api/auth/session",
-      expect.objectContaining({ method: "POST" })
+      expect.objectContaining({ method: "POST" }),
     );
   });
 
@@ -312,7 +454,7 @@ describe("WardexClient", () => {
     expect(result).toEqual(body);
     expect(mock).toHaveBeenCalledWith(
       "http://localhost:8080/api/auth/logout",
-      expect.objectContaining({ method: "POST" })
+      expect.objectContaining({ method: "POST" }),
     );
   });
 
@@ -331,7 +473,7 @@ describe("WardexClient", () => {
     expect(result).toEqual(body);
     expect(mock).toHaveBeenCalledWith(
       "http://localhost:8080/api/session/info",
-      expect.objectContaining({ method: "GET" })
+      expect.objectContaining({ method: "GET" }),
     );
   });
 
@@ -386,7 +528,9 @@ describe("WardexClient", () => {
           connectors: [{ id: "connector-1", status: "ready" }],
           updates: [{ agent_id: "agent-1", status: "assigned" }],
         },
-        change_control: [{ category: "hunt", summary: "Updated scheduled hunt cadence" }],
+        change_control: [
+          { category: "hunt", summary: "Updated scheduled hunt cadence" },
+        ],
       },
       digest: "support-digest-123456",
     };
@@ -397,7 +541,7 @@ describe("WardexClient", () => {
     expect(result).toEqual(body);
     expect(mock).toHaveBeenCalledWith(
       "http://localhost:8080/api/support/diagnostics",
-      expect.objectContaining({ method: "GET" })
+      expect.objectContaining({ method: "GET" }),
     );
   });
 
@@ -435,7 +579,9 @@ describe("WardexClient", () => {
           aligned: true,
         },
       },
-      issues: ["Python SDK version 0.55.0 differs from runtime release 0.56.0."],
+      issues: [
+        "Python SDK version 0.55.0 differs from runtime release 0.56.0.",
+      ],
     };
     const mock = mockFetch(200, body);
     globalThis.fetch = mock;
@@ -444,7 +590,7 @@ describe("WardexClient", () => {
     expect(result).toEqual(body);
     expect(mock).toHaveBeenCalledWith(
       "http://localhost:8080/api/support/parity",
-      expect.objectContaining({ method: "GET" })
+      expect.objectContaining({ method: "GET" }),
     );
   });
 
@@ -561,7 +707,9 @@ describe("WardexClient", () => {
                     label: "Open SOC collector context",
                   },
                 ],
-                recent_runs: [{ started_at: "2026-04-30T11:50:00Z", status: "success" }],
+                recent_runs: [
+                  { started_at: "2026-04-30T11:50:00Z", status: "success" },
+                ],
               },
             },
           ],
@@ -612,7 +760,9 @@ describe("WardexClient", () => {
                 aligned: true,
               },
             },
-            issues: ["Python SDK version 0.55.0 differs from runtime release 0.56.0."],
+            issues: [
+              "Python SDK version 0.55.0 differs from runtime release 0.56.0.",
+            ],
           },
         },
         experimental_surfaces: [
@@ -622,7 +772,9 @@ describe("WardexClient", () => {
             gate: "retrieval fallback, citations, provider status",
           },
         ],
-        known_limitations: ["No cloud, identity, or SaaS collectors are enabled yet."],
+        known_limitations: [
+          "No cloud, identity, or SaaS collectors are enabled yet.",
+        ],
       },
     };
     const mock = mockFetch(200, body);
@@ -632,7 +784,7 @@ describe("WardexClient", () => {
     expect(result).toEqual(body);
     expect(mock).toHaveBeenCalledWith(
       "http://localhost:8080/api/support/readiness-evidence",
-      expect.objectContaining({ method: "GET" })
+      expect.objectContaining({ method: "GET" }),
     );
   });
 
@@ -704,7 +856,7 @@ describe("WardexClient", () => {
     expect(result).toEqual(body);
     expect(mock).toHaveBeenCalledWith(
       "http://localhost:8080/api/support/first-run-proof",
-      expect.objectContaining({ method: "POST" })
+      expect.objectContaining({ method: "POST" }),
     );
   });
 
@@ -732,7 +884,7 @@ describe("WardexClient", () => {
     expect(result).toEqual(body);
     expect(mock).toHaveBeenCalledWith(
       "http://localhost:8080/api/control/failover-drill",
-      expect.objectContaining({ method: "POST" })
+      expect.objectContaining({ method: "POST" }),
     );
   });
 
@@ -776,7 +928,7 @@ describe("WardexClient", () => {
     expect(result).toEqual(body);
     expect(mock).toHaveBeenCalledWith(
       "http://localhost:8080/api/demo/lab",
-      expect.objectContaining({ method: "POST" })
+      expect.objectContaining({ method: "POST" }),
     );
   });
 
@@ -832,17 +984,17 @@ describe("WardexClient", () => {
     expect(mock).toHaveBeenNthCalledWith(
       1,
       "http://localhost:8080/api/report-templates?case_id=42&incident_id=7&investigation_id=inv-7&source=case&scope=scoped",
-      expect.objectContaining({ method: "GET" })
+      expect.objectContaining({ method: "GET" }),
     );
     expect(mock).toHaveBeenNthCalledWith(
       2,
       "http://localhost:8080/api/report-runs?case_id=42&incident_id=7&investigation_id=inv-7&source=case&scope=scoped",
-      expect.objectContaining({ method: "GET" })
+      expect.objectContaining({ method: "GET" }),
     );
     expect(mock).toHaveBeenNthCalledWith(
       3,
       "http://localhost:8080/api/report-schedules?case_id=42&incident_id=7&investigation_id=inv-7&source=case&scope=scoped",
-      expect.objectContaining({ method: "GET" })
+      expect.objectContaining({ method: "GET" }),
     );
   });
 
@@ -929,13 +1081,15 @@ describe("WardexClient", () => {
     expect(run.run.preview.kind).toBe("control_plane_failover_history");
     expect(schedule.schedule.kind).toBe("control_plane_failover_history");
 
-    expect(mock.mock.calls[0][0]).toBe("http://localhost:8080/api/report-templates");
+    expect(mock.mock.calls[0][0]).toBe(
+      "http://localhost:8080/api/report-templates",
+    );
     expect(JSON.parse(String(mock.mock.calls[0][1].body))).toEqual(
       expect.objectContaining({
         name: "Control-plane Failover Drill History",
         kind: "control_plane_failover_history",
         scope: "control_plane",
-      })
+      }),
     );
     expect(mock.mock.calls[1][0]).toBe("http://localhost:8080/api/report-runs");
     expect(JSON.parse(String(mock.mock.calls[1][1].body))).toEqual(
@@ -943,15 +1097,17 @@ describe("WardexClient", () => {
         kind: "control_plane_failover_history",
         case_id: "42",
         investigation_id: "inv-7",
-      })
+      }),
     );
-    expect(mock.mock.calls[2][0]).toBe("http://localhost:8080/api/report-schedules");
+    expect(mock.mock.calls[2][0]).toBe(
+      "http://localhost:8080/api/report-schedules",
+    );
     expect(JSON.parse(String(mock.mock.calls[2][1].body))).toEqual(
       expect.objectContaining({
         name: "Weekly Control-plane Failover Drill History",
         kind: "control_plane_failover_history",
         cadence: "weekly",
-      })
+      }),
     );
   });
 
@@ -978,11 +1134,15 @@ describe("WardexClient", () => {
     const mock = mockFetch(200, body);
     globalThis.fetch = mock;
     const client = new WardexClient({ baseUrl: "http://localhost:8080" });
-    const result = await client.docsIndex({ q: "sdk guide", section: "api", limit: 5 });
+    const result = await client.docsIndex({
+      q: "sdk guide",
+      section: "api",
+      limit: 5,
+    });
     expect(result).toEqual(body);
     expect(mock).toHaveBeenCalledWith(
       "http://localhost:8080/api/docs/index?q=sdk+guide&section=api&limit=5",
-      expect.objectContaining({ method: "GET" })
+      expect.objectContaining({ method: "GET" }),
     );
   });
 
@@ -997,7 +1157,8 @@ describe("WardexClient", () => {
       tags: ["api", "guides"],
       summary: "Use generated clients.",
       headings: ["SDK Guide", "TypeScript SDK"],
-      content: '# SDK Guide\nUse generated clients.\n\n## TypeScript SDK\n```ts\nimport { WardexClient } from "@wardex/sdk";\n```',
+      content:
+        '# SDK Guide\nUse generated clients.\n\n## TypeScript SDK\n```ts\nimport { WardexClient } from "@wardex/sdk";\n```',
     };
     const mock = mockFetch(200, body);
     globalThis.fetch = mock;
@@ -1006,7 +1167,7 @@ describe("WardexClient", () => {
     expect(result).toEqual(body);
     expect(mock).toHaveBeenCalledWith(
       "http://localhost:8080/api/docs/content?path=SDK_GUIDE.md",
-      expect.objectContaining({ method: "GET" })
+      expect.objectContaining({ method: "GET" }),
     );
   });
 
@@ -1074,7 +1235,7 @@ describe("WardexClient", () => {
     expect(result).toEqual(body);
     expect(mock).toHaveBeenCalledWith(
       "http://localhost:8080/api/system/health/dependencies",
-      expect.objectContaining({ method: "GET" })
+      expect.objectContaining({ method: "GET" }),
     );
   });
 
@@ -1096,7 +1257,7 @@ describe("WardexClient", () => {
     expect(result).toEqual(body);
     expect(mock).toHaveBeenCalledWith(
       "http://localhost:8080/api/siem/status",
-      expect.objectContaining({ method: "GET" })
+      expect.objectContaining({ method: "GET" }),
     );
   });
 
@@ -1127,7 +1288,7 @@ describe("WardexClient", () => {
     expect(result).toEqual(body);
     expect(mock).toHaveBeenCalledWith(
       "http://localhost:8080/api/siem/config",
-      expect.objectContaining({ method: "GET" })
+      expect.objectContaining({ method: "GET" }),
     );
   });
 
@@ -1175,7 +1336,7 @@ describe("WardexClient", () => {
       expect.objectContaining({
         method: "POST",
         body: JSON.stringify(request),
-      })
+      }),
     );
   });
 
@@ -1223,7 +1384,7 @@ describe("WardexClient", () => {
       expect.objectContaining({
         method: "POST",
         body: JSON.stringify(request),
-      })
+      }),
     );
   });
 
@@ -1241,7 +1402,7 @@ describe("WardexClient", () => {
     expect(result).toEqual(body);
     expect(mock).toHaveBeenCalledWith(
       "http://localhost:8080/api/taxii/status",
-      expect.objectContaining({ method: "GET" })
+      expect.objectContaining({ method: "GET" }),
     );
   });
 
@@ -1260,7 +1421,7 @@ describe("WardexClient", () => {
     expect(result).toEqual(body);
     expect(mock).toHaveBeenCalledWith(
       "http://localhost:8080/api/taxii/config",
-      expect.objectContaining({ method: "GET" })
+      expect.objectContaining({ method: "GET" }),
     );
   });
 
@@ -1286,7 +1447,7 @@ describe("WardexClient", () => {
       expect.objectContaining({
         method: "POST",
         body: JSON.stringify(request),
-      })
+      }),
     );
   });
 
@@ -1310,7 +1471,7 @@ describe("WardexClient", () => {
     expect(result).toEqual(body);
     expect(mock).toHaveBeenCalledWith(
       "http://localhost:8080/api/taxii/pull",
-      expect.objectContaining({ method: "POST" })
+      expect.objectContaining({ method: "POST" }),
     );
   });
 
@@ -1338,7 +1499,7 @@ describe("WardexClient", () => {
     expect(result).toEqual(body);
     expect(mock).toHaveBeenCalledWith(
       "http://localhost:8080/api/collectors/aws",
-      expect.objectContaining({ method: "GET" })
+      expect.objectContaining({ method: "GET" }),
     );
   });
 
@@ -1381,7 +1542,7 @@ describe("WardexClient", () => {
       expect.objectContaining({
         method: "POST",
         body: JSON.stringify(request),
-      })
+      }),
     );
   });
 
@@ -1433,7 +1594,7 @@ describe("WardexClient", () => {
     expect(result).toEqual(body);
     expect(mock).toHaveBeenCalledWith(
       "http://localhost:8080/api/collectors/aws/validate",
-      expect.objectContaining({ method: "POST" })
+      expect.objectContaining({ method: "POST" }),
     );
   });
 
@@ -1460,7 +1621,7 @@ describe("WardexClient", () => {
     expect(result).toEqual(body);
     expect(mock).toHaveBeenCalledWith(
       "http://localhost:8080/api/collectors/azure",
-      expect.objectContaining({ method: "GET" })
+      expect.objectContaining({ method: "GET" }),
     );
   });
 
@@ -1501,7 +1662,7 @@ describe("WardexClient", () => {
       expect.objectContaining({
         method: "POST",
         body: JSON.stringify(request),
-      })
+      }),
     );
   });
 
@@ -1519,7 +1680,8 @@ describe("WardexClient", () => {
           result_type: "Success",
           caller: "user@example.com",
           timestamp: "2026-04-29T11:59:00Z",
-          resource_id: "/subscriptions/subscription-guid/resourceGroups/rg/providers/Microsoft.Compute/virtualMachines/vm1",
+          resource_id:
+            "/subscriptions/subscription-guid/resourceGroups/rg/providers/Microsoft.Compute/virtualMachines/vm1",
           resource_group: "rg",
           level: "Informational",
           subscription_id: "subscription-guid",
@@ -1551,7 +1713,7 @@ describe("WardexClient", () => {
     expect(result).toEqual(body);
     expect(mock).toHaveBeenCalledWith(
       "http://localhost:8080/api/collectors/azure/validate",
-      expect.objectContaining({ method: "POST" })
+      expect.objectContaining({ method: "POST" }),
     );
   });
 
@@ -1585,7 +1747,7 @@ describe("WardexClient", () => {
     expect(result).toEqual(body);
     expect(mock).toHaveBeenCalledWith(
       "http://localhost:8080/api/collectors/gcp",
-      expect.objectContaining({ method: "GET" })
+      expect.objectContaining({ method: "GET" }),
     );
   });
 
@@ -1628,7 +1790,7 @@ describe("WardexClient", () => {
       expect.objectContaining({
         method: "POST",
         body: JSON.stringify(request),
-      })
+      }),
     );
   });
 
@@ -1680,7 +1842,7 @@ describe("WardexClient", () => {
     expect(result).toEqual(body);
     expect(mock).toHaveBeenCalledWith(
       "http://localhost:8080/api/collectors/gcp/validate",
-      expect.objectContaining({ method: "POST" })
+      expect.objectContaining({ method: "POST" }),
     );
   });
 
@@ -1705,7 +1867,7 @@ describe("WardexClient", () => {
     expect(result).toEqual(body);
     expect(mock).toHaveBeenCalledWith(
       "http://localhost:8080/api/collectors/okta",
-      expect.objectContaining({ method: "GET" })
+      expect.objectContaining({ method: "GET" }),
     );
   });
 
@@ -1742,7 +1904,7 @@ describe("WardexClient", () => {
       expect.objectContaining({
         method: "POST",
         body: JSON.stringify(request),
-      })
+      }),
     );
   });
 
@@ -1799,7 +1961,7 @@ describe("WardexClient", () => {
     expect(result).toEqual(body);
     expect(mock).toHaveBeenCalledWith(
       "http://localhost:8080/api/collectors/okta/validate",
-      expect.objectContaining({ method: "POST" })
+      expect.objectContaining({ method: "POST" }),
     );
   });
 
@@ -1824,7 +1986,7 @@ describe("WardexClient", () => {
     expect(result).toEqual(body);
     expect(mock).toHaveBeenCalledWith(
       "http://localhost:8080/api/collectors/entra",
-      expect.objectContaining({ method: "GET" })
+      expect.objectContaining({ method: "GET" }),
     );
   });
 
@@ -1861,7 +2023,7 @@ describe("WardexClient", () => {
       expect.objectContaining({
         method: "POST",
         body: JSON.stringify(request),
-      })
+      }),
     );
   });
 
@@ -1918,7 +2080,7 @@ describe("WardexClient", () => {
     expect(result).toEqual(body);
     expect(mock).toHaveBeenCalledWith(
       "http://localhost:8080/api/collectors/entra/validate",
-      expect.objectContaining({ method: "POST" })
+      expect.objectContaining({ method: "POST" }),
     );
   });
 
@@ -1944,7 +2106,7 @@ describe("WardexClient", () => {
     expect(result).toEqual(body);
     expect(mock).toHaveBeenCalledWith(
       "http://localhost:8080/api/collectors/m365",
-      expect.objectContaining({ method: "GET" })
+      expect.objectContaining({ method: "GET" }),
     );
   });
 
@@ -1983,7 +2145,7 @@ describe("WardexClient", () => {
       expect.objectContaining({
         method: "POST",
         body: JSON.stringify(request),
-      })
+      }),
     );
   });
 
@@ -2037,7 +2199,7 @@ describe("WardexClient", () => {
     expect(result).toEqual(body);
     expect(mock).toHaveBeenCalledWith(
       "http://localhost:8080/api/collectors/m365/validate",
-      expect.objectContaining({ method: "POST" })
+      expect.objectContaining({ method: "POST" }),
     );
   });
 
@@ -2064,7 +2226,7 @@ describe("WardexClient", () => {
     expect(result).toEqual(body);
     expect(mock).toHaveBeenCalledWith(
       "http://localhost:8080/api/collectors/workspace",
-      expect.objectContaining({ method: "GET" })
+      expect.objectContaining({ method: "GET" }),
     );
   });
 
@@ -2105,7 +2267,7 @@ describe("WardexClient", () => {
       expect.objectContaining({
         method: "POST",
         body: JSON.stringify(request),
-      })
+      }),
     );
   });
 
@@ -2161,7 +2323,7 @@ describe("WardexClient", () => {
     expect(result).toEqual(body);
     expect(mock).toHaveBeenCalledWith(
       "http://localhost:8080/api/collectors/workspace/validate",
-      expect.objectContaining({ method: "POST" })
+      expect.objectContaining({ method: "POST" }),
     );
   });
 
@@ -2192,7 +2354,7 @@ describe("WardexClient", () => {
     expect(result).toEqual(body);
     expect(mock).toHaveBeenCalledWith(
       "http://localhost:8080/api/collectors/github",
-      expect.objectContaining({ method: "GET" })
+      expect.objectContaining({ method: "GET" }),
     );
   });
 
@@ -2235,7 +2397,7 @@ describe("WardexClient", () => {
       expect.objectContaining({
         method: "POST",
         body: JSON.stringify(request),
-      })
+      }),
     );
   });
 
@@ -2287,7 +2449,7 @@ describe("WardexClient", () => {
     expect(result).toEqual(body);
     expect(mock).toHaveBeenCalledWith(
       "http://localhost:8080/api/collectors/github/validate",
-      expect.objectContaining({ method: "POST" })
+      expect.objectContaining({ method: "POST" }),
     );
   });
 
@@ -2302,7 +2464,12 @@ describe("WardexClient", () => {
         client_secret_ref: "********",
         customer_id: "cid-00000000000000000000000000000000",
         poll_interval_secs: 180,
-        required_fields: ["cloud", "client_id", "client_secret_ref", "customer_id"],
+        required_fields: [
+          "cloud",
+          "client_id",
+          "client_secret_ref",
+          "customer_id",
+        ],
         has_client_secret_ref: true,
       },
       validation: {
@@ -2317,7 +2484,7 @@ describe("WardexClient", () => {
     expect(result).toEqual(body);
     expect(mock).toHaveBeenCalledWith(
       "http://localhost:8080/api/collectors/crowdstrike",
-      expect.objectContaining({ method: "GET" })
+      expect.objectContaining({ method: "GET" }),
     );
   });
 
@@ -2341,7 +2508,12 @@ describe("WardexClient", () => {
         client_secret_ref: "********",
         customer_id: "cid-00000000000000000000000000000000",
         poll_interval_secs: 180,
-        required_fields: ["cloud", "client_id", "client_secret_ref", "customer_id"],
+        required_fields: [
+          "cloud",
+          "client_id",
+          "client_secret_ref",
+          "customer_id",
+        ],
         has_client_secret_ref: true,
       },
       validation: {
@@ -2359,7 +2531,7 @@ describe("WardexClient", () => {
       expect.objectContaining({
         method: "POST",
         body: JSON.stringify(request),
-      })
+      }),
     );
   });
 
@@ -2410,7 +2582,7 @@ describe("WardexClient", () => {
     expect(result).toEqual(body);
     expect(mock).toHaveBeenCalledWith(
       "http://localhost:8080/api/collectors/crowdstrike/validate",
-      expect.objectContaining({ method: "POST" })
+      expect.objectContaining({ method: "POST" }),
     );
   });
 
@@ -2440,7 +2612,7 @@ describe("WardexClient", () => {
     expect(result).toEqual(body);
     expect(mock).toHaveBeenCalledWith(
       "http://localhost:8080/api/collectors/syslog",
-      expect.objectContaining({ method: "GET" })
+      expect.objectContaining({ method: "GET" }),
     );
   });
 
@@ -2483,7 +2655,7 @@ describe("WardexClient", () => {
       expect.objectContaining({
         method: "POST",
         body: JSON.stringify(request),
-      })
+      }),
     );
   });
 
@@ -2535,7 +2707,7 @@ describe("WardexClient", () => {
     expect(result).toEqual(body);
     expect(mock).toHaveBeenCalledWith(
       "http://localhost:8080/api/collectors/syslog/validate",
-      expect.objectContaining({ method: "POST" })
+      expect.objectContaining({ method: "POST" }),
     );
   });
 
@@ -2552,7 +2724,11 @@ describe("WardexClient", () => {
         },
         env_prefix: "WARDEX_",
         secrets_dir: "/run/secrets",
-        supported_sources: ["${ENV_VAR}", "file:///run/secrets/name", "vault://secret/path#key"],
+        supported_sources: [
+          "${ENV_VAR}",
+          "file:///run/secrets/name",
+          "vault://secret/path#key",
+        ],
       },
       validation: {
         status: "ready",
@@ -2573,7 +2749,7 @@ describe("WardexClient", () => {
     expect(result).toEqual(body);
     expect(mock).toHaveBeenCalledWith(
       "http://localhost:8080/api/secrets/status",
-      expect.objectContaining({ method: "GET" })
+      expect.objectContaining({ method: "GET" }),
     );
   });
 
@@ -2603,7 +2779,11 @@ describe("WardexClient", () => {
         },
         env_prefix: "WARDEX_",
         secrets_dir: "/run/secrets",
-        supported_sources: ["${ENV_VAR}", "file:///run/secrets/name", "vault://secret/path#key"],
+        supported_sources: [
+          "${ENV_VAR}",
+          "file:///run/secrets/name",
+          "vault://secret/path#key",
+        ],
       },
       validation: {
         status: "ready",
@@ -2627,7 +2807,7 @@ describe("WardexClient", () => {
       expect.objectContaining({
         method: "POST",
         body: JSON.stringify(request),
-      })
+      }),
     );
   });
 
@@ -2661,7 +2841,7 @@ describe("WardexClient", () => {
       expect.objectContaining({
         method: "POST",
         body: JSON.stringify(request),
-      })
+      }),
     );
   });
 
@@ -2689,10 +2869,9 @@ describe("WardexClient", () => {
       expect.objectContaining({
         method: "POST",
         body: JSON.stringify(request),
-      })
+      }),
     );
   });
-
 
   it("fpFeedback() posts false-positive feedback", async () => {
     const feedback = {
@@ -2713,7 +2892,7 @@ describe("WardexClient", () => {
       expect.objectContaining({
         method: "POST",
         body: JSON.stringify(feedback),
-      })
+      }),
     );
   });
 
@@ -2734,7 +2913,7 @@ describe("WardexClient", () => {
     expect(result).toEqual(body);
     expect(mock).toHaveBeenCalledWith(
       "http://localhost:8080/api/fp-feedback/stats",
-      expect.objectContaining({ method: "GET" })
+      expect.objectContaining({ method: "GET" }),
     );
   });
   it("efficacySummary() calls GET /api/efficacy/summary", async () => {
@@ -2801,7 +2980,7 @@ describe("WardexClient", () => {
     expect(result).toEqual(body);
     expect(mock).toHaveBeenCalledWith(
       "http://localhost:8080/api/efficacy/summary",
-      expect.objectContaining({ method: "GET" })
+      expect.objectContaining({ method: "GET" }),
     );
   });
 
@@ -2829,7 +3008,7 @@ describe("WardexClient", () => {
     expect(result).toEqual(body);
     expect(mock).toHaveBeenCalledWith(
       "http://localhost:8080/api/efficacy/rule/sigma%2Fcredential%20access",
-      expect.objectContaining({ method: "GET" })
+      expect.objectContaining({ method: "GET" }),
     );
   });
 
@@ -2855,7 +3034,7 @@ describe("WardexClient", () => {
     expect(result).toEqual(body);
     expect(mock).toHaveBeenCalledWith(
       "http://localhost:8080/api/efficacy/canary-promote",
-      expect.objectContaining({ method: "POST" })
+      expect.objectContaining({ method: "POST" }),
     );
   });
 
@@ -2875,7 +3054,10 @@ describe("WardexClient", () => {
             title: "Validate identity telemetry",
             description: "Review recent login anomalies for the principal.",
             api_pivot: "/api/identity/entity/user-1",
-            recommended_actions: ["Confirm recent sign-ins", "Check MFA prompts"],
+            recommended_actions: [
+              "Confirm recent sign-ins",
+              "Check MFA prompts",
+            ],
             evidence_to_collect: ["Authentication logs", "IP reputation"],
             auto_queries: [
               {
@@ -2896,7 +3078,7 @@ describe("WardexClient", () => {
     expect(result).toEqual(body);
     expect(mock).toHaveBeenCalledWith(
       "http://localhost:8080/api/investigations/workflows",
-      expect.objectContaining({ method: "GET" })
+      expect.objectContaining({ method: "GET" }),
     );
   });
 
@@ -2936,7 +3118,7 @@ describe("WardexClient", () => {
     expect(result).toEqual(body);
     expect(mock).toHaveBeenCalledWith(
       "http://localhost:8080/api/investigations/workflows/credential%20compromise%2Fv2",
-      expect.objectContaining({ method: "GET" })
+      expect.objectContaining({ method: "GET" }),
     );
   });
 
@@ -3009,7 +3191,7 @@ describe("WardexClient", () => {
       expect.objectContaining({
         method: "POST",
         body: JSON.stringify(request),
-      })
+      }),
     );
   });
 
@@ -3041,7 +3223,10 @@ describe("WardexClient", () => {
             title: "Validate identity telemetry",
             description: "Review recent login anomalies for the principal.",
             api_pivot: "/api/identity/entity/user-1",
-            recommended_actions: ["Confirm recent sign-ins", "Check MFA prompts"],
+            recommended_actions: [
+              "Confirm recent sign-ins",
+              "Check MFA prompts",
+            ],
             evidence_to_collect: ["Authentication logs", "IP reputation"],
             auto_queries: [
               {
@@ -3062,7 +3247,7 @@ describe("WardexClient", () => {
     expect(result).toEqual(body);
     expect(mock).toHaveBeenCalledWith(
       "http://localhost:8080/api/investigations/active",
-      expect.objectContaining({ method: "GET" })
+      expect.objectContaining({ method: "GET" }),
     );
   });
 
@@ -3105,7 +3290,10 @@ describe("WardexClient", () => {
         description: "Reset credentials and revoke active sessions.",
         api_pivot: "/api/remediation/change-reviews",
         recommended_actions: ["Reset password", "Revoke refresh tokens"],
-        evidence_to_collect: ["Reset confirmation", "Session revocation audit trail"],
+        evidence_to_collect: [
+          "Reset confirmation",
+          "Session revocation audit trail",
+        ],
         auto_queries: [],
       },
       steps: [
@@ -3137,7 +3325,7 @@ describe("WardexClient", () => {
       expect.objectContaining({
         method: "POST",
         body: JSON.stringify(request),
-      })
+      }),
     );
   });
 
@@ -3175,7 +3363,8 @@ describe("WardexClient", () => {
       handoff: {
         from_analyst: "analyst1",
         to_analyst: "analyst2",
-        summary: "Initial identity review completed; containment still pending.",
+        summary:
+          "Initial identity review completed; containment still pending.",
         next_actions: ["Revoke active sessions", "Reset password"],
         questions: ["Was the MFA device physically present?"],
         updated_at: "2026-04-30T09:20:00Z",
@@ -3212,7 +3401,7 @@ describe("WardexClient", () => {
       expect.objectContaining({
         method: "POST",
         body: JSON.stringify(request),
-      })
+      }),
     );
   });
 
@@ -3235,7 +3424,10 @@ describe("WardexClient", () => {
             title: "Validate identity telemetry",
             description: "Review recent login anomalies for the principal.",
             api_pivot: "/api/identity/entity/user-1",
-            recommended_actions: ["Confirm recent sign-ins", "Check MFA prompts"],
+            recommended_actions: [
+              "Confirm recent sign-ins",
+              "Check MFA prompts",
+            ],
             evidence_to_collect: ["Authentication logs", "IP reputation"],
             auto_queries: [
               {
@@ -3259,7 +3451,7 @@ describe("WardexClient", () => {
       expect.objectContaining({
         method: "POST",
         body: JSON.stringify(request),
-      })
+      }),
     );
   });
 
@@ -3308,7 +3500,7 @@ describe("WardexClient", () => {
       expect.objectContaining({
         method: "POST",
         body: JSON.stringify(request),
-      })
+      }),
     );
   });
 
@@ -3334,7 +3526,7 @@ describe("WardexClient", () => {
     expect(result).toEqual(body);
     expect(mock).toHaveBeenCalledWith(
       "http://localhost:8080/api/timeline/host?hostname=host-7",
-      expect.objectContaining({ method: "GET" })
+      expect.objectContaining({ method: "GET" }),
     );
   });
 
@@ -3360,7 +3552,7 @@ describe("WardexClient", () => {
     expect(result).toEqual(body);
     expect(mock).toHaveBeenCalledWith(
       "http://localhost:8080/api/timeline/agent?agent_id=agent-7",
-      expect.objectContaining({ method: "GET" })
+      expect.objectContaining({ method: "GET" }),
     );
   });
 
@@ -3399,7 +3591,7 @@ describe("WardexClient", () => {
     expect(result).toEqual(body);
     expect(mock).toHaveBeenCalledWith(
       "http://localhost:8080/api/ml/models",
-      expect.objectContaining({ method: "GET" })
+      expect.objectContaining({ method: "GET" }),
     );
   });
 
@@ -3451,7 +3643,7 @@ describe("WardexClient", () => {
     expect(result).toEqual(body);
     expect(mock).toHaveBeenCalledWith(
       "http://localhost:8080/api/ml/models/status",
-      expect.objectContaining({ method: "GET" })
+      expect.objectContaining({ method: "GET" }),
     );
   });
 
@@ -3495,7 +3687,7 @@ describe("WardexClient", () => {
     expect(result).toEqual(body);
     expect(mock).toHaveBeenCalledWith(
       "http://localhost:8080/api/ml/models/rollback",
-      expect.objectContaining({ method: "POST" })
+      expect.objectContaining({ method: "POST" }),
     );
   });
 
@@ -3523,7 +3715,7 @@ describe("WardexClient", () => {
     expect(result).toEqual(body);
     expect(mock).toHaveBeenCalledWith(
       "http://localhost:8080/api/ml/shadow/recent?limit=5",
-      expect.objectContaining({ method: "GET" })
+      expect.objectContaining({ method: "GET" }),
     );
   });
 
@@ -3552,7 +3744,7 @@ describe("WardexClient", () => {
       expect.objectContaining({
         method: "POST",
         body: JSON.stringify(request),
-      })
+      }),
     );
   });
 
@@ -3585,7 +3777,10 @@ describe("WardexClient", () => {
         calibrated_confidence: 0.78,
         band: "medium",
       },
-      rationale: ["Anomaly score is elevated", "Device risk score exceeds baseline"],
+      rationale: [
+        "Anomaly score is elevated",
+        "Device risk score exceeds baseline",
+      ],
     };
     const mock = mockFetch(200, body);
     globalThis.fetch = mock;
@@ -3597,7 +3792,7 @@ describe("WardexClient", () => {
       expect.objectContaining({
         method: "POST",
         body: JSON.stringify(request),
-      })
+      }),
     );
   });
 
@@ -3623,7 +3818,7 @@ describe("WardexClient", () => {
     expect(result).toEqual(body);
     expect(mock).toHaveBeenCalledWith(
       "http://localhost:8080/api/ws/stats",
-      expect.objectContaining({ method: "GET" })
+      expect.objectContaining({ method: "GET" }),
     );
   });
 
@@ -3661,7 +3856,10 @@ describe("WardexClient", () => {
         narrative: {
           headline: "Credential pivot detected",
           summary: "Repeated auth failures preceded remote service access.",
-          observations: ["Auth failures spiked", "Remote service pivot followed"],
+          observations: [
+            "Auth failures spiked",
+            "Remote service pivot followed",
+          ],
           baseline_comparison: "Auth failures are 6x above baseline.",
           time_window: "5m",
           involved_entities: ["prod-web-01", "prod-db-01"],
@@ -3726,7 +3924,7 @@ describe("WardexClient", () => {
         headers: expect.objectContaining({
           Authorization: "Bearer secret",
         }),
-      })
+      }),
     );
   });
 
@@ -3752,7 +3950,7 @@ describe("WardexClient", () => {
         headers: expect.objectContaining({
           Authorization: "Bearer secret",
         }),
-      })
+      }),
     );
   });
 
@@ -3776,7 +3974,7 @@ describe("WardexClient", () => {
         headers: expect.objectContaining({
           Authorization: "Bearer secret",
         }),
-      })
+      }),
     );
   });
 
@@ -3802,7 +4000,7 @@ describe("WardexClient", () => {
         headers: expect.objectContaining({
           Authorization: "Bearer secret",
         }),
-      })
+      }),
     );
   });
 
@@ -3830,7 +4028,7 @@ describe("WardexClient", () => {
         headers: expect.objectContaining({
           Authorization: "Bearer secret",
         }),
-      })
+      }),
     );
   });
 
@@ -3858,7 +4056,7 @@ describe("WardexClient", () => {
         headers: expect.objectContaining({
           Authorization: "Bearer secret",
         }),
-      })
+      }),
     );
   });
 
@@ -3886,7 +4084,7 @@ describe("WardexClient", () => {
         headers: expect.objectContaining({
           Authorization: "Bearer secret",
         }),
-      })
+      }),
     );
   });
 
@@ -3938,7 +4136,7 @@ describe("WardexClient", () => {
         headers: expect.objectContaining({
           Authorization: "Bearer secret",
         }),
-      })
+      }),
     );
   });
 
@@ -3975,7 +4173,7 @@ describe("WardexClient", () => {
         headers: expect.objectContaining({
           Authorization: "Bearer secret",
         }),
-      })
+      }),
     );
   });
 
@@ -4019,7 +4217,7 @@ describe("WardexClient", () => {
         headers: expect.objectContaining({
           Authorization: "Bearer secret",
         }),
-      })
+      }),
     );
   });
 
@@ -4053,7 +4251,7 @@ describe("WardexClient", () => {
         headers: expect.objectContaining({
           Authorization: "Bearer secret",
         }),
-      })
+      }),
     );
   });
 
@@ -4073,7 +4271,7 @@ describe("WardexClient", () => {
     expect(result).toEqual(body);
     expect(mock).toHaveBeenCalledWith(
       "http://localhost:8080/api/queue/stats",
-      expect.objectContaining({ method: "GET" })
+      expect.objectContaining({ method: "GET" }),
     );
   });
 
@@ -4096,7 +4294,7 @@ describe("WardexClient", () => {
     expect(result).toEqual(body);
     expect(mock).toHaveBeenCalledWith(
       "http://localhost:8080/api/response/stats",
-      expect.objectContaining({ method: "GET" })
+      expect.objectContaining({ method: "GET" }),
     );
   });
 
@@ -4105,7 +4303,7 @@ describe("WardexClient", () => {
       requests: [
         {
           id: "rr_123",
-          action: "BlockIp { ip: \"198.51.100.10\" }",
+          action: 'BlockIp { ip: "198.51.100.10" }',
           action_label: "Block IP 198.51.100.10",
           target: {
             hostname: "web-01",
@@ -4167,7 +4365,7 @@ describe("WardexClient", () => {
     expect(result).toEqual(body);
     expect(mock).toHaveBeenCalledWith(
       "http://localhost:8080/api/response/requests",
-      expect.objectContaining({ method: "GET" })
+      expect.objectContaining({ method: "GET" }),
     );
   });
 
@@ -4186,7 +4384,7 @@ describe("WardexClient", () => {
       status: "submitted",
       request: {
         id: "rr_123",
-        action: "BlockIp { ip: \"198.51.100.10\" }",
+        action: 'BlockIp { ip: "198.51.100.10" }',
         action_label: "Block IP 198.51.100.10",
         target: {
           hostname: "web-01",
@@ -4236,7 +4434,7 @@ describe("WardexClient", () => {
       expect.objectContaining({
         method: "POST",
         body: JSON.stringify(payload),
-      })
+      }),
     );
   });
 
@@ -4255,7 +4453,7 @@ describe("WardexClient", () => {
       expect.objectContaining({
         method: "POST",
         body: JSON.stringify({ request_id: "rr_123" }),
-      })
+      }),
     );
   });
 
@@ -4275,7 +4473,7 @@ describe("WardexClient", () => {
     expect(result).toEqual(body);
     expect(mock).toHaveBeenCalledWith(
       "http://localhost:8080/api/cases/stats",
-      expect.objectContaining({ method: "GET" })
+      expect.objectContaining({ method: "GET" }),
     );
   });
 
@@ -4295,7 +4493,7 @@ describe("WardexClient", () => {
     expect(result).toEqual(body);
     expect(mock).toHaveBeenCalledWith(
       "http://localhost:8080/api/platform",
-      expect.objectContaining({ method: "GET" })
+      expect.objectContaining({ method: "GET" }),
     );
   });
 
@@ -4319,7 +4517,7 @@ describe("WardexClient", () => {
     expect(result).toEqual(body);
     expect(mock).toHaveBeenCalledWith(
       "http://localhost:8080/api/slo/status",
-      expect.objectContaining({ method: "GET" })
+      expect.objectContaining({ method: "GET" }),
     );
   });
 
@@ -4352,7 +4550,7 @@ describe("WardexClient", () => {
     expect(result).toEqual(body);
     expect(mock).toHaveBeenCalledWith(
       "http://localhost:8080/api/feeds/stats",
-      expect.objectContaining({ method: "GET" })
+      expect.objectContaining({ method: "GET" }),
     );
   });
 
@@ -4374,7 +4572,7 @@ describe("WardexClient", () => {
     expect(result).toEqual(body);
     expect(mock).toHaveBeenCalledWith(
       "http://localhost:8080/api/threat-intel/stats",
-      expect.objectContaining({ method: "GET" })
+      expect.objectContaining({ method: "GET" }),
     );
   });
 
@@ -4387,12 +4585,13 @@ describe("WardexClient", () => {
     expect(result).toEqual(body);
     expect(mock).toHaveBeenCalledWith(
       "http://localhost:8080/api/threat-intel/status",
-      expect.objectContaining({ method: "GET" })
+      expect.objectContaining({ method: "GET" }),
     );
   });
 
   it("metrics() calls GET /api/metrics and returns plain text", async () => {
-    const body = "# HELP wardex_requests_total Total requests\nwardex_requests_total 100\n";
+    const body =
+      "# HELP wardex_requests_total Total requests\nwardex_requests_total 100\n";
     const mock = mockFetch(200, body);
     globalThis.fetch = mock;
     const client = new WardexClient({ baseUrl: "http://localhost:8080" });
@@ -4400,7 +4599,7 @@ describe("WardexClient", () => {
     expect(result).toBe(body);
     expect(mock).toHaveBeenCalledWith(
       "http://localhost:8080/api/metrics",
-      expect.objectContaining({ method: "GET" })
+      expect.objectContaining({ method: "GET" }),
     );
   });
 
@@ -4462,7 +4661,7 @@ describe("WardexClient", () => {
     expect(result).toEqual(body);
     expect(mock).toHaveBeenCalledWith(
       "http://localhost:8080/api/manager/queue-digest",
-      expect.objectContaining({ method: "GET" })
+      expect.objectContaining({ method: "GET" }),
     );
   });
 
@@ -4538,7 +4737,7 @@ describe("WardexClient", () => {
     expect(result).toEqual(body);
     expect(mock).toHaveBeenCalledWith(
       "http://localhost:8080/api/manager/overview",
-      expect.objectContaining({ method: "GET" })
+      expect.objectContaining({ method: "GET" }),
     );
   });
 
@@ -4562,7 +4761,8 @@ describe("WardexClient", () => {
           label: "Response approval dry-run completed",
           ready: false,
           status: "pending",
-          detail: "Submit one dry-run response request to validate approval and rollback readiness.",
+          detail:
+            "Submit one dry-run response request to validate approval and rollback readiness.",
         },
       ],
     };
@@ -4573,7 +4773,7 @@ describe("WardexClient", () => {
     expect(result).toEqual(body);
     expect(mock).toHaveBeenCalledWith(
       "http://localhost:8080/api/onboarding/readiness",
-      expect.objectContaining({ method: "GET" })
+      expect.objectContaining({ method: "GET" }),
     );
   });
 
@@ -4605,7 +4805,7 @@ describe("WardexClient", () => {
     expect(result).toEqual(body);
     expect(mock).toHaveBeenCalledWith(
       "http://localhost:8080/api/auth/sso/config",
-      expect.objectContaining({ method: "GET" })
+      expect.objectContaining({ method: "GET" }),
     );
   });
 
@@ -4622,7 +4822,7 @@ describe("WardexClient", () => {
     expect(result).toEqual(body);
     expect(mock).toHaveBeenCalledWith(
       "http://localhost:8080/api/auth/rotate",
-      expect.objectContaining({ method: "POST" })
+      expect.objectContaining({ method: "POST" }),
     );
   });
 
@@ -4643,7 +4843,7 @@ describe("WardexClient", () => {
     expect(result).toEqual(body);
     expect(mock).toHaveBeenCalledWith(
       "http://localhost:8080/api/assistant/status",
-      expect.objectContaining({ method: "GET" })
+      expect.objectContaining({ method: "GET" }),
     );
   });
 
@@ -4735,7 +4935,9 @@ describe("WardexClient", () => {
           relevance: 0.91,
         },
       ],
-      warnings: ["LLM assistant is not configured; using retrieval-only synthesis"],
+      warnings: [
+        "LLM assistant is not configured; using retrieval-only synthesis",
+      ],
     };
     const mock = mockFetch(200, body);
     globalThis.fetch = mock;
@@ -4747,7 +4949,7 @@ describe("WardexClient", () => {
       expect.objectContaining({
         method: "POST",
         body: JSON.stringify(payload),
-      })
+      }),
     );
   });
 
@@ -4757,7 +4959,10 @@ describe("WardexClient", () => {
       alert_id: "42",
       severity: "Critical",
       title: "isolate on prod-db-01",
-      summary: ["Critical alert from agent-7.", "Received at 2026-04-30T20:15:00Z."],
+      summary: [
+        "Critical alert from agent-7.",
+        "Received at 2026-04-30T20:15:00Z.",
+      ],
       why_fired: [
         "The detector attached 2 reason(s): credential dumping, remote service pivot.",
       ],
@@ -4793,7 +4998,10 @@ describe("WardexClient", () => {
       baseUrl: "http://localhost:8080",
       apiKey: "secret",
     });
-    const result = await client.detectionExplain({ event_id: 42, alert_id: "42" });
+    const result = await client.detectionExplain({
+      event_id: 42,
+      alert_id: "42",
+    });
     expect(result).toEqual(body);
     expect(mock).toHaveBeenCalledWith(
       "http://localhost:8080/api/detection/explain?event_id=42&alert_id=42",
@@ -4802,7 +5010,7 @@ describe("WardexClient", () => {
         headers: expect.objectContaining({
           Authorization: "Bearer secret",
         }),
-      })
+      }),
     );
   });
 
@@ -4851,7 +5059,7 @@ describe("WardexClient", () => {
         headers: expect.objectContaining({
           Authorization: "Bearer secret",
         }),
-      })
+      }),
     );
   });
 
@@ -4895,14 +5103,15 @@ describe("WardexClient", () => {
         headers: expect.objectContaining({
           Authorization: "Bearer secret",
         }),
-      })
+      }),
     );
   });
 
   it("detectionProfile() calls GET /api/detection/profile", async () => {
     const body = {
       profile: "balanced" as const,
-      description: "Default — tuned for production with good precision/recall balance",
+      description:
+        "Default — tuned for production with good precision/recall balance",
       threshold_multiplier: 1.0,
       learn_threshold: 2.5,
     };
@@ -4913,7 +5122,7 @@ describe("WardexClient", () => {
     expect(result).toEqual(body);
     expect(mock).toHaveBeenCalledWith(
       "http://localhost:8080/api/detection/profile",
-      expect.objectContaining({ method: "GET" })
+      expect.objectContaining({ method: "GET" }),
     );
   });
 
@@ -4932,7 +5141,7 @@ describe("WardexClient", () => {
       expect.objectContaining({
         method: "PUT",
         body: JSON.stringify({ profile: "quiet" }),
-      })
+      }),
     );
   });
 
@@ -4950,7 +5159,7 @@ describe("WardexClient", () => {
     expect(result).toEqual(body);
     expect(mock).toHaveBeenCalledWith(
       "http://localhost:8080/api/detection/score/normalize",
-      expect.objectContaining({ method: "GET" })
+      expect.objectContaining({ method: "GET" }),
     );
   });
 
@@ -4963,7 +5172,7 @@ describe("WardexClient", () => {
     expect(result).toEqual(body);
     expect(mock).toHaveBeenCalledWith(
       "http://localhost:8080/api/dlq/stats",
-      expect.objectContaining({ method: "GET" })
+      expect.objectContaining({ method: "GET" }),
     );
   });
 
@@ -4986,7 +5195,7 @@ describe("WardexClient", () => {
     expect(result).toEqual(body);
     expect(mock).toHaveBeenCalledWith(
       "http://localhost:8080/api/dlq",
-      expect.objectContaining({ method: "GET" })
+      expect.objectContaining({ method: "GET" }),
     );
   });
 
@@ -4999,7 +5208,7 @@ describe("WardexClient", () => {
     expect(result).toEqual(body);
     expect(mock).toHaveBeenCalledWith(
       "http://localhost:8080/api/dlq",
-      expect.objectContaining({ method: "DELETE" })
+      expect.objectContaining({ method: "DELETE" }),
     );
   });
 
@@ -5014,7 +5223,7 @@ describe("WardexClient", () => {
       expect.objectContaining({
         method: "POST",
         body: JSON.stringify({ hash: "abc123" }),
-      })
+      }),
     );
   });
 
@@ -5053,7 +5262,7 @@ describe("WardexClient", () => {
       },
       {
         trusted_publishers: ["Contoso Ltd"],
-      }
+      },
     );
     expect(mock).toHaveBeenCalledWith(
       "http://localhost:8080/api/scan/buffer/v2",
@@ -5070,7 +5279,7 @@ describe("WardexClient", () => {
             trusted_publishers: ["Contoso Ltd"],
           },
         }),
-      })
+      }),
     );
   });
 
@@ -5109,7 +5318,7 @@ describe("WardexClient", () => {
       expect.objectContaining({
         method: "POST",
         body: JSON.stringify(request),
-      })
+      }),
     );
   });
 
@@ -5126,7 +5335,7 @@ describe("WardexClient", () => {
     globalThis.fetch = mock;
     const client = new WardexClient({ baseUrl: "http://localhost:8080" });
     const result = await client.memoryIndicatorsScanBuffer(
-      Uint8Array.from([0x90, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90])
+      Uint8Array.from([0x90, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90]),
     );
     expect(result).toEqual(body);
     expect(mock).toHaveBeenCalledWith(
@@ -5137,7 +5346,7 @@ describe("WardexClient", () => {
           "Content-Type": "text/plain",
         }),
         body: "kJCQkJCQkJA=",
-      })
+      }),
     );
   });
 
@@ -5176,7 +5385,7 @@ describe("WardexClient", () => {
       expect.objectContaining({
         method: "POST",
         body: JSON.stringify(request),
-      })
+      }),
     );
   });
 
@@ -5189,7 +5398,7 @@ describe("WardexClient", () => {
       "http://localhost:8080/api/search",
       expect.objectContaining({
         body: JSON.stringify({ query: "process.name:cmd.exe", limit: 50 }),
-      })
+      }),
     );
   });
 
@@ -5202,7 +5411,7 @@ describe("WardexClient", () => {
     expect(result).toEqual(body);
     expect(mock).toHaveBeenCalledWith(
       "http://localhost:8080/api/sigma/stats",
-      expect.objectContaining({ method: "GET" })
+      expect.objectContaining({ method: "GET" }),
     );
   });
 
@@ -5214,7 +5423,7 @@ describe("WardexClient", () => {
     expect(result).toBe("CEF:0|...");
     expect(mock).toHaveBeenCalledWith(
       "http://localhost:8080/api/export/alerts?format=cef",
-      expect.objectContaining({ method: "GET" })
+      expect.objectContaining({ method: "GET" }),
     );
   });
 
@@ -5226,7 +5435,7 @@ describe("WardexClient", () => {
     expect(result).toBe("---- MODULE Wardex ----");
     expect(mock).toHaveBeenCalledWith(
       "http://localhost:8080/api/export/tla",
-      expect.objectContaining({ method: "GET" })
+      expect.objectContaining({ method: "GET" }),
     );
   });
 
@@ -5238,7 +5447,7 @@ describe("WardexClient", () => {
     expect(result).toBe("module wardex {}");
     expect(mock).toHaveBeenCalledWith(
       "http://localhost:8080/api/export/alloy",
-      expect.objectContaining({ method: "GET" })
+      expect.objectContaining({ method: "GET" }),
     );
   });
 
@@ -5262,7 +5471,7 @@ describe("WardexClient", () => {
     expect(result).toEqual(body);
     expect(mock).toHaveBeenCalledWith(
       "http://localhost:8080/api/export/witnesses",
-      expect.objectContaining({ method: "GET" })
+      expect.objectContaining({ method: "GET" }),
     );
   });
 
@@ -5273,7 +5482,7 @@ describe("WardexClient", () => {
     await client.complianceReport("cis-v8");
     expect(mock).toHaveBeenCalledWith(
       "http://localhost:8080/api/compliance/report?framework=cis-v8",
-      expect.anything()
+      expect.anything(),
     );
   });
 
@@ -5298,7 +5507,7 @@ describe("WardexClient", () => {
     expect(result).toEqual(body);
     expect(mock).toHaveBeenCalledWith(
       "http://localhost:8080/api/compliance/summary",
-      expect.objectContaining({ method: "GET" })
+      expect.objectContaining({ method: "GET" }),
     );
   });
 
@@ -5320,7 +5529,7 @@ describe("WardexClient", () => {
     expect(result).toEqual(body);
     expect(mock).toHaveBeenCalledWith(
       "http://localhost:8080/api/compliance/status",
-      expect.objectContaining({ method: "GET" })
+      expect.objectContaining({ method: "GET" }),
     );
   });
 
@@ -5344,7 +5553,7 @@ describe("WardexClient", () => {
           alert_id: "alert-1",
           variables: { target: "host-1" },
         }),
-      })
+      }),
     );
   });
 
@@ -5357,7 +5566,7 @@ describe("WardexClient", () => {
     expect(result).toEqual(body);
     expect(mock).toHaveBeenCalledWith(
       "http://localhost:8080/api/fleet/installs",
-      expect.objectContaining({ method: "GET" })
+      expect.objectContaining({ method: "GET" }),
     );
   });
 
@@ -5402,7 +5611,7 @@ describe("WardexClient", () => {
           ssh_port: 22,
           use_sudo: true,
         }),
-      })
+      }),
     );
   });
 
@@ -5453,7 +5662,7 @@ describe("WardexClient", () => {
           winrm_port: 5985,
           winrm_use_tls: false,
         }),
-      })
+      }),
     );
   });
 
@@ -5481,7 +5690,7 @@ describe("WardexClient", () => {
     expect(result).toEqual(body);
     expect(mock).toHaveBeenCalledWith(
       "http://localhost:8080/api/processes/threads?pid=4242",
-      expect.objectContaining({ method: "GET" })
+      expect.objectContaining({ method: "GET" }),
     );
   });
 
@@ -5507,7 +5716,7 @@ describe("WardexClient", () => {
     expect(result).toEqual(body);
     expect(mock).toHaveBeenCalledWith(
       "http://localhost:8080/api/host/apps",
-      expect.objectContaining({ method: "GET" })
+      expect.objectContaining({ method: "GET" }),
     );
   });
 
@@ -5564,7 +5773,7 @@ describe("WardexClient", () => {
     expect(result).toEqual(body);
     expect(mock).toHaveBeenCalledWith(
       "http://localhost:8080/api/host/inventory",
-      expect.objectContaining({ method: "GET" })
+      expect.objectContaining({ method: "GET" }),
     );
   });
 
@@ -5592,7 +5801,7 @@ describe("WardexClient", () => {
     expect(result).toEqual(body);
     expect(mock).toHaveBeenCalledWith(
       "http://localhost:8080/api/process-tree",
-      expect.objectContaining({ method: "GET" })
+      expect.objectContaining({ method: "GET" }),
     );
   });
 
@@ -5621,7 +5830,7 @@ describe("WardexClient", () => {
     expect(result).toEqual(body);
     expect(mock).toHaveBeenCalledWith(
       "http://localhost:8080/api/processes/live",
-      expect.objectContaining({ method: "GET" })
+      expect.objectContaining({ method: "GET" }),
     );
   });
 
@@ -5655,7 +5864,7 @@ describe("WardexClient", () => {
     expect(result).toEqual(body);
     expect(mock).toHaveBeenCalledWith(
       "http://localhost:8080/api/processes/analysis",
-      expect.objectContaining({ method: "GET" })
+      expect.objectContaining({ method: "GET" }),
     );
   });
 
@@ -5684,7 +5893,7 @@ describe("WardexClient", () => {
     expect(result).toEqual(body);
     expect(mock).toHaveBeenCalledWith(
       "http://localhost:8080/api/audit/log?limit=25&offset=0",
-      expect.objectContaining({ method: "GET" })
+      expect.objectContaining({ method: "GET" }),
     );
   });
 
@@ -5706,7 +5915,7 @@ describe("WardexClient", () => {
     expect(result).toEqual(body);
     expect(mock).toHaveBeenCalledWith(
       "http://localhost:8080/api/process-tree/deep-chains",
-      expect.objectContaining({ method: "GET" })
+      expect.objectContaining({ method: "GET" }),
     );
   });
 
@@ -5756,7 +5965,7 @@ describe("WardexClient", () => {
     expect(result).toEqual(body);
     expect(mock).toHaveBeenCalledWith(
       "http://localhost:8080/api/processes/detail?pid=4242",
-      expect.objectContaining({ method: "GET" })
+      expect.objectContaining({ method: "GET" }),
     );
   });
 
@@ -5792,7 +6001,7 @@ describe("WardexClient", () => {
       expect.objectContaining({
         method: "POST",
         body: JSON.stringify(observation),
-      })
+      }),
     );
   });
 
@@ -5815,7 +6024,7 @@ describe("WardexClient", () => {
     expect(result).toEqual(body);
     expect(mock).toHaveBeenCalledWith(
       "http://localhost:8080/api/ueba/risky",
-      expect.objectContaining({ method: "GET" })
+      expect.objectContaining({ method: "GET" }),
     );
   });
 
@@ -5836,7 +6045,7 @@ describe("WardexClient", () => {
     expect(result).toEqual(body);
     expect(mock).toHaveBeenCalledWith(
       "http://localhost:8080/api/ueba/entity/user-a",
-      expect.objectContaining({ method: "GET" })
+      expect.objectContaining({ method: "GET" }),
     );
   });
 
@@ -5862,7 +6071,7 @@ describe("WardexClient", () => {
     expect(result).toEqual(body);
     expect(mock).toHaveBeenCalledWith(
       "http://localhost:8080/api/ndr/beaconing",
-      expect.objectContaining({ method: "GET" })
+      expect.objectContaining({ method: "GET" }),
     );
   });
 
@@ -5888,7 +6097,7 @@ describe("WardexClient", () => {
     expect(result).toEqual(body);
     expect(mock).toHaveBeenCalledWith(
       "http://localhost:8080/api/ndr/protocol-distribution",
-      expect.objectContaining({ method: "GET" })
+      expect.objectContaining({ method: "GET" }),
     );
   });
 
@@ -5911,7 +6120,7 @@ describe("WardexClient", () => {
     expect(result).toEqual(body);
     expect(mock).toHaveBeenCalledWith(
       "http://localhost:8080/api/ndr/self-signed-certs",
-      expect.objectContaining({ method: "GET" })
+      expect.objectContaining({ method: "GET" }),
     );
   });
 
@@ -5939,7 +6148,7 @@ describe("WardexClient", () => {
     expect(result).toEqual([body[0]]);
     expect(mock).toHaveBeenCalledWith(
       "http://localhost:8080/api/ndr/top-talkers",
-      expect.objectContaining({ method: "GET" })
+      expect.objectContaining({ method: "GET" }),
     );
   });
 
@@ -5965,7 +6174,7 @@ describe("WardexClient", () => {
     expect(result).toEqual(body);
     expect(mock).toHaveBeenCalledWith(
       "http://localhost:8080/api/ndr/tls-anomalies",
-      expect.objectContaining({ method: "GET" })
+      expect.objectContaining({ method: "GET" }),
     );
   });
 
@@ -5988,7 +6197,7 @@ describe("WardexClient", () => {
     expect(result).toEqual(body);
     expect(mock).toHaveBeenCalledWith(
       "http://localhost:8080/api/ndr/dpi-anomalies",
-      expect.objectContaining({ method: "GET" })
+      expect.objectContaining({ method: "GET" }),
     );
   });
 
@@ -6011,7 +6220,7 @@ describe("WardexClient", () => {
     expect(result).toEqual(body);
     expect(mock).toHaveBeenCalledWith(
       "http://localhost:8080/api/ndr/entropy-anomalies",
-      expect.objectContaining({ method: "GET" })
+      expect.objectContaining({ method: "GET" }),
     );
   });
 
@@ -6084,7 +6293,7 @@ describe("WardexClient", () => {
     expect(result).toEqual(body);
     expect(mock).toHaveBeenCalledWith(
       "http://localhost:8080/api/ndr/report",
-      expect.objectContaining({ method: "GET" })
+      expect.objectContaining({ method: "GET" }),
     );
   });
 
@@ -6121,7 +6330,7 @@ describe("WardexClient", () => {
       expect.objectContaining({
         method: "POST",
         body: JSON.stringify(payload),
-      })
+      }),
     );
   });
 
@@ -6155,7 +6364,7 @@ describe("WardexClient", () => {
     expect(result).toEqual(body);
     expect(mock).toHaveBeenCalledWith(
       "http://localhost:8080/api/incidents",
-      expect.objectContaining({ method: "GET" })
+      expect.objectContaining({ method: "GET" }),
     );
   });
 
@@ -6193,7 +6402,7 @@ describe("WardexClient", () => {
     expect(result).toEqual(body);
     expect(mock).toHaveBeenCalledWith(
       "http://localhost:8080/api/incidents/42",
-      expect.objectContaining({ method: "GET" })
+      expect.objectContaining({ method: "GET" }),
     );
   });
 
@@ -6219,7 +6428,7 @@ describe("WardexClient", () => {
       "Suspicious lateral movement",
       "high",
       "Investigate host drift",
-      { event_ids: [101, 102], agent_ids: ["agent-7"] }
+      { event_ids: [101, 102], agent_ids: ["agent-7"] },
     );
     expect(result).toEqual(body);
     expect(mock).toHaveBeenCalledWith(
@@ -6233,7 +6442,7 @@ describe("WardexClient", () => {
           event_ids: [101, 102],
           agent_ids: ["agent-7"],
         }),
-      })
+      }),
     );
   });
 
@@ -6281,7 +6490,7 @@ describe("WardexClient", () => {
     expect(result).toEqual(body);
     expect(mock).toHaveBeenCalledWith(
       "http://localhost:8080/api/agents",
-      expect.objectContaining({ method: "GET" })
+      expect.objectContaining({ method: "GET" }),
     );
   });
 
@@ -6424,7 +6633,7 @@ describe("WardexClient", () => {
     expect(result).toEqual(body);
     expect(mock).toHaveBeenCalledWith(
       "http://localhost:8080/api/agents/agent-7/details",
-      expect.objectContaining({ method: "GET" })
+      expect.objectContaining({ method: "GET" }),
     );
   });
 
@@ -6462,8 +6671,12 @@ describe("WardexClient", () => {
         ],
         narrative: {
           headline: "Credential pivot detected",
-          summary: "The host shows repeated auth failures followed by lateral activity.",
-          observations: ["Authentication failures spiked", "Remote service access followed"],
+          summary:
+            "The host shows repeated auth failures followed by lateral activity.",
+          observations: [
+            "Authentication failures spiked",
+            "Remote service access followed",
+          ],
           baseline_comparison: "Auth failures are 6x above baseline.",
           time_window: "5m",
           involved_entities: ["prod-web-01", "prod-db-01"],
@@ -6480,7 +6693,8 @@ describe("WardexClient", () => {
           agents: ["agent-7", "agent-9"],
           event_ids: [101, 109],
           severity: "Critical",
-          description: "Related credential reuse alerts across multiple agents.",
+          description:
+            "Related credential reuse alerts across multiple agents.",
         },
       ],
       sigma_matches: 2,
@@ -6495,7 +6709,7 @@ describe("WardexClient", () => {
       expect.objectContaining({
         method: "POST",
         body: JSON.stringify({ agent_id: "agent-7", events }),
-      })
+      }),
     );
   });
 
@@ -6532,7 +6746,7 @@ describe("WardexClient", () => {
     expect(result).toEqual(body);
     expect(mock).toHaveBeenCalledWith(
       "http://localhost:8080/api/openapi.json",
-      expect.objectContaining({ method: "GET" })
+      expect.objectContaining({ method: "GET" }),
     );
   });
 
@@ -6565,7 +6779,7 @@ describe("WardexClient", () => {
     expect(result).toEqual(body);
     expect(mock).toHaveBeenCalledWith(
       "http://localhost:8080/api/assets",
-      expect.objectContaining({ method: "GET" })
+      expect.objectContaining({ method: "GET" }),
     );
   });
 
@@ -6598,7 +6812,7 @@ describe("WardexClient", () => {
     expect(result).toEqual(body);
     expect(mock).toHaveBeenCalledWith(
       "http://localhost:8080/api/assets/search?q=prod%2Fweb%2001",
-      expect.objectContaining({ method: "GET" })
+      expect.objectContaining({ method: "GET" }),
     );
   });
 
@@ -6633,7 +6847,7 @@ describe("WardexClient", () => {
       expect.objectContaining({
         method: "POST",
         body: JSON.stringify(payload),
-      })
+      }),
     );
   });
 
@@ -6654,7 +6868,7 @@ describe("WardexClient", () => {
     expect(result).toEqual(body);
     expect(mock).toHaveBeenCalledWith(
       "http://localhost:8080/api/assets/summary",
-      expect.objectContaining({ method: "GET" })
+      expect.objectContaining({ method: "GET" }),
     );
   });
 
@@ -6676,7 +6890,7 @@ describe("WardexClient", () => {
     expect(result).toEqual(body);
     expect(mock).toHaveBeenCalledWith(
       "http://localhost:8080/api/lifecycle",
-      expect.objectContaining({ method: "GET" })
+      expect.objectContaining({ method: "GET" }),
     );
   });
 
@@ -6698,7 +6912,7 @@ describe("WardexClient", () => {
     expect(result).toEqual(body);
     expect(mock).toHaveBeenCalledWith(
       "http://localhost:8080/api/lifecycle/stats",
-      expect.objectContaining({ method: "GET" })
+      expect.objectContaining({ method: "GET" }),
     );
   });
 
@@ -6727,7 +6941,7 @@ describe("WardexClient", () => {
     expect(result).toEqual(body);
     expect(mock).toHaveBeenCalledWith(
       "http://localhost:8080/api/lifecycle/sweep",
-      expect.objectContaining({ method: "POST" })
+      expect.objectContaining({ method: "POST" }),
     );
   });
 
@@ -6747,7 +6961,7 @@ describe("WardexClient", () => {
     expect(result).toEqual(body);
     expect(mock).toHaveBeenCalledWith(
       "http://localhost:8080/api/ioc-decay/apply",
-      expect.objectContaining({ method: "POST" })
+      expect.objectContaining({ method: "POST" }),
     );
   });
 
@@ -6768,7 +6982,7 @@ describe("WardexClient", () => {
     expect(result).toEqual(body);
     expect(mock).toHaveBeenCalledWith(
       "http://localhost:8080/api/ioc-decay/preview",
-      expect.objectContaining({ method: "GET" })
+      expect.objectContaining({ method: "GET" }),
     );
   });
 
@@ -6803,7 +7017,7 @@ describe("WardexClient", () => {
       expect.objectContaining({
         method: "POST",
         body: JSON.stringify(certificate),
-      })
+      }),
     );
   });
 
@@ -6845,7 +7059,7 @@ describe("WardexClient", () => {
     expect(result).toEqual(body);
     expect(mock).toHaveBeenCalledWith(
       "http://localhost:8080/api/certs/summary",
-      expect.objectContaining({ method: "GET" })
+      expect.objectContaining({ method: "GET" }),
     );
   });
 
@@ -6883,7 +7097,7 @@ describe("WardexClient", () => {
     expect(result).toEqual(body);
     expect(mock).toHaveBeenCalledWith(
       "http://localhost:8080/api/certs/alerts",
-      expect.objectContaining({ method: "GET" })
+      expect.objectContaining({ method: "GET" }),
     );
   });
 
@@ -6915,7 +7129,7 @@ describe("WardexClient", () => {
     expect(result).toEqual(body);
     expect(mock).toHaveBeenCalledWith(
       "http://localhost:8080/api/quarantine",
-      expect.objectContaining({ method: "GET" })
+      expect.objectContaining({ method: "GET" }),
     );
   });
 
@@ -6938,7 +7152,7 @@ describe("WardexClient", () => {
       expect.objectContaining({
         method: "POST",
         body: JSON.stringify(request),
-      })
+      }),
     );
   });
 
@@ -6960,7 +7174,7 @@ describe("WardexClient", () => {
     expect(result).toEqual(body);
     expect(mock).toHaveBeenCalledWith(
       "http://localhost:8080/api/quarantine/stats",
-      expect.objectContaining({ method: "GET" })
+      expect.objectContaining({ method: "GET" }),
     );
   });
 
@@ -6973,7 +7187,7 @@ describe("WardexClient", () => {
     expect(result).toEqual(body);
     expect(mock).toHaveBeenCalledWith(
       "http://localhost:8080/api/quarantine/q%2F1/release",
-      expect.objectContaining({ method: "POST" })
+      expect.objectContaining({ method: "POST" }),
     );
   });
 
@@ -6985,7 +7199,7 @@ describe("WardexClient", () => {
     expect(result).toBeUndefined();
     expect(mock).toHaveBeenCalledWith(
       "http://localhost:8080/api/quarantine/q%2F1",
-      expect.objectContaining({ method: "DELETE" })
+      expect.objectContaining({ method: "DELETE" }),
     );
   });
 
@@ -7021,7 +7235,7 @@ describe("WardexClient", () => {
         headers: expect.objectContaining({
           "Content-Type": "text/plain",
         }),
-      })
+      }),
     );
   });
 
@@ -7047,7 +7261,7 @@ describe("WardexClient", () => {
       expect.objectContaining({
         method: "POST",
         body: JSON.stringify({ domain: "example.tk" }),
-      })
+      }),
     );
   });
 
@@ -7078,7 +7292,7 @@ describe("WardexClient", () => {
     expect(result).toEqual(body);
     expect(mock).toHaveBeenCalledWith(
       "http://localhost:8080/api/dns-threat/summary",
-      expect.objectContaining({ method: "GET" })
+      expect.objectContaining({ method: "GET" }),
     );
   });
 
@@ -7102,7 +7316,7 @@ describe("WardexClient", () => {
       expect.objectContaining({
         method: "POST",
         body: JSON.stringify(query),
-      })
+      }),
     );
   });
 
@@ -7130,7 +7344,7 @@ describe("WardexClient", () => {
     expect(result).toEqual(body);
     expect(mock).toHaveBeenCalledWith(
       "http://localhost:8080/api/images",
-      expect.objectContaining({ method: "GET" })
+      expect.objectContaining({ method: "GET" }),
     );
   });
 
@@ -7152,7 +7366,7 @@ describe("WardexClient", () => {
     expect(result).toEqual(body);
     expect(mock).toHaveBeenCalledWith(
       "http://localhost:8080/api/images/summary",
-      expect.objectContaining({ method: "GET" })
+      expect.objectContaining({ method: "GET" }),
     );
   });
 
@@ -7180,7 +7394,7 @@ describe("WardexClient", () => {
     expect(result).toEqual(body);
     expect(mock).toHaveBeenCalledWith(
       "http://localhost:8080/api/images/collect",
-      expect.objectContaining({ method: "POST" })
+      expect.objectContaining({ method: "POST" }),
     );
   });
 
@@ -7226,7 +7440,7 @@ describe("WardexClient", () => {
       expect.objectContaining({
         method: "POST",
         body: JSON.stringify(request),
-      })
+      }),
     );
   });
 
@@ -7247,7 +7461,7 @@ describe("WardexClient", () => {
     expect(result).toEqual(body);
     expect(mock).toHaveBeenCalledWith(
       "http://localhost:8080/api/config-drift/baselines",
-      expect.objectContaining({ method: "GET" })
+      expect.objectContaining({ method: "GET" }),
     );
   });
 
@@ -7287,7 +7501,7 @@ describe("WardexClient", () => {
     expect(result).toEqual(body);
     expect(mock).toHaveBeenCalledWith(
       "http://localhost:8080/api/coverage/gaps",
-      expect.objectContaining({ method: "GET" })
+      expect.objectContaining({ method: "GET" }),
     );
   });
 
@@ -7309,7 +7523,7 @@ describe("WardexClient", () => {
     expect(result).toEqual(body);
     expect(mock).toHaveBeenCalledWith(
       "http://localhost:8080/api/detectors/slow-attack",
-      expect.objectContaining({ method: "GET" })
+      expect.objectContaining({ method: "GET" }),
     );
   });
 
@@ -7338,7 +7552,7 @@ describe("WardexClient", () => {
     expect(result).toEqual(body);
     expect(mock).toHaveBeenCalledWith(
       "http://localhost:8080/api/detectors/ransomware",
-      expect.objectContaining({ method: "GET" })
+      expect.objectContaining({ method: "GET" }),
     );
   });
 
@@ -7362,7 +7576,7 @@ describe("WardexClient", () => {
     expect(result).toEqual(body);
     expect(mock).toHaveBeenCalledWith(
       "http://localhost:8080/api/retention/status",
-      expect.objectContaining({ method: "GET" })
+      expect.objectContaining({ method: "GET" }),
     );
   });
 
@@ -7379,7 +7593,7 @@ describe("WardexClient", () => {
     expect(result).toEqual(body);
     expect(mock).toHaveBeenCalledWith(
       "http://localhost:8080/api/retention/apply",
-      expect.objectContaining({ method: "POST" })
+      expect.objectContaining({ method: "POST" }),
     );
   });
 
@@ -7402,7 +7616,7 @@ describe("WardexClient", () => {
     expect(result).toEqual(body);
     expect(mock).toHaveBeenCalledWith(
       "http://localhost:8080/api/evidence/plan/linux",
-      expect.objectContaining({ method: "GET" })
+      expect.objectContaining({ method: "GET" }),
     );
   });
 
@@ -7425,7 +7639,7 @@ describe("WardexClient", () => {
     expect(result).toEqual(body);
     expect(mock).toHaveBeenCalledWith(
       "http://localhost:8080/api/evidence/plan/macos",
-      expect.objectContaining({ method: "GET" })
+      expect.objectContaining({ method: "GET" }),
     );
   });
 
@@ -7448,7 +7662,7 @@ describe("WardexClient", () => {
     expect(result).toEqual(body);
     expect(mock).toHaveBeenCalledWith(
       "http://localhost:8080/api/evidence/plan/windows",
-      expect.objectContaining({ method: "GET" })
+      expect.objectContaining({ method: "GET" }),
     );
   });
 
@@ -7526,7 +7740,7 @@ describe("WardexClient", () => {
     expect(result).toEqual(body);
     expect(mock).toHaveBeenCalledWith(
       "http://localhost:8080/api/correlation/campaigns",
-      expect.objectContaining({ method: "GET" })
+      expect.objectContaining({ method: "GET" }),
     );
   });
 
@@ -7553,7 +7767,7 @@ describe("WardexClient", () => {
     expect(result).toEqual(body);
     expect(mock).toHaveBeenCalledWith(
       "http://localhost:8080/api/threat-intel/sightings?limit=25",
-      expect.objectContaining({ method: "GET" })
+      expect.objectContaining({ method: "GET" }),
     );
   });
 
@@ -7664,7 +7878,7 @@ describe("WardexClient", () => {
     expect(result).toEqual(body);
     expect(mock).toHaveBeenCalledWith(
       "http://localhost:8080/api/threat-intel/library/v2",
-      expect.objectContaining({ method: "GET" })
+      expect.objectContaining({ method: "GET" }),
     );
   });
 
@@ -7688,7 +7902,7 @@ describe("WardexClient", () => {
       expect.objectContaining({
         method: "POST",
         body: JSON.stringify(request),
-      })
+      }),
     );
   });
 
@@ -7716,7 +7930,7 @@ describe("WardexClient", () => {
     expect(result).toEqual(body);
     expect(mock).toHaveBeenCalledWith(
       "http://localhost:8080/api/container/alerts",
-      expect.objectContaining({ method: "GET" })
+      expect.objectContaining({ method: "GET" }),
     );
   });
 
@@ -7732,7 +7946,7 @@ describe("WardexClient", () => {
     expect(result).toEqual(body);
     expect(mock).toHaveBeenCalledWith(
       "http://localhost:8080/api/container/stats",
-      expect.objectContaining({ method: "GET" })
+      expect.objectContaining({ method: "GET" }),
     );
   });
 
@@ -7759,7 +7973,7 @@ describe("WardexClient", () => {
     expect(result).toEqual(body);
     expect(mock).toHaveBeenCalledWith(
       "http://localhost:8080/api/alerts/dedup",
-      expect.objectContaining({ method: "GET" })
+      expect.objectContaining({ method: "GET" }),
     );
   });
 
@@ -7784,7 +7998,7 @@ describe("WardexClient", () => {
         headers: expect.objectContaining({
           Authorization: "Bearer secret",
         }),
-      })
+      }),
     );
   });
 
@@ -7820,7 +8034,7 @@ describe("WardexClient", () => {
         headers: expect.objectContaining({
           Authorization: "Bearer secret",
         }),
-      })
+      }),
     );
   });
 
@@ -7863,7 +8077,7 @@ describe("WardexClient", () => {
         headers: expect.objectContaining({
           Authorization: "Bearer secret",
         }),
-      })
+      }),
     );
   });
 
@@ -7892,7 +8106,7 @@ describe("WardexClient", () => {
         headers: expect.objectContaining({
           Authorization: "Bearer secret",
         }),
-      })
+      }),
     );
   });
 
@@ -7919,7 +8133,7 @@ describe("WardexClient", () => {
         headers: expect.objectContaining({
           Authorization: "Bearer secret",
         }),
-      })
+      }),
     );
   });
 
@@ -7944,7 +8158,7 @@ describe("WardexClient", () => {
         headers: expect.objectContaining({
           Authorization: "Bearer secret",
         }),
-      })
+      }),
     );
   });
 
@@ -7976,7 +8190,7 @@ describe("WardexClient", () => {
         headers: expect.objectContaining({
           Authorization: "Bearer secret",
         }),
-      })
+      }),
     );
   });
 
@@ -8002,7 +8216,7 @@ describe("WardexClient", () => {
         headers: expect.objectContaining({
           Authorization: "Bearer secret",
         }),
-      })
+      }),
     );
   });
 
@@ -8027,7 +8241,7 @@ describe("WardexClient", () => {
         headers: expect.objectContaining({
           Authorization: "Bearer secret",
         }),
-      })
+      }),
     );
   });
 
@@ -8054,7 +8268,7 @@ describe("WardexClient", () => {
         headers: expect.objectContaining({
           Authorization: "Bearer secret",
         }),
-      })
+      }),
     );
   });
 
@@ -8083,7 +8297,7 @@ describe("WardexClient", () => {
         headers: expect.objectContaining({
           Authorization: "Bearer secret",
         }),
-      })
+      }),
     );
   });
 
@@ -8115,7 +8329,7 @@ describe("WardexClient", () => {
         headers: expect.objectContaining({
           Authorization: "Bearer secret",
         }),
-      })
+      }),
     );
   });
 
@@ -8141,7 +8355,7 @@ describe("WardexClient", () => {
         headers: expect.objectContaining({
           Authorization: "Bearer secret",
         }),
-      })
+      }),
     );
   });
 
@@ -8186,7 +8400,7 @@ describe("WardexClient", () => {
         headers: expect.objectContaining({
           Authorization: "Bearer secret",
         }),
-      })
+      }),
     );
   });
 
@@ -8230,7 +8444,7 @@ describe("WardexClient", () => {
         headers: expect.objectContaining({
           Authorization: "Bearer secret",
         }),
-      })
+      }),
     );
   });
 
@@ -8258,7 +8472,7 @@ describe("WardexClient", () => {
           Authorization: "Bearer secret",
           "Content-Type": "text/plain",
         }),
-      })
+      }),
     );
   });
 
@@ -8285,7 +8499,7 @@ describe("WardexClient", () => {
         headers: expect.objectContaining({
           Authorization: "Bearer secret",
         }),
-      })
+      }),
     );
   });
 
@@ -8313,7 +8527,7 @@ describe("WardexClient", () => {
           Authorization: "Bearer secret",
           "Content-Type": "application/json",
         }),
-      })
+      }),
     );
   });
 
@@ -8340,7 +8554,7 @@ describe("WardexClient", () => {
         headers: expect.objectContaining({
           Authorization: "Bearer secret",
         }),
-      })
+      }),
     );
   });
 
@@ -8366,7 +8580,7 @@ describe("WardexClient", () => {
         headers: expect.objectContaining({
           Authorization: "Bearer secret",
         }),
-      })
+      }),
     );
   });
 
@@ -8387,7 +8601,7 @@ describe("WardexClient", () => {
         headers: expect.objectContaining({
           Authorization: "Bearer secret",
         }),
-      })
+      }),
     );
   });
 
@@ -8427,7 +8641,7 @@ describe("WardexClient", () => {
         headers: expect.objectContaining({
           Authorization: "Bearer secret",
         }),
-      })
+      }),
     );
   });
 
@@ -8466,7 +8680,7 @@ describe("WardexClient", () => {
         headers: expect.objectContaining({
           Authorization: "Bearer secret",
         }),
-      })
+      }),
     );
   });
 
@@ -8508,7 +8722,7 @@ describe("WardexClient", () => {
         headers: expect.objectContaining({
           Authorization: "Bearer secret",
         }),
-      })
+      }),
     );
   });
 
@@ -8535,7 +8749,7 @@ describe("WardexClient", () => {
         headers: expect.objectContaining({
           Authorization: "Bearer secret",
         }),
-      })
+      }),
     );
   });
 
@@ -8585,7 +8799,7 @@ describe("WardexClient", () => {
         headers: expect.objectContaining({
           Authorization: "Bearer secret",
         }),
-      })
+      }),
     );
   });
 
@@ -8613,7 +8827,7 @@ describe("WardexClient", () => {
         headers: expect.objectContaining({
           Authorization: "Bearer secret",
         }),
-      })
+      }),
     );
   });
 
@@ -8642,7 +8856,7 @@ describe("WardexClient", () => {
         headers: expect.objectContaining({
           Authorization: "Bearer secret",
         }),
-      })
+      }),
     );
   });
 
@@ -8671,7 +8885,7 @@ describe("WardexClient", () => {
         headers: expect.objectContaining({
           Authorization: "Bearer secret",
         }),
-      })
+      }),
     );
   });
 
@@ -8719,7 +8933,7 @@ describe("WardexClient", () => {
     expect(result).toEqual(body);
     expect(mock).toHaveBeenCalledWith(
       "http://localhost:8080/api/vulnerability/scan",
-      expect.objectContaining({ method: "GET" })
+      expect.objectContaining({ method: "GET" }),
     );
   });
 
@@ -8741,7 +8955,7 @@ describe("WardexClient", () => {
     expect(result).toEqual(body);
     expect(mock).toHaveBeenCalledWith(
       "http://localhost:8080/api/vulnerability/summary",
-      expect.objectContaining({ method: "GET" })
+      expect.objectContaining({ method: "GET" }),
     );
   });
 
@@ -8787,7 +9001,7 @@ describe("WardexClient", () => {
           received_chain: [],
           attachments: [],
         }),
-      })
+      }),
     );
   });
 
@@ -8809,7 +9023,7 @@ describe("WardexClient", () => {
     expect(result).toEqual(body);
     expect(mock).toHaveBeenCalledWith(
       "http://localhost:8080/api/policy/current",
-      expect.objectContaining({ method: "GET" })
+      expect.objectContaining({ method: "GET" }),
     );
   });
 
@@ -8841,7 +9055,7 @@ describe("WardexClient", () => {
           published_at: "",
           ...request,
         }),
-      })
+      }),
     );
   });
 
@@ -8865,7 +9079,7 @@ describe("WardexClient", () => {
           request_id: "resp-42",
           decision: "approved",
         }),
-      })
+      }),
     );
   });
 
@@ -8890,7 +9104,7 @@ describe("WardexClient", () => {
       expect.objectContaining({
         method: "POST",
         body: JSON.stringify(connection),
-      })
+      }),
     );
   });
 
@@ -8914,7 +9128,7 @@ describe("WardexClient", () => {
       expect.objectContaining({
         method: "POST",
         body: JSON.stringify(dns),
-      })
+      }),
     );
   });
 
@@ -8963,7 +9177,7 @@ describe("WardexClient", () => {
     expect(result).toEqual(body);
     expect(mock).toHaveBeenCalledWith(
       "http://localhost:8080/api/beacon/analyze",
-      expect.objectContaining({ method: "GET" })
+      expect.objectContaining({ method: "GET" }),
     );
   });
 
@@ -8996,7 +9210,7 @@ describe("WardexClient", () => {
       expect.objectContaining({
         method: "POST",
         body: JSON.stringify(request),
-      })
+      }),
     );
   });
 
@@ -9019,7 +9233,7 @@ describe("WardexClient", () => {
     expect(result).toEqual(body);
     expect(mock).toHaveBeenCalledWith(
       "http://localhost:8080/api/remediation/results",
-      expect.objectContaining({ method: "GET" })
+      expect.objectContaining({ method: "GET" }),
     );
   });
 
@@ -9039,7 +9253,7 @@ describe("WardexClient", () => {
     expect(result).toEqual(body);
     expect(mock).toHaveBeenCalledWith(
       "http://localhost:8080/api/remediation/stats",
-      expect.objectContaining({ method: "GET" })
+      expect.objectContaining({ method: "GET" }),
     );
   });
 
@@ -9052,14 +9266,19 @@ describe("WardexClient", () => {
     expect(result).toEqual(body);
     expect(mock).toHaveBeenCalledWith(
       "http://localhost:8080/api/remediation/change-reviews",
-      expect.objectContaining({ method: "GET" })
+      expect.objectContaining({ method: "GET" }),
     );
   });
 
   it("recordRemediationChangeReview() posts the review payload", async () => {
     const body = {
       status: "recorded",
-      review: { id: "review-1", title: "Review host-1", approvals: [], evidence: {} },
+      review: {
+        id: "review-1",
+        title: "Review host-1",
+        approvals: [],
+        evidence: {},
+      },
     };
     const mock = mockFetch(200, body);
     globalThis.fetch = mock;
@@ -9078,14 +9297,19 @@ describe("WardexClient", () => {
           asset_id: "host-1",
           evidence: { src_ip: "10.0.0.5" },
         }),
-      })
+      }),
     );
   });
 
   it("approveRemediationChangeReview() posts the approval payload", async () => {
     const body = {
       status: "approved",
-      review: { id: "review-1", title: "Review host-1", approvals: [], evidence: {} },
+      review: {
+        id: "review-1",
+        title: "Review host-1",
+        approvals: [],
+        evidence: {},
+      },
     };
     const mock = mockFetch(200, body);
     globalThis.fetch = mock;
@@ -9102,14 +9326,19 @@ describe("WardexClient", () => {
           decision: "approve",
           comment: "Signed from test",
         }),
-      })
+      }),
     );
   });
 
   it("executeRemediationRollback() posts rollback verification input", async () => {
     const body = {
       status: "rollback_recorded",
-      review: { id: "review-1", title: "Review host-1", approvals: [], evidence: {} },
+      review: {
+        id: "review-1",
+        title: "Review host-1",
+        approvals: [],
+        evidence: {},
+      },
     };
     const mock = mockFetch(200, body);
     globalThis.fetch = mock;
@@ -9128,7 +9357,7 @@ describe("WardexClient", () => {
           platform: "linux",
           confirm_hostname: "host-1",
         }),
-      })
+      }),
     );
   });
 

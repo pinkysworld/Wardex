@@ -460,6 +460,40 @@ function installThreatDetectionFetchMock(tracker = {}) {
     if (pathname === '/api/detection/summary') {
       return Promise.resolve(jsonOk(THREAT_FIXTURES.detectionSummary));
     }
+    if (pathname === '/api/detection/recommendations') {
+      return Promise.resolve(
+        jsonOk({
+          recommendations: [
+            {
+              rule_id: 'rule-1',
+              rule_name: 'Suspicious PowerShell',
+              action: 'promote',
+              confidence: 88,
+              reason: 'canary_low_noise',
+              detail: 'Canary rule has low replay hit volume and no active suppressions.',
+            },
+          ],
+        }),
+      );
+    }
+    if (pathname === '/api/detection/readiness') {
+      return Promise.resolve(
+        jsonOk({
+          collector_count: 2,
+          rules: [
+            {
+              rule_id: 'rule-1',
+              rule_name: 'Suspicious PowerShell',
+              status: 'blocked',
+              coverage_pct: 20,
+            },
+          ],
+        }),
+      );
+    }
+    if (pathname === '/api/stream/readiness') {
+      return Promise.resolve(jsonOk({ status: 'ready', score: 94, promotion_guard: 'clear' }));
+    }
     if (pathname === '/api/detection/replay-corpus' && method === 'POST') {
       tracker.replayBodies = [...(tracker.replayBodies || []), body];
       return Promise.resolve(jsonOk(THREAT_FIXTURES.replayCorpus));
@@ -591,6 +625,22 @@ describe('ThreatDetection', () => {
     expect((await screen.findAllByText('Rule Efficacy')).length).toBeGreaterThan(0);
     expect((await screen.findAllByText('T1003 • OS Credential Dumping')).length).toBeGreaterThan(0);
     expect((await screen.findAllByText('Degrading')).length).toBeGreaterThan(0);
+  });
+
+  it('surfaces detection quality scoring and route-backed quality focus', async () => {
+    renderWithProviders('/detection?panel=quality&rule=rule-1');
+
+    const qualityFocus = await screen.findByRole('button', { name: 'Quality' });
+    expect(qualityFocus.className).toContain('active');
+    expect(await screen.findByText('Detection Quality Score')).toBeInTheDocument();
+    expect(screen.getByText('Quality Score')).toBeInTheDocument();
+    expect(screen.getAllByText('Suspicious PowerShell').length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/Replay evidence is/i).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/ATT&CK gaps/i).length).toBeGreaterThan(0);
+    expect(screen.getByText('Backend recommendation')).toBeInTheDocument();
+    expect(screen.getByText('PROMOTE')).toBeInTheDocument();
+    expect(screen.getByText('Collector readiness')).toBeInTheDocument();
+    expect(screen.getByText(/blocked rules across 2 collector lanes/i)).toBeInTheDocument();
   });
 
   it('surfaces detection ownership review planning and routes review actions back into the rule workspace', async () => {

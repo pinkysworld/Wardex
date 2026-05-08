@@ -4,6 +4,28 @@ All notable changes to Wardex are documented in this file.
 
 ## [Unreleased]
 
+## [1.0.7] — 2026-05-08 — production assurance and signed-build readiness
+
+### Added
+- **Production assurance surfaces**: adds release provenance/SBOM evidence, upgrade rehearsal, synthetic console monitoring, incident timeline replay, detection trust scoring, fleet drift compliance, operator work queues, retention forecasting, adversarial validation, and support bundle diffing as authenticated product endpoints with persisted operational snapshots.
+- **Operator Launchpad assurance lane**: surfaces the new production assurance signals alongside release doctor, workflow preflight, stream readiness, SDK parity, operational snapshot evidence, and support bundle exports.
+- **SDK/release-gate parity**: publishes the new assurance routes through runtime OpenAPI, `docs/openapi.yaml`, RBAC, Python SDK, TypeScript SDK, contract-parity checks, and release-acceptance endpoint smoke coverage.
+
+### Changed
+- **Release metadata alignment**: bumps Rust, admin-console, Python SDK, TypeScript SDK, Helm, OTLP, OpenAPI, installation, reproducibility, and website surfaces to the `v1.0.7` release baseline.
+
+## [1.0.6] — 2026-05-08 — resilience proof APIs and release observability gates
+
+### Added
+- **Release observability gates**: adds `/api/release/observability-gates`, Prometheus stream queue/drop metrics, and release-doctor integration for metrics, stream readiness, snapshot verification, and contract parity checks.
+- **Workflow preflight proof**: adds `/api/workflows/preflight` and `/api/content/rules/{id}/preflight`, with the admin console calling rule preflight before canary/active promotion actions.
+- **Cursor pagination contracts**: adds cursor-page APIs for alerts, retained events, and audit logs while preserving existing offset-compatible endpoints.
+- **Tenant/thread/snapshot evidence**: adds tenant isolation proof, runtime thread-baseline proof, and snapshot retention/redaction policy plus dry-run pruning controls.
+
+### Fixed
+- **Admin-console resilience**: hardens GET retry/timeout behavior, structured error parsing, safe browser storage usage, and drawer focus/body-scroll restoration.
+- **Release documentation drift**: refreshes README, status, roadmap, reproducibility, website, Helm, OpenAPI, SDK, OTLP, admin-console, and installation surfaces for the `v1.0.6` release baseline and removes stale `v0.56.2` install commands.
+
 ## [1.0.5] — 2026-05-06 — macOS CI signing secret repair and release validation
 
 ### Fixed

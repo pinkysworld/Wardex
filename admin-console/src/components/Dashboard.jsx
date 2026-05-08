@@ -24,6 +24,7 @@ import { SkeletonCard } from './Skeleton.jsx';
 import { formatDateTime, formatNumber, formatRelativeTime } from './operatorUtils.js';
 import { useWidgetLayout } from './useWidgetLayout.js';
 import { buildHref } from './workflowPivots.js';
+import { safeStorageGet, safeStorageJsonGet, safeStorageJsonSet } from '../safeStorage.js';
 
 function Metric({ label, value, sub, accent, onClick, tip }) {
   return (
@@ -312,7 +313,7 @@ export default function Dashboard() {
   const [selectedPresetKey, setSelectedPresetKey] = useState('');
   const [savingPreset, setSavingPreset] = useState(false);
   const hasLocalLayoutRef = useRef(
-    Boolean(localStorage.getItem('dashboard') || localStorage.getItem('dashboard_hidden')),
+    Boolean(safeStorageGet('dashboard') || safeStorageGet('dashboard_hidden')),
   );
   const hydratedPresetsRef = useRef(false);
 
@@ -471,17 +472,13 @@ export default function Dashboard() {
 
   // Per-widget auto-refresh toggle
   const [pausedWidgets, setPausedWidgets] = useState(() => {
-    try {
-      return new Set(JSON.parse(localStorage.getItem('wardex_paused_widgets') || '[]'));
-    } catch {
-      return new Set();
-    }
+    return new Set(safeStorageJsonGet('wardex_paused_widgets', []));
   });
   const toggleWidgetRefresh = (widgetId) => {
     setPausedWidgets((prev) => {
       const next = new Set(prev);
       next.has(widgetId) ? next.delete(widgetId) : next.add(widgetId);
-      localStorage.setItem('wardex_paused_widgets', JSON.stringify([...next]));
+      safeStorageJsonSet('wardex_paused_widgets', [...next]);
       return next;
     });
   };

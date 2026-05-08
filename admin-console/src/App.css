@@ -889,6 +889,138 @@ tr:hover td {
   color: var(--text-secondary);
 }
 
+/* ── Operator Launchpad ───────────────────────────────────── */
+.operator-launchpad {
+  display: grid;
+  gap: 18px;
+}
+
+.operator-launchpad-hero {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.operator-launchpad-hero h2 {
+  margin: 4px 0 8px;
+  font-size: 24px;
+  line-height: 1.2;
+}
+
+.operator-launchpad-hero p {
+  max-width: 880px;
+  color: var(--text-secondary);
+  line-height: 1.55;
+}
+
+.operator-launchpad-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: 16px;
+}
+
+.operator-lane-card {
+  display: grid;
+  gap: 14px;
+  align-content: flex-start;
+}
+
+.operator-step-list,
+.operator-health-list,
+.operator-kv-list {
+  display: grid;
+  gap: 10px;
+}
+
+.operator-step {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-items: start;
+  gap: 10px;
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: inherit;
+  text-decoration: none;
+}
+
+.operator-step:hover,
+.operator-command-tile:hover {
+  border-color: var(--accent);
+}
+
+.operator-step strong,
+.operator-step span span {
+  display: block;
+}
+
+.operator-step span span {
+  margin-top: 3px;
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.operator-health-row,
+.operator-kv-list > div {
+  display: grid;
+  grid-template-columns: auto minmax(90px, 0.7fr) minmax(120px, 1fr);
+  align-items: center;
+  gap: 10px;
+  font-size: 13px;
+}
+
+.operator-health-row > span:last-child,
+.operator-kv-list span {
+  color: var(--text-secondary);
+}
+
+.operator-kv-list > div {
+  grid-template-columns: 1fr auto;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--border);
+}
+
+.operator-command-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+  gap: 10px;
+}
+
+.operator-command-tile {
+  min-height: 64px;
+  display: grid;
+  align-content: center;
+  gap: 6px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: inherit;
+  text-decoration: none;
+  background: var(--bg);
+}
+
+.operator-command-tile small {
+  color: var(--text-secondary);
+  font-size: 11px;
+}
+
+.operator-demo-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.operator-demo-list span {
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 4px 10px;
+  font-size: 12px;
+  color: var(--text-secondary);
+  background: var(--bg);
+}
+
 /* ── Product Command Center ───────────────────────────────── */
 .command-center-workspace {
   display: grid;

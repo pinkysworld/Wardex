@@ -313,6 +313,204 @@ class WardexClient:
     def ws_stats(self) -> dict[str, Any]:
         return self._get("/api/ws/stats")
 
+    def ws_health(self) -> dict[str, Any]:
+        return self._get("/api/ws/health")
+
+    def stream_readiness(self) -> dict[str, Any]:
+        return self._get("/api/stream/readiness")
+
+    def stream_reliability_lab(self) -> dict[str, Any]:
+        return self._get("/api/stream/reliability-lab")
+
+    def sdk_contract_status(self) -> dict[str, Any]:
+        return self._get("/api/sdk/contract-status")
+
+    def alerts_page(self, cursor: str | int | None = None, limit: int | None = None) -> dict[str, Any]:
+        params: dict[str, Any] = {}
+        if cursor is not None:
+            params["cursor"] = cursor
+        if limit is not None:
+            params["limit"] = limit
+        return self._get("/api/alerts/page", **params)
+
+    def events_page(
+        self,
+        cursor: str | int | None = None,
+        limit: int | None = None,
+        q: str | None = None,
+        source: str | None = None,
+        severity: str | None = None,
+    ) -> dict[str, Any]:
+        params: dict[str, Any] = {}
+        if cursor is not None:
+            params["cursor"] = cursor
+        if limit is not None:
+            params["limit"] = limit
+        if q:
+            params["q"] = q
+        if source:
+            params["source"] = source
+        if severity:
+            params["severity"] = severity
+        return self._get("/api/events/page", **params)
+
+    def audit_log_page(
+        self,
+        cursor: str | int | None = None,
+        limit: int | None = None,
+        q: str | None = None,
+        method: str | None = None,
+        status: str | None = None,
+        auth: str | None = None,
+    ) -> dict[str, Any]:
+        params: dict[str, Any] = {}
+        if cursor is not None:
+            params["cursor"] = cursor
+        if limit is not None:
+            params["limit"] = limit
+        if q:
+            params["q"] = q
+        if method:
+            params["method"] = method
+        if status:
+            params["status"] = status
+        if auth:
+            params["auth"] = auth
+        return self._get("/api/audit/log/page", **params)
+
+    def operational_snapshots(self, kind: str | None = None, limit: int | None = None) -> dict[str, Any]:
+        params: dict[str, Any] = {}
+        if kind:
+            params["kind"] = kind
+        if limit is not None:
+            params["limit"] = limit
+        return self._get("/api/operational/snapshots", **params)
+
+    def operational_snapshot_policy(self) -> dict[str, Any]:
+        return self._get("/api/operational/snapshots/policy")
+
+    def prune_operational_snapshots(
+        self,
+        dry_run: bool = True,
+        keep_latest_per_kind: int | None = None,
+    ) -> dict[str, Any]:
+        payload: dict[str, Any] = {"dry_run": dry_run}
+        if keep_latest_per_kind is not None:
+            payload["keep_latest_per_kind"] = keep_latest_per_kind
+        return self._post("/api/operational/snapshots/prune", payload)
+
+    def verify_operational_snapshot(
+        self,
+        storage_key: str | None = None,
+        digest: str | None = None,
+    ) -> dict[str, Any]:
+        params: dict[str, Any] = {}
+        if storage_key:
+            params["storage_key"] = storage_key
+        if digest:
+            params["digest"] = digest
+        return self._get("/api/operational/snapshots/verify", **params)
+
+    def release_doctor(self) -> dict[str, Any]:
+        return self._get("/api/release/doctor")
+
+    def release_observability_gates(self) -> dict[str, Any]:
+        return self._get("/api/release/observability-gates")
+
+    def release_provenance(self) -> dict[str, Any]:
+        return self._get("/api/release/provenance")
+
+    def release_upgrade_rehearsal(self, target_version: str | None = None) -> dict[str, Any]:
+        params: dict[str, Any] = {}
+        if target_version:
+            params["target_version"] = target_version
+        return self._get("/api/release/upgrade-rehearsal", **params)
+
+    def synthetic_console_monitor(self) -> dict[str, Any]:
+        return self._get("/api/monitoring/synthetic-console")
+
+    def incident_timeline_replay(self, incident_id: int | str | None = None) -> dict[str, Any]:
+        params: dict[str, Any] = {}
+        if incident_id is not None:
+            params["incident_id"] = incident_id
+        return self._get("/api/incidents/timeline-replay", **params)
+
+    def detection_trust_score(self) -> dict[str, Any]:
+        return self._get("/api/detection/trust-score")
+
+    def fleet_drift_compliance(self) -> dict[str, Any]:
+        return self._get("/api/fleet/drift-compliance")
+
+    def operator_work_queue(self) -> dict[str, Any]:
+        return self._get("/api/operator/work-queue")
+
+    def retention_forecast(self) -> dict[str, Any]:
+        return self._get("/api/retention/forecast")
+
+    def adversarial_validation(self) -> dict[str, Any]:
+        return self._get("/api/validation/adversarial")
+
+    def support_bundle_diff(self) -> dict[str, Any]:
+        return self._get("/api/support/bundle-diff")
+
+    def workflow_preflight(self, workflow: str | None = None) -> dict[str, Any]:
+        params: dict[str, Any] = {}
+        if workflow:
+            params["workflow"] = workflow
+        return self._get("/api/workflows/preflight", **params)
+
+    def tenant_isolation_proof(self) -> dict[str, Any]:
+        return self._get("/api/tenants/isolation-proof")
+
+    def thread_detection_proof(self) -> dict[str, Any]:
+        return self._get("/api/processes/thread-proof")
+
+    def content_rule_preflight(
+        self,
+        rule_id: str,
+        target_status: str = "active",
+    ) -> dict[str, Any]:
+        return self._post(
+            f"/api/content/rules/{quote(str(rule_id), safe='')}/preflight",
+            {"target_status": target_status},
+        )
+
+    def support_bundle(self) -> dict[str, Any]:
+        return self._get("/api/support/bundle")
+
+    def launchpad_evidence_pack(self) -> dict[str, Any]:
+        return self._get("/api/launchpad/evidence-pack")
+
+    def launchpad_release_diff(self) -> dict[str, Any]:
+        return self._get("/api/launchpad/release-diff")
+
+    def launchpad_demo_status(self) -> dict[str, Any]:
+        return self._get("/api/launchpad/demo-status")
+
+    def launchpad_demo_reset(self) -> dict[str, Any]:
+        return self._post("/api/launchpad/demo-reset", {})
+
+    def create_subscription(self, lanes: list[str] | None = None, filters: dict[str, Any] | None = None) -> dict[str, Any]:
+        return self._post(
+            "/api/subscriptions",
+            {"lanes": lanes or ["alerts"], "filters": filters or {}},
+        )
+
+    def resume_subscription(
+        self,
+        subscription_id: str | None = None,
+        cursor: str | int | None = None,
+        limit: int | None = None,
+    ) -> dict[str, Any]:
+        params: dict[str, Any] = {}
+        if subscription_id:
+            params["subscription_id"] = subscription_id
+        if cursor is not None:
+            params["cursor"] = cursor
+        if limit is not None:
+            params["limit"] = limit
+        return self._get("/api/subscriptions/resume", **params)
+
     def command_summary(self) -> CommandCenterSummaryResponse:
         return self._get("/api/command/summary")
 
@@ -362,6 +560,21 @@ class WardexClient:
             if len(batch) < page_size:
                 return
             offset += len(batch)
+
+    def alert_histogram(
+        self,
+        window: str | None = None,
+        bucket: str | None = None,
+        severity: str | None = None,
+    ) -> dict[str, Any]:
+        params: dict[str, Any] = {}
+        if window:
+            params["window"] = window
+        if bucket:
+            params["bucket"] = bucket
+        if severity:
+            params["severity"] = severity
+        return self._get("/api/alerts/histogram", **params)
 
     # ── incidents ─────────────────────────────────────────────────────────
 
@@ -509,6 +722,14 @@ class WardexClient:
     def detection_weights(self) -> dict[str, Any]:
         return self._get("/api/detection/weights")
 
+    def detection_recommendations(self, limit: int | None = None) -> dict[str, Any]:
+        params = {"limit": limit} if limit is not None else {}
+        return self._get("/api/detection/recommendations", **params)
+
+    def detection_readiness(self, limit: int | None = None) -> dict[str, Any]:
+        params = {"limit": limit} if limit is not None else {}
+        return self._get("/api/detection/readiness", **params)
+
     def set_detection_weights(self, weights: dict[str, Any]) -> dict[str, Any]:
         return self._post("/api/detection/weights", weights)
 
@@ -588,6 +809,12 @@ class WardexClient:
     def execute_approved_actions(self, request_id: str | None = None) -> dict[str, Any]:
         body = {"request_id": request_id} if request_id else None
         return self._post("/api/response/execute", body)
+
+    def response_approval_overview(self) -> dict[str, Any]:
+        return self._get("/api/response/approval-overview")
+
+    def remediation_safety(self) -> dict[str, Any]:
+        return self._get("/api/remediation/safety")
 
     # ── reports ───────────────────────────────────────────────────────────
 

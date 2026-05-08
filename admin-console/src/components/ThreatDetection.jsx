@@ -46,6 +46,12 @@ const WORKSPACE_PANELS = [
     description: 'Reopen the detection workspace with the full program summary in view.',
   },
   {
+    id: 'quality',
+    label: 'Quality',
+    description:
+      'Rank detections by replay freshness, ownership, suppressions, lifecycle, and analyst outcome pressure.',
+  },
+  {
     id: 'efficacy',
     label: 'Efficacy',
     description: 'Start with analyst outcome quality before tuning or promotion decisions.',
@@ -499,6 +505,185 @@ const scoreFpPatternMatch = (rule, pattern) => {
   return 0;
 };
 
+const detectionQualityTone = (score) => {
+  if (score >= 85) return 'badge-ok';
+  if (score >= 70) return 'badge-info';
+  if (score >= 50) return 'badge-warn';
+  return 'badge-err';
+};
+
+const detectionQualityLabel = (score) => {
+  if (score >= 85) return 'Launch ready';
+  if (score >= 70) return 'Healthy';
+  if (score >= 50) return 'Needs tuning';
+  return 'Blocked';
+};
+
+const rulePackCount = (rule, packs) => {
+  const direct = Array.isArray(rule?.pack_ids) ? rule.pack_ids.length : 0;
+  if (direct > 0) return direct;
+  return (Array.isArray(packs) ? packs : []).filter((pack) => {
+    const ruleIds = [pack?.rule_ids, pack?.rules].filter(Array.isArray).flat().map(String);
+    return ruleIds.includes(String(rule?.id));
+  }).length;
+};
+
+const bestFpSignalForRule = (rule, fpEntries) =>
+  (Array.isArray(fpEntries) ? fpEntries : [])
+    .map((entry) => ({
+      ...entry,
+      matchScore: scoreFpPatternMatch(rule, entry.pattern),
+    }))
+    .filter((entry) => entry.matchScore > 0)
+    .sort(
+      (left, right) =>
+        right.matchScore - left.matchScore ||
+        right.fp_ratio - left.fp_ratio ||
+        right.total_marked - left.total_marked,
+    )[0] || null;
+
+const coverageGapsForRule = (rule, coverageGapItems) => {
+  const techniqueIds = new Set(
+    (Array.isArray(rule?.attack) ? rule.attack : [])
+      .map((attack) => String(attack?.technique_id || '').trim())
+      .filter(Boolean),
+  );
+  const tactics = new Set(
+    (Array.isArray(rule?.attack) ? rule.attack : [])
+      .map((attack) => normalizeText(attack?.tactic))
+      .filter(Boolean),
+  );
+
+  return (Array.isArray(coverageGapItems) ? coverageGapItems : []).filter(
+    (gap) =>
+      techniqueIds.has(String(gap?.technique_id || '').trim()) ||
+      tactics.has(normalizeText(gap?.tactic)),
+  );
+};
+
+const buildDetectionQualityScore = ({
+  rule,
+  suppressionCount,
+  packs,
+  fpEntries,
+  coverageGapItems,
+  efficacy,
+}) => {
+  if (!rule) {
+    return {
+      score: 0,
+      label: 'No rule',
+      tone: 'badge-info',
+      issues: [],
+      strengths: [],
+      liveSuppressions: 0,
+      fpSignal: null,
+      coverageGaps: [],
+      packCount: 0,
+    };
+  }
+
+  let score = 100;
+  const issues = [];
+  const strengths = [];
+  const liveSuppressions = suppressionCount?.[rule.id] || 0;
+  const replayAgeDays = ageInDays(rule.last_test_at);
+  const hits = Number(rule.last_test_match_count) || 0;
+  const lifecycle = normalizeText(rule.lifecycle || 'draft');
+  const owner = String(rule.owner || '').trim();
+  const normalizedOwner = normalizeText(owner);
+  const packCount = rulePackCount(rule, packs);
+  const fpSignal = bestFpSignalForRule(rule, fpEntries);
+  const coverageGaps = coverageGapsForRule(rule, coverageGapItems);
+
+  if (!owner || normalizedOwner === 'system') {
+    score -= 15;
+    issues.push('Assign a named detection owner.');
+  } else {
+    strengths.push(`Owner ${owner} is assigned.`);
+  }
+
+  if (!rule.last_test_at) {
+    score -= 22;
+    issues.push('Replay validation has never run.');
+  } else if (replayAgeDays != null && replayAgeDays >= 14) {
+    score -= 16;
+    issues.push(`Replay evidence is ${replayAgeDays} days old.`);
+  } else {
+    strengths.push('Replay evidence is fresh.');
+  }
+
+  if (hits >= 10) {
+    score -= 18;
+    issues.push(`${hits} validation hits need tuning before promotion.`);
+  } else if (hits >= 5) {
+    score -= 12;
+    issues.push(`${hits} validation hits need review.`);
+  } else {
+    strengths.push('Replay hit volume is controlled.');
+  }
+
+  if (liveSuppressions > 0) {
+    score -= Math.min(18, 6 + liveSuppressions * 4);
+    issues.push(
+      `${liveSuppressions} live suppression${liveSuppressions === 1 ? '' : 's'} influence outcomes.`,
+    );
+  }
+
+  if (packCount === 0) {
+    score -= 10;
+    issues.push('Attach this rule to a content pack.');
+  } else {
+    strengths.push(`${packCount} content pack${packCount === 1 ? '' : 's'} linked.`);
+  }
+
+  if (['deprecated', 'rolled_back'].includes(lifecycle) || rule.enabled === false) {
+    score -= 22;
+    issues.push('Lifecycle is inactive or rolled back.');
+  } else if (['draft', 'test'].includes(lifecycle)) {
+    score -= 8;
+    issues.push('Lifecycle has not reached canary or active.');
+  } else if (lifecycle === 'active') {
+    strengths.push('Lifecycle is active.');
+  }
+
+  if (fpSignal?.fp_ratio >= 0.7) {
+    score -= 18;
+    issues.push(`False-positive feedback is high for “${fpSignal.pattern}”.`);
+  } else if (fpSignal?.fp_ratio >= 0.5) {
+    score -= 10;
+    issues.push(`False-positive feedback is rising for “${fpSignal.pattern}”.`);
+  }
+
+  if (coverageGaps.length > 0) {
+    score -= Math.min(15, coverageGaps.length * 7);
+    issues.push('Related ATT&CK coverage still has open gaps.');
+  }
+
+  if (efficacy) {
+    const fpRate = Number(efficacy.fp_rate ?? efficacy.false_positive_rate ?? 0);
+    if (fpRate >= 0.5) {
+      score -= 12;
+      issues.push(`Rule-level analyst FP rate is ${formatRatio(fpRate)}.`);
+    } else if (Number.isFinite(fpRate) && fpRate > 0) {
+      strengths.push(`Rule-level analyst FP rate is ${formatRatio(fpRate)}.`);
+    }
+  }
+
+  const boundedScore = Math.max(0, Math.min(100, Math.round(score)));
+  return {
+    score: boundedScore,
+    label: detectionQualityLabel(boundedScore),
+    tone: detectionQualityTone(boundedScore),
+    issues,
+    strengths,
+    liveSuppressions,
+    fpSignal,
+    coverageGaps,
+    packCount,
+  };
+};
+
 const casePriorityForSeverity = (severity) => {
   const normalized = normalizeText(severity);
   if (normalized === 'critical') return 'critical';
@@ -717,6 +902,9 @@ export default function ThreatDetection() {
   const [searchParams, setSearchParams] = useSearchParams();
   const { data: profile } = useApi(api.detectionProfile);
   const { data: summary } = useApi(api.detectionSummary);
+  const { data: backendRecommendations } = useApi(api.detectionRecommendations);
+  const { data: backendReadiness } = useApi(api.detectionReadiness);
+  const { data: streamReadiness } = useApi(api.streamReadiness);
   const { data: replayCorpus } = useApi(api.detectionReplayCorpus);
   const { data: efficacySummary } = useApi(api.efficacySummary);
   const { data: fpStats } = useApi(api.fpFeedbackStats);
@@ -1212,6 +1400,14 @@ export default function ThreatDetection() {
   const promoteRule = async (target) => {
     if (!selectedRule) return;
     try {
+      const preflight = await api.contentRulePreflight(selectedRule.id, { target_status: target });
+      if (preflight?.status === 'blocked') {
+        toast('Rule promotion preflight blocked this change.', 'warning');
+        return;
+      }
+      if ((preflight?.warn_count || 0) > 0) {
+        toast(`Preflight found ${preflight.warn_count} review item(s).`, 'warning');
+      }
       await api.contentRulePromote(selectedRule.id, {
         target_status: target,
         reason: `Promoted from workspace to ${target}`,
@@ -1733,6 +1929,61 @@ export default function ThreatDetection() {
       selectedRuleTechniqueIds.has(String(gap?.technique_id || '').trim()) ||
       selectedRuleTactics.has(normalizeText(gap?.tactic)),
   );
+  const detectionQualityRows = useMemo(
+    () =>
+      allRules
+        .map((rule) => ({
+          rule,
+          quality: buildDetectionQualityScore({
+            rule,
+            suppressionCount,
+            packs,
+            fpEntries,
+            coverageGapItems,
+          }),
+        }))
+        .sort(
+          (left, right) =>
+            left.quality.score - right.quality.score ||
+            String(left.rule.title || left.rule.id).localeCompare(
+              String(right.rule.title || right.rule.id),
+            ),
+        ),
+    [allRules, suppressionCount, packs, fpEntries, coverageGapItems],
+  );
+  const selectedRuleQuality = useMemo(
+    () =>
+      buildDetectionQualityScore({
+        rule: selectedRule,
+        suppressionCount,
+        packs,
+        fpEntries,
+        coverageGapItems,
+        efficacy: selectedRuleEfficacy,
+      }),
+    [selectedRule, suppressionCount, packs, fpEntries, coverageGapItems, selectedRuleEfficacy],
+  );
+  const averageDetectionQuality = detectionQualityRows.length
+    ? Math.round(
+        detectionQualityRows.reduce((total, row) => total + row.quality.score, 0) /
+          detectionQualityRows.length,
+      )
+    : 0;
+  const qualityWatchlist = detectionQualityRows.filter((row) => row.quality.score < 70);
+  const recommendationRows = useMemo(
+    () =>
+      Array.isArray(backendRecommendations?.recommendations)
+        ? backendRecommendations.recommendations
+        : [],
+    [backendRecommendations],
+  );
+  const readinessRows = useMemo(
+    () => (Array.isArray(backendReadiness?.rules) ? backendReadiness.rules : []),
+    [backendReadiness],
+  );
+  const blockedReadinessRows = readinessRows.filter((row) => row.status === 'blocked');
+  const streamScore = Number(streamReadiness?.score || 0);
+  const streamPromotionBlocked = streamScore > 0 && streamScore < 80;
   const activeSuppressions = useMemo(
     () => suppressions.filter((item) => item.active !== false),
     [suppressions],
@@ -1962,6 +2213,53 @@ export default function ThreatDetection() {
       rulePanel: normalizePanelId(panelId, RULE_DETAIL_PANELS, 'summary'),
     });
   };
+  const runQualityAction = async (row) => {
+    const rule = row?.rule;
+    if (!rule?.id) return;
+
+    if (row.quality?.score >= 85 && !streamPromotionBlocked) {
+      try {
+        const preflight = await api.contentRulePreflight(rule.id, { target_status: 'canary' });
+        if (preflight?.status === 'blocked') {
+          toast('Quality action preflight blocked promotion.', 'warning');
+          return;
+        }
+        if ((preflight?.warn_count || 0) > 0) {
+          toast(`Preflight found ${preflight.warn_count} review item(s).`, 'warning');
+        }
+        await api.contentRulePromote(rule.id, {
+          target_status: 'canary',
+          reason: 'Promoted from detection quality action workflow',
+        });
+        toast('Rule moved to canary from quality workflow.', 'success');
+        await Promise.all([reloadRules(), reloadWorkbenchOverview()]);
+      } catch {
+        toast('Quality action promotion failed.', 'error');
+      }
+      return;
+    }
+
+    if (row.quality?.liveSuppressions > 0) {
+      focusRule(rule.id, 'efficacy');
+      toast('Opened suppression and efficacy review for this rule.', 'info');
+      return;
+    }
+
+    if ((row.quality?.packCount || 0) === 0) {
+      focusRule(rule.id, 'promotion');
+      toast('Opened promotion checklist for content-pack coverage.', 'info');
+      return;
+    }
+
+    if ((row.quality?.coverageGaps || []).length > 0) {
+      focusRule(rule.id, 'hunts');
+      toast('Opened hunt pivots for ATT&CK coverage gaps.', 'info');
+      return;
+    }
+
+    focusRule(rule.id, 'summary');
+    toast('Opened rule summary for quality review.', 'info');
+  };
   const workflowItems = [
     {
       id: 'soc-investigations',
@@ -2102,6 +2400,11 @@ export default function ThreatDetection() {
             </div>
             <div className="summary-meta">Live exceptions currently shaping rule outcomes</div>
           </div>
+          <div className="summary-card">
+            <div className="summary-label">Detection Quality</div>
+            <div className="summary-value">{averageDetectionQuality || '—'}</div>
+            <div className="summary-meta">{qualityWatchlist.length} rule quality watchlist</div>
+          </div>
         </div>
         <div style={{ marginTop: 16 }}>
           <div className="row-primary" style={{ marginBottom: 8 }}>
@@ -2129,6 +2432,170 @@ export default function ThreatDetection() {
           </div>
         </div>
         {summary && <JsonDetails data={summary} label="Detection summary details" />}
+      </div>
+
+      <div className="card" style={panelCardStyle('quality')}>
+        <div className="card-header">
+          <div>
+            <div className="card-title">Detection Quality Score</div>
+            <div className="hint">
+              Scores combine replay freshness, validation hits, suppressions, owner assignment,
+              content-pack coverage, lifecycle state, false-positive feedback, and ATT&CK gaps.
+            </div>
+          </div>
+          <span className={`badge ${detectionQualityTone(averageDetectionQuality)}`}>
+            Average {averageDetectionQuality || 0}
+          </span>
+        </div>
+        <div className="summary-grid" style={{ marginTop: 12 }}>
+          <div className="summary-card">
+            <div className="summary-label">Watchlist</div>
+            <div className="summary-value">{qualityWatchlist.length}</div>
+            <div className="summary-meta">rules below 70 quality points</div>
+          </div>
+          <div className="summary-card">
+            <div className="summary-label">Launch Ready</div>
+            <div className="summary-value">
+              {detectionQualityRows.filter((row) => row.quality.score >= 85).length}
+            </div>
+            <div className="summary-meta">rules with fresh evidence and low noise pressure</div>
+          </div>
+          <div className="summary-card">
+            <div className="summary-label">Selected Rule</div>
+            <div className="summary-value">{selectedRuleQuality.score || '—'}</div>
+            <div className="summary-meta">{selectedRuleQuality.label}</div>
+          </div>
+          <div className="summary-card">
+            <div className="summary-label">Primary Fix</div>
+            <div className="summary-value">
+              {qualityWatchlist[0]?.quality.issues[0] ? 'Open' : 'Clear'}
+            </div>
+            <div className="summary-meta">
+              {qualityWatchlist[0]?.quality.issues[0] || 'No immediate quality blocker detected.'}
+            </div>
+          </div>
+        </div>
+        <div className="summary-grid" style={{ marginTop: 12 }}>
+          <div className="summary-card">
+            <div className="summary-label">Backend recommendation</div>
+            <div className="summary-value">
+              {recommendationRows[0]?.action
+                ? String(recommendationRows[0].action).toUpperCase()
+                : '—'}
+            </div>
+            <div className="summary-meta">
+              {recommendationRows[0]?.rule_name || 'No recommendation payload loaded'}
+            </div>
+          </div>
+          <div className="summary-card">
+            <div className="summary-label">Collector readiness</div>
+            <div className="summary-value">{blockedReadinessRows.length}</div>
+            <div className="summary-meta">
+              blocked rules across {backendReadiness?.collector_count || 0} collector lanes
+            </div>
+          </div>
+          <div className="summary-card">
+            <div className="summary-label">Stream guard</div>
+            <div className="summary-value">{streamScore || '—'}</div>
+            <div className="summary-meta">
+              {streamPromotionBlocked
+                ? 'recover live stream before promotion'
+                : streamReadiness?.promotion_guard || 'promotion guard clear'}
+            </div>
+          </div>
+        </div>
+        {recommendationRows.length > 0 && (
+          <div className="table-wrap" style={{ marginTop: 16 }}>
+            <table>
+              <thead>
+                <tr>
+                  <th>Recommendation</th>
+                  <th>Confidence</th>
+                  <th>Reason</th>
+                </tr>
+              </thead>
+              <tbody>
+                {recommendationRows.slice(0, 3).map((row) => (
+                  <tr key={`backend-rec-${row.rule_id || row.rule_name}`}>
+                    <td>
+                      <div className="row-primary">{row.rule_name || row.rule_id}</div>
+                      <div className="row-secondary">{row.action || 'monitor'}</div>
+                    </td>
+                    <td>
+                      <span
+                        className={`badge ${detectionQualityTone(Number(row.confidence || 0))}`}
+                      >
+                        {row.confidence || 0}
+                      </span>
+                    </td>
+                    <td>{row.detail || row.reason || 'Keep evidence current.'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+        <div className="table-wrap" style={{ marginTop: 16 }}>
+          <table>
+            <thead>
+              <tr>
+                <th>Rule</th>
+                <th>Score</th>
+                <th>Primary issue</th>
+                <th>Evidence</th>
+                <th>Action</th>
+              </tr>
+            </thead>
+            <tbody>
+              {detectionQualityRows.slice(0, 5).map((row) => (
+                <tr
+                  key={`quality-${row.rule.id}`}
+                  className={selectedRule?.id === row.rule.id ? 'row-active' : ''}
+                  onClick={() => focusRule(row.rule.id, 'summary')}
+                  style={{ cursor: 'pointer' }}
+                >
+                  <td>
+                    <div className="row-primary">{row.rule.title || row.rule.id}</div>
+                    <div className="row-secondary">{row.rule.owner || 'system'} owner</div>
+                  </td>
+                  <td>
+                    <span className={`badge ${row.quality.tone}`}>{row.quality.score}</span>{' '}
+                    {row.quality.label}
+                  </td>
+                  <td>{row.quality.issues[0] || 'No blocker'}</td>
+                  <td>
+                    {row.quality.liveSuppressions} suppressions • {row.quality.packCount} packs •{' '}
+                    {row.quality.coverageGaps.length} ATT&CK gaps
+                  </td>
+                  <td>
+                    <div className="btn-group">
+                      <button
+                        type="button"
+                        className="btn btn-sm btn-primary"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          runQualityAction(row);
+                        }}
+                      >
+                        Run Action
+                      </button>
+                      <button
+                        type="button"
+                        className="btn btn-sm"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          focusRule(row.rule.id, 'summary');
+                        }}
+                      >
+                        Inspect
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       </div>
 
       <div className="card" style={panelCardStyle('efficacy')}>
@@ -3178,55 +3645,70 @@ export default function ThreatDetection() {
                     <th>Owner</th>
                     <th>ATT&CK</th>
                     <th>Noise</th>
+                    <th>Quality</th>
                     <th>Lifecycle</th>
                   </tr>
                 </thead>
                 <tbody>
                   {filteredRules.length === 0 ? (
                     <tr>
-                      <td colSpan="5">
+                      <td colSpan="6">
                         <WorkspaceEmptyState description="No rules match this queue and filter scope." />
                       </td>
                     </tr>
                   ) : (
-                    filteredRules.map((rule) => (
-                      <tr
-                        key={rule.id}
-                        className={selectedRule?.id === rule.id ? 'row-active' : ''}
-                        onClick={() => {
-                          const next = new URLSearchParams(searchParams);
-                          next.set('rule', rule.id);
-                          setSearchParams(next, { replace: true });
-                        }}
-                        onMouseEnter={() => {
-                          const next = new URLSearchParams(searchParams);
-                          next.set('rule', rule.id);
-                          setSearchParams(next, { replace: true });
-                        }}
-                        style={{ cursor: 'pointer' }}
-                      >
-                        <td>
-                          <div className="row-primary">{rule.title || rule.id}</div>
-                          <div className="row-secondary">
-                            {rule.description || 'No rule narrative available.'}
-                          </div>
-                        </td>
-                        <td>{rule.owner || 'system'}</td>
-                        <td>{Array.isArray(rule.attack) ? rule.attack.length : 0} mappings</td>
-                        <td>
-                          <span
-                            className={`badge ${severityTone((rule.last_test_match_count || 0) >= 5 ? 'high' : 'low')}`}
-                          >
-                            {rule.last_test_match_count || 0} hits
-                          </span>
-                        </td>
-                        <td>
-                          <span className={`badge ${lifecycleTone(rule.lifecycle)}`}>
-                            {rule.lifecycle || 'draft'}
-                          </span>
-                        </td>
-                      </tr>
-                    ))
+                    filteredRules.map((rule) => {
+                      const ruleQuality =
+                        detectionQualityRows.find((row) => row.rule.id === rule.id)?.quality ||
+                        buildDetectionQualityScore({
+                          rule,
+                          suppressionCount,
+                          packs,
+                          fpEntries,
+                          coverageGapItems,
+                        });
+                      return (
+                        <tr
+                          key={rule.id}
+                          className={selectedRule?.id === rule.id ? 'row-active' : ''}
+                          onClick={() => {
+                            const next = new URLSearchParams(searchParams);
+                            next.set('rule', rule.id);
+                            setSearchParams(next, { replace: true });
+                          }}
+                          onMouseEnter={() => {
+                            const next = new URLSearchParams(searchParams);
+                            next.set('rule', rule.id);
+                            setSearchParams(next, { replace: true });
+                          }}
+                          style={{ cursor: 'pointer' }}
+                        >
+                          <td>
+                            <div className="row-primary">{rule.title || rule.id}</div>
+                            <div className="row-secondary">
+                              {rule.description || 'No rule narrative available.'}
+                            </div>
+                          </td>
+                          <td>{rule.owner || 'system'}</td>
+                          <td>{Array.isArray(rule.attack) ? rule.attack.length : 0} mappings</td>
+                          <td>
+                            <span
+                              className={`badge ${severityTone((rule.last_test_match_count || 0) >= 5 ? 'high' : 'low')}`}
+                            >
+                              {rule.last_test_match_count || 0} hits
+                            </span>
+                          </td>
+                          <td>
+                            <span className={`badge ${ruleQuality.tone}`}>{ruleQuality.score}</span>
+                          </td>
+                          <td>
+                            <span className={`badge ${lifecycleTone(rule.lifecycle)}`}>
+                              {rule.lifecycle || 'draft'}
+                            </span>
+                          </td>
+                        </tr>
+                      );
+                    })
                   )}
                 </tbody>
               </table>
@@ -3294,6 +3776,15 @@ export default function ThreatDetection() {
                 </div>
 
                 <div className="summary-grid" style={{ marginTop: 16 }}>
+                  <div className="summary-card">
+                    <div className="summary-label">Quality Score</div>
+                    <div className="summary-value">{selectedRuleQuality.score}</div>
+                    <div className="summary-meta">
+                      {selectedRuleQuality.issues[0] ||
+                        selectedRuleQuality.strengths[0] ||
+                        selectedRuleQuality.label}
+                    </div>
+                  </div>
                   <div className="summary-card">
                     <div className="summary-label">Last Test</div>
                     <div className="summary-value">

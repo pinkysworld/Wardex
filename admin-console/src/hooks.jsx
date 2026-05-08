@@ -14,6 +14,7 @@ import {
   wsPoll,
   withSignal,
 } from './api.js';
+import { safeStorageGet, safeStorageRemove, safeStorageSet } from './safeStorage.js';
 
 // ── Auth Context ─────────────────────────────────────────────
 
@@ -32,12 +33,12 @@ export function AuthProvider({ children }) {
       await createAuthSession();
       setToken('');
       setAuthenticated(true);
-      localStorage.removeItem('wardex_token');
+      safeStorageRemove('wardex_token');
       return true;
     } catch {
       setAuthenticated(false);
       setToken('');
-      localStorage.removeItem('wardex_token');
+      safeStorageRemove('wardex_token');
       return false;
     } finally {
       setChecking(false);
@@ -50,13 +51,13 @@ export function AuthProvider({ children }) {
     });
     setToken('');
     setAuthenticated(false);
-    localStorage.removeItem('wardex_token');
+    safeStorageRemove('wardex_token');
   }, []);
 
   // Auto-reconnect from an existing HttpOnly session cookie. Older console
   // builds persisted bearer tokens in localStorage, so migrate and delete one.
   useEffect(() => {
-    const saved = localStorage.getItem('wardex_token');
+    const saved = safeStorageGet('wardex_token');
     let cancelled = false;
 
     const restoreSession = async () => {
@@ -177,8 +178,12 @@ const ThemeContext = createContext(null);
 export function ThemeProvider({ children }) {
   const { authenticated } = useAuth();
   const [dark, setDark] = useState(() => {
-    const saved = localStorage.getItem('wardex_theme');
-    if (saved) return saved === 'dark';
+    try {
+      const saved = safeStorageGet('wardex_theme');
+      if (saved) return saved === 'dark';
+    } catch {
+      /* ignore — private mode */
+    }
     return window.matchMedia('(prefers-color-scheme: dark)').matches;
   });
   const darkRef = useRef(dark);
@@ -187,7 +192,11 @@ export function ThemeProvider({ children }) {
     darkRef.current = dark;
     document.documentElement.setAttribute('data-theme', dark ? 'dark' : 'light');
     document.documentElement.style.colorScheme = dark ? 'dark' : 'light';
-    localStorage.setItem('wardex_theme', dark ? 'dark' : 'light');
+    try {
+      safeStorageSet('wardex_theme', dark ? 'dark' : 'light');
+    } catch {
+      /* ignore — private mode / quota exceeded */
+    }
   }, [dark]);
 
   useEffect(() => {

@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import * as api from '../api.js';
+import { safeStorageGet, safeStorageSet } from '../safeStorage.js';
 
 const POLL_INTERVAL = 30_000;
 const MAX_TOASTS = 8;
@@ -9,7 +10,7 @@ const CRITICAL_DISMISS_MS = 30000; // critical alerts stay longer
 export default function NotificationToast({ active = false }) {
   const [items, setItems] = useState([]);
   const [soundEnabled, setSoundEnabled] = useState(
-    () => localStorage.getItem('wardex_notif_sound') !== 'false',
+    () => safeStorageGet('wardex_notif_sound') !== 'false',
   );
   const idRef = useRef(0);
   const prevAlertCount = useRef(null);
@@ -49,7 +50,7 @@ export default function NotificationToast({ active = false }) {
 
   const toggleSound = useCallback(() => {
     setSoundEnabled((prev) => {
-      localStorage.setItem('wardex_notif_sound', String(!prev));
+      safeStorageSet('wardex_notif_sound', String(!prev));
       return !prev;
     });
   }, []);

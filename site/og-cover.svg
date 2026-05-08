@@ -18,7 +18,7 @@
   </g>
   <text x="80" y="360" font-family="Inter, sans-serif" font-weight="700" font-size="84" fill="#ffffff" letter-spacing="-2">Wardex</text>
   <text x="80" y="428" font-family="Inter, sans-serif" font-weight="500" font-size="36" fill="#c8cdd5">Private-cloud XDR &amp; SIEM built in Rust</text>
-  <text x="80" y="480" font-family="JetBrains Mono, monospace" font-size="22" fill="#4fd1b2">one binary · no vendor lock-in · BSL 1.1</text>
+  <text x="80" y="480" font-family="JetBrains Mono, monospace" font-size="22" fill="#4fd1b2">one binary · no vendor lock-in · AGPL 3.0</text>
   <g transform="translate(80, 530)" font-family="Inter, sans-serif" font-size="20" fill="#8a9099">
     <text x="0" y="0">Detection · Investigation · Hunting · Fleet · Governance</text>
   </g>

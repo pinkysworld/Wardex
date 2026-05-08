@@ -952,6 +952,246 @@ export interface WsStatsResponse {
     native_websocket_supported: boolean;
     connections: WsConnectionStats[];
 }
+export interface OperationalSnapshotMetadata {
+    persisted: boolean;
+    digest: string;
+    generated_at?: string;
+    storage_key?: string;
+    error?: string;
+    verified?: boolean;
+    size_bytes?: number;
+    kind?: string;
+}
+export interface OperationalSnapshotsResponse {
+    generated_at: string;
+    status: string;
+    count: number;
+    verified_count?: number;
+    snapshots: OperationalSnapshotMetadata[];
+}
+export interface OperationalSnapshotVerifyResponse {
+    generated_at: string;
+    status: string;
+    verified: boolean;
+    snapshot?: OperationalSnapshotMetadata & {
+        payload?: Record<string, unknown>;
+    };
+}
+export interface WsHealthResponse {
+    generated_at: string;
+    status: string;
+    stats: Record<string, unknown>;
+    readiness?: StreamReadinessResponse;
+}
+export interface StreamReadinessResponse {
+    generated_at: string;
+    status: "ready" | "degraded" | "backpressure" | string;
+    score: number;
+    queue_depth: number;
+    max_observed_queue_depth: number;
+    dropped_events: number;
+    promotion_guard: string;
+    next_action: string;
+    snapshot?: OperationalSnapshotMetadata;
+}
+export interface StreamReliabilityLabResponse {
+    generated_at: string;
+    status: string;
+    scenario_count?: number;
+    fail_count?: number;
+    warn_count?: number;
+    scenarios: Array<Record<string, unknown>>;
+    snapshot?: OperationalSnapshotMetadata;
+}
+export interface ReleaseDoctorResponse {
+    generated_at: string;
+    status: string;
+    runtime_version?: string;
+    fail_count?: number;
+    warn_count?: number;
+    checks: Array<Record<string, unknown>>;
+    next_action?: string;
+    snapshot?: OperationalSnapshotMetadata;
+}
+export interface SupportBundleResponse {
+    generated_at: string;
+    status: string;
+    digest: string;
+    bundle: Record<string, unknown>;
+    redaction?: Record<string, unknown>;
+    snapshot?: OperationalSnapshotMetadata;
+}
+export interface SdkContractStatusResponse {
+    generated_at: string;
+    runtime_version: string;
+    status: string;
+    drift_count?: number;
+    product_endpoint_inventory?: number;
+    missing_openapi_builder?: string[];
+    missing_docs_openapi?: string[];
+    missing_python_sdk?: string[];
+    missing_typescript_sdk?: string[];
+    missing_release_gate?: string[];
+    snapshot?: OperationalSnapshotMetadata;
+}
+export interface LaunchpadEvidencePackResponse {
+    evidence: Record<string, unknown>;
+    digest: string;
+    snapshot?: OperationalSnapshotMetadata;
+}
+export type LaunchpadReleaseDiffResponse = Record<string, unknown> & {
+    snapshot?: OperationalSnapshotMetadata;
+};
+export type LaunchpadDemoStatusResponse = Record<string, unknown> & {
+    snapshot?: OperationalSnapshotMetadata;
+};
+export interface LaunchpadDemoResetResponse {
+    status: string;
+    removed_transient_alerts?: number;
+    demo_status?: Record<string, unknown>;
+    snapshot?: OperationalSnapshotMetadata;
+}
+export interface AlertHistogramBucket {
+    timestamp: string;
+    count: number;
+    severity_breakdown: Record<string, number>;
+    max_score: number;
+}
+export interface AlertHistogramResponse {
+    generated_at: string;
+    window_secs: number;
+    bucket_secs: number;
+    severity_filter?: string | null;
+    total: number;
+    buckets: AlertHistogramBucket[];
+}
+export interface CursorPageResponse<T = Record<string, unknown>> {
+    generated_at: string;
+    collection: string;
+    cursor: string;
+    next_cursor: string;
+    limit: number;
+    count: number;
+    total: number;
+    has_more: boolean;
+    items: T[];
+}
+export interface RulePreflightResponse {
+    generated_at: string;
+    rule_id: string;
+    target_status: string;
+    status: string;
+    fail_count?: number;
+    warn_count?: number;
+    checks: Array<Record<string, unknown>>;
+    snapshot?: OperationalSnapshotMetadata;
+    [key: string]: unknown;
+}
+export type WorkflowPreflightResponse = Record<string, unknown> & {
+    generated_at?: string;
+    workflow?: string;
+    status?: string;
+    fail_count?: number;
+    warn_count?: number;
+    checks?: Array<Record<string, unknown>>;
+    snapshot?: OperationalSnapshotMetadata;
+};
+export type ReleaseObservabilityGatesResponse = Record<string, unknown> & {
+    generated_at?: string;
+    status?: string;
+    fail_count?: number;
+    warn_count?: number;
+    checks?: Array<Record<string, unknown>>;
+    snapshot?: OperationalSnapshotMetadata;
+};
+export type ProductionAssuranceResponse = Record<string, unknown> & {
+    generated_at?: string;
+    status?: string;
+    fail_count?: number;
+    warn_count?: number;
+    checks?: Array<Record<string, unknown>>;
+    snapshot?: OperationalSnapshotMetadata;
+};
+export type TenantIsolationProofResponse = Record<string, unknown> & {
+    generated_at?: string;
+    status?: string;
+    tenant_count?: number;
+    active_tenant_ids?: string[];
+    snapshot?: OperationalSnapshotMetadata;
+};
+export type ThreadDetectionProofResponse = Record<string, unknown> & {
+    generated_at?: string;
+    status?: string;
+    readiness?: string;
+    thread_count?: number;
+    snapshot?: OperationalSnapshotMetadata;
+};
+export type OperationalSnapshotPolicyResponse = Record<string, unknown> & {
+    generated_at?: string;
+    status?: string;
+    keep_latest_per_kind?: number;
+    snapshot_index?: OperationalSnapshotsResponse;
+};
+export type OperationalSnapshotPruneResponse = Record<string, unknown> & {
+    generated_at?: string;
+    status?: string;
+    dry_run?: boolean;
+    keep_latest_per_kind?: number;
+    candidate_count?: number;
+};
+export interface DetectionRecommendationsResponse {
+    generated_at: string;
+    recommendations: Array<Record<string, unknown>>;
+    snapshot?: OperationalSnapshotMetadata;
+    [key: string]: unknown;
+}
+export interface DetectionReadinessResponse {
+    generated_at: string;
+    rules: Array<Record<string, unknown>>;
+    snapshot?: OperationalSnapshotMetadata;
+    [key: string]: unknown;
+}
+export interface ResponseApprovalOverviewResponse {
+    generated_at: string;
+    pending_count?: number;
+    snapshot?: OperationalSnapshotMetadata;
+    [key: string]: unknown;
+}
+export interface RemediationSafetyResponse {
+    generated_at: string;
+    status?: string;
+    snapshot?: OperationalSnapshotMetadata;
+    [key: string]: unknown;
+}
+export interface SubscriptionCreateRequest {
+    lanes?: string[];
+    filters?: Record<string, unknown>;
+}
+export interface SubscriptionCreateResponse {
+    subscription: {
+        status: string;
+        subscription_id: string;
+        lanes: string[];
+        filters: Record<string, unknown>;
+        cursor: string;
+        durable?: boolean;
+        current_high_watermark?: number;
+    };
+    cursor_store?: Record<string, unknown>;
+    snapshot?: OperationalSnapshotMetadata;
+}
+export interface SubscriptionResumeResponse {
+    subscription_id: string;
+    cursor: string;
+    next_cursor: string;
+    events: Array<Record<string, unknown>>;
+    has_more: boolean;
+    requested_cursor?: string;
+    gap_detected?: boolean;
+    replay_gap?: number;
+    durable?: boolean;
+    cursor_store?: Record<string, unknown>;
+}
 export type CommandCenterLaneName = "incidents" | "remediation" | "connectors" | "rule_tuning" | "release" | "evidence";
 export type CommandCenterMetricKey = "open_incidents" | "pending_remediation_reviews" | "connector_issues" | "noisy_rules" | "release_candidates" | "compliance_packs";
 export interface CommandCenterMetrics {
@@ -4400,6 +4640,77 @@ export declare class WardexClient {
     healthLive(): Promise<HealthLiveResponse>;
     healthReady(): Promise<HealthReadyResponse>;
     wsStats(): Promise<WsStatsResponse>;
+    wsHealth(): Promise<WsHealthResponse>;
+    streamReadiness(): Promise<StreamReadinessResponse>;
+    streamReliabilityLab(): Promise<StreamReliabilityLabResponse>;
+    sdkContractStatus(): Promise<SdkContractStatusResponse>;
+    alertsPage(params?: {
+        cursor?: string | number;
+        limit?: number;
+    }): Promise<CursorPageResponse>;
+    eventsPage(params?: {
+        cursor?: string | number;
+        limit?: number;
+        q?: string;
+        source?: string;
+        severity?: string;
+    }): Promise<CursorPageResponse>;
+    auditLogPage(params?: {
+        cursor?: string | number;
+        limit?: number;
+        q?: string;
+        method?: string;
+        status?: string;
+        auth?: string;
+    }): Promise<CursorPageResponse>;
+    operationalSnapshots(params?: {
+        kind?: string;
+        limit?: number;
+    }): Promise<OperationalSnapshotsResponse>;
+    operationalSnapshotPolicy(): Promise<OperationalSnapshotPolicyResponse>;
+    pruneOperationalSnapshots(request?: {
+        dry_run?: boolean;
+        keep_latest_per_kind?: number;
+    }): Promise<OperationalSnapshotPruneResponse>;
+    verifyOperationalSnapshot(params?: {
+        storageKey?: string;
+        digest?: string;
+    }): Promise<OperationalSnapshotVerifyResponse>;
+    releaseDoctor(): Promise<ReleaseDoctorResponse>;
+    releaseObservabilityGates(): Promise<ReleaseObservabilityGatesResponse>;
+    releaseProvenance(): Promise<ProductionAssuranceResponse>;
+    releaseUpgradeRehearsal(params?: {
+        targetVersion?: string;
+    }): Promise<ProductionAssuranceResponse>;
+    syntheticConsoleMonitor(): Promise<ProductionAssuranceResponse>;
+    incidentTimelineReplay(params?: {
+        incidentId?: string | number;
+    }): Promise<ProductionAssuranceResponse>;
+    detectionTrustScore(): Promise<ProductionAssuranceResponse>;
+    fleetDriftCompliance(): Promise<ProductionAssuranceResponse>;
+    operatorWorkQueue(): Promise<ProductionAssuranceResponse>;
+    retentionForecast(): Promise<ProductionAssuranceResponse>;
+    adversarialValidation(): Promise<ProductionAssuranceResponse>;
+    supportBundleDiff(): Promise<ProductionAssuranceResponse>;
+    workflowPreflight(params?: {
+        workflow?: string;
+    }): Promise<WorkflowPreflightResponse>;
+    tenantIsolationProof(): Promise<TenantIsolationProofResponse>;
+    threadDetectionProof(): Promise<ThreadDetectionProofResponse>;
+    contentRulePreflight(ruleId: string, request?: {
+        target_status?: string;
+    }): Promise<RulePreflightResponse>;
+    supportBundle(): Promise<SupportBundleResponse>;
+    launchpadEvidencePack(): Promise<LaunchpadEvidencePackResponse>;
+    launchpadReleaseDiff(): Promise<LaunchpadReleaseDiffResponse>;
+    launchpadDemoStatus(): Promise<LaunchpadDemoStatusResponse>;
+    launchpadDemoReset(): Promise<LaunchpadDemoResetResponse>;
+    createSubscription(request?: SubscriptionCreateRequest): Promise<SubscriptionCreateResponse>;
+    resumeSubscription(params?: {
+        subscriptionId?: string;
+        cursor?: string | number;
+        limit?: number;
+    }): Promise<SubscriptionResumeResponse>;
     commandSummary(): Promise<CommandSummaryResponse>;
     commandLane(lane: string): Promise<CommandLaneResponse>;
     authCheck(): Promise<AuthCheckResponse>;
@@ -4433,6 +4744,11 @@ export declare class WardexClient {
     alertAnalysis(): Promise<AlertAnalysis>;
     runAlertAnalysis(request?: AlertAnalysisRequest): Promise<AlertAnalysis>;
     groupedAlerts(): Promise<AlertGroup[]>;
+    alertHistogram(params?: {
+        window?: string;
+        bucket?: string;
+        severity?: string;
+    }): Promise<AlertHistogramResponse>;
     getAlert(index: number): Promise<AlertDetail>;
     queueStats(): Promise<QueueStatsResponse>;
     dlqStats(): Promise<DlqStatsResponse>;
@@ -4631,6 +4947,8 @@ export declare class WardexClient {
     approveResponseAction(requestId: string, approve?: boolean): Promise<ResponseApprovalResponse>;
     executeApprovedActions(requestId?: string): Promise<ResponseExecuteResponse>;
     responseExecute(requestId?: string): Promise<ResponseExecuteResponse>;
+    responseApprovalOverview(): Promise<ResponseApprovalOverviewResponse>;
+    remediationSafety(): Promise<RemediationSafetyResponse>;
     ingestEvents(agentId: string, events: EventAlertRecord[]): Promise<EventIngestResponse>;
     onboardingReadiness(): Promise<OnboardingReadiness>;
     managerOverview(): Promise<ManagerOverview>;
@@ -4646,6 +4964,8 @@ export declare class WardexClient {
     detectionFeedback(eventId?: number, limit?: number): Promise<DetectionFeedbackListResponse>;
     recordDetectionFeedback(feedback: Omit<DetectionFeedback, "id" | "created_at">): Promise<DetectionFeedback>;
     detectionProfile(): Promise<DetectionProfileResponse>;
+    detectionRecommendations(limit?: number): Promise<DetectionRecommendationsResponse>;
+    detectionReadiness(limit?: number): Promise<DetectionReadinessResponse>;
     setDetectionProfile(request: SetDetectionProfileRequest): Promise<SetDetectionProfileResponse>;
     normalizeScore(): Promise<NormalizedScore>;
     threatIntelStats(): Promise<IoCEnrichmentStats>;

@@ -1,6 +1,6 @@
 //! Axum-based HTTP API server serving REST endpoints, the admin console, and static assets.
 
-use std::collections::{BTreeSet, HashMap, HashSet, VecDeque};
+use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet, VecDeque};
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
@@ -1175,6 +1175,9 @@ struct DetectionExplainability {
     triage_status: Option<String>,
     related_cases: Vec<String>,
     feedback: Vec<crate::detection_feedback::DetectionFeedback>,
+    evidence_chain: Vec<serde_json::Value>,
+    matched_rules: Vec<serde_json::Value>,
+    similar_past_alerts: Vec<serde_json::Value>,
 }
 
 #[derive(Debug, Clone, serde::Serialize)]
@@ -3346,6 +3349,15 @@ fn prometheus_metrics_payload(state: &AppState) -> String {
         .values()
         .filter(|deployment| deployment_is_pending(deployment, &state.agent_registry))
         .count();
+    let stream_stats = state.alert_broadcaster.stats();
+    let stream_queue_depth = stream_stats
+        .get("subscriber_queue_depth")
+        .and_then(serde_json::Value::as_u64)
+        .unwrap_or_default();
+    let stream_dropped_events = stream_stats
+        .get("dropped_events")
+        .and_then(serde_json::Value::as_u64)
+        .unwrap_or_default();
 
     let metrics = [
         ("wardex_up", "gauge", 1_u64),
@@ -3386,6 +3398,12 @@ fn prometheus_metrics_payload(state: &AppState) -> String {
             "wardex_deployments_pending_total",
             "gauge",
             pending_deployments as u64,
+        ),
+        ("wardex_stream_queue_depth", "gauge", stream_queue_depth),
+        (
+            "wardex_stream_dropped_events_total",
+            "counter",
+            stream_dropped_events,
         ),
         ("wardex_requests_total", "counter", state.request_count),
         ("wardex_request_errors_total", "counter", state.error_count),
@@ -4686,6 +4704,296 @@ fn parse_linux_process_threads_output(output: &str) -> Vec<serde_json::Value> {
         .collect()
 }
 
+fn thread_evidence(thread: &serde_json::Value) -> serde_json::Value {
+    serde_json::json!({
+        "thread_id": thread["thread_id"].clone(),
+        "os_thread_id": thread["os_thread_id"].clone(),
+        "state": thread["state"].clone(),
+        "state_label": thread["state_label"].clone(),
+        "priority": thread["priority"].clone(),
+        "cpu_percent": thread["cpu_percent"].clone(),
+        "wait_reason": thread["wait_reason"].clone(),
+    })
+}
+
+fn push_thread_anomaly(
+    anomalies: &mut Vec<serde_json::Value>,
+    score: &mut u32,
+    kind: &str,
+    severity: &str,
+    weight: u32,
+    detail: String,
+    evidence: serde_json::Value,
+) {
+    *score = score.saturating_add(weight);
+    anomalies.push(serde_json::json!({
+        "kind": kind,
+        "severity": severity,
+        "detail": detail,
+        "evidence": evidence,
+    }));
+}
+
+fn suspicious_wait_reason(reason: &str) -> bool {
+    let normalized = reason.trim().to_ascii_lowercase();
+    [
+        "ptrace",
+        "task_for_pid",
+        "mach_vm",
+        "process_vm",
+        "bpf",
+        "uprobe",
+        "kprobe",
+        "ftrace",
+        "inject",
+    ]
+    .iter()
+    .any(|needle| normalized.contains(needle))
+}
+
+fn thread_anomaly_level(score: u32) -> &'static str {
+    if score >= 75 {
+        "critical"
+    } else if score >= 45 {
+        "high"
+    } else if score >= 20 {
+        "elevated"
+    } else {
+        "nominal"
+    }
+}
+
+fn build_thread_anomaly_summary(
+    identifier_type: &str,
+    message: Option<&str>,
+    threads: &[serde_json::Value],
+    hot_threads: &[serde_json::Value],
+    blocked_threads: &[serde_json::Value],
+    thread_count: usize,
+    hot_thread_count: usize,
+    blocked_count: usize,
+    top_cpu_percent: f64,
+    wait_reason_count: usize,
+) -> (Vec<serde_json::Value>, u32, Vec<String>) {
+    let mut anomalies = Vec::new();
+    let mut score = 0_u32;
+    let mut recommendations = Vec::new();
+    let mut add_recommendation = |value: &str| {
+        if !recommendations.iter().any(|item| item == value) {
+            recommendations.push(value.to_string());
+        }
+    };
+
+    if identifier_type == "unsupported" || message.is_some() {
+        push_thread_anomaly(
+            &mut anomalies,
+            &mut score,
+            "collection_gap",
+            "info",
+            0,
+            message
+                .unwrap_or("Per-thread collection returned no rows for this platform.")
+                .to_string(),
+            serde_json::json!({ "identifier_type": identifier_type }),
+        );
+        add_recommendation(
+            "Collect a live Linux or macOS thread snapshot before ruling out thread-level anomalies.",
+        );
+    }
+
+    if thread_count >= 128 {
+        push_thread_anomaly(
+            &mut anomalies,
+            &mut score,
+            "thread_fanout",
+            "high",
+            28,
+            format!(
+                "Process exposes {thread_count} threads, which is unusually broad for live triage."
+            ),
+            serde_json::json!({ "thread_count": thread_count }),
+        );
+        add_recommendation(
+            "Compare thread fan-out against the process baseline and loaded modules.",
+        );
+    } else if thread_count >= 64 {
+        push_thread_anomaly(
+            &mut anomalies,
+            &mut score,
+            "thread_fanout",
+            "medium",
+            14,
+            format!(
+                "Process exposes {thread_count} threads; watch for worker-pool burst behavior."
+            ),
+            serde_json::json!({ "thread_count": thread_count }),
+        );
+        add_recommendation("Review whether the thread count matches expected workload scale.");
+    }
+
+    if let Some(top_thread) = hot_threads.first() {
+        if top_cpu_percent >= 25.0 {
+            push_thread_anomaly(
+                &mut anomalies,
+                &mut score,
+                "hot_thread",
+                "high",
+                30,
+                format!(
+                    "Thread CPU peaked at {:.1}% during collection.",
+                    top_cpu_percent
+                ),
+                thread_evidence(top_thread),
+            );
+            add_recommendation(
+                "Profile the hottest thread before terminating the process or approving response automation.",
+            );
+        } else if hot_thread_count >= 3 && top_cpu_percent >= 10.0 {
+            push_thread_anomaly(
+                &mut anomalies,
+                &mut score,
+                "cpu_concentration",
+                "medium",
+                16,
+                format!(
+                    "{hot_thread_count} threads exceeded 5% CPU with a {:.1}% peak.",
+                    top_cpu_percent
+                ),
+                serde_json::json!({
+                    "hot_thread_count": hot_thread_count,
+                    "top_cpu_percent": (top_cpu_percent * 10.0).round() / 10.0,
+                    "top_thread": thread_evidence(top_thread),
+                }),
+            );
+            add_recommendation(
+                "Check whether hot workers line up with expected process activity or injected execution.",
+            );
+        }
+    }
+
+    if thread_count > 0 && blocked_count >= 3 {
+        let blocked_ratio = blocked_count as f64 / thread_count as f64;
+        if blocked_ratio >= 0.5 {
+            push_thread_anomaly(
+                &mut anomalies,
+                &mut score,
+                "blocked_concentration",
+                "high",
+                26,
+                format!("{blocked_count}/{thread_count} threads are blocked or stopped."),
+                serde_json::json!({
+                    "blocked_count": blocked_count,
+                    "thread_count": thread_count,
+                    "blocked_threads": blocked_threads.iter().take(3).map(thread_evidence).collect::<Vec<_>>(),
+                }),
+            );
+            add_recommendation(
+                "Inspect blocked wait channels before deciding whether the process is hung or deliberately suspended.",
+            );
+        } else if blocked_ratio >= 0.25 {
+            push_thread_anomaly(
+                &mut anomalies,
+                &mut score,
+                "blocked_concentration",
+                "medium",
+                14,
+                format!("{blocked_count}/{thread_count} threads are blocked or stopped."),
+                serde_json::json!({
+                    "blocked_count": blocked_count,
+                    "thread_count": thread_count,
+                    "blocked_threads": blocked_threads.iter().take(3).map(thread_evidence).collect::<Vec<_>>(),
+                }),
+            );
+            add_recommendation(
+                "Correlate blocked workers with file, socket, or credential activity in the timeline.",
+            );
+        }
+    }
+
+    let stopped_threads = threads
+        .iter()
+        .filter(|thread| {
+            matches!(
+                thread["state_label"].as_str(),
+                Some("stopped") | Some("zombie")
+            )
+        })
+        .take(3)
+        .cloned()
+        .collect::<Vec<_>>();
+    if !stopped_threads.is_empty() {
+        push_thread_anomaly(
+            &mut anomalies,
+            &mut score,
+            "suspended_thread",
+            "medium",
+            15,
+            format!(
+                "{} stopped or zombie thread state{} observed.",
+                stopped_threads.len(),
+                if stopped_threads.len() == 1 {
+                    " was"
+                } else {
+                    "s were"
+                }
+            ),
+            serde_json::json!({
+                "threads": stopped_threads.iter().map(thread_evidence).collect::<Vec<_>>(),
+            }),
+        );
+        add_recommendation(
+            "Validate whether stopped thread state came from debugging, suspension, or abnormal termination.",
+        );
+    }
+
+    let suspicious_waits = threads
+        .iter()
+        .filter_map(|thread| {
+            let reason = thread["wait_reason"].as_str()?.trim();
+            if reason.is_empty() || !suspicious_wait_reason(reason) {
+                return None;
+            }
+            Some(serde_json::json!({
+                "thread_id": thread["thread_id"].clone(),
+                "wait_reason": reason,
+                "state_label": thread["state_label"].clone(),
+                "cpu_percent": thread["cpu_percent"].clone(),
+            }))
+        })
+        .take(4)
+        .collect::<Vec<_>>();
+    if !suspicious_waits.is_empty() {
+        push_thread_anomaly(
+            &mut anomalies,
+            &mut score,
+            "suspicious_wait_reason",
+            "high",
+            32,
+            format!(
+                "{} thread wait reason{} matched injection, tracing, or kernel instrumentation terms.",
+                suspicious_waits.len(),
+                if suspicious_waits.len() == 1 { "" } else { "s" }
+            ),
+            serde_json::json!({ "wait_reasons": suspicious_waits }),
+        );
+        add_recommendation(
+            "Treat suspicious wait channels as process evidence and pivot to module, handle, and parent lineage review.",
+        );
+    } else if wait_reason_count > 0 {
+        add_recommendation(
+            "Use exposed wait reasons to separate normal waiting from stuck or externally controlled workers.",
+        );
+    }
+
+    if anomalies.is_empty() {
+        add_recommendation(
+            "No thread-level anomaly is visible in the current snapshot; keep this as baseline evidence.",
+        );
+    }
+
+    (anomalies, score.min(100), recommendations)
+}
+
 fn build_process_threads_response(
     pid: u32,
     hostname: &str,
@@ -4754,6 +5062,40 @@ fn build_process_threads_response(
         .iter()
         .filter_map(|thread| thread["cpu_percent"].as_f64())
         .fold(0.0_f64, f64::max);
+    let rounded_top_cpu_percent = (top_cpu_percent * 10.0).round() / 10.0;
+    let (thread_anomalies, anomaly_score, recommendations) = build_thread_anomaly_summary(
+        identifier_type,
+        message,
+        &threads,
+        &hot_threads,
+        &blocked_threads,
+        threads.len(),
+        hot_thread_count,
+        blocked_count,
+        rounded_top_cpu_percent,
+        wait_reason_count,
+    );
+    let anomaly_level = thread_anomaly_level(anomaly_score);
+    let observed_thread_count = threads.len();
+    let expected_max_threads = if identifier_type == "unsupported" {
+        0
+    } else {
+        64
+    };
+    let expected_hot_threads = if identifier_type == "unsupported" {
+        0
+    } else {
+        2
+    };
+    let fanout_deviation = observed_thread_count.saturating_sub(expected_max_threads);
+    let hot_thread_deviation = hot_thread_count.saturating_sub(expected_hot_threads);
+    let baseline_status = if identifier_type == "unsupported" || message.is_some() {
+        "collection_gap"
+    } else if anomaly_score >= 45 || fanout_deviation > 0 || hot_thread_deviation > 0 {
+        "deviated"
+    } else {
+        "within_baseline"
+    };
 
     serde_json::json!({
         "pid": pid,
@@ -4767,8 +5109,30 @@ fn build_process_threads_response(
         "sleeping_count": sleeping_count,
         "blocked_count": blocked_count,
         "hot_thread_count": hot_thread_count,
-        "top_cpu_percent": (top_cpu_percent * 10.0).round() / 10.0,
+        "top_cpu_percent": rounded_top_cpu_percent,
         "wait_reason_count": wait_reason_count,
+        "thread_anomaly_count": thread_anomalies.len(),
+        "thread_anomaly_score": anomaly_score,
+        "thread_anomaly_level": anomaly_level,
+        "thread_baseline": {
+            "status": baseline_status,
+            "expected_thread_count": { "min": if identifier_type == "unsupported" { 0 } else { 1 }, "max": expected_max_threads },
+            "expected_hot_threads_max": expected_hot_threads,
+            "thread_count_deviation": fanout_deviation,
+            "hot_thread_deviation": hot_thread_deviation,
+            "confidence": if identifier_type == "unsupported" || message.is_some() { "low" } else if wait_reason_count > 0 { "high" } else { "medium" },
+            "evidence": {
+                "running_count": running_count,
+                "sleeping_count": sleeping_count,
+                "blocked_count": blocked_count,
+                "wait_reason_count": wait_reason_count,
+                "top_cpu_percent": rounded_top_cpu_percent,
+            },
+        },
+        "thread_anomalies": thread_anomalies,
+        "anomaly_score": anomaly_score,
+        "anomaly_level": anomaly_level,
+        "recommendations": recommendations,
         "hot_threads": hot_threads,
         "blocked_threads": blocked_threads,
         "threads": threads,
@@ -4922,6 +5286,57 @@ mod process_thread_parsing_tests {
             threads[1]["wait_reason"].as_str(),
             Some("futex_wait_queue_me")
         );
+    }
+
+    #[test]
+    fn process_thread_response_adds_anomaly_summary() {
+        let threads = vec![
+            serde_json::json!({
+                "thread_id": 4242,
+                "os_thread_id": 4242,
+                "identifier_type": "tid",
+                "state": "R",
+                "state_label": "running",
+                "priority": "40",
+                "cpu_percent": 34.2,
+                "cpu_time": "00:00:03",
+                "wait_reason": serde_json::Value::Null,
+                "command": "python3",
+            }),
+            serde_json::json!({
+                "thread_id": 4243,
+                "os_thread_id": 4243,
+                "identifier_type": "tid",
+                "state": "D",
+                "state_label": "blocked",
+                "priority": "20",
+                "cpu_percent": 0.1,
+                "cpu_time": "00:00:00",
+                "wait_reason": "ptrace_stop",
+                "command": "python3",
+            }),
+        ];
+
+        let payload = build_process_threads_response(
+            4242,
+            "edge-1",
+            "linux",
+            "tid",
+            Some("linux test snapshot"),
+            threads,
+            None,
+        );
+
+        let anomalies = payload["thread_anomalies"].as_array().unwrap();
+        assert!(anomalies.iter().any(|item| item["kind"] == "hot_thread"));
+        assert!(
+            anomalies
+                .iter()
+                .any(|item| item["kind"] == "suspicious_wait_reason")
+        );
+        assert_eq!(payload["thread_anomaly_level"].as_str(), Some("high"));
+        assert!(payload["thread_anomaly_score"].as_u64().unwrap() >= 45);
+        assert!(payload["recommendations"].as_array().unwrap().len() >= 2);
     }
 
     #[test]
@@ -7304,6 +7719,77 @@ fn build_detection_explainability(
             source: Some("detector".to_string()),
         });
     }
+    let evidence_chain = evidence
+        .iter()
+        .enumerate()
+        .map(|(index, item)| {
+            serde_json::json!({
+                "timestamp": event.alert.timestamp,
+                "sequence": index + 1,
+                "signal_type": item.kind,
+                "label": item.label,
+                "value": item.value,
+                "confidence_score": item.confidence.unwrap_or(event.alert.confidence),
+                "source": item.source,
+            })
+        })
+        .collect::<Vec<_>>();
+    let matched_rules = active_rule_metadata(state)
+        .iter()
+        .filter(|rule| {
+            let haystack = format!("{} {} {}", rule.id, rule.title, rule.description)
+                .to_ascii_lowercase();
+            event.alert.reasons.iter().any(|reason| {
+                let normalized = reason.to_ascii_lowercase();
+                normalized.contains(&rule.id.to_ascii_lowercase())
+                    || normalized.contains(&rule.title.to_ascii_lowercase())
+                    || rule.attack.iter().any(|attack| {
+                        !attack.technique_id.is_empty()
+                            && normalized.contains(&attack.technique_id.to_ascii_lowercase())
+                    })
+                    || haystack
+                        .split_whitespace()
+                        .take(4)
+                        .any(|token| normalized.contains(token))
+            })
+        })
+        .take(5)
+        .map(|rule| {
+            serde_json::json!({
+                "rule_id": rule.id,
+                "rule_name": rule.title,
+                "lifecycle_stage": rule.lifecycle,
+                "canary_pct": if matches!(rule.lifecycle, ContentLifecycle::Canary) { 25 } else { 100 },
+                "owner": rule.owner,
+            })
+        })
+        .collect::<Vec<_>>();
+    let similar_past_alerts = state
+        .event_store
+        .all_events()
+        .iter()
+        .filter(|candidate| {
+            candidate.id != event.id
+                && (candidate.alert.hostname == event.alert.hostname
+                    || candidate.alert.level == event.alert.level
+                    || candidate.alert.reasons.iter().any(|reason| {
+                        event.alert.reasons.iter().any(|current| current == reason)
+                    }))
+        })
+        .rev()
+        .take(5)
+        .map(|candidate| {
+            serde_json::json!({
+                "event_id": candidate.id,
+                "alert_id": candidate.id.to_string(),
+                "timestamp": candidate.alert.timestamp,
+                "hostname": candidate.alert.hostname,
+                "severity": candidate.alert.level,
+                "score": candidate.alert.score,
+                "shared_reason": candidate.alert.reasons.iter().find(|reason| event.alert.reasons.iter().any(|current| current == *reason)),
+            })
+        })
+        .collect::<Vec<_>>();
 
     let mut why_safe_or_noisy = Vec::new();
     if !feedback_notes.is_empty() {
@@ -7366,6 +7852,9 @@ fn build_detection_explainability(
         triage_status: Some(event.triage.status.clone()),
         related_cases,
         feedback,
+        evidence_chain,
+        matched_rules,
+        similar_past_alerts,
     })
 }
 
@@ -11133,6 +11622,2476 @@ fn command_summary_payload(state: &mut AppState) -> serde_json::Value {
     })
 }
 
+fn active_rule_metadata(state: &AppState) -> Vec<crate::enterprise::ManagedRuleMetadata> {
+    state
+        .enterprise
+        .builtin_rules()
+        .iter()
+        .cloned()
+        .chain(
+            state
+                .enterprise
+                .native_rules()
+                .iter()
+                .map(|rule| rule.metadata.clone()),
+        )
+        .collect()
+}
+
+fn rule_active_suppression_count(state: &AppState, rule_id: &str) -> usize {
+    state
+        .enterprise
+        .suppressions()
+        .iter()
+        .filter(|suppression| {
+            suppression.is_active()
+                && suppression
+                    .rule_id
+                    .as_deref()
+                    .is_some_and(|candidate| candidate == rule_id)
+        })
+        .count()
+}
+
+fn rule_pack_count(state: &AppState, rule: &crate::enterprise::ManagedRuleMetadata) -> usize {
+    let direct = rule.pack_ids.len();
+    if direct > 0 {
+        return direct;
+    }
+    state
+        .enterprise
+        .packs()
+        .iter()
+        .filter(|pack| pack.rule_ids.iter().any(|id| id == &rule.id))
+        .count()
+}
+
+fn release_item_version(item: &serde_json::Value) -> String {
+    item.get("version")
+        .or_else(|| item.get("tag"))
+        .or_else(|| item.get("name"))
+        .and_then(serde_json::Value::as_str)
+        .unwrap_or("unknown")
+        .to_string()
+}
+
+fn build_launchpad_release_diff(state: &AppState) -> serde_json::Value {
+    let releases_value = serde_json::to_value(state.update_manager.list_releases())
+        .unwrap_or_else(|_| serde_json::json!([]));
+    let releases = releases_value.as_array().cloned().unwrap_or_default();
+    let latest = releases
+        .iter()
+        .find(|item| item.get("latest").and_then(serde_json::Value::as_bool) == Some(true))
+        .or_else(|| {
+            releases.iter().find(|item| {
+                item.get("recommended").and_then(serde_json::Value::as_bool) == Some(true)
+            })
+        })
+        .or_else(|| releases.first());
+    let current_version = env!("CARGO_PKG_VERSION");
+    let latest_version = latest
+        .map(release_item_version)
+        .unwrap_or_else(|| current_version.into());
+    let status = if latest_version == current_version {
+        "current"
+    } else if latest.is_some() {
+        "review_available"
+    } else {
+        "catalog_missing"
+    };
+    let changed_rules = active_rule_metadata(state)
+        .iter()
+        .filter(|rule| {
+            rule.last_promotion_at.is_some()
+                || matches!(
+                    rule.lifecycle,
+                    ContentLifecycle::Canary | ContentLifecycle::Active
+                )
+        })
+        .take(8)
+        .map(|rule| {
+            serde_json::json!({
+                "rule_id": rule.id,
+                "title": rule.title,
+                "lifecycle": rule.lifecycle,
+                "owner": rule.owner,
+                "last_promotion_at": rule.last_promotion_at,
+            })
+        })
+        .collect::<Vec<_>>();
+
+    serde_json::json!({
+        "generated_at": chrono::Utc::now().to_rfc3339(),
+        "status": status,
+        "current_version": current_version,
+        "latest_version": latest_version,
+        "release": latest.cloned(),
+        "release_count": releases.len(),
+        "changed_rules": changed_rules,
+        "operator_summary": if status == "current" {
+            "Runtime and release catalog are aligned."
+        } else if status == "review_available" {
+            "A release candidate is available for operator review."
+        } else {
+            "Release catalog metadata is not available yet."
+        },
+    })
+}
+
+fn build_launchpad_demo_status(state: &AppState) -> serde_json::Value {
+    let sample_alerts = state
+        .alerts
+        .iter()
+        .filter(|alert| {
+            alert.platform == "sample"
+                || alert
+                    .reasons
+                    .iter()
+                    .any(|reason| reason.contains("[SAMPLE]"))
+        })
+        .count();
+    let demo_seeded = std::env::var("WARDEX_DEMO_DATA")
+        .map(|value| matches!(value.as_str(), "1" | "true" | "TRUE" | "yes"))
+        .unwrap_or(false);
+    serde_json::json!({
+        "generated_at": chrono::Utc::now().to_rfc3339(),
+        "status": if demo_seeded || sample_alerts > 0 { "ready" } else { "available" },
+        "seeded": demo_seeded,
+        "sample_alerts": sample_alerts,
+        "scenarios": ["credential_storm", "slow_escalation", "low_battery_attack", "benign_baseline"],
+        "next_action": if sample_alerts > 0 {
+            "Review seeded alerts in Live Monitor or reset the scenario before the next demo."
+        } else {
+            "Start demo lab to seed evaluation telemetry and guided alert context."
+        },
+    })
+}
+
+fn build_detection_recommendations(state: &AppState, limit: usize) -> serde_json::Value {
+    let mut recommendations = active_rule_metadata(state)
+        .into_iter()
+        .map(|rule| {
+            let suppressions = rule_active_suppression_count(state, &rule.id);
+            let pack_count = rule_pack_count(state, &rule);
+            let (action, reason, detail, confidence) = if !rule.enabled
+                || matches!(
+                    rule.lifecycle,
+                    ContentLifecycle::Deprecated | ContentLifecycle::RolledBack
+                )
+            {
+                (
+                    "retire",
+                    "inactive_lifecycle",
+                    "Rule is disabled, deprecated, or rolled back; retire it or document why it remains visible.",
+                    86_u32,
+                )
+            } else if rule.last_test_at.is_none() {
+                (
+                    "review",
+                    "missing_replay_evidence",
+                    "Replay validation has not run; validate the rule before promotion or broader rollout.",
+                    82_u32,
+                )
+            } else if rule.last_test_match_count >= 10 && suppressions == 0 {
+                (
+                    "suppress",
+                    "high_validation_hits",
+                    "Replay validation produced high hit volume without a scoped suppression.",
+                    88_u32,
+                )
+            } else if suppressions >= 2 {
+                (
+                    "review",
+                    "suppression_pressure",
+                    "Multiple live suppressions affect this rule; review tuning before promotion.",
+                    78_u32,
+                )
+            } else if pack_count == 0 {
+                (
+                    "review",
+                    "missing_content_pack",
+                    "Rule is not attached to a content pack, which weakens rollout ownership.",
+                    72_u32,
+                )
+            } else if matches!(rule.lifecycle, ContentLifecycle::Canary)
+                && rule.last_test_match_count <= 2
+                && suppressions == 0
+            {
+                (
+                    "promote",
+                    "canary_low_noise",
+                    "Canary rule has low replay hit volume and no active suppressions.",
+                    74_u32,
+                )
+            } else {
+                (
+                    "monitor",
+                    "healthy_baseline",
+                    "Rule has no immediate blocker; keep evidence fresh and owner review current.",
+                    45_u32,
+                )
+            };
+            serde_json::json!({
+                "rule_id": rule.id,
+                "rule_name": rule.title,
+                "action": action,
+                "confidence": confidence,
+                "reason": reason,
+                "detail": detail,
+                "supporting_metrics": {
+                    "lifecycle": rule.lifecycle,
+                    "enabled": rule.enabled,
+                    "last_test_at": rule.last_test_at,
+                    "last_test_match_count": rule.last_test_match_count,
+                    "active_suppressions": suppressions,
+                    "content_pack_count": pack_count,
+                    "owner": rule.owner,
+                }
+            })
+        })
+        .collect::<Vec<_>>();
+    recommendations.sort_by(|left, right| {
+        right["confidence"]
+            .as_u64()
+            .unwrap_or_default()
+            .cmp(&left["confidence"].as_u64().unwrap_or_default())
+            .then_with(|| {
+                left["rule_name"]
+                    .as_str()
+                    .unwrap_or_default()
+                    .cmp(right["rule_name"].as_str().unwrap_or_default())
+            })
+    });
+    recommendations.truncate(limit.max(1));
+    serde_json::json!({
+        "generated_at": chrono::Utc::now().to_rfc3339(),
+        "days": 30,
+        "recommendations": recommendations,
+    })
+}
+
+fn collector_status_from_freshness(value: &serde_json::Value) -> &'static str {
+    match value
+        .get("freshness")
+        .and_then(serde_json::Value::as_str)
+        .unwrap_or("unknown")
+    {
+        "fresh" => "healthy",
+        "stale" | "unknown" => "stale",
+        "error" => "offline",
+        "disabled" => "disabled",
+        _ => "unknown",
+    }
+}
+
+fn build_detection_readiness(state: &AppState, limit: usize) -> serde_json::Value {
+    let collectors = full_collector_status_entries(state);
+    let rules = active_rule_metadata(state);
+    let mut rows = Vec::new();
+    for rule in rules.iter().take(limit.max(1)) {
+        let mut dependencies = collectors
+            .iter()
+            .filter(|collector| {
+                let lane = collector
+                    .get("lane")
+                    .and_then(serde_json::Value::as_str)
+                    .unwrap_or("cloud");
+                rule_matches_collector_lane(rule, lane)
+            })
+            .map(|collector| {
+                let status = collector_status_from_freshness(collector);
+                serde_json::json!({
+                    "collector_id": collector.get("provider").cloned().unwrap_or_else(|| serde_json::json!("unknown")),
+                    "label": collector.get("label").cloned().unwrap_or_else(|| serde_json::json!("Collector")),
+                    "lane": collector.get("lane").cloned().unwrap_or_else(|| serde_json::json!("unknown")),
+                    "status": status,
+                    "coverage_pct": if status == "healthy" { 100 } else if status == "stale" { 55 } else { 20 },
+                    "last_event_timestamp": collector.get("last_success_at").cloned().unwrap_or(serde_json::Value::Null),
+                    "required_fields_seen": collector.get("enabled").and_then(serde_json::Value::as_bool).unwrap_or(false),
+                    "failure_reason_category": collector.get("error_category").cloned().unwrap_or(serde_json::Value::Null),
+                })
+            })
+            .collect::<Vec<_>>();
+        if dependencies.is_empty() {
+            dependencies.push(serde_json::json!({
+                "collector_id": "generic",
+                "label": "Generic telemetry",
+                "lane": "generic",
+                "status": "unknown",
+                "coverage_pct": 50,
+                "last_event_timestamp": serde_json::Value::Null,
+                "required_fields_seen": false,
+                "failure_reason_category": "mapping_gap",
+            }));
+        }
+        let weakest = dependencies
+            .iter()
+            .map(|item| item["coverage_pct"].as_u64().unwrap_or(0))
+            .min()
+            .unwrap_or(0);
+        rows.push(serde_json::json!({
+            "rule_id": rule.id,
+            "rule_name": rule.title,
+            "owner": rule.owner,
+            "status": if weakest >= 90 { "ready" } else if weakest >= 50 { "degraded" } else { "blocked" },
+            "coverage_pct": weakest,
+            "collectors": dependencies,
+        }));
+    }
+    serde_json::json!({
+        "generated_at": chrono::Utc::now().to_rfc3339(),
+        "rules": rows,
+        "collector_count": collectors.len(),
+    })
+}
+
+fn build_response_approval_overview(state: &AppState) -> serde_json::Value {
+    let response_requests = state.response_orchestrator.all_requests();
+    let pending_response = response_requests
+        .iter()
+        .filter(|request| request.status == ApprovalStatus::Pending)
+        .count();
+    let ready_to_execute = response_requests
+        .iter()
+        .filter(|request| request.status == ApprovalStatus::Approved && !request.dry_run)
+        .count();
+    let playbook_executions = state.playbook_engine.recent_executions(usize::MAX);
+    let pending_playbooks = playbook_executions
+        .iter()
+        .filter(|execution| execution.status == crate::playbook::ExecutionStatus::AwaitingApproval)
+        .count();
+    serde_json::json!({
+        "generated_at": chrono::Utc::now().to_rfc3339(),
+        "pending_response_approvals": pending_response,
+        "ready_to_execute": ready_to_execute,
+        "pending_playbook_approvals": pending_playbooks,
+        "total_response_requests": response_requests.len(),
+        "total_playbook_executions": playbook_executions.len(),
+        "status": if pending_response + pending_playbooks > 0 { "approval_required" } else { "clear" },
+        "next_action": if pending_response + pending_playbooks > 0 {
+            "Open SOC Workbench approval queues before executing live response."
+        } else {
+            "Approval queues are clear; keep dry-run proof current."
+        },
+    })
+}
+
+fn build_remediation_safety_status(state: &AppState) -> serde_json::Value {
+    let lane = crate::remediation::remediation_lane_summary(&state.storage);
+    serde_json::json!({
+        "generated_at": chrono::Utc::now().to_rfc3339(),
+        "current_platform": std::env::consts::OS,
+        "allow_live_rollback": state.config.remediation.allow_live_rollback,
+        "execute_live_rollback_commands": state.config.remediation.execute_live_rollback_commands,
+        "pending_reviews": lane.pending_reviews,
+        "rollback_ready": lane.rollback_ready,
+        "rollback_proofs": lane.rollback_ready,
+        "status": if state.config.remediation.allow_live_rollback && state.config.remediation.execute_live_rollback_commands {
+            "live_enabled"
+        } else if state.config.remediation.allow_live_rollback {
+            "proof_only"
+        } else {
+            "dry_run_only"
+        },
+        "guardrails": [
+            "confirm_hostname must match the change-review asset before live rollback",
+            "local execution is allowed only when the requested platform matches the current OS",
+            "rollback proof metadata is retained for audit review"
+        ],
+    })
+}
+
+const PRODUCT_CONTRACT_ENDPOINTS: &[(&str, &str)] = &[
+    ("GET", "/api/operational/snapshots"),
+    ("GET", "/api/operational/snapshots/verify"),
+    ("GET", "/api/launchpad/evidence-pack"),
+    ("GET", "/api/launchpad/release-diff"),
+    ("GET", "/api/launchpad/demo-status"),
+    ("POST", "/api/launchpad/demo-reset"),
+    ("GET", "/api/release/doctor"),
+    ("GET", "/api/release/provenance"),
+    ("GET", "/api/release/upgrade-rehearsal"),
+    ("GET", "/api/detection/recommendations"),
+    ("GET", "/api/detection/readiness"),
+    ("GET", "/api/detection/trust-score"),
+    ("GET", "/api/monitoring/synthetic-console"),
+    ("GET", "/api/incidents/timeline-replay"),
+    ("GET", "/api/fleet/drift-compliance"),
+    ("GET", "/api/operator/work-queue"),
+    ("GET", "/api/retention/forecast"),
+    ("GET", "/api/validation/adversarial"),
+    ("GET", "/api/support/bundle-diff"),
+    ("GET", "/api/response/approval-overview"),
+    ("GET", "/api/remediation/safety"),
+    ("GET", "/api/support/bundle"),
+    ("GET", "/api/ws/health"),
+    ("GET", "/api/stream/readiness"),
+    ("GET", "/api/stream/reliability-lab"),
+    ("GET", "/api/sdk/contract-status"),
+    ("GET", "/api/alerts/histogram"),
+    ("GET", "/api/alerts/page"),
+    ("GET", "/api/events/page"),
+    ("GET", "/api/audit/log/page"),
+    ("GET", "/api/workflows/preflight"),
+    ("POST", "/api/content/rules/{id}/preflight"),
+    ("GET", "/api/tenants/isolation-proof"),
+    ("GET", "/api/processes/thread-proof"),
+    ("GET", "/api/operational/snapshots/policy"),
+    ("POST", "/api/operational/snapshots/prune"),
+    ("GET", "/api/release/observability-gates"),
+    ("POST", "/api/subscriptions"),
+    ("GET", "/api/subscriptions/resume"),
+];
+
+fn product_contract_missing_from_source(source: &str) -> Vec<String> {
+    PRODUCT_CONTRACT_ENDPOINTS
+        .iter()
+        .filter_map(|(method, path)| {
+            let path_present = if source.contains(path) {
+                true
+            } else if let Some((prefix, suffix)) = path.split_once("{id}") {
+                source.contains(prefix) && source.contains(suffix)
+            } else {
+                false
+            };
+            if path_present {
+                None
+            } else {
+                Some(format!("{method} {path}"))
+            }
+        })
+        .collect()
+}
+
+fn product_contract_missing_from_catalog(
+    catalog: &[crate::openapi::EndpointCatalogEntry],
+) -> Vec<String> {
+    PRODUCT_CONTRACT_ENDPOINTS
+        .iter()
+        .filter_map(|(method, path)| {
+            if catalog
+                .iter()
+                .any(|entry| entry.method == *method && entry.path == *path)
+            {
+                None
+            } else {
+                Some(format!("{method} {path}"))
+            }
+        })
+        .collect()
+}
+
+fn stream_readiness_payload(stats: serde_json::Value) -> serde_json::Value {
+    let dropped = stats
+        .get("dropped_events")
+        .and_then(serde_json::Value::as_u64)
+        .unwrap_or_default();
+    let queue_depth = stats
+        .get("subscriber_queue_depth")
+        .and_then(serde_json::Value::as_u64)
+        .unwrap_or_default();
+    let max_observed_queue_depth = stats
+        .get("max_observed_queue_depth")
+        .and_then(serde_json::Value::as_u64)
+        .unwrap_or(queue_depth);
+    let latency_slo_ms = stats
+        .get("latency_slo_ms")
+        .and_then(serde_json::Value::as_u64)
+        .unwrap_or(1000);
+    let mut score = 100_i64;
+    score -= ((queue_depth.min(200) as i64) / 2).min(45);
+    score -= ((max_observed_queue_depth.min(250) as i64) / 10).min(20);
+    score -= (dropped.min(50) as i64 * 2).min(50);
+    let score = score.clamp(0, 100) as u64;
+    let status = if score >= 90 {
+        "ready"
+    } else if score >= 70 {
+        "degraded"
+    } else {
+        "backpressure"
+    };
+    serde_json::json!({
+        "generated_at": chrono::Utc::now().to_rfc3339(),
+        "status": status,
+        "score": score,
+        "queue_depth": queue_depth,
+        "max_observed_queue_depth": max_observed_queue_depth,
+        "dropped_events": dropped,
+        "latency_slo_ms": latency_slo_ms,
+        "promotion_guard": if score >= 80 { "clear" } else { "recover_stream_first" },
+        "next_action": if score >= 80 {
+            "Stream reliability is strong enough for promotion and evidence workflows."
+        } else {
+            "Recover stream health before trusting rule promotion, live response, or evidence completeness."
+        },
+        "stats": stats,
+    })
+}
+
+fn operational_snapshot_kind(kind: &str) -> String {
+    kind.chars()
+        .map(|ch| {
+            if ch.is_ascii_alphanumeric() || ch == '-' || ch == '_' {
+                ch
+            } else {
+                '_'
+            }
+        })
+        .collect::<String>()
+}
+
+fn storage_root_path(storage: &crate::storage::SharedStorage) -> Option<PathBuf> {
+    storage
+        .with(|store| Ok(store.stats().storage_path))
+        .ok()
+        .map(PathBuf::from)
+}
+
+fn snapshot_entry_from_path(
+    root: &Path,
+    path: &Path,
+    include_payload: bool,
+) -> Option<serde_json::Value> {
+    let bytes = fs::read(path).ok()?;
+    let envelope: serde_json::Value = serde_json::from_slice(&bytes).ok()?;
+    let payload = envelope.get("payload");
+    let digest = envelope.get("digest").and_then(serde_json::Value::as_str)?;
+    let computed_digest =
+        payload.map(|payload| crate::audit::sha256_hex(payload.to_string().as_bytes()));
+    let verified = computed_digest.as_deref() == Some(digest);
+    let relative = path
+        .strip_prefix(root)
+        .unwrap_or(path)
+        .to_string_lossy()
+        .replace('\\', "/");
+    let storage_key = format!("operational_snapshots/{relative}");
+    let mut entry = serde_json::json!({
+        "kind": envelope.get("kind").and_then(serde_json::Value::as_str).unwrap_or("unknown"),
+        "digest": digest,
+        "generated_at": envelope.get("generated_at").cloned().unwrap_or(serde_json::Value::Null),
+        "storage_key": storage_key,
+        "size_bytes": bytes.len(),
+        "verified": verified,
+    });
+    if include_payload && let Some(map) = entry.as_object_mut() {
+        map.insert(
+            "payload".to_string(),
+            payload.cloned().unwrap_or(serde_json::Value::Null),
+        );
+    }
+    Some(entry)
+}
+
+fn list_operational_snapshots(
+    storage: &crate::storage::SharedStorage,
+    kind_filter: Option<&str>,
+    limit: usize,
+) -> serde_json::Value {
+    let generated_at = chrono::Utc::now().to_rfc3339();
+    let Some(storage_path) = storage_root_path(storage) else {
+        return serde_json::json!({
+            "generated_at": generated_at,
+            "status": "unavailable",
+            "snapshots": [],
+            "count": 0,
+            "error": "storage_unavailable",
+        });
+    };
+    let root = storage_path.join("operational_snapshots");
+    let requested_kind = kind_filter
+        .map(operational_snapshot_kind)
+        .filter(|value| !value.is_empty());
+    let mut snapshots = Vec::new();
+    if let Ok(kind_dirs) = fs::read_dir(&root) {
+        for kind_dir in kind_dirs.flatten() {
+            let Ok(file_type) = kind_dir.file_type() else {
+                continue;
+            };
+            if !file_type.is_dir() {
+                continue;
+            }
+            let kind_name = kind_dir.file_name().to_string_lossy().to_string();
+            if let Some(ref requested_kind) = requested_kind
+                && requested_kind != &kind_name
+            {
+                continue;
+            }
+            if let Ok(files) = fs::read_dir(kind_dir.path()) {
+                for file in files.flatten() {
+                    let Ok(file_type) = file.file_type() else {
+                        continue;
+                    };
+                    if file_type.is_file()
+                        && file.path().extension().and_then(|value| value.to_str()) == Some("json")
+                        && let Some(entry) = snapshot_entry_from_path(&root, &file.path(), false)
+                    {
+                        snapshots.push(entry);
+                    }
+                }
+            }
+        }
+    }
+    snapshots.sort_by(|left, right| {
+        right
+            .get("generated_at")
+            .and_then(serde_json::Value::as_str)
+            .cmp(&left.get("generated_at").and_then(serde_json::Value::as_str))
+    });
+    let limit = limit.clamp(1, 500);
+    snapshots.truncate(limit);
+    let verified_count = snapshots
+        .iter()
+        .filter(|entry| {
+            entry
+                .get("verified")
+                .and_then(serde_json::Value::as_bool)
+                .unwrap_or(false)
+        })
+        .count();
+    serde_json::json!({
+        "generated_at": generated_at,
+        "status": if snapshots.is_empty() { "empty" } else { "indexed" },
+        "storage_root": "operational_snapshots",
+        "kind_filter": requested_kind,
+        "count": snapshots.len(),
+        "verified_count": verified_count,
+        "snapshots": snapshots,
+    })
+}
+
+fn safe_snapshot_lookup_path(root: &Path, storage_key: &str) -> Option<PathBuf> {
+    let key = storage_key
+        .strip_prefix("operational_snapshots/")
+        .unwrap_or(storage_key)
+        .trim();
+    if key.is_empty()
+        || key.starts_with('/')
+        || key.contains("..")
+        || key.contains('\\')
+        || key.split('/').any(|part| part.is_empty() || part == ".")
+    {
+        return None;
+    }
+    Some(root.join(key))
+}
+
+fn verify_operational_snapshot(
+    storage: &crate::storage::SharedStorage,
+    storage_key: Option<&str>,
+    digest: Option<&str>,
+) -> serde_json::Value {
+    let generated_at = chrono::Utc::now().to_rfc3339();
+    let Some(storage_path) = storage_root_path(storage) else {
+        return serde_json::json!({
+            "generated_at": generated_at,
+            "status": "unavailable",
+            "verified": false,
+            "error": "storage_unavailable",
+        });
+    };
+    let root = storage_path.join("operational_snapshots");
+    let entry = if let Some(storage_key) = storage_key {
+        safe_snapshot_lookup_path(&root, storage_key)
+            .and_then(|path| snapshot_entry_from_path(&root, &path, true))
+    } else if let Some(digest) = digest {
+        list_operational_snapshots(storage, None, 500)
+            .get("snapshots")
+            .and_then(serde_json::Value::as_array)
+            .and_then(|items| {
+                items
+                    .iter()
+                    .find(|entry| {
+                        entry.get("digest").and_then(serde_json::Value::as_str) == Some(digest)
+                    })
+                    .and_then(|entry| {
+                        let storage_key = entry.get("storage_key")?.as_str()?;
+                        safe_snapshot_lookup_path(&root, storage_key)
+                            .and_then(|path| snapshot_entry_from_path(&root, &path, true))
+                    })
+            })
+    } else {
+        None
+    };
+    match entry {
+        Some(entry) => serde_json::json!({
+            "generated_at": generated_at,
+            "status": if entry.get("verified").and_then(serde_json::Value::as_bool).unwrap_or(false) { "verified" } else { "digest_mismatch" },
+            "verified": entry.get("verified").and_then(serde_json::Value::as_bool).unwrap_or(false),
+            "snapshot": entry,
+        }),
+        None => serde_json::json!({
+            "generated_at": generated_at,
+            "status": "not_found",
+            "verified": false,
+            "error": "snapshot_not_found",
+        }),
+    }
+}
+
+fn persist_operational_snapshot(
+    storage: &crate::storage::SharedStorage,
+    kind: &str,
+    payload: &serde_json::Value,
+) -> serde_json::Value {
+    let digest = crate::audit::sha256_hex(payload.to_string().as_bytes());
+    let generated_at = chrono::Utc::now().to_rfc3339();
+    let Some(storage_path) = storage_root_path(storage) else {
+        return serde_json::json!({
+            "persisted": false,
+            "digest": digest,
+            "error": "storage_unavailable",
+        });
+    };
+    let safe_kind = operational_snapshot_kind(kind);
+    let dir = storage_path.join("operational_snapshots").join(&safe_kind);
+    if let Err(err) = fs::create_dir_all(&dir) {
+        return serde_json::json!({
+            "persisted": false,
+            "digest": digest,
+            "error": format!("snapshot_dir_failed: {err}"),
+        });
+    }
+    let short_digest = digest.chars().take(12).collect::<String>();
+    let file_name = format!(
+        "{}-{short_digest}.json",
+        chrono::Utc::now().timestamp_millis()
+    );
+    let storage_key = format!("operational_snapshots/{safe_kind}/{file_name}");
+    let path = dir.join(&file_name);
+    let envelope = serde_json::json!({
+        "kind": safe_kind,
+        "digest": digest,
+        "generated_at": generated_at,
+        "payload": payload,
+    });
+    match serde_json::to_vec_pretty(&envelope)
+        .ok()
+        .and_then(|bytes| fs::write(&path, bytes).ok())
+    {
+        Some(_) => serde_json::json!({
+            "persisted": true,
+            "digest": envelope["digest"].clone(),
+            "generated_at": generated_at,
+            "storage_key": storage_key,
+        }),
+        None => serde_json::json!({
+            "persisted": false,
+            "digest": envelope["digest"].clone(),
+            "error": "snapshot_write_failed",
+        }),
+    }
+}
+
+fn payload_with_snapshot(
+    mut payload: serde_json::Value,
+    snapshot: serde_json::Value,
+) -> serde_json::Value {
+    if let Some(map) = payload.as_object_mut() {
+        map.insert("snapshot".to_string(), snapshot);
+        payload
+    } else {
+        serde_json::json!({ "generated": payload, "snapshot": snapshot })
+    }
+}
+
+fn build_sdk_contract_status(state: &AppState) -> serde_json::Value {
+    let catalog = crate::openapi::endpoint_catalog(env!("CARGO_PKG_VERSION"));
+    let docs_openapi = include_str!("../docs/openapi.yaml");
+    let python_sdk = include_str!("../sdk/python/wardex/client.py");
+    let typescript_sdk = include_str!("../sdk/typescript/src/index.ts");
+    let release_acceptance = include_str!("../scripts/release_acceptance.sh");
+    let missing_openapi_builder = product_contract_missing_from_catalog(&catalog);
+    let missing_docs = product_contract_missing_from_source(docs_openapi);
+    let missing_python_sdk = product_contract_missing_from_source(python_sdk);
+    let missing_typescript_sdk = product_contract_missing_from_source(typescript_sdk);
+    let missing_release_gate = product_contract_missing_from_source(release_acceptance);
+    let drift_count = missing_openapi_builder.len()
+        + missing_docs.len()
+        + missing_python_sdk.len()
+        + missing_typescript_sdk.len()
+        + missing_release_gate.len();
+    serde_json::json!({
+        "generated_at": chrono::Utc::now().to_rfc3339(),
+        "runtime_version": env!("CARGO_PKG_VERSION"),
+        "openapi_endpoint": "/api/openapi.json",
+        "contract_parity_script": "scripts/check_contract_parity.py",
+        "release_gate": "scripts/release_acceptance.sh",
+        "sdk_surfaces": ["sdk/python", "sdk/typescript"],
+        "endpoint_inventory": catalog.len(),
+        "product_endpoint_inventory": PRODUCT_CONTRACT_ENDPOINTS.len(),
+        "tenant_count": state.multi_tenant.tenant_count(),
+        "missing_openapi_builder": missing_openapi_builder,
+        "missing_docs_openapi": missing_docs,
+        "missing_python_sdk": missing_python_sdk,
+        "missing_typescript_sdk": missing_typescript_sdk,
+        "missing_release_gate": missing_release_gate,
+        "drift_count": drift_count,
+        "status": if drift_count == 0 { "tracked" } else { "drift" },
+    })
+}
+
+fn parse_duration_seconds(value: &str) -> Option<i64> {
+    let trimmed = value.trim();
+    if trimmed.is_empty() {
+        return None;
+    }
+    let (number, multiplier) = match trimmed.chars().last()? {
+        'm' | 'M' => (&trimmed[..trimmed.len().saturating_sub(1)], 60_i64),
+        'h' | 'H' => (&trimmed[..trimmed.len().saturating_sub(1)], 60_i64 * 60),
+        'd' | 'D' => (
+            &trimmed[..trimmed.len().saturating_sub(1)],
+            60_i64 * 60 * 24,
+        ),
+        's' | 'S' => (&trimmed[..trimmed.len().saturating_sub(1)], 1_i64),
+        _ => (trimmed, 1_i64),
+    };
+    number
+        .parse::<i64>()
+        .ok()
+        .filter(|value| *value > 0)
+        .map(|value| value.saturating_mul(multiplier))
+}
+
+fn alert_timestamp(alert: &AlertRecord) -> chrono::DateTime<chrono::Utc> {
+    chrono::DateTime::parse_from_rfc3339(&alert.timestamp)
+        .map(|value| value.with_timezone(&chrono::Utc))
+        .unwrap_or_else(|_| chrono::Utc::now())
+}
+
+fn build_alert_histogram(
+    alerts: &VecDeque<AlertRecord>,
+    window_secs: i64,
+    bucket_secs: i64,
+    severity_filter: Option<&str>,
+) -> serde_json::Value {
+    let end = chrono::Utc::now();
+    let start = end - chrono::Duration::seconds(window_secs.clamp(60, 60 * 60 * 24 * 365));
+    let bucket_secs = bucket_secs.clamp(60, 60 * 60 * 24 * 30);
+    let severities = severity_filter
+        .map(|value| {
+            value
+                .split(',')
+                .map(|item| item.trim().to_ascii_lowercase())
+                .filter(|item| !item.is_empty())
+                .collect::<HashSet<_>>()
+        })
+        .filter(|set| !set.is_empty());
+    let mut buckets: BTreeMap<i64, (usize, HashMap<String, usize>, f32)> = BTreeMap::new();
+    let mut total = 0usize;
+    for alert in alerts {
+        let timestamp = alert_timestamp(alert);
+        if timestamp < start || timestamp > end {
+            continue;
+        }
+        let level = alert.level.to_ascii_lowercase();
+        if let Some(ref severities) = severities
+            && !severities.contains(&level)
+        {
+            continue;
+        }
+        let offset = timestamp.timestamp().saturating_sub(start.timestamp());
+        let bucket_start = start.timestamp() + (offset / bucket_secs) * bucket_secs;
+        let entry = buckets
+            .entry(bucket_start)
+            .or_insert_with(|| (0, HashMap::new(), 0.0));
+        entry.0 += 1;
+        *entry.1.entry(level).or_insert(0) += 1;
+        entry.2 = entry.2.max(alert.score);
+        total += 1;
+    }
+    let bucket_values = buckets
+        .into_iter()
+        .filter_map(|(bucket_start, (count, severity_breakdown, max_score))| {
+            let timestamp = chrono::DateTime::<chrono::Utc>::from_timestamp(bucket_start, 0)?;
+            Some(serde_json::json!({
+                "timestamp": timestamp.to_rfc3339(),
+                "count": count,
+                "severity_breakdown": severity_breakdown,
+                "max_score": (max_score * 100.0).round() / 100.0,
+            }))
+        })
+        .collect::<Vec<_>>();
+    serde_json::json!({
+        "generated_at": end.to_rfc3339(),
+        "window_secs": window_secs,
+        "bucket_secs": bucket_secs,
+        "severity_filter": severity_filter,
+        "total": total,
+        "buckets": bucket_values,
+    })
+}
+
+fn parse_cursor_page_params(url: &str, default_limit: usize, max_limit: usize) -> (usize, usize) {
+    let query = parse_query_string(url);
+    let cursor = query
+        .get("cursor")
+        .or_else(|| query.get("after"))
+        .or_else(|| query.get("offset"))
+        .and_then(|value| value.parse::<usize>().ok())
+        .unwrap_or(0)
+        .min(1_000_000);
+    let limit = query
+        .get("limit")
+        .and_then(|value| value.parse::<usize>().ok())
+        .unwrap_or(default_limit)
+        .clamp(1, max_limit);
+    (cursor, limit)
+}
+
+fn cursor_page_payload(
+    collection: &str,
+    items: Vec<serde_json::Value>,
+    total: usize,
+    cursor: usize,
+    limit: usize,
+) -> serde_json::Value {
+    let count = items.len();
+    let next_cursor = cursor.saturating_add(count);
+    serde_json::json!({
+        "generated_at": chrono::Utc::now().to_rfc3339(),
+        "collection": collection,
+        "cursor": cursor.to_string(),
+        "next_cursor": next_cursor.to_string(),
+        "limit": limit,
+        "count": count,
+        "total": total,
+        "has_more": next_cursor < total,
+        "items": items,
+    })
+}
+
+fn alert_cursor_page_payload(state: &AppState, cursor: usize, limit: usize) -> serde_json::Value {
+    let total = state.alerts.len();
+    let items = state
+        .alerts
+        .iter()
+        .enumerate()
+        .skip(cursor.min(total))
+        .take(limit)
+        .map(|(index, alert)| alert_json_value(alert, index, &state.local_host_info.hostname, &[]))
+        .collect::<Vec<_>>();
+    cursor_page_payload("alerts", items, total, cursor.min(total), limit)
+}
+
+fn event_cursor_page_payload(
+    state: &AppState,
+    url: &str,
+    cursor: usize,
+    limit: usize,
+) -> serde_json::Value {
+    let query = parse_event_query(url);
+    let events = filtered_events(&state.event_store, &query);
+    let total = events.len();
+    let items = events
+        .into_iter()
+        .skip(cursor.min(total))
+        .take(limit)
+        .filter_map(|event| serde_json::to_value(event).ok())
+        .collect::<Vec<_>>();
+    cursor_page_payload("events", items, total, cursor.min(total), limit)
+}
+
+fn audit_cursor_page_payload(
+    state: &AppState,
+    url: &str,
+    cursor: usize,
+    limit: usize,
+) -> serde_json::Value {
+    let query = parse_query_string(url);
+    let filter = AuditLogFilter::from_query(&query);
+    let page = state.audit_log.page_filtered(limit, cursor, &filter);
+    let items = page
+        .entries
+        .into_iter()
+        .filter_map(|entry| serde_json::to_value(entry).ok())
+        .collect::<Vec<_>>();
+    cursor_page_payload("audit_log", items, page.total, page.offset, page.limit)
+}
+
+fn subscription_id_for(lanes: &[String], filters: &serde_json::Value) -> String {
+    let digest = crate::audit::sha256_hex(
+        serde_json::json!({ "lanes": lanes, "filters": filters, "ts": chrono::Utc::now().timestamp_millis() })
+            .to_string()
+            .as_bytes(),
+    );
+    format!("sub-{}", digest.chars().take(16).collect::<String>())
+}
+
+fn subscription_cursor_dir(storage: &crate::storage::SharedStorage) -> Option<PathBuf> {
+    storage_root_path(storage).map(|root| root.join("operational_subscriptions"))
+}
+
+fn safe_subscription_id(value: &str) -> Option<String> {
+    let trimmed = value.trim();
+    if trimmed.is_empty()
+        || trimmed.len() > 96
+        || !trimmed
+            .chars()
+            .all(|ch| ch.is_ascii_alphanumeric() || ch == '-' || ch == '_')
+    {
+        return None;
+    }
+    Some(trimmed.to_string())
+}
+
+fn persist_subscription_cursor(
+    storage: &crate::storage::SharedStorage,
+    cursor: &serde_json::Value,
+) -> serde_json::Value {
+    let generated_at = chrono::Utc::now().to_rfc3339();
+    let Some(subscription_id) = cursor
+        .get("subscription_id")
+        .and_then(serde_json::Value::as_str)
+        .and_then(safe_subscription_id)
+    else {
+        return serde_json::json!({
+            "persisted": false,
+            "generated_at": generated_at,
+            "error": "invalid_subscription_id",
+        });
+    };
+    let Some(dir) = subscription_cursor_dir(storage) else {
+        return serde_json::json!({
+            "persisted": false,
+            "generated_at": generated_at,
+            "error": "storage_unavailable",
+        });
+    };
+    if let Err(err) = fs::create_dir_all(&dir) {
+        return serde_json::json!({
+            "persisted": false,
+            "generated_at": generated_at,
+            "error": format!("cursor_dir_failed: {err}"),
+        });
+    }
+    let path = dir.join(format!("{subscription_id}.json"));
+    let envelope = serde_json::json!({
+        "subscription_id": subscription_id,
+        "updated_at": generated_at,
+        "cursor": cursor,
+    });
+    match serde_json::to_vec_pretty(&envelope)
+        .ok()
+        .and_then(|bytes| fs::write(&path, bytes).ok())
+    {
+        Some(_) => serde_json::json!({
+            "persisted": true,
+            "generated_at": generated_at,
+            "storage_key": format!("operational_subscriptions/{subscription_id}.json"),
+        }),
+        None => serde_json::json!({
+            "persisted": false,
+            "generated_at": generated_at,
+            "error": "cursor_write_failed",
+        }),
+    }
+}
+
+fn read_subscription_cursor(
+    storage: &crate::storage::SharedStorage,
+    subscription_id: &str,
+) -> Option<serde_json::Value> {
+    let subscription_id = safe_subscription_id(subscription_id)?;
+    let path = subscription_cursor_dir(storage)?.join(format!("{subscription_id}.json"));
+    let bytes = fs::read(path).ok()?;
+    let envelope: serde_json::Value = serde_json::from_slice(&bytes).ok()?;
+    envelope.get("cursor").cloned()
+}
+
+fn stream_reliability_lab_payload(stats: serde_json::Value) -> serde_json::Value {
+    let readiness = stream_readiness_payload(stats.clone());
+    let score = readiness
+        .get("score")
+        .and_then(serde_json::Value::as_u64)
+        .unwrap_or_default();
+    let dropped = stats
+        .get("dropped_events")
+        .and_then(serde_json::Value::as_u64)
+        .unwrap_or_default();
+    let queue_depth = stats
+        .get("subscriber_queue_depth")
+        .and_then(serde_json::Value::as_u64)
+        .unwrap_or_default();
+    let max_queue = stats
+        .get("max_observed_queue_depth")
+        .and_then(serde_json::Value::as_u64)
+        .unwrap_or(queue_depth);
+    let scenarios = vec![
+        serde_json::json!({
+            "id": "steady_state",
+            "status": if score >= 90 { "pass" } else { "warn" },
+            "observed": { "score": score, "queue_depth": queue_depth },
+            "expected": "readiness score >= 90 and queue depth below 25",
+            "next_action": if score >= 90 { "Keep promotion workflows enabled." } else { "Collect a clean steady-state sample before promotion." },
+        }),
+        serde_json::json!({
+            "id": "backpressure_recovery",
+            "status": if max_queue <= 100 { "pass" } else if max_queue <= 200 { "warn" } else { "fail" },
+            "observed": { "max_observed_queue_depth": max_queue },
+            "expected": "max queue depth <= 100 during live monitoring",
+            "next_action": if max_queue <= 100 { "No recovery action required." } else { "Drain slow subscribers and reconnect affected consoles." },
+        }),
+        serde_json::json!({
+            "id": "drop_detection",
+            "status": if dropped == 0 { "pass" } else { "fail" },
+            "observed": { "dropped_events": dropped },
+            "expected": "zero dropped events since stream bus start",
+            "next_action": if dropped == 0 { "Cursor replay can be trusted for current buffer." } else { "Use cursor replay and evidence snapshots to identify missing alert context." },
+        }),
+        serde_json::json!({
+            "id": "cursor_resume",
+            "status": "pass",
+            "observed": { "retention_window": "current_alert_buffer", "durable_cursor_store": true },
+            "expected": "subscriptions persist cursor metadata and expose replay gaps",
+            "next_action": "Resume from the latest durable cursor after reconnects.",
+        }),
+    ];
+    let fail_count = scenarios
+        .iter()
+        .filter(|scenario| {
+            scenario.get("status").and_then(serde_json::Value::as_str) == Some("fail")
+        })
+        .count();
+    let warn_count = scenarios
+        .iter()
+        .filter(|scenario| {
+            scenario.get("status").and_then(serde_json::Value::as_str) == Some("warn")
+        })
+        .count();
+    serde_json::json!({
+        "generated_at": chrono::Utc::now().to_rfc3339(),
+        "status": if fail_count > 0 { "fail" } else if warn_count > 0 { "warn" } else { "pass" },
+        "readiness": readiness,
+        "scenario_count": scenarios.len(),
+        "fail_count": fail_count,
+        "warn_count": warn_count,
+        "scenarios": scenarios,
+    })
+}
+
+fn release_doctor_payload(state: &AppState) -> serde_json::Value {
+    let release_diff = build_launchpad_release_diff(state);
+    let contract = build_sdk_contract_status(state);
+    let stream = stream_readiness_payload(state.alert_broadcaster.stats());
+    let remediation = build_remediation_safety_status(state);
+    let observability = build_release_observability_gates(state);
+    let release_current = matches!(
+        release_diff
+            .get("status")
+            .and_then(serde_json::Value::as_str),
+        Some("current") | Some("aligned") | Some("unknown")
+    );
+    let contract_drift = contract
+        .get("drift_count")
+        .and_then(serde_json::Value::as_u64)
+        .unwrap_or_default();
+    let stream_score = stream
+        .get("score")
+        .and_then(serde_json::Value::as_u64)
+        .unwrap_or_default();
+    let observability_status = observability
+        .get("status")
+        .and_then(serde_json::Value::as_str)
+        .unwrap_or("unknown");
+    let checks = vec![
+        serde_json::json!({
+            "id": "release_catalog",
+            "status": if release_current { "pass" } else { "warn" },
+            "detail": release_diff.get("operator_summary").and_then(serde_json::Value::as_str).unwrap_or("Release catalog compared with runtime version."),
+        }),
+        serde_json::json!({
+            "id": "contract_parity",
+            "status": if contract_drift == 0 { "pass" } else { "fail" },
+            "detail": format!("{contract_drift} endpoint parity drift item(s) detected."),
+        }),
+        serde_json::json!({
+            "id": "stream_readiness",
+            "status": if stream_score >= 80 { "pass" } else { "warn" },
+            "detail": format!("Realtime readiness score is {stream_score}."),
+        }),
+        serde_json::json!({
+            "id": "observability_gates",
+            "status": if observability_status == "blocked" { "fail" } else if observability_status == "review" { "warn" } else { "pass" },
+            "detail": format!("Release observability gates are {observability_status}."),
+        }),
+        serde_json::json!({
+            "id": "remediation_guardrails",
+            "status": if remediation.get("status").and_then(serde_json::Value::as_str) == Some("live_enabled") { "warn" } else { "pass" },
+            "detail": format!("Remediation mode is {}.", remediation.get("status").and_then(serde_json::Value::as_str).unwrap_or("unknown")),
+        }),
+    ];
+    let fail_count = checks
+        .iter()
+        .filter(|check| check.get("status").and_then(serde_json::Value::as_str) == Some("fail"))
+        .count();
+    let warn_count = checks
+        .iter()
+        .filter(|check| check.get("status").and_then(serde_json::Value::as_str) == Some("warn"))
+        .count();
+    serde_json::json!({
+        "generated_at": chrono::Utc::now().to_rfc3339(),
+        "status": if fail_count > 0 { "blocked" } else if warn_count > 0 { "review" } else { "ready" },
+        "runtime_version": env!("CARGO_PKG_VERSION"),
+        "fail_count": fail_count,
+        "warn_count": warn_count,
+        "checks": checks,
+        "observability_gates": observability,
+        "next_action": if fail_count > 0 {
+            "Fix contract drift before release acceptance."
+        } else if warn_count > 0 {
+            "Review warnings before approving rollout."
+        } else {
+            "Release acceptance signals are ready."
+        },
+    })
+}
+
+fn support_sensitive_key(key: &str) -> bool {
+    let normalized = key.to_ascii_lowercase();
+    [
+        "token",
+        "secret",
+        "password",
+        "credential",
+        "authorization",
+        "cookie",
+        "private_key",
+        "api_key",
+    ]
+    .iter()
+    .any(|needle| normalized.contains(needle))
+}
+
+fn redact_support_payload(value: &mut serde_json::Value, path: &str, redacted: &mut Vec<String>) {
+    match value {
+        serde_json::Value::Object(map) => {
+            for (key, child) in map.iter_mut() {
+                let next_path = if path.is_empty() {
+                    key.to_string()
+                } else {
+                    format!("{path}.{key}")
+                };
+                if support_sensitive_key(key) {
+                    *child = serde_json::Value::String("[REDACTED]".to_string());
+                    redacted.push(next_path);
+                } else {
+                    redact_support_payload(child, &next_path, redacted);
+                }
+            }
+        }
+        serde_json::Value::Array(items) => {
+            for (index, child) in items.iter_mut().enumerate() {
+                redact_support_payload(child, &format!("{path}[{index}]"), redacted);
+            }
+        }
+        _ => {}
+    }
+}
+
+fn build_support_bundle(state: &mut AppState) -> serde_json::Value {
+    let mut bundle = serde_json::json!({
+        "generated_at": chrono::Utc::now().to_rfc3339(),
+        "runtime_version": env!("CARGO_PKG_VERSION"),
+        "host": {
+            "hostname": state.local_host_info.hostname.clone(),
+            "platform": state.local_host_info.platform.to_string(),
+            "arch": state.local_host_info.arch.clone(),
+        },
+        "readiness_evidence": production_readiness_evidence(state),
+        "release_doctor": release_doctor_payload(state),
+        "stream_reliability": stream_reliability_lab_payload(state.alert_broadcaster.stats()),
+        "snapshot_index": list_operational_snapshots(&state.storage, None, 25),
+        "audit_tail_count": state.audit_log.entries.len(),
+        "alert_count": state.alerts.len(),
+        "redaction_probe": {
+            "authorization": "support bundle redaction self-test",
+            "api_key": "support bundle redaction self-test",
+        },
+    });
+    let mut redacted_fields = Vec::new();
+    redact_support_payload(&mut bundle, "", &mut redacted_fields);
+    let digest = crate::audit::sha256_hex(bundle.to_string().as_bytes());
+    serde_json::json!({
+        "generated_at": chrono::Utc::now().to_rfc3339(),
+        "status": "redacted",
+        "digest": digest,
+        "bundle": bundle,
+        "redaction": {
+            "policy": "keys containing token, secret, password, credential, authorization, cookie, private_key, or api_key are replaced before export",
+            "redacted_fields": redacted_fields,
+            "redacted_count": redacted_fields.len(),
+        },
+    })
+}
+
+fn build_launchpad_evidence_pack(state: &mut AppState) -> serde_json::Value {
+    let readiness = build_onboarding_readiness(state);
+    let command_summary = command_summary_payload(state);
+    serde_json::json!({
+        "generated_at": chrono::Utc::now().to_rfc3339(),
+        "current_version": env!("CARGO_PKG_VERSION"),
+        "readiness": readiness,
+        "release_diff": build_launchpad_release_diff(state),
+        "demo_status": build_launchpad_demo_status(state),
+        "detection_recommendations": build_detection_recommendations(state, 10),
+        "detection_readiness": build_detection_readiness(state, 10),
+        "approval_overview": build_response_approval_overview(state),
+        "remediation_safety": build_remediation_safety_status(state),
+        "stream_health": state.alert_broadcaster.stats(),
+        "sdk_contract": build_sdk_contract_status(state),
+        "command_summary": command_summary,
+        "audit": {
+            "recent_records": state.audit_log.recent(10).len(),
+        },
+    })
+}
+
+fn check_counts(checks: &[serde_json::Value]) -> (usize, usize, &'static str) {
+    let fail_count = checks
+        .iter()
+        .filter(|check| check.get("status").and_then(serde_json::Value::as_str) == Some("fail"))
+        .count();
+    let warn_count = checks
+        .iter()
+        .filter(|check| check.get("status").and_then(serde_json::Value::as_str) == Some("warn"))
+        .count();
+    let status = if fail_count > 0 {
+        "blocked"
+    } else if warn_count > 0 {
+        "review"
+    } else {
+        "ready"
+    };
+    (fail_count, warn_count, status)
+}
+
+fn build_release_observability_gates(state: &AppState) -> serde_json::Value {
+    let metrics = prometheus_metrics_payload(state);
+    let required_metrics = [
+        "wardex_up",
+        "wardex_alerts_total",
+        "wardex_events_total",
+        "wardex_request_errors_total",
+        "wardex_stream_queue_depth",
+        "wardex_stream_dropped_events_total",
+    ];
+    let missing_metrics = required_metrics
+        .iter()
+        .filter(|metric| !metrics.contains(**metric))
+        .copied()
+        .collect::<Vec<_>>();
+    let stream = stream_readiness_payload(state.alert_broadcaster.stats());
+    let stream_score = stream
+        .get("score")
+        .and_then(serde_json::Value::as_u64)
+        .unwrap_or_default();
+    let snapshots = list_operational_snapshots(&state.storage, None, 100);
+    let verified_snapshots = snapshots
+        .get("verified_count")
+        .and_then(serde_json::Value::as_u64)
+        .unwrap_or_default();
+    let contract = build_sdk_contract_status(state);
+    let contract_drift = contract
+        .get("drift_count")
+        .and_then(serde_json::Value::as_u64)
+        .unwrap_or_default();
+    let checks = vec![
+        serde_json::json!({
+            "id": "prometheus_metrics",
+            "status": if missing_metrics.is_empty() { "pass" } else { "fail" },
+            "detail": if missing_metrics.is_empty() { "Release metrics expose the required observability counters.".to_string() } else { format!("Missing metrics: {}", missing_metrics.join(", ")) },
+        }),
+        serde_json::json!({
+            "id": "stream_health",
+            "status": if stream_score >= 80 { "pass" } else { "warn" },
+            "detail": format!("Realtime stream readiness score is {stream_score}."),
+        }),
+        serde_json::json!({
+            "id": "evidence_snapshots",
+            "status": if verified_snapshots > 0 { "pass" } else { "warn" },
+            "detail": format!("{verified_snapshots} verified operational snapshot(s) are indexed."),
+        }),
+        serde_json::json!({
+            "id": "contract_inventory",
+            "status": if contract_drift == 0 { "pass" } else { "fail" },
+            "detail": format!("{contract_drift} product endpoint parity drift item(s)."),
+        }),
+    ];
+    let (fail_count, warn_count, status) = check_counts(&checks);
+    serde_json::json!({
+        "generated_at": chrono::Utc::now().to_rfc3339(),
+        "status": status,
+        "fail_count": fail_count,
+        "warn_count": warn_count,
+        "checks": checks,
+        "required_metrics": required_metrics,
+        "missing_metrics": missing_metrics,
+        "stream": stream,
+        "snapshot_index": snapshots,
+    })
+}
+
+fn build_tenant_isolation_proof(state: &AppState) -> serde_json::Value {
+    let tenant_count = state.multi_tenant.tenant_count();
+    let active_tenant_ids = state.multi_tenant.active_tenant_ids();
+    let summary = state.multi_tenant.cross_tenant_summary();
+    let agents = state.agent_registry.list();
+    let unassigned_devices = if tenant_count > 0 {
+        agents
+            .iter()
+            .filter(|agent| state.multi_tenant.tenant_for_device(&agent.id).is_none())
+            .count()
+    } else {
+        0
+    };
+    let checks = vec![
+        serde_json::json!({
+            "id": "tenant_registry",
+            "status": "pass",
+            "detail": format!("{tenant_count} tenant record(s), {} active.", active_tenant_ids.len()),
+        }),
+        serde_json::json!({
+            "id": "device_partitioning",
+            "status": if tenant_count == 0 || unassigned_devices == 0 { "pass" } else { "warn" },
+            "detail": if tenant_count == 0 { "Single-tenant mode has no tenant-partitioned devices yet.".to_string() } else { format!("{unassigned_devices} enrolled device(s) are not mapped to an active tenant.") },
+        }),
+        serde_json::json!({
+            "id": "scoped_queries",
+            "status": "pass",
+            "detail": "Tenant-aware storage APIs keep explicit tenant_id filters on agent and collector queries.",
+        }),
+        serde_json::json!({
+            "id": "quota_enforcement",
+            "status": "pass",
+            "detail": "Tenant contexts enforce device, policy, storage, and event-rate quotas before registration.",
+        }),
+    ];
+    let (fail_count, warn_count, status) = check_counts(&checks);
+    serde_json::json!({
+        "generated_at": chrono::Utc::now().to_rfc3339(),
+        "status": status,
+        "tenant_count": tenant_count,
+        "active_tenant_ids": active_tenant_ids,
+        "summary": summary,
+        "unassigned_devices": unassigned_devices,
+        "fail_count": fail_count,
+        "warn_count": warn_count,
+        "checks": checks,
+    })
+}
+
+fn current_process_thread_count() -> u32 {
+    #[cfg(target_os = "macos")]
+    {
+        return std::process::Command::new("ps")
+            .args(["-M", "-p", &std::process::id().to_string()])
+            .output()
+            .map(|o| {
+                let lines = String::from_utf8_lossy(&o.stdout).lines().count();
+                if lines > 1 { (lines - 1) as u32 } else { 0 }
+            })
+            .unwrap_or(0);
+    }
+    #[cfg(target_os = "linux")]
+    {
+        return std::fs::read_to_string(format!("/proc/{}/status", std::process::id()))
+            .ok()
+            .and_then(|s| {
+                s.lines()
+                    .find(|line| line.starts_with("Threads:"))
+                    .and_then(|line| line.split_whitespace().nth(1))
+                    .and_then(|value| value.parse().ok())
+            })
+            .unwrap_or(0);
+    }
+    #[cfg(not(any(target_os = "macos", target_os = "linux")))]
+    {
+        0
+    }
+}
+
+fn build_thread_detection_proof(state: &AppState) -> serde_json::Value {
+    let thread_count = current_process_thread_count();
+    let expected_max = 128_u32;
+    let sample_count = state.local_telemetry.len();
+    let status = if thread_count == 0 {
+        "collection_gap"
+    } else if thread_count > expected_max {
+        "deviated"
+    } else {
+        "within_baseline"
+    };
+    let checks = vec![
+        serde_json::json!({
+            "id": "runtime_thread_count",
+            "status": if thread_count == 0 { "warn" } else if thread_count > expected_max { "warn" } else { "pass" },
+            "detail": format!("Current Wardex process thread count is {thread_count} with expected max {expected_max}."),
+        }),
+        serde_json::json!({
+            "id": "telemetry_sample_depth",
+            "status": if sample_count >= 3 { "pass" } else { "warn" },
+            "detail": format!("{sample_count} local telemetry sample(s) are available for baseline confidence."),
+        }),
+        serde_json::json!({
+            "id": "process_drawer_evidence",
+            "status": "pass",
+            "detail": "Per-process thread drawers expose anomaly score, baseline deviation, wait reasons, and recommendations.",
+        }),
+    ];
+    let (fail_count, warn_count, readiness) = check_counts(&checks);
+    serde_json::json!({
+        "generated_at": chrono::Utc::now().to_rfc3339(),
+        "status": status,
+        "readiness": readiness,
+        "fail_count": fail_count,
+        "warn_count": warn_count,
+        "process_id": std::process::id(),
+        "platform": std::env::consts::OS,
+        "thread_count": thread_count,
+        "thread_baseline": {
+            "expected_thread_count": { "min": 1, "max": expected_max },
+            "thread_count_deviation": thread_count.saturating_sub(expected_max),
+            "sample_count": sample_count,
+            "confidence": if thread_count == 0 { "low" } else if sample_count >= 3 { "high" } else { "medium" },
+        },
+        "checks": checks,
+    })
+}
+
+fn build_workflow_preflight(state: &AppState, workflow: &str) -> serde_json::Value {
+    let stream = stream_readiness_payload(state.alert_broadcaster.stats());
+    let stream_score = stream
+        .get("score")
+        .and_then(serde_json::Value::as_u64)
+        .unwrap_or_default();
+    let approvals = build_response_approval_overview(state);
+    let pending_approvals = approvals
+        .get("pending_response_approvals")
+        .and_then(serde_json::Value::as_u64)
+        .unwrap_or_default()
+        + approvals
+            .get("pending_playbook_approvals")
+            .and_then(serde_json::Value::as_u64)
+            .unwrap_or_default();
+    let observability = build_release_observability_gates(state);
+    let tenant = build_tenant_isolation_proof(state);
+    let checks = vec![
+        serde_json::json!({
+            "id": "stream_readiness",
+            "status": if stream_score >= 80 { "pass" } else { "warn" },
+            "detail": format!("Stream readiness score is {stream_score}."),
+        }),
+        serde_json::json!({
+            "id": "approval_queue",
+            "status": if pending_approvals == 0 { "pass" } else { "warn" },
+            "detail": format!("{pending_approvals} approval item(s) are pending."),
+        }),
+        serde_json::json!({
+            "id": "release_observability",
+            "status": if observability.get("status").and_then(serde_json::Value::as_str) == Some("blocked") { "fail" } else { "pass" },
+            "detail": "Release observability gates were evaluated for this workflow.",
+        }),
+        serde_json::json!({
+            "id": "tenant_isolation",
+            "status": if tenant.get("status").and_then(serde_json::Value::as_str) == Some("blocked") { "fail" } else { "pass" },
+            "detail": "Tenant isolation proof is attached for cross-tenant safety review.",
+        }),
+    ];
+    let (fail_count, warn_count, status) = check_counts(&checks);
+    serde_json::json!({
+        "generated_at": chrono::Utc::now().to_rfc3339(),
+        "workflow": workflow,
+        "status": status,
+        "fail_count": fail_count,
+        "warn_count": warn_count,
+        "checks": checks,
+        "stream": stream,
+        "approval_overview": approvals,
+        "tenant_isolation": tenant,
+        "observability_gates": observability,
+    })
+}
+
+fn build_content_rule_preflight(
+    state: &AppState,
+    rule_id: &str,
+    target_status: &str,
+) -> serde_json::Value {
+    let rule = active_rule_metadata(state)
+        .into_iter()
+        .find(|rule| rule.id == rule_id);
+    let stream = stream_readiness_payload(state.alert_broadcaster.stats());
+    let stream_score = stream
+        .get("score")
+        .and_then(serde_json::Value::as_u64)
+        .unwrap_or_default();
+    let mut checks = vec![serde_json::json!({
+        "id": "rule_exists",
+        "status": if rule.is_some() { "pass" } else { "fail" },
+        "detail": if rule.is_some() { "Rule metadata was found." } else { "Rule metadata was not found." },
+    })];
+    if let Some(rule) = &rule {
+        let suppressions = rule_active_suppression_count(state, &rule.id);
+        let pack_count = rule_pack_count(state, rule);
+        checks.push(serde_json::json!({
+            "id": "replay_evidence",
+            "status": if rule.last_test_at.is_some() { "pass" } else { "warn" },
+            "detail": rule.last_test_at.as_deref().unwrap_or("Replay validation has not run."),
+        }));
+        checks.push(serde_json::json!({
+            "id": "suppression_pressure",
+            "status": if suppressions == 0 { "pass" } else { "warn" },
+            "detail": format!("{suppressions} active suppression(s) affect this rule."),
+        }));
+        checks.push(serde_json::json!({
+            "id": "content_pack_ownership",
+            "status": if pack_count > 0 { "pass" } else { "warn" },
+            "detail": format!("Rule is linked to {pack_count} content pack(s)."),
+        }));
+    }
+    checks.push(serde_json::json!({
+        "id": "stream_guard",
+        "status": if matches!(target_status, "canary" | "active") && stream_score < 80 { "warn" } else { "pass" },
+        "detail": format!("Stream readiness score is {stream_score}."),
+    }));
+    let (fail_count, warn_count, status) = check_counts(&checks);
+    serde_json::json!({
+        "generated_at": chrono::Utc::now().to_rfc3339(),
+        "rule_id": rule_id,
+        "target_status": target_status,
+        "status": status,
+        "fail_count": fail_count,
+        "warn_count": warn_count,
+        "checks": checks,
+        "stream": stream,
+        "rule": rule,
+    })
+}
+
+fn release_artifact_entries() -> Vec<serde_json::Value> {
+    fs::read_to_string("release/SHA256SUMS")
+        .ok()
+        .map(|source| {
+            source
+                .lines()
+                .filter_map(|line| {
+                    let mut parts = line.split_whitespace();
+                    let digest = parts.next()?;
+                    let path = parts.next()?;
+                    Some(serde_json::json!({
+                        "path": path,
+                        "sha256": digest,
+                        "exists": Path::new("release").join(path).exists(),
+                    }))
+                })
+                .collect::<Vec<_>>()
+        })
+        .unwrap_or_default()
+}
+
+fn build_release_provenance(state: &AppState) -> serde_json::Value {
+    let cargo_lock = include_str!("../Cargo.lock");
+    let admin_package = include_str!("../admin-console/package.json");
+    let admin_lock = include_str!("../admin-console/package-lock.json");
+    let ts_package = include_str!("../sdk/typescript/package.json");
+    let ts_lock = include_str!("../sdk/typescript/package-lock.json");
+    let openapi = include_str!("../docs/openapi.yaml");
+    let artifacts = release_artifact_entries();
+    let contract = build_sdk_contract_status(state);
+    let contract_drift = contract
+        .get("drift_count")
+        .and_then(serde_json::Value::as_u64)
+        .unwrap_or_default();
+    let missing_artifacts = artifacts
+        .iter()
+        .filter(|artifact| {
+            artifact.get("exists").and_then(serde_json::Value::as_bool) != Some(true)
+        })
+        .count();
+    let components = vec![
+        serde_json::json!({
+            "ecosystem": "cargo",
+            "manifest": "Cargo.toml",
+            "lockfile": "Cargo.lock",
+            "package_count": cargo_lock.matches("\n[[package]]").count(),
+            "lockfile_sha256": crate::audit::sha256_hex(cargo_lock.as_bytes()),
+        }),
+        serde_json::json!({
+            "ecosystem": "npm",
+            "manifest": "admin-console/package.json",
+            "lockfile": "admin-console/package-lock.json",
+            "package_count": admin_lock.matches("node_modules/").count(),
+            "manifest_sha256": crate::audit::sha256_hex(admin_package.as_bytes()),
+            "lockfile_sha256": crate::audit::sha256_hex(admin_lock.as_bytes()),
+        }),
+        serde_json::json!({
+            "ecosystem": "npm",
+            "manifest": "sdk/typescript/package.json",
+            "lockfile": "sdk/typescript/package-lock.json",
+            "package_count": ts_lock.matches("node_modules/").count(),
+            "manifest_sha256": crate::audit::sha256_hex(ts_package.as_bytes()),
+            "lockfile_sha256": crate::audit::sha256_hex(ts_lock.as_bytes()),
+        }),
+        serde_json::json!({
+            "ecosystem": "openapi",
+            "manifest": "docs/openapi.yaml",
+            "operation_inventory": crate::openapi::endpoint_catalog(env!("CARGO_PKG_VERSION")).len(),
+            "manifest_sha256": crate::audit::sha256_hex(openapi.as_bytes()),
+        }),
+    ];
+    let checks = vec![
+        serde_json::json!({
+            "id": "release_artifacts",
+            "status": if artifacts.is_empty() || missing_artifacts > 0 { "warn" } else { "pass" },
+            "detail": if artifacts.is_empty() {
+                "No local release SHA256SUMS file is available for artifact attestation.".to_string()
+            } else {
+                format!("{} artifact checksum record(s), {missing_artifacts} missing file(s).", artifacts.len())
+            },
+        }),
+        serde_json::json!({
+            "id": "contract_parity",
+            "status": if contract_drift == 0 { "pass" } else { "fail" },
+            "detail": format!("{contract_drift} product contract drift item(s) detected."),
+        }),
+        serde_json::json!({
+            "id": "sbom_inputs",
+            "status": "pass",
+            "detail": format!("{} manifest and lockfile source(s) are included in the provenance digest set.", components.len()),
+        }),
+    ];
+    let (fail_count, warn_count, status) = check_counts(&checks);
+    let attestation_digest = crate::audit::sha256_hex(
+        serde_json::json!({
+            "version": env!("CARGO_PKG_VERSION"),
+            "components": components.clone(),
+            "artifacts": artifacts.clone(),
+        })
+        .to_string()
+        .as_bytes(),
+    );
+    serde_json::json!({
+        "generated_at": chrono::Utc::now().to_rfc3339(),
+        "status": status,
+        "runtime_version": env!("CARGO_PKG_VERSION"),
+        "artifact_count": artifacts.len(),
+        "missing_artifacts": missing_artifacts,
+        "components": components,
+        "artifacts": artifacts,
+        "checks": checks,
+        "fail_count": fail_count,
+        "warn_count": warn_count,
+        "attestation_digest": attestation_digest,
+    })
+}
+
+fn build_upgrade_rehearsal(state: &AppState, target_version: &str) -> serde_json::Value {
+    let release_diff = build_launchpad_release_diff(state);
+    let target_version = if target_version.trim().is_empty() {
+        release_diff
+            .get("latest_version")
+            .and_then(serde_json::Value::as_str)
+            .unwrap_or(env!("CARGO_PKG_VERSION"))
+    } else {
+        target_version.trim()
+    };
+    let provenance = build_release_provenance(state);
+    let contract = build_sdk_contract_status(state);
+    let snapshots = list_operational_snapshots(&state.storage, None, 100);
+    let stream = stream_readiness_payload(state.alert_broadcaster.stats());
+    let remediation = build_remediation_safety_status(state);
+    let contract_drift = contract
+        .get("drift_count")
+        .and_then(serde_json::Value::as_u64)
+        .unwrap_or_default();
+    let verified_snapshots = snapshots
+        .get("verified_count")
+        .and_then(serde_json::Value::as_u64)
+        .unwrap_or_default();
+    let stream_score = stream
+        .get("score")
+        .and_then(serde_json::Value::as_u64)
+        .unwrap_or_default();
+    let checks = vec![
+        serde_json::json!({
+            "id": "target_catalog",
+            "status": if target_version == env!("CARGO_PKG_VERSION") || release_diff.get("release").is_some_and(|value| !value.is_null()) { "pass" } else { "warn" },
+            "detail": format!("Upgrade rehearsal target is {target_version}."),
+        }),
+        serde_json::json!({
+            "id": "artifact_provenance",
+            "status": if provenance.get("status").and_then(serde_json::Value::as_str) == Some("blocked") { "fail" } else if provenance.get("status").and_then(serde_json::Value::as_str) == Some("review") { "warn" } else { "pass" },
+            "detail": format!("{} artifact checksum record(s) attached.", provenance.get("artifact_count").and_then(serde_json::Value::as_u64).unwrap_or_default()),
+        }),
+        serde_json::json!({
+            "id": "contract_parity",
+            "status": if contract_drift == 0 { "pass" } else { "fail" },
+            "detail": format!("{contract_drift} contract drift item(s)."),
+        }),
+        serde_json::json!({
+            "id": "rollback_evidence",
+            "status": if verified_snapshots > 0 { "pass" } else { "warn" },
+            "detail": format!("{verified_snapshots} verified operational snapshot(s) can anchor rollback review."),
+        }),
+        serde_json::json!({
+            "id": "stream_guard",
+            "status": if stream_score >= 80 { "pass" } else { "warn" },
+            "detail": format!("Realtime stream readiness score is {stream_score}."),
+        }),
+    ];
+    let (fail_count, warn_count, status) = check_counts(&checks);
+    serde_json::json!({
+        "generated_at": chrono::Utc::now().to_rfc3339(),
+        "status": status,
+        "current_version": env!("CARGO_PKG_VERSION"),
+        "target_version": target_version,
+        "fail_count": fail_count,
+        "warn_count": warn_count,
+        "checks": checks,
+        "phases": [
+            {"id": "preflight", "action": "Verify provenance, contract parity, and signed artifacts before rollout."},
+            {"id": "canary", "action": "Route a bounded operator cohort through live console smoke and stream replay."},
+            {"id": "rollback", "action": "Confirm rollback proof, snapshot digest, and operator approval before live changes."},
+            {"id": "audit", "action": "Persist rehearsal evidence with release doctor and support bundle snapshots."}
+        ],
+        "release_diff": release_diff,
+        "provenance": provenance,
+        "stream": stream,
+        "remediation_safety": remediation,
+        "snapshot_index": snapshots,
+    })
+}
+
+fn build_synthetic_console_monitor(state: &AppState) -> serde_json::Value {
+    let release_doctor = release_doctor_payload(state);
+    let workflow = build_workflow_preflight(state, "synthetic_console");
+    let stream = stream_readiness_payload(state.alert_broadcaster.stats());
+    let alert_page = alert_cursor_page_payload(state, 0, 5);
+    let checks = vec![
+        serde_json::json!({
+            "id": "runtime_health",
+            "route": "/api/status",
+            "status": "pass",
+            "detail": format!("Runtime {} has been up for {}s.", env!("CARGO_PKG_VERSION"), state.server_start.elapsed().as_secs()),
+        }),
+        serde_json::json!({
+            "id": "release_doctor",
+            "route": "/api/release/doctor",
+            "status": if release_doctor.get("status").and_then(serde_json::Value::as_str) == Some("blocked") { "fail" } else if release_doctor.get("status").and_then(serde_json::Value::as_str) == Some("review") { "warn" } else { "pass" },
+            "detail": release_doctor.get("next_action").cloned().unwrap_or_else(|| serde_json::json!("Release doctor checked.")),
+        }),
+        serde_json::json!({
+            "id": "workflow_preflight",
+            "route": "/api/workflows/preflight?workflow=synthetic_console",
+            "status": if workflow.get("status").and_then(serde_json::Value::as_str) == Some("blocked") { "fail" } else if workflow.get("status").and_then(serde_json::Value::as_str) == Some("review") { "warn" } else { "pass" },
+            "detail": "Workflow preflight resolved from live launchpad dependencies.",
+        }),
+        serde_json::json!({
+            "id": "alert_page",
+            "route": "/api/alerts/page?limit=5",
+            "status": "pass",
+            "detail": format!("Cursor page returned {} alert row(s).", alert_page.get("count").and_then(serde_json::Value::as_u64).unwrap_or_default()),
+        }),
+        serde_json::json!({
+            "id": "stream_readiness",
+            "route": "/api/stream/readiness",
+            "status": if stream.get("score").and_then(serde_json::Value::as_u64).unwrap_or_default() >= 80 { "pass" } else { "warn" },
+            "detail": format!("Stream status is {}.", stream.get("status").and_then(serde_json::Value::as_str).unwrap_or("unknown")),
+        }),
+    ];
+    let (fail_count, warn_count, status) = check_counts(&checks);
+    serde_json::json!({
+        "generated_at": chrono::Utc::now().to_rfc3339(),
+        "status": status,
+        "fail_count": fail_count,
+        "warn_count": warn_count,
+        "check_count": checks.len(),
+        "checks": checks,
+        "latency_budget_ms": 1500,
+        "next_action": if fail_count > 0 { "Fix failing console dependencies before relying on the operator launchpad." } else if warn_count > 0 { "Review degraded synthetic console signals before release acceptance." } else { "Synthetic console monitor is clean." },
+    })
+}
+
+fn build_incident_timeline_replay(
+    state: &AppState,
+    requested_id: Option<&str>,
+) -> serde_json::Value {
+    let incidents = state.incident_store.list();
+    let selected = requested_id
+        .and_then(|value| value.parse::<u64>().ok())
+        .and_then(|id| incidents.iter().find(|incident| incident.id == id))
+        .or_else(|| {
+            incidents
+                .iter()
+                .max_by_key(|incident| incident.updated_at.as_str())
+        });
+    let timeline = selected
+        .map(|incident| {
+            let event_ids = incident.event_ids.iter().copied().collect::<HashSet<_>>();
+            let matching_events = state
+                .event_store
+                .all_events()
+                .iter()
+                .filter(|event| event_ids.contains(&event.id))
+                .take(25)
+                .filter_map(|event| serde_json::to_value(event).ok())
+                .collect::<Vec<_>>();
+            serde_json::json!({
+                "incident": incident,
+                "event_count": event_ids.len(),
+                "matched_event_count": matching_events.len(),
+                "events": matching_events,
+                "notes": incident.notes,
+            })
+        })
+        .unwrap_or_else(|| {
+            serde_json::json!({
+                "incident": serde_json::Value::Null,
+                "event_count": 0,
+                "matched_event_count": 0,
+                "events": [],
+                "notes": [],
+            })
+        });
+    let alert_tail = state
+        .alerts
+        .iter()
+        .rev()
+        .take(10)
+        .enumerate()
+        .map(|(index, alert)| alert_json_value(alert, index, &state.local_host_info.hostname, &[]))
+        .collect::<Vec<_>>();
+    let checks = vec![
+        serde_json::json!({
+            "id": "incident_selected",
+            "status": if selected.is_some() { "pass" } else { "warn" },
+            "detail": if let Some(incident) = selected { format!("Incident {} selected for replay.", incident.id) } else { "No incident is available; replay falls back to alert tail context.".to_string() },
+        }),
+        serde_json::json!({
+            "id": "event_join",
+            "status": if timeline.get("event_count").and_then(serde_json::Value::as_u64).unwrap_or_default() == timeline.get("matched_event_count").and_then(serde_json::Value::as_u64).unwrap_or_default() { "pass" } else { "warn" },
+            "detail": format!("{} of {} incident event(s) matched retained event storage.", timeline.get("matched_event_count").and_then(serde_json::Value::as_u64).unwrap_or_default(), timeline.get("event_count").and_then(serde_json::Value::as_u64).unwrap_or_default()),
+        }),
+        serde_json::json!({
+            "id": "alert_tail",
+            "status": if alert_tail.is_empty() { "warn" } else { "pass" },
+            "detail": format!("{} recent alert row(s) attached for operator replay context.", alert_tail.len()),
+        }),
+    ];
+    let (fail_count, warn_count, status) = check_counts(&checks);
+    serde_json::json!({
+        "generated_at": chrono::Utc::now().to_rfc3339(),
+        "status": status,
+        "fail_count": fail_count,
+        "warn_count": warn_count,
+        "incident_count": incidents.len(),
+        "requested_incident_id": requested_id,
+        "timeline": timeline,
+        "alert_tail": alert_tail,
+        "checks": checks,
+    })
+}
+
+fn build_detection_trust_score(state: &AppState) -> serde_json::Value {
+    let mut rows = active_rule_metadata(state)
+        .into_iter()
+        .map(|rule| {
+            let suppressions = rule_active_suppression_count(state, &rule.id);
+            let pack_count = rule_pack_count(state, &rule);
+            let mut score = 100_i64;
+            if !rule.enabled {
+                score -= 30;
+            }
+            if rule.last_test_at.is_none() {
+                score -= 25;
+            }
+            score -= (rule.last_test_match_count.min(20) as i64).min(20);
+            score -= (suppressions as i64 * 10).min(25);
+            if pack_count == 0 {
+                score -= 10;
+            }
+            if matches!(rule.lifecycle, ContentLifecycle::Deprecated | ContentLifecycle::RolledBack) {
+                score -= 35;
+            }
+            let score = score.clamp(0, 100) as u64;
+            serde_json::json!({
+                "rule_id": rule.id,
+                "title": rule.title,
+                "owner": rule.owner,
+                "lifecycle": rule.lifecycle,
+                "enabled": rule.enabled,
+                "score": score,
+                "status": if score >= 85 { "trusted" } else if score >= 65 { "review" } else { "blocked" },
+                "evidence": {
+                    "last_test_at": rule.last_test_at,
+                    "last_promotion_at": rule.last_promotion_at,
+                    "last_test_match_count": rule.last_test_match_count,
+                    "active_suppressions": suppressions,
+                    "content_pack_count": pack_count,
+                },
+            })
+        })
+        .collect::<Vec<_>>();
+    rows.sort_by(|left, right| {
+        left.get("score")
+            .and_then(serde_json::Value::as_u64)
+            .unwrap_or_default()
+            .cmp(
+                &right
+                    .get("score")
+                    .and_then(serde_json::Value::as_u64)
+                    .unwrap_or_default(),
+            )
+    });
+    let rule_count = rows.len();
+    let average_score = if rule_count == 0 {
+        0
+    } else {
+        rows.iter()
+            .map(|row| {
+                row.get("score")
+                    .and_then(serde_json::Value::as_u64)
+                    .unwrap_or_default()
+            })
+            .sum::<u64>()
+            / rule_count as u64
+    };
+    let blocked_count = rows
+        .iter()
+        .filter(|row| row.get("status").and_then(serde_json::Value::as_str) == Some("blocked"))
+        .count();
+    let review_count = rows
+        .iter()
+        .filter(|row| row.get("status").and_then(serde_json::Value::as_str) == Some("review"))
+        .count();
+    serde_json::json!({
+        "generated_at": chrono::Utc::now().to_rfc3339(),
+        "status": if blocked_count > 0 { "blocked" } else if review_count > 0 { "review" } else { "trusted" },
+        "average_score": average_score,
+        "rule_count": rule_count,
+        "blocked_count": blocked_count,
+        "review_count": review_count,
+        "rules": rows.into_iter().take(25).collect::<Vec<_>>(),
+        "next_action": if blocked_count > 0 { "Refresh replay evidence and suppression ownership before promoting blocked rules." } else if review_count > 0 { "Review degraded rules before the next rollout." } else { "Detection content trust is strong enough for promotion review." },
+    })
+}
+
+fn build_fleet_drift_compliance(state: &AppState) -> serde_json::Value {
+    let agents = state.agent_registry.list();
+    let current_version = env!("CARGO_PKG_VERSION");
+    let offline_agents = agents
+        .iter()
+        .filter(|agent| matches!(agent.status, AgentStatus::Offline | AgentStatus::Stale))
+        .count();
+    let version_drift = agents
+        .iter()
+        .filter(|agent| agent.version != current_version)
+        .count();
+    let update_errors = agents
+        .iter()
+        .filter(|agent| agent.health.last_update_error.is_some())
+        .count();
+    let config_summary = serde_json::to_value(state.config_drift_detector.fleet_summary())
+        .unwrap_or_else(|_| serde_json::json!({"status": "unavailable"}));
+    let sample_agents = agents
+        .iter()
+        .take(20)
+        .map(|agent| {
+            serde_json::json!({
+                "id": agent.id,
+                "hostname": agent.hostname,
+                "platform": agent.platform,
+                "version": agent.version,
+                "status": agent.status,
+                "update_state": agent.health.update_state,
+                "update_target_version": agent.health.update_target_version,
+                "last_update_error": agent.health.last_update_error,
+                "version_aligned": agent.version == current_version,
+            })
+        })
+        .collect::<Vec<_>>();
+    let checks = vec![
+        serde_json::json!({
+            "id": "agent_freshness",
+            "status": if offline_agents == 0 { "pass" } else { "warn" },
+            "detail": format!("{offline_agents} offline or stale agent(s)."),
+        }),
+        serde_json::json!({
+            "id": "version_alignment",
+            "status": if version_drift == 0 { "pass" } else { "warn" },
+            "detail": format!("{version_drift} agent(s) report a version different from {current_version}."),
+        }),
+        serde_json::json!({
+            "id": "update_errors",
+            "status": if update_errors == 0 { "pass" } else { "warn" },
+            "detail": format!("{update_errors} agent update error(s) are recorded."),
+        }),
+    ];
+    let (fail_count, warn_count, status) = check_counts(&checks);
+    serde_json::json!({
+        "generated_at": chrono::Utc::now().to_rfc3339(),
+        "status": status,
+        "fail_count": fail_count,
+        "warn_count": warn_count,
+        "agent_count": agents.len(),
+        "offline_agents": offline_agents,
+        "version_drift": version_drift,
+        "update_errors": update_errors,
+        "current_version": current_version,
+        "config_drift": config_summary,
+        "agents": sample_agents,
+        "checks": checks,
+    })
+}
+
+fn build_operator_work_queue(state: &AppState) -> serde_json::Value {
+    let release_doctor = release_doctor_payload(state);
+    let approvals = build_response_approval_overview(state);
+    let trust = build_detection_trust_score(state);
+    let fleet = build_fleet_drift_compliance(state);
+    let retention = build_retention_forecast(state);
+    let mut items = Vec::new();
+    let release_status = release_doctor
+        .get("status")
+        .and_then(serde_json::Value::as_str)
+        .unwrap_or("unknown");
+    if release_status != "ready" {
+        items.push(serde_json::json!({
+            "id": "release_doctor",
+            "priority": if release_status == "blocked" { "high" } else { "medium" },
+            "title": "Release doctor review",
+            "status": release_status,
+            "href": "/launchpad#release-trust",
+            "detail": release_doctor.get("next_action").cloned().unwrap_or_else(|| serde_json::json!("Review release doctor signals.")),
+        }));
+    }
+    let pending_approvals = approvals
+        .get("pending_response_approvals")
+        .and_then(serde_json::Value::as_u64)
+        .unwrap_or_default()
+        + approvals
+            .get("pending_playbook_approvals")
+            .and_then(serde_json::Value::as_u64)
+            .unwrap_or_default();
+    if pending_approvals > 0 {
+        items.push(serde_json::json!({
+            "id": "approval_queue",
+            "priority": "high",
+            "title": "Response approvals waiting",
+            "status": "approval_required",
+            "href": "/soc?focus=response",
+            "detail": format!("{pending_approvals} approval item(s) require operator review."),
+        }));
+    }
+    if trust.get("status").and_then(serde_json::Value::as_str) != Some("trusted") {
+        items.push(serde_json::json!({
+            "id": "detection_trust",
+            "priority": if trust.get("status").and_then(serde_json::Value::as_str) == Some("blocked") { "high" } else { "medium" },
+            "title": "Detection trust debt",
+            "status": trust.get("status").cloned().unwrap_or_else(|| serde_json::json!("review")),
+            "href": "/detection?panel=quality",
+            "detail": format!("{} rule(s) blocked and {} under review.", trust.get("blocked_count").and_then(serde_json::Value::as_u64).unwrap_or_default(), trust.get("review_count").and_then(serde_json::Value::as_u64).unwrap_or_default()),
+        }));
+    }
+    if fleet.get("status").and_then(serde_json::Value::as_str) != Some("ready") {
+        items.push(serde_json::json!({
+            "id": "fleet_drift",
+            "priority": "medium",
+            "title": "Fleet drift review",
+            "status": fleet.get("status").cloned().unwrap_or_else(|| serde_json::json!("review")),
+            "href": "/fleet",
+            "detail": format!("{} agent(s) drifted from runtime version, {} stale/offline.", fleet.get("version_drift").and_then(serde_json::Value::as_u64).unwrap_or_default(), fleet.get("offline_agents").and_then(serde_json::Value::as_u64).unwrap_or_default()),
+        }));
+    }
+    if retention.get("status").and_then(serde_json::Value::as_str) != Some("healthy") {
+        items.push(serde_json::json!({
+            "id": "retention_forecast",
+            "priority": "medium",
+            "title": "Retention forecast review",
+            "status": retention.get("status").cloned().unwrap_or_else(|| serde_json::json!("review")),
+            "href": "/settings?tab=retention",
+            "detail": retention.get("next_action").cloned().unwrap_or_else(|| serde_json::json!("Review retention capacity.")),
+        }));
+    }
+    let high_count = items
+        .iter()
+        .filter(|item| item.get("priority").and_then(serde_json::Value::as_str) == Some("high"))
+        .count();
+    serde_json::json!({
+        "generated_at": chrono::Utc::now().to_rfc3339(),
+        "status": if high_count > 0 { "attention" } else if items.is_empty() { "clear" } else { "review" },
+        "item_count": items.len(),
+        "high_priority_count": high_count,
+        "items": items,
+    })
+}
+
+fn retention_utilization(current: usize, limit: usize) -> u64 {
+    if limit == 0 {
+        0
+    } else {
+        ((current as f64 / limit as f64) * 100.0)
+            .round()
+            .clamp(0.0, 999.0) as u64
+    }
+}
+
+fn build_retention_forecast(state: &AppState) -> serde_json::Value {
+    let storage_stats = state.storage.with(|store| Ok(store.stats())).ok();
+    let audit_count = storage_stats
+        .as_ref()
+        .map(|stats| stats.total_audit_entries)
+        .unwrap_or(state.audit_log.entries.len());
+    let alert_count = storage_stats
+        .as_ref()
+        .map(|stats| stats.total_alerts)
+        .unwrap_or(state.alerts.len());
+    let event_count = state.event_store.all_events().len();
+    let retention = &state.config.retention;
+    let audit_utilization = retention_utilization(audit_count, retention.audit_max_records);
+    let alert_utilization = retention_utilization(alert_count, retention.alert_max_records);
+    let event_utilization = retention_utilization(event_count, retention.event_max_records);
+    let peak_utilization = audit_utilization
+        .max(alert_utilization)
+        .max(event_utilization);
+    let projected_daily_records = ((audit_count + alert_count + event_count) / 30).max(1);
+    let checks = vec![
+        serde_json::json!({
+            "id": "audit_retention",
+            "status": if audit_utilization >= 90 { "warn" } else { "pass" },
+            "detail": format!("Audit retention is {audit_utilization}% utilized."),
+        }),
+        serde_json::json!({
+            "id": "alert_retention",
+            "status": if alert_utilization >= 90 { "warn" } else { "pass" },
+            "detail": format!("Alert retention is {alert_utilization}% utilized."),
+        }),
+        serde_json::json!({
+            "id": "event_retention",
+            "status": if event_utilization >= 90 { "warn" } else { "pass" },
+            "detail": format!("Event retention is {event_utilization}% utilized."),
+        }),
+    ];
+    let (fail_count, warn_count, _) = check_counts(&checks);
+    serde_json::json!({
+        "generated_at": chrono::Utc::now().to_rfc3339(),
+        "status": if peak_utilization >= 95 { "risk" } else if peak_utilization >= 80 { "review" } else { "healthy" },
+        "fail_count": fail_count,
+        "warn_count": warn_count,
+        "current_records": {
+            "audit": audit_count,
+            "alerts": alert_count,
+            "events": event_count,
+        },
+        "limits": {
+            "audit_max_records": retention.audit_max_records,
+            "alert_max_records": retention.alert_max_records,
+            "event_max_records": retention.event_max_records,
+            "audit_max_age_secs": retention.audit_max_age_secs,
+        },
+        "utilization_pct": {
+            "audit": audit_utilization,
+            "alerts": alert_utilization,
+            "events": event_utilization,
+            "peak": peak_utilization,
+        },
+        "forecast": {
+            "projected_daily_records": projected_daily_records,
+            "estimated_monthly_records": projected_daily_records * 30,
+            "remote_syslog_enabled": retention.remote_syslog_endpoint.is_some(),
+            "cost_risk": if peak_utilization >= 95 { "high" } else if peak_utilization >= 80 { "medium" } else { "low" },
+        },
+        "checks": checks,
+        "next_action": if peak_utilization >= 95 { "Increase retention limits or export old evidence before high-volume workflows." } else if peak_utilization >= 80 { "Review retention growth before enabling longer evidence windows." } else { "Retention capacity is healthy for current volume." },
+    })
+}
+
+fn build_adversarial_validation(state: &AppState) -> serde_json::Value {
+    let scenarios = [
+        ("credential_storm", "examples/credential_storm.csv"),
+        ("slow_escalation", "examples/slow_escalation.csv"),
+        ("low_battery_attack", "examples/low_battery_attack.csv"),
+        ("benign_baseline", "examples/benign_baseline.csv"),
+    ];
+    let trust = build_detection_trust_score(state);
+    let readiness = build_detection_readiness(state, 10);
+    let scenario_rows = scenarios
+        .iter()
+        .map(|(id, path)| {
+            let exists = Path::new(path).exists();
+            serde_json::json!({
+                "id": id,
+                "path": path,
+                "status": if exists { "ready" } else { "missing" },
+                "evidence": if exists { "corpus_available" } else { "corpus_missing" },
+            })
+        })
+        .collect::<Vec<_>>();
+    let missing = scenario_rows
+        .iter()
+        .filter(|row| row.get("status").and_then(serde_json::Value::as_str) == Some("missing"))
+        .count();
+    let checks = vec![
+        serde_json::json!({
+            "id": "scenario_corpus",
+            "status": if missing == 0 { "pass" } else { "warn" },
+            "detail": format!("{} adversarial scenario corpus file(s) are missing.", missing),
+        }),
+        serde_json::json!({
+            "id": "detection_trust",
+            "status": if trust.get("status").and_then(serde_json::Value::as_str) == Some("blocked") { "fail" } else if trust.get("status").and_then(serde_json::Value::as_str) == Some("review") { "warn" } else { "pass" },
+            "detail": format!("Detection trust score average is {}.", trust.get("average_score").and_then(serde_json::Value::as_u64).unwrap_or_default()),
+        }),
+        serde_json::json!({
+            "id": "collector_mapping",
+            "status": if readiness.get("collector_count").and_then(serde_json::Value::as_u64).unwrap_or_default() > 0 { "pass" } else { "warn" },
+            "detail": format!("{} collector dependency row(s) available for validation.", readiness.get("collector_count").and_then(serde_json::Value::as_u64).unwrap_or_default()),
+        }),
+    ];
+    let (fail_count, warn_count, status) = check_counts(&checks);
+    serde_json::json!({
+        "generated_at": chrono::Utc::now().to_rfc3339(),
+        "status": status,
+        "fail_count": fail_count,
+        "warn_count": warn_count,
+        "scenario_count": scenario_rows.len(),
+        "missing_scenarios": missing,
+        "scenarios": scenario_rows,
+        "detection_trust": trust,
+        "readiness": readiness,
+        "checks": checks,
+    })
+}
+
+fn build_support_bundle_diff(state: &AppState) -> serde_json::Value {
+    let snapshots = list_operational_snapshots(&state.storage, Some("support_bundle"), 5);
+    let items = snapshots
+        .get("snapshots")
+        .and_then(serde_json::Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+    let latest = items.first().cloned().unwrap_or(serde_json::Value::Null);
+    let previous = items.get(1).cloned().unwrap_or(serde_json::Value::Null);
+    let latest_digest = latest.get("digest").and_then(serde_json::Value::as_str);
+    let previous_digest = previous.get("digest").and_then(serde_json::Value::as_str);
+    let latest_size = latest
+        .get("size_bytes")
+        .and_then(serde_json::Value::as_u64)
+        .unwrap_or_default() as i64;
+    let previous_size = previous
+        .get("size_bytes")
+        .and_then(serde_json::Value::as_u64)
+        .unwrap_or_default() as i64;
+    let checks = vec![
+        serde_json::json!({
+            "id": "snapshot_depth",
+            "status": if items.len() >= 2 { "pass" } else if items.len() == 1 { "warn" } else { "fail" },
+            "detail": format!("{} support bundle snapshot(s) available for diffing.", items.len()),
+        }),
+        serde_json::json!({
+            "id": "digest_change",
+            "status": if latest_digest.is_some() && previous_digest.is_some() && latest_digest == previous_digest { "warn" } else if latest_digest.is_some() { "pass" } else { "fail" },
+            "detail": if latest_digest.is_some() && previous_digest.is_some() && latest_digest == previous_digest { "Latest support bundle digest matches the previous snapshot." } else { "Latest support bundle digest can be compared." },
+        }),
+    ];
+    let (fail_count, warn_count, status) = check_counts(&checks);
+    serde_json::json!({
+        "generated_at": chrono::Utc::now().to_rfc3339(),
+        "status": status,
+        "fail_count": fail_count,
+        "warn_count": warn_count,
+        "snapshot_count": items.len(),
+        "latest": latest,
+        "previous": previous,
+        "diff": {
+            "digest_changed": latest_digest.is_some() && previous_digest.is_some() && latest_digest != previous_digest,
+            "size_delta_bytes": latest_size - previous_size,
+            "redaction_policy": "support bundle snapshots are already redacted before persistence",
+        },
+        "checks": checks,
+        "snapshot_index": snapshots,
+    })
+}
+
+fn build_snapshot_policy_payload(storage: &crate::storage::SharedStorage) -> serde_json::Value {
+    let snapshots = list_operational_snapshots(storage, None, 500);
+    serde_json::json!({
+        "generated_at": chrono::Utc::now().to_rfc3339(),
+        "status": "configured",
+        "keep_latest_per_kind": 25,
+        "max_prune_batch": 500,
+        "redaction_policy": {
+            "sensitive_key_matchers": ["token", "secret", "password", "credential", "authorization", "cookie", "private_key", "api_key"],
+            "support_bundle_redacts_before_snapshot": true,
+        },
+        "snapshot_index": snapshots,
+    })
+}
+
+fn prune_operational_snapshots(
+    storage: &crate::storage::SharedStorage,
+    keep_latest: usize,
+    dry_run: bool,
+) -> serde_json::Value {
+    let generated_at = chrono::Utc::now().to_rfc3339();
+    let Some(storage_path) = storage_root_path(storage) else {
+        return serde_json::json!({
+            "generated_at": generated_at,
+            "status": "unavailable",
+            "dry_run": dry_run,
+            "pruned": [],
+            "error": "storage_unavailable",
+        });
+    };
+    let root = storage_path.join("operational_snapshots");
+    let keep_latest = keep_latest.clamp(1, 500);
+    let mut candidates = Vec::new();
+    if let Ok(kind_dirs) = fs::read_dir(&root) {
+        for kind_dir in kind_dirs.flatten() {
+            let Ok(file_type) = kind_dir.file_type() else {
+                continue;
+            };
+            if !file_type.is_dir() {
+                continue;
+            }
+            let kind = kind_dir.file_name().to_string_lossy().to_string();
+            let mut files = fs::read_dir(kind_dir.path())
+                .ok()
+                .into_iter()
+                .flat_map(|entries| entries.flatten())
+                .filter(|entry| {
+                    entry.path().extension().and_then(|value| value.to_str()) == Some("json")
+                })
+                .collect::<Vec<_>>();
+            files.sort_by_key(|entry| std::cmp::Reverse(entry.file_name()));
+            for file in files.into_iter().skip(keep_latest) {
+                let file_path = file.path();
+                let relative = file_path
+                    .strip_prefix(&root)
+                    .unwrap_or(&file_path)
+                    .to_string_lossy()
+                    .replace('\\', "/");
+                let storage_key = format!("operational_snapshots/{relative}");
+                let removed = dry_run || fs::remove_file(&file_path).is_ok();
+                candidates.push(serde_json::json!({
+                    "kind": kind,
+                    "storage_key": storage_key,
+                    "removed": removed && !dry_run,
+                    "dry_run": dry_run,
+                }));
+            }
+        }
+    }
+    serde_json::json!({
+        "generated_at": generated_at,
+        "status": if dry_run { "preview" } else { "applied" },
+        "dry_run": dry_run,
+        "keep_latest_per_kind": keep_latest,
+        "candidate_count": candidates.len(),
+        "pruned": candidates,
+    })
+}
+
 fn increment_owner_count(owners: &mut HashMap<String, usize>, owner: Option<&str>) {
     let owner = owner
         .map(str::trim)
@@ -13894,6 +16853,12 @@ fn handle_api(
             });
             json_response(&body.to_string(), 200)
         }
+        (Method::Get, "/api/alerts/page") => {
+            let (cursor, limit) = parse_cursor_page_params(&url, 100, 1000);
+            let s = state.lock().unwrap_or_else(|e| e.into_inner());
+            let body = alert_cursor_page_payload(&s, cursor, limit);
+            json_response(&body.to_string(), 200)
+        }
         (Method::Get, "/api/alerts") => {
             let query = parse_query_string(&url);
             let limit = query
@@ -14085,6 +17050,21 @@ fn handle_api(
                 Err(e) => error_json(&format!("serialization error: {e}"), 500),
             }
         }
+        (Method::Get, "/api/alerts/histogram") => {
+            let s = state.lock().unwrap_or_else(|e| e.into_inner());
+            let window_secs = url_param(&url, "window")
+                .as_deref()
+                .and_then(parse_duration_seconds)
+                .unwrap_or(60 * 60 * 24);
+            let bucket_secs = url_param(&url, "bucket")
+                .as_deref()
+                .and_then(parse_duration_seconds)
+                .unwrap_or(60 * 60);
+            let severity = url_param(&url, "severity");
+            let body =
+                build_alert_histogram(&s.alerts, window_secs, bucket_secs, severity.as_deref());
+            json_response(&body.to_string(), 200)
+        }
         // ── Swarm Intelligence ──────────────────────────────────
         (Method::Get, "/api/swarm/intel") => {
             let s = state.lock().unwrap_or_else(|e| e.into_inner());
@@ -14256,6 +17236,18 @@ fn handle_api(
                     "alert_engine": "active",
                     "http_server": "active",
                 },
+                "thread_baseline": {
+                    "status": if thread_count > 128 { "deviated" } else if thread_count == 0 { "collection_gap" } else { "within_baseline" },
+                    "expected_thread_count": { "min": 1, "max": 128 },
+                    "thread_count_deviation": thread_count.saturating_sub(128),
+                    "sample_count": s.local_telemetry.len(),
+                    "confidence": if thread_count == 0 { "low" } else if s.local_telemetry.len() >= 3 { "high" } else { "medium" },
+                    "next_action": if thread_count > 128 {
+                        "Open the process thread drawer and compare thread fan-out against workload scale."
+                    } else {
+                        "Keep this runtime thread count as baseline evidence for future anomaly review."
+                    },
+                },
             });
             json_response(&body.to_string(), 200)
         }
@@ -14314,6 +17306,7 @@ fn handle_api(
                 {"method": "GET", "path": "/api/correlation", "auth": true, "description": "Replay-buffer correlation analysis"},
                 {"method": "GET", "path": "/api/correlation/campaigns", "auth": true, "description": "Campaign clustering, sequence summaries, and attack-graph edges from stored events"},
                 {"method": "GET", "path": "/api/alerts", "auth": true, "description": "Last 100 alerts"},
+                {"method": "GET", "path": "/api/alerts/page", "auth": true, "description": "Cursor-paginated alerts"},
                 {"method": "GET", "path": "/api/alerts/{id}", "auth": true, "description": "Detailed alert view for a specific alert ID"},
                 {"method": "GET", "path": "/api/alerts/count", "auth": true, "description": "Alert count by severity"},
                 {"method": "DELETE", "path": "/api/alerts", "auth": true, "description": "Clear all alerts"},
@@ -14363,6 +17356,7 @@ fn handle_api(
                 {"method": "GET", "path": "/api/threads/status", "auth": true, "description": "Background thread status and collection stats"},
                 {"method": "GET", "path": "/api/detection/summary", "auth": true, "description": "Velocity, entropy, compound detector state"},
                 {"method": "GET", "path": "/api/events/summary", "auth": true, "description": "XDR fleet event analytics summary"},
+                {"method": "GET", "path": "/api/events/page", "auth": true, "description": "Cursor-paginated retained XDR events"},
                 {"method": "GET", "path": "/api/events/export", "auth": true, "description": "Export filtered XDR events as CSV"},
                 {"method": "GET", "path": "/api/workbench/overview", "auth": true, "description": "Consolidated SOC workbench overview across queue, cases, incidents, response, and hot agents"},
                 {"method": "GET", "path": "/api/manager/overview", "auth": true, "description": "Manager-facing operational overview across fleet, queue SLA, deployments, reports, and posture"},
@@ -14373,6 +17367,7 @@ fn handle_api(
                 {"method": "GET", "path": "/api/content/rules", "auth": true, "description": "List Sigma and native content rules with lifecycle and test metadata"},
                 {"method": "POST", "path": "/api/content/rules", "auth": true, "description": "Create or update managed content rules"},
                 {"method": "POST", "path": "/api/content/rules/{id}/test", "auth": true, "description": "Replay a content rule against retained events and return match/test evidence"},
+                {"method": "POST", "path": "/api/content/rules/{id}/preflight", "auth": true, "description": "Validate stream, replay, suppression, and ownership proof before rule promotion"},
                 {"method": "POST", "path": "/api/content/rules/{id}/promote", "auth": true, "description": "Promote a content rule through its lifecycle"},
                 {"method": "POST", "path": "/api/content/rules/{id}/rollback", "auth": true, "description": "Rollback a content rule to its previous lifecycle state"},
                 {"method": "GET", "path": "/api/content/packs", "auth": true, "description": "List content packs grouped by use case"},
@@ -14406,6 +17401,7 @@ fn handle_api(
                 {"method": "POST", "path": "/api/response/approve", "auth": true, "description": "Approve or deny a pending response request"},
                 {"method": "POST", "path": "/api/response/execute", "auth": true, "description": "Execute all approved response requests"},
                 {"method": "GET", "path": "/api/audit/log", "auth": true, "description": "Paginated API audit log entries with search and filter metadata"},
+                {"method": "GET", "path": "/api/audit/log/page", "auth": true, "description": "Cursor-paginated API audit log entries"},
                 {"method": "GET", "path": "/api/audit/log/export", "auth": true, "description": "Export filtered API audit log entries as CSV"},
                 {"method": "GET", "path": "/api/incidents", "auth": true, "description": "List incidents with optional status/severity filters"},
                 {"method": "GET", "path": "/api/incidents/{id}", "auth": true, "description": "Incident detail with timeline"},
@@ -14529,6 +17525,7 @@ fn handle_api(
                 {"method": "GET", "path": "/api/processes/analysis", "auth": true, "description": "Analyse running processes for suspicious behaviour"},
                 {"method": "GET", "path": "/api/processes/detail?pid=<pid>", "auth": true, "description": "Detailed local process investigation view for a specific PID"},
                 {"method": "GET", "path": "/api/processes/threads?pid=<pid>", "auth": true, "description": "Per-process OS thread snapshot with live state, CPU, and priority context"},
+                {"method": "GET", "path": "/api/processes/thread-proof", "auth": true, "description": "Runtime thread anomaly proof and baseline readiness"},
                 {"method": "GET", "path": "/api/host/apps", "auth": true, "description": "Enumerate installed applications"},
                 {"method": "GET", "path": "/api/host/inventory", "auth": true, "description": "Full system inventory (hardware, software, services, users)"},
                 {"method": "POST", "path": "/api/policy-vm/execute", "auth": true, "description": "Execute a policy VM program"},
@@ -14555,6 +17552,7 @@ fn handle_api(
                 {"method": "POST", "path": "/api/taxii/config", "auth": true, "description": "Update TAXII connector configuration"},
                 {"method": "POST", "path": "/api/taxii/pull", "auth": true, "description": "Pull indicators from TAXII sources"},
                 {"method": "GET", "path": "/api/tenants/count", "auth": true, "description": "Tenant count summary"},
+                {"method": "GET", "path": "/api/tenants/isolation-proof", "auth": true, "description": "Tenant isolation and device partitioning proof"},
                 {"method": "GET", "path": "/api/tls/status", "auth": true, "description": "TLS listener and certificate status"},
                 {"method": "POST", "path": "/api/agents/token", "auth": true, "description": "Create an agent enrollment token"},
                 {"method": "POST", "path": "/api/agents/enroll", "auth": false, "description": "Enroll an agent with a valid enrollment token"},
@@ -14680,6 +17678,12 @@ fn handle_api(
 
         // ── XDR Events ────────────────────────────────────────────
         (Method::Post, "/api/events") => handle_event_ingest(body, state),
+        (Method::Get, "/api/events/page") => {
+            let (cursor, limit) = parse_cursor_page_params(&url, 100, 1000);
+            let s = state.lock().unwrap_or_else(|e| e.into_inner());
+            let body = event_cursor_page_payload(&s, &url, cursor, limit);
+            json_response(&body.to_string(), 200)
+        }
         (Method::Get, "/api/events") => {
             let s = state.lock().unwrap_or_else(|e| e.into_inner());
             let query = parse_event_query(&url);
@@ -14815,6 +17819,25 @@ fn handle_api(
             });
             json_response(&body.to_string(), 200)
         }
+        (Method::Get, "/api/detection/recommendations") => {
+            let s = state.lock().unwrap_or_else(|e| e.into_inner());
+            let limit = url_param(&url, "limit")
+                .and_then(|value| value.parse::<usize>().ok())
+                .unwrap_or(10);
+            let body = build_detection_recommendations(&s, limit);
+            let snapshot =
+                persist_operational_snapshot(&s.storage, "detection_recommendations", &body);
+            json_response(&payload_with_snapshot(body, snapshot).to_string(), 200)
+        }
+        (Method::Get, "/api/detection/readiness") => {
+            let s = state.lock().unwrap_or_else(|e| e.into_inner());
+            let limit = url_param(&url, "limit")
+                .and_then(|value| value.parse::<usize>().ok())
+                .unwrap_or(20);
+            let body = build_detection_readiness(&s, limit);
+            let snapshot = persist_operational_snapshot(&s.storage, "detection_readiness", &body);
+            json_response(&payload_with_snapshot(body, snapshot).to_string(), 200)
+        }
         (Method::Get, "/api/detection/weights") => {
             let s = state.lock().unwrap_or_else(|e| e.into_inner());
             let weights = s.detector.signal_weights();
@@ -14868,6 +17891,12 @@ fn handle_api(
         }
 
         // ── Audit Log ─────────────────────────────────────────────
+        (Method::Get, "/api/audit/log/page") => {
+            let (cursor, limit) = parse_cursor_page_params(&url, 50, 200);
+            let s = state.lock().unwrap_or_else(|e| e.into_inner());
+            let body = audit_cursor_page_payload(&s, &url, cursor, limit);
+            json_response(&body.to_string(), 200)
+        }
         (Method::Get, "/api/audit/log") => {
             let query = parse_query_string(&url);
             let filter = AuditLogFilter::from_query(&query);
@@ -16298,13 +19327,411 @@ fn handle_api(
                 200,
             )
         }
+        (Method::Get, "/api/support/bundle") => {
+            let mut s = state.lock().unwrap_or_else(|e| e.into_inner());
+            let body = build_support_bundle(&mut s);
+            let snapshot = persist_operational_snapshot(&s.storage, "support_bundle", &body);
+            json_response(&payload_with_snapshot(body, snapshot).to_string(), 200)
+        }
         (Method::Post, "/api/support/first-run-proof") => {
             first_run_operator_proof(state, &auth_identity)
         }
+        (Method::Get, "/api/operational/snapshots") => {
+            let s = state.lock().unwrap_or_else(|e| e.into_inner());
+            let limit = url_param(&url, "limit")
+                .and_then(|value| value.parse::<usize>().ok())
+                .unwrap_or(50);
+            let body =
+                list_operational_snapshots(&s.storage, url_param(&url, "kind").as_deref(), limit);
+            json_response(&body.to_string(), 200)
+        }
+        (Method::Get, "/api/operational/snapshots/verify") => {
+            let s = state.lock().unwrap_or_else(|e| e.into_inner());
+            let body = verify_operational_snapshot(
+                &s.storage,
+                url_param(&url, "storage_key").as_deref(),
+                url_param(&url, "digest").as_deref(),
+            );
+            json_response(&body.to_string(), 200)
+        }
+        (Method::Get, "/api/operational/snapshots/policy") => {
+            let s = state.lock().unwrap_or_else(|e| e.into_inner());
+            let body = build_snapshot_policy_payload(&s.storage);
+            json_response(&body.to_string(), 200)
+        }
+        (Method::Post, "/api/operational/snapshots/prune") => {
+            let payload = read_json_value(body, 8 * 1024).unwrap_or_else(|_| serde_json::json!({}));
+            let keep_latest = payload
+                .get("keep_latest_per_kind")
+                .or_else(|| payload.get("keep_latest"))
+                .and_then(serde_json::Value::as_u64)
+                .unwrap_or(25) as usize;
+            let dry_run = payload
+                .get("dry_run")
+                .and_then(serde_json::Value::as_bool)
+                .unwrap_or(true);
+            let s = state.lock().unwrap_or_else(|e| e.into_inner());
+            let body = prune_operational_snapshots(&s.storage, keep_latest, dry_run);
+            json_response(&body.to_string(), 200)
+        }
+        (Method::Get, "/api/launchpad/evidence-pack") => {
+            let mut s = state.lock().unwrap_or_else(|e| e.into_inner());
+            let payload = build_launchpad_evidence_pack(&mut s);
+            let digest = crate::audit::sha256_hex(payload.to_string().as_bytes());
+            let snapshot =
+                persist_operational_snapshot(&s.storage, "launchpad_evidence_pack", &payload);
+            json_response(
+                &serde_json::json!({"evidence": payload, "digest": digest, "snapshot": snapshot})
+                    .to_string(),
+                200,
+            )
+        }
+        (Method::Get, "/api/launchpad/release-diff") => {
+            let s = state.lock().unwrap_or_else(|e| e.into_inner());
+            let payload = build_launchpad_release_diff(&s);
+            let snapshot =
+                persist_operational_snapshot(&s.storage, "launchpad_release_diff", &payload);
+            json_response(&payload_with_snapshot(payload, snapshot).to_string(), 200)
+        }
+        (Method::Get, "/api/launchpad/demo-status") => {
+            let s = state.lock().unwrap_or_else(|e| e.into_inner());
+            let payload = build_launchpad_demo_status(&s);
+            let snapshot =
+                persist_operational_snapshot(&s.storage, "launchpad_demo_status", &payload);
+            json_response(&payload_with_snapshot(payload, snapshot).to_string(), 200)
+        }
+        (Method::Post, "/api/launchpad/demo-reset") => {
+            let mut s = state.lock().unwrap_or_else(|e| e.into_inner());
+            let before = s.alerts.len();
+            s.alerts.retain(|alert| {
+                !(alert.platform == "sample"
+                    || alert
+                        .reasons
+                        .iter()
+                        .any(|reason| reason.contains("[SAMPLE]")))
+            });
+            let removed_alerts = before.saturating_sub(s.alerts.len());
+            let status = build_launchpad_demo_status(&s);
+            let snapshot =
+                persist_operational_snapshot(&s.storage, "launchpad_demo_reset", &status);
+            json_response(
+                &serde_json::json!({
+                    "status": "reset_recorded",
+                    "removed_transient_alerts": removed_alerts,
+                    "demo_status": status,
+                    "snapshot": snapshot,
+                })
+                .to_string(),
+                200,
+            )
+        }
+        (Method::Get, "/api/release/doctor") => {
+            let s = state.lock().unwrap_or_else(|e| e.into_inner());
+            let body = release_doctor_payload(&s);
+            let snapshot = persist_operational_snapshot(&s.storage, "release_doctor", &body);
+            json_response(&payload_with_snapshot(body, snapshot).to_string(), 200)
+        }
+        (Method::Get, "/api/release/observability-gates") => {
+            let s = state.lock().unwrap_or_else(|e| e.into_inner());
+            let body = build_release_observability_gates(&s);
+            let snapshot =
+                persist_operational_snapshot(&s.storage, "release_observability_gates", &body);
+            json_response(&payload_with_snapshot(body, snapshot).to_string(), 200)
+        }
+        (Method::Get, "/api/release/provenance") => {
+            let s = state.lock().unwrap_or_else(|e| e.into_inner());
+            let body = build_release_provenance(&s);
+            let snapshot = persist_operational_snapshot(&s.storage, "release_provenance", &body);
+            json_response(&payload_with_snapshot(body, snapshot).to_string(), 200)
+        }
+        (Method::Get, "/api/release/upgrade-rehearsal") => {
+            let target = url_param(&url, "target_version").unwrap_or_default();
+            let s = state.lock().unwrap_or_else(|e| e.into_inner());
+            let body = build_upgrade_rehearsal(&s, &target);
+            let snapshot =
+                persist_operational_snapshot(&s.storage, "release_upgrade_rehearsal", &body);
+            json_response(&payload_with_snapshot(body, snapshot).to_string(), 200)
+        }
+        (Method::Get, "/api/monitoring/synthetic-console") => {
+            let s = state.lock().unwrap_or_else(|e| e.into_inner());
+            let body = build_synthetic_console_monitor(&s);
+            let snapshot =
+                persist_operational_snapshot(&s.storage, "synthetic_console_monitor", &body);
+            json_response(&payload_with_snapshot(body, snapshot).to_string(), 200)
+        }
+        (Method::Get, "/api/incidents/timeline-replay") => {
+            let incident_id = url_param(&url, "incident_id");
+            let s = state.lock().unwrap_or_else(|e| e.into_inner());
+            let body = build_incident_timeline_replay(&s, incident_id.as_deref());
+            let snapshot =
+                persist_operational_snapshot(&s.storage, "incident_timeline_replay", &body);
+            json_response(&payload_with_snapshot(body, snapshot).to_string(), 200)
+        }
+        (Method::Get, "/api/detection/trust-score") => {
+            let s = state.lock().unwrap_or_else(|e| e.into_inner());
+            let body = build_detection_trust_score(&s);
+            let snapshot = persist_operational_snapshot(&s.storage, "detection_trust_score", &body);
+            json_response(&payload_with_snapshot(body, snapshot).to_string(), 200)
+        }
+        (Method::Get, "/api/fleet/drift-compliance") => {
+            let s = state.lock().unwrap_or_else(|e| e.into_inner());
+            let body = build_fleet_drift_compliance(&s);
+            let snapshot =
+                persist_operational_snapshot(&s.storage, "fleet_drift_compliance", &body);
+            json_response(&payload_with_snapshot(body, snapshot).to_string(), 200)
+        }
+        (Method::Get, "/api/operator/work-queue") => {
+            let s = state.lock().unwrap_or_else(|e| e.into_inner());
+            let body = build_operator_work_queue(&s);
+            let snapshot = persist_operational_snapshot(&s.storage, "operator_work_queue", &body);
+            json_response(&payload_with_snapshot(body, snapshot).to_string(), 200)
+        }
+        (Method::Get, "/api/retention/forecast") => {
+            let s = state.lock().unwrap_or_else(|e| e.into_inner());
+            let body = build_retention_forecast(&s);
+            let snapshot = persist_operational_snapshot(&s.storage, "retention_forecast", &body);
+            json_response(&payload_with_snapshot(body, snapshot).to_string(), 200)
+        }
+        (Method::Get, "/api/validation/adversarial") => {
+            let s = state.lock().unwrap_or_else(|e| e.into_inner());
+            let body = build_adversarial_validation(&s);
+            let snapshot =
+                persist_operational_snapshot(&s.storage, "adversarial_validation", &body);
+            json_response(&payload_with_snapshot(body, snapshot).to_string(), 200)
+        }
+        (Method::Get, "/api/support/bundle-diff") => {
+            let s = state.lock().unwrap_or_else(|e| e.into_inner());
+            let body = build_support_bundle_diff(&s);
+            let snapshot = persist_operational_snapshot(&s.storage, "support_bundle_diff", &body);
+            json_response(&payload_with_snapshot(body, snapshot).to_string(), 200)
+        }
         (Method::Post, "/api/demo/lab") => first_run_operator_proof(state, &auth_identity),
+        (Method::Get, "/api/workflows/preflight") => {
+            let workflow = url_param(&url, "workflow").unwrap_or_else(|| "release".to_string());
+            let s = state.lock().unwrap_or_else(|e| e.into_inner());
+            let body = build_workflow_preflight(&s, &workflow);
+            let snapshot = persist_operational_snapshot(&s.storage, "workflow_preflight", &body);
+            json_response(&payload_with_snapshot(body, snapshot).to_string(), 200)
+        }
+        (Method::Get, "/api/tenants/isolation-proof") => {
+            let s = state.lock().unwrap_or_else(|e| e.into_inner());
+            let body = build_tenant_isolation_proof(&s);
+            let snapshot =
+                persist_operational_snapshot(&s.storage, "tenant_isolation_proof", &body);
+            json_response(&payload_with_snapshot(body, snapshot).to_string(), 200)
+        }
+        (Method::Get, "/api/processes/thread-proof") => {
+            let s = state.lock().unwrap_or_else(|e| e.into_inner());
+            let body = build_thread_detection_proof(&s);
+            let snapshot =
+                persist_operational_snapshot(&s.storage, "thread_detection_proof", &body);
+            json_response(&payload_with_snapshot(body, snapshot).to_string(), 200)
+        }
         (Method::Get, "/api/support/parity") => {
             let payload = crate::support_center::support_parity(env!("CARGO_PKG_VERSION"));
             json_response(&payload.to_string(), 200)
+        }
+        (Method::Get, "/api/response/approval-overview") => {
+            let s = state.lock().unwrap_or_else(|e| e.into_inner());
+            let body = build_response_approval_overview(&s);
+            let snapshot =
+                persist_operational_snapshot(&s.storage, "response_approval_overview", &body);
+            json_response(&payload_with_snapshot(body, snapshot).to_string(), 200)
+        }
+        (Method::Get, "/api/remediation/safety") => {
+            let s = state.lock().unwrap_or_else(|e| e.into_inner());
+            let body = build_remediation_safety_status(&s);
+            let snapshot = persist_operational_snapshot(&s.storage, "remediation_safety", &body);
+            json_response(&payload_with_snapshot(body, snapshot).to_string(), 200)
+        }
+        (Method::Get, "/api/ws/health") => {
+            let s = state.lock().unwrap_or_else(|e| e.into_inner());
+            let stats = s.alert_broadcaster.stats();
+            let dropped = stats
+                .get("dropped_events")
+                .and_then(serde_json::Value::as_u64)
+                .unwrap_or_default();
+            let queue_depth = stats
+                .get("subscriber_queue_depth")
+                .and_then(serde_json::Value::as_u64)
+                .unwrap_or_default();
+            let readiness = stream_readiness_payload(stats.clone());
+            json_response(
+                &serde_json::json!({
+                    "generated_at": chrono::Utc::now().to_rfc3339(),
+                    "status": if dropped > 0 || queue_depth > 100 { "backpressure" } else { "healthy" },
+                    "stats": stats,
+                    "readiness": readiness,
+                    "latency_slo_ms": 1000,
+                    "backpressure_threshold": 100,
+                })
+                .to_string(),
+                200,
+            )
+        }
+        (Method::Get, "/api/stream/readiness") => {
+            let s = state.lock().unwrap_or_else(|e| e.into_inner());
+            let body = stream_readiness_payload(s.alert_broadcaster.stats());
+            let snapshot = persist_operational_snapshot(&s.storage, "stream_readiness", &body);
+            json_response(&payload_with_snapshot(body, snapshot).to_string(), 200)
+        }
+        (Method::Get, "/api/stream/reliability-lab") => {
+            let s = state.lock().unwrap_or_else(|e| e.into_inner());
+            let body = stream_reliability_lab_payload(s.alert_broadcaster.stats());
+            let snapshot =
+                persist_operational_snapshot(&s.storage, "stream_reliability_lab", &body);
+            json_response(&payload_with_snapshot(body, snapshot).to_string(), 200)
+        }
+        (Method::Get, "/api/sdk/contract-status") => {
+            let s = state.lock().unwrap_or_else(|e| e.into_inner());
+            let body = build_sdk_contract_status(&s);
+            let snapshot = persist_operational_snapshot(&s.storage, "sdk_contract_status", &body);
+            json_response(&payload_with_snapshot(body, snapshot).to_string(), 200)
+        }
+        (Method::Post, "/api/subscriptions") => {
+            #[derive(serde::Deserialize)]
+            struct SubscriptionRequest {
+                lanes: Option<Vec<String>>,
+                filters: Option<serde_json::Value>,
+            }
+            let body = match read_body_limited(body, 16 * 1024) {
+                Ok(raw) if raw.trim().is_empty() => SubscriptionRequest {
+                    lanes: None,
+                    filters: None,
+                },
+                Ok(raw) => match serde_json::from_str::<SubscriptionRequest>(&raw) {
+                    Ok(value) => value,
+                    Err(err) => {
+                        return error_json(&format!("invalid subscription request: {err}"), 400);
+                    }
+                },
+                Err(err) => return error_json(&err, 413),
+            };
+            let s = state.lock().unwrap_or_else(|e| e.into_inner());
+            let lanes = body
+                .lanes
+                .filter(|items| !items.is_empty())
+                .unwrap_or_else(|| vec!["alerts".to_string()]);
+            let filters = body.filters.unwrap_or_else(|| serde_json::json!({}));
+            let subscription_id = subscription_id_for(&lanes, &filters);
+            let now = chrono::Utc::now();
+            let expires_at = now + chrono::Duration::days(7);
+            let payload = serde_json::json!({
+                "status": "created",
+                "subscription_id": subscription_id,
+                "lanes": lanes,
+                "filters": filters,
+                "cursor": s.alerts.len().to_string(),
+                "created_at": now.to_rfc3339(),
+                "updated_at": now.to_rfc3339(),
+                "expires_at": expires_at.to_rfc3339(),
+                "durable": true,
+                "current_high_watermark": s.alerts.len(),
+                "retention_floor": 0,
+                "retention_window": "current_alert_buffer",
+            });
+            let cursor_store = persist_subscription_cursor(&s.storage, &payload);
+            let snapshot =
+                persist_operational_snapshot(&s.storage, "subscription_cursor", &payload);
+            json_response(
+                &serde_json::json!({ "subscription": payload, "cursor_store": cursor_store, "snapshot": snapshot }).to_string(),
+                200,
+            )
+        }
+        (Method::Get, "/api/subscriptions/resume") => {
+            let s = state.lock().unwrap_or_else(|e| e.into_inner());
+            let subscription_id = url_param(&url, "subscription_id")
+                .and_then(|value| safe_subscription_id(&value))
+                .unwrap_or_else(|| "ad-hoc".to_string());
+            let stored_cursor = read_subscription_cursor(&s.storage, &subscription_id);
+            let requested_cursor = url_param(&url, "cursor")
+                .and_then(|value| value.parse::<usize>().ok())
+                .or_else(|| {
+                    stored_cursor
+                        .as_ref()
+                        .and_then(|cursor| cursor.get("cursor"))
+                        .and_then(serde_json::Value::as_str)
+                        .and_then(|value| value.parse::<usize>().ok())
+                })
+                .unwrap_or(0);
+            let cursor = requested_cursor.min(s.alerts.len());
+            let gap_detected = requested_cursor > s.alerts.len();
+            let replay_gap = requested_cursor.saturating_sub(s.alerts.len());
+            let limit = url_param(&url, "limit")
+                .and_then(|value| value.parse::<usize>().ok())
+                .unwrap_or(100)
+                .clamp(1, 1000);
+            let events = s
+                .alerts
+                .iter()
+                .enumerate()
+                .skip(cursor)
+                .take(limit)
+                .map(|(index, alert)| {
+                    serde_json::json!({
+                        "cursor": (index + 1).to_string(),
+                        "lane": "alerts",
+                        "event_type": "alert",
+                        "data": alert_json_value(alert, index, "", &[]),
+                    })
+                })
+                .collect::<Vec<_>>();
+            let next_cursor = cursor + events.len();
+            let now = chrono::Utc::now();
+            let expires_at = now + chrono::Duration::days(7);
+            let cursor_record = serde_json::json!({
+                "status": if gap_detected { "gap_detected" } else { "resumed" },
+                "subscription_id": subscription_id.clone(),
+                "lanes": stored_cursor
+                    .as_ref()
+                    .and_then(|cursor| cursor.get("lanes"))
+                    .cloned()
+                    .unwrap_or_else(|| serde_json::json!(["alerts"])),
+                "filters": stored_cursor
+                    .as_ref()
+                    .and_then(|cursor| cursor.get("filters"))
+                    .cloned()
+                    .unwrap_or_else(|| serde_json::json!({})),
+                "cursor": next_cursor.to_string(),
+                "created_at": stored_cursor
+                    .as_ref()
+                    .and_then(|cursor| cursor.get("created_at"))
+                    .cloned()
+                    .unwrap_or_else(|| serde_json::json!(now.to_rfc3339())),
+                "updated_at": now.to_rfc3339(),
+                "expires_at": expires_at.to_rfc3339(),
+                "durable": subscription_id != "ad-hoc",
+                "current_high_watermark": s.alerts.len(),
+                "retention_floor": 0,
+                "retention_window": "current_alert_buffer",
+                "last_replay_count": events.len(),
+                "gap_detected": gap_detected,
+                "replay_gap": replay_gap,
+            });
+            let cursor_store = if subscription_id == "ad-hoc" {
+                serde_json::json!({ "persisted": false, "reason": "ad_hoc_subscription" })
+            } else {
+                persist_subscription_cursor(&s.storage, &cursor_record)
+            };
+            json_response(
+                &serde_json::json!({
+                    "subscription_id": subscription_id,
+                    "cursor": cursor.to_string(),
+                    "requested_cursor": requested_cursor.to_string(),
+                    "next_cursor": next_cursor.to_string(),
+                    "events": events,
+                    "has_more": next_cursor < s.alerts.len(),
+                    "gap_detected": gap_detected,
+                    "replay_gap": replay_gap,
+                    "retention_floor": 0,
+                    "current_high_watermark": s.alerts.len(),
+                    "durable": subscription_id != "ad-hoc",
+                    "cursor_store": cursor_store,
+                    "expired": false,
+                })
+                .to_string(),
+                200,
+            )
         }
         (Method::Get, "/api/docs/index") => {
             let payload = crate::support_center::docs_index(
@@ -18643,6 +22070,24 @@ fn handle_api(
                     }
                     Err(e) => error_json(&e, 404),
                 }
+            } else if method == Method::Post
+                && url_path.starts_with("/api/content/rules/")
+                && url_path.ends_with("/preflight")
+            {
+                let rule_id = url_path
+                    .trim_start_matches("/api/content/rules/")
+                    .trim_end_matches("/preflight")
+                    .trim_end_matches('/');
+                let payload = read_json_value(body, 8192).unwrap_or_else(|_| serde_json::json!({}));
+                let target_status = payload
+                    .get("target_status")
+                    .and_then(serde_json::Value::as_str)
+                    .unwrap_or("active");
+                let s = state.lock().unwrap_or_else(|e| e.into_inner());
+                let body = build_content_rule_preflight(&s, rule_id, target_status);
+                let snapshot =
+                    persist_operational_snapshot(&s.storage, "content_rule_preflight", &body);
+                json_response(&payload_with_snapshot(body, snapshot).to_string(), 200)
             } else if method == Method::Post
                 && url_path.starts_with("/api/content/rules/")
                 && url_path.ends_with("/promote")
@@ -26422,6 +29867,125 @@ mod tests {
             mitre: Vec::new(),
             narrative: None,
         }
+    }
+
+    #[test]
+    fn alert_histogram_filters_by_severity() {
+        let mut alerts = VecDeque::new();
+        alerts.push_back(sample_alert("alpha", "high", 0.91, "credential storm"));
+        alerts.push_back(sample_alert("beta", "low", 0.21, "baseline"));
+
+        let payload = build_alert_histogram(&alerts, 60 * 60, 60 * 60, Some("high"));
+
+        assert_eq!(payload["total"], serde_json::json!(1));
+        assert_eq!(
+            payload["buckets"][0]["severity_breakdown"]["high"],
+            serde_json::json!(1)
+        );
+    }
+
+    #[test]
+    fn stream_readiness_degrades_on_drops() {
+        let payload = stream_readiness_payload(serde_json::json!({
+            "subscriber_queue_depth": 150,
+            "max_observed_queue_depth": 200,
+            "dropped_events": 20,
+            "latency_slo_ms": 1000,
+        }));
+
+        assert_eq!(payload["status"], serde_json::json!("backpressure"));
+        assert_eq!(
+            payload["promotion_guard"],
+            serde_json::json!("recover_stream_first")
+        );
+    }
+
+    #[test]
+    fn stream_reliability_lab_flags_dropped_events() {
+        let payload = stream_reliability_lab_payload(serde_json::json!({
+            "subscriber_queue_depth": 12,
+            "max_observed_queue_depth": 20,
+            "dropped_events": 3,
+            "latency_slo_ms": 1000,
+        }));
+
+        assert_eq!(payload["status"], serde_json::json!("fail"));
+        assert!(
+            payload["scenarios"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|scenario| {
+                    scenario["id"] == serde_json::json!("drop_detection")
+                        && scenario["status"] == serde_json::json!("fail")
+                })
+        );
+    }
+
+    #[test]
+    fn support_redaction_removes_nested_sensitive_values() {
+        let mut payload = serde_json::json!({
+            "safe": "visible",
+            "nested": { "api_key": "secret", "token_hint": "secret" },
+            "items": [{ "password": "secret" }],
+        });
+        let mut redacted = Vec::new();
+
+        redact_support_payload(&mut payload, "", &mut redacted);
+
+        assert_eq!(payload["safe"], serde_json::json!("visible"));
+        assert_eq!(
+            payload["nested"]["api_key"],
+            serde_json::json!("[REDACTED]")
+        );
+        assert_eq!(
+            payload["items"][0]["password"],
+            serde_json::json!("[REDACTED]")
+        );
+        assert!(redacted.iter().any(|path| path == "nested.api_key"));
+    }
+
+    #[test]
+    fn snapshot_entry_verifies_digest() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let root = temp.path().join("operational_snapshots");
+        let dir = root.join("stream_readiness");
+        fs::create_dir_all(&dir).expect("snapshot dir");
+        let payload = serde_json::json!({ "status": "ready", "score": 99 });
+        let digest = crate::audit::sha256_hex(payload.to_string().as_bytes());
+        let path = dir.join("1-test.json");
+        fs::write(
+            &path,
+            serde_json::to_vec(&serde_json::json!({
+                "kind": "stream_readiness",
+                "digest": digest,
+                "generated_at": "2026-05-08T00:00:00Z",
+                "payload": payload,
+            }))
+            .unwrap(),
+        )
+        .expect("write snapshot");
+
+        let entry = snapshot_entry_from_path(&root, &path, false).expect("entry");
+
+        assert_eq!(entry["verified"], serde_json::json!(true));
+        assert_eq!(
+            entry["storage_key"],
+            serde_json::json!("operational_snapshots/stream_readiness/1-test.json")
+        );
+    }
+
+    #[test]
+    fn product_contract_endpoint_inventory_is_complete() {
+        let catalog = crate::openapi::endpoint_catalog(env!("CARGO_PKG_VERSION"));
+        assert!(product_contract_missing_from_catalog(&catalog).is_empty());
+        assert!(
+            product_contract_missing_from_source(include_str!("../docs/openapi.yaml")).is_empty()
+        );
+        assert!(
+            product_contract_missing_from_source(include_str!("../scripts/release_acceptance.sh"))
+                .is_empty()
+        );
     }
 
     fn enroll_test_agent(

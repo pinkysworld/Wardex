@@ -201,7 +201,7 @@ const COMMAND_FIXTURES = {
     },
   ],
   sbomData: { component_count: 12 },
-  configData: { version: '1.0.5' },
+  configData: { version: '1.0.7' },
   assistantStatus: {
     mode: 'retrieval-only',
     model: 'local-rag',
@@ -326,7 +326,7 @@ describe('CommandCenter', () => {
     expect(await screen.findByRole('dialog', { name: title })).toBeInTheDocument();
     expect(currentSearchParams().get('drawer')).toBe(drawer);
 
-    await user.click(screen.getByRole('button', { name: 'Close' }));
+    await user.click(screen.getByRole('button', { name: /^Close\b/ }));
 
     await waitFor(() => {
       expect(screen.queryByRole('dialog', { name: title })).not.toBeInTheDocument();
@@ -358,7 +358,7 @@ describe('CommandCenter', () => {
       expect(await screen.findByRole('dialog', { name: dialogTitle })).toBeInTheDocument();
       expect(currentSearchParams().get('drawer')).toBe(drawerParam);
 
-      await user.click(screen.getByRole('button', { name: 'Close' }));
+      await user.click(screen.getByRole('button', { name: /^Close\b/ }));
 
       await waitFor(() => {
         expect(screen.queryByRole('dialog', { name: dialogTitle })).not.toBeInTheDocument();
@@ -442,7 +442,7 @@ describe('CommandCenter', () => {
       expect(tracker.commandSummaryCalls).toBeGreaterThan(afterSaveCommandSummaryCalls);
     });
 
-    await user.click(screen.getByRole('button', { name: 'Close' }));
+    await user.click(screen.getByRole('button', { name: /^Close\b/ }));
     await user.click(screen.getByRole('button', { name: 'AWS CloudTrail' }));
 
     const awsDrawer = await screen.findByRole('dialog', { name: 'Connector Validation' });
@@ -480,7 +480,7 @@ describe('CommandCenter', () => {
       expect(tracker.commandSummaryCalls).toBeGreaterThan(initialCommandSummaryCalls);
     });
 
-    await user.click(screen.getByRole('button', { name: 'Close' }));
+    await user.click(screen.getByRole('button', { name: /^Close\b/ }));
     await user.click(screen.getByRole('button', { name: 'Check readiness' }));
 
     const releaseDrawer = await screen.findByRole('dialog', { name: 'Release Readiness' });
@@ -516,7 +516,7 @@ describe('CommandCenter', () => {
 
     const afterReplayCommandSummaryCalls = tracker.commandSummaryCalls;
 
-    await user.click(screen.getByRole('button', { name: 'Close' }));
+    await user.click(screen.getByRole('button', { name: /^Close\b/ }));
     await user.click(screen.getByRole('button', { name: 'Create evidence pack' }));
 
     const evidenceDrawer = await screen.findByRole('dialog', { name: 'Compliance Evidence Pack' });

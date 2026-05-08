@@ -157,6 +157,53 @@ def test_ws_stats(monkeypatch):
     assert calls[0]["method"] == "GET"
 
 
+def test_product_hardening_methods(monkeypatch):
+    mapping = {
+        ("GET", f"{BASE}/api/ws/health"): DummyResponse(url=f"{BASE}/api/ws/health", json_data={"status": "healthy"}, headers={"content-type": "application/json"}),
+        ("GET", f"{BASE}/api/stream/readiness"): DummyResponse(url=f"{BASE}/api/stream/readiness", json_data={"status": "ready"}, headers={"content-type": "application/json"}),
+        ("GET", f"{BASE}/api/stream/reliability-lab"): DummyResponse(url=f"{BASE}/api/stream/reliability-lab", json_data={"status": "pass"}, headers={"content-type": "application/json"}),
+        ("GET", f"{BASE}/api/sdk/contract-status"): DummyResponse(url=f"{BASE}/api/sdk/contract-status", json_data={"status": "tracked"}, headers={"content-type": "application/json"}),
+        ("GET", f"{BASE}/api/operational/snapshots", (("kind", "stream_readiness"), ("limit", "3"))): DummyResponse(url=f"{BASE}/api/operational/snapshots", json_data={"snapshots": []}, headers={"content-type": "application/json"}),
+        ("GET", f"{BASE}/api/operational/snapshots/verify", (("digest", "abc"),)): DummyResponse(url=f"{BASE}/api/operational/snapshots/verify", json_data={"verified": True}, headers={"content-type": "application/json"}),
+        ("GET", f"{BASE}/api/release/doctor"): DummyResponse(url=f"{BASE}/api/release/doctor", json_data={"status": "ready"}, headers={"content-type": "application/json"}),
+        ("GET", f"{BASE}/api/support/bundle"): DummyResponse(url=f"{BASE}/api/support/bundle", json_data={"status": "redacted"}, headers={"content-type": "application/json"}),
+        ("GET", f"{BASE}/api/launchpad/evidence-pack"): DummyResponse(url=f"{BASE}/api/launchpad/evidence-pack", json_data={"digest": "abc"}, headers={"content-type": "application/json"}),
+        ("GET", f"{BASE}/api/launchpad/release-diff"): DummyResponse(url=f"{BASE}/api/launchpad/release-diff", json_data={"status": "aligned"}, headers={"content-type": "application/json"}),
+        ("GET", f"{BASE}/api/launchpad/demo-status"): DummyResponse(url=f"{BASE}/api/launchpad/demo-status", json_data={"status": "available"}, headers={"content-type": "application/json"}),
+        ("POST", f"{BASE}/api/launchpad/demo-reset"): DummyResponse(url=f"{BASE}/api/launchpad/demo-reset", json_data={"status": "reset_recorded"}, headers={"content-type": "application/json"}),
+        ("GET", f"{BASE}/api/alerts/histogram", (("bucket", "1h"), ("severity", "high"), ("window", "24h"))): DummyResponse(url=f"{BASE}/api/alerts/histogram", json_data={"total": 1}, headers={"content-type": "application/json"}),
+        ("GET", f"{BASE}/api/detection/recommendations", (("limit", "3"),)): DummyResponse(url=f"{BASE}/api/detection/recommendations", json_data={"recommendations": []}, headers={"content-type": "application/json"}),
+        ("GET", f"{BASE}/api/detection/readiness", (("limit", "5"),)): DummyResponse(url=f"{BASE}/api/detection/readiness", json_data={"rules": []}, headers={"content-type": "application/json"}),
+        ("GET", f"{BASE}/api/response/approval-overview"): DummyResponse(url=f"{BASE}/api/response/approval-overview", json_data={"pending_count": 0}, headers={"content-type": "application/json"}),
+        ("GET", f"{BASE}/api/remediation/safety"): DummyResponse(url=f"{BASE}/api/remediation/safety", json_data={"status": "ready"}, headers={"content-type": "application/json"}),
+        ("POST", f"{BASE}/api/subscriptions"): DummyResponse(url=f"{BASE}/api/subscriptions", json_data={"subscription": {"subscription_id": "sub-1"}}, headers={"content-type": "application/json"}),
+        ("GET", f"{BASE}/api/subscriptions/resume", (("cursor", "7"), ("limit", "2"), ("subscription_id", "sub-1"))): DummyResponse(url=f"{BASE}/api/subscriptions/resume", json_data={"events": []}, headers={"content-type": "application/json"}),
+    }
+    calls = install_stub(monkeypatch, mapping)
+    client = WardexClient(BASE, token="tok")
+
+    assert client.ws_health()["status"] == "healthy"
+    assert client.stream_readiness()["status"] == "ready"
+    assert client.stream_reliability_lab()["status"] == "pass"
+    assert client.sdk_contract_status()["status"] == "tracked"
+    assert client.operational_snapshots(kind="stream_readiness", limit=3)["snapshots"] == []
+    assert client.verify_operational_snapshot(digest="abc")["verified"] is True
+    assert client.release_doctor()["status"] == "ready"
+    assert client.support_bundle()["status"] == "redacted"
+    assert client.launchpad_evidence_pack()["digest"] == "abc"
+    assert client.launchpad_release_diff()["status"] == "aligned"
+    assert client.launchpad_demo_status()["status"] == "available"
+    assert client.launchpad_demo_reset()["status"] == "reset_recorded"
+    assert client.alert_histogram(window="24h", bucket="1h", severity="high")["total"] == 1
+    assert client.detection_recommendations(limit=3)["recommendations"] == []
+    assert client.detection_readiness(limit=5)["rules"] == []
+    assert client.response_approval_overview()["pending_count"] == 0
+    assert client.remediation_safety()["status"] == "ready"
+    assert client.create_subscription()["subscription"]["subscription_id"] == "sub-1"
+    assert client.resume_subscription("sub-1", cursor=7, limit=2)["events"] == []
+    assert calls[-1]["method"] == "GET"
+
+
 def test_command_summary(monkeypatch):
     calls = install_stub(
         monkeypatch,

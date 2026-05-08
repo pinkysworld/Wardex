@@ -7,6 +7,7 @@ import { copyTextToClipboard } from './clipboard.js';
 import EmptyState from './EmptyState.jsx';
 import { formatDateTime, formatRelativeTime } from './operatorUtils.js';
 import LocalConsoleInventory from './LocalConsoleInventory.jsx';
+import { safeStorageJsonGet, safeStorageJsonSet } from '../safeStorage.js';
 
 const AGENT_COLUMNS = ['id', 'hostname', 'os', 'version', 'status', 'last_seen'];
 const PAGE_SIZE_OPTIONS = [10, 25, 50, 100];
@@ -245,19 +246,15 @@ export default function FleetAgents() {
   const [isRemoteInstalling, setIsRemoteInstalling] = useState(false);
   const [isAssigningRelease, setIsAssigningRelease] = useState(false);
   const [visibleColumns, setVisibleColumns] = useState(() => {
-    try {
-      const parsed = JSON.parse(localStorage.getItem('wardex_fleet_columns') || 'null');
-      if (Array.isArray(parsed) && parsed.length > 0) {
-        return AGENT_COLUMNS.filter((column) => parsed.includes(column));
-      }
-    } catch {
-      // Ignore malformed stored values and fall back to defaults.
+    const parsed = safeStorageJsonGet('wardex_fleet_columns', null);
+    if (Array.isArray(parsed) && parsed.length > 0) {
+      return AGENT_COLUMNS.filter((column) => parsed.includes(column));
     }
     return AGENT_COLUMNS;
   });
 
   useEffect(() => {
-    localStorage.setItem('wardex_fleet_columns', JSON.stringify(visibleColumns));
+    safeStorageJsonSet('wardex_fleet_columns', visibleColumns);
   }, [visibleColumns]);
 
   const setFleetQueryState = useCallback(

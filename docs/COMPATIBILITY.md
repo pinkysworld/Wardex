@@ -16,17 +16,20 @@ with at least one prior release's notice.
 
 | Platform | Architecture | Tier |
 |----------|-------------|------|
-| Linux (glibc ≥ 2.31) | x86_64 | 1 — tested in CI, release-blocked |
-| Linux (glibc ≥ 2.31) | aarch64 | 1 — tested in CI, release-blocked |
+| Linux (static musl binary) | x86_64 | 1 — tested in CI, release-blocked |
+| Linux (static musl source build) | aarch64 | 3 — source build supported; pre-built release archive not shipped in v1.0.7 |
 | macOS 13+ | aarch64 (Apple Silicon) | 1 — tested in CI, release-blocked |
 | macOS 13+ | x86_64 (Intel) | 2 — built and smoke-tested |
-| Windows 10/11 | x86_64 (GNU toolchain) | 2 — built and smoke-tested |
+| Windows 10/11 | x86_64 (MSVC toolchain) | 2 — built and smoke-tested |
 
 **Tier 1** — Blocked on CI passing. All unit, integration, and e2e tests must
 pass. Release artifacts are signed and SHA-256 checksummed.
 
 **Tier 2** — Best-effort. Cross-compiled; smoke-tested at release time. Issues
 filed and prioritised but not release-blocking.
+
+**Tier 3** — Source-build supported and tracked in compatibility tests, but no
+pre-built release archive is published for the current patch release.
 
 ### Admin console
 

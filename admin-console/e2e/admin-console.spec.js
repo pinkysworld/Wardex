@@ -50,6 +50,11 @@ test.describe('Admin console smoke', () => {
         marker: () => page.locator('button.tab').filter({ hasText: 'Alert Stream' }),
       },
       {
+        title: 'Operator Launchpad',
+        navTitle: 'Operator Launchpad',
+        marker: () => page.getByText('Run the first incident with confidence'),
+      },
+      {
         title: 'Threat Detection',
         navTitle: 'Threat Detection',
         marker: () => page.getByText('Detection Engineering Workspace'),
@@ -123,6 +128,23 @@ test.describe('Admin console smoke', () => {
     const initialTheme = await page.locator('html').getAttribute('data-theme');
     await page.locator('button[title="Light mode"], button[title="Dark mode"]').click();
     await expect(page.locator('html')).not.toHaveAttribute('data-theme', initialTheme || 'light');
+  });
+
+  test('opens the global search palette via the ⌘K / Ctrl+K keyboard shortcut', async ({
+    page,
+    browserName,
+  }) => {
+    await installAppMocks(page);
+    await loginThroughForm(page);
+    // Drop focus off any topbar control so the global keydown handler runs.
+    await page.evaluate(() => {
+      if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
+    });
+    const modifier = browserName === 'webkit' ? 'Meta' : 'Control';
+    await page.keyboard.press(`${modifier}+k`);
+    await expect(page.getByRole('combobox', { name: 'Global search' })).toBeVisible();
+    await page.keyboard.press('Escape');
+    await expect(page.getByRole('combobox', { name: 'Global search' })).toHaveCount(0);
   });
 
   test('dashboard refresh re-fetches grouped overview and signal endpoints', async ({ page }) => {

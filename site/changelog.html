@@ -20,8 +20,8 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
     <link rel="icon" href="favicon.svg" type="image/svg+xml">
-    <link rel="stylesheet" href="styles.css?v=15">
-    <script defer src="app.js?v=15"></script>
+    <link rel="stylesheet" href="styles.css?v=21">
+    <script defer src="app.js?v=21"></script>
   </head>
   <body>
     <nav class="site-nav" id="site-nav" data-shared-nav="true">
@@ -88,19 +88,19 @@
           </div>
           <div class="start-grid">
             <article class="start-card">
+              <p class="label">v1.0.7</p>
+              <h3>Production assurance APIs and Operator Launchpad release evidence.</h3>
+              <p>Adds release provenance and SBOM evidence, upgrade rehearsal, synthetic console monitoring, incident timeline replay, detection trust scoring, fleet drift compliance, operator work queues, retention forecasting, adversarial validation, support bundle diffing, and matching SDK/OpenAPI/release-gate coverage.</p>
+            </article>
+            <article class="start-card">
+              <p class="label">v1.0.6</p>
+              <h3>Resilience proof APIs and release observability gates.</h3>
+              <p>Adds cursor pages for alerts, events, and audit logs; workflow and rule preflight checks; tenant/thread proof APIs; snapshot retention controls; release observability gates; and admin-console resilience cleanup.</p>
+            </article>
+            <article class="start-card">
               <p class="label">v1.0.5</p>
-              <h3>macOS CI signing secret repair for notarized release archives.</h3>
-              <p>Refreshes the Developer ID <code>.p12</code> path, adds a safe GitHub Actions secret updater, imports Apple certificate-chain context, and rejects public <code>.cer</code> files before CI can mistake them for signing identities.</p>
-            </article>
-            <article class="start-card">
-              <p class="label">v1.0.4</p>
-              <h3>macOS signing import hardening for Developer ID notarized release archives.</h3>
-              <p>Imports the Developer ID <code>.p12</code> as a full PKCS#12 identity with explicit <code>codesign</code> access, prints imported identities before signing, and keeps keychain partition diagnostics visible on GitHub macOS runners.</p>
-            </article>
-            <article class="start-card">
-              <p class="label">v1.0.3</p>
-              <h3>Release CI and Live Monitor hardening for notarized macOS artifacts and process-analysis workflows.</h3>
-              <p>Preserves GitHub runner keychains during Developer ID signing, resolves the imported identity before <code>codesign</code>, and adds a focused Chromium Playwright regression for token login, process detail fallback, process refresh scroll preservation, and alert-analysis failover.</p>
+              <h3>macOS signing secret repair and release validation.</h3>
+              <p>Adds the safe GitHub signing-secret updater, validates local Developer ID <code>.p12</code> signing material, and aligns SDK, OpenAPI, Helm, website, and release documentation metadata.</p>
             </article>
           </div>
         </div>
@@ -135,7 +135,7 @@
             <div class="footer-col footer-about">
               <span class="nav-logo footer-logo">WX</span>
               <p>Private-cloud XDR &amp; SIEM built in Rust. One binary. Full data sovereignty.</p>
-              <p class="footer-version"><span id="footer-version">v1.0.5</span> · AGPL 3.0</p>
+              <p class="footer-version"><span id="footer-version">v1.0.7</span> · AGPL 3.0</p>
             </div>
             <div class="footer-col">
               <h3>Product</h3>

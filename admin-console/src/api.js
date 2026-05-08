@@ -5,6 +5,64 @@ let _token = '';
 let _baseUrl = '';
 let _pendingSignal = null;
 
+const DEFAULT_TIMEOUT_MS = 15000;
+const RETRYABLE_STATUS = new Set([408, 429, 500, 502, 503, 504]);
+
+function delay(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function createRequestSignal(parentSignal, timeoutMs = DEFAULT_TIMEOUT_MS) {
+  const controller = new AbortController();
+  let timeoutId = null;
+  const abortFromParent = () => controller.abort(parentSignal?.reason);
+
+  if (parentSignal?.aborted) {
+    abortFromParent();
+  } else if (parentSignal) {
+    parentSignal.addEventListener('abort', abortFromParent, { once: true });
+  }
+
+  if (timeoutMs > 0) {
+    timeoutId = setTimeout(() => {
+      const timeoutError = new Error(`Request timed out after ${timeoutMs}ms`);
+      timeoutError.name = 'TimeoutError';
+      controller.abort(timeoutError);
+    }, timeoutMs);
+  }
+
+  return {
+    signal: controller.signal,
+    cleanup() {
+      if (timeoutId) clearTimeout(timeoutId);
+      if (parentSignal) parentSignal.removeEventListener('abort', abortFromParent);
+    },
+  };
+}
+
+function parseApiErrorMessage(status, statusText, text) {
+  if (!text) return `${status} ${statusText || 'Request failed'}`.trim();
+  try {
+    const parsed = JSON.parse(text);
+    return (
+      parsed?.error?.message ||
+      parsed?.error ||
+      parsed?.message ||
+      parsed?.detail ||
+      `${status} ${statusText || 'Request failed'}`
+    );
+  } catch {
+    return text || `${status} ${statusText || 'Request failed'}`.trim();
+  }
+}
+
+function isRetryable(method, statusOrError) {
+  if (method !== 'GET') return false;
+  if (typeof statusOrError === 'number') return RETRYABLE_STATUS.has(statusOrError);
+  if (typeof statusOrError?.status === 'number') return RETRYABLE_STATUS.has(statusOrError.status);
+  return statusOrError?.name === 'TimeoutError' || statusOrError?.name !== 'AbortError';
+}
+
 /**
  * @typedef {Object} WardexRequestOptions
  * @property {AbortSignal=} signal Abort signal owned by the calling hook or workflow.
@@ -55,20 +113,59 @@ async function request(method, path, body, opts = {}) {
     headers['Content-Type'] = 'application/json';
   }
   const url = _baseUrl + path;
-  const res = await fetch(url, { method, headers, body, signal, credentials: 'include' });
-  const requestId = res.headers.get('x-request-id') || res.headers.get('X-Request-Id') || null;
-  if (!res.ok) {
-    const text = await res.text().catch(() => '');
-    /** @type {WardexApiError} */
-    const err = new Error(`${res.status} ${res.statusText}`);
-    err.status = res.status;
-    err.body = text;
-    if (requestId) err.requestId = requestId;
-    throw err;
+  const maxAttempts = Math.max(1, opts.retries ?? (method === 'GET' ? 2 : 1));
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    const requestSignal = createRequestSignal(signal, opts.timeoutMs ?? DEFAULT_TIMEOUT_MS);
+    try {
+      const res = await fetch(url, {
+        method,
+        headers,
+        body,
+        signal: requestSignal.signal,
+        credentials: 'include',
+      });
+      const requestId = res.headers.get('x-request-id') || res.headers.get('X-Request-Id') || null;
+      if (!res.ok) {
+        const text = await res.text().catch(() => '');
+        if (attempt < maxAttempts && isRetryable(method, res.status)) {
+          requestSignal.cleanup();
+          await delay(100 * attempt);
+          continue;
+        }
+        /** @type {WardexApiError} */
+        const err = new Error(parseApiErrorMessage(res.status, res.statusText, text));
+        err.status = res.status;
+        err.body = text;
+        if (requestId) err.requestId = requestId;
+        throw err;
+      }
+      const ct = res.headers.get('content-type') || '';
+      if (ct.includes('json')) return res.json();
+      return res.text();
+    } catch (err) {
+      if (signal?.aborted) {
+        throw signal.reason || err;
+      }
+      if (requestSignal.signal.aborted) {
+        const reason = requestSignal.signal.reason || err;
+        if (attempt < maxAttempts && isRetryable(method, reason)) {
+          requestSignal.cleanup();
+          await delay(100 * attempt);
+          continue;
+        }
+        throw reason;
+      }
+      if (attempt < maxAttempts && isRetryable(method, err)) {
+        requestSignal.cleanup();
+        await delay(100 * attempt);
+        continue;
+      }
+      throw err;
+    } finally {
+      requestSignal.cleanup();
+    }
   }
-  const ct = res.headers.get('content-type') || '';
-  if (ct.includes('json')) return res.json();
-  return res.text();
 }
 
 const get = (p, o) => request('GET', p, null, o);
@@ -113,9 +210,62 @@ export const metrics = () => get('/api/metrics');
 export const sloStatus = () => get('/api/slo/status');
 export const supportDiag = () => get('/api/support/diagnostics');
 export const supportReadinessEvidence = () => get('/api/support/readiness-evidence');
+export const supportBundle = () => get('/api/support/bundle');
 export const firstRunProof = () => post('/api/support/first-run-proof');
 export const failoverDrill = () => post('/api/control/failover-drill');
 export const productionDemoLab = () => post('/api/demo/lab');
+export const operationalSnapshots = ({ kind, limit } = {}) => {
+  const query = new URLSearchParams();
+  if (kind) query.set('kind', String(kind));
+  if (limit) query.set('limit', String(limit));
+  const suffix = query.toString();
+  return get(`/api/operational/snapshots${suffix ? `?${suffix}` : ''}`);
+};
+export const operationalSnapshotPolicy = () => get('/api/operational/snapshots/policy');
+export const pruneOperationalSnapshots = (body = { dry_run: true }) =>
+  post('/api/operational/snapshots/prune', body);
+export const verifyOperationalSnapshot = ({ storageKey, digest } = {}) => {
+  const query = new URLSearchParams();
+  if (storageKey) query.set('storage_key', String(storageKey));
+  if (digest) query.set('digest', String(digest));
+  const suffix = query.toString();
+  return get(`/api/operational/snapshots/verify${suffix ? `?${suffix}` : ''}`);
+};
+export const launchpadEvidencePack = () => get('/api/launchpad/evidence-pack');
+export const launchpadReleaseDiff = () => get('/api/launchpad/release-diff');
+export const launchpadDemoStatus = () => get('/api/launchpad/demo-status');
+export const launchpadDemoReset = () => post('/api/launchpad/demo-reset');
+export const releaseDoctor = () => get('/api/release/doctor');
+export const releaseObservabilityGates = () => get('/api/release/observability-gates');
+export const releaseProvenance = () => get('/api/release/provenance');
+export const releaseUpgradeRehearsal = ({ targetVersion } = {}) => {
+  const query = new URLSearchParams();
+  if (targetVersion) query.set('target_version', String(targetVersion));
+  const suffix = query.toString();
+  return get(`/api/release/upgrade-rehearsal${suffix ? `?${suffix}` : ''}`);
+};
+export const syntheticConsoleMonitor = () => get('/api/monitoring/synthetic-console');
+export const incidentTimelineReplay = ({ incidentId } = {}) => {
+  const query = new URLSearchParams();
+  if (incidentId) query.set('incident_id', String(incidentId));
+  const suffix = query.toString();
+  return get(`/api/incidents/timeline-replay${suffix ? `?${suffix}` : ''}`);
+};
+export const detectionTrustScore = () => get('/api/detection/trust-score');
+export const fleetDriftCompliance = () => get('/api/fleet/drift-compliance');
+export const operatorWorkQueue = () => get('/api/operator/work-queue');
+export const retentionForecast = () => get('/api/retention/forecast');
+export const adversarialValidation = () => get('/api/validation/adversarial');
+export const supportBundleDiff = () => get('/api/support/bundle-diff');
+export const workflowPreflight = ({ workflow } = {}) => {
+  const query = new URLSearchParams();
+  if (workflow) query.set('workflow', String(workflow));
+  const suffix = query.toString();
+  return get(`/api/workflows/preflight${suffix ? `?${suffix}` : ''}`);
+};
+export const tenantIsolationProof = () => get('/api/tenants/isolation-proof');
+export const threadDetectionProof = () => get('/api/processes/thread-proof');
+export const sdkContractStatus = () => get('/api/sdk/contract-status');
 export const supportParity = () => get('/api/support/parity');
 export const docsIndex = ({ q, section, limit } = {}) => {
   const query = new URLSearchParams();
@@ -136,9 +286,24 @@ export const telemetryHistory = () => get('/api/telemetry/history');
 
 // ── Alerts ───────────────────────────────────────────────────
 export const alerts = () => get('/api/alerts');
+export const alertsPage = ({ cursor, limit } = {}) => {
+  const query = new URLSearchParams();
+  if (cursor !== undefined) query.set('cursor', String(cursor));
+  if (limit) query.set('limit', String(limit));
+  const suffix = query.toString();
+  return get(`/api/alerts/page${suffix ? `?${suffix}` : ''}`);
+};
 export const alertsCount = () => get('/api/alerts/count');
 export const alertById = (id) => get(`/api/alerts/${encodeURIComponent(id)}`);
 export const alertsGrouped = () => get('/api/alerts/grouped');
+export const alertHistogram = ({ window = '24h', bucket = '1h', severity } = {}) => {
+  const query = new URLSearchParams();
+  if (window) query.set('window', String(window));
+  if (bucket) query.set('bucket', String(bucket));
+  if (severity) query.set('severity', String(severity));
+  const suffix = query.toString();
+  return get(`/api/alerts/histogram${suffix ? `?${suffix}` : ''}`);
+};
 export const alertsAnalysisLatest = () => get('/api/alerts/analysis');
 export const alertsAnalysis = (body) => post('/api/alerts/analysis', body);
 export const alertsSample = (body) => post('/api/alerts/sample', body);
@@ -157,6 +322,10 @@ export const checkpoints = () => get('/api/checkpoints');
 export const detectionProfile = () => get('/api/detection/profile');
 export const setDetectionProfile = (body) => put('/api/detection/profile', body);
 export const detectionSummary = () => get('/api/detection/summary');
+export const detectionRecommendations = (limit = 10) =>
+  get(`/api/detection/recommendations?limit=${encodeURIComponent(String(limit))}`);
+export const detectionReadiness = (limit = 20) =>
+  get(`/api/detection/readiness?limit=${encodeURIComponent(String(limit))}`);
 export const detectionReplayCorpus = () => get('/api/detection/replay-corpus');
 export const evaluateDetectionReplayCorpus = (body) => post('/api/detection/replay-corpus', body);
 export const efficacyCanaryPromote = () => post('/api/efficacy/canary-promote');
@@ -207,6 +376,16 @@ export const deleteAgent = (id) => del(`/api/agents/${encodeURIComponent(id)}`);
 
 // ── Events ───────────────────────────────────────────────────
 export const events = () => get('/api/events');
+export const eventsPage = ({ cursor, limit, q, source, severity } = {}) => {
+  const query = new URLSearchParams();
+  if (cursor !== undefined) query.set('cursor', String(cursor));
+  if (limit) query.set('limit', String(limit));
+  if (q) query.set('q', String(q));
+  if (source) query.set('source', String(source));
+  if (severity) query.set('severity', String(severity));
+  const suffix = query.toString();
+  return get(`/api/events/page${suffix ? `?${suffix}` : ''}`);
+};
 export const postEvents = (body) => post('/api/events', body);
 export const eventsExport = () => get('/api/events/export');
 export const eventsSummary = () => get('/api/events/summary');
@@ -247,6 +426,8 @@ export const responseRequests = () => get('/api/response/requests');
 export const responseAudit = () => get('/api/response/audit');
 export const responseStats = () => get('/api/response/stats');
 export const responseApprovals = () => get('/api/response/approvals');
+export const responseApprovalOverview = () => get('/api/response/approval-overview');
+export const remediationSafety = () => get('/api/remediation/safety');
 
 // ── Policy ───────────────────────────────────────────────────
 export const policyCurrent = () => get('/api/policy/current');
@@ -335,6 +516,13 @@ const buildAuditLogQuery = ({ limit, offset, q, method, status, auth } = {}) => 
 export const auditLog = ({ limit = 50, offset = 0, q, method, status, auth } = {}) => {
   const suffix = buildAuditLogQuery({ limit, offset, q, method, status, auth });
   return get(`/api/audit/log${suffix ? `?${suffix}` : ''}`);
+};
+export const auditLogPage = ({ cursor = 0, limit = 50, q, method, status, auth } = {}) => {
+  const suffix = buildAuditLogQuery({ limit, q, method, status, auth });
+  const query = new URLSearchParams(suffix);
+  query.set('cursor', String(cursor));
+  const serialized = query.toString();
+  return get(`/api/audit/log/page${serialized ? `?${serialized}` : ''}`);
 };
 export const auditLogExport = ({ q, method, status, auth } = {}) => {
   const suffix = buildAuditLogQuery({ q, method, status, auth });
@@ -459,6 +647,8 @@ export const contentRuleLifecycle = (id, body) =>
   post(`/api/content/rules/${encodeURIComponent(id)}/lifecycle`, body);
 export const contentRuleTest = (id, body = {}) =>
   post(`/api/content/rules/${encodeURIComponent(id)}/test`, body);
+export const contentRulePreflight = (id, body = {}) =>
+  post(`/api/content/rules/${encodeURIComponent(id)}/preflight`, body);
 export const contentRulePromote = (id, body) =>
   post(`/api/content/rules/${encodeURIComponent(id)}/promote`, body);
 export const contentRuleRollback = (id) =>
@@ -738,6 +928,19 @@ export const wsDisconnect = (subscriberId) =>
   post('/api/ws/disconnect', { subscriber_id: subscriberId });
 export const wsPoll = (subscriberId) => post('/api/ws/poll', { subscriber_id: subscriberId });
 export const wsStats = () => get('/api/ws/stats');
+export const wsHealth = () => get('/api/ws/health');
+export const streamReadiness = () => get('/api/stream/readiness');
+export const streamReliabilityLab = () => get('/api/stream/reliability-lab');
+export const createSubscription = (body = { lanes: ['alerts'], filters: {} }) =>
+  post('/api/subscriptions', body);
+export const resumeSubscription = ({ subscriptionId, cursor, limit } = {}) => {
+  const query = new URLSearchParams();
+  if (subscriptionId) query.set('subscription_id', String(subscriptionId));
+  if (cursor !== undefined && cursor !== null) query.set('cursor', String(cursor));
+  if (limit !== undefined && limit !== null) query.set('limit', String(limit));
+  const suffix = query.toString();
+  return get(`/api/subscriptions/resume${suffix ? `?${suffix}` : ''}`);
+};
 export const wsBroadcast = (data) => post('/api/ws/broadcast', data);
 
 // ── v0.44.0: Enhanced Detection & UX ─────────────────────────

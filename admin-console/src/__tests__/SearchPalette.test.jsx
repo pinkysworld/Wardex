@@ -53,6 +53,18 @@ describe('SearchPalette', () => {
   it('uses shared command routes for quick actions', () => {
     render(<SearchPalette open={true} onClose={onClose} onNavigate={onNavigate} />);
 
+    fireEvent.click(screen.getByRole('button', { name: /Open Operator Launchpad/i }));
+
+    expect(onNavigate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: 'open-launchpad',
+        path: buildCommandHref('open-launchpad'),
+      }),
+    );
+
+    onNavigate.mockClear();
+    onClose.mockClear();
+
     fireEvent.click(screen.getByRole('button', { name: /Create Incident/i }));
 
     expect(onNavigate).toHaveBeenCalledWith(

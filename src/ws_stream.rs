@@ -314,6 +314,8 @@ struct EventBusInner {
     events: VecDeque<WsEvent>,
     max_buffer: usize,
     sequence: u64,
+    dropped_events: u64,
+    max_observed_queue_depth: usize,
     subscribers: Vec<Subscriber>,
     next_subscriber_id: u64,
 }
@@ -332,6 +334,8 @@ impl EventBus {
                 events: VecDeque::new(),
                 max_buffer,
                 sequence: 0,
+                dropped_events: 0,
+                max_observed_queue_depth: 0,
                 subscribers: Vec::new(),
                 next_subscriber_id: 1,
             })),
@@ -341,13 +345,17 @@ impl EventBus {
     pub fn publish(&self, event: WsEvent) {
         if let Ok(mut bus) = self.inner.lock() {
             let max_buf = bus.max_buffer;
+            let mut dropped = 0_u64;
+            let mut max_depth = bus.max_observed_queue_depth;
             // Fan out to subscribers
             for sub in &mut bus.subscribers {
                 if sub.channels.is_empty() || sub.channels.contains(&event.event_type) {
                     sub.queue.push_back(event.clone());
+                    max_depth = max_depth.max(sub.queue.len());
                     // Limit per-subscriber queue
                     while sub.queue.len() > max_buf {
                         sub.queue.pop_front();
+                        dropped += 1;
                     }
                 }
             }
@@ -355,7 +363,10 @@ impl EventBus {
             bus.events.push_back(event);
             while bus.events.len() > max_buf {
                 bus.events.pop_front();
+                dropped += 1;
             }
+            bus.dropped_events = bus.dropped_events.saturating_add(dropped);
+            bus.max_observed_queue_depth = max_depth;
             bus.sequence += 1;
         }
     }
@@ -404,6 +415,24 @@ impl EventBus {
 
     pub fn event_count(&self) -> u64 {
         self.inner.lock().map(|b| b.sequence).unwrap_or(0)
+    }
+
+    pub fn queue_depth(&self) -> usize {
+        self.inner
+            .lock()
+            .map(|bus| bus.subscribers.iter().map(|sub| sub.queue.len()).sum())
+            .unwrap_or(0)
+    }
+
+    pub fn max_queue_depth(&self) -> usize {
+        self.inner
+            .lock()
+            .map(|bus| bus.max_observed_queue_depth)
+            .unwrap_or(0)
+    }
+
+    pub fn dropped_events(&self) -> u64 {
+        self.inner.lock().map(|bus| bus.dropped_events).unwrap_or(0)
     }
 }
 
@@ -561,6 +590,11 @@ impl AlertBroadcaster {
             "connected_clients": self.connections.len(),
             "total_events": self.bus.event_count(),
             "subscribers": self.bus.subscriber_count(),
+            "subscriber_queue_depth": self.bus.queue_depth(),
+            "max_observed_queue_depth": self.bus.max_queue_depth(),
+            "dropped_events": self.bus.dropped_events(),
+            "latency_slo_ms": 1000,
+            "backpressure_state": if self.bus.dropped_events() > 0 || self.bus.queue_depth() > 100 { "backpressure" } else { "healthy" },
             "native_websocket_supported": false,
             "connections": self.connections.iter().map(|c| serde_json::json!({
                 "subscriber_id": c.subscriber_id,

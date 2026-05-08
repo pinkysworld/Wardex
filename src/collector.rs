@@ -1075,12 +1075,12 @@ fn collect_processes() -> Vec<ProcessEntry> {
             continue;
         }
         // Node,CommandLine,Name,ProcessId,WorkingSetSize
-        let parts: Vec<&str> = trimmed.split(',').collect();
+        let parts = split_wmic_csv_record(trimmed);
         if parts.len() < 5 {
             continue;
         }
-        let command = parts[1].to_string();
-        let name = parts[2].to_string();
+        let command = parts[1].clone();
+        let name = parts[2].clone();
         let pid = parts[3].trim().parse::<u32>().unwrap_or(0);
         let wss = parts[4].trim().parse::<f32>().unwrap_or(0.0);
         entries.push(ProcessEntry {
@@ -1093,6 +1093,32 @@ fn collect_processes() -> Vec<ProcessEntry> {
         });
     }
     entries
+}
+
+#[cfg(any(target_os = "windows", test))]
+fn split_wmic_csv_record(line: &str) -> Vec<String> {
+    let mut fields = Vec::new();
+    let mut field = String::new();
+    let mut in_quotes = false;
+    let mut chars = line.chars().peekable();
+
+    while let Some(ch) = chars.next() {
+        match ch {
+            '"' if in_quotes && chars.peek() == Some(&'"') => {
+                field.push('"');
+                chars.next();
+            }
+            '"' => in_quotes = !in_quotes,
+            ',' if !in_quotes => {
+                fields.push(field.trim().to_string());
+                field.clear();
+            }
+            _ => field.push(ch),
+        }
+    }
+
+    fields.push(field.trim().to_string());
+    fields
 }
 
 #[cfg(not(any(target_os = "linux", target_os = "macos", target_os = "windows")))]
@@ -1196,8 +1222,8 @@ fn collect_sockets(limit: usize) -> (Vec<SocketEntry>, Vec<SocketEntry>) {
                     process = after[..name_close].to_string();
                 }
             }
-            if let Some(pid_pos) = inner.find("pid=") {
-                let tail = &inner[pid_pos + 4..];
+            if let Some(pid_pos) = inner.find(",pid=") {
+                let tail = &inner[pid_pos + 5..];
                 let digits: String = tail.chars().take_while(|c| c.is_ascii_digit()).collect();
                 pid = digits.parse::<u32>().ok();
             }
@@ -2366,6 +2392,20 @@ mod tests {
         };
         let sample = collect_sample_scoped(&mut state, None, None, &scope);
         assert_eq!(sample.auth_failures, 0);
+    }
+
+    #[test]
+    fn split_wmic_csv_record_preserves_commas_in_command_lines() {
+        let fields = split_wmic_csv_record(
+            r#"node,"C:\Windows\System32\cmd.exe /c echo alpha,beta",cmd.exe,1234,2097152"#,
+        );
+
+        assert_eq!(
+            fields[1],
+            r#"C:\Windows\System32\cmd.exe /c echo alpha,beta"#
+        );
+        assert_eq!(fields[2], "cmd.exe");
+        assert_eq!(fields[3], "1234");
     }
 
     #[test]

@@ -134,6 +134,26 @@ function normalizeThreadItems(items) {
     .filter((thread) => Number.isFinite(thread.thread_id));
 }
 
+function anomalyBadgeClass(severity) {
+  const normalized = String(severity || '').toLowerCase();
+  if (['critical', 'high'].includes(normalized)) return 'badge-err';
+  if (['medium', 'elevated', 'warning'].includes(normalized)) return 'badge-warn';
+  if (normalized === 'info') return 'badge-info';
+  return 'badge-ok';
+}
+
+function normalizeThreadAnomalies(items) {
+  return (Array.isArray(items) ? items : [])
+    .map((item, index) => ({
+      id: `${item?.kind || 'thread-signal'}-${item?.evidence?.thread_id || index}`,
+      kind: item?.kind || 'thread_signal',
+      severity: item?.severity || 'info',
+      detail: item?.detail || item?.message || 'Thread anomaly evidence was reported.',
+      evidence: item?.evidence || {},
+    }))
+    .filter((item) => item.detail);
+}
+
 function normalizeProcessThreads(threadData) {
   return normalizeThreadItems(threadData?.threads);
 }
@@ -302,12 +322,20 @@ export default function ProcessDrawer({
     const waitReasonCount =
       threadData.wait_reason_count ??
       processThreads.filter((thread) => Boolean(thread.wait_reason)).length;
+    const anomalies = normalizeThreadAnomalies(threadData.thread_anomalies);
+    const recommendations = Array.isArray(threadData.recommendations)
+      ? threadData.recommendations.filter(Boolean)
+      : [];
 
     return {
       threadCount: threadData.thread_count ?? processThreads.length,
       runningCount,
       sleepingCount,
       blockedCount,
+      anomalyScore: Number(threadData.thread_anomaly_score ?? threadData.anomaly_score ?? 0),
+      anomalyLevel: threadData.thread_anomaly_level || threadData.anomaly_level || 'nominal',
+      anomalies,
+      recommendations,
       hotThreadCount:
         threadData.hot_thread_count ??
         processThreads.filter((thread) => Number(thread.cpu_percent || 0) >= 5).length,
@@ -668,10 +696,48 @@ export default function ProcessDrawer({
                     Highest per-thread CPU share at collection time.
                   </div>
                 </div>
+                <div>
+                  <div className="metric-label">Anomaly Score</div>
+                  <div style={{ fontSize: 22, fontWeight: 700 }}>
+                    {Number(threadSummary.anomalyScore || 0)}
+                  </div>
+                  <div className="row-secondary">
+                    <span className={`badge ${anomalyBadgeClass(threadSummary.anomalyLevel)}`}>
+                      {String(threadSummary.anomalyLevel || 'nominal').replace(/_/g, ' ')}
+                    </span>
+                  </div>
+                </div>
               </div>
               {threadSummary.note && (
                 <div className="detail-callout" style={{ marginTop: 12 }}>
                   {threadSummary.note}
+                </div>
+              )}
+              {threadSummary.anomalies.length > 0 && (
+                <div className="detail-callout" style={{ marginTop: 12 }}>
+                  <div className="row-primary" style={{ marginBottom: 8 }}>
+                    Thread Anomaly Signals
+                  </div>
+                  <div style={{ display: 'grid', gap: 8 }}>
+                    {threadSummary.anomalies.slice(0, 4).map((anomaly) => (
+                      <div key={anomaly.id}>
+                        <span className={`badge ${anomalyBadgeClass(anomaly.severity)}`}>
+                          {String(anomaly.severity || 'info').replace(/_/g, ' ')}
+                        </span>{' '}
+                        <strong>
+                          {String(anomaly.kind || 'thread signal').replace(/_/g, ' ')}
+                        </strong>
+                        <div className="hint" style={{ marginTop: 4 }}>
+                          {anomaly.detail}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {threadSummary.recommendations.length > 0 && (
+                <div className="hint" style={{ marginTop: 12 }}>
+                  Recommended thread pivot: {threadSummary.recommendations[0]}
                 </div>
               )}
               {threadSummary.hotThreads.length > 0 && (

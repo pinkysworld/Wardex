@@ -83,16 +83,58 @@ describe('request helper', () => {
     }
   });
 
-  it('captures the X-Request-Id header on thrown errors', async () => {
+  it('extracts structured API error messages', async () => {
     mockFetch.mockResolvedValueOnce({
       ok: false,
-      status: 500,
-      statusText: 'Internal Server Error',
-      headers: {
-        get: (name) => (name.toLowerCase() === 'x-request-id' ? 'req-abc-123' : null),
-      },
-      text: async () => '{"error":"boom"}',
+      status: 422,
+      statusText: 'Unprocessable Entity',
+      headers: { get: () => 'application/json' },
+      text: async () => JSON.stringify({ error: { message: 'preflight blocked' } }),
     });
+
+    await expect(api.health()).rejects.toMatchObject({
+      status: 422,
+      message: 'preflight blocked',
+    });
+  });
+
+  it('retries retryable GET failures once', async () => {
+    mockFetch
+      .mockResolvedValueOnce({
+        ok: false,
+        status: 503,
+        statusText: 'Service Unavailable',
+        headers: { get: () => null },
+        text: async () => 'busy',
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        headers: { get: () => 'application/json' },
+        json: async () => ({ status: 'ok' }),
+      });
+
+    await expect(api.health()).resolves.toEqual({ status: 'ok' });
+    expect(mockFetch).toHaveBeenCalledTimes(2);
+  });
+
+  it('captures the X-Request-Id header on thrown errors', async () => {
+    mockFetch
+      .mockResolvedValueOnce({
+        ok: false,
+        status: 500,
+        statusText: 'Internal Server Error',
+        headers: { get: () => null },
+        text: async () => '{"error":"retry me"}',
+      })
+      .mockResolvedValueOnce({
+        ok: false,
+        status: 500,
+        statusText: 'Internal Server Error',
+        headers: {
+          get: (name) => (name.toLowerCase() === 'x-request-id' ? 'req-abc-123' : null),
+        },
+        text: async () => '{"error":"boom"}',
+      });
 
     try {
       await api.health();
@@ -241,6 +283,49 @@ describe('GET endpoints', () => {
     await api.inbox();
     expect(mockFetch.mock.calls[0][0]).toBe('/api/inbox');
   });
+
+  it('hardening helpers call product hardening routes', async () => {
+    mockFetch.mockResolvedValue(jsonOk({ ok: true }));
+    await api.streamReadiness();
+    await api.streamReliabilityLab();
+    await api.operationalSnapshots({ kind: 'stream_readiness', limit: 3 });
+    await api.operationalSnapshotPolicy();
+    await api.verifyOperationalSnapshot({ digest: 'abc' });
+    await api.releaseDoctor();
+    await api.releaseObservabilityGates();
+    await api.workflowPreflight({ workflow: 'release' });
+    await api.tenantIsolationProof();
+    await api.threadDetectionProof();
+    await api.supportBundle();
+    await api.alertHistogram({ window: '24h', bucket: '1h', severity: 'high' });
+    await api.alertsPage({ cursor: 10, limit: 5 });
+    await api.eventsPage({ cursor: 2, limit: 4, q: 'login', severity: 'high' });
+    await api.auditLogPage({ cursor: 6, limit: 3, status: '2xx' });
+    await api.resumeSubscription({ subscriptionId: 'sub-1', cursor: 7, limit: 2 });
+
+    expect(mockFetch.mock.calls[0][0]).toBe('/api/stream/readiness');
+    expect(mockFetch.mock.calls[1][0]).toBe('/api/stream/reliability-lab');
+    expect(mockFetch.mock.calls[2][0]).toBe(
+      '/api/operational/snapshots?kind=stream_readiness&limit=3',
+    );
+    expect(mockFetch.mock.calls[3][0]).toBe('/api/operational/snapshots/policy');
+    expect(mockFetch.mock.calls[4][0]).toBe('/api/operational/snapshots/verify?digest=abc');
+    expect(mockFetch.mock.calls[5][0]).toBe('/api/release/doctor');
+    expect(mockFetch.mock.calls[6][0]).toBe('/api/release/observability-gates');
+    expect(mockFetch.mock.calls[7][0]).toBe('/api/workflows/preflight?workflow=release');
+    expect(mockFetch.mock.calls[8][0]).toBe('/api/tenants/isolation-proof');
+    expect(mockFetch.mock.calls[9][0]).toBe('/api/processes/thread-proof');
+    expect(mockFetch.mock.calls[10][0]).toBe('/api/support/bundle');
+    expect(mockFetch.mock.calls[11][0]).toBe(
+      '/api/alerts/histogram?window=24h&bucket=1h&severity=high',
+    );
+    expect(mockFetch.mock.calls[12][0]).toBe('/api/alerts/page?cursor=10&limit=5');
+    expect(mockFetch.mock.calls[13][0]).toBe('/api/events/page?cursor=2&limit=4&q=login&severity=high');
+    expect(mockFetch.mock.calls[14][0]).toBe('/api/audit/log/page?limit=3&status=2xx&cursor=6');
+    expect(mockFetch.mock.calls[15][0]).toBe(
+      '/api/subscriptions/resume?subscription_id=sub-1&cursor=7&limit=2',
+    );
+  });
 });
 
 // ── POST endpoints ───────────────────────────────────────────
@@ -279,6 +364,20 @@ describe('POST endpoints', () => {
     expect(mockFetch.mock.calls[0][0]).toBe('/api/content/rules/rule-1/test');
   });
 
+  it('contentRulePreflight() posts to the rule preflight endpoint', async () => {
+    mockFetch.mockResolvedValueOnce(jsonOk({ status: 'ready' }));
+    await api.contentRulePreflight('rule-1', { target_status: 'canary' });
+    expect(mockFetch.mock.calls[0][0]).toBe('/api/content/rules/rule-1/preflight');
+    expect(JSON.parse(mockFetch.mock.calls[0][1].body)).toEqual({ target_status: 'canary' });
+  });
+
+  it('pruneOperationalSnapshots() defaults to dry-run pruning', async () => {
+    mockFetch.mockResolvedValueOnce(jsonOk({ status: 'preview' }));
+    await api.pruneOperationalSnapshots();
+    expect(mockFetch.mock.calls[0][0]).toBe('/api/operational/snapshots/prune');
+    expect(JSON.parse(mockFetch.mock.calls[0][1].body)).toEqual({ dry_run: true });
+  });
+
   it('createReportRun() posts report run payload', async () => {
     mockFetch.mockResolvedValueOnce(jsonOk({ status: 'created' }));
     await api.createReportRun({ kind: 'executive_status', scope: 'global' });
@@ -302,6 +401,16 @@ describe('POST endpoints', () => {
     expect(JSON.parse(mockFetch.mock.calls[0][1].body)).toEqual({
       dry_run: true,
       platform: 'linux',
+    });
+  });
+
+  it('createSubscription() posts subscription filters', async () => {
+    mockFetch.mockResolvedValueOnce(jsonOk({ subscription: { subscription_id: 'sub-1' } }));
+    await api.createSubscription({ lanes: ['alerts'], filters: { severity: 'high' } });
+    expect(mockFetch.mock.calls[0][0]).toBe('/api/subscriptions');
+    expect(JSON.parse(mockFetch.mock.calls[0][1].body)).toEqual({
+      lanes: ['alerts'],
+      filters: { severity: 'high' },
     });
   });
 });

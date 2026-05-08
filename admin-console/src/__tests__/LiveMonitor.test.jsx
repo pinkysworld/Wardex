@@ -66,6 +66,43 @@ describe('LiveMonitor', () => {
       if (String(url).includes('/api/ws/stats')) {
         return Promise.resolve(jsonOk(wsStatsFixture()));
       }
+      if (String(url).includes('/api/ws/health')) {
+        return Promise.resolve(jsonOk({ status: 'healthy', stats: wsStatsFixture() }));
+      }
+      if (String(url).includes('/api/stream/readiness')) {
+        return Promise.resolve(jsonOk({ status: 'ready', score: 98, promotion_guard: 'clear' }));
+      }
+      if (String(url).includes('/api/stream/reliability-lab')) {
+        return Promise.resolve(
+          jsonOk({
+            status: 'pass',
+            fail_count: 0,
+            warn_count: 0,
+            scenarios: [
+              {
+                id: 'steady_state',
+                status: 'pass',
+                expected: 'score >= 90',
+                next_action: 'Keep promotion workflows enabled.',
+              },
+            ],
+          }),
+        );
+      }
+      if (String(url).includes('/api/alerts/histogram')) {
+        return Promise.resolve(jsonOk({ total: 2, buckets: [] }));
+      }
+      if (String(url).includes('/api/subscriptions/resume')) {
+        return Promise.resolve(
+          jsonOk({
+            cursor: '0',
+            next_cursor: '0',
+            events: [],
+            has_more: false,
+            gap_detected: false,
+          }),
+        );
+      }
       if (String(url).includes('/api/alerts/grouped')) return Promise.resolve(jsonOk([]));
       if (String(url).includes('/api/alerts')) return Promise.resolve(jsonOk([]));
       if (String(url).includes('/api/processes/live')) {
@@ -153,6 +190,14 @@ describe('LiveMonitor', () => {
     expect((await screen.findAllByText('network burst detected')).length).toBeGreaterThan(0);
     expect(screen.getByText('Live feed: WebSocket')).toBeInTheDocument();
     expect(screen.getByText('Transport and Recovery')).toBeInTheDocument();
+    expect(screen.getByText('Queue Depth')).toBeInTheDocument();
+    expect(screen.getByText('Dropped Events')).toBeInTheDocument();
+    expect(screen.getByText('Backpressure')).toBeInTheDocument();
+    expect(screen.getByText('Readiness Score')).toBeInTheDocument();
+    expect(screen.getByText('Reliability Lab')).toBeInTheDocument();
+    expect(screen.getByText('steady state')).toBeInTheDocument();
+    expect(screen.getByText('24h Histogram')).toBeInTheDocument();
+    expect(screen.getByText('Cursor Replay')).toBeInTheDocument();
     expect(screen.getAllByText('critical').length).toBeGreaterThan(0);
 
     await user.click(screen.getByRole('button', { name: /incident \(1\)/i }));
@@ -660,7 +705,7 @@ describe('LiveMonitor', () => {
       </MemoryRouter>,
     );
 
-    const alertCheckbox = await screen.findByLabelText('Select alert alert-1');
+    await screen.findByLabelText('Select alert alert-1');
     expect(screen.getByText(/Shortcuts:/i)).toBeInTheDocument();
 
     fireEvent.keyDown(window, { key: '/' });
@@ -673,13 +718,13 @@ describe('LiveMonitor', () => {
     fireEvent.keyDown(window, { key: 'ArrowDown' });
 
     await waitFor(() => {
-      expect(alertCheckbox.closest('tr')).toHaveClass('row-active');
+      expect(screen.getByLabelText('Select alert alert-1').closest('tr')).toHaveClass('row-active');
     });
 
     fireEvent.keyDown(window, { key: 'x' });
 
     await waitFor(() => {
-      expect(alertCheckbox).toBeChecked();
+      expect(screen.getByLabelText('Select alert alert-1')).toBeChecked();
     });
 
     fireEvent.keyDown(window, { key: 't' });

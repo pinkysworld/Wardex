@@ -121,6 +121,17 @@ describe('ProcessDrawer', () => {
             hot_thread_count: 1,
             top_cpu_percent: 12.5,
             wait_reason_count: 1,
+            thread_anomaly_score: 48,
+            thread_anomaly_level: 'high',
+            thread_anomalies: [
+              {
+                kind: 'suspicious_wait_reason',
+                severity: 'high',
+                detail: 'Thread wait reason matched tracing or injection terms.',
+                evidence: { thread_id: 2, wait_reason: 'ptrace_stop' },
+              },
+            ],
+            recommendations: ['Pivot to module, handle, and parent lineage review.'],
             hot_threads: [
               {
                 thread_id: 1,
@@ -228,6 +239,14 @@ describe('ProcessDrawer', () => {
     expect(screen.getByText(/Hottest threads: T1 12.5%/i)).toBeInTheDocument();
     expect(
       screen.getByText(/Blocked threads: T2 waiting on futex_wait_queue_me/i),
+    ).toBeInTheDocument();
+    expect(screen.getByText('Thread Anomaly Signals')).toBeInTheDocument();
+    expect(screen.getByText(/suspicious wait reason/i)).toBeInTheDocument();
+    expect(
+      screen.getByText(/Thread wait reason matched tracing or injection terms/i),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/Pivot to module, handle, and parent lineage review/i),
     ).toBeInTheDocument();
     expect(screen.getAllByText('futex_wait_queue_me').length).toBeGreaterThan(0);
     expect(screen.getByText('0:00.20 / 0:00.45')).toBeInTheDocument();

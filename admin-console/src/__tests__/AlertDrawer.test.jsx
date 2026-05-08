@@ -23,6 +23,14 @@ describe('AlertDrawer', () => {
             why_fired: ['The detector attached credential and lateral movement reasons.'],
             why_safe_or_noisy: ['No prior analyst feedback is recorded for this event.'],
             next_steps: ['Review identity activity and isolate the source if confirmed.'],
+            thread_anomalies: [
+              {
+                kind: 'hot_thread',
+                severity: 'high',
+                detail: 'Thread CPU peaked at 34.2% during alert collection.',
+                evidence: { thread_id: 4242 },
+              },
+            ],
             entity_scores: [
               {
                 entity_kind: 'host',
@@ -41,6 +49,22 @@ describe('AlertDrawer', () => {
                 recommended_pivots: ['Open host timeline for edge-1.'],
               },
             ],
+            evidence_chain: [
+              {
+                signal_type: 'reason',
+                label: 'Detection Reason',
+                value: 'credential_dump_attempt user=alice',
+                confidence_score: 0.93,
+              },
+            ],
+            matched_rules: [
+              {
+                rule_id: 'rule-1',
+                rule_name: 'Suspicious PowerShell',
+                lifecycle_stage: 'canary',
+              },
+            ],
+            similar_past_alerts: [{ event_id: 7, hostname: 'edge-1', severity: 'critical' }],
           }),
         );
       }
@@ -79,6 +103,13 @@ describe('AlertDrawer', () => {
     expect(screen.getByText(/Peer group: linux hosts/i)).toBeInTheDocument();
     expect(screen.getByText(/alert score:/i)).toBeInTheDocument();
     expect(screen.getByText(/Credential-access precursor/i)).toBeInTheDocument();
+    expect(screen.getByText('Contributing signals')).toBeInTheDocument();
+    expect(screen.getByText(/hot thread/i)).toBeInTheDocument();
+    expect(screen.getByText(/Thread CPU peaked at 34.2%/i)).toBeInTheDocument();
+    expect(screen.getByText('Evidence chain')).toBeInTheDocument();
+    expect(screen.getAllByText(/credential_dump_attempt user=alice/i).length).toBeGreaterThan(0);
+    expect(screen.getByText(/Suspicious PowerShell/i)).toBeInTheDocument();
+    expect(screen.getByText(/1 similar past alert available for pivot/i)).toBeInTheDocument();
     expect(screen.getByText(/Next pivot: Open host timeline for edge-1/i)).toBeInTheDocument();
   });
 

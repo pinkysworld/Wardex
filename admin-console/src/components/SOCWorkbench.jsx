@@ -9,6 +9,7 @@ import InvestigationTimeline from './InvestigationTimeline.jsx';
 import { downloadData, formatDateTime, formatRelativeTime } from './operatorUtils.js';
 import { buildLongRetentionHistoryPath } from './settings/helpers.js';
 import { buildHref } from './workflowPivots.js';
+import { safeStorageGet, safeStorageJsonGet, safeStorageJsonSet, safeStorageSet } from '../safeStorage.js';
 
 import PlaybookEditor from './PlaybookEditor.jsx';
 
@@ -631,12 +632,8 @@ export default function SOCWorkbench() {
   const [analystLoading, setAnalystLoading] = useState(false);
   const [queueFilterText, setQueueFilterText] = useState(queueFilterParam);
   const [savedQueueFilters, setSavedQueueFilters] = useState(() => {
-    try {
-      const parsed = JSON.parse(localStorage.getItem('wardex_saved_queue_filters') || '[]');
-      return Array.isArray(parsed) ? parsed : [];
-    } catch {
-      return [];
-    }
+    const parsed = safeStorageJsonGet('wardex_saved_queue_filters', []);
+    return Array.isArray(parsed) ? parsed : [];
   });
   const [selectedCaseIds, setSelectedCaseIds] = useState(new Set());
   const [bulkCaseStatus, setBulkCaseStatus] = useState('investigating');
@@ -684,18 +681,15 @@ export default function SOCWorkbench() {
 
   // ── Investigation Checklists (persisted) ──
   const [checklist, setChecklist] = useState(() => {
-    try {
-      return JSON.parse(localStorage.getItem('wardex_checklist') || '[]');
-    } catch {
-      return [];
-    }
+    const parsed = safeStorageJsonGet('wardex_checklist', []);
+    return Array.isArray(parsed) ? parsed : [];
   });
   const [checklistType, setChecklistType] = useState(
-    () => localStorage.getItem('wardex_checklist_type') || '',
+    () => safeStorageGet('wardex_checklist_type', '') || '',
   );
   useEffect(() => {
-    localStorage.setItem('wardex_checklist', JSON.stringify(checklist));
-    localStorage.setItem('wardex_checklist_type', checklistType);
+    safeStorageJsonSet('wardex_checklist', checklist);
+    safeStorageSet('wardex_checklist_type', checklistType);
   }, [checklist, checklistType]);
 
   useInterval(() => {
@@ -1107,7 +1101,7 @@ export default function SOCWorkbench() {
   ]);
 
   useEffect(() => {
-    localStorage.setItem('wardex_saved_queue_filters', JSON.stringify(savedQueueFilters));
+    safeStorageJsonSet('wardex_saved_queue_filters', savedQueueFilters);
   }, [savedQueueFilters]);
 
   useEffect(() => {

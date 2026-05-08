@@ -194,6 +194,60 @@ function extractAlertProcessCandidates(alert) {
   });
 }
 
+function normalizeContributingSignal(signal, index) {
+  if (typeof signal === 'string') {
+    return {
+      id: `signal-${index}`,
+      kind: 'signal',
+      severity: 'info',
+      detail: signal,
+    };
+  }
+  if (!signal || typeof signal !== 'object') return null;
+  return {
+    id: `${signal.kind || signal.type || 'signal'}-${signal.thread_id || signal.id || index}`,
+    kind: signal.kind || signal.type || signal.source || 'signal',
+    severity: signal.severity || signal.level || 'info',
+    detail: signal.detail || signal.message || signal.description || signal.reason || '',
+    evidence: signal.evidence || signal,
+  };
+}
+
+function signalBadgeClass(severity) {
+  const normalized = String(severity || '').toLowerCase();
+  if (['critical', 'high', 'severe'].includes(normalized)) return 'badge-err';
+  if (['medium', 'elevated', 'warning'].includes(normalized)) return 'badge-warn';
+  return 'badge-info';
+}
+
+function extractContributingSignals(alert, explainData) {
+  const directSignals = [
+    alert?.thread_anomalies,
+    alert?.thread_signals,
+    alert?.contributing_signals,
+    explainData?.thread_anomalies,
+    explainData?.thread_signals,
+    explainData?.contributing_signals,
+  ]
+    .filter(Array.isArray)
+    .flat();
+
+  const normalized = directSignals
+    .map(normalizeContributingSignal)
+    .filter((signal) => signal?.detail || String(signal?.kind || '').includes('thread'));
+
+  if (normalized.length === 0 && Number(alert?.thread_anomaly_count || 0) > 0) {
+    normalized.push({
+      id: 'thread-anomaly-count',
+      kind: 'thread_anomaly',
+      severity: alert.thread_anomaly_level || 'info',
+      detail: `${alert.thread_anomaly_count} thread anomaly signal${Number(alert.thread_anomaly_count) === 1 ? '' : 's'} attached to this alert.`,
+    });
+  }
+
+  return normalized.slice(0, 6);
+}
+
 /* ── AlertDrawer component ──────────────────────────────────── */
 
 export default function AlertDrawer({
@@ -346,6 +400,14 @@ export default function AlertDrawer({
   const nextSteps = explainData?.next_steps?.length ? explainData.next_steps : fallbackNextSteps;
   const analystFeedback = Array.isArray(explainData?.feedback) ? explainData.feedback : [];
   const entityScores = Array.isArray(explainData?.entity_scores) ? explainData.entity_scores : [];
+  const contributingSignals = extractContributingSignals(alert, explainData);
+  const evidenceChain = Array.isArray(explainData?.evidence_chain)
+    ? explainData.evidence_chain
+    : [];
+  const matchedRules = Array.isArray(explainData?.matched_rules) ? explainData.matched_rules : [];
+  const similarPastAlerts = Array.isArray(explainData?.similar_past_alerts)
+    ? explainData.similar_past_alerts
+    : [];
   const processLinkState = processCandidates.length
     ? 'Process-linked'
     : processNames.length
@@ -707,6 +769,68 @@ export default function AlertDrawer({
                     );
                   })}
                 </div>
+              </div>
+            )}
+            {contributingSignals.length > 0 && (
+              <div style={{ margin: '12px 0' }}>
+                <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 8 }}>
+                  Contributing signals
+                </div>
+                <div style={{ display: 'grid', gap: 8 }}>
+                  {contributingSignals.map((signal) => (
+                    <div key={signal.id} className="detail-callout" style={{ margin: 0 }}>
+                      <span className={`badge ${signalBadgeClass(signal.severity)}`}>
+                        {String(signal.severity || 'info').replace(/_/g, ' ')}
+                      </span>{' '}
+                      <strong>{String(signal.kind || 'signal').replace(/_/g, ' ')}</strong>
+                      <div className="hint" style={{ marginTop: 4 }}>
+                        {signal.detail}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+            {(evidenceChain.length > 0 ||
+              matchedRules.length > 0 ||
+              similarPastAlerts.length > 0) && (
+              <div style={{ margin: '12px 0' }}>
+                <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 8 }}>Evidence chain</div>
+                <div style={{ display: 'grid', gap: 8 }}>
+                  {evidenceChain.slice(0, 4).map((item, index) => (
+                    <div
+                      key={`evidence-chain-${index}`}
+                      className="detail-callout"
+                      style={{ margin: 0 }}
+                    >
+                      <span className="badge badge-info">
+                        {String(item.signal_type || 'signal').replace(/_/g, ' ')}
+                      </span>{' '}
+                      <strong>{item.label || `Signal ${index + 1}`}</strong>
+                      <div className="hint" style={{ marginTop: 4 }}>
+                        {item.value || 'Evidence captured'}
+                        {item.confidence_score != null
+                          ? ` • confidence ${Number(item.confidence_score).toFixed(2)}`
+                          : ''}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                {matchedRules.length > 0 && (
+                  <div className="chip-row" style={{ marginTop: 8 }}>
+                    {matchedRules.slice(0, 4).map((rule) => (
+                      <span key={rule.rule_id || rule.rule_name} className="scope-chip">
+                        {rule.rule_name || rule.rule_id} · {rule.lifecycle_stage || 'active'}
+                      </span>
+                    ))}
+                  </div>
+                )}
+                {similarPastAlerts.length > 0 && (
+                  <div className="hint" style={{ marginTop: 8 }}>
+                    {similarPastAlerts.length} similar past alert
+                    {similarPastAlerts.length === 1 ? '' : 's'} available for pivot.
+                  </div>
+                )}
               </div>
             )}
             <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 4 }}>

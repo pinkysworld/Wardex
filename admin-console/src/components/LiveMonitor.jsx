@@ -110,6 +110,32 @@ function normalizeAlert(alert, fallbackIndex) {
   };
 }
 
+function threadSignalMeta(alert) {
+  const count = Number(
+    alert?.thread_anomaly_count ??
+      (Array.isArray(alert?.thread_anomalies)
+        ? alert.thread_anomalies.length
+        : Array.isArray(alert?.thread_signals)
+          ? alert.thread_signals.length
+          : 0),
+  );
+  if (!Number.isFinite(count) || count <= 0) return null;
+  const level = String(alert?.thread_anomaly_level || alert?.thread_signal_level || 'elevated')
+    .toLowerCase()
+    .replace(/_/g, ' ');
+  const badgeClass = ['critical', 'high', 'severe'].includes(level)
+    ? 'badge-err'
+    : level === 'info' || level === 'nominal'
+      ? 'badge-info'
+      : 'badge-warn';
+  return {
+    count,
+    label: `${count} thread signal${count === 1 ? '' : 's'}`,
+    level,
+    badgeClass,
+  };
+}
+
 function alertDedupKey(alert, index) {
   const primaryId = alert.id ?? alert.alert_id ?? alert._index;
   if (primaryId != null) return String(primaryId);
@@ -295,6 +321,7 @@ function MonitorShortcutDialog({ onClose }) {
 
 function MobileAlertCard({ alert, index, active, onPreview, onOpen, onMarkFP }) {
   const alertId = alertIdFor(alert, index);
+  const threadSignal = threadSignalMeta(alert);
   return (
     <article
       className={`mobile-stack-card ${active ? 'active' : ''}`}
@@ -325,6 +352,7 @@ function MobileAlertCard({ alert, index, active, onPreview, onOpen, onMarkFP }) 
         <span>{alert.source || 'unknown source'}</span>
         <span>{alert.category || alert.type || 'uncategorized'}</span>
         <span>{formatRelativeTime(alert.timestamp || alert.time)}</span>
+        {threadSignal && <span>{threadSignal.label}</span>}
       </div>
       <div className="mobile-card-actions">
         <button
@@ -356,6 +384,17 @@ export default function LiveMonitor() {
   const alertSearchRef = useRef(null);
   const processTableRef = useRef(null);
   const { data: wsStats, reload: reloadWsStats } = useApi(api.wsStats);
+  const { data: wsHealth, reload: reloadWsHealth } = useApi(api.wsHealth);
+  const { data: streamReadiness, reload: reloadStreamReadiness } = useApi(api.streamReadiness);
+  const { data: streamReliabilityLab, reload: reloadStreamReliabilityLab } = useApi(
+    api.streamReliabilityLab,
+  );
+  const { data: alertHistogram, reload: reloadAlertHistogram } = useApi(() =>
+    api.alertHistogram({ window: '24h', bucket: '1h' }),
+  );
+  const { data: subscriptionResume, reload: reloadSubscriptionResume } = useApi(() =>
+    api.resumeSubscription({ cursor: 0, limit: 5 }),
+  );
   const nativeStreamSupported = Boolean(wsStats?.native_websocket_supported);
   const {
     events: streamEvents,
@@ -522,7 +561,21 @@ export default function LiveMonitor() {
     if (!latestStreamAlertKey) return;
     reloadAlertSummary();
     reloadWsStats();
-  }, [latestStreamAlertKey, reloadAlertSummary, reloadWsStats]);
+    reloadWsHealth();
+    reloadStreamReadiness();
+    reloadStreamReliabilityLab();
+    reloadAlertHistogram();
+    reloadSubscriptionResume();
+  }, [
+    latestStreamAlertKey,
+    reloadAlertHistogram,
+    reloadAlertSummary,
+    reloadStreamReadiness,
+    reloadStreamReliabilityLab,
+    reloadSubscriptionResume,
+    reloadWsHealth,
+    reloadWsStats,
+  ]);
 
   const runAlertAnalysis = useCallback(async () => {
     try {
@@ -545,7 +598,14 @@ export default function LiveMonitor() {
 
   useInterval(
     () => {
-      if (tab === 'stream') reloadWsStats();
+      if (tab === 'stream') {
+        reloadWsStats();
+        reloadWsHealth();
+        reloadStreamReadiness();
+        reloadStreamReliabilityLab();
+        reloadAlertHistogram();
+        reloadSubscriptionResume();
+      }
     },
     tab === 'stream' ? 10000 : null,
   );
@@ -590,7 +650,23 @@ export default function LiveMonitor() {
     : streamStatus === 'reconnecting'
       ? 'badge-warn'
       : 'badge-info';
-  const wsConnectionCount = Array.isArray(wsStats?.connections) ? wsStats.connections.length : 0;
+  const streamHealthStats = wsHealth?.stats || wsStats || {};
+  const wsConnectionCount = Array.isArray(streamHealthStats?.connections)
+    ? streamHealthStats.connections.length
+    : 0;
+  const streamQueueDepth = Number(streamHealthStats?.subscriber_queue_depth || 0);
+  const streamDroppedEvents = Number(streamHealthStats?.dropped_events || 0);
+  const streamBackpressureState =
+    wsHealth?.status || streamHealthStats?.backpressure_state || 'healthy';
+  const streamReadinessScore = Number(streamReadiness?.score ?? wsHealth?.readiness?.score ?? 0);
+  const streamReliabilityScenarios = Array.isArray(streamReliabilityLab?.scenarios)
+    ? streamReliabilityLab.scenarios
+    : [];
+  const alertHistogramTotal = Number(alertHistogram?.total || 0);
+  const subscriptionReplayEvents = Array.isArray(subscriptionResume?.events)
+    ? subscriptionResume.events.length
+    : 0;
+  const subscriptionGapDetected = Boolean(subscriptionResume?.gap_detected);
 
   const sourceOptions = ['all', ...new Set(alertList.map((alert) => alert.source).filter(Boolean))];
   const hostOptions = ['all', ...new Set(alertList.map((alert) => alert.hostname).filter(Boolean))];
@@ -862,7 +938,14 @@ export default function LiveMonitor() {
     };
 
     const handleKeyDown = (event) => {
-      if (event.defaultPrevented || event.metaKey || event.ctrlKey || event.altKey) return;
+      if (
+        event.defaultPrevented ||
+        event.isComposing ||
+        event.metaKey ||
+        event.ctrlKey ||
+        event.altKey
+      )
+        return;
       if (showShortcutHelp) {
         if (event.key === 'Escape') {
           event.preventDefault();
@@ -1073,6 +1156,11 @@ export default function LiveMonitor() {
                   onClick={() => {
                     reconnectStream();
                     reloadWsStats();
+                    reloadWsHealth();
+                    reloadStreamReadiness();
+                    reloadStreamReliabilityLab();
+                    reloadAlertHistogram();
+                    reloadSubscriptionResume();
                   }}
                 >
                   Reconnect now
@@ -1082,6 +1170,11 @@ export default function LiveMonitor() {
                   onClick={() => {
                     clearStreamEvents();
                     reloadWsStats();
+                    reloadWsHealth();
+                    reloadStreamReadiness();
+                    reloadStreamReliabilityLab();
+                    reloadAlertHistogram();
+                    reloadSubscriptionResume();
                   }}
                 >
                   Clear live buffer
@@ -1115,10 +1208,61 @@ export default function LiveMonitor() {
               </div>
               <div className="summary-card">
                 <div className="summary-label">Server Subscribers</div>
-                <div className="summary-value">{wsStats?.subscribers ?? 0}</div>
+                <div className="summary-value">{streamHealthStats?.subscribers ?? 0}</div>
                 <div className="summary-meta">
                   {wsConnectionCount} native websocket client{wsConnectionCount === 1 ? '' : 's'}{' '}
                   connected.
+                </div>
+              </div>
+              <div className="summary-card">
+                <div className="summary-label">Queue Depth</div>
+                <div className="summary-value">{streamQueueDepth}</div>
+                <div className="summary-meta">Pending events across server-side subscribers.</div>
+              </div>
+              <div className="summary-card">
+                <div className="summary-label">Dropped Events</div>
+                <div className="summary-value">{streamDroppedEvents}</div>
+                <div className="summary-meta">Backpressure loss since the stream bus started.</div>
+              </div>
+              <div className="summary-card">
+                <div className="summary-label">Backpressure</div>
+                <div className="summary-value">
+                  {String(streamBackpressureState).replace(/_/g, ' ')}
+                </div>
+                <div className="summary-meta">
+                  SLO {streamHealthStats?.latency_slo_ms || wsHealth?.latency_slo_ms || 1000} ms.
+                </div>
+              </div>
+              <div className="summary-card">
+                <div className="summary-label">Readiness Score</div>
+                <div className="summary-value">{streamReadinessScore || '—'}</div>
+                <div className="summary-meta">
+                  {streamReadiness?.promotion_guard ||
+                    wsHealth?.readiness?.promotion_guard ||
+                    'clear'}
+                </div>
+              </div>
+              <div className="summary-card">
+                <div className="summary-label">Reliability Lab</div>
+                <div className="summary-value">
+                  {streamReliabilityLab?.status ? String(streamReliabilityLab.status) : '—'}
+                </div>
+                <div className="summary-meta">
+                  {Number(streamReliabilityLab?.fail_count || 0)} fail •{' '}
+                  {Number(streamReliabilityLab?.warn_count || 0)} warn
+                </div>
+              </div>
+              <div className="summary-card">
+                <div className="summary-label">24h Histogram</div>
+                <div className="summary-value">{alertHistogramTotal}</div>
+                <div className="summary-meta">alerts represented in backend time buckets.</div>
+              </div>
+              <div className="summary-card">
+                <div className="summary-label">Cursor Replay</div>
+                <div className="summary-value">{subscriptionReplayEvents}</div>
+                <div className="summary-meta">
+                  {subscriptionGapDetected ? 'gap detected' : 'healthy'} • next cursor{' '}
+                  {subscriptionResume?.next_cursor || subscriptionResume?.cursor || '0'}
                 </div>
               </div>
               <div className="summary-card">
@@ -1136,6 +1280,41 @@ export default function LiveMonitor() {
                 </div>
               </div>
             </div>
+            {streamReliabilityScenarios.length > 0 && (
+              <div className="table-wrap" style={{ marginTop: 16 }}>
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Reliability scenario</th>
+                      <th>Status</th>
+                      <th>Next action</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {streamReliabilityScenarios.map((scenario) => (
+                      <tr key={scenario.id || scenario.expected}>
+                        <td>
+                          <div className="row-primary">
+                            {String(scenario.id || 'scenario').replaceAll('_', ' ')}
+                          </div>
+                          <div className="row-secondary">
+                            {scenario.expected || 'Expected state'}
+                          </div>
+                        </td>
+                        <td>
+                          <span
+                            className={`badge ${scenario.status === 'pass' ? 'badge-ok' : scenario.status === 'fail' ? 'badge-err' : 'badge-warn'}`}
+                          >
+                            {scenario.status || 'review'}
+                          </span>
+                        </td>
+                        <td>{scenario.next_action || 'Keep monitoring stream reliability.'}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
             <div className="triage-toolbar" style={{ marginTop: 16 }}>
               <div className="triage-toolbar-group">
                 {liveEventTypeOptions.map((eventType) => (
@@ -1418,6 +1597,7 @@ export default function LiveMonitor() {
                           const aid = alertIdFor(alert, index);
                           const isSelected = selectedAlerts.has(aid);
                           const isActive = selectedId === aid || hoveredId === aid;
+                          const threadSignal = threadSignalMeta(alert);
                           return (
                             <tr
                               key={aid}
@@ -1469,6 +1649,13 @@ export default function LiveMonitor() {
                                 <div className="row-secondary">
                                   {alert.hostname || alert.origin_agent_id || 'No host context'}
                                 </div>
+                                {threadSignal && (
+                                  <div className="chip-row" style={{ marginTop: 6 }}>
+                                    <span className={`badge ${threadSignal.badgeClass}`}>
+                                      {threadSignal.label} • {threadSignal.level}
+                                    </span>
+                                  </div>
+                                )}
                               </td>
                             </tr>
                           );

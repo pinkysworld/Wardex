@@ -2,9 +2,37 @@
 
 This backlog lists the next concrete tasks in build order.
 
-## Current strengthening checkpoint (`v0.56.2`)
+## Current strengthening checkpoint (`v1.0.7`)
 
-Recently completed for the `v0.56.2` lint-clean release:
+Recently completed for the `v1.0.7` production assurance sweep:
+
+- [x] Release provenance and SBOM input attestation endpoint with artifact checksum evidence.
+- [x] Upgrade and rollback rehearsal endpoint backed by release doctor, contract parity, snapshots, and stream guards.
+- [x] Synthetic console monitor for launchpad-critical API surfaces.
+- [x] Incident timeline replay with retained-event joins and alert context.
+- [x] Detection content trust score based on replay, suppression, lifecycle, and pack ownership signals.
+- [x] Fleet drift and config compliance summary.
+- [x] Operator work queue synthesized from release, response, detection, fleet, and retention pressure.
+- [x] Retention cost/risk forecast and evidence-capacity signal.
+- [x] Adversarial validation dashboard for shipped attack and baseline corpora.
+- [x] Support bundle diffing with digest and redaction-policy status.
+
+## Current strengthening checkpoint (`v1.0.6`)
+
+Recently completed for the `v1.0.6` resilience and release-proof sweep:
+
+- [x] Browser resilience: structured API errors, GET retry/timeout handling, safe storage migration, and drawer focus/body-scroll hardening.
+- [x] Cursor pagination APIs for alerts, retained events, and audit logs with matching admin-console and SDK helpers.
+- [x] Workflow/rule preflight, tenant isolation proof, runtime thread proof, snapshot retention/redaction controls, release observability gates, OpenAPI parity, and release-gate coverage.
+- [x] Release documentation, website version surfaces, and SDK/package metadata aligned on the `v1.0.6` baseline.
+
+Earlier checkpoint for the `v1.0.5` release-quality sweep:
+
+- [x] Developer ID signing and notarization release path verified for macOS x86_64 and aarch64 archives, including Gatekeeper evidence files on GitHub Releases.
+- [x] CI stabilized across Windows, macOS, Linux, SDK generation, site quality, release acceptance, container scan, binary attestation, and frontend Playwright/Vitest gates.
+- [x] Release documentation, website version surfaces, and SDK/package metadata aligned on the `v1.0.5` baseline.
+
+Earlier checkpoint for the `v0.56.2` lint-clean release:
 
 - [x] Clippy-clean OIDC and SOC workbench code paths: collapsed redundant `if let` guards in `validate_jwk_for_id_token` and the OIDC test harness token-body branch and removed a needless borrow in `build_team_load_overview`.
 - [x] Live release re-verification across admin-console Vitest, full Rust library suites, `cargo build --release`, contract-parity, release-docs validators, and Playwright e2e on chromium and webkit.
@@ -206,7 +234,7 @@ Recommended next backlog slices:
 - [x] T168: Add a global collapsible activity log panel across all admin views.
 - [x] T169: Add responsive icon-only sidebar behavior for narrow viewports.
 - [x] T170: Add Ctrl+K / Cmd+K keyboard shortcut support for rapid navigation.
-- [x] T171: Replace placeholder licensing with BSL 1.1 and propagate references through docs and site assets.
+- [x] T171: Replace placeholder licensing with production licensing and propagate references through docs and site assets.
 
 ## Phase 21 — Detection expansion & server security hardening (completed)
 

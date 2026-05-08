@@ -264,11 +264,83 @@ run_live_smokes() {
   node "$PLAYWRIGHT_CLI" test \
     --reporter=list,html \
     tests/playwright/live_release_smoke.spec.js \
+    tests/playwright/detection_quality_thread_smoke.spec.js \
     tests/playwright/advanced_console_workflows.spec.js \
     tests/playwright/enterprise_console_smoke.spec.js \
     tests/playwright/assistant_ticketing_live.spec.js \
     tests/playwright/siem_settings_live.spec.js \
     tests/playwright/mobile_topbar_smoke.spec.js
+}
+
+verify_product_hardening_endpoints() {
+  local endpoint
+  local get_endpoints=(
+    "/api/operational/snapshots"
+    "/api/operational/snapshots/verify"
+    "/api/operational/snapshots/policy"
+    "/api/launchpad/evidence-pack"
+    "/api/launchpad/release-diff"
+    "/api/launchpad/demo-status"
+    "/api/release/doctor"
+    "/api/release/observability-gates"
+    "/api/release/provenance"
+    "/api/release/upgrade-rehearsal"
+    "/api/monitoring/synthetic-console"
+    "/api/incidents/timeline-replay"
+    "/api/detection/trust-score"
+    "/api/fleet/drift-compliance"
+    "/api/operator/work-queue"
+    "/api/retention/forecast"
+    "/api/validation/adversarial"
+    "/api/support/bundle-diff"
+    "/api/workflows/preflight?workflow=release"
+    "/api/detection/recommendations"
+    "/api/detection/readiness"
+    "/api/tenants/isolation-proof"
+    "/api/processes/thread-proof"
+    "/api/response/approval-overview"
+    "/api/remediation/safety"
+    "/api/support/bundle"
+    "/api/ws/health"
+    "/api/stream/readiness"
+    "/api/stream/reliability-lab"
+    "/api/sdk/contract-status"
+    "/api/alerts/histogram"
+    "/api/alerts/page?limit=5"
+    "/api/events/page?limit=5"
+    "/api/audit/log/page?limit=5"
+    "/api/subscriptions/resume"
+  )
+
+  for endpoint in "${get_endpoints[@]}"; do
+    curl --silent --show-error --fail --max-time 10 \
+      -H "Authorization: Bearer $WARDEX_ADMIN_TOKEN" \
+      "$WARDEX_BASE_URL$endpoint" >/dev/null
+  done
+
+  curl --silent --show-error --fail --max-time 10 \
+    -H "Authorization: Bearer $WARDEX_ADMIN_TOKEN" \
+    -H "Content-Type: application/json" \
+    --data '{"lanes":["alerts"],"filters":{}}' \
+    "$WARDEX_BASE_URL/api/subscriptions" >/dev/null
+
+  curl --silent --show-error --fail --max-time 10 \
+    -H "Authorization: Bearer $WARDEX_ADMIN_TOKEN" \
+    -H "Content-Type: application/json" \
+    --data '{"target_status":"canary"}' \
+    "$WARDEX_BASE_URL/api/content/rules/release-acceptance-smoke/preflight" >/dev/null
+
+  curl --silent --show-error --fail --max-time 10 \
+    -H "Authorization: Bearer $WARDEX_ADMIN_TOKEN" \
+    -H "Content-Type: application/json" \
+    --data '{}' \
+    "$WARDEX_BASE_URL/api/launchpad/demo-reset" >/dev/null
+
+  curl --silent --show-error --fail --max-time 10 \
+    -H "Authorization: Bearer $WARDEX_ADMIN_TOKEN" \
+    -H "Content-Type: application/json" \
+    --data '{"dry_run":true,"keep_latest_per_kind":25}' \
+    "$WARDEX_BASE_URL/api/operational/snapshots/prune" >/dev/null
 }
 
 require_file "$PLAYWRIGHT_CLI" "Playwright CLI not found at $PLAYWRIGHT_CLI. Run npm ci in admin-console first."
@@ -304,6 +376,7 @@ if [[ "$RELEASE_MODE" == "managed" ]]; then
   run_step "Start temporary Wardex release instance at $WARDEX_BASE_URL" start_managed_wardex
 fi
 run_step "Verify live Wardex admin is reachable at $WARDEX_BASE_URL" curl --silent --show-error --fail --max-time 10 "$WARDEX_BASE_URL/admin/"
+run_step "Verify product hardening endpoints" verify_product_hardening_endpoints
 run_step "Run routed release smoke suite" run_live_smokes
 
 echo

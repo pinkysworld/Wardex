@@ -1,7 +1,7 @@
 openapi: 3.0.3
 info:
   title: Wardex XDR/SIEM API
-  version: 1.0.5
+  version: 1.0.7
   description: "Wardex XDR/SIEM REST API \u2014 detection, fleet management, incident response, and platform operations."
   license:
     name: AGPL-3.0-only
@@ -1118,6 +1118,21 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+      security:
+      - bearerAuth: []
+  /api/audit/log/page:
+    get:
+      summary: Cursor-paginated API audit log entries
+      operationId: getAuditLogCursorPage
+      tags:
+      - observability
+      responses:
+        '200':
+          description: Cursor-paginated API audit log entries
+          content:
+            application/json:
+              schema:
+                type: object
       security:
       - bearerAuth: []
   /api/audit/verify:
@@ -3446,6 +3461,26 @@ paths:
                 $ref: '#/components/schemas/Error'
       security:
       - bearerAuth: []
+  /api/content/rules/{id}/preflight:
+    post:
+      summary: Validate stream, replay, suppression, and ownership proof before rule promotion
+      operationId: preflightContentRule
+      tags:
+      - hunts
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: Rule promotion preflight response
+          content:
+            application/json:
+              schema:
+                type: object
+      security:
+      - bearerAuth: []
   /api/content/rules/{id}/promote:
     post:
       summary: Promote a content rule through its lifecycle
@@ -5419,6 +5454,21 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
       x-wardex-auth: agent
+      security:
+      - bearerAuth: []
+  /api/events/page:
+    get:
+      summary: Cursor-paginated retained events
+      operationId: getEventsCursorPage
+      tags:
+      - telemetry
+      responses:
+        '200':
+          description: Cursor-paginated retained events
+          content:
+            application/json:
+              schema:
+                type: object
       security:
       - bearerAuth: []
   /api/events/export:
@@ -12391,8 +12441,786 @@ paths:
                 $ref: '#/components/schemas/Error'
       security:
       - {}
+  /api/alerts/histogram:
+    get:
+      summary: Time-bucketed alert histogram with severity breakdowns
+      operationId: getAlertHistogram
+      tags:
+      - alerts
+      responses:
+        '200':
+          description: Alert histogram
+          content:
+            application/json:
+              schema:
+                type: object
+      security:
+      - bearerAuth: []
+      x-wardex-auth: authenticated
+  /api/support/bundle:
+    get:
+      summary: Redacted support bundle with release, stream, and evidence diagnostics
+      operationId: getSupportBundle
+      tags:
+      - status
+      responses:
+        '200':
+          description: Support bundle
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SupportBundleResponse'
+      security:
+      - bearerAuth: []
+      x-wardex-auth: authenticated
+  /api/alerts/page:
+    get:
+      summary: Cursor-paginated alerts
+      operationId: getAlertsCursorPage
+      tags:
+      - alerts
+      responses:
+        '200':
+          description: Cursor-paginated alerts
+          content:
+            application/json:
+              schema:
+                type: object
+      security:
+      - bearerAuth: []
+  /api/operational/snapshots:
+    get:
+      summary: List indexed operational evidence snapshots with digest verification status
+      operationId: listOperationalSnapshots
+      tags:
+      - observability
+      responses:
+        '200':
+          description: Operational snapshots
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OperationalSnapshotsResponse'
+      security:
+      - bearerAuth: []
+      x-wardex-auth: authenticated
+  /api/operational/snapshots/verify:
+    get:
+      summary: Verify an operational evidence snapshot by storage key or digest
+      operationId: verifyOperationalSnapshot
+      tags:
+      - observability
+      responses:
+        '200':
+          description: Operational snapshot verification
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OperationalSnapshotVerifyResponse'
+      security:
+      - bearerAuth: []
+      x-wardex-auth: authenticated
+  /api/operational/snapshots/policy:
+    get:
+      summary: Operational snapshot retention and redaction policy
+      operationId: getOperationalSnapshotPolicy
+      tags:
+      - observability
+      responses:
+        '200':
+          description: Operational snapshot policy
+          content:
+            application/json:
+              schema:
+                type: object
+      security:
+      - bearerAuth: []
+  /api/operational/snapshots/prune:
+    post:
+      summary: Preview or apply operational snapshot retention pruning
+      operationId: pruneOperationalSnapshots
+      tags:
+      - observability
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: Snapshot prune result
+          content:
+            application/json:
+              schema:
+                type: object
+      security:
+      - bearerAuth: []
+  /api/launchpad/evidence-pack:
+    get:
+      summary: Server-generated operator evidence pack for Launchpad export
+      operationId: getLaunchpadEvidencePack
+      tags:
+      - status
+      responses:
+        '200':
+          description: Launchpad evidence pack
+          content:
+            application/json:
+              schema:
+                type: object
+      security:
+      - bearerAuth: []
+      x-wardex-auth: authenticated
+  /api/launchpad/release-diff:
+    get:
+      summary: Current runtime versus release-catalog rollout summary
+      operationId: getLaunchpadReleaseDiff
+      tags:
+      - status
+      responses:
+        '200':
+          description: Release diff
+          content:
+            application/json:
+              schema:
+                type: object
+      security:
+      - bearerAuth: []
+      x-wardex-auth: authenticated
+  /api/launchpad/demo-status:
+    get:
+      summary: Demo-lab scenario availability and seeded sample state
+      operationId: getLaunchpadDemoStatus
+      tags:
+      - status
+      responses:
+        '200':
+          description: Demo status
+          content:
+            application/json:
+              schema:
+                type: object
+      security:
+      - bearerAuth: []
+      x-wardex-auth: authenticated
+  /api/launchpad/demo-reset:
+    post:
+      summary: Reset transient demo-lab sample state
+      operationId: resetLaunchpadDemoStatus
+      tags:
+      - status
+      responses:
+        '200':
+          description: Demo reset status
+          content:
+            application/json:
+              schema:
+                type: object
+      security:
+      - bearerAuth: []
+      x-wardex-auth: authenticated
+  /api/release/doctor:
+    get:
+      summary: Release acceptance doctor with contract, stream, and rollback readiness checks
+      operationId: getReleaseDoctor
+      tags:
+      - status
+      responses:
+        '200':
+          description: Release doctor
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReleaseDoctorResponse'
+      security:
+      - bearerAuth: []
+      x-wardex-auth: authenticated
+  /api/release/observability-gates:
+    get:
+      summary: Release observability gates across metrics, stream, snapshots, and contract parity
+      operationId: getReleaseObservabilityGates
+      tags:
+      - status
+      responses:
+        '200':
+          description: Release observability gates
+          content:
+            application/json:
+              schema:
+                type: object
+      security:
+      - bearerAuth: []
+  /api/release/provenance:
+    get:
+      summary: Release provenance, artifact checksum, and SBOM input attestation
+      operationId: getReleaseProvenance
+      tags:
+      - status
+      responses:
+        '200':
+          description: Release provenance response
+          content:
+            application/json:
+              schema:
+                type: object
+      security:
+      - bearerAuth: []
+  /api/release/upgrade-rehearsal:
+    get:
+      summary: Upgrade and rollback rehearsal checks for a target release
+      operationId: getReleaseUpgradeRehearsal
+      tags:
+      - status
+      responses:
+        '200':
+          description: Release upgrade rehearsal response
+          content:
+            application/json:
+              schema:
+                type: object
+      security:
+      - bearerAuth: []
+  /api/monitoring/synthetic-console:
+    get:
+      summary: Synthetic console monitor covering launchpad-critical API surfaces
+      operationId: getSyntheticConsoleMonitor
+      tags:
+      - observability
+      responses:
+        '200':
+          description: Synthetic console monitor response
+          content:
+            application/json:
+              schema:
+                type: object
+      security:
+      - bearerAuth: []
+  /api/incidents/timeline-replay:
+    get:
+      summary: Incident timeline replay with retained event joins and alert context
+      operationId: getIncidentTimelineReplay
+      tags:
+      - incidents
+      responses:
+        '200':
+          description: Incident timeline replay response
+          content:
+            application/json:
+              schema:
+                type: object
+      security:
+      - bearerAuth: []
+  /api/detection/trust-score:
+    get:
+      summary: Detection content trust score based on replay, suppression, and pack ownership evidence
+      operationId: getDetectionTrustScore
+      tags:
+      - detection
+      responses:
+        '200':
+          description: Detection trust score response
+          content:
+            application/json:
+              schema:
+                type: object
+      security:
+      - bearerAuth: []
+  /api/fleet/drift-compliance:
+    get:
+      summary: Fleet version drift, update error, and config compliance summary
+      operationId: getFleetDriftCompliance
+      tags:
+      - agents
+      responses:
+        '200':
+          description: Fleet drift compliance response
+          content:
+            application/json:
+              schema:
+                type: object
+      security:
+      - bearerAuth: []
+  /api/operator/work-queue:
+    get:
+      summary: Prioritized operator work queue synthesized from release, response, detection, fleet, and retention signals
+      operationId: getOperatorWorkQueue
+      tags:
+      - status
+      responses:
+        '200':
+          description: Operator work queue response
+          content:
+            application/json:
+              schema:
+                type: object
+      security:
+      - bearerAuth: []
+  /api/retention/forecast:
+    get:
+      summary: Retention utilization, cost risk, and evidence-capacity forecast
+      operationId: getRetentionForecast
+      tags:
+      - observability
+      responses:
+        '200':
+          description: Retention forecast response
+          content:
+            application/json:
+              schema:
+                type: object
+      security:
+      - bearerAuth: []
+  /api/validation/adversarial:
+    get:
+      summary: Adversarial validation dashboard for shipped attack and baseline corpora
+      operationId: getAdversarialValidation
+      tags:
+      - detection
+      responses:
+        '200':
+          description: Adversarial validation response
+          content:
+            application/json:
+              schema:
+                type: object
+      security:
+      - bearerAuth: []
+  /api/support/bundle-diff:
+    get:
+      summary: Support bundle snapshot diff with digest and redaction policy status
+      operationId: getSupportBundleDiff
+      tags:
+      - status
+      responses:
+        '200':
+          description: Support bundle diff response
+          content:
+            application/json:
+              schema:
+                type: object
+      security:
+      - bearerAuth: []
+  /api/workflows/preflight:
+    get:
+      summary: Workflow readiness preflight with stream, approval, tenant, and observability proof
+      operationId: getWorkflowPreflight
+      tags:
+      - status
+      responses:
+        '200':
+          description: Workflow preflight response
+          content:
+            application/json:
+              schema:
+                type: object
+      security:
+      - bearerAuth: []
+  /api/tenants/isolation-proof:
+    get:
+      summary: Tenant isolation and device partitioning proof
+      operationId: getTenantIsolationProof
+      tags:
+      - status
+      responses:
+        '200':
+          description: Tenant isolation proof
+          content:
+            application/json:
+              schema:
+                type: object
+      security:
+      - bearerAuth: []
+  /api/processes/thread-proof:
+    get:
+      summary: Runtime thread anomaly proof and baseline readiness
+      operationId: getThreadDetectionProof
+      tags:
+      - status
+      responses:
+        '200':
+          description: Thread detection proof
+          content:
+            application/json:
+              schema:
+                type: object
+      security:
+      - bearerAuth: []
+  /api/detection/recommendations:
+    get:
+      summary: Backend detection-quality recommendations with operational snapshot metadata
+      operationId: getDetectionRecommendations
+      tags:
+      - detection
+      responses:
+        '200':
+          description: Detection recommendations
+          content:
+            application/json:
+              schema:
+                type: object
+      security:
+      - bearerAuth: []
+      x-wardex-auth: authenticated
+  /api/detection/readiness:
+    get:
+      summary: Detection collector and rule readiness with snapshot metadata
+      operationId: getDetectionReadiness
+      tags:
+      - detection
+      responses:
+        '200':
+          description: Detection readiness
+          content:
+            application/json:
+              schema:
+                type: object
+      security:
+      - bearerAuth: []
+      x-wardex-auth: authenticated
+  /api/response/approval-overview:
+    get:
+      summary: SOC response approval queue and policy overview
+      operationId: getResponseApprovalOverview
+      tags:
+      - response
+      responses:
+        '200':
+          description: Approval overview
+          content:
+            application/json:
+              schema:
+                type: object
+      security:
+      - bearerAuth: []
+      x-wardex-auth: authenticated
+  /api/remediation/safety:
+    get:
+      summary: Remediation safety guardrail and rollback readiness status
+      operationId: getRemediationSafety
+      tags:
+      - response
+      responses:
+        '200':
+          description: Remediation safety
+          content:
+            application/json:
+              schema:
+                type: object
+      security:
+      - bearerAuth: []
+      x-wardex-auth: authenticated
+  /api/ws/health:
+    get:
+      summary: Realtime stream queue depth, drop count, and backpressure status
+      operationId: getWsHealth
+      tags:
+      - observability
+      responses:
+        '200':
+          description: WebSocket health
+          content:
+            application/json:
+              schema:
+                type: object
+      security:
+      - bearerAuth: []
+      x-wardex-auth: authenticated
+  /api/stream/readiness:
+    get:
+      summary: Realtime stream confidence score for promotion and evidence workflows
+      operationId: getStreamReadiness
+      tags:
+      - observability
+      responses:
+        '200':
+          description: Stream readiness
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StreamReadinessResponse'
+      security:
+      - bearerAuth: []
+      x-wardex-auth: authenticated
+  /api/stream/reliability-lab:
+    get:
+      summary: Realtime stream reliability scenarios and cursor recovery checks
+      operationId: getStreamReliabilityLab
+      tags:
+      - observability
+      responses:
+        '200':
+          description: Stream reliability lab
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StreamReliabilityLabResponse'
+      security:
+      - bearerAuth: []
+      x-wardex-auth: authenticated
+  /api/sdk/contract-status:
+    get:
+      summary: SDK/OpenAPI contract automation status, parity drift, and release-gate hooks
+      operationId: getSdkContractStatus
+      tags:
+      - status
+      responses:
+        '200':
+          description: SDK contract status
+          content:
+            application/json:
+              schema:
+                type: object
+      security:
+      - bearerAuth: []
+      x-wardex-auth: authenticated
+  /api/subscriptions:
+    post:
+      summary: Create a resumable event subscription cursor
+      operationId: createSubscription
+      tags:
+      - observability
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: Subscription cursor
+          content:
+            application/json:
+              schema:
+                type: object
+      security:
+      - bearerAuth: []
+      x-wardex-auth: authenticated
+  /api/subscriptions/resume:
+    get:
+      summary: Resume buffered events from a subscription cursor
+      operationId: resumeSubscription
+      tags:
+      - observability
+      responses:
+        '200':
+          description: Subscription resume payload
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SubscriptionResumeResponse'
+      security:
+      - bearerAuth: []
+      x-wardex-auth: authenticated
 components:
   schemas:
+    OperationalSnapshotMetadata:
+      type: object
+      required:
+      - digest
+      properties:
+        persisted:
+          type: boolean
+        digest:
+          type: string
+        generated_at:
+          type: string
+          format: date-time
+        storage_key:
+          type: string
+        verified:
+          type: boolean
+    OperationalSnapshotEntry:
+      type: object
+      required:
+      - kind
+      - digest
+      - storage_key
+      - verified
+      properties:
+        kind:
+          type: string
+        digest:
+          type: string
+        generated_at:
+          type: string
+          format: date-time
+        storage_key:
+          type: string
+        size_bytes:
+          type: integer
+          format: int64
+        verified:
+          type: boolean
+    OperationalSnapshotsResponse:
+      type: object
+      required:
+      - generated_at
+      - status
+      - snapshots
+      properties:
+        generated_at:
+          type: string
+          format: date-time
+        status:
+          type: string
+        count:
+          type: integer
+          format: int64
+        verified_count:
+          type: integer
+          format: int64
+        snapshots:
+          type: array
+          items:
+            $ref: '#/components/schemas/OperationalSnapshotEntry'
+    OperationalSnapshotVerifyResponse:
+      type: object
+      required:
+      - generated_at
+      - status
+      - verified
+      properties:
+        generated_at:
+          type: string
+          format: date-time
+        status:
+          type: string
+        verified:
+          type: boolean
+        snapshot:
+          $ref: '#/components/schemas/OperationalSnapshotEntry'
+    StreamReadinessResponse:
+      type: object
+      required:
+      - generated_at
+      - status
+      - score
+      properties:
+        generated_at:
+          type: string
+          format: date-time
+        status:
+          type: string
+        score:
+          type: integer
+          format: int64
+        queue_depth:
+          type: integer
+          format: int64
+        dropped_events:
+          type: integer
+          format: int64
+        promotion_guard:
+          type: string
+        next_action:
+          type: string
+        snapshot:
+          $ref: '#/components/schemas/OperationalSnapshotMetadata'
+    StreamReliabilityLabResponse:
+      type: object
+      required:
+      - generated_at
+      - status
+      - scenarios
+      properties:
+        generated_at:
+          type: string
+          format: date-time
+        status:
+          type: string
+        scenario_count:
+          type: integer
+          format: int64
+        fail_count:
+          type: integer
+          format: int64
+        warn_count:
+          type: integer
+          format: int64
+        scenarios:
+          type: array
+          items:
+            type: object
+        snapshot:
+          $ref: '#/components/schemas/OperationalSnapshotMetadata'
+    ReleaseDoctorResponse:
+      type: object
+      required:
+      - generated_at
+      - status
+      - checks
+      properties:
+        generated_at:
+          type: string
+          format: date-time
+        status:
+          type: string
+        runtime_version:
+          type: string
+        fail_count:
+          type: integer
+          format: int64
+        warn_count:
+          type: integer
+          format: int64
+        checks:
+          type: array
+          items:
+            type: object
+        next_action:
+          type: string
+        snapshot:
+          $ref: '#/components/schemas/OperationalSnapshotMetadata'
+    SupportBundleResponse:
+      type: object
+      required:
+      - generated_at
+      - status
+      - digest
+      properties:
+        generated_at:
+          type: string
+          format: date-time
+        status:
+          type: string
+        digest:
+          type: string
+        bundle:
+          type: object
+        redaction:
+          type: object
+        snapshot:
+          $ref: '#/components/schemas/OperationalSnapshotMetadata'
+    SubscriptionResumeResponse:
+      type: object
+      required:
+      - subscription_id
+      - cursor
+      - next_cursor
+      - events
+      - gap_detected
+      properties:
+        subscription_id:
+          type: string
+        cursor:
+          type: string
+        requested_cursor:
+          type: string
+        next_cursor:
+          type: string
+        events:
+          type: array
+          items:
+            type: object
+        has_more:
+          type: boolean
+        gap_detected:
+          type: boolean
+        replay_gap:
+          type: integer
+          format: int64
+        durable:
+          type: boolean
     Agent:
       type: object
       properties:

@@ -353,6 +353,7 @@ pub fn endpoint_permission(method: &str, path: &str) -> Permission {
         (_, p) if p.starts_with("/api/events") => Permission::ManageAlerts,
 
         // Incidents
+        ("GET", "/api/incidents/timeline-replay") => Permission::ViewSupport,
         ("GET", p) if p.starts_with("/api/incidents") => Permission::ViewIncidents,
         (_, p) if p.starts_with("/api/incidents") => Permission::ManageIncidents,
         ("GET", p) if p.starts_with("/api/cases") => Permission::ViewIncidents,
@@ -383,8 +384,12 @@ pub fn endpoint_permission(method: &str, path: &str) -> Permission {
         // Alerts
         ("GET", p) if p.starts_with("/api/alerts") => Permission::ViewAlerts,
         (_, p) if p.starts_with("/api/alerts") => Permission::ManageAlerts,
+        ("POST", "/api/subscriptions") | ("GET", "/api/subscriptions/resume") => {
+            Permission::ViewAlerts
+        }
 
         // Agents / Fleet
+        ("GET", "/api/fleet/drift-compliance") => Permission::ViewSupport,
         ("GET", p) if p.starts_with("/api/agents") || p.starts_with("/api/fleet") => {
             Permission::ViewAgents
         }
@@ -439,6 +444,8 @@ pub fn endpoint_permission(method: &str, path: &str) -> Permission {
                 || p.starts_with("/api/hunts")
                 || p.starts_with("/api/coverage/mitre")
                 || p.starts_with("/api/suppressions")
+                || p == "/api/detection/recommendations"
+                || p == "/api/detection/readiness"
                 || p == "/api/threat-intel/status"
                 || p == "/api/threat-intel/library"
                 || p == "/api/threat-intel/stats"
@@ -491,6 +498,22 @@ pub fn endpoint_permission(method: &str, path: &str) -> Permission {
                 || p == "/api/ocsf/schema/version"
                 || p == "/api/detection/summary"
                 || p == "/api/detection/weights"
+                || p == "/api/remediation/safety"
+                || p == "/api/ws/health"
+                || p == "/api/sdk/contract-status"
+                || p == "/api/stream/readiness"
+                || p == "/api/stream/reliability-lab"
+                || p == "/api/release/doctor"
+                || p == "/api/release/observability-gates"
+                || p == "/api/release/provenance"
+                || p == "/api/release/upgrade-rehearsal"
+                || p == "/api/workflows/preflight"
+                || p == "/api/processes/thread-proof"
+                || p == "/api/incidents/timeline-replay"
+                || p == "/api/detection/trust-score"
+                || p == "/api/fleet/drift-compliance"
+                || p == "/api/operator/work-queue"
+                || p == "/api/validation/adversarial"
                 || p == "/api/dlq"
                 || p == "/api/dlq/stats"
                 || p == "/api/correlation"
@@ -520,15 +543,20 @@ pub fn endpoint_permission(method: &str, path: &str) -> Permission {
                 || p == "/api/side-channel/status"
                 || p == "/api/swarm/posture"
                 || p == "/api/tenants/count"
+                || p == "/api/tenants/isolation-proof"
                 || p == "/api/tls/status"
                 || p == "/api/causal/graph"
                 || p == "/api/patches"
                 || p.starts_with("/api/monitoring/")
+                || p.starts_with("/api/launchpad/")
+                || p.starts_with("/api/operational/")
                 || p.starts_with("/api/support/")
                 || p.starts_with("/api/system/health/") =>
         {
             Permission::ViewSupport
         }
+        ("POST", "/api/operational/snapshots/prune") => Permission::ViewSupport,
+        ("POST", "/api/launchpad/demo-reset") => Permission::ManageAlerts,
         ("GET", "/api/updates/releases") => Permission::ViewAgents,
         ("DELETE", "/api/dlq") => Permission::ManageConfig,
 
@@ -941,6 +969,86 @@ mod tests {
         assert_eq!(
             endpoint_permission("POST", "/api/content/rules/SE-001/promote"),
             Permission::PromoteRules
+        );
+        assert_eq!(
+            endpoint_permission("GET", "/api/operational/snapshots"),
+            Permission::ViewSupport
+        );
+        assert_eq!(
+            endpoint_permission("GET", "/api/operational/snapshots/verify"),
+            Permission::ViewSupport
+        );
+        assert_eq!(
+            endpoint_permission("GET", "/api/release/doctor"),
+            Permission::ViewSupport
+        );
+        assert_eq!(
+            endpoint_permission("GET", "/api/release/observability-gates"),
+            Permission::ViewSupport
+        );
+        assert_eq!(
+            endpoint_permission("GET", "/api/release/provenance"),
+            Permission::ViewSupport
+        );
+        assert_eq!(
+            endpoint_permission("GET", "/api/release/upgrade-rehearsal"),
+            Permission::ViewSupport
+        );
+        assert_eq!(
+            endpoint_permission("GET", "/api/monitoring/synthetic-console"),
+            Permission::ViewSupport
+        );
+        assert_eq!(
+            endpoint_permission("GET", "/api/incidents/timeline-replay"),
+            Permission::ViewSupport
+        );
+        assert_eq!(
+            endpoint_permission("GET", "/api/detection/trust-score"),
+            Permission::ViewSupport
+        );
+        assert_eq!(
+            endpoint_permission("GET", "/api/fleet/drift-compliance"),
+            Permission::ViewSupport
+        );
+        assert_eq!(
+            endpoint_permission("GET", "/api/operator/work-queue"),
+            Permission::ViewSupport
+        );
+        assert_eq!(
+            endpoint_permission("GET", "/api/retention/forecast"),
+            Permission::ViewSupport
+        );
+        assert_eq!(
+            endpoint_permission("GET", "/api/validation/adversarial"),
+            Permission::ViewSupport
+        );
+        assert_eq!(
+            endpoint_permission("GET", "/api/support/bundle-diff"),
+            Permission::ViewSupport
+        );
+        assert_eq!(
+            endpoint_permission("GET", "/api/workflows/preflight"),
+            Permission::ViewSupport
+        );
+        assert_eq!(
+            endpoint_permission("GET", "/api/stream/reliability-lab"),
+            Permission::ViewSupport
+        );
+        assert_eq!(
+            endpoint_permission("GET", "/api/tenants/isolation-proof"),
+            Permission::ViewSupport
+        );
+        assert_eq!(
+            endpoint_permission("GET", "/api/processes/thread-proof"),
+            Permission::ViewSupport
+        );
+        assert_eq!(
+            endpoint_permission("POST", "/api/operational/snapshots/prune"),
+            Permission::ViewSupport
+        );
+        assert_eq!(
+            endpoint_permission("GET", "/api/support/bundle"),
+            Permission::ViewSupport
         );
     }
 

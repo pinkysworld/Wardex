@@ -336,6 +336,21 @@ fn number_schema() -> SchemaRef {
     })
 }
 
+fn boolean_schema() -> SchemaRef {
+    SchemaRef::Inline(Schema {
+        schema_type: Some("boolean".into()),
+        ..Default::default()
+    })
+}
+
+fn array_schema(items: SchemaRef) -> SchemaRef {
+    SchemaRef::Inline(Schema {
+        schema_type: Some("array".into()),
+        items: Some(Box::new(items)),
+        ..Default::default()
+    })
+}
+
 fn string_array_schema() -> SchemaRef {
     SchemaRef::Inline(Schema {
         schema_type: Some("array".into()),
@@ -515,6 +530,15 @@ fn op_with_responses(
     operation(id, summary, tags, None, resp, bearer_auth())
 }
 
+fn op_with_schema(id: &str, summary: &str, tags: &[&str], schema: SchemaRef) -> Operation {
+    op_with_responses(
+        id,
+        summary,
+        tags,
+        content_response_status("200", summary, "application/json", schema),
+    )
+}
+
 fn op_post(id: &str, summary: &str, tags: &[&str], body_desc: &str) -> Operation {
     let mut resp = json_response(summary);
     resp.extend(error_responses());
@@ -636,6 +660,186 @@ fn inferred_path_parameters(path: &str) -> Vec<Parameter> {
         .collect()
 }
 
+fn operational_snapshot_metadata_schema() -> Schema {
+    Schema {
+        schema_type: Some("object".into()),
+        properties: {
+            let mut p = BTreeMap::new();
+            p.insert("persisted".into(), boolean_schema());
+            p.insert("digest".into(), string_schema());
+            p.insert("generated_at".into(), string_datetime_schema());
+            p.insert("storage_key".into(), string_schema());
+            p.insert("verified".into(), boolean_schema());
+            p
+        },
+        required: vec!["digest".into()],
+        ..Default::default()
+    }
+}
+
+fn operational_snapshot_entry_schema() -> Schema {
+    Schema {
+        schema_type: Some("object".into()),
+        properties: {
+            let mut p = BTreeMap::new();
+            p.insert("kind".into(), string_schema());
+            p.insert("digest".into(), string_schema());
+            p.insert("generated_at".into(), string_datetime_schema());
+            p.insert("storage_key".into(), string_schema());
+            p.insert("size_bytes".into(), integer_schema());
+            p.insert("verified".into(), boolean_schema());
+            p
+        },
+        required: vec![
+            "kind".into(),
+            "digest".into(),
+            "storage_key".into(),
+            "verified".into(),
+        ],
+        ..Default::default()
+    }
+}
+
+fn operational_snapshots_response_schema() -> Schema {
+    Schema {
+        schema_type: Some("object".into()),
+        properties: {
+            let mut p = BTreeMap::new();
+            p.insert("generated_at".into(), string_datetime_schema());
+            p.insert("status".into(), string_schema());
+            p.insert("count".into(), integer_schema());
+            p.insert("verified_count".into(), integer_schema());
+            p.insert(
+                "snapshots".into(),
+                array_schema(schema_ref("OperationalSnapshotEntry")),
+            );
+            p
+        },
+        required: vec!["generated_at".into(), "status".into(), "snapshots".into()],
+        ..Default::default()
+    }
+}
+
+fn operational_snapshot_verify_response_schema() -> Schema {
+    Schema {
+        schema_type: Some("object".into()),
+        properties: {
+            let mut p = BTreeMap::new();
+            p.insert("generated_at".into(), string_datetime_schema());
+            p.insert("status".into(), string_schema());
+            p.insert("verified".into(), boolean_schema());
+            p.insert("snapshot".into(), schema_ref("OperationalSnapshotEntry"));
+            p
+        },
+        required: vec!["generated_at".into(), "status".into(), "verified".into()],
+        ..Default::default()
+    }
+}
+
+fn stream_readiness_response_schema() -> Schema {
+    Schema {
+        schema_type: Some("object".into()),
+        properties: {
+            let mut p = BTreeMap::new();
+            p.insert("generated_at".into(), string_datetime_schema());
+            p.insert("status".into(), string_schema());
+            p.insert("score".into(), integer_schema());
+            p.insert("queue_depth".into(), integer_schema());
+            p.insert("dropped_events".into(), integer_schema());
+            p.insert("promotion_guard".into(), string_schema());
+            p.insert("next_action".into(), string_schema());
+            p.insert("snapshot".into(), schema_ref("OperationalSnapshotMetadata"));
+            p
+        },
+        required: vec!["generated_at".into(), "status".into(), "score".into()],
+        ..Default::default()
+    }
+}
+
+fn stream_reliability_lab_response_schema() -> Schema {
+    Schema {
+        schema_type: Some("object".into()),
+        properties: {
+            let mut p = BTreeMap::new();
+            p.insert("generated_at".into(), string_datetime_schema());
+            p.insert("status".into(), string_schema());
+            p.insert("scenario_count".into(), integer_schema());
+            p.insert("fail_count".into(), integer_schema());
+            p.insert("warn_count".into(), integer_schema());
+            p.insert("scenarios".into(), array_schema(object_schema()));
+            p.insert("snapshot".into(), schema_ref("OperationalSnapshotMetadata"));
+            p
+        },
+        required: vec!["generated_at".into(), "status".into(), "scenarios".into()],
+        ..Default::default()
+    }
+}
+
+fn release_doctor_response_schema() -> Schema {
+    Schema {
+        schema_type: Some("object".into()),
+        properties: {
+            let mut p = BTreeMap::new();
+            p.insert("generated_at".into(), string_datetime_schema());
+            p.insert("status".into(), string_schema());
+            p.insert("runtime_version".into(), string_schema());
+            p.insert("fail_count".into(), integer_schema());
+            p.insert("warn_count".into(), integer_schema());
+            p.insert("checks".into(), array_schema(object_schema()));
+            p.insert("next_action".into(), string_schema());
+            p.insert("snapshot".into(), schema_ref("OperationalSnapshotMetadata"));
+            p
+        },
+        required: vec!["generated_at".into(), "status".into(), "checks".into()],
+        ..Default::default()
+    }
+}
+
+fn support_bundle_response_schema() -> Schema {
+    Schema {
+        schema_type: Some("object".into()),
+        properties: {
+            let mut p = BTreeMap::new();
+            p.insert("generated_at".into(), string_datetime_schema());
+            p.insert("status".into(), string_schema());
+            p.insert("digest".into(), string_schema());
+            p.insert("bundle".into(), object_schema());
+            p.insert("redaction".into(), object_schema());
+            p.insert("snapshot".into(), schema_ref("OperationalSnapshotMetadata"));
+            p
+        },
+        required: vec!["generated_at".into(), "status".into(), "digest".into()],
+        ..Default::default()
+    }
+}
+
+fn subscription_resume_response_schema() -> Schema {
+    Schema {
+        schema_type: Some("object".into()),
+        properties: {
+            let mut p = BTreeMap::new();
+            p.insert("subscription_id".into(), string_schema());
+            p.insert("cursor".into(), string_schema());
+            p.insert("requested_cursor".into(), string_schema());
+            p.insert("next_cursor".into(), string_schema());
+            p.insert("events".into(), array_schema(object_schema()));
+            p.insert("has_more".into(), boolean_schema());
+            p.insert("gap_detected".into(), boolean_schema());
+            p.insert("replay_gap".into(), integer_schema());
+            p.insert("durable".into(), boolean_schema());
+            p
+        },
+        required: vec![
+            "subscription_id".into(),
+            "cursor".into(),
+            "next_cursor".into(),
+            "events".into(),
+            "gap_detected".into(),
+        ],
+        ..Default::default()
+    }
+}
+
 // ── Wardex spec factory ──────────────────────────────────────────────────────
 
 pub fn wardex_openapi_spec(version: &str) -> OpenApiSpec {
@@ -685,6 +889,30 @@ pub fn wardex_openapi_spec(version: &str) -> OpenApiSpec {
                 required: vec!["error".into(), "code".into()],
                 ..Default::default()
             },
+        )
+        .schema(
+            "OperationalSnapshotMetadata",
+            operational_snapshot_metadata_schema(),
+        )
+        .schema("OperationalSnapshotEntry", operational_snapshot_entry_schema())
+        .schema(
+            "OperationalSnapshotsResponse",
+            operational_snapshots_response_schema(),
+        )
+        .schema(
+            "OperationalSnapshotVerifyResponse",
+            operational_snapshot_verify_response_schema(),
+        )
+        .schema("StreamReadinessResponse", stream_readiness_response_schema())
+        .schema(
+            "StreamReliabilityLabResponse",
+            stream_reliability_lab_response_schema(),
+        )
+        .schema("ReleaseDoctorResponse", release_doctor_response_schema())
+        .schema("SupportBundleResponse", support_bundle_response_schema())
+        .schema(
+            "SubscriptionResumeResponse",
+            subscription_resume_response_schema(),
         )
         .schema(
             "Alert",
@@ -1145,6 +1373,55 @@ pub fn wardex_openapi_spec(version: &str) -> OpenApiSpec {
             ),
         )
         .path(
+            "/api/ws/health",
+            "get",
+            op(
+                "getWsHealth",
+                "Realtime stream queue depth, drop count, and backpressure status",
+                &["observability"],
+            ),
+        )
+        .path(
+            "/api/stream/readiness",
+            "get",
+            op_with_schema(
+                "getStreamReadiness",
+                "Realtime stream confidence score for promotion and evidence workflows",
+                &["observability"],
+                schema_ref("StreamReadinessResponse"),
+            ),
+        )
+        .path(
+            "/api/stream/reliability-lab",
+            "get",
+            op_with_schema(
+                "getStreamReliabilityLab",
+                "Realtime stream reliability scenarios and cursor recovery checks",
+                &["observability"],
+                schema_ref("StreamReliabilityLabResponse"),
+            ),
+        )
+        .path(
+            "/api/subscriptions",
+            "post",
+            op_post_optional(
+                "createSubscription",
+                "Create a resumable event subscription cursor",
+                &["observability"],
+                "Subscription lanes and filters",
+            ),
+        )
+        .path(
+            "/api/subscriptions/resume",
+            "get",
+            op_with_schema(
+                "resumeSubscription",
+                "Resume buffered events from a subscription cursor",
+                &["observability"],
+                schema_ref("SubscriptionResumeResponse"),
+            ),
+        )
+        .path(
             "/api/policy/current",
             "get",
             op_public("getCurrentPolicy", "Get current active policy", &["policy"]),
@@ -1564,6 +1841,15 @@ pub fn wardex_openapi_spec(version: &str) -> OpenApiSpec {
             op("getEvents", "List stored events", &["telemetry"]),
         )
         .path(
+            "/api/events/page",
+            "get",
+            op(
+                "getEventsCursorPage",
+                "Cursor-paginated retained events",
+                &["telemetry"],
+            ),
+        )
+        .path(
             "/api/events",
             "post",
             op_post(
@@ -1753,6 +2039,20 @@ pub fn wardex_openapi_spec(version: &str) -> OpenApiSpec {
             ),
         )
         .path(
+            "/api/alerts/histogram",
+            "get",
+            op(
+                "getAlertHistogram",
+                "Time-bucketed alert histogram with severity breakdowns",
+                &["alerts"],
+            ),
+        )
+        .path(
+            "/api/alerts/page",
+            "get",
+            op("getAlertsCursorPage", "Cursor-paginated alerts", &["alerts"]),
+        )
+        .path(
             "/api/queue/alerts",
             "get",
             op(
@@ -1796,6 +2096,24 @@ pub fn wardex_openapi_spec(version: &str) -> OpenApiSpec {
             op(
                 "getDetectionSummary",
                 "Detector state across velocity, entropy, and compound models",
+                &["detection"],
+            ),
+        )
+        .path(
+            "/api/detection/recommendations",
+            "get",
+            op(
+                "getDetectionRecommendations",
+                "Backend-ranked rule promotion, tuning, suppression, and retirement recommendations",
+                &["detection"],
+            ),
+        )
+        .path(
+            "/api/detection/readiness",
+            "get",
+            op(
+                "getDetectionReadiness",
+                "Collector-to-rule readiness and coverage gaps for detection rollout",
                 &["detection"],
             ),
         )
@@ -2212,6 +2530,24 @@ pub fn wardex_openapi_spec(version: &str) -> OpenApiSpec {
             ),
         )
         .path(
+            "/api/response/approval-overview",
+            "get",
+            op(
+                "getResponseApprovalOverview",
+                "SOC approval backlog, ready-to-execute counts, and queue guardrails",
+                &["response"],
+            ),
+        )
+        .path(
+            "/api/remediation/safety",
+            "get",
+            op(
+                "getRemediationSafety",
+                "Rollback execution policy, platform guardrails, and remediation lane status",
+                &["response"],
+            ),
+        )
+        .path(
             "/api/playbooks",
             "get",
             op(
@@ -2329,6 +2665,16 @@ pub fn wardex_openapi_spec(version: &str) -> OpenApiSpec {
                 "Replay a content rule against retained events",
                 &["hunts"],
                 "Rule test payload",
+            ),
+        )
+        .path(
+            "/api/content/rules/{id}/preflight",
+            "post",
+            op_post(
+                "preflightContentRule",
+                "Validate stream, replay, suppression, and ownership proof before rule promotion",
+                &["hunts"],
+                "Rule preflight payload",
             ),
         )
         .path(
@@ -2617,7 +2963,7 @@ pub fn wardex_openapi_spec(version: &str) -> OpenApiSpec {
             with_parameters(
                 op(
                     "getProcessThreads",
-                    "Per-process OS thread snapshot with live state, CPU, and wait context",
+                    "Per-process OS thread snapshot with live state, CPU, wait context, and anomaly evidence",
                     &["observability"],
                 ),
                 vec![integer_parameter(
@@ -2643,6 +2989,15 @@ pub fn wardex_openapi_spec(version: &str) -> OpenApiSpec {
             op(
                 "getAuditLog",
                 "Recent API audit log entries",
+                &["observability"],
+            ),
+        )
+        .path(
+            "/api/audit/log/page",
+            "get",
+            op(
+                "getAuditLogCursorPage",
+                "Cursor-paginated API audit log entries",
                 &["observability"],
             ),
         )
@@ -2717,6 +3072,236 @@ pub fn wardex_openapi_spec(version: &str) -> OpenApiSpec {
             op(
                 "getReadinessEvidence",
                 "Production readiness evidence pack",
+                &["status"],
+            ),
+        )
+        .path(
+            "/api/support/bundle",
+            "get",
+            op_with_schema(
+                "getSupportBundle",
+                "Redacted support bundle with release, stream, and evidence diagnostics",
+                &["status"],
+                schema_ref("SupportBundleResponse"),
+            ),
+        )
+        .path(
+            "/api/operational/snapshots",
+            "get",
+            op_with_schema(
+                "listOperationalSnapshots",
+                "List indexed operational evidence snapshots with digest verification status",
+                &["observability"],
+                schema_ref("OperationalSnapshotsResponse"),
+            ),
+        )
+        .path(
+            "/api/operational/snapshots/verify",
+            "get",
+            op_with_schema(
+                "verifyOperationalSnapshot",
+                "Verify an operational evidence snapshot by storage key or digest",
+                &["observability"],
+                schema_ref("OperationalSnapshotVerifyResponse"),
+            ),
+        )
+        .path(
+            "/api/operational/snapshots/policy",
+            "get",
+            op(
+                "getOperationalSnapshotPolicy",
+                "Operational snapshot retention and redaction policy",
+                &["observability"],
+            ),
+        )
+        .path(
+            "/api/operational/snapshots/prune",
+            "post",
+            op_post(
+                "pruneOperationalSnapshots",
+                "Preview or apply operational snapshot retention pruning",
+                &["observability"],
+                "Snapshot prune payload",
+            ),
+        )
+        .path(
+            "/api/launchpad/evidence-pack",
+            "get",
+            op(
+                "getLaunchpadEvidencePack",
+                "Server-generated operator evidence pack for Launchpad export",
+                &["status"],
+            ),
+        )
+        .path(
+            "/api/launchpad/release-diff",
+            "get",
+            op(
+                "getLaunchpadReleaseDiff",
+                "Current runtime versus release-catalog rollout summary",
+                &["status"],
+            ),
+        )
+        .path(
+            "/api/launchpad/demo-status",
+            "get",
+            op(
+                "getLaunchpadDemoStatus",
+                "Demo-lab scenario availability and seeded sample state",
+                &["status"],
+            ),
+        )
+        .path(
+            "/api/launchpad/demo-reset",
+            "post",
+            op(
+                "resetLaunchpadDemoStatus",
+                "Reset transient demo-lab sample state",
+                &["status"],
+            ),
+        )
+        .path(
+            "/api/release/doctor",
+            "get",
+            op_with_schema(
+                "getReleaseDoctor",
+                "Release acceptance doctor with contract, stream, and rollback readiness checks",
+                &["status"],
+                schema_ref("ReleaseDoctorResponse"),
+            ),
+        )
+        .path(
+            "/api/release/observability-gates",
+            "get",
+            op(
+                "getReleaseObservabilityGates",
+                "Release observability gates across metrics, stream, snapshots, and contract parity",
+                &["status"],
+            ),
+        )
+        .path(
+            "/api/release/provenance",
+            "get",
+            op(
+                "getReleaseProvenance",
+                "Release provenance, artifact checksum, and SBOM input attestation",
+                &["status"],
+            ),
+        )
+        .path(
+            "/api/release/upgrade-rehearsal",
+            "get",
+            op(
+                "getReleaseUpgradeRehearsal",
+                "Upgrade and rollback rehearsal checks for a target release",
+                &["status"],
+            ),
+        )
+        .path(
+            "/api/monitoring/synthetic-console",
+            "get",
+            op(
+                "getSyntheticConsoleMonitor",
+                "Synthetic console monitor covering launchpad-critical API surfaces",
+                &["observability"],
+            ),
+        )
+        .path(
+            "/api/incidents/timeline-replay",
+            "get",
+            op(
+                "getIncidentTimelineReplay",
+                "Incident timeline replay with retained event joins and alert context",
+                &["incidents"],
+            ),
+        )
+        .path(
+            "/api/detection/trust-score",
+            "get",
+            op(
+                "getDetectionTrustScore",
+                "Detection content trust score based on replay, suppression, and pack ownership evidence",
+                &["detection"],
+            ),
+        )
+        .path(
+            "/api/fleet/drift-compliance",
+            "get",
+            op(
+                "getFleetDriftCompliance",
+                "Fleet version drift, update error, and config compliance summary",
+                &["agents"],
+            ),
+        )
+        .path(
+            "/api/operator/work-queue",
+            "get",
+            op(
+                "getOperatorWorkQueue",
+                "Prioritized operator work queue synthesized from release, response, detection, fleet, and retention signals",
+                &["status"],
+            ),
+        )
+        .path(
+            "/api/retention/forecast",
+            "get",
+            op(
+                "getRetentionForecast",
+                "Retention utilization, cost risk, and evidence-capacity forecast",
+                &["observability"],
+            ),
+        )
+        .path(
+            "/api/validation/adversarial",
+            "get",
+            op(
+                "getAdversarialValidation",
+                "Adversarial validation dashboard for shipped attack and baseline corpora",
+                &["detection"],
+            ),
+        )
+        .path(
+            "/api/support/bundle-diff",
+            "get",
+            op(
+                "getSupportBundleDiff",
+                "Support bundle snapshot diff with digest and redaction policy status",
+                &["status"],
+            ),
+        )
+        .path(
+            "/api/workflows/preflight",
+            "get",
+            op(
+                "getWorkflowPreflight",
+                "Workflow readiness preflight with stream, approval, tenant, and observability proof",
+                &["status"],
+            ),
+        )
+        .path(
+            "/api/tenants/isolation-proof",
+            "get",
+            op(
+                "getTenantIsolationProof",
+                "Tenant isolation and device partitioning proof",
+                &["status"],
+            ),
+        )
+        .path(
+            "/api/processes/thread-proof",
+            "get",
+            op(
+                "getThreadDetectionProof",
+                "Runtime thread anomaly proof and baseline readiness",
+                &["status"],
+            ),
+        )
+        .path(
+            "/api/sdk/contract-status",
+            "get",
+            op(
+                "getSdkContractStatus",
+                "SDK/OpenAPI contract automation status, parity drift, and release-gate hooks",
                 &["status"],
             ),
         )
@@ -2841,18 +3426,32 @@ mod tests {
         assert!(spec.paths.contains_key("/api/status"));
         assert!(spec.paths.contains_key("/api/alerts"));
         assert!(spec.paths.contains_key("/api/agents"));
+        assert!(spec.paths.contains_key("/api/alerts/histogram"));
         assert!(spec.paths.contains_key("/api/config/current"));
         assert!(spec.paths.contains_key("/api/playbooks"));
         assert!(spec.paths.contains_key("/api/fleet/dashboard"));
         assert!(spec.paths.contains_key("/api/fleet/installs"));
+        assert!(spec.paths.contains_key("/api/stream/readiness"));
+        assert!(spec.paths.contains_key("/api/subscriptions"));
+        assert!(spec.paths.contains_key("/api/subscriptions/resume"));
         assert!(spec.paths.contains_key("/api/detection/profile"));
         assert!(spec.paths.contains_key("/api/detection/score/normalize"));
         assert!(spec.paths.contains_key("/api/processes/threads"));
         assert!(spec.paths.contains_key("/api/backups"));
         assert!(spec.paths.contains_key("/api/events/search"));
         assert!(spec.paths.contains_key("/api/ws/stats"));
+        assert!(spec.paths.contains_key("/api/ws/health"));
         assert!(spec.paths.contains_key("/api/rollout/config"));
+        assert!(spec.paths.contains_key("/api/detection/recommendations"));
+        assert!(spec.paths.contains_key("/api/detection/readiness"));
         assert!(spec.paths.contains_key("/api/support/readiness-evidence"));
+        assert!(spec.paths.contains_key("/api/launchpad/evidence-pack"));
+        assert!(spec.paths.contains_key("/api/launchpad/release-diff"));
+        assert!(spec.paths.contains_key("/api/launchpad/demo-status"));
+        assert!(spec.paths.contains_key("/api/launchpad/demo-reset"));
+        assert!(spec.paths.contains_key("/api/remediation/safety"));
+        assert!(spec.paths.contains_key("/api/response/approval-overview"));
+        assert!(spec.paths.contains_key("/api/sdk/contract-status"));
         assert!(spec.paths.contains_key("/api/support/first-run-proof"));
         assert!(spec.paths.contains_key("/api/control/failover-drill"));
     }

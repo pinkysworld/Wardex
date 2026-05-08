@@ -1,17 +1,14 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import * as api from '../api.js';
+import { safeStorageJsonGet, safeStorageJsonSet } from '../safeStorage.js';
 import { SEARCH_COMMANDS } from './workflowPivots.js';
 
 const SAVED_KEY = 'wardex_saved_searches';
 function loadSaved() {
-  try {
-    return JSON.parse(localStorage.getItem(SAVED_KEY) || '[]');
-  } catch {
-    return [];
-  }
+  return safeStorageJsonGet(SAVED_KEY, []);
 }
 function persistSaved(list) {
-  localStorage.setItem(SAVED_KEY, JSON.stringify(list));
+  safeStorageJsonSet(SAVED_KEY, list);
 }
 
 const CATEGORIES = [

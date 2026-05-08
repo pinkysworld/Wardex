@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import * as api from '../api.js';
+import { safeStorageGet, safeStorageRemove, safeStorageSet } from '../safeStorage.js';
 
 const ROLES = ['viewer', 'analyst', 'admin'];
 const FEEDS = ['Abuse.ch MalwareBazaar', 'CIRCL MISP (TAXII)', 'Custom URL feed'];
@@ -25,7 +26,7 @@ function ChecklistItem({ label, complete, helper, actionLabel, onAction, busy })
 
 export default function OnboardingWizard({ onComplete }) {
   const [token, setToken] = useState('');
-  const [role, setRole] = useState(localStorage.getItem('wardex_role') || 'analyst');
+  const [role, setRole] = useState(safeStorageGet('wardex_role', 'analyst'));
   const [selectedFeeds, setSelectedFeeds] = useState([FEEDS[0]]);
   const [readiness, setReadiness] = useState(null);
   const [readinessCheck, setReadinessCheck] = useState({
@@ -103,7 +104,7 @@ export default function OnboardingWizard({ onComplete }) {
             await api.createAuthSession();
             await refreshReadiness();
             api.setToken('');
-            localStorage.removeItem('wardex_token');
+            safeStorageRemove('wardex_token');
             setTokenCheck({ busy: false, ok: true, message: 'Backend accepted the token.' });
           } catch {
             setTokenCheck({
@@ -208,9 +209,9 @@ export default function OnboardingWizard({ onComplete }) {
   };
 
   const finish = async () => {
-    localStorage.removeItem('wardex_token');
-    if (role) localStorage.setItem('wardex_role', role);
-    localStorage.setItem('wardex_onboarding_complete', '1');
+    safeStorageRemove('wardex_token');
+    if (role) safeStorageSet('wardex_role', role);
+    safeStorageSet('wardex_onboarding_complete', '1');
     for (const feed of selectedFeeds) {
       try {
         await api.addFeed({ name: feed });

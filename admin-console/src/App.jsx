@@ -12,6 +12,12 @@ import {
   buildContextualHelpHref,
   describeSearchScope,
 } from './components/workflowPivots.js';
+import {
+  safeStorageGet,
+  safeStorageJsonGet,
+  safeStorageJsonSet,
+  safeStorageSet,
+} from './safeStorage.js';
 
 // ── Recent Items (persisted in localStorage) ─────────────────
 const MAX_RECENT = 10;
@@ -44,11 +50,7 @@ function normalizeSsoProviders(providers) {
 
 function useRecentItems() {
   const [items, setItems] = useState(() => {
-    try {
-      return JSON.parse(localStorage.getItem('wardex_recent') || '[]');
-    } catch {
-      return [];
-    }
+    return safeStorageJsonGet('wardex_recent', []);
   });
   const add = useCallback((path, label) => {
     setItems((prev) => {
@@ -56,7 +58,7 @@ function useRecentItems() {
         0,
         MAX_RECENT,
       );
-      localStorage.setItem('wardex_recent', JSON.stringify(next));
+      safeStorageJsonSet('wardex_recent', next);
       return next;
     });
   }, []);
@@ -72,13 +74,7 @@ function normalizePinnedSections(value) {
 }
 
 function readStoredPinnedSections() {
-  try {
-    return normalizePinnedSections(
-      JSON.parse(localStorage.getItem('wardex_pinned_sections') || '[]'),
-    );
-  } catch {
-    return [];
-  }
+  return normalizePinnedSections(safeStorageJsonGet('wardex_pinned_sections', []));
 }
 
 // ── Breadcrumbs ──────────────────────────────────────────────
@@ -115,6 +111,7 @@ function Breadcrumbs({ sections, pathname }) {
 }
 
 const Dashboard = lazy(() => import('./components/Dashboard.jsx'));
+const OperatorLaunchpad = lazy(() => import('./components/OperatorLaunchpad.jsx'));
 const LiveMonitor = lazy(() => import('./components/LiveMonitor.jsx'));
 const ThreatDetection = lazy(() => import('./components/ThreatDetection.jsx'));
 const FleetAgents = lazy(() => import('./components/FleetAgents.jsx'));
@@ -133,6 +130,13 @@ const AttackGraph = lazy(() => import('./components/AttackGraph.jsx'));
 
 const SECTIONS = [
   { id: 'dashboard', path: '/', label: 'Dashboard', shortLabel: 'DB', minRole: 'viewer' },
+  {
+    id: 'operator-launchpad',
+    path: '/launchpad',
+    label: 'Operator Launchpad',
+    shortLabel: 'OP',
+    minRole: 'viewer',
+  },
   {
     id: 'live-monitor',
     path: '/monitor',
@@ -218,7 +222,11 @@ const SECTIONS = [
 
 const WORKFLOW_GROUPS = [
   { id: 'command', label: 'Command', sections: ['command-center'] },
-  { id: 'monitor', label: 'Monitor', sections: ['dashboard', 'live-monitor', 'reports-exports'] },
+  {
+    id: 'monitor',
+    label: 'Monitor',
+    sections: ['dashboard', 'operator-launchpad', 'live-monitor', 'reports-exports'],
+  },
   {
     id: 'investigate',
     label: 'Investigate',
@@ -275,9 +283,9 @@ export default function App() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [linkCopied, setLinkCopied] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
-  const [showOnboarding, setShowOnboarding] = useState(
-    () => !localStorage.getItem('wardex_onboarded'),
-  );
+  const [showOnboarding, setShowOnboarding] = useState(() => {
+    return !safeStorageGet('wardex_onboarded');
+  });
   const [showShortcuts, setShowShortcuts] = useState(false);
   const [showInboxLocationKey, setShowInboxLocationKey] = useState(null);
   const [showTopbarActionsLocationKey, setShowTopbarActionsLocationKey] = useState(null);
@@ -329,7 +337,7 @@ export default function App() {
       const normalized = normalizePinnedSections(nextSections);
       pinnedSectionsRef.current = normalized;
       setPinnedSections(normalized);
-      localStorage.setItem('wardex_pinned_sections', JSON.stringify(normalized));
+      safeStorageJsonSet('wardex_pinned_sections', normalized);
       if (persistRemote && authenticated) {
         void api.setUserPreferences({ pinned_sections: normalized }).catch((error) => {
           void error;
@@ -384,9 +392,26 @@ export default function App() {
   // ── Global Keyboard Shortcuts ──
   useEffect(() => {
     const handler = (e) => {
-      // Ignore if user is typing in an input/textarea
-      if (['INPUT', 'TEXTAREA', 'SELECT'].includes(e.target.tagName)) return;
+      // Ignore IME composition and editable surfaces.
+      if (e.isComposing) return;
+      const tag = e.target?.tagName;
+      if (['INPUT', 'TEXTAREA', 'SELECT'].includes(tag)) return;
+      if (e.target?.isContentEditable) return;
+
       const key = e.key.toLowerCase();
+
+      // ⌘K / Ctrl+K opens the global search palette.
+      if (key === 'k' && (e.metaKey || e.ctrlKey) && !e.shiftKey && !e.altKey) {
+        if (!authenticated) return;
+        e.preventDefault();
+        setSearchOpen(true);
+        return;
+      }
+
+      // Letter navigation shortcuts must not fire while a browser/system
+      // modifier is held (Cmd+T, Ctrl+F, Alt+S, …).
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
+
       if (key === '?') {
         setShowShortcuts((s) => !s);
         return;
@@ -395,6 +420,9 @@ export default function App() {
       switch (key) {
         case 'd':
           navigate('/');
+          break;
+        case 'o':
+          navigate('/launchpad');
           break;
         case 'm':
           navigate('/monitor');
@@ -1145,6 +1173,16 @@ export default function App() {
                 }
               />
               <Route
+                path="/launchpad"
+                element={
+                  <ErrorBoundary>
+                    <Suspense fallback={<div className="loading">Loading…</div>}>
+                      <OperatorLaunchpad />
+                    </Suspense>
+                  </ErrorBoundary>
+                }
+              />
+              <Route
                 path="/detection"
                 element={
                   <ErrorBoundary>
@@ -1323,7 +1361,7 @@ export default function App() {
       {authenticated && showOnboarding && (
         <OnboardingWizard
           onComplete={() => {
-            localStorage.setItem('wardex_onboarded', '1');
+            safeStorageSet('wardex_onboarded', '1');
             setShowOnboarding(false);
           }}
         />
@@ -1352,6 +1390,7 @@ export default function App() {
               {[
                 ['?', 'Toggle this help'],
                 ['D', 'Go to Dashboard'],
+                ['O', 'Go to Operator Launchpad'],
                 ['M', 'Go to Live Monitor'],
                 ['T', 'Go to Threat Detection'],
                 ['F', 'Go to Fleet & Agents'],
