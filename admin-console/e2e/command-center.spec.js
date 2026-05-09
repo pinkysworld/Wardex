@@ -36,7 +36,7 @@ test.describe('Command Center smoke', () => {
     await page.getByRole('button', { name: /Noisy rules/i }).click();
     const replayDrawer = page.getByRole('dialog', { name: 'Rule Replay and Promotion' });
     await expect(replayDrawer).toBeVisible();
-    await expect(replayDrawer.getByLabel('Rule')).toHaveValue('rule-ssh-burst');
+    await expect(replayDrawer.getByRole('combobox').first()).toHaveValue('rule-ssh-burst');
     await page.getByRole('button', { name: 'Close' }).click();
 
     await page.getByRole('button', { name: /Compliance packs/i }).click();
