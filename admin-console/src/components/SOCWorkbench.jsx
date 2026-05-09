@@ -9,7 +9,12 @@ import InvestigationTimeline from './InvestigationTimeline.jsx';
 import { downloadData, formatDateTime, formatRelativeTime } from './operatorUtils.js';
 import { buildLongRetentionHistoryPath } from './settings/helpers.js';
 import { buildHref } from './workflowPivots.js';
-import { safeStorageGet, safeStorageJsonGet, safeStorageJsonSet, safeStorageSet } from '../safeStorage.js';
+import {
+  safeStorageGet,
+  safeStorageJsonGet,
+  safeStorageJsonSet,
+  safeStorageSet,
+} from '../safeStorage.js';
 
 import PlaybookEditor from './PlaybookEditor.jsx';
 

@@ -342,28 +342,96 @@ export default function OperatorLaunchpad() {
   const detectionTrustAverage = Number(data.detectionTrust?.average_score || 0);
   const retentionPeak = Number(data.retentionForecast?.utilization_pct?.peak || 0);
   const productionSignals = [
-    ['Provenance', data.releaseProvenance?.status, `${countValue(data.releaseProvenance, ['artifact_count'])} artifacts`],
-    ['Upgrade rehearsal', data.upgradeRehearsal?.status, data.upgradeRehearsal?.target_version || currentVersion],
-    ['Synthetic console', data.syntheticConsole?.status, `${countValue(data.syntheticConsole, ['check_count'])} checks`],
-    ['Timeline replay', data.incidentReplay?.status, `${countValue(data.incidentReplay, ['incident_count'])} incidents`],
+    [
+      'Provenance',
+      data.releaseProvenance?.status,
+      `${countValue(data.releaseProvenance, ['artifact_count'])} artifacts`,
+    ],
+    [
+      'Upgrade rehearsal',
+      data.upgradeRehearsal?.status,
+      data.upgradeRehearsal?.target_version || currentVersion,
+    ],
+    [
+      'Synthetic console',
+      data.syntheticConsole?.status,
+      `${countValue(data.syntheticConsole, ['check_count'])} checks`,
+    ],
+    [
+      'Timeline replay',
+      data.incidentReplay?.status,
+      `${countValue(data.incidentReplay, ['incident_count'])} incidents`,
+    ],
     ['Detection trust', data.detectionTrust?.status, `${detectionTrustAverage || '—'} score`],
-    ['Fleet drift', data.fleetDrift?.status, `${countValue(data.fleetDrift, ['version_drift'])} drifted`],
+    [
+      'Fleet drift',
+      data.fleetDrift?.status,
+      `${countValue(data.fleetDrift, ['version_drift'])} drifted`,
+    ],
     ['Work queue', data.workQueue?.status, `${workQueueCount} items`],
     ['Retention', data.retentionForecast?.status, `${retentionPeak || '—'}% peak`],
-    ['Adversarial', data.adversarialValidation?.status, `${countValue(data.adversarialValidation, ['scenario_count'])} scenarios`],
-    ['Bundle diff', data.supportBundleDiff?.status, `${countValue(data.supportBundleDiff, ['snapshot_count'])} snapshots`],
+    [
+      'Adversarial',
+      data.adversarialValidation?.status,
+      `${countValue(data.adversarialValidation, ['scenario_count'])} scenarios`,
+    ],
+    [
+      'Bundle diff',
+      data.supportBundleDiff?.status,
+      `${countValue(data.supportBundleDiff, ['snapshot_count'])} snapshots`,
+    ],
   ];
   const releaseVerificationSignals = [
-    ['Clean cut', data.cleanReleaseCut?.status, data.cleanReleaseCut?.target_version || currentVersion],
-    ['Container parity', data.containerParity?.status, `${countValue(data.containerParity, ['fail_count'])} fails`],
-    ['Verification center', data.releaseVerification?.status, `${countValue(data.releaseVerification, ['warn_count'])} warnings`],
-    ['Deployment wizard', data.deploymentWizard?.status, data.deploymentWizard?.preflight?.storage_ready ? 'storage ready' : 'storage review'],
-    ['Data quality', data.dataQuality?.status, `${countValue(data.dataQuality?.metrics, ['dead_letter_events'])} DLQ`],
-    ['Scale baseline', data.scaleBaseline?.status, `${countValue(data.scaleBaseline?.metrics, ['request_rate_per_min'])}/min`],
-    ['Failover execution', data.failoverExecution?.status, data.failoverExecution?.mode || 'rehearsal'],
-    ['Secret rotation', data.secretsRotation?.status, `${countValue(data.secretsRotation, ['warn_count'])} warnings`],
-    ['Task automation', data.taskAutomation?.status, `${countValue(data.taskAutomation, ['automation_count'])} actions`],
-    ['Validation packs', data.validationPacks?.status, `${countValue(data.validationPacks, ['pack_count'])} packs`],
+    [
+      'Clean cut',
+      data.cleanReleaseCut?.status,
+      data.cleanReleaseCut?.target_version || currentVersion,
+    ],
+    [
+      'Container parity',
+      data.containerParity?.status,
+      `${countValue(data.containerParity, ['fail_count'])} fails`,
+    ],
+    [
+      'Verification center',
+      data.releaseVerification?.status,
+      `${countValue(data.releaseVerification, ['warn_count'])} warnings`,
+    ],
+    [
+      'Deployment wizard',
+      data.deploymentWizard?.status,
+      data.deploymentWizard?.preflight?.storage_ready ? 'storage ready' : 'storage review',
+    ],
+    [
+      'Data quality',
+      data.dataQuality?.status,
+      `${countValue(data.dataQuality?.metrics, ['dead_letter_events'])} DLQ`,
+    ],
+    [
+      'Scale baseline',
+      data.scaleBaseline?.status,
+      `${countValue(data.scaleBaseline?.metrics, ['request_rate_per_min'])}/min`,
+    ],
+    [
+      'Failover execution',
+      data.failoverExecution?.status,
+      data.failoverExecution?.mode || 'rehearsal',
+    ],
+    [
+      'Secret rotation',
+      data.secretsRotation?.status,
+      `${countValue(data.secretsRotation, ['warn_count'])} warnings`,
+    ],
+    [
+      'Task automation',
+      data.taskAutomation?.status,
+      `${countValue(data.taskAutomation, ['automation_count'])} actions`,
+    ],
+    [
+      'Validation packs',
+      data.validationPacks?.status,
+      `${countValue(data.validationPacks, ['pack_count'])} packs`,
+    ],
   ];
   const releaseVerificationRows = asArray(data.releaseVerification?.verification_rows);
   const deploymentPlans = asArray(data.deploymentWizard?.install_plans);
@@ -377,8 +445,14 @@ export default function OperatorLaunchpad() {
   const releaseVerificationBlockers = releaseVerificationSignals.filter(([, status]) =>
     ['blocked', 'fail', 'risk', 'attention'].includes(String(status || '').toLowerCase()),
   ).length;
-  const productionBadge = statusBadge(productionBlockers === 0 && workQueueCount === 0, workQueueCount > 0);
-  const verificationBadge = statusBadge(releaseVerificationBlockers === 0, releaseVerificationBlockers > 0);
+  const productionBadge = statusBadge(
+    productionBlockers === 0 && workQueueCount === 0,
+    workQueueCount > 0,
+  );
+  const verificationBadge = statusBadge(
+    releaseVerificationBlockers === 0,
+    releaseVerificationBlockers > 0,
+  );
   const releaseDoctorBadge = statusBadge(
     releaseDoctorStatus === 'ready',
     releaseDoctorStatus === 'review',
@@ -532,7 +606,9 @@ export default function OperatorLaunchpad() {
               <div className="summary-label">Release verification</div>
               <h3 className="card-title">Clean release and deployment</h3>
             </div>
-            <span className={`badge ${verificationBadge.className}`}>{verificationBadge.label}</span>
+            <span className={`badge ${verificationBadge.className}`}>
+              {verificationBadge.label}
+            </span>
           </div>
           <div className="operator-health-list">
             {releaseVerificationSignals.map(([name, status, detail]) => {

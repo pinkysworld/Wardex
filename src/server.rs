@@ -13093,18 +13093,18 @@ fn build_tenant_isolation_proof(state: &AppState) -> serde_json::Value {
 fn current_process_thread_count() -> u32 {
     #[cfg(target_os = "macos")]
     {
-        return std::process::Command::new("ps")
+        std::process::Command::new("ps")
             .args(["-M", "-p", &std::process::id().to_string()])
             .output()
             .map(|o| {
                 let lines = String::from_utf8_lossy(&o.stdout).lines().count();
                 if lines > 1 { (lines - 1) as u32 } else { 0 }
             })
-            .unwrap_or(0);
+            .unwrap_or(0)
     }
     #[cfg(target_os = "linux")]
     {
-        return std::fs::read_to_string(format!("/proc/{}/status", std::process::id()))
+        std::fs::read_to_string(format!("/proc/{}/status", std::process::id()))
             .ok()
             .and_then(|s| {
                 s.lines()
@@ -13112,7 +13112,7 @@ fn current_process_thread_count() -> u32 {
                     .and_then(|line| line.split_whitespace().nth(1))
                     .and_then(|value| value.parse().ok())
             })
-            .unwrap_or(0);
+            .unwrap_or(0)
     }
     #[cfg(not(any(target_os = "macos", target_os = "linux")))]
     {
@@ -13134,7 +13134,7 @@ fn build_thread_detection_proof(state: &AppState) -> serde_json::Value {
     let checks = vec![
         serde_json::json!({
             "id": "runtime_thread_count",
-            "status": if thread_count == 0 { "warn" } else if thread_count > expected_max { "warn" } else { "pass" },
+            "status": if thread_count == 0 || thread_count > expected_max { "warn" } else { "pass" },
             "detail": format!("Current Wardex process thread count is {thread_count} with expected max {expected_max}."),
         }),
         serde_json::json!({
@@ -30986,6 +30986,57 @@ mod tests {
         assert!(
             product_contract_missing_from_source(include_str!("../scripts/release_acceptance.sh"))
                 .is_empty()
+        );
+    }
+
+    #[test]
+    fn release_readiness_builders_expose_operator_evidence() {
+        let (_port, _token, state) = spawn_test_server_with_state();
+        let state = state.lock().unwrap_or_else(|e| e.into_inner());
+
+        let clean_cut = build_clean_release_cut(&state);
+        assert_eq!(
+            clean_cut["target_version"],
+            serde_json::json!(env!("CARGO_PKG_VERSION"))
+        );
+        assert_eq!(
+            clean_cut["synthetic_console"]["mode"],
+            serde_json::json!("clean_cut_summary")
+        );
+        assert!(clean_cut["release_steps"].as_array().unwrap().len() >= 4);
+
+        let verification = build_release_verification_center(&state);
+        assert!(verification["verify_commands"].as_array().unwrap().len() >= 4);
+
+        let deployment = build_self_hosted_deployment_wizard(&state);
+        assert!(deployment["install_plans"].as_array().unwrap().len() >= 4);
+
+        let data_quality = build_data_quality_dashboard(&state);
+        assert_eq!(data_quality["slo_summary"]["total"], serde_json::json!(4));
+
+        let performance = build_performance_scale_baseline(&state);
+        assert!(performance["load_gate"].as_array().unwrap().len() >= 4);
+
+        let failover = build_cluster_failover_execution(&state);
+        assert_eq!(
+            failover["drill_execution"]["execute_api"],
+            serde_json::json!("/api/control/failover-drill")
+        );
+
+        let secrets = build_secrets_rotation_operations(&state);
+        assert!(secrets["dry_runs"].as_array().unwrap().len() >= 5);
+
+        let automation = build_operator_task_automation(&state);
+        assert_eq!(
+            automation["mutation_guard"]["status"],
+            serde_json::json!("dry_run_only")
+        );
+
+        let validation = build_detection_validation_packs(&state);
+        assert_eq!(validation["pack_count"], serde_json::json!(5));
+        assert_eq!(
+            validation["suite_execution"]["command"],
+            serde_json::json!("bash scripts/detection_validation_packs.sh")
         );
     }
 

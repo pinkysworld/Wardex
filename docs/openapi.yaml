@@ -3467,6 +3467,13 @@ paths:
       operationId: preflightContentRule
       tags:
       - hunts
+      parameters:
+      - name: id
+        in: path
+        description: Path parameter `id`
+        required: true
+        schema:
+          type: string
       requestBody:
         content:
           application/json:

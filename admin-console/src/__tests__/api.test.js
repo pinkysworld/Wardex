@@ -344,7 +344,9 @@ describe('GET endpoints', () => {
       '/api/alerts/histogram?window=24h&bucket=1h&severity=high',
     );
     expect(mockFetch.mock.calls[24][0]).toBe('/api/alerts/page?cursor=10&limit=5');
-    expect(mockFetch.mock.calls[25][0]).toBe('/api/events/page?cursor=2&limit=4&q=login&severity=high');
+    expect(mockFetch.mock.calls[25][0]).toBe(
+      '/api/events/page?cursor=2&limit=4&q=login&severity=high',
+    );
     expect(mockFetch.mock.calls[26][0]).toBe('/api/audit/log/page?limit=3&status=2xx&cursor=6');
     expect(mockFetch.mock.calls[27][0]).toBe(
       '/api/subscriptions/resume?subscription_id=sub-1&cursor=7&limit=2',
