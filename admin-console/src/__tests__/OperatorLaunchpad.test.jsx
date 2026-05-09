@@ -33,8 +33,8 @@ describe('OperatorLaunchpad', () => {
     fetchMock.mockReset();
     fetchMock.mockImplementation(async (url, options = {}) => {
       const path = new URL(String(url), 'http://localhost').pathname;
-      if (path === '/api/health') return jsonOk({ status: 'ok', version: '1.0.7' });
-      if (path === '/api/status') return jsonOk({ version: '1.0.7', mode: 'local' });
+      if (path === '/api/health') return jsonOk({ status: 'ok', version: '1.0.8' });
+      if (path === '/api/status') return jsonOk({ version: '1.0.8', mode: 'local' });
       if (path === '/api/onboarding/readiness') {
         return jsonOk({
           checks: [
@@ -63,13 +63,13 @@ describe('OperatorLaunchpad', () => {
         return jsonOk({ collectors: [{ enabled: true, freshness: 'fresh', label: 'Syslog' }] });
       }
       if (path === '/api/updates/releases') {
-        return jsonOk([{ version: '1.0.7', latest: true, published_at: '2026-05-08T12:00:00Z' }]);
+        return jsonOk([{ version: '1.0.8', latest: true, published_at: '2026-05-09T12:00:00Z' }]);
       }
       if (path === '/api/launchpad/release-diff') {
         return jsonOk({
           status: 'current',
-          current_version: '1.0.7',
-          latest_version: '1.0.7',
+          current_version: '1.0.8',
+          latest_version: '1.0.8',
           changed_rules: [{ rule_id: 'rule-1', title: 'Suspicious PowerShell' }],
           operator_summary: 'Runtime and release catalog are aligned.',
         });
@@ -82,6 +82,57 @@ describe('OperatorLaunchpad', () => {
           fail_count: 0,
           next_action: 'Release acceptance signals are ready.',
         });
+      }
+      if (path === '/api/release/clean-cut') {
+        return jsonOk({ status: 'ready', target_version: '1.0.8', fail_count: 0, warn_count: 0 });
+      }
+      if (path === '/api/containers/release-parity') {
+        return jsonOk({ status: 'ready', fail_count: 0, warn_count: 0 });
+      }
+      if (path === '/api/release/verification-center') {
+        return jsonOk({
+          status: 'ready',
+          fail_count: 0,
+          warn_count: 0,
+          verification_rows: [{ artifact: 'wardex-macos-aarch64.tar.gz', status: 'ready' }],
+        });
+      }
+      if (path === '/api/deployment/self-hosted-wizard') {
+        return jsonOk({
+          status: 'ready',
+          preflight: { storage_ready: true },
+          install_plans: [{ id: 'docker', title: 'Docker single-node' }],
+        });
+      }
+      if (path === '/api/data-quality/dashboard') {
+        return jsonOk({
+          status: 'ready',
+          metrics: { dead_letter_events: 0 },
+          slo_summary: { score: 100, passing: 4, total: 4 },
+        });
+      }
+      if (path === '/api/performance/scale-baseline') {
+        return jsonOk({
+          status: 'ready',
+          metrics: { request_rate_per_min: 12 },
+          load_gate: [{ id: 'launchpad_fanout', status: 'pass' }],
+        });
+      }
+      if (path === '/api/cluster/failover-execution') {
+        return jsonOk({ status: 'ready', mode: 'cluster_ready' });
+      }
+      if (path === '/api/secrets/rotation-operations') {
+        return jsonOk({ status: 'ready', fail_count: 0, warn_count: 0 });
+      }
+      if (path === '/api/operator/task-automation') {
+        return jsonOk({
+          status: 'ready',
+          automation_count: 2,
+          action_blueprints: [{ action: 'assign_owner' }, { action: 'create_ticket' }],
+        });
+      }
+      if (path === '/api/detection/validation-packs') {
+        return jsonOk({ status: 'ready', pack_count: 5, executable_pack_count: 5 });
       }
       if (path === '/api/operational/snapshots') {
         return jsonOk({
@@ -105,7 +156,7 @@ describe('OperatorLaunchpad', () => {
         });
       }
       if (path === '/api/launchpad/evidence-pack') {
-        return jsonOk({ evidence: { current_version: '1.0.7' }, digest: 'digest-1' });
+        return jsonOk({ evidence: { current_version: '1.0.8' }, digest: 'digest-1' });
       }
       if (path === '/api/launchpad/demo-reset' && options.method === 'POST') {
         return jsonOk({ status: 'reset_recorded', removed_transient_alerts: 0 });
@@ -143,10 +194,18 @@ describe('OperatorLaunchpad', () => {
     expect(await screen.findByText('Operator Launchpad')).toBeInTheDocument();
     expect(screen.getByText('Run the first incident with confidence')).toBeInTheDocument();
     expect(screen.getAllByText('2/5').length).toBeGreaterThan(0);
-    expect(screen.getAllByText('1.0.7').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('1.0.8').length).toBeGreaterThan(0);
     expect(screen.getByText('External systems')).toBeInTheDocument();
     expect(screen.getByText('Promotion confidence')).toBeInTheDocument();
     expect(screen.getByText('Acceptance readiness')).toBeInTheDocument();
+    expect(screen.getByText('Release verification')).toBeInTheDocument();
+    expect(screen.getByText('Clean release and deployment')).toBeInTheDocument();
+    expect(screen.getByText('Container parity')).toBeInTheDocument();
+    expect(screen.getAllByText('Validation packs').length).toBeGreaterThan(0);
+    expect(screen.getByText('Artifact rows')).toBeInTheDocument();
+    expect(screen.getByText('Install plans')).toBeInTheDocument();
+    expect(screen.getByText('Quality score')).toBeInTheDocument();
+    expect(screen.getByText('Dry-run actions')).toBeInTheDocument();
     expect(screen.getByText('Promotion guard')).toBeInTheDocument();
     expect(screen.getByText('Process evidence')).toBeInTheDocument();
     expect(screen.getByText('Approvals and dry-runs')).toBeInTheDocument();

@@ -4682,6 +4682,16 @@ export declare class WardexClient {
     releaseUpgradeRehearsal(params?: {
         targetVersion?: string;
     }): Promise<ProductionAssuranceResponse>;
+    cleanReleaseCut(): Promise<ProductionAssuranceResponse>;
+    containerReleaseParity(): Promise<ProductionAssuranceResponse>;
+    releaseVerificationCenter(): Promise<ProductionAssuranceResponse>;
+    selfHostedDeploymentWizard(): Promise<ProductionAssuranceResponse>;
+    dataQualityDashboard(): Promise<ProductionAssuranceResponse>;
+    performanceScaleBaseline(): Promise<ProductionAssuranceResponse>;
+    clusterFailoverExecution(): Promise<ProductionAssuranceResponse>;
+    secretsRotationOperations(): Promise<ProductionAssuranceResponse>;
+    operatorTaskAutomation(): Promise<ProductionAssuranceResponse>;
+    detectionValidationPacks(): Promise<ProductionAssuranceResponse>;
     syntheticConsoleMonitor(): Promise<ProductionAssuranceResponse>;
     incidentTimelineReplay(params?: {
         incidentId?: string | number;

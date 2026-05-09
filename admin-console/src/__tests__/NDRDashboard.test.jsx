@@ -135,7 +135,7 @@ describe('NDRDashboard', () => {
       ([url]) => new URL(String(url), 'http://localhost').pathname === '/api/ndr/report',
     ).length;
 
-    await user.click(screen.getByRole('button', { name: 'Refresh NDR data' }));
+    await user.click(await screen.findByRole('button', { name: 'Refresh NDR data' }));
 
     await waitFor(() => {
       const after = globalThis.fetch.mock.calls.filter(

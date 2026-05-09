@@ -6,7 +6,13 @@
 
 Wardex is a Rust-based XDR and SIEM platform for private-cloud and self-hosted security operations. It combines cross-platform telemetry collection, detection engineering, analyst workflows, approval-gated response, agent lifecycle management, SIEM integrations, and tamper-evident evidence handling in a single deployable product.
 
-## What ships in `v1.0.7`
+## What ships in `v1.0.8`
+
+- **Clean release and container parity** — new authenticated readiness endpoints cover the next clean release cut, Docker build-context parity, release verification evidence, and self-hosted deployment wizard preflight state.
+- **Executable release verification** — artifact verification rows, install plans, data-quality SLOs, launchpad performance gates, failover drill targets, secrets-rotation dry-runs, operator action blueprints, and validation-pack inventory checks are exposed from the same control plane operators already use.
+- **Console, SDK, and contract coverage** — `/admin/launchpad`, Python/TypeScript SDKs, runtime OpenAPI, static OpenAPI, RBAC, contract parity, release-acceptance smoke checks, and live Playwright coverage now include the full release-verification tranche.
+
+## Also included from the `v1.0.7` baseline
 
 - **Production assurance surfaces** — the control plane now exposes release provenance/SBOM evidence, upgrade rehearsal, synthetic console monitoring, incident timeline replay, detection trust scoring, fleet drift compliance, operator work queue, retention risk forecast, adversarial validation, and support bundle diff endpoints.
 - **Operator Launchpad coverage** — `/admin/launchpad` now pulls those assurance signals into one compact readiness lane with persisted operational snapshot evidence, release-doctor state, workflow preflight, stream readiness, and support bundle exports.

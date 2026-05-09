@@ -2,9 +2,11 @@
 
 ## Current release baseline
 
-`v1.0.7` is the current stable patch release of Wardex. It carries all capabilities of `v1.0.0`, the `v1.0.1` CI hardening fixes, the `v1.0.2` macOS release-trust hardening, the Live Monitor process-analysis regression coverage, the refreshed Developer ID `.p12` signing-secret repair path, the `v1.0.6` resilience/proof tranche, and the production assurance tranche for release provenance, upgrade rehearsal, synthetic console monitoring, incident replay, detection trust, fleet drift, operator queues, retention forecasting, adversarial validation, and support bundle diffing.
+`v1.0.8` is the current stable patch release of Wardex. It carries all capabilities of `v1.0.0`, the `v1.0.1` CI hardening fixes, the `v1.0.2` macOS release-trust hardening, the Live Monitor process-analysis regression coverage, the refreshed Developer ID `.p12` signing-secret repair path, the `v1.0.6` resilience/proof tranche, the `v1.0.7` production assurance tranche, and the release verification/deployment-confidence tranche.
 
-The current release wires that assurance depth through backend routes, OpenAPI, RBAC, SDKs, release-gate smoke checks, and the Operator Launchpad.
+The current release wires clean release cut readiness, container release parity, release verification evidence, self-hosted install plans, data-quality SLOs, performance gates, failover drill targets, secrets-rotation dry-runs, task action blueprints, and validation-pack inventory checks through backend routes, OpenAPI, RBAC, SDKs, release-gate smoke checks, and the Operator Launchpad.
+
+`v1.0.7` added the production assurance tranche for release provenance, upgrade rehearsal, synthetic console monitoring, incident replay, detection trust, fleet drift, operator queues, retention forecasting, adversarial validation, and support bundle diffing.
 
 `v1.0.0` is the first stable release of Wardex, delivering a production-hardened private-cloud XDR and SIEM platform with full operator-usable UI for every shipped capability, HA-ready control-plane posture, and AGPL-3.0 open-source licensing.
 
@@ -66,7 +68,7 @@ The current release wires that assurance depth through backend routes, OpenAPI, 
 - Live Monitor now includes dedicated regression coverage for route-restored monitor tabs, selected alert drawer state, carried queue filters, and preserved scope across tab and drawer transitions. The next gap is keeping those routed monitoring workflows and live-transport affordances aligned as stream detail, process context, and analyst actions evolve.
 - Fleet & Agents now includes dedicated regression coverage for route-restored rollout and recovery focus plus carried offline-scope pivots back into filtered agent inventory. The next gap is keeping those routed rollout, recovery, and deployment-health workflows aligned as live release telemetry expands.
 - Detection Engineering, collector health, and infrastructure malware/remediation routes are now covered by deterministic browser checks and the live release-gate smoke. Rule promotion also has server-side preflight proof for stream, replay, suppression, and content-pack ownership before canary/active changes. The remaining work is keeping that live coverage aligned as those workflows continue to evolve.
-- Production assurance now has first-class route coverage for provenance, upgrade rehearsal, synthetic console health, incident replay, detection trust, fleet drift, operator queues, retention forecast, adversarial validation, and support bundle diffs. The next gap is keeping those assurance signals backed by real environment-specific evidence as deployments scale.
+- Production assurance now has first-class route coverage for provenance, upgrade rehearsal, synthetic console health, incident replay, detection trust, fleet drift, operator queues, retention forecast, adversarial validation, support bundle diffs, clean release cuts, container parity, release verification, deployment wizard state, data quality, scale baselines, failover execution, secrets rotation, operator task automation, and validation packs. The next gap is keeping those assurance signals backed by real environment-specific evidence as deployments scale.
 - Malware analysis and infrastructure remediation now have route-aware verdict, integrity, exposure, and observability workflows, guided-remediation, signed multi-approver change reviews, approval-chain digests, rollback proof, remediation-module-backed dry-run rollback verification, opt-in live rollback execution, recovery-history views, dedicated regression coverage for route-backed assets explorer state, grouped asset refresh, deep malware scan execution, asset-to-exposure pivots, observability scope restoration, and Linux/macOS/Windows rollback-recording paths, plus matching-platform true execution coverage for restore-file, kill-process, restart-service, block-ip, remove-persistence, disable-account, and flush-dns actions when operators also enable `remediation.execute_live_rollback_commands`. The next gap is keeping those safeguards, regressions, and operator-facing workflows aligned as additional adapters are introduced.
 
 ## Remaining closure checklist
@@ -81,7 +83,7 @@ The current release wires that assurance depth through backend routes, OpenAPI, 
 
 ## Success criteria
 
-| Metric | Current (`v1.0.7`) | Target |
+| Metric | Current (`v1.0.8`) | Target |
 |---|---|---|
 | Automated tests | 1413 lib + 212+ integration + focused browser/admin regressions | maintained and expanded on every release |
 | OpenAPI and SDK contract | versioned OpenAPI plus generated Python and TypeScript SDKs | kept in lockstep on every release |

@@ -2,10 +2,10 @@
 
 ## Current release
 
-- **Version:** `1.0.7`
+- **Version:** `1.0.8`
 - **Positioning:** private-cloud XDR and SIEM platform with enterprise detection engineering, malware scanning, analyst workflows, fleet operations, behavioural analytics, and automated incident response
 - **Source footprint:** 139 Rust source modules
-- **API contract:** versioned OpenAPI surface with REST, GraphQL, live `/api/openapi.json` export, generated SDK parity diagnostics, cursor page contracts, release observability/preflight proof APIs, and production assurance endpoints that surface alignment drift directly in the operator console
+- **API contract:** versioned OpenAPI surface with REST, GraphQL, live `/api/openapi.json` export, generated SDK parity diagnostics, cursor page contracts, release observability/preflight proof APIs, production assurance endpoints, and release verification readiness endpoints that surface alignment drift directly in the operator console
 - **Verification:** Rust integration coverage, focused session-cookie exchange tests, collector lifecycle tests, remediation change-review tests, Command Center summary/action-drawer tests, Help & Docs unit coverage, assistant/ticketing/enterprise API regression tests, SDK regeneration checks, release-contract validation, strict Playwright a11y smoke coverage, local Developer ID `.p12` signing validation, and focused admin-console regression coverage for auth routing, dashboard presets, detection drill-downs, workbench overview, assistant/reporting handoffs, scoped report artifacts/templates, persisted artifact downloads, response snapshots, long-retention history, and collector/secrets setup flows
 - **Production hardening:** 100% (59/59 controls implemented)
 
@@ -98,7 +98,14 @@ The current release has been verified with:
 
 ## Current product posture
 
-Wardex is now positioned as a professional XDR/SIEM control plane with incident-first analyst workflows, explainable detections, context-preserving reporting, operator-visible recovery posture, and explicit shift-lead surfaces for ownership, handoff, and detection-review pressure. The runtime, admin console, release process, and website are aligned around operator trust, workflow closure, and deployment readiness.
+Wardex is now positioned as a professional XDR/SIEM control plane with incident-first analyst workflows, explainable detections, context-preserving reporting, operator-visible recovery posture, and explicit shift-lead surfaces for ownership, handoff, and detection-review pressure. The runtime, admin console, release process, and website are aligned around operator trust, workflow closure, deployment readiness, and clean release verification.
+
+## Recently shipped (v1.0.8)
+
+- **Release verification endpoints** — clean release cut readiness, container release parity, release verification center, self-hosted deployment wizard, data-quality dashboard, performance/scale baseline, failover execution, secrets rotation operations, operator task automation, and detection validation packs are now exposed as authenticated snapshot-backed routes.
+- **Executable release gates** — artifact verification rows, install plans, data-quality SLOs, launchpad performance gates, failover drill targets, secrets-rotation dry-runs, operator action blueprints, and validation-pack inventory checks are wired into the release evidence surface.
+- **Launchpad release verification lane** — the Operator Launchpad now renders the release/deployment confidence signals beside the existing production assurance lane, release doctor, workflow preflight, stream readiness, SDK parity, and operational snapshot evidence.
+- **Parity and smoke coverage** — runtime OpenAPI, `docs/openapi.yaml`, RBAC, Python SDK, TypeScript SDK, contract parity, release-acceptance live smoke checks, and live Playwright coverage now cover 220 documented operations including the release-verification tranche.
 
 ## Recently shipped (v1.0.7)
 

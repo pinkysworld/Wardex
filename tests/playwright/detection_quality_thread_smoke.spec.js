@@ -69,6 +69,16 @@ test("live detection quality and thread evidence routes stay wired", async ({
   await expectApiOk(page, "/api/launchpad/release-diff");
   await expectApiOk(page, "/api/launchpad/demo-status");
   await expectApiOk(page, "/api/release/doctor");
+  await expectApiOk(page, "/api/release/clean-cut");
+  await expectApiOk(page, "/api/containers/release-parity");
+  await expectApiOk(page, "/api/release/verification-center");
+  await expectApiOk(page, "/api/deployment/self-hosted-wizard");
+  await expectApiOk(page, "/api/data-quality/dashboard");
+  await expectApiOk(page, "/api/performance/scale-baseline");
+  await expectApiOk(page, "/api/cluster/failover-execution");
+  await expectApiOk(page, "/api/secrets/rotation-operations");
+  await expectApiOk(page, "/api/operator/task-automation");
+  await expectApiOk(page, "/api/detection/validation-packs");
   await expectApiOk(page, "/api/detection/recommendations");
   await expectApiOk(page, "/api/detection/readiness");
   await expectApiOk(page, "/api/response/approval-overview");
@@ -96,6 +106,12 @@ test("live detection quality and thread evidence routes stay wired", async ({
   ).toBeVisible();
   await expect(page.getByText("Promotion confidence")).toBeVisible();
   await expect(page.getByText("Acceptance readiness")).toBeVisible();
+  await expect(page.getByText("Release verification")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Clean release and deployment" })).toBeVisible();
+  await expect(page.getByText("Artifact rows")).toBeVisible();
+  await expect(page.getByText("Install plans")).toBeVisible();
+  await expect(page.getByText("Quality score", { exact: true })).toBeVisible();
+  await expect(page.getByText("Dry-run actions")).toBeVisible();
   await expect(page.getByText("Promotion guard")).toBeVisible();
   await expect(page.getByText("Operational snapshots")).toBeVisible();
   await expect(

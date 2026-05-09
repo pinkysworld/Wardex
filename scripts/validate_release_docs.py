@@ -35,6 +35,10 @@ CAPABILITY_SPEC_REQUIREMENTS = {
         "enterprise_console_smoke.spec.js",
         "live_release_smoke.spec.js",
     },
+    "Release verification and deployment confidence": {
+        "enterprise_console_smoke.spec.js",
+        "live_release_smoke.spec.js",
+    },
     "Vulnerability, exposure, drift, certificates, assets": {
         "advanced_console_workflows.spec.js"
     },

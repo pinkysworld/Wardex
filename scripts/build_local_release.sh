@@ -177,6 +177,10 @@ if [[ ${#failed[@]} -gt 0 ]]; then
 fi
 printf 'LOG\n%s\n' "$LOG_FILE"
 
+if [[ ${#failed[@]} -gt 0 ]]; then
+  exit 1
+fi
+
 if [[ ${#built[@]} -eq 0 ]]; then
   exit 1
 fi

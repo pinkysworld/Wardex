@@ -35,7 +35,7 @@ git diff -- sdk/python sdk/typescript
 
 ### Release-proof helpers
 
-The `v1.0.7` clients expose the same resilience/proof contracts used by the admin console and release gate:
+The `v1.0.8` clients expose the same resilience/proof contracts used by the admin console and release gate, plus the release verification and deployment-confidence tranche:
 
 ```python
 client.alerts_page(limit=100)
@@ -45,7 +45,17 @@ client.workflow_preflight(workflow="release")
 client.content_rule_preflight("rule-id", target_status="canary")
 client.release_observability_gates()
 client.release_provenance()
-client.release_upgrade_rehearsal(target_version="1.0.7")
+client.release_upgrade_rehearsal(target_version="1.0.8")
+client.clean_release_cut()
+client.container_release_parity()
+client.release_verification_center()
+client.self_hosted_deployment_wizard()
+client.data_quality_dashboard()
+client.performance_scale_baseline()
+client.cluster_failover_execution()
+client.secrets_rotation_operations()
+client.operator_task_automation()
+client.detection_validation_packs()
 client.synthetic_console_monitor()
 client.incident_timeline_replay()
 client.detection_trust_score()
@@ -134,7 +144,17 @@ await client.workflowPreflight({ workflow: "release" });
 await client.contentRulePreflight("rule-id", { target_status: "canary" });
 await client.releaseObservabilityGates();
 await client.releaseProvenance();
-await client.releaseUpgradeRehearsal({ targetVersion: "1.0.7" });
+await client.releaseUpgradeRehearsal({ targetVersion: "1.0.8" });
+await client.cleanReleaseCut();
+await client.containerReleaseParity();
+await client.releaseVerificationCenter();
+await client.selfHostedDeploymentWizard();
+await client.dataQualityDashboard();
+await client.performanceScaleBaseline();
+await client.clusterFailoverExecution();
+await client.secretsRotationOperations();
+await client.operatorTaskAutomation();
+await client.detectionValidationPacks();
 await client.syntheticConsoleMonitor();
 await client.incidentTimelineReplay();
 await client.detectionTrustScore();
@@ -166,5 +186,6 @@ The full API is documented at `docs/openapi.yaml`. Key areas include:
 | Feature flags     | `/api/feature-flags/*`                 |
 | Health            | `/api/healthz/*`, `/api/status-json`, `/api/release/observability-gates`, `/api/workflows/preflight` |
 | Production assurance | `/api/release/provenance`, `/api/release/upgrade-rehearsal`, `/api/monitoring/synthetic-console`, `/api/incidents/timeline-replay`, `/api/detection/trust-score`, `/api/fleet/drift-compliance`, `/api/operator/work-queue`, `/api/retention/forecast`, `/api/validation/adversarial`, `/api/support/bundle-diff` |
+| Release verification | `/api/release/clean-cut`, `/api/containers/release-parity`, `/api/release/verification-center`, `/api/deployment/self-hosted-wizard`, `/api/data-quality/dashboard`, `/api/performance/scale-baseline`, `/api/cluster/failover-execution`, `/api/secrets/rotation-operations`, `/api/operator/task-automation`, `/api/detection/validation-packs` |
 
-Recent additions reflected in the generated SDKs include cookie-aware request credentials, admin session inspection/exchange helpers, Command Center summary and per-lane access with explicit Python and TypeScript response models, collector lifecycle status access, remediation change-review read/write helpers, signed remediation approval helpers, rollback verification helpers, detection tuning profiles, normalized scoring, health probes, false-positive feedback, fleet remote install history/actions, process thread snapshots, backup listing/creation/status helpers, evidence collection plans, local host application/inventory inspection, cursor-page traversal, workflow/rule preflight proof, tenant isolation proof, thread-baseline proof, snapshot retention controls, release observability gates, and production assurance helpers for provenance, rehearsal, synthetic monitoring, incident replay, detection trust, fleet drift, operator queues, retention forecast, adversarial validation, and support bundle diffing. These updates align SDK consumers with the same HttpOnly-session, command-center, collector-ingestion, approval-chain, recovery-proof, detection-tuning, fleet-install, backup, host-context, and release-proof surfaces now used by the admin console.
+Recent additions reflected in the generated SDKs include cookie-aware request credentials, admin session inspection/exchange helpers, Command Center summary and per-lane access with explicit Python and TypeScript response models, collector lifecycle status access, remediation change-review read/write helpers, signed remediation approval helpers, rollback verification helpers, detection tuning profiles, normalized scoring, health probes, false-positive feedback, fleet remote install history/actions, process thread snapshots, backup listing/creation/status helpers, evidence collection plans, local host application/inventory inspection, cursor-page traversal, workflow/rule preflight proof, tenant isolation proof, thread-baseline proof, snapshot retention controls, release observability gates, production assurance helpers for provenance, rehearsal, synthetic monitoring, incident replay, detection trust, fleet drift, operator queues, retention forecast, adversarial validation, support bundle diffing, and release verification helpers for clean cuts, container parity, deployment wizard state, data quality, scale baselines, failover execution, secret rotation, task automation, and validation packs. These updates align SDK consumers with the same HttpOnly-session, command-center, collector-ingestion, approval-chain, recovery-proof, detection-tuning, fleet-install, backup, host-context, and release-proof surfaces now used by the admin console.

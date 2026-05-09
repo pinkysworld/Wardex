@@ -192,7 +192,7 @@ PY
 wait_for_managed_admin() {
   local attempts=0
 
-  until curl --silent --show-error --fail --max-time 2 "$BASE_URL/admin/" >/dev/null; do
+  until curl --silent --fail --max-time 2 "$BASE_URL/admin/" >/dev/null; do
     attempts=$((attempts + 1))
 
     if ! kill -0 "$MANAGED_SERVER_PID" 2>/dev/null; then
@@ -262,6 +262,7 @@ run_live_smokes() {
   PLAYWRIGHT_HTML_OUTPUT_DIR="${PLAYWRIGHT_HTML_OUTPUT_DIR:-$ROOT_DIR/playwright-report}" \
   PLAYWRIGHT_HTML_OPEN="${PLAYWRIGHT_HTML_OPEN:-never}" \
   node "$PLAYWRIGHT_CLI" test \
+    --workers="${WARDEX_PLAYWRIGHT_WORKERS:-1}" \
     --reporter=list,html \
     tests/playwright/live_release_smoke.spec.js \
     tests/playwright/detection_quality_thread_smoke.spec.js \
@@ -273,6 +274,8 @@ run_live_smokes() {
 }
 
 verify_product_hardening_endpoints() {
+  cd "$ROOT_DIR"
+
   local endpoint
   local get_endpoints=(
     "/api/operational/snapshots"
@@ -285,6 +288,16 @@ verify_product_hardening_endpoints() {
     "/api/release/observability-gates"
     "/api/release/provenance"
     "/api/release/upgrade-rehearsal"
+    "/api/release/clean-cut"
+    "/api/containers/release-parity"
+    "/api/release/verification-center"
+    "/api/deployment/self-hosted-wizard"
+    "/api/data-quality/dashboard"
+    "/api/performance/scale-baseline"
+    "/api/cluster/failover-execution"
+    "/api/secrets/rotation-operations"
+    "/api/operator/task-automation"
+    "/api/detection/validation-packs"
     "/api/monitoring/synthetic-console"
     "/api/incidents/timeline-replay"
     "/api/detection/trust-score"
@@ -317,6 +330,12 @@ verify_product_hardening_endpoints() {
       -H "Authorization: Bearer $WARDEX_ADMIN_TOKEN" \
       "$WARDEX_BASE_URL$endpoint" >/dev/null
   done
+
+  WARDEX_BASE_URL="$WARDEX_BASE_URL" WARDEX_ADMIN_TOKEN="$WARDEX_ADMIN_TOKEN" \
+    bash scripts/detection_validation_packs.sh >/dev/null
+  WARDEX_BASE_URL="$WARDEX_BASE_URL" WARDEX_ADMIN_TOKEN="$WARDEX_ADMIN_TOKEN" \
+    WARDEX_PERF_BUDGET_MS="${WARDEX_PERF_BUDGET_MS:-5000}" \
+    bash scripts/performance_scale_baseline.sh --launchpad >/dev/null
 
   curl --silent --show-error --fail --max-time 10 \
     -H "Authorization: Bearer $WARDEX_ADMIN_TOKEN" \

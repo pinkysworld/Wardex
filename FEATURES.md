@@ -74,6 +74,7 @@ Wardex is a self-hosted XDR and SIEM platform built in Rust for teams that want 
   - OpenTelemetry-compatible tracing with span hierarchy, OTLP JSON export, and trace statistics
   - Backup encryption with AES-256-GCM and passphrase-derived keys
   - Production assurance APIs for release provenance, upgrade rehearsal, synthetic console monitoring, incident replay, retention forecast, adversarial validation, and support bundle diffing
+  - Release verification APIs for clean release cut readiness, container parity, data quality, scale baseline, failover execution, secrets rotation, task automation, and detection validation packs
 
 - **Enterprise controls**
   - RBAC with endpoint-level enforcement
@@ -101,7 +102,7 @@ Wardex is a self-hosted XDR and SIEM platform built in Rust for teams that want 
   - TypeScript SDK (`@wardex/sdk`) with typed production assurance, cursor-page, preflight, snapshot, and release-proof methods
   - GraphQL query layer for threat-hunting with aliases, sub-field selection, and introspection
   - Prometheus metrics endpoint with 20+ wardex_* counters, gauges, and histograms
-  - OpenAPI 3.0.3 machine-readable spec with 210 documented operations and full schema definitions
+  - OpenAPI 3.0.3 machine-readable spec with 220 documented operations and full schema definitions
   - Homebrew formula for macOS/Linux with multi-platform binary selection and launchd/systemd integration
 
 - **Production hardening**
@@ -165,11 +166,12 @@ Wardex is a self-hosted XDR and SIEM platform built in Rust for teams that want 
 - Signed multi-approver remediation approvals with approval-chain digests, rollback proof cards, and adapter-backed rollback verification
 - Production demo lab seeding from Help & Docs for evaluation-ready telemetry, case, response, report, and evidence workflows
 - Operator Launchpad production assurance lane for provenance, upgrade rehearsal, synthetic monitor, incident replay, detection trust, fleet drift, retention forecast, adversarial validation, and support bundle diff signals
+- Operator Launchpad release verification lane for clean-cut readiness, container parity, deployment wizard state, data quality, scale baseline, failover execution, secrets rotation, task automation, and validation packs
 
 ## Product posture
 
 - 135+ Rust source modules
-- 210 documented OpenAPI operations
+- 220 documented OpenAPI operations
 - 1272 lib tests + 190 integration tests, all passing
 - 41 admin-console unit suites / 290 Vitest tests
 - Criterion micro-benchmarks for pipeline throughput

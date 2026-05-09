@@ -171,6 +171,18 @@ describe("WardexClient", () => {
     await client.verifyOperationalSnapshot({ digest: "abc" });
     await client.releaseDoctor();
     await client.supportBundle();
+    await client.releaseProvenance();
+    await client.releaseUpgradeRehearsal({ targetVersion: "1.0.8" });
+    await client.cleanReleaseCut();
+    await client.containerReleaseParity();
+    await client.releaseVerificationCenter();
+    await client.selfHostedDeploymentWizard();
+    await client.dataQualityDashboard();
+    await client.performanceScaleBaseline();
+    await client.clusterFailoverExecution();
+    await client.secretsRotationOperations();
+    await client.operatorTaskAutomation();
+    await client.detectionValidationPacks();
     await client.launchpadEvidencePack();
     await client.launchpadReleaseDiff();
     await client.launchpadDemoStatus();
@@ -217,6 +229,54 @@ describe("WardexClient", () => {
     );
     expect(mock).toHaveBeenCalledWith(
       "http://localhost:8080/api/support/bundle",
+      expect.objectContaining({ method: "GET" }),
+    );
+    expect(mock).toHaveBeenCalledWith(
+      "http://localhost:8080/api/release/provenance",
+      expect.objectContaining({ method: "GET" }),
+    );
+    expect(mock).toHaveBeenCalledWith(
+      "http://localhost:8080/api/release/upgrade-rehearsal?target_version=1.0.8",
+      expect.objectContaining({ method: "GET" }),
+    );
+    expect(mock).toHaveBeenCalledWith(
+      "http://localhost:8080/api/release/clean-cut",
+      expect.objectContaining({ method: "GET" }),
+    );
+    expect(mock).toHaveBeenCalledWith(
+      "http://localhost:8080/api/containers/release-parity",
+      expect.objectContaining({ method: "GET" }),
+    );
+    expect(mock).toHaveBeenCalledWith(
+      "http://localhost:8080/api/release/verification-center",
+      expect.objectContaining({ method: "GET" }),
+    );
+    expect(mock).toHaveBeenCalledWith(
+      "http://localhost:8080/api/deployment/self-hosted-wizard",
+      expect.objectContaining({ method: "GET" }),
+    );
+    expect(mock).toHaveBeenCalledWith(
+      "http://localhost:8080/api/data-quality/dashboard",
+      expect.objectContaining({ method: "GET" }),
+    );
+    expect(mock).toHaveBeenCalledWith(
+      "http://localhost:8080/api/performance/scale-baseline",
+      expect.objectContaining({ method: "GET" }),
+    );
+    expect(mock).toHaveBeenCalledWith(
+      "http://localhost:8080/api/cluster/failover-execution",
+      expect.objectContaining({ method: "GET" }),
+    );
+    expect(mock).toHaveBeenCalledWith(
+      "http://localhost:8080/api/secrets/rotation-operations",
+      expect.objectContaining({ method: "GET" }),
+    );
+    expect(mock).toHaveBeenCalledWith(
+      "http://localhost:8080/api/operator/task-automation",
+      expect.objectContaining({ method: "GET" }),
+    );
+    expect(mock).toHaveBeenCalledWith(
+      "http://localhost:8080/api/detection/validation-packs",
       expect.objectContaining({ method: "GET" }),
     );
     expect(mock).toHaveBeenCalledWith(

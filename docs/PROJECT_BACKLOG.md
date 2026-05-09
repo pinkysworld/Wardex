@@ -2,7 +2,25 @@
 
 This backlog lists the next concrete tasks in build order.
 
-## Current strengthening checkpoint (`v1.0.7`)
+## Current strengthening checkpoint (`v1.0.8`)
+
+Recently completed for the `v1.0.8` release verification and deployment-confidence sweep:
+
+- [x] Clean release cut readiness endpoint with next-patch target, source parity, container, observability, and live-console smoke evidence.
+- [x] Container release parity endpoint for Docker build context, scan, signing, and provenance workflow coverage.
+- [x] Release Verification Center endpoint for checksums, SBOM, Gatekeeper evidence, provenance, and container verification commands.
+- [x] Self-hosted Deployment Wizard endpoint for Docker, Helm, systemd, and local binary preflight state.
+- [x] Production Data Quality Dashboard endpoint for telemetry flow, DLQ pressure, collector health, and stale/offline agents.
+- [x] Performance and scale baseline endpoint for API error rate, request rate, storage volume, WebSocket state, and recommended load tests.
+- [x] Cluster/failover execution endpoint for standby/drill history, promotion steps, and post-failover verification.
+- [x] Secrets and key rotation operations endpoint for admin token, spool key, OIDC, collector, and signing-secret rotation planning.
+- [x] Operator task automation endpoint that turns the production work queue into assign/snooze/ticket/preflight/evidence/closure actions.
+- [x] Detection validation packs endpoint with ATT&CK-mapped scenarios and expected alert/timeline/rule evidence outputs.
+- [x] Operator Launchpad, OpenAPI, RBAC, SDK, contract parity, and release-acceptance smoke coverage for all ten endpoints.
+- [x] Executable release verification detail for artifact rows, install plans, data-quality SLOs, performance gates, failover targets, secrets-rotation dry-runs, task action blueprints, and validation-pack inventory checks.
+- [x] Live Playwright and release-acceptance coverage for the Launchpad release verification lane and the validation/performance helper scripts.
+
+## Previous strengthening checkpoint (`v1.0.7`)
 
 Recently completed for the `v1.0.7` production assurance sweep:
 

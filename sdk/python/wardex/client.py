@@ -426,6 +426,36 @@ class WardexClient:
             params["target_version"] = target_version
         return self._get("/api/release/upgrade-rehearsal", **params)
 
+    def clean_release_cut(self) -> dict[str, Any]:
+        return self._get("/api/release/clean-cut")
+
+    def container_release_parity(self) -> dict[str, Any]:
+        return self._get("/api/containers/release-parity")
+
+    def release_verification_center(self) -> dict[str, Any]:
+        return self._get("/api/release/verification-center")
+
+    def self_hosted_deployment_wizard(self) -> dict[str, Any]:
+        return self._get("/api/deployment/self-hosted-wizard")
+
+    def data_quality_dashboard(self) -> dict[str, Any]:
+        return self._get("/api/data-quality/dashboard")
+
+    def performance_scale_baseline(self) -> dict[str, Any]:
+        return self._get("/api/performance/scale-baseline")
+
+    def cluster_failover_execution(self) -> dict[str, Any]:
+        return self._get("/api/cluster/failover-execution")
+
+    def secrets_rotation_operations(self) -> dict[str, Any]:
+        return self._get("/api/secrets/rotation-operations")
+
+    def operator_task_automation(self) -> dict[str, Any]:
+        return self._get("/api/operator/task-automation")
+
+    def detection_validation_packs(self) -> dict[str, Any]:
+        return self._get("/api/detection/validation-packs")
+
     def synthetic_console_monitor(self) -> dict[str, Any]:
         return self._get("/api/monitoring/synthetic-console")
 

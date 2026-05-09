@@ -244,6 +244,16 @@ export const releaseUpgradeRehearsal = ({ targetVersion } = {}) => {
   const suffix = query.toString();
   return get(`/api/release/upgrade-rehearsal${suffix ? `?${suffix}` : ''}`);
 };
+export const cleanReleaseCut = () => get('/api/release/clean-cut');
+export const containerReleaseParity = () => get('/api/containers/release-parity');
+export const releaseVerificationCenter = () => get('/api/release/verification-center');
+export const selfHostedDeploymentWizard = () => get('/api/deployment/self-hosted-wizard');
+export const dataQualityDashboard = () => get('/api/data-quality/dashboard');
+export const performanceScaleBaseline = () => get('/api/performance/scale-baseline');
+export const clusterFailoverExecution = () => get('/api/cluster/failover-execution');
+export const secretsRotationOperations = () => get('/api/secrets/rotation-operations');
+export const operatorTaskAutomation = () => get('/api/operator/task-automation');
+export const detectionValidationPacks = () => get('/api/detection/validation-packs');
 export const syntheticConsoleMonitor = () => get('/api/monitoring/synthetic-console');
 export const incidentTimelineReplay = ({ incidentId } = {}) => {
   const query = new URLSearchParams();

@@ -14,12 +14,13 @@ The wrapper is implemented in `scripts/release_acceptance.sh` and runs these che
 
 1. `admin-console` production build via `npm run build`.
 2. Root `cargo build` so embedded assets and backend routes match the browser bundle.
-3. API/OpenAPI/SDK contract parity via `python3 scripts/check_contract_parity.py`, including report workflows, cursor pagination, workflow/rule preflight, tenant/thread proof, snapshot retention controls, release observability gates, and production assurance endpoints across runtime routing, the live OpenAPI builder, `docs/openapi.yaml`, and both SDK clients.
+3. API/OpenAPI/SDK contract parity via `python3 scripts/check_contract_parity.py`, including report workflows, cursor pagination, workflow/rule preflight, tenant/thread proof, snapshot retention controls, release observability gates, production assurance endpoints, and release verification readiness endpoints across runtime routing, the live OpenAPI builder, `docs/openapi.yaml`, and both SDK clients.
 4. Release-document consistency via `python3 scripts/validate_release_docs.py`, including `STATUS`, roadmap, feature UI coverage, and routed smoke mappings.
 5. Published marketing-site link validation across `site/*.html`.
 6. Managed mode only: start a temporary local Wardex instance on a loopback port with a cloned acceptance config that disables request throttling for the smoke run.
 7. Live admin reachability check against `WARDEX_BASE_URL`.
-8. Routed browser release suite:
+8. Release verification helper gates: `scripts/detection_validation_packs.sh` confirms validation-pack fixtures, and `scripts/performance_scale_baseline.sh --launchpad` verifies release-verification endpoint latency against the smoke budget.
+9. Routed browser release suite:
    - `tests/playwright/live_release_smoke.spec.js`
   - `tests/playwright/detection_quality_thread_smoke.spec.js`
    - `tests/playwright/advanced_console_workflows.spec.js`

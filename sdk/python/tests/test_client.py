@@ -166,6 +166,18 @@ def test_product_hardening_methods(monkeypatch):
         ("GET", f"{BASE}/api/operational/snapshots", (("kind", "stream_readiness"), ("limit", "3"))): DummyResponse(url=f"{BASE}/api/operational/snapshots", json_data={"snapshots": []}, headers={"content-type": "application/json"}),
         ("GET", f"{BASE}/api/operational/snapshots/verify", (("digest", "abc"),)): DummyResponse(url=f"{BASE}/api/operational/snapshots/verify", json_data={"verified": True}, headers={"content-type": "application/json"}),
         ("GET", f"{BASE}/api/release/doctor"): DummyResponse(url=f"{BASE}/api/release/doctor", json_data={"status": "ready"}, headers={"content-type": "application/json"}),
+        ("GET", f"{BASE}/api/release/provenance"): DummyResponse(url=f"{BASE}/api/release/provenance", json_data={"status": "ready"}, headers={"content-type": "application/json"}),
+        ("GET", f"{BASE}/api/release/upgrade-rehearsal", (("target_version", "1.0.8"),)): DummyResponse(url=f"{BASE}/api/release/upgrade-rehearsal", json_data={"status": "ready"}, headers={"content-type": "application/json"}),
+        ("GET", f"{BASE}/api/release/clean-cut"): DummyResponse(url=f"{BASE}/api/release/clean-cut", json_data={"status": "ready"}, headers={"content-type": "application/json"}),
+        ("GET", f"{BASE}/api/containers/release-parity"): DummyResponse(url=f"{BASE}/api/containers/release-parity", json_data={"status": "ready"}, headers={"content-type": "application/json"}),
+        ("GET", f"{BASE}/api/release/verification-center"): DummyResponse(url=f"{BASE}/api/release/verification-center", json_data={"status": "ready"}, headers={"content-type": "application/json"}),
+        ("GET", f"{BASE}/api/deployment/self-hosted-wizard"): DummyResponse(url=f"{BASE}/api/deployment/self-hosted-wizard", json_data={"status": "ready"}, headers={"content-type": "application/json"}),
+        ("GET", f"{BASE}/api/data-quality/dashboard"): DummyResponse(url=f"{BASE}/api/data-quality/dashboard", json_data={"status": "ready"}, headers={"content-type": "application/json"}),
+        ("GET", f"{BASE}/api/performance/scale-baseline"): DummyResponse(url=f"{BASE}/api/performance/scale-baseline", json_data={"status": "ready"}, headers={"content-type": "application/json"}),
+        ("GET", f"{BASE}/api/cluster/failover-execution"): DummyResponse(url=f"{BASE}/api/cluster/failover-execution", json_data={"status": "ready"}, headers={"content-type": "application/json"}),
+        ("GET", f"{BASE}/api/secrets/rotation-operations"): DummyResponse(url=f"{BASE}/api/secrets/rotation-operations", json_data={"status": "ready"}, headers={"content-type": "application/json"}),
+        ("GET", f"{BASE}/api/operator/task-automation"): DummyResponse(url=f"{BASE}/api/operator/task-automation", json_data={"status": "ready"}, headers={"content-type": "application/json"}),
+        ("GET", f"{BASE}/api/detection/validation-packs"): DummyResponse(url=f"{BASE}/api/detection/validation-packs", json_data={"status": "ready"}, headers={"content-type": "application/json"}),
         ("GET", f"{BASE}/api/support/bundle"): DummyResponse(url=f"{BASE}/api/support/bundle", json_data={"status": "redacted"}, headers={"content-type": "application/json"}),
         ("GET", f"{BASE}/api/launchpad/evidence-pack"): DummyResponse(url=f"{BASE}/api/launchpad/evidence-pack", json_data={"digest": "abc"}, headers={"content-type": "application/json"}),
         ("GET", f"{BASE}/api/launchpad/release-diff"): DummyResponse(url=f"{BASE}/api/launchpad/release-diff", json_data={"status": "aligned"}, headers={"content-type": "application/json"}),
@@ -189,6 +201,18 @@ def test_product_hardening_methods(monkeypatch):
     assert client.operational_snapshots(kind="stream_readiness", limit=3)["snapshots"] == []
     assert client.verify_operational_snapshot(digest="abc")["verified"] is True
     assert client.release_doctor()["status"] == "ready"
+    assert client.release_provenance()["status"] == "ready"
+    assert client.release_upgrade_rehearsal(target_version="1.0.8")["status"] == "ready"
+    assert client.clean_release_cut()["status"] == "ready"
+    assert client.container_release_parity()["status"] == "ready"
+    assert client.release_verification_center()["status"] == "ready"
+    assert client.self_hosted_deployment_wizard()["status"] == "ready"
+    assert client.data_quality_dashboard()["status"] == "ready"
+    assert client.performance_scale_baseline()["status"] == "ready"
+    assert client.cluster_failover_execution()["status"] == "ready"
+    assert client.secrets_rotation_operations()["status"] == "ready"
+    assert client.operator_task_automation()["status"] == "ready"
+    assert client.detection_validation_packs()["status"] == "ready"
     assert client.support_bundle()["status"] == "redacted"
     assert client.launchpad_evidence_pack()["digest"] == "abc"
     assert client.launchpad_release_diff()["status"] == "aligned"

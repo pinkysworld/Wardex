@@ -234,6 +234,36 @@ class WardexClient {
             qs.set("target_version", params.targetVersion);
         return this.request("GET", `/api/release/upgrade-rehearsal${qs.toString() ? `?${qs.toString()}` : ""}`);
     }
+    async cleanReleaseCut() {
+        return this.request("GET", "/api/release/clean-cut");
+    }
+    async containerReleaseParity() {
+        return this.request("GET", "/api/containers/release-parity");
+    }
+    async releaseVerificationCenter() {
+        return this.request("GET", "/api/release/verification-center");
+    }
+    async selfHostedDeploymentWizard() {
+        return this.request("GET", "/api/deployment/self-hosted-wizard");
+    }
+    async dataQualityDashboard() {
+        return this.request("GET", "/api/data-quality/dashboard");
+    }
+    async performanceScaleBaseline() {
+        return this.request("GET", "/api/performance/scale-baseline");
+    }
+    async clusterFailoverExecution() {
+        return this.request("GET", "/api/cluster/failover-execution");
+    }
+    async secretsRotationOperations() {
+        return this.request("GET", "/api/secrets/rotation-operations");
+    }
+    async operatorTaskAutomation() {
+        return this.request("GET", "/api/operator/task-automation");
+    }
+    async detectionValidationPacks() {
+        return this.request("GET", "/api/detection/validation-packs");
+    }
     async syntheticConsoleMonitor() {
         return this.request("GET", "/api/monitoring/synthetic-console");
     }

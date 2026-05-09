@@ -4,6 +4,14 @@ All notable changes to Wardex are documented in this file.
 
 ## [Unreleased]
 
+## [1.0.8] — 2026-05-09 — release verification and deployment confidence
+
+### Added
+- **v1.0.8 release readiness tranche**: adds clean release cut readiness, container release parity, release verification center, self-hosted deployment wizard, data-quality dashboard, performance/scale baseline, failover execution, secrets rotation operations, operator task automation, and detection validation pack endpoints with persisted operational snapshots.
+- **Executable release gates**: deepens the verification payloads with artifact verification rows, install plans, data-quality SLOs, launchpad performance gates, failover drill execution targets, secrets-rotation dry-runs, task action blueprints, and executable validation-pack inventory checks.
+- **Launchpad release verification lane**: surfaces the new readiness tranche in `/admin/launchpad` with clean-cut, container, deployment, data quality, scale, failover, secret rotation, task automation, and validation-pack signals.
+- **Contract and SDK parity**: extends runtime OpenAPI, `docs/openapi.yaml`, RBAC, Python SDK, TypeScript SDK, contract-parity requirements, and release-acceptance live smoke coverage for the new endpoints.
+
 ## [1.0.7] — 2026-05-08 — production assurance and signed-build readiness
 
 ### Added

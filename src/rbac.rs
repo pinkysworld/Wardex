@@ -436,6 +436,7 @@ pub fn endpoint_permission(method: &str, path: &str) -> Permission {
         (_, p) if p.starts_with("/api/audit") => Permission::ViewAuditLog,
 
         // Rules / Detection Content
+        ("GET", "/api/detection/validation-packs") => Permission::ViewSupport,
         ("GET", p)
             if p.starts_with("/api/rules")
                 || p.starts_with("/api/sigma")
@@ -507,6 +508,15 @@ pub fn endpoint_permission(method: &str, path: &str) -> Permission {
                 || p == "/api/release/observability-gates"
                 || p == "/api/release/provenance"
                 || p == "/api/release/upgrade-rehearsal"
+                || p == "/api/release/clean-cut"
+                || p == "/api/containers/release-parity"
+                || p == "/api/release/verification-center"
+                || p == "/api/deployment/self-hosted-wizard"
+                || p == "/api/data-quality/dashboard"
+                || p == "/api/performance/scale-baseline"
+                || p == "/api/cluster/failover-execution"
+                || p == "/api/secrets/rotation-operations"
+                || p == "/api/operator/task-automation"
                 || p == "/api/workflows/preflight"
                 || p == "/api/processes/thread-proof"
                 || p == "/api/incidents/timeline-replay"
@@ -992,6 +1002,46 @@ mod tests {
         );
         assert_eq!(
             endpoint_permission("GET", "/api/release/upgrade-rehearsal"),
+            Permission::ViewSupport
+        );
+        assert_eq!(
+            endpoint_permission("GET", "/api/release/clean-cut"),
+            Permission::ViewSupport
+        );
+        assert_eq!(
+            endpoint_permission("GET", "/api/containers/release-parity"),
+            Permission::ViewSupport
+        );
+        assert_eq!(
+            endpoint_permission("GET", "/api/release/verification-center"),
+            Permission::ViewSupport
+        );
+        assert_eq!(
+            endpoint_permission("GET", "/api/deployment/self-hosted-wizard"),
+            Permission::ViewSupport
+        );
+        assert_eq!(
+            endpoint_permission("GET", "/api/data-quality/dashboard"),
+            Permission::ViewSupport
+        );
+        assert_eq!(
+            endpoint_permission("GET", "/api/performance/scale-baseline"),
+            Permission::ViewSupport
+        );
+        assert_eq!(
+            endpoint_permission("GET", "/api/cluster/failover-execution"),
+            Permission::ViewSupport
+        );
+        assert_eq!(
+            endpoint_permission("GET", "/api/secrets/rotation-operations"),
+            Permission::ViewSupport
+        );
+        assert_eq!(
+            endpoint_permission("GET", "/api/operator/task-automation"),
+            Permission::ViewSupport
+        );
+        assert_eq!(
+            endpoint_permission("GET", "/api/detection/validation-packs"),
             Permission::ViewSupport
         );
         assert_eq!(

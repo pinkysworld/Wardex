@@ -52,7 +52,7 @@ standalone CLI binaries because it reports app-only validation errors.
 ## Verify the container image
 
 ```bash
-IMAGE=ghcr.io/pinkysworld/wardex:1.0.7
+IMAGE=ghcr.io/pinkysworld/wardex:1.0.8
 
 # 1. Cosign keyless signature (subject is the release workflow run)
 cosign verify \

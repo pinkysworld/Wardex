@@ -12011,6 +12011,16 @@ const PRODUCT_CONTRACT_ENDPOINTS: &[(&str, &str)] = &[
     ("GET", "/api/release/doctor"),
     ("GET", "/api/release/provenance"),
     ("GET", "/api/release/upgrade-rehearsal"),
+    ("GET", "/api/release/clean-cut"),
+    ("GET", "/api/containers/release-parity"),
+    ("GET", "/api/release/verification-center"),
+    ("GET", "/api/deployment/self-hosted-wizard"),
+    ("GET", "/api/data-quality/dashboard"),
+    ("GET", "/api/performance/scale-baseline"),
+    ("GET", "/api/cluster/failover-execution"),
+    ("GET", "/api/secrets/rotation-operations"),
+    ("GET", "/api/operator/task-automation"),
+    ("GET", "/api/detection/validation-packs"),
     ("GET", "/api/detection/recommendations"),
     ("GET", "/api/detection/readiness"),
     ("GET", "/api/detection/trust-score"),
@@ -14010,6 +14020,928 @@ fn build_support_bundle_diff(state: &AppState) -> serde_json::Value {
         },
         "checks": checks,
         "snapshot_index": snapshots,
+    })
+}
+
+fn next_patch_version(version: &str) -> String {
+    let mut parts = version
+        .split('.')
+        .map(|part| part.parse::<u64>().unwrap_or(0))
+        .collect::<Vec<_>>();
+    while parts.len() < 3 {
+        parts.push(0);
+    }
+    parts[2] = parts[2].saturating_add(1);
+    format!("{}.{}.{}", parts[0], parts[1], parts[2])
+}
+
+fn build_clean_release_cut(state: &AppState) -> serde_json::Value {
+    let current_version = env!("CARGO_PKG_VERSION");
+    let target_version = current_version.to_string();
+    let next_patch_target = next_patch_version(current_version);
+    let provenance = build_release_provenance(state);
+    let observability = build_release_observability_gates(state);
+    let synthetic = build_synthetic_console_summary(state);
+    let container = build_container_release_parity(state);
+    let contract = build_sdk_contract_status(state);
+    let drift_count = contract
+        .get("drift_count")
+        .and_then(serde_json::Value::as_u64)
+        .unwrap_or_default();
+    let artifacts = release_artifact_entries();
+    let checks = vec![
+        serde_json::json!({
+            "id": "target_patch",
+            "status": "pass",
+            "detail": format!("Clean release target is v{target_version}; next patch runway is v{next_patch_target}."),
+        }),
+        serde_json::json!({
+            "id": "source_contract",
+            "status": if drift_count == 0 { "pass" } else { "fail" },
+            "detail": format!("{drift_count} contract drift item(s) before the clean cut."),
+        }),
+        serde_json::json!({
+            "id": "local_artifacts",
+            "status": if artifacts.is_empty() { "warn" } else { "pass" },
+            "detail": format!("{} local release checksum artifact(s) are available for rehearsal.", artifacts.len()),
+        }),
+        serde_json::json!({
+            "id": "container_context",
+            "status": if container.get("status").and_then(serde_json::Value::as_str) == Some("blocked") { "fail" } else if container.get("status").and_then(serde_json::Value::as_str) == Some("review") { "warn" } else { "pass" },
+            "detail": container.get("next_action").cloned().unwrap_or_else(|| serde_json::json!("Container release context checked.")),
+        }),
+        serde_json::json!({
+            "id": "release_observability",
+            "status": if observability.get("status").and_then(serde_json::Value::as_str) == Some("blocked") { "fail" } else if observability.get("status").and_then(serde_json::Value::as_str) == Some("review") { "warn" } else { "pass" },
+            "detail": "Release observability gates are attached to the cut plan.",
+        }),
+        serde_json::json!({
+            "id": "live_console_smoke",
+            "status": if synthetic.get("status").and_then(serde_json::Value::as_str) == Some("blocked") { "fail" } else if synthetic.get("status").and_then(serde_json::Value::as_str) == Some("review") { "warn" } else { "pass" },
+            "detail": "Synthetic console route smoke is attached to the cut plan.",
+        }),
+    ];
+    let (fail_count, warn_count, status) = check_counts(&checks);
+    serde_json::json!({
+        "generated_at": chrono::Utc::now().to_rfc3339(),
+        "status": status,
+        "current_version": current_version,
+        "target_version": target_version,
+        "next_patch_target": next_patch_target,
+        "fail_count": fail_count,
+        "warn_count": warn_count,
+        "checks": checks,
+        "release_steps": [
+            {"id": "bump", "action": "Align Cargo, SDKs, Helm, OpenAPI, docs, and website to the target patch version."},
+            {"id": "validate", "action": "Run contract parity, release docs, Rust, SDK, admin, and focused browser smoke gates."},
+            {"id": "tag", "action": "Create an annotated tag only after source and container parity are clean."},
+            {"id": "publish", "action": "Let GitHub Actions publish signed macOS archives, checksums, SBOM, package artifacts, and container provenance."}
+        ],
+        "release_gate": {
+            "target_tag": format!("v{target_version}"),
+            "required_local_commands": [
+                "cargo fmt --all --check",
+                "cargo test --lib",
+                "npm --prefix admin-console run lint",
+                "npm --prefix admin-console test -- --run",
+                "npm --prefix admin-console run build",
+                "npm --prefix sdk/typescript run build",
+                "npm --prefix sdk/typescript test -- --run",
+                ".venv/bin/python -m pytest sdk/python/tests/test_client.py",
+                ".venv/bin/python scripts/check_contract_parity.py",
+                ".venv/bin/python scripts/validate_release_docs.py",
+                "bash scripts/performance_scale_baseline.sh"
+            ],
+            "required_ci_evidence": ["signed macOS archives", "Gatekeeper evidence", "SHA256SUMS", "SBOM", "SLSA provenance", "cosign container signature"],
+            "tag_policy": format!("create the v{target_version} tag only after the release verification center is ready or only has expected local-evidence warnings"),
+        },
+        "provenance": provenance,
+        "container": container,
+        "observability": observability,
+        "synthetic_console": synthetic,
+    })
+}
+
+fn build_synthetic_console_summary(state: &AppState) -> serde_json::Value {
+    let stream = stream_readiness_payload(state.alert_broadcaster.stats());
+    let stream_score = stream
+        .get("score")
+        .and_then(serde_json::Value::as_u64)
+        .unwrap_or_default();
+    let alert_page = alert_cursor_page_payload(state, 0, 5);
+    let checks = vec![
+        serde_json::json!({
+            "id": "runtime_health",
+            "route": "/api/status",
+            "status": "pass",
+            "detail": format!("Runtime {} has been up for {}s.", env!("CARGO_PKG_VERSION"), state.server_start.elapsed().as_secs()),
+        }),
+        serde_json::json!({
+            "id": "alert_page",
+            "route": "/api/alerts/page?limit=5",
+            "status": "pass",
+            "detail": format!("Cursor page returned {} alert row(s).", alert_page.get("count").and_then(serde_json::Value::as_u64).unwrap_or_default()),
+        }),
+        serde_json::json!({
+            "id": "stream_readiness",
+            "route": "/api/stream/readiness",
+            "status": if stream_score >= 80 { "pass" } else { "warn" },
+            "detail": format!("Stream status is {}.", stream.get("status").and_then(serde_json::Value::as_str).unwrap_or("unknown")),
+        }),
+    ];
+    let (fail_count, warn_count, status) = check_counts(&checks);
+    serde_json::json!({
+        "generated_at": chrono::Utc::now().to_rfc3339(),
+        "status": status,
+        "fail_count": fail_count,
+        "warn_count": warn_count,
+        "check_count": checks.len(),
+        "checks": checks,
+        "mode": "clean_cut_summary",
+        "full_endpoint": "/api/monitoring/synthetic-console",
+        "next_action": if fail_count > 0 { "Fix failing console dependencies before relying on the operator launchpad." } else if warn_count > 0 { "Review degraded synthetic console signals before release acceptance." } else { "Synthetic console summary is clean." },
+    })
+}
+
+fn build_container_release_parity(_state: &AppState) -> serde_json::Value {
+    let dockerfile = fs::read_to_string("Dockerfile").unwrap_or_default();
+    let release_workflow = fs::read_to_string(".github/workflows/release.yml").unwrap_or_default();
+    let required_copies = [
+        ("src", "COPY src/ src/"),
+        ("scripts", "COPY scripts/ scripts/"),
+        ("docs", "COPY docs/ docs/"),
+        ("admin-console", "COPY admin-console/ admin-console/"),
+        ("sdk", "COPY sdk/ sdk/"),
+        ("site", "COPY site/ site/"),
+        ("examples", "COPY examples/ examples/"),
+    ];
+    let copy_rows = required_copies
+        .iter()
+        .map(|(name, needle)| {
+            let present = dockerfile.contains(needle);
+            serde_json::json!({
+                "name": name,
+                "dockerfile_copy": needle,
+                "present": present,
+                "status": if present { "pass" } else { "fail" },
+            })
+        })
+        .collect::<Vec<_>>();
+    let missing_copies = copy_rows
+        .iter()
+        .filter(|row| row.get("present").and_then(serde_json::Value::as_bool) != Some(true))
+        .count();
+    let workflow_checks = vec![
+        serde_json::json!({
+            "id": "container_scan",
+            "status": if release_workflow.contains("Container Image Scan") { "pass" } else { "warn" },
+            "detail": "Release workflow carries a container image scan job.",
+        }),
+        serde_json::json!({
+            "id": "container_signing",
+            "status": if release_workflow.contains("cosign sign") { "pass" } else { "warn" },
+            "detail": "Release workflow signs pushed container tags with cosign.",
+        }),
+        serde_json::json!({
+            "id": "container_provenance",
+            "status": if release_workflow.contains("attest-build-provenance") { "pass" } else { "warn" },
+            "detail": "Release workflow emits provenance for release archives and container digest.",
+        }),
+    ];
+    let mut checks = vec![serde_json::json!({
+        "id": "docker_build_context",
+        "status": if missing_copies == 0 { "pass" } else { "fail" },
+        "detail": format!("{missing_copies} required Docker build input copy rule(s) are missing."),
+    })];
+    checks.extend(workflow_checks);
+    let (fail_count, warn_count, status) = check_counts(&checks);
+    serde_json::json!({
+        "generated_at": chrono::Utc::now().to_rfc3339(),
+        "status": status,
+        "runtime_version": env!("CARGO_PKG_VERSION"),
+        "fail_count": fail_count,
+        "warn_count": warn_count,
+        "copy_rows": copy_rows,
+        "image_tags": [env!("CARGO_PKG_VERSION"), "latest"],
+        "build_matrix": [
+            {"id": "linux_amd64", "artifact": "wardex-linux-x86_64.tar.gz", "container": true, "required_context": ["src", "scripts", "docs", "admin-console", "sdk", "site", "examples"]},
+            {"id": "macos_aarch64", "artifact": "wardex-macos-aarch64.tar.gz", "container": false, "required_context": ["src", "scripts", "docs", "admin-console", "sdk", "site", "examples"]},
+            {"id": "macos_x86_64", "artifact": "wardex-macos-x86_64.tar.gz", "container": false, "required_context": ["src", "scripts", "docs", "admin-console", "sdk", "site", "examples"]},
+            {"id": "windows_x86_64", "artifact": "wardex-windows-x86_64.zip", "container": false, "required_context": ["src", "scripts", "docs", "admin-console", "sdk", "site", "examples"]}
+        ],
+        "ci_retrigger_plan": {
+            "workflow": ".github/workflows/release.yml",
+            "required_jobs": ["Package binaries", "Container Image Scan", "Publish container", "Generate SBOM", "Attest build provenance"],
+            "manual_check": "verify the container build uses the same committed Dockerfile and copied release context as the archive builds",
+        },
+        "expected_assets": ["ghcr.io/pinkysworld/wardex", "SBOM", "SLSA provenance", "cosign signature"],
+        "checks": checks,
+        "next_action": if fail_count > 0 { "Fix Docker build context before cutting another tag." } else if warn_count > 0 { "Review container signing or provenance workflow coverage before publish." } else { "Container release parity is ready for the next clean tag." },
+    })
+}
+
+fn build_release_verification_center(state: &AppState) -> serde_json::Value {
+    let provenance = build_release_provenance(state);
+    let container = build_container_release_parity(state);
+    let artifacts = release_artifact_entries();
+    let gatekeeper_evidence = [
+        "release/wardex-macos-aarch64-gatekeeper.txt",
+        "release/wardex-macos-x86_64-gatekeeper.txt",
+    ]
+    .iter()
+    .map(|path| {
+        let exists = Path::new(path).exists();
+        serde_json::json!({
+            "path": path,
+            "exists": exists,
+            "status": if exists { "available" } else { "missing_locally" },
+        })
+    })
+    .collect::<Vec<_>>();
+    let gatekeeper_missing = gatekeeper_evidence
+        .iter()
+        .filter(|row| row.get("exists").and_then(serde_json::Value::as_bool) != Some(true))
+        .count();
+    let sbom_exists = Path::new("release/wardex-sbom.cdx.json").exists();
+    let verification_rows = artifacts
+        .iter()
+        .map(|artifact| {
+            let path = artifact
+                .get("path")
+                .and_then(serde_json::Value::as_str)
+                .unwrap_or("artifact");
+            let exists = artifact
+                .get("exists")
+                .and_then(serde_json::Value::as_bool)
+                .unwrap_or(false);
+            serde_json::json!({
+                "artifact": path,
+                "sha256": artifact.get("sha256").cloned().unwrap_or(serde_json::Value::Null),
+                "exists": exists,
+                "commands": [
+                    format!("shasum -a 256 -c SHA256SUMS --ignore-missing # {path}"),
+                    format!("gh attestation verify {path} --repo pinkysworld/Wardex"),
+                ],
+                "status": if exists { "ready" } else { "missing_locally" },
+            })
+        })
+        .collect::<Vec<_>>();
+    let release_workflow = fs::read_to_string(".github/workflows/release.yml").unwrap_or_default();
+    let workflow_evidence = vec![
+        serde_json::json!({"id": "notarization", "status": if release_workflow.contains("notarytool") || release_workflow.contains("notarize") { "tracked" } else { "review" }}),
+        serde_json::json!({"id": "container_signature", "status": if release_workflow.contains("cosign sign") { "tracked" } else { "review" }}),
+        serde_json::json!({"id": "provenance", "status": if release_workflow.contains("attest-build-provenance") { "tracked" } else { "review" }}),
+        serde_json::json!({"id": "sbom", "status": if release_workflow.contains("sbom") || release_workflow.contains("SBOM") { "tracked" } else { "review" }}),
+    ];
+    let checks = vec![
+        serde_json::json!({
+            "id": "checksums",
+            "status": if artifacts.is_empty() { "warn" } else { "pass" },
+            "detail": format!("{} checksum record(s) available locally.", artifacts.len()),
+        }),
+        serde_json::json!({
+            "id": "macos_gatekeeper_evidence",
+            "status": if gatekeeper_missing == 0 { "pass" } else { "warn" },
+            "detail": format!("{} Gatekeeper evidence file(s) are missing from the local release directory.", gatekeeper_missing),
+        }),
+        serde_json::json!({
+            "id": "sbom_asset",
+            "status": if sbom_exists { "pass" } else { "warn" },
+            "detail": if sbom_exists { "CycloneDX SBOM is available locally." } else { "SBOM is expected from GitHub release automation." },
+        }),
+        serde_json::json!({
+            "id": "container_signature_plan",
+            "status": if container.get("status").and_then(serde_json::Value::as_str) == Some("blocked") { "fail" } else if container.get("status").and_then(serde_json::Value::as_str) == Some("review") { "warn" } else { "pass" },
+            "detail": container.get("next_action").cloned().unwrap_or_else(|| serde_json::json!("Container parity checked.")),
+        }),
+    ];
+    let (fail_count, warn_count, status) = check_counts(&checks);
+    serde_json::json!({
+        "generated_at": chrono::Utc::now().to_rfc3339(),
+        "status": status,
+        "fail_count": fail_count,
+        "warn_count": warn_count,
+        "release_url": format!("https://github.com/pinkysworld/Wardex/releases/tag/v{}", env!("CARGO_PKG_VERSION")),
+        "artifacts": artifacts,
+        "gatekeeper_evidence": gatekeeper_evidence,
+        "verification_rows": verification_rows,
+        "workflow_evidence": workflow_evidence,
+        "operator_workflow": [
+            {"id": "download", "label": "Download all archives, SHA256SUMS, SBOM, and provenance attestations from the release."},
+            {"id": "verify", "label": "Run checksum, GitHub attestation, cosign, and macOS signature verification before install."},
+            {"id": "install", "label": "Install only the artifact whose platform, digest, and signature all match the release evidence."},
+            {"id": "record", "label": "Persist the verification-center snapshot digest in the release review."}
+        ],
+        "provenance": provenance,
+        "container": container,
+        "verify_commands": [
+            "shasum -a 256 -c SHA256SUMS",
+            "gh attestation verify <archive> --repo pinkysworld/Wardex",
+            "cosign verify ghcr.io/pinkysworld/wardex:<version>",
+            "codesign --verify --strict --verbose=2 wardex"
+        ],
+        "checks": checks,
+    })
+}
+
+fn build_self_hosted_deployment_wizard(state: &AppState) -> serde_json::Value {
+    let storage_ready = storage_root_path(&state.storage).is_some();
+    let spool_key_set = std::env::var("WARDEX_SPOOL_KEY").is_ok();
+    let admin_token_set = std::env::var("WARDEX_ADMIN_TOKEN").is_ok();
+    let release_artifacts = release_artifact_entries();
+    let image = format!("ghcr.io/pinkysworld/wardex:{}", env!("CARGO_PKG_VERSION"));
+    let config_path = state.config_path.display().to_string();
+    let checks = vec![
+        serde_json::json!({
+            "id": "admin_token",
+            "status": if admin_token_set { "pass" } else { "warn" },
+            "detail": if admin_token_set { "WARDEX_ADMIN_TOKEN is provided by the environment." } else { "Set WARDEX_ADMIN_TOKEN explicitly before production deployment." },
+        }),
+        serde_json::json!({
+            "id": "spool_key",
+            "status": if spool_key_set { "pass" } else { "warn" },
+            "detail": if spool_key_set { "Persistent spool encryption key is configured." } else { "Set WARDEX_SPOOL_KEY so token rotation does not orphan spool data." },
+        }),
+        serde_json::json!({
+            "id": "storage",
+            "status": if storage_ready { "pass" } else { "fail" },
+            "detail": "Operational storage path is available for snapshots, audit, and evidence.",
+        }),
+        serde_json::json!({
+            "id": "release_assets",
+            "status": if release_artifacts.is_empty() { "warn" } else { "pass" },
+            "detail": format!("{} local release archive checksum row(s) are visible for install rehearsal.", release_artifacts.len()),
+        }),
+    ];
+    let (fail_count, warn_count, status) = check_counts(&checks);
+    serde_json::json!({
+        "generated_at": chrono::Utc::now().to_rfc3339(),
+        "status": status,
+        "fail_count": fail_count,
+        "warn_count": warn_count,
+        "config_path": config_path,
+        "modes": [
+            {"id": "docker", "title": "Docker", "checks": ["token", "spool_key", "volume", "port", "container_signature"]},
+            {"id": "helm", "title": "Helm", "checks": ["image_tag", "network_policy", "secret_refs", "persistent_volume", "ingress_tls"]},
+            {"id": "systemd", "title": "systemd", "checks": ["service_user", "config_path", "spool_key", "log_rotation", "backup_path"]},
+            {"id": "binary", "title": "Local binary", "checks": ["checksum", "signature", "config", "site_dir", "examples_dir"]}
+        ],
+        "preflight": {
+            "admin_token_configured": admin_token_set,
+            "spool_key_configured": spool_key_set,
+            "storage_ready": storage_ready,
+            "release_artifact_count": release_artifacts.len(),
+        },
+        "install_plans": [
+            {
+                "id": "docker",
+                "title": "Docker single-node",
+                "commands": [
+                    format!("docker pull {image}"),
+                    "docker volume create wardex-var".to_string(),
+                    format!("docker run --name wardex --restart unless-stopped -p 8080:8080 -e WARDEX_ADMIN_TOKEN=<secret> -e WARDEX_SPOOL_KEY=<persistent-secret> -v wardex-var:/app/var {image}")
+                ],
+                "required_secrets": ["WARDEX_ADMIN_TOKEN", "WARDEX_SPOOL_KEY"],
+                "post_install_checks": ["/api/health", "/api/release/verification-center", "/api/data-quality/dashboard"]
+            },
+            {
+                "id": "helm",
+                "title": "Kubernetes Helm",
+                "commands": [
+                    "helm upgrade --install wardex deploy/helm/wardex --namespace wardex --create-namespace --set image.tag=<version>".to_string(),
+                    "kubectl -n wardex rollout status deploy/wardex".to_string(),
+                    "kubectl -n wardex port-forward svc/wardex 8080:8080".to_string()
+                ],
+                "required_secrets": ["adminToken", "spoolKey", "ingress.tls"],
+                "post_install_checks": ["/api/system/health/dependencies", "/api/cluster/failover-execution"]
+            },
+            {
+                "id": "systemd",
+                "title": "Linux systemd",
+                "commands": [
+                    "sudo install -m 0755 wardex /usr/local/bin/wardex".to_string(),
+                    format!("sudo install -m 0640 {config_path} /etc/wardex/wardex.toml"),
+                    "sudo systemctl enable --now wardex".to_string()
+                ],
+                "required_secrets": ["EnvironmentFile=/etc/wardex/wardex.env"],
+                "post_install_checks": ["systemctl status wardex", "/api/healthz/ready"]
+            },
+            {
+                "id": "binary",
+                "title": "Local signed binary",
+                "commands": [
+                    "shasum -a 256 -c SHA256SUMS".to_string(),
+                    "./wardex --version".to_string(),
+                    "WARDEX_ADMIN_TOKEN=<secret> WARDEX_SPOOL_KEY=<persistent-secret> ./wardex start".to_string()
+                ],
+                "required_secrets": ["WARDEX_ADMIN_TOKEN", "WARDEX_SPOOL_KEY"],
+                "post_install_checks": ["/api/status", "/admin/"]
+            }
+        ],
+        "checks": checks,
+        "next_action": if fail_count > 0 { "Fix blocking deployment inputs before production install." } else if warn_count > 0 { "Resolve deployment warnings before promoting this install path." } else { "Self-hosted deployment wizard is ready for guided install." },
+    })
+}
+
+fn build_data_quality_dashboard(state: &AppState) -> serde_json::Value {
+    let events = state.event_store.all_events();
+    let agents = state.agent_registry.list();
+    let dlq_count = state.dead_letter_queue.len();
+    let stale_agents = agents
+        .iter()
+        .filter(|agent| matches!(agent.status, AgentStatus::Offline | AgentStatus::Stale))
+        .count();
+    let recent_alerts = state.alerts.len();
+    let collector_rows = full_collector_status_entries(state);
+    let unhealthy_collectors = collector_rows
+        .iter()
+        .filter(|row| {
+            let status = row
+                .get("status")
+                .or_else(|| row.get("freshness"))
+                .and_then(serde_json::Value::as_str)
+                .unwrap_or("unknown")
+                .to_ascii_lowercase();
+            matches!(status.as_str(), "error" | "stale" | "disabled" | "missing")
+        })
+        .count();
+    let checks = vec![
+        serde_json::json!({
+            "id": "dead_letter_queue",
+            "status": if dlq_count == 0 { "pass" } else { "warn" },
+            "detail": format!("{dlq_count} malformed or unprocessable event(s) are in the DLQ."),
+        }),
+        serde_json::json!({
+            "id": "agent_freshness",
+            "status": if stale_agents == 0 { "pass" } else { "warn" },
+            "detail": format!("{stale_agents} stale/offline agent(s) can weaken detection coverage."),
+        }),
+        serde_json::json!({
+            "id": "event_flow",
+            "status": if events.is_empty() && recent_alerts == 0 { "warn" } else { "pass" },
+            "detail": format!("{} retained event(s) and {recent_alerts} alert(s) are currently visible.", events.len()),
+        }),
+        serde_json::json!({
+            "id": "collector_health",
+            "status": if unhealthy_collectors == 0 { "pass" } else { "warn" },
+            "detail": format!("{unhealthy_collectors} collector lane(s) report degraded freshness or setup state."),
+        }),
+    ];
+    let (fail_count, warn_count, status) = check_counts(&checks);
+    let slo_rows = vec![
+        serde_json::json!({
+            "id": "dlq_zero",
+            "target": "0 dead-letter events before release sign-off",
+            "observed": dlq_count,
+            "status": if dlq_count == 0 { "pass" } else { "warn" },
+            "drilldown": "/api/dlq/stats",
+        }),
+        serde_json::json!({
+            "id": "agent_freshness",
+            "target": "no stale/offline agents in the release evidence window",
+            "observed": stale_agents,
+            "status": if stale_agents == 0 { "pass" } else { "warn" },
+            "drilldown": "/api/fleet/dashboard",
+        }),
+        serde_json::json!({
+            "id": "collector_health",
+            "target": "all enabled collectors report healthy freshness",
+            "observed": unhealthy_collectors,
+            "status": if unhealthy_collectors == 0 { "pass" } else { "warn" },
+            "drilldown": "/api/collectors/status",
+        }),
+        serde_json::json!({
+            "id": "telemetry_flow",
+            "target": "events or alerts visible before detection validation",
+            "observed": events.len() + recent_alerts,
+            "status": if events.is_empty() && recent_alerts == 0 { "warn" } else { "pass" },
+            "drilldown": "/api/events/page?limit=5",
+        }),
+    ];
+    let slo_warn_count = slo_rows
+        .iter()
+        .filter(|row| row.get("status").and_then(serde_json::Value::as_str) != Some("pass"))
+        .count();
+    let quality_score = 100usize.saturating_sub(slo_warn_count.saturating_mul(15));
+    serde_json::json!({
+        "generated_at": chrono::Utc::now().to_rfc3339(),
+        "status": status,
+        "fail_count": fail_count,
+        "warn_count": warn_count,
+        "metrics": {
+            "retained_events": events.len(),
+            "alerts": recent_alerts,
+            "dead_letter_events": dlq_count,
+            "agents": agents.len(),
+            "stale_agents": stale_agents,
+            "collector_lanes": collector_rows.len(),
+            "unhealthy_collectors": unhealthy_collectors,
+        },
+        "collector_rows": collector_rows.into_iter().take(12).collect::<Vec<_>>(),
+        "slo_summary": {
+            "score": quality_score,
+            "passing": slo_rows.len().saturating_sub(slo_warn_count),
+            "total": slo_rows.len(),
+            "status": if slo_warn_count == 0 { "ready" } else { "review" },
+        },
+        "slos": slo_rows,
+        "checks": checks,
+        "next_action": if warn_count > 0 { "Review degraded data sources before relying on detection confidence." } else { "Telemetry quality is healthy for current validation depth." },
+    })
+}
+
+fn build_performance_scale_baseline(state: &AppState) -> serde_json::Value {
+    let uptime_secs = state.server_start.elapsed().as_secs().max(1);
+    let request_rate_per_min = (state.request_count.saturating_mul(60)) / uptime_secs;
+    let error_rate_pct = if state.request_count == 0 {
+        0
+    } else {
+        ((state.error_count as f64 / state.request_count as f64) * 100.0).round() as u64
+    };
+    let ws_stats = state.alert_broadcaster.stats();
+    let storage_stats = state.storage.with(|store| Ok(store.stats())).ok();
+    let total_records = storage_stats
+        .as_ref()
+        .map(|stats| stats.total_alerts + stats.total_audit_entries)
+        .unwrap_or(state.alerts.len() + state.audit_log.entries.len());
+    let checks = vec![
+        serde_json::json!({
+            "id": "api_error_rate",
+            "status": if error_rate_pct > 5 { "warn" } else { "pass" },
+            "detail": format!("API error rate is {error_rate_pct}% over {uptime_secs}s uptime."),
+        }),
+        serde_json::json!({
+            "id": "stream_backpressure",
+            "status": if ws_stats.get("backpressure_state").and_then(serde_json::Value::as_str) == Some("critical") { "warn" } else { "pass" },
+            "detail": format!("WebSocket transport state is {}.", ws_stats.get("backpressure_state").and_then(serde_json::Value::as_str).unwrap_or("unknown")),
+        }),
+        serde_json::json!({
+            "id": "storage_volume",
+            "status": if total_records > 100_000 { "warn" } else { "pass" },
+            "detail": format!("{total_records} stored alert/audit records are visible for baseline sizing."),
+        }),
+    ];
+    let (fail_count, warn_count, status) = check_counts(&checks);
+    let load_gate = vec![
+        serde_json::json!({
+            "id": "api_error_rate",
+            "target": "<= 5%",
+            "observed": format!("{error_rate_pct}%"),
+            "status": if error_rate_pct > 5 { "warn" } else { "pass" },
+            "command": "bash scripts/performance_scale_baseline.sh --api-error-rate",
+        }),
+        serde_json::json!({
+            "id": "launchpad_fanout",
+            "target": "all release-verification endpoints answer within the smoke budget",
+            "observed": "not measured by runtime snapshot",
+            "status": "review",
+            "command": "bash scripts/performance_scale_baseline.sh --launchpad",
+        }),
+        serde_json::json!({
+            "id": "retained_event_search",
+            "target": "retained-event cursor query under 1000 ms on seeded fixtures",
+            "observed": "not measured by runtime snapshot",
+            "status": "review",
+            "command": "bash scripts/performance_scale_baseline.sh --retained-events",
+        }),
+        serde_json::json!({
+            "id": "support_bundle_export",
+            "target": "support bundle export under 1500 ms on release smoke data",
+            "observed": "not measured by runtime snapshot",
+            "status": "review",
+            "command": "bash scripts/performance_scale_baseline.sh --support-bundle",
+        }),
+    ];
+    serde_json::json!({
+        "generated_at": chrono::Utc::now().to_rfc3339(),
+        "status": status,
+        "fail_count": fail_count,
+        "warn_count": warn_count,
+        "metrics": {
+            "uptime_secs": uptime_secs,
+            "request_count": state.request_count,
+            "error_count": state.error_count,
+            "request_rate_per_min": request_rate_per_min,
+            "error_rate_pct": error_rate_pct,
+            "stored_records": total_records,
+            "alert_count": state.alerts.len(),
+            "event_count": state.event_store.all_events().len(),
+        },
+        "targets": {
+            "api_p95_ms": 500,
+            "websocket_queue_depth": 100,
+            "release_smoke_budget_ms": 1500,
+            "retained_event_search_ms": 1000,
+        },
+        "recommended_tests": [
+            "API route latency sweep for launchpad fanout",
+            "Retained-event search with 10k, 100k, and 1m row fixtures",
+            "WebSocket fanout with queue-depth and dropped-event assertions",
+            "Report export and support bundle generation under concurrent reads"
+        ],
+        "load_gate": load_gate,
+        "ci_gate": {
+            "script": "scripts/performance_scale_baseline.sh",
+            "requires_running_server": true,
+            "environment": ["WARDEX_BASE_URL", "WARDEX_ADMIN_TOKEN"],
+            "release_policy": "warnings require manual review; failures block the tag",
+        },
+        "stream": ws_stats,
+        "checks": checks,
+    })
+}
+
+fn build_cluster_failover_execution(state: &AppState) -> serde_json::Value {
+    let cluster_snapshot = control_plane_cluster_snapshot(state);
+    let history = control_plane_failover_history_preview(state);
+    let last_drill = state
+        .last_failover_drill
+        .as_ref()
+        .and_then(|record| serde_json::to_value(record).ok())
+        .unwrap_or(serde_json::Value::Null);
+    let has_cluster = cluster_snapshot.is_some();
+    let drill_count = history
+        .get("count")
+        .and_then(serde_json::Value::as_u64)
+        .unwrap_or_default();
+    let checks = vec![
+        serde_json::json!({
+            "id": "cluster_reference",
+            "status": if has_cluster { "pass" } else { "warn" },
+            "detail": if has_cluster { "Control-plane cluster snapshot is available." } else { "Standalone mode: execution plan is a rehearsal until standby state is configured." },
+        }),
+        serde_json::json!({
+            "id": "drill_history",
+            "status": if drill_count > 0 { "pass" } else { "warn" },
+            "detail": format!("{drill_count} failover drill record(s) are available."),
+        }),
+        serde_json::json!({
+            "id": "release_observability",
+            "status": if build_release_observability_gates(state).get("status").and_then(serde_json::Value::as_str) == Some("blocked") { "fail" } else { "pass" },
+            "detail": "Release observability gates are available as failover preconditions.",
+        }),
+    ];
+    let (fail_count, warn_count, status) = check_counts(&checks);
+    serde_json::json!({
+        "generated_at": chrono::Utc::now().to_rfc3339(),
+        "status": status,
+        "fail_count": fail_count,
+        "warn_count": warn_count,
+        "mode": if has_cluster { "cluster_ready" } else { "standalone_rehearsal" },
+        "execution_steps": [
+            {"id": "freeze", "action": "Pause risky rollout and remediation mutations before failover."},
+            {"id": "promote", "action": "Promote the standby or leader candidate only after health, storage, and stream gates pass."},
+            {"id": "verify", "action": "Run release observability, synthetic console, and data-quality checks against the promoted node."},
+            {"id": "record", "action": "Persist drill evidence and export the support bundle before closing the event."}
+        ],
+        "drill_execution": {
+            "mode": if has_cluster { "executable_drill" } else { "standalone_dry_run" },
+            "execute_api": "/api/control/failover-drill",
+            "rto_target_secs": 300,
+            "rpo_target_secs": 60,
+            "post_failover_smoke": ["/api/healthz/ready", "/api/status", "/api/release/observability-gates", "/api/data-quality/dashboard", "/api/support/bundle"],
+            "evidence_artifacts": ["failover_drill_record", "release_observability_snapshot", "data_quality_snapshot", "support_bundle_digest"],
+        },
+        "cluster": cluster_snapshot.and_then(|snapshot| serde_json::to_value(snapshot).ok()),
+        "history": history,
+        "last_drill": last_drill,
+        "checks": checks,
+    })
+}
+
+fn build_secrets_rotation_operations(state: &AppState) -> serde_json::Value {
+    let token_age_secs = state.token_issued_at.elapsed().as_secs();
+    let spool_stats = state.spool.stats();
+    let checks = vec![
+        serde_json::json!({
+            "id": "admin_token_rotation",
+            "status": if token_age_secs > 30 * 24 * 60 * 60 { "warn" } else { "pass" },
+            "detail": format!("Admin token age is {token_age_secs}s in this runtime."),
+        }),
+        serde_json::json!({
+            "id": "spool_key_rotation",
+            "status": if std::env::var("WARDEX_SPOOL_KEY").is_ok() { "pass" } else { "warn" },
+            "detail": "Persistent spool key should be set before token or spool rotation.",
+        }),
+        serde_json::json!({
+            "id": "oidc_secret_inventory",
+            "status": if state.oidc_providers.is_empty() { "warn" } else { "pass" },
+            "detail": format!("{} OIDC provider configuration(s) are available for rotation planning.", state.oidc_providers.len()),
+        }),
+        serde_json::json!({
+            "id": "spool_backlog",
+            "status": if spool_stats.current_depth > 0 { "warn" } else { "pass" },
+            "detail": format!("{} encrypted spool item(s) should drain before key changes.", spool_stats.current_depth),
+        }),
+    ];
+    let (fail_count, warn_count, status) = check_counts(&checks);
+    let dry_runs = vec![
+        serde_json::json!({
+            "id": "admin_token",
+            "status": "ready",
+            "preflight": ["create replacement token", "exchange a test session", "confirm RBAC role mapping"],
+            "apply": ["deploy new WARDEX_ADMIN_TOKEN", "restart one node", "validate /api/auth/check"],
+            "rollback": ["restore previous token", "invalidate failed session exchange"],
+        }),
+        serde_json::json!({
+            "id": "spool_key",
+            "status": if spool_stats.current_depth == 0 { "ready" } else { "review" },
+            "preflight": ["drain encrypted spool", "backup var/spool", "seal replacement WARDEX_SPOOL_KEY"],
+            "apply": ["restart with replacement key", "write and read a synthetic spool entry"],
+            "rollback": ["restore previous key and spool backup before accepting telemetry"],
+        }),
+        serde_json::json!({
+            "id": "oidc_clients",
+            "status": if state.oidc_providers.is_empty() { "review" } else { "ready" },
+            "preflight": ["create staged client secret", "validate discovery metadata", "run test-login callback"],
+            "apply": ["swap provider secret", "run callback validation", "confirm group mapping"],
+            "rollback": ["restore previous client secret until all sessions validate"],
+        }),
+        serde_json::json!({
+            "id": "collector_credentials",
+            "status": "ready",
+            "preflight": ["stage new connector credential", "run collector validation", "capture sample event"],
+            "apply": ["promote staged credential", "refresh collector status", "verify freshness SLO"],
+            "rollback": ["restore previous connector secret and retry backoff state"],
+        }),
+        serde_json::json!({
+            "id": "release_signing",
+            "status": "ready",
+            "preflight": ["sign temporary artifact", "verify codesign/cosign", "confirm notarization profile"],
+            "apply": ["rotate CI secrets", "run release workflow dry run", "verify artifact evidence"],
+            "rollback": ["restore previous CI secret versions and revoke temporary credentials"],
+        }),
+    ];
+    serde_json::json!({
+        "generated_at": chrono::Utc::now().to_rfc3339(),
+        "status": status,
+        "fail_count": fail_count,
+        "warn_count": warn_count,
+        "rotation_domains": [
+            {"id": "admin_token", "dry_run": true, "rollback": "Keep the previous token valid until session exchange succeeds."},
+            {"id": "spool_key", "dry_run": true, "rollback": "Drain spool and keep sealed backup before changing encryption material."},
+            {"id": "oidc_clients", "dry_run": true, "rollback": "Preserve old client secret until callback and group mapping validation pass."},
+            {"id": "collector_credentials", "dry_run": true, "rollback": "Validate staged connector credentials before deleting old secrets."},
+            {"id": "release_signing", "dry_run": true, "rollback": "Verify Developer ID and cosign signatures on a temporary artifact before secret replacement."}
+        ],
+        "dry_runs": dry_runs,
+        "operator_ticket": {
+            "title": "Rotate Wardex production secrets",
+            "required_approvals": ["platform_owner", "security_owner"],
+            "evidence": ["preflight_snapshot", "post_rotation_auth_check", "spool_read_write_probe", "collector_freshness_snapshot"],
+        },
+        "spool": {
+            "queued": spool_stats.current_depth,
+            "capacity": spool_stats.max_entries,
+            "utilization_pct": spool_stats.utilization_pct,
+        },
+        "checks": checks,
+    })
+}
+
+fn build_operator_task_automation(state: &AppState) -> serde_json::Value {
+    let queue = build_operator_work_queue(state);
+    let items = queue
+        .get("items")
+        .and_then(serde_json::Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+    let automations = items
+        .iter()
+        .map(|item| {
+            let id = item.get("id").and_then(serde_json::Value::as_str).unwrap_or("task");
+            serde_json::json!({
+                "task_id": id,
+                "status": "ready",
+                "available_actions": ["assign_owner", "snooze", "create_ticket", "run_preflight", "export_evidence", "close_with_note"],
+                "recommended_action": match id {
+                    "release_doctor" => "run_preflight",
+                    "approval_queue" => "assign_owner",
+                    "detection_trust" => "export_evidence",
+                    "fleet_drift" => "create_ticket",
+                    "retention_forecast" => "snooze",
+                    _ => "assign_owner",
+                },
+                "source": item,
+            })
+        })
+        .collect::<Vec<_>>();
+    let action_blueprints = vec![
+        serde_json::json!({"action": "assign_owner", "method": "dry_run", "required_fields": ["task_id", "owner", "due_at"], "audit": true}),
+        serde_json::json!({"action": "snooze", "method": "dry_run", "required_fields": ["task_id", "duration", "reason"], "audit": true}),
+        serde_json::json!({"action": "create_ticket", "method": "dry_run", "required_fields": ["task_id", "provider", "project", "summary"], "audit": true}),
+        serde_json::json!({"action": "run_preflight", "method": "dry_run", "required_fields": ["task_id", "workflow"], "audit": true}),
+        serde_json::json!({"action": "export_evidence", "method": "dry_run", "required_fields": ["task_id", "format"], "audit": true}),
+        serde_json::json!({"action": "close_with_note", "method": "dry_run", "required_fields": ["task_id", "note", "evidence_digest"], "audit": true}),
+    ];
+    serde_json::json!({
+        "generated_at": chrono::Utc::now().to_rfc3339(),
+        "status": if automations.is_empty() { "clear" } else { "ready" },
+        "automation_count": automations.len(),
+        "queue": queue,
+        "automations": automations,
+        "action_blueprints": action_blueprints,
+        "mutation_guard": {
+            "status": "dry_run_only",
+            "reason": "automation actions are exposed as auditable plans until write-action approval policy is configured",
+        },
+        "audit_requirements": ["actor", "task_id", "decision", "evidence_digest", "closed_at"],
+        "next_action": if items.is_empty() { "No operator automation tasks are waiting." } else { "Review recommended task automations before enabling write actions." },
+    })
+}
+
+fn build_detection_validation_packs(state: &AppState) -> serde_json::Value {
+    let packs = [
+        (
+            "credential_storm",
+            "Credential storm",
+            "T1110",
+            "examples/credential_storm.csv",
+        ),
+        (
+            "slow_escalation",
+            "Slow escalation",
+            "T1078",
+            "examples/slow_escalation.csv",
+        ),
+        (
+            "low_battery_attack",
+            "Low battery attack",
+            "T1496",
+            "examples/low_battery_attack.csv",
+        ),
+        (
+            "c2_beaconing",
+            "C2 beaconing",
+            "T1071",
+            "examples/credential_storm_extended.csv",
+        ),
+        (
+            "benign_baseline",
+            "Benign baseline",
+            "baseline",
+            "examples/benign_baseline.csv",
+        ),
+    ];
+    let rows = packs
+        .iter()
+        .map(|(id, title, attack, path)| {
+            let exists = Path::new(path).exists();
+            serde_json::json!({
+                "id": id,
+                "title": title,
+                "attack_mapping": attack,
+                "path": path,
+                "status": if exists { "ready" } else { "missing" },
+                "execution": {
+                    "mode": "dry_run_replay",
+                    "command": format!("./target/debug/wardex demo --scenario {id}"),
+                    "expected_alerts": if *id == "benign_baseline" { 0 } else { 1 },
+                    "expected_artifacts": ["alert", "timeline", "rule_evidence", "false_positive_guidance"],
+                },
+                "expected_outputs": ["alert", "timeline", "rule_evidence", "false_positive_guidance"],
+            })
+        })
+        .collect::<Vec<_>>();
+    let missing = rows
+        .iter()
+        .filter(|row| row.get("status").and_then(serde_json::Value::as_str) == Some("missing"))
+        .count();
+    let trust = build_detection_trust_score(state);
+    let executable = rows
+        .iter()
+        .filter(|row| row.get("status").and_then(serde_json::Value::as_str) == Some("ready"))
+        .count();
+    let checks = vec![
+        serde_json::json!({
+            "id": "pack_files",
+            "status": if missing == 0 { "pass" } else { "warn" },
+            "detail": format!("{missing} validation pack fixture(s) are missing."),
+        }),
+        serde_json::json!({
+            "id": "detection_trust",
+            "status": if trust.get("status").and_then(serde_json::Value::as_str) == Some("blocked") { "fail" } else if trust.get("status").and_then(serde_json::Value::as_str) == Some("review") { "warn" } else { "pass" },
+            "detail": format!("Detection trust average is {}.", trust.get("average_score").and_then(serde_json::Value::as_u64).unwrap_or_default()),
+        }),
+    ];
+    let (fail_count, warn_count, status) = check_counts(&checks);
+    serde_json::json!({
+        "generated_at": chrono::Utc::now().to_rfc3339(),
+        "status": status,
+        "fail_count": fail_count,
+        "warn_count": warn_count,
+        "pack_count": rows.len(),
+        "missing_pack_count": missing,
+        "executable_pack_count": executable,
+        "suite_execution": {
+            "mode": "dry_run_replay",
+            "command": "bash scripts/detection_validation_packs.sh",
+            "required_before_release": true,
+            "success_criteria": ["all ready packs replay", "expected alerts observed", "benign baseline has no alert", "timeline and rule evidence exported"],
+        },
+        "packs": rows,
+        "detection_trust": trust,
+        "checks": checks,
     })
 }
 
@@ -19450,6 +20382,75 @@ fn handle_api(
             let body = build_upgrade_rehearsal(&s, &target);
             let snapshot =
                 persist_operational_snapshot(&s.storage, "release_upgrade_rehearsal", &body);
+            json_response(&payload_with_snapshot(body, snapshot).to_string(), 200)
+        }
+        (Method::Get, "/api/release/clean-cut") => {
+            let s = state.lock().unwrap_or_else(|e| e.into_inner());
+            let body = build_clean_release_cut(&s);
+            let snapshot = persist_operational_snapshot(&s.storage, "clean_release_cut", &body);
+            json_response(&payload_with_snapshot(body, snapshot).to_string(), 200)
+        }
+        (Method::Get, "/api/containers/release-parity") => {
+            let s = state.lock().unwrap_or_else(|e| e.into_inner());
+            let body = build_container_release_parity(&s);
+            let snapshot =
+                persist_operational_snapshot(&s.storage, "container_release_parity", &body);
+            json_response(&payload_with_snapshot(body, snapshot).to_string(), 200)
+        }
+        (Method::Get, "/api/release/verification-center") => {
+            let s = state.lock().unwrap_or_else(|e| e.into_inner());
+            let body = build_release_verification_center(&s);
+            let snapshot =
+                persist_operational_snapshot(&s.storage, "release_verification_center", &body);
+            json_response(&payload_with_snapshot(body, snapshot).to_string(), 200)
+        }
+        (Method::Get, "/api/deployment/self-hosted-wizard") => {
+            let s = state.lock().unwrap_or_else(|e| e.into_inner());
+            let body = build_self_hosted_deployment_wizard(&s);
+            let snapshot =
+                persist_operational_snapshot(&s.storage, "self_hosted_deployment_wizard", &body);
+            json_response(&payload_with_snapshot(body, snapshot).to_string(), 200)
+        }
+        (Method::Get, "/api/data-quality/dashboard") => {
+            let s = state.lock().unwrap_or_else(|e| e.into_inner());
+            let body = build_data_quality_dashboard(&s);
+            let snapshot =
+                persist_operational_snapshot(&s.storage, "data_quality_dashboard", &body);
+            json_response(&payload_with_snapshot(body, snapshot).to_string(), 200)
+        }
+        (Method::Get, "/api/performance/scale-baseline") => {
+            let s = state.lock().unwrap_or_else(|e| e.into_inner());
+            let body = build_performance_scale_baseline(&s);
+            let snapshot =
+                persist_operational_snapshot(&s.storage, "performance_scale_baseline", &body);
+            json_response(&payload_with_snapshot(body, snapshot).to_string(), 200)
+        }
+        (Method::Get, "/api/cluster/failover-execution") => {
+            let s = state.lock().unwrap_or_else(|e| e.into_inner());
+            let body = build_cluster_failover_execution(&s);
+            let snapshot =
+                persist_operational_snapshot(&s.storage, "cluster_failover_execution", &body);
+            json_response(&payload_with_snapshot(body, snapshot).to_string(), 200)
+        }
+        (Method::Get, "/api/secrets/rotation-operations") => {
+            let s = state.lock().unwrap_or_else(|e| e.into_inner());
+            let body = build_secrets_rotation_operations(&s);
+            let snapshot =
+                persist_operational_snapshot(&s.storage, "secrets_rotation_operations", &body);
+            json_response(&payload_with_snapshot(body, snapshot).to_string(), 200)
+        }
+        (Method::Get, "/api/operator/task-automation") => {
+            let s = state.lock().unwrap_or_else(|e| e.into_inner());
+            let body = build_operator_task_automation(&s);
+            let snapshot =
+                persist_operational_snapshot(&s.storage, "operator_task_automation", &body);
+            json_response(&payload_with_snapshot(body, snapshot).to_string(), 200)
+        }
+        (Method::Get, "/api/detection/validation-packs") => {
+            let s = state.lock().unwrap_or_else(|e| e.into_inner());
+            let body = build_detection_validation_packs(&s);
+            let snapshot =
+                persist_operational_snapshot(&s.storage, "detection_validation_packs", &body);
             json_response(&payload_with_snapshot(body, snapshot).to_string(), 200)
         }
         (Method::Get, "/api/monitoring/synthetic-console") => {

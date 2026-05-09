@@ -1247,21 +1247,25 @@ export default function ThreatDetection() {
 
     const primaryPack = packs.find((pack) => (selectedRule.pack_ids || []).includes(pack.id));
 
-    setHuntDraft((draft) => ({
-      ...draft,
-      id: '',
-      name: huntNameParam || `Hunt ${selectedRule.title || selectedRule.id}`,
-      query: buildDefaultHuntQuery(selectedRule, huntQueryParam),
-      severity: String(selectedRule.severity_mapping || draft.severity || 'medium').toLowerCase(),
-      level: String(selectedRule.severity_mapping || draft.level || '').toLowerCase(),
-      lifecycle: String(selectedRule.lifecycle || 'draft').toLowerCase(),
-      canaryPercentage: selectedRule.lifecycle === 'canary' ? '10' : '100',
-      packId: primaryPack?.id || '',
-      targetGroup: primaryPack?.target_group || '',
-      recommendedWorkflows: Array.isArray(primaryPack?.recommended_workflows)
-        ? primaryPack.recommended_workflows
-        : [],
-    }));
+    setHuntDraft((draft) => {
+      if (!huntIntent && !huntQueryParam && !huntNameParam && draft.id) return draft;
+
+      return {
+        ...draft,
+        id: '',
+        name: huntNameParam || `Hunt ${selectedRule.title || selectedRule.id}`,
+        query: buildDefaultHuntQuery(selectedRule, huntQueryParam),
+        severity: String(selectedRule.severity_mapping || draft.severity || 'medium').toLowerCase(),
+        level: String(selectedRule.severity_mapping || draft.level || '').toLowerCase(),
+        lifecycle: String(selectedRule.lifecycle || 'draft').toLowerCase(),
+        canaryPercentage: selectedRule.lifecycle === 'canary' ? '10' : '100',
+        packId: primaryPack?.id || '',
+        targetGroup: primaryPack?.target_group || '',
+        recommendedWorkflows: Array.isArray(primaryPack?.recommended_workflows)
+          ? primaryPack.recommended_workflows
+          : [],
+      };
+    });
   }, [selectedRule, packs, drawerMode, huntIntent, huntQueryParam, huntNameParam]);
 
   useEffect(() => {

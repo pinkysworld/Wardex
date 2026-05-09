@@ -1,7 +1,7 @@
 openapi: 3.0.3
 info:
   title: Wardex XDR/SIEM API
-  version: 1.0.7
+  version: 1.0.8
   description: "Wardex XDR/SIEM REST API \u2014 detection, fleet management, incident response, and platform operations."
   license:
     name: AGPL-3.0-only
@@ -12674,6 +12674,156 @@ paths:
       responses:
         '200':
           description: Release upgrade rehearsal response
+          content:
+            application/json:
+              schema:
+                type: object
+      security:
+      - bearerAuth: []
+  /api/release/clean-cut:
+    get:
+      summary: Clean next-patch release cut readiness across source, artifacts, container parity, and smoke gates
+      operationId: getCleanReleaseCut
+      tags:
+      - status
+      responses:
+        '200':
+          description: Clean release cut readiness response
+          content:
+            application/json:
+              schema:
+                type: object
+      security:
+      - bearerAuth: []
+  /api/containers/release-parity:
+    get:
+      summary: Container release parity for build context, scan, signing, and provenance coverage
+      operationId: getContainerReleaseParity
+      tags:
+      - observability
+      responses:
+        '200':
+          description: Container release parity response
+          content:
+            application/json:
+              schema:
+                type: object
+      security:
+      - bearerAuth: []
+  /api/release/verification-center:
+    get:
+      summary: Release verification center for checksums, SBOM, provenance, macOS evidence, and container signatures
+      operationId: getReleaseVerificationCenter
+      tags:
+      - status
+      responses:
+        '200':
+          description: Release verification center response
+          content:
+            application/json:
+              schema:
+                type: object
+      security:
+      - bearerAuth: []
+  /api/deployment/self-hosted-wizard:
+    get:
+      summary: Self-hosted deployment wizard readiness for Docker, Helm, systemd, and local binary installs
+      operationId: getSelfHostedDeploymentWizard
+      tags:
+      - status
+      responses:
+        '200':
+          description: Self-hosted deployment wizard response
+          content:
+            application/json:
+              schema:
+                type: object
+      security:
+      - bearerAuth: []
+  /api/data-quality/dashboard:
+    get:
+      summary: Production data quality dashboard for telemetry freshness, DLQ pressure, collector health, and silent agents
+      operationId: getDataQualityDashboard
+      tags:
+      - observability
+      responses:
+        '200':
+          description: Data quality dashboard response
+          content:
+            application/json:
+              schema:
+                type: object
+      security:
+      - bearerAuth: []
+  /api/performance/scale-baseline:
+    get:
+      summary: Performance and scale baseline for API, storage, stream, report, and release-smoke targets
+      operationId: getPerformanceScaleBaseline
+      tags:
+      - observability
+      responses:
+        '200':
+          description: Performance and scale baseline response
+          content:
+            application/json:
+              schema:
+                type: object
+      security:
+      - bearerAuth: []
+  /api/cluster/failover-execution:
+    get:
+      summary: Cluster failover execution readiness with standby, drill history, promotion, and verification steps
+      operationId: getClusterFailoverExecution
+      tags:
+      - status
+      responses:
+        '200':
+          description: Cluster failover execution response
+          content:
+            application/json:
+              schema:
+                type: object
+      security:
+      - bearerAuth: []
+  /api/secrets/rotation-operations:
+    get:
+      summary: Secrets and key rotation operations plan with dry-run and rollback guidance
+      operationId: getSecretsRotationOperations
+      tags:
+      - status
+      responses:
+        '200':
+          description: Secrets rotation operations response
+          content:
+            application/json:
+              schema:
+                type: object
+      security:
+      - bearerAuth: []
+  /api/operator/task-automation:
+    get:
+      summary: Operator work queue automation plan for assignment, snooze, ticketing, preflight, evidence, and closure actions
+      operationId: getOperatorTaskAutomation
+      tags:
+      - status
+      responses:
+        '200':
+          description: Operator task automation response
+          content:
+            application/json:
+              schema:
+                type: object
+      security:
+      - bearerAuth: []
+  /api/detection/validation-packs:
+    get:
+      summary: Real-world detection validation packs mapped to ATT&CK scenarios and expected evidence outputs
+      operationId: getDetectionValidationPacks
+      tags:
+      - detection
+      responses:
+        '200':
+          description: Detection validation packs response
           content:
             application/json:
               schema:

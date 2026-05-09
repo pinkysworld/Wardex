@@ -5676,6 +5676,46 @@ export class WardexClient {
     );
   }
 
+  async cleanReleaseCut(): Promise<ProductionAssuranceResponse> {
+    return this.request("GET", "/api/release/clean-cut");
+  }
+
+  async containerReleaseParity(): Promise<ProductionAssuranceResponse> {
+    return this.request("GET", "/api/containers/release-parity");
+  }
+
+  async releaseVerificationCenter(): Promise<ProductionAssuranceResponse> {
+    return this.request("GET", "/api/release/verification-center");
+  }
+
+  async selfHostedDeploymentWizard(): Promise<ProductionAssuranceResponse> {
+    return this.request("GET", "/api/deployment/self-hosted-wizard");
+  }
+
+  async dataQualityDashboard(): Promise<ProductionAssuranceResponse> {
+    return this.request("GET", "/api/data-quality/dashboard");
+  }
+
+  async performanceScaleBaseline(): Promise<ProductionAssuranceResponse> {
+    return this.request("GET", "/api/performance/scale-baseline");
+  }
+
+  async clusterFailoverExecution(): Promise<ProductionAssuranceResponse> {
+    return this.request("GET", "/api/cluster/failover-execution");
+  }
+
+  async secretsRotationOperations(): Promise<ProductionAssuranceResponse> {
+    return this.request("GET", "/api/secrets/rotation-operations");
+  }
+
+  async operatorTaskAutomation(): Promise<ProductionAssuranceResponse> {
+    return this.request("GET", "/api/operator/task-automation");
+  }
+
+  async detectionValidationPacks(): Promise<ProductionAssuranceResponse> {
+    return this.request("GET", "/api/detection/validation-packs");
+  }
+
   async syntheticConsoleMonitor(): Promise<ProductionAssuranceResponse> {
     return this.request("GET", "/api/monitoring/synthetic-console");
   }

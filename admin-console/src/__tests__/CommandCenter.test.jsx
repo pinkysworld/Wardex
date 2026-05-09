@@ -201,7 +201,7 @@ const COMMAND_FIXTURES = {
     },
   ],
   sbomData: { component_count: 12 },
-  configData: { version: '1.0.7' },
+  configData: { version: '1.0.8' },
   assistantStatus: {
     mode: 'retrieval-only',
     model: 'local-rag',

@@ -3198,6 +3198,96 @@ pub fn wardex_openapi_spec(version: &str) -> OpenApiSpec {
             ),
         )
         .path(
+            "/api/release/clean-cut",
+            "get",
+            op(
+                "getCleanReleaseCut",
+                "Clean next-patch release cut readiness across source, artifacts, container parity, and smoke gates",
+                &["status"],
+            ),
+        )
+        .path(
+            "/api/containers/release-parity",
+            "get",
+            op(
+                "getContainerReleaseParity",
+                "Container release parity for build context, scan, signing, and provenance coverage",
+                &["observability"],
+            ),
+        )
+        .path(
+            "/api/release/verification-center",
+            "get",
+            op(
+                "getReleaseVerificationCenter",
+                "Release verification center for checksums, SBOM, provenance, macOS evidence, and container signatures",
+                &["status"],
+            ),
+        )
+        .path(
+            "/api/deployment/self-hosted-wizard",
+            "get",
+            op(
+                "getSelfHostedDeploymentWizard",
+                "Self-hosted deployment wizard readiness for Docker, Helm, systemd, and local binary installs",
+                &["status"],
+            ),
+        )
+        .path(
+            "/api/data-quality/dashboard",
+            "get",
+            op(
+                "getDataQualityDashboard",
+                "Production data quality dashboard for telemetry freshness, DLQ pressure, collector health, and silent agents",
+                &["observability"],
+            ),
+        )
+        .path(
+            "/api/performance/scale-baseline",
+            "get",
+            op(
+                "getPerformanceScaleBaseline",
+                "Performance and scale baseline for API, storage, stream, report, and release-smoke targets",
+                &["observability"],
+            ),
+        )
+        .path(
+            "/api/cluster/failover-execution",
+            "get",
+            op(
+                "getClusterFailoverExecution",
+                "Cluster failover execution readiness with standby, drill history, promotion, and verification steps",
+                &["status"],
+            ),
+        )
+        .path(
+            "/api/secrets/rotation-operations",
+            "get",
+            op(
+                "getSecretsRotationOperations",
+                "Secrets and key rotation operations plan with dry-run and rollback guidance",
+                &["status"],
+            ),
+        )
+        .path(
+            "/api/operator/task-automation",
+            "get",
+            op(
+                "getOperatorTaskAutomation",
+                "Operator work queue automation plan for assignment, snooze, ticketing, preflight, evidence, and closure actions",
+                &["status"],
+            ),
+        )
+        .path(
+            "/api/detection/validation-packs",
+            "get",
+            op(
+                "getDetectionValidationPacks",
+                "Real-world detection validation packs mapped to ATT&CK scenarios and expected evidence outputs",
+                &["detection"],
+            ),
+        )
+        .path(
             "/api/monitoring/synthetic-console",
             "get",
             op(
@@ -3454,6 +3544,19 @@ mod tests {
         assert!(spec.paths.contains_key("/api/sdk/contract-status"));
         assert!(spec.paths.contains_key("/api/support/first-run-proof"));
         assert!(spec.paths.contains_key("/api/control/failover-drill"));
+        assert!(spec.paths.contains_key("/api/release/clean-cut"));
+        assert!(spec.paths.contains_key("/api/containers/release-parity"));
+        assert!(spec.paths.contains_key("/api/release/verification-center"));
+        assert!(
+            spec.paths
+                .contains_key("/api/deployment/self-hosted-wizard")
+        );
+        assert!(spec.paths.contains_key("/api/data-quality/dashboard"));
+        assert!(spec.paths.contains_key("/api/performance/scale-baseline"));
+        assert!(spec.paths.contains_key("/api/cluster/failover-execution"));
+        assert!(spec.paths.contains_key("/api/secrets/rotation-operations"));
+        assert!(spec.paths.contains_key("/api/operator/task-automation"));
+        assert!(spec.paths.contains_key("/api/detection/validation-packs"));
     }
 
     #[test]
