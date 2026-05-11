@@ -183,8 +183,8 @@ describe('Dashboard refresh', () => {
         if (href.includes('/api/malware/stats')) {
           callCounts.malwareStats += 1;
           return jsonOk({
-            database: { total_entries: 10 },
-            scanner: { total_scans: 2, malicious_count: 1 },
+            database: { total_hashes: 10, sources: ['built-in', 'operator-clamav'] },
+            scanner: { total_scans: 2, malicious_count: 1, suspicious_count: 1 },
             yara_rules: 5,
           });
         }
@@ -242,6 +242,13 @@ describe('Dashboard refresh', () => {
     expect(await screen.findByText('Collector Health')).toBeInTheDocument();
     expect(screen.getByText('Readiness timeline')).toBeInTheDocument();
     expect(screen.getByText('Collector enabled')).toBeInTheDocument();
+    expect(await screen.findByText('Malware, Rootkit & Virus Scanning')).toBeInTheDocument();
+    expect(screen.getByText('Open-Source AV Baseline')).toBeInTheDocument();
+    expect(screen.getByText('Full Malware + Rootkit Sweep')).toBeInTheDocument();
+    expect(screen.getByText('Rootkit Scanning')).toBeInTheDocument();
+    expect(screen.getByText('Trojan & Loader Detection')).toBeInTheDocument();
+    expect(screen.getByText('Virus Signatures')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Open Scanning Workspace' })).toBeInTheDocument();
     expect(
       screen.getByRole('button', { name: 'Open infrastructure evidence' }),
     ).toBeInTheDocument();

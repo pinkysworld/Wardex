@@ -4,6 +4,7 @@
 use crate::collector::AlertRecord;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use std::net::Ipv4Addr;
 
 // ── Result types ─────────────────────────────────────────────────────
 
@@ -65,11 +66,34 @@ pub struct AlertAnalysis {
     pub pattern: AlertPattern,
     pub score_trend: ScoreTrend,
     pub dominant_reasons: Vec<(String, usize)>,
+    pub source_breakdown: Vec<SourceBreakdown>,
+    pub ip_enrichment: Vec<IpEnrichment>,
     pub clusters: Vec<AlertCluster>,
     pub anomalies: Vec<AlertAnomaly>,
     pub severity_breakdown: SeverityBreakdown,
     pub isolation_guidance: Vec<IsolationGuidance>,
     pub summary: String,
+}
+
+/// Counts by telemetry source so analysts can see where an analysed pattern came from.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SourceBreakdown {
+    pub source: String,
+    pub count: usize,
+    pub critical: usize,
+    pub severe: usize,
+    pub elevated: usize,
+}
+
+/// Offline enrichment for IP addresses extracted from alert reasons/actions.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct IpEnrichment {
+    pub ip: String,
+    pub observed_count: usize,
+    pub scope: String,
+    pub hostname_hint: Option<String>,
+    pub notes: Vec<String>,
+    pub recommended_actions: Vec<String>,
 }
 
 /// Counts by severity level.
@@ -267,6 +291,8 @@ pub fn analyze_alerts(alerts: &[AlertRecord], window_minutes: u64) -> AlertAnaly
             pattern: AlertPattern::Baseline,
             score_trend: ScoreTrend::Stable,
             dominant_reasons: Vec::new(),
+            source_breakdown: Vec::new(),
+            ip_enrichment: Vec::new(),
             clusters: Vec::new(),
             anomalies: Vec::new(),
             severity_breakdown: SeverityBreakdown {
@@ -289,6 +315,8 @@ pub fn analyze_alerts(alerts: &[AlertRecord], window_minutes: u64) -> AlertAnaly
         .unwrap_or_default();
     let severity_breakdown = compute_severity(&filtered);
     let dominant_reasons = compute_reason_histogram(&filtered);
+    let source_breakdown = compute_source_breakdown(&filtered);
+    let ip_enrichment = compute_ip_enrichment(&filtered);
     let clusters = compute_clusters(&filtered, 30.0);
     let anomalies = compute_anomalies(&filtered);
     let score_trend = compute_trend(&filtered);
@@ -311,6 +339,8 @@ pub fn analyze_alerts(alerts: &[AlertRecord], window_minutes: u64) -> AlertAnaly
         pattern,
         score_trend,
         dominant_reasons,
+        source_breakdown,
+        ip_enrichment,
         clusters,
         anomalies,
         severity_breakdown,
@@ -403,6 +433,149 @@ fn compute_severity(alerts: &[AlertRecord]) -> SeverityBreakdown {
         critical: alerts.iter().filter(|a| a.level == "Critical").count(),
         severe: alerts.iter().filter(|a| a.level == "Severe").count(),
         elevated: alerts.iter().filter(|a| a.level == "Elevated").count(),
+    }
+}
+
+fn alert_source(alert: &AlertRecord) -> String {
+    if alert.platform.eq_ignore_ascii_case("sample") {
+        "sample".to_string()
+    } else {
+        "local-monitor".to_string()
+    }
+}
+
+fn compute_source_breakdown(alerts: &[AlertRecord]) -> Vec<SourceBreakdown> {
+    let mut by_source: HashMap<String, SourceBreakdown> = HashMap::new();
+    for alert in alerts {
+        let source = alert_source(alert);
+        let entry = by_source
+            .entry(source.clone())
+            .or_insert_with(|| SourceBreakdown {
+                source,
+                count: 0,
+                critical: 0,
+                severe: 0,
+                elevated: 0,
+            });
+        entry.count += 1;
+        match alert.level.to_lowercase().as_str() {
+            "critical" => entry.critical += 1,
+            "severe" | "high" => entry.severe += 1,
+            _ => entry.elevated += 1,
+        }
+    }
+
+    let mut rows: Vec<_> = by_source.into_values().collect();
+    rows.sort_by(|left, right| {
+        right
+            .count
+            .cmp(&left.count)
+            .then_with(|| left.source.cmp(&right.source))
+    });
+    rows
+}
+
+fn compute_ip_enrichment(alerts: &[AlertRecord]) -> Vec<IpEnrichment> {
+    let mut counts: HashMap<String, usize> = HashMap::new();
+    let mut host_hints: HashMap<String, String> = HashMap::new();
+    for alert in alerts {
+        let text = format!(
+            "{} {} {}",
+            alert.hostname,
+            alert.action,
+            alert.reasons.join(" ")
+        );
+        for ip in extract_ipv4_values(&text) {
+            *counts.entry(ip.clone()).or_default() += 1;
+            if !alert.hostname.trim().is_empty()
+                && !alert.hostname.eq_ignore_ascii_case("localhost")
+                && !host_hints.contains_key(&ip)
+            {
+                host_hints.insert(ip, alert.hostname.clone());
+            }
+        }
+    }
+
+    let mut rows = counts
+        .into_iter()
+        .map(|(ip, observed_count)| {
+            let scope = classify_ipv4_scope(&ip);
+            let mut notes = Vec::new();
+            let mut recommended_actions = Vec::new();
+            match scope.as_str() {
+                "private" => {
+                    notes.push("Private RFC1918 address; correlate with asset inventory, DHCP, VPN, and identity logs.".into());
+                    recommended_actions.push("Pivot to endpoint or network inventory before blocking broadly.".into());
+                }
+                "loopback" | "link-local" | "multicast" | "broadcast" | "documentation" => {
+                    notes.push("Address is not normally a routable internet source; treat as local/test/sensor context unless other evidence contradicts it.".into());
+                    recommended_actions.push("Do not create an external block until source attribution is confirmed.".into());
+                }
+                _ => {
+                    notes.push("Potentially public address; enrich with proxy/firewall logs and threat intelligence before enforcement.".into());
+                    recommended_actions.push("If hostile activity is confirmed, submit an approval-gated block-IP response request.".into());
+                }
+            }
+            IpEnrichment {
+                ip: ip.clone(),
+                observed_count,
+                scope,
+                hostname_hint: host_hints.get(&ip).cloned(),
+                notes,
+                recommended_actions,
+            }
+        })
+        .collect::<Vec<_>>();
+    rows.sort_by(|left, right| {
+        right
+            .observed_count
+            .cmp(&left.observed_count)
+            .then_with(|| left.ip.cmp(&right.ip))
+    });
+    rows.truncate(25);
+    rows
+}
+
+fn extract_ipv4_values(text: &str) -> Vec<String> {
+    let mut values = Vec::new();
+    for token in text.split(|c: char| {
+        c.is_whitespace() || matches!(c, ',' | ';' | ')' | '(' | '[' | ']' | '"' | '\'')
+    }) {
+        let candidate = token
+            .trim_matches(|c: char| !c.is_ascii_digit() && c != '.')
+            .trim_matches('.');
+        if candidate.parse::<Ipv4Addr>().is_ok() && !values.iter().any(|v| v == candidate) {
+            values.push(candidate.to_string());
+        }
+    }
+    values
+}
+
+fn classify_ipv4_scope(ip: &str) -> String {
+    let Ok(addr) = ip.parse::<Ipv4Addr>() else {
+        return "invalid".into();
+    };
+    let octets = addr.octets();
+    if octets == [255, 255, 255, 255] {
+        "broadcast".into()
+    } else if octets[0] == 10
+        || (octets[0] == 172 && (16..=31).contains(&octets[1]))
+        || (octets[0] == 192 && octets[1] == 168)
+    {
+        "private".into()
+    } else if octets[0] == 127 {
+        "loopback".into()
+    } else if octets[0] == 169 && octets[1] == 254 {
+        "link-local".into()
+    } else if (224..=239).contains(&octets[0]) {
+        "multicast".into()
+    } else if (octets[0] == 192 && octets[1] == 0 && octets[2] == 2)
+        || (octets[0] == 198 && octets[1] == 51 && octets[2] == 100)
+        || (octets[0] == 203 && octets[1] == 0 && octets[2] == 113)
+    {
+        "documentation".into()
+    } else {
+        "public".into()
     }
 }
 
@@ -738,7 +911,34 @@ fn generate_isolation_guidance(dominant_reasons: &[(String, usize)]) -> Vec<Isol
 
     for (reason, _count) in dominant_reasons {
         let r = reason.to_lowercase();
-        let g = if r.contains("network burst") {
+        let g = if r.contains("malware")
+            || r.contains("virus")
+            || r.contains("yara")
+            || r.contains("hash reputation")
+        {
+            IsolationGuidance {
+                reason: reason.clone(),
+                threat_description: "Malware or virus evidence detected — may indicate a known malicious hash, YARA signature, packed payload, or runtime behavior tied to execution and persistence.".into(),
+                steps: vec![
+                    "Run an on-demand malware scan against the reported file, containing folder, or whole-system roots with rootkit heuristics enabled.".into(),
+                    "Quarantine the file through the approval workflow when the hash, YARA rule, or behavior profile is confirmed malicious.".into(),
+                    "Kill the linked process only after collecting command line, parent PID, open network connections, and memory evidence.".into(),
+                    "Search the fleet for the SHA256, filename, parent process, and persistence artifact.".into(),
+                    "If the artifact is spreading or beaconing, isolate the host and preserve disk state for forensics.".into(),
+                ],
+            }
+        } else if r.contains("rootkit") {
+            IsolationGuidance {
+                reason: reason.clone(),
+                threat_description: "Rootkit-relevant behavior detected — hidden persistence, kernel/userland masquerading, preload abuse, or system-path tampering may be present.".into(),
+                steps: vec![
+                    "Run the rootkit scan endpoint against launch items, kernel extensions, preload files, and temporary execution paths.".into(),
+                    "Compare suspicious launch items and system files against a known-good baseline from outside the host.".into(),
+                    "Avoid rebooting until volatile evidence and process memory have been captured.".into(),
+                    "If user-space kernel-thread masquerading or preload tampering is confirmed, isolate and rebuild from a trusted image.".into(),
+                ],
+            }
+        } else if r.contains("network burst") {
             IsolationGuidance {
                 reason: reason.clone(),
                 threat_description: "Abnormal network traffic spike detected — may indicate data exfiltration, C2 communication, lateral movement, or a DDoS amplification attack.".into(),
@@ -746,6 +946,8 @@ fn generate_isolation_guidance(dominant_reasons: &[(String, usize)]) -> Vec<Isol
                     "Isolate the affected host from the network or move to a quarantine VLAN.".into(),
                     "Capture a packet trace (tcpdump/Wireshark) on the host to identify destination IPs and protocols.".into(),
                     "Check firewall and proxy logs for connections to known-bad IPs or unusual ports.".into(),
+                    "If a hostile public source or destination IP is present, stage an approval-gated block-IP response.".into(),
+                    "If attribution is incomplete, stage a traffic-throttle dry run while collecting flow detail.".into(),
                     "Review running processes for unexpected network-capable binaries (netstat -tlnp / lsof -i).".into(),
                     "If exfiltration is suspected, disable the host's internet access immediately and preserve forensic evidence.".into(),
                     "Cross-reference destination IPs with threat intelligence feeds.".into(),
@@ -759,6 +961,8 @@ fn generate_isolation_guidance(dominant_reasons: &[(String, usize)]) -> Vec<Isol
                     "Temporarily lock the targeted accounts and enforce password resets.".into(),
                     "Enable or strengthen rate-limiting on authentication endpoints.".into(),
                     "Review source IPs of failed attempts for known-bad actors.".into(),
+                    "If a hostile source IP is present, submit an approval-gated block-IP response request before live enforcement.".into(),
+                    "If the alert only has aggregate failure counts, stage an auth ingress rate-limit dry run and keep collecting source attribution.".into(),
                     "Check for successful logins from the same source IPs (potential breach indicator).".into(),
                     "Enable MFA on all affected accounts if not already enabled.".into(),
                     "Consider geofencing or IP-blocking if attempts originate from unexpected regions.".into(),
@@ -774,6 +978,7 @@ fn generate_isolation_guidance(dominant_reasons: &[(String, usize)]) -> Vec<Isol
                     "Compare modified files with original versions to identify nature of changes.".into(),
                     "Check for new cron jobs, startup items, systemd services, or scheduled tasks.".into(),
                     "Scan for rootkits (rkhunter, chkrootkit, OSSEC).".into(),
+                    "Request config rollback only after confirming the trusted baseline and preserving the modified artifact.".into(),
                     "If compromise is confirmed, re-image the host from a trusted golden image.".into(),
                 ],
             }
@@ -1051,6 +1256,38 @@ mod tests {
             .iter()
             .find(|(r, _)| r == "network burst");
         assert_eq!(nb.map(|(_, c)| *c), Some(2));
+    }
+
+    #[test]
+    fn enriches_ips_extracted_from_alert_context() {
+        let alerts = vec![
+            alert(
+                "2026-04-02T10:00:00Z",
+                5.0,
+                "Critical",
+                vec!["auth failures surge source_ip=198.51.100.42"],
+            ),
+            alert(
+                "2026-04-02T10:00:05Z",
+                4.7,
+                "Severe",
+                vec!["network burst dst=10.0.0.5"],
+            ),
+        ];
+        let result = analyze_alerts(&alerts, 0);
+        let publicish = result
+            .ip_enrichment
+            .iter()
+            .find(|entry| entry.ip == "198.51.100.42")
+            .expect("documentation IP should be enriched");
+        assert_eq!(publicish.scope, "documentation");
+        let private = result
+            .ip_enrichment
+            .iter()
+            .find(|entry| entry.ip == "10.0.0.5")
+            .expect("private IP should be enriched");
+        assert_eq!(private.scope, "private");
+        assert!(private.recommended_actions[0].contains("inventory"));
     }
 
     #[test]

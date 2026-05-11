@@ -112,6 +112,7 @@ describe('ProcessDrawer', () => {
           jsonOk({
             pid: 4242,
             platform: 'macos',
+            collection_source: 'macos-ps-thread-sampler',
             identifier_type: 'row_slot',
             note: 'macOS exposes real per-thread rows here, but thread IDs are collection-time row slots.',
             thread_count: 3,
@@ -228,7 +229,9 @@ describe('ProcessDrawer', () => {
     expect(screen.getByText('bash (PID 321)')).toBeInTheDocument();
     expect(screen.getByText('python3 (PID 4242)')).toBeInTheDocument();
     expect(screen.getByText(/Matched a deep process chain with depth 4/i)).toBeInTheDocument();
-    expect(screen.getByText('Thread Activity')).toBeInTheDocument();
+    expect(screen.getByText('Thread Analysis')).toBeInTheDocument();
+    expect(screen.getByText('Selected Thread')).toBeInTheDocument();
+    expect(screen.getAllByText('macos-ps-thread-sampler').length).toBeGreaterThan(0);
     expect(screen.getByText('Peak Thread CPU')).toBeInTheDocument();
     expect(
       screen.getByText(
@@ -243,13 +246,18 @@ describe('ProcessDrawer', () => {
     expect(screen.getByText('Thread Anomaly Signals')).toBeInTheDocument();
     expect(screen.getByText(/suspicious wait reason/i)).toBeInTheDocument();
     expect(
-      screen.getByText(/Thread wait reason matched tracing or injection terms/i),
-    ).toBeInTheDocument();
+      screen.getAllByText(/Thread wait reason matched tracing or injection terms/i).length,
+    ).toBeGreaterThan(0);
     expect(
       screen.getByText(/Pivot to module, handle, and parent lineage review/i),
     ).toBeInTheDocument();
     expect(screen.getAllByText('futex_wait_queue_me').length).toBeGreaterThan(0);
-    expect(screen.getByText('0:00.20 / 0:00.45')).toBeInTheDocument();
+    expect(screen.getAllByText(/0:00\.01 \/ 0:00\.03/).length).toBeGreaterThan(0);
+
+    fireEvent.click(screen.getByRole('button', { name: /T2.*Anomalous/i }));
+
+    expect(screen.getAllByText('futex_wait_queue_me').length).toBeGreaterThan(0);
+    expect(screen.getByText('Priority 37T')).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: 'Inspect bash' }));
 

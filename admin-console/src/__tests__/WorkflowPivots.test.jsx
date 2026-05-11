@@ -8,6 +8,7 @@ import NDRDashboard from '../components/NDRDashboard.jsx';
 import AttackGraph from '../components/AttackGraph.jsx';
 import Infrastructure from '../components/Infrastructure.jsx';
 import { AuthProvider, RoleProvider, ThemeProvider, ToastProvider } from '../hooks.jsx';
+import { SEARCH_COMMANDS } from '../components/workflowPivots.js';
 
 function jsonOk(data) {
   return {
@@ -87,6 +88,25 @@ function mockSharedRoutes(extraRoutes = {}) {
 }
 
 describe('Workflow pivots', () => {
+  it('exposes malware scanning presets through global commands', () => {
+    expect(SEARCH_COMMANDS).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          title: 'Malware Scan Presets',
+          path: '/infrastructure?tab=integrity&malwarePanel=summary&scanPreset=open-source-av-baseline',
+        }),
+        expect.objectContaining({
+          title: 'Rootkit Sweep',
+          path: '/infrastructure?tab=integrity&malwarePanel=actions&scanPreset=rootkit-persistence-sweep',
+        }),
+        expect.objectContaining({
+          title: 'Trojan Loader Hunt',
+          path: '/infrastructure?tab=integrity&malwarePanel=provenance&scanPreset=trojan-loader-hunt',
+        }),
+      ]),
+    );
+  });
+
   beforeEach(() => {
     vi.clearAllMocks();
     localStorage.clear();

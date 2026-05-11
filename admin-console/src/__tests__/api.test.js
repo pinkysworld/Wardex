@@ -294,7 +294,7 @@ describe('GET endpoints', () => {
     await api.releaseDoctor();
     await api.releaseObservabilityGates();
     await api.releaseProvenance();
-    await api.releaseUpgradeRehearsal({ targetVersion: '1.0.8' });
+    await api.releaseUpgradeRehearsal({ targetVersion: '1.0.10' });
     await api.cleanReleaseCut();
     await api.containerReleaseParity();
     await api.releaseVerificationCenter();
@@ -325,7 +325,7 @@ describe('GET endpoints', () => {
     expect(mockFetch.mock.calls[5][0]).toBe('/api/release/doctor');
     expect(mockFetch.mock.calls[6][0]).toBe('/api/release/observability-gates');
     expect(mockFetch.mock.calls[7][0]).toBe('/api/release/provenance');
-    expect(mockFetch.mock.calls[8][0]).toBe('/api/release/upgrade-rehearsal?target_version=1.0.8');
+    expect(mockFetch.mock.calls[8][0]).toBe('/api/release/upgrade-rehearsal?target_version=1.0.10');
     expect(mockFetch.mock.calls[9][0]).toBe('/api/release/clean-cut');
     expect(mockFetch.mock.calls[10][0]).toBe('/api/containers/release-parity');
     expect(mockFetch.mock.calls[11][0]).toBe('/api/release/verification-center');

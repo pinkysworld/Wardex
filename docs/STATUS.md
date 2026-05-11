@@ -2,11 +2,11 @@
 
 ## Current release
 
-- **Version:** `1.0.8`
+- **Version:** `1.0.10`
 - **Positioning:** private-cloud XDR and SIEM platform with enterprise detection engineering, malware scanning, analyst workflows, fleet operations, behavioural analytics, and automated incident response
 - **Source footprint:** 139 Rust source modules
-- **API contract:** versioned OpenAPI surface with REST, GraphQL, live `/api/openapi.json` export, generated SDK parity diagnostics, cursor page contracts, release observability/preflight proof APIs, production assurance endpoints, and release verification readiness endpoints that surface alignment drift directly in the operator console
-- **Verification:** Rust integration coverage, focused session-cookie exchange tests, collector lifecycle tests, remediation change-review tests, Command Center summary/action-drawer tests, Help & Docs unit coverage, assistant/ticketing/enterprise API regression tests, SDK regeneration checks, release-contract validation, strict Playwright a11y smoke coverage, local Developer ID `.p12` signing validation, and focused admin-console regression coverage for auth routing, dashboard presets, detection drill-downs, workbench overview, assistant/reporting handoffs, scoped report artifacts/templates, persisted artifact downloads, response snapshots, long-retention history, and collector/secrets setup flows
+- **API contract:** versioned OpenAPI surface with REST, GraphQL, live `/api/openapi.json` export, generated SDK parity diagnostics, cursor page contracts, release observability/preflight proof APIs, production assurance endpoints, malware scan and response-action contracts, source-aware alert analysis, and release verification readiness endpoints with evidence freshness metadata
+- **Verification:** Rust integration coverage, focused session-cookie exchange tests, collector lifecycle tests, remediation change-review tests, Command Center summary/action-drawer tests, Help & Docs unit coverage, assistant/ticketing/enterprise API regression tests, SDK regeneration checks, release-contract validation, strict Playwright a11y smoke coverage, local Developer ID `.p12` signing validation, focused admin-console regression coverage, thread pullout regression coverage, and Launchpad coverage for proof freshness badges and persisted snapshot evidence state
 - **Production hardening:** 100% (59/59 controls implemented)
 
 ## Shipped in the current platform
@@ -98,7 +98,18 @@ The current release has been verified with:
 
 ## Current product posture
 
-Wardex is now positioned as a professional XDR/SIEM control plane with incident-first analyst workflows, explainable detections, context-preserving reporting, operator-visible recovery posture, and explicit shift-lead surfaces for ownership, handoff, and detection-review pressure. The runtime, admin console, release process, and website are aligned around operator trust, workflow closure, deployment readiness, and clean release verification.
+Wardex is now positioned as a professional XDR/SIEM control plane with incident-first analyst workflows, explainable detections, context-preserving reporting, operator-visible recovery posture, and explicit shift-lead surfaces for ownership, handoff, and detection-review pressure. The runtime, admin console, release process, and website are aligned around operator trust, workflow closure, deployment readiness, clean release verification, and freshness-gated evidence.
+
+## Recently shipped (v1.0.10)
+
+- **Detection and response hardening** — alert analysis now carries stronger source attribution, false-positive reasoning, IP/hostname enrichment, and alarm-specific response action recommendations across authentication, network, process, malware, identity, and persistence scenarios.
+- **Malware scanning workspace** — malware, virus, trojan, and rootkit operations now have a dedicated dashboard area with on-demand file, folder, and system scan targets plus operator-selectable open-source signature presets.
+- **Thread investigation polish** — process-thread analysis now uses responsive card rows, preserves source context, and avoids horizontal scrolling in the analysis pullout.
+- **Live monitor and console layout fixes** — live refresh preserves scroll position, and Help, Settings, Detection, Workflow, and Thread views use corrected box sizing and alignment.
+- **Evidence freshness contract** — production assurance and release verification payloads now include `wardex.evidence_freshness.v1` metadata with source, mode, environment ID, run/request IDs, collection and expiry timestamps, artifact digest, criticality, status, and stale/unknown reasons.
+- **Freshness-gated release readiness** — clean release cut and release verification center gates now treat missing critical proof, including local checksum rows, SBOM, Gatekeeper evidence, provenance, container parity, observability, and synthetic-console evidence, as blockers before signed release promotion.
+- **Persisted proof metadata** — operational snapshot envelopes now retain evidence freshness metadata beside payload digests so later support and release reviews can verify the quality of saved evidence.
+- **Launchpad proof visibility** — Operator Launchpad release verification, production assurance, and persisted snapshot rows now show fresh/stale/unknown proof badges and proof collection timing.
 
 ## Recently shipped (v1.0.8)
 

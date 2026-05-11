@@ -78,8 +78,22 @@ function readStoredPinnedSections() {
 }
 
 // ── Breadcrumbs ──────────────────────────────────────────────
-function Breadcrumbs({ sections, pathname }) {
-  const current = sections.find((s) => s.path === pathname);
+function sectionPath(section) {
+  return section.matchPath || String(section.path || '').split('?')[0] || '/';
+}
+
+function sectionMatchesLocation(section, location) {
+  if (sectionPath(section) !== location.pathname) return false;
+  if (section.matchSearch) return location.search.includes(section.matchSearch);
+  return true;
+}
+
+function currentSectionForLocation(sections, location) {
+  return sections.find((section) => sectionMatchesLocation(section, location)) || sections[0];
+}
+
+function Breadcrumbs({ sections, location }) {
+  const current = currentSectionForLocation(sections, location);
   if (!current || current.path === '/') return null;
   return (
     <nav className="breadcrumbs" aria-label="Breadcrumb">
@@ -187,6 +201,15 @@ const SECTIONS = [
     minRole: 'analyst',
   },
   {
+    id: 'malware-scanning',
+    path: '/infrastructure?tab=integrity&malwarePanel=summary&scanPreset=open-source-av-baseline',
+    matchPath: '/infrastructure',
+    matchSearch: 'scanPreset=',
+    label: 'Malware Scanning',
+    shortLabel: 'AV',
+    minRole: 'analyst',
+  },
+  {
     id: 'infrastructure',
     path: '/infrastructure',
     label: 'Infrastructure',
@@ -243,7 +266,12 @@ const WORKFLOW_GROUPS = [
   {
     id: 'respond',
     label: 'Respond',
-    sections: ['fleet-agents', 'security-policy', 'email-security'],
+    sections: ['fleet-agents'],
+  },
+  {
+    id: 'protect',
+    label: 'Protect',
+    sections: ['malware-scanning', 'security-policy', 'email-security'],
   },
   { id: 'manage', label: 'Manage', sections: ['settings', 'help-docs'] },
 ];
@@ -462,7 +490,7 @@ export default function App() {
     return () => window.removeEventListener('keydown', handler);
   }, [navigate, authenticated]);
 
-  const currentSection = SECTIONS.find((s) => s.path === location.pathname) || SECTIONS[0];
+  const currentSection = currentSectionForLocation(SECTIONS, location);
   const currentGroup = WORKFLOW_GROUPS.find((group) => group.sections.includes(currentSection.id));
   const routeScopeTokens = describeSearchScope(location.search);
   const primaryDestination =
@@ -595,7 +623,11 @@ export default function App() {
             <div className="sidebar-primary">
               <div className="sidebar-group-title">Primary</div>
               <NavLink
-                className={({ isActive }) => `primary-destination ${isActive ? 'active' : ''}`}
+                className={() =>
+                  `primary-destination ${
+                    currentSection.path === primaryDestination.path ? 'active' : ''
+                  }`
+                }
                 to={primaryDestination.path}
               >
                 <span className="primary-destination-label">{primaryDestination.label}</span>
@@ -609,8 +641,8 @@ export default function App() {
               {pinnedVisibleSections.map((section) => (
                 <NavLink
                   key={section.id}
-                  className={({ isActive }) =>
-                    `nav-item nav-item-pinned ${isActive ? 'active' : ''}`
+                  className={() =>
+                    `nav-item nav-item-pinned ${currentSection.id === section.id ? 'active' : ''}`
                   }
                   to={section.path}
                   title={section.label}
@@ -629,10 +661,10 @@ export default function App() {
               {group.sections.map((section) => (
                 <div key={section.id} className="nav-item-shell">
                   <NavLink
-                    className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}
+                    className={() => `nav-item ${currentSection.id === section.id ? 'active' : ''}`}
                     to={section.path}
                     title={section.label}
-                    aria-current={location.pathname === section.path ? 'page' : undefined}
+                    aria-current={currentSection.id === section.id ? 'page' : undefined}
                   >
                     <span className="nav-icon nav-icon-text" aria-hidden="true">
                       {section.shortLabel}
@@ -744,7 +776,7 @@ export default function App() {
             </button>
             <div className="topbar-title-group">
               <h1 className="topbar-title">{currentSection.label}</h1>
-              <Breadcrumbs sections={SECTIONS} pathname={location.pathname} />
+              <Breadcrumbs sections={SECTIONS} location={location} />
             </div>
           </div>
           <div className={`topbar-right ${showTopbarActions ? 'topbar-menu-open' : ''}`}>

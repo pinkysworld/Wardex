@@ -25,6 +25,7 @@ import { formatDateTime, formatNumber, formatRelativeTime } from './operatorUtil
 import { useWidgetLayout } from './useWidgetLayout.js';
 import { buildHref } from './workflowPivots.js';
 import { safeStorageGet, safeStorageJsonGet, safeStorageJsonSet } from '../safeStorage.js';
+import { MALWARE_SCAN_PRESETS } from './malwareScanningPresets.js';
 
 function Metric({ label, value, sub, accent, onClick, tip }) {
   return (
@@ -65,6 +66,7 @@ const DASHBOARD_WIDGETS = [
   'charts',
   'process-security',
   'detection-engine',
+  'malware-scanning',
   'malware-ti',
   'dns-threats',
   'lifecycle',
@@ -82,6 +84,7 @@ const SHARED_DASHBOARD_PRESETS = [
       'threat-overview',
       'recent-alerts',
       'detection-engine',
+      'malware-scanning',
       'collector-health',
       'charts',
       'process-security',
@@ -109,6 +112,7 @@ const SHARED_DASHBOARD_PRESETS = [
       'charts',
       'recent-alerts',
       'detection-engine',
+      'malware-scanning',
       'process-security',
       'manager-digest',
       'malware-ti',
@@ -133,6 +137,7 @@ const SHARED_DASHBOARD_PRESETS = [
       'recent-alerts',
       'detection-engine',
       'process-security',
+      'malware-scanning',
       'malware-ti',
       'dns-threats',
     ],
@@ -679,6 +684,25 @@ export default function Dashboard() {
     : Array.isArray(gaps)
       ? gaps.length
       : 0;
+  const malwareDbTotal =
+    mwStats?.database?.total_hashes ?? mwStats?.database?.total_entries ?? mwStats?.total_hashes;
+  const malwareScanTotal = mwStats?.scanner?.total_scans ?? 0;
+  const malwareMalicious = mwStats?.scanner?.malicious_count ?? 0;
+  const malwareSuspicious = mwStats?.scanner?.suspicious_count ?? 0;
+  const malwareSignatureSources = Array.isArray(mwStats?.database?.sources)
+    ? mwStats.database.sources.length
+    : fdStats?.active_sources;
+  const malwareScanWorkspace = buildHref('/infrastructure', {
+    params: { tab: 'integrity', malwarePanel: 'summary' },
+  });
+  const malwareScanPresetHref = (preset) =>
+    buildHref('/infrastructure', {
+      params: {
+        tab: 'integrity',
+        malwarePanel: preset.panel || 'summary',
+        scanPreset: preset.id,
+      },
+    });
   const workflowItems = [
     {
       id: 'soc-triage',
@@ -1447,6 +1471,168 @@ export default function Dashboard() {
                       </div>
                     ))}
                 </div>
+              </div>
+            </DashboardWidget>
+          );
+        if (wid === 'malware-scanning')
+          return (
+            <DashboardWidget
+              key={wid}
+              id={wid}
+              title="Malware, Rootkit & Virus Scanning"
+              index={order.indexOf(wid)}
+              onMove={moveWidget}
+              onRemove={removeWidget}
+              paused={widgetPaused}
+              onTogglePause={toggleWidgetRefresh}
+            >
+              <div className="card-grid">
+                <Metric
+                  label="Malware Scans"
+                  value={formatNumber(malwareScanTotal)}
+                  sub={`${formatNumber(malwareMalicious)} malicious · ${formatNumber(malwareSuspicious)} suspicious`}
+                  accent={malwareMalicious > 0}
+                  onClick={() => navigate(malwareScanWorkspace)}
+                />
+                <Metric
+                  label="Rootkit Scanning"
+                  value="Enabled"
+                  sub="On-demand scans include kernel, startup, driver, and preload checks"
+                  onClick={() => navigate(malwareScanWorkspace)}
+                />
+                <Metric
+                  label="Trojan & Loader Detection"
+                  value="Static + Behavior"
+                  sub="Downloader, persistence, credential, and process-injection traits"
+                  onClick={() => navigate(malwareScanWorkspace)}
+                />
+                <Metric
+                  label="Virus Signatures"
+                  value={malwareDbTotal != null ? formatNumber(malwareDbTotal) : '—'}
+                  sub={
+                    malwareSignatureSources
+                      ? `${malwareSignatureSources} source${malwareSignatureSources === 1 ? '' : 's'}`
+                      : `${mwStats?.yara_rules ?? 0} YARA rules`
+                  }
+                  onClick={() => navigate(malwareScanWorkspace)}
+                />
+              </div>
+              <div
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
+                  gap: 12,
+                  marginTop: 16,
+                }}
+              >
+                {MALWARE_SCAN_PRESETS.map((preset) => (
+                  <div key={preset.id} className="detail-callout" style={{ margin: 0 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
+                      <strong>{preset.title}</strong>
+                      <span className="badge badge-info">{preset.badge}</span>
+                    </div>
+                    <div className="hint" style={{ marginTop: 8 }}>
+                      {preset.summary}
+                    </div>
+                    <div className="chip-row" style={{ marginTop: 10 }}>
+                      {preset.sourceMix.slice(0, 3).map((source) => (
+                        <span key={`${preset.id}-${source}`} className="scope-chip">
+                          {source}
+                        </span>
+                      ))}
+                    </div>
+                    <button
+                      className="btn btn-sm"
+                      style={{ marginTop: 12 }}
+                      onClick={() => navigate(malwareScanPresetHref(preset))}
+                    >
+                      Wire In Preset
+                    </button>
+                  </div>
+                ))}
+              </div>
+              <div
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
+                  gap: 12,
+                  marginTop: 16,
+                }}
+              >
+                {[
+                  {
+                    title: 'Malware',
+                    status: malwareMalicious > 0 ? 'Findings present' : 'Ready',
+                    detail:
+                      malwareScanTotal > 0
+                        ? `${formatNumber(malwareScanTotal)} backend scans recorded.`
+                        : 'Run file, folder, or whole-system scans from the integrity workspace.',
+                    badge: malwareMalicious > 0 ? 'badge-err' : 'badge-ok',
+                  },
+                  {
+                    title: 'Rootkit',
+                    status: 'Heuristics wired',
+                    detail:
+                      'Checks cover Linux preload/module paths, macOS launch persistence, and Windows driver/task roots.',
+                    badge: 'badge-info',
+                  },
+                  {
+                    title: 'Trojan',
+                    status: 'Loader traits watched',
+                    detail:
+                      'Cross-platform script downloaders, encoded launch chains, C2 hints, and persistence are scored.',
+                    badge: 'badge-warn',
+                  },
+                  {
+                    title: 'Virus',
+                    status: 'Signatures ready',
+                    detail:
+                      'Hash DB, YARA content, EICAR validation, and operator-provided ClamAV hash files are supported.',
+                    badge: 'badge-info',
+                  },
+                ].map((lane) => (
+                  <div key={lane.title} className="detail-callout" style={{ margin: 0 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
+                      <strong>{lane.title}</strong>
+                      <span className={`badge ${lane.badge}`}>{lane.status}</span>
+                    </div>
+                    <div className="hint" style={{ marginTop: 8 }}>
+                      {lane.detail}
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <div className="btn-group" style={{ marginTop: 16, flexWrap: 'wrap' }}>
+                <button
+                  className="btn btn-sm btn-primary"
+                  onClick={() => navigate(malwareScanWorkspace)}
+                >
+                  Open Scanning Workspace
+                </button>
+                <button
+                  className="btn btn-sm"
+                  onClick={() =>
+                    navigate(
+                      buildHref('/infrastructure', {
+                        params: { tab: 'integrity', malwarePanel: 'provenance' },
+                      }),
+                    )
+                  }
+                >
+                  Review Scan Evidence
+                </button>
+                <button
+                  className="btn btn-sm"
+                  onClick={() =>
+                    navigate(
+                      buildHref('/infrastructure', {
+                        params: { tab: 'integrity', malwarePanel: 'actions' },
+                      }),
+                    )
+                  }
+                >
+                  Response Actions
+                </button>
               </div>
             </DashboardWidget>
           );

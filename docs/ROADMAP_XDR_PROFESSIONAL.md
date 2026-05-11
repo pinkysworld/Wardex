@@ -2,9 +2,11 @@
 
 ## Current release baseline
 
-`v1.0.8` is the current stable patch release of Wardex. It carries all capabilities of `v1.0.0`, the `v1.0.1` CI hardening fixes, the `v1.0.2` macOS release-trust hardening, the Live Monitor process-analysis regression coverage, the refreshed Developer ID `.p12` signing-secret repair path, the `v1.0.6` resilience/proof tranche, the `v1.0.7` production assurance tranche, and the release verification/deployment-confidence tranche.
+`v1.0.10` is the current stable patch release of Wardex. It carries all capabilities of `v1.0.0`, the `v1.0.1` CI hardening fixes, the `v1.0.2` macOS release-trust hardening, the Live Monitor process-analysis regression coverage, the refreshed Developer ID `.p12` signing-secret repair path, the `v1.0.6` resilience/proof tranche, the `v1.0.7` production assurance tranche, the `v1.0.8` release verification/deployment-confidence tranche, the evidence freshness tranche, and the detection response and malware-scanning polish shipped for this release.
 
-The current release wires clean release cut readiness, container release parity, release verification evidence, self-hosted install plans, data-quality SLOs, performance gates, failover drill targets, secrets-rotation dry-runs, task action blueprints, and validation-pack inventory checks through backend routes, OpenAPI, RBAC, SDKs, release-gate smoke checks, and the Operator Launchpad.
+The current release wires source-aware alert analysis, IP/hostname enrichment, alarm-specific response actions, malware/virus/trojan/rootkit scan workflows, open-source signature presets, responsive thread investigation pullouts, live-monitor scroll preservation, evidence freshness metadata, critical proof gating, persisted snapshot freshness, Launchpad proof badges, release verification evidence, and validation-pack inventory checks through backend routes, OpenAPI, RBAC, SDKs, release-gate smoke checks, and the Operator Launchpad.
+
+`v1.0.8` added the release verification/deployment-confidence tranche for clean release cuts, container parity, verification center evidence, self-hosted install plans, data-quality SLOs, scale gates, failover execution, secrets rotation, operator task automation, and detection validation packs.
 
 `v1.0.7` added the production assurance tranche for release provenance, upgrade rehearsal, synthetic console monitoring, incident replay, detection trust, fleet drift, operator queues, retention forecasting, adversarial validation, and support bundle diffing.
 
@@ -83,12 +85,12 @@ The current release wires clean release cut readiness, container release parity,
 
 ## Success criteria
 
-| Metric | Current (`v1.0.8`) | Target |
+| Metric | Current (`v1.0.10`) | Target |
 |---|---|---|
 | Automated tests | 1413 lib + 212+ integration + focused browser/admin regressions | maintained and expanded on every release |
 | OpenAPI and SDK contract | versioned OpenAPI plus generated Python and TypeScript SDKs | kept in lockstep on every release |
 | Release targets | Linux, macOS, Windows | maintained on every tagged release |
 | Control-plane posture | private-cloud enterprise deployment | HA-ready, recovery-safe enterprise deployment |
-| Production hardening | 100% (59/59) | maintain 100% while adding features |
+| Production hardening | 100% (59/59) plus freshness-gated release evidence | maintain 100% while adding features |
 | Feature usability | many advanced capabilities surfaced, several still shallow | every shipped feature routed, structured, and operator-usable |
 | Detection content operations | full canary/promote/distribute lifecycle with stronger analytics | maintain routed lifecycle evidence, distribution analytics, and regression coverage as workflows evolve |

@@ -4,76 +4,37 @@
 [![Support](https://img.shields.io/badge/support-GitHub%20Sponsors-c47a2e?style=flat-square)](https://github.com/sponsors/pinkysworld)
 [![Release](https://img.shields.io/github/v/release/pinkysworld/Wardex?style=flat-square)](https://github.com/pinkysworld/Wardex/releases)
 
-Wardex is a Rust-based XDR and SIEM platform for private-cloud and self-hosted security operations. It combines cross-platform telemetry collection, detection engineering, analyst workflows, approval-gated response, agent lifecycle management, SIEM integrations, and tamper-evident evidence handling in a single deployable product.
+Wardex is a Rust-based XDR and SIEM platform for private-cloud and self-hosted security operations. It brings telemetry collection, detection engineering, malware analysis, analyst workflows, approval-gated response, fleet management, evidence handling, and release verification into one deployable product.
 
-## What ships in `v1.0.8`
+## Why Wardex
 
-- **Clean release and container parity** — new authenticated readiness endpoints cover the next clean release cut, Docker build-context parity, release verification evidence, and self-hosted deployment wizard preflight state.
-- **Executable release verification** — artifact verification rows, install plans, data-quality SLOs, launchpad performance gates, failover drill targets, secrets-rotation dry-runs, operator action blueprints, and validation-pack inventory checks are exposed from the same control plane operators already use.
-- **Console, SDK, and contract coverage** — `/admin/launchpad`, Python/TypeScript SDKs, runtime OpenAPI, static OpenAPI, RBAC, contract parity, release-acceptance smoke checks, and live Playwright coverage now include the full release-verification tranche.
+- **Own the control plane:** run the console, APIs, telemetry, and evidence workflows in your own environment.
+- **Investigate in one place:** triage alerts, inspect threads/processes, pivot into cases, and keep source evidence attached.
+- **Respond with guardrails:** use approval-aware actions such as block IP, isolate host, kill process, quarantine file, disable account, and rollback.
+- **Scan across platforms:** malware, virus, trojan, and rootkit workflows cover Linux, macOS, and Windows with local engines plus optional open-source signature presets.
+- **Ship verifiably:** releases include checksums, SBOMs, provenance, signed artifacts, and documented verification gates.
 
-## Also included from the `v1.0.7` baseline
+## Current Release: `v1.0.10`
 
-- **Production assurance surfaces** — the control plane now exposes release provenance/SBOM evidence, upgrade rehearsal, synthetic console monitoring, incident timeline replay, detection trust scoring, fleet drift compliance, operator work queue, retention risk forecast, adversarial validation, and support bundle diff endpoints.
-- **Operator Launchpad coverage** — `/admin/launchpad` now pulls those assurance signals into one compact readiness lane with persisted operational snapshot evidence, release-doctor state, workflow preflight, stream readiness, and support bundle exports.
-- **SDK and release-gate parity** — Python and TypeScript clients, static OpenAPI, runtime OpenAPI, RBAC, contract parity, and release-acceptance smoke checks all include the new production assurance routes.
+This release focuses on detection confidence, response actions, malware scanning, and a calmer admin console.
 
-## Also included from the `v1.0.6` baseline
+- Malware, virus, trojan, and rootkit scanning now has a dedicated dashboard area with on-demand file, folder, and system scan options.
+- Operators can choose preset open-source signature sources and combine them before wiring them into the scanning workflow.
+- Alert analysis now enriches source context, IP/hostname details, response options, and false-positive reasoning.
+- Thread analysis uses a responsive pullout layout, keeps source context visible, and avoids horizontal scrolling.
+- Live view refreshes preserve scroll position during auto-refresh.
+- Help, Settings, Detection, Workflow, and Thread views have tighter box sizing and alignment.
 
-- **Release observability gates** — `/api/release/observability-gates` now verifies required Prometheus metrics, stream health, operational snapshot proof, and SDK/OpenAPI contract drift before release approval.
-- **Workflow and rule preflight checks** — rule promotion and release workflows now have server-side preflight evidence for stream readiness, replay validation, suppressions, content-pack ownership, approval queues, tenant isolation, and release observability.
-- **Cursor pagination for large audit/event surfaces** — alerts, events, and audit logs now expose cursor page contracts alongside existing offset-compatible APIs for more reliable console and SDK traversal.
-- **Tenant, thread, and snapshot proof APIs** — operators can inspect tenant isolation proof, runtime thread-baseline proof, and operational snapshot retention/redaction policy from the console, SDKs, and OpenAPI contract.
-- **Admin-console resilience** — GET requests retry retryable failures and timeouts, structured API errors preserve useful messages/request IDs, browser storage uses the safe storage wrapper, and shared drawers restore focus/body scroll cleanly.
-- **macOS CI signing repair** — the release helper now accepts a local Developer ID `.p12` path, imports the root Apple certificate-chain files as context, rejects public `.cer` files before keychain import, and ships a safe GitHub secret updater for refreshing the broken Actions certificate secrets without printing private material.
-- **Release CI and Live Monitor hardening** — the macOS signing helper preserves CI runner keychains while resolving the imported Developer ID identity, and the admin console ships a dedicated Playwright regression for token login, process analysis fallback, and process-refresh scroll preservation.
-- **Major GA release** — first stable version with a 12-month API stability pledge.
-- **AGPL-3.0 dual-license** — open-source under AGPL-3.0; commercial license available for production use without copyleft obligations. See [LICENSE](LICENSE) and [LICENSE.COMMERCIAL](LICENSE.COMMERCIAL).
-- **All experimental modules promoted to stable** — ML engine, LLM analyst, quantum key rotation, and ZK proof modules are now unconditionally compiled; the `experimental-*` Cargo feature flags are removed.
-- **HA failover runbook** — [docs/runbooks/HA_FAILOVER.md](docs/runbooks/HA_FAILOVER.md) with step-by-step active/passive failover, RPO/RTO targets, agent reconnection, and Kubernetes guidance.
-- **ClickHouse storage** — the recommended event backend for production-scale telemetry is now fully integrated and configurable via `[clickhouse]` in the server TOML.
-- **Compatibility matrix** — [docs/COMPATIBILITY.md](docs/COMPATIBILITY.md) defines MSRV (1.88.0), supported OS/arch (Linux x86_64/aarch64, macOS arm64/x64, Windows x86_64), Node ≥ 20.19.0, and support window.
-- **Deprecation policy** — [docs/DEPRECATION_POLICY.md](docs/DEPRECATION_POLICY.md) guarantees minimum sunset windows for all public API, CLI, config, and SDK changes.
-- **Compliance posture** — [docs/COMPLIANCE.md](docs/COMPLIANCE.md) explicitly states the FIPS/CC/SOC 2 roadmap and GDPR posture.
-- **0.x → 1.0 upgrade guide** — [docs/UPGRADE_0_56_TO_1_0.md](docs/UPGRADE_0_56_TO_1_0.md) covers all breaking changes, build-script updates, config changes, and rollback.
-- **Helm NetworkPolicy** — the Helm chart now ships a `NetworkPolicy` template (enabled by default) with configurable ingress/egress rules and ClickHouse egress toggle.
-- 139 Rust source modules, 1500+ automated tests, Playwright e2e on chromium and webkit, and all clippy/fmt/cargo deny gates green.
+See [CHANGELOG.md](CHANGELOG.md) for full release history.
 
-- 139 Rust source modules covering telemetry collection, detection engineering, hunt/search, SOC workflows, fleet operations, governance, and automated incident response.
-- A versioned OpenAPI contract with regenerated Python and TypeScript SDKs for authenticated admin-console workflows, explainability, onboarding readiness, threat-intel enrichment, malware analysis, reports, hunts, investigations, NDR, and enterprise support surfaces.
-- 1500+ automated tests and smoke checks spanning Rust, SDK, admin-console, and Playwright browser coverage.
-- **Lint-clean OIDC and SOC workbench code paths** — collapsed redundant `if let` guards in the OIDC JWKS validator and OIDC test harness, removed a needless borrow in the SOC workbench team-load builder, and re-verified the release with `cargo clippy --all-targets --no-deps -- -D warnings`, full Rust suites, admin-console Vitest, and Playwright e2e on chromium and webkit.
-- **Control-plane posture evidence** — Help & Docs plus the support-readiness, dependency-health, and backup-status contracts now surface active/passive reference status, backup cadence, latest backup/checkpoint artifacts, and restore readiness so operators can verify recovery posture without reading raw backend JSON.
-- **Operational readiness drill timeline** — Help & Docs now renders documented RTO/RPO targets, backup/checkpoint evidence, persisted failover-drill history, pass/fail artifact checks, and one-click timeline export for recovery reviews.
-- **Route-auth and update trust hardening** — OpenAPI `x-wardex-auth`, endpoint catalog auth flags, and contract parity now derive from the runtime route classifier, while agent updates carry Ed25519 signatures, replay counters, trusted-signer policy, downgrade rejection, and verified auto-progress metadata.
-- **Release guardrails** — Node 22 contributor and CI alignment, checksummed release assets, Debian package install smoke coverage, strict Playwright a11y gates for onboarding and settings, and shared request-ID generation harden the release path.
-- **Product Command Center** — `/command` is the analyst default workspace, bringing incident pressure, cases, connector gaps, remediation approvals, rule tuning debt, release readiness, and compliance evidence into one routed surface with inline action drawers, drawer deep-links via `?drawer=<lane>`, and a per-lane `GET /api/command/lanes/{lane}` endpoint for focused refreshes.
-- **Guided connector onboarding** — GitHub Audit Log, CrowdStrike Falcon, and Generic Syslog now have saved setup contracts, validation endpoints, sample-event proof, collector status, OpenAPI coverage, and console onboarding flows.
-- **Detection trust and explainability** — model-registry status, shadow-mode inference tracking, rollback visibility, analyst feedback capture, entity-centric risk scoring, campaign intelligence, replay-corpus gates, platform/signal-type drift breakdowns, and explainable alert reasoning are now first-class operator workflows instead of backend-only plumbing.
-- **Operator-readiness onboarding** — onboarding is now driven by server readiness checks that verify token validity, first agent health, telemetry flow, alert visibility, intel-source health, malware scan readiness, and response dry-run coverage.
-- **Incident-first SOC workflows** — SOC Workbench now keeps cases, incidents, notes, evidence, narrative context, and pivots into investigations, response, assistant, and reporting in URL-addressable drawers that can be reopened and shared.
-- **Shift and handoff operations** — SOC Workbench and Command Center now expose a Shift Command Board, case handoff packets, team load and ownership, connector coverage impact, and compact detection-review pressure so shift leads can assign work and validate blockers without rebuilding context by hand.
-- **Scoped reporting and artifacts** — reports, report runs, schedules, templates, and stored artifacts can now carry case / incident / investigation execution context, with backend filtering and republish flows for older unscoped reports.
-- **Artifact persistence and response closure** — compliance exports, evidence bundles, audit exports, privacy snapshots, backend-native alert exports, and response-approval snapshots can now be persisted into scoped run history and reopened with their original payloads.
-- **Threat-intel and malware depth** — richer threat-intel `v2` metadata, indicator sightings, deep malware scan `v2` static and behavior profiles, route-aware malware verdict workspaces, and analyst-facing provenance views are now wired through the console.
-- **Session and integration hardening** — pasted console tokens are exchanged for HttpOnly admin sessions, while federated sign-in readiness plus cloud, identity, and SaaS collector lanes expose staged validation, lifecycle history, failure streaks, last-success/error checkpoints, and ingestion-health analytics instead of snapshot-only summaries.
-- **Remediation review history** — Infrastructure now records approval and recovery notes for malware verdicts and remediation candidates, giving operators a durable change-review ledger for high-risk action paths.
-- **Production demo lab** — Help & Docs can seed an evaluation-ready scenario with telemetry, case context, response dry-run approval, report artifacts, and evidence metadata.
-- **Manager and analyst efficiency** — morning-brief style dashboard summaries, saved queue filters, deep-linked alert/case selection, and target-aware assistant/reporting handoffs from SOC, NDR, UEBA, detection, attack-graph, and infrastructure flows reduce console re-navigation and make exact workflows shareable.
-- **Deterministic regression coverage** — focused Rust, admin-console, and routed Playwright release checks now cover Command Center action drawers, explainability, replay drift, collector timelines, deep malware scan profiles, threat-intel sightings, and scoped report/report-template persistence.
+## Quick Start
 
-See [FEATURES.md](FEATURES.md) for the concise capability summary, [CHANGELOG.md](CHANGELOG.md) for release history, and [docs/README.md](docs/README.md) for the full documentation map.
-
-## Quick start
-
-The fastest path from a clean checkout to a running local console is:
+Install frontend dependencies and build the Rust binary:
 
 ```bash
 npm ci --prefix admin-console
 cargo build --release
 ```
-
-The embedded admin console is compiled as part of the Rust build, so a clean checkout needs the admin-console npm dependencies installed first.
 
 Start Wardex:
 
@@ -81,107 +42,98 @@ Start Wardex:
 ./target/release/wardex start
 ```
 
-Read the admin token:
+Read the generated admin token:
 
 ```bash
 cat var/.wardex_token
 ```
 
-Open the admin console:
+Open the console:
 
 ```text
 http://localhost:8080/admin/
 ```
 
-Paste the token from `var/.wardex_token` into the login form.
+Notes:
 
-Important:
+- `http://localhost:8080/` serves the product website.
+- `http://localhost:8080/admin/` serves the authenticated admin console.
+- If `WARDEX_ADMIN_TOKEN` is set, Wardex uses that token and may not create `var/.wardex_token`.
+- Check the running version with `./target/release/wardex --version`.
 
-- `http://localhost:8080/` is the public product website.
-- `http://localhost:8080/admin/` is the actual admin console.
-- If you set `WARDEX_ADMIN_TOKEN` yourself, Wardex uses that value and may not create `var/.wardex_token`.
-- You can confirm which binary you are running with `./target/release/wardex --version`.
-
-For development, `cargo run` is equivalent to `wardex start` and also serves the console on `http://localhost:8080/admin/`.
-
-Useful next commands:
-
-Run the included demo trace:
+Useful local commands:
 
 ```bash
 cargo run -- demo
-```
-
-Analyze a telemetry scenario:
-
-```bash
 cargo run -- analyze examples/credential_storm.csv
-```
-
-Start the live control plane:
-
-```bash
 cargo run
 ```
 
-`cargo run` starts the local Rust control plane on port `8080` and serves the embedded admin console from `http://localhost:8080/admin/`. Read the token from `var/.wardex_token`, paste it into the login form, and you will have access to the live admin console, SOC Workbench, fleet controls, detection engineering views, and reports. If you are developing the frontend separately with `npm run dev`, use `http://localhost:5173/admin/` instead; `:8080` is the backend-served local default, not the standalone Vite dev server. Use `cargo run -- serve` only when you explicitly want the web server without the embedded local monitor.
+## Core Capabilities
 
-## Core capabilities
-
-- **Detection engineering**: managed Sigma/native rules, YARA engine, malware hash DB, rule testing, promote/rollback lifecycle, suppressions, KQL-like threat hunting, scheduled hunt history, and MITRE coverage.
-- **Malware scanning**: file hash lookup against ~48 built-in signatures, YARA pattern matching, verdict classification (malicious/suspicious/clean), and community rule packs.
-- **SOC operations**: queued alerts, case management, investigation graph and timelines, entity pivots, storyline generation, evidence export, alert deduplication, and response approvals.
-- **Detection review operations**: shift-level detection review pressure now stays aligned across Command Center, Threat Detection, and SOC Workbench with replay deltas, analyst verdict history, and direct rule-review pivots.
-- **Incident automation**: declarative playbook engine with 11 step types, trigger matching, conditional branching, parallel execution, approval gates, and SLA-driven escalation.
-- **Fleet operations**: agent enrollment, policy sync, update rollout groups, release assignment, rollback, cancellation, and per-agent activity snapshots.
-- **Governance and compliance**: RBAC, admin session control, tamper-evident audit records, compliance evaluation (CIS v8, PCI-DSS v4, SOC 2, NIST CSF 2.0), encrypted backups, and IDP/SCIM configuration.
-- **Integrations**: multi-format SIEM export (CEF/LEEF/Syslog/Sentinel/UDM/ECS/QRadar), threat-intel pull, ticket sync, OpenTelemetry tracing, API analytics, and release packaging for Linux, macOS, and Windows.
-
-## Verification
-
-Run the full automated suite:
-
-```bash
-cargo test
-```
-
-The current release is validated with Rust unit and integration suites, SDK checks, admin-console builds, and focused Playwright smoke coverage. The repo also includes live verification helpers in [`tests/live_test.py`](tests/live_test.py), [`tests/verify_admin.py`](tests/verify_admin.py), [`tests/playwright/enterprise_console_smoke.spec.js`](tests/playwright/enterprise_console_smoke.spec.js), and [`tests/playwright/live_release_smoke.spec.js`](tests/playwright/live_release_smoke.spec.js).
-
-## Repository layout
-
-```text
-src/                  Core platform modules (134 Rust source files)
-tests/                Integration tests, live checks, and browser smoke coverage
-docs/                 Product, architecture, deployment, and runbook documentation
-admin-console/        React admin console source (embedded from dist at build time)
-site/                 Static product website
-.github/workflows/    CI, Pages, and release automation
-examples/             Sample telemetry traces for demo and regression scenarios
-```
+- **Telemetry and monitoring:** OS event streams, process trees, file/network activity, kernel-event normalization, and live control-plane views.
+- **Detection engineering:** managed Sigma/native rules, YARA content, MITRE ATT&CK coverage, suppressions, replay validation, promotion/rollback, and saved hunts.
+- **Malware analysis:** hash and YARA matching, static and behavior profiles, quarantine guidance, open-source signature presets, and on-demand scans.
+- **SOC workflows:** alert queue, cases, investigations, notes, timelines, evidence bundles, handoffs, response approvals, and analyst assistant pivots.
+- **Response automation:** playbooks, approval gates, platform-aware remediation actions, rollback evidence, and audit history.
+- **Fleet operations:** agent enrollment, heartbeat tracking, policy sync, rollout assignment, rollback, recovery focus, and inventory context.
+- **Governance:** RBAC, HttpOnly admin sessions, audit chain, retention controls, encrypted evidence buffering, compliance exports, and support bundles.
+- **Integrations:** SIEM export, OCSF normalization, threat-intel enrichment, ticket sync, OpenTelemetry, GraphQL, REST OpenAPI, and generated SDKs.
 
 ## Documentation
 
-Start with:
+Start here:
 
-- [`docs/GETTING_STARTED.md`](docs/GETTING_STARTED.md)
-- [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)
-- [`docs/STATUS.md`](docs/STATUS.md)
-- [`docs/DEPLOYMENT_MODELS.md`](docs/DEPLOYMENT_MODELS.md)
-- [`docs/runbooks/README.md`](docs/runbooks/README.md)
+- [Getting Started](docs/GETTING_STARTED.md)
+- [Architecture](docs/ARCHITECTURE.md)
+- [Status](docs/STATUS.md)
+- [Compatibility](docs/COMPATIBILITY.md)
+- [Release Acceptance](docs/RELEASE_ACCEPTANCE.md)
+- [Runbooks](docs/runbooks/README.md)
+- [SDK Guide](docs/SDK_GUIDE.md)
+- [OpenAPI Contract](docs/openapi.yaml)
 
-## Releases
+The public website lives in [site/](site/) and mirrors the main product, release, and support information.
 
-Tagged releases are packaged by GitHub Actions into Linux, macOS, and Windows archives. macOS archives are Developer ID signed and notarized before publication so GitHub downloads pass Gatekeeper. Public release notes and artifacts are published on the GitHub Releases page for this repository.
+## Development and Verification
 
-## Support
+Common checks:
 
-The public support page at [minh.systems/Wardex/donate.html](https://minh.systems/Wardex/donate.html) summarizes sponsorship, commercial licensing, and non-monetary ways to help. You can support ongoing development, release validation, documentation, and SDK maintenance through [GitHub Sponsors](https://github.com/sponsors/pinkysworld). For production deployment or commercial usage, contact the author for a commercial license at **support@wardex.dev**.
+```bash
+cargo test
+cargo build --release
+npm run build --prefix admin-console
+python3 scripts/validate_release_docs.py
+make release-acceptance
+```
 
-## License
+Focused frontend checks can be run from `admin-console/` with Vitest or Playwright, depending on the workflow being changed.
+
+## Releases and Trust
+
+Tagged releases are packaged by GitHub Actions for Linux, macOS, and Windows. The release pipeline publishes checksums, CycloneDX SBOMs, SLSA provenance, cosign signatures, and notarized macOS archives when the required signing secrets are present.
+
+Local signed macOS builds require Developer ID signing and notarization credentials. Unsigned local builds are still useful for development and verification, but tagged CI releases are the distribution path for signed artifacts.
+
+## Repository Layout
+
+```text
+src/                  Rust control plane, detection, scanning, response, and API modules
+admin-console/        React admin console embedded into release builds
+site/                 Static product website
+docs/                 Product docs, runbooks, status, architecture, and release guidance
+sdk/                  Generated Python and TypeScript SDKs
+deploy/               Helm, OTLP, container, signing, and deployment assets
+tests/                Integration, live, and browser smoke coverage
+examples/             Sample telemetry and demo scenarios
+.github/workflows/    CI, Pages, release, signing, and publishing automation
+```
+
+## License and Support
 
 Wardex is dual-licensed:
 
-- **Open-source**: [GNU Affero General Public License v3.0](LICENSE) (AGPL-3.0) — free to use, modify, and distribute with copyleft obligations.
-- **Commercial**: See [LICENSE.COMMERCIAL](LICENSE.COMMERCIAL) — for organisations that cannot comply with AGPL-3.0's network-service copyleft requirement.
+- **Open source:** [AGPL-3.0](LICENSE)
+- **Commercial:** [commercial license](LICENSE.COMMERCIAL) for organizations that cannot use AGPL network-service copyleft terms
 
-See [LICENSE](LICENSE) and [LICENSE.COMMERCIAL](LICENSE.COMMERCIAL) for full terms.
+Support and sponsorship details are available on the [Wardex support page](https://minh.systems/Wardex/donate.html) and through [GitHub Sponsors](https://github.com/sponsors/pinkysworld). For production deployment or commercial licensing, contact **support@wardex.dev**.

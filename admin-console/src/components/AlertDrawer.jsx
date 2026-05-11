@@ -90,6 +90,9 @@ function suggestNextSteps(alert, mitre) {
 }
 
 const HASH_VALUE_PATTERN = /\b(?:[a-fA-F0-9]{64}|[a-fA-F0-9]{32})\b/g;
+const IPV4_VALUE_PATTERN = /\b(?:(?:25[0-5]|2[0-4]\d|1?\d?\d)\.){3}(?:25[0-5]|2[0-4]\d|1?\d?\d)\b/g;
+const FILE_PATH_PATTERN =
+  /(?:[A-Za-z]:\\[^\s'"<>]+|\/(?:Applications|Library|System|Users|bin|etc|opt|private|tmp|usr|var|home|dev|run)\/[^\s'"<>]+)/g;
 
 function extractAlertHashes(alert, reasons) {
   if (!alert) return [];
@@ -113,6 +116,137 @@ function extractAlertHashes(alert, reasons) {
         .toLowerCase(),
     )
     .filter((value) => /^[a-f0-9]{32}$|^[a-f0-9]{64}$/.test(value));
+}
+
+function isBlockableIpv4(value) {
+  const parts = String(value || '').split('.');
+  if (parts.length !== 4) return false;
+  const nums = parts.map((part) => Number(part));
+  if (nums.some((part) => !Number.isInteger(part) || part < 0 || part > 255)) return false;
+  if (nums[0] === 0 || nums[0] === 127) return false;
+  if (nums[0] === 169 && nums[1] === 254) return false;
+  return value !== '255.255.255.255';
+}
+
+function extractAlertSourceIps(alert, reasons) {
+  if (!alert) return [];
+  const directCandidates = [
+    alert.source_ip,
+    alert.src_ip,
+    alert.remote_ip,
+    alert.client_ip,
+    alert.attacker_ip,
+    alert.origin_ip,
+    alert.ip,
+    alert.identity_event?.source_ip,
+    alert.auth_event?.source_ip,
+    alert.event?.source_ip,
+    alert.context?.source_ip,
+    alert.details?.source_ip,
+    alert.data?.source_ip,
+    alert.raw?.source_ip,
+    alert.source?.ip,
+  ];
+  const textCandidates = [alert.message, alert.description, ...reasons]
+    .filter(Boolean)
+    .flatMap((value) => String(value).match(IPV4_VALUE_PATTERN) || []);
+
+  return [...new Set([...directCandidates, ...textCandidates])]
+    .map((value) => String(value || '').trim())
+    .filter(isBlockableIpv4);
+}
+
+function extractAlertFilePaths(alert, reasons) {
+  if (!alert) return [];
+  const directCandidates = [
+    alert.path,
+    alert.file,
+    alert.file_path,
+    alert.artifact_path,
+    alert.quarantine_path,
+    alert.exe_path,
+    alert.process?.exe_path,
+    alert.process_detail?.exe_path,
+    alert.sample?.file_path,
+    alert.context?.file_path,
+    alert.details?.file_path,
+    alert.data?.file_path,
+  ];
+  const textCandidates = [alert.message, alert.description, alert.action, ...reasons]
+    .filter(Boolean)
+    .flatMap((value) => String(value).match(FILE_PATH_PATTERN) || []);
+
+  return [...new Set([...directCandidates, ...textCandidates])]
+    .map((value) =>
+      String(value || '')
+        .trim()
+        .replace(/[),.;]+$/g, ''),
+    )
+    .filter((value) => value.length > 1);
+}
+
+function extractAlertUsernames(alert, reasons) {
+  if (!alert) return [];
+  const directCandidates = [
+    alert.username,
+    alert.user,
+    alert.account,
+    alert.identity,
+    alert.identity_event?.username,
+    alert.auth_event?.username,
+    alert.event?.username,
+    alert.context?.username,
+    alert.details?.username,
+  ];
+  const textCandidates = [alert.message, alert.description, ...reasons]
+    .filter(Boolean)
+    .flatMap((value) => {
+      const matches =
+        String(value).match(/\b(?:user|username|account)=([A-Za-z0-9._@\\-]+)/gi) || [];
+      return matches.map((match) => match.split('=').pop());
+    });
+  return [...new Set([...directCandidates, ...textCandidates])]
+    .map((value) => String(value || '').trim())
+    .filter(Boolean);
+}
+
+function isAuthenticationAlert(alert, reasons) {
+  if (!alert) return false;
+  const haystack = [alert.category, alert.type, alert.message, alert.description, ...reasons]
+    .filter(Boolean)
+    .join(' ')
+    .toLowerCase();
+  return [
+    'auth failures surge',
+    'auth_failures',
+    'authentication',
+    'brute',
+    'credential',
+    'login failure',
+    'failed login',
+    'credential stuffing',
+  ].some((needle) => haystack.includes(needle));
+}
+
+function alertText(alert, reasons) {
+  return [
+    alert?.category,
+    alert?.type,
+    alert?.message,
+    alert?.description,
+    alert?.action,
+    ...reasons,
+  ]
+    .filter(Boolean)
+    .join(' ')
+    .toLowerCase();
+}
+
+function alertPlatform(alert) {
+  const normalized = String(alert?.platform || '').toLowerCase();
+  if (normalized.includes('mac') || normalized.includes('darwin')) return 'macos';
+  if (normalized.includes('win')) return 'windows';
+  return 'linux';
 }
 
 function normalizeAlertProcessCandidate(source, alert) {
@@ -194,6 +328,245 @@ function extractAlertProcessCandidates(alert) {
   });
 }
 
+function responseBody(alert, body) {
+  return {
+    hostname: alert?.hostname || alert?.target_hostname || 'local-host',
+    severity: alert?.severity || 'high',
+    ...body,
+  };
+}
+
+function buildResponseActions(alert, reasons, sourceIps, filePaths, usernames, processCandidates) {
+  if (!alert) return [];
+
+  const text = alertText(alert, reasons);
+  const hostname = alert.hostname || alert.target_hostname || 'local-host';
+  const primaryIp = sourceIps[0];
+  const primaryFile = filePaths[0];
+  const primaryUser = usernames[0];
+  const primaryProcess = processCandidates[0];
+  const isAuth = isAuthenticationAlert(alert, reasons);
+  const isNetwork = [
+    'network',
+    'beacon',
+    'c2',
+    'command_and_control',
+    'dns',
+    'exfil',
+    'lateral',
+    'recon',
+    'port scan',
+  ].some((needle) => text.includes(needle));
+  const isMalware = [
+    'malware',
+    'virus',
+    'ransom',
+    'rootkit',
+    'hash reputation',
+    'yara',
+    'packed',
+    'defense evasion',
+    'persistence',
+    'credential_dump',
+  ].some((needle) => text.includes(needle));
+  const isIntegrity = ['integrity drift', 'config drift', 'tamper', 'rollback'].some((needle) =>
+    text.includes(needle),
+  );
+  const isResource = [
+    'process count',
+    'process_count',
+    'memory pressure',
+    'disk pressure',
+    'thermal',
+    'cpu',
+    'crypto',
+  ].some((needle) => text.includes(needle));
+
+  const actions = [];
+  const add = (action) => actions.push(action);
+
+  if (primaryIp && (isAuth || isNetwork)) {
+    add({
+      id: `block-ip-${primaryIp}`,
+      action: 'block_ip',
+      label: 'Request IP Block',
+      badge: isAuth ? 'Auth surge' : 'Network',
+      target: primaryIp,
+      description: 'Approval-gated traffic block for the suspicious source or destination IP.',
+      primary: true,
+      body: responseBody(alert, {
+        action: 'block_ip',
+        ip: primaryIp,
+        dry_run: false,
+        asset_tags: [isAuth ? 'auth-surge' : 'network-detection', 'containment'],
+        reason: `${isAuth ? 'Authentication failure surge' : 'Network alarm'} on ${hostname}; request traffic block for ${primaryIp}.`,
+      }),
+    });
+  }
+
+  if (isAuth) {
+    add({
+      id: 'auth-throttle',
+      action: 'throttle',
+      label: 'Stage Auth Rate Limit',
+      badge: 'Auth surge',
+      target: hostname,
+      description:
+        'Dry-run rate-limit request for aggregate auth-failure surges without reliable IP attribution.',
+      body: responseBody(alert, {
+        action: 'throttle',
+        rate_limit_kbps: 512,
+        dry_run: true,
+        asset_tags: ['auth-surge', 'rate-limit'],
+        reason:
+          'Authentication failure surge detected; stage an approval-safe auth ingress rate-limit dry run.',
+      }),
+    });
+  }
+
+  if (primaryUser && isAuth) {
+    add({
+      id: `disable-account-${primaryUser}`,
+      action: 'disable_account',
+      label: 'Request Account Disable',
+      badge: 'Identity',
+      target: primaryUser,
+      description: 'Dual-approval account disable for confirmed credential compromise.',
+      body: responseBody(alert, {
+        action: 'disable_account',
+        username: primaryUser,
+        dry_run: false,
+        asset_tags: ['identity', 'credential-access'],
+        reason: `Authentication alarm on ${hostname}; request account disable for ${primaryUser} if compromise is confirmed.`,
+      }),
+    });
+  }
+
+  if (primaryFile && (isMalware || isIntegrity || text.includes('disk pressure'))) {
+    add({
+      id: `quarantine-file-${primaryFile}`,
+      action: 'quarantine_file',
+      label: 'Request File Quarantine',
+      badge: 'Artifact',
+      target: primaryFile,
+      description: 'Approval-gated file quarantine with reversible release path.',
+      primary: isMalware,
+      body: responseBody(alert, {
+        action: 'quarantine_file',
+        path: primaryFile,
+        dry_run: false,
+        asset_tags: ['malware', 'artifact'],
+        reason: `Malware or integrity alarm on ${hostname}; request quarantine for ${primaryFile}.`,
+      }),
+    });
+  }
+
+  if (primaryProcess && (isMalware || isResource)) {
+    add({
+      id: `kill-process-${primaryProcess.pid}`,
+      action: 'kill_process',
+      label: 'Request Process Kill',
+      badge: 'Process',
+      target: `${primaryProcess.display_name || primaryProcess.name} (${primaryProcess.pid})`,
+      description: 'Single-approval kill request for the suspicious process tree root.',
+      body: responseBody(alert, {
+        action: 'kill_process',
+        pid: primaryProcess.pid,
+        process_name:
+          primaryProcess.display_name || primaryProcess.name || `pid-${primaryProcess.pid}`,
+        dry_run: false,
+        asset_tags: ['process', isMalware ? 'malware' : 'resource-abuse'],
+        reason: `Alarm on ${hostname}; request termination of suspicious process PID ${primaryProcess.pid}.`,
+      }),
+    });
+  }
+
+  if (
+    isNetwork ||
+    isMalware ||
+    isIntegrity ||
+    text.includes('ransom') ||
+    text.includes('rootkit')
+  ) {
+    add({
+      id: 'isolate-host',
+      action: 'isolate',
+      label: 'Request Host Isolation',
+      badge: 'Host',
+      target: hostname,
+      description: 'Approval-gated network isolation for confirmed high-impact activity.',
+      body: responseBody(alert, {
+        action: 'isolate',
+        dry_run: false,
+        asset_tags: ['host-containment'],
+        reason: `High-risk alarm on ${hostname}; request host isolation while evidence is preserved.`,
+      }),
+    });
+  }
+
+  if (isNetwork || (isResource && !isAuth)) {
+    add({
+      id: 'traffic-throttle',
+      action: 'throttle',
+      label: 'Stage Traffic Throttle',
+      badge: 'Traffic',
+      target: hostname,
+      description: 'Dry-run traffic shaping request for noisy network or resource-abuse alarms.',
+      body: responseBody(alert, {
+        action: 'throttle',
+        rate_limit_kbps: 1024,
+        dry_run: true,
+        asset_tags: ['traffic-control'],
+        reason: `Network or resource alarm on ${hostname}; stage traffic throttle dry run.`,
+      }),
+    });
+  }
+
+  if (isIntegrity) {
+    add({
+      id: 'rollback-config',
+      action: 'rollback_config',
+      label: 'Request Config Rollback',
+      badge: 'Integrity',
+      target: primaryFile || alert.category || 'configuration baseline',
+      description: 'Single-approval rollback request for drifted or tampered configuration.',
+      body: responseBody(alert, {
+        action: 'rollback_config',
+        config_name: primaryFile || alert.category || 'configuration baseline',
+        dry_run: false,
+        asset_tags: ['integrity', 'rollback'],
+        reason: `Integrity drift alarm on ${hostname}; request rollback to the last trusted baseline.`,
+      }),
+    });
+  }
+
+  if (actions.length === 0) {
+    add({
+      id: 'notify-soc',
+      action: 'alert',
+      label: 'Create Response Notice',
+      badge: 'Triage',
+      target: hostname,
+      description:
+        'Notification-only response record for alarms that need analyst validation first.',
+      body: responseBody(alert, {
+        action: 'alert',
+        dry_run: true,
+        asset_tags: ['triage'],
+        reason: `Alarm on ${hostname}; create a response notice for analyst validation.`,
+      }),
+    });
+  }
+
+  const seen = new Set();
+  return actions.filter((action) => {
+    const key = `${action.action}:${action.target}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
 function normalizeContributingSignal(signal, index) {
   if (typeof signal === 'string') {
     return {
@@ -271,6 +644,8 @@ export default function AlertDrawer({
     sightings: [],
   });
   const [artifactContextLoading, setArtifactContextLoading] = useState(false);
+  const [responseSubmitting, setResponseSubmitting] = useState(null);
+  const [responseResult, setResponseResult] = useState(null);
 
   const summary = useMemo(() => {
     if (!alert) return null;
@@ -290,7 +665,15 @@ export default function AlertDrawer({
     return Array.isArray(alert.reasons) ? alert.reasons : alert.reasons ? [alert.reasons] : [];
   }, [alert]);
   const alertHashes = useMemo(() => extractAlertHashes(alert, reasons), [alert, reasons]);
+  const sourceIps = useMemo(() => extractAlertSourceIps(alert, reasons), [alert, reasons]);
+  const filePaths = useMemo(() => extractAlertFilePaths(alert, reasons), [alert, reasons]);
+  const usernames = useMemo(() => extractAlertUsernames(alert, reasons), [alert, reasons]);
+  const isAuthAlert = useMemo(() => isAuthenticationAlert(alert, reasons), [alert, reasons]);
   const processCandidates = useMemo(() => extractAlertProcessCandidates(alert), [alert]);
+  const responseActions = useMemo(
+    () => buildResponseActions(alert, reasons, sourceIps, filePaths, usernames, processCandidates),
+    [alert, reasons, sourceIps, filePaths, usernames, processCandidates],
+  );
   const processNames = useMemo(
     () => (Array.isArray(alert?.process_names) ? alert.process_names.filter(Boolean) : []),
     [alert],
@@ -311,7 +694,6 @@ export default function AlertDrawer({
   useEffect(() => {
     let cancelled = false;
     if (!alert) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
       setExplainData(null);
       setExplainLoading(false);
       return undefined;
@@ -340,7 +722,6 @@ export default function AlertDrawer({
     let cancelled = false;
 
     if (!alert || alertHashes.length === 0) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
       setArtifactContext({ hashMatch: null, recentDetections: [], sightings: [] });
       setArtifactContextLoading(false);
       return undefined;
@@ -481,6 +862,35 @@ export default function AlertDrawer({
     }
   };
 
+  const submitResponseAction = async (actionConfig) => {
+    if (!alert) return;
+    setResponseSubmitting(actionConfig.id);
+    setResponseResult(null);
+    try {
+      let plan = null;
+      if (actionConfig.action === 'block_ip' && actionConfig.body?.ip) {
+        try {
+          plan = await api.remediationPlan({
+            platform: alertPlatform(alert),
+            action: 'block_ip',
+            addr: actionConfig.body.ip,
+          });
+        } catch {
+          plan = null;
+        }
+      }
+
+      const result = await api.responseRequest(actionConfig.body);
+      setResponseResult({ action: actionConfig, result, plan });
+      toast(`${actionConfig.label} submitted`, 'success');
+      onUpdated?.();
+    } catch {
+      toast(`${actionConfig.label} failed`, 'error');
+    } finally {
+      setResponseSubmitting(null);
+    }
+  };
+
   return (
     <SideDrawer
       open={!!alert}
@@ -613,6 +1023,102 @@ export default function AlertDrawer({
       )}
 
       <AlertNarrative narrative={alert.narrative} />
+
+      {responseActions.length > 0 && (
+        <div className="card" style={{ marginTop: 16 }}>
+          <div className="card-header">
+            <div>
+              <div className="card-title">Containment Actions</div>
+              <div className="hint" style={{ marginTop: 6 }}>
+                Stage guarded responses for this alarm. Destructive or high-impact actions stay in
+                the approval workflow; throttles and notices run as dry-runs first.
+              </div>
+            </div>
+            <span className="badge badge-warn">
+              {isAuthAlert
+                ? 'Auth surge'
+                : `${responseActions.length} action${responseActions.length === 1 ? '' : 's'}`}
+            </span>
+          </div>
+          <div className="drawer-copy-grid">
+            <div>
+              <div className="metric-label">Source IP</div>
+              <div className="row-primary">{sourceIps[0] || 'Not present in alert'}</div>
+              <div className="row-secondary">
+                {sourceIps.length > 0
+                  ? 'Use an approval-gated block if this source is confirmed hostile.'
+                  : 'This alert stream only reported failure counts, so blocking a remote address is not available yet.'}
+              </div>
+            </div>
+            <div>
+              <div className="metric-label">Primary Artifact</div>
+              <div className="row-primary">
+                {filePaths[0] ||
+                  (processCandidates[0]
+                    ? `${processCandidates[0].display_name} (${processCandidates[0].pid})`
+                    : usernames[0] || 'Host-level response')}
+              </div>
+              <div className="row-secondary">
+                Actions are selected from the alert category, source context, process pivots, and
+                extracted artifact fields.
+              </div>
+            </div>
+          </div>
+          <div style={{ display: 'grid', gap: 10, marginTop: 12 }}>
+            {responseActions.slice(0, 6).map((actionConfig) => (
+              <div key={actionConfig.id} className="detail-callout" style={{ margin: 0 }}>
+                <div
+                  style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    gap: 12,
+                    alignItems: 'flex-start',
+                    flexWrap: 'wrap',
+                  }}
+                >
+                  <div>
+                    <span className="badge badge-info" style={{ marginBottom: 6 }}>
+                      {actionConfig.badge}
+                    </span>
+                    <div className="row-primary">{actionConfig.target}</div>
+                    <div className="row-secondary">{actionConfig.description}</div>
+                  </div>
+                  <button
+                    className={`btn btn-sm ${actionConfig.primary ? 'btn-primary' : ''}`}
+                    onClick={() => submitResponseAction(actionConfig)}
+                    disabled={responseSubmitting != null}
+                  >
+                    {responseSubmitting === actionConfig.id ? 'Submitting…' : actionConfig.label}
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+          {responseActions.length > 6 && (
+            <div className="hint" style={{ marginTop: 10 }}>
+              Showing the six safest high-signal actions for this alarm.
+            </div>
+          )}
+          {responseResult?.result?.request && (
+            <div className="alert-banner success" style={{ marginTop: 12 }}>
+              <div className="row-primary">
+                {responseResult.result.request.action_label || 'Response request'} ·{' '}
+                {responseResult.result.request.status || 'submitted'}
+              </div>
+              <div className="row-secondary">
+                Tier {responseResult.result.request.tier || 'review'} · reversal:{' '}
+                {responseResult.result.request.reversal_path || 'tracked in response workflow'}
+              </div>
+              {responseResult.plan?.commands?.length > 0 && (
+                <div className="row-secondary">
+                  Planned adapter command: {responseResult.plan.commands[0].program}{' '}
+                  {(responseResult.plan.commands[0].args || []).join(' ')}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* ── Explain Alert ───────────────────────────── */}
       <div className="card" style={{ marginTop: 16 }}>

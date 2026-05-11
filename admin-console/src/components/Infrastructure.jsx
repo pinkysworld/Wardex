@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useApi, useApiGroup, useToast } from '../hooks.jsx';
 import * as api from '../api.js';
@@ -6,6 +6,7 @@ import { JsonDetails, SummaryGrid } from './operator.jsx';
 import { formatDateTime, formatRelativeTime } from './operatorUtils.js';
 import WorkflowGuidance from './WorkflowGuidance.jsx';
 import { buildHref } from './workflowPivots.js';
+import { MALWARE_SCAN_PRESETS, findMalwareScanPreset } from './malwareScanningPresets.js';
 
 const TABS = ['overview', 'assets', 'exposure', 'integrity', 'observability'];
 const MALWARE_PANELS = [
@@ -48,6 +49,15 @@ const DEFAULT_SCAN_BEHAVIOR = {
   c2_beaconing_detected: false,
   credential_access: false,
 };
+const SIGNATURE_PRESET_PATHS = [
+  'rules/clamav',
+  'rules/malware_hashes',
+  'var/signatures/clamav',
+  '/var/lib/clamav',
+  '/usr/local/share/clamav',
+  '/opt/homebrew/share/clamav',
+];
+const CLAMAV_HASH_EXAMPLE = '44d88612fea8a8f36de82e1278abb02f:68:Eicar-Test-Signature';
 
 function splitListInput(value) {
   return String(value || '')
@@ -266,7 +276,18 @@ export default function Infrastructure() {
   const [internalToolsText, setInternalToolsText] = useState('');
   const [runningDeepScan, setRunningDeepScan] = useState(false);
   const [deepScanResult, setDeepScanResult] = useState(null);
+  const [pathScanScope, setPathScanScope] = useState('folder');
+  const [pathScanTargets, setPathScanTargets] = useState('/tmp');
+  const [pathScanIncludeRootkit, setPathScanIncludeRootkit] = useState(true);
+  const [runningPathScan, setRunningPathScan] = useState(false);
+  const [pathScanResult, setPathScanResult] = useState(null);
+  const [signaturePayload, setSignaturePayload] = useState('');
+  const [signatureSource, setSignatureSource] = useState('operator-open-source-signatures');
+  const [signatureImportResult, setSignatureImportResult] = useState(null);
+  const [importingSignatures, setImportingSignatures] = useState(false);
+  const [loadingLocalSignatures, setLoadingLocalSignatures] = useState(false);
   const [focusedMalwareId, setFocusedMalwareId] = useState('');
+  const appliedScanPresetRef = useRef('');
 
   const activeTab = TABS.includes(searchParams.get('tab')) ? searchParams.get('tab') : 'overview';
   const savedView = searchParams.get('view') || 'critical';
@@ -274,6 +295,8 @@ export default function Infrastructure() {
   const typeFilter = searchParams.get('type') || 'all';
   const malwarePanel = normalizePanel(searchParams.get('malwarePanel'), MALWARE_PANELS, 'summary');
   const routeMalwareId = searchParams.get('malware') || '';
+  const scanPresetId = searchParams.get('scanPreset') || '';
+  const activeScanPreset = findMalwareScanPreset(scanPresetId);
   const recentMalware = useMemo(
     () => normalizeRecentMalwareEntries(malwareRecentData),
     [malwareRecentData],
@@ -352,6 +375,22 @@ export default function Infrastructure() {
     if (focusedMalwareId && recentMalware.some((item) => item.id === focusedMalwareId)) return;
     setFocusedMalwareId(routeMalwareId || recentMalware[0]?.id || '');
   }, [focusedMalwareId, recentMalware, routeMalwareId]);
+
+  useEffect(() => {
+    if (!activeScanPreset || appliedScanPresetRef.current === activeScanPreset.id) return;
+    appliedScanPresetRef.current = activeScanPreset.id;
+    setPathScanScope(activeScanPreset.scope || 'folder');
+    setPathScanTargets((activeScanPreset.targets || []).join('\n'));
+    setPathScanIncludeRootkit(activeScanPreset.includeRootkit !== false);
+    setSignatureSource(activeScanPreset.sourceLabel || 'operator-open-source-signatures');
+    setSignaturePayload(activeScanPreset.signaturePayload || '');
+    if (activeScanPreset.behavior) {
+      setScanBehavior((previous) => ({
+        ...previous,
+        ...activeScanPreset.behavior,
+      }));
+    }
+  }, [activeScanPreset]);
 
   const counts = {
     critical: assets.filter((item) => item.priority === 'critical').length,
@@ -727,6 +766,71 @@ export default function Infrastructure() {
       toast('Unable to complete the deep malware scan.', 'error');
     } finally {
       setRunningDeepScan(false);
+    }
+  };
+
+  const runPathMalwareScan = async () => {
+    const paths = splitListInput(pathScanTargets);
+    if (pathScanScope !== 'whole_system' && paths.length === 0) {
+      toast('Select at least one file or folder before starting an on-demand scan.', 'warning');
+      return;
+    }
+
+    setRunningPathScan(true);
+    try {
+      const result = await api.malwareScanPath({
+        scope: pathScanScope,
+        paths,
+        include_rootkit: pathScanIncludeRootkit,
+        max_files: pathScanScope === 'whole_system' ? 500 : 250,
+      });
+      setPathScanResult(result);
+      await reloadInfrastructureMalware();
+      updateParams({ tab: 'integrity', malwarePanel: 'summary' });
+      toast('On-demand malware scan completed.', 'success');
+    } catch {
+      setPathScanResult(null);
+      toast('Unable to complete the on-demand malware scan.', 'error');
+    } finally {
+      setRunningPathScan(false);
+    }
+  };
+
+  const loadLocalSignaturePreset = async () => {
+    setLoadingLocalSignatures(true);
+    try {
+      const result = await api.malwareLoadLocalSignatures();
+      setSignatureImportResult(result);
+      await reloadInfrastructureMalware();
+      toast(
+        result?.imported > 0
+          ? `Loaded ${result.imported} local open-source signatures.`
+          : 'No local signature files were found in the preset paths.',
+        result?.imported > 0 ? 'success' : 'warning',
+      );
+    } catch {
+      toast('Unable to load local signature presets.', 'error');
+    } finally {
+      setLoadingLocalSignatures(false);
+    }
+  };
+
+  const importSignaturePayload = async () => {
+    if (!String(signaturePayload || '').trim()) {
+      toast('Paste ClamAV hash, MalwareBazaar CSV, or Wardex JSON signatures first.', 'warning');
+      return;
+    }
+
+    setImportingSignatures(true);
+    try {
+      const result = await api.malwareImport(signaturePayload, signatureSource);
+      setSignatureImportResult(result);
+      await reloadInfrastructureMalware();
+      toast(`Imported ${result?.imported || 0} signatures.`, 'success');
+    } catch {
+      toast('Unable to import malware signatures.', 'error');
+    } finally {
+      setImportingSignatures(false);
     }
   };
 
@@ -1346,6 +1450,64 @@ export default function Infrastructure() {
             </div>
           </div>
 
+          <div className="card" style={{ marginTop: 16 }}>
+            <div className="card-header">
+              <div>
+                <span className="card-title">Scanning Presets</span>
+                <div className="hint" style={{ marginTop: 6 }}>
+                  Wire in open-source malware, rootkit, trojan, and virus scanning combinations
+                  without hand-building each scan.
+                </div>
+              </div>
+              {activeScanPreset && (
+                <span className="badge badge-info">{activeScanPreset.title}</span>
+              )}
+            </div>
+            <div
+              style={{
+                display: 'grid',
+                gap: 12,
+                gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
+              }}
+            >
+              {MALWARE_SCAN_PRESETS.map((preset) => (
+                <button
+                  key={preset.id}
+                  type="button"
+                  className={`detail-callout ${preset.id === activeScanPreset?.id ? 'active' : ''}`}
+                  style={{
+                    margin: 0,
+                    textAlign: 'left',
+                    cursor: 'pointer',
+                    borderColor: preset.id === activeScanPreset?.id ? 'var(--primary)' : undefined,
+                  }}
+                  onClick={() =>
+                    updateParams({
+                      tab: 'integrity',
+                      malwarePanel: preset.panel || 'summary',
+                      scanPreset: preset.id,
+                    })
+                  }
+                >
+                  <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
+                    <strong>{preset.title}</strong>
+                    <span className="badge badge-info">{preset.badge}</span>
+                  </div>
+                  <div className="hint" style={{ marginTop: 8 }}>
+                    {preset.summary}
+                  </div>
+                  <div className="chip-row" style={{ marginTop: 10 }}>
+                    {preset.sourceMix.slice(0, 3).map((source) => (
+                      <span key={`${preset.id}-${source}`} className="scope-chip">
+                        {source}
+                      </span>
+                    ))}
+                  </div>
+                </button>
+              ))}
+            </div>
+          </div>
+
           <div className="card-grid" style={{ marginTop: 16 }}>
             <div className="card">
               <div className="card-header">
@@ -1879,6 +2041,256 @@ export default function Infrastructure() {
 
                   <JsonDetails data={deepScanResult} label="Deep malware scan payload" />
                 </>
+              )}
+            </div>
+
+            <div className="card">
+              <div className="card-header">
+                <div>
+                  <span className="card-title">Open-Source Signature Sources</span>
+                  <div className="hint" style={{ marginTop: 6 }}>
+                    Operator-approved ClamAV hash files can be loaded from preset local paths or
+                    imported as pasted hash/CSV/JSON content.
+                  </div>
+                </div>
+                <button
+                  className="btn btn-sm"
+                  disabled={loadingLocalSignatures}
+                  onClick={loadLocalSignaturePreset}
+                >
+                  {loadingLocalSignatures ? 'Loading...' : 'Load Local Preset'}
+                </button>
+              </div>
+
+              <div
+                style={{
+                  display: 'grid',
+                  gap: 10,
+                  gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
+                }}
+              >
+                {SIGNATURE_PRESET_PATHS.map((path) => (
+                  <div key={path} className="detail-callout" style={{ margin: 0 }}>
+                    <span className="badge badge-info">Preset</span>
+                    <div style={{ marginTop: 6, fontFamily: 'var(--font-mono)', fontSize: 12 }}>
+                      {path}
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              <div className="form-group" style={{ marginTop: 14 }}>
+                <label className="form-label" htmlFor="signature-source">
+                  Source label
+                </label>
+                <input
+                  id="signature-source"
+                  className="form-input"
+                  value={signatureSource}
+                  onChange={(event) => setSignatureSource(event.target.value)}
+                  placeholder="operator-open-source-signatures"
+                />
+              </div>
+
+              <div className="form-group">
+                <label className="form-label" htmlFor="signature-import-payload">
+                  Signature payload
+                </label>
+                <textarea
+                  id="signature-import-payload"
+                  className="form-input"
+                  rows={5}
+                  value={signaturePayload}
+                  onChange={(event) => setSignaturePayload(event.target.value)}
+                  placeholder={`${CLAMAV_HASH_EXAMPLE}\n# also accepts MalwareBazaar CSV or Wardex JSON arrays`}
+                />
+              </div>
+
+              <div className="btn-group" style={{ marginTop: 16, flexWrap: 'wrap' }}>
+                <button
+                  className="btn btn-sm btn-primary"
+                  disabled={importingSignatures}
+                  onClick={importSignaturePayload}
+                >
+                  {importingSignatures ? 'Importing...' : 'Import Signatures'}
+                </button>
+                <button
+                  className="btn btn-sm"
+                  onClick={() => {
+                    setSignaturePayload(CLAMAV_HASH_EXAMPLE);
+                    setSignatureSource('operator-clamav-hash-preset');
+                  }}
+                >
+                  Use Example
+                </button>
+                <button
+                  className="btn btn-sm"
+                  onClick={() => {
+                    setSignaturePayload('');
+                    setSignatureImportResult(null);
+                  }}
+                >
+                  Clear
+                </button>
+              </div>
+
+              {!signatureImportResult ? (
+                <div className="detail-callout" style={{ marginTop: 16 }}>
+                  Presets never auto-download feeds. They only load files that an operator has
+                  already installed or placed locally.
+                </div>
+              ) : (
+                <div style={{ marginTop: 16 }}>
+                  <SummaryGrid data={signatureImportResult} limit={8} />
+                </div>
+              )}
+            </div>
+
+            <div className="card">
+              <div className="card-header">
+                <div>
+                  <span className="card-title">On-Demand Malware & Rootkit Scan</span>
+                  <div className="hint" style={{ marginTop: 6 }}>
+                    Scan selected files, folders, or bounded system roots with the backend AV
+                    engine.
+                  </div>
+                </div>
+                <button className="btn btn-sm" onClick={() => setPathScanResult(null)}>
+                  Clear Result
+                </button>
+              </div>
+
+              <div
+                style={{
+                  display: 'grid',
+                  gap: 12,
+                  gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
+                }}
+              >
+                <div className="form-group">
+                  <label className="form-label" htmlFor="path-scan-scope">
+                    Scan scope
+                  </label>
+                  <select
+                    id="path-scan-scope"
+                    className="form-input"
+                    value={pathScanScope}
+                    onChange={(event) => setPathScanScope(event.target.value)}
+                  >
+                    <option value="file">Files</option>
+                    <option value="folder">Folders</option>
+                    <option value="whole_system">Whole system roots</option>
+                  </select>
+                </div>
+                <label
+                  style={{
+                    display: 'flex',
+                    gap: 8,
+                    alignItems: 'center',
+                    fontSize: 13,
+                    marginTop: 28,
+                  }}
+                >
+                  <input
+                    type="checkbox"
+                    checked={pathScanIncludeRootkit}
+                    onChange={(event) => setPathScanIncludeRootkit(event.target.checked)}
+                  />
+                  Include rootkit heuristics
+                </label>
+              </div>
+
+              <div className="form-group">
+                <label className="form-label" htmlFor="path-scan-targets">
+                  Files or folders
+                </label>
+                <textarea
+                  id="path-scan-targets"
+                  className="form-input"
+                  rows={5}
+                  value={pathScanTargets}
+                  onChange={(event) => setPathScanTargets(event.target.value)}
+                  placeholder="/Users/alice/Downloads/suspicious.bin&#10;/tmp"
+                />
+              </div>
+
+              <div className="btn-group" style={{ marginTop: 16, flexWrap: 'wrap' }}>
+                <button
+                  className="btn btn-sm btn-primary"
+                  disabled={runningPathScan}
+                  onClick={runPathMalwareScan}
+                >
+                  {runningPathScan ? 'Scanning…' : 'Run On-Demand Scan'}
+                </button>
+                <button
+                  className="btn btn-sm"
+                  onClick={() => {
+                    setPathScanScope('folder');
+                    setPathScanTargets('/tmp');
+                    setPathScanIncludeRootkit(true);
+                  }}
+                >
+                  Reset Targets
+                </button>
+              </div>
+
+              {!pathScanResult ? (
+                <div className="detail-callout" style={{ marginTop: 16 }}>
+                  Whole-system mode uses bounded platform roots and a file cap so the backend
+                  remains responsive during manual scans.
+                </div>
+              ) : (
+                <div style={{ marginTop: 18 }}>
+                  <SummaryGrid data={pathScanResult.summary || {}} limit={10} />
+                  {(pathScanResult.findings || []).length > 0 && (
+                    <>
+                      <div className="card-title" style={{ marginTop: 16, marginBottom: 10 }}>
+                        File Findings
+                      </div>
+                      <div style={{ display: 'grid', gap: 8 }}>
+                        {(pathScanResult.findings || []).slice(0, 8).map((finding) => (
+                          <div key={finding.path} className="detail-callout" style={{ margin: 0 }}>
+                            <span className={`badge ${verdictBadgeClass(finding.verdict)}`}>
+                              {finding.verdict}
+                            </span>{' '}
+                            <strong>{finding.path}</strong>
+                            <div className="hint" style={{ marginTop: 4 }}>
+                              {finding.matches?.[0]?.detail ||
+                                `${Math.round((Number(finding.confidence) || 0) * 100)}% confidence`}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </>
+                  )}
+                  {(pathScanResult.rootkit_findings || []).length > 0 && (
+                    <>
+                      <div className="card-title" style={{ marginTop: 16, marginBottom: 10 }}>
+                        Rootkit Findings
+                      </div>
+                      <div style={{ display: 'grid', gap: 8 }}>
+                        {(pathScanResult.rootkit_findings || [])
+                          .slice(0, 8)
+                          .map((finding, index) => (
+                            <div
+                              key={`${finding.category}-${finding.path || finding.process || index}`}
+                              className="detail-callout"
+                              style={{ margin: 0 }}
+                            >
+                              <span className={`badge ${verdictBadgeClass(finding.severity)}`}>
+                                {finding.severity}
+                              </span>{' '}
+                              <strong>{String(finding.category || '').replace(/_/g, ' ')}</strong>
+                              <div className="hint" style={{ marginTop: 4 }}>
+                                {finding.detail}
+                              </div>
+                            </div>
+                          ))}
+                      </div>
+                    </>
+                  )}
+                  <JsonDetails data={pathScanResult} label="On-demand malware scan payload" />
+                </div>
               )}
             </div>
           </div>

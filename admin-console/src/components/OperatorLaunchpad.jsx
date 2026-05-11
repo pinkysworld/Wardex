@@ -81,6 +81,33 @@ function signalBadge(status) {
   return { className: 'badge-warn', label: normalized };
 }
 
+function evidenceFreshness(value) {
+  return value?.evidence_freshness || value?.evidenceFreshness || null;
+}
+
+function evidenceNeedsAttention(value) {
+  const evidence = evidenceFreshness(value);
+  if (!evidence?.critical) return false;
+  return String(evidence.status || 'unknown').toLowerCase() !== 'fresh';
+}
+
+function evidenceBadge(value) {
+  const evidence = evidenceFreshness(value);
+  const status = String(evidence?.status || 'unknown').toLowerCase();
+  if (status === 'fresh') return { className: 'badge-ok', label: 'fresh proof' };
+  if (['stale', 'unknown'].includes(status) && evidence?.critical) {
+    return { className: 'badge-err', label: `${status} proof` };
+  }
+  return { className: 'badge-warn', label: `${status} proof` };
+}
+
+function freshnessDetail(detail, value) {
+  const evidence = evidenceFreshness(value);
+  if (!evidence) return `${detail} - evidence pending`;
+  const mode = String(evidence.mode || 'evidence').replaceAll('_', ' ');
+  return `${detail} - ${evidence.status || 'unknown'} ${mode}`;
+}
+
 function readinessMap(readiness) {
   return asArray(readiness?.checks || readiness, ['items']).reduce((acc, item) => {
     if (item?.key) acc[item.key] = item;
@@ -345,92 +372,132 @@ export default function OperatorLaunchpad() {
     [
       'Provenance',
       data.releaseProvenance?.status,
-      `${countValue(data.releaseProvenance, ['artifact_count'])} artifacts`,
+      freshnessDetail(
+        `${countValue(data.releaseProvenance, ['artifact_count'])} artifacts`,
+        data.releaseProvenance,
+      ),
+      data.releaseProvenance,
     ],
     [
       'Upgrade rehearsal',
       data.upgradeRehearsal?.status,
       data.upgradeRehearsal?.target_version || currentVersion,
+      data.upgradeRehearsal,
     ],
     [
       'Synthetic console',
       data.syntheticConsole?.status,
-      `${countValue(data.syntheticConsole, ['check_count'])} checks`,
+      freshnessDetail(
+        `${countValue(data.syntheticConsole, ['check_count'])} checks`,
+        data.syntheticConsole,
+      ),
+      data.syntheticConsole,
     ],
     [
       'Timeline replay',
       data.incidentReplay?.status,
       `${countValue(data.incidentReplay, ['incident_count'])} incidents`,
+      data.incidentReplay,
     ],
-    ['Detection trust', data.detectionTrust?.status, `${detectionTrustAverage || '—'} score`],
+    [
+      'Detection trust',
+      data.detectionTrust?.status,
+      `${detectionTrustAverage || '—'} score`,
+      data.detectionTrust,
+    ],
     [
       'Fleet drift',
       data.fleetDrift?.status,
       `${countValue(data.fleetDrift, ['version_drift'])} drifted`,
+      data.fleetDrift,
     ],
-    ['Work queue', data.workQueue?.status, `${workQueueCount} items`],
-    ['Retention', data.retentionForecast?.status, `${retentionPeak || '—'}% peak`],
+    ['Work queue', data.workQueue?.status, `${workQueueCount} items`, data.workQueue],
+    ['Retention', data.retentionForecast?.status, `${retentionPeak || '—'}% peak`, data.retentionForecast],
     [
       'Adversarial',
       data.adversarialValidation?.status,
       `${countValue(data.adversarialValidation, ['scenario_count'])} scenarios`,
+      data.adversarialValidation,
     ],
     [
       'Bundle diff',
       data.supportBundleDiff?.status,
       `${countValue(data.supportBundleDiff, ['snapshot_count'])} snapshots`,
+      data.supportBundleDiff,
     ],
   ];
   const releaseVerificationSignals = [
     [
       'Clean cut',
       data.cleanReleaseCut?.status,
-      data.cleanReleaseCut?.target_version || currentVersion,
+      freshnessDetail(data.cleanReleaseCut?.target_version || currentVersion, data.cleanReleaseCut),
+      data.cleanReleaseCut,
     ],
     [
       'Container parity',
       data.containerParity?.status,
-      `${countValue(data.containerParity, ['fail_count'])} fails`,
+      freshnessDetail(`${countValue(data.containerParity, ['fail_count'])} fails`, data.containerParity),
+      data.containerParity,
     ],
     [
       'Verification center',
       data.releaseVerification?.status,
-      `${countValue(data.releaseVerification, ['warn_count'])} warnings`,
+      freshnessDetail(
+        `${countValue(data.releaseVerification, ['warn_count'])} warnings`,
+        data.releaseVerification,
+      ),
+      data.releaseVerification,
     ],
     [
       'Deployment wizard',
       data.deploymentWizard?.status,
       data.deploymentWizard?.preflight?.storage_ready ? 'storage ready' : 'storage review',
+      data.deploymentWizard,
     ],
     [
       'Data quality',
       data.dataQuality?.status,
-      `${countValue(data.dataQuality?.metrics, ['dead_letter_events'])} DLQ`,
+      freshnessDetail(
+        `${countValue(data.dataQuality?.metrics, ['dead_letter_events'])} DLQ`,
+        data.dataQuality,
+      ),
+      data.dataQuality,
     ],
     [
       'Scale baseline',
       data.scaleBaseline?.status,
-      `${countValue(data.scaleBaseline?.metrics, ['request_rate_per_min'])}/min`,
+      freshnessDetail(
+        `${countValue(data.scaleBaseline?.metrics, ['request_rate_per_min'])}/min`,
+        data.scaleBaseline,
+      ),
+      data.scaleBaseline,
     ],
     [
       'Failover execution',
       data.failoverExecution?.status,
-      data.failoverExecution?.mode || 'rehearsal',
+      freshnessDetail(data.failoverExecution?.mode || 'rehearsal', data.failoverExecution),
+      data.failoverExecution,
     ],
     [
       'Secret rotation',
       data.secretsRotation?.status,
-      `${countValue(data.secretsRotation, ['warn_count'])} warnings`,
+      freshnessDetail(
+        `${countValue(data.secretsRotation, ['warn_count'])} warnings`,
+        data.secretsRotation,
+      ),
+      data.secretsRotation,
     ],
     [
       'Task automation',
       data.taskAutomation?.status,
       `${countValue(data.taskAutomation, ['automation_count'])} actions`,
+      data.taskAutomation,
     ],
     [
       'Validation packs',
       data.validationPacks?.status,
-      `${countValue(data.validationPacks, ['pack_count'])} packs`,
+      freshnessDetail(`${countValue(data.validationPacks, ['pack_count'])} packs`, data.validationPacks),
+      data.validationPacks,
     ],
   ];
   const releaseVerificationRows = asArray(data.releaseVerification?.verification_rows);
@@ -442,8 +509,12 @@ export default function OperatorLaunchpad() {
   const productionBlockers = productionSignals.filter(([, status]) =>
     ['blocked', 'fail', 'risk', 'attention'].includes(String(status || '').toLowerCase()),
   ).length;
-  const releaseVerificationBlockers = releaseVerificationSignals.filter(([, status]) =>
-    ['blocked', 'fail', 'risk', 'attention'].includes(String(status || '').toLowerCase()),
+  const releaseVerificationBlockers = releaseVerificationSignals.filter(([, status, , evidenceSource]) =>
+    ['blocked', 'fail', 'risk', 'attention'].includes(String(status || '').toLowerCase()) ||
+    evidenceNeedsAttention(evidenceSource),
+  ).length;
+  const releaseFreshEvidenceCount = releaseVerificationSignals.filter(
+    ([, , , evidenceSource]) => evidenceFreshness(evidenceSource)?.status === 'fresh',
   ).length;
   const productionBadge = statusBadge(
     productionBlockers === 0 && workQueueCount === 0,
@@ -611,13 +682,15 @@ export default function OperatorLaunchpad() {
             </span>
           </div>
           <div className="operator-health-list">
-            {releaseVerificationSignals.map(([name, status, detail]) => {
+            {releaseVerificationSignals.map(([name, status, detail, evidenceSource]) => {
               const badge = signalBadge(status);
+              const proofBadge = evidenceBadge(evidenceSource);
               return (
                 <div key={name} className="operator-health-row">
                   <span className={`badge ${badge.className}`}>{badge.label}</span>
                   <span>{name}</span>
                   <span>{detail}</span>
+                  <span className={`badge ${proofBadge.className}`}>{proofBadge.label}</span>
                 </div>
               );
             })}
@@ -652,6 +725,18 @@ export default function OperatorLaunchpad() {
             <div>
               <span>Load gates</span>
               <strong>{loadGateRows.length || '—'}</strong>
+            </div>
+            <div>
+              <span>Fresh proof</span>
+              <strong>
+                {releaseFreshEvidenceCount}/{releaseVerificationSignals.length}
+              </strong>
+            </div>
+            <div>
+              <span>Proof collected</span>
+              <strong>
+                {formatDateTime(data.releaseVerification?.evidence_freshness?.collected_at) || '—'}
+              </strong>
             </div>
             <div>
               <span>Dry-run actions</span>
@@ -785,13 +870,17 @@ export default function OperatorLaunchpad() {
             <span className={`badge ${productionBadge.className}`}>{productionBadge.label}</span>
           </div>
           <div className="operator-health-list">
-            {productionSignals.slice(0, 6).map(([name, status, detail]) => {
+            {productionSignals.slice(0, 6).map(([name, status, detail, evidenceSource]) => {
               const badge = signalBadge(status);
+              const proofBadge = evidenceBadge(evidenceSource);
               return (
                 <div key={name} className="operator-health-row">
                   <span className={`badge ${badge.className}`}>{badge.label}</span>
                   <span>{name}</span>
                   <span>{detail}</span>
+                  {evidenceFreshness(evidenceSource) ? (
+                    <span className={`badge ${proofBadge.className}`}>{proofBadge.label}</span>
+                  ) : null}
                 </div>
               );
             })}
@@ -981,20 +1070,26 @@ export default function OperatorLaunchpad() {
             </div>
           ) : (
             <div className="operator-health-list">
-              {snapshotRows.slice(0, 5).map(([name, snapshot]) => (
-                <div
-                  key={`${name}-${snapshot.digest || snapshot.storage_key}`}
-                  className="operator-health-row"
-                >
-                  <span
-                    className={`badge ${snapshot.verified || snapshot.persisted ? 'badge-ok' : 'badge-warn'}`}
+              {snapshotRows.slice(0, 5).map(([name, snapshot]) => {
+                const proofBadge = evidenceBadge(snapshot);
+                return (
+                  <div
+                    key={`${name}-${snapshot.digest || snapshot.storage_key}`}
+                    className="operator-health-row"
                   >
-                    {snapshot.verified ? 'Verified' : snapshot.persisted ? 'Saved' : 'Inline'}
-                  </span>
-                  <span>{name}</span>
-                  <span>{String(snapshot.digest || '').slice(0, 12)}</span>
-                </div>
-              ))}
+                    <span
+                      className={`badge ${snapshot.verified || snapshot.persisted ? 'badge-ok' : 'badge-warn'}`}
+                    >
+                      {snapshot.verified ? 'Verified' : snapshot.persisted ? 'Saved' : 'Inline'}
+                    </span>
+                    <span>{name}</span>
+                    <span>{String(snapshot.digest || '').slice(0, 12)}</span>
+                    {evidenceFreshness(snapshot) ? (
+                      <span className={`badge ${proofBadge.className}`}>{proofBadge.label}</span>
+                    ) : null}
+                  </div>
+                );
+              })}
             </div>
           )}
           <div className="summary-meta" style={{ marginTop: 10 }}>

@@ -4,6 +4,29 @@ All notable changes to Wardex are documented in this file.
 
 ## [Unreleased]
 
+## [1.0.10] — 2026-05-10 — detection response and signed-release polish
+
+### Added
+- **Malware, virus, trojan, and rootkit scanning workspace**: adds dashboard and infrastructure surfaces for on-demand scans, whole-system/folder/file scan scopes, open-source signature presets, and operator-wired signature source combinations.
+- **Alarm response actions**: expands alarm handling with approval-gated response choices for process, artifact, identity, network, malware, resource-abuse, and thread signals, including traffic containment and malware scan pivots.
+- **Thread analysis pullout**: adds source-aware per-thread analysis with signal classification, selected-thread evidence, false-positive guidance, and response actions inside the process investigation drawer.
+
+### Changed
+- **Detection intelligence hardening**: strengthens alert analysis, source/IP context handling, malware/rootkit/trojan/virus verdicting, and false-positive reduction guidance across supported operating systems.
+- **Admin-console layout polish**: reduces crowded nested boxes, fixes stretched/alignment-heavy panels, preserves Live Monitor scroll position during refresh, and replaces the thread popout table with readable stacked thread cards.
+- **Release metadata alignment**: bumps Rust, admin-console, Python SDK, TypeScript SDK, Helm, OTLP, OpenAPI, installation, reproducibility, website, and test surfaces to the `v1.0.10` release baseline.
+
+## [1.0.9] — 2026-05-10 — evidence freshness and signed-build readiness
+
+### Added
+- **Evidence freshness contract**: adds `wardex.evidence_freshness.v1` metadata to production assurance and release verification payloads, recording source, mode, environment ID, run/request IDs, collection and expiry timestamps, artifact digest, criticality, status, and stale/unknown reasons.
+- **Snapshot freshness persistence**: operational snapshot envelopes now retain evidence freshness metadata beside the existing payload digest so support and release reviews can verify whether saved evidence was fresh, stale, or incomplete when captured.
+- **Operator Launchpad proof badges**: `/admin/launchpad` now renders fresh/stale/unknown proof state for release verification signals, production assurance rows, and persisted snapshots.
+
+### Changed
+- **Release readiness gates**: clean release cut and release verification center readiness now treat missing critical local proof, including checksum rows, SBOM, Gatekeeper evidence, provenance, container parity, observability, and synthetic-console evidence, as a blocker instead of a soft ready state.
+- **Release metadata alignment**: bumps Rust, admin-console, Python SDK, TypeScript SDK, Helm, OTLP, OpenAPI, installation, reproducibility, and website surfaces to the `v1.0.9` release baseline.
+
 ## [1.0.8] — 2026-05-09 — release verification and deployment confidence
 
 ### Added

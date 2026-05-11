@@ -172,7 +172,7 @@ describe("WardexClient", () => {
     await client.releaseDoctor();
     await client.supportBundle();
     await client.releaseProvenance();
-    await client.releaseUpgradeRehearsal({ targetVersion: "1.0.8" });
+    await client.releaseUpgradeRehearsal({ targetVersion: "1.0.10" });
     await client.cleanReleaseCut();
     await client.containerReleaseParity();
     await client.releaseVerificationCenter();
@@ -236,7 +236,7 @@ describe("WardexClient", () => {
       expect.objectContaining({ method: "GET" }),
     );
     expect(mock).toHaveBeenCalledWith(
-      "http://localhost:8080/api/release/upgrade-rehearsal?target_version=1.0.8",
+      "http://localhost:8080/api/release/upgrade-rehearsal?target_version=1.0.10",
       expect.objectContaining({ method: "GET" }),
     );
     expect(mock).toHaveBeenCalledWith(

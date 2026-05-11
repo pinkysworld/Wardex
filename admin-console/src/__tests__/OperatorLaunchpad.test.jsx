@@ -18,6 +18,26 @@ function jsonOk(data) {
   };
 }
 
+function evidence(kind, overrides = {}) {
+  return {
+    schema: 'wardex.evidence_freshness.v1',
+    kind,
+    mode: 'live_runtime',
+    source: 'test-fixture',
+    status: 'fresh',
+    critical: true,
+    environment_id: 'test-env',
+    run_id: `${kind}-run`,
+    request_id: `${kind}-request`,
+    collected_at: '2026-05-10T09:00:00Z',
+    expires_at: '2026-05-10T15:00:00Z',
+    fresh_for_secs: 21600,
+    artifact_digest: `${kind}-digest`,
+    stale_reason: null,
+    ...overrides,
+  };
+}
+
 function renderLaunchpad() {
   return render(
     <MemoryRouter>
@@ -84,10 +104,21 @@ describe('OperatorLaunchpad', () => {
         });
       }
       if (path === '/api/release/clean-cut') {
-        return jsonOk({ status: 'ready', target_version: '1.0.8', fail_count: 0, warn_count: 0 });
+        return jsonOk({
+          status: 'ready',
+          target_version: '1.0.8',
+          fail_count: 0,
+          warn_count: 0,
+          evidence_freshness: evidence('clean_release_cut'),
+        });
       }
       if (path === '/api/containers/release-parity') {
-        return jsonOk({ status: 'ready', fail_count: 0, warn_count: 0 });
+        return jsonOk({
+          status: 'ready',
+          fail_count: 0,
+          warn_count: 0,
+          evidence_freshness: evidence('container_release_parity'),
+        });
       }
       if (path === '/api/release/verification-center') {
         return jsonOk({
@@ -95,6 +126,7 @@ describe('OperatorLaunchpad', () => {
           fail_count: 0,
           warn_count: 0,
           verification_rows: [{ artifact: 'wardex-macos-aarch64.tar.gz', status: 'ready' }],
+          evidence_freshness: evidence('release_verification_center'),
         });
       }
       if (path === '/api/deployment/self-hosted-wizard') {
@@ -109,6 +141,7 @@ describe('OperatorLaunchpad', () => {
           status: 'ready',
           metrics: { dead_letter_events: 0 },
           slo_summary: { score: 100, passing: 4, total: 4 },
+          evidence_freshness: evidence('data_quality_dashboard'),
         });
       }
       if (path === '/api/performance/scale-baseline') {
@@ -116,13 +149,23 @@ describe('OperatorLaunchpad', () => {
           status: 'ready',
           metrics: { request_rate_per_min: 12 },
           load_gate: [{ id: 'launchpad_fanout', status: 'pass' }],
+          evidence_freshness: evidence('performance_scale_baseline'),
         });
       }
       if (path === '/api/cluster/failover-execution') {
-        return jsonOk({ status: 'ready', mode: 'cluster_ready' });
+        return jsonOk({
+          status: 'ready',
+          mode: 'cluster_ready',
+          evidence_freshness: evidence('cluster_failover_execution'),
+        });
       }
       if (path === '/api/secrets/rotation-operations') {
-        return jsonOk({ status: 'ready', fail_count: 0, warn_count: 0 });
+        return jsonOk({
+          status: 'ready',
+          fail_count: 0,
+          warn_count: 0,
+          evidence_freshness: evidence('secrets_rotation_operations'),
+        });
       }
       if (path === '/api/operator/task-automation') {
         return jsonOk({
@@ -132,7 +175,12 @@ describe('OperatorLaunchpad', () => {
         });
       }
       if (path === '/api/detection/validation-packs') {
-        return jsonOk({ status: 'ready', pack_count: 5, executable_pack_count: 5 });
+        return jsonOk({
+          status: 'ready',
+          pack_count: 5,
+          executable_pack_count: 5,
+          evidence_freshness: evidence('detection_validation_packs'),
+        });
       }
       if (path === '/api/operational/snapshots') {
         return jsonOk({
@@ -144,6 +192,7 @@ describe('OperatorLaunchpad', () => {
               digest: 'snapshot-digest-1',
               storage_key: 'operational_snapshots/release_doctor/1.json',
               verified: true,
+              evidence_freshness: evidence('release_doctor'),
             },
           ],
         });
@@ -206,6 +255,7 @@ describe('OperatorLaunchpad', () => {
     expect(screen.getByText('Install plans')).toBeInTheDocument();
     expect(screen.getByText('Quality score')).toBeInTheDocument();
     expect(screen.getByText('Dry-run actions')).toBeInTheDocument();
+    expect(screen.getAllByText('fresh proof').length).toBeGreaterThan(0);
     expect(screen.getByText('Promotion guard')).toBeInTheDocument();
     expect(screen.getByText('Process evidence')).toBeInTheDocument();
     expect(screen.getByText('Approvals and dry-runs')).toBeInTheDocument();

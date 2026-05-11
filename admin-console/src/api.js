@@ -832,9 +832,18 @@ export const analystQuery = (body) => post('/api/events/search', body);
 export const scanBuffer = (body) => post('/api/scan/buffer', body);
 export const scanBufferV2 = (body) => post('/api/scan/buffer/v2', body);
 export const scanHash = (body) => post('/api/scan/hash', body);
+export const malwareScanPath = (body) =>
+  post('/api/malware/scan-path', body, { timeoutMs: 120000 });
+export const rootkitScan = (body) => post('/api/rootkit/scan', body, { timeoutMs: 120000 });
 export const malwareStats = () => get('/api/malware/stats');
 export const malwareRecent = () => get('/api/malware/recent');
-export const malwareImport = (body) => post('/api/malware/signatures/import', body);
+export const malwareSignaturePresets = () => get('/api/malware/signatures/presets');
+export const malwareLoadLocalSignatures = () => post('/api/malware/signatures/load-local');
+export const malwareImport = (body, source) =>
+  post(
+    `/api/malware/signatures/import${source ? `?source=${encodeURIComponent(source)}` : ''}`,
+    body,
+  );
 export const detectionExplain = (params = {}) =>
   get(`/api/detection/explain${toQuery(params) ? `?${toQuery(params)}` : ''}`);
 export const detectionFeedback = (params = {}) =>

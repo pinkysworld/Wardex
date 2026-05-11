@@ -138,6 +138,17 @@ use crate::structured_log::generate_request_id;
 use crate::support::{FailoverDrillRecord, InboxItem, ReportExecutionContext, SupportStore};
 use sha2::Digest;
 
+const LOCAL_AV_SIGNATURE_PRESET_DIRS: &[&str] = &[
+    "rules/clamav",
+    "rules/malware_hashes",
+    "var/signatures/clamav",
+    "/var/lib/clamav",
+    "/usr/local/share/clamav",
+    "/opt/homebrew/share/clamav",
+];
+
+const LOCAL_AV_SIGNATURE_EXTENSIONS: &[&str] = &["hdb", "hsb", "hashes", "txt"];
+
 // ── Rate Limiter ────────────────────────────────────────────
 
 struct RateLimiter {
@@ -665,6 +676,77 @@ struct AppState {
     alert_broadcaster: crate::ws_stream::AlertBroadcaster,
     // Phase 46: extensible key-value store for webhooks etc.
     extra: HashMap<String, serde_json::Value>,
+}
+
+fn local_av_signature_files() -> Vec<PathBuf> {
+    let mut files = Vec::new();
+    for dir in LOCAL_AV_SIGNATURE_PRESET_DIRS {
+        let path = Path::new(dir);
+        let Ok(entries) = fs::read_dir(path) else {
+            continue;
+        };
+        for entry in entries.flatten() {
+            let file_path = entry.path();
+            let ext = file_path
+                .extension()
+                .and_then(|value| value.to_str())
+                .unwrap_or("")
+                .to_ascii_lowercase();
+            if LOCAL_AV_SIGNATURE_EXTENSIONS.contains(&ext.as_str()) {
+                files.push(file_path);
+            }
+        }
+    }
+    files.sort();
+    files
+}
+
+fn local_av_signature_presets_json() -> serde_json::Value {
+    let files = local_av_signature_files();
+    let directories: Vec<_> = LOCAL_AV_SIGNATURE_PRESET_DIRS
+        .iter()
+        .map(|dir| {
+            let path = Path::new(dir);
+            let detected_files = files
+                .iter()
+                .filter(|file| file.parent().is_some_and(|parent| parent == path))
+                .map(|file| file.display().to_string())
+                .collect::<Vec<_>>();
+            serde_json::json!({
+                "path": dir,
+                "exists": path.exists(),
+                "detected_files": detected_files,
+            })
+        })
+        .collect();
+    serde_json::json!({
+        "preset": "local_open_source_av",
+        "formats": ["clamav_hdb_md5", "clamav_hsb_sha256", "plain_hash_lines"],
+        "operator_decision_required": true,
+        "auto_download": false,
+        "directories": directories,
+    })
+}
+
+fn load_local_open_source_av_signatures(state: &Arc<Mutex<AppState>>) -> usize {
+    let mut imported = 0usize;
+    for file_path in local_av_signature_files() {
+        let Ok(content) = fs::read_to_string(&file_path) else {
+            continue;
+        };
+        let mut s = state.lock().unwrap_or_else(|e| e.into_inner());
+        match s
+            .malware_hash_db
+            .load_clamav_hash_signatures(&content, Some(&format!("local:{}", file_path.display())))
+        {
+            Ok(count) => imported += count,
+            Err(error) => tracing::warn!(
+                "failed to load local malware signatures {}: {error}",
+                file_path.display()
+            ),
+        }
+    }
+    imported
 }
 
 fn build_search_index_from_events(
@@ -1609,6 +1691,14 @@ pub async fn run_server(
                 Err(e) => tracing::warn!("failed to load YARA malware rules: {e}"),
             }
         }
+    }
+
+    // Load local open-source AV hash signatures by default when present.
+    // Operators opt in by placing ClamAV-style .hdb/.hsb files in preset
+    // directories; Wardex does not redistribute or auto-download databases.
+    let imported = load_local_open_source_av_signatures(&state);
+    if imported > 0 {
+        tracing::info!("loaded {imported} local open-source AV hash signatures");
     }
 
     spawn_enterprise_hunt_scheduler(&state);
@@ -5101,6 +5191,12 @@ fn build_process_threads_response(
         "pid": pid,
         "hostname": hostname,
         "platform": platform,
+        "collection_source": match (platform, identifier_type) {
+            ("macos", "row_slot") => "ps -M -p <pid>",
+            ("linux", "tid") => "ps -L -p <pid>",
+            ("windows", _) => "windows-thread-collector",
+            _ => "process-thread-collector",
+        },
         "identifier_type": identifier_type,
         "note": note,
         "message": message,
@@ -12157,6 +12253,130 @@ fn storage_root_path(storage: &crate::storage::SharedStorage) -> Option<PathBuf>
         .map(PathBuf::from)
 }
 
+const EVIDENCE_FRESHNESS_WINDOW_SECS: i64 = 6 * 60 * 60;
+
+fn short_digest(value: &str, width: usize) -> String {
+    value.chars().take(width).collect()
+}
+
+fn evidence_request_id() -> String {
+    crate::structured_log::generate_request_id()
+        .unwrap_or_else(|_| format!("req-fallback-{}", chrono::Utc::now().timestamp_micros()))
+}
+
+fn evidence_environment_id(state: &AppState) -> String {
+    let source = format!(
+        "{}:{}:{}",
+        state.local_host_info.hostname,
+        state.config_path.display(),
+        env!("CARGO_PKG_VERSION")
+    );
+    short_digest(&crate::audit::sha256_hex(source.as_bytes()), 16)
+}
+
+fn evidence_freshness(
+    state: &AppState,
+    kind: &str,
+    mode: &str,
+    source: &str,
+    status: &str,
+    stale_reason: Option<&str>,
+    critical: bool,
+    artifacts: serde_json::Value,
+) -> serde_json::Value {
+    let collected_at = chrono::Utc::now();
+    let expires_at = collected_at + chrono::Duration::seconds(EVIDENCE_FRESHNESS_WINDOW_SECS);
+    let artifact_digest = crate::audit::sha256_hex(
+        serde_json::json!({
+            "kind": kind,
+            "mode": mode,
+            "source": source,
+            "runtime_version": env!("CARGO_PKG_VERSION"),
+            "artifacts": artifacts,
+        })
+        .to_string()
+        .as_bytes(),
+    );
+    serde_json::json!({
+        "schema": "wardex.evidence_freshness.v1",
+        "kind": kind,
+        "mode": mode,
+        "source": source,
+        "status": status,
+        "critical": critical,
+        "environment_id": evidence_environment_id(state),
+        "run_id": format!("{kind}-{}", short_digest(&artifact_digest, 12)),
+        "request_id": evidence_request_id(),
+        "collected_at": collected_at.to_rfc3339(),
+        "expires_at": expires_at.to_rfc3339(),
+        "fresh_for_secs": EVIDENCE_FRESHNESS_WINDOW_SECS,
+        "artifact_digest": artifact_digest,
+        "stale_reason": stale_reason,
+    })
+}
+
+fn with_evidence_freshness(
+    mut payload: serde_json::Value,
+    evidence: serde_json::Value,
+) -> serde_json::Value {
+    if let Some(map) = payload.as_object_mut() {
+        map.insert("evidence_freshness".to_string(), evidence);
+        payload
+    } else {
+        serde_json::json!({
+            "payload": payload,
+            "evidence_freshness": evidence,
+        })
+    }
+}
+
+fn payload_evidence_freshness(payload: &serde_json::Value) -> Option<serde_json::Value> {
+    payload.get("evidence_freshness").cloned()
+}
+
+fn evidence_freshness_check(
+    id: &str,
+    label: &str,
+    payload: &serde_json::Value,
+    critical: bool,
+) -> serde_json::Value {
+    let evidence = payload.get("evidence_freshness");
+    let status = evidence
+        .and_then(|value| value.get("status"))
+        .and_then(serde_json::Value::as_str)
+        .unwrap_or("unknown");
+    let mode = evidence
+        .and_then(|value| value.get("mode"))
+        .and_then(serde_json::Value::as_str)
+        .unwrap_or("missing");
+    let source = evidence
+        .and_then(|value| value.get("source"))
+        .and_then(serde_json::Value::as_str)
+        .unwrap_or("unreported");
+    let stale_reason = evidence
+        .and_then(|value| value.get("stale_reason"))
+        .and_then(serde_json::Value::as_str);
+    let check_status = if status == "fresh" {
+        "pass"
+    } else if critical {
+        "fail"
+    } else {
+        "warn"
+    };
+    serde_json::json!({
+        "id": id,
+        "status": check_status,
+        "detail": if let Some(reason) = stale_reason {
+            format!("{label} evidence is {status} from {mode} ({source}): {reason}.")
+        } else {
+            format!("{label} evidence is {status} from {mode} ({source}).")
+        },
+        "evidence_status": status,
+        "evidence_mode": mode,
+        "critical": critical,
+    })
+}
+
 fn snapshot_entry_from_path(
     root: &Path,
     path: &Path,
@@ -12182,6 +12402,7 @@ fn snapshot_entry_from_path(
         "storage_key": storage_key,
         "size_bytes": bytes.len(),
         "verified": verified,
+        "evidence_freshness": envelope.get("evidence_freshness").cloned().unwrap_or_else(|| serde_json::Value::Null),
     });
     if include_payload && let Some(map) = entry.as_object_mut() {
         map.insert(
@@ -12372,6 +12593,7 @@ fn persist_operational_snapshot(
         "kind": safe_kind,
         "digest": digest,
         "generated_at": generated_at,
+        "evidence_freshness": payload_evidence_freshness(payload),
         "payload": payload,
     });
     match serde_json::to_vec_pretty(&envelope)
@@ -13028,17 +13250,34 @@ fn build_release_observability_gates(state: &AppState) -> serde_json::Value {
         }),
     ];
     let (fail_count, warn_count, status) = check_counts(&checks);
-    serde_json::json!({
-        "generated_at": chrono::Utc::now().to_rfc3339(),
-        "status": status,
-        "fail_count": fail_count,
-        "warn_count": warn_count,
-        "checks": checks,
-        "required_metrics": required_metrics,
-        "missing_metrics": missing_metrics,
-        "stream": stream,
-        "snapshot_index": snapshots,
-    })
+    with_evidence_freshness(
+        serde_json::json!({
+            "generated_at": chrono::Utc::now().to_rfc3339(),
+            "status": status,
+            "fail_count": fail_count,
+            "warn_count": warn_count,
+            "checks": checks,
+            "required_metrics": required_metrics,
+            "missing_metrics": missing_metrics,
+            "stream": stream,
+            "snapshot_index": snapshots,
+        }),
+        evidence_freshness(
+            state,
+            "release_observability_gates",
+            "live_runtime",
+            "prometheus_metrics_stream_contract_snapshots",
+            "fresh",
+            None,
+            true,
+            serde_json::json!({
+                "missing_metrics": missing_metrics,
+                "stream_score": stream_score,
+                "verified_snapshots": verified_snapshots,
+                "contract_drift": contract_drift,
+            }),
+        ),
+    )
 }
 
 fn build_tenant_isolation_proof(state: &AppState) -> serde_json::Value {
@@ -13380,19 +13619,51 @@ fn build_release_provenance(state: &AppState) -> serde_json::Value {
         .to_string()
         .as_bytes(),
     );
-    serde_json::json!({
-        "generated_at": chrono::Utc::now().to_rfc3339(),
-        "status": status,
-        "runtime_version": env!("CARGO_PKG_VERSION"),
-        "artifact_count": artifacts.len(),
-        "missing_artifacts": missing_artifacts,
-        "components": components,
-        "artifacts": artifacts,
-        "checks": checks,
-        "fail_count": fail_count,
-        "warn_count": warn_count,
-        "attestation_digest": attestation_digest,
-    })
+    let evidence_status = if artifacts.is_empty() {
+        "unknown"
+    } else if missing_artifacts > 0 {
+        "stale"
+    } else {
+        "fresh"
+    };
+    let stale_reason = if artifacts.is_empty() {
+        Some("release_sha256s_missing")
+    } else if missing_artifacts > 0 {
+        Some("release_artifact_file_missing")
+    } else {
+        None
+    };
+    with_evidence_freshness(
+        serde_json::json!({
+            "generated_at": chrono::Utc::now().to_rfc3339(),
+            "status": status,
+            "runtime_version": env!("CARGO_PKG_VERSION"),
+            "artifact_count": artifacts.len(),
+            "missing_artifacts": missing_artifacts,
+            "components": components,
+            "artifacts": artifacts,
+            "checks": checks,
+            "fail_count": fail_count,
+            "warn_count": warn_count,
+            "attestation_digest": attestation_digest,
+        }),
+        evidence_freshness(
+            state,
+            "release_provenance",
+            "local_artifact_probe",
+            "release/SHA256SUMS_and_embedded_manifests",
+            evidence_status,
+            stale_reason,
+            true,
+            serde_json::json!({
+                "artifact_count": artifacts.len(),
+                "missing_artifacts": missing_artifacts,
+                "component_count": components.len(),
+                "contract_drift": contract_drift,
+                "attestation_digest": attestation_digest,
+            }),
+        ),
+    )
 }
 
 fn build_upgrade_rehearsal(state: &AppState, target_version: &str) -> serde_json::Value {
@@ -13510,16 +13781,32 @@ fn build_synthetic_console_monitor(state: &AppState) -> serde_json::Value {
         }),
     ];
     let (fail_count, warn_count, status) = check_counts(&checks);
-    serde_json::json!({
-        "generated_at": chrono::Utc::now().to_rfc3339(),
-        "status": status,
-        "fail_count": fail_count,
-        "warn_count": warn_count,
-        "check_count": checks.len(),
-        "checks": checks,
-        "latency_budget_ms": 1500,
-        "next_action": if fail_count > 0 { "Fix failing console dependencies before relying on the operator launchpad." } else if warn_count > 0 { "Review degraded synthetic console signals before release acceptance." } else { "Synthetic console monitor is clean." },
-    })
+    with_evidence_freshness(
+        serde_json::json!({
+            "generated_at": chrono::Utc::now().to_rfc3339(),
+            "status": status,
+            "fail_count": fail_count,
+            "warn_count": warn_count,
+            "check_count": checks.len(),
+            "checks": checks,
+            "latency_budget_ms": 1500,
+            "next_action": if fail_count > 0 { "Fix failing console dependencies before relying on the operator launchpad." } else if warn_count > 0 { "Review degraded synthetic console signals before release acceptance." } else { "Synthetic console monitor is clean." },
+        }),
+        evidence_freshness(
+            state,
+            "synthetic_console_monitor",
+            "live_runtime",
+            "runtime_status_workflow_preflight_alert_cursor_stream_readiness",
+            "fresh",
+            None,
+            true,
+            serde_json::json!({
+                "fail_count": fail_count,
+                "warn_count": warn_count,
+                "check_count": checks.len(),
+            }),
+        ),
+    )
 }
 
 fn build_incident_timeline_replay(
@@ -14049,7 +14336,7 @@ fn build_clean_release_cut(state: &AppState) -> serde_json::Value {
         .and_then(serde_json::Value::as_u64)
         .unwrap_or_default();
     let artifacts = release_artifact_entries();
-    let checks = vec![
+    let mut checks = vec![
         serde_json::json!({
             "id": "target_patch",
             "status": "pass",
@@ -14081,45 +14368,91 @@ fn build_clean_release_cut(state: &AppState) -> serde_json::Value {
             "detail": "Synthetic console route smoke is attached to the cut plan.",
         }),
     ];
+    checks.extend([
+        evidence_freshness_check(
+            "provenance_freshness",
+            "Release provenance",
+            &provenance,
+            true,
+        ),
+        evidence_freshness_check("container_freshness", "Container parity", &container, true),
+        evidence_freshness_check(
+            "observability_freshness",
+            "Release observability",
+            &observability,
+            true,
+        ),
+        evidence_freshness_check(
+            "synthetic_console_freshness",
+            "Synthetic console",
+            &synthetic,
+            true,
+        ),
+    ]);
     let (fail_count, warn_count, status) = check_counts(&checks);
-    serde_json::json!({
-        "generated_at": chrono::Utc::now().to_rfc3339(),
-        "status": status,
-        "current_version": current_version,
-        "target_version": target_version,
-        "next_patch_target": next_patch_target,
-        "fail_count": fail_count,
-        "warn_count": warn_count,
-        "checks": checks,
-        "release_steps": [
-            {"id": "bump", "action": "Align Cargo, SDKs, Helm, OpenAPI, docs, and website to the target patch version."},
-            {"id": "validate", "action": "Run contract parity, release docs, Rust, SDK, admin, and focused browser smoke gates."},
-            {"id": "tag", "action": "Create an annotated tag only after source and container parity are clean."},
-            {"id": "publish", "action": "Let GitHub Actions publish signed macOS archives, checksums, SBOM, package artifacts, and container provenance."}
-        ],
-        "release_gate": {
-            "target_tag": format!("v{target_version}"),
-            "required_local_commands": [
-                "cargo fmt --all --check",
-                "cargo test --lib",
-                "npm --prefix admin-console run lint",
-                "npm --prefix admin-console test -- --run",
-                "npm --prefix admin-console run build",
-                "npm --prefix sdk/typescript run build",
-                "npm --prefix sdk/typescript test -- --run",
-                ".venv/bin/python -m pytest sdk/python/tests/test_client.py",
-                ".venv/bin/python scripts/check_contract_parity.py",
-                ".venv/bin/python scripts/validate_release_docs.py",
-                "bash scripts/performance_scale_baseline.sh"
+    with_evidence_freshness(
+        serde_json::json!({
+            "generated_at": chrono::Utc::now().to_rfc3339(),
+            "status": status,
+            "current_version": current_version,
+            "target_version": target_version,
+            "next_patch_target": next_patch_target,
+            "fail_count": fail_count,
+            "warn_count": warn_count,
+            "checks": checks,
+            "release_steps": [
+                {"id": "bump", "action": "Align Cargo, SDKs, Helm, OpenAPI, docs, and website to the target patch version."},
+                {"id": "validate", "action": "Run contract parity, release docs, Rust, SDK, admin, and focused browser smoke gates."},
+                {"id": "tag", "action": "Create an annotated tag only after source and container parity are clean."},
+                {"id": "publish", "action": "Let GitHub Actions publish signed macOS archives, checksums, SBOM, package artifacts, and container provenance."}
             ],
-            "required_ci_evidence": ["signed macOS archives", "Gatekeeper evidence", "SHA256SUMS", "SBOM", "SLSA provenance", "cosign container signature"],
-            "tag_policy": format!("create the v{target_version} tag only after the release verification center is ready or only has expected local-evidence warnings"),
-        },
-        "provenance": provenance,
-        "container": container,
-        "observability": observability,
-        "synthetic_console": synthetic,
-    })
+            "release_gate": {
+                "target_tag": format!("v{target_version}"),
+                "required_local_commands": [
+                    "cargo fmt --all --check",
+                    "cargo test --lib",
+                    "npm --prefix admin-console run lint",
+                    "npm --prefix admin-console test -- --run",
+                    "npm --prefix admin-console run build",
+                    "npm --prefix sdk/typescript run build",
+                    "npm --prefix sdk/typescript test -- --run",
+                    ".venv/bin/python -m pytest sdk/python/tests/test_client.py",
+                    ".venv/bin/python scripts/check_contract_parity.py",
+                    ".venv/bin/python scripts/validate_release_docs.py",
+                    "bash scripts/performance_scale_baseline.sh"
+                ],
+                "required_ci_evidence": ["signed macOS archives", "Gatekeeper evidence", "SHA256SUMS", "SBOM", "SLSA provenance", "cosign container signature"],
+                "tag_policy": format!("create the v{target_version} tag only after the release verification center is ready or only has expected local-evidence warnings"),
+            },
+            "provenance": provenance,
+            "container": container,
+            "observability": observability,
+            "synthetic_console": synthetic,
+        }),
+        evidence_freshness(
+            state,
+            "clean_release_cut",
+            if fail_count == 0 {
+                "live_release_gate"
+            } else {
+                "blocked_release_gate"
+            },
+            "provenance_container_observability_synthetic_console",
+            if fail_count == 0 { "fresh" } else { "unknown" },
+            if fail_count == 0 {
+                None
+            } else {
+                Some("critical_release_evidence_not_fresh")
+            },
+            true,
+            serde_json::json!({
+                "fail_count": fail_count,
+                "warn_count": warn_count,
+                "target_version": target_version,
+                "next_patch_target": next_patch_target,
+            }),
+        ),
+    )
 }
 
 fn build_synthetic_console_summary(state: &AppState) -> serde_json::Value {
@@ -14150,17 +14483,34 @@ fn build_synthetic_console_summary(state: &AppState) -> serde_json::Value {
         }),
     ];
     let (fail_count, warn_count, status) = check_counts(&checks);
-    serde_json::json!({
-        "generated_at": chrono::Utc::now().to_rfc3339(),
-        "status": status,
-        "fail_count": fail_count,
-        "warn_count": warn_count,
-        "check_count": checks.len(),
-        "checks": checks,
-        "mode": "clean_cut_summary",
-        "full_endpoint": "/api/monitoring/synthetic-console",
-        "next_action": if fail_count > 0 { "Fix failing console dependencies before relying on the operator launchpad." } else if warn_count > 0 { "Review degraded synthetic console signals before release acceptance." } else { "Synthetic console summary is clean." },
-    })
+    with_evidence_freshness(
+        serde_json::json!({
+            "generated_at": chrono::Utc::now().to_rfc3339(),
+            "status": status,
+            "fail_count": fail_count,
+            "warn_count": warn_count,
+            "check_count": checks.len(),
+            "checks": checks,
+            "mode": "clean_cut_summary",
+            "full_endpoint": "/api/monitoring/synthetic-console",
+            "next_action": if fail_count > 0 { "Fix failing console dependencies before relying on the operator launchpad." } else if warn_count > 0 { "Review degraded synthetic console signals before release acceptance." } else { "Synthetic console summary is clean." },
+        }),
+        evidence_freshness(
+            state,
+            "synthetic_console_summary",
+            "live_runtime_summary",
+            "runtime_status_alert_cursor_stream_readiness",
+            "fresh",
+            None,
+            true,
+            serde_json::json!({
+                "stream_score": stream_score,
+                "fail_count": fail_count,
+                "warn_count": warn_count,
+                "check_count": checks.len(),
+            }),
+        ),
+    )
 }
 
 fn build_container_release_parity(_state: &AppState) -> serde_json::Value {
@@ -14215,29 +14565,53 @@ fn build_container_release_parity(_state: &AppState) -> serde_json::Value {
     })];
     checks.extend(workflow_checks);
     let (fail_count, warn_count, status) = check_counts(&checks);
-    serde_json::json!({
-        "generated_at": chrono::Utc::now().to_rfc3339(),
-        "status": status,
-        "runtime_version": env!("CARGO_PKG_VERSION"),
-        "fail_count": fail_count,
-        "warn_count": warn_count,
-        "copy_rows": copy_rows,
-        "image_tags": [env!("CARGO_PKG_VERSION"), "latest"],
-        "build_matrix": [
-            {"id": "linux_amd64", "artifact": "wardex-linux-x86_64.tar.gz", "container": true, "required_context": ["src", "scripts", "docs", "admin-console", "sdk", "site", "examples"]},
-            {"id": "macos_aarch64", "artifact": "wardex-macos-aarch64.tar.gz", "container": false, "required_context": ["src", "scripts", "docs", "admin-console", "sdk", "site", "examples"]},
-            {"id": "macos_x86_64", "artifact": "wardex-macos-x86_64.tar.gz", "container": false, "required_context": ["src", "scripts", "docs", "admin-console", "sdk", "site", "examples"]},
-            {"id": "windows_x86_64", "artifact": "wardex-windows-x86_64.zip", "container": false, "required_context": ["src", "scripts", "docs", "admin-console", "sdk", "site", "examples"]}
-        ],
-        "ci_retrigger_plan": {
-            "workflow": ".github/workflows/release.yml",
-            "required_jobs": ["Package binaries", "Container Image Scan", "Publish container", "Generate SBOM", "Attest build provenance"],
-            "manual_check": "verify the container build uses the same committed Dockerfile and copied release context as the archive builds",
-        },
-        "expected_assets": ["ghcr.io/pinkysworld/wardex", "SBOM", "SLSA provenance", "cosign signature"],
-        "checks": checks,
-        "next_action": if fail_count > 0 { "Fix Docker build context before cutting another tag." } else if warn_count > 0 { "Review container signing or provenance workflow coverage before publish." } else { "Container release parity is ready for the next clean tag." },
-    })
+    with_evidence_freshness(
+        serde_json::json!({
+            "generated_at": chrono::Utc::now().to_rfc3339(),
+            "status": status,
+            "runtime_version": env!("CARGO_PKG_VERSION"),
+            "fail_count": fail_count,
+            "warn_count": warn_count,
+            "copy_rows": copy_rows,
+            "image_tags": [env!("CARGO_PKG_VERSION"), "latest"],
+            "build_matrix": [
+                {"id": "linux_amd64", "artifact": "wardex-linux-x86_64.tar.gz", "container": true, "required_context": ["src", "scripts", "docs", "admin-console", "sdk", "site", "examples"]},
+                {"id": "macos_aarch64", "artifact": "wardex-macos-aarch64.tar.gz", "container": false, "required_context": ["src", "scripts", "docs", "admin-console", "sdk", "site", "examples"]},
+                {"id": "macos_x86_64", "artifact": "wardex-macos-x86_64.tar.gz", "container": false, "required_context": ["src", "scripts", "docs", "admin-console", "sdk", "site", "examples"]},
+                {"id": "windows_x86_64", "artifact": "wardex-windows-x86_64.zip", "container": false, "required_context": ["src", "scripts", "docs", "admin-console", "sdk", "site", "examples"]}
+            ],
+            "ci_retrigger_plan": {
+                "workflow": ".github/workflows/release.yml",
+                "required_jobs": ["Package binaries", "Container Image Scan", "Publish container", "Generate SBOM", "Attest build provenance"],
+                "manual_check": "verify the container build uses the same committed Dockerfile and copied release context as the archive builds",
+            },
+            "expected_assets": ["ghcr.io/pinkysworld/wardex", "SBOM", "SLSA provenance", "cosign signature"],
+            "checks": checks,
+            "next_action": if fail_count > 0 { "Fix Docker build context before cutting another tag." } else if warn_count > 0 { "Review container signing or provenance workflow coverage before publish." } else { "Container release parity is ready for the next clean tag." },
+        }),
+        evidence_freshness(
+            _state,
+            "container_release_parity",
+            "local_artifact_probe",
+            "Dockerfile_and_release_workflow",
+            if missing_copies == 0 {
+                "fresh"
+            } else {
+                "stale"
+            },
+            if missing_copies == 0 {
+                None
+            } else {
+                Some("docker_build_context_incomplete")
+            },
+            true,
+            serde_json::json!({
+                "missing_copies": missing_copies,
+                "fail_count": fail_count,
+                "warn_count": warn_count,
+            }),
+        ),
+    )
 }
 
 fn build_release_verification_center(state: &AppState) -> serde_json::Value {
@@ -14293,7 +14667,7 @@ fn build_release_verification_center(state: &AppState) -> serde_json::Value {
         serde_json::json!({"id": "provenance", "status": if release_workflow.contains("attest-build-provenance") { "tracked" } else { "review" }}),
         serde_json::json!({"id": "sbom", "status": if release_workflow.contains("sbom") || release_workflow.contains("SBOM") { "tracked" } else { "review" }}),
     ];
-    let checks = vec![
+    let mut checks = vec![
         serde_json::json!({
             "id": "checksums",
             "status": if artifacts.is_empty() { "warn" } else { "pass" },
@@ -14315,33 +14689,79 @@ fn build_release_verification_center(state: &AppState) -> serde_json::Value {
             "detail": container.get("next_action").cloned().unwrap_or_else(|| serde_json::json!("Container parity checked.")),
         }),
     ];
+    let local_verification_ready = !artifacts.is_empty() && gatekeeper_missing == 0 && sbom_exists;
+    checks.extend([
+        evidence_freshness_check("provenance_freshness", "Release provenance", &provenance, true),
+        evidence_freshness_check("container_freshness", "Container parity", &container, true),
+        serde_json::json!({
+            "id": "local_release_evidence_freshness",
+            "status": if local_verification_ready { "pass" } else { "fail" },
+            "detail": if local_verification_ready {
+                "Checksums, macOS Gatekeeper evidence, and SBOM are present for local verification.".to_string()
+            } else {
+                format!("Local verification evidence is incomplete: {} checksum row(s), {gatekeeper_missing} Gatekeeper gap(s), SBOM present: {sbom_exists}.", artifacts.len())
+            },
+            "evidence_status": if local_verification_ready { "fresh" } else { "unknown" },
+            "critical": true,
+        }),
+    ]);
     let (fail_count, warn_count, status) = check_counts(&checks);
-    serde_json::json!({
-        "generated_at": chrono::Utc::now().to_rfc3339(),
-        "status": status,
-        "fail_count": fail_count,
-        "warn_count": warn_count,
-        "release_url": format!("https://github.com/pinkysworld/Wardex/releases/tag/v{}", env!("CARGO_PKG_VERSION")),
-        "artifacts": artifacts,
-        "gatekeeper_evidence": gatekeeper_evidence,
-        "verification_rows": verification_rows,
-        "workflow_evidence": workflow_evidence,
-        "operator_workflow": [
-            {"id": "download", "label": "Download all archives, SHA256SUMS, SBOM, and provenance attestations from the release."},
-            {"id": "verify", "label": "Run checksum, GitHub attestation, cosign, and macOS signature verification before install."},
-            {"id": "install", "label": "Install only the artifact whose platform, digest, and signature all match the release evidence."},
-            {"id": "record", "label": "Persist the verification-center snapshot digest in the release review."}
-        ],
-        "provenance": provenance,
-        "container": container,
-        "verify_commands": [
-            "shasum -a 256 -c SHA256SUMS",
-            "gh attestation verify <archive> --repo pinkysworld/Wardex",
-            "cosign verify ghcr.io/pinkysworld/wardex:<version>",
-            "codesign --verify --strict --verbose=2 wardex"
-        ],
-        "checks": checks,
-    })
+    with_evidence_freshness(
+        serde_json::json!({
+            "generated_at": chrono::Utc::now().to_rfc3339(),
+            "status": status,
+            "fail_count": fail_count,
+            "warn_count": warn_count,
+            "release_url": format!("https://github.com/pinkysworld/Wardex/releases/tag/v{}", env!("CARGO_PKG_VERSION")),
+            "artifacts": artifacts,
+            "gatekeeper_evidence": gatekeeper_evidence,
+            "verification_rows": verification_rows,
+            "workflow_evidence": workflow_evidence,
+            "operator_workflow": [
+                {"id": "download", "label": "Download all archives, SHA256SUMS, SBOM, and provenance attestations from the release."},
+                {"id": "verify", "label": "Run checksum, GitHub attestation, cosign, and macOS signature verification before install."},
+                {"id": "install", "label": "Install only the artifact whose platform, digest, and signature all match the release evidence."},
+                {"id": "record", "label": "Persist the verification-center snapshot digest in the release review."}
+            ],
+            "provenance": provenance,
+            "container": container,
+            "verify_commands": [
+                "shasum -a 256 -c SHA256SUMS",
+                "gh attestation verify <archive> --repo pinkysworld/Wardex",
+                "cosign verify ghcr.io/pinkysworld/wardex:<version>",
+                "codesign --verify --strict --verbose=2 wardex"
+            ],
+            "checks": checks,
+        }),
+        evidence_freshness(
+            state,
+            "release_verification_center",
+            if local_verification_ready {
+                "local_artifact_probe"
+            } else {
+                "incomplete_artifact_probe"
+            },
+            "release_directory_checksums_gatekeeper_sbom",
+            if local_verification_ready {
+                "fresh"
+            } else {
+                "unknown"
+            },
+            if local_verification_ready {
+                None
+            } else {
+                Some("local_release_verification_evidence_incomplete")
+            },
+            true,
+            serde_json::json!({
+                "artifact_count": artifacts.len(),
+                "gatekeeper_missing": gatekeeper_missing,
+                "sbom_exists": sbom_exists,
+                "fail_count": fail_count,
+                "warn_count": warn_count,
+            }),
+        ),
+    )
 }
 
 fn build_self_hosted_deployment_wizard(state: &AppState) -> serde_json::Value {
@@ -14523,31 +14943,50 @@ fn build_data_quality_dashboard(state: &AppState) -> serde_json::Value {
         .filter(|row| row.get("status").and_then(serde_json::Value::as_str) != Some("pass"))
         .count();
     let quality_score = 100usize.saturating_sub(slo_warn_count.saturating_mul(15));
-    serde_json::json!({
-        "generated_at": chrono::Utc::now().to_rfc3339(),
-        "status": status,
-        "fail_count": fail_count,
-        "warn_count": warn_count,
-        "metrics": {
-            "retained_events": events.len(),
-            "alerts": recent_alerts,
-            "dead_letter_events": dlq_count,
-            "agents": agents.len(),
-            "stale_agents": stale_agents,
-            "collector_lanes": collector_rows.len(),
-            "unhealthy_collectors": unhealthy_collectors,
-        },
-        "collector_rows": collector_rows.into_iter().take(12).collect::<Vec<_>>(),
-        "slo_summary": {
-            "score": quality_score,
-            "passing": slo_rows.len().saturating_sub(slo_warn_count),
-            "total": slo_rows.len(),
-            "status": if slo_warn_count == 0 { "ready" } else { "review" },
-        },
-        "slos": slo_rows,
-        "checks": checks,
-        "next_action": if warn_count > 0 { "Review degraded data sources before relying on detection confidence." } else { "Telemetry quality is healthy for current validation depth." },
-    })
+    with_evidence_freshness(
+        serde_json::json!({
+            "generated_at": chrono::Utc::now().to_rfc3339(),
+            "status": status,
+            "fail_count": fail_count,
+            "warn_count": warn_count,
+            "metrics": {
+                "retained_events": events.len(),
+                "alerts": recent_alerts,
+                "dead_letter_events": dlq_count,
+                "agents": agents.len(),
+                "stale_agents": stale_agents,
+                "collector_lanes": collector_rows.len(),
+                "unhealthy_collectors": unhealthy_collectors,
+            },
+            "collector_rows": collector_rows.into_iter().take(12).collect::<Vec<_>>(),
+            "slo_summary": {
+                "score": quality_score,
+                "passing": slo_rows.len().saturating_sub(slo_warn_count),
+                "total": slo_rows.len(),
+                "status": if slo_warn_count == 0 { "ready" } else { "review" },
+            },
+            "slos": slo_rows,
+            "checks": checks,
+            "next_action": if warn_count > 0 { "Review degraded data sources before relying on detection confidence." } else { "Telemetry quality is healthy for current validation depth." },
+        }),
+        evidence_freshness(
+            state,
+            "data_quality_dashboard",
+            "live_runtime",
+            "event_store_agent_registry_dlq_collectors",
+            "fresh",
+            None,
+            true,
+            serde_json::json!({
+                "events": events.len(),
+                "alerts": recent_alerts,
+                "dead_letter_events": dlq_count,
+                "stale_agents": stale_agents,
+                "unhealthy_collectors": unhealthy_collectors,
+                "quality_score": quality_score,
+            }),
+        ),
+    )
 }
 
 fn build_performance_scale_baseline(state: &AppState) -> serde_json::Value {
@@ -14612,43 +15051,61 @@ fn build_performance_scale_baseline(state: &AppState) -> serde_json::Value {
             "command": "bash scripts/performance_scale_baseline.sh --support-bundle",
         }),
     ];
-    serde_json::json!({
-        "generated_at": chrono::Utc::now().to_rfc3339(),
-        "status": status,
-        "fail_count": fail_count,
-        "warn_count": warn_count,
-        "metrics": {
-            "uptime_secs": uptime_secs,
-            "request_count": state.request_count,
-            "error_count": state.error_count,
-            "request_rate_per_min": request_rate_per_min,
-            "error_rate_pct": error_rate_pct,
-            "stored_records": total_records,
-            "alert_count": state.alerts.len(),
-            "event_count": state.event_store.all_events().len(),
-        },
-        "targets": {
-            "api_p95_ms": 500,
-            "websocket_queue_depth": 100,
-            "release_smoke_budget_ms": 1500,
-            "retained_event_search_ms": 1000,
-        },
-        "recommended_tests": [
-            "API route latency sweep for launchpad fanout",
-            "Retained-event search with 10k, 100k, and 1m row fixtures",
-            "WebSocket fanout with queue-depth and dropped-event assertions",
-            "Report export and support bundle generation under concurrent reads"
-        ],
-        "load_gate": load_gate,
-        "ci_gate": {
-            "script": "scripts/performance_scale_baseline.sh",
-            "requires_running_server": true,
-            "environment": ["WARDEX_BASE_URL", "WARDEX_ADMIN_TOKEN"],
-            "release_policy": "warnings require manual review; failures block the tag",
-        },
-        "stream": ws_stats,
-        "checks": checks,
-    })
+    with_evidence_freshness(
+        serde_json::json!({
+            "generated_at": chrono::Utc::now().to_rfc3339(),
+            "status": status,
+            "fail_count": fail_count,
+            "warn_count": warn_count,
+            "metrics": {
+                "uptime_secs": uptime_secs,
+                "request_count": state.request_count,
+                "error_count": state.error_count,
+                "request_rate_per_min": request_rate_per_min,
+                "error_rate_pct": error_rate_pct,
+                "stored_records": total_records,
+                "alert_count": state.alerts.len(),
+                "event_count": state.event_store.all_events().len(),
+            },
+            "targets": {
+                "api_p95_ms": 500,
+                "websocket_queue_depth": 100,
+                "release_smoke_budget_ms": 1500,
+                "retained_event_search_ms": 1000,
+            },
+            "recommended_tests": [
+                "API route latency sweep for launchpad fanout",
+                "Retained-event search with 10k, 100k, and 1m row fixtures",
+                "WebSocket fanout with queue-depth and dropped-event assertions",
+                "Report export and support bundle generation under concurrent reads"
+            ],
+            "load_gate": load_gate,
+            "ci_gate": {
+                "script": "scripts/performance_scale_baseline.sh",
+                "requires_running_server": true,
+                "environment": ["WARDEX_BASE_URL", "WARDEX_ADMIN_TOKEN"],
+                "release_policy": "warnings require manual review; failures block the tag",
+            },
+            "stream": ws_stats,
+            "checks": checks,
+        }),
+        evidence_freshness(
+            state,
+            "performance_scale_baseline",
+            "live_runtime",
+            "request_counters_websocket_stats_storage_stats",
+            "fresh",
+            None,
+            true,
+            serde_json::json!({
+                "uptime_secs": uptime_secs,
+                "request_count": state.request_count,
+                "error_count": state.error_count,
+                "error_rate_pct": error_rate_pct,
+                "stored_records": total_records,
+            }),
+        ),
+    )
 }
 
 fn build_cluster_failover_execution(state: &AppState) -> serde_json::Value {
@@ -14682,31 +15139,66 @@ fn build_cluster_failover_execution(state: &AppState) -> serde_json::Value {
         }),
     ];
     let (fail_count, warn_count, status) = check_counts(&checks);
-    serde_json::json!({
-        "generated_at": chrono::Utc::now().to_rfc3339(),
-        "status": status,
-        "fail_count": fail_count,
-        "warn_count": warn_count,
-        "mode": if has_cluster { "cluster_ready" } else { "standalone_rehearsal" },
-        "execution_steps": [
-            {"id": "freeze", "action": "Pause risky rollout and remediation mutations before failover."},
-            {"id": "promote", "action": "Promote the standby or leader candidate only after health, storage, and stream gates pass."},
-            {"id": "verify", "action": "Run release observability, synthetic console, and data-quality checks against the promoted node."},
-            {"id": "record", "action": "Persist drill evidence and export the support bundle before closing the event."}
-        ],
-        "drill_execution": {
-            "mode": if has_cluster { "executable_drill" } else { "standalone_dry_run" },
-            "execute_api": "/api/control/failover-drill",
-            "rto_target_secs": 300,
-            "rpo_target_secs": 60,
-            "post_failover_smoke": ["/api/healthz/ready", "/api/status", "/api/release/observability-gates", "/api/data-quality/dashboard", "/api/support/bundle"],
-            "evidence_artifacts": ["failover_drill_record", "release_observability_snapshot", "data_quality_snapshot", "support_bundle_digest"],
-        },
-        "cluster": cluster_snapshot.and_then(|snapshot| serde_json::to_value(snapshot).ok()),
-        "history": history,
-        "last_drill": last_drill,
-        "checks": checks,
-    })
+    let failover_evidence_status = if has_cluster && drill_count > 0 {
+        "fresh"
+    } else if drill_count > 0 {
+        "stale"
+    } else {
+        "unknown"
+    };
+    let failover_stale_reason = if has_cluster && drill_count > 0 {
+        None
+    } else if drill_count > 0 {
+        Some("drill_history_without_cluster_reference")
+    } else {
+        Some("failover_drill_history_missing")
+    };
+    with_evidence_freshness(
+        serde_json::json!({
+            "generated_at": chrono::Utc::now().to_rfc3339(),
+            "status": status,
+            "fail_count": fail_count,
+            "warn_count": warn_count,
+            "mode": if has_cluster { "cluster_ready" } else { "standalone_rehearsal" },
+            "execution_steps": [
+                {"id": "freeze", "action": "Pause risky rollout and remediation mutations before failover."},
+                {"id": "promote", "action": "Promote the standby or leader candidate only after health, storage, and stream gates pass."},
+                {"id": "verify", "action": "Run release observability, synthetic console, and data-quality checks against the promoted node."},
+                {"id": "record", "action": "Persist drill evidence and export the support bundle before closing the event."}
+            ],
+            "drill_execution": {
+                "mode": if has_cluster { "executable_drill" } else { "standalone_dry_run" },
+                "execute_api": "/api/control/failover-drill",
+                "rto_target_secs": 300,
+                "rpo_target_secs": 60,
+                "post_failover_smoke": ["/api/healthz/ready", "/api/status", "/api/release/observability-gates", "/api/data-quality/dashboard", "/api/support/bundle"],
+                "evidence_artifacts": ["failover_drill_record", "release_observability_snapshot", "data_quality_snapshot", "support_bundle_digest"],
+            },
+            "cluster": cluster_snapshot.and_then(|snapshot| serde_json::to_value(snapshot).ok()),
+            "history": history,
+            "last_drill": last_drill,
+            "checks": checks,
+        }),
+        evidence_freshness(
+            state,
+            "cluster_failover_execution",
+            if has_cluster {
+                "live_cluster_runtime"
+            } else {
+                "standalone_rehearsal"
+            },
+            "cluster_snapshot_failover_drill_history",
+            failover_evidence_status,
+            failover_stale_reason,
+            true,
+            serde_json::json!({
+                "has_cluster": has_cluster,
+                "drill_count": drill_count,
+                "fail_count": fail_count,
+                "warn_count": warn_count,
+            }),
+        ),
+    )
 }
 
 fn build_secrets_rotation_operations(state: &AppState) -> serde_json::Value {
@@ -14772,31 +15264,48 @@ fn build_secrets_rotation_operations(state: &AppState) -> serde_json::Value {
             "rollback": ["restore previous CI secret versions and revoke temporary credentials"],
         }),
     ];
-    serde_json::json!({
-        "generated_at": chrono::Utc::now().to_rfc3339(),
-        "status": status,
-        "fail_count": fail_count,
-        "warn_count": warn_count,
-        "rotation_domains": [
-            {"id": "admin_token", "dry_run": true, "rollback": "Keep the previous token valid until session exchange succeeds."},
-            {"id": "spool_key", "dry_run": true, "rollback": "Drain spool and keep sealed backup before changing encryption material."},
-            {"id": "oidc_clients", "dry_run": true, "rollback": "Preserve old client secret until callback and group mapping validation pass."},
-            {"id": "collector_credentials", "dry_run": true, "rollback": "Validate staged connector credentials before deleting old secrets."},
-            {"id": "release_signing", "dry_run": true, "rollback": "Verify Developer ID and cosign signatures on a temporary artifact before secret replacement."}
-        ],
-        "dry_runs": dry_runs,
-        "operator_ticket": {
-            "title": "Rotate Wardex production secrets",
-            "required_approvals": ["platform_owner", "security_owner"],
-            "evidence": ["preflight_snapshot", "post_rotation_auth_check", "spool_read_write_probe", "collector_freshness_snapshot"],
-        },
-        "spool": {
-            "queued": spool_stats.current_depth,
-            "capacity": spool_stats.max_entries,
-            "utilization_pct": spool_stats.utilization_pct,
-        },
-        "checks": checks,
-    })
+    with_evidence_freshness(
+        serde_json::json!({
+            "generated_at": chrono::Utc::now().to_rfc3339(),
+            "status": status,
+            "fail_count": fail_count,
+            "warn_count": warn_count,
+            "rotation_domains": [
+                {"id": "admin_token", "dry_run": true, "rollback": "Keep the previous token valid until session exchange succeeds."},
+                {"id": "spool_key", "dry_run": true, "rollback": "Drain spool and keep sealed backup before changing encryption material."},
+                {"id": "oidc_clients", "dry_run": true, "rollback": "Preserve old client secret until callback and group mapping validation pass."},
+                {"id": "collector_credentials", "dry_run": true, "rollback": "Validate staged connector credentials before deleting old secrets."},
+                {"id": "release_signing", "dry_run": true, "rollback": "Verify Developer ID and cosign signatures on a temporary artifact before secret replacement."}
+            ],
+            "dry_runs": dry_runs,
+            "operator_ticket": {
+                "title": "Rotate Wardex production secrets",
+                "required_approvals": ["platform_owner", "security_owner"],
+                "evidence": ["preflight_snapshot", "post_rotation_auth_check", "spool_read_write_probe", "collector_freshness_snapshot"],
+            },
+            "spool": {
+                "queued": spool_stats.current_depth,
+                "capacity": spool_stats.max_entries,
+                "utilization_pct": spool_stats.utilization_pct,
+            },
+            "checks": checks,
+        }),
+        evidence_freshness(
+            state,
+            "secrets_rotation_operations",
+            "live_runtime",
+            "token_age_spool_oidc_runtime_inventory",
+            "fresh",
+            None,
+            true,
+            serde_json::json!({
+                "token_age_secs": token_age_secs,
+                "spool_depth": spool_stats.current_depth,
+                "oidc_provider_count": state.oidc_providers.len(),
+                "warn_count": warn_count,
+            }),
+        ),
+    )
 }
 
 fn build_operator_task_automation(state: &AppState) -> serde_json::Value {
@@ -14925,24 +15434,46 @@ fn build_detection_validation_packs(state: &AppState) -> serde_json::Value {
         }),
     ];
     let (fail_count, warn_count, status) = check_counts(&checks);
-    serde_json::json!({
-        "generated_at": chrono::Utc::now().to_rfc3339(),
-        "status": status,
-        "fail_count": fail_count,
-        "warn_count": warn_count,
-        "pack_count": rows.len(),
-        "missing_pack_count": missing,
-        "executable_pack_count": executable,
-        "suite_execution": {
-            "mode": "dry_run_replay",
-            "command": "bash scripts/detection_validation_packs.sh",
-            "required_before_release": true,
-            "success_criteria": ["all ready packs replay", "expected alerts observed", "benign baseline has no alert", "timeline and rule evidence exported"],
-        },
-        "packs": rows,
-        "detection_trust": trust,
-        "checks": checks,
-    })
+    let validation_evidence_status = if missing == 0 { "fresh" } else { "unknown" };
+    with_evidence_freshness(
+        serde_json::json!({
+            "generated_at": chrono::Utc::now().to_rfc3339(),
+            "status": status,
+            "fail_count": fail_count,
+            "warn_count": warn_count,
+            "pack_count": rows.len(),
+            "missing_pack_count": missing,
+            "executable_pack_count": executable,
+            "suite_execution": {
+                "mode": "dry_run_replay",
+                "command": "bash scripts/detection_validation_packs.sh",
+                "required_before_release": true,
+                "success_criteria": ["all ready packs replay", "expected alerts observed", "benign baseline has no alert", "timeline and rule evidence exported"],
+            },
+            "packs": rows,
+            "detection_trust": trust,
+            "checks": checks,
+        }),
+        evidence_freshness(
+            state,
+            "detection_validation_packs",
+            "local_artifact_probe",
+            "examples_validation_pack_files_and_detection_trust",
+            validation_evidence_status,
+            if missing == 0 {
+                None
+            } else {
+                Some("validation_pack_fixture_missing")
+            },
+            true,
+            serde_json::json!({
+                "pack_count": packs.len(),
+                "missing_pack_count": missing,
+                "executable_pack_count": executable,
+                "detection_trust_status": trust.get("status").cloned().unwrap_or(serde_json::Value::Null),
+            }),
+        ),
+    )
 }
 
 fn build_snapshot_policy_payload(storage: &crate::storage::SharedStorage) -> serde_json::Value {
@@ -26225,6 +26756,10 @@ fn handle_api(
                 }
             } else if method == Method::Post && url_path == "/api/scan/buffer/v2" {
                 handle_scan_buffer_v2(body, state)
+            } else if method == Method::Post && url_path == "/api/malware/scan-path" {
+                handle_malware_path_scan(body, state)
+            } else if method == Method::Post && url_path == "/api/rootkit/scan" {
+                handle_rootkit_scan(body)
             } else if method == Method::Post && url_path == "/api/scan/hash" {
                 match read_body_limited(body, 4096) {
                     Ok(body_str) => {
@@ -26268,18 +26803,33 @@ fn handle_api(
                 let recent = s.malware_hash_db.recent_detections();
                 let body = serde_json::to_string(&recent).unwrap_or_default();
                 json_response(&body, 200)
+            } else if method == Method::Get && url_path == "/api/malware/signatures/presets" {
+                let body =
+                    serde_json::to_string(&local_av_signature_presets_json()).unwrap_or_default();
+                json_response(&body, 200)
+            } else if method == Method::Post && url_path == "/api/malware/signatures/load-local" {
+                let imported = load_local_open_source_av_signatures(state);
+                let report = serde_json::json!({
+                    "imported": imported,
+                    "format": "clamav_hash",
+                    "source": "local_open_source_av",
+                    "preset": local_av_signature_presets_json(),
+                });
+                let body = serde_json::to_string(&report).unwrap_or_default();
+                json_response(&body, 200)
             } else if method == Method::Post && url_path == "/api/malware/signatures/import" {
                 match read_body_limited(body, 10 * 1024 * 1024) {
                     Ok(body_str) => {
                         let mut s = state.lock().unwrap_or_else(|e| e.into_inner());
-                        // Try JSON first, then CSV
-                        let result = if body_str.trim_start().starts_with('[') {
-                            s.malware_hash_db.load_from_json(&body_str)
-                        } else {
-                            s.malware_hash_db.load_abuse_ch_csv(&body_str)
-                        };
+                        let source = url_param(&url, "source");
+                        let result = s
+                            .malware_hash_db
+                            .load_auto_detected_signatures(&body_str, source.as_deref());
                         match result {
-                            Ok(count) => json_response(&format!(r#"{{"imported":{count}}}"#), 200),
+                            Ok(result) => {
+                                let body = serde_json::to_string(&result).unwrap_or_default();
+                                json_response(&body, 200)
+                            }
                             Err(e) => error_json(&e, 400),
                         }
                     }
@@ -27666,6 +28216,451 @@ fn handle_threat_intel_sightings(url: &str, state: &Arc<Mutex<AppState>>) -> Res
         .to_string(),
         200,
     )
+}
+
+#[derive(Debug, serde::Deserialize)]
+struct MalwarePathScanRequest {
+    scope: Option<String>,
+    paths: Option<Vec<String>>,
+    include_rootkit: Option<bool>,
+    max_files: Option<usize>,
+    max_bytes_per_file: Option<usize>,
+}
+
+#[derive(Debug, serde::Serialize)]
+struct MalwarePathScanFinding {
+    path: String,
+    verdict: String,
+    confidence: f64,
+    sha256: String,
+    size_bytes: usize,
+    matches: Vec<crate::malware_scanner::ScanMatch>,
+    malware_family: Option<String>,
+}
+
+#[derive(Debug, serde::Serialize)]
+struct MalwarePathScanError {
+    path: String,
+    error: String,
+}
+
+#[derive(Debug, serde::Serialize)]
+struct RootkitFinding {
+    category: String,
+    severity: String,
+    path: Option<String>,
+    process: Option<String>,
+    detail: String,
+    recommendation: String,
+}
+
+#[derive(Debug, serde::Deserialize)]
+struct RootkitScanRequest {
+    paths: Option<Vec<String>>,
+    max_files: Option<usize>,
+}
+
+fn handle_malware_path_scan(body: &[u8], state: &Arc<Mutex<AppState>>) -> Response<Body> {
+    let body = match read_body_limited(body, 32 * 1024) {
+        Ok(body) => body,
+        Err(error) => return error_json(&error, 400),
+    };
+    let req: MalwarePathScanRequest = match serde_json::from_str(&body) {
+        Ok(req) => req,
+        Err(error) => {
+            return error_json(&format!("invalid malware path scan request: {error}"), 400);
+        }
+    };
+
+    let scope = req
+        .scope
+        .unwrap_or_else(|| "folder".to_string())
+        .trim()
+        .to_ascii_lowercase();
+    let mut roots = req
+        .paths
+        .unwrap_or_default()
+        .into_iter()
+        .map(|path| path.trim().to_string())
+        .filter(|path| !path.is_empty())
+        .collect::<Vec<_>>();
+    if scope == "whole_system" && roots.is_empty() {
+        roots = default_system_scan_roots();
+    }
+    if roots.is_empty() {
+        return error_json(
+            "at least one path is required unless scope is whole_system",
+            400,
+        );
+    }
+
+    let max_files = req
+        .max_files
+        .unwrap_or(if scope == "whole_system" { 500 } else { 250 })
+        .clamp(1, 5_000);
+    let max_bytes = req
+        .max_bytes_per_file
+        .unwrap_or(crate::malware_scanner::MAX_SCAN_SIZE)
+        .clamp(1, crate::malware_scanner::MAX_SCAN_SIZE);
+    let scan_targets = collect_scan_targets(&roots, &scope, max_files);
+    let mut findings = Vec::new();
+    let mut errors = Vec::new();
+    let mut skipped_files = 0_usize;
+
+    for path in scan_targets {
+        match fs::metadata(&path) {
+            Ok(metadata) if metadata.is_file() => {
+                if metadata.len() as usize > max_bytes {
+                    skipped_files += 1;
+                    errors.push(MalwarePathScanError {
+                        path: path.display().to_string(),
+                        error: format!("file exceeds scan cap of {max_bytes} bytes"),
+                    });
+                    continue;
+                }
+            }
+            Ok(_) => {
+                skipped_files += 1;
+                continue;
+            }
+            Err(error) => {
+                skipped_files += 1;
+                errors.push(MalwarePathScanError {
+                    path: path.display().to_string(),
+                    error: format!("metadata unavailable: {error}"),
+                });
+                continue;
+            }
+        }
+
+        let data = match fs::read(&path) {
+            Ok(data) => data,
+            Err(error) => {
+                skipped_files += 1;
+                errors.push(MalwarePathScanError {
+                    path: path.display().to_string(),
+                    error: format!("read failed: {error}"),
+                });
+                continue;
+            }
+        };
+        let filename = path
+            .file_name()
+            .map(|name| name.to_string_lossy().to_string())
+            .unwrap_or_else(|| path.display().to_string());
+        let mut s = state.lock().unwrap_or_else(|e| e.into_inner());
+        let AppState {
+            ref mut malware_scanner,
+            ref mut malware_hash_db,
+            ref yara_engine,
+            ref mut threat_intel,
+            ..
+        } = *s;
+        match malware_scanner.scan_buffer(
+            &data,
+            &filename,
+            malware_hash_db,
+            yara_engine,
+            threat_intel,
+        ) {
+            Ok(result) => findings.push(MalwarePathScanFinding {
+                path: path.display().to_string(),
+                verdict: result.verdict.to_string(),
+                confidence: result.confidence,
+                sha256: result.sha256,
+                size_bytes: result.size_bytes,
+                matches: result.matches,
+                malware_family: result.malware_family,
+            }),
+            Err(error) => errors.push(MalwarePathScanError {
+                path: path.display().to_string(),
+                error,
+            }),
+        }
+    }
+
+    let rootkit_findings = if req.include_rootkit.unwrap_or(false) {
+        run_rootkit_scan(&roots, max_files)
+    } else {
+        Vec::new()
+    };
+    let malicious = findings
+        .iter()
+        .filter(|finding| finding.verdict == "malicious" || finding.verdict == "ransomware")
+        .count();
+    let suspicious = findings
+        .iter()
+        .filter(|finding| finding.verdict == "suspicious")
+        .count();
+    let clean = findings
+        .iter()
+        .filter(|finding| finding.verdict == "clean")
+        .count();
+    json_response(
+        &serde_json::json!({
+            "summary": {
+                "scope": scope,
+                "requested_paths": roots,
+                "scanned_files": findings.len(),
+                "skipped_files": skipped_files,
+                "malicious": malicious,
+                "suspicious": suspicious,
+                "clean": clean,
+                "max_files": max_files,
+                "max_bytes_per_file": max_bytes,
+            },
+            "findings": findings,
+            "errors": errors,
+            "rootkit_findings": rootkit_findings,
+        })
+        .to_string(),
+        200,
+    )
+}
+
+fn handle_rootkit_scan(body: &[u8]) -> Response<Body> {
+    let body = match read_body_limited(body, 32 * 1024) {
+        Ok(body) => body,
+        Err(error) => return error_json(&error, 400),
+    };
+    let req: RootkitScanRequest = match serde_json::from_str(&body) {
+        Ok(req) => req,
+        Err(error) => return error_json(&format!("invalid rootkit scan request: {error}"), 400),
+    };
+    let roots = req
+        .paths
+        .unwrap_or_else(default_rootkit_scan_roots)
+        .into_iter()
+        .map(|path| path.trim().to_string())
+        .filter(|path| !path.is_empty())
+        .collect::<Vec<_>>();
+    let max_files = req.max_files.unwrap_or(500).clamp(1, 5_000);
+    let findings = run_rootkit_scan(&roots, max_files);
+    json_response(
+        &serde_json::json!({
+            "summary": {
+                "scanned_roots": roots,
+                "finding_count": findings.len(),
+                "max_files": max_files,
+            },
+            "findings": findings,
+        })
+        .to_string(),
+        200,
+    )
+}
+
+fn collect_scan_targets(roots: &[String], scope: &str, max_files: usize) -> Vec<PathBuf> {
+    let mut targets = Vec::new();
+    let recurse = scope != "file";
+    let mut stack = roots.iter().map(PathBuf::from).collect::<Vec<_>>();
+    while let Some(path) = stack.pop() {
+        if targets.len() >= max_files {
+            break;
+        }
+        let metadata = match fs::symlink_metadata(&path) {
+            Ok(metadata) => metadata,
+            Err(_) => continue,
+        };
+        if metadata.file_type().is_symlink() {
+            continue;
+        }
+        if metadata.is_file() {
+            targets.push(path);
+        } else if metadata.is_dir()
+            && recurse
+            && let Ok(entries) = fs::read_dir(&path)
+        {
+            for entry in entries.flatten() {
+                stack.push(entry.path());
+            }
+        }
+    }
+    targets
+}
+
+fn default_system_scan_roots() -> Vec<String> {
+    [
+        "/Applications",
+        "/Library/LaunchAgents",
+        "/Library/LaunchDaemons",
+        "/Library/Extensions",
+        "/usr/local/bin",
+        "/opt",
+        "/tmp",
+        "/private/tmp",
+        "/etc",
+        "/home",
+        "C:\\Users",
+        "C:\\ProgramData",
+        "C:\\Windows\\Temp",
+        "C:\\Windows\\System32\\Tasks",
+    ]
+    .iter()
+    .filter(|path| Path::new(path).exists())
+    .map(|path| path.to_string())
+    .collect()
+}
+
+fn default_rootkit_scan_roots() -> Vec<String> {
+    [
+        "/Library/LaunchAgents",
+        "/Library/LaunchDaemons",
+        "/Library/Extensions",
+        "/System/Library/Extensions",
+        "/etc",
+        "/usr/local/bin",
+        "/tmp",
+        "/private/tmp",
+        "/dev/shm",
+        "/proc",
+        "C:\\ProgramData\\Microsoft\\Windows\\Start Menu\\Programs\\Startup",
+        "C:\\Windows\\System32\\drivers",
+        "C:\\Windows\\System32\\Tasks",
+        "C:\\Windows\\Temp",
+    ]
+    .iter()
+    .filter(|path| Path::new(path).exists())
+    .map(|path| path.to_string())
+    .collect()
+}
+
+fn run_rootkit_scan(roots: &[String], max_files: usize) -> Vec<RootkitFinding> {
+    let mut findings = Vec::new();
+    let targets = collect_scan_targets(roots, "folder", max_files);
+    for path in targets {
+        let path_string = path.display().to_string();
+        let lower_path = path_string.to_ascii_lowercase();
+        let file_name = path
+            .file_name()
+            .map(|name| name.to_string_lossy().to_string())
+            .unwrap_or_default();
+        if lower_path.ends_with("/ld.so.preload")
+            && fs::metadata(&path).map(|m| m.len() > 0).unwrap_or(false)
+        {
+            findings.push(RootkitFinding {
+                category: "library_preload".into(),
+                severity: "high".into(),
+                path: Some(path_string.clone()),
+                process: None,
+                detail: "ld.so.preload is present and non-empty, which can force hidden libraries into every process.".into(),
+                recommendation: "Review contents offline, validate each referenced library hash, and isolate host if unauthorized.".into(),
+            });
+        }
+        if file_name.starts_with('.')
+            && (lower_path.contains("/launch")
+                || lower_path.contains("/tmp/")
+                || lower_path.contains("/private/tmp/")
+                || lower_path.contains("/usr/local/bin/"))
+        {
+            findings.push(RootkitFinding {
+                category: "hidden_artifact".into(),
+                severity: "medium".into(),
+                path: Some(path_string.clone()),
+                process: None,
+                detail: "Hidden executable or persistence artifact in a sensitive location.".into(),
+                recommendation: "Hash the file, inspect signing/provenance, and quarantine if it is not expected.".into(),
+            });
+        }
+        if lower_path.ends_with(".plist")
+            && (lower_path.contains("launchagents") || lower_path.contains("launchdaemons"))
+            && let Ok(bytes) = fs::read(&path)
+        {
+            let sample =
+                String::from_utf8_lossy(&bytes[..bytes.len().min(64 * 1024)]).to_ascii_lowercase();
+            if [
+                "dyld_insert_libraries",
+                "/private/tmp/",
+                "/tmp/",
+                "curl ",
+                "bash -c",
+                "nc ",
+                "chmod +x",
+                "base64",
+            ]
+            .iter()
+            .any(|needle| sample.contains(needle))
+            {
+                findings.push(RootkitFinding {
+                    category: "launch_persistence".into(),
+                    severity: "high".into(),
+                    path: Some(path_string.clone()),
+                    process: None,
+                    detail: "Launch item contains suspicious loader, network, or temporary-path behavior.".into(),
+                    recommendation: "Disable the launch item, preserve the plist and target binary, then run a full malware scan.".into(),
+                });
+            }
+        }
+        if lower_path.ends_with(".kext") && lower_path.contains("/library/extensions/") {
+            findings.push(RootkitFinding {
+                category: "kernel_extension".into(),
+                severity: "medium".into(),
+                path: Some(path_string.clone()),
+                process: None,
+                detail: "Third-party kernel extension present in a rootkit-relevant location.".into(),
+                recommendation: "Verify vendor signing, notarization, and business justification before allowing it to remain loaded.".into(),
+            });
+        }
+
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            if let Ok(metadata) = fs::metadata(&path) {
+                let mode = metadata.permissions().mode();
+                if metadata.is_file()
+                    && mode & 0o002 != 0
+                    && (lower_path.contains("/usr/local/bin/") || lower_path.contains("/etc/"))
+                {
+                    findings.push(RootkitFinding {
+                        category: "world_writable_system_file".into(),
+                        severity: "high".into(),
+                        path: Some(path_string.clone()),
+                        process: None,
+                        detail: "World-writable file in a privileged system path.".into(),
+                        recommendation: "Remove world-write permissions, compare against package baseline, and investigate recent writers.".into(),
+                    });
+                }
+            }
+        }
+    }
+
+    findings.extend(scan_proc_rootkit_indicators());
+    findings
+}
+
+fn scan_proc_rootkit_indicators() -> Vec<RootkitFinding> {
+    let proc = Path::new("/proc");
+    if !proc.exists() {
+        return Vec::new();
+    }
+    let mut findings = Vec::new();
+    if let Ok(entries) = fs::read_dir(proc) {
+        for entry in entries.flatten().take(4096) {
+            let pid = entry.file_name().to_string_lossy().to_string();
+            if !pid.chars().all(|c| c.is_ascii_digit()) {
+                continue;
+            }
+            let comm_path = entry.path().join("comm");
+            let exe_path = entry.path().join("exe");
+            let comm = fs::read_to_string(comm_path).unwrap_or_default();
+            let name = comm.trim();
+            if matches!(name, "kworker" | "kthreadd" | "rcu_sched")
+                && fs::read_link(&exe_path).is_ok()
+            {
+                findings.push(RootkitFinding {
+                    category: "kernel_thread_masquerade".into(),
+                    severity: "high".into(),
+                    path: fs::read_link(&exe_path)
+                        .ok()
+                        .map(|path| path.display().to_string()),
+                    process: Some(format!("{name} pid={pid}")),
+                    detail: "Process is using a kernel-thread-like name while exposing a user-space executable.".into(),
+                    recommendation: "Dump process memory, isolate host, and terminate only after evidence capture.".into(),
+                });
+            }
+        }
+    }
+    findings
 }
 
 fn handle_scan_buffer_v2(body: &[u8], state: &Arc<Mutex<AppState>>) -> Response<Body> {

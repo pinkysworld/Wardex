@@ -118,6 +118,8 @@ pub struct AnomalyDetector {
     custom_weights: Option<HashMap<String, f32>>,
     /// Rolling window of recent auth_failures for rate-of-change smoothing.
     auth_history: VecDeque<u32>,
+    /// Last cumulative auth counter value that produced an auth-surge reason.
+    last_auth_surge_count: u32,
     /// ML triage engine for alert classification.
     ml_engine: StubEngine,
     /// FP feedback counts per signal/reason for auto-weight adjustment.
@@ -141,6 +143,7 @@ impl AnomalyDetector {
             adaptation: AdaptationMode::Normal,
             custom_weights: None,
             auth_history: VecDeque::new(),
+            last_auth_surge_count: 0,
             ml_engine: StubEngine::new(),
             fp_feedback: HashMap::new(),
             fp_auto_adjust_threshold: 5,
@@ -210,6 +213,7 @@ impl AnomalyDetector {
         self.baseline = None;
         self.observed_samples = 0;
         self.auth_history.clear();
+        self.last_auth_surge_count = 0;
     }
 
     /// Restore from a persisted baseline so the detector continues
@@ -307,16 +311,43 @@ impl AnomalyDetector {
                     contributions.push(("network_kbps", c));
                 }
                 score += c;
-                let c = weighted_positive_delta(
-                    sample.auth_failures as f32 - baseline.auth_failures,
-                    3.0,
-                    self.weight_for("auth_failures", 1.6),
-                    "auth failures surge",
-                    &mut reasons,
-                    &mut suspicious_axes,
-                );
+                let previous_auth_max = self.auth_history.iter().copied().max().unwrap_or(0);
+                let auth_delta = sample.auth_failures as f32 - baseline.auth_failures;
+                let auth_relative_surge = if baseline.auth_failures >= 5.0 {
+                    sample.auth_failures as f32 >= baseline.auth_failures * 1.35
+                } else {
+                    auth_delta >= 5.0
+                };
+                let surge_gap = sample
+                    .auth_failures
+                    .saturating_sub(self.last_auth_surge_count);
+                let min_surge_gap = if self.last_auth_surge_count == 0 {
+                    8
+                } else {
+                    ((self.last_auth_surge_count as f32 * 0.20).ceil() as u32).clamp(5, 25)
+                };
+                let auth_window_high_water = self.auth_history.is_empty()
+                    || previous_auth_max == 0
+                    || surge_gap >= min_surge_gap;
+                let c = if sample.auth_failures >= 8
+                    && auth_delta >= 3.0
+                    && auth_relative_surge
+                    && auth_window_high_water
+                {
+                    weighted_positive_delta(
+                        auth_delta,
+                        3.0,
+                        self.weight_for("auth_failures", 1.6),
+                        "auth failures surge",
+                        &mut reasons,
+                        &mut suspicious_axes,
+                    )
+                } else {
+                    0.0
+                };
                 if c > 0.0 {
                     contributions.push(("auth_failures", c));
+                    self.last_auth_surge_count = sample.auth_failures;
                 }
                 score += c;
                 let c = weighted_positive_delta(
@@ -400,7 +431,7 @@ impl AnomalyDetector {
                     let r0 = self.auth_history[len - 3];
                     let r2 = self.auth_history[len - 1];
                     let rate_of_change = r2 as f32 - r0 as f32;
-                    if rate_of_change > 4.0 {
+                    if rate_of_change > 4.0 && auth_window_high_water {
                         let roc_weight = self.weight_for("auth_rate_of_change", 0.8);
                         let roc_score = (rate_of_change / 8.0).min(1.5) * roc_weight;
                         score += roc_score;
@@ -848,6 +879,7 @@ impl EntropyDetector {
                 .map(|a| a[dim])
                 .fold(f32::NEG_INFINITY, f32::max);
             let range = (max_v - min_v).max(0.001);
+            let mean_v = self.window.iter().map(|a| a[dim]).sum::<f32>() / n;
 
             // Bin the values
             let mut hist = vec![0u32; self.bins];
@@ -873,7 +905,7 @@ impl EntropyDetector {
             // Very low entropy = suspicious uniformity (cryptominer steady-state)
             // Threshold at 10% of max entropy — avoids false positives on
             // single-host metrics (battery, temperature) that are naturally stable.
-            if h < max_entropy * 0.10 && n >= 10.0 {
+            if h < max_entropy * 0.10 && n >= 10.0 && low_entropy_axis_is_meaningful(dim, mean_v) {
                 anomalous.push(format!("{name}:low_entropy"));
                 boost += 0.25;
             }
@@ -889,6 +921,21 @@ impl EntropyDetector {
             anomalous_axes: anomalous,
             score_boost: boost.min(2.0),
         }
+    }
+}
+
+fn low_entropy_axis_is_meaningful(dim: usize, mean: f32) -> bool {
+    match VelocityDetector::AXIS_NAMES[dim] {
+        "cpu_load_pct" => mean >= 70.0,
+        "memory_load_pct" => mean >= 85.0,
+        "temperature_c" => mean >= 70.0,
+        "network_kbps" => mean >= 5_000.0,
+        "auth_failures" => mean >= 8.0,
+        "integrity_drift" => false,
+        "process_count" => false,
+        "disk_pressure_pct" => false,
+        "battery_pct" => false,
+        _ => false,
     }
 }
 
@@ -1241,6 +1288,63 @@ mod tests {
     }
 
     #[test]
+    fn repeated_auth_window_count_does_not_emit_new_surge() {
+        let mut detector = AnomalyDetector::default();
+        for timestamp in 0..4 {
+            let _ = detector.evaluate(&TelemetrySample {
+                timestamp_ms: timestamp,
+                cpu_load_pct: 18.0,
+                memory_load_pct: 24.0,
+                temperature_c: 37.0,
+                network_kbps: 500.0,
+                auth_failures: 0,
+                battery_pct: 88.0,
+                integrity_drift: 0.02,
+                process_count: 45,
+                disk_pressure_pct: 8.0,
+            });
+        }
+
+        let first = detector.evaluate(&TelemetrySample {
+            timestamp_ms: 5,
+            cpu_load_pct: 18.0,
+            memory_load_pct: 24.0,
+            temperature_c: 37.0,
+            network_kbps: 500.0,
+            auth_failures: 12,
+            battery_pct: 88.0,
+            integrity_drift: 0.02,
+            process_count: 45,
+            disk_pressure_pct: 8.0,
+        });
+        let repeated = detector.evaluate(&TelemetrySample {
+            timestamp_ms: 6,
+            cpu_load_pct: 18.0,
+            memory_load_pct: 24.0,
+            temperature_c: 37.0,
+            network_kbps: 500.0,
+            auth_failures: 12,
+            battery_pct: 88.0,
+            integrity_drift: 0.02,
+            process_count: 45,
+            disk_pressure_pct: 8.0,
+        });
+
+        assert!(
+            first
+                .reasons
+                .iter()
+                .any(|reason| reason.contains("auth failures surge"))
+        );
+        assert!(
+            !repeated
+                .reasons
+                .iter()
+                .any(|reason| reason.contains("auth failures surge"))
+        );
+    }
+
+    #[test]
     fn snapshot_round_trip() {
         let mut detector = AnomalyDetector::default();
         detector.evaluate(&TelemetrySample {
@@ -1370,6 +1474,39 @@ mod tests {
         assert!(
             signal.contributions.is_empty(),
             "first sample (baseline init) should have no contributions"
+        );
+    }
+
+    #[test]
+    fn static_unavailable_sensors_do_not_emit_low_entropy_noise() {
+        let mut detector = super::EntropyDetector::new(12, 8);
+        let mut last = super::EntropyReport {
+            entropies: vec![],
+            anomalous_axes: vec![],
+            score_boost: 0.0,
+        };
+
+        for timestamp in 0..12 {
+            last = detector.update(&TelemetrySample {
+                timestamp_ms: timestamp,
+                cpu_load_pct: 0.0,
+                memory_load_pct: 50.0,
+                temperature_c: 0.0,
+                network_kbps: 100.0,
+                auth_failures: 0,
+                battery_pct: 80.0,
+                integrity_drift: 0.0,
+                process_count: 120,
+                disk_pressure_pct: 100.0,
+            });
+        }
+
+        assert!(
+            last.anomalous_axes
+                .iter()
+                .all(|axis| !axis.ends_with(":low_entropy")),
+            "static unavailable/local sensors should not create low-entropy alert noise: {:?}",
+            last.anomalous_axes
         );
     }
 

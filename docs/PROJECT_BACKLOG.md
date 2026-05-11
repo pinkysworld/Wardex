@@ -2,7 +2,19 @@
 
 This backlog lists the next concrete tasks in build order.
 
-## Current strengthening checkpoint (`v1.0.8`)
+## Current strengthening checkpoint (`v1.0.10`)
+
+Recently completed for the `v1.0.10` evidence freshness and signed-build readiness sweep:
+
+- [x] Shared `wardex.evidence_freshness.v1` contract for production assurance and release verification payloads.
+- [x] Evidence freshness metadata persisted in operational snapshot envelopes and returned in snapshot index rows.
+- [x] Clean release cut readiness now gates critical release proof freshness before promotion.
+- [x] Release Verification Center now blocks when checksum, SBOM, or macOS Gatekeeper evidence is incomplete locally.
+- [x] Data quality, performance scale, failover execution, secrets rotation, validation packs, synthetic console, container parity, release provenance, and release observability payloads expose freshness metadata.
+- [x] Operator Launchpad renders proof freshness badges and proof collection timing for release verification, production assurance, and persisted snapshot rows.
+- [x] Release metadata, docs, website, Helm, OpenAPI, Python SDK, TypeScript SDK, OTLP, and install/reproducibility surfaces aligned on `v1.0.10`.
+
+## Previous strengthening checkpoint (`v1.0.8`)
 
 Recently completed for the `v1.0.8` release verification and deployment-confidence sweep:
 

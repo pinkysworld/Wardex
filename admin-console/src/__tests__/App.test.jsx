@@ -273,6 +273,28 @@ describe('App', () => {
     expect(screen.getAllByText('Dashboard').length).toBeGreaterThanOrEqual(1);
   });
 
+  it('places malware scanning in a dedicated Protect sidebar section', async () => {
+    localStorage.setItem('wardex_token', 'admin-token');
+    fetchMock.mockImplementation(async (url) => ({
+      ok: true,
+      headers: { get: () => 'application/json' },
+      json: async () => {
+        if (url === '/api/auth/check') return { authenticated: true };
+        if (url === '/api/auth/session') return { authenticated: true, role: 'admin' };
+        return {};
+      },
+    }));
+
+    await renderApp('/infrastructure?tab=integrity&scanPreset=open-source-av-baseline');
+
+    expect((await screen.findAllByText('Protect')).length).toBeGreaterThan(0);
+    expect(screen.getByRole('link', { name: 'Malware Scanning' })).toHaveAttribute(
+      'href',
+      '/infrastructure?tab=integrity&malwarePanel=summary&scanPreset=open-source-av-baseline',
+    );
+    expect(screen.getAllByText('Malware Scanning').length).toBeGreaterThan(0);
+  });
+
   it('disables Connect button when token input is empty', async () => {
     await renderApp();
     const btn = screen.getByText('Connect');

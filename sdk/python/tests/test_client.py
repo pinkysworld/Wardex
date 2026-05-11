@@ -167,7 +167,7 @@ def test_product_hardening_methods(monkeypatch):
         ("GET", f"{BASE}/api/operational/snapshots/verify", (("digest", "abc"),)): DummyResponse(url=f"{BASE}/api/operational/snapshots/verify", json_data={"verified": True}, headers={"content-type": "application/json"}),
         ("GET", f"{BASE}/api/release/doctor"): DummyResponse(url=f"{BASE}/api/release/doctor", json_data={"status": "ready"}, headers={"content-type": "application/json"}),
         ("GET", f"{BASE}/api/release/provenance"): DummyResponse(url=f"{BASE}/api/release/provenance", json_data={"status": "ready"}, headers={"content-type": "application/json"}),
-        ("GET", f"{BASE}/api/release/upgrade-rehearsal", (("target_version", "1.0.8"),)): DummyResponse(url=f"{BASE}/api/release/upgrade-rehearsal", json_data={"status": "ready"}, headers={"content-type": "application/json"}),
+        ("GET", f"{BASE}/api/release/upgrade-rehearsal", (("target_version", "1.0.10"),)): DummyResponse(url=f"{BASE}/api/release/upgrade-rehearsal", json_data={"status": "ready"}, headers={"content-type": "application/json"}),
         ("GET", f"{BASE}/api/release/clean-cut"): DummyResponse(url=f"{BASE}/api/release/clean-cut", json_data={"status": "ready"}, headers={"content-type": "application/json"}),
         ("GET", f"{BASE}/api/containers/release-parity"): DummyResponse(url=f"{BASE}/api/containers/release-parity", json_data={"status": "ready"}, headers={"content-type": "application/json"}),
         ("GET", f"{BASE}/api/release/verification-center"): DummyResponse(url=f"{BASE}/api/release/verification-center", json_data={"status": "ready"}, headers={"content-type": "application/json"}),
@@ -202,7 +202,7 @@ def test_product_hardening_methods(monkeypatch):
     assert client.verify_operational_snapshot(digest="abc")["verified"] is True
     assert client.release_doctor()["status"] == "ready"
     assert client.release_provenance()["status"] == "ready"
-    assert client.release_upgrade_rehearsal(target_version="1.0.8")["status"] == "ready"
+    assert client.release_upgrade_rehearsal(target_version="1.0.10")["status"] == "ready"
     assert client.clean_release_cut()["status"] == "ready"
     assert client.container_release_parity()["status"] == "ready"
     assert client.release_verification_center()["status"] == "ready"

@@ -664,4 +664,23 @@ describe('Infrastructure', () => {
     expect((await screen.findAllByText('alerts_list')).length).toBeGreaterThan(0);
     expect(await screen.findByText('Trace collector detail')).toBeInTheDocument();
   });
+
+  it('applies malware scanning presets from the route into scan and source controls', async () => {
+    renderInfrastructure('/infrastructure?tab=integrity&scanPreset=virus-signature-validation');
+
+    expect(await screen.findByText('Scanning Presets')).toBeInTheDocument();
+    expect(screen.getAllByText('Virus Signature Validation').length).toBeGreaterThan(0);
+
+    await waitFor(() => {
+      expect(screen.getByLabelText('Scan scope')).toHaveValue('folder');
+      expect(screen.getByLabelText('Files or folders')).toHaveValue('/tmp');
+      expect(screen.getByLabelText('Include rootkit heuristics')).not.toBeChecked();
+      expect(screen.getByLabelText('Source label')).toHaveValue(
+        'operator-virus-signature-validation',
+      );
+      expect(screen.getByLabelText('Signature payload')).toHaveValue(
+        '44d88612fea8a8f36de82e1278abb02f:68:Eicar-Test-Signature',
+      );
+    });
+  });
 });

@@ -814,11 +814,11 @@ export default function HelpDocs() {
           <div className="card-title" style={{ marginBottom: 12 }}>
             Suggested Workflow
           </div>
-          <div style={{ display: 'grid', gap: 10 }}>
+          <div className="workflow-step-list">
             {guide.steps.map((step, index) => (
-              <div key={step} style={{ display: 'flex', gap: 10 }}>
-                <span className="badge badge-info">{index + 1}</span>
-                <div style={{ fontSize: 13, lineHeight: 1.5 }}>{step}</div>
+              <div key={step} className="workflow-step-row">
+                <span className="badge badge-info workflow-step-index">{index + 1}</span>
+                <div className="workflow-step-copy">{step}</div>
               </div>
             ))}
           </div>

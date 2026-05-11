@@ -35,7 +35,7 @@ git diff -- sdk/python sdk/typescript
 
 ### Release-proof helpers
 
-The `v1.0.8` clients expose the same resilience/proof contracts used by the admin console and release gate, plus the release verification and deployment-confidence tranche:
+The `v1.0.10` clients expose the same resilience/proof contracts used by the admin console and release gate, plus the release verification and deployment-confidence tranche:
 
 ```python
 client.alerts_page(limit=100)
@@ -45,7 +45,7 @@ client.workflow_preflight(workflow="release")
 client.content_rule_preflight("rule-id", target_status="canary")
 client.release_observability_gates()
 client.release_provenance()
-client.release_upgrade_rehearsal(target_version="1.0.8")
+client.release_upgrade_rehearsal(target_version="1.0.10")
 client.clean_release_cut()
 client.container_release_parity()
 client.release_verification_center()
@@ -144,7 +144,7 @@ await client.workflowPreflight({ workflow: "release" });
 await client.contentRulePreflight("rule-id", { target_status: "canary" });
 await client.releaseObservabilityGates();
 await client.releaseProvenance();
-await client.releaseUpgradeRehearsal({ targetVersion: "1.0.8" });
+await client.releaseUpgradeRehearsal({ targetVersion: "1.0.10" });
 await client.cleanReleaseCut();
 await client.containerReleaseParity();
 await client.releaseVerificationCenter();

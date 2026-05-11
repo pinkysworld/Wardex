@@ -35,21 +35,15 @@ export default function WorkflowGuidance({
           </div>
         </div>
       </div>
-      <div
-        style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
-          gap: 12,
-        }}
-      >
+      <div className="workflow-pivot-grid">
         {visibleItems.map((item) => (
-          <article key={item.id || item.title} className="summary-card" style={{ gap: 10 }}>
+          <article key={item.id || item.title} className="summary-card workflow-pivot-card">
             {item.badge ? (
               <span className={`badge ${item.badgeTone || 'badge-info'}`}>{item.badge}</span>
             ) : null}
-            <div style={{ fontSize: 14, fontWeight: 700 }}>{item.title}</div>
+            <div className="workflow-pivot-title">{item.title}</div>
             <div className="summary-meta">{item.description}</div>
-            <div className="btn-group" style={{ marginTop: 'auto' }}>
+            <div className="btn-group">
               <Link
                 className={`btn btn-sm ${item.tone === 'primary' ? 'btn-primary' : ''}`}
                 to={item.to}

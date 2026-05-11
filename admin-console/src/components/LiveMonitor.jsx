@@ -240,6 +240,11 @@ function normalizeLiveEvent(event, index) {
   };
 }
 
+function getMonitorScrollContainer() {
+  if (typeof document === 'undefined') return null;
+  return document.getElementById('main-content');
+}
+
 function TriageEmptyState({ title, description, actionLabel, onAction }) {
   return (
     <div className="triage-empty">
@@ -468,19 +473,23 @@ export default function LiveMonitor() {
     updateMonitorParams({ alert: nextParam });
   }, [searchParams, selectedId, updateMonitorParams]);
 
-  const withProcessScrollPreserved = useCallback(
+  const withMonitorScrollPreserved = useCallback(
     async (work) => {
-      if (tab !== 'processes') return work();
-
       const previousWindowY = typeof window !== 'undefined' ? window.scrollY : 0;
+      const scrollContainer = getMonitorScrollContainer();
+      const previousContentScrollTop = scrollContainer?.scrollTop ?? null;
       const previousTableScrollTop = processTableRef.current?.scrollTop ?? null;
 
-      const restoreProcessScroll = () => {
+      const restoreMonitorScroll = () => {
         if (typeof window === 'undefined') return;
 
         const restoreScroll = () => {
           window.scrollTo(0, previousWindowY);
-          if (processTableRef.current && previousTableScrollTop != null) {
+          const currentScrollContainer = getMonitorScrollContainer();
+          if (currentScrollContainer && previousContentScrollTop != null) {
+            currentScrollContainer.scrollTop = previousContentScrollTop;
+          }
+          if (tab === 'processes' && processTableRef.current && previousTableScrollTop != null) {
             processTableRef.current.scrollTop = previousTableScrollTop;
           }
         };
@@ -497,10 +506,10 @@ export default function LiveMonitor() {
 
       try {
         const result = await work();
-        restoreProcessScroll();
+        restoreMonitorScroll();
         return result;
       } catch (error) {
-        restoreProcessScroll();
+        restoreMonitorScroll();
         throw error;
       }
     },
@@ -508,12 +517,12 @@ export default function LiveMonitor() {
   );
 
   const reloadAll = useCallback(
-    () => withProcessScrollPreserved(() => Promise.all([reloadAlerts(), reloadAlertSummary()])),
-    [reloadAlertSummary, reloadAlerts, withProcessScrollPreserved],
+    () => withMonitorScrollPreserved(() => Promise.all([reloadAlerts(), reloadAlertSummary()])),
+    [reloadAlertSummary, reloadAlerts, withMonitorScrollPreserved],
   );
   const reloadProcessData = useCallback(
-    () => withProcessScrollPreserved(() => reloadProcessDataRaw()),
-    [reloadProcessDataRaw, withProcessScrollPreserved],
+    () => withMonitorScrollPreserved(() => reloadProcessDataRaw()),
+    [reloadProcessDataRaw, withMonitorScrollPreserved],
   );
   const reload = reloadAlerts;
 
@@ -559,13 +568,17 @@ export default function LiveMonitor() {
 
   useEffect(() => {
     if (!latestStreamAlertKey) return;
-    reloadAlertSummary();
-    reloadWsStats();
-    reloadWsHealth();
-    reloadStreamReadiness();
-    reloadStreamReliabilityLab();
-    reloadAlertHistogram();
-    reloadSubscriptionResume();
+    withMonitorScrollPreserved(() =>
+      Promise.all([
+        reloadAlertSummary(),
+        reloadWsStats(),
+        reloadWsHealth(),
+        reloadStreamReadiness(),
+        reloadStreamReliabilityLab(),
+        reloadAlertHistogram(),
+        reloadSubscriptionResume(),
+      ]),
+    );
   }, [
     latestStreamAlertKey,
     reloadAlertHistogram,
@@ -575,36 +588,43 @@ export default function LiveMonitor() {
     reloadSubscriptionResume,
     reloadWsHealth,
     reloadWsStats,
+    withMonitorScrollPreserved,
   ]);
 
   const runAlertAnalysis = useCallback(async () => {
-    try {
-      const result = await api.alertsAnalysis({});
-      setAnalysisResult(result);
-      toast('Analysis complete', 'success');
-      return;
-    } catch {
-      // Some deployments expose alert analysis as read-only; try that shape next.
-    }
+    await withMonitorScrollPreserved(async () => {
+      try {
+        const result = await api.alertsAnalysis({});
+        setAnalysisResult(result);
+        toast('Analysis complete', 'success');
+        return;
+      } catch {
+        // Some deployments expose alert analysis as read-only; try that shape next.
+      }
 
-    try {
-      const result = await api.alertsAnalysisLatest();
-      setAnalysisResult(result);
-      toast('Analysis complete', 'success');
-    } catch {
-      toast('Analysis failed', 'error');
-    }
-  }, [toast]);
+      try {
+        const result = await api.alertsAnalysisLatest();
+        setAnalysisResult(result);
+        toast('Analysis complete', 'success');
+      } catch {
+        toast('Analysis failed', 'error');
+      }
+    });
+  }, [toast, withMonitorScrollPreserved]);
 
   useInterval(
     () => {
       if (tab === 'stream') {
-        reloadWsStats();
-        reloadWsHealth();
-        reloadStreamReadiness();
-        reloadStreamReliabilityLab();
-        reloadAlertHistogram();
-        reloadSubscriptionResume();
+        withMonitorScrollPreserved(() =>
+          Promise.all([
+            reloadWsStats(),
+            reloadWsHealth(),
+            reloadStreamReadiness(),
+            reloadStreamReliabilityLab(),
+            reloadAlertHistogram(),
+            reloadSubscriptionResume(),
+          ]),
+        );
       }
     },
     tab === 'stream' ? 10000 : null,
@@ -1934,7 +1954,52 @@ export default function LiveMonitor() {
                     </div>
                   </div>
                 )}
+                {Array.isArray(analysisResult.source_breakdown) &&
+                  analysisResult.source_breakdown.length > 0 && (
+                    <div className="card" style={{ padding: 12 }}>
+                      <div className="metric-label">Primary Source</div>
+                      <div style={{ fontSize: 14, fontWeight: 600 }}>
+                        {analysisResult.source_breakdown[0].source || 'unknown'}
+                      </div>
+                      <div className="row-secondary">
+                        {analysisResult.source_breakdown[0].count || 0} alert
+                        {analysisResult.source_breakdown[0].count === 1 ? '' : 's'} in window
+                      </div>
+                    </div>
+                  )}
               </div>
+              {Array.isArray(analysisResult.source_breakdown) &&
+                analysisResult.source_breakdown.length > 0 && (
+                  <div style={{ marginBottom: 16 }}>
+                    <div className="card-title" style={{ marginBottom: 8 }}>
+                      Alert Sources
+                    </div>
+                    <div className="table-wrap">
+                      <table>
+                        <thead>
+                          <tr>
+                            <th>Source</th>
+                            <th>Total</th>
+                            <th>Critical</th>
+                            <th>Severe</th>
+                            <th>Elevated</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {analysisResult.source_breakdown.map((source) => (
+                            <tr key={source.source || 'unknown'}>
+                              <td>{source.source || 'unknown'}</td>
+                              <td>{source.count || 0}</td>
+                              <td>{source.critical || 0}</td>
+                              <td>{source.severe || 0}</td>
+                              <td>{source.elevated || 0}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
               {analysisResult.dominant_reasons?.length > 0 && (
                 <div style={{ marginBottom: 16 }}>
                   <div className="card-title" style={{ marginBottom: 8 }}>
@@ -2027,13 +2092,13 @@ export default function LiveMonitor() {
                 marginBottom: 12,
               }}
             >
-              <div className="card" style={{ padding: 10 }}>
+              <div className="summary-card">
                 <div className="metric-label">Process Count</div>
                 <div style={{ fontSize: 22, fontWeight: 700 }}>
                   {procData?.count ?? procList.length}
                 </div>
               </div>
-              <div className="card" style={{ padding: 10 }}>
+              <div className="summary-card">
                 <div className="metric-label">Total CPU</div>
                 <div style={{ fontSize: 22, fontWeight: 700 }}>
                   {procData?.total_cpu_percent != null
@@ -2043,7 +2108,7 @@ export default function LiveMonitor() {
                       : 'Pending'}
                 </div>
               </div>
-              <div className="card" style={{ padding: 10 }}>
+              <div className="summary-card">
                 <div className="metric-label">Total Memory</div>
                 <div style={{ fontSize: 22, fontWeight: 700 }}>
                   {procData?.total_mem_percent != null
@@ -2053,7 +2118,7 @@ export default function LiveMonitor() {
                       : 'Pending'}
                 </div>
               </div>
-              <div className="card" style={{ padding: 10 }}>
+              <div className="summary-card">
                 <div className="metric-label">Findings</div>
                 <div
                   style={{
@@ -2122,12 +2187,12 @@ export default function LiveMonitor() {
                 </div>
               </div>
               <div className="card-grid" style={{ marginBottom: 16 }}>
-                <div className="card" style={{ padding: 10 }}>
+                <div className="summary-card">
                   <div className="metric-label">Tree Nodes</div>
                   <div style={{ fontSize: 22, fontWeight: 700 }}>{processTreeNodes.length}</div>
                   <div className="metric-sub">Published by the live process tree endpoint</div>
                 </div>
-                <div className="card" style={{ padding: 10 }}>
+                <div className="summary-card">
                   <div className="metric-label">Deep Chains</div>
                   <div style={{ fontSize: 22, fontWeight: 700 }}>{processDeepChains.length}</div>
                   <div className="metric-sub">
@@ -2136,7 +2201,7 @@ export default function LiveMonitor() {
                       : 'No suspicious chains currently flagged'}
                   </div>
                 </div>
-                <div className="card" style={{ padding: 10 }}>
+                <div className="summary-card">
                   <div className="metric-label">Priority Process</div>
                   <div style={{ fontSize: 16, fontWeight: 700 }}>
                     {highestRiskProcess?.name ||
@@ -2158,14 +2223,16 @@ export default function LiveMonitor() {
                 }}
               >
                 {topDeepChain && (
-                  <div className="card">
-                    <div className="metric-label">Top Deep Chain</div>
-                    <div className="row-primary" style={{ marginTop: 6 }}>
-                      {topDeepChain.summary}
+                  <div className="row-card" style={{ marginTop: 0 }}>
+                    <div>
+                      <div className="metric-label">Top Deep Chain</div>
+                      <div className="row-primary" style={{ marginTop: 6 }}>
+                        {topDeepChain.summary}
+                      </div>
+                      <div className="row-secondary">Depth {topDeepChain.depth || '—'}</div>
                     </div>
-                    <div className="row-secondary">Depth {topDeepChain.depth || '—'}</div>
                     {topDeepChain.pid != null && (
-                      <div className="btn-group" style={{ marginTop: 12 }}>
+                      <div className="btn-group">
                         <button className="btn btn-sm" onClick={() => openProcess(topDeepChain)}>
                           Investigate Chain Leaf
                         </button>
@@ -2174,13 +2241,15 @@ export default function LiveMonitor() {
                   </div>
                 )}
                 {highestRiskProcess && (
-                  <div className="card">
-                    <div className="metric-label">Top Risk Finding</div>
-                    <div className="row-primary" style={{ marginTop: 6 }}>
-                      {highestRiskProcess.name}
+                  <div className="row-card" style={{ marginTop: 0 }}>
+                    <div>
+                      <div className="metric-label">Top Risk Finding</div>
+                      <div className="row-primary" style={{ marginTop: 6 }}>
+                        {highestRiskProcess.name}
+                      </div>
+                      <div className="row-secondary">{highestRiskProcess.reason}</div>
                     </div>
-                    <div className="row-secondary">{highestRiskProcess.reason}</div>
-                    <div className="btn-group" style={{ marginTop: 12 }}>
+                    <div className="btn-group">
                       <button
                         className="btn btn-sm"
                         onClick={() => openProcess(highestRiskProcess)}

@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { useApi, useApiGroup, useToast } from '../hooks.jsx';
 import * as api from '../api.js';
 import { JsonDetails, SideDrawer, SummaryGrid } from './operator.jsx';
@@ -154,6 +154,116 @@ function normalizeThreadAnomalies(items) {
     .filter((item) => item.detail);
 }
 
+function normalizeThreadCollectionSource(threadData, detail) {
+  const explicit =
+    threadData?.collection_source ||
+    threadData?.collector ||
+    threadData?.source ||
+    threadData?.telemetry_source ||
+    threadData?.origin ||
+    threadData?.agent_id ||
+    detail?.thread_collection_source ||
+    detail?.source;
+  if (explicit) return explicit;
+  const platform = threadData?.platform || detail?.platform;
+  if (platform) return `${platform} live thread collector`;
+  return 'live process collector';
+}
+
+function threadIdValue(thread) {
+  return Number(thread?.thread_id ?? thread?.os_thread_id);
+}
+
+function threadRuntime(thread) {
+  return (
+    thread?.cpu_time ||
+    [thread?.system_time, thread?.user_time].filter(Boolean).join(' / ') ||
+    'Unavailable'
+  );
+}
+
+function assessThread(thread, summary) {
+  if (!thread) {
+    return {
+      label: 'No thread selected',
+      badgeClass: 'badge-info',
+      confidence: 'low',
+      reason: 'Select a thread row to inspect its state, source, and response options.',
+      falsePositiveNote: 'No per-thread signal is selected.',
+    };
+  }
+
+  const id = threadIdValue(thread);
+  const cpu = Number(thread.cpu_percent || 0);
+  const anomaly = summary.anomalies.find(
+    (item) => Number(item?.evidence?.thread_id ?? item?.evidence?.os_thread_id) === id,
+  );
+  const isHot = cpu >= 5 || summary.hotThreads.some((candidate) => threadIdValue(candidate) === id);
+  const state = String(thread.state_label || thread.state || '').toLowerCase();
+  const isBlocked =
+    ['blocked', 'stopped', 'uninterruptible'].includes(state) ||
+    Boolean(thread.wait_reason) ||
+    summary.blockedThreads.some((candidate) => threadIdValue(candidate) === id);
+
+  if (anomaly) {
+    return {
+      label: 'Anomalous',
+      badgeClass: anomalyBadgeClass(anomaly.severity),
+      confidence: ['critical', 'high'].includes(String(anomaly.severity).toLowerCase())
+        ? 'high'
+        : 'medium',
+      reason: anomaly.detail,
+      falsePositiveNote:
+        'Treat as lower confidence if the same wait reason appears on trusted software after an update or debugging session.',
+    };
+  }
+
+  if (isHot && isBlocked) {
+    return {
+      label: 'Hot + blocked',
+      badgeClass: 'badge-err',
+      confidence: 'medium',
+      reason:
+        'The thread is both CPU-active and exposing wait or blocked-state evidence, which can indicate contention, injection, tracing, or unstable code.',
+      falsePositiveNote:
+        'High-volume compilers, browsers, and EDR tools can create short-lived hot blocked workers; compare against parent lineage and command line.',
+    };
+  }
+
+  if (isHot) {
+    return {
+      label: 'Hot thread',
+      badgeClass: 'badge-warn',
+      confidence: cpu >= 25 ? 'medium' : 'low',
+      reason: `This thread is consuming ${cpu.toFixed(1)}% CPU in the latest sample.`,
+      falsePositiveNote:
+        'CPU-only signals are noisy unless they persist across samples or align with suspicious process, file, or network evidence.',
+    };
+  }
+
+  if (isBlocked) {
+    return {
+      label: 'Blocked/waiting',
+      badgeClass: 'badge-info',
+      confidence: thread.wait_reason ? 'medium' : 'low',
+      reason: thread.wait_reason
+        ? `The collector observed wait reason ${thread.wait_reason}.`
+        : 'The collector observed a blocked or stopped thread state.',
+      falsePositiveNote:
+        'Blocked workers are common in normal applications; prioritize only when the wait reason matches tracing, injection, crypto, or process-control terms.',
+    };
+  }
+
+  return {
+    label: 'Baseline',
+    badgeClass: 'badge-ok',
+    confidence: 'low',
+    reason: 'No hot, blocked, or anomaly signal is currently attached to this thread.',
+    falsePositiveNote:
+      'Keep this as context for process-level analysis; it is not suspicious by itself.',
+  };
+}
+
 function normalizeProcessThreads(threadData) {
   return normalizeThreadItems(threadData?.threads);
 }
@@ -222,14 +332,8 @@ function ProcessRelationPanel({ title, items, onSelectProcess }) {
         {items.map((process) => (
           <div
             key={`${title}-${process.pid}`}
-            className="card"
-            style={{
-              padding: 12,
-              display: 'flex',
-              justifyContent: 'space-between',
-              gap: 12,
-              alignItems: 'center',
-            }}
+            className="row-card"
+            style={{ marginTop: 0, alignItems: 'center' }}
           >
             <div>
               <div className="row-primary">{processDisplayName(process)}</div>
@@ -265,6 +369,7 @@ export default function ProcessDrawer({
 }) {
   const toast = useToast();
   const [confirm, confirmUI] = useConfirm();
+  const [selectedThreadId, setSelectedThreadId] = useState(null);
   const {
     data: detail,
     loading,
@@ -326,6 +431,7 @@ export default function ProcessDrawer({
     const recommendations = Array.isArray(threadData.recommendations)
       ? threadData.recommendations.filter(Boolean)
       : [];
+    const collectionSource = normalizeThreadCollectionSource(threadData, activeDetail);
 
     return {
       threadCount: threadData.thread_count ?? processThreads.length,
@@ -340,6 +446,7 @@ export default function ProcessDrawer({
         threadData.hot_thread_count ??
         processThreads.filter((thread) => Number(thread.cpu_percent || 0) >= 5).length,
       identifierType: threadData.identifier_type || null,
+      collectionSource,
       note: threadData.note || null,
       message: threadData.message || null,
       topCpuPercent,
@@ -357,7 +464,39 @@ export default function ProcessDrawer({
               .filter((thread) => ['blocked', 'stopped'].includes(thread.state_label))
               .slice(0, 4),
     };
-  }, [processContextData.processThreads, processThreads]);
+  }, [activeDetail, processContextData.processThreads, processThreads]);
+
+  const selectedThread = useMemo(() => {
+    if (processThreads.length === 0) return null;
+    const selected =
+      selectedThreadId != null
+        ? processThreads.find((thread) => threadIdValue(thread) === Number(selectedThreadId))
+        : null;
+    if (selected) return selected;
+
+    const anomalyThreadId = threadSummary.anomalies
+      .map((anomaly) => Number(anomaly?.evidence?.thread_id ?? anomaly?.evidence?.os_thread_id))
+      .find((value) => Number.isFinite(value));
+    if (anomalyThreadId != null) {
+      const anomalyThread = processThreads.find(
+        (thread) => threadIdValue(thread) === anomalyThreadId,
+      );
+      if (anomalyThread) return anomalyThread;
+    }
+
+    return threadSummary.hotThreads[0] || threadSummary.blockedThreads[0] || processThreads[0];
+  }, [
+    processThreads,
+    selectedThreadId,
+    threadSummary.anomalies,
+    threadSummary.blockedThreads,
+    threadSummary.hotThreads,
+  ]);
+
+  const selectedThreadAssessment = useMemo(
+    () => assessThread(selectedThread, threadSummary),
+    [selectedThread, threadSummary],
+  );
 
   const summary = useMemo(() => {
     if (!activeDetail) return null;
@@ -431,6 +570,23 @@ export default function ProcessDrawer({
         reason: `Operator-requested host isolation while investigating PID ${detail.pid}`,
       },
       'Isolation',
+    );
+  };
+
+  const queueThreadAction = async (action, label) => {
+    if (!activeDetail || !selectedThread) return;
+    await queueAction(
+      {
+        action,
+        pid: activeDetail.pid,
+        thread_id: threadIdValue(selectedThread),
+        process_name: activeDetail.display_name || activeDetail.name,
+        hostname: activeDetail.hostname,
+        severity: requestSeverity(activeDetail),
+        source: threadSummary.collectionSource,
+        reason: `${label} for ${activeDetail.display_name || activeDetail.name} thread ${threadIdValue(selectedThread)}: ${selectedThreadAssessment.reason}`,
+      },
+      label,
     );
   };
 
@@ -653,7 +809,7 @@ export default function ProcessDrawer({
 
             <div className="card" style={{ marginTop: 16 }}>
               <div className="card-title" style={{ marginBottom: 8 }}>
-                Thread Activity
+                Thread Analysis
               </div>
               <div className="drawer-copy-grid">
                 <div>
@@ -697,6 +853,15 @@ export default function ProcessDrawer({
                   </div>
                 </div>
                 <div>
+                  <div className="metric-label">Source</div>
+                  <div style={{ fontSize: 13, fontWeight: 700, fontFamily: 'var(--font-mono)' }}>
+                    {threadSummary.collectionSource || '—'}
+                  </div>
+                  <div className="row-secondary">
+                    Live collector surface used for this thread analysis.
+                  </div>
+                </div>
+                <div>
                   <div className="metric-label">Anomaly Score</div>
                   <div style={{ fontSize: 22, fontWeight: 700 }}>
                     {Number(threadSummary.anomalyScore || 0)}
@@ -708,6 +873,76 @@ export default function ProcessDrawer({
                   </div>
                 </div>
               </div>
+              <div className="detail-hero thread-focus-panel" style={{ marginTop: 14 }}>
+                <div>
+                  <div className="metric-label">Selected Thread</div>
+                  <div className="detail-hero-title">
+                    {selectedThread ? `T${threadIdValue(selectedThread)}` : 'No thread rows'}
+                  </div>
+                  <div className="detail-hero-copy">
+                    {selectedThreadAssessment.reason}
+                  </div>
+                  {selectedThread && (
+                    <div className="chip-row" style={{ marginTop: 10 }}>
+                      <span className={`badge ${selectedThreadAssessment.badgeClass}`}>
+                        {selectedThreadAssessment.label}
+                      </span>
+                      <span className="scope-chip">
+                        confidence {selectedThreadAssessment.confidence}
+                      </span>
+                      <span className="scope-chip">{threadSummary.collectionSource}</span>
+                    </div>
+                  )}
+                </div>
+                <div className="thread-action-stack">
+                  <button
+                    className="btn btn-sm"
+                    disabled={!selectedThread}
+                    onClick={() => queueThreadAction('collect_thread_evidence', 'Thread evidence')}
+                  >
+                    Collect Evidence
+                  </button>
+                  <button
+                    className="btn btn-sm"
+                    disabled={!selectedThread}
+                    onClick={() => queueThreadAction('run_process_malware_scan', 'Malware scan')}
+                  >
+                    Malware Scan
+                  </button>
+                  <button
+                    className="btn btn-sm"
+                    disabled={!selectedThread}
+                    onClick={() =>
+                      queueThreadAction('stage_process_traffic_containment', 'Traffic containment')
+                    }
+                  >
+                    Contain Traffic
+                  </button>
+                </div>
+              </div>
+              {selectedThread && (
+                <div className="thread-analysis-grid">
+                  <div>
+                    <div className="metric-label">State</div>
+                    <div className="row-primary">
+                      {selectedThread.state_label || selectedThread.state || 'unknown'}
+                    </div>
+                    <div className="row-secondary">
+                      CPU {Number(selectedThread.cpu_percent || 0).toFixed(1)}% · runtime{' '}
+                      {threadRuntime(selectedThread)}
+                    </div>
+                  </div>
+                  <div>
+                    <div className="metric-label">Wait / Priority</div>
+                    <div className="row-primary">{selectedThread.wait_reason || 'No wait reason'}</div>
+                    <div className="row-secondary">Priority {selectedThread.priority || '—'}</div>
+                  </div>
+                  <div>
+                    <div className="metric-label">False-positive check</div>
+                    <div className="row-secondary">{selectedThreadAssessment.falsePositiveNote}</div>
+                  </div>
+                </div>
+              )}
               {threadSummary.note && (
                 <div className="detail-callout" style={{ marginTop: 12 }}>
                   {threadSummary.note}
@@ -768,52 +1003,40 @@ export default function ProcessDrawer({
                   {threadSummary.message}
                 </div>
               ) : processThreads.length > 0 ? (
-                <div className="table-wrap" style={{ marginTop: 12 }}>
-                  <table>
-                    <thead>
-                      <tr>
-                        <th>Thread</th>
-                        <th>State</th>
-                        <th>CPU</th>
-                        <th>Priority</th>
-                        <th>Wait</th>
-                        <th>Runtime</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {processThreads.slice(0, 10).map((thread) => (
-                        <tr key={`thread-${thread.thread_id}`}>
-                          <td style={{ fontFamily: 'var(--font-mono)', fontSize: 12 }}>
-                            {thread.thread_id}
-                            {thread.os_thread_id != null && thread.os_thread_id !== thread.thread_id
-                              ? ` / ${thread.os_thread_id}`
-                              : ''}
-                          </td>
-                          <td>
-                            <span className="scope-chip">
-                              {thread.state_label || thread.state || 'unknown'}
-                            </span>
-                          </td>
-                          <td>{Number(thread.cpu_percent || 0).toFixed(1)}%</td>
-                          <td>{thread.priority || '—'}</td>
-                          <td
-                            style={{
-                              fontFamily: 'var(--font-mono)',
-                              fontSize: 12,
-                              wordBreak: 'break-all',
-                            }}
-                          >
-                            {thread.wait_reason || '—'}
-                          </td>
-                          <td>
-                            {thread.cpu_time ||
-                              [thread.system_time, thread.user_time].filter(Boolean).join(' / ') ||
-                              '—'}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                <div className="thread-card-list">
+                  {processThreads.slice(0, 10).map((thread) => {
+                    const assessment = assessThread(thread, threadSummary);
+                    const isSelected = threadIdValue(thread) === threadIdValue(selectedThread);
+                    return (
+                      <button
+                        key={`thread-${thread.thread_id}`}
+                        type="button"
+                        className={`thread-card-row ${isSelected ? 'selected' : ''}`}
+                        onClick={() => setSelectedThreadId(threadIdValue(thread))}
+                      >
+                        <div className="thread-card-main">
+                          <span className="thread-id-pill">T{thread.thread_id}</span>
+                          <span className={`badge ${assessment.badgeClass}`}>
+                            {assessment.label}
+                          </span>
+                          <span className="scope-chip">
+                            {thread.state_label || thread.state || 'unknown'}
+                          </span>
+                        </div>
+                        <div className="thread-card-metrics">
+                          <span>{Number(thread.cpu_percent || 0).toFixed(1)}% CPU</span>
+                          <span>{thread.priority || '—'} priority</span>
+                          <span>{threadRuntime(thread)}</span>
+                        </div>
+                        <div className="thread-card-wait">
+                          {thread.wait_reason || 'No wait reason'}
+                        </div>
+                        {thread.os_thread_id != null && thread.os_thread_id !== thread.thread_id && (
+                          <div className="row-secondary">OS thread {thread.os_thread_id}</div>
+                        )}
+                      </button>
+                    );
+                  })}
                 </div>
               ) : (
                 <div className="hint" style={{ marginTop: 12 }}>

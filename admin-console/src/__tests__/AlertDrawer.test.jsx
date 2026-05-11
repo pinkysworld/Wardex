@@ -310,4 +310,220 @@ describe('AlertDrawer', () => {
       }),
     );
   });
+
+  it('offers approval-gated containment for authentication surge alerts with source IPs', async () => {
+    const user = userEvent.setup();
+
+    globalThis.fetch = vi.fn((url, options = {}) => {
+      const href = String(url);
+      const method = options?.method || 'GET';
+
+      if (href.includes('/api/detection/explain')) {
+        return Promise.resolve(jsonOk({ next_steps: ['Confirm source IP before blocking.'] }));
+      }
+      if (href.includes('/api/remediation/plan') && method === 'POST') {
+        return Promise.resolve(
+          jsonOk({
+            platform: 'Linux',
+            commands: [{ program: 'iptables', args: ['-A', 'INPUT', '-s', '198.51.100.42'] }],
+          }),
+        );
+      }
+      if (href.includes('/api/response/request') && method === 'POST') {
+        return Promise.resolve(
+          jsonOk({
+            status: 'submitted',
+            request: {
+              id: 'resp-1',
+              action_label: 'Block IP 198.51.100.42',
+              status: 'Pending',
+              tier: 'SingleApproval',
+              reversal_path: 'Remove block for 198.51.100.42 from network controls.',
+            },
+          }),
+        );
+      }
+
+      return Promise.resolve(jsonOk({}));
+    });
+
+    render(
+      <ToastProvider>
+        <AlertDrawer
+          alert={{
+            id: 5,
+            alert_id: '5',
+            message: 'Authentication failures surge from 198.51.100.42',
+            hostname: 'edge-auth',
+            platform: 'linux',
+            severity: 'critical',
+            category: 'brute_force',
+            source_ip: '198.51.100.42',
+            reasons: ['auth failures surge'],
+          }}
+          onClose={() => {}}
+        />
+      </ToastProvider>,
+    );
+
+    expect(await screen.findByText('Containment Actions')).toBeInTheDocument();
+    expect(screen.getAllByText('198.51.100.42').length).toBeGreaterThan(0);
+
+    await user.click(screen.getByRole('button', { name: 'Request IP Block' }));
+
+    await waitFor(() => {
+      expect(screen.getByText(/Block IP 198.51.100.42/i)).toBeInTheDocument();
+    });
+
+    const responseCall = globalThis.fetch.mock.calls.find(([url]) =>
+      String(url).includes('/api/response/request'),
+    );
+    expect(responseCall).toBeTruthy();
+    const body = JSON.parse(responseCall[1].body);
+    expect(body).toMatchObject({
+      action: 'block_ip',
+      ip: '198.51.100.42',
+      hostname: 'edge-auth',
+      dry_run: false,
+    });
+  });
+
+  it('stages an auth rate-limit dry run when auth alerts lack a source IP', async () => {
+    const user = userEvent.setup();
+
+    globalThis.fetch = vi.fn((url, options = {}) => {
+      const href = String(url);
+      const method = options?.method || 'GET';
+
+      if (href.includes('/api/detection/explain')) {
+        return Promise.resolve(jsonOk({ next_steps: ['Review authentication logs.'] }));
+      }
+      if (href.includes('/api/response/request') && method === 'POST') {
+        return Promise.resolve(
+          jsonOk({
+            status: 'submitted',
+            request: {
+              id: 'resp-2',
+              action_label: 'Throttle to 512 kbps',
+              status: 'DryRunCompleted',
+              tier: 'Auto',
+              reversal_path: 'Restore normal rate limits.',
+            },
+          }),
+        );
+      }
+
+      return Promise.resolve(jsonOk({}));
+    });
+
+    render(
+      <ToastProvider>
+        <AlertDrawer
+          alert={{
+            id: 6,
+            alert_id: '6',
+            message: 'Authentication failures surge',
+            hostname: 'edge-auth',
+            severity: 'critical',
+            category: 'brute_force',
+            reasons: ['auth failures surge'],
+          }}
+          onClose={() => {}}
+        />
+      </ToastProvider>,
+    );
+
+    expect(await screen.findByText('Containment Actions')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Request IP Block' })).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Stage Auth Rate Limit' }));
+
+    await waitFor(() => {
+      expect(screen.getByText(/Throttle to 512 kbps/i)).toBeInTheDocument();
+    });
+
+    const responseCall = globalThis.fetch.mock.calls.find(([url]) =>
+      String(url).includes('/api/response/request'),
+    );
+    expect(responseCall).toBeTruthy();
+    const body = JSON.parse(responseCall[1].body);
+    expect(body).toMatchObject({
+      action: 'throttle',
+      rate_limit_kbps: 512,
+      hostname: 'edge-auth',
+      dry_run: true,
+    });
+  });
+
+  it('offers artifact and process actions for malware alarms', async () => {
+    const user = userEvent.setup();
+
+    globalThis.fetch = vi.fn((url, options = {}) => {
+      const href = String(url);
+      const method = options?.method || 'GET';
+
+      if (href.includes('/api/detection/explain')) {
+        return Promise.resolve(jsonOk({ next_steps: ['Quarantine artifact after validation.'] }));
+      }
+      if (href.includes('/api/response/request') && method === 'POST') {
+        return Promise.resolve(
+          jsonOk({
+            status: 'submitted',
+            request: {
+              id: 'resp-3',
+              action_label: 'Quarantine file /tmp/dropper.bin',
+              status: 'Pending',
+              tier: 'SingleApproval',
+              reversal_path: 'Release after review.',
+            },
+          }),
+        );
+      }
+
+      return Promise.resolve(jsonOk({}));
+    });
+
+    render(
+      <ToastProvider>
+        <AlertDrawer
+          alert={{
+            id: 7,
+            alert_id: '7',
+            message: 'Malware execution /tmp/dropper.bin',
+            hostname: 'edge-malware',
+            severity: 'critical',
+            category: 'malware',
+            file_path: '/tmp/dropper.bin',
+            process: {
+              pid: 7331,
+              display_name: 'dropper',
+              cmd_line: '/tmp/dropper.bin',
+            },
+            reasons: ['malware hash reputation match'],
+          }}
+          onClose={() => {}}
+        />
+      </ToastProvider>,
+    );
+
+    expect(await screen.findByText('Containment Actions')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Request File Quarantine' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Request Process Kill' })).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Request File Quarantine' }));
+
+    await waitFor(() => {
+      expect(screen.getByText(/Quarantine file \/tmp\/dropper.bin/i)).toBeInTheDocument();
+    });
+
+    const responseCall = globalThis.fetch.mock.calls.find(([url]) =>
+      String(url).includes('/api/response/request'),
+    );
+    expect(JSON.parse(responseCall[1].body)).toMatchObject({
+      action: 'quarantine_file',
+      path: '/tmp/dropper.bin',
+      hostname: 'edge-malware',
+      dry_run: false,
+    });
+  });
 });
