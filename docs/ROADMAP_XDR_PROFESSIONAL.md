@@ -2,9 +2,11 @@
 
 ## Current release baseline
 
-`v1.0.10` is the current stable patch release of Wardex. It carries all capabilities of `v1.0.0`, the `v1.0.1` CI hardening fixes, the `v1.0.2` macOS release-trust hardening, the Live Monitor process-analysis regression coverage, the refreshed Developer ID `.p12` signing-secret repair path, the `v1.0.6` resilience/proof tranche, the `v1.0.7` production assurance tranche, the `v1.0.8` release verification/deployment-confidence tranche, the evidence freshness tranche, and the detection response and malware-scanning polish shipped for this release.
+`v1.0.11` is the current stable patch release of Wardex. It carries all capabilities of `v1.0.0`, the `v1.0.1` CI hardening fixes, the `v1.0.2` macOS release-trust hardening, the Live Monitor process-analysis regression coverage, the refreshed Developer ID `.p12` signing-secret repair path, the `v1.0.6` resilience/proof tranche, the `v1.0.7` production assurance tranche, the `v1.0.8` release verification/deployment-confidence tranche, the evidence freshness tranche, the `v1.0.10` detection response and malware-scanning polish, and the `v1.0.11` CI/release-trust hotfix.
 
-The current release wires source-aware alert analysis, IP/hostname enrichment, alarm-specific response actions, malware/virus/trojan/rootkit scan workflows, open-source signature presets, responsive thread investigation pullouts, live-monitor scroll preservation, evidence freshness metadata, critical proof gating, persisted snapshot freshness, Launchpad proof badges, release verification evidence, and validation-pack inventory checks through backend routes, OpenAPI, RBAC, SDKs, release-gate smoke checks, and the Operator Launchpad.
+The current release wires release preflight gating for Rust formatting, Clippy, admin-console linting, admin-console formatting, admin-console build, and release-doc validation before signed-build packaging starts. It preserves the source-aware alert analysis, IP/hostname enrichment, alarm-specific response actions, malware/virus/trojan/rootkit scan workflows, open-source signature presets, responsive thread investigation pullouts, live-monitor scroll preservation, evidence freshness metadata, critical proof gating, persisted snapshot freshness, Launchpad proof badges, release verification evidence, and validation-pack inventory checks shipped in the prior release.
+
+`v1.0.10` added the detection response and malware-scanning tranche for source-aware alert analysis, IP/hostname enrichment, alarm-specific response actions, malware/virus/trojan/rootkit scan workflows, open-source signature presets, responsive thread investigation pullouts, live-monitor scroll preservation, and admin-console layout polish.
 
 `v1.0.8` added the release verification/deployment-confidence tranche for clean release cuts, container parity, verification center evidence, self-hosted install plans, data-quality SLOs, scale gates, failover execution, secrets rotation, operator task automation, and detection validation packs.
 
@@ -85,7 +87,7 @@ The current release wires source-aware alert analysis, IP/hostname enrichment, a
 
 ## Success criteria
 
-| Metric | Current (`v1.0.10`) | Target |
+| Metric | Current (`v1.0.11`) | Target |
 |---|---|---|
 | Automated tests | 1413 lib + 212+ integration + focused browser/admin regressions | maintained and expanded on every release |
 | OpenAPI and SDK contract | versioned OpenAPI plus generated Python and TypeScript SDKs | kept in lockstep on every release |

@@ -12402,7 +12402,7 @@ fn snapshot_entry_from_path(
         "storage_key": storage_key,
         "size_bytes": bytes.len(),
         "verified": verified,
-        "evidence_freshness": envelope.get("evidence_freshness").cloned().unwrap_or_else(|| serde_json::Value::Null),
+        "evidence_freshness": envelope.get("evidence_freshness").cloned().unwrap_or(serde_json::Value::Null),
     });
     if include_payload && let Some(map) = entry.as_object_mut() {
         map.insert(

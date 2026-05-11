@@ -879,9 +879,7 @@ export default function ProcessDrawer({
                   <div className="detail-hero-title">
                     {selectedThread ? `T${threadIdValue(selectedThread)}` : 'No thread rows'}
                   </div>
-                  <div className="detail-hero-copy">
-                    {selectedThreadAssessment.reason}
-                  </div>
+                  <div className="detail-hero-copy">{selectedThreadAssessment.reason}</div>
                   {selectedThread && (
                     <div className="chip-row" style={{ marginTop: 10 }}>
                       <span className={`badge ${selectedThreadAssessment.badgeClass}`}>
@@ -934,12 +932,16 @@ export default function ProcessDrawer({
                   </div>
                   <div>
                     <div className="metric-label">Wait / Priority</div>
-                    <div className="row-primary">{selectedThread.wait_reason || 'No wait reason'}</div>
+                    <div className="row-primary">
+                      {selectedThread.wait_reason || 'No wait reason'}
+                    </div>
                     <div className="row-secondary">Priority {selectedThread.priority || '—'}</div>
                   </div>
                   <div>
                     <div className="metric-label">False-positive check</div>
-                    <div className="row-secondary">{selectedThreadAssessment.falsePositiveNote}</div>
+                    <div className="row-secondary">
+                      {selectedThreadAssessment.falsePositiveNote}
+                    </div>
                   </div>
                 </div>
               )}
@@ -1031,9 +1033,10 @@ export default function ProcessDrawer({
                         <div className="thread-card-wait">
                           {thread.wait_reason || 'No wait reason'}
                         </div>
-                        {thread.os_thread_id != null && thread.os_thread_id !== thread.thread_id && (
-                          <div className="row-secondary">OS thread {thread.os_thread_id}</div>
-                        )}
+                        {thread.os_thread_id != null &&
+                          thread.os_thread_id !== thread.thread_id && (
+                            <div className="row-secondary">OS thread {thread.os_thread_id}</div>
+                          )}
                       </button>
                     );
                   })}

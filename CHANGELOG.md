@@ -4,6 +4,13 @@ All notable changes to Wardex are documented in this file.
 
 ## [Unreleased]
 
+## [1.0.11] — 2026-05-11 — CI and release-trust hotfix
+
+### Fixed
+- **Release preflight gate**: adds a release workflow preflight job so signed release packaging waits for Rust formatting, Clippy, admin-console linting, admin-console formatting, admin-console build, and release-doc validation.
+- **CI drift cleanup**: fixes the Clippy `unnecessary_lazy_evaluations` failure in snapshot evidence rendering and applies the existing Prettier rules to the Operator Launchpad and process-thread drawer.
+- **Release metadata alignment**: bumps Rust, admin-console, Python SDK, TypeScript SDK, Helm, OTLP, OpenAPI, installation, reproducibility, website, and test surfaces to the `v1.0.11` hotfix baseline.
+
 ## [1.0.10] — 2026-05-10 — detection response and signed-release polish
 
 ### Added

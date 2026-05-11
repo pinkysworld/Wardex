@@ -2,11 +2,11 @@
 
 ## Current release
 
-- **Version:** `1.0.10`
+- **Version:** `1.0.11`
 - **Positioning:** private-cloud XDR and SIEM platform with enterprise detection engineering, malware scanning, analyst workflows, fleet operations, behavioural analytics, and automated incident response
 - **Source footprint:** 139 Rust source modules
 - **API contract:** versioned OpenAPI surface with REST, GraphQL, live `/api/openapi.json` export, generated SDK parity diagnostics, cursor page contracts, release observability/preflight proof APIs, production assurance endpoints, malware scan and response-action contracts, source-aware alert analysis, and release verification readiness endpoints with evidence freshness metadata
-- **Verification:** Rust integration coverage, focused session-cookie exchange tests, collector lifecycle tests, remediation change-review tests, Command Center summary/action-drawer tests, Help & Docs unit coverage, assistant/ticketing/enterprise API regression tests, SDK regeneration checks, release-contract validation, strict Playwright a11y smoke coverage, local Developer ID `.p12` signing validation, focused admin-console regression coverage, thread pullout regression coverage, and Launchpad coverage for proof freshness badges and persisted snapshot evidence state
+- **Verification:** release preflight gating for Rust formatting, Clippy, admin-console linting, admin-console formatting, admin-console build, and release-doc validation, plus Rust integration coverage, focused session-cookie exchange tests, collector lifecycle tests, remediation change-review tests, Command Center summary/action-drawer tests, Help & Docs unit coverage, assistant/ticketing/enterprise API regression tests, SDK regeneration checks, strict Playwright a11y smoke coverage, local Developer ID `.p12` signing validation, focused admin-console regression coverage, thread pullout regression coverage, and Launchpad coverage for proof freshness badges and persisted snapshot evidence state
 - **Production hardening:** 100% (59/59 controls implemented)
 
 ## Shipped in the current platform
@@ -99,6 +99,12 @@ The current release has been verified with:
 ## Current product posture
 
 Wardex is now positioned as a professional XDR/SIEM control plane with incident-first analyst workflows, explainable detections, context-preserving reporting, operator-visible recovery posture, and explicit shift-lead surfaces for ownership, handoff, and detection-review pressure. The runtime, admin console, release process, and website are aligned around operator trust, workflow closure, deployment readiness, clean release verification, and freshness-gated evidence.
+
+## Recently shipped (v1.0.11)
+
+- **Release preflight gate** — signed release packaging now waits for Rust formatting, Clippy, admin-console linting, admin-console formatting, admin-console build, and release-doc validation.
+- **CI drift cleanup** — scheduled CI is restored by resolving the snapshot evidence Clippy warning and applying the existing Prettier rules to the Operator Launchpad and process-thread drawer.
+- **Hotfix metadata alignment** — Rust, admin-console, Python SDK, TypeScript SDK, Helm, OTLP, OpenAPI, installation, reproducibility, website, and test fixtures now point at the `v1.0.11` hotfix baseline.
 
 ## Recently shipped (v1.0.10)
 

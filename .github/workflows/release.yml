@@ -17,8 +17,49 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  release-preflight:
+    name: Release Preflight
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # stable
+        with:
+          toolchain: 1.95.0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: admin-console/package-lock.json
+
+      - name: Install admin console dependencies
+        run: npm ci --prefix admin-console
+
+      - name: Check Rust formatting
+        run: cargo fmt -- --check
+
+      - name: Check Rust lints
+        run: cargo clippy --all-targets -- -D warnings
+
+      - name: Lint admin console
+        run: npm run lint --prefix admin-console
+
+      - name: Check admin console formatting
+        run: npm run format:check --prefix admin-console
+
+      - name: Build admin console
+        run: npm run build --prefix admin-console
+
+      - name: Check release docs consistency
+        run: python3 scripts/validate_release_docs.py
+
   build:
     name: Build & Package — ${{ matrix.platform }}
+    needs: [release-preflight]
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -150,6 +191,7 @@ jobs:
   # ── Generate CycloneDX SBOM ──────────────────────────────────────────
   sbom:
     name: Generate SBOM
+    needs: [release-preflight]
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -175,6 +217,7 @@ jobs:
   # ── Lint Helm chart ──────────────────────────────────────────────────
   helm-lint:
     name: Helm Chart Lint
+    needs: [release-preflight]
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -294,6 +337,7 @@ jobs:
   # ── Container image vulnerability scan ───────────────────────────────
   container-scan:
     name: Container Image Scan
+    needs: [release-preflight]
     runs-on: ubuntu-latest
     steps:
       - name: Checkout

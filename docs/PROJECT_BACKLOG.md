@@ -2,7 +2,15 @@
 
 This backlog lists the next concrete tasks in build order.
 
-## Current strengthening checkpoint (`v1.0.10`)
+## Current strengthening checkpoint (`v1.0.11`)
+
+Recently completed for the `v1.0.11` CI and release-trust hotfix:
+
+- [x] Release workflow preflight blocks signed-build packaging until Rust formatting, Clippy, admin-console linting, admin-console formatting, admin-console build, and release-doc validation pass.
+- [x] Scheduled CI drift fixed by resolving the snapshot evidence Clippy warning and applying the existing Prettier rules to the affected admin-console files.
+- [x] Release metadata, docs, website, Helm, OpenAPI, Python SDK, TypeScript SDK, OTLP, and install/reproducibility surfaces aligned on `v1.0.11`.
+
+## Previous strengthening checkpoint (`v1.0.10`)
 
 Recently completed for the `v1.0.10` evidence freshness and signed-build readiness sweep:
 

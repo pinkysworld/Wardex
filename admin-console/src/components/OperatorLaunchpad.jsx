@@ -412,7 +412,12 @@ export default function OperatorLaunchpad() {
       data.fleetDrift,
     ],
     ['Work queue', data.workQueue?.status, `${workQueueCount} items`, data.workQueue],
-    ['Retention', data.retentionForecast?.status, `${retentionPeak || '—'}% peak`, data.retentionForecast],
+    [
+      'Retention',
+      data.retentionForecast?.status,
+      `${retentionPeak || '—'}% peak`,
+      data.retentionForecast,
+    ],
     [
       'Adversarial',
       data.adversarialValidation?.status,
@@ -436,7 +441,10 @@ export default function OperatorLaunchpad() {
     [
       'Container parity',
       data.containerParity?.status,
-      freshnessDetail(`${countValue(data.containerParity, ['fail_count'])} fails`, data.containerParity),
+      freshnessDetail(
+        `${countValue(data.containerParity, ['fail_count'])} fails`,
+        data.containerParity,
+      ),
       data.containerParity,
     ],
     [
@@ -496,7 +504,10 @@ export default function OperatorLaunchpad() {
     [
       'Validation packs',
       data.validationPacks?.status,
-      freshnessDetail(`${countValue(data.validationPacks, ['pack_count'])} packs`, data.validationPacks),
+      freshnessDetail(
+        `${countValue(data.validationPacks, ['pack_count'])} packs`,
+        data.validationPacks,
+      ),
       data.validationPacks,
     ],
   ];
@@ -509,9 +520,10 @@ export default function OperatorLaunchpad() {
   const productionBlockers = productionSignals.filter(([, status]) =>
     ['blocked', 'fail', 'risk', 'attention'].includes(String(status || '').toLowerCase()),
   ).length;
-  const releaseVerificationBlockers = releaseVerificationSignals.filter(([, status, , evidenceSource]) =>
-    ['blocked', 'fail', 'risk', 'attention'].includes(String(status || '').toLowerCase()) ||
-    evidenceNeedsAttention(evidenceSource),
+  const releaseVerificationBlockers = releaseVerificationSignals.filter(
+    ([, status, , evidenceSource]) =>
+      ['blocked', 'fail', 'risk', 'attention'].includes(String(status || '').toLowerCase()) ||
+      evidenceNeedsAttention(evidenceSource),
   ).length;
   const releaseFreshEvidenceCount = releaseVerificationSignals.filter(
     ([, , , evidenceSource]) => evidenceFreshness(evidenceSource)?.status === 'fresh',

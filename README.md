@@ -14,16 +14,14 @@ Wardex is a Rust-based XDR and SIEM platform for private-cloud and self-hosted s
 - **Scan across platforms:** malware, virus, trojan, and rootkit workflows cover Linux, macOS, and Windows with local engines plus optional open-source signature presets.
 - **Ship verifiably:** releases include checksums, SBOMs, provenance, signed artifacts, and documented verification gates.
 
-## Current Release: `v1.0.10`
+## Current Release: `v1.0.11`
 
-This release focuses on detection confidence, response actions, malware scanning, and a calmer admin console.
+This hotfix release focuses on CI cleanliness and release trust after the detection and malware-scanning work shipped in `v1.0.10`.
 
-- Malware, virus, trojan, and rootkit scanning now has a dedicated dashboard area with on-demand file, folder, and system scan options.
-- Operators can choose preset open-source signature sources and combine them before wiring them into the scanning workflow.
-- Alert analysis now enriches source context, IP/hostname details, response options, and false-positive reasoning.
-- Thread analysis uses a responsive pullout layout, keeps source context visible, and avoids horizontal scrolling.
-- Live view refreshes preserve scroll position during auto-refresh.
-- Help, Settings, Detection, Workflow, and Thread views have tighter box sizing and alignment.
+- Release packaging and signed-build publication now wait for a dedicated preflight gate.
+- Preflight checks cover Rust formatting, Clippy, admin-console linting, admin-console formatting, admin-console build, and release-doc validation.
+- The scheduled CI drift from `v1.0.10` is fixed without changing product APIs, SDK methods, storage, or runtime behavior.
+- All release metadata, docs, website, SDKs, Helm, OTLP, and test fixtures are aligned on `v1.0.11`.
 
 See [CHANGELOG.md](CHANGELOG.md) for full release history.
 
