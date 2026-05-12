@@ -3322,7 +3322,7 @@ dependencies = [
  "log",
  "md5",
  "notify",
- "rand 0.8.6",
+ "rand 0.9.4",
  "rusqlite",
  "serde",
  "serde_json",
