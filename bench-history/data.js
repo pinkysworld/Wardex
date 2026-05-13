@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1778691712658,
+  "lastUpdate": 1778692228407,
   "repoUrl": "https://github.com/pinkysworld/Wardex",
   "entries": {
     "Wardex criterion benches": [
@@ -8859,6 +8859,114 @@ window.BENCHMARK_DATA = {
             "name": "sigma_evaluate_20_rules",
             "value": 25219,
             "range": "± 475",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "85413447+pinkysworld@users.noreply.github.com",
+            "name": "pinkysworld",
+            "username": "pinkysworld"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "3dd5e4f3d5e7c527c751c77e7c62e50a9c7bd38e",
+          "message": "Merge pull request #60 from pinkysworld/codex/release-1.0.18-intelligence-gates\n\n[codex] Release v1.0.18 intelligence gates",
+          "timestamp": "2026-05-13T18:56:15+02:00",
+          "tree_id": "a74c79bb1361ed346eafd6d6b33b6e09b0dda329",
+          "url": "https://github.com/pinkysworld/Wardex/commit/3dd5e4f3d5e7c527c751c77e7c62e50a9c7bd38e"
+        },
+        "date": 1778692227928,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "full_pipeline/5",
+            "value": 48779,
+            "range": "± 357",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "full_pipeline/50",
+            "value": 406654,
+            "range": "± 8620",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "full_pipeline/200",
+            "value": 1899261,
+            "range": "± 18397",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "full_pipeline/1000",
+            "value": 17907097,
+            "range": "± 85219",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "detector_evaluate_single",
+            "value": 610,
+            "range": "± 1",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "detector_window_stream_256",
+            "value": 852789,
+            "range": "± 9095",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "shared_storage_observed_schema_read",
+            "value": 136,
+            "range": "± 0",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "shared_storage_4_threads_64_alerts",
+            "value": 145781,
+            "range": "± 2421",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "policy_evaluate_single",
+            "value": 246,
+            "range": "± 0",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "throughput/1000_samples",
+            "value": 18055845,
+            "range": "± 98433",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "search_500_events",
+            "value": 107273,
+            "range": "± 629",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "hunt_field_query",
+            "value": 86572,
+            "range": "± 336",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "ml_triage_rf",
+            "value": 50,
+            "range": "± 0",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "sigma_evaluate_20_rules",
+            "value": 35358,
+            "range": "± 258",
             "unit": "ns/iter"
           }
         ]
