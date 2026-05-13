@@ -1,7 +1,7 @@
 import { expect } from '@playwright/test';
 
 export const TOKEN = 'playwright-local-token';
-export const VERSION = '1.0.10';
+export const VERSION = '1.0.18';
 
 const NOW = '2026-04-20T06:27:45.809Z';
 
@@ -384,6 +384,31 @@ function buildResponses() {
       total_requests: 5,
       denied: 0,
       protected_assets: 2,
+    },
+    'GET /api/onboarding/readiness': {
+      ready: false,
+      checks: [
+        { key: 'first_agent_online', label: 'First agent online', ready: true },
+        { key: 'telemetry_flowing', label: 'Telemetry flowing', ready: true },
+        { key: 'first_alert_visible', label: 'First alert visible', ready: true },
+        { key: 'intel_source_healthy', label: 'Intel source healthy', ready: true },
+        { key: 'malware_scan_run', label: 'Malware scan run', ready: false },
+        {
+          key: 'response_approval_dry_run_completed',
+          label: 'Response approval dry-run completed',
+          ready: false,
+        },
+      ],
+    },
+    'POST /api/agents/token': {
+      token: 'playwright-enrollment-token',
+      expires_at: '2026-04-21T06:27:45.809Z',
+      max_uses: 1,
+      uses_remaining: 1,
+    },
+    'GET /api/remediation/safety': {
+      status: 'dry_run_only',
+      rollback_status: 'rollback ready',
     },
     'GET /api/processes/analysis': {
       findings: [

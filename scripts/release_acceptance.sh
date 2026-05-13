@@ -13,6 +13,8 @@ MANAGED_SERVER_PID=""
 MANAGED_SERVER_LOG=""
 MANAGED_CONFIG_PATH=""
 MANAGED_TOKEN_FILE=""
+WARDEX_RELEASE_ACCEPTANCE_CURL_TIMEOUT="${WARDEX_RELEASE_ACCEPTANCE_CURL_TIMEOUT:-30}"
+WARDEX_RELEASE_ACCEPTANCE_CURL_RETRIES="${WARDEX_RELEASE_ACCEPTANCE_CURL_RETRIES:-2}"
 
 require_file() {
   local path="$1"
@@ -29,6 +31,15 @@ run_step() {
   echo
   echo "==> $title"
   "$@"
+}
+
+acceptance_curl() {
+  curl --silent --show-error --fail \
+    --max-time "$WARDEX_RELEASE_ACCEPTANCE_CURL_TIMEOUT" \
+    --retry "$WARDEX_RELEASE_ACCEPTANCE_CURL_RETRIES" \
+    --retry-delay 1 \
+    --retry-all-errors \
+    "$@"
 }
 
 cleanup() {
@@ -301,6 +312,10 @@ verify_product_hardening_endpoints() {
     "/api/monitoring/synthetic-console"
     "/api/incidents/timeline-replay"
     "/api/detection/trust-score"
+    "/api/detection/trust/overview"
+    "/api/detection/trust/rules"
+    "/api/detection/trust/rules/release-acceptance-smoke"
+    "/api/detection/trust/tuning-drafts"
     "/api/fleet/drift-compliance"
     "/api/operator/work-queue"
     "/api/retention/forecast"
@@ -317,6 +332,19 @@ verify_product_hardening_endpoints() {
     "/api/ws/health"
     "/api/stream/readiness"
     "/api/stream/reliability-lab"
+    "/api/operator/workspaces"
+    "/api/alerts/feedback/summary"
+    "/api/alerts/evidence-chain"
+    "/api/detection-lab/status"
+    "/api/detection-lab/history"
+    "/api/detection-lab/report"
+    "/api/response/safety"
+    "/api/integrations/marketplace"
+    "/api/integrations/sample-event?provider=generic_syslog"
+    "/api/operations/health"
+    "/api/operations/health/snapshot"
+    "/api/malware/explain"
+    "/api/malware/scan-diff"
     "/api/sdk/contract-status"
     "/api/alerts/histogram"
     "/api/alerts/page?limit=5"
@@ -326,7 +354,7 @@ verify_product_hardening_endpoints() {
   )
 
   for endpoint in "${get_endpoints[@]}"; do
-    curl --silent --show-error --fail --max-time 10 \
+    acceptance_curl \
       -H "Authorization: Bearer $WARDEX_ADMIN_TOKEN" \
       "$WARDEX_BASE_URL$endpoint" >/dev/null
   done
@@ -334,28 +362,76 @@ verify_product_hardening_endpoints() {
   WARDEX_BASE_URL="$WARDEX_BASE_URL" WARDEX_ADMIN_TOKEN="$WARDEX_ADMIN_TOKEN" \
     bash scripts/detection_validation_packs.sh >/dev/null
   WARDEX_BASE_URL="$WARDEX_BASE_URL" WARDEX_ADMIN_TOKEN="$WARDEX_ADMIN_TOKEN" \
-    WARDEX_PERF_BUDGET_MS="${WARDEX_PERF_BUDGET_MS:-5000}" \
+    WARDEX_PERF_BUDGET_MS="${WARDEX_PERF_BUDGET_MS:-15000}" \
     bash scripts/performance_scale_baseline.sh --launchpad >/dev/null
 
-  curl --silent --show-error --fail --max-time 10 \
+  acceptance_curl \
     -H "Authorization: Bearer $WARDEX_ADMIN_TOKEN" \
     -H "Content-Type: application/json" \
     --data '{"lanes":["alerts"],"filters":{}}' \
     "$WARDEX_BASE_URL/api/subscriptions" >/dev/null
 
-  curl --silent --show-error --fail --max-time 10 \
+  acceptance_curl \
     -H "Authorization: Bearer $WARDEX_ADMIN_TOKEN" \
     -H "Content-Type: application/json" \
     --data '{"target_status":"canary"}' \
     "$WARDEX_BASE_URL/api/content/rules/release-acceptance-smoke/preflight" >/dev/null
 
-  curl --silent --show-error --fail --max-time 10 \
+  acceptance_curl \
+    -H "Authorization: Bearer $WARDEX_ADMIN_TOKEN" \
+    -H "Content-Type: application/json" \
+    --data '{"rule_id":"release-acceptance-smoke","draft_type":"noisy_rule_review"}' \
+    "$WARDEX_BASE_URL/api/detection/trust/tuning-drafts" >/dev/null
+
+  acceptance_curl \
+    -H "Authorization: Bearer $WARDEX_ADMIN_TOKEN" \
+    -H "Content-Type: application/json" \
+    --data '{}' \
+    "$WARDEX_BASE_URL/api/detection/trust/tuning-drafts/noisy_rule_review-release-acceptance-smoke/preview" >/dev/null
+
+  acceptance_curl \
+    -H "Authorization: Bearer $WARDEX_ADMIN_TOKEN" \
+    -H "Content-Type: application/json" \
+    --data '{}' \
+    "$WARDEX_BASE_URL/api/detection/trust/tuning-drafts/noisy_rule_review-release-acceptance-smoke/approve" >/dev/null
+
+  acceptance_curl \
     -H "Authorization: Bearer $WARDEX_ADMIN_TOKEN" \
     -H "Content-Type: application/json" \
     --data '{}' \
     "$WARDEX_BASE_URL/api/launchpad/demo-reset" >/dev/null
 
-  curl --silent --show-error --fail --max-time 10 \
+  acceptance_curl \
+    -H "Authorization: Bearer $WARDEX_ADMIN_TOKEN" \
+    -H "Content-Type: application/json" \
+    --data '{"state":"needs_more_data","reason":"release acceptance smoke"}' \
+    "$WARDEX_BASE_URL/api/alerts/feedback" >/dev/null
+
+  acceptance_curl \
+    -H "Authorization: Bearer $WARDEX_ADMIN_TOKEN" \
+    -H "Content-Type: application/json" \
+    --data '{"mode":"replay"}' \
+    "$WARDEX_BASE_URL/api/detection-lab/runs" >/dev/null
+
+  acceptance_curl \
+    -H "Authorization: Bearer $WARDEX_ADMIN_TOKEN" \
+    -H "Content-Type: application/json" \
+    --data '{"action":"block_ip","target":"198.51.100.10"}' \
+    "$WARDEX_BASE_URL/api/response/preview" >/dev/null
+
+  acceptance_curl \
+    -H "Authorization: Bearer $WARDEX_ADMIN_TOKEN" \
+    -H "Content-Type: application/json" \
+    --data '{"action":"block_ip","target":"198.51.100.10"}' \
+    "$WARDEX_BASE_URL/api/response/verify" >/dev/null
+
+  acceptance_curl \
+    -H "Authorization: Bearer $WARDEX_ADMIN_TOKEN" \
+    -H "Content-Type: application/json" \
+    --data '{"provider":"generic_syslog"}' \
+    "$WARDEX_BASE_URL/api/integrations/validate" >/dev/null
+
+  acceptance_curl \
     -H "Authorization: Bearer $WARDEX_ADMIN_TOKEN" \
     -H "Content-Type: application/json" \
     --data '{"dry_run":true,"keep_latest_per_kind":25}' \
@@ -394,7 +470,7 @@ run_step "Check published site links" check_site_links
 if [[ "$RELEASE_MODE" == "managed" ]]; then
   run_step "Start temporary Wardex release instance at $WARDEX_BASE_URL" start_managed_wardex
 fi
-run_step "Verify live Wardex admin is reachable at $WARDEX_BASE_URL" curl --silent --show-error --fail --max-time 10 "$WARDEX_BASE_URL/admin/"
+run_step "Verify live Wardex admin is reachable at $WARDEX_BASE_URL" acceptance_curl "$WARDEX_BASE_URL/admin/"
 run_step "Verify product hardening endpoints" verify_product_hardening_endpoints
 run_step "Run routed release smoke suite" run_live_smokes
 

@@ -35,7 +35,7 @@ git diff -- sdk/python sdk/typescript
 
 ### Release-proof helpers
 
-The `v1.0.11` clients expose the same resilience/proof contracts used by the admin console and release gate, plus the release verification and deployment-confidence tranche:
+The `v1.0.18` clients expose the same resilience/proof contracts used by the admin console and release gate, plus the release verification, deployment-confidence, Detection Trust draft-only tuning tranche, Claude workbench layout metadata, operator onboarding workflow release metadata, operator-continuity surfaces, and intelligence-gate metadata:
 
 ```python
 client.alerts_page(limit=100)
@@ -45,7 +45,7 @@ client.workflow_preflight(workflow="release")
 client.content_rule_preflight("rule-id", target_status="canary")
 client.release_observability_gates()
 client.release_provenance()
-client.release_upgrade_rehearsal(target_version="1.0.11")
+client.release_upgrade_rehearsal(target_version="1.0.18")
 client.clean_release_cut()
 client.container_release_parity()
 client.release_verification_center()
@@ -59,6 +59,13 @@ client.detection_validation_packs()
 client.synthetic_console_monitor()
 client.incident_timeline_replay()
 client.detection_trust_score()
+client.detection_trust_overview()
+client.detection_trust_rules()
+client.detection_trust_rule("rule-id")
+client.detection_trust_tuning_drafts()
+client.create_detection_trust_tuning_draft({"rule_id": "rule-id", "draft_type": "threshold_review"})
+client.preview_detection_trust_tuning_draft("threshold_review-rule-id")
+client.approve_detection_trust_tuning_draft("threshold_review-rule-id")
 client.fleet_drift_compliance()
 client.operator_work_queue()
 client.retention_forecast()
@@ -144,7 +151,7 @@ await client.workflowPreflight({ workflow: "release" });
 await client.contentRulePreflight("rule-id", { target_status: "canary" });
 await client.releaseObservabilityGates();
 await client.releaseProvenance();
-await client.releaseUpgradeRehearsal({ targetVersion: "1.0.11" });
+await client.releaseUpgradeRehearsal({ targetVersion: "1.0.18" });
 await client.cleanReleaseCut();
 await client.containerReleaseParity();
 await client.releaseVerificationCenter();
@@ -158,6 +165,13 @@ await client.detectionValidationPacks();
 await client.syntheticConsoleMonitor();
 await client.incidentTimelineReplay();
 await client.detectionTrustScore();
+await client.detectionTrustOverview();
+await client.detectionTrustRules();
+await client.detectionTrustRule("rule-id");
+await client.detectionTrustTuningDrafts();
+await client.createDetectionTrustTuningDraft({ rule_id: "rule-id", draft_type: "threshold_review" });
+await client.previewDetectionTrustTuningDraft("threshold_review-rule-id");
+await client.approveDetectionTrustTuningDraft("threshold_review-rule-id");
 await client.fleetDriftCompliance();
 await client.operatorWorkQueue();
 await client.retentionForecast();

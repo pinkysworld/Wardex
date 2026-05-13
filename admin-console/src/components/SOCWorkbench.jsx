@@ -36,6 +36,8 @@ const TAB_GROUPS = [
   { label: 'Respond', tabs: ['response', 'escalation', 'playbooks', 'rbac'] },
   { label: 'Measure', tabs: ['efficacy'] },
 ];
+const MAX_QUEUE_RENDER_ROWS = 250;
+const MAX_PROCESS_FINDING_ROWS = 120;
 
 // ── Investigation Checklist Templates ──────────────────────────
 const CHECKLIST_TEMPLATES = {
@@ -254,6 +256,43 @@ const formatResponseTarget = (entry) => {
   if (target && typeof target === 'object') return JSON.stringify(target);
   return String(entry.id || entry.alert_id || '—');
 };
+
+const alertReasonList = (alert) => {
+  const values = [
+    ...(Array.isArray(alert?.reasons) ? alert.reasons : []),
+    ...(Array.isArray(alert?.reason_codes) ? alert.reason_codes : []),
+    alert?.reason,
+    alert?.rule_id,
+    alert?.category,
+  ];
+  return [...new Set(values.map((value) => String(value || '').trim()).filter(Boolean))].slice(
+    0,
+    4,
+  );
+};
+
+const alertConfidencePct = (alert) => {
+  const raw = Number(alert?.confidence ?? alert?.score ?? alert?.risk_score ?? alert?.probability);
+  if (!Number.isFinite(raw)) return null;
+  return Math.max(0, Math.min(100, raw <= 1 ? Math.round(raw * 100) : Math.round(raw)));
+};
+
+const confidenceBadgeClass = (confidence) => {
+  if (confidence == null) return 'badge-info';
+  if (confidence >= 85) return 'badge-ok';
+  if (confidence >= 60) return 'badge-warn';
+  return 'badge-err';
+};
+
+const responseItemList = (value) =>
+  value?.actions ||
+  value?.pending ||
+  value?.requests ||
+  value?.items ||
+  (Array.isArray(value) ? value : []);
+
+const responseAuditList = (value) =>
+  value?.audit_log || value?.entries || value?.audit || (Array.isArray(value) ? value : []);
 
 function resolveInvestigationPivot(endpoint, context, label) {
   const normalized = String(endpoint || '').trim();
@@ -574,8 +613,10 @@ export default function SOCWorkbench() {
     respReq: api.responseRequests,
     respAudit: api.responseAudit,
     respStats: api.responseStats,
+    remediationSafety: api.remediationSafety,
+    changeReviews: api.remediationChangeReviews,
   });
-  const { pending, respReq, respAudit, respStats } = responseData;
+  const { pending, respReq, respAudit, respStats, remediationSafety, changeReviews } = responseData;
   const { data: processTreeData, reload: reloadProcessTreeData } = useApiGroup({
     procs: api.processTree,
     deepCh: api.deepChains,
@@ -733,6 +774,28 @@ export default function SOCWorkbench() {
       .toLowerCase()
       .includes(q);
   });
+  const renderedQueueArr = filteredQueueArr.slice(0, MAX_QUEUE_RENDER_ROWS);
+  const hiddenQueueRowCount = Math.max(0, filteredQueueArr.length - renderedQueueArr.length);
+  const explainableQueueCount = filteredQueueArr.filter(
+    (alert) => alertReasonList(alert).length > 0 || alertConfidencePct(alert) != null,
+  ).length;
+  const pendingResponseArr = responseItemList(pending);
+  const responseRequestArr = responseItemList(respReq);
+  const responseAuditArr = responseAuditList(respAudit);
+  const changeReviewArr = responseItemList(
+    changeReviews?.reviews ? changeReviews.reviews : changeReviews,
+  );
+  const responseReadyToExecute = Number(
+    respStats?.ready_to_execute ?? respStats?.approved_ready ?? respStats?.ready ?? 0,
+  );
+  const responseRollbackStatus =
+    remediationSafety?.rollback_status || remediationSafety?.status || 'dry_run_only';
+  const processFindingArr = Array.isArray(procFindings?.findings) ? procFindings.findings : [];
+  const renderedProcessFindings = processFindingArr.slice(0, MAX_PROCESS_FINDING_ROWS);
+  const hiddenProcessFindingCount = Math.max(
+    0,
+    processFindingArr.length - renderedProcessFindings.length,
+  );
   const casesById = Object.fromEntries(caseArr.map((caseItem) => [String(caseItem.id), caseItem]));
   const selectedCaseIdList = [...selectedCaseIds];
   const focusedCase = focusedCaseId ? casesById[String(focusedCaseId)] || null : null;
@@ -1390,8 +1453,8 @@ export default function SOCWorkbench() {
   };
 
   return (
-    <div>
-      <div className="tabs" style={{ flexWrap: 'wrap', gap: 0 }}>
+    <div className="soc-workbench">
+      <div className="tabs soc-workbench-tabs" style={{ flexWrap: 'wrap', gap: 0 }}>
         {TAB_GROUPS.map((g) => (
           <div key={g.label} style={{ display: 'flex', alignItems: 'center', gap: 0 }}>
             <button
@@ -1428,6 +1491,33 @@ export default function SOCWorkbench() {
         description="Move from queue and case context into hunts, entity analytics, asset evidence, campaign mapping, and delivery reporting."
         items={workflowItems}
       />
+
+      <div className="soc-cockpit-strip" aria-label="SOC operational cockpit">
+        <button className="soc-cockpit-card" type="button" onClick={() => setTab('queue')}>
+          <span className="summary-label">Alert queue</span>
+          <strong>{filteredQueueArr.length}</strong>
+          <span>{explainableQueueCount} explainable signals</span>
+        </button>
+        <button className="soc-cockpit-card" type="button" onClick={() => setTab('investigations')}>
+          <span className="summary-label">Investigations</span>
+          <strong>{activeInvestigationArr.length}</strong>
+          <span>{selectedInvestigation ? 'active context selected' : 'ready for planner'}</span>
+        </button>
+        <button className="soc-cockpit-card" type="button" onClick={() => setTab('response')}>
+          <span className="summary-label">Response readiness</span>
+          <strong>{pendingResponseArr.length + changeReviewArr.length}</strong>
+          <span>{responseReadyToExecute} ready to execute</span>
+        </button>
+        <button className="soc-cockpit-card" type="button" onClick={() => setTab('process-tree')}>
+          <span className="summary-label">Process evidence</span>
+          <strong>{processFindingArr.length}</strong>
+          <span>
+            {hiddenProcessFindingCount
+              ? `${hiddenProcessFindingCount} hidden by cap`
+              : 'render cap healthy'}
+          </span>
+        </button>
+      </div>
 
       {tab === 'overview' &&
         (overview ? (
@@ -3377,65 +3467,129 @@ export default function SOCWorkbench() {
                     <th>ID</th>
                     <th>Severity</th>
                     <th>Summary</th>
+                    <th>Why / Confidence</th>
                     <th>Assigned</th>
                     <th>Actions</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {filteredQueueArr.map((a, i) => (
-                    <tr key={i}>
-                      <td>{a.id || i}</td>
-                      <td>
-                        <span className={`sev-${(a.severity || 'low').toLowerCase()}`}>
-                          {a.severity}
-                        </span>
-                      </td>
-                      <td>{a.summary || a.message || '—'}</td>
-                      <td>{a.assigned_to || '—'}</td>
-                      <td>
-                        <button
-                          className="btn btn-sm"
-                          onClick={async () => {
-                            if (!a.id) {
-                              toast('No alert ID', 'error');
-                              return;
-                            }
-                            try {
-                              await api.queueAck({ alert_id: a.id });
-                              toast('Acknowledged', 'success');
-                              rQueue();
-                            } catch {
-                              toast('Failed', 'error');
-                            }
-                          }}
-                        >
-                          Ack
-                        </button>
-                        <button
-                          className="btn btn-sm"
-                          onClick={() => openInvestigationPlanner(a, 'queue-alert')}
-                        >
-                          Plan
-                        </button>
-                        <button className="btn btn-sm" onClick={() => pivotPlannerToHunt(a)}>
-                          Hunt
-                        </button>
-                        <button
-                          className="btn btn-sm"
-                          onClick={() =>
-                            openResponseFocus({
-                              target: a.host || a.agent_id || a.endpoint_id || a.entity_id || a.id,
-                              source: 'queue',
-                            })
-                          }
-                        >
-                          Respond
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
+                  {renderedQueueArr.map((alert, index) => {
+                    const reasons = alertReasonList(alert);
+                    const confidence = alertConfidencePct(alert);
+                    return (
+                      <tr key={alert.id || index}>
+                        <td>{alert.id || index}</td>
+                        <td>
+                          <span className={`sev-${(alert.severity || 'low').toLowerCase()}`}>
+                            {alert.severity}
+                          </span>
+                        </td>
+                        <td>
+                          <div className="row-primary">
+                            {alert.summary || alert.message || 'Untitled alert'}
+                          </div>
+                          <div className="row-secondary">
+                            {alert.hostname || alert.host || alert.agent_id || 'No host context'}
+                          </div>
+                        </td>
+                        <td>
+                          <div className="alert-explainability-row">
+                            {reasons.length > 0 ? (
+                              reasons.map((reason) => (
+                                <span key={reason} className="badge badge-info">
+                                  {reason}
+                                </span>
+                              ))
+                            ) : (
+                              <span className="badge badge-warn">evidence pending</span>
+                            )}
+                          </div>
+                          <div className="row-secondary" style={{ marginTop: 6 }}>
+                            <span className={`badge ${confidenceBadgeClass(confidence)}`}>
+                              {confidence == null
+                                ? 'confidence pending'
+                                : `${confidence}% confidence`}
+                            </span>
+                          </div>
+                        </td>
+                        <td>{alert.assigned_to || '—'}</td>
+                        <td>
+                          <div className="btn-group">
+                            <button
+                              className="btn btn-sm"
+                              onClick={async () => {
+                                if (!alert.id) {
+                                  toast('No alert ID', 'error');
+                                  return;
+                                }
+                                try {
+                                  await api.queueAck({ alert_id: alert.id });
+                                  toast('Acknowledged', 'success');
+                                  rQueue();
+                                } catch {
+                                  toast('Failed', 'error');
+                                }
+                              }}
+                            >
+                              Ack
+                            </button>
+                            <button
+                              className="btn btn-sm"
+                              onClick={() => openInvestigationPlanner(alert, 'queue-alert')}
+                            >
+                              Plan
+                            </button>
+                            <button
+                              className="btn btn-sm"
+                              onClick={() => pivotPlannerToHunt(alert)}
+                            >
+                              Hunt
+                            </button>
+                            <button
+                              className="btn btn-sm"
+                              onClick={() =>
+                                navigate(
+                                  buildHref('/reports', {
+                                    params: {
+                                      tab: 'evidence',
+                                      alert: alert.id || undefined,
+                                      source: 'soc-queue',
+                                    },
+                                  }),
+                                )
+                              }
+                            >
+                              Evidence
+                            </button>
+                            <button
+                              className="btn btn-sm"
+                              onClick={() =>
+                                openResponseFocus({
+                                  target:
+                                    alert.host ||
+                                    alert.agent_id ||
+                                    alert.endpoint_id ||
+                                    alert.entity_id ||
+                                    alert.id,
+                                  source: 'queue',
+                                })
+                              }
+                            >
+                              Respond
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
+              {hiddenQueueRowCount > 0 && (
+                <div className="table-cap-note">
+                  Showing {renderedQueueArr.length} of {filteredQueueArr.length} matching alerts to
+                  keep triage responsive. Narrow the filter to inspect the hidden rows.
+                </div>
+              )}
             </div>
           )}
         </div>
@@ -3487,14 +3641,36 @@ export default function SOCWorkbench() {
               </div>
             )}
           </div>
+
+          <div className="response-readiness-grid" aria-label="Response readiness summary">
+            <div className="response-readiness-card">
+              <div className="summary-label">Approvals</div>
+              <strong>{pendingResponseArr.length + changeReviewArr.length}</strong>
+              <span>{responseReadyToExecute} ready to execute</span>
+            </div>
+            <div className="response-readiness-card">
+              <div className="summary-label">Rollback</div>
+              <strong>{responseRollbackStatus}</strong>
+              <span>{changeReviewArr.length} reviewed change records</span>
+            </div>
+            <div className="response-readiness-card">
+              <div className="summary-label">Execution logs</div>
+              <strong>{responseRequestArr.length}</strong>
+              <span>{responseAuditArr.length} audit events available</span>
+            </div>
+            <div className="response-readiness-card">
+              <div className="summary-label">Post-action verify</div>
+              <strong>{respStats?.protected_assets ?? respStats?.verified ?? '—'}</strong>
+              <span>protected or verified assets</span>
+            </div>
+          </div>
           <div className="card-grid">
             <div className="card">
               <div className="card-title" style={{ marginBottom: 12 }}>
                 Pending Responses
               </div>
               {(() => {
-                const items =
-                  pending?.actions || pending?.pending || (Array.isArray(pending) ? pending : []);
+                const items = pendingResponseArr;
                 return items.length > 0 ? (
                   <div className="table-wrap">
                     <table>
@@ -3549,7 +3725,7 @@ export default function SOCWorkbench() {
                 Response Requests
               </div>
               {(() => {
-                const reqs = respReq?.requests || (Array.isArray(respReq) ? respReq : []);
+                const reqs = responseRequestArr;
                 return reqs.length > 0 ? (
                   <div className="table-wrap">
                     <table>
@@ -3559,6 +3735,7 @@ export default function SOCWorkbench() {
                           <th>Type</th>
                           <th>Target</th>
                           <th>Status</th>
+                          <th>Readiness</th>
                           <th>Progress</th>
                           <th>Requested</th>
                         </tr>
@@ -3596,6 +3773,19 @@ export default function SOCWorkbench() {
                               <td>{formatResponseTarget(r)}</td>
                               <td>
                                 <span className={`badge ${statusClass}`}>{r.status || '—'}</span>
+                              </td>
+                              <td>
+                                <div className="response-readiness-mini">
+                                  <span className="badge badge-info">
+                                    {r.approval_status || r.approval || 'approval pending'}
+                                  </span>
+                                  <span className="badge badge-warn">
+                                    {r.rollback_status || r.rollback || responseRollbackStatus}
+                                  </span>
+                                  <span className="badge badge-info">
+                                    {r.verification_status || r.verify_status || 'verify queued'}
+                                  </span>
+                                </div>
                               </td>
                               <td style={{ minWidth: 140 }}>
                                 <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
@@ -3728,11 +3918,7 @@ export default function SOCWorkbench() {
                 Response Audit Trail
               </div>
               {(() => {
-                const entries =
-                  respAudit?.audit_log ||
-                  respAudit?.entries ||
-                  respAudit?.audit ||
-                  (Array.isArray(respAudit) ? respAudit : []);
+                const entries = responseAuditArr;
                 return entries.length > 0 ? (
                   <div style={{ borderLeft: '2px solid var(--border)', paddingLeft: 12 }}>
                     {entries.map((e, i) => (
@@ -4000,9 +4186,25 @@ export default function SOCWorkbench() {
       )}
 
       {tab === 'process-tree' && (
-        <div>
+        <div className="soc-process-workbench">
+          <div className="detail-callout process-performance-callout" style={{ marginBottom: 16 }}>
+            <strong>Process workbench performance guard</strong>
+            <div style={{ marginTop: 6 }}>
+              Live rows are sorted by CPU and capped for responsiveness. Export keeps the raw
+              payload available for deeper review.
+            </div>
+            <div className="btn-group" style={{ marginTop: 10 }}>
+              <span className="badge badge-info">{processFindingArr.length} findings</span>
+              <span className="badge badge-info">
+                {liveProcs?.processes?.length || 0} live processes
+              </span>
+              {hiddenProcessFindingCount > 0 && (
+                <span className="badge badge-warn">{hiddenProcessFindingCount} hidden by cap</span>
+              )}
+            </div>
+          </div>
           {/* Security findings banner */}
-          {procFindings?.findings?.length > 0 && (
+          {processFindingArr.length > 0 && (
             <div
               className="card"
               style={{ marginBottom: 16, borderLeft: '3px solid var(--danger)' }}
@@ -4031,8 +4233,8 @@ export default function SOCWorkbench() {
                     ),
                 )}
               </div>
-              <div className="table-wrap">
-                <table>
+              <div className="table-wrap process-table-wrap">
+                <table className="process-table">
                   <thead>
                     <tr>
                       <th>Risk</th>
@@ -4046,7 +4248,7 @@ export default function SOCWorkbench() {
                     </tr>
                   </thead>
                   <tbody>
-                    {procFindings.findings.map((f, i) => (
+                    {renderedProcessFindings.map((f, i) => (
                       <tr
                         key={i}
                         className="interactive-row"
@@ -4062,12 +4264,12 @@ export default function SOCWorkbench() {
                         <td>
                           <span className={`sev-${f.risk_level}`}>{f.risk_level}</span>
                         </td>
-                        <td style={{ fontFamily: 'var(--font-mono)', fontSize: 12 }}>{f.pid}</td>
-                        <td style={{ fontWeight: 600 }}>{f.name}</td>
-                        <td>{f.user}</td>
+                        <td className="mono-cell">{f.pid}</td>
+                        <td className="process-name-cell">{f.name}</td>
+                        <td className="process-user-cell">{f.user}</td>
                         <td>{f.cpu_percent?.toFixed(1)}%</td>
                         <td>{f.mem_percent?.toFixed(1)}%</td>
-                        <td style={{ fontSize: 12 }}>{f.reason}</td>
+                        <td className="process-reason-cell">{f.reason}</td>
                         <td>
                           <button className="btn btn-sm" onClick={() => openProcess(f)}>
                             Investigate
@@ -4077,12 +4279,18 @@ export default function SOCWorkbench() {
                     ))}
                   </tbody>
                 </table>
+                {hiddenProcessFindingCount > 0 && (
+                  <div className="table-cap-note">
+                    Showing {renderedProcessFindings.length} of {processFindingArr.length} findings.
+                    Export the payload for the full set.
+                  </div>
+                )}
               </div>
             </div>
           )}
           <div className="card-grid">
             {/* Live processes */}
-            <div className="card">
+            <div className="card process-card">
               <div className="card-header">
                 <span className="card-title">Live Processes ({liveProcs?.count ?? '—'})</span>
                 <div className="btn-group">
@@ -4098,8 +4306,11 @@ export default function SOCWorkbench() {
                 </div>
               </div>
               {liveProcs?.processes?.length > 0 ? (
-                <div className="table-wrap" style={{ maxHeight: 400, overflowY: 'auto' }}>
-                  <table>
+                <div
+                  className="table-wrap process-table-wrap"
+                  style={{ maxHeight: 400, overflowY: 'auto' }}
+                >
+                  <table className="process-table process-live-table">
                     <thead
                       style={{
                         position: 'sticky',
@@ -4123,11 +4334,14 @@ export default function SOCWorkbench() {
                         .slice(0, 100)
                         .map((p) => (
                           <tr key={p.pid} className="interactive-row">
-                            <td style={{ fontFamily: 'var(--font-mono)', fontSize: 12 }}>
-                              {p.pid}
+                            <td className="mono-cell">{p.pid}</td>
+                            <td
+                              className="process-name-cell"
+                              style={{ fontWeight: p.cpu_percent > 50 ? 700 : 400 }}
+                            >
+                              {p.name}
                             </td>
-                            <td style={{ fontWeight: p.cpu_percent > 50 ? 700 : 400 }}>{p.name}</td>
-                            <td>{p.user}</td>
+                            <td className="process-user-cell">{p.user}</td>
                             <td style={{ color: p.cpu_percent > 50 ? 'var(--danger)' : undefined }}>
                               {p.cpu_percent?.toFixed(1)}
                             </td>
@@ -4151,13 +4365,13 @@ export default function SOCWorkbench() {
               )}
             </div>
             {/* Deep chains */}
-            <div className="card">
+            <div className="card process-card">
               <div className="card-title" style={{ marginBottom: 12 }}>
                 Deep Process Chains
               </div>
               {deepCh?.chains?.length > 0 || (Array.isArray(deepCh) && deepCh.length > 0) ? (
-                <div className="table-wrap">
-                  <table>
+                <div className="table-wrap process-table-wrap">
+                  <table className="process-table process-chain-table">
                     <thead>
                       <tr>
                         <th>Chain</th>
@@ -4167,7 +4381,7 @@ export default function SOCWorkbench() {
                     <tbody>
                       {(deepCh?.chains || deepCh || []).map((c, i) => (
                         <tr key={i}>
-                          <td style={{ fontFamily: 'var(--font-mono)', fontSize: 12 }}>
+                          <td className="mono-cell process-chain-cell">
                             {Array.isArray(c.chain) ? c.chain.join(' → ') : JSON.stringify(c)}
                           </td>
                           <td>{c.depth || c.chain?.length || '—'}</td>

@@ -80,7 +80,16 @@ describe('OperatorLaunchpad', () => {
       }
       if (path === '/api/siem/status') return jsonOk({ enabled: true, pending: 0 });
       if (path === '/api/collectors/status') {
-        return jsonOk({ collectors: [{ enabled: true, freshness: 'fresh', label: 'Syslog' }] });
+        return jsonOk({
+          collectors: [
+            { enabled: true, freshness: 'fresh', label: 'Syslog', provider: 'generic_syslog' },
+            { enabled: true, freshness: 'fresh', label: 'AWS', provider: 'aws_cloudtrail' },
+            { enabled: true, freshness: 'fresh', label: 'Okta', provider: 'okta_identity' },
+          ],
+        });
+      }
+      if (path === '/api/assistant/status') {
+        return jsonOk({ mode: 'retrieval-only', model: 'retrieval-only' });
       }
       if (path === '/api/updates/releases') {
         return jsonOk([{ version: '1.0.8', latest: true, published_at: '2026-05-09T12:00:00Z' }]);
@@ -182,6 +191,9 @@ describe('OperatorLaunchpad', () => {
           evidence_freshness: evidence('detection_validation_packs'),
         });
       }
+      if (path === '/api/incidents/timeline-replay') {
+        return jsonOk({ status: 'ready', incident_count: 2 });
+      }
       if (path === '/api/operational/snapshots') {
         return jsonOk({
           count: 1,
@@ -214,7 +226,9 @@ describe('OperatorLaunchpad', () => {
       if (path === '/api/response/approval-overview') {
         return jsonOk({ pending_response_approvals: 1, pending_playbook_approvals: 1 });
       }
-      if (path === '/api/remediation/safety') return jsonOk({ status: 'dry_run_only' });
+      if (path === '/api/remediation/safety') {
+        return jsonOk({ status: 'dry_run_only', rollback_status: 'rollback ready' });
+      }
       if (path === '/api/sdk/contract-status') return jsonOk({ status: 'tracked', drift_count: 0 });
       if (path === '/api/stream/readiness') {
         return jsonOk({ status: 'ready', score: 96, promotion_guard: 'clear' });
@@ -224,7 +238,7 @@ describe('OperatorLaunchpad', () => {
       if (path === '/api/privacy/budget') return jsonOk({ remaining: 99 });
       if (path === '/api/attestation/status') return jsonOk({ status: 'verified' });
       if (path === '/api/alerts/count') return jsonOk({ count: 3 });
-      if (path === '/api/fleet/health') return jsonOk({ online: 1 });
+      if (path === '/api/fleet/health') return jsonOk({ total_agents: 1, online: 1 });
       if (path === '/api/detection/summary') return jsonOk({ active_rules: 40 });
       if (path === '/api/detection/replay-corpus') return jsonOk({ status: 'ready' });
       if (path === '/api/fp-feedback/stats') return jsonOk({ false_positive_rate: 0.18 });
@@ -249,32 +263,90 @@ describe('OperatorLaunchpad', () => {
     expect(screen.getByText('Acceptance readiness')).toBeInTheDocument();
     expect(screen.getByText('Release verification')).toBeInTheDocument();
     expect(screen.getByText('Clean release and deployment')).toBeInTheDocument();
-    expect(screen.getByText('Container parity')).toBeInTheDocument();
+    expect(screen.getAllByText('Deployment confidence').length).toBeGreaterThan(0);
+    expect(screen.getByText('Ship readiness matrix')).toBeInTheDocument();
+    expect(screen.getByText('API and SDK contract')).toBeInTheDocument();
+    expect(screen.getByText('Backup and failover')).toBeInTheDocument();
+    expect(screen.getAllByText('Container parity').length).toBeGreaterThan(0);
     expect(screen.getAllByText('Validation packs').length).toBeGreaterThan(0);
     expect(screen.getByText('Artifact rows')).toBeInTheDocument();
-    expect(screen.getByText('Install plans')).toBeInTheDocument();
+    expect(screen.getAllByText('Install plans').length).toBeGreaterThan(0);
     expect(screen.getByText('Quality score')).toBeInTheDocument();
     expect(screen.getByText('Dry-run actions')).toBeInTheDocument();
     expect(screen.getAllByText('fresh proof').length).toBeGreaterThan(0);
     expect(screen.getByText('Promotion guard')).toBeInTheDocument();
-    expect(screen.getByText('Process evidence')).toBeInTheDocument();
-    expect(screen.getByText('Approvals and dry-runs')).toBeInTheDocument();
+    expect(screen.getAllByText('Process evidence').length).toBeGreaterThan(0);
+    expect(screen.getByText('Agent connect drawer')).toBeInTheDocument();
+    expect(screen.getAllByText('Morning brief').length).toBeGreaterThan(0);
+    expect(screen.getByText('Handoff workspace')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Export handoff' })).toBeEnabled();
+    expect(screen.getAllByText('Timeline builder').length).toBeGreaterThan(0);
+    expect(screen.getByRole('button', { name: 'Export draft' })).toBeEnabled();
+    expect(screen.getByText('Telemetry lanes')).toBeInTheDocument();
+    expect(screen.getByText('Triage path')).toBeInTheDocument();
+    expect(screen.getByText('Canonical operator journeys')).toBeInTheDocument();
+    expect(screen.getByText('Critical alert to response')).toBeInTheDocument();
+    expect(screen.getByText('Release cut to acceptance')).toBeInTheDocument();
+    expect(screen.getByText('Agent drilldown')).toBeInTheDocument();
+    expect(screen.getByText('Agent risk heatmap')).toBeInTheDocument();
+    expect(screen.getByText('Proof freshness rollup')).toBeInTheDocument();
+    expect(screen.getByText('live runtime')).toBeInTheDocument();
+    expect(screen.getByText('Freshness coverage')).toBeInTheDocument();
+    expect(screen.getByText('Ship gate checklist')).toBeInTheDocument();
+    expect(screen.getByText('Acceptance report')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Export report' })).toBeEnabled();
+    expect(screen.getByText('Next actions')).toBeInTheDocument();
+    expect(screen.getByText('Playbook blast-radius preview')).toBeInTheDocument();
+    expect(screen.getByText('Viewer home')).toBeInTheDocument();
+    expect(screen.getByText('Screenshot gate')).toBeInTheDocument();
+    expect(screen.getByText('Safe assistant boundaries')).toBeInTheDocument();
+    expect(screen.getAllByText('retrieval-only').length).toBeGreaterThan(0);
+    expect(screen.getByText('Scenario count')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Evidence Pack' })).toBeEnabled();
     expect(screen.getByRole('button', { name: 'Support Bundle' })).toBeEnabled();
     expect(screen.getByText('Runtime and release catalog are aligned.')).toBeInTheDocument();
     expect(screen.getByText('Release acceptance signals are ready.')).toBeInTheDocument();
-    expect(screen.getByText('dry_run_only')).toBeInTheDocument();
+    expect(screen.getAllByText('dry_run_only').length).toBeGreaterThan(0);
     expect(screen.getByText('What changed').closest('.operator-lane-card')).toHaveAttribute(
       'id',
       'release-trust',
+    );
+    expect(
+      screen.getByText('Ship readiness matrix').closest('.operator-lane-card'),
+    ).toHaveAttribute('id', 'deployment-confidence');
+    expect(screen.getByRole('link', { name: /Connect agent drawer/i })).toHaveAttribute(
+      'href',
+      '/fleet?fleetTab=updates&updatesPanel=install#connect-agent-drawer',
+    );
+    expect(screen.getByRole('link', { name: /Response simulator/i })).toHaveAttribute(
+      'href',
+      '/launchpad#response-simulator',
     );
     expect(screen.getByText('Evaluation scenarios').closest('.operator-lane-card')).toHaveAttribute(
       'id',
       'demo-mode',
     );
     expect(
-      screen.getByText('Approvals and dry-runs').closest('.operator-lane-card'),
+      screen.getByText('Playbook blast-radius preview').closest('.operator-lane-card'),
     ).not.toHaveAttribute('id', 'demo-mode');
+    expect(screen.getByText('Handoff workspace').closest('.operator-lane-card')).toHaveAttribute(
+      'id',
+      'shift-handoff-workspace',
+    );
+    expect(document.getElementById('incident-timeline-builder')).toHaveTextContent(
+      'Timeline builder',
+    );
+    expect(screen.getByText('Telemetry lanes').closest('.operator-lane-card')).toHaveAttribute(
+      'id',
+      'collector-onboarding-center',
+    );
+    expect(screen.getByText('Agent risk heatmap').closest('.operator-lane-card')).toHaveAttribute(
+      'id',
+      'fleet-risk-heatmap',
+    );
+    expect(
+      screen.getByText('Safe assistant boundaries').closest('.operator-lane-card'),
+    ).toHaveAttribute('id', 'safe-assistant');
 
     await userEvent.click(screen.getByRole('button', { name: 'Evidence Pack' }));
 

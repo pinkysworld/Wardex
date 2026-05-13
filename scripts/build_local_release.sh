@@ -170,10 +170,14 @@ fi
 printf 'BUILT\n'
 if [[ ${#built[@]} -gt 0 ]]; then
   printf '%s\n' "${built[@]}"
+else
+  printf 'none\n'
 fi
 printf 'FAILED\n'
 if [[ ${#failed[@]} -gt 0 ]]; then
   printf '%s\n' "${failed[@]}"
+else
+  printf 'none\n'
 fi
 printf 'LOG\n%s\n' "$LOG_FILE"
 

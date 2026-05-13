@@ -17,7 +17,7 @@ with at least one prior release's notice.
 | Platform | Architecture | Tier |
 |----------|-------------|------|
 | Linux (static musl binary) | x86_64 | 1 — tested in CI, release-blocked |
-| Linux (static musl source build) | aarch64 | 3 — source build supported; pre-built release archive not shipped in v1.0.11 |
+| Linux (static musl source build) | aarch64 | 3 — source build supported; pre-built release archive not shipped in v1.0.18 |
 | macOS 13+ | aarch64 (Apple Silicon) | 1 — tested in CI, release-blocked |
 | macOS 13+ | x86_64 (Intel) | 2 — built and smoke-tested |
 | Windows 10/11 | x86_64 (MSVC toolchain) | 2 — built and smoke-tested |

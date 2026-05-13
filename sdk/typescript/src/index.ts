@@ -5735,6 +5735,53 @@ export class WardexClient {
     return this.request("GET", "/api/detection/trust-score");
   }
 
+  async detectionTrustOverview(): Promise<Record<string, unknown>> {
+    return this.request("GET", "/api/detection/trust/overview");
+  }
+
+  async detectionTrustRules(): Promise<Record<string, unknown>> {
+    return this.request("GET", "/api/detection/trust/rules");
+  }
+
+  async detectionTrustRule(id: string): Promise<Record<string, unknown>> {
+    return this.request(
+      "GET",
+      `/api/detection/trust/rules/${encodeURIComponent(id)}`,
+    );
+  }
+
+  async detectionTrustTuningDrafts(): Promise<Record<string, unknown>> {
+    return this.request("GET", "/api/detection/trust/tuning-drafts");
+  }
+
+  async createDetectionTrustTuningDraft(
+    draft: Record<string, unknown>,
+  ): Promise<Record<string, unknown>> {
+    return this.request("POST", "/api/detection/trust/tuning-drafts", draft);
+  }
+
+  async previewDetectionTrustTuningDraft(
+    id: string,
+    request: Record<string, unknown> = {},
+  ): Promise<Record<string, unknown>> {
+    return this.request(
+      "POST",
+      `/api/detection/trust/tuning-drafts/${encodeURIComponent(id)}/preview`,
+      request,
+    );
+  }
+
+  async approveDetectionTrustTuningDraft(
+    id: string,
+    request: Record<string, unknown> = {},
+  ): Promise<Record<string, unknown>> {
+    return this.request(
+      "POST",
+      `/api/detection/trust/tuning-drafts/${encodeURIComponent(id)}/approve`,
+      request,
+    );
+  }
+
   async fleetDriftCompliance(): Promise<ProductionAssuranceResponse> {
     return this.request("GET", "/api/fleet/drift-compliance");
   }
@@ -7002,6 +7049,18 @@ export class WardexClient {
     return this.request("GET", "/api/response/stats");
   }
 
+  async operatorWorkspaces(): Promise<Record<string, unknown>> {
+    return this.request("GET", "/api/operator/workspaces");
+  }
+
+  async operationsHealth(): Promise<Record<string, unknown>> {
+    return this.request("GET", "/api/operations/health");
+  }
+
+  async operationsHealthSnapshot(): Promise<Record<string, unknown>> {
+    return this.request("GET", "/api/operations/health/snapshot");
+  }
+
   async casesStats(): Promise<CasesStatsResponse> {
     return this.request("GET", "/api/cases/stats");
   }
@@ -7064,6 +7123,22 @@ export class WardexClient {
 
   async responseApprovalOverview(): Promise<ResponseApprovalOverviewResponse> {
     return this.request("GET", "/api/response/approval-overview");
+  }
+
+  async responseSafety(): Promise<Record<string, unknown>> {
+    return this.request("GET", "/api/response/safety");
+  }
+
+  async responsePreview(
+    request: Record<string, unknown>,
+  ): Promise<Record<string, unknown>> {
+    return this.request("POST", "/api/response/preview", request);
+  }
+
+  async responseVerify(
+    request: Record<string, unknown>,
+  ): Promise<Record<string, unknown>> {
+    return this.request("POST", "/api/response/verify", request);
   }
 
   async remediationSafety(): Promise<RemediationSafetyResponse> {
@@ -7289,6 +7364,74 @@ export class WardexClient {
 
   async fpFeedbackStats(): Promise<FpFeedbackStat[]> {
     return this.request("GET", "/api/fp-feedback/stats");
+  }
+
+  async alertFeedback(
+    feedback: Record<string, unknown>,
+  ): Promise<Record<string, unknown>> {
+    return this.request("POST", "/api/alerts/feedback", feedback);
+  }
+
+  async alertFeedbackSummary(): Promise<Record<string, unknown>> {
+    return this.request("GET", "/api/alerts/feedback/summary");
+  }
+
+  async alertEvidenceChain(
+    params: { alertId?: string | number } = {},
+  ): Promise<Record<string, unknown>> {
+    const qs = new URLSearchParams();
+    if (params.alertId != null) qs.set("alert_id", String(params.alertId));
+    return this.request(
+      "GET",
+      `/api/alerts/evidence-chain${qs.toString() ? `?${qs.toString()}` : ""}`,
+    );
+  }
+
+  async detectionLabStatus(): Promise<Record<string, unknown>> {
+    return this.request("GET", "/api/detection-lab/status");
+  }
+
+  async detectionLabRun(
+    request: Record<string, unknown> = { mode: "replay" },
+  ): Promise<Record<string, unknown>> {
+    return this.request("POST", "/api/detection-lab/runs", request);
+  }
+
+  async detectionLabHistory(): Promise<Record<string, unknown>> {
+    return this.request("GET", "/api/detection-lab/history");
+  }
+
+  async detectionLabReport(): Promise<Record<string, unknown>> {
+    return this.request("GET", "/api/detection-lab/report");
+  }
+
+  async integrationsMarketplace(): Promise<Record<string, unknown>> {
+    return this.request("GET", "/api/integrations/marketplace");
+  }
+
+  async validateIntegration(
+    request: Record<string, unknown>,
+  ): Promise<Record<string, unknown>> {
+    return this.request("POST", "/api/integrations/validate", request);
+  }
+
+  async integrationSampleEvent(
+    provider?: string,
+  ): Promise<Record<string, unknown>> {
+    const qs = new URLSearchParams();
+    if (provider) qs.set("provider", provider);
+    return this.request(
+      "GET",
+      `/api/integrations/sample-event${qs.toString() ? `?${qs.toString()}` : ""}`,
+    );
+  }
+
+  async malwareExplain(): Promise<Record<string, unknown>> {
+    return this.request("GET", "/api/malware/explain");
+  }
+
+  async malwareScanDiff(): Promise<Record<string, unknown>> {
+    return this.request("GET", "/api/malware/scan-diff");
   }
 
   async mlModels(): Promise<MlModelsResponse> {

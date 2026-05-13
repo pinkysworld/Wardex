@@ -141,6 +141,31 @@ const UEBADashboard = lazy(() => import('./components/UEBADashboard.jsx'));
 const NDRDashboard = lazy(() => import('./components/NDRDashboard.jsx'));
 const EmailSecurity = lazy(() => import('./components/EmailSecurity.jsx'));
 const AttackGraph = lazy(() => import('./components/AttackGraph.jsx'));
+const DetectionLab = lazy(() =>
+  import('./components/OperatorTrustWorkspace.jsx').then((module) => ({
+    default: module.DetectionLab,
+  })),
+);
+const ResponseSafety = lazy(() =>
+  import('./components/OperatorTrustWorkspace.jsx').then((module) => ({
+    default: module.ResponseSafety,
+  })),
+);
+const IntegrationsMarketplace = lazy(() =>
+  import('./components/OperatorTrustWorkspace.jsx').then((module) => ({
+    default: module.IntegrationsMarketplace,
+  })),
+);
+const OperationsHealth = lazy(() =>
+  import('./components/OperatorTrustWorkspace.jsx').then((module) => ({
+    default: module.OperationsHealth,
+  })),
+);
+const MalwareTrustCenter = lazy(() =>
+  import('./components/OperatorTrustWorkspace.jsx').then((module) => ({
+    default: module.MalwareTrustCenter,
+  })),
+);
 
 const SECTIONS = [
   { id: 'dashboard', path: '/', label: 'Dashboard', shortLabel: 'DB', minRole: 'viewer' },
@@ -202,12 +227,38 @@ const SECTIONS = [
   },
   {
     id: 'malware-scanning',
-    path: '/infrastructure?tab=integrity&malwarePanel=summary&scanPreset=open-source-av-baseline',
-    matchPath: '/infrastructure',
-    matchSearch: 'scanPreset=',
+    path: '/malware',
     label: 'Malware Scanning',
     shortLabel: 'AV',
     minRole: 'analyst',
+  },
+  {
+    id: 'detection-lab',
+    path: '/detection-lab',
+    label: 'Detection Lab',
+    shortLabel: 'LAB',
+    minRole: 'analyst',
+  },
+  {
+    id: 'response-safety',
+    path: '/response-safety',
+    label: 'Response Safety',
+    shortLabel: 'SAFE',
+    minRole: 'analyst',
+  },
+  {
+    id: 'integrations',
+    path: '/integrations',
+    label: 'Integrations',
+    shortLabel: 'INT',
+    minRole: 'analyst',
+  },
+  {
+    id: 'operations-health',
+    path: '/operations-health',
+    label: 'Operations Health',
+    shortLabel: 'OPS',
+    minRole: 'viewer',
   },
   {
     id: 'infrastructure',
@@ -244,36 +295,46 @@ const SECTIONS = [
 ];
 
 const WORKFLOW_GROUPS = [
-  { id: 'command', label: 'Command', sections: ['command-center'] },
   {
-    id: 'monitor',
-    label: 'Monitor',
-    sections: ['dashboard', 'operator-launchpad', 'live-monitor', 'reports-exports'],
+    id: 'overview',
+    label: 'Overview',
+    sections: ['dashboard', 'operator-launchpad', 'command-center'],
   },
   {
-    id: 'investigate',
-    label: 'Investigate',
+    id: 'analyze',
+    label: 'Analyze',
     sections: [
+      'live-monitor',
       'soc-workbench',
       'assistant-workspace',
-      'threat-detection',
       'infrastructure',
+      'malware-scanning',
       'ueba',
       'ndr',
       'attack-graph',
     ],
   },
   {
-    id: 'respond',
-    label: 'Respond',
-    sections: ['fleet-agents'],
+    id: 'detect',
+    label: 'Detect',
+    sections: ['threat-detection', 'detection-lab'],
   },
   {
-    id: 'protect',
-    label: 'Protect',
-    sections: ['malware-scanning', 'security-policy', 'email-security'],
+    id: 'respond',
+    label: 'Respond',
+    sections: ['response-safety', 'fleet-agents'],
   },
-  { id: 'manage', label: 'Manage', sections: ['settings', 'help-docs'] },
+  {
+    id: 'operate',
+    label: 'Operate',
+    sections: ['integrations', 'operations-health', 'reports-exports'],
+  },
+  {
+    id: 'govern',
+    label: 'Govern',
+    sections: ['security-policy', 'email-security', 'settings'],
+  },
+  { id: 'support', label: 'Support', sections: ['help-docs'] },
 ];
 
 const ROLE_LEVEL = { viewer: 0, analyst: 1, admin: 2 };
@@ -309,6 +370,9 @@ export default function App() {
   const [ssoConfig, setSsoConfig] = useState(null);
   const [ssoProviders, setSsoProviders] = useState([]);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [collapsedGroups, setCollapsedGroups] = useState(() => {
+    return safeStorageJsonGet('wardex_collapsed_nav_groups', []);
+  });
   const [linkCopied, setLinkCopied] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const [showOnboarding, setShowOnboarding] = useState(() => {
@@ -550,6 +614,16 @@ export default function App() {
     [applyPinnedSections],
   );
 
+  const toggleGroup = useCallback((groupId) => {
+    setCollapsedGroups((current) => {
+      const next = current.includes(groupId)
+        ? current.filter((id) => id !== groupId)
+        : [...current, groupId];
+      safeStorageJsonSet('wardex_collapsed_nav_groups', next);
+      return next;
+    });
+  }, []);
+
   const copyShareLink = useCallback(async () => {
     const url = window.location.origin + location.pathname + location.search;
     const copied = await copyTextToClipboard(url);
@@ -596,7 +670,10 @@ export default function App() {
   })).filter((group) => group.sections.length > 0);
 
   return (
-    <div className={`app ${sidebarCollapsed ? 'sidebar-collapsed' : ''}`}>
+    <div
+      className={`app wardex-workbench ${sidebarCollapsed ? 'sidebar-collapsed' : ''}`}
+      data-section={currentSection.id}
+    >
       <a href="#main-content" className="sr-only focus-visible-only">
         Skip to main content
       </a>
@@ -657,37 +734,50 @@ export default function App() {
           )}
           {groupedSections.map((group) => (
             <div key={group.id} className="sidebar-group">
-              {!sidebarCollapsed && <div className="sidebar-group-title">{group.label}</div>}
-              {group.sections.map((section) => (
-                <div key={section.id} className="nav-item-shell">
-                  <NavLink
-                    className={() => `nav-item ${currentSection.id === section.id ? 'active' : ''}`}
-                    to={section.path}
-                    title={section.label}
-                    aria-current={currentSection.id === section.id ? 'page' : undefined}
-                  >
-                    <span className="nav-icon nav-icon-text" aria-hidden="true">
-                      {section.shortLabel}
-                    </span>
-                    {!sidebarCollapsed && <span className="nav-label">{section.label}</span>}
-                  </NavLink>
-                  {!sidebarCollapsed && authenticated && (
-                    <button
-                      className={`pin-toggle ${pinnedSections.includes(section.id) ? 'active' : ''}`}
-                      type="button"
-                      onClick={() => togglePinnedSection(section.id)}
-                      aria-label={
-                        pinnedSections.includes(section.id)
-                          ? `Unpin ${section.label}`
-                          : `Pin ${section.label}`
+              {!sidebarCollapsed && (
+                <button
+                  className="sidebar-group-title sidebar-group-toggle"
+                  type="button"
+                  onClick={() => toggleGroup(group.id)}
+                  aria-expanded={!collapsedGroups.includes(group.id)}
+                >
+                  <span>{group.label}</span>
+                  <span aria-hidden="true">{collapsedGroups.includes(group.id) ? '▸' : '▾'}</span>
+                </button>
+              )}
+              {(sidebarCollapsed || !collapsedGroups.includes(group.id)) &&
+                group.sections.map((section) => (
+                  <div key={section.id} className="nav-item-shell">
+                    <NavLink
+                      className={() =>
+                        `nav-item ${currentSection.id === section.id ? 'active' : ''}`
                       }
-                      title={pinnedSections.includes(section.id) ? 'Unpin' : 'Pin'}
+                      to={section.path}
+                      title={section.label}
+                      aria-current={currentSection.id === section.id ? 'page' : undefined}
                     >
-                      ★
-                    </button>
-                  )}
-                </div>
-              ))}
+                      <span className="nav-icon nav-icon-text" aria-hidden="true">
+                        {section.shortLabel}
+                      </span>
+                      {!sidebarCollapsed && <span className="nav-label">{section.label}</span>}
+                    </NavLink>
+                    {!sidebarCollapsed && authenticated && (
+                      <button
+                        className={`pin-toggle ${pinnedSections.includes(section.id) ? 'active' : ''}`}
+                        type="button"
+                        onClick={() => togglePinnedSection(section.id)}
+                        aria-label={
+                          pinnedSections.includes(section.id)
+                            ? `Unpin ${section.label}`
+                            : `Pin ${section.label}`
+                        }
+                        title={pinnedSections.includes(section.id) ? 'Unpin' : 'Pin'}
+                      >
+                        ★
+                      </button>
+                    )}
+                  </div>
+                ))}
             </div>
           ))}
         </nav>
@@ -910,11 +1000,12 @@ export default function App() {
             {authenticated && (
               <div className="topbar-secondary-actions">
                 <button
-                  className="btn btn-sm"
+                  className="btn btn-sm topbar-search-trigger"
                   onClick={() => setSearchOpen(true)}
                   title="Global search (⌘K)"
                   aria-label="Open global search (⌘K)"
                 >
+                  <span aria-hidden="true">⌘K</span>
                   Search
                 </button>
                 {currentSection.path !== '/help' && (
@@ -1227,12 +1318,70 @@ export default function App() {
                 }
               />
               <Route
+                path="/detection-lab"
+                element={
+                  <ErrorBoundary>
+                    <RequireRole minRole="analyst">
+                      <Suspense fallback={<div className="loading">Loading…</div>}>
+                        <DetectionLab />
+                      </Suspense>
+                    </RequireRole>
+                  </ErrorBoundary>
+                }
+              />
+              <Route
                 path="/fleet"
                 element={
                   <ErrorBoundary>
                     <Suspense fallback={<div className="loading">Loading…</div>}>
                       <FleetAgents />
                     </Suspense>
+                  </ErrorBoundary>
+                }
+              />
+              <Route
+                path="/response-safety"
+                element={
+                  <ErrorBoundary>
+                    <RequireRole minRole="analyst">
+                      <Suspense fallback={<div className="loading">Loading…</div>}>
+                        <ResponseSafety />
+                      </Suspense>
+                    </RequireRole>
+                  </ErrorBoundary>
+                }
+              />
+              <Route
+                path="/integrations"
+                element={
+                  <ErrorBoundary>
+                    <RequireRole minRole="analyst">
+                      <Suspense fallback={<div className="loading">Loading…</div>}>
+                        <IntegrationsMarketplace />
+                      </Suspense>
+                    </RequireRole>
+                  </ErrorBoundary>
+                }
+              />
+              <Route
+                path="/operations-health"
+                element={
+                  <ErrorBoundary>
+                    <Suspense fallback={<div className="loading">Loading…</div>}>
+                      <OperationsHealth />
+                    </Suspense>
+                  </ErrorBoundary>
+                }
+              />
+              <Route
+                path="/malware"
+                element={
+                  <ErrorBoundary>
+                    <RequireRole minRole="analyst">
+                      <Suspense fallback={<div className="loading">Loading…</div>}>
+                        <MalwareTrustCenter />
+                      </Suspense>
+                    </RequireRole>
                   </ErrorBoundary>
                 }
               />
@@ -1383,6 +1532,7 @@ export default function App() {
       </main>
       <SearchPalette
         open={searchOpen}
+        currentPath={location.pathname}
         onClose={(v) => setSearchOpen(typeof v === 'boolean' ? v : false)}
         onNavigate={(item) => {
           const targetPath = item.path || (item.action ? buildCommandHref(item.action) : '');

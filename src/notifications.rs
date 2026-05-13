@@ -85,6 +85,27 @@ pub struct DeliveryResult {
     pub duration_ms: u64,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub enum OutboxStatus {
+    Queued,
+    Delivered,
+    Failed,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct OutboxRecord {
+    pub notification_id: String,
+    pub dedupe_key: String,
+    pub channel_name: String,
+    pub channel_kind: ChannelKind,
+    pub queued_at: String,
+    pub last_attempt_at: Option<String>,
+    pub next_retry_at: Option<String>,
+    pub attempts: u32,
+    pub status: OutboxStatus,
+    pub last_error: Option<String>,
+}
+
 // ── Formatter ────────────────────────────────────────────────────────
 
 fn format_slack(n: &Notification) -> String {
@@ -229,6 +250,7 @@ fn level_ge(alert_level: &str, min_level: &str) -> bool {
 pub struct NotificationEngine {
     channels: Vec<ChannelConfig>,
     history: Vec<DeliveryResult>,
+    outbox: Vec<OutboxRecord>,
     max_retries: u32,
 }
 
@@ -243,6 +265,7 @@ impl NotificationEngine {
         Self {
             channels: Vec::new(),
             history: Vec::new(),
+            outbox: Vec::new(),
             max_retries: 3,
         }
     }
@@ -280,6 +303,19 @@ impl NotificationEngine {
         }
 
         self.history.extend(results.clone());
+        results
+    }
+
+    /// Dispatch and keep an operator-visible outbox record for every channel.
+    ///
+    /// This preserves the existing immediate delivery behavior while exposing
+    /// delivery provenance for SOC handoffs, release evidence, and later
+    /// durable-queue persistence.
+    pub fn dispatch_with_outbox(&mut self, notification: &Notification) -> Vec<DeliveryResult> {
+        let results = self.dispatch(notification);
+        for result in &results {
+            self.record_outbox_result(notification, result);
+        }
         results
     }
 
@@ -410,6 +446,11 @@ impl NotificationEngine {
         &self.history
     }
 
+    /// Operator-visible notification queue and delivery trail.
+    pub fn outbox(&self) -> &[OutboxRecord] {
+        &self.outbox
+    }
+
     /// Number of successful deliveries.
     pub fn success_count(&self) -> usize {
         self.history.iter().filter(|d| d.success).count()
@@ -423,6 +464,61 @@ impl NotificationEngine {
     /// Clear the delivery history.
     pub fn clear_history(&mut self) {
         self.history.clear();
+    }
+
+    /// Clear transient delivery history and outbox records.
+    pub fn clear_delivery_state(&mut self) {
+        self.history.clear();
+        self.outbox.clear();
+    }
+
+    fn record_outbox_result(&mut self, notification: &Notification, result: &DeliveryResult) {
+        let now = chrono::Utc::now();
+        let dedupe_key = format!("{}:{}", notification.id, result.channel_name);
+        let next_retry_at = if result.success {
+            None
+        } else {
+            Some((now + chrono::Duration::minutes(5)).to_rfc3339())
+        };
+        let terminal_config_error = result
+            .error
+            .as_deref()
+            .is_some_and(|error| error.contains("no URL") || error.contains("no SMTP config"));
+        let status = if result.success {
+            OutboxStatus::Delivered
+        } else if terminal_config_error || result.attempts >= self.max_retries {
+            OutboxStatus::Failed
+        } else {
+            OutboxStatus::Queued
+        };
+        if let Some(existing) = self
+            .outbox
+            .iter_mut()
+            .find(|record| record.dedupe_key == dedupe_key)
+        {
+            existing.last_attempt_at = Some(now.to_rfc3339());
+            existing.next_retry_at = next_retry_at;
+            existing.attempts = result.attempts;
+            existing.status = status;
+            existing.last_error = result.error.clone();
+            return;
+        }
+        self.outbox.push(OutboxRecord {
+            notification_id: notification.id.clone(),
+            dedupe_key,
+            channel_name: result.channel_name.clone(),
+            channel_kind: result.channel_kind.clone(),
+            queued_at: now.to_rfc3339(),
+            last_attempt_at: Some(now.to_rfc3339()),
+            next_retry_at,
+            attempts: result.attempts,
+            status,
+            last_error: result.error.clone(),
+        });
+        if self.outbox.len() > 500 {
+            let keep_from = self.outbox.len() - 500;
+            self.outbox.drain(0..keep_from);
+        }
     }
 }
 
@@ -768,5 +864,45 @@ mod tests {
 
         engine.clear_history();
         assert!(engine.history().is_empty());
+    }
+
+    #[test]
+    fn dispatch_with_outbox_records_delivery_state() {
+        let mut engine = NotificationEngine::new();
+        engine.add_channel(ChannelConfig {
+            kind: ChannelKind::Webhook,
+            name: "missing-hook".into(),
+            enabled: true,
+            url: None,
+            token: None,
+            smtp: None,
+            min_level: "Elevated".into(),
+        });
+
+        let n = test_notification("Critical");
+        let results = engine.dispatch_with_outbox(&n);
+        assert_eq!(results.len(), 1);
+        assert_eq!(engine.outbox().len(), 1);
+        let record = &engine.outbox()[0];
+        assert_eq!(record.notification_id, n.id);
+        assert_eq!(record.channel_name, "missing-hook");
+        assert_eq!(record.status, OutboxStatus::Failed);
+        assert!(
+            record
+                .last_error
+                .as_deref()
+                .unwrap_or("")
+                .contains("no URL")
+        );
+
+        engine.dispatch_with_outbox(&n);
+        assert_eq!(
+            engine.outbox().len(),
+            1,
+            "dedupe key should update the existing record"
+        );
+        engine.clear_delivery_state();
+        assert!(engine.history().is_empty());
+        assert!(engine.outbox().is_empty());
     }
 }

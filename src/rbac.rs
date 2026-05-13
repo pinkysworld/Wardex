@@ -445,6 +445,7 @@ pub fn endpoint_permission(method: &str, path: &str) -> Permission {
                 || p.starts_with("/api/hunts")
                 || p.starts_with("/api/coverage/mitre")
                 || p.starts_with("/api/suppressions")
+                || p.starts_with("/api/detection/trust/")
                 || p == "/api/detection/recommendations"
                 || p == "/api/detection/readiness"
                 || p == "/api/threat-intel/status"
@@ -473,6 +474,9 @@ pub fn endpoint_permission(method: &str, path: &str) -> Permission {
         }
         (_, p) if p.starts_with("/api/hunts") => Permission::ManageHunts,
         (_, p) if p.starts_with("/api/suppressions") => Permission::ManageSuppressions,
+        (_, p) if p.starts_with("/api/detection/trust/tuning-drafts") => {
+            Permission::ManageSuppressions
+        }
 
         // Integrations
         ("GET", p) if p.starts_with("/api/enrichments/connectors") => Permission::ViewSupport,
@@ -1055,6 +1059,14 @@ mod tests {
         assert_eq!(
             endpoint_permission("GET", "/api/detection/trust-score"),
             Permission::ViewSupport
+        );
+        assert_eq!(
+            endpoint_permission("GET", "/api/detection/trust/overview"),
+            Permission::ViewCoverage
+        );
+        assert_eq!(
+            endpoint_permission("POST", "/api/detection/trust/tuning-drafts"),
+            Permission::ManageSuppressions
         );
         assert_eq!(
             endpoint_permission("GET", "/api/fleet/drift-compliance"),

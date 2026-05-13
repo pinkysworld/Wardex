@@ -780,6 +780,13 @@ export default function AlertDrawer({
   const whySafeOrNoisy = explainData?.why_safe_or_noisy || [];
   const nextSteps = explainData?.next_steps?.length ? explainData.next_steps : fallbackNextSteps;
   const analystFeedback = Array.isArray(explainData?.feedback) ? explainData.feedback : [];
+  const normalizedFeedbackStates = [
+    'valid',
+    'false_positive',
+    'benign_true_positive',
+    'needs_more_data',
+    'duplicate',
+  ];
   const entityScores = Array.isArray(explainData?.entity_scores) ? explainData.entity_scores : [];
   const contributingSignals = extractContributingSignals(alert, explainData);
   const evidenceChain = Array.isArray(explainData?.evidence_chain)
@@ -1361,6 +1368,21 @@ export default function AlertDrawer({
                 {String(analystFeedback[0].verdict || '').replace(/_/g, ' ')}.
               </div>
             )}
+            <div className="detail-callout" style={{ marginTop: 12 }}>
+              <strong>Detection trust impact</strong>
+              <div style={{ marginTop: 6 }}>
+                Feedback uses normalized outcomes and feeds the rule trust score, draft-only
+                suppression suggestions, threshold reviews, and promotion blockers. Wardex does not
+                auto-weaken production detections from this drawer.
+              </div>
+              <div className="chip-row" style={{ marginTop: 10 }}>
+                {normalizedFeedbackStates.map((state) => (
+                  <span key={state} className="badge badge-info">
+                    {state.replace(/_/g, ' ')}
+                  </span>
+                ))}
+              </div>
+            </div>
           </div>
         )}
       </div>

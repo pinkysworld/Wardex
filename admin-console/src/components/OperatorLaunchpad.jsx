@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import * as api from '../api.js';
-import { useApiGroup, useToast } from '../hooks.jsx';
+import { useApiGroup, useRole, useToast } from '../hooks.jsx';
 import { downloadData, formatDateTime } from './operatorUtils.js';
 
 const READINESS_STEPS = [
@@ -38,13 +38,95 @@ const READINESS_STEPS = [
 ];
 
 const COMMAND_ACCELERATORS = [
-  { title: 'Open alert queue', href: '/monitor', shortcut: 'M' },
-  { title: 'Detection quality', href: '/detection?panel=quality', shortcut: 'Cmd' },
-  { title: 'Thread evidence', href: '/monitor?monitorTab=processes', shortcut: 'Cmd' },
-  { title: 'Create incident', href: '/soc?intent=create-incident', shortcut: 'Cmd' },
-  { title: 'Generate evidence', href: '/reports?tab=evidence', shortcut: 'Cmd' },
-  { title: 'Integration health', href: '/settings?tab=integrations', shortcut: 'Cmd' },
+  {
+    title: 'Connect agent drawer',
+    href: '/fleet?fleetTab=updates&updatesPanel=install#connect-agent-drawer',
+    shortcut: 'Cmd',
+  },
+  { title: 'Morning brief', href: '/launchpad#morning-brief', shortcut: 'Cmd' },
+  { title: 'Guided incident', href: '/launchpad#guided-incident-path', shortcut: 'Cmd' },
+  { title: 'Open SOC queue', href: '/soc#queue', shortcut: 'Cmd' },
+  { title: 'Response simulator', href: '/launchpad#response-simulator', shortcut: 'Cmd' },
+  { title: 'Fleet drilldown', href: '/launchpad#fleet-health-drilldown', shortcut: 'Cmd' },
+  { title: 'Evidence freshness', href: '/launchpad#evidence-freshness', shortcut: 'Cmd' },
+  { title: 'Shift handoff', href: '/launchpad#shift-handoff-workspace', shortcut: 'Cmd' },
+  {
+    title: 'Timeline builder',
+    href: '/launchpad#incident-timeline-builder',
+    shortcut: 'Cmd',
+  },
+  {
+    title: 'Collector onboarding',
+    href: '/launchpad#collector-onboarding-center',
+    shortcut: 'Cmd',
+  },
+  {
+    title: 'Fleet risk heatmap',
+    href: '/launchpad#fleet-risk-heatmap',
+    shortcut: 'Cmd',
+  },
+  { title: 'Safe assistant', href: '/launchpad#safe-assistant', shortcut: 'Cmd' },
+  { title: 'Operator queue', href: '/launchpad#operator-task-queue', shortcut: 'Cmd' },
+  { title: 'Release gate', href: '/launchpad#release-gate-automation', shortcut: 'Cmd' },
+  { title: 'Demo scenarios', href: '/launchpad#demo-mode', shortcut: 'Cmd' },
 ];
+
+const COLLECTOR_ONBOARDING_LANES = [
+  {
+    name: 'Cloud audit lane',
+    providers: ['aws_cloudtrail', 'aws', 'azure_activity', 'azure', 'gcp_audit', 'gcp'],
+    target: 'CloudTrail, Azure, or GCP audit',
+    href: '/settings?tab=integrations#collectors',
+  },
+  {
+    name: 'Identity lane',
+    providers: ['okta', 'entra', 'idp', 'identity'],
+    target: 'Okta or Entra identity events',
+    href: '/settings?tab=integrations#collectors',
+  },
+  {
+    name: 'SaaS lane',
+    providers: ['m365', 'workspace', 'github', 'saas'],
+    target: 'M365, Workspace, or GitHub audit',
+    href: '/settings?tab=integrations#collectors',
+  },
+  {
+    name: 'Endpoint lane',
+    providers: ['crowdstrike', 'falcon', 'endpoint'],
+    target: 'EDR telemetry and host posture',
+    href: '/settings?tab=integrations#collectors',
+  },
+  {
+    name: 'Syslog lane',
+    providers: ['syslog', 'generic_syslog', 'network'],
+    target: 'Network and appliance syslog',
+    href: '/settings?tab=integrations#collectors',
+  },
+];
+
+const ROLE_HOME_CONFIG = {
+  admin: {
+    title: 'Admin home',
+    summary: 'Release trust, fleet rollout, collector coverage, and access posture.',
+    primaryHref: '/launchpad#release-acceptance-report',
+    secondaryHref: '/settings?tab=integrations',
+    rows: ['Release acceptance', 'Fleet risk', 'Collector onboarding'],
+  },
+  analyst: {
+    title: 'Analyst home',
+    summary: 'Queue context, timeline building, evidence freshness, and response simulation.',
+    primaryHref: '/launchpad#incident-timeline-builder',
+    secondaryHref: '/soc#queue',
+    rows: ['Timeline builder', 'Shift handoff', 'Safe assistant'],
+  },
+  viewer: {
+    title: 'Viewer home',
+    summary: 'Read-only operational proof, release confidence, and report-ready evidence.',
+    primaryHref: '/reports?tab=evidence',
+    secondaryHref: '/launchpad#evidence-surface-coverage',
+    rows: ['Evidence coverage', 'Release trust', 'Visual gate'],
+  },
+};
 
 function asArray(value, keys = []) {
   if (Array.isArray(value)) return value;
@@ -52,6 +134,13 @@ function asArray(value, keys = []) {
     if (Array.isArray(value?.[key])) return value[key];
   }
   return [];
+}
+
+function normalizeProvider(value) {
+  return String(value || '')
+    .toLowerCase()
+    .replaceAll('-', '_')
+    .replaceAll(' ', '_');
 }
 
 function countValue(value, keys = ['count', 'total', 'open', 'pending']) {
@@ -81,6 +170,18 @@ function signalBadge(status) {
   return { className: 'badge-warn', label: normalized };
 }
 
+function isReadyStatus(status) {
+  return ['ready', 'pass', 'passed', 'trusted', 'healthy', 'clear', 'ok', 'current'].includes(
+    String(status || '').toLowerCase(),
+  );
+}
+
+function isBlockingStatus(status) {
+  return ['blocked', 'fail', 'failed', 'risk', 'attention', 'stale', 'error', 'degraded'].includes(
+    String(status || '').toLowerCase(),
+  );
+}
+
 function evidenceFreshness(value) {
   return value?.evidence_freshness || value?.evidenceFreshness || null;
 }
@@ -99,6 +200,11 @@ function evidenceBadge(value) {
     return { className: 'badge-err', label: `${status} proof` };
   }
   return { className: 'badge-warn', label: `${status} proof` };
+}
+
+function evidenceMode(value) {
+  const evidence = evidenceFreshness(value);
+  return String(evidence?.mode || 'pending').replaceAll('_', ' ');
 }
 
 function freshnessDetail(detail, value) {
@@ -176,15 +282,32 @@ function partialErrorRows(errors) {
   }));
 }
 
+function collectorMatchesLane(item, lane) {
+  const provider = normalizeProvider(
+    item?.provider || item?.id || item?.key || item?.name || item?.label || item?.type,
+  );
+  return lane.providers.some((candidate) => provider.includes(normalizeProvider(candidate)));
+}
+
+function riskBadge(score) {
+  if (score >= 70) return { className: 'badge-err', label: 'High risk' };
+  if (score >= 30) return { className: 'badge-warn', label: 'Watch' };
+  return { className: 'badge-ok', label: 'Contained' };
+}
+
 export default function OperatorLaunchpad() {
   const toast = useToast();
+  const { role, groups, userId } = useRole();
   const [demoBusy, setDemoBusy] = useState(false);
   const [demoResetBusy, setDemoResetBusy] = useState(false);
   const [evidenceBusy, setEvidenceBusy] = useState(false);
   const [supportBundleBusy, setSupportBundleBusy] = useState(false);
+  const [handoffOwner, setHandoffOwner] = useState('');
+  const [handoffNote, setHandoffNote] = useState('');
   const { data, loading, errors, reload } = useApiGroup({
     health: api.health,
     status: api.status,
+    assistant: api.assistantStatus,
     readiness: api.onboardingReadiness,
     readinessEvidence: api.supportReadinessEvidence,
     dependencies: api.systemDeps,
@@ -271,6 +394,7 @@ export default function OperatorLaunchpad() {
     deps: data.dependencies,
     audit: data.audit,
   });
+  const collectorItems = asArray(data.collectors, ['collectors', 'items']);
   const replayReady = ['ready', 'passed', 'ok'].includes(
     String(data.replayCorpus?.status || '').toLowerCase(),
   );
@@ -536,6 +660,59 @@ export default function OperatorLaunchpad() {
     releaseVerificationBlockers === 0,
     releaseVerificationBlockers > 0,
   );
+  const deploymentConfidenceRows = [
+    [
+      'API and SDK contract',
+      data.sdkContract?.status || data.releaseVerification?.sdk_contract_status || 'unknown',
+      `${countValue(data.sdkContract, ['endpoint_count', 'operation_count']) || releaseVerificationRows.length || '—'} checks`,
+      data.sdkContract || data.releaseVerification,
+    ],
+    [
+      'Signing and provenance',
+      data.releaseProvenance?.status || data.releaseDoctor?.signing_status || 'unknown',
+      data.releaseProvenance?.artifact_count
+        ? `${data.releaseProvenance.artifact_count} artifacts`
+        : 'artifact proof',
+      data.releaseProvenance,
+    ],
+    [
+      'Container parity',
+      data.containerParity?.status || 'unknown',
+      data.containerParity?.image_tag || data.containerParity?.digest || 'image parity',
+      data.containerParity,
+    ],
+    [
+      'Backup and failover',
+      data.failoverExecution?.status || data.drDrill?.status || 'unknown',
+      data.failoverExecution?.last_drill_at
+        ? `drilled ${formatDateTime(data.failoverExecution.last_drill_at)}`
+        : 'drill evidence',
+      data.failoverExecution,
+    ],
+    [
+      'Data quality and scale',
+      dataQualityScore >= 90 && loadGateRows.length > 0 ? 'ready' : 'attention',
+      `quality ${dataQualityScore || '—'} • ${loadGateRows.length || 0} gates`,
+      data.dataQuality || data.scaleBaseline,
+    ],
+    [
+      'Install plan coverage',
+      deploymentPlans.length > 0 ? 'ready' : 'attention',
+      `${deploymentPlans.length || 0} install plans`,
+      data.deploymentWizard,
+    ],
+  ];
+  const deploymentConfidenceBlockers = deploymentConfidenceRows.filter(([, status, , source]) => {
+    const normalized = String(status || '').toLowerCase();
+    return (
+      ['blocked', 'fail', 'risk', 'attention'].includes(normalized) ||
+      evidenceNeedsAttention(source)
+    );
+  }).length;
+  const deploymentConfidenceBadge = statusBadge(
+    deploymentConfidenceBlockers === 0,
+    deploymentConfidenceBlockers > 0,
+  );
   const releaseDoctorBadge = statusBadge(
     releaseDoctorStatus === 'ready',
     releaseDoctorStatus === 'review',
@@ -581,6 +758,552 @@ export default function OperatorLaunchpad() {
         snapshot,
       ])
     : inlineSnapshotRows;
+  const allEvidenceRows = [
+    ...releaseVerificationSignals,
+    ...productionSignals,
+    ...deploymentConfidenceRows,
+  ]
+    .map(([name, status, detail, evidenceSource]) => ({ name, status, detail, evidenceSource }))
+    .filter((row) => evidenceFreshness(row.evidenceSource));
+  const staleEvidenceRows = allEvidenceRows.filter((row) =>
+    evidenceNeedsAttention(row.evidenceSource),
+  );
+  const freshEvidenceRows = allEvidenceRows.filter(
+    (row) => evidenceFreshness(row.evidenceSource)?.status === 'fresh',
+  );
+  const evidenceModeCounts = allEvidenceRows.reduce((acc, row) => {
+    const mode = evidenceMode(row.evidenceSource);
+    acc[mode] = (acc[mode] || 0) + 1;
+    return acc;
+  }, {});
+  const evidenceModeRows = Object.entries(evidenceModeCounts)
+    .map(([mode, count]) => ({ mode, count }))
+    .sort((left, right) => right.count - left.count);
+  const evidenceFreshnessBadge = statusBadge(
+    allEvidenceRows.length > 0 && staleEvidenceRows.length === 0,
+    staleEvidenceRows.length > 0,
+  );
+  const fleetTotal =
+    countValue(data.fleet, ['total_agents', 'agent_count', 'agents', 'total']) ||
+    countValue(data.fleet?.fleet, ['total_agents', 'agent_count', 'total']);
+  const fleetOnline =
+    countValue(data.fleet, ['online', 'online_agents']) ||
+    countValue(data.fleet?.status_counts?.online) ||
+    countValue(data.fleet?.fleet?.status_counts?.online);
+  const fleetOffline =
+    countValue(data.fleet, ['offline', 'offline_agents']) ||
+    countValue(data.fleet?.status_counts?.offline) ||
+    countValue(data.fleet?.fleet?.status_counts?.offline);
+  const staleHeartbeats =
+    countValue(data.fleet, ['stale', 'stale_agents', 'stale_heartbeats']) ||
+    countValue(data.fleetDrift, ['stale_heartbeat_count', 'stale_agents']);
+  const fleetDriftCount = countValue(data.fleetDrift, [
+    'version_drift',
+    'drifted_agents',
+    'drift_count',
+  ]);
+  const fleetHealthBadge = statusBadge(
+    fleetOnline > 0 && fleetOffline === 0 && fleetDriftCount === 0,
+    fleetOffline > 0 || fleetDriftCount > 0 || staleHeartbeats > 0,
+  );
+  const morningBriefRows = [
+    {
+      name: 'First-run readiness',
+      status: readyCount === steps.length ? 'ready' : 'attention',
+      detail: `${readyCount}/${steps.length} checks ready`,
+    },
+    {
+      name: 'Incident queue',
+      status: alertCount > 0 ? 'attention' : 'ready',
+      detail: `${alertCount} alerts available`,
+    },
+    {
+      name: 'Response approvals',
+      status: pendingApprovals === 0 ? 'ready' : 'attention',
+      detail: `${pendingApprovals} pending approvals`,
+    },
+    {
+      name: 'Evidence freshness',
+      status: staleEvidenceRows.length === 0 ? 'ready' : 'attention',
+      detail: `${freshEvidenceRows.length}/${allEvidenceRows.length || 0} fresh proofs`,
+    },
+    {
+      name: 'Release gate',
+      status: deploymentConfidenceBlockers === 0 ? 'ready' : 'attention',
+      detail: `${deploymentConfidenceBlockers} deployment blockers`,
+    },
+  ];
+  const guidedIncidentSteps = [
+    {
+      title: 'Connect an agent',
+      detail: fleetOnline > 0 ? `${fleetOnline} online sensors` : 'Open the install bundle drawer',
+      href: '/fleet?fleetTab=updates&updatesPanel=install#connect-agent-drawer',
+      ready: fleetOnline > 0 || steps[0]?.ready,
+    },
+    {
+      title: 'Open the queue',
+      detail: alertCount > 0 ? `${alertCount} alerts ready to triage` : 'No alert context yet',
+      href: '/soc#queue',
+      ready: alertCount > 0,
+    },
+    {
+      title: 'Explain the evidence',
+      detail:
+        threadFindingCount > 0 ? `${threadFindingCount} thread findings` : 'Process baseline ready',
+      href: '/monitor?drawer=alert-evidence',
+      ready: alertCount > 0 || threadFindingCount > 0,
+    },
+    {
+      title: 'Simulate response',
+      detail:
+        pendingApprovals > 0 ? `${pendingApprovals} approvals need review` : 'No approvals blocked',
+      href: '/launchpad#response-simulator',
+      ready: pendingApprovals === 0 || Boolean(data.remediationSafety?.status),
+    },
+    {
+      title: 'Package handoff',
+      detail:
+        staleEvidenceRows.length > 0
+          ? `${staleEvidenceRows.length} stale proofs`
+          : 'Evidence pack ready',
+      href: '/reports?tab=evidence',
+      ready: staleEvidenceRows.length === 0 && allEvidenceRows.length > 0,
+    },
+  ];
+  const guidedIncidentReadyCount = guidedIncidentSteps.filter((step) => step.ready).length;
+  const rollbackStatus =
+    data.remediationSafety?.rollback_status ||
+    data.remediationSafety?.rollback ||
+    data.remediationSafety?.status ||
+    'dry_run_only';
+  const rollbackReady =
+    String(rollbackStatus).toLowerCase().includes('ready') || rollbackStatus === 'dry_run_only';
+  const responseSimulatorRows = [
+    {
+      name: 'Blast radius',
+      status: countValue(data.response, ['protected_assets']) > 0 ? 'ready' : 'review',
+      detail: `${countValue(data.response, ['protected_assets']) || '—'} protected assets mapped`,
+    },
+    {
+      name: 'Approval queue',
+      status: pendingApprovals === 0 ? 'ready' : 'attention',
+      detail: `${pendingApprovals} pending approvals`,
+    },
+    {
+      name: 'Rollback posture',
+      status: rollbackReady ? 'ready' : 'attention',
+      detail: String(rollbackStatus).replaceAll('_', ' '),
+    },
+    {
+      name: 'Dry-run mode',
+      status: data.remediationSafety?.status || 'dry_run_only',
+      detail: `${countValue(data.response, ['ready_to_execute', 'approved_ready'])} actions ready`,
+    },
+  ];
+  const fleetDrilldownRows = [
+    {
+      name: 'Online coverage',
+      status: fleetOnline > 0 ? 'ready' : 'attention',
+      detail: `${fleetOnline}/${fleetTotal || '—'} online`,
+    },
+    {
+      name: 'Offline agents',
+      status: fleetOffline === 0 ? 'ready' : 'attention',
+      detail: `${fleetOffline} offline`,
+    },
+    {
+      name: 'Stale heartbeat',
+      status: staleHeartbeats === 0 ? 'ready' : 'attention',
+      detail: `${staleHeartbeats} stale`,
+    },
+    {
+      name: 'Version drift',
+      status: fleetDriftCount === 0 ? 'ready' : 'attention',
+      detail: `${fleetDriftCount} drifted`,
+    },
+  ];
+  const workQueueItems = asArray(data.workQueue, ['items', 'tasks', 'queue']);
+  const generatedTasks = [
+    pendingApprovals > 0
+      ? {
+          title: 'Review response approvals',
+          status: 'attention',
+          detail: `${pendingApprovals} approvals waiting`,
+          href: '/soc#response',
+        }
+      : null,
+    deploymentConfidenceBlockers > 0
+      ? {
+          title: 'Clear release blockers',
+          status: 'attention',
+          detail: `${deploymentConfidenceBlockers} deployment blockers`,
+          href: '/launchpad#deployment-confidence',
+        }
+      : null,
+    staleEvidenceRows.length > 0
+      ? {
+          title: 'Refresh stale evidence',
+          status: 'attention',
+          detail: `${staleEvidenceRows.length} proofs need refresh`,
+          href: '/launchpad#evidence-freshness',
+        }
+      : null,
+    fleetOffline > 0 || fleetDriftCount > 0
+      ? {
+          title: 'Recover fleet coverage',
+          status: 'attention',
+          detail: `${fleetOffline} offline, ${fleetDriftCount} drifted`,
+          href: '/launchpad#fleet-health-drilldown',
+        }
+      : null,
+    workQueueCount > 0
+      ? {
+          title: 'Work queued automation',
+          status: data.workQueue?.status || 'attention',
+          detail: `${workQueueCount} production items`,
+          href: '/launchpad#operator-task-queue',
+        }
+      : null,
+  ].filter(Boolean);
+  const operatorTaskRows = workQueueItems.length
+    ? workQueueItems.slice(0, 5).map((item, index) => ({
+        title: item.title || item.name || item.kind || `Queued task ${index + 1}`,
+        status: item.status || item.priority || 'attention',
+        detail:
+          item.detail || item.summary || item.owner || item.reason || 'Awaiting operator action',
+        href: item.href || item.path || '/launchpad#operator-task-queue',
+      }))
+    : generatedTasks;
+  const activeTaskCount = operatorTaskRows.filter((row) => !isReadyStatus(row.status)).length;
+  const taskQueueBadge = statusBadge(activeTaskCount === 0, activeTaskCount > 0);
+  const releaseGateRows = [
+    {
+      name: 'Release doctor',
+      status: releaseDoctorStatus,
+      detail: `${releaseDoctorChecks.length || 0} checks`,
+    },
+    {
+      name: 'Workflow preflight',
+      status: workflowPreflightStatus,
+      detail: data.workflowPreflight?.next_action || 'release workflow',
+    },
+    {
+      name: 'Validation packs',
+      status: data.validationPacks?.status || 'unknown',
+      detail: `${executablePacks || 0} executable packs`,
+    },
+    {
+      name: 'SDK contract',
+      status: contractDrift === 0 ? 'ready' : 'attention',
+      detail: `${contractDrift} drift items`,
+    },
+    {
+      name: 'Deployment gate',
+      status: deploymentConfidenceBlockers === 0 ? 'ready' : 'attention',
+      detail: `${deploymentConfidenceBlockers} blockers`,
+    },
+  ];
+  const releaseGateBlockers = releaseGateRows.filter((row) => isBlockingStatus(row.status)).length;
+  const releaseGateBadge = statusBadge(releaseGateBlockers === 0, releaseGateBlockers > 0);
+  const shiftHandoffRows = [
+    {
+      name: 'Queue summary',
+      status: alertCount > 0 ? 'attention' : 'ready',
+      detail: `${alertCount} alert contexts, ${activeTaskCount} operator tasks`,
+      href: '/soc#queue',
+    },
+    {
+      name: 'Evidence delta',
+      status: staleEvidenceRows.length > 0 ? 'attention' : 'ready',
+      detail: `${freshEvidenceRows.length}/${allEvidenceRows.length || 0} proofs fresh`,
+      href: '/launchpad#evidence-freshness',
+    },
+    {
+      name: 'Release posture',
+      status: releaseGateBlockers > 0 ? 'attention' : 'ready',
+      detail: `${releaseGateBlockers} ship gate blockers`,
+      href: '/launchpad#release-gate-automation',
+    },
+    {
+      name: 'Fleet watch',
+      status: fleetOffline > 0 || staleHeartbeats > 0 ? 'attention' : 'ready',
+      detail: `${fleetOffline} offline, ${staleHeartbeats} stale heartbeat`,
+      href: '/launchpad#fleet-risk-heatmap',
+    },
+  ];
+  const handoffRecipient = handoffOwner.trim() || (userId !== 'anonymous' ? userId : 'next-shift');
+  const incidentReplayCount = countValue(data.incidentReplay, [
+    'incident_count',
+    'timeline_count',
+    'count',
+  ]);
+  const incidentTimelineRows = [
+    {
+      name: 'Signal capture',
+      status: alertCount > 0 ? 'ready' : 'attention',
+      detail: `${alertCount} alerts available`,
+      href: '/soc#queue',
+    },
+    {
+      name: 'Host and thread proof',
+      status: threadFindingCount > 0 ? 'attention' : 'ready',
+      detail: `${threadFindingCount} thread findings`,
+      href: '/monitor?monitorTab=processes',
+    },
+    {
+      name: 'Timeline replay',
+      status: data.incidentReplay?.status || (incidentReplayCount > 0 ? 'ready' : 'attention'),
+      detail: `${incidentReplayCount || 0} replayable incidents`,
+      href: '/soc?drawer=incident-detail&incidentPanel=timeline#cases',
+    },
+    {
+      name: 'Report handoff',
+      status: staleEvidenceRows.length > 0 ? 'attention' : 'ready',
+      detail:
+        staleEvidenceRows.length > 0 ? `${staleEvidenceRows.length} proofs stale` : 'packet ready',
+      href: '/reports?tab=evidence',
+    },
+  ];
+  const collectorOnboardingRows = COLLECTOR_ONBOARDING_LANES.map((lane) => {
+    const matches = collectorItems.filter((item) => collectorMatchesLane(item, lane));
+    const enabled = matches.filter((item) => item?.enabled !== false).length;
+    const review = matches.filter((item) => {
+      const status = String(
+        item?.freshness || item?.status || item?.validation?.status || '',
+      ).toLowerCase();
+      return ['stale', 'unknown', 'warning', 'error', 'failed'].includes(status);
+    }).length;
+    const ready = matches.length > 0 && enabled === matches.length && review === 0;
+    return {
+      ...lane,
+      count: matches.length,
+      status: ready ? 'ready' : matches.length > 0 ? 'attention' : 'pending',
+      detail:
+        matches.length > 0
+          ? `${enabled}/${matches.length} enabled, ${review} review`
+          : `Add ${lane.target}`,
+    };
+  });
+  const collectorReadyCount = collectorOnboardingRows.filter((row) =>
+    isReadyStatus(row.status),
+  ).length;
+  const collectorOnboardingBadge = statusBadge(
+    collectorReadyCount === collectorOnboardingRows.length,
+    collectorReadyCount < collectorOnboardingRows.length,
+  );
+  const releaseAcceptanceRows = [
+    ...releaseGateRows,
+    {
+      name: 'Fresh evidence',
+      status: staleEvidenceRows.length === 0 ? 'ready' : 'attention',
+      detail: `${freshEvidenceRows.length}/${allEvidenceRows.length || 0} proofs fresh`,
+    },
+    {
+      name: 'Visual smoke',
+      status: 'ready',
+      detail: 'Launchpad screenshot gate configured',
+    },
+  ];
+  const releaseAcceptanceBlockers = releaseAcceptanceRows.filter((row) =>
+    isBlockingStatus(row.status),
+  ).length;
+  const releaseAcceptanceBadge = statusBadge(
+    releaseAcceptanceBlockers === 0,
+    releaseAcceptanceBlockers > 0,
+  );
+  const riskRows = [
+    {
+      name: 'Offline coverage',
+      score: fleetTotal
+        ? Math.min(100, Math.round((fleetOffline / fleetTotal) * 100))
+        : fleetOffline * 25,
+      detail: `${fleetOffline}/${fleetTotal || '—'} offline`,
+      href: '/fleet?status=offline',
+    },
+    {
+      name: 'Heartbeat age',
+      score: Math.min(100, staleHeartbeats * 20),
+      detail: `${staleHeartbeats} stale heartbeat`,
+      href: '/fleet?fleetTab=updates&updatesPanel=health',
+    },
+    {
+      name: 'Version drift',
+      score: Math.min(100, fleetDriftCount * 20),
+      detail: `${fleetDriftCount} drifted agents`,
+      href: '/fleet?fleetTab=updates&updatesPanel=versions',
+    },
+    {
+      name: 'Active detections',
+      score: Math.min(100, alertCount * 8 + threadFindingCount * 12),
+      detail: `${alertCount} alerts, ${threadFindingCount} thread findings`,
+      href: '/soc#queue',
+    },
+  ];
+  const maxFleetRisk = Math.max(0, ...riskRows.map((row) => row.score));
+  const fleetRiskBadge = riskBadge(maxFleetRisk);
+  const responsePlaybookRows = [
+    ...responseSimulatorRows,
+    {
+      name: 'Approval policy',
+      status: pendingApprovals > 0 ? 'attention' : 'ready',
+      detail: `${pendingApprovals} approvals before execution`,
+    },
+    {
+      name: 'Audit trail',
+      status: data.audit?.ok || data.audit?.valid ? 'ready' : 'attention',
+      detail: data.audit?.ok || data.audit?.valid ? 'verified chain' : 'verify audit chain',
+    },
+  ];
+  const evidenceCoverageRows = [
+    {
+      name: 'SOC cases',
+      status: alertCount > 0 || threadFindingCount > 0 ? 'ready' : 'attention',
+      detail: `${alertCount} alert contexts`,
+      href: '/soc#cases',
+    },
+    {
+      name: 'Reports',
+      status: allEvidenceRows.length > 0 ? 'ready' : 'attention',
+      detail: `${allEvidenceRows.length || 0} proof rows`,
+      href: '/reports?tab=evidence',
+    },
+    {
+      name: 'Release gate',
+      status: releaseFreshEvidenceCount > 0 ? 'ready' : 'attention',
+      detail: `${releaseFreshEvidenceCount}/${releaseVerificationSignals.length} release proofs`,
+      href: '/launchpad#release-acceptance-report',
+    },
+    {
+      name: 'Response queue',
+      status: data.remediationSafety?.status ? 'ready' : 'attention',
+      detail: String(data.remediationSafety?.status || 'dry-run evidence pending'),
+      href: '/response-safety',
+    },
+  ];
+  const roleHome = ROLE_HOME_CONFIG[role] || ROLE_HOME_CONFIG.viewer;
+  const visualGateRows = [
+    {
+      name: 'Launchpad viewport',
+      status: 'ready',
+      detail: '#deployment-confidence and continuity cards',
+    },
+    {
+      name: 'Command palette smoke',
+      status: 'ready',
+      detail: 'Cmd+K featured actions are asserted',
+    },
+    {
+      name: 'Screenshot artifact',
+      status: 'ready',
+      detail: 'Playwright validates non-empty screenshot output',
+    },
+  ];
+  const assistantMode = data.assistant?.mode || 'retrieval-only';
+  const canonicalJourneys = [
+    {
+      name: 'Critical alert to response',
+      status:
+        alertCount > 0 && freshEvidenceRows.length > 0 && pendingApprovals === 0
+          ? 'ready'
+          : 'attention',
+      detail:
+        pendingApprovals > 0
+          ? `${pendingApprovals} approval(s) waiting`
+          : `${alertCount} alert(s), ${freshEvidenceRows.length} fresh proof(s)`,
+      href: '/soc#queue',
+    },
+    {
+      name: 'Collector to detection trust',
+      status: collectorReadyCount > 0 && staleEvidenceRows.length === 0 ? 'ready' : 'attention',
+      detail: `${collectorReadyCount}/${collectorOnboardingRows.length} telemetry lanes ready`,
+      href: '/settings?tab=integrations#collectors',
+    },
+    {
+      name: 'Release cut to acceptance',
+      status: releaseAcceptanceBlockers === 0 ? 'ready' : 'attention',
+      detail: `${releaseAcceptanceBlockers} blocker(s), ${releaseFreshEvidenceCount} release proof(s)`,
+      href: '/launchpad#release-acceptance-report',
+    },
+    {
+      name: 'Assistant answer to cited evidence',
+      status:
+        assistantMode === 'retrieval-only' && freshEvidenceRows.length > 0 ? 'ready' : 'review',
+      detail: `${assistantMode} mode, ${freshEvidenceRows.length} usable proof(s)`,
+      href: '/assistant?source=launchpad-quality-gate',
+    },
+  ];
+  const canonicalReadyCount = canonicalJourneys.filter((journey) =>
+    isReadyStatus(journey.status),
+  ).length;
+  const assistantBoundaryRows = [
+    {
+      name: 'Mode boundary',
+      status: assistantMode === 'retrieval-only' ? 'ready' : 'attention',
+      detail: assistantMode,
+      href: '/assistant',
+    },
+    {
+      name: 'Citation requirement',
+      status: 'ready',
+      detail: 'answers route through cited context',
+      href: '/assistant?source=launchpad-safe-boundary',
+    },
+    {
+      name: 'Execution boundary',
+      status: 'ready',
+      detail: 'assistant cannot execute response actions',
+      href: '/response-safety',
+    },
+  ];
+
+  const exportShiftHandoff = () => {
+    downloadData(
+      {
+        schema: 'wardex.shift_handoff.v1',
+        created_at: new Date().toISOString(),
+        created_by: userId,
+        recipient: handoffRecipient,
+        role,
+        groups,
+        note: handoffNote.trim(),
+        summary: shiftHandoffRows,
+        tasks: operatorTaskRows,
+        evidence: staleEvidenceRows.slice(0, 8),
+      },
+      'wardex-shift-handoff.json',
+    );
+    toast?.('Shift handoff exported', 'success');
+  };
+
+  const exportTimelineDraft = () => {
+    downloadData(
+      {
+        schema: 'wardex.incident_timeline_draft.v1',
+        created_at: new Date().toISOString(),
+        rows: incidentTimelineRows,
+        alert_count: alertCount,
+        thread_finding_count: threadFindingCount,
+        fresh_evidence: freshEvidenceRows.length,
+      },
+      'wardex-incident-timeline-draft.json',
+    );
+    toast?.('Timeline draft exported', 'success');
+  };
+
+  const exportReleaseAcceptance = () => {
+    downloadData(
+      {
+        schema: 'wardex.release_acceptance_report.v1',
+        created_at: new Date().toISOString(),
+        version: currentVersion,
+        blockers: releaseAcceptanceBlockers,
+        rows: releaseAcceptanceRows,
+        evidence: allEvidenceRows,
+      },
+      `wardex-release-acceptance-${currentVersion}.json`,
+    );
+    toast?.('Release acceptance report exported', 'success');
+  };
 
   return (
     <div className="operator-launchpad">
@@ -657,6 +1380,213 @@ export default function OperatorLaunchpad() {
       </section>
 
       <section className="operator-launchpad-grid">
+        <div className="card operator-lane-card" id="connect-agent-drawer">
+          <div className="card-header">
+            <div>
+              <div className="summary-label">Persistent connect</div>
+              <h3 className="card-title">Agent connect drawer</h3>
+            </div>
+            <Link
+              className="btn btn-sm"
+              to="/fleet?fleetTab=updates&updatesPanel=install#connect-agent-drawer"
+            >
+              Open drawer
+            </Link>
+          </div>
+          <div className="operator-kv-list">
+            <div>
+              <span>Enrollment path</span>
+              <strong>Manual or remote</strong>
+            </div>
+            <div>
+              <span>Fleet online</span>
+              <strong>
+                {fleetOnline}/{fleetTotal || '—'}
+              </strong>
+            </div>
+            <div>
+              <span>Install plans</span>
+              <strong>{deploymentPlans.length || '—'}</strong>
+            </div>
+          </div>
+          <div className="summary-meta">
+            The Fleet install panel now has a stable command-palette route and hash target.
+          </div>
+        </div>
+
+        <div className="card operator-lane-card" id="morning-brief">
+          <div className="card-header">
+            <div>
+              <div className="summary-label">Shift handoff</div>
+              <h3 className="card-title">Morning brief</h3>
+            </div>
+            <span className={`badge ${taskQueueBadge.className}`}>{taskQueueBadge.label}</span>
+          </div>
+          <div className="operator-health-list">
+            {morningBriefRows.map((row) => {
+              const badge = signalBadge(row.status);
+              return (
+                <div key={row.name} className="operator-health-row">
+                  <span className={`badge ${badge.className}`}>{badge.label}</span>
+                  <span>{row.name}</span>
+                  <span>{row.detail}</span>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        <div className="card operator-lane-card" id="shift-handoff-workspace">
+          <div className="card-header">
+            <div>
+              <div className="summary-label">Shift continuity</div>
+              <h3 className="card-title">Handoff workspace</h3>
+            </div>
+            <button type="button" className="btn btn-sm" onClick={exportShiftHandoff}>
+              Export handoff
+            </button>
+          </div>
+          <div className="operator-handoff-form">
+            <label className="form-label" htmlFor="handoff-owner">
+              Recipient
+            </label>
+            <input
+              id="handoff-owner"
+              className="form-input"
+              value={handoffOwner}
+              onChange={(event) => setHandoffOwner(event.target.value)}
+              placeholder={handoffRecipient}
+            />
+            <label className="form-label" htmlFor="handoff-note">
+              Shift note
+            </label>
+            <textarea
+              id="handoff-note"
+              className="form-textarea"
+              rows={3}
+              value={handoffNote}
+              onChange={(event) => setHandoffNote(event.target.value)}
+              placeholder="Open items, watchlist, and ownership changes"
+            />
+          </div>
+          <div className="operator-health-list">
+            {shiftHandoffRows.map((row) => {
+              const badge = signalBadge(row.status);
+              return (
+                <Link
+                  key={row.name}
+                  className="operator-health-row operator-health-link"
+                  to={row.href}
+                >
+                  <span className={`badge ${badge.className}`}>{badge.label}</span>
+                  <span>{row.name}</span>
+                  <span>{row.detail}</span>
+                </Link>
+              );
+            })}
+          </div>
+        </div>
+
+        <div className="card operator-lane-card" id="guided-incident-path">
+          <div className="card-header">
+            <div>
+              <div className="summary-label">Guided incident</div>
+              <h3 className="card-title">Triage path</h3>
+            </div>
+            <span
+              className={`badge ${guidedIncidentReadyCount === guidedIncidentSteps.length ? 'badge-ok' : 'badge-warn'}`}
+            >
+              {guidedIncidentReadyCount}/{guidedIncidentSteps.length}
+            </span>
+          </div>
+          <div className="operator-step-list">
+            {guidedIncidentSteps.map((step) => {
+              const badge = statusBadge(step.ready);
+              return (
+                <Link key={step.title} className="operator-step" to={step.href}>
+                  <span className={`badge ${badge.className}`}>{badge.label}</span>
+                  <span>
+                    <strong>{step.title}</strong>
+                    <span>{step.detail}</span>
+                  </span>
+                </Link>
+              );
+            })}
+          </div>
+        </div>
+
+        <div className="card operator-lane-card" id="canonical-operator-journeys">
+          <div className="card-header">
+            <div>
+              <div className="summary-label">Golden paths</div>
+              <h3 className="card-title">Canonical operator journeys</h3>
+            </div>
+            <span
+              className={`badge ${canonicalReadyCount === canonicalJourneys.length ? 'badge-ok' : 'badge-warn'}`}
+            >
+              {canonicalReadyCount}/{canonicalJourneys.length}
+            </span>
+          </div>
+          <div className="operator-health-list">
+            {canonicalJourneys.map((journey) => {
+              const badge = signalBadge(journey.status);
+              return (
+                <Link
+                  key={journey.name}
+                  className="operator-health-row operator-health-link"
+                  to={journey.href}
+                >
+                  <span className={`badge ${badge.className}`}>{badge.label}</span>
+                  <span>{journey.name}</span>
+                  <span>{journey.detail}</span>
+                </Link>
+              );
+            })}
+          </div>
+        </div>
+
+        <div className="card operator-lane-card" id="incident-timeline-builder">
+          <div className="card-header">
+            <div>
+              <div className="summary-label">Incident reconstruction</div>
+              <h3 className="card-title">Timeline builder</h3>
+            </div>
+            <button type="button" className="btn btn-sm" onClick={exportTimelineDraft}>
+              Export draft
+            </button>
+          </div>
+          <div className="operator-health-list">
+            {incidentTimelineRows.map((row) => {
+              const badge = signalBadge(row.status);
+              return (
+                <Link
+                  key={row.name}
+                  className="operator-health-row operator-health-link"
+                  to={row.href}
+                >
+                  <span className={`badge ${badge.className}`}>{badge.label}</span>
+                  <span>{row.name}</span>
+                  <span>{row.detail}</span>
+                </Link>
+              );
+            })}
+          </div>
+          <div className="operator-kv-list">
+            <div>
+              <span>Replay incidents</span>
+              <strong>{incidentReplayCount || '—'}</strong>
+            </div>
+            <div>
+              <span>Fresh evidence</span>
+              <strong>{freshEvidenceRows.length}</strong>
+            </div>
+            <div>
+              <span>Handoff target</span>
+              <strong>Reports</strong>
+            </div>
+          </div>
+        </div>
+
         <div className="card operator-lane-card">
           <div className="card-header">
             <div>
@@ -761,6 +1691,48 @@ export default function OperatorLaunchpad() {
           </div>
         </div>
 
+        <div className="card operator-lane-card" id="deployment-confidence">
+          <div className="card-header">
+            <div>
+              <div className="summary-label">Deployment confidence</div>
+              <h3 className="card-title">Ship readiness matrix</h3>
+            </div>
+            <span className={`badge ${deploymentConfidenceBadge.className}`}>
+              {deploymentConfidenceBadge.label}
+            </span>
+          </div>
+          <div className="deployment-confidence-matrix">
+            {deploymentConfidenceRows.map(([name, status, detail, evidenceSource]) => {
+              const badge = signalBadge(status);
+              const proofBadge = evidenceBadge(evidenceSource);
+              return (
+                <div key={name} className="deployment-confidence-row">
+                  <span className={`badge ${badge.className}`}>{badge.label}</span>
+                  <strong>{name}</strong>
+                  <span>{detail}</span>
+                  <span className={`badge ${proofBadge.className}`}>{proofBadge.label}</span>
+                </div>
+              );
+            })}
+          </div>
+          <div className="operator-kv-list" style={{ marginTop: 12 }}>
+            <div>
+              <span>Blockers</span>
+              <strong>{deploymentConfidenceBlockers}</strong>
+            </div>
+            <div>
+              <span>Fresh proof</span>
+              <strong>
+                {releaseFreshEvidenceCount}/{releaseVerificationSignals.length}
+              </strong>
+            </div>
+            <div>
+              <span>Install plans</span>
+              <strong>{deploymentPlans.length || '—'}</strong>
+            </div>
+          </div>
+        </div>
+
         <div className="card operator-lane-card">
           <div className="card-header">
             <div>
@@ -780,6 +1752,181 @@ export default function OperatorLaunchpad() {
                   <span>{row.name}</span>
                   <span>{row.detail}</span>
                 </div>
+              );
+            })}
+          </div>
+        </div>
+
+        <div className="card operator-lane-card" id="collector-onboarding-center">
+          <div className="card-header">
+            <div>
+              <div className="summary-label">Collector onboarding</div>
+              <h3 className="card-title">Telemetry lanes</h3>
+            </div>
+            <span className={`badge ${collectorOnboardingBadge.className}`}>
+              {collectorReadyCount}/{collectorOnboardingRows.length}
+            </span>
+          </div>
+          <div className="operator-health-list">
+            {collectorOnboardingRows.map((row) => {
+              const badge = signalBadge(row.status);
+              return (
+                <Link
+                  key={row.name}
+                  className="operator-health-row operator-health-link"
+                  to={row.href}
+                >
+                  <span className={`badge ${badge.className}`}>{badge.label}</span>
+                  <span>{row.name}</span>
+                  <span>{row.detail}</span>
+                </Link>
+              );
+            })}
+          </div>
+          <div className="operator-kv-list">
+            <div>
+              <span>Configured collectors</span>
+              <strong>{collectorItems.length}</strong>
+            </div>
+            <div>
+              <span>Healthy lanes</span>
+              <strong>{collectorReadyCount}</strong>
+            </div>
+          </div>
+        </div>
+
+        <div className="card operator-lane-card" id="fleet-health-drilldown">
+          <div className="card-header">
+            <div>
+              <div className="summary-label">Fleet health</div>
+              <h3 className="card-title">Agent drilldown</h3>
+            </div>
+            <span className={`badge ${fleetHealthBadge.className}`}>{fleetHealthBadge.label}</span>
+          </div>
+          <div className="operator-health-list">
+            {fleetDrilldownRows.map((row) => {
+              const badge = signalBadge(row.status);
+              return (
+                <div key={row.name} className="operator-health-row">
+                  <span className={`badge ${badge.className}`}>{badge.label}</span>
+                  <span>{row.name}</span>
+                  <span>{row.detail}</span>
+                </div>
+              );
+            })}
+          </div>
+          <div className="btn-group">
+            <Link className="btn btn-sm" to="/fleet?status=offline">
+              Offline agents
+            </Link>
+            <Link className="btn btn-sm" to="/fleet?fleetTab=updates&updatesPanel=health">
+              Deployment health
+            </Link>
+          </div>
+        </div>
+
+        <div className="card operator-lane-card" id="fleet-risk-heatmap">
+          <div className="card-header">
+            <div>
+              <div className="summary-label">Fleet risk</div>
+              <h3 className="card-title">Agent risk heatmap</h3>
+            </div>
+            <span className={`badge ${fleetRiskBadge.className}`}>{fleetRiskBadge.label}</span>
+          </div>
+          <div className="operator-risk-list">
+            {riskRows.map((row) => {
+              const badge = riskBadge(row.score);
+              return (
+                <Link key={row.name} className="operator-risk-row" to={row.href}>
+                  <span className={`badge ${badge.className}`}>{row.score}</span>
+                  <span>
+                    <strong>{row.name}</strong>
+                    <small>{row.detail}</small>
+                  </span>
+                  <span className="operator-risk-track" aria-hidden="true">
+                    <span style={{ width: `${Math.max(row.score, 4)}%` }} />
+                  </span>
+                </Link>
+              );
+            })}
+          </div>
+        </div>
+
+        <div className="card operator-lane-card" id="evidence-freshness">
+          <div className="card-header">
+            <div>
+              <div className="summary-label">Evidence freshness</div>
+              <h3 className="card-title">Proof freshness rollup</h3>
+            </div>
+            <span className={`badge ${evidenceFreshnessBadge.className}`}>
+              {evidenceFreshnessBadge.label}
+            </span>
+          </div>
+          <div className="operator-kv-list">
+            <div>
+              <span>Fresh proof</span>
+              <strong>
+                {freshEvidenceRows.length}/{allEvidenceRows.length || 0}
+              </strong>
+            </div>
+            <div>
+              <span>Stale proof</span>
+              <strong>{staleEvidenceRows.length}</strong>
+            </div>
+            <div>
+              <span>Snapshots</span>
+              <strong>{snapshotRows.length || '—'}</strong>
+            </div>
+          </div>
+          <div className="operator-kv-list" style={{ marginTop: 12 }}>
+            {(evidenceModeRows.length ? evidenceModeRows : [{ mode: 'pending', count: 0 }]).map(
+              (row) => (
+                <div key={row.mode}>
+                  <span>{row.mode}</span>
+                  <strong>{row.count}</strong>
+                </div>
+              ),
+            )}
+          </div>
+          <div className="operator-health-list">
+            {(staleEvidenceRows.length ? staleEvidenceRows : allEvidenceRows)
+              .slice(0, 4)
+              .map((row) => {
+                const proofBadge = evidenceBadge(row.evidenceSource);
+                return (
+                  <div key={`${row.name}-${row.detail}`} className="operator-health-row">
+                    <span className={`badge ${proofBadge.className}`}>{proofBadge.label}</span>
+                    <span>{row.name}</span>
+                    <span>{row.detail}</span>
+                  </div>
+                );
+              })}
+          </div>
+        </div>
+
+        <div className="card operator-lane-card" id="evidence-surface-coverage">
+          <div className="card-header">
+            <div>
+              <div className="summary-label">Evidence everywhere</div>
+              <h3 className="card-title">Freshness coverage</h3>
+            </div>
+            <span className={`badge ${evidenceFreshnessBadge.className}`}>
+              {freshEvidenceRows.length}/{allEvidenceRows.length || 0}
+            </span>
+          </div>
+          <div className="operator-health-list">
+            {evidenceCoverageRows.map((row) => {
+              const badge = signalBadge(row.status);
+              return (
+                <Link
+                  key={row.name}
+                  className="operator-health-row operator-health-link"
+                  to={row.href}
+                >
+                  <span className={`badge ${badge.className}`}>{badge.label}</span>
+                  <span>{row.name}</span>
+                  <span>{row.detail}</span>
+                </Link>
               );
             })}
           </div>
@@ -873,6 +2020,111 @@ export default function OperatorLaunchpad() {
           </div>
         </div>
 
+        <div className="card operator-lane-card" id="release-gate-automation">
+          <div className="card-header">
+            <div>
+              <div className="summary-label">Release gate automation</div>
+              <h3 className="card-title">Ship gate checklist</h3>
+            </div>
+            <span className={`badge ${releaseGateBadge.className}`}>{releaseGateBadge.label}</span>
+          </div>
+          <div className="operator-health-list">
+            {releaseGateRows.map((row) => {
+              const badge = signalBadge(row.status);
+              return (
+                <div key={row.name} className="operator-health-row">
+                  <span className={`badge ${badge.className}`}>{badge.label}</span>
+                  <span>{row.name}</span>
+                  <span>{row.detail}</span>
+                </div>
+              );
+            })}
+          </div>
+          <div className="btn-group">
+            <Link className="btn btn-sm" to="/launchpad#deployment-confidence">
+              Deployment matrix
+            </Link>
+            <Link className="btn btn-sm" to="/reports?tab=evidence">
+              Evidence export
+            </Link>
+          </div>
+        </div>
+
+        <div className="card operator-lane-card" id="release-acceptance-report">
+          <div className="card-header">
+            <div>
+              <div className="summary-label">Release acceptance</div>
+              <h3 className="card-title">Acceptance report</h3>
+            </div>
+            <button type="button" className="btn btn-sm" onClick={exportReleaseAcceptance}>
+              Export report
+            </button>
+          </div>
+          <div className="operator-kv-list">
+            <div>
+              <span>Version</span>
+              <strong>{currentVersion}</strong>
+            </div>
+            <div>
+              <span>Blockers</span>
+              <strong>{releaseAcceptanceBlockers}</strong>
+            </div>
+            <div>
+              <span>Proof rows</span>
+              <strong>{allEvidenceRows.length}</strong>
+            </div>
+          </div>
+          <div className="operator-health-list">
+            {releaseAcceptanceRows.slice(0, 6).map((row) => {
+              const badge = signalBadge(row.status);
+              return (
+                <div key={row.name} className="operator-health-row">
+                  <span className={`badge ${badge.className}`}>{badge.label}</span>
+                  <span>{row.name}</span>
+                  <span>{row.detail}</span>
+                </div>
+              );
+            })}
+          </div>
+          <span className={`badge ${releaseAcceptanceBadge.className}`}>
+            {releaseAcceptanceBadge.label}
+          </span>
+        </div>
+
+        <div className="card operator-lane-card" id="operator-task-queue">
+          <div className="card-header">
+            <div>
+              <div className="summary-label">Operator task queue</div>
+              <h3 className="card-title">Next actions</h3>
+            </div>
+            <span className={`badge ${taskQueueBadge.className}`}>
+              {activeTaskCount || 'Clear'}
+            </span>
+          </div>
+          {operatorTaskRows.length === 0 ? (
+            <div className="empty empty-compact">No generated operator tasks right now.</div>
+          ) : (
+            <div className="operator-step-list">
+              {operatorTaskRows.map((task) => {
+                const badge = signalBadge(task.status);
+                return (
+                  <Link
+                    key={`${task.title}-${task.detail}`}
+                    className="operator-step"
+                    to={task.href}
+                  >
+                    <span className={`badge ${badge.className}`}>{badge.label}</span>
+                    <span>
+                      <strong>{task.title}</strong>
+                      <span>{task.detail}</span>
+                    </span>
+                  </Link>
+                );
+              })}
+            </div>
+          )}
+        </div>
+
         <div className="card operator-lane-card">
           <div className="card-header">
             <div>
@@ -913,33 +2165,35 @@ export default function OperatorLaunchpad() {
           </div>
         </div>
 
-        <div className="card operator-lane-card">
+        <div className="card operator-lane-card" id="response-playbook-simulator">
+          <span id="response-simulator" aria-hidden="true" />
           <div className="card-header">
             <div>
-              <div className="summary-label">Action safety</div>
-              <h3 className="card-title">Approvals and dry-runs</h3>
+              <div className="summary-label">Response simulator</div>
+              <h3 className="card-title">Playbook blast-radius preview</h3>
             </div>
             <span className={`badge ${actionBadge.className}`}>{actionBadge.label}</span>
           </div>
-          <div className="operator-kv-list">
-            <div>
-              <span>Pending approval</span>
-              <strong>{pendingApprovals}</strong>
-            </div>
-            <div>
-              <span>Ready to execute</span>
-              <strong>
-                {countValue(data.approvalOverview || data.response, ['ready_to_execute'])}
-              </strong>
-            </div>
-            <div>
-              <span>Rollback mode</span>
-              <strong>{data.remediationSafety?.status || 'dry_run_only'}</strong>
-            </div>
+          <div className="operator-health-list">
+            {responsePlaybookRows.map((row) => {
+              const badge = signalBadge(row.status);
+              return (
+                <div key={row.name} className="operator-health-row">
+                  <span className={`badge ${badge.className}`}>{badge.label}</span>
+                  <span>{row.name}</span>
+                  <span>{row.detail}</span>
+                </div>
+              );
+            })}
           </div>
-          <Link className="btn btn-sm" to="/soc?focus=response">
-            Review response queue
-          </Link>
+          <div className="btn-group">
+            <Link className="btn btn-sm" to="/response-safety">
+              Open safety lab
+            </Link>
+            <Link className="btn btn-sm" to="/soc?focus=response">
+              Review queue
+            </Link>
+          </div>
         </div>
 
         <div className="card operator-lane-card">
@@ -1066,6 +2320,98 @@ export default function OperatorLaunchpad() {
           </div>
         </div>
 
+        <div className="card operator-lane-card" id="role-home-screen">
+          <div className="card-header">
+            <div>
+              <div className="summary-label">Role home</div>
+              <h3 className="card-title">{roleHome.title}</h3>
+            </div>
+            <span className="badge badge-info">{role}</span>
+          </div>
+          <div className="summary-meta">{roleHome.summary}</div>
+          <div className="operator-command-grid">
+            {roleHome.rows.map((label) => (
+              <Link key={label} to={roleHome.primaryHref} className="operator-command-tile">
+                <span>{label}</span>
+                <small>{groups.length ? groups.slice(0, 2).join(', ') : userId}</small>
+              </Link>
+            ))}
+          </div>
+          <div className="btn-group">
+            <Link className="btn btn-sm" to={roleHome.primaryHref}>
+              Primary view
+            </Link>
+            <Link className="btn btn-sm" to={roleHome.secondaryHref}>
+              Secondary view
+            </Link>
+          </div>
+        </div>
+
+        <div className="card operator-lane-card" id="safe-assistant">
+          <div className="card-header">
+            <div>
+              <div className="summary-label">Operator Assistant</div>
+              <h3 className="card-title">Safe assistant boundaries</h3>
+            </div>
+            <span
+              className={`badge ${assistantMode === 'retrieval-only' ? 'badge-info' : 'badge-warn'}`}
+            >
+              {assistantMode}
+            </span>
+          </div>
+          <div className="operator-health-list">
+            {assistantBoundaryRows.map((row) => {
+              const badge = signalBadge(row.status);
+              return (
+                <Link
+                  key={row.name}
+                  className="operator-health-row operator-health-link"
+                  to={row.href}
+                >
+                  <span className={`badge ${badge.className}`}>{badge.label}</span>
+                  <span>{row.name}</span>
+                  <span>{row.detail}</span>
+                </Link>
+              );
+            })}
+          </div>
+          <Link className="btn btn-sm" to="/assistant?source=launchpad-safe-boundary">
+            Open assistant
+          </Link>
+        </div>
+
+        <div className="card operator-lane-card" id="visual-regression-gate">
+          <div className="card-header">
+            <div>
+              <div className="summary-label">Visual regression</div>
+              <h3 className="card-title">Screenshot gate</h3>
+            </div>
+            <span className="badge badge-ok">Ready</span>
+          </div>
+          <div className="operator-health-list">
+            {visualGateRows.map((row) => {
+              const badge = signalBadge(row.status);
+              return (
+                <div key={row.name} className="operator-health-row">
+                  <span className={`badge ${badge.className}`}>{badge.label}</span>
+                  <span>{row.name}</span>
+                  <span>{row.detail}</span>
+                </div>
+              );
+            })}
+          </div>
+          <div className="operator-kv-list">
+            <div>
+              <span>Primary route</span>
+              <strong>Launchpad</strong>
+            </div>
+            <div>
+              <span>Artifact type</span>
+              <strong>Playwright screenshot</strong>
+            </div>
+          </div>
+        </div>
+
         <div className="card operator-lane-card">
           <div className="card-header">
             <div>
@@ -1139,6 +2485,20 @@ export default function OperatorLaunchpad() {
             {demoScenarios.map((scenario) => (
               <span key={scenario}>{String(scenario).replaceAll('_', ' ')}</span>
             ))}
+          </div>
+          <div className="operator-kv-list">
+            <div>
+              <span>Scenario count</span>
+              <strong>{demoScenarios.length}</strong>
+            </div>
+            <div>
+              <span>Sample alerts</span>
+              <strong>{demoSampleAlerts}</strong>
+            </div>
+            <div>
+              <span>Handoff route</span>
+              <strong>Reports evidence</strong>
+            </div>
           </div>
           <div className="summary-meta">
             {data.demoStatus?.status || 'available'} • {demoSampleAlerts} sample alerts

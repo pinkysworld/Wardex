@@ -491,6 +491,86 @@ function installThreatDetectionFetchMock(tracker = {}) {
         }),
       );
     }
+    if (pathname === '/api/detection/trust/overview') {
+      return Promise.resolve(
+        jsonOk({
+          summary: {
+            average_trust_score: 68,
+            noisy_rule_count: 1,
+            trusted_rule_count: 1,
+            stale_suppression_count: 1,
+            draft_count: 1,
+          },
+          noisy_rules: [
+            {
+              rule_id: 'rule-1',
+              title: 'Suspicious PowerShell',
+              trust_score: 54,
+              recommended_draft: 'scoped_suppression',
+              metrics: { active_suppressions: 1 },
+            },
+          ],
+          trusted_rules: [
+            {
+              rule_id: 'rule-2',
+              title: 'Credential Guard Signal',
+              trust_score: 92,
+            },
+          ],
+          stale_suppressions: [{ id: 'sup-1', rule_id: 'rule-1', name: 'Legacy PowerShell' }],
+          draft_queue: [
+            {
+              id: 'scoped_suppression-rule-1',
+              draft_type: 'scoped_suppression',
+              rule_id: 'rule-1',
+              rule_name: 'Suspicious PowerShell',
+              impact_preview: {
+                matched_historical_alerts: 4,
+                expected_alert_volume_change: -0.45,
+              },
+            },
+          ],
+          confidence_drivers: ['historical_feedback', 'suppression_pressure', 'replay_freshness'],
+        }),
+      );
+    }
+    if (pathname === '/api/detection/trust/tuning-drafts' && method === 'GET') {
+      return Promise.resolve(
+        jsonOk({
+          drafts: [
+            {
+              id: 'scoped_suppression-rule-1',
+              draft_type: 'scoped_suppression',
+              rule_id: 'rule-1',
+              rule_name: 'Suspicious PowerShell',
+              impact_preview: {
+                matched_historical_alerts: 4,
+                expected_alert_volume_change: -0.45,
+              },
+            },
+          ],
+        }),
+      );
+    }
+    if (
+      pathname === '/api/detection/trust/tuning-drafts/scoped_suppression-rule-1/preview' &&
+      method === 'POST'
+    ) {
+      tracker.trustPreviewCalls = (tracker.trustPreviewCalls || 0) + 1;
+      return Promise.resolve(
+        jsonOk({
+          draft: {
+            id: 'scoped_suppression-rule-1',
+            rule_name: 'Suspicious PowerShell',
+            impact_preview: {
+              matched_historical_alerts: 4,
+              expected_alert_volume_change: -0.45,
+            },
+          },
+          auto_apply: false,
+        }),
+      );
+    }
     if (pathname === '/api/stream/readiness') {
       return Promise.resolve(jsonOk({ status: 'ready', score: 94, promotion_guard: 'clear' }));
     }
@@ -641,6 +721,24 @@ describe('ThreatDetection', () => {
     expect(screen.getByText('PROMOTE')).toBeInTheDocument();
     expect(screen.getByText('Collector readiness')).toBeInTheDocument();
     expect(screen.getByText(/blocked rules across 2 collector lanes/i)).toBeInTheDocument();
+  });
+
+  it('surfaces Detection Trust scoring and previews draft-only tuning impact', async () => {
+    const tracker = {};
+    installThreatDetectionFetchMock(tracker);
+    renderWithProviders('/detection?panel=quality&rule=rule-1');
+
+    expect(await screen.findByText('Detection Trust')).toBeInTheDocument();
+    expect(screen.getByText('Noisy Rules')).toBeInTheDocument();
+    expect(screen.getByText('Draft Queue')).toBeInTheDocument();
+    expect(screen.getByText(/operator-approved only/i)).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: /Preview impact/i }));
+    await waitFor(() => {
+      expect(tracker.trustPreviewCalls).toBe(1);
+      expect(screen.getByText('Impact preview')).toBeInTheDocument();
+    });
+    expect(screen.getByText(/Auto-apply is disabled/i)).toBeInTheDocument();
   });
 
   it('surfaces detection ownership review planning and routes review actions back into the rule workspace', async () => {

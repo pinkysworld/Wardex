@@ -38,6 +38,11 @@ const INSTALL_ARTIFACTS = {
 
 const UPDATE_PANELS = [
   {
+    id: 'install',
+    label: 'Connect Agent',
+    description: 'Generate a one-use enrollment bundle or run a remote install from the console.',
+  },
+  {
     id: 'rollout',
     label: 'Rollout History',
     description: 'Reopen recent deployment history, rollout notes, and policy-change context.',
@@ -1508,7 +1513,7 @@ export default function FleetAgents() {
           </div>
 
           <div className="card-grid" style={{ marginBottom: 16 }}>
-            <div className="card">
+            <div className="card" id="connect-agent-drawer">
               <div className="card-title" style={{ marginBottom: 12 }}>
                 Enroll New Host
               </div>

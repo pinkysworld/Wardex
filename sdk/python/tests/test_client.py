@@ -162,12 +162,30 @@ def test_product_hardening_methods(monkeypatch):
         ("GET", f"{BASE}/api/ws/health"): DummyResponse(url=f"{BASE}/api/ws/health", json_data={"status": "healthy"}, headers={"content-type": "application/json"}),
         ("GET", f"{BASE}/api/stream/readiness"): DummyResponse(url=f"{BASE}/api/stream/readiness", json_data={"status": "ready"}, headers={"content-type": "application/json"}),
         ("GET", f"{BASE}/api/stream/reliability-lab"): DummyResponse(url=f"{BASE}/api/stream/reliability-lab", json_data={"status": "pass"}, headers={"content-type": "application/json"}),
+        ("GET", f"{BASE}/api/operator/workspaces"): DummyResponse(url=f"{BASE}/api/operator/workspaces", json_data={"groups": []}, headers={"content-type": "application/json"}),
+        ("POST", f"{BASE}/api/alerts/feedback"): DummyResponse(url=f"{BASE}/api/alerts/feedback", json_data={"status": "recorded"}, headers={"content-type": "application/json"}),
+        ("GET", f"{BASE}/api/alerts/feedback/summary"): DummyResponse(url=f"{BASE}/api/alerts/feedback/summary", json_data={"summary": {}}, headers={"content-type": "application/json"}),
+        ("GET", f"{BASE}/api/alerts/evidence-chain", (("alert_id", "7"),)): DummyResponse(url=f"{BASE}/api/alerts/evidence-chain", json_data={"alert_id": "7"}, headers={"content-type": "application/json"}),
+        ("GET", f"{BASE}/api/detection-lab/status"): DummyResponse(url=f"{BASE}/api/detection-lab/status", json_data={"status": "ready"}, headers={"content-type": "application/json"}),
+        ("POST", f"{BASE}/api/detection-lab/runs"): DummyResponse(url=f"{BASE}/api/detection-lab/runs", json_data={"status": "completed"}, headers={"content-type": "application/json"}),
+        ("GET", f"{BASE}/api/detection-lab/history"): DummyResponse(url=f"{BASE}/api/detection-lab/history", json_data={"history": []}, headers={"content-type": "application/json"}),
+        ("GET", f"{BASE}/api/detection-lab/report"): DummyResponse(url=f"{BASE}/api/detection-lab/report", json_data={"report": {}}, headers={"content-type": "application/json"}),
+        ("GET", f"{BASE}/api/response/safety"): DummyResponse(url=f"{BASE}/api/response/safety", json_data={"status": "ready"}, headers={"content-type": "application/json"}),
+        ("POST", f"{BASE}/api/response/preview"): DummyResponse(url=f"{BASE}/api/response/preview", json_data={"status": "preview_ready"}, headers={"content-type": "application/json"}),
+        ("POST", f"{BASE}/api/response/verify"): DummyResponse(url=f"{BASE}/api/response/verify", json_data={"verified": True}, headers={"content-type": "application/json"}),
+        ("GET", f"{BASE}/api/integrations/marketplace"): DummyResponse(url=f"{BASE}/api/integrations/marketplace", json_data={"connectors": []}, headers={"content-type": "application/json"}),
+        ("POST", f"{BASE}/api/integrations/validate"): DummyResponse(url=f"{BASE}/api/integrations/validate", json_data={"valid": True}, headers={"content-type": "application/json"}),
+        ("GET", f"{BASE}/api/integrations/sample-event", (("provider", "generic_syslog"),)): DummyResponse(url=f"{BASE}/api/integrations/sample-event", json_data={"provider": "generic_syslog"}, headers={"content-type": "application/json"}),
+        ("GET", f"{BASE}/api/operations/health"): DummyResponse(url=f"{BASE}/api/operations/health", json_data={"slo_cards": []}, headers={"content-type": "application/json"}),
+        ("GET", f"{BASE}/api/operations/health/snapshot"): DummyResponse(url=f"{BASE}/api/operations/health/snapshot", json_data={"snapshot": {}}, headers={"content-type": "application/json"}),
+        ("GET", f"{BASE}/api/malware/explain"): DummyResponse(url=f"{BASE}/api/malware/explain", json_data={"summary": {}}, headers={"content-type": "application/json"}),
+        ("GET", f"{BASE}/api/malware/scan-diff"): DummyResponse(url=f"{BASE}/api/malware/scan-diff", json_data={"comparison": {}}, headers={"content-type": "application/json"}),
         ("GET", f"{BASE}/api/sdk/contract-status"): DummyResponse(url=f"{BASE}/api/sdk/contract-status", json_data={"status": "tracked"}, headers={"content-type": "application/json"}),
         ("GET", f"{BASE}/api/operational/snapshots", (("kind", "stream_readiness"), ("limit", "3"))): DummyResponse(url=f"{BASE}/api/operational/snapshots", json_data={"snapshots": []}, headers={"content-type": "application/json"}),
         ("GET", f"{BASE}/api/operational/snapshots/verify", (("digest", "abc"),)): DummyResponse(url=f"{BASE}/api/operational/snapshots/verify", json_data={"verified": True}, headers={"content-type": "application/json"}),
         ("GET", f"{BASE}/api/release/doctor"): DummyResponse(url=f"{BASE}/api/release/doctor", json_data={"status": "ready"}, headers={"content-type": "application/json"}),
         ("GET", f"{BASE}/api/release/provenance"): DummyResponse(url=f"{BASE}/api/release/provenance", json_data={"status": "ready"}, headers={"content-type": "application/json"}),
-        ("GET", f"{BASE}/api/release/upgrade-rehearsal", (("target_version", "1.0.11"),)): DummyResponse(url=f"{BASE}/api/release/upgrade-rehearsal", json_data={"status": "ready"}, headers={"content-type": "application/json"}),
+        ("GET", f"{BASE}/api/release/upgrade-rehearsal", (("target_version", "1.0.13"),)): DummyResponse(url=f"{BASE}/api/release/upgrade-rehearsal", json_data={"status": "ready"}, headers={"content-type": "application/json"}),
         ("GET", f"{BASE}/api/release/clean-cut"): DummyResponse(url=f"{BASE}/api/release/clean-cut", json_data={"status": "ready"}, headers={"content-type": "application/json"}),
         ("GET", f"{BASE}/api/containers/release-parity"): DummyResponse(url=f"{BASE}/api/containers/release-parity", json_data={"status": "ready"}, headers={"content-type": "application/json"}),
         ("GET", f"{BASE}/api/release/verification-center"): DummyResponse(url=f"{BASE}/api/release/verification-center", json_data={"status": "ready"}, headers={"content-type": "application/json"}),
@@ -186,6 +204,13 @@ def test_product_hardening_methods(monkeypatch):
         ("GET", f"{BASE}/api/alerts/histogram", (("bucket", "1h"), ("severity", "high"), ("window", "24h"))): DummyResponse(url=f"{BASE}/api/alerts/histogram", json_data={"total": 1}, headers={"content-type": "application/json"}),
         ("GET", f"{BASE}/api/detection/recommendations", (("limit", "3"),)): DummyResponse(url=f"{BASE}/api/detection/recommendations", json_data={"recommendations": []}, headers={"content-type": "application/json"}),
         ("GET", f"{BASE}/api/detection/readiness", (("limit", "5"),)): DummyResponse(url=f"{BASE}/api/detection/readiness", json_data={"rules": []}, headers={"content-type": "application/json"}),
+        ("GET", f"{BASE}/api/detection/trust/overview"): DummyResponse(url=f"{BASE}/api/detection/trust/overview", json_data={"draft_only_tuning": True}, headers={"content-type": "application/json"}),
+        ("GET", f"{BASE}/api/detection/trust/rules"): DummyResponse(url=f"{BASE}/api/detection/trust/rules", json_data={"rules": []}, headers={"content-type": "application/json"}),
+        ("GET", f"{BASE}/api/detection/trust/rules/rule-1"): DummyResponse(url=f"{BASE}/api/detection/trust/rules/rule-1", json_data={"found": True}, headers={"content-type": "application/json"}),
+        ("GET", f"{BASE}/api/detection/trust/tuning-drafts"): DummyResponse(url=f"{BASE}/api/detection/trust/tuning-drafts", json_data={"drafts": []}, headers={"content-type": "application/json"}),
+        ("POST", f"{BASE}/api/detection/trust/tuning-drafts"): DummyResponse(url=f"{BASE}/api/detection/trust/tuning-drafts", json_data={"created": True}, headers={"content-type": "application/json"}),
+        ("POST", f"{BASE}/api/detection/trust/tuning-drafts/draft-1/preview"): DummyResponse(url=f"{BASE}/api/detection/trust/tuning-drafts/draft-1/preview", json_data={"auto_apply": False}, headers={"content-type": "application/json"}),
+        ("POST", f"{BASE}/api/detection/trust/tuning-drafts/draft-1/approve"): DummyResponse(url=f"{BASE}/api/detection/trust/tuning-drafts/draft-1/approve", json_data={"applied": False}, headers={"content-type": "application/json"}),
         ("GET", f"{BASE}/api/response/approval-overview"): DummyResponse(url=f"{BASE}/api/response/approval-overview", json_data={"pending_count": 0}, headers={"content-type": "application/json"}),
         ("GET", f"{BASE}/api/remediation/safety"): DummyResponse(url=f"{BASE}/api/remediation/safety", json_data={"status": "ready"}, headers={"content-type": "application/json"}),
         ("POST", f"{BASE}/api/subscriptions"): DummyResponse(url=f"{BASE}/api/subscriptions", json_data={"subscription": {"subscription_id": "sub-1"}}, headers={"content-type": "application/json"}),
@@ -197,12 +222,30 @@ def test_product_hardening_methods(monkeypatch):
     assert client.ws_health()["status"] == "healthy"
     assert client.stream_readiness()["status"] == "ready"
     assert client.stream_reliability_lab()["status"] == "pass"
+    assert client.operator_workspaces()["groups"] == []
+    assert client.alert_feedback({"state": "valid"})["status"] == "recorded"
+    assert client.alert_feedback_summary()["summary"] == {}
+    assert client.alert_evidence_chain(alert_id=7)["alert_id"] == "7"
+    assert client.detection_lab_status()["status"] == "ready"
+    assert client.detection_lab_run({"mode": "replay"})["status"] == "completed"
+    assert client.detection_lab_history()["history"] == []
+    assert client.detection_lab_report()["report"] == {}
+    assert client.response_safety()["status"] == "ready"
+    assert client.response_preview({"action": "block_ip"})["status"] == "preview_ready"
+    assert client.response_verify({"action": "block_ip"})["verified"] is True
+    assert client.integrations_marketplace()["connectors"] == []
+    assert client.validate_integration({"provider": "generic_syslog"})["valid"] is True
+    assert client.integration_sample_event("generic_syslog")["provider"] == "generic_syslog"
+    assert client.operations_health()["slo_cards"] == []
+    assert client.operations_health_snapshot()["snapshot"] == {}
+    assert client.malware_explain()["summary"] == {}
+    assert client.malware_scan_diff()["comparison"] == {}
     assert client.sdk_contract_status()["status"] == "tracked"
     assert client.operational_snapshots(kind="stream_readiness", limit=3)["snapshots"] == []
     assert client.verify_operational_snapshot(digest="abc")["verified"] is True
     assert client.release_doctor()["status"] == "ready"
     assert client.release_provenance()["status"] == "ready"
-    assert client.release_upgrade_rehearsal(target_version="1.0.11")["status"] == "ready"
+    assert client.release_upgrade_rehearsal(target_version="1.0.13")["status"] == "ready"
     assert client.clean_release_cut()["status"] == "ready"
     assert client.container_release_parity()["status"] == "ready"
     assert client.release_verification_center()["status"] == "ready"
@@ -221,6 +264,13 @@ def test_product_hardening_methods(monkeypatch):
     assert client.alert_histogram(window="24h", bucket="1h", severity="high")["total"] == 1
     assert client.detection_recommendations(limit=3)["recommendations"] == []
     assert client.detection_readiness(limit=5)["rules"] == []
+    assert client.detection_trust_overview()["draft_only_tuning"] is True
+    assert client.detection_trust_rules()["rules"] == []
+    assert client.detection_trust_rule("rule-1")["found"] is True
+    assert client.detection_trust_tuning_drafts()["drafts"] == []
+    assert client.create_detection_trust_tuning_draft({"rule_id": "rule-1"})["created"] is True
+    assert client.preview_detection_trust_tuning_draft("draft-1")["auto_apply"] is False
+    assert client.approve_detection_trust_tuning_draft("draft-1")["applied"] is False
     assert client.response_approval_overview()["pending_count"] == 0
     assert client.remediation_safety()["status"] == "ready"
     assert client.create_subscription()["subscription"]["subscription_id"] == "sub-1"

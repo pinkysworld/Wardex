@@ -852,6 +852,10 @@ pub fn wardex_openapi_spec(version: &str) -> OpenApiSpec {
         .tag("incidents", "Incident and case management")
         .tag("fleet", "Fleet enrollment, agents, and inventory")
         .tag("response", "Response orchestration and approvals")
+        .tag(
+            "operator-trust",
+            "Operator trust, usability, evidence clarity, and safety workspaces",
+        )
         .tag("policy", "Policy publishing and version history")
         .tag(
             "threat-intel",
@@ -1399,6 +1403,173 @@ pub fn wardex_openapi_spec(version: &str) -> OpenApiSpec {
                 "Realtime stream reliability scenarios and cursor recovery checks",
                 &["observability"],
                 schema_ref("StreamReliabilityLabResponse"),
+            ),
+        )
+        .path(
+            "/api/operator/workspaces",
+            "get",
+            op(
+                "getOperatorWorkspaces",
+                "Grouped operator navigation, role workspaces, and trust workspace snapshots",
+                &["operator-trust"],
+            ),
+        )
+        .path(
+            "/api/alerts/feedback",
+            "post",
+            op_post(
+                "submitAlertFeedback",
+                "Submit additive alert outcome feedback without automatic tuning",
+                &["alerts", "operator-trust"],
+                "Alert feedback payload",
+            ),
+        )
+        .path(
+            "/api/alerts/feedback/summary",
+            "get",
+            op(
+                "getAlertFeedbackSummary",
+                "Alert feedback rollup and tuning suggestions",
+                &["alerts", "operator-trust"],
+            ),
+        )
+        .path(
+            "/api/alerts/evidence-chain",
+            "get",
+            op(
+                "getAlertEvidenceChain",
+                "Source-aware evidence chain, freshness badges, and why-this-fired explanation",
+                &["alerts", "operator-trust"],
+            ),
+        )
+        .path(
+            "/api/detection-lab/runs",
+            "post",
+            op_post(
+                "createDetectionLabRun",
+                "Run a safe detection validation lab workflow",
+                &["detection", "operator-trust"],
+                "Detection lab run request",
+            ),
+        )
+        .path(
+            "/api/detection-lab/status",
+            "get",
+            op(
+                "getDetectionLabStatus",
+                "Detection validation modes, expected-vs-observed summary, and recommendations",
+                &["detection", "operator-trust"],
+            ),
+        )
+        .path(
+            "/api/detection-lab/history",
+            "get",
+            op(
+                "getDetectionLabHistory",
+                "Detection validation history and report attachment metadata",
+                &["detection", "operator-trust"],
+            ),
+        )
+        .path(
+            "/api/detection-lab/report",
+            "get",
+            op(
+                "getDetectionLabReport",
+                "Detection validation report export payload",
+                &["detection", "operator-trust"],
+            ),
+        )
+        .path(
+            "/api/response/safety",
+            "get",
+            op(
+                "getResponseSafety",
+                "Response safety center with approvals, dry-run previews, rollback, and verification",
+                &["response", "operator-trust"],
+            ),
+        )
+        .path(
+            "/api/response/preview",
+            "post",
+            op_post(
+                "previewResponseAction",
+                "Preview response action blast radius, approvals, rollback, and platform command mapping",
+                &["response", "operator-trust"],
+                "Response action preview request",
+            ),
+        )
+        .path(
+            "/api/response/verify",
+            "post",
+            op_post(
+                "verifyResponseAction",
+                "Record response action verification checklist status",
+                &["response", "operator-trust"],
+                "Response action verification request",
+            ),
+        )
+        .path(
+            "/api/integrations/marketplace",
+            "get",
+            op(
+                "getIntegrationMarketplace",
+                "Connector marketplace summaries, health, sample event previews, and impact mapping",
+                &["config", "operator-trust"],
+            ),
+        )
+        .path(
+            "/api/integrations/validate",
+            "post",
+            op_post(
+                "validateIntegration",
+                "Validate connector setup and return sample-event guidance",
+                &["config", "operator-trust"],
+                "Connector validation request",
+            ),
+        )
+        .path(
+            "/api/integrations/sample-event",
+            "get",
+            op(
+                "getIntegrationSampleEvent",
+                "Preview a normalized sample event for a connector provider",
+                &["config", "operator-trust"],
+            ),
+        )
+        .path(
+            "/api/operations/health",
+            "get",
+            op(
+                "getOperationsHealth",
+                "Deployment health cards across ingestion, queues, scans, API, storage, fleet, and release posture",
+                &["observability", "operator-trust"],
+            ),
+        )
+        .path(
+            "/api/operations/health/snapshot",
+            "get",
+            op(
+                "exportOperationsHealthSnapshot",
+                "Persist and export operations health for support and release readiness",
+                &["observability", "operator-trust"],
+            ),
+        )
+        .path(
+            "/api/malware/explain",
+            "get",
+            op(
+                "getMalwareExplanation",
+                "Malware verdict explanation contract, signature source presets, and scan transparency",
+                &["operator-trust"],
+            ),
+        )
+        .path(
+            "/api/malware/scan-diff",
+            "get",
+            op(
+                "getMalwareScanDiff",
+                "Compare repeated malware scans for verdict, confidence, matches, and rootkit deltas",
+                &["operator-trust"],
             ),
         )
         .path(
@@ -3312,6 +3483,72 @@ pub fn wardex_openapi_spec(version: &str) -> OpenApiSpec {
                 "getDetectionTrustScore",
                 "Detection content trust score based on replay, suppression, and pack ownership evidence",
                 &["detection"],
+            ),
+        )
+        .path(
+            "/api/detection/trust/overview",
+            "get",
+            op(
+                "getDetectionTrustOverview",
+                "Detection Trust overview with noisy rules, trusted rules, stale suppressions, confidence drivers, and draft-only tuning queue",
+                &["detection"],
+            ),
+        )
+        .path(
+            "/api/detection/trust/rules",
+            "get",
+            op(
+                "getDetectionTrustRules",
+                "Per-rule Detection Trust scores with feedback rollups, suppression pressure, replay freshness, source quality, enrichment, ATT&CK coverage, and volume trend",
+                &["detection"],
+            ),
+        )
+        .path(
+            "/api/detection/trust/rules/{id}",
+            "get",
+            op(
+                "getDetectionTrustRule",
+                "Detection Trust detail for one rule including analyst feedback history and any draft-only tuning suggestion",
+                &["detection"],
+            ),
+        )
+        .path(
+            "/api/detection/trust/tuning-drafts",
+            "get",
+            op(
+                "getDetectionTrustTuningDrafts",
+                "Draft-only tuning suggestions generated from analyst outcomes, suppressions, replay, and rule lifecycle evidence",
+                &["detection"],
+            ),
+        )
+        .path(
+            "/api/detection/trust/tuning-drafts",
+            "post",
+            op_post(
+                "createDetectionTrustTuningDraft",
+                "Create an operator-reviewed Detection Trust tuning draft without changing production detections",
+                &["detection"],
+                "Detection Trust tuning draft request",
+            ),
+        )
+        .path(
+            "/api/detection/trust/tuning-drafts/{id}/preview",
+            "post",
+            op_post_optional(
+                "previewDetectionTrustTuningDraft",
+                "Preview Detection Trust draft impact before any operator-applied change",
+                &["detection"],
+                "Detection Trust draft preview request",
+            ),
+        )
+        .path(
+            "/api/detection/trust/tuning-drafts/{id}/approve",
+            "post",
+            op_post_optional(
+                "approveDetectionTrustTuningDraft",
+                "Approve Detection Trust draft intent while keeping production tuning manual and audit-visible",
+                &["detection"],
+                "Detection Trust draft approval request",
             ),
         )
         .path(

@@ -93,15 +93,73 @@ describe('Workflow pivots', () => {
       expect.arrayContaining([
         expect.objectContaining({
           title: 'Malware Scan Presets',
-          path: '/infrastructure?tab=integrity&malwarePanel=summary&scanPreset=open-source-av-baseline',
+          path: '/malware?scanPreset=open-source-av-baseline',
         }),
         expect.objectContaining({
           title: 'Rootkit Sweep',
-          path: '/infrastructure?tab=integrity&malwarePanel=actions&scanPreset=rootkit-persistence-sweep',
+          path: '/malware?scanPreset=rootkit-persistence-sweep',
         }),
         expect.objectContaining({
           title: 'Trojan Loader Hunt',
-          path: '/infrastructure?tab=integrity&malwarePanel=provenance&scanPreset=trojan-loader-hunt',
+          path: '/malware?scanPreset=trojan-loader-hunt',
+        }),
+      ]),
+    );
+  });
+
+  it('exposes second-tranche operator workflow pivots through global commands', () => {
+    expect(SEARCH_COMMANDS).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          title: 'Connect Agent Drawer',
+          path: '/fleet?fleetTab=updates&updatesPanel=install#connect-agent-drawer',
+        }),
+        expect.objectContaining({
+          title: 'Guided Incident Path',
+          path: '/launchpad#guided-incident-path',
+        }),
+        expect.objectContaining({
+          title: 'Morning Brief',
+          path: '/launchpad#morning-brief',
+        }),
+        expect.objectContaining({
+          title: 'Release Gate Automation',
+          path: '/launchpad#release-gate-automation',
+        }),
+      ]),
+    );
+  });
+
+  it('exposes continuity and visual gate pivots through global commands', () => {
+    expect(SEARCH_COMMANDS).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          title: 'Shift Handoff Workspace',
+          path: '/launchpad#shift-handoff-workspace',
+        }),
+        expect.objectContaining({
+          title: 'Incident Timeline Builder',
+          path: '/launchpad#incident-timeline-builder',
+        }),
+        expect.objectContaining({
+          title: 'Collector Onboarding Center',
+          path: '/launchpad#collector-onboarding-center',
+        }),
+        expect.objectContaining({
+          title: 'Fleet Risk Heatmap',
+          path: '/launchpad#fleet-risk-heatmap',
+        }),
+        expect.objectContaining({
+          title: 'Release Acceptance Report',
+          path: '/launchpad#release-acceptance-report',
+        }),
+        expect.objectContaining({
+          title: 'Visual Regression Gate',
+          path: '/launchpad#visual-regression-gate',
+        }),
+        expect.objectContaining({
+          title: 'Safe Assistant',
+          path: '/launchpad#safe-assistant',
         }),
       ]),
     );

@@ -908,6 +908,8 @@ export default function ThreatDetection() {
   const { data: replayCorpus } = useApi(api.detectionReplayCorpus);
   const { data: efficacySummary } = useApi(api.efficacySummary);
   const { data: fpStats } = useApi(api.fpFeedbackStats);
+  const { data: detectionTrustOverview } = useApi(api.detectionTrustOverview);
+  const { data: detectionTrustDraftsData } = useApi(api.detectionTrustTuningDrafts);
   const { data: workbenchOverview, reload: reloadWorkbenchOverview } = useApi(
     api.workbenchOverview,
   );
@@ -990,6 +992,8 @@ export default function ThreatDetection() {
   const [runningSavedHuntId, setRunningSavedHuntId] = useState(null);
   const [escalatingRunId, setEscalatingRunId] = useState(null);
   const [promotingHuntResult, setPromotingHuntResult] = useState(false);
+  const [trustPreview, setTrustPreview] = useState(null);
+  const [previewingDraftId, setPreviewingDraftId] = useState(null);
   const [drawerSessionId, setDrawerSessionId] = useState(0);
   const [drawerBaseline, setDrawerBaseline] = useState(null);
   const [investigationSuggestions, setInvestigationSuggestions] = useState([]);
@@ -1022,6 +1026,21 @@ export default function ThreatDetection() {
     if (suppression.rule_id) acc[suppression.rule_id] = (acc[suppression.rule_id] || 0) + 1;
     return acc;
   }, {});
+  const trustSummary = detectionTrustOverview?.summary || {};
+  const trustNoisyRules = Array.isArray(detectionTrustOverview?.noisy_rules)
+    ? detectionTrustOverview.noisy_rules
+    : [];
+  const trustTrustedRules = Array.isArray(detectionTrustOverview?.trusted_rules)
+    ? detectionTrustOverview.trusted_rules
+    : [];
+  const trustStaleSuppressions = Array.isArray(detectionTrustOverview?.stale_suppressions)
+    ? detectionTrustOverview.stale_suppressions
+    : [];
+  const trustDraftQueue = Array.isArray(detectionTrustDraftsData?.drafts)
+    ? detectionTrustDraftsData.drafts
+    : Array.isArray(detectionTrustOverview?.draft_queue)
+      ? detectionTrustOverview.draft_queue
+      : [];
 
   const queue = searchParams.get('queue') || 'noisy';
   const query = searchParams.get('q') || '';
@@ -2264,6 +2283,19 @@ export default function ThreatDetection() {
     focusRule(rule.id, 'summary');
     toast('Opened rule summary for quality review.', 'info');
   };
+  const previewTrustDraft = async (draft) => {
+    if (!draft?.id) return;
+    setPreviewingDraftId(draft.id);
+    try {
+      const preview = await api.previewDetectionTrustTuningDraft(draft.id);
+      setTrustPreview(preview);
+      toast('Detection Trust impact preview loaded.', 'success');
+    } catch {
+      toast('Unable to preview tuning draft.', 'error');
+    } finally {
+      setPreviewingDraftId(null);
+    }
+  };
   const workflowItems = [
     {
       id: 'soc-investigations',
@@ -2409,6 +2441,131 @@ export default function ThreatDetection() {
             <div className="summary-value">{averageDetectionQuality || '—'}</div>
             <div className="summary-meta">{qualityWatchlist.length} rule quality watchlist</div>
           </div>
+        </div>
+        <div className="card" style={{ marginTop: 16 }}>
+          <div className="card-header">
+            <div>
+              <div className="card-title">Detection Trust</div>
+              <div className="hint">
+                Draft-only tuning from analyst feedback, replay freshness, suppressions, source
+                quality, enrichment, ATT&CK coverage, and alert-volume trend.
+              </div>
+            </div>
+            <span className={`badge ${detectionQualityTone(trustSummary.average_trust_score)}`}>
+              Trust {trustSummary.average_trust_score ?? '—'}
+            </span>
+          </div>
+          <div className="summary-grid" style={{ marginTop: 12 }}>
+            <div className="summary-card">
+              <div className="summary-label">Noisy Rules</div>
+              <div className="summary-value">{trustSummary.noisy_rule_count ?? 0}</div>
+              <div className="summary-meta">rule trust rows need review</div>
+            </div>
+            <div className="summary-card">
+              <div className="summary-label">Trusted Rules</div>
+              <div className="summary-value">{trustSummary.trusted_rule_count ?? 0}</div>
+              <div className="summary-meta">rules with strong confidence drivers</div>
+            </div>
+            <div className="summary-card">
+              <div className="summary-label">Stale Suppressions</div>
+              <div className="summary-value">{trustStaleSuppressions.length}</div>
+              <div className="summary-meta">unbounded or expired candidates</div>
+            </div>
+            <div className="summary-card">
+              <div className="summary-label">Draft Queue</div>
+              <div className="summary-value">{trustDraftQueue.length}</div>
+              <div className="summary-meta">operator-approved only, never auto-applied</div>
+            </div>
+          </div>
+          <div className="split-grid" style={{ marginTop: 16 }}>
+            <div>
+              <div className="row-primary" style={{ marginBottom: 8 }}>
+                Noisy rule focus
+              </div>
+              <div className="stack-list">
+                {trustNoisyRules.slice(0, 4).map((rule) => (
+                  <button
+                    key={`trust-noisy-${rule.rule_id}`}
+                    type="button"
+                    className="list-button"
+                    onClick={() => focusRule(rule.rule_id, 'efficacy')}
+                  >
+                    <span>
+                      <span className="row-primary">{rule.title || rule.rule_id}</span>
+                      <span className="row-secondary">
+                        {formatHumanLabel(rule.recommended_draft, 'Review')} •{' '}
+                        {rule.metrics?.active_suppressions || 0} suppression(s)
+                      </span>
+                    </span>
+                    <span className={`badge ${detectionQualityTone(rule.trust_score)}`}>
+                      {rule.trust_score}
+                    </span>
+                  </button>
+                ))}
+                {trustNoisyRules.length === 0 && (
+                  <div className="empty-inline">No noisy rule trust rows are currently queued.</div>
+                )}
+              </div>
+            </div>
+            <div>
+              <div className="row-primary" style={{ marginBottom: 8 }}>
+                Draft-only tuning queue
+              </div>
+              <div className="stack-list">
+                {trustDraftQueue.slice(0, 4).map((draft) => (
+                  <div key={`trust-draft-${draft.id}`} className="list-row">
+                    <div>
+                      <div className="row-primary">{draft.rule_name || draft.rule_id}</div>
+                      <div className="row-secondary">
+                        {formatHumanLabel(draft.draft_type, 'Draft')} • expected volume{' '}
+                        {formatDeltaRatio(draft.impact_preview?.expected_alert_volume_change)}
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      className="btn btn-sm"
+                      disabled={previewingDraftId === draft.id}
+                      onClick={() => previewTrustDraft(draft)}
+                    >
+                      {previewingDraftId === draft.id ? 'Previewing' : 'Preview impact'}
+                    </button>
+                  </div>
+                ))}
+                {trustDraftQueue.length === 0 && (
+                  <div className="empty-inline">
+                    No draft tuning suggestions are waiting for review.
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+          <div className="chip-row" style={{ marginTop: 14 }}>
+            {(detectionTrustOverview?.confidence_drivers || []).slice(0, 8).map((driver) => (
+              <span key={driver} className="badge badge-info">
+                {formatHumanLabel(driver)}
+              </span>
+            ))}
+          </div>
+          {trustTrustedRules.length > 0 && (
+            <div className="hint" style={{ marginTop: 10 }}>
+              Most trusted rule: {trustTrustedRules[0].title || trustTrustedRules[0].rule_id} at{' '}
+              {trustTrustedRules[0].trust_score} trust.
+            </div>
+          )}
+          {trustPreview && (
+            <div className="detail-callout" style={{ marginTop: 12 }}>
+              <strong>Impact preview</strong>
+              <div style={{ marginTop: 6 }}>
+                {trustPreview.draft?.rule_name ||
+                  trustPreview.draft?.rule_id ||
+                  trustPreview.draft?.id}{' '}
+                would affect {trustPreview.draft?.impact_preview?.matched_historical_alerts ?? 0}{' '}
+                historical alert(s) with{' '}
+                {formatDeltaRatio(trustPreview.draft?.impact_preview?.expected_alert_volume_change)}{' '}
+                expected volume change. Auto-apply is disabled.
+              </div>
+            </div>
+          )}
         </div>
         <div style={{ marginTop: 16 }}>
           <div className="row-primary" style={{ marginBottom: 8 }}>

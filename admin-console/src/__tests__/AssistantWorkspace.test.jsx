@@ -85,6 +85,18 @@ describe('AssistantWorkspace', () => {
           conversation_id: 'local-42',
           mode: 'retrieval-only',
           warnings: ['LLM assistant is not configured; using retrieval-only synthesis'],
+          quality_gates: [
+            {
+              id: 'citation_required',
+              status: 'pass',
+              detail: '1 cited source(s) attached',
+            },
+            {
+              id: 'execution_boundary',
+              status: 'pass',
+              detail: 'retrieval-only mode cannot execute response actions',
+            },
+          ],
           case_context: {
             case: {
               id: 42,
@@ -147,6 +159,8 @@ describe('AssistantWorkspace', () => {
       0,
     );
     expect(await screen.findByText('Context & citations')).toBeInTheDocument();
+    expect(await screen.findByText('Answer quality gates')).toBeInTheDocument();
+    expect(screen.getByText('citation required')).toBeInTheDocument();
     expect(
       (await screen.findAllByText('Credential dumping observed on db-01')).length,
     ).toBeGreaterThan(0);

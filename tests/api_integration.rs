@@ -6025,7 +6025,7 @@ fn workbench_overview_surfaces_queue_cases_incidents_and_ready_actions() {
         .unwrap()
         .iter()
         .find(|item| {
-            item["latest_feedback_verdict"].as_str() == Some("true_positive")
+            item["latest_feedback_verdict"].as_str() == Some("valid")
                 && item["latest_feedback_notes"].as_str()
                     == Some("SOC handoff confirmed the replay noise is expected.")
         })
@@ -7122,7 +7122,7 @@ fn enterprise_content_rules_suppressions_and_coverage_work() {
         rule_view["review_history"]["analyst_feedback"]["latest_verdict"]
             .as_str()
             .unwrap(),
-        "true_positive"
+        "valid"
     );
     assert_eq!(
         rule_view["review_history"]["analyst_feedback"]["total"]

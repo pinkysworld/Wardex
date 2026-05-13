@@ -1,15 +1,11 @@
-// ONNX ML inference engine — stub for future integration.
+// Hybrid ML inference engine for alert triage.
 //
-// This module provides the trait and data structures for running ML models
-// (anomaly detection, entity classification, NLP-based alert triage) via
-// ONNX Runtime.  The actual `ort` / `onnxruntime` crate dependency is NOT
-// added yet; all methods return placeholder results so the rest of the
-// codebase can program against the interface today.
-//
-// To activate:
-//   1. Add `ort = "2"` to [dependencies] in Cargo.toml
-//   2. Replace the stub implementations below with real inference calls
-//   3. Ship .onnx model files under models/
+// Wardex keeps the production decision path conservative: a built-in random
+// forest is always available, optional ONNX models can run in shadow mode, and
+// every result carries calibration plus operator-safe decision support. The
+// ONNX runner still uses metadata/heuristic scaffolding until the `ort` crate
+// is introduced, but the public contract is the same one the real runtime will
+// use.
 
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -800,6 +796,22 @@ pub struct ShadowInferenceRecord {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ModelQualityGate {
+    pub id: String,
+    pub status: String,
+    pub detail: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TriageDecisionSupport {
+    pub operator_journey: String,
+    pub evidence_mode: String,
+    pub recommended_action: String,
+    pub requires_human_approval: bool,
+    pub quality_gates: Vec<ModelQualityGate>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ManagedTriageOutcome {
     pub result: TriageResult,
     #[serde(default)]
@@ -811,6 +823,7 @@ pub struct ManagedTriageOutcome {
     pub calibration: ConfidenceCalibration,
     #[serde(default)]
     pub rationale: Vec<String>,
+    pub decision_support: TriageDecisionSupport,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -973,15 +986,25 @@ impl ModelRegistry {
             rationale
                 .push("fallback-only decision because no ONNX triage model is loaded".to_string());
         }
+        let active_backend = if use_onnx_primary {
+            "onnx"
+        } else {
+            "random_forest_fallback"
+        };
+        let decision_support = build_decision_support(
+            &primary,
+            &calibrated_confidence,
+            band,
+            active_backend,
+            shadow.as_ref(),
+            onnx_ready,
+            features,
+        );
         ManagedTriageOutcome {
             result: primary.clone(),
             shadow,
             fallback_used: !use_onnx_primary,
-            active_backend: if use_onnx_primary {
-                "onnx".to_string()
-            } else {
-                "random_forest_fallback".to_string()
-            },
+            active_backend: active_backend.to_string(),
             shadow_backend: if self.shadow_mode && onnx_ready {
                 Some(if use_onnx_primary {
                     "random_forest_fallback".to_string()
@@ -997,6 +1020,7 @@ impl ModelRegistry {
                 band: band.to_string(),
             },
             rationale,
+            decision_support,
         }
     }
 
@@ -1022,6 +1046,104 @@ impl ModelRegistry {
             let keep_from = self.recent_shadow_reports.len() - 200;
             self.recent_shadow_reports.drain(0..keep_from);
         }
+    }
+}
+
+fn build_decision_support(
+    result: &TriageResult,
+    calibrated_confidence: &f64,
+    band: &str,
+    active_backend: &str,
+    shadow: Option<&TriageResult>,
+    onnx_ready: bool,
+    features: &TriageFeatures,
+) -> TriageDecisionSupport {
+    let (operator_journey, recommended_action, requires_human_approval) = match result.label {
+        TriageLabel::TruePositive => {
+            if features.device_risk_score >= 0.75 || features.anomaly_score >= 0.9 {
+                (
+                    "critical-alert-to-response",
+                    "Open the SOC queue, attach cited evidence, run response safety preview, and request approval before containment.",
+                    true,
+                )
+            } else {
+                (
+                    "alert-to-evidence-review",
+                    "Open the alert drawer, confirm supporting evidence, and promote to case if the cited signals hold.",
+                    false,
+                )
+            }
+        }
+        TriageLabel::FalsePositive => (
+            "false-positive-tuning",
+            "Review detection trust inputs and create a draft-only suppression or threshold review.",
+            false,
+        ),
+        TriageLabel::NeedsReview => (
+            "analyst-review",
+            "Keep the alert in analyst review, collect missing entity context, and avoid automated response.",
+            true,
+        ),
+    };
+
+    let mut quality_gates = vec![
+        ModelQualityGate {
+            id: "confidence_calibrated".into(),
+            status: if *calibrated_confidence >= 0.6 {
+                "pass".into()
+            } else {
+                "review".into()
+            },
+            detail: format!("{band} confidence after calibration"),
+        },
+        ModelQualityGate {
+            id: "backend_shadowed".into(),
+            status: if shadow.is_some() || !onnx_ready {
+                "pass".into()
+            } else {
+                "review".into()
+            },
+            detail: if shadow.is_some() {
+                "shadow comparison captured for drift review".into()
+            } else if onnx_ready {
+                "ONNX model active without shadow comparison".into()
+            } else {
+                "built-in fallback is active until an ONNX model is loaded".into()
+            },
+        },
+        ModelQualityGate {
+            id: "human_gate".into(),
+            status: if requires_human_approval {
+                "pass".into()
+            } else {
+                "info".into()
+            },
+            detail: if requires_human_approval {
+                "response remains approval-gated".into()
+            } else {
+                "recommendation is advisory and non-executing".into()
+            },
+        },
+    ];
+
+    if active_backend != "onnx" {
+        quality_gates.push(ModelQualityGate {
+            id: "production_model_loaded".into(),
+            status: "review".into(),
+            detail: "no primary ONNX triage model is loaded for this slot".into(),
+        });
+    }
+
+    TriageDecisionSupport {
+        operator_journey: operator_journey.into(),
+        evidence_mode: if active_backend == "onnx" {
+            "model_primary".into()
+        } else {
+            "built_in_fallback".into()
+        },
+        recommended_action: recommended_action.into(),
+        requires_human_approval,
+        quality_gates,
     }
 }
 
@@ -1204,5 +1326,32 @@ mod onnx_tests {
         let status = registry.status();
         assert!(!status.onnx_loaded);
         assert_eq!(status.available_models.len(), 3);
+    }
+
+    #[test]
+    fn managed_triage_includes_operator_safe_decision_support() {
+        let mut registry = ModelRegistry::new("/nonexistent/models");
+        let features = TriageFeatures {
+            anomaly_score: 0.95,
+            confidence: 0.9,
+            suspicious_axes: 4,
+            hour_of_day: 2,
+            day_of_week: 6,
+            alert_frequency_1h: 12,
+            device_risk_score: 0.9,
+        };
+        let outcome = registry.triage_alert(&features);
+        assert_eq!(
+            outcome.decision_support.operator_journey,
+            "critical-alert-to-response"
+        );
+        assert!(outcome.decision_support.requires_human_approval);
+        assert!(
+            outcome
+                .decision_support
+                .quality_gates
+                .iter()
+                .any(|gate| gate.id == "human_gate" && gate.status == "pass")
+        );
     }
 }

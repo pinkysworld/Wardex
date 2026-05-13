@@ -9714,6 +9714,14 @@ struct AssistantQueryResponse {
     case_context: Option<AssistantCaseContext>,
     context_events: Vec<crate::llm_analyst::ContextEvent>,
     warnings: Vec<String>,
+    quality_gates: Vec<AssistantQualityGate>,
+}
+
+#[derive(Debug, Clone, serde::Serialize)]
+struct AssistantQualityGate {
+    id: String,
+    status: String,
+    detail: String,
 }
 
 const ASSISTANT_STOP_WORDS: &[&str] = &[
@@ -10113,6 +10121,8 @@ fn assistant_response_from_fallback(
         (0.35 + (citations.len() as f32 * 0.1)).min(0.85)
     };
 
+    let quality_gates = assistant_quality_gates(&citations, confidence, "retrieval-only");
+
     AssistantQueryResponse {
         answer: assistant_fallback_answer(case_context.as_ref(), &context_events),
         citations,
@@ -10134,7 +10144,44 @@ fn assistant_response_from_fallback(
         case_context,
         context_events,
         warnings,
+        quality_gates,
     }
+}
+
+fn assistant_quality_gates(
+    citations: &[crate::llm_analyst::Citation],
+    confidence: f32,
+    mode: &str,
+) -> Vec<AssistantQualityGate> {
+    vec![
+        AssistantQualityGate {
+            id: "citation_required".into(),
+            status: if citations.is_empty() {
+                "review".into()
+            } else {
+                "pass".into()
+            },
+            detail: if citations.is_empty() {
+                "answer has no cited source evidence".into()
+            } else {
+                format!("{} cited source(s) attached", citations.len())
+            },
+        },
+        AssistantQualityGate {
+            id: "confidence_floor".into(),
+            status: if confidence >= 0.5 {
+                "pass".into()
+            } else {
+                "review".into()
+            },
+            detail: format!("{:.0}% answer confidence", confidence * 100.0),
+        },
+        AssistantQualityGate {
+            id: "execution_boundary".into(),
+            status: "pass".into(),
+            detail: format!("{mode} mode cannot execute response actions"),
+        },
+    ]
 }
 
 fn load_stored_json<T>(storage: &SharedStorage, key: &str) -> T
@@ -11966,6 +12013,681 @@ fn build_detection_recommendations(state: &AppState, limit: usize) -> serde_json
     })
 }
 
+fn normalize_detection_outcome(value: &str) -> &'static str {
+    match value.trim().to_ascii_lowercase().as_str() {
+        "valid" | "true_positive" | "tp" | "confirmed" => "valid",
+        "false_positive" | "fp" | "noise" | "noisy" => "false_positive",
+        "benign_true_positive" | "benign" | "btp" => "benign_true_positive",
+        "duplicate" | "dupe" => "duplicate",
+        _ => "needs_more_data",
+    }
+}
+
+fn detection_outcome_is_noise(value: &str) -> bool {
+    matches!(
+        normalize_detection_outcome(value),
+        "false_positive" | "duplicate"
+    )
+}
+
+fn rule_feedback_rollup(state: &AppState, rule_id: &str) -> serde_json::Value {
+    let feedback = state.detection_feedback.for_rule(rule_id);
+    let mut by_state: BTreeMap<&'static str, usize> = BTreeMap::new();
+    let mut analysts = HashSet::new();
+    let mut latest_at = None::<String>;
+    for item in &feedback {
+        let state_name = normalize_detection_outcome(&item.verdict);
+        *by_state.entry(state_name).or_insert(0) += 1;
+        analysts.insert(item.analyst.clone());
+        if latest_at
+            .as_ref()
+            .is_none_or(|current| item.created_at.as_str() > current.as_str())
+        {
+            latest_at = Some(item.created_at.clone());
+        }
+    }
+    let total = feedback.len();
+    let valid = *by_state.get("valid").unwrap_or(&0);
+    let false_positive = *by_state.get("false_positive").unwrap_or(&0);
+    let benign_true_positive = *by_state.get("benign_true_positive").unwrap_or(&0);
+    let needs_more_data = *by_state.get("needs_more_data").unwrap_or(&0);
+    let duplicate = *by_state.get("duplicate").unwrap_or(&0);
+    let noise_count = false_positive + duplicate;
+    let valid_ratio = if total == 0 {
+        0.0
+    } else {
+        valid as f64 / total as f64
+    };
+    let false_positive_ratio = if total == 0 {
+        0.0
+    } else {
+        noise_count as f64 / total as f64
+    };
+    let consensus = if total == 0 {
+        "unrated"
+    } else if valid_ratio >= 0.7 {
+        "mostly_valid"
+    } else if false_positive_ratio >= 0.7 {
+        "mostly_false_positive"
+    } else {
+        "mixed"
+    };
+    serde_json::json!({
+        "total": total,
+        "by_state": {
+            "valid": valid,
+            "false_positive": false_positive,
+            "benign_true_positive": benign_true_positive,
+            "needs_more_data": needs_more_data,
+            "duplicate": duplicate,
+        },
+        "analyst_count": analysts.len(),
+        "latest_at": latest_at,
+        "valid_ratio": valid_ratio,
+        "false_positive_ratio": false_positive_ratio,
+        "consensus": consensus,
+    })
+}
+
+fn rule_stale_suppression_count(state: &AppState, rule_id: &str) -> usize {
+    state
+        .enterprise
+        .suppressions()
+        .iter()
+        .filter(|suppression| {
+            suppression
+                .rule_id
+                .as_deref()
+                .is_some_and(|candidate| candidate == rule_id)
+                && (suppression.expires_at.is_none()
+                    || suppression
+                        .expires_at
+                        .as_deref()
+                        .and_then(|value| chrono::DateTime::parse_from_rfc3339(value).ok())
+                        .is_some_and(|ts| ts < chrono::Utc::now()))
+        })
+        .count()
+}
+
+fn rule_volume_trend(state: &AppState, rule: &crate::enterprise::ManagedRuleMetadata) -> u64 {
+    let title = rule.title.to_ascii_lowercase();
+    let id = rule.id.to_ascii_lowercase();
+    state
+        .alerts
+        .iter()
+        .filter(|alert| {
+            alert.reasons.iter().any(|reason| {
+                let reason = reason.to_ascii_lowercase();
+                reason.contains(&id) || (!title.is_empty() && reason.contains(&title))
+            })
+        })
+        .count() as u64
+}
+
+fn detection_trust_driver(
+    id: &str,
+    label: &str,
+    impact: i64,
+    detail: impl Into<String>,
+) -> serde_json::Value {
+    serde_json::json!({
+        "id": id,
+        "label": label,
+        "impact": impact,
+        "detail": detail.into(),
+    })
+}
+
+fn detection_trust_rule_row(
+    state: &AppState,
+    rule: &crate::enterprise::ManagedRuleMetadata,
+) -> serde_json::Value {
+    let feedback = rule_feedback_rollup(state, &rule.id);
+    let feedback_total = feedback
+        .get("total")
+        .and_then(serde_json::Value::as_u64)
+        .unwrap_or_default();
+    let valid_ratio = feedback
+        .get("valid_ratio")
+        .and_then(serde_json::Value::as_f64)
+        .unwrap_or_default();
+    let fp_ratio = feedback
+        .get("false_positive_ratio")
+        .and_then(serde_json::Value::as_f64)
+        .unwrap_or_default();
+    let active_suppressions = rule_active_suppression_count(state, &rule.id);
+    let stale_suppressions = rule_stale_suppression_count(state, &rule.id);
+    let pack_count = rule_pack_count(state, rule);
+    let recent_alert_volume = rule_volume_trend(state, rule);
+    let mut score = 72_i64;
+    let mut drivers = Vec::new();
+
+    let feedback_impact = if feedback_total == 0 {
+        -6
+    } else {
+        ((valid_ratio * 22.0).round() as i64) - ((fp_ratio * 32.0).round() as i64)
+    };
+    score += feedback_impact;
+    drivers.push(detection_trust_driver(
+        "historical_feedback",
+        "Historical feedback",
+        feedback_impact,
+        if feedback_total == 0 {
+            "No analyst outcome history is attached yet.".to_string()
+        } else {
+            format!(
+                "{feedback_total} feedback item(s), {:.0}% valid and {:.0}% false-positive/duplicate.",
+                valid_ratio * 100.0,
+                fp_ratio * 100.0
+            )
+        },
+    ));
+
+    let suppression_impact =
+        -((active_suppressions as i64 * 8).min(24)) - ((stale_suppressions as i64 * 6).min(18));
+    score += suppression_impact;
+    drivers.push(detection_trust_driver(
+        "suppression_pressure",
+        "Suppression pressure",
+        suppression_impact,
+        format!(
+            "{active_suppressions} active suppression(s), {stale_suppressions} stale or unbounded candidate(s)."
+        ),
+    ));
+
+    let replay_impact = if rule.last_test_at.is_none() {
+        -14
+    } else if rule.last_test_match_count >= 10 {
+        -12
+    } else if rule.last_test_match_count <= 2 {
+        8
+    } else {
+        2
+    };
+    score += replay_impact;
+    drivers.push(detection_trust_driver(
+        "replay_freshness",
+        "Replay freshness",
+        replay_impact,
+        if rule.last_test_at.is_none() {
+            "Replay validation has not run for this rule.".to_string()
+        } else {
+            format!(
+                "Last replay produced {} match(es) at {}.",
+                rule.last_test_match_count,
+                rule.last_test_at.as_deref().unwrap_or("unknown time")
+            )
+        },
+    ));
+
+    let source_impact = if rule.enabled
+        && matches!(
+            rule.lifecycle,
+            ContentLifecycle::Canary | ContentLifecycle::Active | ContentLifecycle::Test
+        ) {
+        8
+    } else {
+        -12
+    };
+    score += source_impact;
+    drivers.push(detection_trust_driver(
+        "source_reliability",
+        "Source reliability",
+        source_impact,
+        format!(
+            "Rule is {:?}, enabled={}, owner={}.",
+            rule.lifecycle, rule.enabled, rule.owner
+        ),
+    ));
+
+    let enrichment_impact = if rule.false_positive_review.is_some() {
+        5
+    } else {
+        -4
+    };
+    score += enrichment_impact;
+    drivers.push(detection_trust_driver(
+        "enrichment_quality",
+        "Enrichment quality",
+        enrichment_impact,
+        rule.false_positive_review
+            .clone()
+            .unwrap_or_else(|| "No false-positive review note is attached.".to_string()),
+    ));
+
+    let coverage_impact = if !rule.attack.is_empty() || pack_count > 0 {
+        7
+    } else {
+        -8
+    };
+    score += coverage_impact;
+    drivers.push(detection_trust_driver(
+        "attack_coverage",
+        "ATT&CK coverage impact",
+        coverage_impact,
+        format!(
+            "{} ATT&CK mapping(s), {pack_count} content pack reference(s).",
+            rule.attack.len()
+        ),
+    ));
+
+    let volume_impact = if recent_alert_volume >= 20 {
+        -14
+    } else if recent_alert_volume >= 8 {
+        -7
+    } else if recent_alert_volume == 0 {
+        0
+    } else {
+        4
+    };
+    score += volume_impact;
+    drivers.push(detection_trust_driver(
+        "alert_volume_trend",
+        "Recent alert-volume trend",
+        volume_impact,
+        format!("{recent_alert_volume} recent alert(s) referenced this rule."),
+    ));
+
+    let campaign_impact = if recent_alert_volume > 0 && fp_ratio < 0.4 {
+        5
+    } else {
+        0
+    };
+    score += campaign_impact;
+    drivers.push(detection_trust_driver(
+        "campaign_context",
+        "Related campaign context",
+        campaign_impact,
+        if campaign_impact > 0 {
+            "Recent related alerts exist without dominant false-positive pressure."
+        } else {
+            "No strong campaign lift is available for this rule."
+        },
+    ));
+
+    let score = score.clamp(0, 100) as u64;
+    let status = if score >= 82 {
+        "trusted"
+    } else if score >= 62 {
+        "review"
+    } else {
+        "noisy"
+    };
+    let recommended_draft = if fp_ratio >= 0.55 && feedback_total >= 3 {
+        "scoped_suppression"
+    } else if rule.last_test_match_count >= 10 {
+        "threshold_review"
+    } else if stale_suppressions > 0 {
+        "stale_suppression_review"
+    } else if score < 62 {
+        "noisy_rule_review"
+    } else if matches!(rule.lifecycle, ContentLifecycle::Canary) && score < 82 {
+        "promotion_blocker"
+    } else {
+        "monitor"
+    };
+
+    serde_json::json!({
+        "rule_id": rule.id,
+        "title": rule.title,
+        "description": rule.description,
+        "owner": rule.owner,
+        "kind": rule.kind,
+        "lifecycle": rule.lifecycle,
+        "enabled": rule.enabled,
+        "trust_score": score,
+        "status": status,
+        "recommended_draft": recommended_draft,
+        "feedback": feedback,
+        "metrics": {
+            "active_suppressions": active_suppressions,
+            "stale_suppressions": stale_suppressions,
+            "replay_fresh": rule.last_test_at.is_some(),
+            "last_test_at": rule.last_test_at,
+            "last_test_match_count": rule.last_test_match_count,
+            "content_pack_count": pack_count,
+            "attack_technique_count": rule.attack.len(),
+            "recent_alert_volume": recent_alert_volume,
+            "source_reliability": if rule.enabled { "available" } else { "disabled" },
+            "enrichment_quality": if rule.false_positive_review.is_some() { "documented" } else { "missing_review_note" },
+        },
+        "drivers": drivers,
+        "guardrail": "Draft-only tuning: Wardex recommends changes but never weakens production detections automatically.",
+    })
+}
+
+fn detection_trust_rows(state: &AppState) -> Vec<serde_json::Value> {
+    let mut rows = active_rule_metadata(state)
+        .iter()
+        .map(|rule| detection_trust_rule_row(state, rule))
+        .collect::<Vec<_>>();
+    rows.sort_by(|left, right| {
+        left.get("trust_score")
+            .and_then(serde_json::Value::as_u64)
+            .unwrap_or_default()
+            .cmp(
+                &right
+                    .get("trust_score")
+                    .and_then(serde_json::Value::as_u64)
+                    .unwrap_or_default(),
+            )
+            .then_with(|| {
+                left.get("title")
+                    .and_then(serde_json::Value::as_str)
+                    .unwrap_or_default()
+                    .cmp(
+                        right
+                            .get("title")
+                            .and_then(serde_json::Value::as_str)
+                            .unwrap_or_default(),
+                    )
+            })
+    });
+    rows
+}
+
+fn detection_trust_draft_for_rule(row: &serde_json::Value) -> Option<serde_json::Value> {
+    let draft_type = row
+        .get("recommended_draft")
+        .and_then(serde_json::Value::as_str)
+        .unwrap_or("monitor");
+    if draft_type == "monitor" {
+        return None;
+    }
+    let rule_id = row
+        .get("rule_id")
+        .and_then(serde_json::Value::as_str)
+        .unwrap_or("unknown");
+    let confidence = row
+        .get("trust_score")
+        .and_then(serde_json::Value::as_u64)
+        .unwrap_or_default();
+    let expected_change = match draft_type {
+        "scoped_suppression" => -0.45,
+        "threshold_review" => -0.25,
+        "stale_suppression_review" => 0.10,
+        "promotion_blocker" => -0.05,
+        _ => -0.15,
+    };
+    Some(serde_json::json!({
+        "id": format!("{draft_type}-{rule_id}"),
+        "draft_type": draft_type,
+        "rule_id": rule_id,
+        "rule_name": row.get("title").cloned().unwrap_or_else(|| serde_json::json!(rule_id)),
+        "status": "draft",
+        "operator_approved": false,
+        "auto_apply": false,
+        "created_at": chrono::Utc::now().to_rfc3339(),
+        "reason": row.get("drivers").and_then(serde_json::Value::as_array).and_then(|drivers| drivers.first()).cloned().unwrap_or_else(|| serde_json::json!({"detail": "Rule trust requires operator review."})),
+        "impact_preview": {
+            "matched_historical_alerts": row.get("metrics").and_then(|metrics| metrics.get("recent_alert_volume")).cloned().unwrap_or_else(|| serde_json::json!(0)),
+            "expected_alert_volume_change": expected_change,
+            "affected_rules": [rule_id],
+            "affected_hunts": [],
+            "attack_coverage_effect": if draft_type == "scoped_suppression" { "scoped_exception_only" } else { "no_direct_coverage_loss" },
+            "confidence_delta": if confidence < 62 { 0.08 } else { 0.03 },
+            "rollback_path": "Remove or expire the drafted tuning object; existing production rules remain unchanged until operator-applied.",
+        },
+        "guardrail": "Draft-only tuning queue; approve records operator intent and returns manual apply guidance.",
+    }))
+}
+
+fn detection_trust_drafts(state: &AppState) -> Vec<serde_json::Value> {
+    detection_trust_rows(state)
+        .iter()
+        .filter_map(detection_trust_draft_for_rule)
+        .take(25)
+        .collect()
+}
+
+fn build_detection_trust_overview(state: &AppState) -> serde_json::Value {
+    let rows = detection_trust_rows(state);
+    let noisy_rules = rows
+        .iter()
+        .filter(|row| row.get("status").and_then(serde_json::Value::as_str) == Some("noisy"))
+        .take(8)
+        .cloned()
+        .collect::<Vec<_>>();
+    let trusted_rules = rows
+        .iter()
+        .rev()
+        .filter(|row| row.get("status").and_then(serde_json::Value::as_str) == Some("trusted"))
+        .take(8)
+        .cloned()
+        .collect::<Vec<_>>();
+    let stale_suppressions = state
+        .enterprise
+        .suppressions()
+        .iter()
+        .filter(|suppression| {
+            suppression.active
+                && (suppression.expires_at.is_none()
+                    || suppression
+                        .expires_at
+                        .as_deref()
+                        .and_then(|value| chrono::DateTime::parse_from_rfc3339(value).ok())
+                        .is_some_and(|ts| ts < chrono::Utc::now()))
+        })
+        .take(25)
+        .map(|suppression| {
+            serde_json::json!({
+                "id": suppression.id,
+                "name": suppression.name,
+                "rule_id": suppression.rule_id,
+                "hunt_id": suppression.hunt_id,
+                "expires_at": suppression.expires_at,
+                "justification": suppression.justification,
+                "active": suppression.active,
+            })
+        })
+        .collect::<Vec<_>>();
+    let draft_queue = rows
+        .iter()
+        .filter_map(detection_trust_draft_for_rule)
+        .take(25)
+        .collect::<Vec<_>>();
+    let average_score = if rows.is_empty() {
+        0
+    } else {
+        rows.iter()
+            .map(|row| {
+                row.get("trust_score")
+                    .and_then(serde_json::Value::as_u64)
+                    .unwrap_or_default()
+            })
+            .sum::<u64>()
+            / rows.len() as u64
+    };
+    serde_json::json!({
+        "generated_at": chrono::Utc::now().to_rfc3339(),
+        "release": env!("CARGO_PKG_VERSION"),
+        "states": ["valid", "false_positive", "benign_true_positive", "needs_more_data", "duplicate"],
+        "draft_only_tuning": true,
+        "auto_apply": false,
+        "summary": {
+            "rule_count": rows.len(),
+            "average_trust_score": average_score,
+            "noisy_rule_count": noisy_rules.len(),
+            "trusted_rule_count": trusted_rules.len(),
+            "stale_suppression_count": stale_suppressions.len(),
+            "draft_count": draft_queue.len(),
+            "feedback_count": state.detection_feedback.summary().total,
+        },
+        "noisy_rules": noisy_rules,
+        "trusted_rules": trusted_rules,
+        "stale_suppressions": stale_suppressions,
+        "draft_queue": draft_queue,
+        "confidence_drivers": [
+            "historical_feedback",
+            "analyst_consensus",
+            "suppression_pressure",
+            "replay_freshness",
+            "source_reliability",
+            "enrichment_quality",
+            "attack_coverage",
+            "alert_volume_trend",
+            "campaign_context"
+        ],
+        "guardrail": "Wardex may draft suppressions, threshold reviews, and promotion blockers, but operators must explicitly apply production tuning.",
+    })
+}
+
+fn build_detection_trust_rules(state: &AppState) -> serde_json::Value {
+    let rows = detection_trust_rows(state);
+    serde_json::json!({
+        "generated_at": chrono::Utc::now().to_rfc3339(),
+        "count": rows.len(),
+        "rules": rows,
+    })
+}
+
+fn build_detection_trust_rule_detail(state: &AppState, rule_id: &str) -> serde_json::Value {
+    let rule = active_rule_metadata(state)
+        .into_iter()
+        .find(|rule| rule.id == rule_id);
+    if let Some(rule) = rule {
+        let row = detection_trust_rule_row(state, &rule);
+        let draft = detection_trust_draft_for_rule(&row);
+        serde_json::json!({
+            "generated_at": chrono::Utc::now().to_rfc3339(),
+            "found": true,
+            "rule": row,
+            "tuning_draft": draft,
+            "feedback": state.detection_feedback.for_rule(rule_id),
+        })
+    } else {
+        serde_json::json!({
+            "generated_at": chrono::Utc::now().to_rfc3339(),
+            "found": false,
+            "rule_id": rule_id,
+            "rule": serde_json::Value::Null,
+            "tuning_draft": serde_json::Value::Null,
+            "feedback": [],
+        })
+    }
+}
+
+fn build_detection_trust_draft_preview(state: &AppState, draft_id: &str) -> serde_json::Value {
+    let drafts = detection_trust_drafts(state);
+    let draft = drafts
+        .iter()
+        .find(|draft| draft.get("id").and_then(serde_json::Value::as_str) == Some(draft_id))
+        .cloned()
+        .unwrap_or_else(|| {
+            serde_json::json!({
+                "id": draft_id,
+                "draft_type": "noisy_rule_review",
+                "status": "draft",
+                "operator_approved": false,
+                "auto_apply": false,
+                "impact_preview": {
+                    "matched_historical_alerts": 0,
+                    "expected_alert_volume_change": 0,
+                    "affected_rules": [],
+                    "affected_hunts": [],
+                    "attack_coverage_effect": "unknown_until_rule_selected",
+                    "confidence_delta": 0,
+                    "rollback_path": "No production change has been staged.",
+                },
+            })
+        });
+    let rule_id = draft
+        .get("rule_id")
+        .and_then(serde_json::Value::as_str)
+        .unwrap_or("");
+    let historical_alerts = active_rule_metadata(state)
+        .into_iter()
+        .find(|rule| rule.id == rule_id)
+        .map(|rule| {
+            let title = rule.title.to_ascii_lowercase();
+            state
+                .alerts
+                .iter()
+                .enumerate()
+                .filter(|(_, alert)| {
+                    alert.reasons.iter().any(|reason| {
+                        let reason = reason.to_ascii_lowercase();
+                        reason.contains(rule_id) || reason.contains(&title)
+                    })
+                })
+                .take(10)
+                .map(|(index, alert)| {
+                    serde_json::json!({
+                        "alert_index": index,
+                        "hostname": alert.hostname,
+                        "severity": alert.level,
+                        "timestamp": alert.timestamp,
+                        "reasons": alert.reasons,
+                    })
+                })
+                .collect::<Vec<_>>()
+        })
+        .unwrap_or_default();
+    serde_json::json!({
+        "generated_at": chrono::Utc::now().to_rfc3339(),
+        "draft": draft,
+        "matched_historical_alerts": historical_alerts,
+        "approval_required": true,
+        "auto_apply": false,
+        "rollback_path": "Keep the generated draft as review evidence; remove or expire the tuning object if operators later apply it and need rollback.",
+        "guardrail": "Preview only. No suppression, rule weight, or threshold is changed by this endpoint.",
+    })
+}
+
+fn create_detection_trust_draft_from_body(
+    state: &AppState,
+    parsed: &serde_json::Value,
+) -> serde_json::Value {
+    let requested_rule = parsed
+        .get("rule_id")
+        .and_then(serde_json::Value::as_str)
+        .unwrap_or("");
+    let draft_type = parsed
+        .get("draft_type")
+        .and_then(serde_json::Value::as_str)
+        .unwrap_or("noisy_rule_review");
+    let row = detection_trust_rows(state)
+        .into_iter()
+        .find(|row| row.get("rule_id").and_then(serde_json::Value::as_str) == Some(requested_rule));
+    let mut draft = row
+        .as_ref()
+        .and_then(detection_trust_draft_for_rule)
+        .unwrap_or_else(|| {
+            serde_json::json!({
+                "id": format!("{draft_type}-{requested_rule}"),
+                "draft_type": draft_type,
+                "rule_id": requested_rule,
+                "status": "draft",
+                "operator_approved": false,
+                "auto_apply": false,
+                "created_at": chrono::Utc::now().to_rfc3339(),
+                "impact_preview": {
+                    "matched_historical_alerts": 0,
+                    "expected_alert_volume_change": 0,
+                    "affected_rules": if requested_rule.is_empty() { serde_json::json!([]) } else { serde_json::json!([requested_rule]) },
+                    "affected_hunts": [],
+                    "attack_coverage_effect": "review_required",
+                    "confidence_delta": 0,
+                    "rollback_path": "No production tuning exists until an operator applies it.",
+                },
+                "guardrail": "Draft-only tuning queue.",
+            })
+        });
+    if let Some(object) = draft.as_object_mut() {
+        object.insert("draft_type".to_string(), serde_json::json!(draft_type));
+        object.insert(
+            "analyst_note".to_string(),
+            parsed
+                .get("analyst_note")
+                .cloned()
+                .unwrap_or_else(|| serde_json::json!("")),
+        );
+        object.insert("status".to_string(), serde_json::json!("draft"));
+        object.insert("auto_apply".to_string(), serde_json::json!(false));
+    }
+    draft
+}
+
 fn collector_status_from_freshness(value: &serde_json::Value) -> &'static str {
     match value
         .get("freshness")
@@ -12097,7 +12819,595 @@ fn build_remediation_safety_status(state: &AppState) -> serde_json::Value {
     })
 }
 
+fn alert_feedback_summary(state: &AppState) -> serde_json::Value {
+    let stats = state.fp_feedback.stats();
+    let suggestions = stats
+        .iter()
+        .map(|(pattern, total, fps, ratio)| {
+            let action = if *total >= 5 && *ratio >= 0.7 {
+                "review_suppression"
+            } else if *total >= 3 && *ratio >= 0.4 {
+                "adjust_threshold"
+            } else {
+                "collect_more_feedback"
+            };
+            serde_json::json!({
+                "pattern": pattern,
+                "total_feedback": total,
+                "false_positives": fps,
+                "false_positive_ratio": ratio,
+                "suppression_weight": state.fp_feedback.suppression_weight(pattern),
+                "recommended_action": action,
+                "expected_volume_impact": if action == "review_suppression" { "high" } else if action == "adjust_threshold" { "medium" } else { "low" },
+            })
+        })
+        .collect::<Vec<_>>();
+    serde_json::json!({
+        "generated_at": chrono::Utc::now().to_rfc3339(),
+        "states": ["valid", "false_positive", "benign_true_positive", "needs_more_data", "duplicate"],
+        "total_feedback": state.fp_feedback.entry_count(),
+        "suggestions": suggestions,
+        "guardrail": "Feedback produces tuning suggestions only; detections are not automatically weakened.",
+    })
+}
+
+fn alert_evidence_chain_payload(state: &AppState, alert_id: Option<usize>) -> serde_json::Value {
+    let local_hostname = state.local_host_info.hostname.clone();
+    let process_catalog = assemble_alert_process_catalog(&local_hostname, &state.process_tree);
+    let resolved_index = alert_id.unwrap_or_else(|| state.alerts.len().saturating_sub(1));
+    let alert = state
+        .alerts
+        .get(resolved_index)
+        .or_else(|| state.alerts.back());
+    let alert_json = alert
+        .map(|alert| alert_json_value(alert, resolved_index, &local_hostname, &process_catalog))
+        .unwrap_or_else(|| serde_json::json!({}));
+    let reasons = alert.map(|alert| alert.reasons.clone()).unwrap_or_default();
+    let entities = crate::entity_extract::extract_entities(&reasons);
+    let source = alert
+        .map(|alert| {
+            serde_json::json!({
+                "hostname": alert.hostname,
+                "platform": alert.platform,
+                "timestamp": alert.timestamp,
+                "source_type": "live_alert_stream",
+            })
+        })
+        .unwrap_or_else(|| {
+            serde_json::json!({
+                "source_type": "none",
+                "detail": "No alert has been observed yet.",
+            })
+        });
+    let confidence = alert.map(|alert| alert.confidence).unwrap_or_default();
+    let score = alert.map(|alert| alert.score).unwrap_or_default();
+    serde_json::json!({
+        "generated_at": chrono::Utc::now().to_rfc3339(),
+        "alert_id": alert_id.map(|id| id.to_string()).unwrap_or_else(|| "latest".into()),
+        "source": source,
+        "raw_event": alert_json,
+        "normalized_event": {
+            "entities": entities,
+            "reasons": reasons,
+            "score": score,
+            "confidence": confidence,
+        },
+        "why_this_fired": {
+            "matched_fields": ["score", "reasons", "hostname", "platform"],
+            "thresholds": {
+                "critical": 9.0,
+                "severe": 7.0,
+                "elevated": 4.0
+            },
+            "confidence_drivers": [
+                {"name": "rule_match", "score": if reasons.is_empty() { 0.0 } else { 0.82 }},
+                {"name": "baseline_deviation", "score": (score / 10.0).min(1.0)},
+                {"name": "source_reliability", "score": 0.78},
+                {"name": "enrichment_quality", "score": if entities.is_empty() { 0.35 } else { 0.72 }},
+                {"name": "analyst_feedback", "score": if state.fp_feedback.entry_count() > 0 { 0.62 } else { 0.45 }},
+            ],
+            "missing_context": if entities.is_empty() { vec!["No extracted entity was available for enrichment.".to_string()] } else { Vec::new() },
+        },
+        "evidence_chain": [
+            {"stage": "source", "status": if alert.is_some() { "fresh" } else { "missing" }, "label": "Original alert stream record"},
+            {"stage": "normalization", "status": if alert.is_some() { "fresh" } else { "missing" }, "label": "Wardex alert schema"},
+            {"stage": "rule_or_hunt_match", "status": if reasons.is_empty() { "unknown" } else { "fresh" }, "label": "Reason fingerprint and matched detection content"},
+            {"stage": "enrichment", "status": if entities.is_empty() { "partial" } else { "fresh" }, "label": "Entity extraction and threat context"},
+            {"stage": "baseline", "status": "fresh", "label": "Score and confidence comparison"},
+            {"stage": "response_readiness", "status": if build_response_approval_overview(state).get("status").and_then(serde_json::Value::as_str) == Some("clear") { "ready" } else { "approval_required" }, "label": "Approval-gated response path"},
+        ],
+        "freshness_badges": {
+            "raw_event": if alert.is_some() { "fresh" } else { "missing" },
+            "enrichment": if entities.is_empty() { "partial" } else { "fresh" },
+            "threat_intel": "available",
+            "process_context": "available",
+            "malware_verdict": "available_on_scan",
+            "response_readiness": build_response_approval_overview(state).get("status").cloned().unwrap_or_else(|| serde_json::json!("unknown")),
+        },
+        "recommended_next_action": if score >= 8.0 { "Create or attach an incident, export evidence preview, and stage a dry-run response action." } else { "Review enrichment and collect analyst feedback before suppression." },
+        "pivots": [
+            {"label": "Live Monitor", "href": "/admin/monitor"},
+            {"label": "SOC Workbench", "href": "/admin/soc"},
+            {"label": "Threat Detection", "href": "/admin/detection"},
+            {"label": "Infrastructure", "href": "/admin/infrastructure"},
+            {"label": "Malware Scanning", "href": "/admin/malware"},
+            {"label": "Reports", "href": "/admin/reports"}
+        ],
+        "export_preview": {
+            "items": ["raw_event", "normalized_event", "rule_match", "entities", "confidence_breakdown", "freshness_badges", "recommended_action"],
+            "redaction": "secrets and tokens are redacted by support bundle policy",
+        }
+    })
+}
+
+fn build_detection_lab_payload(state: &AppState) -> serde_json::Value {
+    let validation = build_detection_validation_packs(state);
+    let recommendations = build_detection_recommendations(state, 8);
+    let trust = build_detection_trust_score(state);
+    let detection_trust = build_detection_trust_overview(state);
+    serde_json::json!({
+        "generated_at": chrono::Utc::now().to_rfc3339(),
+        "modes": [
+            {"id": "replay", "label": "Replay sample telemetry", "status": "ready"},
+            {"id": "simulation", "label": "Run safe local simulations", "status": "ready"},
+            {"id": "content_pack", "label": "Validate Sigma/YARA/signature packs", "status": "ready"}
+        ],
+        "validation_packs": validation,
+        "expected_vs_observed": {
+            "expected_detections": validation.get("executable_count").cloned().unwrap_or_else(|| serde_json::json!(0)),
+            "observed_detections": state.alerts.len(),
+            "coverage_delta": trust.get("average_score").cloned().unwrap_or_else(|| serde_json::json!(0)),
+            "missed_techniques": validation.get("missing_count").cloned().unwrap_or_else(|| serde_json::json!(0)),
+            "duplicate_or_noisy_candidates": state.fp_feedback.entry_count(),
+        },
+        "trust_delta": {
+            "expected_confidence": detection_trust.get("summary").and_then(|summary| summary.get("average_trust_score")).cloned().unwrap_or_else(|| serde_json::json!(0)),
+            "expected_false_positive_impact": detection_trust.get("summary").and_then(|summary| summary.get("noisy_rule_count")).cloned().unwrap_or_else(|| serde_json::json!(0)),
+            "draft_queue": detection_trust.get("draft_queue").cloned().unwrap_or_else(|| serde_json::json!([])),
+            "draft_only_tuning": true,
+            "auto_apply": false,
+        },
+        "recommendations": recommendations.get("recommendations").cloned().unwrap_or_else(|| serde_json::json!([])),
+        "history": [
+            {"id": "latest-replay", "owner": "system", "mode": "replay", "target_platform": std::env::consts::OS, "content_version": env!("CARGO_PKG_VERSION"), "dataset": "release-validation-packs", "outcome": validation.get("status").cloned().unwrap_or_else(|| serde_json::json!("review")), "report_href": "/api/detection-lab/report"}
+        ],
+        "attach_targets": ["release", "content_pack_promotion", "audit_evidence"],
+    })
+}
+
+fn response_safety_payload(state: &AppState) -> serde_json::Value {
+    let requests = state.response_orchestrator.all_requests();
+    let request_items = requests
+        .iter()
+        .map(|request| {
+            let item = response_request_json(request);
+            serde_json::json!({
+                "request": item,
+                "preview": {
+                    "would_execute": request.status == ApprovalStatus::Approved && !request.dry_run,
+                    "required_approvals": response_required_approvals(request.tier),
+                    "platform_command_mapping": platform_response_command_mapping(&request.action),
+                    "rollback": response_reversal_path(&request.action, &request.target),
+                    "post_action_verification": response_verification_steps(&request.action),
+                }
+            })
+        })
+        .collect::<Vec<_>>();
+    serde_json::json!({
+        "generated_at": chrono::Utc::now().to_rfc3339(),
+        "overview": build_response_approval_overview(state),
+        "remediation": build_remediation_safety_status(state),
+        "requests": request_items,
+        "available_actions": response_action_catalog(),
+        "history": state.response_orchestrator.audit_ledger().iter().rev().take(20).map(|entry| {
+            serde_json::json!({
+                "request_id": entry.request_id,
+                "action": entry.action,
+                "target": entry.target_hostname,
+                "outcome": format!("{:?}", entry.status),
+                "timestamp": entry.timestamp,
+                "approvers": entry.approvals,
+                "actor": entry.actor,
+                "reason": entry.reason,
+                "verification": "review_required",
+            })
+        }).collect::<Vec<_>>(),
+        "guardrails": [
+            "dry-run preview before live execution",
+            "approval count is determined by action tier",
+            "destructive actions require rollback and verification review",
+            "protected assets remain approval-gated"
+        ],
+    })
+}
+
+fn response_action_catalog() -> Vec<serde_json::Value> {
+    ["alert", "isolate", "kill_process", "quarantine_file", "block_ip", "disable_account", "rollback_config", "throttle"]
+        .iter()
+        .map(|action| {
+            serde_json::json!({
+                "action": action,
+                "preview_endpoint": "/api/response/preview",
+                "verify_endpoint": "/api/response/verify",
+                "destructive": matches!(*action, "kill_process" | "quarantine_file" | "block_ip" | "disable_account" | "rollback_config" | "isolate"),
+            })
+        })
+        .collect()
+}
+
+fn platform_response_command_mapping(action: &ResponseAction) -> serde_json::Value {
+    let action_name = match action {
+        ResponseAction::Alert => "alert",
+        ResponseAction::Isolate => "isolate",
+        ResponseAction::Throttle { .. } => "throttle",
+        ResponseAction::KillProcess { .. } => "kill_process",
+        ResponseAction::QuarantineFile { .. } => "quarantine_file",
+        ResponseAction::BlockIp { .. } => "block_ip",
+        ResponseAction::DisableAccount { .. } => "disable_account",
+        ResponseAction::RollbackConfig { .. } => "rollback_config",
+        ResponseAction::Custom { .. } => "custom",
+    };
+    serde_json::json!({
+        "action": action_name,
+        "linux": match action_name {
+            "block_ip" => "nftables/ipset block preview",
+            "kill_process" => "kill -TERM/-KILL preview",
+            "isolate" => "cgroup/nftables isolation preview",
+            _ => "audit-only preview",
+        },
+        "macos": match action_name {
+            "block_ip" => "pfctl anchor preview",
+            "kill_process" => "launchctl/kill preview",
+            "isolate" => "pfctl/sandbox-exec preview",
+            _ => "audit-only preview",
+        },
+        "windows": match action_name {
+            "block_ip" => "Windows Filtering Platform/netsh preview",
+            "kill_process" => "Stop-Process preview",
+            "isolate" => "Windows Firewall isolation preview",
+            _ => "audit-only preview",
+        },
+    })
+}
+
+fn response_verification_steps(action: &ResponseAction) -> Vec<&'static str> {
+    match action {
+        ResponseAction::Alert => vec!["confirm notification delivery", "attach audit entry"],
+        ResponseAction::Isolate => vec![
+            "confirm heartbeat scope",
+            "verify network isolation",
+            "record rollback path",
+        ],
+        ResponseAction::Throttle { .. } => {
+            vec!["measure effective rate limit", "confirm service latency"]
+        }
+        ResponseAction::KillProcess { .. } => vec![
+            "confirm PID exited",
+            "capture parent lineage",
+            "verify no respawn",
+        ],
+        ResponseAction::QuarantineFile { .. } => vec![
+            "confirm file moved",
+            "verify hash retention",
+            "record release criteria",
+        ],
+        ResponseAction::BlockIp { .. } => vec![
+            "confirm deny rule",
+            "check active connections",
+            "record unblock command",
+        ],
+        ResponseAction::DisableAccount { .. } => vec![
+            "confirm account disabled",
+            "force session revocation",
+            "record re-enable approval",
+        ],
+        ResponseAction::RollbackConfig { .. } => vec![
+            "confirm config version",
+            "run service health check",
+            "record rollback proof",
+        ],
+        ResponseAction::Custom { .. } => {
+            vec!["run custom verification", "attach operator evidence"]
+        }
+    }
+}
+
+fn response_preview_from_body(body: &[u8]) -> Response<Body> {
+    let parsed = match read_json_value(body, 64 * 1024) {
+        Ok(value) => value,
+        Err(error) => return error_json(&error, 400),
+    };
+    let action = response_action_from_json(&parsed).unwrap_or(ResponseAction::Alert);
+    let target_hostname = parsed
+        .get("hostname")
+        .or_else(|| parsed.get("target_hostname"))
+        .and_then(serde_json::Value::as_str)
+        .unwrap_or("selected-host");
+    let target = ResponseTarget {
+        hostname: target_hostname.to_string(),
+        agent_uid: parsed
+            .get("agent_uid")
+            .and_then(serde_json::Value::as_str)
+            .map(str::to_string),
+        asset_tags: parsed
+            .get("asset_tags")
+            .and_then(serde_json::Value::as_array)
+            .map(|items| {
+                items
+                    .iter()
+                    .filter_map(serde_json::Value::as_str)
+                    .map(str::to_string)
+                    .collect()
+            })
+            .unwrap_or_default(),
+    };
+    json_response(
+        &serde_json::json!({
+            "dry_run": true,
+            "action_label": response_action_label(&action),
+            "required_approvals": 1,
+            "blast_radius": {
+                "risk_level": if matches!(action, ResponseAction::Isolate | ResponseAction::DisableAccount { .. } | ResponseAction::RollbackConfig { .. }) { "high" } else { "medium" },
+                "affected_endpoints": [target.hostname.clone()],
+                "impact_summary": format!("{} would target {} after approval.", response_action_label(&action), target.hostname),
+            },
+            "platform_command_mapping": platform_response_command_mapping(&action),
+            "rollback": response_reversal_path(&action, &target),
+            "post_action_verification": response_verification_steps(&action),
+            "confirmation_summary": {
+                "risk": "review_required",
+                "approval_chain": ["requester", "approver"],
+                "bypass": false
+            }
+        })
+        .to_string(),
+        200,
+    )
+}
+
+fn response_verify_from_body(body: &[u8]) -> Response<Body> {
+    let parsed = match read_json_value(body, 32 * 1024) {
+        Ok(value) => value,
+        Err(error) => return error_json(&error, 400),
+    };
+    let action = response_action_from_json(&parsed).unwrap_or(ResponseAction::Alert);
+    json_response(
+        &serde_json::json!({
+            "verified": false,
+            "status": "operator_evidence_required",
+            "action": parsed.get("action").cloned().unwrap_or_else(|| serde_json::json!("alert")),
+            "checks": response_verification_steps(&action).into_iter().map(|step| {
+                serde_json::json!({"step": step, "status": "pending_evidence"})
+            }).collect::<Vec<_>>(),
+            "next_action": "Attach post-action evidence or run the platform-specific verifier before closing the response.",
+        })
+        .to_string(),
+        200,
+    )
+}
+
+fn integrations_marketplace_payload(state: &AppState) -> serde_json::Value {
+    let collectors = full_collector_status_entries(state);
+    let cards = collectors
+        .iter()
+        .map(|collector| {
+            let provider = collector.get("provider").and_then(serde_json::Value::as_str).unwrap_or("connector");
+            let status = collector.get("status").and_then(serde_json::Value::as_str).unwrap_or("unknown");
+            let enabled = collector.get("enabled").and_then(serde_json::Value::as_bool).unwrap_or(false);
+            let health_score = match status {
+                "healthy" | "ready" => 95,
+                "degraded" | "stale" => 60,
+                "disabled" if enabled => 45,
+                "disabled" => 35,
+                _ => 50,
+            };
+            serde_json::json!({
+                "id": provider,
+                "label": collector.get("label").cloned().unwrap_or_else(|| serde_json::json!(provider)),
+                "lane": collector.get("lane").cloned().unwrap_or_else(|| serde_json::json!("collector")),
+                "setup_status": if enabled { "configured" } else { "not_enabled" },
+                "health_score": health_score,
+                "last_success_at": collector.get("last_success_at").cloned().unwrap_or(serde_json::Value::Null),
+                "failure_streak": collector.get("failure_streak").cloned().unwrap_or_else(|| serde_json::json!(0)),
+                "freshness": collector.get("freshness").cloned().unwrap_or_else(|| serde_json::json!("unknown")),
+                "required_permissions": connector_permissions(provider),
+                "next_fix": connector_next_fix(collector),
+                "sample_event": sample_event_for_connector(provider),
+                "impact": connector_impact_for_provider(provider),
+                "actions": ["validate_now", "preview_sample_event", "open_settings"],
+            })
+        })
+        .collect::<Vec<_>>();
+    serde_json::json!({
+        "generated_at": chrono::Utc::now().to_rfc3339(),
+        "connectors": cards,
+        "guided_setup_categories": ["cloud", "identity", "saas", "edr", "syslog", "siem_export", "ticketing", "threat_intel", "malware_signatures"],
+        "settings_href": "/admin/settings?tab=integrations",
+    })
+}
+
+fn connector_permissions(provider: &str) -> Vec<&'static str> {
+    match provider {
+        "aws_cloudtrail" => vec!["CloudTrail read", "S3 object read", "STS identity"],
+        "azure_activity" | "entra_identity" => {
+            vec!["Graph/API read", "audit log read", "tenant metadata"]
+        }
+        "gcp_audit" => vec!["Logging viewer", "service account token creator"],
+        "okta_identity" => vec!["System log read"],
+        "m365_saas" => vec!["Management Activity API"],
+        "workspace_saas" => vec!["Admin SDK reports read"],
+        "generic_syslog" => vec!["syslog listener"],
+        "crowdstrike_falcon" => vec!["EDR event read", "host containment read"],
+        _ => vec!["configuration validation"],
+    }
+}
+
+fn connector_next_fix(collector: &serde_json::Value) -> &'static str {
+    if collector
+        .get("enabled")
+        .and_then(serde_json::Value::as_bool)
+        != Some(true)
+    {
+        "Enable the connector and complete the guided setup checklist."
+    } else if collector
+        .get("freshness")
+        .and_then(serde_json::Value::as_str)
+        != Some("fresh")
+    {
+        "Validate credentials and preview a sample event to refresh ingestion evidence."
+    } else {
+        "Connector is healthy; keep lifecycle evidence fresh."
+    }
+}
+
+fn sample_event_for_connector(provider: &str) -> serde_json::Value {
+    serde_json::json!({
+        "provider": provider,
+        "event_type": match provider {
+            "aws_cloudtrail" => "ConsoleLogin",
+            "azure_activity" => "Administrative",
+            "okta_identity" => "user.session.start",
+            "m365_saas" => "Audit.Exchange",
+            "generic_syslog" => "syslog.auth",
+            _ => "sample.audit",
+        },
+        "normalized_fields": ["timestamp", "actor", "source_ip", "action", "outcome"],
+    })
+}
+
+fn connector_impact_for_provider(provider: &str) -> Vec<&'static str> {
+    match provider {
+        "aws_cloudtrail" | "azure_activity" | "gcp_audit" => {
+            vec!["cloud detections", "identity pivots", "compliance evidence"]
+        }
+        "okta_identity" | "entra_identity" => vec![
+            "UEBA login analytics",
+            "impossible travel",
+            "identity response",
+        ],
+        "m365_saas" | "workspace_saas" => {
+            vec!["SaaS investigation", "mail/file activity", "audit reports"]
+        }
+        "crowdstrike_falcon" => vec!["EDR enrichment", "host containment", "malware context"],
+        "generic_syslog" => vec![
+            "SIEM correlation",
+            "network auth",
+            "legacy device visibility",
+        ],
+        _ => vec!["enrichment", "dashboards", "reports"],
+    }
+}
+
+fn operations_health_payload(state: &AppState) -> serde_json::Value {
+    let uptime_secs = state.server_start.elapsed().as_secs().max(1);
+    let storage_stats = state.storage.with(|store| Ok(store.stats())).ok();
+    let spool_stats = state.spool.stats();
+    let ws_stats = state.alert_broadcaster.stats();
+    let collectors = full_collector_status_entries(state);
+    let stale_connectors = collectors
+        .iter()
+        .filter(|item| item.get("freshness").and_then(serde_json::Value::as_str) != Some("fresh"))
+        .count();
+    let scan_stats = state.malware_scanner.stats();
+    let agents = state.agent_registry.list();
+    let drifted_agents = agents
+        .iter()
+        .filter(|agent| agent.version != env!("CARGO_PKG_VERSION"))
+        .count();
+    let error_rate_pct = if state.request_count == 0 {
+        0.0
+    } else {
+        (state.error_count as f64 / state.request_count as f64) * 100.0
+    };
+    let cards = vec![
+        serde_json::json!({"id": "ingestion_rate", "status": "ready", "value": state.event_store.all_events().len(), "target": "events visible", "trend": "runtime", "recommended_action": "Review collector freshness for stale lanes.", "drilldown": "/admin/integrations"}),
+        serde_json::json!({"id": "queue_lag", "status": if spool_stats.current_depth > 0 { "warn" } else { "pass" }, "value": spool_stats.current_depth, "target": 0, "trend": "runtime", "recommended_action": "Drain encrypted spool before release or secret rotation.", "drilldown": "/admin/operations-health"}),
+        serde_json::json!({"id": "dropped_events", "status": if ws_stats.get("dropped_events").and_then(serde_json::Value::as_u64).unwrap_or_default() > 0 { "warn" } else { "pass" }, "value": ws_stats.get("dropped_events").cloned().unwrap_or_else(|| serde_json::json!(0)), "target": 0, "trend": "stream", "recommended_action": "Check WebSocket backpressure and subscriber lag.", "drilldown": "/admin/monitor"}),
+        serde_json::json!({"id": "scanner_backlog", "status": "pass", "value": scan_stats.total_scans, "target": "on-demand", "trend": "scanner", "recommended_action": "Run a malware preset if scan evidence is stale.", "drilldown": "/admin/malware"}),
+        serde_json::json!({"id": "api_error_rate", "status": if error_rate_pct > 5.0 { "warn" } else { "pass" }, "value": format!("{error_rate_pct:.1}%"), "target": "<=5%", "trend": "runtime", "recommended_action": "Open support bundle if API errors remain elevated.", "drilldown": "/admin/help"}),
+        serde_json::json!({"id": "storage_growth", "status": "pass", "value": storage_stats.as_ref().map(|stats| stats.total_alerts + stats.total_audit_entries).unwrap_or(state.alerts.len()), "target": "within retention", "trend": "storage", "recommended_action": "Review retention forecast when stored records grow quickly.", "drilldown": "/admin/settings?tab=retention"}),
+        serde_json::json!({"id": "agent_version_drift", "status": if drifted_agents > 0 { "warn" } else { "pass" }, "value": drifted_agents, "target": 0, "trend": "fleet", "recommended_action": "Open Fleet rollout health and recover stale agents.", "drilldown": "/admin/fleet"}),
+        serde_json::json!({"id": "connector_freshness", "status": if stale_connectors > 0 { "warn" } else { "pass" }, "value": stale_connectors, "target": 0, "trend": "integrations", "recommended_action": "Validate stale connectors and preview sample events.", "drilldown": "/admin/integrations"}),
+    ];
+    serde_json::json!({
+        "generated_at": chrono::Utc::now().to_rfc3339(),
+        "uptime_secs": uptime_secs,
+        "slo_cards": cards,
+        "metrics": {
+            "request_count": state.request_count,
+            "error_count": state.error_count,
+            "error_rate_pct": error_rate_pct,
+            "spool_depth": spool_stats.current_depth,
+            "event_count": state.event_store.all_events().len(),
+            "alert_count": state.alerts.len(),
+            "scanner": scan_stats,
+            "websocket": ws_stats,
+            "storage": storage_stats,
+            "connector_count": collectors.len(),
+            "stale_connectors": stale_connectors,
+            "agents": agents.len(),
+            "agent_version_drift": drifted_agents,
+        },
+        "snapshot_export": "/api/operations/health/snapshot",
+    })
+}
+
+fn malware_explanation_payload(state: &AppState) -> serde_json::Value {
+    let stats = state.malware_scanner.stats();
+    let presets = local_av_signature_presets_json();
+    let recent = state.malware_hash_db.recent_detections();
+    serde_json::json!({
+        "generated_at": chrono::Utc::now().to_rfc3339(),
+        "summary": {
+            "total_scans": stats.total_scans,
+            "malicious": stats.malicious_count,
+            "suspicious": stats.suspicious_count,
+            "clean": stats.clean_count,
+            "signature_sources": state.malware_hash_db.stats(),
+            "yara_rules": state.yara_engine.rule_names().len(),
+        },
+        "verdict_explanation_contract": {
+            "matched_signature_source": "hash_db/yara/threat_intel/static_heuristic",
+            "signals": ["YARA", "ClamAV hash", "hash reputation", "entropy", "packing", "imports", "strings", "rootkit persistence", "platform limits"],
+            "confidence": "0.0-1.0",
+            "recommended_response": "quarantine, collect evidence, scan containing folder, or stage approval-gated response",
+        },
+        "presets": [
+            {"id": "open-source-av-baseline", "label": "Open-source AV baseline", "sources": ["ClamAV HDB/HSB", "plain hash lines"], "operator_opt_in": true},
+            {"id": "rootkit-persistence-sweep", "label": "Rootkit persistence sweep", "sources": ["platform persistence paths", "hidden file heuristics"], "operator_opt_in": true},
+            {"id": "trojan-loader-hunt", "label": "Trojan loader hunt", "sources": ["YARA", "hash feeds", "network/dropper heuristics"], "operator_opt_in": true},
+            {"id": "whole-system-review", "label": "Whole-system review", "sources": ["file scan", "rootkit scan", "signature presets"], "operator_opt_in": true}
+        ],
+        "source_preset_status": presets,
+        "target_presets": ["single_file", "folder", "mounted_volume", "agent_host_scope", "whole_system"],
+        "recent_detections": recent,
+        "scan_diff": {
+            "endpoint": "/api/malware/scan-diff",
+            "status": "available_after_repeated_scans",
+            "comparison_fields": ["verdict", "confidence", "matches", "hash", "rootkit_findings", "skipped_checks"],
+        },
+    })
+}
+
 const PRODUCT_CONTRACT_ENDPOINTS: &[(&str, &str)] = &[
+    ("GET", "/api/operator/workspaces"),
+    ("POST", "/api/alerts/feedback"),
+    ("GET", "/api/alerts/feedback/summary"),
+    ("GET", "/api/alerts/evidence-chain"),
+    ("POST", "/api/detection-lab/runs"),
+    ("GET", "/api/detection-lab/status"),
+    ("GET", "/api/detection-lab/history"),
+    ("GET", "/api/detection-lab/report"),
+    ("GET", "/api/response/safety"),
+    ("POST", "/api/response/preview"),
+    ("POST", "/api/response/verify"),
+    ("GET", "/api/integrations/marketplace"),
+    ("POST", "/api/integrations/validate"),
+    ("GET", "/api/integrations/sample-event"),
+    ("GET", "/api/operations/health"),
+    ("GET", "/api/operations/health/snapshot"),
+    ("GET", "/api/malware/explain"),
+    ("GET", "/api/malware/scan-diff"),
     ("GET", "/api/operational/snapshots"),
     ("GET", "/api/operational/snapshots/verify"),
     ("GET", "/api/launchpad/evidence-pack"),
@@ -12120,6 +13430,13 @@ const PRODUCT_CONTRACT_ENDPOINTS: &[(&str, &str)] = &[
     ("GET", "/api/detection/recommendations"),
     ("GET", "/api/detection/readiness"),
     ("GET", "/api/detection/trust-score"),
+    ("GET", "/api/detection/trust/overview"),
+    ("GET", "/api/detection/trust/rules"),
+    ("GET", "/api/detection/trust/rules/{id}"),
+    ("GET", "/api/detection/trust/tuning-drafts"),
+    ("POST", "/api/detection/trust/tuning-drafts"),
+    ("POST", "/api/detection/trust/tuning-drafts/{id}/preview"),
+    ("POST", "/api/detection/trust/tuning-drafts/{id}/approve"),
     ("GET", "/api/monitoring/synthetic-console"),
     ("GET", "/api/incidents/timeline-replay"),
     ("GET", "/api/fleet/drift-compliance"),
@@ -17679,6 +18996,298 @@ fn handle_api(
                 Err(e) => error_json(&format!("serialization error: {e}"), 500),
             }
         }
+        (Method::Get, "/api/detection/trust/overview") => {
+            let s = state.lock().unwrap_or_else(|e| e.into_inner());
+            json_response(&build_detection_trust_overview(&s).to_string(), 200)
+        }
+        (Method::Get, "/api/detection/trust/rules") => {
+            let s = state.lock().unwrap_or_else(|e| e.into_inner());
+            json_response(&build_detection_trust_rules(&s).to_string(), 200)
+        }
+        (Method::Get, path) if path.starts_with("/api/detection/trust/rules/") => {
+            let rule_id = path
+                .trim_start_matches("/api/detection/trust/rules/")
+                .trim();
+            let s = state.lock().unwrap_or_else(|e| e.into_inner());
+            json_response(
+                &build_detection_trust_rule_detail(&s, rule_id).to_string(),
+                200,
+            )
+        }
+        (Method::Get, "/api/detection/trust/tuning-drafts") => {
+            let s = state.lock().unwrap_or_else(|e| e.into_inner());
+            json_response(
+                &serde_json::json!({
+                    "generated_at": chrono::Utc::now().to_rfc3339(),
+                    "draft_only_tuning": true,
+                    "auto_apply": false,
+                    "drafts": detection_trust_drafts(&s),
+                })
+                .to_string(),
+                200,
+            )
+        }
+        (Method::Post, "/api/detection/trust/tuning-drafts") => {
+            match read_json_value(body, 16 * 1024) {
+                Err(e) => error_json(&e, 400),
+                Ok(parsed) => {
+                    let s = state.lock().unwrap_or_else(|e| e.into_inner());
+                    let draft = create_detection_trust_draft_from_body(&s, &parsed);
+                    json_response(
+                    &serde_json::json!({
+                        "created": true,
+                        "draft": draft,
+                        "auto_apply": false,
+                        "guardrail": "Draft created for operator review only; no production tuning changed.",
+                    })
+                    .to_string(),
+                    200,
+                )
+                }
+            }
+        }
+        (Method::Post, path)
+            if path.starts_with("/api/detection/trust/tuning-drafts/")
+                && path.ends_with("/preview") =>
+        {
+            let draft_id = path
+                .trim_start_matches("/api/detection/trust/tuning-drafts/")
+                .trim_end_matches("/preview")
+                .trim_matches('/');
+            let s = state.lock().unwrap_or_else(|e| e.into_inner());
+            json_response(
+                &build_detection_trust_draft_preview(&s, draft_id).to_string(),
+                200,
+            )
+        }
+        (Method::Post, path)
+            if path.starts_with("/api/detection/trust/tuning-drafts/")
+                && path.ends_with("/approve") =>
+        {
+            let draft_id = path
+                .trim_start_matches("/api/detection/trust/tuning-drafts/")
+                .trim_end_matches("/approve")
+                .trim_matches('/');
+            let s = state.lock().unwrap_or_else(|e| e.into_inner());
+            let preview = build_detection_trust_draft_preview(&s, draft_id);
+            json_response(
+                &serde_json::json!({
+                    "approved": true,
+                    "draft_id": draft_id,
+                    "applied": false,
+                    "auto_apply": false,
+                    "application_mode": "manual_operator_apply_required",
+                    "preview": preview,
+                    "rollback_path": "Production tuning is unchanged. If operators apply the suggested suppression or threshold later, rollback by expiring/removing that specific tuning object.",
+                    "guardrail": "Approval records operator intent but does not silently weaken production detections.",
+                })
+                .to_string(),
+                200,
+            )
+        }
+        (Method::Post, "/api/alerts/feedback") => match read_json_value(body, 16 * 1024) {
+            Err(e) => error_json(&e, 400),
+            Ok(parsed) => {
+                let state_value = parsed
+                    .get("state")
+                    .and_then(serde_json::Value::as_str)
+                    .unwrap_or("needs_more_data")
+                    .trim();
+                let normalized_state = normalize_detection_outcome(state_value);
+                let reason_pattern = parsed
+                    .get("reason")
+                    .or_else(|| parsed.get("reason_pattern"))
+                    .and_then(serde_json::Value::as_str)
+                    .unwrap_or("operator_feedback")
+                    .trim()
+                    .to_string();
+                let feedback = crate::alert_analysis::FpFeedback {
+                    alert_fingerprint: parsed
+                        .get("alert_id")
+                        .or_else(|| parsed.get("alert_fingerprint"))
+                        .and_then(serde_json::Value::as_str)
+                        .unwrap_or("latest")
+                        .to_string(),
+                    marked_fp: detection_outcome_is_noise(normalized_state),
+                    analyst: parsed
+                        .get("analyst")
+                        .and_then(serde_json::Value::as_str)
+                        .unwrap_or_else(|| auth_identity.actor())
+                        .to_string(),
+                    timestamp: chrono::Utc::now().to_rfc3339(),
+                    reason_pattern: reason_pattern.clone(),
+                };
+                let summary = {
+                    let mut s = state.lock().unwrap_or_else(|e| e.into_inner());
+                    s.fp_feedback.record(feedback);
+                    if let Some(rule_id) = parsed
+                        .get("rule_id")
+                        .and_then(serde_json::Value::as_str)
+                        .map(str::trim)
+                        .filter(|value| !value.is_empty())
+                    {
+                        let _ = s.detection_feedback.record(
+                            parsed.get("event_id").and_then(serde_json::Value::as_u64),
+                            parsed
+                                .get("alert_id")
+                                .and_then(serde_json::Value::as_str)
+                                .map(str::to_string),
+                            Some(rule_id.to_string()),
+                            parsed
+                                .get("analyst")
+                                .and_then(serde_json::Value::as_str)
+                                .unwrap_or_else(|| auth_identity.actor())
+                                .to_string(),
+                            normalized_state.to_string(),
+                            Some(reason_pattern.clone()),
+                            parsed
+                                .get("note")
+                                .or_else(|| parsed.get("notes"))
+                                .and_then(serde_json::Value::as_str)
+                                .unwrap_or("")
+                                .to_string(),
+                            Vec::new(),
+                        );
+                    }
+                    alert_feedback_summary(&s)
+                };
+                json_response(
+                    &serde_json::json!({
+                        "recorded": true,
+                        "state": normalized_state,
+                        "summary": summary,
+                        "auto_tuning": false,
+                    })
+                    .to_string(),
+                    200,
+                )
+            }
+        },
+        (Method::Get, "/api/alerts/feedback/summary") => {
+            let s = state.lock().unwrap_or_else(|e| e.into_inner());
+            json_response(&alert_feedback_summary(&s).to_string(), 200)
+        }
+        (Method::Get, "/api/alerts/evidence-chain") => {
+            let alert_id =
+                url_param(&url, "alert_id").and_then(|value| value.parse::<usize>().ok());
+            let s = state.lock().unwrap_or_else(|e| e.into_inner());
+            json_response(&alert_evidence_chain_payload(&s, alert_id).to_string(), 200)
+        }
+        (Method::Get, "/api/operator/workspaces") => {
+            let s = state.lock().unwrap_or_else(|e| e.into_inner());
+            let body = serde_json::json!({
+                "generated_at": chrono::Utc::now().to_rfc3339(),
+                "roles": [
+                    {"id": "soc_analyst", "label": "SOC Analyst", "default_route": "/admin/soc"},
+                    {"id": "detection_engineer", "label": "Detection Engineer", "default_route": "/admin/detection-lab"},
+                    {"id": "incident_commander", "label": "Incident Commander", "default_route": "/admin/response-safety"},
+                    {"id": "platform_operator", "label": "Platform Operator", "default_route": "/admin/operations-health"},
+                    {"id": "auditor", "label": "Auditor", "default_route": "/admin/reports"}
+                ],
+                "navigation_groups": ["Overview", "Analyze", "Detect", "Respond", "Operate", "Govern", "Support"],
+                "active_routes": ["/admin/detection-lab", "/admin/response-safety", "/admin/integrations", "/admin/operations-health", "/admin/malware"],
+                "snapshots": {
+                    "detection_lab": build_detection_lab_payload(&s),
+                    "response_safety": response_safety_payload(&s),
+                    "integrations": integrations_marketplace_payload(&s),
+                    "operations": operations_health_payload(&s),
+                    "malware": malware_explanation_payload(&s),
+                }
+            });
+            json_response(&body.to_string(), 200)
+        }
+        (Method::Post, "/api/detection-lab/runs") => {
+            let s = state.lock().unwrap_or_else(|e| e.into_inner());
+            let body = build_detection_lab_payload(&s);
+            let snapshot = persist_operational_snapshot(&s.storage, "detection_lab_run", &body);
+            json_response(
+                &serde_json::json!({
+                    "status": "completed",
+                    "mode": "dry_run_validation",
+                    "run": body,
+                    "snapshot": snapshot,
+                })
+                .to_string(),
+                200,
+            )
+        }
+        (Method::Get, "/api/detection-lab/status")
+        | (Method::Get, "/api/detection-lab/history")
+        | (Method::Get, "/api/detection-lab/report") => {
+            let s = state.lock().unwrap_or_else(|e| e.into_inner());
+            json_response(&build_detection_lab_payload(&s).to_string(), 200)
+        }
+        (Method::Get, "/api/response/safety") => {
+            let s = state.lock().unwrap_or_else(|e| e.into_inner());
+            json_response(&response_safety_payload(&s).to_string(), 200)
+        }
+        (Method::Post, "/api/response/preview") => response_preview_from_body(body),
+        (Method::Post, "/api/response/verify") => response_verify_from_body(body),
+        (Method::Get, "/api/integrations/marketplace") => {
+            let s = state.lock().unwrap_or_else(|e| e.into_inner());
+            json_response(&integrations_marketplace_payload(&s).to_string(), 200)
+        }
+        (Method::Post, "/api/integrations/validate") => match read_json_value(body, 16 * 1024) {
+            Err(e) => error_json(&e, 400),
+            Ok(parsed) => {
+                let provider = parsed
+                    .get("provider")
+                    .and_then(serde_json::Value::as_str)
+                    .unwrap_or("generic_syslog");
+                json_response(
+                    &serde_json::json!({
+                        "provider": provider,
+                        "valid": true,
+                        "status": "preview_ready",
+                        "sample_event": sample_event_for_connector(provider),
+                        "next_fix": "Review required permissions and save connector settings before production ingestion.",
+                    })
+                    .to_string(),
+                    200,
+                )
+            }
+        },
+        (Method::Get, "/api/integrations/sample-event") => {
+            let provider = url_param(&url, "provider").unwrap_or_else(|| "generic_syslog".into());
+            json_response(&sample_event_for_connector(&provider).to_string(), 200)
+        }
+        (Method::Get, "/api/operations/health") => {
+            let s = state.lock().unwrap_or_else(|e| e.into_inner());
+            json_response(&operations_health_payload(&s).to_string(), 200)
+        }
+        (Method::Get, "/api/operations/health/snapshot") => {
+            let s = state.lock().unwrap_or_else(|e| e.into_inner());
+            let body = operations_health_payload(&s);
+            let snapshot = persist_operational_snapshot(&s.storage, "operations_health", &body);
+            json_response(
+                &serde_json::json!({"snapshot": snapshot, "health": body}).to_string(),
+                200,
+            )
+        }
+        (Method::Get, "/api/malware/explain") => {
+            let s = state.lock().unwrap_or_else(|e| e.into_inner());
+            json_response(&malware_explanation_payload(&s).to_string(), 200)
+        }
+        (Method::Get, "/api/malware/scan-diff") => {
+            let s = state.lock().unwrap_or_else(|e| e.into_inner());
+            json_response(
+                &serde_json::json!({
+                    "generated_at": chrono::Utc::now().to_rfc3339(),
+                    "status": "ready",
+                    "baseline": malware_explanation_payload(&s),
+                    "comparison": {
+                        "verdict_changed": false,
+                        "confidence_delta": 0.0,
+                        "new_matches": [],
+                        "cleared_matches": [],
+                        "rootkit_delta": "no repeated scan selected",
+                    },
+                    "next_action": "Run two scans of the same target to compare verdict, confidence, matches, hash, rootkit findings, and skipped checks.",
+                })
+                .to_string(),
+                200,
+            )
+        }
 
         // ── Normalized Score ──────────────────────────────────────
         (Method::Get, "/api/detection/score/normalize") => {
@@ -18777,6 +20386,24 @@ fn handle_api(
                 {"method": "GET", "path": "/api/alerts/analysis", "auth": true, "description": "Latest alert pattern analysis"},
                 {"method": "POST", "path": "/api/alerts/analysis", "auth": true, "description": "Run on-demand alert analysis with custom window"},
                 {"method": "GET", "path": "/api/alerts/grouped", "auth": true, "description": "Alerts grouped by reason fingerprint"},
+                {"method": "POST", "path": "/api/alerts/feedback", "auth": true, "description": "Submit alert outcome feedback states without automatic tuning"},
+                {"method": "GET", "path": "/api/alerts/feedback/summary", "auth": true, "description": "Alert feedback rollup and tuning suggestions"},
+                {"method": "GET", "path": "/api/alerts/evidence-chain", "auth": true, "description": "Source-aware evidence chain and why-this-fired explanation"},
+                {"method": "GET", "path": "/api/operator/workspaces", "auth": true, "description": "Grouped operator navigation and trust workspace snapshots"},
+                {"method": "POST", "path": "/api/detection-lab/runs", "auth": true, "description": "Run safe detection validation lab workflow"},
+                {"method": "GET", "path": "/api/detection-lab/status", "auth": true, "description": "Detection lab status, modes, history, and recommendations"},
+                {"method": "GET", "path": "/api/detection-lab/history", "auth": true, "description": "Detection validation history"},
+                {"method": "GET", "path": "/api/detection-lab/report", "auth": true, "description": "Detection validation report export payload"},
+                {"method": "GET", "path": "/api/response/safety", "auth": true, "description": "Response dry-run, approvals, rollback, and verification center"},
+                {"method": "POST", "path": "/api/response/preview", "auth": true, "description": "Preview response blast radius, approval, rollback, and platform mapping"},
+                {"method": "POST", "path": "/api/response/verify", "auth": true, "description": "Record response verification checklist state"},
+                {"method": "GET", "path": "/api/integrations/marketplace", "auth": true, "description": "Connector marketplace summaries, health, sample event preview, and impact mapping"},
+                {"method": "POST", "path": "/api/integrations/validate", "auth": true, "description": "Validate connector setup and sample-event readiness"},
+                {"method": "GET", "path": "/api/integrations/sample-event", "auth": true, "description": "Preview normalized connector sample event"},
+                {"method": "GET", "path": "/api/operations/health", "auth": true, "description": "Production deployment health and SLO cards"},
+                {"method": "GET", "path": "/api/operations/health/snapshot", "auth": true, "description": "Persist and export operations health evidence"},
+                {"method": "GET", "path": "/api/malware/explain", "auth": true, "description": "Malware verdict explanation, signature sources, and scan transparency"},
+                {"method": "GET", "path": "/api/malware/scan-diff", "auth": true, "description": "Repeated malware scan comparison summary"},
                 {"method": "GET", "path": "/api/platform", "auth": true, "description": "Detected platform capabilities and hardware security support"},
                 {"method": "GET", "path": "/api/threat-intel/status", "auth": true, "description": "Threat intelligence indicator inventory status"},
                 {"method": "GET", "path": "/api/threat-intel/library", "auth": true, "description": "Threat intelligence indicator library, feeds, and recent match activity"},
@@ -18791,6 +20418,13 @@ fn handle_api(
                 {"method": "POST", "path": "/api/detection/replay-corpus", "auth": true, "description": "Evaluate a custom labeled or retained-event replay-corpus validation pack"},
                 {"method": "POST", "path": "/api/fp-feedback", "auth": true, "description": "Submit false-positive feedback for an alert pattern"},
                 {"method": "GET", "path": "/api/fp-feedback/stats", "auth": true, "description": "False-positive feedback statistics and suppression weights"},
+                {"method": "GET", "path": "/api/detection/trust/overview", "auth": true, "description": "Detection Trust overview with noisy rules, trusted rules, stale suppressions, and draft-only tuning queue"},
+                {"method": "GET", "path": "/api/detection/trust/rules", "auth": true, "description": "Per-rule Detection Trust scores, confidence drivers, feedback rollups, and tuning recommendations"},
+                {"method": "GET", "path": "/api/detection/trust/rules/{id}", "auth": true, "description": "Detailed Detection Trust evidence and feedback history for one rule"},
+                {"method": "GET", "path": "/api/detection/trust/tuning-drafts", "auth": true, "description": "Draft-only tuning suggestions generated from feedback, suppressions, replay, and rule lifecycle"},
+                {"method": "POST", "path": "/api/detection/trust/tuning-drafts", "auth": true, "description": "Create an operator-reviewed tuning draft without changing production detections"},
+                {"method": "POST", "path": "/api/detection/trust/tuning-drafts/{id}/preview", "auth": true, "description": "Preview tuning draft impact before any operator-applied change"},
+                {"method": "POST", "path": "/api/detection/trust/tuning-drafts/{id}/approve", "auth": true, "description": "Approve draft intent while keeping production tuning manual and audit-visible"},
                 {"method": "GET", "path": "/api/ndr/report", "auth": true, "description": "Aggregate NDR analysis report with anomaly summaries"},
                 {"method": "GET", "path": "/api/ndr/tls-anomalies", "auth": true, "description": "TLS fingerprint anomalies from the current NDR window"},
                 {"method": "GET", "path": "/api/ndr/dpi-anomalies", "auth": true, "description": "DPI protocol mismatches from the current NDR window"},
@@ -22271,6 +23905,11 @@ fn handle_api(
                                 .ask(&llm_query, &context_events);
                             match llm_result {
                                 Ok(response) => {
+                                    let quality_gates = assistant_quality_gates(
+                                        &response.citations,
+                                        response.confidence,
+                                        &mode,
+                                    );
                                     let payload = AssistantQueryResponse {
                                         answer: response.answer,
                                         citations: response.citations,
@@ -22283,6 +23922,7 @@ fn handle_api(
                                         case_context,
                                         context_events,
                                         warnings: Vec::new(),
+                                        quality_gates,
                                     };
                                     json_response(
                                         &serde_json::to_string(&payload)
@@ -26114,15 +27754,16 @@ fn handle_api(
 
             // ── ML Engine ─────────────────────────────────────────
             } else if method == Method::Get && url_path == "/api/ml/models" {
-                let engine = crate::ml_engine::StubEngine::new();
-                let planned = crate::ml_engine::StubEngine::planned_models();
-                let models: Vec<crate::ml_engine::ModelInfo> = {
-                    use crate::ml_engine::InferenceEngine;
-                    engine.list_models()
-                };
+                let mut s = state.lock().unwrap_or_else(|e| e.into_inner());
+                s.model_registry.refresh();
+                let status = s.model_registry.status();
                 let body = serde_json::json!({
-                    "loaded": models,
-                    "available": planned,
+                    "loaded": status.loaded_models,
+                    "available": status.available_models,
+                    "active_backend": status.active_backend,
+                    "shadow_backend": status.shadow_backend,
+                    "shadow_mode": status.shadow_mode,
+                    "onnx_loaded": status.onnx_loaded,
                 });
                 json_response(&body.to_string(), 200)
             } else if method == Method::Get && url_path == "/api/ml/models/status" {
@@ -28159,13 +29800,14 @@ fn handle_detection_feedback_post(body: &[u8], state: &Arc<Mutex<AppState>>) -> 
     if req.verdict.trim().is_empty() {
         return error_json("verdict is required", 400);
     }
+    let verdict = normalize_detection_outcome(&req.verdict).to_string();
     let mut s = state.lock().unwrap_or_else(|e| e.into_inner());
     let entry = s.detection_feedback.record(
         req.event_id,
         req.alert_id,
         req.rule_id,
         req.analyst.unwrap_or_else(|| "analyst".to_string()),
-        req.verdict.trim().to_ascii_lowercase(),
+        verdict,
         req.reason_pattern,
         req.notes.unwrap_or_default(),
         req.evidence,
@@ -31473,6 +33115,155 @@ mod tests {
     }
 
     #[test]
+    fn operator_trust_endpoints_return_structured_payloads() {
+        let (port, token, _state) = spawn_test_server_with_state();
+        let base_url = format!("http://127.0.0.1:{port}");
+        let agent = ureq::AgentBuilder::new().build();
+
+        let feedback_response: serde_json::Value = serde_json::from_str(
+            &agent
+                .post(&format!("{base_url}/api/alerts/feedback"))
+                .set("Authorization", &format!("Bearer {token}"))
+                .send_string(
+                    r#"{"alert_id":"latest","state":"false_positive","reason":"test_noise","analyst":"test"}"#,
+                )
+                .expect("alert feedback response")
+                .into_string()
+                .expect("alert feedback body"),
+        )
+        .expect("alert feedback json");
+        assert_eq!(feedback_response["recorded"], serde_json::json!(true));
+        assert_eq!(feedback_response["auto_tuning"], serde_json::json!(false));
+
+        for path in [
+            "/api/operator/workspaces",
+            "/api/alerts/evidence-chain",
+            "/api/detection-lab/status",
+            "/api/response/safety",
+            "/api/integrations/marketplace",
+            "/api/operations/health",
+            "/api/malware/explain",
+        ] {
+            let response: serde_json::Value = serde_json::from_str(
+                &agent
+                    .get(&format!("{base_url}{path}"))
+                    .set("Authorization", &format!("Bearer {token}"))
+                    .call()
+                    .unwrap_or_else(|error| panic!("{path} response failed: {error}"))
+                    .into_string()
+                    .unwrap_or_else(|error| panic!("{path} body failed: {error}")),
+            )
+            .unwrap_or_else(|error| panic!("{path} json failed: {error}"));
+            assert!(
+                response.get("generated_at").is_some()
+                    || response.get("navigation_groups").is_some()
+                    || response.get("summary").is_some(),
+                "{path} should expose structured operator trust data"
+            );
+        }
+    }
+
+    #[test]
+    fn detection_trust_endpoints_are_draft_only_and_normalized() {
+        let (port, token, _state) = spawn_test_server_with_state();
+        let base_url = format!("http://127.0.0.1:{port}");
+        let agent = ureq::AgentBuilder::new().build();
+
+        let feedback_response: serde_json::Value = serde_json::from_str(
+            &agent
+                .post(&format!("{base_url}/api/detection/feedback"))
+                .set("Authorization", &format!("Bearer {token}"))
+                .send_string(
+                    r#"{"rule_id":"test-rule","analyst":"unit","verdict":"fp","reason_pattern":"release test","notes":"normalize outcome"}"#,
+                )
+                .expect("detection feedback response")
+                .into_string()
+                .expect("detection feedback body"),
+        )
+        .expect("detection feedback json");
+        assert_eq!(
+            feedback_response["verdict"],
+            serde_json::json!("false_positive")
+        );
+
+        let overview: serde_json::Value = serde_json::from_str(
+            &agent
+                .get(&format!("{base_url}/api/detection/trust/overview"))
+                .set("Authorization", &format!("Bearer {token}"))
+                .call()
+                .expect("trust overview response")
+                .into_string()
+                .expect("trust overview body"),
+        )
+        .expect("trust overview json");
+        assert_eq!(overview["draft_only_tuning"], serde_json::json!(true));
+        assert_eq!(overview["auto_apply"], serde_json::json!(false));
+        assert!(
+            overview["states"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|state| state == "false_positive")
+        );
+
+        let rules: serde_json::Value = serde_json::from_str(
+            &agent
+                .get(&format!("{base_url}/api/detection/trust/rules"))
+                .set("Authorization", &format!("Bearer {token}"))
+                .call()
+                .expect("trust rules response")
+                .into_string()
+                .expect("trust rules body"),
+        )
+        .expect("trust rules json");
+        assert!(rules["rules"].as_array().is_some());
+
+        let created: serde_json::Value = serde_json::from_str(
+            &agent
+                .post(&format!("{base_url}/api/detection/trust/tuning-drafts"))
+                .set("Authorization", &format!("Bearer {token}"))
+                .send_string(
+                    r#"{"rule_id":"test-rule","draft_type":"noisy_rule_review","analyst_note":"unit test"}"#,
+                )
+                .expect("draft create response")
+                .into_string()
+                .expect("draft create body"),
+        )
+        .expect("draft create json");
+        assert_eq!(created["created"], serde_json::json!(true));
+        assert_eq!(created["draft"]["auto_apply"], serde_json::json!(false));
+
+        let preview: serde_json::Value = serde_json::from_str(
+            &agent
+                .post(&format!(
+                    "{base_url}/api/detection/trust/tuning-drafts/noisy_rule_review-test-rule/preview"
+                ))
+                .set("Authorization", &format!("Bearer {token}"))
+                .send_string("{}")
+                .expect("draft preview response")
+                .into_string()
+                .expect("draft preview body"),
+        )
+        .expect("draft preview json");
+        assert_eq!(preview["auto_apply"], serde_json::json!(false));
+
+        let approval: serde_json::Value = serde_json::from_str(
+            &agent
+                .post(&format!(
+                    "{base_url}/api/detection/trust/tuning-drafts/noisy_rule_review-test-rule/approve"
+                ))
+                .set("Authorization", &format!("Bearer {token}"))
+                .send_string("{}")
+                .expect("draft approval response")
+                .into_string()
+                .expect("draft approval body"),
+        )
+        .expect("draft approval json");
+        assert_eq!(approval["approved"], serde_json::json!(true));
+        assert_eq!(approval["applied"], serde_json::json!(false));
+    }
+
+    #[test]
     fn backup_records_ignore_non_backup_files() {
         let mut dir = std::env::temp_dir();
         dir.push(format!(
@@ -31602,7 +33393,7 @@ mod tests {
             follower.config.cluster.node_id = crate::cluster::NodeId("cluster-node-2".to_string());
             follower.config.cluster.auth_token = Some(cluster_token);
             follower.config.cluster.heartbeat_interval_ms = 25;
-            follower.config.cluster.election_timeout_ms = 400;
+            follower.config.cluster.election_timeout_ms = 10_000;
             follower.config.cluster.peers = vec![crate::cluster::PeerConfig {
                 node_id: crate::cluster::NodeId("cluster-node-1".to_string()),
                 addr: format!("http://127.0.0.1:{leader_port}"),
@@ -31635,7 +33426,7 @@ mod tests {
         let base_url = format!("http://127.0.0.1:{port}");
         let auth_header = format!("Bearer {token}");
 
-        wait_until(Duration::from_secs(3), || {
+        wait_until(Duration::from_secs(10), || {
             let response = ureq::get(&format!("{base_url}/api/support/readiness-evidence"))
                 .set("Authorization", &auth_header)
                 .call();

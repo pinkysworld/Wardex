@@ -2,9 +2,13 @@
 
 ## Current release baseline
 
-`v1.0.11` is the current stable patch release of Wardex. It carries all capabilities of `v1.0.0`, the `v1.0.1` CI hardening fixes, the `v1.0.2` macOS release-trust hardening, the Live Monitor process-analysis regression coverage, the refreshed Developer ID `.p12` signing-secret repair path, the `v1.0.6` resilience/proof tranche, the `v1.0.7` production assurance tranche, the `v1.0.8` release verification/deployment-confidence tranche, the evidence freshness tranche, the `v1.0.10` detection response and malware-scanning polish, and the `v1.0.11` CI/release-trust hotfix.
+`v1.0.18` is the current stable patch release of Wardex. It carries all capabilities of `v1.0.0`, the `v1.0.1` CI hardening fixes, the `v1.0.2` macOS release-trust hardening, the Live Monitor process-analysis regression coverage, the refreshed Developer ID `.p12` signing-secret repair path, the `v1.0.6` resilience/proof tranche, the `v1.0.7` production assurance tranche, the `v1.0.8` release verification/deployment-confidence tranche, the evidence freshness tranche, the `v1.0.10` detection response and malware-scanning polish, the `v1.0.11` CI/release-trust hotfix, the `v1.0.12` operator-trust usability tranche, the `v1.0.13` detection-trust false-positive control tranche, the `v1.0.14` Claude workbench layout tranche, the `v1.0.15` operator onboarding/workflow-depth tranche, the `v1.0.16` operator execution-board tranche, the `v1.0.17` operator continuity/evidence-closure tranche, and the `v1.0.18` intelligence-gates tranche.
 
-The current release wires release preflight gating for Rust formatting, Clippy, admin-console linting, admin-console formatting, admin-console build, and release-doc validation before signed-build packaging starts. It preserves the source-aware alert analysis, IP/hostname enrichment, alarm-specific response actions, malware/virus/trojan/rootkit scan workflows, open-source signature presets, responsive thread investigation pullouts, live-monitor scroll preservation, evidence freshness metadata, critical proof gating, persisted snapshot freshness, Launchpad proof badges, release verification evidence, and validation-pack inventory checks shipped in the prior release.
+The current release adds operator-safe triage decision support, assistant quality gates, notification outbox records, canonical Launchpad journeys, evidence-mode rollups, and deeper macOS vmmap memory indicators. It preserves the shift handoff workspace, incident timeline builder, collector onboarding center, release acceptance report, fleet risk heatmap, response playbook simulator depth, evidence coverage, role home screen, visual regression gate, safe assistant boundaries, persistent Connect Agent route, Launchpad morning brief, guided incident path, fleet drilldown, evidence freshness rollup, operator task queue, release gate automation, first-agent onboarding cockpit, SOC explainability, response readiness, process evidence render caps, deployment confidence matrix, Detection Trust scoring, grouped navigation, role workspaces, Detection Lab validation, Response Safety previews, Integrations marketplace summaries, Operations Health SLOs, Malware verdict explanations, release preflight gating, evidence freshness metadata, Launchpad proof badges, release verification evidence, and validation-pack inventory checks shipped in prior releases.
+
+`v1.0.12` added the operator-trust and usability tranche with grouped console navigation, role workspaces, command-palette access to major workflows, Detection Lab validation, Response Safety previews, Integrations marketplace summaries, Operations Health SLOs, Malware verdict explanations, alert feedback summaries, evidence-chain APIs, opt-in signature presets, and scan diffing.
+
+`v1.0.11` added the CI and release-trust hotfix that gates signed-build packaging on Rust formatting, Clippy, admin-console linting, admin-console formatting, admin-console build, and release-doc validation.
 
 `v1.0.10` added the detection response and malware-scanning tranche for source-aware alert analysis, IP/hostname enrichment, alarm-specific response actions, malware/virus/trojan/rootkit scan workflows, open-source signature presets, responsive thread investigation pullouts, live-monitor scroll preservation, and admin-console layout polish.
 
@@ -87,9 +91,9 @@ The current release wires release preflight gating for Rust formatting, Clippy, 
 
 ## Success criteria
 
-| Metric | Current (`v1.0.11`) | Target |
+| Metric | Current (`v1.0.18`) | Target |
 |---|---|---|
-| Automated tests | 1413 lib + 212+ integration + focused browser/admin regressions | maintained and expanded on every release |
+| Automated tests | 1503 lib + 239 integration + focused browser/admin regressions | maintained and expanded on every release |
 | OpenAPI and SDK contract | versioned OpenAPI plus generated Python and TypeScript SDKs | kept in lockstep on every release |
 | Release targets | Linux, macOS, Windows | maintained on every tagged release |
 | Control-plane posture | private-cloud enterprise deployment | HA-ready, recovery-safe enterprise deployment |

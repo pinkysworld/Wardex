@@ -75,4 +75,106 @@ describe('SearchPalette', () => {
     );
     expect(onClose).toHaveBeenCalledWith(false);
   });
+
+  it('includes operator trust quick actions', () => {
+    render(<SearchPalette open={true} onClose={onClose} onNavigate={onNavigate} />);
+
+    fireEvent.click(screen.getByRole('button', { name: /Start Detection Lab/i }));
+    expect(onNavigate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: 'start-detection-lab',
+        path: '/detection-lab',
+      }),
+    );
+
+    onNavigate.mockClear();
+    fireEvent.click(screen.getByRole('button', { name: /Review Response Safety/i }));
+    expect(onNavigate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: 'review-response-safety',
+        path: '/response-safety',
+      }),
+    );
+  });
+
+  it('surfaces connect, SOC, response, and deployment command destinations', () => {
+    render(<SearchPalette open={true} onClose={onClose} onNavigate={onNavigate} />);
+
+    fireEvent.click(screen.getByRole('button', { name: /Connect First Agent/i }));
+    expect(onNavigate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: 'connect-first-agent',
+        path: buildCommandHref('connect-first-agent'),
+      }),
+    );
+
+    onNavigate.mockClear();
+    fireEvent.click(screen.getByRole('button', { name: /Open SOC Queue/i }));
+    expect(onNavigate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: 'open-soc-queue',
+        path: buildCommandHref('open-soc-queue'),
+      }),
+    );
+
+    onNavigate.mockClear();
+    fireEvent.click(screen.getByRole('button', { name: /Response Readiness/i }));
+    expect(onNavigate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: 'response-readiness',
+        path: buildCommandHref('response-readiness'),
+      }),
+    );
+
+    onNavigate.mockClear();
+    fireEvent.click(screen.getByRole('button', { name: /Deployment Confidence/i }));
+    expect(onNavigate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: 'deployment-confidence',
+        path: buildCommandHref('deployment-confidence'),
+      }),
+    );
+  });
+
+  it('surfaces route-aware launchpad actions before the general command list', () => {
+    render(
+      <SearchPalette
+        open={true}
+        currentPath="/launchpad"
+        onClose={onClose}
+        onNavigate={onNavigate}
+      />,
+    );
+
+    expect(screen.getByText('Launchpad actions')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: /Shift Handoff Workspace/i }));
+
+    expect(onNavigate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: 'shift-handoff-workspace',
+        path: buildCommandHref('shift-handoff-workspace'),
+      }),
+    );
+
+    onNavigate.mockClear();
+    fireEvent.click(screen.getByRole('button', { name: /Morning Brief/i }));
+
+    expect(onNavigate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: 'morning-brief',
+        path: buildCommandHref('morning-brief'),
+      }),
+    );
+
+    onNavigate.mockClear();
+    fireEvent.click(screen.getByRole('button', { name: /Visual Regression Gate/i }));
+
+    expect(onNavigate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: 'visual-regression-gate',
+        path: buildCommandHref('visual-regression-gate'),
+      }),
+    );
+  });
 });

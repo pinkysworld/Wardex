@@ -2,11 +2,11 @@
 
 ## Current release
 
-- **Version:** `1.0.11`
+- **Version:** `1.0.18`
 - **Positioning:** private-cloud XDR and SIEM platform with enterprise detection engineering, malware scanning, analyst workflows, fleet operations, behavioural analytics, and automated incident response
 - **Source footprint:** 139 Rust source modules
-- **API contract:** versioned OpenAPI surface with REST, GraphQL, live `/api/openapi.json` export, generated SDK parity diagnostics, cursor page contracts, release observability/preflight proof APIs, production assurance endpoints, malware scan and response-action contracts, source-aware alert analysis, and release verification readiness endpoints with evidence freshness metadata
-- **Verification:** release preflight gating for Rust formatting, Clippy, admin-console linting, admin-console formatting, admin-console build, and release-doc validation, plus Rust integration coverage, focused session-cookie exchange tests, collector lifecycle tests, remediation change-review tests, Command Center summary/action-drawer tests, Help & Docs unit coverage, assistant/ticketing/enterprise API regression tests, SDK regeneration checks, strict Playwright a11y smoke coverage, local Developer ID `.p12` signing validation, focused admin-console regression coverage, thread pullout regression coverage, and Launchpad coverage for proof freshness badges and persisted snapshot evidence state
+- **API contract:** versioned OpenAPI surface with REST, GraphQL, live `/api/openapi.json` export, generated SDK parity diagnostics, cursor page contracts, release observability/preflight proof APIs, production assurance endpoints, malware scan and response-action contracts, source-aware alert analysis, operator-trust workspaces, alert feedback/evidence-chain contracts, Detection Trust scoring and draft-only tuning APIs, detection validation lab APIs, response safety preview/verification APIs, agent enrollment-token flows, connector marketplace summaries, operations health snapshots, and release verification readiness endpoints with evidence freshness metadata
+- **Verification:** release preflight gating for Rust formatting, Clippy, admin-console linting, admin-console formatting, admin-console build, and release-doc validation, plus Rust integration coverage, focused Detection Trust endpoint tests, session-cookie exchange tests, collector lifecycle tests, remediation change-review tests, Command Center summary/action-drawer tests, Help & Docs unit coverage, assistant/ticketing/enterprise API regression tests, operator trust workspace unit coverage, SDK regeneration checks, strict Playwright a11y smoke coverage, local Developer ID `.p12` signing validation, focused admin-console regression coverage, thread pullout regression coverage, and Launchpad coverage for proof freshness badges and persisted snapshot evidence state
 - **Production hardening:** 100% (59/59 controls implemented)
 
 ## Shipped in the current platform
@@ -80,6 +80,7 @@
 
 - Help & Docs support center with searchable embedded documentation, version-aware runbooks and deployment guidance, operator inbox context, production demo lab, support diagnostics, production-readiness control-plane posture, REST/OpenAPI/GraphQL/SDK parity diagnostics, live GraphQL query execution, and API endpoint exploration
 - Help & Docs operational readiness drill timeline with documented RTO/RPO targets, backup/checkpoint evidence, persisted failover-drill history, pass/fail artifact checks, and exportable recovery review payloads
+- Operator Trust workspaces with grouped console navigation, role anchors, Detection Lab validation, Response Safety previews, Integrations marketplace cards, Operations Health SLOs, and Malware verdict explanations
 
 ### Integrations and evidence
 
@@ -99,6 +100,59 @@ The current release has been verified with:
 ## Current product posture
 
 Wardex is now positioned as a professional XDR/SIEM control plane with incident-first analyst workflows, explainable detections, context-preserving reporting, operator-visible recovery posture, and explicit shift-lead surfaces for ownership, handoff, and detection-review pressure. The runtime, admin console, release process, and website are aligned around operator trust, workflow closure, deployment readiness, clean release verification, and freshness-gated evidence.
+
+## Recently shipped (v1.0.18)
+
+- **Operator-safe triage intelligence** — managed ML triage now includes calibrated confidence, quality gates, recommended operator journey, evidence mode, and human-approval requirements.
+- **Assistant answer quality gates** — Assistant responses include citation, confidence, and execution-boundary checks, with matching UI visibility in the analyst workspace.
+- **Notification delivery trail** — alert notifications can be dispatched with deduplicated outbox records that preserve channel, attempts, status, next retry, and last error.
+- **Evidence-mode launchpad** — Operator Launchpad adds canonical journey readiness plus evidence-mode rollups for live, persisted, stale, and pending proof paths.
+- **macOS memory indicator depth** — vmmap output now contributes RWX and anonymous-executable region findings instead of returning only a basic placeholder.
+- **Release metadata alignment** — Rust, admin-console, Python SDK, TypeScript SDK, Helm, OTLP, OpenAPI, website, and test fixtures now point at the `v1.0.18` intelligence-gates baseline.
+
+## Recently shipped (v1.0.17)
+
+- **Shift continuity workspace** — Operator Launchpad now includes exportable next-shift notes that carry queue state, stale evidence, release blockers, fleet watch items, and generated tasks.
+- **Incident timeline builder** — Launchpad assembles alert, process/thread, replay, proof, and report handoff context into a downloadable timeline draft.
+- **Collector onboarding and fleet risk** — cloud, identity, SaaS, endpoint, and syslog telemetry lanes now sit beside a fleet heatmap for offline, stale heartbeat, version drift, and active-detection risk.
+- **Release acceptance and visual gate** — operators can export an acceptance report from live Launchpad signals, and Playwright now captures a screenshot artifact for the continuity board.
+- **Role home and safe assistant** — Launchpad adds role-specific home cards plus explicit retrieval-only, citation, and execution boundaries for assistant use.
+- **Release metadata alignment** — Rust, admin-console, Python SDK, TypeScript SDK, Helm, OTLP, OpenAPI, website, and test fixtures now point at the `v1.0.17` operator-continuity baseline.
+
+## Recently shipped (v1.0.16)
+
+- **Persistent Connect Agent drawer** — Fleet now exposes the install-bundle and remote-enrollment workflow as a stable URL target for Launchpad and command-palette pivots.
+- **Launchpad execution board** — Operator Launchpad now adds morning brief, guided incident path, fleet health drilldown, evidence freshness, operator task queue, response simulator, release gate automation, and demo-scenario rollups.
+- **Context-aware command palette** — command search now promotes route-aware actions for Launchpad, Fleet, SOC, release, and detection contexts before the broader command catalog.
+- **Focused regression coverage** — Launchpad, Search Palette, and workflow-pivot tests now cover the second-tranche operator execution paths.
+- **Release metadata alignment** — Rust, admin-console, Python SDK, TypeScript SDK, Helm, OTLP, OpenAPI, website, and test fixtures now point at the `v1.0.16` operator-execution baseline.
+
+## Recently shipped (v1.0.15)
+
+- **First-agent onboarding cockpit** — setup now explains the connection path, keeps admin API tokens distinct from one-use agent enrollment tokens, generates OS-specific install commands, and refreshes live readiness checks.
+- **Operator command palette depth** — command search now highlights connect-agent, SOC queue, response readiness, process workbench, and deployment confidence pivots.
+- **SOC workflow polish** — queue rows show why-this-fired evidence and confidence, response requests show approval/rollback/verification readiness, and process evidence rendering is capped for large payloads.
+- **Deployment confidence matrix** — Operator Launchpad now summarizes SDK/API contract, signing/provenance, container parity, backup/failover, data quality, scale gates, and install-plan coverage.
+- **Release metadata alignment** — Rust, admin-console, Python SDK, TypeScript SDK, Helm, OTLP, OpenAPI, website, and test fixtures now point at the `v1.0.15` operator-workflow baseline.
+
+## Recently shipped (v1.0.14)
+
+- **Claude workbench template** — the admin console shell now adopts the dense root `design/app` workbench template with a compact navigation rail, tighter topbar, darker default surface, scoped chips, compact cards, and process-investigation table hardening.
+- **Release metadata alignment** — Rust, admin-console, Python SDK, TypeScript SDK, Helm, OTLP, OpenAPI, website, and test fixtures now point at the `v1.0.14` Claude workbench layout baseline.
+
+## Recently shipped (v1.0.13)
+
+- **Detection Trust layer** — alert feedback, detection feedback, false-positive feedback, suppressions, replay freshness, lifecycle state, source reliability, enrichment quality, ATT&CK impact, alert volume, and campaign context now roll into per-rule trust scoring.
+- **Draft-only tuning queue** — Wardex now drafts scoped suppressions, threshold reviews, weight adjustments, stale suppression reviews, noisy rule reviews, and promotion blockers with impact previews and rollback paths, but never auto-applies them.
+- **Trust-first console updates** — Threat Detection shows noisy rules, trusted rules, stale suppressions, confidence drivers, and draft impact previews; Alert Drawer explains normalized outcomes and how feedback affects trust.
+- **Detection Lab trust deltas** — validation reports now include expected confidence and false-positive impact from Detection Trust.
+- **Release metadata alignment** — Rust, admin-console, Python SDK, TypeScript SDK, Helm, OTLP, OpenAPI, installation, reproducibility, website, and test fixtures now point at the `v1.0.13` detection-trust baseline.
+
+## Recently shipped (v1.0.12)
+
+- **Operator usability hardening** — the console groups navigation into Overview, Analyze, Detect, Respond, Operate, Govern, and Support, adds collapsible groups and role workspace anchors, and exposes trust workspaces through the global command palette.
+- **Evidence-first alert trust** — alert feedback, feedback summaries, evidence chains, and “why this fired” inputs are available through additive APIs and SDK helpers, with tuning suggestions visible but not automatically applied.
+- **Detection and response trust centers** — Detection Lab, Response Safety, Integrations, Operations Health, and Malware transparency workspaces expose validation runs, response previews, connector health, deployment SLOs, support snapshots, malware verdict explanations, opt-in signature presets, and scan diffing.
 
 ## Recently shipped (v1.0.11)
 

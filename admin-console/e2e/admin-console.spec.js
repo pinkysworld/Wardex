@@ -52,7 +52,7 @@ test.describe('Admin console smoke', () => {
       {
         title: 'Operator Launchpad',
         navTitle: 'Operator Launchpad',
-        marker: () => page.getByText('Run the first incident with confidence'),
+        marker: () => page.locator('#deployment-confidence').getByText('Ship readiness matrix'),
       },
       {
         title: 'Threat Detection',
@@ -108,6 +108,8 @@ test.describe('Admin console smoke', () => {
     await page.getByRole('button', { name: 'Search' }).click();
     const searchInput = page.getByRole('combobox', { name: 'Global search' });
     await expect(searchInput).toBeVisible();
+    await expect(page.getByRole('button', { name: /Connect First Agent/i })).toBeVisible();
+    await expect(page.getByRole('button', { name: /Deployment Confidence/i })).toBeVisible();
     await searchInput.fill('ssh');
     await expect(page.getByText('SSH burst detection')).toBeVisible({ timeout: 10000 });
     await page.getByText('SSH burst detection').click();

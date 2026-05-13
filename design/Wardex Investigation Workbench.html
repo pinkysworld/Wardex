@@ -1,0 +1,229 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<title>Wardex Security — Investigation Workbench</title>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet"/>
+<link rel="stylesheet" href="app/tokens.css"/>
+
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+
+<script src="app/data.js"></script>
+<script type="text/babel" src="app/icons.jsx"></script>
+<script type="text/babel" src="app/atoms.jsx"></script>
+<script type="text/babel" src="app/shell.jsx"></script>
+<script type="text/babel" src="app/screens/investigation.jsx"></script>
+<script type="text/babel" src="app/screens/dashboard.jsx"></script>
+<script type="text/babel" src="app/screens/misc.jsx"></script>
+<script type="text/babel" src="app/screens/variants.jsx"></script>
+<script type="text/babel" src="design-canvas.jsx"></script>
+<script type="text/babel" src="tweaks-panel.jsx"></script>
+
+<style>
+  html, body, #root { height: 100%; }
+  body { background: #eef0f3; }
+  .mode-switch {
+    position: fixed; top: 14px; left: 50%; transform: translateX(-50%);
+    z-index: 200;
+    display: flex; gap: 0; background: var(--bg-0); border: 1px solid var(--line);
+    border-radius: 7px; padding: 3px; box-shadow: var(--shadow-sm);
+  }
+  .mode-switch button {
+    padding: 5px 12px; font-size: 12px; font-weight: 500;
+    background: transparent; border: none; border-radius: 5px; cursor: pointer;
+    color: var(--fg-3); display: inline-flex; align-items: center; gap: 6px;
+  }
+  .mode-switch button.on { background: var(--bg-3); color: var(--fg); }
+  .app-frame {
+    position: absolute; inset: 0; background: var(--bg-0);
+  }
+</style>
+</head>
+<body>
+<div id="root"></div>
+
+<script type="text/babel" data-presets="react">
+const useState = React.useState;
+const useEffect = React.useEffect;
+
+const TWEAKS = /*EDITMODE-BEGIN*/{
+  "theme": "dark",
+  "accent": "#7c3aed",
+  "density": "comfortable",
+  "rail": "expanded",
+  "sevStyle": "soft",
+  "monoFont": "IBM Plex Mono"
+}/*EDITMODE-END*/;
+
+const ACCENT_OPTIONS = ['#7c3aed', '#2f5cf2', '#0e8a6a', '#e89a3e', '#dd1d4e'];
+const THEME_OPTIONS = ['light','dark','amber'];
+
+function applyTheme(t, accent, mono) {
+  const body = document.body;
+  body.classList.remove('theme-dark','theme-amber');
+  if (t === 'dark') body.classList.add('theme-dark');
+  if (t === 'amber') body.classList.add('theme-amber');
+  if (accent) {
+    document.documentElement.style.setProperty('--accent', accent);
+    // also compute a soft variant
+    const rgb = accent.match(/\w\w/g).map(h => parseInt(h,16));
+    document.documentElement.style.setProperty('--accent-soft', `rgba(${rgb.join(',')},0.12)`);
+  }
+  if (mono) document.documentElement.style.setProperty('--font-mono', `'${mono}', ui-monospace, monospace`);
+}
+
+function App() {
+  const [mode, setMode] = useState('proto'); // proto | canvas
+  const [active, setActive] = useState('investigation');
+  const t = window.useTweaks ? window.useTweaks(TWEAKS) : [TWEAKS, ()=>{}];
+  const tweaks = t[0], setTweak = t[1];
+
+  useEffect(() => { applyTheme(tweaks.theme, tweaks.accent, tweaks.monoFont); }, [tweaks.theme, tweaks.accent, tweaks.monoFont]);
+
+  const screens = {
+    investigation: window.InvestigationScreen,
+    command: window.DashboardScreen,
+    dashboard: window.DashboardScreen,
+    monitor: window.MonitorScreen,
+    detection: window.DetectionScreen,
+    fleet: window.FleetScreen,
+    approvals: window.ApprovalsScreen,
+    malware: window.MalwareScreen,
+    reports: window.ReportsScreen,
+    settings: window.SettingsScreen,
+  };
+  const ScreenC = screens[active] || screens.investigation;
+
+  return (
+    <>
+      <div className="mode-switch">
+        <button className={mode==='proto'?'on':''} onClick={()=>setMode('proto')}>
+          <svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6"><rect x="2" y="3" width="12" height="10" rx="1"/></svg>
+          Prototype
+        </button>
+        <button className={mode==='canvas'?'on':''} onClick={()=>setMode('canvas')}>
+          <svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6"><rect x="2" y="2" width="5" height="5" rx="1"/><rect x="9" y="2" width="5" height="5" rx="1"/><rect x="2" y="9" width="5" height="5" rx="1"/><rect x="9" y="9" width="5" height="5" rx="1"/></svg>
+          Variant canvas
+        </button>
+      </div>
+
+      {mode === 'proto' && (
+        <div className="app-frame" data-screen-label="Prototype">
+          <window.Shell active={active} onNav={setActive} railMode={tweaks.rail==='rail'?'rail':'expanded'}>
+            <ScreenC/>
+          </window.Shell>
+        </div>
+      )}
+
+      {mode === 'canvas' && <CanvasView/>}
+
+      <window.TweaksPanel title="Tweaks">
+        <window.TweakSection title="Theme">
+          <window.TweakRadio
+            label="Mode"
+            value={tweaks.theme}
+            options={[{label:'Light',value:'light'},{label:'Dark',value:'dark'},{label:'Amber',value:'amber'}]}
+            onChange={v=>setTweak('theme', v)}
+          />
+          <window.TweakColor
+            label="Accent"
+            value={tweaks.accent}
+            options={ACCENT_OPTIONS}
+            onChange={v=>setTweak('accent', v)}
+          />
+        </window.TweakSection>
+        <window.TweakSection title="Layout">
+          <window.TweakRadio
+            label="Sidebar"
+            value={tweaks.rail}
+            options={[{label:'Expanded',value:'expanded'},{label:'Rail',value:'rail'}]}
+            onChange={v=>setTweak('rail', v)}
+          />
+          <window.TweakRadio
+            label="Density"
+            value={tweaks.density}
+            options={[{label:'Comfortable',value:'comfortable'},{label:'Compact',value:'compact'}]}
+            onChange={v=>setTweak('density', v)}
+          />
+        </window.TweakSection>
+        <window.TweakSection title="Typography">
+          <window.TweakSelect
+            label="Mono font"
+            value={tweaks.monoFont}
+            options={['JetBrains Mono','IBM Plex Mono','ui-monospace']}
+            onChange={v=>setTweak('monoFont', v)}
+          />
+        </window.TweakSection>
+      </window.TweaksPanel>
+    </>
+  );
+}
+
+function CanvasView() {
+  const DC = window;
+  return (
+    <DC.DesignCanvas title="Wardex · investigation surface explorations" subtitle="One incident, five takes on the same data.">
+      <DC.DCSection id="primary" title="Primary — workbench" subtitle="Three-pane layout: alert queue, case canvas, response inspector. Built around the hero ransomware case.">
+        <DC.DCArtboard id="ab-primary" label="Workbench · prod-app-07" width={1440} height={900}>
+          <div className="app-frame" data-screen-label="01 Primary workbench"><window.Shell active="investigation"><window.InvestigationScreen/></window.Shell></div>
+        </DC.DCArtboard>
+        <DC.DCArtboard id="ab-cmd" label="Command Center" width={1440} height={900}>
+          <div className="app-frame" data-screen-label="02 Command Center"><window.Shell active="dashboard"><window.DashboardScreen/></window.Shell></div>
+        </DC.DCArtboard>
+      </DC.DCSection>
+
+      <DC.DCSection id="aesthetic" title="Aesthetic explorations" subtitle="Same case, recomposed. Less about screens, more about character.">
+        <DC.DCArtboard id="ab-terminal" label="Terminal" width={1100} height={760}>
+          <div data-screen-label="03 Terminal variant" style={{position:'absolute', inset:0}}><window.VariantTerminal/></div>
+        </DC.DCArtboard>
+        <DC.DCArtboard id="ab-graph" label="Graph-first · blast radius" width={1280} height={760}>
+          <div data-screen-label="04 Graph-first variant" style={{position:'absolute', inset:0}}><window.VariantGraphFirst/></div>
+        </DC.DCArtboard>
+        <DC.DCArtboard id="ab-timeline" label="Timeline-first" width={900} height={900}>
+          <div data-screen-label="05 Timeline-first variant" style={{position:'absolute', inset:0}}><window.VariantTimelineFirst/></div>
+        </DC.DCArtboard>
+        <DC.DCArtboard id="ab-storyline" label="Storyline · exec-ready" width={900} height={900}>
+          <div data-screen-label="06 Storyline variant" style={{position:'absolute', inset:0}}><window.VariantStoryline/></div>
+        </DC.DCArtboard>
+        <DC.DCArtboard id="ab-assist" label="Assistant-led" width={1280} height={820}>
+          <div data-screen-label="07 Assistant-led variant" style={{position:'absolute', inset:0}}><window.VariantAssistant/></div>
+        </DC.DCArtboard>
+      </DC.DCSection>
+
+      <DC.DCSection id="surfaces" title="Supporting surfaces" subtitle="Same system, applied across the rest of the product.">
+        <DC.DCArtboard id="ab-fleet" label="Fleet & agents" width={1440} height={760}>
+          <div className="app-frame" data-screen-label="08 Fleet"><window.Shell active="fleet"><window.FleetScreen/></window.Shell></div>
+        </DC.DCArtboard>
+        <DC.DCArtboard id="ab-detect" label="Detection rules" width={1440} height={760}>
+          <div className="app-frame" data-screen-label="09 Detection"><window.Shell active="detection"><window.DetectionScreen/></window.Shell></div>
+        </DC.DCArtboard>
+        <DC.DCArtboard id="ab-approve" label="Approvals + audit" width={1440} height={760}>
+          <div className="app-frame" data-screen-label="10 Approvals"><window.Shell active="approvals"><window.ApprovalsScreen/></window.Shell></div>
+        </DC.DCArtboard>
+        <DC.DCArtboard id="ab-malware" label="Sample analysis" width={1440} height={620}>
+          <div className="app-frame" data-screen-label="11 Malware"><window.Shell active="malware"><window.MalwareScreen/></window.Shell></div>
+        </DC.DCArtboard>
+        <DC.DCArtboard id="ab-monitor" label="Live monitor" width={1440} height={680}>
+          <div className="app-frame" data-screen-label="12 Monitor"><window.Shell active="monitor"><window.MonitorScreen/></window.Shell></div>
+        </DC.DCArtboard>
+        <DC.DCArtboard id="ab-reports" label="Reports" width={1440} height={620}>
+          <div className="app-frame" data-screen-label="13 Reports"><window.Shell active="reports"><window.ReportsScreen/></window.Shell></div>
+        </DC.DCArtboard>
+        <DC.DCArtboard id="ab-settings" label="Settings · RBAC" width={1440} height={680}>
+          <div className="app-frame" data-screen-label="14 Settings"><window.Shell active="settings"><window.SettingsScreen/></window.Shell></div>
+        </DC.DCArtboard>
+      </DC.DCSection>
+    </DC.DesignCanvas>
+  );
+}
+
+const root = ReactDOM.createRoot(document.getElementById('root'));
+root.render(<App/>);
+</script>
+</body>
+</html>

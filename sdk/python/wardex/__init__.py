@@ -13,7 +13,7 @@ from wardex.exceptions import (
     ServerError,
 )
 
-__version__ = "1.0.11"
+__version__ = "1.0.18"
 __all__ = [
     "CommandCenterLaneResponse",
     "CommandCenterSummaryResponse",

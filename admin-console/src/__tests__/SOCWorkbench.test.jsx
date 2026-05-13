@@ -262,6 +262,9 @@ const BASE_SOC_FIXTURES = {
         severity: 'high',
         summary: 'Password spray against Okta tenant',
         assigned_to: 'analyst-1',
+        rule_id: 'rule-okta-spray',
+        reasons: ['impossible travel', 'mfa failures'],
+        confidence: 0.87,
       },
       {
         id: 'alert-2',
@@ -290,6 +293,9 @@ const BASE_SOC_FIXTURES = {
         type: 'Contain host',
         target: 'host-1',
         status: 'running',
+        approval_status: 'approval granted',
+        rollback_status: 'rollback ready',
+        verification_status: 'verify queued',
         requested_at: '2024-01-01T00:00:00Z',
         steps: [{ name: 'Isolate host', status: 'running' }],
       },
@@ -304,7 +310,9 @@ const BASE_SOC_FIXTURES = {
       },
     ],
   },
-  responseStats: { pending: 1, running: 1, completed: 4, failed: 0 },
+  responseStats: { pending: 1, running: 1, completed: 4, failed: 0, ready_to_execute: 1 },
+  remediationSafety: { status: 'ready', rollback_status: 'rollback ready' },
+  changeReviews: { reviews: [{ id: 'change-1', status: 'approved' }] },
   escalationPolicies: {
     policies: [
       {
@@ -660,6 +668,10 @@ function installSocWorkbenchFetchMock(tracker = {}) {
       return Promise.resolve(jsonOk(fixtures.responseRequests));
     if (pathname === '/api/response/audit') return Promise.resolve(jsonOk(fixtures.responseAudit));
     if (pathname === '/api/response/stats') return Promise.resolve(jsonOk(fixtures.responseStats));
+    if (pathname === '/api/remediation/safety')
+      return Promise.resolve(jsonOk(fixtures.remediationSafety));
+    if (pathname === '/api/remediation/change-reviews')
+      return Promise.resolve(jsonOk(fixtures.changeReviews));
     if (pathname === '/api/escalation/acknowledge' && method === 'POST') {
       tracker.ackBodies = [...(tracker.ackBodies || []), body];
       fixtures.escalationActive.escalations = [];
@@ -861,6 +873,9 @@ describe('SOCWorkbench', () => {
     if (!queueCard) throw new Error('queue card not found');
 
     expect(await screen.findByText('Live (3)')).toBeInTheDocument();
+    expect(await screen.findByText('Why / Confidence')).toBeInTheDocument();
+    expect(await screen.findByText('rule-okta-spray')).toBeInTheDocument();
+    expect(await screen.findByText('87% confidence')).toBeInTheDocument();
     expect(currentLocation().hash).toBe('#queue');
 
     const initialQueueCalls = countCalls('/api/queue/alerts');
@@ -1223,6 +1238,10 @@ describe('SOCWorkbench', () => {
 
     expect(await screen.findByText('block-host')).toBeInTheDocument();
     expect(await screen.findByText('Requested host isolation')).toBeInTheDocument();
+    expect(await screen.findByText('Response readiness')).toBeInTheDocument();
+    expect(await screen.findByText('approval granted')).toBeInTheDocument();
+    expect((await screen.findAllByText('rollback ready')).length).toBeGreaterThan(0);
+    expect(await screen.findByText('verify queued')).toBeInTheDocument();
     expect(currentLocation().hash).toBe('#response');
 
     const initialPendingCalls = countResponseCalls('/api/response/pending');
@@ -1343,6 +1362,7 @@ describe('SOCWorkbench', () => {
     const countProcessCalls = (path) =>
       globalThis.fetch.mock.calls.filter(([url]) => String(url).split('?')[0] === path).length;
 
+    expect(await screen.findByText('Process workbench performance guard')).toBeInTheDocument();
     const findingsHeading = await screen.findByText('Process Security Findings (1)');
     const findingsCard = findingsHeading.closest('.card');
     if (!findingsCard) throw new Error('process findings card not found');
