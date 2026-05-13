@@ -184,7 +184,7 @@ export function ThemeProvider({ children }) {
     } catch {
       /* ignore — private mode */
     }
-    return window.matchMedia('(prefers-color-scheme: dark)').matches;
+    return true;
   });
   const darkRef = useRef(dark);
 

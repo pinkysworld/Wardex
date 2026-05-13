@@ -166,13 +166,31 @@ describe("WardexClient", () => {
     await client.wsHealth();
     await client.streamReadiness();
     await client.streamReliabilityLab();
+    await client.operatorWorkspaces();
+    await client.alertFeedback({ state: "valid" });
+    await client.alertFeedbackSummary();
+    await client.alertEvidenceChain({ alertId: "7" });
+    await client.detectionLabStatus();
+    await client.detectionLabRun({ mode: "replay" });
+    await client.detectionLabHistory();
+    await client.detectionLabReport();
+    await client.responseSafety();
+    await client.responsePreview({ action: "block_ip" });
+    await client.responseVerify({ action: "block_ip" });
+    await client.integrationsMarketplace();
+    await client.validateIntegration({ provider: "generic_syslog" });
+    await client.integrationSampleEvent("generic_syslog");
+    await client.operationsHealth();
+    await client.operationsHealthSnapshot();
+    await client.malwareExplain();
+    await client.malwareScanDiff();
     await client.sdkContractStatus();
     await client.operationalSnapshots({ kind: "stream_readiness", limit: 3 });
     await client.verifyOperationalSnapshot({ digest: "abc" });
     await client.releaseDoctor();
     await client.supportBundle();
     await client.releaseProvenance();
-    await client.releaseUpgradeRehearsal({ targetVersion: "1.0.11" });
+    await client.releaseUpgradeRehearsal({ targetVersion: "1.0.13" });
     await client.cleanReleaseCut();
     await client.containerReleaseParity();
     await client.releaseVerificationCenter();
@@ -194,6 +212,13 @@ describe("WardexClient", () => {
     });
     await client.detectionRecommendations(3);
     await client.detectionReadiness(5);
+    await client.detectionTrustOverview();
+    await client.detectionTrustRules();
+    await client.detectionTrustRule("rule-1");
+    await client.detectionTrustTuningDrafts();
+    await client.createDetectionTrustTuningDraft({ rule_id: "rule-1" });
+    await client.previewDetectionTrustTuningDraft("draft-1");
+    await client.approveDetectionTrustTuningDraft("draft-1");
     await client.responseApprovalOverview();
     await client.remediationSafety();
     await client.createSubscription();
@@ -213,6 +238,78 @@ describe("WardexClient", () => {
     );
     expect(mock).toHaveBeenCalledWith(
       "http://localhost:8080/api/stream/reliability-lab",
+      expect.objectContaining({ method: "GET" }),
+    );
+    expect(mock).toHaveBeenCalledWith(
+      "http://localhost:8080/api/operator/workspaces",
+      expect.objectContaining({ method: "GET" }),
+    );
+    expect(mock).toHaveBeenCalledWith(
+      "http://localhost:8080/api/alerts/feedback",
+      expect.objectContaining({ method: "POST" }),
+    );
+    expect(mock).toHaveBeenCalledWith(
+      "http://localhost:8080/api/alerts/feedback/summary",
+      expect.objectContaining({ method: "GET" }),
+    );
+    expect(mock).toHaveBeenCalledWith(
+      "http://localhost:8080/api/alerts/evidence-chain?alert_id=7",
+      expect.objectContaining({ method: "GET" }),
+    );
+    expect(mock).toHaveBeenCalledWith(
+      "http://localhost:8080/api/detection-lab/status",
+      expect.objectContaining({ method: "GET" }),
+    );
+    expect(mock).toHaveBeenCalledWith(
+      "http://localhost:8080/api/detection-lab/runs",
+      expect.objectContaining({ method: "POST" }),
+    );
+    expect(mock).toHaveBeenCalledWith(
+      "http://localhost:8080/api/detection-lab/history",
+      expect.objectContaining({ method: "GET" }),
+    );
+    expect(mock).toHaveBeenCalledWith(
+      "http://localhost:8080/api/detection-lab/report",
+      expect.objectContaining({ method: "GET" }),
+    );
+    expect(mock).toHaveBeenCalledWith(
+      "http://localhost:8080/api/response/safety",
+      expect.objectContaining({ method: "GET" }),
+    );
+    expect(mock).toHaveBeenCalledWith(
+      "http://localhost:8080/api/response/preview",
+      expect.objectContaining({ method: "POST" }),
+    );
+    expect(mock).toHaveBeenCalledWith(
+      "http://localhost:8080/api/response/verify",
+      expect.objectContaining({ method: "POST" }),
+    );
+    expect(mock).toHaveBeenCalledWith(
+      "http://localhost:8080/api/integrations/marketplace",
+      expect.objectContaining({ method: "GET" }),
+    );
+    expect(mock).toHaveBeenCalledWith(
+      "http://localhost:8080/api/integrations/validate",
+      expect.objectContaining({ method: "POST" }),
+    );
+    expect(mock).toHaveBeenCalledWith(
+      "http://localhost:8080/api/integrations/sample-event?provider=generic_syslog",
+      expect.objectContaining({ method: "GET" }),
+    );
+    expect(mock).toHaveBeenCalledWith(
+      "http://localhost:8080/api/operations/health",
+      expect.objectContaining({ method: "GET" }),
+    );
+    expect(mock).toHaveBeenCalledWith(
+      "http://localhost:8080/api/operations/health/snapshot",
+      expect.objectContaining({ method: "GET" }),
+    );
+    expect(mock).toHaveBeenCalledWith(
+      "http://localhost:8080/api/malware/explain",
+      expect.objectContaining({ method: "GET" }),
+    );
+    expect(mock).toHaveBeenCalledWith(
+      "http://localhost:8080/api/malware/scan-diff",
       expect.objectContaining({ method: "GET" }),
     );
     expect(mock).toHaveBeenCalledWith(
@@ -236,7 +333,7 @@ describe("WardexClient", () => {
       expect.objectContaining({ method: "GET" }),
     );
     expect(mock).toHaveBeenCalledWith(
-      "http://localhost:8080/api/release/upgrade-rehearsal?target_version=1.0.11",
+      "http://localhost:8080/api/release/upgrade-rehearsal?target_version=1.0.13",
       expect.objectContaining({ method: "GET" }),
     );
     expect(mock).toHaveBeenCalledWith(

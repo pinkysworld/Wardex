@@ -30,6 +30,18 @@ BULLET_RE = re.compile(r"^-\s+(?P<text>.*)$")
 BOLD_RE = re.compile(r"\*\*(.+?)\*\*")
 INLINE_CODE_RE = re.compile(r"`([^`]+)`")
 LINK_RE = re.compile(r"\[([^\]]+)\]\(([^)]+)\)")
+REPO_BLOB_URL = "https://github.com/pinkysworld/Wardex/blob/main/"
+
+
+def changelog_href(href: str) -> str:
+    """Return a publishable href for links copied from the repo changelog."""
+    if re.match(r"^[a-z][a-z0-9+.-]*:", href, flags=re.IGNORECASE):
+        return href
+    if href.startswith(("#", "/", "../")):
+        return href
+    if href.startswith(("docs/", "LICENSE", "CHANGELOG.md", "README.md")):
+        return REPO_BLOB_URL + href
+    return href
 
 
 def inline(text: str) -> str:
@@ -37,7 +49,7 @@ def inline(text: str) -> str:
     text = html.escape(text)
     # Links — must run before bold since link text may contain bold.
     text = LINK_RE.sub(
-        lambda m: f'<a href="{html.escape(m.group(2), quote=True)}" '
+        lambda m: f'<a href="{html.escape(changelog_href(m.group(2)), quote=True)}" '
         f'rel="noopener" target="_blank">{m.group(1)}</a>',
         text,
     )

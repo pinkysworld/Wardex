@@ -55,14 +55,115 @@ const CATEGORIES = [
 ];
 
 const COMMANDS = SEARCH_COMMANDS;
+const FEATURED_COMMANDS = [
+  'Connect First Agent',
+  'Connect Agent Drawer',
+  'Shift Handoff Workspace',
+  'Incident Timeline Builder',
+  'Guided Incident Path',
+  'Fleet Risk Heatmap',
+  'Open SOC Queue',
+  'Deployment Confidence',
+  'Safe Assistant',
+];
 
-function SearchPaletteDialog({ onClose, onNavigate, saved, setSaved }) {
+const CONTEXT_COMMANDS = [
+  {
+    label: 'Launchpad actions',
+    match: (path) => path === '/launchpad' || path === '/',
+    actions: [
+      'shift-handoff-workspace',
+      'incident-timeline-builder',
+      'morning-brief',
+      'guided-incident',
+      'operator-task-queue',
+      'collector-onboarding-center',
+      'release-gate',
+      'release-acceptance-report',
+      'fleet-risk-heatmap',
+      'evidence-freshness',
+      'safe-assistant',
+      'visual-regression-gate',
+    ],
+  },
+  {
+    label: 'Fleet actions',
+    match: (path) => path === '/fleet',
+    actions: [
+      'connect-agent-drawer',
+      'fleet-health-drilldown',
+      'fleet-risk-heatmap',
+      'collector-onboarding-center',
+      'review-offline-agents',
+    ],
+  },
+  {
+    label: 'SOC actions',
+    match: (path) => path === '/soc',
+    actions: [
+      'incident-timeline-builder',
+      'shift-handoff-workspace',
+      'guided-incident',
+      'open-soc-queue',
+      'response-playbook-simulator',
+      'safe-assistant',
+      'open-process-workbench',
+    ],
+  },
+  {
+    label: 'Release actions',
+    match: (path) => ['/operations-health', '/reports', '/settings'].includes(path),
+    actions: [
+      'release-acceptance-report',
+      'release-gate',
+      'deployment-confidence',
+      'evidence-surface-coverage',
+      'visual-regression-gate',
+    ],
+  },
+  {
+    label: 'Detection actions',
+    match: (path) => path === '/detection' || path === '/detection-lab',
+    actions: ['detection-quality', 'run-hunt', 'start-detection-lab', 'demo-scenarios'],
+  },
+];
+
+function uniqueCommandsByAction(commands) {
+  const seen = new Set();
+  return commands.filter((command) => {
+    const key = command.action || command.title;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+function contextualCommandsForPath(pathname = '') {
+  const context = CONTEXT_COMMANDS.find((entry) => entry.match(pathname));
+  if (!context) return { label: '', commands: [] };
+  const commands = context.actions
+    .map((action) => COMMANDS.find((command) => command.action === action))
+    .filter(Boolean);
+  return { label: context.label, commands: uniqueCommandsByAction(commands) };
+}
+
+function SearchPaletteDialog({ onClose, onNavigate, saved, setSaved, currentPath }) {
   const [query, setQuery] = useState('');
   const [results, setResults] = useState([]);
   const [loading, setLoading] = useState(false);
   const [selectedIdx, setSelectedIdx] = useState(0);
   const inputRef = useRef(null);
   const searchGenRef = useRef(0);
+  const contextualCommands = contextualCommandsForPath(currentPath);
+  const contextualActions = new Set(contextualCommands.commands.map((command) => command.action));
+  const featuredCommands = COMMANDS.filter(
+    (command) =>
+      FEATURED_COMMANDS.includes(command.title) && !contextualActions.has(command.action),
+  );
+  const remainingCommands = COMMANDS.filter(
+    (command) =>
+      !FEATURED_COMMANDS.includes(command.title) && !contextualActions.has(command.action),
+  );
 
   useEffect(() => {
     const focusTimer = window.setTimeout(() => inputRef.current?.focus(), 50);
@@ -249,22 +350,81 @@ function SearchPaletteDialog({ onClose, onNavigate, saved, setSaved }) {
           </div>
         )}
         {query.length < 2 && (
-          <div className="search-command-grid">
-            {COMMANDS.map((command) => (
-              <button
-                key={command.title}
-                type="button"
-                className="search-command-card"
-                onClick={() => {
-                  onNavigate?.(command);
-                  onClose?.(false);
-                }}
-              >
-                <span className="search-command-label">{command.title}</span>
-                <span className="search-command-copy">{command.subtitle}</span>
-              </button>
-            ))}
-          </div>
+          <>
+            {contextualCommands.commands.length > 0 && (
+              <>
+                <div className="search-section-heading">
+                  <span>{contextualCommands.label}</span>
+                  <span>{contextualCommands.commands.length} actions</span>
+                </div>
+                <div className="search-command-grid search-command-grid-featured">
+                  {contextualCommands.commands.map((command) => (
+                    <button
+                      key={command.title}
+                      type="button"
+                      className="search-command-card search-command-card-featured"
+                      onClick={() => {
+                        onNavigate?.(command);
+                        onClose?.(false);
+                      }}
+                    >
+                      <span className="search-command-icon" aria-hidden="true">
+                        {command.icon}
+                      </span>
+                      <span className="search-command-label">{command.title}</span>
+                      <span className="search-command-copy">{command.subtitle}</span>
+                    </button>
+                  ))}
+                </div>
+              </>
+            )}
+            <div className="search-section-heading">
+              <span>Operator quick actions</span>
+              <span>{featuredCommands.length} actions</span>
+            </div>
+            <div className="search-command-grid search-command-grid-featured">
+              {featuredCommands.map((command) => (
+                <button
+                  key={command.title}
+                  type="button"
+                  className="search-command-card search-command-card-featured"
+                  onClick={() => {
+                    onNavigate?.(command);
+                    onClose?.(false);
+                  }}
+                >
+                  <span className="search-command-icon" aria-hidden="true">
+                    {command.icon}
+                  </span>
+                  <span className="search-command-label">{command.title}</span>
+                  <span className="search-command-copy">{command.subtitle}</span>
+                </button>
+              ))}
+            </div>
+            <div className="search-section-heading">
+              <span>All commands</span>
+              <span>{remainingCommands.length} more</span>
+            </div>
+            <div className="search-command-grid">
+              {remainingCommands.map((command) => (
+                <button
+                  key={command.title}
+                  type="button"
+                  className="search-command-card"
+                  onClick={() => {
+                    onNavigate?.(command);
+                    onClose?.(false);
+                  }}
+                >
+                  <span className="search-command-icon" aria-hidden="true">
+                    {command.icon}
+                  </span>
+                  <span className="search-command-label">{command.title}</span>
+                  <span className="search-command-copy">{command.subtitle}</span>
+                </button>
+              ))}
+            </div>
+          </>
         )}
         {loading && (
           <div
@@ -282,6 +442,10 @@ function SearchPaletteDialog({ onClose, onNavigate, saved, setSaved }) {
         )}
         {results.length > 0 && (
           <div className="search-palette-results" id="search-results" role="listbox">
+            <div className="search-section-heading search-results-heading">
+              <span>Top matches</span>
+              <span>{results.length} shown</span>
+            </div>
             {results.map((r, i) => (
               <div
                 key={i}
@@ -317,7 +481,7 @@ function SearchPaletteDialog({ onClose, onNavigate, saved, setSaved }) {
   );
 }
 
-export default function SearchPalette({ open, onClose, onNavigate }) {
+export default function SearchPalette({ open, onClose, onNavigate, currentPath = '' }) {
   const [saved, setSaved] = useState(loadSaved);
 
   useEffect(() => {
@@ -339,6 +503,7 @@ export default function SearchPalette({ open, onClose, onNavigate }) {
       onNavigate={onNavigate}
       saved={saved}
       setSaved={setSaved}
+      currentPath={currentPath}
     />
   );
 }

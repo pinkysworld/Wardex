@@ -93,6 +93,22 @@ test('advanced admin console workflows smoke', async ({ page }) => {
   await sidebar.getByRole('link', { name: 'Dashboard', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Security Overview' })).toBeVisible();
 
+  await page.goto(`${BASE}/admin/detection-lab`, { waitUntil: 'domcontentloaded' });
+  await expect(page.getByRole('heading', { name: 'Detection Lab' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Run validation' })).toBeVisible();
+  await page.goto(`${BASE}/admin/response-safety`, { waitUntil: 'domcontentloaded' });
+  await expect(page.getByRole('heading', { name: 'Response Safety' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Preview block IP' })).toBeVisible();
+  await page.goto(`${BASE}/admin/integrations`, { waitUntil: 'domcontentloaded' });
+  await expect(page.getByRole('heading', { name: 'Integrations' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Validate syslog' })).toBeVisible();
+  await page.goto(`${BASE}/admin/operations-health`, { waitUntil: 'domcontentloaded' });
+  await expect(page.getByRole('heading', { name: 'Operations Health' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Export snapshot' })).toBeVisible();
+  await page.goto(`${BASE}/admin/malware`, { waitUntil: 'domcontentloaded' });
+  await expect(page.getByRole('heading', { name: 'Malware Trust Center' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Compare scans' })).toBeVisible();
+
   await page.goto(
     `${BASE}/admin/detection?intent=run-hunt&huntName=${encodeURIComponent(huntName)}&huntQuery=${encodeURIComponent(huntQuery)}`,
     { waitUntil: 'domcontentloaded' },

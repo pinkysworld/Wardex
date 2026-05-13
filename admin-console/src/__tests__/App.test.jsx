@@ -273,7 +273,7 @@ describe('App', () => {
     expect(screen.getAllByText('Dashboard').length).toBeGreaterThanOrEqual(1);
   });
 
-  it('places malware scanning in a dedicated Protect sidebar section', async () => {
+  it('places malware scanning in the dedicated malware trust route', async () => {
     localStorage.setItem('wardex_token', 'admin-token');
     fetchMock.mockImplementation(async (url) => ({
       ok: true,
@@ -285,12 +285,12 @@ describe('App', () => {
       },
     }));
 
-    await renderApp('/infrastructure?tab=integrity&scanPreset=open-source-av-baseline');
+    await renderApp('/malware?scanPreset=open-source-av-baseline');
 
-    expect((await screen.findAllByText('Protect')).length).toBeGreaterThan(0);
+    expect((await screen.findAllByText('Detect')).length).toBeGreaterThan(0);
     expect(screen.getByRole('link', { name: 'Malware Scanning' })).toHaveAttribute(
       'href',
-      '/infrastructure?tab=integrity&malwarePanel=summary&scanPreset=open-source-av-baseline',
+      '/malware',
     );
     expect(screen.getAllByText('Malware Scanning').length).toBeGreaterThan(0);
   });

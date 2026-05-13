@@ -16,6 +16,13 @@ function statusBadgeClass(mode) {
   return 'badge-warn';
 }
 
+function gateBadgeClass(status) {
+  const normalized = String(status || '').toLowerCase();
+  if (normalized === 'pass') return 'badge-ok';
+  if (normalized === 'review') return 'badge-warn';
+  return 'badge-info';
+}
+
 function formatScopeSource(value) {
   if (!value) return 'Manual';
   return String(value)
@@ -150,6 +157,23 @@ export default function AssistantWorkspace() {
   const selectedInvestigation =
     investigations.find((entry) => String(entry.id) === String(activeInvestigationId)) || null;
   const mode = statusData?.mode || 'retrieval-only';
+  const assistantBoundaryRows = [
+    {
+      name: 'Retrieval boundary',
+      detail: mode === 'retrieval-only' ? 'No autonomous execution' : 'Review model mode',
+      badge: mode === 'retrieval-only' ? 'badge-info' : 'badge-warn',
+    },
+    {
+      name: 'Citation trail',
+      detail: 'Answers keep citations and context events visible',
+      badge: 'badge-ok',
+    },
+    {
+      name: 'Action boundary',
+      detail: 'Response actions stay in approval and safety workspaces',
+      badge: 'badge-ok',
+    },
+  ];
 
   useEffect(() => {
     setCaseId(searchParams.get('case') || '');
@@ -219,6 +243,7 @@ export default function AssistantWorkspace() {
   const citations = Array.isArray(response?.citations) ? response.citations : [];
   const contextEvents = Array.isArray(response?.context_events) ? response.context_events : [];
   const warnings = Array.isArray(response?.warnings) ? response.warnings : [];
+  const qualityGates = Array.isArray(response?.quality_gates) ? response.quality_gates : [];
   const linkedCaseHref = caseContext?.case?.id
     ? buildSocLink({ caseId: caseContext.case.id, hash: 'cases' })
     : '/soc#cases';
@@ -384,6 +409,22 @@ export default function AssistantWorkspace() {
         )}
       </div>
 
+      <div className="card" id="safe-assistant-boundaries">
+        <div className="card-header">
+          <span className="card-title">Safe assistant boundaries</span>
+          <span className={`badge ${statusBadgeClass(mode)}`}>{mode}</span>
+        </div>
+        <div className="operator-health-list">
+          {assistantBoundaryRows.map((row) => (
+            <div key={row.name} className="operator-health-row">
+              <span className={`badge ${row.badge}`}>Ready</span>
+              <span>{row.name}</span>
+              <span>{row.detail}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+
       <div className="card">
         <div className="card-header">
           <span className="card-title">Ask a question</span>
@@ -467,6 +508,29 @@ export default function AssistantWorkspace() {
         </div>
 
         <div style={{ display: 'grid', gap: 16 }}>
+          <div className="card">
+            <div className="card-header">
+              <span className="card-title">Answer quality gates</span>
+              <span className="badge badge-info">{qualityGates.length || 3} checks</span>
+            </div>
+            {qualityGates.length > 0 ? (
+              <div style={{ display: 'grid', gap: 10 }}>
+                {qualityGates.map((gate) => (
+                  <div key={gate.id} className="operator-health-row">
+                    <span className={`badge ${gateBadgeClass(gate.status)}`}>{gate.status}</span>
+                    <span>{String(gate.id || '').replaceAll('_', ' ')}</span>
+                    <span>{gate.detail}</span>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <WorkspaceEmptyState
+                compact
+                description="Quality checks appear after a query runs."
+              />
+            )}
+          </div>
+
           <div className="card">
             <div className="card-header">
               <span className="card-title">Context & citations</span>

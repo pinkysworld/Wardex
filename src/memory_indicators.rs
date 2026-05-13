@@ -362,20 +362,62 @@ fn empty_report(pid: u32, name: &str, reason: &str) -> MemoryIndicatorReport {
 }
 
 #[cfg(target_os = "macos")]
-fn analyze_vmmap(pid: u32, process_name: &str, _vmmap_out: &str) -> MemoryIndicatorReport {
-    // vmmap output parsing is very different from /proc/maps.
-    // Simplified stub: report basic info only.
+fn analyze_vmmap(pid: u32, process_name: &str, vmmap_out: &str) -> MemoryIndicatorReport {
+    analyze_vmmap_output(pid, process_name, vmmap_out)
+}
+
+#[cfg(any(target_os = "macos", test))]
+fn analyze_vmmap_output(pid: u32, process_name: &str, vmmap_out: &str) -> MemoryIndicatorReport {
+    let mut rwx_regions = 0;
+    let mut anonymous_executable = 0;
+    let mut indicators = Vec::new();
+    let mut total_regions_scanned = 0;
+
+    for line in vmmap_out
+        .lines()
+        .map(str::trim)
+        .filter(|line| !line.is_empty())
+    {
+        let lower = line.to_ascii_lowercase();
+        let executable = lower.contains("r-x") || lower.contains("rwx") || lower.contains("__text");
+        if !executable {
+            continue;
+        }
+        total_regions_scanned += 1;
+
+        let writable = lower.contains("rwx") || lower.contains("rw-/rwx") || lower.contains("rwx/");
+        let anonymous = lower.contains("[ anon")
+            || lower.contains("malloc")
+            || lower.contains("stack")
+            || lower.contains("vm_allocate")
+            || lower.contains("anonymous");
+
+        if writable {
+            rwx_regions += 1;
+            indicators.push(format!("RWX vmmap region: {line}"));
+        }
+        if anonymous {
+            anonymous_executable += 1;
+            indicators.push(format!("anonymous executable vmmap region: {line}"));
+        }
+    }
+
+    let risk_score = ((rwx_regions as f32 * 0.35) + (anonymous_executable as f32 * 0.25)).min(1.0);
+    if indicators.is_empty() {
+        indicators.push("macOS vmmap analysis found no executable anonymous or RWX regions".into());
+    }
+
     MemoryIndicatorReport {
         pid,
         process_name: process_name.into(),
-        rwx_regions: 0,
-        anonymous_executable: 0,
+        rwx_regions,
+        anonymous_executable,
         reflective_dll_suspects: vec![],
         shellcode_patterns: vec![],
-        hollowing_suspected: false,
-        total_regions_scanned: 0,
-        risk_score: 0.0,
-        indicators: vec!["macOS vmmap analysis (limited)".into()],
+        hollowing_suspected: rwx_regions > 0 && anonymous_executable > 0,
+        total_regions_scanned,
+        risk_score,
+        indicators,
     }
 }
 
@@ -438,5 +480,19 @@ mod tests {
         let summary = summarize(&[r1, r2]);
         assert_eq!(summary.processes_scanned, 2);
         assert_eq!(summary.processes_flagged, 1);
+    }
+
+    #[test]
+    fn vmmap_parser_flags_rwx_and_anonymous_executable_regions() {
+        let vmmap = "\
+__TEXT                 100000000-100010000 [   64K] r-x/r-x SM=COW  /bin/example
+MALLOC_SMALL           110000000-110010000 [   64K] rwx/rwx SM=PRV
+[ anon ]               120000000-120010000 [   64K] r-x/r-x SM=PRV
+";
+        let report = analyze_vmmap_output(42, "sample", vmmap);
+        assert_eq!(report.rwx_regions, 1);
+        assert_eq!(report.anonymous_executable, 2);
+        assert!(report.hollowing_suspected);
+        assert!(report.risk_score > 0.0);
     }
 }

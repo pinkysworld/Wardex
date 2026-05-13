@@ -318,6 +318,36 @@ export const alertsAnalysisLatest = () => get('/api/alerts/analysis');
 export const alertsAnalysis = (body) => post('/api/alerts/analysis', body);
 export const alertsSample = (body) => post('/api/alerts/sample', body);
 export const alertsClear = () => del('/api/alerts');
+export const operatorWorkspaces = () => get('/api/operator/workspaces');
+export const alertFeedback = (body) => post('/api/alerts/feedback', body);
+export const alertFeedbackSummary = () => get('/api/alerts/feedback/summary');
+export const alertEvidenceChain = ({ alertId } = {}) => {
+  const query = new URLSearchParams();
+  if (alertId !== undefined && alertId !== null && alertId !== '') {
+    query.set('alert_id', String(alertId));
+  }
+  const suffix = query.toString();
+  return get(`/api/alerts/evidence-chain${suffix ? `?${suffix}` : ''}`);
+};
+export const detectionLabStatus = () => get('/api/detection-lab/status');
+export const detectionLabHistory = () => get('/api/detection-lab/history');
+export const detectionLabReport = () => get('/api/detection-lab/report');
+export const runDetectionLab = (body = { mode: 'replay' }) => post('/api/detection-lab/runs', body);
+export const responseSafety = () => get('/api/response/safety');
+export const responsePreview = (body) => post('/api/response/preview', body);
+export const responseVerify = (body) => post('/api/response/verify', body);
+export const integrationsMarketplace = () => get('/api/integrations/marketplace');
+export const validateIntegration = (body) => post('/api/integrations/validate', body);
+export const integrationSampleEvent = ({ provider } = {}) => {
+  const query = new URLSearchParams();
+  if (provider) query.set('provider', String(provider));
+  const suffix = query.toString();
+  return get(`/api/integrations/sample-event${suffix ? `?${suffix}` : ''}`);
+};
+export const operationsHealth = () => get('/api/operations/health');
+export const operationsHealthSnapshot = () => get('/api/operations/health/snapshot');
+export const malwareExplain = () => get('/api/malware/explain');
+export const malwareScanDiff = () => get('/api/malware/scan-diff');
 
 // ── Detection ────────────────────────────────────────────────
 export const analyze = (body) => post('/api/analyze', body);
@@ -336,6 +366,17 @@ export const detectionRecommendations = (limit = 10) =>
   get(`/api/detection/recommendations?limit=${encodeURIComponent(String(limit))}`);
 export const detectionReadiness = (limit = 20) =>
   get(`/api/detection/readiness?limit=${encodeURIComponent(String(limit))}`);
+export const detectionTrustOverview = () => get('/api/detection/trust/overview');
+export const detectionTrustRules = () => get('/api/detection/trust/rules');
+export const detectionTrustRule = (id) =>
+  get(`/api/detection/trust/rules/${encodeURIComponent(id)}`);
+export const detectionTrustTuningDrafts = () => get('/api/detection/trust/tuning-drafts');
+export const createDetectionTrustTuningDraft = (body) =>
+  post('/api/detection/trust/tuning-drafts', body);
+export const previewDetectionTrustTuningDraft = (id, body = {}) =>
+  post(`/api/detection/trust/tuning-drafts/${encodeURIComponent(id)}/preview`, body);
+export const approveDetectionTrustTuningDraft = (id, body = {}) =>
+  post(`/api/detection/trust/tuning-drafts/${encodeURIComponent(id)}/approve`, body);
 export const detectionReplayCorpus = () => get('/api/detection/replay-corpus');
 export const evaluateDetectionReplayCorpus = (body) => post('/api/detection/replay-corpus', body);
 export const efficacyCanaryPromote = () => post('/api/efficacy/canary-promote');

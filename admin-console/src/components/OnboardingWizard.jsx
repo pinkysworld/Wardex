@@ -1,11 +1,60 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import * as api from '../api.js';
+import { copyTextToClipboard } from './clipboard.js';
 import { safeStorageGet, safeStorageRemove, safeStorageSet } from '../safeStorage.js';
 
 const ROLES = ['viewer', 'analyst', 'admin'];
 const FEEDS = ['Abuse.ch MalwareBazaar', 'CIRCL MISP (TAXII)', 'Custom URL feed'];
+const AGENT_PLATFORMS = [
+  { id: 'macos', label: 'macOS', hostname: '$(hostname -s)' },
+  { id: 'linux', label: 'Linux', hostname: '$(hostname)' },
+  { id: 'windows', label: 'Windows', hostname: '$env:COMPUTERNAME' },
+];
+const DEFAULT_AGENT_TTL_SECS = 24 * 60 * 60;
 
-function ChecklistItem({ label, complete, helper, actionLabel, onAction, busy }) {
+function defaultManagerUrl() {
+  if (typeof window === 'undefined') return 'http://localhost:8080';
+  return window.location.origin || 'http://localhost:8080';
+}
+
+function quoteShell(value) {
+  return `'${String(value).replace(/'/g, `'"'"'`)}'`;
+}
+
+function quotePowerShell(value) {
+  return `'${String(value).replace(/'/g, "''")}'`;
+}
+
+function buildAgentInstallCommand({ platform, managerUrl, token }) {
+  const enrollmentToken = token || '<enrollment-token>';
+  const downloadBase = `${managerUrl.replace(/\/$/, '')}/api/updates/download`;
+
+  if (platform === 'windows') {
+    return [
+      `Invoke-WebRequest -Uri ${quotePowerShell(`${downloadBase}/wardex-agent-windows.exe`)} -OutFile "$env:TEMP\\wardex-agent.exe"`,
+      `.\\wardex-agent.exe enroll \``,
+      `  --server ${quotePowerShell(managerUrl)} \``,
+      `  --token ${quotePowerShell(enrollmentToken)} \``,
+      `  --hostname $env:COMPUTERNAME \``,
+      `  --platform windows`,
+    ].join('\n');
+  }
+
+  const artifact =
+    platform === 'macos' ? 'wardex-agent-macos-universal' : 'wardex-agent-linux-amd64';
+  const hostname = AGENT_PLATFORMS.find((item) => item.id === platform)?.hostname || '$(hostname)';
+  return [
+    `curl -fsSL -o /tmp/wardex-agent ${quoteShell(`${downloadBase}/${artifact}`)}`,
+    'chmod +x /tmp/wardex-agent',
+    'sudo /tmp/wardex-agent enroll \\',
+    `  --server ${quoteShell(managerUrl)} \\`,
+    `  --token ${quoteShell(enrollmentToken)} \\`,
+    `  --hostname ${hostname} \\`,
+    `  --platform ${platform}`,
+  ].join('\n');
+}
+
+function ChecklistItem({ label, complete, helper, actionLabel, onAction, busy, actionDisabled }) {
   return (
     <div className={`onboarding-checklist-item ${complete ? 'complete' : ''}`}>
       <div className="onboarding-checklist-mark" aria-hidden="true">
@@ -16,7 +65,12 @@ function ChecklistItem({ label, complete, helper, actionLabel, onAction, busy })
         {helper && <div className="onboarding-checklist-helper">{helper}</div>}
       </div>
       {onAction && (
-        <button type="button" className="btn btn-sm" onClick={onAction} disabled={busy}>
+        <button
+          type="button"
+          className="btn btn-sm"
+          onClick={onAction}
+          disabled={busy || actionDisabled}
+        >
           {busy ? 'Checking…' : actionLabel}
         </button>
       )}
@@ -28,6 +82,15 @@ export default function OnboardingWizard({ onComplete }) {
   const [token, setToken] = useState('');
   const [role, setRole] = useState(safeStorageGet('wardex_role', 'analyst'));
   const [selectedFeeds, setSelectedFeeds] = useState([FEEDS[0]]);
+  const [managerUrl, setManagerUrl] = useState(defaultManagerUrl);
+  const [agentPlatform, setAgentPlatform] = useState('macos');
+  const [enrollment, setEnrollment] = useState({
+    token: '',
+    expiresAt: '',
+    busy: false,
+    copied: false,
+    message: 'Create a one-use enrollment token when you are ready to connect the first agent.',
+  });
   const [readiness, setReadiness] = useState(null);
   const [readinessCheck, setReadinessCheck] = useState({
     busy: false,
@@ -83,16 +146,16 @@ export default function OnboardingWizard({ onComplete }) {
     () => [
       {
         key: 'token-present',
-        label: 'Connect backend',
-        complete: Boolean(token.trim()),
+        label: 'Console session',
+        complete: true,
         helper: token
-          ? 'Token entered and ready to validate.'
-          : 'Paste the admin token shown in the terminal.',
+          ? 'Admin token entered for verification and enrollment-token creation.'
+          : 'The console is connected. Paste the admin token only when you want this dialog to verify or issue agent tokens.',
       },
       {
         key: 'token-verified',
         label: 'Verify token',
-        complete: tokenCheck.ok,
+        complete: tokenCheck.ok || !token.trim(),
         helper: tokenCheck.message,
         actionLabel: 'Verify Token',
         onAction: async () => {
@@ -117,6 +180,7 @@ export default function OnboardingWizard({ onComplete }) {
           }
         },
         busy: tokenCheck.busy,
+        actionDisabled: !token.trim(),
       },
       {
         key: 'role-selected',
@@ -125,6 +189,12 @@ export default function OnboardingWizard({ onComplete }) {
         helper: role
           ? `Workspace optimized for ${role}.`
           : 'Choose the workspace that matches your daily responsibilities.',
+      },
+      {
+        key: 'agent-token-ready',
+        label: 'Agent enrollment command',
+        complete: Boolean(enrollment.token),
+        helper: enrollment.message,
       },
       {
         key: 'first-agent-online',
@@ -196,11 +266,29 @@ export default function OnboardingWizard({ onComplete }) {
         busy: readinessCheck.busy,
       },
     ],
-    [readinessCheck.busy, readinessItem, refreshReadiness, role, token, tokenCheck],
+    [
+      enrollment.message,
+      enrollment.token,
+      readinessCheck.busy,
+      readinessItem,
+      refreshReadiness,
+      role,
+      token,
+      tokenCheck,
+    ],
   );
 
   const completedCount = checklist.filter((item) => item.complete).length;
-  const canFinish = checklist[0].complete && checklist[2].complete;
+  const canFinish = checklist[2].complete;
+  const installCommand = useMemo(
+    () =>
+      buildAgentInstallCommand({
+        platform: agentPlatform,
+        managerUrl: managerUrl.trim() || defaultManagerUrl(),
+        token: enrollment.token,
+      }),
+    [agentPlatform, enrollment.token, managerUrl],
+  );
 
   const toggleFeed = (feed) => {
     setSelectedFeeds((prev) =>
@@ -220,6 +308,50 @@ export default function OnboardingWizard({ onComplete }) {
       }
     }
     onComplete?.();
+  };
+
+  const createEnrollmentToken = async () => {
+    const previous = api.getToken();
+    setEnrollment((current) => ({
+      ...current,
+      busy: true,
+      copied: false,
+      message: 'Requesting a one-use enrollment token from Wardex...',
+    }));
+    try {
+      if (token.trim()) api.setToken(token.trim());
+      const next = await api.agentsToken({ max_uses: 1, ttl_secs: DEFAULT_AGENT_TTL_SECS });
+      setEnrollment({
+        token: next?.token || '',
+        expiresAt: next?.expires_at || '',
+        busy: false,
+        copied: false,
+        message: next?.expires_at
+          ? `Token ready. It expires ${next.expires_at}.`
+          : 'Token ready. Use it once to enroll the first agent.',
+      });
+      await refreshReadiness();
+    } catch {
+      setEnrollment((current) => ({
+        ...current,
+        busy: false,
+        message:
+          'Could not create an enrollment token. Confirm the session or paste a fresh admin token.',
+      }));
+    } finally {
+      api.setToken(previous);
+    }
+  };
+
+  const copyInstallCommand = async () => {
+    const copied = await copyTextToClipboard(installCommand);
+    setEnrollment((current) => ({
+      ...current,
+      copied,
+      message: copied
+        ? 'Install command copied.'
+        : 'Clipboard unavailable. Select the command text manually.',
+    }));
   };
 
   return (
@@ -249,9 +381,25 @@ export default function OnboardingWizard({ onComplete }) {
 
         <div className="onboarding-grid">
           <section className="onboarding-section">
+            <div className="onboarding-connect-card">
+              <div>
+                <div className="form-label">Connection Path</div>
+                <div className="onboarding-connect-title">
+                  Admin console → enrollment token → first heartbeat
+                </div>
+                <div className="form-helper">
+                  Keep this panel open while you generate the enrollment token, run the install
+                  command, and refresh readiness.
+                </div>
+              </div>
+              <span className={`badge ${readiness?.ready ? 'badge-ok' : 'badge-warn'}`}>
+                {readiness?.ready ? 'Ready' : 'Setup in progress'}
+              </span>
+            </div>
+
             <div className="form-group">
               <label className="form-label" htmlFor="onboarding-token">
-                API Token
+                Admin API Token
               </label>
               <input
                 id="onboarding-token"
@@ -271,7 +419,24 @@ export default function OnboardingWizard({ onComplete }) {
                 autoComplete="current-password"
               />
               <div className="form-helper">
-                The token is printed in the terminal when the Wardex backend starts.
+                The token is printed in the terminal when the Wardex backend starts. Existing
+                console sessions can continue without re-entering it.
+              </div>
+            </div>
+
+            <div className="form-group">
+              <label className="form-label" htmlFor="onboarding-manager-url">
+                Wardex Server URL
+              </label>
+              <input
+                id="onboarding-manager-url"
+                className="form-input"
+                value={managerUrl}
+                onChange={(event) => setManagerUrl(event.target.value)}
+                placeholder="http://localhost:8080"
+              />
+              <div className="form-helper">
+                This URL is embedded into the generated agent enrollment command.
               </div>
             </div>
 
@@ -314,6 +479,61 @@ export default function OnboardingWizard({ onComplete }) {
                 Pick the feeds you want configured as part of the initial setup.
               </div>
             </div>
+
+            <div className="form-group">
+              <div className="form-label">First Agent</div>
+              <div
+                className="segmented-control"
+                role="radiogroup"
+                aria-label="Choose agent platform"
+              >
+                {AGENT_PLATFORMS.map((item) => (
+                  <button
+                    key={item.id}
+                    type="button"
+                    className={`segmented-option ${agentPlatform === item.id ? 'active' : ''}`}
+                    role="radio"
+                    aria-checked={agentPlatform === item.id}
+                    onClick={() => setAgentPlatform(item.id)}
+                  >
+                    {item.label}
+                  </button>
+                ))}
+              </div>
+              <div className="onboarding-command-panel">
+                <div className="onboarding-command-header">
+                  <span>
+                    {enrollment.token
+                      ? 'Enrollment command ready'
+                      : 'Generate token to unlock command'}
+                  </span>
+                  <div className="btn-group">
+                    <button
+                      type="button"
+                      className="btn btn-sm"
+                      onClick={createEnrollmentToken}
+                      disabled={enrollment.busy}
+                    >
+                      {enrollment.busy ? 'Creating...' : 'Create Token'}
+                    </button>
+                    <button
+                      type="button"
+                      className="btn btn-sm"
+                      onClick={copyInstallCommand}
+                      disabled={!enrollment.token}
+                    >
+                      {enrollment.copied ? 'Copied' : 'Copy Command'}
+                    </button>
+                  </div>
+                </div>
+                <pre className="onboarding-command-preview">{installCommand}</pre>
+                {enrollment.expiresAt && (
+                  <div className="form-helper">
+                    Enrollment token expires {enrollment.expiresAt}.
+                  </div>
+                )}
+              </div>
+            </div>
           </section>
 
           <section className="onboarding-section">
@@ -327,6 +547,7 @@ export default function OnboardingWizard({ onComplete }) {
                   actionLabel={item.actionLabel}
                   onAction={item.onAction}
                   busy={item.busy}
+                  actionDisabled={item.actionDisabled}
                 />
               ))}
             </div>

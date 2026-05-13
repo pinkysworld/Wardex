@@ -4,6 +4,88 @@ All notable changes to Wardex are documented in this file.
 
 ## [Unreleased]
 
+## [1.0.18] — 2026-05-13 — intelligence gates and release cleanup
+
+### Added
+- **Operator-safe triage intelligence**: enriches managed ML triage results with calibrated confidence, quality gates, recommended operator journey, evidence mode, and human-approval requirements while keeping response execution approval-gated.
+- **Assistant answer quality gates**: adds citation, confidence, and execution-boundary checks to analyst assistant responses and renders those checks in the assistant workspace.
+- **Notification outbox trail**: adds deduplicated outbox records for notification dispatch attempts so alert delivery state can become operator-visible evidence.
+- **Canonical operator journeys**: adds Launchpad golden-path coverage for critical alert response, collector-to-detection trust, release acceptance, and assistant-to-evidence workflows.
+
+### Changed
+- **Evidence-mode clarity**: Launchpad now summarizes proof freshness by evidence mode so operators can distinguish live runtime proof from pending or persisted evidence.
+- **macOS memory indicators**: replaces the basic vmmap placeholder with RWX and anonymous-executable region parsing for stronger local memory-forensics signals.
+- **Release metadata alignment**: bumps Rust, admin-console, Python SDK, TypeScript SDK, Helm, OTLP, OpenAPI, website, and test fixtures to the `v1.0.18` intelligence-gates baseline.
+
+## [1.0.17] — 2026-05-12 — operator continuity and evidence closure
+
+### Added
+- **Shift continuity workspace**: adds exportable handoff notes that carry queue pressure, stale evidence, release blockers, fleet watch items, and generated operator tasks into the next shift.
+- **Incident timeline builder**: assembles alert, process/thread, timeline replay, evidence, and report handoff signals into a Launchpad timeline draft with a downloadable artifact.
+- **Collector onboarding center and fleet risk heatmap**: groups cloud, identity, SaaS, endpoint, and syslog telemetry lanes while surfacing offline, stale heartbeat, version drift, and active-detection fleet risk.
+- **Release acceptance and visual gate**: adds a one-click release acceptance export plus a Playwright screenshot artifact gate for the Launchpad continuity board.
+- **Role home and safe assistant surfaces**: adds role-specific Launchpad home cards and explicit retrieval-only/citation/execution boundaries for the Operator Assistant.
+
+### Changed
+- **Command palette continuity**: adds direct pivots for handoff, timeline builder, collector onboarding, release acceptance, fleet heatmap, response playbook simulation, visual gate, and safe assistant cards.
+- **Release metadata alignment**: bumps Rust, admin-console, Python SDK, TypeScript SDK, Helm, OTLP, OpenAPI, website, and test fixtures to the `v1.0.17` operator-continuity baseline.
+
+## [1.0.16] — 2026-05-11 — operator execution board
+
+### Added
+- **Persistent Connect Agent drawer**: gives the Fleet install-bundle and remote-enrollment workflow a stable command-palette route and URL hash so operators can jump directly into agent connection from Launchpad, Fleet, or search.
+- **Launchpad execution board**: adds morning brief, guided incident path, fleet health drilldown, evidence freshness, operator task queue, response simulator, release gate automation, and demo-scenario rollups on top of existing live signals.
+- **Context-aware command palette**: surfaces route-specific Launchpad, Fleet, SOC, release, and detection actions ahead of the broader command catalog.
+
+### Changed
+- **Fleet enrollment focus**: adds a URL-backed Connect Agent update panel for one-use enrollment bundles, manual installs, and remote install workflows.
+- **Release metadata alignment**: bumps Rust, admin-console, Python SDK, TypeScript SDK, Helm, OTLP, OpenAPI, website, and test fixtures to the `v1.0.16` operator-execution baseline.
+
+## [1.0.15] — 2026-05-11 — operator onboarding and workflow depth
+
+### Added
+- **First-agent onboarding cockpit**: adds a guided connection path that separates the admin API token from one-use agent enrollment tokens, generates OS-specific install commands, and keeps server readiness visible during setup.
+- **Operator command palette depth**: adds connect-agent, SOC queue, process workbench, response-readiness, and deployment-confidence quick actions with stronger command grouping.
+- **SOC workflow polish**: adds queue explainability and confidence context, response-readiness summaries with approval/rollback/verification state, process workbench render caps, and a compact SOC cockpit strip.
+
+### Changed
+- **Launchpad deployment confidence**: adds a ship-readiness matrix across SDK/API contract, signing/provenance, container parity, backup/failover, data quality, scale gates, and install-plan coverage.
+- **Release metadata alignment**: bumps Rust, admin-console, Python SDK, TypeScript SDK, Helm, OTLP, OpenAPI, website, and test fixtures to the `v1.0.15` operator-workflow baseline.
+
+## [1.0.14] — 2026-05-11 — Claude workbench layout
+
+### Changed
+- **Claude design template integration**: wires the root `design/app` workbench template into the live admin console shell with a compact rail, dense topbar, scoped chips, dark default surface, and tighter card/table treatment.
+- **SOC process workbench hardening**: updates process findings, live-process, deep-chain, and timeline layouts to better match the Claude investigation template while keeping existing route and API behavior intact.
+- **Release metadata alignment**: bumps Rust, admin-console, Python SDK, TypeScript SDK, Helm, OTLP, OpenAPI, website, and test fixtures to the `v1.0.14` Claude workbench layout baseline.
+
+## [1.0.13] — 2026-05-11 — detection trust and false-positive control
+
+### Added
+- **Detection Trust layer**: correlates analyst feedback, false-positive signals, suppressions, replay evidence, rule lifecycle, source reliability, enrichment quality, ATT&CK impact, alert-volume trend, and campaign context into per-rule trust scores.
+- **Draft-only tuning APIs**: adds Detection Trust overview, rule detail, tuning draft queue, draft creation, impact preview, and approval-intent endpoints across REST/OpenAPI, Python SDK, TypeScript SDK, and release acceptance.
+- **Operator-visible trust UI**: Threat Detection now shows noisy rules, trusted rules, stale suppressions, confidence drivers, and draft impact previews; Alert Drawer explains normalized feedback states and how feedback affects trust.
+
+### Changed
+- **Feedback normalization**: detection and alert feedback normalize to `valid`, `false_positive`, `benign_true_positive`, `needs_more_data`, or `duplicate` before scoring.
+- **Detection Lab trust deltas**: validation payloads now include expected confidence and false-positive impact from Detection Trust.
+- **Release metadata alignment**: bumps Rust, admin-console, Python SDK, TypeScript SDK, Helm, OTLP, OpenAPI, installation, reproducibility, website, and test surfaces to the `v1.0.13` detection-trust baseline.
+
+### Guardrail
+- **No automatic weakening**: Wardex can draft suppressions, threshold reviews, weight adjustments, stale-suppression reviews, noisy-rule reviews, and promotion blockers, but production tuning remains operator-applied only.
+
+## [1.0.12] — 2026-05-11 — operator trust and usability
+
+### Added
+- **Operator trust workspaces**: adds grouped navigation, role workspace anchors, Detection Lab, Response Safety, Integrations, Operations Health, and Malware transparency routes so every major trust workflow is reachable from the console and command palette.
+- **Additive trust APIs**: publishes alert feedback summaries, evidence-chain retrieval, detection validation runs, response preview and verification, connector marketplace summaries, operations health snapshots, malware verdict explanations, and scan diff retrieval through REST/OpenAPI and both SDKs.
+- **Malware and response transparency**: expands malware verdicts with signature-source, YARA/ClamAV/hash, rootkit, packing, skipped-check, confidence, and response guidance, while response actions now expose preview, blast-radius, approval, rollback, and verification evidence before execution.
+
+### Changed
+- **False-positive control**: alert feedback now records outcome states and feeds visible tuning suggestions without automatically weakening detections.
+- **Deployment trust**: operations and connector views summarize freshness, lag, health, sample events, permissions, impact, and support snapshots in operator-readable cards.
+- **Release metadata alignment**: bumps Rust, admin-console, Python SDK, TypeScript SDK, Helm, OTLP, OpenAPI, installation, reproducibility, website, and test surfaces to the `v1.0.12` release baseline.
+
 ## [1.0.11] — 2026-05-11 — CI and release-trust hotfix
 
 ### Fixed

@@ -1,7 +1,7 @@
 openapi: 3.0.3
 info:
   title: Wardex XDR/SIEM API
-  version: 1.0.11
+  version: 1.0.18
   description: "Wardex XDR/SIEM REST API \u2014 detection, fleet management, incident response, and platform operations."
   license:
     name: AGPL-3.0-only
@@ -11242,6 +11242,344 @@ paths:
                 $ref: '#/components/schemas/Error'
       security:
       - bearerAuth: []
+  /api/operator/workspaces:
+    get:
+      summary: Grouped operator navigation, role workspaces, and trust workspace snapshots
+      operationId: getOperatorWorkspaces
+      tags:
+      - operator-trust
+      x-wardex-auth: authenticated
+      responses:
+        '200':
+          description: Grouped operator navigation, role workspaces, and trust workspace snapshots
+          content:
+            application/json:
+              schema:
+                type: object
+      security:
+      - bearerAuth: []
+  /api/alerts/feedback:
+    post:
+      summary: Submit additive alert outcome feedback without automatic tuning
+      operationId: submitAlertFeedback
+      tags:
+      - alerts
+      - operator-trust
+      x-wardex-auth: authenticated
+      requestBody:
+        required: false
+        description: Alert feedback payload
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: Submit additive alert outcome feedback without automatic tuning
+          content:
+            application/json:
+              schema:
+                type: object
+      security:
+      - bearerAuth: []
+  /api/alerts/feedback/summary:
+    get:
+      summary: Alert feedback rollup and tuning suggestions
+      operationId: getAlertFeedbackSummary
+      tags:
+      - alerts
+      - operator-trust
+      x-wardex-auth: authenticated
+      responses:
+        '200':
+          description: Alert feedback rollup and tuning suggestions
+          content:
+            application/json:
+              schema:
+                type: object
+      security:
+      - bearerAuth: []
+  /api/alerts/evidence-chain:
+    get:
+      summary: Evidence chain for an alert, thread, case, or investigation drawer
+      operationId: getAlertEvidenceChain
+      tags:
+      - alerts
+      - operator-trust
+      x-wardex-auth: authenticated
+      responses:
+        '200':
+          description: Evidence chain for an alert, thread, case, or investigation drawer
+          content:
+            application/json:
+              schema:
+                type: object
+      security:
+      - bearerAuth: []
+  /api/detection-lab/runs:
+    post:
+      summary: Create a safe detection validation lab run
+      operationId: createDetectionLabRun
+      tags:
+      - detection
+      - operator-trust
+      x-wardex-auth: authenticated
+      requestBody:
+        required: false
+        description: Detection lab run request
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: Create a safe detection validation lab run
+          content:
+            application/json:
+              schema:
+                type: object
+      security:
+      - bearerAuth: []
+  /api/detection-lab/status:
+    get:
+      summary: Detection Lab status, expected-vs-observed detections, and recommendations
+      operationId: getDetectionLabStatus
+      tags:
+      - detection
+      - operator-trust
+      x-wardex-auth: authenticated
+      responses:
+        '200':
+          description: Detection Lab status, expected-vs-observed detections, and recommendations
+          content:
+            application/json:
+              schema:
+                type: object
+      security:
+      - bearerAuth: []
+  /api/detection-lab/history:
+    get:
+      summary: Detection Lab validation history and evidence
+      operationId: listDetectionLabHistory
+      tags:
+      - detection
+      - operator-trust
+      x-wardex-auth: authenticated
+      responses:
+        '200':
+          description: Detection Lab validation history and evidence
+          content:
+            application/json:
+              schema:
+                type: object
+      security:
+      - bearerAuth: []
+  /api/detection-lab/report:
+    get:
+      summary: Exportable Detection Lab validation report
+      operationId: exportDetectionLabReport
+      tags:
+      - detection
+      - operator-trust
+      x-wardex-auth: authenticated
+      responses:
+        '200':
+          description: Exportable Detection Lab validation report
+          content:
+            application/json:
+              schema:
+                type: object
+      security:
+      - bearerAuth: []
+  /api/response/safety:
+    get:
+      summary: Response Safety Center overview and action catalog
+      operationId: getResponseSafety
+      tags:
+      - response
+      - operator-trust
+      x-wardex-auth: authenticated
+      responses:
+        '200':
+          description: Response Safety Center overview and action catalog
+          content:
+            application/json:
+              schema:
+                type: object
+      security:
+      - bearerAuth: []
+  /api/response/preview:
+    post:
+      summary: Preview response action blast radius, approvals, rollback, and verification
+      operationId: previewResponseAction
+      tags:
+      - response
+      - operator-trust
+      x-wardex-auth: authenticated
+      requestBody:
+        required: false
+        description: Response preview payload
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: Preview response action blast radius, approvals, rollback, and verification
+          content:
+            application/json:
+              schema:
+                type: object
+      security:
+      - bearerAuth: []
+  /api/response/verify:
+    post:
+      summary: Verify whether a response action outcome took effect
+      operationId: verifyResponseAction
+      tags:
+      - response
+      - operator-trust
+      x-wardex-auth: authenticated
+      requestBody:
+        required: false
+        description: Response verification payload
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: Verify whether a response action outcome took effect
+          content:
+            application/json:
+              schema:
+                type: object
+      security:
+      - bearerAuth: []
+  /api/integrations/marketplace:
+    get:
+      summary: Connector marketplace summaries, health, permissions, and impact mapping
+      operationId: getIntegrationsMarketplace
+      tags:
+      - config
+      - operator-trust
+      x-wardex-auth: authenticated
+      responses:
+        '200':
+          description: Connector marketplace summaries, health, permissions, and impact mapping
+          content:
+            application/json:
+              schema:
+                type: object
+      security:
+      - bearerAuth: []
+  /api/integrations/validate:
+    post:
+      summary: Validate connector configuration support and preview sample evidence
+      operationId: validateIntegration
+      tags:
+      - config
+      - operator-trust
+      x-wardex-auth: authenticated
+      requestBody:
+        required: false
+        description: Connector validation payload
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: Validate connector configuration support and preview sample evidence
+          content:
+            application/json:
+              schema:
+                type: object
+      security:
+      - bearerAuth: []
+  /api/integrations/sample-event:
+    get:
+      summary: Preview a normalized sample event for a connector provider
+      operationId: getIntegrationSampleEvent
+      tags:
+      - config
+      - operator-trust
+      x-wardex-auth: authenticated
+      responses:
+        '200':
+          description: Preview a normalized sample event for a connector provider
+          content:
+            application/json:
+              schema:
+                type: object
+      security:
+      - bearerAuth: []
+  /api/operations/health:
+    get:
+      summary: Operations Health SLO cards, deployment signals, and recommended actions
+      operationId: getOperationsHealth
+      tags:
+      - observability
+      - operator-trust
+      x-wardex-auth: authenticated
+      responses:
+        '200':
+          description: Operations Health SLO cards, deployment signals, and recommended actions
+          content:
+            application/json:
+              schema:
+                type: object
+      security:
+      - bearerAuth: []
+  /api/operations/health/snapshot:
+    get:
+      summary: Export production health snapshot for support bundles and release readiness
+      operationId: exportOperationsHealthSnapshot
+      tags:
+      - observability
+      - operator-trust
+      x-wardex-auth: authenticated
+      responses:
+        '200':
+          description: Export production health snapshot for support bundles and release readiness
+          content:
+            application/json:
+              schema:
+                type: object
+      security:
+      - bearerAuth: []
+  /api/malware/explain:
+    get:
+      summary: Explain malware verdict evidence, signature sources, rootkit checks, and limitations
+      operationId: explainMalwareVerdict
+      tags:
+      - operator-trust
+      x-wardex-auth: authenticated
+      responses:
+        '200':
+          description: Explain malware verdict evidence, signature sources, rootkit checks, and limitations
+          content:
+            application/json:
+              schema:
+                type: object
+      security:
+      - bearerAuth: []
+  /api/malware/scan-diff:
+    get:
+      summary: Compare repeated malware scans for a file, folder, host, or scan target
+      operationId: getMalwareScanDiff
+      tags:
+      - operator-trust
+      x-wardex-auth: authenticated
+      responses:
+        '200':
+          description: Compare repeated malware scans for a file, folder, host, or scan target
+          content:
+            application/json:
+              schema:
+                type: object
+      security:
+      - bearerAuth: []
   /api/system/health/dependencies:
     get:
       summary: Dependency and rollout health
@@ -12882,6 +13220,160 @@ paths:
                 type: object
       security:
       - bearerAuth: []
+      x-wardex-auth: authenticated
+  /api/detection/trust/overview:
+    get:
+      summary: Detection Trust overview with noisy rules, trusted rules, stale suppressions, confidence drivers, and draft-only tuning queue
+      operationId: getDetectionTrustOverview
+      tags:
+      - detection
+      responses:
+        '200':
+          description: Detection Trust overview response
+          content:
+            application/json:
+              schema:
+                type: object
+      security:
+      - bearerAuth: []
+      x-wardex-auth: authenticated
+  /api/detection/trust/rules:
+    get:
+      summary: Per-rule Detection Trust scores with feedback rollups, suppression pressure, replay freshness, source quality, enrichment, ATT&CK coverage, and volume trend
+      operationId: getDetectionTrustRules
+      tags:
+      - detection
+      responses:
+        '200':
+          description: Detection Trust rules response
+          content:
+            application/json:
+              schema:
+                type: object
+      security:
+      - bearerAuth: []
+      x-wardex-auth: authenticated
+  /api/detection/trust/rules/{id}:
+    get:
+      summary: Detection Trust detail for one rule including analyst feedback history and any draft-only tuning suggestion
+      operationId: getDetectionTrustRule
+      tags:
+      - detection
+      parameters:
+      - name: id
+        in: path
+        description: Path parameter
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: Detection Trust rule response
+          content:
+            application/json:
+              schema:
+                type: object
+      security:
+      - bearerAuth: []
+      x-wardex-auth: authenticated
+  /api/detection/trust/tuning-drafts:
+    get:
+      summary: Draft-only tuning suggestions generated from analyst outcomes, suppressions, replay, and rule lifecycle evidence
+      operationId: getDetectionTrustTuningDrafts
+      tags:
+      - detection
+      responses:
+        '200':
+          description: Detection Trust tuning drafts response
+          content:
+            application/json:
+              schema:
+                type: object
+      security:
+      - bearerAuth: []
+      x-wardex-auth: authenticated
+    post:
+      summary: Create an operator-reviewed Detection Trust tuning draft without changing production detections
+      operationId: createDetectionTrustTuningDraft
+      tags:
+      - detection
+      requestBody:
+        description: Detection Trust tuning draft request
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: Detection Trust tuning draft response
+          content:
+            application/json:
+              schema:
+                type: object
+      security:
+      - bearerAuth: []
+      x-wardex-auth: authenticated
+  /api/detection/trust/tuning-drafts/{id}/preview:
+    post:
+      summary: Preview Detection Trust draft impact before any operator-applied change
+      operationId: previewDetectionTrustTuningDraft
+      tags:
+      - detection
+      parameters:
+      - name: id
+        in: path
+        description: Path parameter
+        required: true
+        schema:
+          type: string
+      requestBody:
+        description: Detection Trust draft preview request
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: Detection Trust draft preview response
+          content:
+            application/json:
+              schema:
+                type: object
+      security:
+      - bearerAuth: []
+      x-wardex-auth: authenticated
+  /api/detection/trust/tuning-drafts/{id}/approve:
+    post:
+      summary: Approve Detection Trust draft intent while keeping production tuning manual and audit-visible
+      operationId: approveDetectionTrustTuningDraft
+      tags:
+      - detection
+      parameters:
+      - name: id
+        in: path
+        description: Path parameter
+        required: true
+        schema:
+          type: string
+      requestBody:
+        description: Detection Trust draft approval request
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: Detection Trust draft approval response
+          content:
+            application/json:
+              schema:
+                type: object
+      security:
+      - bearerAuth: []
+      x-wardex-auth: authenticated
   /api/fleet/drift-compliance:
     get:
       summary: Fleet version drift, update error, and config compliance summary
@@ -13635,6 +14127,8 @@ tags:
   description: Platform health, status, and diagnostics
 - name: command
   description: Command Center lane health and operator action surfaces
+- name: operator-trust
+  description: Operator trust workspaces, evidence validation, response safety, and usability surfaces
 - name: detection
   description: Detection engineering, rules, and analysis
 - name: alerts

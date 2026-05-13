@@ -1,0 +1,185 @@
+/* app/tokens.css — Wardex design tokens (default theme: cool slate) */
+:root {
+  /* Surfaces */
+  --bg-0: #ffffff;
+  --bg-1: #f7f8fa;
+  --bg-2: #eef0f3;
+  --bg-3: #e7eaef;
+  --bg-inset: #f3f4f7;
+
+  /* Foregrounds */
+  --fg:   #0e1116;
+  --fg-2: #38404d;
+  --fg-3: #6c7686;
+  --fg-4: #98a1b0;
+
+  /* Lines */
+  --line-soft: #e6e8ee;
+  --line:      #d4d8e0;
+  --line-strong: #b8bec9;
+
+  /* Accent — cool blue (Wardex primary) */
+  --accent: #2f5cf2;
+  --accent-fg: #ffffff;
+  --accent-soft: #e6ecfe;
+  --accent-strong: #2147c8;
+
+  /* Severities */
+  --sev-crit: #d83a3a;
+  --sev-crit-soft: #fdecec;
+  --sev-high: #dd6b20;
+  --sev-high-soft: #fdf0e5;
+  --sev-med:  #c79215;
+  --sev-med-soft: #faf2dc;
+  --sev-low:  #2d8f59;
+  --sev-low-soft: #e3f2ea;
+  --sev-info: #5a6573;
+  --sev-info-soft: #eef1f5;
+
+  --radius: 6px;
+  --radius-sm: 4px;
+  --shadow-sm: 0 1px 2px rgba(15,18,25,0.05);
+  --shadow:    0 4px 14px rgba(15,18,25,0.08);
+
+  --font-sans: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-mono: 'IBM Plex Mono', 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+/* Dark theme — for the variant exploration */
+.theme-dark {
+  --bg-0:#0b0d12; --bg-1:#10131a; --bg-2:#171b24; --bg-3:#1f2530; --bg-inset:#0e1118;
+  --fg:#e6e9ef; --fg-2:#b5bcc9; --fg-3:#7a8395; --fg-4:#4d5564;
+  --line-soft:#1d2230; --line:#2a3142; --line-strong:#3a4256;
+  --accent:#a78bfa; --accent-soft:#2a1c4a; --accent-strong:#c4b1ff;
+  --sev-crit-soft:#3a1818; --sev-high-soft:#3a2615; --sev-med-soft:#2e2510; --sev-low-soft:#10261c; --sev-info-soft:#1a1f29;
+  --shadow-sm: 0 1px 2px rgba(0,0,0,0.4);
+  --shadow:    0 4px 16px rgba(0,0,0,0.5);
+}
+
+/* Amber/terminal theme */
+.theme-amber {
+  --bg-0:#0a0907; --bg-1:#0f0c08; --bg-2:#16110a; --bg-3:#1f1810; --bg-inset:#0d0a07;
+  --fg:#f0e6d2; --fg-2:#c9bb9c; --fg-3:#8a7e63; --fg-4:#5a4f3a;
+  --line-soft:#1e1810; --line:#2d2417; --line-strong:#43361f;
+  --accent:#e89a3e; --accent-soft:#2a1f10; --accent-strong:#f2b461;
+}
+
+/* Reset */
+* { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; height: 100%; }
+body {
+  font-family: var(--font-sans);
+  font-size: 13px;
+  color: var(--fg);
+  background: var(--bg-0);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  font-feature-settings: 'ss01','cv11';
+}
+button { font-family: inherit; }
+.mono { font-family: var(--font-mono); font-feature-settings: 'zero','ss02'; }
+.tnum { font-variant-numeric: tabular-nums; }
+.row { display: flex; align-items: center; }
+
+/* Eyebrow / small label */
+.eyebrow {
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--fg-3);
+  font-weight: 600;
+}
+
+/* Buttons */
+.btn {
+  display: inline-flex; align-items: center; gap: 6px;
+  height: 28px; padding: 0 10px;
+  background: var(--bg-0);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  color: var(--fg);
+  font-size: 12px; font-weight: 500;
+  cursor: pointer;
+  transition: background .12s, border-color .12s;
+  white-space: nowrap;
+}
+.btn:hover { background: var(--bg-2); border-color: var(--line-strong); }
+.btn-sm { height: 24px; padding: 0 8px; font-size: 11.5px; }
+.btn-icon { width: 28px; padding: 0; justify-content: center; }
+.btn-sm.btn-icon { width: 24px; }
+.btn-ghost { background: transparent; border-color: transparent; color: var(--fg-2); }
+.btn-ghost:hover { background: var(--bg-2); border-color: transparent; }
+.btn-primary { background: var(--accent); border-color: var(--accent); color: var(--accent-fg); }
+.btn-primary:hover { background: var(--accent-strong); border-color: var(--accent-strong); }
+.btn-danger { background: var(--sev-crit); border-color: var(--sev-crit); color: #fff; }
+.btn-danger:hover { background: #b82e2e; border-color: #b82e2e; }
+
+/* Chip */
+.chip {
+  display: inline-flex; align-items: center; gap: 5px;
+  height: 20px; padding: 0 7px;
+  background: var(--bg-2);
+  border: 1px solid var(--line-soft);
+  border-radius: 10px;
+  color: var(--fg-2);
+  font-size: 11px;
+  white-space: nowrap;
+}
+.dot { width: 6px; height: 6px; border-radius: 50%; flex: 0 0 6px; }
+
+/* Severity badge */
+.sev {
+  display: inline-flex; align-items: center;
+  height: 16px; padding: 0 5px;
+  border-radius: 3px;
+  font-family: var(--font-mono);
+  font-size: 10px; font-weight: 700;
+  letter-spacing: 0.04em;
+}
+.sev-crit { background: var(--sev-crit-soft); color: var(--sev-crit); }
+.sev-high { background: var(--sev-high-soft); color: var(--sev-high); }
+.sev-med  { background: var(--sev-med-soft);  color: var(--sev-med); }
+.sev-low  { background: var(--sev-low-soft);  color: var(--sev-low); }
+.sev-info { background: var(--sev-info-soft); color: var(--sev-info); }
+
+/* Keyboard shortcut */
+.kbd {
+  display: inline-flex; align-items: center; justify-content: center;
+  min-width: 16px; height: 16px; padding: 0 4px;
+  background: var(--bg-0);
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  font-family: var(--font-mono);
+  font-size: 10px; color: var(--fg-3);
+  box-shadow: 0 1px 0 var(--line);
+}
+
+/* Card */
+.card {
+  background: var(--bg-0);
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+.card-h {
+  display: flex; align-items: center; gap: 10px;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--line-soft);
+  min-height: 40px;
+}
+.card-h h3 { margin: 0; font-size: 12px; font-weight: 600; letter-spacing: -0.005em; color: var(--fg); }
+.card-h .right { margin-left: auto; }
+
+/* Sparkline color */
+.spark { color: var(--accent); }
+.spark.warn { color: var(--sev-high); }
+.spark.danger { color: var(--sev-crit); }
+
+/* Scrollbar — subtle */
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-thumb { background: var(--line); border-radius: 4px; }
+::-webkit-scrollbar-thumb:hover { background: var(--line-strong); }
+::-webkit-scrollbar-track { background: transparent; }
+
+/* Tweak controls overrides — make our panel feel native */
+.wx { font-size: 13px; }

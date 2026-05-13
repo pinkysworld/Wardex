@@ -14,14 +14,15 @@ Wardex is a Rust-based XDR and SIEM platform for private-cloud and self-hosted s
 - **Scan across platforms:** malware, virus, trojan, and rootkit workflows cover Linux, macOS, and Windows with local engines plus optional open-source signature presets.
 - **Ship verifiably:** releases include checksums, SBOMs, provenance, signed artifacts, and documented verification gates.
 
-## Current Release: `v1.0.11`
+## Current Release: `v1.0.18`
 
-This hotfix release focuses on CI cleanliness and release trust after the detection and malware-scanning work shipped in `v1.0.10`.
+This intelligence-gates release strengthens the operator path from alert triage through evidence, assistant review, notifications, and release acceptance while keeping automated response execution behind existing approval gates.
 
-- Release packaging and signed-build publication now wait for a dedicated preflight gate.
-- Preflight checks cover Rust formatting, Clippy, admin-console linting, admin-console formatting, admin-console build, and release-doc validation.
-- The scheduled CI drift from `v1.0.10` is fixed without changing product APIs, SDK methods, storage, or runtime behavior.
-- All release metadata, docs, website, SDKs, Helm, OTLP, and test fixtures are aligned on `v1.0.11`.
+- Managed alert triage now returns calibrated confidence, quality gates, recommended operator journeys, evidence mode, and approval requirements.
+- Analyst Assistant responses now expose citation, confidence, and execution-boundary quality gates in both API payloads and the console.
+- Notifications now keep an outbox-style delivery trail for alert dispatch attempts, and macOS memory indicators parse vmmap output for RWX and anonymous-executable regions.
+- Operator Launchpad now includes canonical journey readiness and evidence-mode rollups across critical alert response, collector trust, release acceptance, and assistant-to-evidence paths.
+- All release metadata, docs, website, SDKs, Helm, OTLP, and test fixtures are aligned on `v1.0.18`.
 
 See [CHANGELOG.md](CHANGELOG.md) for full release history.
 

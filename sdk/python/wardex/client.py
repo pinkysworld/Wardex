@@ -325,6 +325,15 @@ class WardexClient:
     def sdk_contract_status(self) -> dict[str, Any]:
         return self._get("/api/sdk/contract-status")
 
+    def operator_workspaces(self) -> dict[str, Any]:
+        return self._get("/api/operator/workspaces")
+
+    def operations_health(self) -> dict[str, Any]:
+        return self._get("/api/operations/health")
+
+    def operations_health_snapshot(self) -> dict[str, Any]:
+        return self._get("/api/operations/health/snapshot")
+
     def alerts_page(self, cursor: str | int | None = None, limit: int | None = None) -> dict[str, Any]:
         params: dict[str, Any] = {}
         if cursor is not None:
@@ -467,6 +476,41 @@ class WardexClient:
 
     def detection_trust_score(self) -> dict[str, Any]:
         return self._get("/api/detection/trust-score")
+
+    def detection_trust_overview(self) -> dict[str, Any]:
+        return self._get("/api/detection/trust/overview")
+
+    def detection_trust_rules(self) -> dict[str, Any]:
+        return self._get("/api/detection/trust/rules")
+
+    def detection_trust_rule(self, rule_id: str) -> dict[str, Any]:
+        return self._get(f"/api/detection/trust/rules/{quote(str(rule_id), safe='')}")
+
+    def detection_trust_tuning_drafts(self) -> dict[str, Any]:
+        return self._get("/api/detection/trust/tuning-drafts")
+
+    def create_detection_trust_tuning_draft(self, draft: dict[str, Any]) -> dict[str, Any]:
+        return self._post("/api/detection/trust/tuning-drafts", draft)
+
+    def preview_detection_trust_tuning_draft(
+        self,
+        draft_id: str,
+        request: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        return self._post(
+            f"/api/detection/trust/tuning-drafts/{quote(str(draft_id), safe='')}/preview",
+            request or {},
+        )
+
+    def approve_detection_trust_tuning_draft(
+        self,
+        draft_id: str,
+        request: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        return self._post(
+            f"/api/detection/trust/tuning-drafts/{quote(str(draft_id), safe='')}/approve",
+            request or {},
+        )
 
     def fleet_drift_compliance(self) -> dict[str, Any]:
         return self._get("/api/fleet/drift-compliance")
@@ -1073,6 +1117,57 @@ class WardexClient:
 
     def malware_import(self, data: str) -> dict[str, Any]:
         return self._post("/api/malware/signatures/import", data)
+
+    def malware_explain(self) -> dict[str, Any]:
+        return self._get("/api/malware/explain")
+
+    def malware_scan_diff(self) -> dict[str, Any]:
+        return self._get("/api/malware/scan-diff")
+
+    def alert_feedback(self, feedback: dict[str, Any]) -> dict[str, Any]:
+        return self._post("/api/alerts/feedback", feedback)
+
+    def alert_feedback_summary(self) -> dict[str, Any]:
+        return self._get("/api/alerts/feedback/summary")
+
+    def alert_evidence_chain(self, alert_id: str | int | None = None) -> dict[str, Any]:
+        params: dict[str, Any] = {}
+        if alert_id is not None:
+            params["alert_id"] = alert_id
+        return self._get("/api/alerts/evidence-chain", **params)
+
+    def detection_lab_status(self) -> dict[str, Any]:
+        return self._get("/api/detection-lab/status")
+
+    def detection_lab_run(self, request: dict[str, Any] | None = None) -> dict[str, Any]:
+        return self._post("/api/detection-lab/runs", request or {"mode": "replay"})
+
+    def detection_lab_history(self) -> dict[str, Any]:
+        return self._get("/api/detection-lab/history")
+
+    def detection_lab_report(self) -> dict[str, Any]:
+        return self._get("/api/detection-lab/report")
+
+    def response_safety(self) -> dict[str, Any]:
+        return self._get("/api/response/safety")
+
+    def response_preview(self, request: dict[str, Any]) -> dict[str, Any]:
+        return self._post("/api/response/preview", request)
+
+    def response_verify(self, request: dict[str, Any]) -> dict[str, Any]:
+        return self._post("/api/response/verify", request)
+
+    def integrations_marketplace(self) -> dict[str, Any]:
+        return self._get("/api/integrations/marketplace")
+
+    def validate_integration(self, request: dict[str, Any]) -> dict[str, Any]:
+        return self._post("/api/integrations/validate", request)
+
+    def integration_sample_event(self, provider: str | None = None) -> dict[str, Any]:
+        params: dict[str, Any] = {}
+        if provider:
+            params["provider"] = provider
+        return self._get("/api/integrations/sample-event", **params)
 
     def collectors_status(self) -> dict[str, Any]:
         return self._get("/api/collectors/status")

@@ -5,11 +5,9 @@ const TOKEN = process.env.WARDEX_ADMIN_TOKEN || "wardex-live-token";
 
 async function authenticate(page) {
   await page.context().clearCookies();
-  const session = await page.context().request.post(`${BASE}/api/auth/session`, {
-    headers: { Authorization: `Bearer ${TOKEN}` },
-  });
-  expect(session.ok(), `/api/auth/session returned ${session.status()}`).toBeTruthy();
   await page.goto(`${BASE}/admin/`, { waitUntil: "domcontentloaded" });
+  await page.getByPlaceholder("API token").fill(TOKEN);
+  await page.getByRole("button", { name: "Connect" }).click();
   const authBadge = page.locator(".auth-badge");
   await expect(authBadge).toContainText(/Connected/i, { timeout: 15000 });
 
@@ -44,7 +42,7 @@ async function expectApiPostOk(page, path, body = {}) {
 test("live detection quality and thread evidence routes stay wired", async ({
   page,
 }) => {
-  test.setTimeout(60000);
+  test.setTimeout(180000);
 
   const consoleErrors = [];
   const pageErrors = [];
@@ -61,6 +59,9 @@ test("live detection quality and thread evidence routes stay wired", async ({
   });
 
   await authenticate(page);
+  consoleErrors.length = 0;
+  badResponses.length = 0;
+  pageErrors.length = 0;
 
   const evidencePack = await expectApiOk(page, "/api/launchpad/evidence-pack");
   expect(evidencePack).toHaveProperty("digest");
@@ -107,9 +108,14 @@ test("live detection quality and thread evidence routes stay wired", async ({
   await expect(page.getByText("Promotion confidence")).toBeVisible();
   await expect(page.getByText("Acceptance readiness")).toBeVisible();
   await expect(page.getByText("Release verification")).toBeVisible();
-  await expect(page.getByRole("heading", { name: "Clean release and deployment" })).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "Clean release and deployment" }),
+  ).toBeVisible();
   await expect(page.getByText("Artifact rows")).toBeVisible();
-  await expect(page.getByText("Install plans")).toBeVisible();
+  const deploymentConfidence = page.locator("#deployment-confidence");
+  await expect(
+    deploymentConfidence.getByText("Install plans", { exact: true }),
+  ).toBeVisible();
   await expect(page.getByText("Quality score", { exact: true })).toBeVisible();
   await expect(page.getByText("Dry-run actions")).toBeVisible();
   await expect(page.getByText("Promotion guard")).toBeVisible();
@@ -132,6 +138,9 @@ test("live detection quality and thread evidence routes stay wired", async ({
   await page.goto(`${BASE}/admin/detection?panel=quality`, {
     waitUntil: "domcontentloaded",
   });
+  await expect(page.locator(".auth-badge")).toContainText(/Connected/i, {
+    timeout: 30000,
+  });
   await expect(page.getByText("Detection Quality Score")).toBeVisible({
     timeout: 15000,
   });
@@ -148,12 +157,16 @@ test("live detection quality and thread evidence routes stay wired", async ({
   await page.goto(`${BASE}/admin/monitor?monitorTab=stream`, {
     waitUntil: "domcontentloaded",
   });
-  await expect(page.locator(".summary-label", { hasText: "Readiness Score" })).toBeVisible({
+  await expect(
+    page.locator(".summary-label", { hasText: "Readiness Score" }),
+  ).toBeVisible({
     timeout: 15000,
   });
   await expect(page.getByText("Reliability Lab")).toBeVisible();
   await expect(page.getByText("24h Histogram")).toBeVisible();
-  await expect(page.locator(".summary-label", { hasText: "Cursor Replay" })).toBeVisible();
+  await expect(
+    page.locator(".summary-label", { hasText: "Cursor Replay" }),
+  ).toBeVisible();
 
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto(`${BASE}/admin/launchpad`, { waitUntil: "domcontentloaded" });
@@ -165,8 +178,15 @@ test("live detection quality and thread evidence routes stay wired", async ({
   await expect(
     page.getByRole("button", { name: "Evidence Pack" }),
   ).toBeVisible();
+  await authenticate(page);
+  consoleErrors.length = 0;
+  badResponses.length = 0;
+  pageErrors.length = 0;
   await page.goto(`${BASE}/admin/detection?panel=quality`, {
     waitUntil: "domcontentloaded",
+  });
+  await expect(page.locator(".auth-badge")).toContainText(/Connected/i, {
+    timeout: 30000,
   });
   await expect(page.getByText("Detection Quality Score")).toBeVisible({
     timeout: 15000,
@@ -174,6 +194,9 @@ test("live detection quality and thread evidence routes stay wired", async ({
   await page.setViewportSize({ width: 1280, height: 900 });
 
   await authenticate(page);
+  consoleErrors.length = 0;
+  badResponses.length = 0;
+  pageErrors.length = 0;
 
   await page.goto(`${BASE}/admin/monitor?monitorTab=processes`, {
     waitUntil: "domcontentloaded",

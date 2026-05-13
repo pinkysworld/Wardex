@@ -2,7 +2,66 @@
 
 This backlog lists the next concrete tasks in build order.
 
-## Current strengthening checkpoint (`v1.0.11`)
+## Current strengthening checkpoint (`v1.0.18`)
+
+Recently completed for the `v1.0.18` intelligence-gates release:
+
+- [x] Managed ML triage outcomes now expose calibrated confidence, operator journey, evidence mode, approval requirements, and quality gates.
+- [x] Analyst Assistant API/UI responses now expose citation, confidence, and execution-boundary quality gates.
+- [x] Notification dispatch now supports deduplicated outbox records for delivery provenance.
+- [x] Operator Launchpad now includes canonical journey readiness and evidence-mode rollups.
+- [x] macOS memory indicators now parse vmmap output for RWX and anonymous-executable regions.
+- [x] Release metadata, docs, website, Helm, OpenAPI, Python SDK, TypeScript SDK, OTLP, and install/reproducibility surfaces aligned on `v1.0.18`.
+
+## Previous strengthening checkpoint (`v1.0.17`)
+
+Recently completed for the `v1.0.17` operator-continuity release:
+
+- [x] Shift handoff workspace added with exportable next-shift notes, queue context, evidence gaps, release blockers, fleet watch items, and operator tasks.
+- [x] Incident timeline builder added for alert, process/thread, replay, evidence, and report handoff context.
+- [x] Collector onboarding center, fleet risk heatmap, release acceptance report, evidence coverage, role home screen, visual regression gate, and safe assistant boundary cards added to Launchpad.
+- [x] Command palette pivots added for the new continuity, fleet-risk, release-acceptance, visual-gate, and assistant-boundary surfaces.
+- [x] Focused Launchpad, Search Palette, workflow-pivot, and Playwright screenshot-gate coverage added for the continuity board.
+- [x] Release metadata, docs, website, Helm, OpenAPI, Python SDK, TypeScript SDK, OTLP, and install/reproducibility surfaces aligned on `v1.0.17`.
+
+## Previous strengthening checkpoint (`v1.0.16`)
+
+Recently completed for the `v1.0.16` operator-execution release:
+
+- [x] Persistent Connect Agent route added for the Fleet install-bundle and remote-enrollment workflow.
+- [x] Operator Launchpad expanded with morning brief, guided incident path, fleet health drilldown, evidence freshness, operator task queue, response simulator, release gate automation, and demo-scenario rollups.
+- [x] Command palette made context-aware for Launchpad, Fleet, SOC, release, and detection workspaces.
+- [x] Focused Launchpad, Search Palette, and workflow-pivot regression coverage added for the new execution board.
+- [x] Release metadata, docs, website, Helm, OpenAPI, Python SDK, TypeScript SDK, OTLP, and install/reproducibility surfaces aligned on `v1.0.16`.
+
+## Previous strengthening checkpoint (`v1.0.15`)
+
+Recently completed for the `v1.0.15` operator-workflow release:
+
+- [x] First-agent onboarding cockpit added with admin-token explanation, one-use enrollment token generation, OS-specific install commands, and readiness refresh.
+- [x] Command palette expanded with connect-agent, SOC queue, response-readiness, process-workbench, and deployment-confidence pivots.
+- [x] SOC queue, response, and process workbench polish added for explainability, approval/rollback/verification state, and large-payload render caps.
+- [x] Operator Launchpad deployment confidence matrix added for contract, signing, container, failover, quality, scale, and install-plan readiness.
+- [x] Focused unit and Playwright smoke coverage added for the new operator-workflow surfaces.
+- [x] Release metadata, docs, website, Helm, OpenAPI, Python SDK, TypeScript SDK, OTLP, and install/reproducibility surfaces aligned on `v1.0.15`.
+
+## Previous strengthening checkpoint (`v1.0.14`)
+
+Recently completed for the `v1.0.14` Claude workbench layout release:
+
+- [x] Claude root `design/app` workbench template wired into the live admin-console shell with compact rail, topbar, card, table, and SOC process-workbench styling.
+- [x] Release metadata, docs, website, Helm, OpenAPI, Python SDK, TypeScript SDK, OTLP, and install/reproducibility surfaces aligned on `v1.0.14`.
+
+## Previous strengthening checkpoint (`v1.0.12`)
+
+Recently completed for the `v1.0.12` operator-trust and usability release:
+
+- [x] Grouped navigation, collapsible console lanes, role workspace anchors, and command-palette access added for major operator workflows.
+- [x] Alert feedback, evidence-chain, detection lab, response safety, connector marketplace, operations health, malware explanation, and scan-diff contracts exposed through REST/OpenAPI and both SDKs.
+- [x] Detection Lab, Response Safety, Integrations, Operations Health, and Malware transparency workspaces added with focused admin-console regression coverage.
+- [x] Release metadata, docs, website, Helm, OpenAPI, Python SDK, TypeScript SDK, OTLP, and install/reproducibility surfaces aligned on `v1.0.12`.
+
+## Previous strengthening checkpoint (`v1.0.11`)
 
 Recently completed for the `v1.0.11` CI and release-trust hotfix:
 

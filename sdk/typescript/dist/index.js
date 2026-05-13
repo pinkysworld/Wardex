@@ -276,6 +276,27 @@ class WardexClient {
     async detectionTrustScore() {
         return this.request("GET", "/api/detection/trust-score");
     }
+    async detectionTrustOverview() {
+        return this.request("GET", "/api/detection/trust/overview");
+    }
+    async detectionTrustRules() {
+        return this.request("GET", "/api/detection/trust/rules");
+    }
+    async detectionTrustRule(id) {
+        return this.request("GET", `/api/detection/trust/rules/${encodeURIComponent(id)}`);
+    }
+    async detectionTrustTuningDrafts() {
+        return this.request("GET", "/api/detection/trust/tuning-drafts");
+    }
+    async createDetectionTrustTuningDraft(draft) {
+        return this.request("POST", "/api/detection/trust/tuning-drafts", draft);
+    }
+    async previewDetectionTrustTuningDraft(id, request = {}) {
+        return this.request("POST", `/api/detection/trust/tuning-drafts/${encodeURIComponent(id)}/preview`, request);
+    }
+    async approveDetectionTrustTuningDraft(id, request = {}) {
+        return this.request("POST", `/api/detection/trust/tuning-drafts/${encodeURIComponent(id)}/approve`, request);
+    }
     async fleetDriftCompliance() {
         return this.request("GET", "/api/fleet/drift-compliance");
     }
@@ -1083,6 +1104,15 @@ class WardexClient {
     async responseStats() {
         return this.request("GET", "/api/response/stats");
     }
+    async operatorWorkspaces() {
+        return this.request("GET", "/api/operator/workspaces");
+    }
+    async operationsHealth() {
+        return this.request("GET", "/api/operations/health");
+    }
+    async operationsHealthSnapshot() {
+        return this.request("GET", "/api/operations/health/snapshot");
+    }
     async casesStats() {
         return this.request("GET", "/api/cases/stats");
     }
@@ -1118,6 +1148,15 @@ class WardexClient {
     }
     async responseApprovalOverview() {
         return this.request("GET", "/api/response/approval-overview");
+    }
+    async responseSafety() {
+        return this.request("GET", "/api/response/safety");
+    }
+    async responsePreview(request) {
+        return this.request("POST", "/api/response/preview", request);
+    }
+    async responseVerify(request) {
+        return this.request("POST", "/api/response/verify", request);
     }
     async remediationSafety() {
         return this.request("GET", "/api/remediation/safety");
@@ -1255,6 +1294,48 @@ class WardexClient {
     }
     async fpFeedbackStats() {
         return this.request("GET", "/api/fp-feedback/stats");
+    }
+    async alertFeedback(feedback) {
+        return this.request("POST", "/api/alerts/feedback", feedback);
+    }
+    async alertFeedbackSummary() {
+        return this.request("GET", "/api/alerts/feedback/summary");
+    }
+    async alertEvidenceChain(params = {}) {
+        const qs = new URLSearchParams();
+        if (params.alertId != null)
+            qs.set("alert_id", String(params.alertId));
+        return this.request("GET", `/api/alerts/evidence-chain${qs.toString() ? `?${qs.toString()}` : ""}`);
+    }
+    async detectionLabStatus() {
+        return this.request("GET", "/api/detection-lab/status");
+    }
+    async detectionLabRun(request = { mode: "replay" }) {
+        return this.request("POST", "/api/detection-lab/runs", request);
+    }
+    async detectionLabHistory() {
+        return this.request("GET", "/api/detection-lab/history");
+    }
+    async detectionLabReport() {
+        return this.request("GET", "/api/detection-lab/report");
+    }
+    async integrationsMarketplace() {
+        return this.request("GET", "/api/integrations/marketplace");
+    }
+    async validateIntegration(request) {
+        return this.request("POST", "/api/integrations/validate", request);
+    }
+    async integrationSampleEvent(provider) {
+        const qs = new URLSearchParams();
+        if (provider)
+            qs.set("provider", provider);
+        return this.request("GET", `/api/integrations/sample-event${qs.toString() ? `?${qs.toString()}` : ""}`);
+    }
+    async malwareExplain() {
+        return this.request("GET", "/api/malware/explain");
+    }
+    async malwareScanDiff() {
+        return this.request("GET", "/api/malware/scan-diff");
     }
     async mlModels() {
         return this.request("GET", "/api/ml/models");

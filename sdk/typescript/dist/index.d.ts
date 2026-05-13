@@ -4697,6 +4697,13 @@ export declare class WardexClient {
         incidentId?: string | number;
     }): Promise<ProductionAssuranceResponse>;
     detectionTrustScore(): Promise<ProductionAssuranceResponse>;
+    detectionTrustOverview(): Promise<Record<string, unknown>>;
+    detectionTrustRules(): Promise<Record<string, unknown>>;
+    detectionTrustRule(id: string): Promise<Record<string, unknown>>;
+    detectionTrustTuningDrafts(): Promise<Record<string, unknown>>;
+    createDetectionTrustTuningDraft(draft: Record<string, unknown>): Promise<Record<string, unknown>>;
+    previewDetectionTrustTuningDraft(id: string, request?: Record<string, unknown>): Promise<Record<string, unknown>>;
+    approveDetectionTrustTuningDraft(id: string, request?: Record<string, unknown>): Promise<Record<string, unknown>>;
     fleetDriftCompliance(): Promise<ProductionAssuranceResponse>;
     operatorWorkQueue(): Promise<ProductionAssuranceResponse>;
     retentionForecast(): Promise<ProductionAssuranceResponse>;
@@ -4947,6 +4954,9 @@ export declare class WardexClient {
     containerAlerts(): Promise<ContainerAlert[]>;
     containerStats(): Promise<ContainerStatsResponse>;
     responseStats(): Promise<ResponseStatsResponse>;
+    operatorWorkspaces(): Promise<Record<string, unknown>>;
+    operationsHealth(): Promise<Record<string, unknown>>;
+    operationsHealthSnapshot(): Promise<Record<string, unknown>>;
     casesStats(): Promise<CasesStatsResponse>;
     platform(): Promise<PlatformCapabilitiesResponse>;
     sloStatus(): Promise<SloStatus>;
@@ -4958,6 +4968,9 @@ export declare class WardexClient {
     executeApprovedActions(requestId?: string): Promise<ResponseExecuteResponse>;
     responseExecute(requestId?: string): Promise<ResponseExecuteResponse>;
     responseApprovalOverview(): Promise<ResponseApprovalOverviewResponse>;
+    responseSafety(): Promise<Record<string, unknown>>;
+    responsePreview(request: Record<string, unknown>): Promise<Record<string, unknown>>;
+    responseVerify(request: Record<string, unknown>): Promise<Record<string, unknown>>;
     remediationSafety(): Promise<RemediationSafetyResponse>;
     ingestEvents(agentId: string, events: EventAlertRecord[]): Promise<EventIngestResponse>;
     onboardingReadiness(): Promise<OnboardingReadiness>;
@@ -5000,6 +5013,20 @@ export declare class WardexClient {
     efficacyTriage(record: EfficacyTriageRecord): Promise<EfficacyTriageRecordResponse>;
     fpFeedback(feedback: FpFeedback): Promise<FpFeedbackResponse>;
     fpFeedbackStats(): Promise<FpFeedbackStat[]>;
+    alertFeedback(feedback: Record<string, unknown>): Promise<Record<string, unknown>>;
+    alertFeedbackSummary(): Promise<Record<string, unknown>>;
+    alertEvidenceChain(params?: {
+        alertId?: string | number;
+    }): Promise<Record<string, unknown>>;
+    detectionLabStatus(): Promise<Record<string, unknown>>;
+    detectionLabRun(request?: Record<string, unknown>): Promise<Record<string, unknown>>;
+    detectionLabHistory(): Promise<Record<string, unknown>>;
+    detectionLabReport(): Promise<Record<string, unknown>>;
+    integrationsMarketplace(): Promise<Record<string, unknown>>;
+    validateIntegration(request: Record<string, unknown>): Promise<Record<string, unknown>>;
+    integrationSampleEvent(provider?: string): Promise<Record<string, unknown>>;
+    malwareExplain(): Promise<Record<string, unknown>>;
+    malwareScanDiff(): Promise<Record<string, unknown>>;
     mlModels(): Promise<MlModelsResponse>;
     mlModelsStatus(): Promise<MlModelRegistryStatus>;
     mlModelStatus(): Promise<MlModelRegistryStatus>;
