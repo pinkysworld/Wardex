@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1778648816908,
+  "lastUpdate": 1778691712658,
   "repoUrl": "https://github.com/pinkysworld/Wardex",
   "entries": {
     "Wardex criterion benches": [
@@ -8751,6 +8751,114 @@ window.BENCHMARK_DATA = {
             "name": "sigma_evaluate_20_rules",
             "value": 35951,
             "range": "± 844",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "49699333+dependabot[bot]@users.noreply.github.com",
+            "name": "dependabot[bot]",
+            "username": "dependabot[bot]"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "c00cac32f21de46af6c64b411a543c5864a1eba9",
+          "message": "Bump tokio from 1.52.2 to 1.52.3 (#59)\n\nBumps [tokio](https://github.com/tokio-rs/tokio) from 1.52.2 to 1.52.3.\n- [Release notes](https://github.com/tokio-rs/tokio/releases)\n- [Commits](https://github.com/tokio-rs/tokio/compare/tokio-1.52.2...tokio-1.52.3)\n\n---\nupdated-dependencies:\n- dependency-name: tokio\n  dependency-version: 1.52.3\n  dependency-type: direct:production\n  update-type: version-update:semver-patch\n...\n\nSigned-off-by: dependabot[bot] <support@github.com>\nCo-authored-by: dependabot[bot] <49699333+dependabot[bot]@users.noreply.github.com>",
+          "timestamp": "2026-05-13T18:54:35+02:00",
+          "tree_id": "63727a3703bbc8ca839bfba6561bcd79aa0b0fe6",
+          "url": "https://github.com/pinkysworld/Wardex/commit/c00cac32f21de46af6c64b411a543c5864a1eba9"
+        },
+        "date": 1778691711743,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "full_pipeline/5",
+            "value": 39490,
+            "range": "± 988",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "full_pipeline/50",
+            "value": 322640,
+            "range": "± 1046",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "full_pipeline/200",
+            "value": 1497501,
+            "range": "± 11815",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "full_pipeline/1000",
+            "value": 14109718,
+            "range": "± 70415",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "detector_evaluate_single",
+            "value": 482,
+            "range": "± 1",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "detector_window_stream_256",
+            "value": 671719,
+            "range": "± 7382",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "shared_storage_observed_schema_read",
+            "value": 106,
+            "range": "± 0",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "shared_storage_4_threads_64_alerts",
+            "value": 113248,
+            "range": "± 1871",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "policy_evaluate_single",
+            "value": 198,
+            "range": "± 5",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "throughput/1000_samples",
+            "value": 14298387,
+            "range": "± 46678",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "search_500_events",
+            "value": 83069,
+            "range": "± 261",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "hunt_field_query",
+            "value": 67632,
+            "range": "± 1119",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "ml_triage_rf",
+            "value": 39,
+            "range": "± 0",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "sigma_evaluate_20_rules",
+            "value": 25219,
+            "range": "± 475",
             "unit": "ns/iter"
           }
         ]
