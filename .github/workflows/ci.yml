@@ -60,6 +60,17 @@ jobs:
       - name: Check panic policy
         run: python3 scripts/check_panic_policy.py
 
+  workspace-hygiene:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - name: Set up Python
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6
+        with:
+          python-version: "3.12"
+      - name: Detect duplicate-like untracked source copies
+        run: python3 scripts/check_workspace_hygiene.py
+
   contract-parity:
     runs-on: ubuntu-latest
     steps:
@@ -257,6 +268,8 @@ jobs:
           cache-dependency-path: admin-console/package-lock.json
       - name: Install dependencies
         run: npm ci
+      - name: Typecheck
+        run: npm run typecheck
       - name: Lint
         run: npm run lint
       - name: Format check
@@ -451,6 +464,7 @@ jobs:
     if: always()
     needs:
       - test
+      - workspace-hygiene
       - contract-parity
       - release-docs
       - audit

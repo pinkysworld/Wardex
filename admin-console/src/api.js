@@ -66,11 +66,25 @@ function isRetryable(method, statusOrError) {
 /**
  * @typedef {Object} WardexRequestOptions
  * @property {AbortSignal=} signal Abort signal owned by the calling hook or workflow.
+ * @property {number=} timeoutMs Optional timeout override in milliseconds.
+ * @property {number=} retries Optional retry attempt override.
  */
 
 /**
  * @typedef {Error & {status?: number, body?: string, requestId?: string}} WardexApiError
  */
+
+/** @typedef {import('@wardex/sdk').AuthSession} AuthSession */
+/** @typedef {import('@wardex/sdk').HealthStatus} HealthStatus */
+/** @typedef {import('@wardex/sdk').HealthLiveResponse} HealthLiveResponse */
+/** @typedef {import('@wardex/sdk').HealthReadyResponse} HealthReadyResponse */
+/** @typedef {import('@wardex/sdk').CommandSummaryResponse} CommandSummaryResponse */
+/** @typedef {import('@wardex/sdk').CommandLaneResponse} CommandLaneResponse */
+/** @typedef {import('@wardex/sdk').ReleaseDoctorResponse} ReleaseDoctorResponse */
+/** @typedef {import('@wardex/sdk').OperationalSnapshotsResponse} OperationalSnapshotsResponse */
+/** @typedef {import('@wardex/sdk').LaunchpadEvidencePackResponse} LaunchpadEvidencePackResponse */
+/** @typedef {import('@wardex/sdk').CursorPageResponse} CursorPageResponse */
+/** @typedef {import('@wardex/sdk').AlertSeverityCounts} AlertSeverityCounts */
 
 export function setToken(t) {
   _token = t;
@@ -185,6 +199,7 @@ const toQuery = (params = {}) => {
 // ── Auth ─────────────────────────────────────────────────────
 export const authCheck = () => get('/api/auth/check');
 export const authRotate = () => post('/api/auth/rotate');
+/** @returns {Promise<AuthSession>} */
 export const authSession = () => get('/api/auth/session');
 export const createAuthSession = () => post('/api/auth/session');
 export const authLogout = () => post('/api/auth/logout');
@@ -196,8 +211,11 @@ export const userPreferences = () => get('/api/user/preferences');
 export const setUserPreferences = (body) => put('/api/user/preferences', body);
 
 // ── Health & System ──────────────────────────────────────────
+/** @returns {Promise<HealthStatus>} */
 export const health = () => get('/api/health');
+/** @returns {Promise<HealthLiveResponse>} */
 export const healthLive = () => get('/api/healthz/live');
+/** @returns {Promise<HealthReadyResponse>} */
 export const healthReady = () => get('/api/healthz/ready');
 export const status = () => get('/api/status');
 export const report = () => get('/api/report');
@@ -214,6 +232,7 @@ export const supportBundle = () => get('/api/support/bundle');
 export const firstRunProof = () => post('/api/support/first-run-proof');
 export const failoverDrill = () => post('/api/control/failover-drill');
 export const productionDemoLab = () => post('/api/demo/lab');
+/** @returns {Promise<OperationalSnapshotsResponse>} */
 export const operationalSnapshots = ({ kind, limit } = {}) => {
   const query = new URLSearchParams();
   if (kind) query.set('kind', String(kind));
@@ -231,10 +250,12 @@ export const verifyOperationalSnapshot = ({ storageKey, digest } = {}) => {
   const suffix = query.toString();
   return get(`/api/operational/snapshots/verify${suffix ? `?${suffix}` : ''}`);
 };
+/** @returns {Promise<LaunchpadEvidencePackResponse>} */
 export const launchpadEvidencePack = () => get('/api/launchpad/evidence-pack');
 export const launchpadReleaseDiff = () => get('/api/launchpad/release-diff');
 export const launchpadDemoStatus = () => get('/api/launchpad/demo-status');
 export const launchpadDemoReset = () => post('/api/launchpad/demo-reset');
+/** @returns {Promise<ReleaseDoctorResponse>} */
 export const releaseDoctor = () => get('/api/release/doctor');
 export const releaseObservabilityGates = () => get('/api/release/observability-gates');
 export const releaseProvenance = () => get('/api/release/provenance');
@@ -296,6 +317,7 @@ export const telemetryHistory = () => get('/api/telemetry/history');
 
 // ── Alerts ───────────────────────────────────────────────────
 export const alerts = () => get('/api/alerts');
+/** @returns {Promise<CursorPageResponse>} */
 export const alertsPage = ({ cursor, limit } = {}) => {
   const query = new URLSearchParams();
   if (cursor !== undefined) query.set('cursor', String(cursor));
@@ -303,6 +325,7 @@ export const alertsPage = ({ cursor, limit } = {}) => {
   const suffix = query.toString();
   return get(`/api/alerts/page${suffix ? `?${suffix}` : ''}`);
 };
+/** @returns {Promise<AlertSeverityCounts>} */
 export const alertsCount = () => get('/api/alerts/count');
 export const alertById = (id) => get(`/api/alerts/${encodeURIComponent(id)}`);
 export const alertsGrouped = () => get('/api/alerts/grouped');
@@ -356,7 +379,12 @@ export const runDemo = () => post('/api/control/run-demo');
 export const resetBaseline = () => post('/api/control/reset-baseline');
 export const checkpoint = () => post('/api/control/checkpoint');
 export const restoreCheckpoint = (body) => post('/api/control/restore-checkpoint', body);
+/** @returns {Promise<CommandSummaryResponse>} */
 export const commandSummary = () => get('/api/command/summary');
+/**
+ * @param {string} lane
+ * @returns {Promise<CommandLaneResponse>}
+ */
 export const commandLane = (lane) => get(`/api/command/lanes/${encodeURIComponent(lane)}`);
 export const checkpoints = () => get('/api/checkpoints');
 export const detectionProfile = () => get('/api/detection/profile');

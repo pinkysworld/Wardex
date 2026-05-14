@@ -19,6 +19,7 @@
   --primary-hover: #2147c8;
   --accent: #2f5cf2;
   --accent-hover: #2147c8;
+  --accent-ink: #ffffff;
   --accent-soft: #e6ecfe;
   --success: #2d8f59;
   --warning: #dd6b20;
@@ -50,6 +51,7 @@
   --primary-hover: #c8b5ff;
   --accent: #b18cff;
   --accent-hover: #c8b5ff;
+  --accent-ink: #0b1020;
   --accent-soft: #241a3a;
   --success: #3fb878;
   --warning: #ff8a2a;
@@ -436,16 +438,21 @@ body {
   background: color-mix(in srgb, var(--accent) 8%, var(--bg-card));
 }
 .btn:disabled {
-  opacity: 0.5;
+  opacity: 1;
   cursor: not-allowed;
 }
 .btn-primary {
   background: var(--accent);
   border-color: var(--accent);
-  color: #fff;
+  color: var(--accent-ink);
 }
 .btn-primary:hover {
   background: var(--accent-hover);
+}
+.btn-primary:disabled {
+  background: color-mix(in srgb, var(--accent) 55%, var(--bg-card));
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--border));
+  color: color-mix(in srgb, var(--accent-ink) 82%, var(--text));
 }
 .btn-danger {
   background: var(--danger);
@@ -2345,9 +2352,9 @@ textarea:focus-visible,
 }
 
 .primary-destination-copy {
-  font-size: 11px;
-  line-height: 1.4;
-  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--text-sidebar);
 }
 
 .nav-item-shell {

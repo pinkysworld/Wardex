@@ -131,12 +131,19 @@ use crate::response::{
     ApprovalRecord as ResponseApprovalRecord, ApprovalStatus, ResponseAction, ResponseOrchestrator,
     ResponseRequest, ResponseTarget,
 };
+use crate::server_response::{
+    cors_origin, csv_response, error_json, json_response, safe_body, security_headers,
+    text_response,
+};
+use crate::server_routing::{api_route_access, method_from_name};
 use crate::sigma::SigmaEngine;
 use crate::spool::EncryptedSpool;
 use crate::storage::SharedStorage;
 use crate::structured_log::generate_request_id;
 use crate::support::{FailoverDrillRecord, InboxItem, ReportExecutionContext, SupportStore};
 use sha2::Digest;
+
+pub use crate::server_routing::{ApiRouteAccess, classify_api_route_access};
 
 const LOCAL_AV_SIGNATURE_PRESET_DIRS: &[&str] = &[
     "rules/clamav",
@@ -3006,99 +3013,6 @@ fn scan_pii(text: &str) -> Vec<String> {
     categories
 }
 
-fn cors_origin() -> String {
-    let origin =
-        std::env::var("SENTINEL_CORS_ORIGIN").unwrap_or_else(|_| "http://localhost".into());
-    // Block wildcard CORS origin — credentials must not use "*"
-    if origin == "*" {
-        return "http://localhost".into();
-    }
-    // Validate origin looks like a URL scheme
-    if origin.starts_with("http://") || origin.starts_with("https://") {
-        origin
-    } else {
-        "http://localhost".into()
-    }
-}
-
-fn security_headers(builder: axum::http::response::Builder) -> axum::http::response::Builder {
-    let origin = cors_origin();
-    builder
-        .header("Access-Control-Allow-Origin", origin)
-        .header("Vary", "Origin")
-        .header("X-Content-Type-Options", "nosniff")
-        .header("X-Frame-Options", "DENY")
-        .header("Cache-Control", "no-store")
-        .header("Referrer-Policy", "strict-origin-when-cross-origin")
-        .header("Permissions-Policy", "camera=(), microphone=(), geolocation=()")
-        .header(
-            "Strict-Transport-Security",
-            "max-age=63072000; includeSubDomains; preload",
-        )
-        .header(
-            "Content-Security-Policy",
-            "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; font-src 'self'; frame-ancestors 'none'",
-        )
-        .header("Cross-Origin-Opener-Policy", "same-origin")
-        .header("Cross-Origin-Resource-Policy", "same-origin")
-        .header("X-DNS-Prefetch-Control", "off")
-        .header("X-Permitted-Cross-Domain-Policies", "none")
-}
-
-fn safe_body(builder: axum::http::response::Builder, body: Body) -> Response<Body> {
-    builder.body(body).unwrap_or_else(|_| {
-        Response::builder()
-            .status(500)
-            .body(Body::from("internal server error"))
-            .expect("fallback response must build")
-    })
-}
-
-fn json_response(body: &str, status: u16) -> Response<Body> {
-    safe_body(
-        security_headers(Response::builder().status(status))
-            .header("Content-Type", "application/json"),
-        Body::from(body.to_owned()),
-    )
-}
-
-fn error_json(message: &str, status: u16) -> Response<Body> {
-    let code = match status {
-        400 => "VALIDATION_ERROR",
-        401 => "AUTH_REQUIRED",
-        403 => "FORBIDDEN",
-        404 => "NOT_FOUND",
-        409 => "CONFLICT",
-        413 => "PAYLOAD_TOO_LARGE",
-        429 => "RATE_LIMITED",
-        500 => "INTERNAL_ERROR",
-        503 => "SERVICE_UNAVAILABLE",
-        _ => "ERROR",
-    };
-    let body = format!(
-        r#"{{"error":"{}","code":"{}"}}"#,
-        message.replace('"', "\\\""),
-        code
-    );
-    json_response(&body, status)
-}
-
-fn text_response(body: &str, status: u16) -> Response<Body> {
-    safe_body(
-        security_headers(Response::builder().status(status))
-            .header("Content-Type", "text/plain; charset=utf-8"),
-        Body::from(body.to_owned()),
-    )
-}
-
-fn csv_response(body: &str, status: u16) -> Response<Body> {
-    safe_body(
-        security_headers(Response::builder().status(status))
-            .header("Content-Type", "text/csv; charset=utf-8"),
-        Body::from(body.to_owned()),
-    )
-}
-
 #[derive(Debug, Clone, serde::Serialize, PartialEq)]
 struct AlertProcessPivot {
     pid: u32,
@@ -3650,29 +3564,6 @@ fn cluster_peer_url(addr: &str, path: &str) -> String {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum ApiRouteAccess {
-    Public,
-    Agent,
-    Cluster,
-    Authenticated,
-}
-
-impl ApiRouteAccess {
-    pub fn as_str(self) -> &'static str {
-        match self {
-            Self::Public => "public",
-            Self::Agent => "agent",
-            Self::Cluster => "cluster",
-            Self::Authenticated => "authenticated",
-        }
-    }
-
-    pub fn requires_bearer_auth(self) -> bool {
-        !matches!(self, Self::Public)
-    }
-}
-
 const SESSION_COOKIE_NAME: &str = "wardex_session";
 
 fn session_cookie_token(headers: &HeaderMap) -> Option<String> {
@@ -3742,69 +3633,6 @@ fn load_or_create_session_seal_key(config_path: &Path) -> Vec<u8> {
     let _ = std::fs::write(&path, &generated);
     harden_private_file_permissions(&path);
     generated.into_bytes()
-}
-
-fn is_public_api_endpoint(method: &Method, route_path: &str) -> bool {
-    matches!(
-        (method, route_path),
-        (&Method::Get, "/api/health")
-            | (&Method::Get, "/api/metrics")
-            | (&Method::Get, "/api/openapi.json")
-            | (&Method::Get, "/api/auth/session")
-            | (&Method::Get, "/api/auth/sso/config")
-            | (&Method::Get, "/api/auth/sso/login")
-            | (&Method::Get, "/api/auth/sso/callback")
-            | (&Method::Post, "/api/auth/sso/callback")
-    )
-}
-
-fn is_agent_api_endpoint(method: &Method, route_path: &str) -> bool {
-    route_path.starts_with("/api/agents/enroll")
-        || route_path.starts_with("/api/agents/update")
-        || (route_path.contains("/heartbeat") && route_path.starts_with("/api/agents/"))
-        || (*method == Method::Post && route_path == "/api/events")
-        || route_path.starts_with("/api/policy/current")
-        || route_path.starts_with("/api/updates/download/")
-        || (*method == Method::Post
-            && route_path.starts_with("/api/agents/")
-            && route_path.ends_with("/logs"))
-        || (*method == Method::Post
-            && route_path.starts_with("/api/agents/")
-            && route_path.ends_with("/inventory"))
-}
-
-fn api_route_access(method: &Method, route_path: &str) -> ApiRouteAccess {
-    if !route_path.starts_with("/api/") {
-        return ApiRouteAccess::Public;
-    }
-    if route_path.starts_with("/api/cluster/") {
-        return ApiRouteAccess::Cluster;
-    }
-    if is_public_api_endpoint(method, route_path) {
-        return ApiRouteAccess::Public;
-    }
-    if is_agent_api_endpoint(method, route_path) {
-        return ApiRouteAccess::Agent;
-    }
-    ApiRouteAccess::Authenticated
-}
-
-fn method_from_name(value: &str) -> Option<Method> {
-    let normalized = value.trim().to_ascii_uppercase();
-    match normalized.as_str() {
-        "GET" => Some(Method::Get),
-        "POST" => Some(Method::Post),
-        "PUT" => Some(Method::Put),
-        "DELETE" => Some(Method::Delete),
-        "PATCH" => Some(Method::Patch),
-        "OPTIONS" => Some(Method::Options),
-        "HEAD" => Some(Method::Head),
-        _ => None,
-    }
-}
-
-pub fn classify_api_route_access(method: &str, route_path: &str) -> Option<ApiRouteAccess> {
-    method_from_name(method).map(|parsed| api_route_access(&parsed, route_path))
 }
 
 fn user_preferences_store_path(config_path: &Path) -> String {
