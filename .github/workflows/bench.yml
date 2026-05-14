@@ -57,7 +57,7 @@ jobs:
           cargo bench --bench pipeline -- --output-format bencher | tee bench-output.txt
 
       - name: Store benchmark results
-        uses: benchmark-action/github-action-benchmark@4de1bed97a47495fc4c5404952da0499e31f5c29 # v1.20.3
+        uses: benchmark-action/github-action-benchmark@a60cea5bc7b49e15c1f58f411161f99e0df48372 # v1.22.0
         with:
           name: Wardex criterion benches
           tool: cargo
