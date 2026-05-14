@@ -145,7 +145,7 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
         with:
-          node-version: "22"
+          node-version: "20.19.0"
           cache: npm
           cache-dependency-path: admin-console/package-lock.json
       - name: Install Rust
@@ -243,11 +243,11 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
         with:
-          node-version: "22"
+          node-version: "20.19.0"
           cache: npm
           cache-dependency-path: sdk/typescript/package-lock.json
       - name: Install dependencies
-        run: npm ci
+        run: npm ci --ignore-scripts
       - name: Build SDK
         run: npm run build
       - name: Run tests
@@ -263,11 +263,11 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
         with:
-          node-version: "22"
+          node-version: "20.19.0"
           cache: npm
           cache-dependency-path: admin-console/package-lock.json
       - name: Install dependencies
-        run: npm ci
+        run: npm ci --ignore-scripts
       - name: Typecheck
         run: npm run typecheck
       - name: Lint
@@ -292,7 +292,7 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
         with:
-          node-version: "22"
+          node-version: "20.19.0"
           cache: npm
           cache-dependency-path: admin-console/package-lock.json
       - name: Install Rust
@@ -309,7 +309,7 @@ jobs:
           key: release-acceptance-${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: release-acceptance-${{ runner.os }}-
       - name: Install admin console dependencies
-        run: npm ci --prefix admin-console
+        run: npm ci --ignore-scripts --prefix admin-console
       - name: Install Playwright browser
         run: cd admin-console && npx playwright install --with-deps chromium
       - name: Run managed release acceptance
@@ -354,11 +354,11 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
         with:
-          node-version: "22"
+          node-version: "20.19.0"
           cache: npm
           cache-dependency-path: admin-console/package-lock.json
       - name: Install admin console dependencies
-        run: npm ci --prefix admin-console
+        run: npm ci --ignore-scripts --prefix admin-console
       - name: Install Rust
         run: |
           rustup toolchain install stable --profile minimal
@@ -392,7 +392,7 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
         with:
-          node-version: "22"
+          node-version: "20.19.0"
           cache: npm
           cache-dependency-path: sdk/typescript/package-lock.json
       - name: Set up Java
@@ -403,8 +403,8 @@ jobs:
       - name: Install SDK generation tooling
         run: |
           cd sdk/typescript
-          npm ci
-          npm install -g @openapitools/openapi-generator-cli
+          npm ci --ignore-scripts
+          npm install -g --ignore-scripts --no-audit --no-fund @openapitools/openapi-generator-cli@2.32.0
       - name: Regenerate SDKs
         run: bash sdk/generate.sh
       - name: Verify generated SDKs are committed
