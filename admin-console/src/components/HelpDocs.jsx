@@ -36,6 +36,46 @@ const GUIDES = {
       'Use daily and weekly schedules for routine delivery instead of building one-off exports each time.',
     ],
   },
+  'live-monitor': {
+    title: 'Live Monitor Support',
+    intro:
+      'Use URL-backed monitor tabs, alert filters, and drawer anchors to hand off live triage without losing the active queue scope.',
+    steps: [
+      'Open a monitor deep link with the tab, filters, and selected alert intact before handing the queue to another analyst.',
+      'Close drawers from the monitor instead of editing the URL so stale alert and process anchors are cleared cleanly.',
+      'Use grouped and process views as pivots from the same live scope rather than restarting the investigation in another page.',
+    ],
+  },
+  collectors: {
+    title: 'Collector Lifecycle Support',
+    intro:
+      'Use connector lifecycle rows to confirm setup state, recent proof, validation drift, and the next settings handoff.',
+    steps: [
+      'Start with the connector gap count in Command Center and open the lane with the oldest missing proof.',
+      'Check last proof and failure streak before trusting downstream detections or compliance exports.',
+      'Validate credentials and sample events from settings, then return to Command Center for lifecycle confirmation.',
+    ],
+  },
+  'response-approvals': {
+    title: 'Response Approval Support',
+    intro:
+      'Use the SOC response row to see pending approvers, approval chain, notification state, escalation policy, and execution trace continuity.',
+    steps: [
+      'Confirm pending approvers and quorum before moving a response request from dry-run to live execution.',
+      'Check notification and escalation labels so approval handoffs do not disappear into a separate tab.',
+      'Use trace and audit labels to package post-action verification with rollback proof after execution.',
+    ],
+  },
+  'execution-audit': {
+    title: 'Execution Audit Support',
+    intro:
+      'Response safety now links request IDs to dry-run preview, approval ledger, trace export, rollback, and post-action verification evidence.',
+    steps: [
+      'Use the response safety payload as the source of truth for audit anchors and trace endpoints.',
+      'Review response audit entries alongside trace spans before closing a live action.',
+      'Attach rollback and verification proof to the same request ID used by the approval chain.',
+    ],
+  },
   default: {
     title: 'Operator Support',
     intro:
@@ -930,6 +970,54 @@ export default function HelpDocs() {
               }
             >
               Open SDK guide
+            </button>
+            <button
+              className={`filter-chip-button ${context === 'live-monitor' ? 'active' : ''}`}
+              onClick={() =>
+                updateSearchParams(searchParams, setSearchParams, {
+                  context: 'live-monitor',
+                  docs_section: 'guides',
+                  doc: 'FEATURE_UI_COVERAGE.md',
+                })
+              }
+            >
+              Open live monitor continuity
+            </button>
+            <button
+              className={`filter-chip-button ${context === 'collectors' ? 'active' : ''}`}
+              onClick={() =>
+                updateSearchParams(searchParams, setSearchParams, {
+                  context: 'collectors',
+                  docs_section: 'guides',
+                  doc: 'CONFIGURATION.md',
+                })
+              }
+            >
+              Open collector lifecycle
+            </button>
+            <button
+              className={`filter-chip-button ${context === 'response-approvals' ? 'active' : ''}`}
+              onClick={() =>
+                updateSearchParams(searchParams, setSearchParams, {
+                  context: 'response-approvals',
+                  docs_section: 'guides',
+                  doc: 'SECURITY.md',
+                })
+              }
+            >
+              Open response approvals
+            </button>
+            <button
+              className={`filter-chip-button ${context === 'execution-audit' ? 'active' : ''}`}
+              onClick={() =>
+                updateSearchParams(searchParams, setSearchParams, {
+                  context: 'execution-audit',
+                  docs_section: 'api',
+                  doc: 'openapi.yaml',
+                })
+              }
+            >
+              Open execution audit trail
             </button>
           </div>
           <div className="detail-callout" style={{ marginTop: 16 }}>

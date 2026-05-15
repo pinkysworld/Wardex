@@ -2470,8 +2470,8 @@ fn flush_to_storage(state: &Arc<Mutex<AppState>>) {
 
 fn generate_token() -> String {
     use rand::Rng;
-    let mut rng = rand::thread_rng();
-    let bytes: Vec<u8> = (0..32).map(|_| rng.r#gen()).collect();
+    let mut rng = rand::rng();
+    let bytes: Vec<u8> = (0..32).map(|_| rng.random()).collect();
     hex::encode(bytes)
 }
 
@@ -12805,18 +12805,30 @@ fn build_detection_lab_payload(state: &AppState) -> serde_json::Value {
 
 fn response_safety_payload(state: &AppState) -> serde_json::Value {
     let requests = state.response_orchestrator.all_requests();
+    let audit_ledger = state.response_orchestrator.audit_ledger();
     let request_items = requests
         .iter()
         .map(|request| {
             let item = response_request_json(request);
+            let audit_anchor = format!("response:{}:{}", request.id, request.requested_at);
             serde_json::json!({
                 "request": item,
                 "preview": {
                     "would_execute": request.status == ApprovalStatus::Approved && !request.dry_run,
                     "required_approvals": response_required_approvals(request.tier),
+                    "approval_chain": ["requester", "approver", "execution verifier"],
+                    "pending_approvers": if request.status == ApprovalStatus::Pending { serde_json::json!(["response approver"]) } else { serde_json::json!([]) },
                     "platform_command_mapping": platform_response_command_mapping(&request.action),
                     "rollback": response_reversal_path(&request.action, &request.target),
                     "post_action_verification": response_verification_steps(&request.action),
+                    "execution_audit": {
+                        "audit_anchor": audit_anchor,
+                        "audit_endpoint": "/api/response/audit",
+                        "trace_endpoint": "/api/traces",
+                        "trace_id": format!("response-{}", request.id),
+                        "notification_status": if request.status == ApprovalStatus::Executed { "delivery recorded" } else { "queued after approval" },
+                        "continuity": "request id links dry-run preview, approval ledger, trace export, rollback, and post-action verification",
+                    },
                 }
             })
         })
@@ -12827,7 +12839,13 @@ fn response_safety_payload(state: &AppState) -> serde_json::Value {
         "remediation": build_remediation_safety_status(state),
         "requests": request_items,
         "available_actions": response_action_catalog(),
-        "history": state.response_orchestrator.audit_ledger().iter().rev().take(20).map(|entry| {
+        "execution_audit": {
+            "ledger_entry_count": audit_ledger.len(),
+            "audit_endpoint": "/api/response/audit",
+            "trace_endpoint": "/api/traces",
+            "continuity": "response request ids link approvals, dry-run previews, ledger entries, traces, rollback proof, and verification evidence",
+        },
+        "history": audit_ledger.iter().rev().take(20).map(|entry| {
             serde_json::json!({
                 "request_id": entry.request_id,
                 "action": entry.action,
@@ -16460,26 +16478,7 @@ fn build_operator_task_automation(state: &AppState) -> serde_json::Value {
         .and_then(serde_json::Value::as_array)
         .cloned()
         .unwrap_or_default();
-    let automations = items
-        .iter()
-        .map(|item| {
-            let id = item.get("id").and_then(serde_json::Value::as_str).unwrap_or("task");
-            serde_json::json!({
-                "task_id": id,
-                "status": "ready",
-                "available_actions": ["assign_owner", "snooze", "create_ticket", "run_preflight", "export_evidence", "close_with_note"],
-                "recommended_action": match id {
-                    "release_doctor" => "run_preflight",
-                    "approval_queue" => "assign_owner",
-                    "detection_trust" => "export_evidence",
-                    "fleet_drift" => "create_ticket",
-                    "retention_forecast" => "snooze",
-                    _ => "assign_owner",
-                },
-                "source": item,
-            })
-        })
-        .collect::<Vec<_>>();
+    let generated_at = chrono::Utc::now();
     let action_blueprints = vec![
         serde_json::json!({"action": "assign_owner", "method": "dry_run", "required_fields": ["task_id", "owner", "due_at"], "audit": true}),
         serde_json::json!({"action": "snooze", "method": "dry_run", "required_fields": ["task_id", "duration", "reason"], "audit": true}),
@@ -16488,6 +16487,79 @@ fn build_operator_task_automation(state: &AppState) -> serde_json::Value {
         serde_json::json!({"action": "export_evidence", "method": "dry_run", "required_fields": ["task_id", "format"], "audit": true}),
         serde_json::json!({"action": "close_with_note", "method": "dry_run", "required_fields": ["task_id", "note", "evidence_digest"], "audit": true}),
     ];
+    let automations = items
+        .iter()
+        .map(|item| {
+            let id = item.get("id").and_then(serde_json::Value::as_str).unwrap_or("task");
+            let priority = item
+                .get("priority")
+                .and_then(serde_json::Value::as_str)
+                .unwrap_or("medium");
+            let owner = match id {
+                "release_doctor" => "release manager",
+                "approval_queue" => "shift lead",
+                "detection_trust" => "detections owner",
+                "fleet_drift" => "fleet owner",
+                "retention_forecast" => "platform owner",
+                _ => "platform owner",
+            };
+            let recommended_action = match id {
+                "release_doctor" => "run_preflight",
+                "approval_queue" => "assign_owner",
+                "detection_trust" => "export_evidence",
+                "fleet_drift" => "create_ticket",
+                "retention_forecast" => "snooze",
+                _ => "assign_owner",
+            };
+            let due_at = generated_at
+                + chrono::Duration::minutes(match id {
+                    "approval_queue" => 15,
+                    "release_doctor" => 120,
+                    "fleet_drift" => 240,
+                    "detection_trust" => 8 * 60,
+                    "retention_forecast" => 24 * 60,
+                    _ if priority == "high" => 240,
+                    _ => 24 * 60,
+                });
+            let sla_age = match id {
+                "approval_queue" => "breaching",
+                "release_doctor" => "due_this_shift",
+                "fleet_drift" => "due_today",
+                "detection_trust" => "due_this_week",
+                "retention_forecast" => "planning_window",
+                _ if priority == "high" => "due_today",
+                _ => "planning_window",
+            };
+            let next_escalation_target = match id {
+                "approval_queue" => "security owner",
+                "release_doctor" => "platform owner",
+                "detection_trust" => "detection manager",
+                "fleet_drift" => "infrastructure lead",
+                "retention_forecast" => "storage owner",
+                _ => "platform owner",
+            };
+            let action_blueprint = action_blueprints
+                .iter()
+                .find(|blueprint| {
+                    blueprint.get("action").and_then(serde_json::Value::as_str)
+                        == Some(recommended_action)
+                })
+                .cloned()
+                .unwrap_or(serde_json::Value::Null);
+            serde_json::json!({
+                "task_id": id,
+                "status": "ready",
+                "available_actions": ["assign_owner", "snooze", "create_ticket", "run_preflight", "export_evidence", "close_with_note"],
+                "owner": owner,
+                "due_at": due_at.to_rfc3339(),
+                "sla_age": sla_age,
+                "next_escalation_target": next_escalation_target,
+                "recommended_action": recommended_action,
+                "action_blueprint": action_blueprint,
+                "source": item,
+            })
+        })
+        .collect::<Vec<_>>();
     serde_json::json!({
         "generated_at": chrono::Utc::now().to_rfc3339(),
         "status": if automations.is_empty() { "clear" } else { "ready" },
@@ -29386,7 +29458,7 @@ fn handle_api(
                             // Assign an ID if not present
                             if hook.get("id").is_none() {
                                 use rand::Rng;
-                                let mut rng = rand::thread_rng();
+                                let mut rng = rand::rng();
                                 let mut buf = [0u8; 16];
                                 rng.fill(&mut buf);
                                 hook["id"] = serde_json::Value::String(hex::encode(buf));

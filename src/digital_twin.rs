@@ -438,7 +438,7 @@ pub fn fleet_attack_simulation(
     propagation_probability: f64,
 ) -> SimResult {
     use rand::Rng;
-    let mut rng = rand::thread_rng();
+    let mut rng = rand::rng();
 
     let mut steps = Vec::new();
 
@@ -453,12 +453,12 @@ pub fn fleet_attack_simulation(
 
     // Ticks 2..N: probabilistic lateral movement
     for (i, neighbour) in neighbours.iter().enumerate() {
-        if rng.r#gen::<f64>() < propagation_probability {
+        if rng.random::<f64>() < propagation_probability {
             steps.push(SimStep {
                 tick: (i + 2) as u64,
                 events: vec![SimEvent::MalwareInject {
                     target: neighbour.clone(),
-                    score: 7.0 + rng.r#gen::<f64>() * 2.0,
+                    score: 7.0 + rng.random::<f64>() * 2.0,
                 }],
             });
         }

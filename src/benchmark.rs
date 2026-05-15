@@ -309,40 +309,40 @@ mod tests {
     fn benchmark_10k_samples() {
         use rand::Rng;
 
-        let mut rng = rand::thread_rng();
+        let mut rng = rand::rng();
         let anomaly_rate = 0.05; // 5% anomaly injection
         let n = 10_000;
 
         let mut labeled: Vec<(TelemetrySample, bool)> = Vec::with_capacity(n);
         for i in 0..n {
-            let is_anomaly = rng.r#gen::<f64>() < anomaly_rate;
+            let is_anomaly = rng.random::<f64>() < anomaly_rate;
             let sample = if is_anomaly {
                 // Attack profile: elevated across all axes
                 TelemetrySample {
                     timestamp_ms: i as u64,
-                    cpu_load_pct: 70.0 + rng.r#gen::<f32>() * 25.0,
-                    memory_load_pct: 65.0 + rng.r#gen::<f32>() * 30.0,
-                    temperature_c: 55.0 + rng.r#gen::<f32>() * 15.0,
-                    network_kbps: 5000.0 + rng.r#gen::<f32>() * 5000.0,
-                    auth_failures: (5.0 + rng.r#gen::<f32>() * 20.0) as u32,
-                    battery_pct: 20.0 + rng.r#gen::<f32>() * 30.0,
-                    integrity_drift: 0.10 + rng.r#gen::<f32>() * 0.20,
-                    process_count: (100.0 + rng.r#gen::<f32>() * 150.0) as u32,
-                    disk_pressure_pct: 60.0 + rng.r#gen::<f32>() * 35.0,
+                    cpu_load_pct: 70.0 + rng.random::<f32>() * 25.0,
+                    memory_load_pct: 65.0 + rng.random::<f32>() * 30.0,
+                    temperature_c: 55.0 + rng.random::<f32>() * 15.0,
+                    network_kbps: 5000.0 + rng.random::<f32>() * 5000.0,
+                    auth_failures: (5.0 + rng.random::<f32>() * 20.0) as u32,
+                    battery_pct: 20.0 + rng.random::<f32>() * 30.0,
+                    integrity_drift: 0.10 + rng.random::<f32>() * 0.20,
+                    process_count: (100.0 + rng.random::<f32>() * 150.0) as u32,
+                    disk_pressure_pct: 60.0 + rng.random::<f32>() * 35.0,
                 }
             } else {
                 // Benign profile: normal operating range
                 TelemetrySample {
                     timestamp_ms: i as u64,
-                    cpu_load_pct: 10.0 + rng.r#gen::<f32>() * 25.0,
-                    memory_load_pct: 20.0 + rng.r#gen::<f32>() * 25.0,
-                    temperature_c: 35.0 + rng.r#gen::<f32>() * 12.0,
-                    network_kbps: 200.0 + rng.r#gen::<f32>() * 600.0,
-                    auth_failures: if rng.r#gen::<f32>() < 0.1 { 1 } else { 0 },
-                    battery_pct: 70.0 + rng.r#gen::<f32>() * 28.0,
-                    integrity_drift: rng.r#gen::<f32>() * 0.03,
-                    process_count: (30.0 + rng.r#gen::<f32>() * 30.0) as u32,
-                    disk_pressure_pct: 5.0 + rng.r#gen::<f32>() * 20.0,
+                    cpu_load_pct: 10.0 + rng.random::<f32>() * 25.0,
+                    memory_load_pct: 20.0 + rng.random::<f32>() * 25.0,
+                    temperature_c: 35.0 + rng.random::<f32>() * 12.0,
+                    network_kbps: 200.0 + rng.random::<f32>() * 600.0,
+                    auth_failures: if rng.random::<f32>() < 0.1 { 1 } else { 0 },
+                    battery_pct: 70.0 + rng.random::<f32>() * 28.0,
+                    integrity_drift: rng.random::<f32>() * 0.03,
+                    process_count: (30.0 + rng.random::<f32>() * 30.0) as u32,
+                    disk_pressure_pct: 5.0 + rng.random::<f32>() * 20.0,
                 }
             };
             labeled.push((sample, is_anomaly));

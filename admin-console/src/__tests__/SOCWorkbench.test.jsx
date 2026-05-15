@@ -292,8 +292,13 @@ const BASE_SOC_FIXTURES = {
         id: 'resp-1',
         type: 'Contain host',
         target: 'host-1',
+        severity: 'high',
         status: 'running',
         approval_status: 'approval granted',
+        approval_chain: ['requester', 'secops-lead'],
+        pending_approvers: ['incident commander'],
+        notification_status: 'slack queued',
+        trace_id: 'trace-response-1',
         rollback_status: 'rollback ready',
         verification_status: 'verify queued',
         requested_at: '2024-01-01T00:00:00Z',
@@ -311,7 +316,36 @@ const BASE_SOC_FIXTURES = {
     ],
   },
   responseStats: { pending: 1, running: 1, completed: 4, failed: 0, ready_to_execute: 1 },
+  responseSafety: {
+    overview: { pending_response_approvals: 1, ready_to_execute: 1, status: 'review' },
+    remediation: { current_platform: 'linux' },
+    requests: [
+      {
+        request: { id: 'resp-1', status: 'running', action: 'Contain host' },
+        preview: {
+          would_execute: false,
+          required_approvals: 1,
+          platform_command_mapping: {
+            linux: 'cgroup/nftables isolation preview',
+          },
+          rollback: 'Restore network access after incident validation.',
+          post_action_verification: ['confirm heartbeat scope', 'verify network isolation'],
+          execution_audit: {
+            trace_id: 'trace-response-1',
+            notification_status: 'slack queued',
+            audit_anchor: 'response:resp-1:2024-01-01T00:00:00Z',
+          },
+        },
+      },
+    ],
+    guardrails: [
+      'dry-run preview before live execution',
+      'approval count is determined by action tier',
+      'record verification evidence after execution',
+    ],
+  },
   remediationSafety: { status: 'ready', rollback_status: 'rollback ready' },
+  traces: { recent: [{ trace_id: 'trace-response-1', span_name: 'response.execute' }] },
   changeReviews: { reviews: [{ id: 'change-1', status: 'approved' }] },
   escalationPolicies: {
     policies: [
@@ -668,6 +702,8 @@ function installSocWorkbenchFetchMock(tracker = {}) {
       return Promise.resolve(jsonOk(fixtures.responseRequests));
     if (pathname === '/api/response/audit') return Promise.resolve(jsonOk(fixtures.responseAudit));
     if (pathname === '/api/response/stats') return Promise.resolve(jsonOk(fixtures.responseStats));
+    if (pathname === '/api/response/safety') return Promise.resolve(jsonOk(fixtures.responseSafety));
+    if (pathname === '/api/traces') return Promise.resolve(jsonOk(fixtures.traces));
     if (pathname === '/api/remediation/safety')
       return Promise.resolve(jsonOk(fixtures.remediationSafety));
     if (pathname === '/api/remediation/change-reviews')
@@ -1242,12 +1278,24 @@ describe('SOCWorkbench', () => {
     expect(await screen.findByText('approval granted')).toBeInTheDocument();
     expect((await screen.findAllByText('rollback ready')).length).toBeGreaterThan(0);
     expect(await screen.findByText('verify queued')).toBeInTheDocument();
+    expect(await screen.findByText('Dry-run gated')).toBeInTheDocument();
+    expect(await screen.findByText(/Linux: cgroup\/nftables isolation preview/i)).toBeInTheDocument();
+    expect(await screen.findByText(/Rollback: Restore network access after incident validation./i)).toBeInTheDocument();
+    expect(await screen.findByText(/Pending approver: incident commander/i)).toBeInTheDocument();
+    expect(await screen.findByText(/Approval chain: requester -> secops-lead/i)).toBeInTheDocument();
+    expect(await screen.findByText(/Notify: slack queued/i)).toBeInTheDocument();
+    expect(await screen.findByText(/Escalate: Critical Route policy/i)).toBeInTheDocument();
+    expect(await screen.findByText(/Trace: trace-response-1/i)).toBeInTheDocument();
+    expect(
+      await screen.findByText(/Response safety guardrails: dry-run preview before live execution/i),
+    ).toBeInTheDocument();
     expect(currentLocation().hash).toBe('#response');
 
     const initialPendingCalls = countResponseCalls('/api/response/pending');
     const initialRequestCalls = countResponseCalls('/api/response/requests');
     const initialAuditCalls = countResponseCalls('/api/response/audit');
     const initialStatsCalls = countResponseCalls('/api/response/stats');
+    const initialSafetyCalls = countResponseCalls('/api/response/safety');
 
     fireEvent.click(within(responseCallout).getByRole('button', { name: '↻ Refresh' }));
 
@@ -1256,6 +1304,7 @@ describe('SOCWorkbench', () => {
       expect(countResponseCalls('/api/response/requests')).toBe(initialRequestCalls + 1);
       expect(countResponseCalls('/api/response/audit')).toBe(initialAuditCalls + 1);
       expect(countResponseCalls('/api/response/stats')).toBe(initialStatsCalls + 1);
+      expect(countResponseCalls('/api/response/safety')).toBe(initialSafetyCalls + 1);
     });
   });
 

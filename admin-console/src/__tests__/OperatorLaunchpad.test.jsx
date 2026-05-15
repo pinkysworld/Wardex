@@ -176,11 +176,73 @@ describe('OperatorLaunchpad', () => {
           evidence_freshness: evidence('secrets_rotation_operations'),
         });
       }
+      if (path === '/api/operator/work-queue') {
+        return jsonOk({
+          status: 'attention',
+          item_count: 2,
+          high_priority_count: 1,
+          items: [
+            {
+              id: 'approval_queue',
+              priority: 'high',
+              title: 'Response approvals waiting',
+              status: 'approval_required',
+              href: '/soc?focus=response',
+              detail: '2 approval item(s) require operator review.',
+            },
+            {
+              id: 'release_doctor',
+              priority: 'medium',
+              title: 'Release doctor review',
+              status: 'review',
+              href: '/launchpad#release-trust',
+              detail: 'Review release doctor signals.',
+            },
+          ],
+        });
+      }
       if (path === '/api/operator/task-automation') {
         return jsonOk({
           status: 'ready',
           automation_count: 2,
-          action_blueprints: [{ action: 'assign_owner' }, { action: 'create_ticket' }],
+          automations: [
+            {
+              task_id: 'approval_queue',
+              status: 'ready',
+              owner: 'shift lead',
+              due_at: '2026-05-10T09:15:00Z',
+              sla_age: 'breaching',
+              next_escalation_target: 'security owner',
+              recommended_action: 'assign_owner',
+              action_blueprint: { action: 'assign_owner', method: 'dry_run' },
+              source: {
+                title: 'Response approvals waiting',
+                status: 'approval_required',
+                detail: '2 approval item(s) require operator review.',
+                href: '/soc?focus=response',
+              },
+            },
+            {
+              task_id: 'release_doctor',
+              status: 'ready',
+              owner: 'release manager',
+              due_at: '2026-05-10T11:00:00Z',
+              sla_age: 'due_this_shift',
+              next_escalation_target: 'platform owner',
+              recommended_action: 'run_preflight',
+              action_blueprint: { action: 'run_preflight', method: 'dry_run' },
+              source: {
+                title: 'Release doctor review',
+                status: 'review',
+                detail: 'Review release doctor signals.',
+                href: '/launchpad#release-trust',
+              },
+            },
+          ],
+          action_blueprints: [
+            { action: 'assign_owner', method: 'dry_run' },
+            { action: 'run_preflight', method: 'dry_run' },
+          ],
         });
       }
       if (path === '/api/detection/validation-packs') {
@@ -296,6 +358,12 @@ describe('OperatorLaunchpad', () => {
     expect(screen.getByText('Acceptance report')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Export report' })).toBeEnabled();
     expect(screen.getByText('Next actions')).toBeInTheDocument();
+    expect(screen.getByText('Response approvals waiting')).toBeInTheDocument();
+    expect(screen.getByText(/Owner: shift lead/i)).toBeInTheDocument();
+    expect(screen.getByText(/SLA: Breaching/i)).toBeInTheDocument();
+    expect(screen.getByText(/Escalate: security owner/i)).toBeInTheDocument();
+    expect(screen.getByText(/Next action: Assign owner/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/Dry run blueprint/i).length).toBeGreaterThan(0);
     expect(screen.getByText('Playbook blast-radius preview')).toBeInTheDocument();
     expect(screen.getByText('Viewer home')).toBeInTheDocument();
     expect(screen.getByText('Screenshot gate')).toBeInTheDocument();

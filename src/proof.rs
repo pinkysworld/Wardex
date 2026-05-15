@@ -169,7 +169,7 @@ impl ProofBackend for SigmaBackend {
 
     fn generate_witness(&self, entry: &ProofEntry) -> WitnessBundle {
         use rand::Rng;
-        let mut rng = rand::thread_rng();
+        let mut rng = rand::rng();
 
         // Generate random nonce (32 bytes)
         let mut nonce = [0u8; 32];

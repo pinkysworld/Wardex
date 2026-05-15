@@ -40,12 +40,12 @@ impl LamportPrivateKey {
     /// Generate a new Lamport private key using the system RNG.
     pub fn generate() -> Self {
         use rand::Rng;
-        let mut rng = rand::thread_rng();
-        let key_id = hex::encode((0..8).map(|_| rng.r#gen::<u8>()).collect::<Vec<_>>());
+        let mut rng = rand::rng();
+        let key_id = hex::encode((0..8).map(|_| rng.random::<u8>()).collect::<Vec<_>>());
         let pairs: Vec<(String, String)> = (0..256)
             .map(|_| {
-                let zero: Vec<u8> = (0..32).map(|_| rng.r#gen()).collect();
-                let one: Vec<u8> = (0..32).map(|_| rng.r#gen()).collect();
+                let zero: Vec<u8> = (0..32).map(|_| rng.random()).collect();
+                let one: Vec<u8> = (0..32).map(|_| rng.random()).collect();
                 (hex::encode(&zero), hex::encode(&one))
             })
             .collect();
@@ -465,8 +465,8 @@ impl MlDsaKeyPair {
     /// Generate a new ML-DSA-65 keypair (simulated).
     pub fn generate() -> Self {
         use rand::Rng;
-        let mut rng = rand::thread_rng();
-        let seed_bytes: Vec<u8> = (0..32).map(|_| rng.r#gen()).collect();
+        let mut rng = rand::rng();
+        let seed_bytes: Vec<u8> = (0..32).map(|_| rng.random()).collect();
         let seed = hex::encode(&seed_bytes);
         let pk_hash = sha256_hex(format!("mldsa65-pk:{seed}").as_bytes());
         let key_id = hex::encode(&seed_bytes[..8]);

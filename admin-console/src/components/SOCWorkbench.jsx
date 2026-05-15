@@ -294,6 +294,73 @@ const responseItemList = (value) =>
 const responseAuditList = (value) =>
   value?.audit_log || value?.entries || value?.audit || (Array.isArray(value) ? value : []);
 
+const traceItemList = (value) =>
+  value?.recent || value?.traces || value?.items || (Array.isArray(value) ? value : []);
+
+function responseApprovalVisibility(request, preview, escalationItems, escalationPolicies, traces) {
+  const approvals = Array.isArray(request?.approvals) ? request.approvals : [];
+  const approvedCount = Number(
+    request?.approval_count ??
+      approvals.filter((approval) => String(approval?.decision || '').toLowerCase() === 'approve')
+        .length ??
+      0,
+  );
+  const required = Math.max(
+    1,
+    Number(preview?.required_approvals ?? request?.approvals_required ?? request?.required_approvals ?? 1),
+  );
+  const pendingCount = Math.max(0, required - approvedCount);
+  const pendingApprovers = [
+    ...(Array.isArray(request?.pending_approvers) ? request.pending_approvers : []),
+    ...(Array.isArray(preview?.pending_approvers) ? preview.pending_approvers : []),
+  ].filter(Boolean);
+  const chain = [
+    ...(Array.isArray(request?.approval_chain) ? request.approval_chain : []),
+    ...(Array.isArray(preview?.approval_chain) ? preview.approval_chain : []),
+    ...approvals.map((approval) => approval.actor || approval.user || approval.approver).filter(Boolean),
+  ];
+  const severity = String(request?.severity || '').toLowerCase();
+  const activeEscalation = escalationItems.find((entry) => {
+    const haystack = `${entry?.request_id || ''} ${entry?.incident_id || ''} ${entry?.target || ''} ${entry?.severity || ''}`.toLowerCase();
+    return (
+      (request?.id && haystack.includes(String(request.id).toLowerCase())) ||
+      (request?.target && haystack.includes(String(request.target).toLowerCase()))
+    );
+  });
+  const matchingPolicy = escalationPolicies.find(
+    (policy) => String(policy?.severity || '').toLowerCase() === severity,
+  );
+  const trace =
+    preview?.execution_audit?.trace_id ||
+    request?.trace_id ||
+    traces.find((item) => item?.request_id === request?.id)?.trace_id ||
+    traces[0]?.trace_id ||
+    null;
+
+  return {
+    pendingLabel:
+      pendingApprovers.length > 0
+        ? pendingApprovers.slice(0, 2).join(', ')
+        : pendingCount > 0
+          ? `${pendingCount} approver${pendingCount === 1 ? '' : 's'} needed`
+          : 'quorum met',
+    chainLabel:
+      chain.length > 0
+        ? [...new Set(chain.map((item) => String(item).trim()).filter(Boolean))].slice(0, 3).join(' -> ')
+        : `${approvedCount}/${required} approvals recorded`,
+    notificationStatus:
+      request?.notification_status ||
+      preview?.execution_audit?.notification_status ||
+      (pendingCount > 0 ? 'queued after approval' : 'ready to notify'),
+    escalationLabel: activeEscalation
+      ? `${activeEscalation.policy || activeEscalation.policy_id || 'active policy'} level ${activeEscalation.level || 1}`
+      : matchingPolicy
+        ? `${matchingPolicy.name || matchingPolicy.id} policy`
+        : 'default SOC escalation',
+    traceLabel: trace ? String(trace).slice(0, 16) : 'trace pending',
+  };
+}
+
 function resolveInvestigationPivot(endpoint, context, label) {
   const normalized = String(endpoint || '').trim();
   if (!normalized) return null;
@@ -613,10 +680,21 @@ export default function SOCWorkbench() {
     respReq: api.responseRequests,
     respAudit: api.responseAudit,
     respStats: api.responseStats,
+    responseSafety: api.responseSafety,
     remediationSafety: api.remediationSafety,
     changeReviews: api.remediationChangeReviews,
+    tracesData: api.traces,
   });
-  const { pending, respReq, respAudit, respStats, remediationSafety, changeReviews } = responseData;
+  const {
+    pending,
+    respReq,
+    respAudit,
+    respStats,
+    responseSafety,
+    remediationSafety,
+    changeReviews,
+    tracesData,
+  } = responseData;
   const { data: processTreeData, reload: reloadProcessTreeData } = useApiGroup({
     procs: api.processTree,
     deepCh: api.deepChains,
@@ -782,6 +860,7 @@ export default function SOCWorkbench() {
   const pendingResponseArr = responseItemList(pending);
   const responseRequestArr = responseItemList(respReq);
   const responseAuditArr = responseAuditList(respAudit);
+  const responseTraceArr = traceItemList(tracesData);
   const changeReviewArr = responseItemList(
     changeReviews?.reviews ? changeReviews.reviews : changeReviews,
   );
@@ -790,6 +869,38 @@ export default function SOCWorkbench() {
   );
   const responseRollbackStatus =
     remediationSafety?.rollback_status || remediationSafety?.status || 'dry_run_only';
+  const responseSafetyRequests = Array.isArray(responseSafety?.requests)
+    ? responseSafety.requests
+    : [];
+  const responseSafetyPreviewById = useMemo(
+    () =>
+      Object.fromEntries(
+        responseSafetyRequests
+          .map((entry) => {
+            const request = entry?.request && typeof entry.request === 'object' ? entry.request : {};
+            const requestId = String(request.id ?? entry?.request_id ?? '').trim();
+            if (!requestId) return null;
+            return [requestId, entry?.preview || null];
+          })
+          .filter(Boolean),
+      ),
+    [responseSafetyRequests],
+  );
+  const responseSafetyGuardrails = Array.isArray(responseSafety?.guardrails)
+    ? responseSafety.guardrails
+    : [];
+  const responseSafetyPlatform =
+    responseSafety?.remediation?.current_platform || remediationSafety?.current_platform || 'linux';
+  const activeEscalationArr = Array.isArray(escActive?.escalations)
+    ? escActive.escalations
+    : Array.isArray(escActive)
+      ? escActive
+      : [];
+  const escalationPolicyArr = Array.isArray(escPolicies?.policies)
+    ? escPolicies.policies
+    : Array.isArray(escPolicies)
+      ? escPolicies
+      : [];
   const processFindingArr = Array.isArray(procFindings?.findings) ? procFindings.findings : [];
   const renderedProcessFindings = processFindingArr.slice(0, MAX_PROCESS_FINDING_ROWS);
   const hiddenProcessFindingCount = Math.max(
@@ -3656,7 +3767,9 @@ export default function SOCWorkbench() {
             <div className="response-readiness-card">
               <div className="summary-label">Execution logs</div>
               <strong>{responseRequestArr.length}</strong>
-              <span>{responseAuditArr.length} audit events available</span>
+              <span>
+                {responseAuditArr.length} audit events · {responseTraceArr.length} trace spans
+              </span>
             </div>
             <div className="response-readiness-card">
               <div className="summary-label">Post-action verify</div>
@@ -3736,12 +3849,21 @@ export default function SOCWorkbench() {
                           <th>Target</th>
                           <th>Status</th>
                           <th>Readiness</th>
+                          <th>Preview</th>
                           <th>Progress</th>
                           <th>Requested</th>
                         </tr>
                       </thead>
                       <tbody>
                         {reqs.map((r, i) => {
+                          const preview = responseSafetyPreviewById[String(r.id)] || null;
+                          const approvalVisibility = responseApprovalVisibility(
+                            r,
+                            preview,
+                            activeEscalationArr,
+                            escalationPolicyArr,
+                            responseTraceArr,
+                          );
                           const steps = r.steps || [];
                           const completedSteps = steps.filter(
                             (s) => s.status === 'completed' || s.status === 'done',
@@ -3786,6 +3908,55 @@ export default function SOCWorkbench() {
                                     {r.verification_status || r.verify_status || 'verify queued'}
                                   </span>
                                 </div>
+                                <div
+                                  style={{
+                                    display: 'grid',
+                                    gap: 2,
+                                    marginTop: 6,
+                                    fontSize: 12,
+                                    color: 'var(--text-secondary)',
+                                  }}
+                                >
+                                  <span>Pending approver: {approvalVisibility.pendingLabel}</span>
+                                  <span>Approval chain: {approvalVisibility.chainLabel}</span>
+                                  <span>Notify: {approvalVisibility.notificationStatus}</span>
+                                  <span>Escalate: {approvalVisibility.escalationLabel}</span>
+                                  <span>Trace: {approvalVisibility.traceLabel}</span>
+                                </div>
+                              </td>
+                              <td style={{ minWidth: 250 }}>
+                                {preview ? (
+                                  <div
+                                    style={{ display: 'grid', gap: 4, fontSize: 12, color: 'var(--text-secondary)' }}
+                                  >
+                                    <span
+                                      className={`badge ${preview.would_execute ? 'badge-ok' : 'badge-warn'}`}
+                                      style={{ width: 'fit-content' }}
+                                    >
+                                      {preview.would_execute ? 'Live after approval' : 'Dry-run gated'}
+                                    </span>
+                                    <div>
+                                      {preview.required_approvals || 0} approval
+                                      {(preview.required_approvals || 0) === 1 ? '' : 's'} required
+                                    </div>
+                                    {preview.platform_command_mapping?.[responseSafetyPlatform] && (
+                                      <div>
+                                        {formatCompactLabel(responseSafetyPlatform)}:{' '}
+                                        {preview.platform_command_mapping[responseSafetyPlatform]}
+                                      </div>
+                                    )}
+                                    {preview.rollback && <div>Rollback: {preview.rollback}</div>}
+                                    {Array.isArray(preview.post_action_verification) &&
+                                      preview.post_action_verification.length > 0 && (
+                                        <div>
+                                          Verify:{' '}
+                                          {preview.post_action_verification.slice(0, 2).join(' • ')}
+                                        </div>
+                                      )}
+                                  </div>
+                                ) : (
+                                  <span className="hint">Preview unavailable</span>
+                                )}
                               </td>
                               <td style={{ minWidth: 140 }}>
                                 <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
@@ -3835,6 +4006,11 @@ export default function SOCWorkbench() {
                         })}
                       </tbody>
                     </table>
+                      {responseSafetyGuardrails.length > 0 && (
+                        <div className="hint" style={{ marginTop: 12 }}>
+                          Response safety guardrails: {responseSafetyGuardrails.slice(0, 3).join(' • ')}
+                        </div>
+                      )}
                     {/* Per-step execution detail for in-progress/failed requests */}
                     {reqs
                       .filter(

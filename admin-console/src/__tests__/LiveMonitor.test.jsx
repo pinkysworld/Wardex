@@ -205,6 +205,67 @@ describe('LiveMonitor', () => {
     expect(await screen.findByText('Credential misuse follow-up')).toBeInTheDocument();
   });
 
+  it('restores live event filters from the route for shared stream links', async () => {
+    const sockets = [];
+
+    globalThis.WebSocket = class MockWebSocket {
+      constructor(url) {
+        this.url = url;
+        sockets.push(this);
+      }
+
+      close() {}
+
+      emitOpen() {
+        this.onopen?.();
+      }
+
+      emitMessage(payload) {
+        this.onmessage?.({ data: payload });
+      }
+    };
+
+    renderMonitor('/monitor?eventType=incident&eventQuery=Credential');
+    await waitFor(() => {
+      expect(sockets).toHaveLength(1);
+    });
+
+    await act(async () => {
+      sockets[0].emitOpen();
+      sockets[0].emitMessage(
+        JSON.stringify({
+          type: 'alert',
+          timestamp: new Date().toISOString(),
+          data: {
+            id: 42,
+            timestamp: new Date().toISOString(),
+            hostname: 'edge-1',
+            level: 'Critical',
+            reasons: ['network burst detected'],
+          },
+        }),
+      );
+      sockets[0].emitMessage(
+        JSON.stringify({
+          event_type: 'incident',
+          timestamp: new Date().toISOString(),
+          data: {
+            id: 'inc-17',
+            title: 'Credential misuse follow-up',
+            severity: 'high',
+          },
+        }),
+      );
+    });
+
+    expect(currentLocation().searchParams.get('eventType')).toBe('incident');
+    expect(currentLocation().searchParams.get('eventQuery')).toBe('Credential');
+    expect(await screen.findByText('Credential misuse follow-up')).toBeInTheDocument();
+    const liveEventsTable = screen.getByRole('table', { name: 'Live event buffer' });
+    expect(within(liveEventsTable).getByText('Credential misuse follow-up')).toBeInTheDocument();
+    expect(within(liveEventsTable).queryByText('network burst detected')).not.toBeInTheDocument();
+  });
+
   it('refreshes grouped alert summaries and process data from the existing controls', async () => {
     const user = userEvent.setup();
     const callCounts = {

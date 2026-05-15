@@ -14,15 +14,16 @@ Wardex is a Rust-based XDR and SIEM platform for private-cloud and self-hosted s
 - **Scan across platforms:** malware, virus, trojan, and rootkit workflows cover Linux, macOS, and Windows with local engines plus optional open-source signature presets.
 - **Ship verifiably:** releases include checksums, SBOMs, provenance, signed artifacts, and documented verification gates.
 
-## Current Release: `v1.0.18`
+## Current Release: `v1.0.19`
 
-This intelligence-gates release strengthens the operator path from alert triage through evidence, assistant review, notifications, and release acceptance while keeping automated response execution behind existing approval gates.
+This operator-trust continuity release strengthens handoffs across live triage, collector readiness, detection promotion, and approval-gated response while keeping automated response execution behind existing approval gates.
 
-- Managed alert triage now returns calibrated confidence, quality gates, recommended operator journeys, evidence mode, and approval requirements.
-- Analyst Assistant responses now expose citation, confidence, and execution-boundary quality gates in both API payloads and the console.
-- Notifications now keep an outbox-style delivery trail for alert dispatch attempts, and macOS memory indicators parse vmmap output for RWX and anonymous-executable regions.
-- Operator Launchpad now includes canonical journey readiness and evidence-mode rollups across critical alert response, collector trust, release acceptance, and assistant-to-evidence paths.
-- All release metadata, docs, website, SDKs, Helm, OTLP, and test fixtures are aligned on `v1.0.18`.
+- Live Monitor route state now preserves tabs, filters, selected alerts, and process drawer context for reliable handoff links.
+- Command Center connector rows now surface lifecycle proof, failure context, and next settings actions for collector recovery.
+- Threat Detection quality rows now show promotion-ready or promotion-blocked status with the first actionable blocker.
+- SOC response rows now expose pending approvers, approval chain, notification state, escalation policy, trace labels, rollback, and verification context.
+- Response Safety payloads now link request IDs to dry-run preview, approval ledger, trace endpoint, rollback, and post-action verification evidence.
+- All release metadata, docs, website, SDKs, Helm, OTLP, and test fixtures are aligned on `v1.0.19`.
 
 See [CHANGELOG.md](CHANGELOG.md) for full release history.
 

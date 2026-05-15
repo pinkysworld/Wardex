@@ -4,6 +4,18 @@ All notable changes to Wardex are documented in this file.
 
 ## [Unreleased]
 
+## [1.0.19] — 2026-05-15 — operator trust continuity
+
+### Added
+- **Live Monitor continuity**: keeps route-backed tabs, filters, selected alert drawers, and selected process drawers synchronized for handoff-safe live triage links.
+- **Collector lifecycle proof**: adds Command Center connector lifecycle rows with last proof, validation/failure state, and next-action settings handoffs.
+- **Inline promotion guidance**: surfaces promotion-ready or promotion-blocked status directly in Threat Detection quality rows with the first actionable blocker.
+- **SOC approval visibility**: shows pending approvers, approval chain, notification state, escalation policy, and trace labels beside response dry-run and rollback previews.
+- **Execution audit continuity**: links Response Safety request IDs to dry-run preview, approval ledger, trace endpoint, rollback, and post-action verification evidence.
+
+### Changed
+- **Help and website alignment**: updates in-app help, OpenAPI descriptions, public website status/copy, docs, SDK metadata, Helm, OTLP, and test fixtures to the `v1.0.19` operator-trust continuity baseline.
+
 ## [1.0.18] — 2026-05-13 — intelligence gates and release cleanup
 
 ### Added

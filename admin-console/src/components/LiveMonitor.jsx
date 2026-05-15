@@ -50,6 +50,12 @@ const MONITOR_VIEW_META = {
   },
 };
 
+const VALID_MONITOR_TABS = Object.keys(MONITOR_VIEW_META);
+
+function normalizeMonitorTab(value) {
+  return VALID_MONITOR_TABS.includes(value) ? value : 'stream';
+}
+
 const MONITOR_SHORTCUTS = [
   {
     title: 'Queue navigation',
@@ -82,6 +88,10 @@ const MONITOR_SHORTCUTS = [
 
 function alertIdFor(alert, index) {
   return String(alert.id ?? alert.alert_id ?? alert._index ?? `${alert.timestamp}-${index}`);
+}
+
+function processIdFor(process) {
+  return String(process?.pid ?? process?.process_id ?? process?.id ?? '').trim();
 }
 
 function normalizeAlert(alert, fallbackIndex) {
@@ -433,7 +443,7 @@ export default function LiveMonitor() {
   const [selectedId, setSelectedId] = useState(() => searchParams.get('alert'));
   const [hoveredId, setHoveredId] = useState(null);
   const [analysisResult, setAnalysisResult] = useState(null);
-  const [tab, setTab] = useState(() => searchParams.get('monitorTab') || 'stream');
+  const [tab, setTab] = useState(() => normalizeMonitorTab(searchParams.get('monitorTab')));
   const [showShortcutHelp, setShowShortcutHelp] = useState(false);
   const [procSort, setProcSort] = useState('cpu');
   const [procFilter, setProcFilter] = useState('');
@@ -453,17 +463,47 @@ export default function LiveMonitor() {
     (updates) => {
       const next = new URLSearchParams(searchParams);
       Object.entries(updates).forEach(([key, value]) => {
-        if (!value || value === 'all') next.delete(key);
-        else next.set(key, value);
+        if (value == null || value === '' || value === 'all') next.delete(key);
+        else next.set(key, String(value));
       });
       setSearchParams(next, { replace: true });
     },
     [searchParams, setSearchParams],
   );
 
+  const setMonitorTab = useCallback(
+    (nextTab) => {
+      const normalizedTab = normalizeMonitorTab(nextTab);
+      setTab(normalizedTab);
+      updateMonitorParams({ monitorTab: normalizedTab });
+    },
+    [updateMonitorParams],
+  );
+
+  useEffect(() => {
+    const nextTab = normalizeMonitorTab(searchParams.get('monitorTab'));
+    setTab((current) => (current === nextTab ? current : nextTab));
+  }, [searchParams]);
+
   useEffect(() => {
     const alertParam = searchParams.get('alert');
     setSelectedId((current) => (current === alertParam ? current : alertParam));
+  }, [searchParams]);
+
+  useEffect(() => {
+    const nextSeverity = searchParams.get('sev') || 'all';
+    const nextSource = searchParams.get('source') || 'all';
+    const nextHost = searchParams.get('host') || 'all';
+    const nextQuery = searchParams.get('q') || '';
+    const nextEventType = searchParams.get('eventType') || 'all';
+    const nextEventQuery = searchParams.get('eventQuery') || '';
+
+    setSevFilter((current) => (current === nextSeverity ? current : nextSeverity));
+    setSourceFilter((current) => (current === nextSource ? current : nextSource));
+    setHostFilter((current) => (current === nextHost ? current : nextHost));
+    setSearchFilter((current) => (current === nextQuery ? current : nextQuery));
+    setLiveEventTypeFilter((current) => (current === nextEventType ? current : nextEventType));
+    setLiveEventQuery((current) => (current === nextEventQuery ? current : nextEventQuery));
   }, [searchParams]);
 
   useEffect(() => {
@@ -769,8 +809,12 @@ export default function LiveMonitor() {
   };
 
   // Process list with sorting and filtering
+  const rawProcessRows = useMemo(
+    () => (Array.isArray(procData?.processes) ? procData.processes : []),
+    [procData?.processes],
+  );
   const procList = (() => {
-    let list = procData?.processes || [];
+    let list = rawProcessRows;
     if (procFilter) {
       const f = procFilter.toLowerCase();
       list = list.filter(
@@ -802,6 +846,21 @@ export default function LiveMonitor() {
   );
   const currentTabMeta = MONITOR_VIEW_META[tab] || MONITOR_VIEW_META.stream;
   const hasProcessSnapshot = procData?.count != null || procList.length > 0;
+
+  useEffect(() => {
+    const processParam = searchParams.get('process');
+    if (!processParam) {
+      setSelectedProcess((current) => (current == null ? current : null));
+      return;
+    }
+    const matchingProcess = rawProcessRows.find(
+      (process) => processIdFor(process) === processParam,
+    );
+    if (!matchingProcess) return;
+    setSelectedProcess((current) =>
+      processIdFor(current) === processParam ? current : { ...matchingProcess },
+    );
+  }, [rawProcessRows, searchParams]);
 
   const currentView = ALERT_VIEWS.find(
     (view) =>
@@ -944,7 +1003,15 @@ export default function LiveMonitor() {
     );
   };
 
-  const openProcess = (process) => setSelectedProcess(process ? { ...process } : null);
+  const openProcess = useCallback(
+    (process) => {
+      const processId = processIdFor(process);
+      setSelectedProcess(processId ? { ...process } : null);
+      if (processId) setTab('processes');
+      updateMonitorParams({ process: processId || null, monitorTab: processId ? 'processes' : tab });
+    },
+    [tab, updateMonitorParams],
+  );
 
   useEffect(() => {
     if (tab !== 'stream') return;
@@ -1117,10 +1184,7 @@ export default function LiveMonitor() {
           className={`tab ${tab === 'stream' ? 'active' : ''}`}
           role="tab"
           aria-selected={tab === 'stream'}
-          onClick={() => {
-            setTab('stream');
-            updateMonitorParams({ monitorTab: 'stream' });
-          }}
+          onClick={() => setMonitorTab('stream')}
         >
           Alert Stream
         </button>
@@ -1128,10 +1192,7 @@ export default function LiveMonitor() {
           className={`tab ${tab === 'grouped' ? 'active' : ''}`}
           role="tab"
           aria-selected={tab === 'grouped'}
-          onClick={() => {
-            setTab('grouped');
-            updateMonitorParams({ monitorTab: 'grouped' });
-          }}
+          onClick={() => setMonitorTab('grouped')}
         >
           Grouped
         </button>
@@ -1139,10 +1200,7 @@ export default function LiveMonitor() {
           className={`tab ${tab === 'analysis' ? 'active' : ''}`}
           role="tab"
           aria-selected={tab === 'analysis'}
-          onClick={() => {
-            setTab('analysis');
-            updateMonitorParams({ monitorTab: 'analysis' });
-          }}
+          onClick={() => setMonitorTab('analysis')}
         >
           Analysis
         </button>
@@ -1150,10 +1208,7 @@ export default function LiveMonitor() {
           className={`tab ${tab === 'processes' ? 'active' : ''}`}
           role="tab"
           aria-selected={tab === 'processes'}
-          onClick={() => {
-            setTab('processes');
-            updateMonitorParams({ monitorTab: 'processes' });
-          }}
+          onClick={() => setMonitorTab('processes')}
         >
           Processes
         </button>
@@ -1302,7 +1357,7 @@ export default function LiveMonitor() {
             </div>
             {streamReliabilityScenarios.length > 0 && (
               <div className="table-wrap" style={{ marginTop: 16 }}>
-                <table>
+                <table aria-label="Stream reliability scenarios">
                   <thead>
                     <tr>
                       <th>Reliability scenario</th>
@@ -1372,7 +1427,7 @@ export default function LiveMonitor() {
               />
             ) : (
               <div className="table-wrap" style={{ marginTop: 16 }}>
-                <table>
+                <table aria-label="Live event buffer">
                   <thead>
                     <tr>
                       <th>Type</th>
@@ -2434,7 +2489,7 @@ export default function LiveMonitor() {
         onUpdated={reloadAll}
         onSelectProcess={(process) => {
           setSelectedId(null);
-          setSelectedProcess(process ? { ...process } : null);
+          openProcess(process);
         }}
         onPrevious={() => moveAlert(-1, true)}
         onNext={() => moveAlert(1, true)}
@@ -2447,7 +2502,7 @@ export default function LiveMonitor() {
       <ProcessDrawer
         pid={selectedProcess?.pid}
         snapshot={selectedProcess}
-        onClose={() => setSelectedProcess(null)}
+        onClose={() => openProcess(null)}
         onSelectProcess={openProcess}
         onPrevious={() => {
           const currentIndex = procList.findIndex((proc) => proc.pid === selectedProcess?.pid);

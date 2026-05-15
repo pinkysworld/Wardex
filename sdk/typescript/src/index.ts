@@ -1400,6 +1400,60 @@ export interface RemediationSafetyResponse {
   [key: string]: unknown;
 }
 
+export interface OperatorWorkQueueItem {
+  id: string;
+  priority: string;
+  title: string;
+  status: string;
+  href: string;
+  detail: string;
+}
+
+export interface OperatorWorkQueueResponse {
+  generated_at: string;
+  status: string;
+  item_count: number;
+  high_priority_count: number;
+  items: OperatorWorkQueueItem[];
+}
+
+export interface OperatorTaskActionBlueprint {
+  action: string;
+  method: string;
+  required_fields: string[];
+  audit: boolean;
+}
+
+export interface OperatorTaskAutomationEntry {
+  task_id: string;
+  status: string;
+  available_actions: string[];
+  owner: string;
+  due_at: string;
+  sla_age: string;
+  next_escalation_target: string;
+  recommended_action: string;
+  action_blueprint: OperatorTaskActionBlueprint;
+  source: OperatorWorkQueueItem;
+}
+
+export interface OperatorTaskAutomationMutationGuard {
+  status: string;
+  reason: string;
+}
+
+export interface OperatorTaskAutomationResponse {
+  generated_at: string;
+  status: string;
+  automation_count: number;
+  queue: OperatorWorkQueueResponse;
+  automations: OperatorTaskAutomationEntry[];
+  action_blueprints: OperatorTaskActionBlueprint[];
+  mutation_guard: OperatorTaskAutomationMutationGuard;
+  audit_requirements: string[];
+  next_action: string;
+}
+
 export interface SubscriptionCreateRequest {
   lanes?: string[];
   filters?: Record<string, unknown>;
@@ -5708,7 +5762,7 @@ export class WardexClient {
     return this.request("GET", "/api/secrets/rotation-operations");
   }
 
-  async operatorTaskAutomation(): Promise<ProductionAssuranceResponse> {
+  async operatorTaskAutomation(): Promise<OperatorTaskAutomationResponse> {
     return this.request("GET", "/api/operator/task-automation");
   }
 
@@ -5786,7 +5840,7 @@ export class WardexClient {
     return this.request("GET", "/api/fleet/drift-compliance");
   }
 
-  async operatorWorkQueue(): Promise<ProductionAssuranceResponse> {
+  async operatorWorkQueue(): Promise<OperatorWorkQueueResponse> {
     return this.request("GET", "/api/operator/work-queue");
   }
 

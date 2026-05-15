@@ -11,6 +11,7 @@ import {
   IMPROVEMENT_LANES,
   asArray,
   compactTimestamp,
+  collectorLifecycleSummary,
   connectorStatusFromReadiness,
   formatCount,
   normalizedStatus,
@@ -122,10 +123,12 @@ export default function CommandCenter() {
       ),
     [data.commandSummary],
   );
-  const connectorRows = CONNECTOR_LANES.map((connector) => ({
-    ...connector,
-    ...connectorStatusFromReadiness(connector, connectorReadiness[connector.provider]),
-  }));
+  const connectorRows = CONNECTOR_LANES.map((connector) => {
+    const readiness = connectorReadiness[connector.provider] || null;
+    const status = connectorStatusFromReadiness(connector, readiness || {});
+    const row = { ...connector, readiness, ...status };
+    return { ...row, lifecycle: collectorLifecycleSummary(row) };
+  });
   const connectorIssues = connectorRows.filter(
     (connector) =>
       !['ok', 'ready', 'healthy', 'connected'].includes(normalizedStatus(connector.status)),
@@ -441,6 +444,7 @@ export default function CommandCenter() {
                   <th>Connector</th>
                   <th>Lane</th>
                   <th>Status</th>
+                  <th>Lifecycle</th>
                   <th>Sample</th>
                 </tr>
               </thead>
@@ -462,6 +466,13 @@ export default function CommandCenter() {
                         {connector.status}
                       </span>
                       <div className="hint">{connector.detail}</div>
+                    </td>
+                    <td>
+                      <span className={`badge ${connector.lifecycle.tone}`}>
+                        {connector.lifecycle.label}
+                      </span>
+                      <div className="hint">Last proof: {connector.lifecycle.evidence}</div>
+                      <div className="hint">{connector.lifecycle.nextAction}</div>
                     </td>
                     <td>{connector.sample}</td>
                   </tr>

@@ -211,7 +211,7 @@ impl SessionStore {
         groups: &[String],
         ttl_hours: i64,
     ) -> String {
-        let mut rng = rand::thread_rng();
+        let mut rng = rand::rng();
         let mut buf = [0u8; 32];
         rng.fill(&mut buf);
         let session_id = hex::encode(buf);
@@ -301,7 +301,7 @@ impl AuthManager {
     /// Build the OIDC authorization URL and a random state nonce.
     /// Returns `(authorization_url, state_nonce)`.
     pub fn build_auth_url(&self) -> (String, String) {
-        let mut rng = rand::thread_rng();
+        let mut rng = rand::rng();
         let mut nonce_buf = [0u8; 16];
         rng.fill(&mut nonce_buf);
         let nonce = hex::encode(nonce_buf);

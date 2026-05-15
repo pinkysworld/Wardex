@@ -39,7 +39,7 @@ fn spool_cipher_core(data: &[u8], key: &[u8], nonce: &[u8; 16]) -> Vec<u8> {
 fn spool_encrypt(data: &[u8], key: &[u8]) -> Vec<u8> {
     use rand::Rng;
     let mut nonce = [0u8; 16];
-    rand::thread_rng().fill(&mut nonce);
+    rand::rng().fill(&mut nonce);
     let mut result = nonce.to_vec();
     result.extend(spool_cipher_core(data, key, &nonce));
     result

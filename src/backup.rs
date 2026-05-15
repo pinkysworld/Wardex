@@ -29,10 +29,10 @@ fn derive_key(passphrase: &str, salt: &[u8; 16]) -> [u8; 32] {
 /// allowing post-decryption integrity verification that the data wasn't truncated.
 pub fn encrypt_backup_data(plaintext: &[u8], passphrase: &str) -> Result<Vec<u8>, String> {
     use rand::Rng;
-    let mut rng = rand::thread_rng();
+    let mut rng = rand::rng();
     // Generate random salt and nonce — never reuse (key, nonce) pair
-    let salt: [u8; 16] = rng.r#gen();
-    let nonce_bytes: [u8; 12] = rng.r#gen();
+    let salt: [u8; 16] = rng.random();
+    let nonce_bytes: [u8; 12] = rng.random();
     let key = derive_key(passphrase, &salt);
     let cipher = Aes256Gcm::new_from_slice(&key).map_err(|e| format!("key error: {e}"))?;
     let nonce = Nonce::from_slice(&nonce_bytes);

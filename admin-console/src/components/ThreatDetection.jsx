@@ -2004,6 +2004,15 @@ export default function ThreatDetection() {
     () => (Array.isArray(backendReadiness?.rules) ? backendReadiness.rules : []),
     [backendReadiness],
   );
+  const readinessByRuleId = useMemo(
+    () =>
+      Object.fromEntries(
+        readinessRows
+          .map((row) => [String(row.rule_id || row.id || '').trim(), row])
+          .filter(([ruleId]) => ruleId),
+      ),
+    [readinessRows],
+  );
   const blockedReadinessRows = readinessRows.filter((row) => row.status === 'blocked');
   const streamScore = Number(streamReadiness?.score || 0);
   const streamPromotionBlocked = streamScore > 0 && streamScore < 80;
@@ -2235,6 +2244,29 @@ export default function ThreatDetection() {
       rule: ruleId || undefined,
       rulePanel: normalizePanelId(panelId, RULE_DETAIL_PANELS, 'summary'),
     });
+  };
+  const promotionReadinessForRule = (rule) => {
+    const backendRow = readinessByRuleId[String(rule?.id || '').trim()] || null;
+    const blockers = [];
+    if (backendRow?.status === 'blocked') {
+      blockers.push(
+        backendRow.reason ||
+          backendRow.detail ||
+          `Collector readiness blocked at ${backendRow.coverage_pct ?? 0}% coverage.`,
+      );
+    }
+    blockers.push(...rulePromotionBlockers(rule, suppressionCount));
+    if (streamPromotionBlocked) {
+      blockers.push(streamReadiness?.promotion_guard || 'Recover live stream before promotion.');
+    }
+    const ready = blockers.length === 0;
+    return {
+      label: ready ? 'Promotion ready' : 'Promotion blocked',
+      tone: ready ? 'badge-ok' : 'badge-warn',
+      reason: blockers[0] || 'Canary promotion preflight is clear.',
+      blockerCount: blockers.length,
+      backendStatus: backendRow?.status || null,
+    };
   };
   const runQualityAction = async (row) => {
     const rule = row?.rule;
@@ -2702,58 +2734,69 @@ export default function ThreatDetection() {
               <tr>
                 <th>Rule</th>
                 <th>Score</th>
+                <th>Promotion</th>
                 <th>Primary issue</th>
                 <th>Evidence</th>
                 <th>Action</th>
               </tr>
             </thead>
             <tbody>
-              {detectionQualityRows.slice(0, 5).map((row) => (
-                <tr
-                  key={`quality-${row.rule.id}`}
-                  className={selectedRule?.id === row.rule.id ? 'row-active' : ''}
-                  onClick={() => focusRule(row.rule.id, 'summary')}
-                  style={{ cursor: 'pointer' }}
-                >
-                  <td>
-                    <div className="row-primary">{row.rule.title || row.rule.id}</div>
-                    <div className="row-secondary">{row.rule.owner || 'system'} owner</div>
-                  </td>
-                  <td>
-                    <span className={`badge ${row.quality.tone}`}>{row.quality.score}</span>{' '}
-                    {row.quality.label}
-                  </td>
-                  <td>{row.quality.issues[0] || 'No blocker'}</td>
-                  <td>
-                    {row.quality.liveSuppressions} suppressions • {row.quality.packCount} packs •{' '}
-                    {row.quality.coverageGaps.length} ATT&CK gaps
-                  </td>
-                  <td>
-                    <div className="btn-group">
-                      <button
-                        type="button"
-                        className="btn btn-sm btn-primary"
-                        onClick={(event) => {
-                          event.stopPropagation();
-                          runQualityAction(row);
-                        }}
-                      >
-                        Run Action
-                      </button>
-                      <button
-                        type="button"
-                        className="btn btn-sm"
-                        onClick={(event) => {
-                          event.stopPropagation();
-                          focusRule(row.rule.id, 'summary');
-                        }}
-                      >
-                        Inspect
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
+              {detectionQualityRows.slice(0, 5).map((row) => {
+                const promotion = promotionReadinessForRule(row.rule);
+                return (
+                  <tr
+                    key={`quality-${row.rule.id}`}
+                    className={selectedRule?.id === row.rule.id ? 'row-active' : ''}
+                    onClick={() => focusRule(row.rule.id, 'summary')}
+                    style={{ cursor: 'pointer' }}
+                  >
+                    <td>
+                      <div className="row-primary">{row.rule.title || row.rule.id}</div>
+                      <div className="row-secondary">{row.rule.owner || 'system'} owner</div>
+                    </td>
+                    <td>
+                      <span className={`badge ${row.quality.tone}`}>{row.quality.score}</span>{' '}
+                      {row.quality.label}
+                    </td>
+                    <td>
+                      <span className={`badge ${promotion.tone}`}>{promotion.label}</span>
+                      <div className="hint">{promotion.reason}</div>
+                      {promotion.blockerCount > 1 && (
+                        <div className="hint">{promotion.blockerCount} blockers before canary</div>
+                      )}
+                    </td>
+                    <td>{row.quality.issues[0] || 'No blocker'}</td>
+                    <td>
+                      {row.quality.liveSuppressions} suppressions • {row.quality.packCount} packs •{' '}
+                      {row.quality.coverageGaps.length} ATT&CK gaps
+                    </td>
+                    <td>
+                      <div className="btn-group">
+                        <button
+                          type="button"
+                          className="btn btn-sm btn-primary"
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            runQualityAction(row);
+                          }}
+                        >
+                          Run Action
+                        </button>
+                        <button
+                          type="button"
+                          className="btn btn-sm"
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            focusRule(row.rule.id, 'summary');
+                          }}
+                        >
+                          Inspect
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>

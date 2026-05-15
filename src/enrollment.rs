@@ -76,9 +76,11 @@ pub struct EnrollmentToken {
 
 impl EnrollmentToken {
     pub fn new(max_uses: u32) -> Self {
-        use rand::RngCore;
+        use rand::TryRngCore;
         let mut bytes = [0u8; 16];
-        rand::rngs::OsRng.fill_bytes(&mut bytes);
+        let mut rng = rand::rngs::OsRng;
+        rng.try_fill_bytes(&mut bytes)
+            .expect("system RNG unavailable for enrollment token");
         Self {
             token: hex::encode(bytes),
             created_at: chrono::Utc::now().to_rfc3339(),
@@ -358,8 +360,8 @@ struct RegistryData {
 
 fn generate_agent_id() -> String {
     use rand::Rng;
-    let mut rng = rand::thread_rng();
-    let bytes: Vec<u8> = (0..8).map(|_| rng.r#gen()).collect();
+    let mut rng = rand::rng();
+    let bytes: Vec<u8> = (0..8).map(|_| rng.random()).collect();
     format!("agent-{}", hex::encode(bytes))
 }
 

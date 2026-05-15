@@ -2,7 +2,19 @@
 
 This backlog lists the next concrete tasks in build order.
 
-## Current strengthening checkpoint (`v1.0.18`)
+## Current strengthening checkpoint (`v1.0.19`)
+
+Recently completed for the `v1.0.19` operator-trust continuity release:
+
+- [x] Live Monitor now normalizes route-backed tabs and keeps alert/process drawer anchors synchronized with URL state.
+- [x] Command Center connector rows now surface lifecycle proof, failure/validation context, and next-action handoffs into settings.
+- [x] Threat Detection quality rows now expose inline promotion-ready/blocked status with the first actionable blocker.
+- [x] SOC response requests now show pending approvers, approval chain, notification state, escalation policy, and execution trace labels.
+- [x] Response Safety payloads now link dry-run preview, approval ledger, trace endpoint, rollback, and post-action verification continuity.
+- [x] Help & Docs now includes routed guidance for Live Monitor continuity, collector lifecycle, response approvals, and execution audit trails.
+- [x] Release metadata, docs, website, Helm, OpenAPI, Python SDK, TypeScript SDK, OTLP, and install/reproducibility surfaces aligned on `v1.0.19`.
+
+## Previous strengthening checkpoint (`v1.0.18`)
 
 Recently completed for the `v1.0.18` intelligence-gates release:
 
@@ -10,6 +22,7 @@ Recently completed for the `v1.0.18` intelligence-gates release:
 - [x] Analyst Assistant API/UI responses now expose citation, confidence, and execution-boundary quality gates.
 - [x] Notification dispatch now supports deduplicated outbox records for delivery provenance.
 - [x] Operator Launchpad now includes canonical journey readiness and evidence-mode rollups.
+- [x] Operator-trust follow-through now keeps alert provenance/freshness in the explain drawer, exposes Response Safety dry-run previews inside the SOC response lane, and carries owner/SLA/escalation context in Launchpad task automation rows.
 - [x] macOS memory indicators now parse vmmap output for RWX and anonymous-executable regions.
 - [x] Release metadata, docs, website, Helm, OpenAPI, Python SDK, TypeScript SDK, OTLP, and install/reproducibility surfaces aligned on `v1.0.18`.
 

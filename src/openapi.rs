@@ -813,6 +813,168 @@ fn support_bundle_response_schema() -> Schema {
     }
 }
 
+fn operator_work_queue_item_schema() -> Schema {
+    Schema {
+        schema_type: Some("object".into()),
+        properties: {
+            let mut p = BTreeMap::new();
+            p.insert("id".into(), string_schema());
+            p.insert("priority".into(), string_schema());
+            p.insert("title".into(), string_schema());
+            p.insert("status".into(), string_schema());
+            p.insert("href".into(), string_schema());
+            p.insert("detail".into(), string_schema());
+            p
+        },
+        required: vec![
+            "id".into(),
+            "priority".into(),
+            "title".into(),
+            "status".into(),
+            "href".into(),
+            "detail".into(),
+        ],
+        ..Default::default()
+    }
+}
+
+fn operator_work_queue_response_schema() -> Schema {
+    Schema {
+        schema_type: Some("object".into()),
+        properties: {
+            let mut p = BTreeMap::new();
+            p.insert("generated_at".into(), string_datetime_schema());
+            p.insert("status".into(), string_schema());
+            p.insert("item_count".into(), integer_schema());
+            p.insert("high_priority_count".into(), integer_schema());
+            p.insert(
+                "items".into(),
+                array_schema(schema_ref("OperatorWorkQueueItem")),
+            );
+            p
+        },
+        required: vec![
+            "generated_at".into(),
+            "status".into(),
+            "item_count".into(),
+            "high_priority_count".into(),
+            "items".into(),
+        ],
+        ..Default::default()
+    }
+}
+
+fn operator_task_action_blueprint_schema() -> Schema {
+    Schema {
+        schema_type: Some("object".into()),
+        properties: {
+            let mut p = BTreeMap::new();
+            p.insert("action".into(), string_schema());
+            p.insert("method".into(), string_schema());
+            p.insert("required_fields".into(), string_array_schema());
+            p.insert("audit".into(), boolean_schema());
+            p
+        },
+        required: vec![
+            "action".into(),
+            "method".into(),
+            "required_fields".into(),
+            "audit".into(),
+        ],
+        ..Default::default()
+    }
+}
+
+fn operator_task_automation_entry_schema() -> Schema {
+    Schema {
+        schema_type: Some("object".into()),
+        properties: {
+            let mut p = BTreeMap::new();
+            p.insert("task_id".into(), string_schema());
+            p.insert("status".into(), string_schema());
+            p.insert("available_actions".into(), string_array_schema());
+            p.insert("owner".into(), string_schema());
+            p.insert("due_at".into(), string_datetime_schema());
+            p.insert("sla_age".into(), string_schema());
+            p.insert("next_escalation_target".into(), string_schema());
+            p.insert("recommended_action".into(), string_schema());
+            p.insert(
+                "action_blueprint".into(),
+                schema_ref("OperatorTaskActionBlueprint"),
+            );
+            p.insert("source".into(), schema_ref("OperatorWorkQueueItem"));
+            p
+        },
+        required: vec![
+            "task_id".into(),
+            "status".into(),
+            "available_actions".into(),
+            "owner".into(),
+            "due_at".into(),
+            "sla_age".into(),
+            "next_escalation_target".into(),
+            "recommended_action".into(),
+            "action_blueprint".into(),
+            "source".into(),
+        ],
+        ..Default::default()
+    }
+}
+
+fn operator_task_automation_mutation_guard_schema() -> Schema {
+    Schema {
+        schema_type: Some("object".into()),
+        properties: {
+            let mut p = BTreeMap::new();
+            p.insert("status".into(), string_schema());
+            p.insert("reason".into(), string_schema());
+            p
+        },
+        required: vec!["status".into(), "reason".into()],
+        ..Default::default()
+    }
+}
+
+fn operator_task_automation_response_schema() -> Schema {
+    Schema {
+        schema_type: Some("object".into()),
+        properties: {
+            let mut p = BTreeMap::new();
+            p.insert("generated_at".into(), string_datetime_schema());
+            p.insert("status".into(), string_schema());
+            p.insert("automation_count".into(), integer_schema());
+            p.insert("queue".into(), schema_ref("OperatorWorkQueueResponse"));
+            p.insert(
+                "automations".into(),
+                array_schema(schema_ref("OperatorTaskAutomationEntry")),
+            );
+            p.insert(
+                "action_blueprints".into(),
+                array_schema(schema_ref("OperatorTaskActionBlueprint")),
+            );
+            p.insert(
+                "mutation_guard".into(),
+                schema_ref("OperatorTaskAutomationMutationGuard"),
+            );
+            p.insert("audit_requirements".into(), string_array_schema());
+            p.insert("next_action".into(), string_schema());
+            p
+        },
+        required: vec![
+            "generated_at".into(),
+            "status".into(),
+            "automation_count".into(),
+            "queue".into(),
+            "automations".into(),
+            "action_blueprints".into(),
+            "mutation_guard".into(),
+            "audit_requirements".into(),
+            "next_action".into(),
+        ],
+        ..Default::default()
+    }
+}
+
 fn subscription_resume_response_schema() -> Schema {
     Schema {
         schema_type: Some("object".into()),
@@ -856,7 +1018,6 @@ pub fn wardex_openapi_spec(version: &str) -> OpenApiSpec {
             "operator-trust",
             "Operator trust, usability, evidence clarity, and safety workspaces",
         )
-        .tag("policy", "Policy publishing and version history")
         .tag(
             "threat-intel",
             "Threat intelligence, enrichment, and investigation pivots",
@@ -914,6 +1075,24 @@ pub fn wardex_openapi_spec(version: &str) -> OpenApiSpec {
         )
         .schema("ReleaseDoctorResponse", release_doctor_response_schema())
         .schema("SupportBundleResponse", support_bundle_response_schema())
+        .schema("OperatorWorkQueueItem", operator_work_queue_item_schema())
+        .schema("OperatorWorkQueueResponse", operator_work_queue_response_schema())
+        .schema(
+            "OperatorTaskActionBlueprint",
+            operator_task_action_blueprint_schema(),
+        )
+        .schema(
+            "OperatorTaskAutomationEntry",
+            operator_task_automation_entry_schema(),
+        )
+        .schema(
+            "OperatorTaskAutomationMutationGuard",
+            operator_task_automation_mutation_guard_schema(),
+        )
+        .schema(
+            "OperatorTaskAutomationResponse",
+            operator_task_automation_response_schema(),
+        )
         .schema(
             "SubscriptionResumeResponse",
             subscription_resume_response_schema(),
@@ -1484,7 +1663,7 @@ pub fn wardex_openapi_spec(version: &str) -> OpenApiSpec {
             "get",
             op(
                 "getResponseSafety",
-                "Response safety center with approvals, dry-run previews, rollback, and verification",
+                "Response safety center with approvals, dry-run previews, rollback, trace, audit, and verification continuity",
                 &["response", "operator-trust"],
             ),
         )
@@ -3443,10 +3622,11 @@ pub fn wardex_openapi_spec(version: &str) -> OpenApiSpec {
         .path(
             "/api/operator/task-automation",
             "get",
-            op(
+            op_with_schema(
                 "getOperatorTaskAutomation",
-                "Operator work queue automation plan for assignment, snooze, ticketing, preflight, evidence, and closure actions",
+                "Operator work queue automation plan with owner, SLA, escalation, and dry-run assignment, snooze, ticketing, preflight, evidence, and closure actions",
                 &["status"],
+                schema_ref("OperatorTaskAutomationResponse"),
             ),
         )
         .path(
@@ -3563,10 +3743,11 @@ pub fn wardex_openapi_spec(version: &str) -> OpenApiSpec {
         .path(
             "/api/operator/work-queue",
             "get",
-            op(
+            op_with_schema(
                 "getOperatorWorkQueue",
                 "Prioritized operator work queue synthesized from release, response, detection, fleet, and retention signals",
                 &["status"],
+                schema_ref("OperatorWorkQueueResponse"),
             ),
         )
         .path(

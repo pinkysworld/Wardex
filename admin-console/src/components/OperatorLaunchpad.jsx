@@ -2,7 +2,18 @@ import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import * as api from '../api.js';
 import { useApiGroup, useRole, useToast } from '../hooks.jsx';
-import { downloadData, formatDateTime } from './operatorUtils.js';
+import { downloadData, formatDateTime, formatLabel } from './operatorUtils.js';
+import {
+  evidenceBadge,
+  evidenceFreshness,
+  evidenceMode,
+  evidenceNeedsAttention,
+  freshnessDetail,
+  isBlockingStatus,
+  isReadyStatus,
+  signalBadge,
+  statusBadge,
+} from './operatorTrustUtils.js';
 
 const READINESS_STEPS = [
   {
@@ -150,68 +161,6 @@ function countValue(value, keys = ['count', 'total', 'open', 'pending']) {
     if (Number.isFinite(numeric)) return numeric;
   }
   return 0;
-}
-
-function statusBadge(ok, pending = false) {
-  if (pending) return { className: 'badge-warn', label: 'Needs review' };
-  return ok
-    ? { className: 'badge-ok', label: 'Ready' }
-    : { className: 'badge-warn', label: 'Pending' };
-}
-
-function signalBadge(status) {
-  const normalized = String(status || 'unknown').toLowerCase();
-  if (['ready', 'pass', 'trusted', 'healthy', 'clear'].includes(normalized)) {
-    return { className: 'badge-ok', label: normalized };
-  }
-  if (['blocked', 'fail', 'risk', 'attention'].includes(normalized)) {
-    return { className: 'badge-err', label: normalized };
-  }
-  return { className: 'badge-warn', label: normalized };
-}
-
-function isReadyStatus(status) {
-  return ['ready', 'pass', 'passed', 'trusted', 'healthy', 'clear', 'ok', 'current'].includes(
-    String(status || '').toLowerCase(),
-  );
-}
-
-function isBlockingStatus(status) {
-  return ['blocked', 'fail', 'failed', 'risk', 'attention', 'stale', 'error', 'degraded'].includes(
-    String(status || '').toLowerCase(),
-  );
-}
-
-function evidenceFreshness(value) {
-  return value?.evidence_freshness || value?.evidenceFreshness || null;
-}
-
-function evidenceNeedsAttention(value) {
-  const evidence = evidenceFreshness(value);
-  if (!evidence?.critical) return false;
-  return String(evidence.status || 'unknown').toLowerCase() !== 'fresh';
-}
-
-function evidenceBadge(value) {
-  const evidence = evidenceFreshness(value);
-  const status = String(evidence?.status || 'unknown').toLowerCase();
-  if (status === 'fresh') return { className: 'badge-ok', label: 'fresh proof' };
-  if (['stale', 'unknown'].includes(status) && evidence?.critical) {
-    return { className: 'badge-err', label: `${status} proof` };
-  }
-  return { className: 'badge-warn', label: `${status} proof` };
-}
-
-function evidenceMode(value) {
-  const evidence = evidenceFreshness(value);
-  return String(evidence?.mode || 'pending').replaceAll('_', ' ');
-}
-
-function freshnessDetail(detail, value) {
-  const evidence = evidenceFreshness(value);
-  if (!evidence) return `${detail} - evidence pending`;
-  const mode = String(evidence.mode || 'evidence').replaceAll('_', ' ');
-  return `${detail} - ${evidence.status || 'unknown'} ${mode}`;
 }
 
 function readinessMap(readiness) {
@@ -640,6 +589,7 @@ export default function OperatorLaunchpad() {
   const dataQualityScore = Number(data.dataQuality?.slo_summary?.score || 0);
   const loadGateRows = asArray(data.scaleBaseline?.load_gate);
   const automationBlueprints = asArray(data.taskAutomation?.action_blueprints);
+  const automationPlans = asArray(data.taskAutomation?.automations);
   const executablePacks = countValue(data.validationPacks, ['executable_pack_count']);
   const productionBlockers = productionSignals.filter(([, status]) =>
     ['blocked', 'fail', 'risk', 'attention'].includes(String(status || '').toLowerCase()),
@@ -965,15 +915,34 @@ export default function OperatorLaunchpad() {
         }
       : null,
   ].filter(Boolean);
-  const operatorTaskRows = workQueueItems.length
-    ? workQueueItems.slice(0, 5).map((item, index) => ({
-        title: item.title || item.name || item.kind || `Queued task ${index + 1}`,
-        status: item.status || item.priority || 'attention',
-        detail:
-          item.detail || item.summary || item.owner || item.reason || 'Awaiting operator action',
-        href: item.href || item.path || '/launchpad#operator-task-queue',
+  const operatorTaskRows = automationPlans.length
+    ? automationPlans.slice(0, 5).map((plan, index) => ({
+        title: plan.source?.title || `Queued task ${index + 1}`,
+        status: plan.source?.status || plan.status || plan.source?.priority || 'attention',
+        detail: plan.source?.detail || 'Awaiting operator action',
+        href: plan.source?.href || '/launchpad#operator-task-queue',
+        owner: plan.owner || null,
+        dueAt: plan.due_at || null,
+        slaAge: plan.sla_age || null,
+        nextEscalationTarget: plan.next_escalation_target || null,
+        recommendedAction: plan.recommended_action || null,
+        actionBlueprint: plan.action_blueprint || null,
       }))
-    : generatedTasks;
+    : workQueueItems.length
+      ? workQueueItems.slice(0, 5).map((item, index) => ({
+          title: item.title || item.name || item.kind || `Queued task ${index + 1}`,
+          status: item.status || item.priority || 'attention',
+          detail:
+            item.detail || item.summary || item.owner || item.reason || 'Awaiting operator action',
+          href: item.href || item.path || '/launchpad#operator-task-queue',
+          owner: item.owner || null,
+          dueAt: item.due_at || null,
+          slaAge: item.sla_age || null,
+          nextEscalationTarget: item.next_escalation_target || null,
+          recommendedAction: item.recommended_action || null,
+          actionBlueprint: null,
+        }))
+      : generatedTasks;
   const activeTaskCount = operatorTaskRows.filter((row) => !isReadyStatus(row.status)).length;
   const taskQueueBadge = statusBadge(activeTaskCount === 0, activeTaskCount > 0);
   const releaseGateRows = [
@@ -2117,6 +2086,34 @@ export default function OperatorLaunchpad() {
                     <span>
                       <strong>{task.title}</strong>
                       <span>{task.detail}</span>
+                      {(task.owner || task.slaAge || task.nextEscalationTarget) && (
+                        <span className="hint">
+                          {[
+                            task.owner ? `Owner: ${task.owner}` : null,
+                            task.slaAge ? `SLA: ${formatLabel(task.slaAge)}` : null,
+                            task.nextEscalationTarget
+                              ? `Escalate: ${task.nextEscalationTarget}`
+                              : null,
+                          ]
+                            .filter(Boolean)
+                            .join(' • ')}
+                        </span>
+                      )}
+                      {(task.recommendedAction || task.actionBlueprint?.method) && (
+                        <span className="hint">
+                          {[
+                            task.recommendedAction
+                              ? `Next action: ${formatLabel(task.recommendedAction)}`
+                              : null,
+                            task.actionBlueprint?.method
+                              ? `${formatLabel(task.actionBlueprint.method)} blueprint`
+                              : null,
+                          ]
+                            .filter(Boolean)
+                            .join(' • ')}
+                        </span>
+                      )}
+                      {task.dueAt && <span className="hint">Due: {formatDateTime(task.dueAt)}</span>}
                     </span>
                   </Link>
                 );

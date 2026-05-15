@@ -2,7 +2,8 @@ import { useEffect, useMemo, useState } from 'react';
 import { useToast } from '../hooks.jsx';
 import * as api from '../api.js';
 import { JsonDetails, SideDrawer, SummaryGrid } from './operator.jsx';
-import { downloadData } from './operatorUtils.js';
+import { downloadData, formatDateTime, formatLabel } from './operatorUtils.js';
+import { freshnessStatusBadge } from './operatorTrustUtils.js';
 import AlertNarrative from './AlertNarrative.jsx';
 
 /* ── MITRE + investigation helpers ──────────────────────────── */
@@ -796,6 +797,20 @@ export default function AlertDrawer({
   const similarPastAlerts = Array.isArray(explainData?.similar_past_alerts)
     ? explainData.similar_past_alerts
     : [];
+  const alertSource = explainData?.source && typeof explainData.source === 'object'
+    ? explainData.source
+    : null;
+  const freshnessRows =
+    explainData?.freshness_badges && typeof explainData.freshness_badges === 'object'
+      ? Object.entries(explainData.freshness_badges).map(([key, status]) => ({
+          key,
+          label: formatLabel(key),
+          tone: freshnessStatusBadge(status),
+        }))
+      : [];
+  const exportPreviewItems = Array.isArray(explainData?.export_preview?.items)
+    ? explainData.export_preview.items
+    : [];
   const processLinkState = processCandidates.length
     ? 'Process-linked'
     : processNames.length
@@ -1302,6 +1317,53 @@ export default function AlertDrawer({
                     </div>
                   ))}
                 </div>
+              </div>
+            )}
+            {(freshnessRows.length > 0 ||
+              alertSource ||
+              explainData?.recommended_next_action ||
+              exportPreviewItems.length > 0) && (
+              <div style={{ margin: '12px 0' }}>
+                <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 8 }}>
+                  Provenance and freshness
+                </div>
+                {alertSource && (
+                  <div className="detail-callout" style={{ margin: 0 }}>
+                    <strong>{formatLabel(alertSource.source_type || 'source')}</strong>
+                    <div className="hint" style={{ marginTop: 4 }}>
+                      {[
+                        alertSource.hostname || alert.hostname,
+                        alertSource.platform || alert.platform,
+                        formatDateTime(alertSource.timestamp || summary?.timestamp),
+                      ]
+                        .filter((value) => value && value !== '—')
+                        .join(' • ') || 'Source metadata pending'}
+                    </div>
+                  </div>
+                )}
+                {freshnessRows.length > 0 && (
+                  <div className="chip-row" style={{ marginTop: 8 }}>
+                    {freshnessRows.map((row) => (
+                      <span key={row.key} className={`badge ${row.tone.className}`}>
+                        {row.label}: {row.tone.label}
+                      </span>
+                    ))}
+                  </div>
+                )}
+                {explainData?.recommended_next_action && (
+                  <div className="hint" style={{ marginTop: 8 }}>
+                    Decision path: {explainData.recommended_next_action}
+                  </div>
+                )}
+                {exportPreviewItems.length > 0 && (
+                  <div className="hint" style={{ marginTop: 8 }}>
+                    Evidence export preview:{' '}
+                    {exportPreviewItems
+                      .slice(0, 4)
+                      .map((item) => formatLabel(item))
+                      .join(' • ')}
+                  </div>
+                )}
               </div>
             )}
             {(evidenceChain.length > 0 ||

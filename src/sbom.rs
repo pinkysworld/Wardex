@@ -329,7 +329,7 @@ impl SbomGenerator {
 /// Generate a v4-like UUID (random).
 fn uuid_v4() -> String {
     use rand::Rng;
-    let mut rng = rand::thread_rng();
+    let mut rng = rand::rng();
     let mut bytes = [0u8; 16];
     rng.fill(&mut bytes);
     format!(

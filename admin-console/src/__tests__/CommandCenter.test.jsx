@@ -107,7 +107,7 @@ const COMMAND_FIXTURES = {
         readiness: {
           collectors: [
             {
-              provider: 'github',
+              provider: 'github_audit',
               status: 'warning',
               detail: 'Sample GitHub audit proof is stale.',
               sample_event: 'git.push',
@@ -404,6 +404,9 @@ describe('CommandCenter', () => {
     renderWithProviders('/command');
 
     expect(await screen.findByRole('heading', { name: /Operate incidents/i })).toBeInTheDocument();
+    expect((await screen.findAllByText('Needs review')).length).toBeGreaterThan(0);
+    expect(screen.getByText('Last proof: No recent proof')).toBeInTheDocument();
+    expect(screen.getByText(/Review the latest collector error/i)).toBeInTheDocument();
 
     await user.click(screen.getByRole('button', { name: 'GitHub Audit Log' }));
 

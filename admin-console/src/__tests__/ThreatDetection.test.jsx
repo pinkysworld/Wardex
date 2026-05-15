@@ -721,6 +721,8 @@ describe('ThreatDetection', () => {
     expect(screen.getByText('PROMOTE')).toBeInTheDocument();
     expect(screen.getByText('Collector readiness')).toBeInTheDocument();
     expect(screen.getByText(/blocked rules across 2 collector lanes/i)).toBeInTheDocument();
+    expect(screen.getByText('Promotion blocked')).toBeInTheDocument();
+    expect(screen.getByText(/Collector readiness blocked/i)).toBeInTheDocument();
   });
 
   it('surfaces Detection Trust scoring and previews draft-only tuning impact', async () => {

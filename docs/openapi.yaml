@@ -1,7 +1,7 @@
 openapi: 3.0.3
 info:
   title: Wardex XDR/SIEM API
-  version: 1.0.18
+  version: 1.0.19
   description: "Wardex XDR/SIEM REST API \u2014 detection, fleet management, incident response, and platform operations."
   license:
     name: AGPL-3.0-only
@@ -11393,7 +11393,7 @@ paths:
       - bearerAuth: []
   /api/response/safety:
     get:
-      summary: Response Safety Center overview and action catalog
+      summary: Response Safety Center overview, action catalog, trace, and audit continuity
       operationId: getResponseSafety
       tags:
       - response
@@ -11401,7 +11401,7 @@ paths:
       x-wardex-auth: authenticated
       responses:
         '200':
-          description: Response Safety Center overview and action catalog
+          description: Response Safety Center overview, action catalog, trace, and audit continuity
           content:
             application/json:
               schema:
@@ -13147,7 +13147,7 @@ paths:
       - bearerAuth: []
   /api/operator/task-automation:
     get:
-      summary: Operator work queue automation plan for assignment, snooze, ticketing, preflight, evidence, and closure actions
+      summary: Operator work queue automation plan with owner, SLA, escalation, and dry-run assignment, snooze, ticketing, preflight, evidence, and closure actions
       operationId: getOperatorTaskAutomation
       tags:
       - status
@@ -13157,7 +13157,7 @@ paths:
           content:
             application/json:
               schema:
-                type: object
+                $ref: '#/components/schemas/OperatorTaskAutomationResponse'
       security:
       - bearerAuth: []
   /api/detection/validation-packs:
@@ -13401,7 +13401,7 @@ paths:
           content:
             application/json:
               schema:
-                type: object
+                $ref: '#/components/schemas/OperatorWorkQueueResponse'
       security:
       - bearerAuth: []
   /api/retention/forecast:
@@ -13840,6 +13840,156 @@ components:
           type: object
         snapshot:
           $ref: '#/components/schemas/OperationalSnapshotMetadata'
+    OperatorWorkQueueItem:
+      type: object
+      required:
+      - id
+      - priority
+      - title
+      - status
+      - href
+      - detail
+      properties:
+        id:
+          type: string
+        priority:
+          type: string
+        title:
+          type: string
+        status:
+          type: string
+        href:
+          type: string
+        detail:
+          type: string
+    OperatorWorkQueueResponse:
+      type: object
+      required:
+      - generated_at
+      - status
+      - item_count
+      - high_priority_count
+      - items
+      properties:
+        generated_at:
+          type: string
+          format: date-time
+        status:
+          type: string
+        item_count:
+          type: integer
+          format: int64
+        high_priority_count:
+          type: integer
+          format: int64
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/OperatorWorkQueueItem'
+    OperatorTaskActionBlueprint:
+      type: object
+      required:
+      - action
+      - method
+      - required_fields
+      - audit
+      properties:
+        action:
+          type: string
+        method:
+          type: string
+        required_fields:
+          type: array
+          items:
+            type: string
+        audit:
+          type: boolean
+    OperatorTaskAutomationEntry:
+      type: object
+      required:
+      - task_id
+      - status
+      - available_actions
+      - owner
+      - due_at
+      - sla_age
+      - next_escalation_target
+      - recommended_action
+      - action_blueprint
+      - source
+      properties:
+        task_id:
+          type: string
+        status:
+          type: string
+        available_actions:
+          type: array
+          items:
+            type: string
+        owner:
+          type: string
+        due_at:
+          type: string
+          format: date-time
+        sla_age:
+          type: string
+        next_escalation_target:
+          type: string
+        recommended_action:
+          type: string
+        action_blueprint:
+          $ref: '#/components/schemas/OperatorTaskActionBlueprint'
+        source:
+          $ref: '#/components/schemas/OperatorWorkQueueItem'
+    OperatorTaskAutomationMutationGuard:
+      type: object
+      required:
+      - status
+      - reason
+      properties:
+        status:
+          type: string
+        reason:
+          type: string
+    OperatorTaskAutomationResponse:
+      type: object
+      required:
+      - generated_at
+      - status
+      - automation_count
+      - queue
+      - automations
+      - action_blueprints
+      - mutation_guard
+      - audit_requirements
+      - next_action
+      properties:
+        generated_at:
+          type: string
+          format: date-time
+        status:
+          type: string
+        automation_count:
+          type: integer
+          format: int64
+        queue:
+          $ref: '#/components/schemas/OperatorWorkQueueResponse'
+        automations:
+          type: array
+          items:
+            $ref: '#/components/schemas/OperatorTaskAutomationEntry'
+        action_blueprints:
+          type: array
+          items:
+            $ref: '#/components/schemas/OperatorTaskActionBlueprint'
+        mutation_guard:
+          $ref: '#/components/schemas/OperatorTaskAutomationMutationGuard'
+        audit_requirements:
+          type: array
+          items:
+            type: string
+        next_action:
+          type: string
     SubscriptionResumeResponse:
       type: object
       required:

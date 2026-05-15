@@ -23,6 +23,22 @@ describe('AlertDrawer', () => {
             why_fired: ['The detector attached credential and lateral movement reasons.'],
             why_safe_or_noisy: ['No prior analyst feedback is recorded for this event.'],
             next_steps: ['Review identity activity and isolate the source if confirmed.'],
+            source: {
+              source_type: 'live_alert_stream',
+              hostname: 'edge-1',
+              platform: 'linux',
+              timestamp: '2026-05-10T09:00:00Z',
+            },
+            freshness_badges: {
+              raw_event: 'fresh',
+              enrichment: 'partial',
+              response_readiness: 'approval_required',
+            },
+            recommended_next_action:
+              'Create or attach an incident, export evidence preview, and stage a dry-run response action.',
+            export_preview: {
+              items: ['raw_event', 'normalized_event', 'freshness_badges'],
+            },
             thread_anomalies: [
               {
                 kind: 'hot_thread',
@@ -106,6 +122,13 @@ describe('AlertDrawer', () => {
     expect(screen.getByText('Contributing signals')).toBeInTheDocument();
     expect(screen.getByText(/hot thread/i)).toBeInTheDocument();
     expect(screen.getByText(/Thread CPU peaked at 34.2%/i)).toBeInTheDocument();
+    expect(screen.getByText('Provenance and freshness')).toBeInTheDocument();
+    expect(screen.getByText(/Live alert stream/i)).toBeInTheDocument();
+    expect(screen.getByText(/Raw event: fresh/i)).toBeInTheDocument();
+    expect(screen.getByText(/Enrichment: partial/i)).toBeInTheDocument();
+    expect(screen.getByText(/Response readiness: approval required/i)).toBeInTheDocument();
+    expect(screen.getByText(/Decision path:/i)).toBeInTheDocument();
+    expect(screen.getByText(/Evidence export preview: Raw event/i)).toBeInTheDocument();
     expect(screen.getByText('Evidence chain')).toBeInTheDocument();
     expect(screen.getAllByText(/credential_dump_attempt user=alice/i).length).toBeGreaterThan(0);
     expect(screen.getByText(/Suspicious PowerShell/i)).toBeInTheDocument();

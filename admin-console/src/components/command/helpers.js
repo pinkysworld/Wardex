@@ -150,28 +150,72 @@ export const compactTimestamp = (value) => {
 
 export const connectorStatusFromReadiness = (connector, readiness = {}) => {
   const lastSuccess = readiness.last_success_at || null;
+  const readinessStatus = normalizedStatus(readiness.status || readiness.freshness);
   const hasError = Boolean(readiness.last_error_at || readiness.error_category);
-  const status = hasError
-    ? 'warning'
-    : readiness.enabled
-      ? 'configured'
-      : connector.newLane
-        ? 'setup_ready'
-        : 'not configured';
+  const status =
+    readinessStatus && readinessStatus !== 'unknown'
+      ? readinessStatus
+      : hasError
+        ? 'warning'
+        : readiness.enabled
+          ? 'configured'
+          : connector.newLane
+            ? 'setup_ready'
+            : 'not configured';
   return {
     status,
-    detail: hasError
-      ? `Last collector error ${compactTimestamp(readiness.last_error_at)}${readiness.error_category ? ` (${readiness.error_category})` : ''}.`
-      : lastSuccess
-        ? `Last successful collection ${compactTimestamp(lastSuccess)}.`
-        : connector.newLane
-          ? 'Guided setup is available with saved config, validation, and sample-event proof.'
-          : 'Awaiting validation.',
+    detail:
+      readiness.detail || readiness.message || readiness.reason || hasError
+        ? readiness.detail ||
+          readiness.message ||
+          readiness.reason ||
+          `Last collector error ${compactTimestamp(readiness.last_error_at)}${readiness.error_category ? ` (${readiness.error_category})` : ''}.`
+        : lastSuccess
+          ? `Last successful collection ${compactTimestamp(lastSuccess)}.`
+          : connector.newLane
+            ? 'Guided setup is available with saved config, validation, and sample-event proof.'
+            : 'Awaiting validation.',
     sample:
       readiness.checkpoint_id ||
       readiness.sample_event_type ||
       connector.sampleEvent ||
       'Sample preview pending',
+  };
+};
+
+export const collectorLifecycleSummary = (connector) => {
+  const readiness = connector?.readiness || {};
+  const status = normalizedStatus(connector?.status);
+  const lastSuccess = readiness.last_success_at || readiness.last_seen_at || null;
+  const lastError = readiness.last_error_at || null;
+  const failureStreak = Number(readiness.failure_streak ?? readiness.consecutive_failures ?? 0);
+  const evidenceTime = lastError || lastSuccess;
+
+  if (['failed', 'error', 'blocked', 'critical', 'degraded', 'warning'].includes(status)) {
+    return {
+      label: failureStreak > 0 ? `${failureStreak} failure streak` : 'Needs review',
+      tone: 'badge-warn',
+      evidence: evidenceTime ? compactTimestamp(evidenceTime) : 'No recent proof',
+      nextAction: readiness.error_category
+        ? `Fix ${String(readiness.error_category).replace(/_/g, ' ')} and validate now.`
+        : 'Review the latest collector error and run validation.',
+    };
+  }
+
+  if (['ok', 'ready', 'healthy', 'connected'].includes(status)) {
+    return {
+      label: 'Healthy lifecycle',
+      tone: 'badge-ok',
+      evidence: evidenceTime ? compactTimestamp(evidenceTime) : 'Awaiting checkpoint',
+      nextAction: 'Keep sample-event proof and checkpoint evidence current.',
+    };
+  }
+
+  return {
+    label: connector?.newLane ? 'Setup ready' : 'Setup needed',
+    tone: connector?.newLane ? 'badge-info' : 'badge-warn',
+    evidence: evidenceTime ? compactTimestamp(evidenceTime) : 'No validation proof yet',
+    nextAction: 'Open settings, save configuration, then validate the collector.',
   };
 };
 

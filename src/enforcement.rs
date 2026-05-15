@@ -795,9 +795,11 @@ impl EnforcementEngine {
 
         // Generate attestation quote
         let nonce: Vec<u8> = {
-            use rand::RngCore;
+            use rand::TryRngCore;
             let mut buf = [0u8; 16];
-            rand::rngs::OsRng.fill_bytes(&mut buf);
+            let mut rng = rand::rngs::OsRng;
+            rng.try_fill_bytes(&mut buf)
+                .expect("system RNG unavailable for attestation nonce");
             buf.to_vec()
         };
         self.tpm.quote(&[0, 1, 7], &nonce)
