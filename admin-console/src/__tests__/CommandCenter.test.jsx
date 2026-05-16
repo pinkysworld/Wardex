@@ -343,6 +343,8 @@ describe('CommandCenter', () => {
     renderWithProviders('/command');
 
     expect(await screen.findByRole('heading', { name: /Operate incidents/i })).toBeInTheDocument();
+    expect(screen.getByText('Current focus')).toBeInTheDocument();
+    expect(screen.getByText('Open SOC triage')).toBeInTheDocument();
 
     const drawerTriggers = [
       ['Validate connectors', 'Connector Validation', 'connectors'],

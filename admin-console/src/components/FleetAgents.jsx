@@ -749,6 +749,137 @@ export default function FleetAgents() {
       view.filters.q === query,
   )?.id;
 
+  const fleetFocusState = useMemo(() => {
+    if (offlineAgents.length > 0) {
+      return {
+        title: 'Offline endpoints need recovery triage',
+        copy: `${offlineAgents.length} endpoint${offlineAgents.length === 1 ? ' is' : 's are'} offline, with ${offlineAgents[0]?.hostname || offlineAgents[0]?.id || 'the oldest host'} as the fastest recovery handoff.`,
+        lane: 'Recovery watchlist',
+        lead: offlineAgents[0]?.hostname || offlineAgents[0]?.id || 'Offline endpoint',
+        tab: 'updates',
+        updatesPanel: 'recovery',
+      };
+    }
+    if (staleAgents.length > 0) {
+      return {
+        title: 'Stale heartbeats need validation',
+        copy: `${staleAgents.length} endpoint${staleAgents.length === 1 ? ' is' : 's are'} outside the heartbeat window, so confirm upgrade state and transport reachability before queueing more change.`,
+        lane: 'Heartbeat recovery',
+        lead: staleAgents[0]?.hostname || staleAgents[0]?.id || 'Stale endpoint',
+        tab: 'updates',
+        updatesPanel: 'recovery',
+      };
+    }
+    if (driftAgents.length > 0) {
+      return {
+        title: 'Release drift needs rollout review',
+        copy: `${driftAgents.length} endpoint${driftAgents.length === 1 ? ' is' : 's are'} behind ${latestRelease?.version || 'the current release'}, so validate rollout readiness before broad assignment.`,
+        lane: 'Deployment health',
+        lead: driftAgents[0]?.hostname || driftAgents[0]?.id || 'Drifted endpoint',
+        tab: 'updates',
+        updatesPanel: 'health',
+      };
+    }
+    return {
+      title: 'Fleet coverage is ready for routine monitoring',
+      copy:
+        'No recovery or release-drift lane is dominating right now, so operators can work from the agent explorer and install queue without immediate escalation pressure.',
+      lane: 'Fleet overview',
+      lead: latestRelease?.version || 'Stable release',
+      tab: 'fleet',
+      updatesPanel: null,
+    };
+  }, [driftAgents, latestRelease?.version, offlineAgents, staleAgents]);
+  const fleetFocusSummary = [
+    {
+      label: 'Priority lane',
+      value: fleetFocusState.lane,
+      meta:
+        fleetFocusState.updatesPanel === 'recovery'
+          ? `${offlineAgents.length + staleAgents.length} agent${offlineAgents.length + staleAgents.length === 1 ? '' : 's'} in recovery scope`
+          : fleetFocusState.updatesPanel === 'health'
+            ? `${driftAgents.length} agent${driftAgents.length === 1 ? '' : 's'} behind release`
+            : `${agentArr.length} agent${agentArr.length === 1 ? '' : 's'} enrolled`,
+    },
+    {
+      label: 'Lead endpoint',
+      value: fleetFocusState.lead,
+      meta: 'First hostname or release target to validate',
+    },
+    {
+      label: 'Recovery queue',
+      value: offlineAgents.length + staleAgents.length,
+      meta: `${offlineAgents.length} offline • ${staleAgents.length} stale heartbeat${staleAgents.length === 1 ? '' : 's'}`,
+    },
+    {
+      label: 'Release reference',
+      value: latestRelease?.version || 'Unavailable',
+      meta: `${driftAgents.length} endpoint${driftAgents.length === 1 ? '' : 's'} currently off baseline`,
+    },
+  ];
+  const fleetFocusRows = [
+    {
+      id: 'recovery',
+      title: 'Review recovery watchlist',
+      detail:
+        offlineAgents.length + staleAgents.length > 0
+          ? `${offlineAgents.length + staleAgents.length} endpoint${offlineAgents.length + staleAgents.length === 1 ? ' is' : 's are'} waiting for heartbeat or reconnect validation.`
+          : 'Recovery watchlist is currently clear.',
+      badge: offlineAgents.length > 0 ? 'Recovery' : staleAgents.length > 0 ? 'Stale' : 'Clear',
+      tone:
+        offlineAgents.length > 0
+          ? 'badge-err'
+          : staleAgents.length > 0
+            ? 'badge-warn'
+            : 'badge-ok',
+      onClick: () => {
+        setTab('updates');
+        setFleetQueryState({ fleetTab: 'updates', updatesPanel: 'recovery' });
+      },
+    },
+    {
+      id: 'agents',
+      title: 'Open offline agent queue',
+      detail:
+        offlineAgents.length > 0
+          ? `Jump directly into the ${offlineAgents.length} offline endpoint${offlineAgents.length === 1 ? '' : 's'} that ${offlineAgents.length === 1 ? 'needs' : 'need'} ownership and recovery notes.`
+          : 'Open the agent explorer with the current fleet inventory.',
+      badge: offlineAgents.length > 0 ? 'Offline' : 'Agents',
+      tone: offlineAgents.length > 0 ? 'badge-warn' : 'badge-info',
+      onClick: () =>
+        openRecoveryScope({
+          nextStatus: offlineAgents.length > 0 ? 'offline' : 'all',
+        }),
+    },
+    {
+      id: 'release',
+      title: 'Inspect release drift',
+      detail: latestRelease?.version
+        ? `${driftAgents.length} endpoint${driftAgents.length === 1 ? '' : 's'} are not on ${latestRelease.version}.`
+        : 'Latest release metadata is not currently available.',
+      badge: driftAgents.length > 0 ? 'Drift' : 'Release',
+      tone: driftAgents.length > 0 ? 'badge-info' : 'badge-ok',
+      onClick: () => {
+        setTab('updates');
+        setFleetQueryState({ fleetTab: 'updates', updatesPanel: 'health' });
+      },
+    },
+    {
+      id: 'install',
+      title: 'Queue agent connection work',
+      detail:
+        visibleRemoteInstallHistory.length > 0
+          ? `${visibleRemoteInstallHistory.length} recent install attempt${visibleRemoteInstallHistory.length === 1 ? '' : 's'} are available for follow-up.`
+          : 'Open enrollment, remote install, and first-heartbeat workflows.',
+      badge: 'Connect',
+      tone: 'badge-info',
+      onClick: () => {
+        setTab('updates');
+        setFleetQueryState({ fleetTab: 'updates', updatesPanel: 'install' });
+      },
+    },
+  ];
+
   const openRecoveryScope = useCallback(
     ({ nextStatus = 'all', nextOs = 'all', nextQuery = '' } = {}) => {
       setTab('agents');
@@ -768,6 +899,62 @@ export default function FleetAgents() {
 
   return (
     <div>
+      <section className="fleet-focus-strip" aria-label="Current fleet focus">
+        <div className="fleet-focus-hero">
+          <div className="summary-label">Current fleet focus</div>
+          <h3>{fleetFocusState.title}</h3>
+          <p>{fleetFocusState.copy}</p>
+          <div className="fleet-focus-actions btn-group">
+            <button
+              className="btn btn-sm btn-primary"
+              onClick={() => {
+                setTab(fleetFocusState.tab);
+                setFleetQueryState({
+                  fleetTab: fleetFocusState.tab,
+                  updatesPanel: fleetFocusState.updatesPanel,
+                });
+              }}
+            >
+              Open Priority Lane
+            </button>
+            <button className="btn btn-sm" onClick={() => handleTabChange('agents')}>
+              Review Agents
+            </button>
+            <button
+              className="btn btn-sm"
+              onClick={() => {
+                setTab('updates');
+                setFleetQueryState({ fleetTab: 'updates', updatesPanel: 'install' });
+              }}
+            >
+              Connect Agent
+            </button>
+          </div>
+        </div>
+        <div className="summary-grid fleet-focus-summary-grid">
+          {fleetFocusSummary.map((item) => (
+            <div key={item.label} className="summary-card">
+              <div className="summary-label">{item.label}</div>
+              <div className="summary-value">{item.value}</div>
+              <div className="summary-meta">{item.meta}</div>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      <div className="fleet-focus-list" aria-label="Fleet quick focus">
+        {fleetFocusRows.map((item) => (
+          <button key={item.id} className="fleet-focus-row" type="button" onClick={item.onClick}>
+            <span className={`badge ${item.tone}`}>{item.badge}</span>
+            <span className="fleet-focus-row-copy">
+              <strong>{item.title}</strong>
+              <span>{item.detail}</span>
+            </span>
+            <span className="fleet-focus-row-action">Open</span>
+          </button>
+        ))}
+      </div>
+
       <div className="tabs">
         {['fleet', 'agents', 'events', 'updates', 'swarm'].map((item) => (
           <button

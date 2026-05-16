@@ -88,7 +88,8 @@ describe('Dashboard presets', () => {
   it('hydrates and persists dashboard presets through user preferences', async () => {
     renderWithProviders(<Dashboard />);
 
-    expect(await screen.findByText('Dashboard Layout Presets')).toBeInTheDocument();
+    expect(await screen.findByText('Operations home')).toBeInTheDocument();
+    expect(screen.getByText('Dashboard Layout Presets')).toBeInTheDocument();
     expect(await screen.findByText('My Morning Queue')).toBeInTheDocument();
 
     fireEvent.change(screen.getByLabelText('Dashboard preset'), {

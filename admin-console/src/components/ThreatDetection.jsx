@@ -2371,6 +2371,106 @@ export default function ThreatDetection() {
       badge: 'Report',
     },
   ];
+  const detectionFocusTitle =
+    qualityWatchlist.length > 0
+      ? 'Detection quality backlog needs review'
+      : urgentCoverageGapCount > 0
+        ? 'ATT&CK coverage gaps are blocking confidence'
+        : unresolvedNoiseCount > 0
+          ? 'Suppression noise needs operator cleanup'
+          : targetlessPackCount > 0 || stalePackCount > 0
+            ? 'Pack rollout routing needs attention'
+            : 'Detection workspace is ready for promotion review';
+  const detectionFocusCopy =
+    qualityWatchlist.length > 0
+      ? `${qualityWatchlist.length} rule${qualityWatchlist.length === 1 ? '' : 's'} are below the quality threshold, and ${blockedReadinessRows.length} collector readiness blocker${blockedReadinessRows.length === 1 ? '' : 's'} are still visible in the queue.`
+      : urgentCoverageGapCount > 0
+        ? `${urgentCoverageGapCount} urgent ATT&CK gap${urgentCoverageGapCount === 1 ? '' : 's'} are still uncovered, with ${weakestTactic ? weakestTactic.tactic : 'the weakest tactic'} showing the thinnest coverage.`
+        : unresolvedNoiseCount > 0
+          ? `${unresolvedNoiseCount} noisy rule${unresolvedNoiseCount === 1 ? '' : 's'} still lack suppression coverage or replay confirmation.`
+          : targetlessPackCount > 0 || stalePackCount > 0
+            ? `${targetlessPackCount} pack${targetlessPackCount === 1 ? '' : 's'} need routing targets and ${stalePackCount} stale pack${stalePackCount === 1 ? '' : 's'} need freshness review before broader rollout.`
+            : `${readyPackCount} pack${readyPackCount === 1 ? '' : 's'} and ${detectionQualityRows.filter((row) => row.quality.score >= 85).length} rule${detectionQualityRows.filter((row) => row.quality.score >= 85).length === 1 ? '' : 's'} are ready for the next promotion conversation.`;
+  const detectionFocusSummary = [
+    {
+      label: 'Quality watchlist',
+      value: qualityWatchlist.length,
+      meta:
+        qualityWatchlist.length > 0
+          ? `${averageDetectionQuality} average score across the workspace`
+          : 'No rules are below the watch threshold',
+    },
+    {
+      label: 'Urgent gaps',
+      value: urgentCoverageGapCount,
+      meta: weakestTactic
+        ? `${weakestTactic.tactic} is the weakest tactic`
+        : 'No tactic gap summary loaded',
+    },
+    {
+      label: 'Noise pressure',
+      value: unresolvedNoiseCount,
+      meta:
+        activeSuppressions.length > 0
+          ? `${activeSuppressions.length} live suppression${activeSuppressions.length === 1 ? '' : 's'} shaping outcomes`
+          : 'No live suppressions are active',
+    },
+    {
+      label: 'Rollout routing',
+      value: targetlessPackCount + stalePackCount,
+      meta: `${readyPackCount} pack${readyPackCount === 1 ? '' : 's'} currently ready`,
+    },
+  ];
+  const detectionFocusRows = [
+    {
+      id: 'quality',
+      title: 'Review detection quality',
+      detail:
+        qualityWatchlist.length > 0
+          ? `${qualityWatchlist.length} rule${qualityWatchlist.length === 1 ? '' : 's'} are below 70 quality points.`
+          : 'Quality scoring is stable across the current rule set.',
+      badge: qualityWatchlist.length > 0 ? 'Quality' : 'Stable',
+      tone: qualityWatchlist.length > 0 ? 'badge-warn' : 'badge-ok',
+      panel: 'quality',
+      rulePanel: 'summary',
+    },
+    {
+      id: 'coverage',
+      title: 'Inspect ATT&CK gaps',
+      detail:
+        urgentCoverageGapCount > 0
+          ? `${urgentCoverageGapCount} urgent gap${urgentCoverageGapCount === 1 ? '' : 's'} still need rule or hunt coverage.`
+          : 'Coverage gaps are not driving the current queue.',
+      badge: urgentCoverageGapCount > 0 ? 'Coverage' : 'Clear',
+      tone: urgentCoverageGapCount > 0 ? 'badge-warn' : 'badge-ok',
+      panel: 'coverage',
+      rulePanel: 'efficacy',
+    },
+    {
+      id: 'noise',
+      title: 'Triage suppression noise',
+      detail:
+        unresolvedNoiseCount > 0
+          ? `${unresolvedNoiseCount} noisy rule${unresolvedNoiseCount === 1 ? '' : 's'} need replay or suppression cleanup.`
+          : 'Noise pressure is controlled in the current queue.',
+      badge: unresolvedNoiseCount > 0 ? 'Noise' : 'Clear',
+      tone: unresolvedNoiseCount > 0 ? 'badge-info' : 'badge-ok',
+      panel: 'noise',
+      rulePanel: 'efficacy',
+    },
+    {
+      id: 'rollout',
+      title: 'Check pack rollout',
+      detail:
+        targetlessPackCount > 0 || stalePackCount > 0
+          ? `${targetlessPackCount} targetless pack${targetlessPackCount === 1 ? '' : 's'} and ${stalePackCount} stale pack${stalePackCount === 1 ? '' : 's'} need follow-up.`
+          : `${readyPackCount} pack${readyPackCount === 1 ? '' : 's'} are ready for routing or promotion.`,
+      badge: targetlessPackCount > 0 || stalePackCount > 0 ? 'Rollout' : 'Ready',
+      tone: targetlessPackCount > 0 || stalePackCount > 0 ? 'badge-info' : 'badge-ok',
+      panel: 'rollout',
+      rulePanel: 'hunts',
+    },
+  ];
 
   const prefillSuppressionFromSignal = (entry) => {
     if (!selectedRule) return;
@@ -2413,7 +2513,7 @@ export default function ThreatDetection() {
 
   return (
     <div>
-      <div className="card" style={{ marginBottom: 16 }}>
+      <div className="card detection-intro-card" style={{ marginBottom: 16 }}>
         <div className="card-header">
           <div>
             <div className="card-title">Detection Engineering Workspace</div>
@@ -2438,6 +2538,53 @@ export default function ThreatDetection() {
               </button>
             ))}
           </div>
+        </div>
+        <section className="detection-focus-strip" aria-label="Current detection focus">
+          <div className="detection-focus-hero">
+            <div className="summary-label">Current detection focus</div>
+            <h3>{detectionFocusTitle}</h3>
+            <p>{detectionFocusCopy}</p>
+            <div className="detection-focus-actions btn-group">
+              <button
+                className="btn btn-sm btn-primary"
+                onClick={() => focusWorkspacePanel('quality', 'summary')}
+              >
+                Open Quality
+              </button>
+              <button className="btn btn-sm" onClick={() => focusWorkspacePanel('coverage', 'efficacy')}>
+                Review Gaps
+              </button>
+              <button className="btn btn-sm" onClick={() => focusWorkspacePanel('rollout', 'hunts')}>
+                Inspect Rollout
+              </button>
+            </div>
+          </div>
+          <div className="summary-grid detection-focus-summary-grid">
+            {detectionFocusSummary.map((item) => (
+              <div key={item.label} className="summary-card">
+                <div className="summary-label">{item.label}</div>
+                <div className="summary-value">{item.value}</div>
+                <div className="summary-meta">{item.meta}</div>
+              </div>
+            ))}
+          </div>
+        </section>
+        <div className="detection-focus-list" aria-label="Detection quick focus">
+          {detectionFocusRows.map((item) => (
+            <button
+              key={item.id}
+              type="button"
+              className="detection-focus-row"
+              onClick={() => focusWorkspacePanel(item.panel, item.rulePanel)}
+            >
+              <span className={`badge ${item.tone}`}>{item.badge}</span>
+              <span className="detection-focus-row-copy">
+                <strong>{item.title}</strong>
+                <span>{item.detail}</span>
+              </span>
+              <span className="detection-focus-row-action">Open</span>
+            </button>
+          ))}
         </div>
         <div className="summary-grid">
           <div className="summary-card">

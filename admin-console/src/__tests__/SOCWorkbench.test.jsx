@@ -848,6 +848,11 @@ describe('SOCWorkbench', () => {
   it('renders team load and ownership signals from the workbench overview', async () => {
     renderWithProviders('/soc');
 
+    expect(await screen.findByText('SOC shift focus')).toBeInTheDocument();
+    expect(screen.getByText('Queue pressure is driving this shift')).toBeInTheDocument();
+    expect(screen.getByText('Triage alert queue')).toBeInTheDocument();
+    expect(screen.getByText('Continue case workspace')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /^Open Queue$/i })).toBeInTheDocument();
     expect(await screen.findByText('Team Load And Ownership')).toBeInTheDocument();
     expect(
       screen.getAllByText(
@@ -875,6 +880,13 @@ describe('SOCWorkbench', () => {
     expect(
       screen.getAllByText('Shift handoff confirmed the replay noise is expected.').length,
     ).toBeGreaterThan(0);
+
+    fireEvent.click(screen.getByRole('button', { name: /^Review Response$/i }));
+
+    await waitFor(() => {
+      expect(currentLocation().hash).toBe('#response');
+    });
+    expect(await screen.findByText('Response Operations')).toBeInTheDocument();
   });
 
   it('hydrates the queue filter from URL state and clears back to the full queue', async () => {

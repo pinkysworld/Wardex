@@ -727,6 +727,147 @@ export default function ReportsExports() {
       badge: 'Graph',
     },
   ];
+  const reportsFocusState =
+    (activeResponseTarget && (filteredResponsePending.length > 0 || filteredResponseRequests.length > 0)) ||
+    filteredResponsePending.length > 0
+      ? {
+          title: 'Response evidence needs delivery coordination',
+          copy: `${filteredResponsePending.length} approval${filteredResponsePending.length === 1 ? '' : 's'} and ${filteredResponseRequests.length} response request${filteredResponseRequests.length === 1 ? '' : 's'} are tied to ${activeResponseTarget || filteredResponsePending[0]?.target_hostname || 'the current response target'}, so delivery should stay ahead of execution.`,
+          lane: 'Delivery',
+          lead:
+            activeResponseTarget ||
+            filteredResponsePending[0]?.target_hostname ||
+            filteredResponseRequests[0]?.target_hostname ||
+            'Response target',
+          tab: 'delivery',
+        }
+      : totalFailedControls > 0 || totalManualReviewControls > 0
+        ? {
+            title: 'Compliance backlog needs remediation packaging',
+            copy: `${totalFailedControls + totalManualReviewControls} control finding${totalFailedControls + totalManualReviewControls === 1 ? ' is' : 's are'} open across the reporting backlog, with ${selectedReport?.framework_name || 'the lead framework'} ready for remediation or evidence packaging.`,
+            lane: 'Compliance',
+            lead: selectedReport?.framework_name || 'Compliance snapshot',
+            tab: 'compliance',
+          }
+        : failingAttestationChecks.length > 0
+          ? {
+              title: 'Evidence and attestation need packaging',
+              copy: `${failingAttestationChecks.length} attestation check${failingAttestationChecks.length === 1 ? ' is' : 's are'} still open, so evidence workflows should close the audit gap before distribution.`,
+              lane: 'Evidence',
+              lead: failingAttestationChecks[0]?.name || 'Attestation review',
+              tab: 'evidence',
+            }
+          : templates.length > 0
+            ? {
+                title: 'Templates are ready for report generation',
+                copy: `${templates.length} reusable template${templates.length === 1 ? ' is' : 's are'} available, so operators can generate or schedule the next report without rebuilding the payload.`,
+                lane: 'Templates',
+                lead: selectedTemplate?.name || templates[0]?.name || 'Report template',
+                tab: 'templates',
+              }
+            : runs.length > 0
+              ? {
+                  title: 'Recent report runs are ready for review',
+                  copy: `${runs.length} report run${runs.length === 1 ? '' : 's'} remain in history, so reopen the last payload before creating new evidence work.`,
+                  lane: 'Runs',
+                  lead: runs[0]?.name || runs[0]?.id || 'Latest run',
+                  tab: 'runs',
+                }
+              : {
+                  title: 'Reporting workspace is ready for routine publishing',
+                  copy:
+                    'No delivery, compliance, or attestation lane is dominating right now, so operators can work from templates and privacy controls without immediate escalation pressure.',
+                  lane: 'Privacy',
+                  lead: 'Routine publishing',
+                  tab: 'privacy',
+                };
+  const reportsFocusSummary = [
+    {
+      label: 'Priority lane',
+      value: reportsFocusState.lane,
+      meta:
+        reportsFocusState.tab === 'delivery'
+          ? `${filteredResponsePending.length} pending approval${filteredResponsePending.length === 1 ? '' : 's'}`
+          : reportsFocusState.tab === 'compliance'
+            ? `${totalFailedControls} failed • ${totalManualReviewControls} review`
+            : reportsFocusState.tab === 'evidence'
+              ? `${failingAttestationChecks.length} attestation gap${failingAttestationChecks.length === 1 ? '' : 's'}`
+              : reportsFocusState.tab === 'templates'
+                ? `${templates.length} template${templates.length === 1 ? '' : 's'} ready`
+                : `${runs.length} stored run${runs.length === 1 ? '' : 's'}`,
+    },
+    {
+      label: 'Lead scope',
+      value: reportsFocusState.lead,
+      meta: hasActiveScope ? formatScopeSource(activeSource) : 'Global reporting workspace',
+    },
+    {
+      label: 'Stored artifacts',
+      value: storedReports.length,
+      meta: `${scopedArtifactRuns.length} scoped run${scopedArtifactRuns.length === 1 ? '' : 's'} visible`,
+    },
+    {
+      label: 'Attestation',
+      value: attestationData?.passed ? 'Ready' : 'Needs review',
+      meta: `${failingAttestationChecks.length} outstanding check${failingAttestationChecks.length === 1 ? '' : 's'}`,
+    },
+  ];
+  const reportsFocusRows = [
+    {
+      id: 'delivery',
+      title: 'Review response delivery',
+      detail:
+        filteredResponsePending.length + filteredResponseRequests.length > 0
+          ? `${filteredResponsePending.length + filteredResponseRequests.length} response evidence item${filteredResponsePending.length + filteredResponseRequests.length === 1 ? '' : 's'} are waiting for approval, dry-run, or execution context.`
+          : 'Open delivery workflows for approvals and distribution state.',
+      badge:
+        filteredResponsePending.length > 0
+          ? 'Delivery'
+          : filteredResponseRequests.length > 0
+            ? 'Requests'
+            : 'Open',
+      tone:
+        filteredResponsePending.length > 0
+          ? 'badge-warn'
+          : filteredResponseRequests.length > 0
+            ? 'badge-info'
+            : 'badge-ok',
+      onClick: () => switchTab('delivery'),
+    },
+    {
+      id: 'compliance',
+      title: 'Review compliance backlog',
+      detail:
+        totalFailedControls + totalManualReviewControls > 0
+          ? `${totalFailedControls + totalManualReviewControls} control finding${totalFailedControls + totalManualReviewControls === 1 ? '' : 's'} need remediation or manual review packaging.`
+          : 'Compliance backlog is currently clear.',
+      badge: totalFailedControls > 0 ? 'Compliance' : 'Clear',
+      tone: totalFailedControls > 0 ? 'badge-err' : 'badge-ok',
+      onClick: () => switchTab('compliance'),
+    },
+    {
+      id: 'evidence',
+      title: 'Review evidence artifacts',
+      detail:
+        storedReports.length > 0
+          ? `${storedReports.length} stored artifact${storedReports.length === 1 ? '' : 's'} are available for republish, scope attachment, or download.`
+          : 'No stored artifacts are currently available.',
+      badge: storedReports.length > 0 ? 'Artifacts' : 'Clear',
+      tone: storedReports.length > 0 ? 'badge-info' : 'badge-ok',
+      onClick: () => switchTab('evidence'),
+    },
+    {
+      id: 'privacy',
+      title: 'Review privacy and attestation',
+      detail:
+        failingAttestationChecks.length > 0
+          ? `${failingAttestationChecks.length} attestation check${failingAttestationChecks.length === 1 ? ' is' : 's are'} still open before publish-ready status.`
+          : 'Privacy budget and attestation are currently in a publishable state.',
+      badge: failingAttestationChecks.length > 0 ? 'Privacy' : 'Ready',
+      tone: failingAttestationChecks.length > 0 ? 'badge-warn' : 'badge-ok',
+      onClick: () => switchTab('privacy'),
+    },
+  ];
   const failedFindings = Array.isArray(selectedReport?.findings)
     ? selectedReport.findings.filter((finding) => finding.status === 'fail')
     : [];
@@ -1332,6 +1473,52 @@ export default function ReportsExports() {
             aria-selected={activeTab === tab}
           >
             {TAB_LABELS[tab]}
+          </button>
+        ))}
+      </div>
+
+      <section className="reports-focus-strip" aria-label="Current reporting focus">
+        <div className="reports-focus-hero">
+          <div className="summary-label">Current reporting focus</div>
+          <h3>{reportsFocusState.title}</h3>
+          <p>{reportsFocusState.copy}</p>
+          <div className="reports-focus-actions btn-group">
+            <button className="btn btn-sm btn-primary" onClick={() => switchTab(reportsFocusState.tab)}>
+              Open Priority Lane
+            </button>
+            <button className="btn btn-sm" onClick={() => switchTab('templates')}>
+              Review Templates
+            </button>
+            <button className="btn btn-sm" onClick={() => switchTab('evidence')}>
+              Review Artifacts
+            </button>
+          </div>
+        </div>
+        <div className="summary-grid reports-focus-summary-grid">
+          {reportsFocusSummary.map((item) => (
+            <div key={item.label} className="summary-card">
+              <div className="summary-label">{item.label}</div>
+              <div className="summary-value">{item.value}</div>
+              <div className="summary-meta">{item.meta}</div>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      <div className="reports-focus-list" aria-label="Reporting quick focus">
+        {reportsFocusRows.map((item) => (
+          <button
+            key={item.id}
+            className="reports-focus-row"
+            type="button"
+            onClick={item.onClick}
+          >
+            <span className={`badge ${item.tone}`}>{item.badge}</span>
+            <span className="reports-focus-row-copy">
+              <strong>{item.title}</strong>
+              <span>{item.detail}</span>
+            </span>
+            <span className="reports-focus-row-action">Open</span>
           </button>
         ))}
       </div>

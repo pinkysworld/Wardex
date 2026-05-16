@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { act, render, screen, waitFor } from '@testing-library/react';
+import { act, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, useLocation } from 'react-router-dom';
 import { AuthProvider, RoleProvider, ThemeProvider, ToastProvider } from '../hooks.jsx';
@@ -271,6 +271,9 @@ describe('App', () => {
     await renderApp();
     // Check that navigation labels exist
     expect(screen.getAllByText('Dashboard').length).toBeGreaterThanOrEqual(1);
+    expect(screen.getByText('Operations Home')).toBeInTheDocument();
+    expect(screen.getByText('Platform')).toBeInTheDocument();
+    expect(screen.getByText('Governance')).toBeInTheDocument();
   });
 
   it('places malware scanning in the dedicated malware trust route', async () => {
@@ -287,12 +290,35 @@ describe('App', () => {
 
     await renderApp('/malware?scanPreset=open-source-av-baseline');
 
-    expect((await screen.findAllByText('Detect')).length).toBeGreaterThan(0);
+    expect((await screen.findAllByText('Investigations')).length).toBeGreaterThan(0);
     expect(screen.getByRole('link', { name: 'Malware Scanning' })).toHaveAttribute(
       'href',
       '/malware',
     );
     expect(screen.getAllByText('Malware Scanning').length).toBeGreaterThan(0);
+  });
+
+  it('keeps the scope bar focused on useful route context instead of internal params', async () => {
+    localStorage.setItem('wardex_token', 'analyst-token');
+    fetchMock.mockImplementation(async (url) => ({
+      ok: true,
+      headers: { get: () => 'application/json' },
+      json: async () => {
+        if (url === '/api/auth/check') return { authenticated: true };
+        if (url === '/api/auth/session') return { authenticated: true, role: 'analyst' };
+        return {};
+      },
+    }));
+
+    await renderApp('/email-security?tab=policies&source=launchpad&drawer=detail');
+
+    const scopeBar = screen.getByLabelText('Current workspace scope');
+    expect(scopeBar).toBeInTheDocument();
+    expect(within(scopeBar).getByText('Email Security')).toBeInTheDocument();
+    expect(scopeBar).toHaveTextContent('Analyst Workspace');
+    expect(within(scopeBar).getByText('Tab: Policies')).toBeInTheDocument();
+    expect(within(scopeBar).queryByText('Source: Launchpad')).not.toBeInTheDocument();
+    expect(within(scopeBar).queryByText('Drawer: Detail')).not.toBeInTheDocument();
   });
 
   it('disables Connect button when token input is empty', async () => {

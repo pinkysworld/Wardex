@@ -6,7 +6,7 @@ import ProcessDrawer from './ProcessDrawer.jsx';
 import WorkflowGuidance from './WorkflowGuidance.jsx';
 import { JsonDetails, SideDrawer, SummaryGrid } from './operator.jsx';
 import InvestigationTimeline from './InvestigationTimeline.jsx';
-import { downloadData, formatDateTime, formatRelativeTime } from './operatorUtils.js';
+import { downloadData, formatDateTime, formatNumber, formatRelativeTime } from './operatorUtils.js';
 import { buildLongRetentionHistoryPath } from './settings/helpers.js';
 import { buildHref } from './workflowPivots.js';
 import {
@@ -869,9 +869,10 @@ export default function SOCWorkbench() {
   );
   const responseRollbackStatus =
     remediationSafety?.rollback_status || remediationSafety?.status || 'dry_run_only';
-  const responseSafetyRequests = Array.isArray(responseSafety?.requests)
-    ? responseSafety.requests
-    : [];
+  const responseSafetyRequests = useMemo(
+    () => (Array.isArray(responseSafety?.requests) ? responseSafety.requests : []),
+    [responseSafety?.requests],
+  );
   const responseSafetyPreviewById = useMemo(
     () =>
       Object.fromEntries(
@@ -1124,6 +1125,95 @@ export default function SOCWorkbench() {
       badge: 'Report',
     },
   ].filter(Boolean);
+  const socQueuePressure = filteredQueueArr.length;
+  const socInvestigationPressure = activeInvestigationArr.length;
+  const socResponsePressure = pendingResponseArr.length + changeReviewArr.length;
+  const socProcessPressure = processFindingArr.length;
+  const socFocusTitle =
+    socQueuePressure > 0
+      ? 'Queue pressure is driving this shift'
+      : socResponsePressure > 0
+        ? 'Response approvals need operator review'
+        : socProcessPressure > 0
+          ? 'Process evidence is ready for triage'
+          : 'SOC workbench is ready for the next investigation';
+  const socFocusCopy =
+    socQueuePressure > 0
+      ? `${formatNumber(socQueuePressure)} alert${socQueuePressure === 1 ? '' : 's'} are in scope, with ${formatNumber(explainableQueueCount)} carrying explainability or confidence evidence.`
+      : socResponsePressure > 0
+        ? `${formatNumber(socResponsePressure)} response item${socResponsePressure === 1 ? '' : 's'} need approval, rollback, or change-review confirmation before execution.`
+        : socProcessPressure > 0
+          ? `${formatNumber(socProcessPressure)} process finding${socProcessPressure === 1 ? '' : 's'} are ready for containment context and investigation pivots.`
+          : 'No urgent queue, response, or process pressure is currently visible. Start with cases, investigations, or the pivot map.';
+  const socFocusSummary = [
+    {
+      label: 'Queue',
+      value: formatNumber(socQueuePressure),
+      meta:
+        explainableQueueCount > 0
+          ? `${formatNumber(explainableQueueCount)} explainable signal${explainableQueueCount === 1 ? '' : 's'}`
+          : 'No explainability evidence attached',
+    },
+    {
+      label: 'Investigations',
+      value: formatNumber(socInvestigationPressure),
+      meta: selectedInvestigation ? 'Active context selected' : 'Planner ready',
+    },
+    {
+      label: 'Response',
+      value: formatNumber(socResponsePressure),
+      meta: `${formatNumber(responseReadyToExecute)} ready to execute`,
+    },
+    {
+      label: 'Process evidence',
+      value: formatNumber(socProcessPressure),
+      meta: hiddenProcessFindingCount
+        ? `${formatNumber(hiddenProcessFindingCount)} hidden by render cap`
+        : 'Render cap healthy',
+    },
+  ];
+  const socFocusRows = [
+    {
+      id: 'queue',
+      title: 'Triage alert queue',
+      detail:
+        hiddenQueueRowCount > 0
+          ? `${formatNumber(socQueuePressure)} alerts in scope, ${formatNumber(hiddenQueueRowCount)} hidden by the render cap.`
+          : `${formatNumber(socQueuePressure)} alerts in scope and the queue is fully rendered.`,
+      badge: socQueuePressure > 0 ? 'Triage' : 'Clear',
+      tone: socQueuePressure > 0 ? 'badge-warn' : 'badge-ok',
+      tab: 'queue',
+    },
+    {
+      id: 'response',
+      title: 'Review response readiness',
+      detail: `${formatNumber(socResponsePressure)} pending response or change-review item${socResponsePressure === 1 ? '' : 's'}, ${formatNumber(responseReadyToExecute)} ready to execute.`,
+      badge: socResponsePressure > 0 ? 'Review' : 'Ready',
+      tone: socResponsePressure > 0 ? 'badge-warn' : 'badge-ok',
+      tab: 'response',
+    },
+    {
+      id: 'cases',
+      title: 'Continue case workspace',
+      detail: activeWorkspaceCase
+        ? `Case #${activeWorkspaceCase.id} is the current handoff and evidence context.`
+        : `${formatNumber(caseArr.length)} case${caseArr.length === 1 ? '' : 's'} available for investigation context.`,
+      badge: activeWorkspaceCase ? 'Context' : 'Cases',
+      tone: activeWorkspaceCase ? 'badge-info' : 'badge-ok',
+      tab: 'cases',
+    },
+    {
+      id: 'process-tree',
+      title: 'Inspect process evidence',
+      detail:
+        socProcessPressure > 0
+          ? `${formatNumber(socProcessPressure)} process finding${socProcessPressure === 1 ? '' : 's'} available for host-level triage.`
+          : 'Live process and deep-chain views are ready when host evidence arrives.',
+      badge: socProcessPressure > 0 ? 'Inspect' : 'Stable',
+      tone: socProcessPressure > 0 ? 'badge-info' : 'badge-ok',
+      tab: 'process-tree',
+    },
+  ];
 
   const openCaseFocus = useCallback(
     (caseId) => {
@@ -1597,11 +1687,51 @@ export default function SOCWorkbench() {
         ))}
       </div>
 
-      <WorkflowGuidance
-        title="SOC Pivots"
-        description="Move from queue and case context into hunts, entity analytics, asset evidence, campaign mapping, and delivery reporting."
-        items={workflowItems}
-      />
+      <section className="soc-priority-strip" aria-label="SOC shift focus">
+        <div className="soc-priority-hero">
+          <div className="summary-label">SOC shift focus</div>
+          <h3>{socFocusTitle}</h3>
+          <p>{socFocusCopy}</p>
+          <div className="soc-priority-actions btn-group">
+            <button className="btn btn-sm btn-primary" type="button" onClick={() => setTab('queue')}>
+              Open Queue
+            </button>
+            <button className="btn btn-sm" type="button" onClick={() => setTab('response')}>
+              Review Response
+            </button>
+            <button className="btn btn-sm" type="button" onClick={() => setTab('cases')}>
+              Open Cases
+            </button>
+          </div>
+        </div>
+        <div className="summary-grid soc-priority-summary-grid">
+          {socFocusSummary.map((item) => (
+            <div key={item.label} className="summary-card">
+              <div className="summary-label">{item.label}</div>
+              <div className="summary-value">{item.value}</div>
+              <div className="summary-meta">{item.meta}</div>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      <div className="soc-focus-list" aria-label="SOC quick focus">
+        {socFocusRows.map((item) => (
+          <button
+            key={item.id}
+            className="soc-focus-row"
+            type="button"
+            onClick={() => setTab(item.tab)}
+          >
+            <span className={`badge ${item.tone}`}>{item.badge}</span>
+            <span className="soc-focus-row-copy">
+              <strong>{item.title}</strong>
+              <span>{item.detail}</span>
+            </span>
+            <span className="soc-focus-row-action">Open</span>
+          </button>
+        ))}
+      </div>
 
       <div className="soc-cockpit-strip" aria-label="SOC operational cockpit">
         <button className="soc-cockpit-card" type="button" onClick={() => setTab('queue')}>
@@ -1629,6 +1759,12 @@ export default function SOCWorkbench() {
           </span>
         </button>
       </div>
+
+      <WorkflowGuidance
+        title="SOC Pivots"
+        description="Move from queue and case context into hunts, entity analytics, asset evidence, campaign mapping, and delivery reporting."
+        items={workflowItems}
+      />
 
       {tab === 'overview' &&
         (overview ? (

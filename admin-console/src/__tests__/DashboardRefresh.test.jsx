@@ -238,6 +238,8 @@ describe('Dashboard refresh', () => {
 
     renderWithProviders(<Dashboard />);
 
+    expect(await screen.findByText('Operations home')).toBeInTheDocument();
+    expect(screen.getByText('Open Launchpad')).toBeInTheDocument();
     const refreshButton = await screen.findByRole('button', { name: '↻ Refresh' });
     expect(await screen.findByText('Collector Health')).toBeInTheDocument();
     expect(screen.getByText('Readiness timeline')).toBeInTheDocument();

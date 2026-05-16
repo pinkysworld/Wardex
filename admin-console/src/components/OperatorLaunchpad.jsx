@@ -1224,6 +1224,82 @@ export default function OperatorLaunchpad() {
       href: '/response-safety',
     },
   ];
+  const urgentPriorityRows =
+    operatorTaskRows.length > 0
+      ? operatorTaskRows.slice(0, 3)
+      : morningBriefRows
+          .filter((row) => !isReadyStatus(row.status))
+          .slice(0, 3)
+          .map((row) => ({
+            title: row.name,
+            status: row.status,
+            detail: row.detail,
+            href: '/launchpad#morning-brief',
+          }));
+  const guidedPriorityRows = [
+    ...guidedIncidentSteps.filter((step) => !step.ready),
+    ...guidedIncidentSteps.filter((step) => step.ready),
+  ]
+    .slice(0, 3)
+    .map((step) => ({
+      title: step.title,
+      status: step.ready ? 'ready' : 'attention',
+      detail: step.detail,
+      href: step.href,
+    }));
+  const platformGuardrailRows = [
+    {
+      title: 'Release gate',
+      status: releaseGateBlockers === 0 ? 'ready' : 'attention',
+      detail: `${releaseGateBlockers} ship gate blockers`,
+      href: '/launchpad#release-gate-automation',
+    },
+    {
+      title: 'Evidence freshness',
+      status: staleEvidenceRows.length === 0 && allEvidenceRows.length > 0 ? 'ready' : 'attention',
+      detail: `${freshEvidenceRows.length}/${allEvidenceRows.length || 0} proofs fresh`,
+      href: '/launchpad#evidence-freshness',
+    },
+    {
+      title: 'Fleet coverage',
+      status:
+        fleetOffline === 0 && staleHeartbeats === 0 && fleetDriftCount === 0
+          ? 'ready'
+          : 'attention',
+      detail: `${fleetOnline}/${fleetTotal || '—'} online, ${staleHeartbeats} stale`,
+      href: '/launchpad#fleet-health-drilldown',
+    },
+  ];
+  const guardrailNeedsAttention = platformGuardrailRows.some((row) => !isReadyStatus(row.status));
+  const prioritySections = [
+    {
+      title: 'Needs attention now',
+      label: 'Shift priority',
+      meta: `${activeTaskCount} active task${activeTaskCount === 1 ? '' : 's'}`,
+      badge: taskQueueBadge,
+      rows: urgentPriorityRows,
+      empty: 'No urgent operator tasks right now.',
+    },
+    {
+      title: 'First incident path',
+      label: 'Guided run',
+      meta: `${guidedIncidentReadyCount}/${guidedIncidentSteps.length} steps ready`,
+      badge: statusBadge(
+        guidedIncidentReadyCount === guidedIncidentSteps.length,
+        guidedIncidentReadyCount < guidedIncidentSteps.length,
+      ),
+      rows: guidedPriorityRows,
+      empty: 'Incident path is clear.',
+    },
+    {
+      title: 'Ship and evidence guardrails',
+      label: 'Trust gate',
+      meta: `${releaseGateBlockers} release blocker${releaseGateBlockers === 1 ? '' : 's'}`,
+      badge: statusBadge(!guardrailNeedsAttention, guardrailNeedsAttention),
+      rows: platformGuardrailRows,
+      empty: 'All guardrails are clear.',
+    },
+  ];
 
   const exportShiftHandoff = () => {
     downloadData(
@@ -1348,1183 +1424,1236 @@ export default function OperatorLaunchpad() {
         </div>
       </section>
 
-      <section className="operator-launchpad-grid">
-        <div className="card operator-lane-card" id="connect-agent-drawer">
-          <div className="card-header">
-            <div>
-              <div className="summary-label">Persistent connect</div>
-              <h3 className="card-title">Agent connect drawer</h3>
+      <section className="operator-priority-board" aria-label="Shift priorities">
+        {prioritySections.map((section) => (
+          <div key={section.title} className="card operator-priority-card">
+            <div className="card-header">
+              <div>
+                <div className="summary-label">{section.label}</div>
+                <h3 className="card-title">{section.title}</h3>
+                <div className="summary-meta">{section.meta}</div>
+              </div>
+              <span className={`badge ${section.badge.className}`}>{section.badge.label}</span>
             </div>
-            <Link
-              className="btn btn-sm"
-              to="/fleet?fleetTab=updates&updatesPanel=install#connect-agent-drawer"
-            >
-              Open drawer
-            </Link>
-          </div>
-          <div className="operator-kv-list">
-            <div>
-              <span>Enrollment path</span>
-              <strong>Manual or remote</strong>
-            </div>
-            <div>
-              <span>Fleet online</span>
-              <strong>
-                {fleetOnline}/{fleetTotal || '—'}
-              </strong>
-            </div>
-            <div>
-              <span>Install plans</span>
-              <strong>{deploymentPlans.length || '—'}</strong>
-            </div>
-          </div>
-          <div className="summary-meta">
-            The Fleet install panel now has a stable command-palette route and hash target.
-          </div>
-        </div>
-
-        <div className="card operator-lane-card" id="morning-brief">
-          <div className="card-header">
-            <div>
-              <div className="summary-label">Shift handoff</div>
-              <h3 className="card-title">Morning brief</h3>
-            </div>
-            <span className={`badge ${taskQueueBadge.className}`}>{taskQueueBadge.label}</span>
-          </div>
-          <div className="operator-health-list">
-            {morningBriefRows.map((row) => {
-              const badge = signalBadge(row.status);
-              return (
-                <div key={row.name} className="operator-health-row">
-                  <span className={`badge ${badge.className}`}>{badge.label}</span>
-                  <span>{row.name}</span>
-                  <span>{row.detail}</span>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-
-        <div className="card operator-lane-card" id="shift-handoff-workspace">
-          <div className="card-header">
-            <div>
-              <div className="summary-label">Shift continuity</div>
-              <h3 className="card-title">Handoff workspace</h3>
-            </div>
-            <button type="button" className="btn btn-sm" onClick={exportShiftHandoff}>
-              Export handoff
-            </button>
-          </div>
-          <div className="operator-handoff-form">
-            <label className="form-label" htmlFor="handoff-owner">
-              Recipient
-            </label>
-            <input
-              id="handoff-owner"
-              className="form-input"
-              value={handoffOwner}
-              onChange={(event) => setHandoffOwner(event.target.value)}
-              placeholder={handoffRecipient}
-            />
-            <label className="form-label" htmlFor="handoff-note">
-              Shift note
-            </label>
-            <textarea
-              id="handoff-note"
-              className="form-textarea"
-              rows={3}
-              value={handoffNote}
-              onChange={(event) => setHandoffNote(event.target.value)}
-              placeholder="Open items, watchlist, and ownership changes"
-            />
-          </div>
-          <div className="operator-health-list">
-            {shiftHandoffRows.map((row) => {
-              const badge = signalBadge(row.status);
-              return (
-                <Link
-                  key={row.name}
-                  className="operator-health-row operator-health-link"
-                  to={row.href}
-                >
-                  <span className={`badge ${badge.className}`}>{badge.label}</span>
-                  <span>{row.name}</span>
-                  <span>{row.detail}</span>
-                </Link>
-              );
-            })}
-          </div>
-        </div>
-
-        <div className="card operator-lane-card" id="guided-incident-path">
-          <div className="card-header">
-            <div>
-              <div className="summary-label">Guided incident</div>
-              <h3 className="card-title">Triage path</h3>
-            </div>
-            <span
-              className={`badge ${guidedIncidentReadyCount === guidedIncidentSteps.length ? 'badge-ok' : 'badge-warn'}`}
-            >
-              {guidedIncidentReadyCount}/{guidedIncidentSteps.length}
-            </span>
-          </div>
-          <div className="operator-step-list">
-            {guidedIncidentSteps.map((step) => {
-              const badge = statusBadge(step.ready);
-              return (
-                <Link key={step.title} className="operator-step" to={step.href}>
-                  <span className={`badge ${badge.className}`}>{badge.label}</span>
-                  <span>
-                    <strong>{step.title}</strong>
-                    <span>{step.detail}</span>
-                  </span>
-                </Link>
-              );
-            })}
-          </div>
-        </div>
-
-        <div className="card operator-lane-card" id="canonical-operator-journeys">
-          <div className="card-header">
-            <div>
-              <div className="summary-label">Golden paths</div>
-              <h3 className="card-title">Canonical operator journeys</h3>
-            </div>
-            <span
-              className={`badge ${canonicalReadyCount === canonicalJourneys.length ? 'badge-ok' : 'badge-warn'}`}
-            >
-              {canonicalReadyCount}/{canonicalJourneys.length}
-            </span>
-          </div>
-          <div className="operator-health-list">
-            {canonicalJourneys.map((journey) => {
-              const badge = signalBadge(journey.status);
-              return (
-                <Link
-                  key={journey.name}
-                  className="operator-health-row operator-health-link"
-                  to={journey.href}
-                >
-                  <span className={`badge ${badge.className}`}>{badge.label}</span>
-                  <span>{journey.name}</span>
-                  <span>{journey.detail}</span>
-                </Link>
-              );
-            })}
-          </div>
-        </div>
-
-        <div className="card operator-lane-card" id="incident-timeline-builder">
-          <div className="card-header">
-            <div>
-              <div className="summary-label">Incident reconstruction</div>
-              <h3 className="card-title">Timeline builder</h3>
-            </div>
-            <button type="button" className="btn btn-sm" onClick={exportTimelineDraft}>
-              Export draft
-            </button>
-          </div>
-          <div className="operator-health-list">
-            {incidentTimelineRows.map((row) => {
-              const badge = signalBadge(row.status);
-              return (
-                <Link
-                  key={row.name}
-                  className="operator-health-row operator-health-link"
-                  to={row.href}
-                >
-                  <span className={`badge ${badge.className}`}>{badge.label}</span>
-                  <span>{row.name}</span>
-                  <span>{row.detail}</span>
-                </Link>
-              );
-            })}
-          </div>
-          <div className="operator-kv-list">
-            <div>
-              <span>Replay incidents</span>
-              <strong>{incidentReplayCount || '—'}</strong>
-            </div>
-            <div>
-              <span>Fresh evidence</span>
-              <strong>{freshEvidenceRows.length}</strong>
-            </div>
-            <div>
-              <span>Handoff target</span>
-              <strong>Reports</strong>
-            </div>
-          </div>
-        </div>
-
-        <div className="card operator-lane-card">
-          <div className="card-header">
-            <div>
-              <div className="summary-label">Guided first run</div>
-              <h3 className="card-title">Mission path</h3>
-            </div>
-            <span className={`badge ${readyCount === steps.length ? 'badge-ok' : 'badge-warn'}`}>
-              {readyCount}/{steps.length}
-            </span>
-          </div>
-          <div className="operator-step-list">
-            {steps.map((step) => {
-              const badge = statusBadge(step.ready);
-              return (
-                <Link key={step.key} className="operator-step" to={step.href}>
-                  <span className={`badge ${badge.className}`}>{badge.label}</span>
-                  <span>
-                    <strong>{step.label}</strong>
-                    <span>{step.detail}</span>
-                  </span>
-                </Link>
-              );
-            })}
-          </div>
-        </div>
-
-        <div className="card operator-lane-card">
-          <div className="card-header">
-            <div>
-              <div className="summary-label">Release verification</div>
-              <h3 className="card-title">Clean release and deployment</h3>
-            </div>
-            <span className={`badge ${verificationBadge.className}`}>
-              {verificationBadge.label}
-            </span>
-          </div>
-          <div className="operator-health-list">
-            {releaseVerificationSignals.map(([name, status, detail, evidenceSource]) => {
-              const badge = signalBadge(status);
-              const proofBadge = evidenceBadge(evidenceSource);
-              return (
-                <div key={name} className="operator-health-row">
-                  <span className={`badge ${badge.className}`}>{badge.label}</span>
-                  <span>{name}</span>
-                  <span>{detail}</span>
-                  <span className={`badge ${proofBadge.className}`}>{proofBadge.label}</span>
-                </div>
-              );
-            })}
-          </div>
-          <div className="operator-kv-list" style={{ marginTop: 12 }}>
-            <div>
-              <span>Target</span>
-              <strong>{data.cleanReleaseCut?.target_version || '—'}</strong>
-            </div>
-            <div>
-              <span>Container</span>
-              <strong>{data.containerParity?.status || 'unknown'}</strong>
-            </div>
-            <div>
-              <span>Validation packs</span>
-              <strong>{countValue(data.validationPacks, ['pack_count'])}</strong>
-            </div>
-          </div>
-          <div className="operator-kv-list" style={{ marginTop: 12 }}>
-            <div>
-              <span>Artifact rows</span>
-              <strong>{releaseVerificationRows.length || '—'}</strong>
-            </div>
-            <div>
-              <span>Install plans</span>
-              <strong>{deploymentPlans.length || '—'}</strong>
-            </div>
-            <div>
-              <span>Quality score</span>
-              <strong>{dataQualityScore || '—'}</strong>
-            </div>
-            <div>
-              <span>Load gates</span>
-              <strong>{loadGateRows.length || '—'}</strong>
-            </div>
-            <div>
-              <span>Fresh proof</span>
-              <strong>
-                {releaseFreshEvidenceCount}/{releaseVerificationSignals.length}
-              </strong>
-            </div>
-            <div>
-              <span>Proof collected</span>
-              <strong>
-                {formatDateTime(data.releaseVerification?.evidence_freshness?.collected_at) || '—'}
-              </strong>
-            </div>
-            <div>
-              <span>Dry-run actions</span>
-              <strong>{automationBlueprints.length || '—'}</strong>
-            </div>
-            <div>
-              <span>Executable packs</span>
-              <strong>{executablePacks || '—'}</strong>
-            </div>
-          </div>
-        </div>
-
-        <div className="card operator-lane-card" id="deployment-confidence">
-          <div className="card-header">
-            <div>
-              <div className="summary-label">Deployment confidence</div>
-              <h3 className="card-title">Ship readiness matrix</h3>
-            </div>
-            <span className={`badge ${deploymentConfidenceBadge.className}`}>
-              {deploymentConfidenceBadge.label}
-            </span>
-          </div>
-          <div className="deployment-confidence-matrix">
-            {deploymentConfidenceRows.map(([name, status, detail, evidenceSource]) => {
-              const badge = signalBadge(status);
-              const proofBadge = evidenceBadge(evidenceSource);
-              return (
-                <div key={name} className="deployment-confidence-row">
-                  <span className={`badge ${badge.className}`}>{badge.label}</span>
-                  <strong>{name}</strong>
-                  <span>{detail}</span>
-                  <span className={`badge ${proofBadge.className}`}>{proofBadge.label}</span>
-                </div>
-              );
-            })}
-          </div>
-          <div className="operator-kv-list" style={{ marginTop: 12 }}>
-            <div>
-              <span>Blockers</span>
-              <strong>{deploymentConfidenceBlockers}</strong>
-            </div>
-            <div>
-              <span>Fresh proof</span>
-              <strong>
-                {releaseFreshEvidenceCount}/{releaseVerificationSignals.length}
-              </strong>
-            </div>
-            <div>
-              <span>Install plans</span>
-              <strong>{deploymentPlans.length || '—'}</strong>
-            </div>
-          </div>
-        </div>
-
-        <div className="card operator-lane-card">
-          <div className="card-header">
-            <div>
-              <div className="summary-label">Integration health</div>
-              <h3 className="card-title">External systems</h3>
-            </div>
-            <Link className="btn btn-sm" to="/settings?tab=integrations">
-              Open
-            </Link>
-          </div>
-          <div className="operator-health-list">
-            {integrations.map((row) => {
-              const badge = statusBadge(row.ok);
-              return (
-                <div key={row.name} className="operator-health-row">
-                  <span className={`badge ${badge.className}`}>{badge.label}</span>
-                  <span>{row.name}</span>
-                  <span>{row.detail}</span>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-
-        <div className="card operator-lane-card" id="collector-onboarding-center">
-          <div className="card-header">
-            <div>
-              <div className="summary-label">Collector onboarding</div>
-              <h3 className="card-title">Telemetry lanes</h3>
-            </div>
-            <span className={`badge ${collectorOnboardingBadge.className}`}>
-              {collectorReadyCount}/{collectorOnboardingRows.length}
-            </span>
-          </div>
-          <div className="operator-health-list">
-            {collectorOnboardingRows.map((row) => {
-              const badge = signalBadge(row.status);
-              return (
-                <Link
-                  key={row.name}
-                  className="operator-health-row operator-health-link"
-                  to={row.href}
-                >
-                  <span className={`badge ${badge.className}`}>{badge.label}</span>
-                  <span>{row.name}</span>
-                  <span>{row.detail}</span>
-                </Link>
-              );
-            })}
-          </div>
-          <div className="operator-kv-list">
-            <div>
-              <span>Configured collectors</span>
-              <strong>{collectorItems.length}</strong>
-            </div>
-            <div>
-              <span>Healthy lanes</span>
-              <strong>{collectorReadyCount}</strong>
-            </div>
-          </div>
-        </div>
-
-        <div className="card operator-lane-card" id="fleet-health-drilldown">
-          <div className="card-header">
-            <div>
-              <div className="summary-label">Fleet health</div>
-              <h3 className="card-title">Agent drilldown</h3>
-            </div>
-            <span className={`badge ${fleetHealthBadge.className}`}>{fleetHealthBadge.label}</span>
-          </div>
-          <div className="operator-health-list">
-            {fleetDrilldownRows.map((row) => {
-              const badge = signalBadge(row.status);
-              return (
-                <div key={row.name} className="operator-health-row">
-                  <span className={`badge ${badge.className}`}>{badge.label}</span>
-                  <span>{row.name}</span>
-                  <span>{row.detail}</span>
-                </div>
-              );
-            })}
-          </div>
-          <div className="btn-group">
-            <Link className="btn btn-sm" to="/fleet?status=offline">
-              Offline agents
-            </Link>
-            <Link className="btn btn-sm" to="/fleet?fleetTab=updates&updatesPanel=health">
-              Deployment health
-            </Link>
-          </div>
-        </div>
-
-        <div className="card operator-lane-card" id="fleet-risk-heatmap">
-          <div className="card-header">
-            <div>
-              <div className="summary-label">Fleet risk</div>
-              <h3 className="card-title">Agent risk heatmap</h3>
-            </div>
-            <span className={`badge ${fleetRiskBadge.className}`}>{fleetRiskBadge.label}</span>
-          </div>
-          <div className="operator-risk-list">
-            {riskRows.map((row) => {
-              const badge = riskBadge(row.score);
-              return (
-                <Link key={row.name} className="operator-risk-row" to={row.href}>
-                  <span className={`badge ${badge.className}`}>{row.score}</span>
-                  <span>
-                    <strong>{row.name}</strong>
-                    <small>{row.detail}</small>
-                  </span>
-                  <span className="operator-risk-track" aria-hidden="true">
-                    <span style={{ width: `${Math.max(row.score, 4)}%` }} />
-                  </span>
-                </Link>
-              );
-            })}
-          </div>
-        </div>
-
-        <div className="card operator-lane-card" id="evidence-freshness">
-          <div className="card-header">
-            <div>
-              <div className="summary-label">Evidence freshness</div>
-              <h3 className="card-title">Proof freshness rollup</h3>
-            </div>
-            <span className={`badge ${evidenceFreshnessBadge.className}`}>
-              {evidenceFreshnessBadge.label}
-            </span>
-          </div>
-          <div className="operator-kv-list">
-            <div>
-              <span>Fresh proof</span>
-              <strong>
-                {freshEvidenceRows.length}/{allEvidenceRows.length || 0}
-              </strong>
-            </div>
-            <div>
-              <span>Stale proof</span>
-              <strong>{staleEvidenceRows.length}</strong>
-            </div>
-            <div>
-              <span>Snapshots</span>
-              <strong>{snapshotRows.length || '—'}</strong>
-            </div>
-          </div>
-          <div className="operator-kv-list" style={{ marginTop: 12 }}>
-            {(evidenceModeRows.length ? evidenceModeRows : [{ mode: 'pending', count: 0 }]).map(
-              (row) => (
-                <div key={row.mode}>
-                  <span>{row.mode}</span>
-                  <strong>{row.count}</strong>
-                </div>
-              ),
+            {section.rows.length === 0 ? (
+              <div className="empty empty-compact">{section.empty}</div>
+            ) : (
+              <div className="operator-priority-list">
+                {section.rows.map((row) => {
+                  const badge = signalBadge(row.status);
+                  return (
+                    <Link
+                      key={`${section.title}-${row.title}-${row.detail}`}
+                      className="operator-priority-row"
+                      to={row.href || '/launchpad'}
+                    >
+                      <span className={`badge ${badge.className}`}>{badge.label}</span>
+                      <span>
+                        <strong>{row.title}</strong>
+                        <span>{row.detail}</span>
+                      </span>
+                    </Link>
+                  );
+                })}
+              </div>
             )}
           </div>
-          <div className="operator-health-list">
-            {(staleEvidenceRows.length ? staleEvidenceRows : allEvidenceRows)
-              .slice(0, 4)
-              .map((row) => {
-                const proofBadge = evidenceBadge(row.evidenceSource);
+        ))}
+      </section>
+
+      <section className="operator-capability-section" aria-label="Full launchpad capability map">
+        <div className="section-header">
+          <div>
+            <div className="summary-label">Full launchpad</div>
+            <h2>Capability map</h2>
+          </div>
+        </div>
+
+        <div className="operator-launchpad-grid">
+          <div className="card operator-lane-card" id="connect-agent-drawer">
+            <div className="card-header">
+              <div>
+                <div className="summary-label">Persistent connect</div>
+                <h3 className="card-title">Agent connect drawer</h3>
+              </div>
+              <Link
+                className="btn btn-sm"
+                to="/fleet?fleetTab=updates&updatesPanel=install#connect-agent-drawer"
+              >
+                Open drawer
+              </Link>
+            </div>
+            <div className="operator-kv-list">
+              <div>
+                <span>Enrollment path</span>
+                <strong>Manual or remote</strong>
+              </div>
+              <div>
+                <span>Fleet online</span>
+                <strong>
+                  {fleetOnline}/{fleetTotal || '—'}
+                </strong>
+              </div>
+              <div>
+                <span>Install plans</span>
+                <strong>{deploymentPlans.length || '—'}</strong>
+              </div>
+            </div>
+            <div className="summary-meta">
+              The Fleet install panel now has a stable command-palette route and hash target.
+            </div>
+          </div>
+
+          <div className="card operator-lane-card" id="morning-brief">
+            <div className="card-header">
+              <div>
+                <div className="summary-label">Shift handoff</div>
+                <h3 className="card-title">Morning brief</h3>
+              </div>
+              <span className={`badge ${taskQueueBadge.className}`}>{taskQueueBadge.label}</span>
+            </div>
+            <div className="operator-health-list">
+              {morningBriefRows.map((row) => {
+                const badge = signalBadge(row.status);
                 return (
-                  <div key={`${row.name}-${row.detail}`} className="operator-health-row">
-                    <span className={`badge ${proofBadge.className}`}>{proofBadge.label}</span>
+                  <div key={row.name} className="operator-health-row">
+                    <span className={`badge ${badge.className}`}>{badge.label}</span>
                     <span>{row.name}</span>
                     <span>{row.detail}</span>
                   </div>
                 );
               })}
+            </div>
           </div>
-        </div>
 
-        <div className="card operator-lane-card" id="evidence-surface-coverage">
-          <div className="card-header">
-            <div>
-              <div className="summary-label">Evidence everywhere</div>
-              <h3 className="card-title">Freshness coverage</h3>
-            </div>
-            <span className={`badge ${evidenceFreshnessBadge.className}`}>
-              {freshEvidenceRows.length}/{allEvidenceRows.length || 0}
-            </span>
-          </div>
-          <div className="operator-health-list">
-            {evidenceCoverageRows.map((row) => {
-              const badge = signalBadge(row.status);
-              return (
-                <Link
-                  key={row.name}
-                  className="operator-health-row operator-health-link"
-                  to={row.href}
-                >
-                  <span className={`badge ${badge.className}`}>{badge.label}</span>
-                  <span>{row.name}</span>
-                  <span>{row.detail}</span>
-                </Link>
-              );
-            })}
-          </div>
-        </div>
-
-        <div className="card operator-lane-card" id="release-trust">
-          <div className="card-header">
-            <div>
-              <div className="summary-label">Release trust</div>
-              <h3 className="card-title">What changed</h3>
-            </div>
-            <span className={`badge ${releaseBadge.className}`}>{releaseBadge.label}</span>
-          </div>
-          <div className="operator-kv-list">
-            <div>
-              <span>Current</span>
-              <strong>{currentVersion}</strong>
-            </div>
-            <div>
-              <span>Catalog</span>
-              <strong>{releaseCatalogVersion}</strong>
-            </div>
-            <div>
-              <span>Changes</span>
-              <strong>
-                {countValue(data.releaseDiff, ['changed_rule_count']) ||
-                  asArray(data.releaseDiff?.changed_rules).length}
-              </strong>
-            </div>
-          </div>
-          {data.releaseDiff?.operator_summary && (
-            <div className="summary-meta">{data.releaseDiff.operator_summary}</div>
-          )}
-          {release?.published_at && (
-            <div className="summary-meta">published {formatDateTime(release.published_at)}</div>
-          )}
-          <div className="operator-health-list" style={{ marginTop: 12 }}>
-            {releaseDoctorChecks.slice(0, 3).map((check) => (
-              <div key={check.id || check.detail} className="operator-health-row">
-                <span
-                  className={`badge ${check.status === 'pass' ? 'badge-ok' : check.status === 'fail' ? 'badge-err' : 'badge-warn'}`}
-                >
-                  {check.status || 'review'}
-                </span>
-                <span>{String(check.id || 'check').replaceAll('_', ' ')}</span>
-                <span>{check.detail || 'No detail'}</span>
+          <div className="card operator-lane-card" id="shift-handoff-workspace">
+            <div className="card-header">
+              <div>
+                <div className="summary-label">Shift continuity</div>
+                <h3 className="card-title">Handoff workspace</h3>
               </div>
-            ))}
-          </div>
-        </div>
-
-        <div className="card operator-lane-card">
-          <div className="card-header">
-            <div>
-              <div className="summary-label">Release doctor</div>
-              <h3 className="card-title">Acceptance readiness</h3>
+              <button type="button" className="btn btn-sm" onClick={exportShiftHandoff}>
+                Export handoff
+              </button>
             </div>
-            <span className={`badge ${releaseDoctorBadge.className}`}>
-              {releaseDoctorBadge.label}
-            </span>
-          </div>
-          <div className="operator-kv-list">
-            <div>
-              <span>Checks</span>
-              <strong>{releaseDoctorChecks.length || '—'}</strong>
+            <div className="operator-handoff-form">
+              <label className="form-label" htmlFor="handoff-owner">
+                Recipient
+              </label>
+              <input
+                id="handoff-owner"
+                className="form-input"
+                value={handoffOwner}
+                onChange={(event) => setHandoffOwner(event.target.value)}
+                placeholder={handoffRecipient}
+              />
+              <label className="form-label" htmlFor="handoff-note">
+                Shift note
+              </label>
+              <textarea
+                id="handoff-note"
+                className="form-textarea"
+                rows={3}
+                value={handoffNote}
+                onChange={(event) => setHandoffNote(event.target.value)}
+                placeholder="Open items, watchlist, and ownership changes"
+              />
             </div>
-            <div>
-              <span>Warnings</span>
-              <strong>{Number(data.releaseDoctor?.warn_count || 0)}</strong>
-            </div>
-            <div>
-              <span>Blockers</span>
-              <strong>{Number(data.releaseDoctor?.fail_count || 0)}</strong>
-            </div>
-            <div>
-              <span>Observability</span>
-              <strong>{releaseObservabilityStatus}</strong>
-            </div>
-            <div>
-              <span>Preflight</span>
-              <strong>{workflowPreflightStatus}</strong>
-            </div>
-            <div>
-              <span>Snapshot keep</span>
-              <strong>{data.snapshotPolicy?.keep_latest_per_kind || '—'}</strong>
-            </div>
-          </div>
-          <div className="summary-meta">
-            {data.releaseDoctor?.next_action ||
-              'Run release acceptance after launchpad signals load.'}
-          </div>
-        </div>
-
-        <div className="card operator-lane-card" id="release-gate-automation">
-          <div className="card-header">
-            <div>
-              <div className="summary-label">Release gate automation</div>
-              <h3 className="card-title">Ship gate checklist</h3>
-            </div>
-            <span className={`badge ${releaseGateBadge.className}`}>{releaseGateBadge.label}</span>
-          </div>
-          <div className="operator-health-list">
-            {releaseGateRows.map((row) => {
-              const badge = signalBadge(row.status);
-              return (
-                <div key={row.name} className="operator-health-row">
-                  <span className={`badge ${badge.className}`}>{badge.label}</span>
-                  <span>{row.name}</span>
-                  <span>{row.detail}</span>
-                </div>
-              );
-            })}
-          </div>
-          <div className="btn-group">
-            <Link className="btn btn-sm" to="/launchpad#deployment-confidence">
-              Deployment matrix
-            </Link>
-            <Link className="btn btn-sm" to="/reports?tab=evidence">
-              Evidence export
-            </Link>
-          </div>
-        </div>
-
-        <div className="card operator-lane-card" id="release-acceptance-report">
-          <div className="card-header">
-            <div>
-              <div className="summary-label">Release acceptance</div>
-              <h3 className="card-title">Acceptance report</h3>
-            </div>
-            <button type="button" className="btn btn-sm" onClick={exportReleaseAcceptance}>
-              Export report
-            </button>
-          </div>
-          <div className="operator-kv-list">
-            <div>
-              <span>Version</span>
-              <strong>{currentVersion}</strong>
-            </div>
-            <div>
-              <span>Blockers</span>
-              <strong>{releaseAcceptanceBlockers}</strong>
-            </div>
-            <div>
-              <span>Proof rows</span>
-              <strong>{allEvidenceRows.length}</strong>
-            </div>
-          </div>
-          <div className="operator-health-list">
-            {releaseAcceptanceRows.slice(0, 6).map((row) => {
-              const badge = signalBadge(row.status);
-              return (
-                <div key={row.name} className="operator-health-row">
-                  <span className={`badge ${badge.className}`}>{badge.label}</span>
-                  <span>{row.name}</span>
-                  <span>{row.detail}</span>
-                </div>
-              );
-            })}
-          </div>
-          <span className={`badge ${releaseAcceptanceBadge.className}`}>
-            {releaseAcceptanceBadge.label}
-          </span>
-        </div>
-
-        <div className="card operator-lane-card" id="operator-task-queue">
-          <div className="card-header">
-            <div>
-              <div className="summary-label">Operator task queue</div>
-              <h3 className="card-title">Next actions</h3>
-            </div>
-            <span className={`badge ${taskQueueBadge.className}`}>
-              {activeTaskCount || 'Clear'}
-            </span>
-          </div>
-          {operatorTaskRows.length === 0 ? (
-            <div className="empty empty-compact">No generated operator tasks right now.</div>
-          ) : (
-            <div className="operator-step-list">
-              {operatorTaskRows.map((task) => {
-                const badge = signalBadge(task.status);
+            <div className="operator-health-list">
+              {shiftHandoffRows.map((row) => {
+                const badge = signalBadge(row.status);
                 return (
                   <Link
-                    key={`${task.title}-${task.detail}`}
-                    className="operator-step"
-                    to={task.href}
+                    key={row.name}
+                    className="operator-health-row operator-health-link"
+                    to={row.href}
                   >
                     <span className={`badge ${badge.className}`}>{badge.label}</span>
+                    <span>{row.name}</span>
+                    <span>{row.detail}</span>
+                  </Link>
+                );
+              })}
+            </div>
+          </div>
+
+          <div className="card operator-lane-card" id="guided-incident-path">
+            <div className="card-header">
+              <div>
+                <div className="summary-label">Guided incident</div>
+                <h3 className="card-title">Triage path</h3>
+              </div>
+              <span
+                className={`badge ${guidedIncidentReadyCount === guidedIncidentSteps.length ? 'badge-ok' : 'badge-warn'}`}
+              >
+                {guidedIncidentReadyCount}/{guidedIncidentSteps.length}
+              </span>
+            </div>
+            <div className="operator-step-list">
+              {guidedIncidentSteps.map((step) => {
+                const badge = statusBadge(step.ready);
+                return (
+                  <Link key={step.title} className="operator-step" to={step.href}>
+                    <span className={`badge ${badge.className}`}>{badge.label}</span>
                     <span>
-                      <strong>{task.title}</strong>
-                      <span>{task.detail}</span>
-                      {(task.owner || task.slaAge || task.nextEscalationTarget) && (
-                        <span className="hint">
-                          {[
-                            task.owner ? `Owner: ${task.owner}` : null,
-                            task.slaAge ? `SLA: ${formatLabel(task.slaAge)}` : null,
-                            task.nextEscalationTarget
-                              ? `Escalate: ${task.nextEscalationTarget}`
-                              : null,
-                          ]
-                            .filter(Boolean)
-                            .join(' • ')}
-                        </span>
-                      )}
-                      {(task.recommendedAction || task.actionBlueprint?.method) && (
-                        <span className="hint">
-                          {[
-                            task.recommendedAction
-                              ? `Next action: ${formatLabel(task.recommendedAction)}`
-                              : null,
-                            task.actionBlueprint?.method
-                              ? `${formatLabel(task.actionBlueprint.method)} blueprint`
-                              : null,
-                          ]
-                            .filter(Boolean)
-                            .join(' • ')}
-                        </span>
-                      )}
-                      {task.dueAt && <span className="hint">Due: {formatDateTime(task.dueAt)}</span>}
+                      <strong>{step.title}</strong>
+                      <span>{step.detail}</span>
                     </span>
                   </Link>
                 );
               })}
             </div>
-          )}
-        </div>
+          </div>
 
-        <div className="card operator-lane-card">
-          <div className="card-header">
-            <div>
-              <div className="summary-label">Production assurance</div>
-              <h3 className="card-title">Next tranche signals</h3>
+          <div className="card operator-lane-card" id="canonical-operator-journeys">
+            <div className="card-header">
+              <div>
+                <div className="summary-label">Golden paths</div>
+                <h3 className="card-title">Canonical operator journeys</h3>
+              </div>
+              <span
+                className={`badge ${canonicalReadyCount === canonicalJourneys.length ? 'badge-ok' : 'badge-warn'}`}
+              >
+                {canonicalReadyCount}/{canonicalJourneys.length}
+              </span>
             </div>
-            <span className={`badge ${productionBadge.className}`}>{productionBadge.label}</span>
-          </div>
-          <div className="operator-health-list">
-            {productionSignals.slice(0, 6).map(([name, status, detail, evidenceSource]) => {
-              const badge = signalBadge(status);
-              const proofBadge = evidenceBadge(evidenceSource);
-              return (
-                <div key={name} className="operator-health-row">
-                  <span className={`badge ${badge.className}`}>{badge.label}</span>
-                  <span>{name}</span>
-                  <span>{detail}</span>
-                  {evidenceFreshness(evidenceSource) ? (
-                    <span className={`badge ${proofBadge.className}`}>{proofBadge.label}</span>
-                  ) : null}
-                </div>
-              );
-            })}
-          </div>
-          <div className="operator-kv-list" style={{ marginTop: 12 }}>
-            <div>
-              <span>Queue</span>
-              <strong>{workQueueCount}</strong>
-            </div>
-            <div>
-              <span>Retention peak</span>
-              <strong>{retentionPeak || '—'}%</strong>
-            </div>
-            <div>
-              <span>Blockers</span>
-              <strong>{productionBlockers}</strong>
-            </div>
-          </div>
-        </div>
-
-        <div className="card operator-lane-card" id="response-playbook-simulator">
-          <span id="response-simulator" aria-hidden="true" />
-          <div className="card-header">
-            <div>
-              <div className="summary-label">Response simulator</div>
-              <h3 className="card-title">Playbook blast-radius preview</h3>
-            </div>
-            <span className={`badge ${actionBadge.className}`}>{actionBadge.label}</span>
-          </div>
-          <div className="operator-health-list">
-            {responsePlaybookRows.map((row) => {
-              const badge = signalBadge(row.status);
-              return (
-                <div key={row.name} className="operator-health-row">
-                  <span className={`badge ${badge.className}`}>{badge.label}</span>
-                  <span>{row.name}</span>
-                  <span>{row.detail}</span>
-                </div>
-              );
-            })}
-          </div>
-          <div className="btn-group">
-            <Link className="btn btn-sm" to="/response-safety">
-              Open safety lab
-            </Link>
-            <Link className="btn btn-sm" to="/soc?focus=response">
-              Review queue
-            </Link>
-          </div>
-        </div>
-
-        <div className="card operator-lane-card">
-          <div className="card-header">
-            <div>
-              <div className="summary-label">Explainability</div>
-              <h3 className="card-title">Alert-to-evidence path</h3>
-            </div>
-            <Link className="btn btn-sm" to="/monitor">
-              Open alerts
-            </Link>
-          </div>
-          <div className="operator-command-grid">
-            <Link to="/monitor" className="operator-command-tile">
-              Alert drawer
-            </Link>
-            <Link to="/detection?intent=run-hunt" className="operator-command-tile">
-              Run hunt
-            </Link>
-            <Link to="/reports?tab=evidence" className="operator-command-tile">
-              Evidence
-            </Link>
-          </div>
-        </div>
-
-        <div className="card operator-lane-card">
-          <div className="card-header">
-            <div>
-              <div className="summary-label">Detection quality</div>
-              <h3 className="card-title">Promotion confidence</h3>
-            </div>
-            <span className={`badge ${detectionBadge.className}`}>{detectionBadge.label}</span>
-          </div>
-          <div className="operator-kv-list">
-            <div>
-              <span>Replay corpus</span>
-              <strong>{data.replayCorpus?.status || 'pending'}</strong>
-            </div>
-            <div>
-              <span>FP feedback</span>
-              <strong>{Math.round(fpRate * 100)}%</strong>
-            </div>
-            <div>
-              <span>Rules tracked</span>
-              <strong>{detectionRules || '—'}</strong>
-            </div>
-          </div>
-          <Link className="btn btn-sm" to="/detection?panel=quality">
-            Open quality score
-          </Link>
-        </div>
-
-        <div className="card operator-lane-card">
-          <div className="card-header">
-            <div>
-              <div className="summary-label">Live stream</div>
-              <h3 className="card-title">Promotion guard</h3>
-            </div>
-            <span className={`badge ${streamBadge.className}`}>{streamBadge.label}</span>
-          </div>
-          <div className="operator-kv-list">
-            <div>
-              <span>Readiness</span>
-              <strong>{streamScore || '—'}</strong>
-            </div>
-            <div>
-              <span>Histogram</span>
-              <strong>{histogramTotal}</strong>
-            </div>
-            <div>
-              <span>Contract drift</span>
-              <strong>{contractDrift}</strong>
-            </div>
-          </div>
-          {data.streamReadiness?.next_action && (
-            <div className="summary-meta">{data.streamReadiness.next_action}</div>
-          )}
-        </div>
-
-        <div className="card operator-lane-card">
-          <div className="card-header">
-            <div>
-              <div className="summary-label">Thread signal depth</div>
-              <h3 className="card-title">Process evidence</h3>
-            </div>
-            <span className={`badge ${threadFindingCount > 0 ? 'badge-warn' : 'badge-ok'}`}>
-              {threadFindingCount > 0 ? `${threadFindingCount} review` : 'Baseline'}
-            </span>
-          </div>
-          <div className="operator-kv-list">
-            <div>
-              <span>Runtime</span>
-              <strong>{threadStatus}</strong>
-            </div>
-            <div>
-              <span>Findings</span>
-              <strong>{threadFindingCount}</strong>
-            </div>
-            <div>
-              <span>Next pivot</span>
-              <strong>{threadFindingCount > 0 ? 'Process drawer' : 'Baseline'}</strong>
-            </div>
-          </div>
-          <Link className="btn btn-sm" to="/monitor?monitorTab=processes">
-            Open processes
-          </Link>
-        </div>
-
-        <div className="card operator-lane-card">
-          <div className="card-header">
-            <div>
-              <div className="summary-label">Command palette</div>
-              <h3 className="card-title">Operator accelerators</h3>
-            </div>
-            <span className="badge badge-info">Cmd+K</span>
-          </div>
-          <div className="operator-command-grid">
-            {COMMAND_ACCELERATORS.map((command) => (
-              <Link key={command.title} to={command.href} className="operator-command-tile">
-                <span>{command.title}</span>
-                <small>{command.shortcut}</small>
-              </Link>
-            ))}
-          </div>
-        </div>
-
-        <div className="card operator-lane-card" id="role-home-screen">
-          <div className="card-header">
-            <div>
-              <div className="summary-label">Role home</div>
-              <h3 className="card-title">{roleHome.title}</h3>
-            </div>
-            <span className="badge badge-info">{role}</span>
-          </div>
-          <div className="summary-meta">{roleHome.summary}</div>
-          <div className="operator-command-grid">
-            {roleHome.rows.map((label) => (
-              <Link key={label} to={roleHome.primaryHref} className="operator-command-tile">
-                <span>{label}</span>
-                <small>{groups.length ? groups.slice(0, 2).join(', ') : userId}</small>
-              </Link>
-            ))}
-          </div>
-          <div className="btn-group">
-            <Link className="btn btn-sm" to={roleHome.primaryHref}>
-              Primary view
-            </Link>
-            <Link className="btn btn-sm" to={roleHome.secondaryHref}>
-              Secondary view
-            </Link>
-          </div>
-        </div>
-
-        <div className="card operator-lane-card" id="safe-assistant">
-          <div className="card-header">
-            <div>
-              <div className="summary-label">Operator Assistant</div>
-              <h3 className="card-title">Safe assistant boundaries</h3>
-            </div>
-            <span
-              className={`badge ${assistantMode === 'retrieval-only' ? 'badge-info' : 'badge-warn'}`}
-            >
-              {assistantMode}
-            </span>
-          </div>
-          <div className="operator-health-list">
-            {assistantBoundaryRows.map((row) => {
-              const badge = signalBadge(row.status);
-              return (
-                <Link
-                  key={row.name}
-                  className="operator-health-row operator-health-link"
-                  to={row.href}
-                >
-                  <span className={`badge ${badge.className}`}>{badge.label}</span>
-                  <span>{row.name}</span>
-                  <span>{row.detail}</span>
-                </Link>
-              );
-            })}
-          </div>
-          <Link className="btn btn-sm" to="/assistant?source=launchpad-safe-boundary">
-            Open assistant
-          </Link>
-        </div>
-
-        <div className="card operator-lane-card" id="visual-regression-gate">
-          <div className="card-header">
-            <div>
-              <div className="summary-label">Visual regression</div>
-              <h3 className="card-title">Screenshot gate</h3>
-            </div>
-            <span className="badge badge-ok">Ready</span>
-          </div>
-          <div className="operator-health-list">
-            {visualGateRows.map((row) => {
-              const badge = signalBadge(row.status);
-              return (
-                <div key={row.name} className="operator-health-row">
-                  <span className={`badge ${badge.className}`}>{badge.label}</span>
-                  <span>{row.name}</span>
-                  <span>{row.detail}</span>
-                </div>
-              );
-            })}
-          </div>
-          <div className="operator-kv-list">
-            <div>
-              <span>Primary route</span>
-              <strong>Launchpad</strong>
-            </div>
-            <div>
-              <span>Artifact type</span>
-              <strong>Playwright screenshot</strong>
-            </div>
-          </div>
-        </div>
-
-        <div className="card operator-lane-card">
-          <div className="card-header">
-            <div>
-              <div className="summary-label">Operational snapshots</div>
-              <h3 className="card-title">Persisted evidence</h3>
-            </div>
-            <span className={`badge ${snapshotRows.length ? 'badge-ok' : 'badge-info'}`}>
-              {snapshotRows.length || 'Live'}
-            </span>
-          </div>
-          {snapshotRows.length === 0 ? (
-            <div className="empty empty-compact">
-              Snapshots are generated as live signals refresh.
-            </div>
-          ) : (
             <div className="operator-health-list">
-              {snapshotRows.slice(0, 5).map(([name, snapshot]) => {
-                const proofBadge = evidenceBadge(snapshot);
+              {canonicalJourneys.map((journey) => {
+                const badge = signalBadge(journey.status);
                 return (
-                  <div
-                    key={`${name}-${snapshot.digest || snapshot.storage_key}`}
-                    className="operator-health-row"
+                  <Link
+                    key={journey.name}
+                    className="operator-health-row operator-health-link"
+                    to={journey.href}
                   >
-                    <span
-                      className={`badge ${snapshot.verified || snapshot.persisted ? 'badge-ok' : 'badge-warn'}`}
-                    >
-                      {snapshot.verified ? 'Verified' : snapshot.persisted ? 'Saved' : 'Inline'}
+                    <span className={`badge ${badge.className}`}>{badge.label}</span>
+                    <span>{journey.name}</span>
+                    <span>{journey.detail}</span>
+                  </Link>
+                );
+              })}
+            </div>
+          </div>
+
+          <div className="card operator-lane-card" id="incident-timeline-builder">
+            <div className="card-header">
+              <div>
+                <div className="summary-label">Incident reconstruction</div>
+                <h3 className="card-title">Timeline builder</h3>
+              </div>
+              <button type="button" className="btn btn-sm" onClick={exportTimelineDraft}>
+                Export draft
+              </button>
+            </div>
+            <div className="operator-health-list">
+              {incidentTimelineRows.map((row) => {
+                const badge = signalBadge(row.status);
+                return (
+                  <Link
+                    key={row.name}
+                    className="operator-health-row operator-health-link"
+                    to={row.href}
+                  >
+                    <span className={`badge ${badge.className}`}>{badge.label}</span>
+                    <span>{row.name}</span>
+                    <span>{row.detail}</span>
+                  </Link>
+                );
+              })}
+            </div>
+            <div className="operator-kv-list">
+              <div>
+                <span>Replay incidents</span>
+                <strong>{incidentReplayCount || '—'}</strong>
+              </div>
+              <div>
+                <span>Fresh evidence</span>
+                <strong>{freshEvidenceRows.length}</strong>
+              </div>
+              <div>
+                <span>Handoff target</span>
+                <strong>Reports</strong>
+              </div>
+            </div>
+          </div>
+
+          <div className="card operator-lane-card">
+            <div className="card-header">
+              <div>
+                <div className="summary-label">Guided first run</div>
+                <h3 className="card-title">Mission path</h3>
+              </div>
+              <span className={`badge ${readyCount === steps.length ? 'badge-ok' : 'badge-warn'}`}>
+                {readyCount}/{steps.length}
+              </span>
+            </div>
+            <div className="operator-step-list">
+              {steps.map((step) => {
+                const badge = statusBadge(step.ready);
+                return (
+                  <Link key={step.key} className="operator-step" to={step.href}>
+                    <span className={`badge ${badge.className}`}>{badge.label}</span>
+                    <span>
+                      <strong>{step.label}</strong>
+                      <span>{step.detail}</span>
                     </span>
+                  </Link>
+                );
+              })}
+            </div>
+          </div>
+
+          <div className="card operator-lane-card">
+            <div className="card-header">
+              <div>
+                <div className="summary-label">Release verification</div>
+                <h3 className="card-title">Clean release and deployment</h3>
+              </div>
+              <span className={`badge ${verificationBadge.className}`}>
+                {verificationBadge.label}
+              </span>
+            </div>
+            <div className="operator-health-list">
+              {releaseVerificationSignals.map(([name, status, detail, evidenceSource]) => {
+                const badge = signalBadge(status);
+                const proofBadge = evidenceBadge(evidenceSource);
+                return (
+                  <div key={name} className="operator-health-row">
+                    <span className={`badge ${badge.className}`}>{badge.label}</span>
                     <span>{name}</span>
-                    <span>{String(snapshot.digest || '').slice(0, 12)}</span>
-                    {evidenceFreshness(snapshot) ? (
+                    <span>{detail}</span>
+                    <span className={`badge ${proofBadge.className}`}>{proofBadge.label}</span>
+                  </div>
+                );
+              })}
+            </div>
+            <div className="operator-kv-list" style={{ marginTop: 12 }}>
+              <div>
+                <span>Target</span>
+                <strong>{data.cleanReleaseCut?.target_version || '—'}</strong>
+              </div>
+              <div>
+                <span>Container</span>
+                <strong>{data.containerParity?.status || 'unknown'}</strong>
+              </div>
+              <div>
+                <span>Validation packs</span>
+                <strong>{countValue(data.validationPacks, ['pack_count'])}</strong>
+              </div>
+            </div>
+            <div className="operator-kv-list" style={{ marginTop: 12 }}>
+              <div>
+                <span>Artifact rows</span>
+                <strong>{releaseVerificationRows.length || '—'}</strong>
+              </div>
+              <div>
+                <span>Install plans</span>
+                <strong>{deploymentPlans.length || '—'}</strong>
+              </div>
+              <div>
+                <span>Quality score</span>
+                <strong>{dataQualityScore || '—'}</strong>
+              </div>
+              <div>
+                <span>Load gates</span>
+                <strong>{loadGateRows.length || '—'}</strong>
+              </div>
+              <div>
+                <span>Fresh proof</span>
+                <strong>
+                  {releaseFreshEvidenceCount}/{releaseVerificationSignals.length}
+                </strong>
+              </div>
+              <div>
+                <span>Proof collected</span>
+                <strong>
+                  {formatDateTime(data.releaseVerification?.evidence_freshness?.collected_at) ||
+                    '—'}
+                </strong>
+              </div>
+              <div>
+                <span>Dry-run actions</span>
+                <strong>{automationBlueprints.length || '—'}</strong>
+              </div>
+              <div>
+                <span>Executable packs</span>
+                <strong>{executablePacks || '—'}</strong>
+              </div>
+            </div>
+          </div>
+
+          <div className="card operator-lane-card" id="deployment-confidence">
+            <div className="card-header">
+              <div>
+                <div className="summary-label">Deployment confidence</div>
+                <h3 className="card-title">Ship readiness matrix</h3>
+              </div>
+              <span className={`badge ${deploymentConfidenceBadge.className}`}>
+                {deploymentConfidenceBadge.label}
+              </span>
+            </div>
+            <div className="deployment-confidence-matrix">
+              {deploymentConfidenceRows.map(([name, status, detail, evidenceSource]) => {
+                const badge = signalBadge(status);
+                const proofBadge = evidenceBadge(evidenceSource);
+                return (
+                  <div key={name} className="deployment-confidence-row">
+                    <span className={`badge ${badge.className}`}>{badge.label}</span>
+                    <strong>{name}</strong>
+                    <span>{detail}</span>
+                    <span className={`badge ${proofBadge.className}`}>{proofBadge.label}</span>
+                  </div>
+                );
+              })}
+            </div>
+            <div className="operator-kv-list" style={{ marginTop: 12 }}>
+              <div>
+                <span>Blockers</span>
+                <strong>{deploymentConfidenceBlockers}</strong>
+              </div>
+              <div>
+                <span>Fresh proof</span>
+                <strong>
+                  {releaseFreshEvidenceCount}/{releaseVerificationSignals.length}
+                </strong>
+              </div>
+              <div>
+                <span>Install plans</span>
+                <strong>{deploymentPlans.length || '—'}</strong>
+              </div>
+            </div>
+          </div>
+
+          <div className="card operator-lane-card">
+            <div className="card-header">
+              <div>
+                <div className="summary-label">Integration health</div>
+                <h3 className="card-title">External systems</h3>
+              </div>
+              <Link className="btn btn-sm" to="/settings?tab=integrations">
+                Open
+              </Link>
+            </div>
+            <div className="operator-health-list">
+              {integrations.map((row) => {
+                const badge = statusBadge(row.ok);
+                return (
+                  <div key={row.name} className="operator-health-row">
+                    <span className={`badge ${badge.className}`}>{badge.label}</span>
+                    <span>{row.name}</span>
+                    <span>{row.detail}</span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          <div className="card operator-lane-card" id="collector-onboarding-center">
+            <div className="card-header">
+              <div>
+                <div className="summary-label">Collector onboarding</div>
+                <h3 className="card-title">Telemetry lanes</h3>
+              </div>
+              <span className={`badge ${collectorOnboardingBadge.className}`}>
+                {collectorReadyCount}/{collectorOnboardingRows.length}
+              </span>
+            </div>
+            <div className="operator-health-list">
+              {collectorOnboardingRows.map((row) => {
+                const badge = signalBadge(row.status);
+                return (
+                  <Link
+                    key={row.name}
+                    className="operator-health-row operator-health-link"
+                    to={row.href}
+                  >
+                    <span className={`badge ${badge.className}`}>{badge.label}</span>
+                    <span>{row.name}</span>
+                    <span>{row.detail}</span>
+                  </Link>
+                );
+              })}
+            </div>
+            <div className="operator-kv-list">
+              <div>
+                <span>Configured collectors</span>
+                <strong>{collectorItems.length}</strong>
+              </div>
+              <div>
+                <span>Healthy lanes</span>
+                <strong>{collectorReadyCount}</strong>
+              </div>
+            </div>
+          </div>
+
+          <div className="card operator-lane-card" id="fleet-health-drilldown">
+            <div className="card-header">
+              <div>
+                <div className="summary-label">Fleet health</div>
+                <h3 className="card-title">Agent drilldown</h3>
+              </div>
+              <span className={`badge ${fleetHealthBadge.className}`}>
+                {fleetHealthBadge.label}
+              </span>
+            </div>
+            <div className="operator-health-list">
+              {fleetDrilldownRows.map((row) => {
+                const badge = signalBadge(row.status);
+                return (
+                  <div key={row.name} className="operator-health-row">
+                    <span className={`badge ${badge.className}`}>{badge.label}</span>
+                    <span>{row.name}</span>
+                    <span>{row.detail}</span>
+                  </div>
+                );
+              })}
+            </div>
+            <div className="btn-group">
+              <Link className="btn btn-sm" to="/fleet?status=offline">
+                Offline agents
+              </Link>
+              <Link className="btn btn-sm" to="/fleet?fleetTab=updates&updatesPanel=health">
+                Deployment health
+              </Link>
+            </div>
+          </div>
+
+          <div className="card operator-lane-card" id="fleet-risk-heatmap">
+            <div className="card-header">
+              <div>
+                <div className="summary-label">Fleet risk</div>
+                <h3 className="card-title">Agent risk heatmap</h3>
+              </div>
+              <span className={`badge ${fleetRiskBadge.className}`}>{fleetRiskBadge.label}</span>
+            </div>
+            <div className="operator-risk-list">
+              {riskRows.map((row) => {
+                const badge = riskBadge(row.score);
+                return (
+                  <Link key={row.name} className="operator-risk-row" to={row.href}>
+                    <span className={`badge ${badge.className}`}>{row.score}</span>
+                    <span>
+                      <strong>{row.name}</strong>
+                      <small>{row.detail}</small>
+                    </span>
+                    <span className="operator-risk-track" aria-hidden="true">
+                      <span style={{ width: `${Math.max(row.score, 4)}%` }} />
+                    </span>
+                  </Link>
+                );
+              })}
+            </div>
+          </div>
+
+          <div className="card operator-lane-card" id="evidence-freshness">
+            <div className="card-header">
+              <div>
+                <div className="summary-label">Evidence freshness</div>
+                <h3 className="card-title">Proof freshness rollup</h3>
+              </div>
+              <span className={`badge ${evidenceFreshnessBadge.className}`}>
+                {evidenceFreshnessBadge.label}
+              </span>
+            </div>
+            <div className="operator-kv-list">
+              <div>
+                <span>Fresh proof</span>
+                <strong>
+                  {freshEvidenceRows.length}/{allEvidenceRows.length || 0}
+                </strong>
+              </div>
+              <div>
+                <span>Stale proof</span>
+                <strong>{staleEvidenceRows.length}</strong>
+              </div>
+              <div>
+                <span>Snapshots</span>
+                <strong>{snapshotRows.length || '—'}</strong>
+              </div>
+            </div>
+            <div className="operator-kv-list" style={{ marginTop: 12 }}>
+              {(evidenceModeRows.length ? evidenceModeRows : [{ mode: 'pending', count: 0 }]).map(
+                (row) => (
+                  <div key={row.mode}>
+                    <span>{row.mode}</span>
+                    <strong>{row.count}</strong>
+                  </div>
+                ),
+              )}
+            </div>
+            <div className="operator-health-list">
+              {(staleEvidenceRows.length ? staleEvidenceRows : allEvidenceRows)
+                .slice(0, 4)
+                .map((row) => {
+                  const proofBadge = evidenceBadge(row.evidenceSource);
+                  return (
+                    <div key={`${row.name}-${row.detail}`} className="operator-health-row">
+                      <span className={`badge ${proofBadge.className}`}>{proofBadge.label}</span>
+                      <span>{row.name}</span>
+                      <span>{row.detail}</span>
+                    </div>
+                  );
+                })}
+            </div>
+          </div>
+
+          <div className="card operator-lane-card" id="evidence-surface-coverage">
+            <div className="card-header">
+              <div>
+                <div className="summary-label">Evidence everywhere</div>
+                <h3 className="card-title">Freshness coverage</h3>
+              </div>
+              <span className={`badge ${evidenceFreshnessBadge.className}`}>
+                {freshEvidenceRows.length}/{allEvidenceRows.length || 0}
+              </span>
+            </div>
+            <div className="operator-health-list">
+              {evidenceCoverageRows.map((row) => {
+                const badge = signalBadge(row.status);
+                return (
+                  <Link
+                    key={row.name}
+                    className="operator-health-row operator-health-link"
+                    to={row.href}
+                  >
+                    <span className={`badge ${badge.className}`}>{badge.label}</span>
+                    <span>{row.name}</span>
+                    <span>{row.detail}</span>
+                  </Link>
+                );
+              })}
+            </div>
+          </div>
+
+          <div className="card operator-lane-card" id="release-trust">
+            <div className="card-header">
+              <div>
+                <div className="summary-label">Release trust</div>
+                <h3 className="card-title">What changed</h3>
+              </div>
+              <span className={`badge ${releaseBadge.className}`}>{releaseBadge.label}</span>
+            </div>
+            <div className="operator-kv-list">
+              <div>
+                <span>Current</span>
+                <strong>{currentVersion}</strong>
+              </div>
+              <div>
+                <span>Catalog</span>
+                <strong>{releaseCatalogVersion}</strong>
+              </div>
+              <div>
+                <span>Changes</span>
+                <strong>
+                  {countValue(data.releaseDiff, ['changed_rule_count']) ||
+                    asArray(data.releaseDiff?.changed_rules).length}
+                </strong>
+              </div>
+            </div>
+            {data.releaseDiff?.operator_summary && (
+              <div className="summary-meta">{data.releaseDiff.operator_summary}</div>
+            )}
+            {release?.published_at && (
+              <div className="summary-meta">published {formatDateTime(release.published_at)}</div>
+            )}
+            <div className="operator-health-list" style={{ marginTop: 12 }}>
+              {releaseDoctorChecks.slice(0, 3).map((check) => (
+                <div key={check.id || check.detail} className="operator-health-row">
+                  <span
+                    className={`badge ${check.status === 'pass' ? 'badge-ok' : check.status === 'fail' ? 'badge-err' : 'badge-warn'}`}
+                  >
+                    {check.status || 'review'}
+                  </span>
+                  <span>{String(check.id || 'check').replaceAll('_', ' ')}</span>
+                  <span>{check.detail || 'No detail'}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="card operator-lane-card">
+            <div className="card-header">
+              <div>
+                <div className="summary-label">Release doctor</div>
+                <h3 className="card-title">Acceptance readiness</h3>
+              </div>
+              <span className={`badge ${releaseDoctorBadge.className}`}>
+                {releaseDoctorBadge.label}
+              </span>
+            </div>
+            <div className="operator-kv-list">
+              <div>
+                <span>Checks</span>
+                <strong>{releaseDoctorChecks.length || '—'}</strong>
+              </div>
+              <div>
+                <span>Warnings</span>
+                <strong>{Number(data.releaseDoctor?.warn_count || 0)}</strong>
+              </div>
+              <div>
+                <span>Blockers</span>
+                <strong>{Number(data.releaseDoctor?.fail_count || 0)}</strong>
+              </div>
+              <div>
+                <span>Observability</span>
+                <strong>{releaseObservabilityStatus}</strong>
+              </div>
+              <div>
+                <span>Preflight</span>
+                <strong>{workflowPreflightStatus}</strong>
+              </div>
+              <div>
+                <span>Snapshot keep</span>
+                <strong>{data.snapshotPolicy?.keep_latest_per_kind || '—'}</strong>
+              </div>
+            </div>
+            <div className="summary-meta">
+              {data.releaseDoctor?.next_action ||
+                'Run release acceptance after launchpad signals load.'}
+            </div>
+          </div>
+
+          <div className="card operator-lane-card" id="release-gate-automation">
+            <div className="card-header">
+              <div>
+                <div className="summary-label">Release gate automation</div>
+                <h3 className="card-title">Ship gate checklist</h3>
+              </div>
+              <span className={`badge ${releaseGateBadge.className}`}>
+                {releaseGateBadge.label}
+              </span>
+            </div>
+            <div className="operator-health-list">
+              {releaseGateRows.map((row) => {
+                const badge = signalBadge(row.status);
+                return (
+                  <div key={row.name} className="operator-health-row">
+                    <span className={`badge ${badge.className}`}>{badge.label}</span>
+                    <span>{row.name}</span>
+                    <span>{row.detail}</span>
+                  </div>
+                );
+              })}
+            </div>
+            <div className="btn-group">
+              <Link className="btn btn-sm" to="/launchpad#deployment-confidence">
+                Deployment matrix
+              </Link>
+              <Link className="btn btn-sm" to="/reports?tab=evidence">
+                Evidence export
+              </Link>
+            </div>
+          </div>
+
+          <div className="card operator-lane-card" id="release-acceptance-report">
+            <div className="card-header">
+              <div>
+                <div className="summary-label">Release acceptance</div>
+                <h3 className="card-title">Acceptance report</h3>
+              </div>
+              <button type="button" className="btn btn-sm" onClick={exportReleaseAcceptance}>
+                Export report
+              </button>
+            </div>
+            <div className="operator-kv-list">
+              <div>
+                <span>Version</span>
+                <strong>{currentVersion}</strong>
+              </div>
+              <div>
+                <span>Blockers</span>
+                <strong>{releaseAcceptanceBlockers}</strong>
+              </div>
+              <div>
+                <span>Proof rows</span>
+                <strong>{allEvidenceRows.length}</strong>
+              </div>
+            </div>
+            <div className="operator-health-list">
+              {releaseAcceptanceRows.slice(0, 6).map((row) => {
+                const badge = signalBadge(row.status);
+                return (
+                  <div key={row.name} className="operator-health-row">
+                    <span className={`badge ${badge.className}`}>{badge.label}</span>
+                    <span>{row.name}</span>
+                    <span>{row.detail}</span>
+                  </div>
+                );
+              })}
+            </div>
+            <span className={`badge ${releaseAcceptanceBadge.className}`}>
+              {releaseAcceptanceBadge.label}
+            </span>
+          </div>
+
+          <div className="card operator-lane-card" id="operator-task-queue">
+            <div className="card-header">
+              <div>
+                <div className="summary-label">Operator task queue</div>
+                <h3 className="card-title">Next actions</h3>
+              </div>
+              <span className={`badge ${taskQueueBadge.className}`}>
+                {activeTaskCount || 'Clear'}
+              </span>
+            </div>
+            {operatorTaskRows.length === 0 ? (
+              <div className="empty empty-compact">No generated operator tasks right now.</div>
+            ) : (
+              <div className="operator-step-list">
+                {operatorTaskRows.map((task) => {
+                  const badge = signalBadge(task.status);
+                  return (
+                    <Link
+                      key={`${task.title}-${task.detail}`}
+                      className="operator-step"
+                      to={task.href}
+                    >
+                      <span className={`badge ${badge.className}`}>{badge.label}</span>
+                      <span>
+                        <strong>{task.title}</strong>
+                        <span>{task.detail}</span>
+                        {(task.owner || task.slaAge || task.nextEscalationTarget) && (
+                          <span className="hint">
+                            {[
+                              task.owner ? `Owner: ${task.owner}` : null,
+                              task.slaAge ? `SLA: ${formatLabel(task.slaAge)}` : null,
+                              task.nextEscalationTarget
+                                ? `Escalate: ${task.nextEscalationTarget}`
+                                : null,
+                            ]
+                              .filter(Boolean)
+                              .join(' • ')}
+                          </span>
+                        )}
+                        {(task.recommendedAction || task.actionBlueprint?.method) && (
+                          <span className="hint">
+                            {[
+                              task.recommendedAction
+                                ? `Next action: ${formatLabel(task.recommendedAction)}`
+                                : null,
+                              task.actionBlueprint?.method
+                                ? `${formatLabel(task.actionBlueprint.method)} blueprint`
+                                : null,
+                            ]
+                              .filter(Boolean)
+                              .join(' • ')}
+                          </span>
+                        )}
+                        {task.dueAt && (
+                          <span className="hint">Due: {formatDateTime(task.dueAt)}</span>
+                        )}
+                      </span>
+                    </Link>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
+          <div className="card operator-lane-card">
+            <div className="card-header">
+              <div>
+                <div className="summary-label">Production assurance</div>
+                <h3 className="card-title">Next tranche signals</h3>
+              </div>
+              <span className={`badge ${productionBadge.className}`}>{productionBadge.label}</span>
+            </div>
+            <div className="operator-health-list">
+              {productionSignals.slice(0, 6).map(([name, status, detail, evidenceSource]) => {
+                const badge = signalBadge(status);
+                const proofBadge = evidenceBadge(evidenceSource);
+                return (
+                  <div key={name} className="operator-health-row">
+                    <span className={`badge ${badge.className}`}>{badge.label}</span>
+                    <span>{name}</span>
+                    <span>{detail}</span>
+                    {evidenceFreshness(evidenceSource) ? (
                       <span className={`badge ${proofBadge.className}`}>{proofBadge.label}</span>
                     ) : null}
                   </div>
                 );
               })}
             </div>
-          )}
-          <div className="summary-meta" style={{ marginTop: 10 }}>
-            {data.operationalSnapshots?.count ?? snapshotRows.length} indexed •{' '}
-            {data.operationalSnapshots?.verified_count ?? snapshotRows.length} verified
+            <div className="operator-kv-list" style={{ marginTop: 12 }}>
+              <div>
+                <span>Queue</span>
+                <strong>{workQueueCount}</strong>
+              </div>
+              <div>
+                <span>Retention peak</span>
+                <strong>{retentionPeak || '—'}%</strong>
+              </div>
+              <div>
+                <span>Blockers</span>
+                <strong>{productionBlockers}</strong>
+              </div>
+            </div>
           </div>
-        </div>
 
-        <div className="card operator-lane-card" id="demo-mode">
-          <div className="card-header">
-            <div>
-              <div className="summary-label">Demo mode</div>
-              <h3 className="card-title">Evaluation scenarios</h3>
+          <div className="card operator-lane-card" id="response-playbook-simulator">
+            <span id="response-simulator" aria-hidden="true" />
+            <div className="card-header">
+              <div>
+                <div className="summary-label">Response simulator</div>
+                <h3 className="card-title">Playbook blast-radius preview</h3>
+              </div>
+              <span className={`badge ${actionBadge.className}`}>{actionBadge.label}</span>
+            </div>
+            <div className="operator-health-list">
+              {responsePlaybookRows.map((row) => {
+                const badge = signalBadge(row.status);
+                return (
+                  <div key={row.name} className="operator-health-row">
+                    <span className={`badge ${badge.className}`}>{badge.label}</span>
+                    <span>{row.name}</span>
+                    <span>{row.detail}</span>
+                  </div>
+                );
+              })}
             </div>
             <div className="btn-group">
-              <button
-                type="button"
-                className="btn btn-sm"
-                onClick={resetDemoLab}
-                disabled={demoResetBusy}
-              >
-                {demoResetBusy ? 'Resetting...' : 'Reset'}
-              </button>
-              <button
-                type="button"
-                className="btn btn-sm btn-primary"
-                onClick={startDemoLab}
-                disabled={demoBusy}
-              >
-                {demoBusy ? 'Starting...' : 'Start'}
-              </button>
+              <Link className="btn btn-sm" to="/response-safety">
+                Open safety lab
+              </Link>
+              <Link className="btn btn-sm" to="/soc?focus=response">
+                Review queue
+              </Link>
             </div>
           </div>
-          <div className="operator-demo-list">
-            {demoScenarios.map((scenario) => (
-              <span key={scenario}>{String(scenario).replaceAll('_', ' ')}</span>
-            ))}
-          </div>
-          <div className="operator-kv-list">
-            <div>
-              <span>Scenario count</span>
-              <strong>{demoScenarios.length}</strong>
-            </div>
-            <div>
-              <span>Sample alerts</span>
-              <strong>{demoSampleAlerts}</strong>
-            </div>
-            <div>
-              <span>Handoff route</span>
-              <strong>Reports evidence</strong>
-            </div>
-          </div>
-          <div className="summary-meta">
-            {data.demoStatus?.status || 'available'} • {demoSampleAlerts} sample alerts
-          </div>
-        </div>
 
-        <div className="card operator-lane-card">
-          <div className="card-header">
-            <div>
-              <div className="summary-label">Partial-state resilience</div>
-              <h3 className="card-title">Runtime confidence</h3>
+          <div className="card operator-lane-card">
+            <div className="card-header">
+              <div>
+                <div className="summary-label">Explainability</div>
+                <h3 className="card-title">Alert-to-evidence path</h3>
+              </div>
+              <Link className="btn btn-sm" to="/monitor">
+                Open alerts
+              </Link>
             </div>
-            <span className={`badge ${errorRows.length === 0 ? 'badge-ok' : 'badge-warn'}`}>
-              {errorRows.length === 0 ? 'Clean' : `${errorRows.length} degraded`}
-            </span>
+            <div className="operator-command-grid">
+              <Link to="/monitor" className="operator-command-tile">
+                Alert drawer
+              </Link>
+              <Link to="/detection?intent=run-hunt" className="operator-command-tile">
+                Run hunt
+              </Link>
+              <Link to="/reports?tab=evidence" className="operator-command-tile">
+                Evidence
+              </Link>
+            </div>
           </div>
-          {errorRows.length === 0 ? (
-            <div className="empty empty-compact">All launchpad signals loaded.</div>
-          ) : (
-            <div className="operator-health-list">
-              {errorRows.map((row) => (
-                <div key={row.key} className="operator-health-row">
-                  <span className="badge badge-warn">Partial</span>
-                  <span>{row.key}</span>
-                  <span>{row.message}</span>
-                </div>
+
+          <div className="card operator-lane-card">
+            <div className="card-header">
+              <div>
+                <div className="summary-label">Detection quality</div>
+                <h3 className="card-title">Promotion confidence</h3>
+              </div>
+              <span className={`badge ${detectionBadge.className}`}>{detectionBadge.label}</span>
+            </div>
+            <div className="operator-kv-list">
+              <div>
+                <span>Replay corpus</span>
+                <strong>{data.replayCorpus?.status || 'pending'}</strong>
+              </div>
+              <div>
+                <span>FP feedback</span>
+                <strong>{Math.round(fpRate * 100)}%</strong>
+              </div>
+              <div>
+                <span>Rules tracked</span>
+                <strong>{detectionRules || '—'}</strong>
+              </div>
+            </div>
+            <Link className="btn btn-sm" to="/detection?panel=quality">
+              Open quality score
+            </Link>
+          </div>
+
+          <div className="card operator-lane-card">
+            <div className="card-header">
+              <div>
+                <div className="summary-label">Live stream</div>
+                <h3 className="card-title">Promotion guard</h3>
+              </div>
+              <span className={`badge ${streamBadge.className}`}>{streamBadge.label}</span>
+            </div>
+            <div className="operator-kv-list">
+              <div>
+                <span>Readiness</span>
+                <strong>{streamScore || '—'}</strong>
+              </div>
+              <div>
+                <span>Histogram</span>
+                <strong>{histogramTotal}</strong>
+              </div>
+              <div>
+                <span>Contract drift</span>
+                <strong>{contractDrift}</strong>
+              </div>
+            </div>
+            {data.streamReadiness?.next_action && (
+              <div className="summary-meta">{data.streamReadiness.next_action}</div>
+            )}
+          </div>
+
+          <div className="card operator-lane-card">
+            <div className="card-header">
+              <div>
+                <div className="summary-label">Thread signal depth</div>
+                <h3 className="card-title">Process evidence</h3>
+              </div>
+              <span className={`badge ${threadFindingCount > 0 ? 'badge-warn' : 'badge-ok'}`}>
+                {threadFindingCount > 0 ? `${threadFindingCount} review` : 'Baseline'}
+              </span>
+            </div>
+            <div className="operator-kv-list">
+              <div>
+                <span>Runtime</span>
+                <strong>{threadStatus}</strong>
+              </div>
+              <div>
+                <span>Findings</span>
+                <strong>{threadFindingCount}</strong>
+              </div>
+              <div>
+                <span>Next pivot</span>
+                <strong>{threadFindingCount > 0 ? 'Process drawer' : 'Baseline'}</strong>
+              </div>
+            </div>
+            <Link className="btn btn-sm" to="/monitor?monitorTab=processes">
+              Open processes
+            </Link>
+          </div>
+
+          <div className="card operator-lane-card">
+            <div className="card-header">
+              <div>
+                <div className="summary-label">Command palette</div>
+                <h3 className="card-title">Operator accelerators</h3>
+              </div>
+              <span className="badge badge-info">Cmd+K</span>
+            </div>
+            <div className="operator-command-grid">
+              {COMMAND_ACCELERATORS.map((command) => (
+                <Link key={command.title} to={command.href} className="operator-command-tile">
+                  <span>{command.title}</span>
+                  <small>{command.shortcut}</small>
+                </Link>
               ))}
             </div>
-          )}
+          </div>
+
+          <div className="card operator-lane-card" id="role-home-screen">
+            <div className="card-header">
+              <div>
+                <div className="summary-label">Role home</div>
+                <h3 className="card-title">{roleHome.title}</h3>
+              </div>
+              <span className="badge badge-info">{role}</span>
+            </div>
+            <div className="summary-meta">{roleHome.summary}</div>
+            <div className="operator-command-grid">
+              {roleHome.rows.map((label) => (
+                <Link key={label} to={roleHome.primaryHref} className="operator-command-tile">
+                  <span>{label}</span>
+                  <small>{groups.length ? groups.slice(0, 2).join(', ') : userId}</small>
+                </Link>
+              ))}
+            </div>
+            <div className="btn-group">
+              <Link className="btn btn-sm" to={roleHome.primaryHref}>
+                Primary view
+              </Link>
+              <Link className="btn btn-sm" to={roleHome.secondaryHref}>
+                Secondary view
+              </Link>
+            </div>
+          </div>
+
+          <div className="card operator-lane-card" id="safe-assistant">
+            <div className="card-header">
+              <div>
+                <div className="summary-label">Operator Assistant</div>
+                <h3 className="card-title">Safe assistant boundaries</h3>
+              </div>
+              <span
+                className={`badge ${assistantMode === 'retrieval-only' ? 'badge-info' : 'badge-warn'}`}
+              >
+                {assistantMode}
+              </span>
+            </div>
+            <div className="operator-health-list">
+              {assistantBoundaryRows.map((row) => {
+                const badge = signalBadge(row.status);
+                return (
+                  <Link
+                    key={row.name}
+                    className="operator-health-row operator-health-link"
+                    to={row.href}
+                  >
+                    <span className={`badge ${badge.className}`}>{badge.label}</span>
+                    <span>{row.name}</span>
+                    <span>{row.detail}</span>
+                  </Link>
+                );
+              })}
+            </div>
+            <Link className="btn btn-sm" to="/assistant?source=launchpad-safe-boundary">
+              Open assistant
+            </Link>
+          </div>
+
+          <div className="card operator-lane-card" id="visual-regression-gate">
+            <div className="card-header">
+              <div>
+                <div className="summary-label">Visual regression</div>
+                <h3 className="card-title">Screenshot gate</h3>
+              </div>
+              <span className="badge badge-ok">Ready</span>
+            </div>
+            <div className="operator-health-list">
+              {visualGateRows.map((row) => {
+                const badge = signalBadge(row.status);
+                return (
+                  <div key={row.name} className="operator-health-row">
+                    <span className={`badge ${badge.className}`}>{badge.label}</span>
+                    <span>{row.name}</span>
+                    <span>{row.detail}</span>
+                  </div>
+                );
+              })}
+            </div>
+            <div className="operator-kv-list">
+              <div>
+                <span>Primary route</span>
+                <strong>Launchpad</strong>
+              </div>
+              <div>
+                <span>Artifact type</span>
+                <strong>Playwright screenshot</strong>
+              </div>
+            </div>
+          </div>
+
+          <div className="card operator-lane-card">
+            <div className="card-header">
+              <div>
+                <div className="summary-label">Operational snapshots</div>
+                <h3 className="card-title">Persisted evidence</h3>
+              </div>
+              <span className={`badge ${snapshotRows.length ? 'badge-ok' : 'badge-info'}`}>
+                {snapshotRows.length || 'Live'}
+              </span>
+            </div>
+            {snapshotRows.length === 0 ? (
+              <div className="empty empty-compact">
+                Snapshots are generated as live signals refresh.
+              </div>
+            ) : (
+              <div className="operator-health-list">
+                {snapshotRows.slice(0, 5).map(([name, snapshot]) => {
+                  const proofBadge = evidenceBadge(snapshot);
+                  return (
+                    <div
+                      key={`${name}-${snapshot.digest || snapshot.storage_key}`}
+                      className="operator-health-row"
+                    >
+                      <span
+                        className={`badge ${snapshot.verified || snapshot.persisted ? 'badge-ok' : 'badge-warn'}`}
+                      >
+                        {snapshot.verified ? 'Verified' : snapshot.persisted ? 'Saved' : 'Inline'}
+                      </span>
+                      <span>{name}</span>
+                      <span>{String(snapshot.digest || '').slice(0, 12)}</span>
+                      {evidenceFreshness(snapshot) ? (
+                        <span className={`badge ${proofBadge.className}`}>{proofBadge.label}</span>
+                      ) : null}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+            <div className="summary-meta" style={{ marginTop: 10 }}>
+              {data.operationalSnapshots?.count ?? snapshotRows.length} indexed •{' '}
+              {data.operationalSnapshots?.verified_count ?? snapshotRows.length} verified
+            </div>
+          </div>
+
+          <div className="card operator-lane-card" id="demo-mode">
+            <div className="card-header">
+              <div>
+                <div className="summary-label">Demo mode</div>
+                <h3 className="card-title">Evaluation scenarios</h3>
+              </div>
+              <div className="btn-group">
+                <button
+                  type="button"
+                  className="btn btn-sm"
+                  onClick={resetDemoLab}
+                  disabled={demoResetBusy}
+                >
+                  {demoResetBusy ? 'Resetting...' : 'Reset'}
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-sm btn-primary"
+                  onClick={startDemoLab}
+                  disabled={demoBusy}
+                >
+                  {demoBusy ? 'Starting...' : 'Start'}
+                </button>
+              </div>
+            </div>
+            <div className="operator-demo-list">
+              {demoScenarios.map((scenario) => (
+                <span key={scenario}>{String(scenario).replaceAll('_', ' ')}</span>
+              ))}
+            </div>
+            <div className="operator-kv-list">
+              <div>
+                <span>Scenario count</span>
+                <strong>{demoScenarios.length}</strong>
+              </div>
+              <div>
+                <span>Sample alerts</span>
+                <strong>{demoSampleAlerts}</strong>
+              </div>
+              <div>
+                <span>Handoff route</span>
+                <strong>Reports evidence</strong>
+              </div>
+            </div>
+            <div className="summary-meta">
+              {data.demoStatus?.status || 'available'} • {demoSampleAlerts} sample alerts
+            </div>
+          </div>
+
+          <div className="card operator-lane-card">
+            <div className="card-header">
+              <div>
+                <div className="summary-label">Partial-state resilience</div>
+                <h3 className="card-title">Runtime confidence</h3>
+              </div>
+              <span className={`badge ${errorRows.length === 0 ? 'badge-ok' : 'badge-warn'}`}>
+                {errorRows.length === 0 ? 'Clean' : `${errorRows.length} degraded`}
+              </span>
+            </div>
+            {errorRows.length === 0 ? (
+              <div className="empty empty-compact">All launchpad signals loaded.</div>
+            ) : (
+              <div className="operator-health-list">
+                {errorRows.map((row) => (
+                  <div key={row.key} className="operator-health-row">
+                    <span className="badge badge-warn">Partial</span>
+                    <span>{row.key}</span>
+                    <span>{row.message}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
       </section>
     </div>

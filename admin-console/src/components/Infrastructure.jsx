@@ -400,6 +400,139 @@ export default function Infrastructure() {
     containers: assets.filter((item) => item.type === 'container').length,
     malware: assets.filter((item) => item.type === 'malware').length,
   };
+  const remediationSummary = remediationReviewsData?.summary || {};
+  const exposureQueue = counts.vulnerabilities + counts.certificates + counts.containers;
+  const integrityQueue = counts.drifted + counts.malware;
+  const infraFocusState = useMemo(() => {
+    if ((remediationSummary.pending || 0) > 0) {
+      const leadReview = remediationReviewsData?.reviews?.[0];
+      return {
+        title: 'Change review backlog needs approval',
+        copy: `${remediationSummary.pending} remediation review${remediationSummary.pending === 1 ? ' is' : 's are'} waiting for approval, with ${leadReview?.title || 'the newest review'} as the fastest recovery handoff.`,
+        lane: 'Change review',
+        lead: leadReview?.title || 'Pending remediation review',
+        tab: 'overview',
+      };
+    }
+    if (counts.critical > 0) {
+      const leadCritical = assets.find((item) => item.priority === 'critical') || assets[0];
+      return {
+        title: 'Critical asset backlog needs ownership review',
+        copy: `${counts.critical} critical asset${counts.critical === 1 ? ' is' : 's are'} leading the queue, with ${leadCritical?.title || 'the lead asset'} ready for owner validation and next-step routing.`,
+        lane: 'Critical assets',
+        lead: leadCritical?.title || 'Critical asset',
+        tab: 'assets',
+      };
+    }
+    if (exposureQueue > 0) {
+      const leadExposure =
+        assets.find((item) => item.type === 'vulnerability') ||
+        assets.find((item) => item.type === 'certificate') ||
+        assets.find((item) => item.type === 'container');
+      return {
+        title: 'Exposure backlog is driving infrastructure work',
+        copy: `${exposureQueue} exposure finding${exposureQueue === 1 ? ' is' : 's are'} open, with ${leadExposure?.title || 'the lead finding'} as the next ownership and mitigation review.`,
+        lane: 'Exposure queue',
+        lead: leadExposure?.title || 'Exposure finding',
+        tab: 'exposure',
+      };
+    }
+    if (integrityQueue > 0) {
+      const leadIntegrity = focusedMalware || assets.find((item) => item.type === 'drift');
+      return {
+        title: 'Integrity backlog needs containment review',
+        copy: `${integrityQueue} integrity finding${integrityQueue === 1 ? ' is' : 's are'} active, so validate whether ${leadIntegrity?.title || 'the lead finding'} is malicious, noisy, or approved before remediation.`,
+        lane: 'Integrity queue',
+        lead: leadIntegrity?.title || 'Integrity finding',
+        tab: 'integrity',
+      };
+    }
+    return {
+      title: 'Infrastructure telemetry is ready for routine monitoring',
+      copy:
+        'No asset, exposure, or integrity lane is dominating right now, so operators can work from observability and inventory without immediate escalation pressure.',
+      lane: 'Observability',
+      lead: slo?.health_gate || monSt?.health_gate || 'Healthy telemetry',
+      tab: 'observability',
+    };
+  }, [assets, counts.critical, exposureQueue, focusedMalware, integrityQueue, monSt?.health_gate, remediationReviewsData?.reviews, remediationSummary.pending, slo?.health_gate]);
+  const infraFocusSummary = [
+    {
+      label: 'Priority lane',
+      value: infraFocusState.lane,
+      meta:
+        infraFocusState.tab === 'overview'
+          ? `${remediationSummary.pending || 0} pending review${(remediationSummary.pending || 0) === 1 ? '' : 's'}`
+          : infraFocusState.tab === 'assets'
+            ? `${counts.critical} critical asset${counts.critical === 1 ? '' : 's'}`
+            : infraFocusState.tab === 'exposure'
+              ? `${exposureQueue} open exposure finding${exposureQueue === 1 ? '' : 's'}`
+              : infraFocusState.tab === 'integrity'
+                ? `${integrityQueue} integrity finding${integrityQueue === 1 ? '' : 's'}`
+                : 'Health and telemetry path',
+    },
+    {
+      label: 'Lead item',
+      value: infraFocusState.lead,
+      meta: 'First asset or queue to validate',
+    },
+    {
+      label: 'Change reviews',
+      value: remediationSummary.pending || 0,
+      meta: `${remediationSummary.recovery_ready || 0} recovery ready • ${remediationSummary.signed || 0} signed`,
+    },
+    {
+      label: 'Observability',
+      value: slo?.health_gate || monSt?.health_gate || '—',
+      meta: 'Threads, APIs, and monitoring systems',
+    },
+  ];
+  const infraFocusRows = [
+    {
+      id: 'reviews',
+      title: 'Review change approvals',
+      detail:
+        (remediationSummary.pending || 0) > 0
+          ? `${remediationSummary.pending} review${remediationSummary.pending === 1 ? ' is' : 's are'} waiting for signed approval or rollback verification.`
+          : 'No remediation approvals are currently blocking change work.',
+      badge: (remediationSummary.pending || 0) > 0 ? 'Review' : 'Clear',
+      tone: (remediationSummary.pending || 0) > 0 ? 'badge-warn' : 'badge-ok',
+      onClick: () => updateParams({ tab: 'overview' }),
+    },
+    {
+      id: 'assets',
+      title: 'Open critical assets',
+      detail:
+        counts.critical > 0
+          ? `${counts.critical} critical asset${counts.critical === 1 ? '' : 's'} need owner and blast-radius review.`
+          : 'Open the asset explorer for the full infrastructure inventory.',
+      badge: counts.critical > 0 ? 'Assets' : 'Explore',
+      tone: counts.critical > 0 ? 'badge-err' : 'badge-info',
+      onClick: () => updateParams({ tab: 'assets', view: 'critical', asset: '' }),
+    },
+    {
+      id: 'exposure',
+      title: 'Review exposure queue',
+      detail:
+        exposureQueue > 0
+          ? `${exposureQueue} vulnerability, certificate, or container finding${exposureQueue === 1 ? '' : 's'} need mitigation planning.`
+          : 'Exposure queue is currently clear.',
+      badge: exposureQueue > 0 ? 'Exposure' : 'Clear',
+      tone: exposureQueue > 0 ? 'badge-info' : 'badge-ok',
+      onClick: () => updateParams({ tab: 'exposure', asset: '' }),
+    },
+    {
+      id: 'integrity',
+      title: 'Review integrity queue',
+      detail:
+        integrityQueue > 0
+          ? `${integrityQueue} drift or malware finding${integrityQueue === 1 ? '' : 's'} need containment context.`
+          : 'Integrity queue is currently quiet.',
+      badge: integrityQueue > 0 ? 'Integrity' : 'Clear',
+      tone: integrityQueue > 0 ? 'badge-warn' : 'badge-ok',
+      onClick: () => updateParams({ tab: 'integrity', asset: '' }),
+    },
+  ];
   const focalAsset = selectedAsset?.title || selectedAsset?.id || 'critical assets';
   const focalQuery = selectedAsset?.id || selectedAsset?.title || query;
   const assetRemediation = useMemo(() => {
@@ -851,6 +984,53 @@ export default function Infrastructure() {
             aria-selected={activeTab === tab}
           >
             {tab.charAt(0).toUpperCase() + tab.slice(1)}
+          </button>
+        ))}
+      </div>
+
+      <section className="infra-focus-strip" aria-label="Current infrastructure focus">
+        <div className="infra-focus-hero">
+          <div className="summary-label">Current infrastructure focus</div>
+          <h3>{infraFocusState.title}</h3>
+          <p>{infraFocusState.copy}</p>
+          <div className="infra-focus-actions btn-group">
+            <button
+              className="btn btn-sm btn-primary"
+              onClick={() => updateParams({ tab: infraFocusState.tab })}
+            >
+              Open Priority Lane
+            </button>
+            <button className="btn btn-sm" onClick={() => updateParams({ tab: 'assets', asset: '' })}>
+              Review Assets
+            </button>
+            <button
+              className="btn btn-sm"
+              onClick={() => updateParams({ tab: 'observability', asset: '' })}
+            >
+              Open Observability
+            </button>
+          </div>
+        </div>
+        <div className="summary-grid infra-focus-summary-grid">
+          {infraFocusSummary.map((item) => (
+            <div key={item.label} className="summary-card">
+              <div className="summary-label">{item.label}</div>
+              <div className="summary-value">{item.value}</div>
+              <div className="summary-meta">{item.meta}</div>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      <div className="infra-focus-list" aria-label="Infrastructure quick focus">
+        {infraFocusRows.map((item) => (
+          <button key={item.id} className="infra-focus-row" type="button" onClick={item.onClick}>
+            <span className={`badge ${item.tone}`}>{item.badge}</span>
+            <span className="infra-focus-row-copy">
+              <strong>{item.title}</strong>
+              <span>{item.detail}</span>
+            </span>
+            <span className="infra-focus-row-action">Open</span>
           </button>
         ))}
       </div>

@@ -647,6 +647,40 @@ export default function Dashboard() {
   const dashboardReportTarget = alertReportTarget(leadPriorityAlert);
   const dashboardReportTab = (respStats?.pending ?? 0) > 0 ? 'delivery' : 'evidence';
   const dashboardReportSubject = dashboardReportTarget || 'the current priority stack';
+  const dashboardHomeSummary = [
+    {
+      label: 'Critical queue',
+      value: formatNumber(critical),
+      meta:
+        critical > 0
+          ? `${critical} alert${critical === 1 ? '' : 's'} need immediate review`
+          : 'No critical alerts are active',
+    },
+    {
+      label: 'Stale queue',
+      value: formatNumber(staleAlerts.length),
+      meta:
+        staleAlerts.length > 0
+          ? 'Alerts older than 30 minutes still need ownership'
+          : 'No alerts are beyond the stale threshold',
+    },
+    {
+      label: 'Response blockers',
+      value: formatNumber(respStats?.pending ?? 0),
+      meta:
+        (respStats?.pending ?? 0) > 0
+          ? 'Response steps are waiting for approval'
+          : 'No response actions are blocked',
+    },
+    {
+      label: 'Collectors degraded',
+      value: formatNumber(degradedCollectors.length),
+      meta:
+        degradedCollectors.length > 0
+          ? `${collectorFreshnessCounts.error ?? 0} error • ${collectorFreshnessCounts.stale ?? 0} stale`
+          : 'All enabled collectors are fresh',
+    },
+  ];
   const situationCards = [
     {
       title: 'Critical Now',
@@ -796,6 +830,109 @@ export default function Dashboard() {
         </div>
       </div>
 
+      <section className="dashboard-home-strip" aria-label="Dashboard operating summary">
+        <div className="dashboard-home-hero">
+          <div className="summary-label">Operations home</div>
+          <h3>
+            {leadPriorityAlert
+              ? `${alertCategory(leadPriorityAlert)} is leading the queue`
+              : 'The dashboard is ready for the next operator pass'}
+          </h3>
+          <p>
+            {leadPriorityAlert
+              ? `${alertNarrative(leadPriorityAlert)}`
+              : 'Use the overview to move directly into live triage, response review, and collector recovery without re-finding context.'}
+          </p>
+          <div className="dashboard-home-meta">
+            <span className={`badge ${critical > 0 ? 'badge-err' : 'badge-ok'}`}>
+              {critical > 0 ? 'critical queue' : 'queue clear'}
+            </span>
+            <span>
+              {leadPriorityAlert
+                ? `${formatRelativeTime(leadPriorityAlert.timestamp || leadPriorityAlert.time)} • ${formatDateTime(leadPriorityAlert.timestamp || leadPriorityAlert.time)}`
+                : `${alertList.length} alert${alertList.length === 1 ? '' : 's'} visible`}
+            </span>
+          </div>
+          <div className="btn-group dashboard-home-actions">
+            <button className="btn btn-sm btn-primary" onClick={() => navigate('/soc#queue')}>
+              Open SOC Triage
+            </button>
+            <button className="btn btn-sm" onClick={() => navigate('/monitor')}>
+              Open Live Monitor
+            </button>
+            <button className="btn btn-sm" onClick={() => navigate('/launchpad')}>
+              Open Launchpad
+            </button>
+          </div>
+        </div>
+        <div className="summary-grid dashboard-home-summary-grid">
+          {dashboardHomeSummary.map((item) => (
+            <div key={item.label} className="summary-card">
+              <div className="summary-label">{item.label}</div>
+              <div className="summary-value">{item.value}</div>
+              <div className="summary-meta">{item.meta}</div>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      <div className="situation-grid">
+        {situationCards.map((card) => (
+          <article key={card.title} className="situation-card">
+            <div className="situation-eyebrow">{card.title}</div>
+            <div className="situation-value">{card.value}</div>
+            <p className="situation-copy">{card.detail}</p>
+            <button className="btn btn-sm btn-primary" onClick={card.onAction}>
+              {card.action}
+            </button>
+          </article>
+        ))}
+      </div>
+
+      <WorkflowGuidance
+        title="Console Pivots"
+        description="Use the overview to jump directly into the next operator workflow instead of re-finding the same context in each workspace."
+        items={workflowItems}
+      />
+
+      <div className="card priority-stack">
+        <div className="card-header">
+          <span className="card-title">Priority Stack</span>
+          <span className="hint">Updated {formatRelativeTime(new Date())}</span>
+        </div>
+        {priorityAlerts.length === 0 ? (
+          <div className="empty">No alerts are waiting in the priority stack.</div>
+        ) : (
+          <div className="priority-stack-list">
+            {priorityAlerts.map((alert, index) => {
+              const alertId = alert.id || alert.alert_id || `priority-${index}`;
+              return (
+                <button
+                  key={alertId}
+                  type="button"
+                  className="priority-stack-item"
+                  onClick={() => setExpandedAlert(alertId)}
+                >
+                  <div className="priority-stack-main">
+                    <span
+                      className={`badge ${alertSeverity(alert) === 'critical' ? 'badge-err' : 'badge-warn'}`}
+                    >
+                      {alertSeverity(alert)}
+                    </span>
+                    <span className="priority-stack-title">{alertCategory(alert)}</span>
+                  </div>
+                  <div className="priority-stack-copy">{alertNarrative(alert)}</div>
+                  <div className="priority-stack-meta">
+                    {formatRelativeTime(alert.timestamp || alert.time)} ·{' '}
+                    {formatDateTime(alert.timestamp || alert.time)}
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
       <div className="card" style={{ marginBottom: 16 }}>
         <div className="card-header">
           <span className="card-title">Dashboard Layout Presets</span>
@@ -874,63 +1011,6 @@ export default function Dashboard() {
           Shared presets give analysts and admins a consistent starting point. Personal presets sync
           through the user preferences API so your layout survives new sessions.
         </div>
-      </div>
-
-      <div className="situation-grid">
-        {situationCards.map((card) => (
-          <article key={card.title} className="situation-card">
-            <div className="situation-eyebrow">{card.title}</div>
-            <div className="situation-value">{card.value}</div>
-            <p className="situation-copy">{card.detail}</p>
-            <button className="btn btn-sm btn-primary" onClick={card.onAction}>
-              {card.action}
-            </button>
-          </article>
-        ))}
-      </div>
-
-      <WorkflowGuidance
-        title="Console Pivots"
-        description="Use the overview to jump directly into the next operator workflow instead of re-finding the same context in each workspace."
-        items={workflowItems}
-      />
-
-      <div className="card priority-stack">
-        <div className="card-header">
-          <span className="card-title">Priority Stack</span>
-          <span className="hint">Updated {formatRelativeTime(new Date())}</span>
-        </div>
-        {priorityAlerts.length === 0 ? (
-          <div className="empty">No alerts are waiting in the priority stack.</div>
-        ) : (
-          <div className="priority-stack-list">
-            {priorityAlerts.map((alert, index) => {
-              const alertId = alert.id || alert.alert_id || `priority-${index}`;
-              return (
-                <button
-                  key={alertId}
-                  type="button"
-                  className="priority-stack-item"
-                  onClick={() => setExpandedAlert(alertId)}
-                >
-                  <div className="priority-stack-main">
-                    <span
-                      className={`badge ${alertSeverity(alert) === 'critical' ? 'badge-err' : 'badge-warn'}`}
-                    >
-                      {alertSeverity(alert)}
-                    </span>
-                    <span className="priority-stack-title">{alertCategory(alert)}</span>
-                  </div>
-                  <div className="priority-stack-copy">{alertNarrative(alert)}</div>
-                  <div className="priority-stack-meta">
-                    {formatRelativeTime(alert.timestamp || alert.time)} ·{' '}
-                    {formatDateTime(alert.timestamp || alert.time)}
-                  </div>
-                </button>
-              );
-            })}
-          </div>
-        )}
       </div>
 
       {/* ── NOC Wall Display ─────────── */}

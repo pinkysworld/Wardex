@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { MemoryRouter, useLocation } from 'react-router-dom';
 import EmailSecurity from '../components/EmailSecurity.jsx';
 import { ToastProvider } from '../hooks.jsx';
 
@@ -40,6 +41,22 @@ const POLICIES = [
 
 describe('EmailSecurity', () => {
   let quarantineState;
+
+  function LocationProbe() {
+    const location = useLocation();
+    return <div data-testid="email-location">{`${location.pathname}${location.search}`}</div>;
+  }
+
+  function renderEmail(route = '/email-security') {
+    return render(
+      <MemoryRouter initialEntries={[route]}>
+        <ToastProvider>
+          <EmailSecurity />
+          <LocationProbe />
+        </ToastProvider>
+      </MemoryRouter>,
+    );
+  }
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -84,28 +101,21 @@ describe('EmailSecurity', () => {
   });
 
   it('renders summary cards and the quarantine table from the email APIs', async () => {
-    render(
-      <ToastProvider>
-        <EmailSecurity />
-      </ToastProvider>,
-    );
+    renderEmail();
 
     expect(await screen.findByText('attacker@evil.example')).toBeInTheDocument();
+    expect(screen.getByText('Current email focus')).toBeInTheDocument();
     expect(screen.getByText('Urgent password reset')).toBeInTheDocument();
-    expect(screen.getByText('1248')).toBeInTheDocument();
-    expect(screen.getByText('37')).toBeInTheDocument();
-    expect(screen.getByText('4')).toBeInTheDocument();
+    expect(screen.getAllByText('1248').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('37').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('4').length).toBeGreaterThan(0);
     expect(screen.getByText(/lookalike_domain/)).toBeInTheDocument();
   });
 
   it('releases a quarantined email and reloads the quarantine list', async () => {
     const user = userEvent.setup();
 
-    render(
-      <ToastProvider>
-        <EmailSecurity />
-      </ToastProvider>,
-    );
+    renderEmail();
 
     expect(await screen.findByText('attacker@evil.example')).toBeInTheDocument();
 
@@ -129,11 +139,7 @@ describe('EmailSecurity', () => {
   it('deletes a quarantined email and reloads the quarantine list', async () => {
     const user = userEvent.setup();
 
-    render(
-      <ToastProvider>
-        <EmailSecurity />
-      </ToastProvider>,
-    );
+    renderEmail();
 
     expect(await screen.findByText('attacker@evil.example')).toBeInTheDocument();
 
@@ -157,13 +163,9 @@ describe('EmailSecurity', () => {
   it('analyzes a pasted email payload and renders the phishing verdict', async () => {
     const user = userEvent.setup();
 
-    render(
-      <ToastProvider>
-        <EmailSecurity />
-      </ToastProvider>,
-    );
+    renderEmail('/email-security?tab=analyze');
 
-    await user.click(screen.getByRole('tab', { name: 'analyze' }));
+    expect(screen.getByTestId('email-location')).toHaveTextContent('/email-security?tab=analyze');
 
     const input = screen.getByLabelText('Email JSON input');
     await user.click(input);
@@ -187,18 +189,31 @@ describe('EmailSecurity', () => {
   });
 
   it('renders configured policies from the email policies API', async () => {
-    const user = userEvent.setup();
+    renderEmail('/email-security?tab=policies');
 
-    render(
-      <ToastProvider>
-        <EmailSecurity />
-      </ToastProvider>,
-    );
-
-    await user.click(screen.getByRole('tab', { name: 'policies' }));
+    expect(screen.getByTestId('email-location')).toHaveTextContent('/email-security?tab=policies');
 
     expect(await screen.findByText('Executive Protection')).toBeInTheDocument();
     const policyCard = screen.getByText('Executive Protection').parentElement;
     expect(within(policyCard).getByText('0.60')).toBeInTheDocument();
+  });
+
+  it('keeps email focus actions route-backed', async () => {
+    const user = userEvent.setup();
+
+    renderEmail('/email-security?tab=policies');
+
+    expect(await screen.findByText('Current email focus')).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Review Quarantine' }));
+    expect(screen.getByRole('tab', { name: 'quarantine' })).toHaveAttribute('aria-selected', 'true');
+    expect(screen.getByTestId('email-location')).toHaveTextContent('/email-security');
+
+    await user.click(screen.getByRole('button', { name: 'Review Policies' }));
+    expect(screen.getByRole('tab', { name: 'policies' })).toHaveAttribute('aria-selected', 'true');
+    expect(screen.getByTestId('email-location')).toHaveTextContent('/email-security?tab=policies');
+
+    await user.click(screen.getByRole('button', { name: 'Open Priority Lane' }));
+    expect(screen.getByRole('tab', { name: 'quarantine' })).toHaveAttribute('aria-selected', 'true');
   });
 });

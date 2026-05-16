@@ -5,7 +5,7 @@ use chrono::{DateTime, Duration, Utc};
 use rand::Rng;
 use serde::Deserialize;
 use sha2::{Digest, Sha256};
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::path::Path;
 use std::sync::Mutex;
 
@@ -168,11 +168,14 @@ impl SessionStore {
         let Some(ref path) = self.store_path else {
             return;
         };
-        let store = self.sessions.lock().unwrap_or_else(|e| e.into_inner());
+        let sessions = {
+            let store = self.sessions.lock().unwrap_or_else(|e| e.into_inner());
+            store.clone()
+        };
         let envelope = PersistedSessionEnvelope {
             version: 1,
-            sessions: store.clone(),
-            signature: self.session_signature(&store),
+            signature: self.session_signature(&sessions),
+            sessions,
         };
         if let Ok(json) = serde_json::to_string(&envelope) {
             if let Some(parent) = Path::new(path).parent()
@@ -192,12 +195,17 @@ impl SessionStore {
     }
 
     fn session_signature(&self, sessions: &HashMap<String, Session>) -> String {
-        let payload = serde_json::to_vec(sessions).unwrap_or_default();
+        let ordered: BTreeMap<&String, &Session> = sessions.iter().collect();
+        let payload = serde_json::to_vec(&ordered).unwrap_or_default();
         let mut digest = Sha256::new();
+        digest.update(b"wardex-session-store-v1");
         if let Some(key) = &self.persistence_key {
+            digest.update((key.len() as u64).to_be_bytes());
             digest.update(key);
-            digest.update([0u8]);
+        } else {
+            digest.update(0u64.to_be_bytes());
         }
+        digest.update((payload.len() as u64).to_be_bytes());
         digest.update(payload);
         hex::encode(digest.finalize())
     }
@@ -661,6 +669,26 @@ mod tests {
 
         let reloaded = SessionStore::with_persistence_key(&path_str, Some(key));
         assert!(reloaded.sessions.lock().unwrap().is_empty());
+    }
+
+    #[test]
+    fn session_persistence_signature_survives_multiple_session_reload() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let path = dir.path().join("sessions.json");
+        let path_str = path.to_string_lossy().to_string();
+        let key = b"session-order-test-key".to_vec();
+
+        {
+            let store = SessionStore::with_persistence_key(&path_str, Some(key.clone()));
+            store.create_session("u1", "u1@example.com", "admin", &[], 8);
+            store.create_session("u2", "u2@example.com", "analyst", &[], 8);
+            store.create_session("u3", "u3@example.com", "viewer", &[], 8);
+        }
+
+        for _ in 0..8 {
+            let store = SessionStore::with_persistence_key(&path_str, Some(key.clone()));
+            assert_eq!(store.sessions.lock().unwrap().len(), 3);
+        }
     }
 
     #[test]

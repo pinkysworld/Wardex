@@ -320,6 +320,10 @@ describe('OperatorLaunchpad', () => {
     expect(screen.getByText('Run the first incident with confidence')).toBeInTheDocument();
     expect(screen.getAllByText('2/5').length).toBeGreaterThan(0);
     expect(screen.getAllByText('1.0.8').length).toBeGreaterThan(0);
+    expect(screen.getByText('Needs attention now')).toBeInTheDocument();
+    expect(screen.getByText('First incident path')).toBeInTheDocument();
+    expect(screen.getByText('Ship and evidence guardrails')).toBeInTheDocument();
+    expect(screen.getByText('Capability map')).toBeInTheDocument();
     expect(screen.getByText('External systems')).toBeInTheDocument();
     expect(screen.getByText('Promotion confidence')).toBeInTheDocument();
     expect(screen.getByText('Acceptance readiness')).toBeInTheDocument();
@@ -358,7 +362,7 @@ describe('OperatorLaunchpad', () => {
     expect(screen.getByText('Acceptance report')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Export report' })).toBeEnabled();
     expect(screen.getByText('Next actions')).toBeInTheDocument();
-    expect(screen.getByText('Response approvals waiting')).toBeInTheDocument();
+    expect(screen.getAllByText('Response approvals waiting').length).toBeGreaterThan(0);
     expect(screen.getByText(/Owner: shift lead/i)).toBeInTheDocument();
     expect(screen.getByText(/SLA: Breaching/i)).toBeInTheDocument();
     expect(screen.getByText(/Escalate: security owner/i)).toBeInTheDocument();

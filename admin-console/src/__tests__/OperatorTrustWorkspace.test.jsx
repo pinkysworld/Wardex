@@ -123,6 +123,8 @@ describe('Operator trust workspaces', () => {
   it('renders operations health cards', async () => {
     renderWorkspace(<OperationsHealth />);
     expect(await screen.findByRole('heading', { name: /Operations Health/i })).toBeInTheDocument();
+    expect(screen.getByText(/Current operations focus/i)).toBeInTheDocument();
+    expect(screen.getByText(/Operations SLOs are steady/i)).toBeInTheDocument();
     expect(screen.getByText(/queue_lag/i)).toBeInTheDocument();
   });
 

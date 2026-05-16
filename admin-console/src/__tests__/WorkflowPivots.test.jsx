@@ -367,7 +367,7 @@ describe('Workflow pivots', () => {
 
     expect(await screen.findByText('Network Pivots')).toBeInTheDocument();
     expect(screen.getByText('Network Response Playbook')).toBeInTheDocument();
-    expect(screen.getByText('Beaconing cadence')).toBeInTheDocument();
+    expect(screen.getByText('Beaconing cadence needs containment review')).toBeInTheDocument();
     expect(screen.getByRole('tab', { name: /Beaconing \(1\)/ })).toHaveAttribute(
       'aria-selected',
       'true',

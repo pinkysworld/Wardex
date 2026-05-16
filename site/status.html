@@ -180,13 +180,31 @@ update counters enforced</code></pre>
             const el = document.createElement('div');
             el.className = 'release-row';
             const date = r.published_at ? new Date(r.published_at).toISOString().slice(0, 10) : '';
-            el.innerHTML = `
-              <div class="release-row-head">
-                <a class="release-tag" href="${r.html_url}" target="_blank" rel="noopener">${r.tag_name}</a>
-                <span class="release-date">${date}</span>
-              </div>
-              <p class="release-name">${(r.name || '').replace(/</g, '&lt;')}</p>
-            `;
+            const head = document.createElement('div');
+            head.className = 'release-row-head';
+
+            const link = document.createElement('a');
+            link.className = 'release-tag';
+            link.target = '_blank';
+            link.rel = 'noopener';
+            link.textContent = r.tag_name || 'Release';
+            try {
+              const url = new URL(r.html_url || '', window.location.href);
+              link.href = url.protocol === 'https:' ? url.href : 'https://github.com/pinkysworld/Wardex/releases';
+            } catch {
+              link.href = 'https://github.com/pinkysworld/Wardex/releases';
+            }
+
+            const dateEl = document.createElement('span');
+            dateEl.className = 'release-date';
+            dateEl.textContent = date;
+
+            const name = document.createElement('p');
+            name.className = 'release-name';
+            name.textContent = r.name || '';
+
+            head.append(link, dateEl);
+            el.append(head, name);
             list.appendChild(el);
           }
         } catch (err) {

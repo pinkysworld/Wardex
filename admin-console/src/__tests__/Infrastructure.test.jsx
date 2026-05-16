@@ -134,8 +134,10 @@ describe('Infrastructure', () => {
     const user = userEvent.setup();
     renderInfrastructure();
 
+    expect(await screen.findByText('Current infrastructure focus')).toBeInTheDocument();
+    expect(screen.getByText('Change review backlog needs approval')).toBeInTheDocument();
     expect(await screen.findByText('Change Review & Recovery')).toBeInTheDocument();
-    expect(screen.getByText('Review suspicious binary quarantine')).toBeInTheDocument();
+    expect(screen.getAllByText('Review suspicious binary quarantine').length).toBeGreaterThan(0);
     expect(screen.getByText('0/1 approvals')).toBeInTheDocument();
 
     await user.click(screen.getByRole('button', { name: 'Sign Approval' }));
@@ -154,6 +156,32 @@ describe('Infrastructure', () => {
             (options?.method || 'GET') === 'POST',
         ),
       ).toBe(true);
+    });
+  });
+
+  it('keeps infrastructure focus actions route-backed', async () => {
+    const user = userEvent.setup();
+    renderInfrastructure();
+
+    expect(await screen.findByRole('button', { name: 'Open Priority Lane' })).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Review Assets' }));
+
+    await waitFor(() => {
+      const params = currentLocation().searchParams;
+      expect(params.get('tab')).toBe('assets');
+    });
+
+    await user.click(screen.getByRole('button', { name: 'Open Priority Lane' }));
+
+    await waitFor(() => {
+      expect(currentLocation().searchParams.get('tab')).toBe('overview');
+    });
+
+    await user.click(screen.getByRole('button', { name: 'Open Observability' }));
+
+    await waitFor(() => {
+      expect(currentLocation().searchParams.get('tab')).toBe('observability');
     });
   });
 

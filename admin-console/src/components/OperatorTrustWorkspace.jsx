@@ -256,8 +256,61 @@ function IntegrationsView({ data }) {
 
 function OperationsView({ data }) {
   const cards = asArray(data?.slo_cards);
+  const attentionCards = cards.filter((card) => !['pass', 'ready', 'ok'].includes(String(card.status || '').toLowerCase()));
+  const leadCard = attentionCards[0] || cards[0] || null;
+  const leadLabel = leadCard?.id
+    ? String(leadCard.id)
+        .replaceAll('_', ' ')
+        .replace(/\b\w/g, (char) => char.toUpperCase())
+    : 'Operations health';
+  const operationsFocusTitle = leadCard
+    ? attentionCards.length > 0
+      ? `${leadLabel} needs operations follow-up`
+      : 'Operations SLOs are steady'
+    : 'Operations health is waiting for telemetry';
+  const operationsFocusCopy = leadCard
+    ? attentionCards.length > 0
+      ? `${attentionCards.length} SLO card${attentionCards.length === 1 ? ' is' : 's are'} outside the pass lane, with ${leadLabel} as the first queue to validate before release or support work.`
+      : `${leadLabel} is currently passing, so operators can work from support evidence and routine snapshot exports without immediate escalation pressure.`
+    : 'Operations health cards appear once telemetry has been loaded from the backend.';
   return (
     <>
+      <section className="ops-focus-strip" aria-label="Current operations focus">
+        <div className="ops-focus-hero">
+          <div className="summary-label">Current operations focus</div>
+          <h3>{operationsFocusTitle}</h3>
+          <p>{operationsFocusCopy}</p>
+          <div className="ops-focus-actions btn-group">
+            <Link className="btn btn-sm btn-primary" to="/help?context=operations-health">
+              Open Support
+            </Link>
+            <Link className="btn btn-sm" to="/settings?tab=admin">
+              Review Admin Controls
+            </Link>
+          </div>
+        </div>
+        <div className="trust-grid trust-grid-3 ops-focus-summary-grid">
+          <MetricCard
+            label="Priority lane"
+            value={leadLabel}
+            detail={leadCard?.recommended_action || 'Routine operations review'}
+            status={leadCard?.status || 'ready'}
+          />
+          <MetricCard
+            label="Attention cards"
+            value={attentionCards.length}
+            detail={`${cards.length} total SLO card${cards.length === 1 ? '' : 's'}`}
+            status={attentionCards.length > 0 ? 'review' : 'pass'}
+          />
+          <MetricCard
+            label="Snapshot support"
+            value="Ready"
+            detail="Support bundles and release snapshots stay available."
+            status="support"
+          />
+        </div>
+      </section>
+
       <div className="trust-grid trust-grid-4">
         {cards.map((card) => (
           <MetricCard

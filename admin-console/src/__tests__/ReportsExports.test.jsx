@@ -644,6 +644,34 @@ beforeEach(() => {
 });
 
 describe('ReportsExports', () => {
+  it('keeps reporting focus actions route-backed', async () => {
+    renderWithProviders('/reports?tab=templates&target=finance-admin-01');
+
+    expect(await screen.findByText('Current reporting focus')).toBeInTheDocument();
+    expect(screen.getByText('Compliance backlog needs remediation packaging')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Review Templates' }));
+
+    await waitFor(() => {
+      const currentUrl = new URL(
+        screen.getByTestId('location-probe').textContent || '/',
+        'http://localhost',
+      );
+      expect(currentUrl.searchParams.get('tab')).toBe('templates');
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Open Priority Lane' }));
+
+    await waitFor(() => {
+      const currentUrl = new URL(
+        screen.getByTestId('location-probe').textContent || '/',
+        'http://localhost',
+      );
+      expect(currentUrl.searchParams.get('tab')).toBe('compliance');
+      expect(currentUrl.searchParams.get('target')).toBe('finance-admin-01');
+    });
+  });
+
   it('renders framework findings and downloads an evidence bundle', async () => {
     renderWithProviders('/reports?tab=compliance');
 

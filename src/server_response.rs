@@ -72,11 +72,11 @@ pub(crate) fn error_json(message: &str, status: u16) -> Response<Body> {
         503 => "SERVICE_UNAVAILABLE",
         _ => "ERROR",
     };
-    let body = format!(
-        r#"{{"error":"{}","code":"{}"}}"#,
-        message.replace('"', "\\\""),
-        code
-    );
+    let body = serde_json::json!({
+        "error": message,
+        "code": code,
+    })
+    .to_string();
     json_response(&body, status)
 }
 
@@ -94,4 +94,25 @@ pub(crate) fn csv_response(body: &str, status: u16) -> Response<Body> {
             .header("Content-Type", "text/csv; charset=utf-8"),
         Body::from(body.to_owned()),
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn error_json_escapes_control_characters_and_backslashes() {
+        let response = error_json("invalid path: C:\\tmp\\x\nquote: \"", 400);
+        let bytes = axum::body::to_bytes(response.into_body(), 4096)
+            .await
+            .expect("error body");
+        let parsed: serde_json::Value =
+            serde_json::from_slice(&bytes).expect("valid json error body");
+
+        assert_eq!(
+            parsed["error"],
+            serde_json::json!("invalid path: C:\\tmp\\x\nquote: \"")
+        );
+        assert_eq!(parsed["code"], serde_json::json!("VALIDATION_ERROR"));
+    }
 }

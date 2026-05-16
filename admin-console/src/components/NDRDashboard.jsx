@@ -77,8 +77,8 @@ export default function NDRDashboard() {
     ? searchParams.get('tab')
     : 'overview';
   const leadAddress = unusualDests[0]?.dst_addr || topTalkers[0]?.addr || '';
-  const networkPlaybook = useMemo(() => {
-    const config = {
+  const networkPlaybookConfig = useMemo(
+    () => ({
       overview: {
         label: 'Overview pressure',
         findings: unusualDests.length + protoAnomalies.length,
@@ -137,31 +137,155 @@ export default function NDRDashboard() {
         nextStep:
           'Confirm issuer expectations, trust-store policy, and whether the endpoint is intentionally private.',
       },
-    };
-    const active = config[activeTab] || config.overview;
-    const responseLane =
-      activeTab === 'beaconing' || activeTab === 'tls'
-        ? 'Containment and evidence capture'
-        : activeTab === 'dpi' || activeTab === 'entropy'
-          ? 'Owner validation and hunt expansion'
-          : 'Triage and service validation';
+    }),
+    [
+      beaconingList,
+      dpiList,
+      entropyList,
+      leadAddress,
+      protoAnomalies.length,
+      selfSignedList,
+      tlsList,
+      topTalkers,
+      unusualDests,
+    ],
+  );
+  const getResponseLane = (tabId) =>
+    tabId === 'beaconing' || tabId === 'tls'
+      ? 'Containment and evidence capture'
+      : tabId === 'dpi' || tabId === 'entropy'
+        ? 'Owner validation and hunt expansion'
+        : 'Triage and service validation';
+  const networkPlaybook = useMemo(() => {
+    const active = networkPlaybookConfig[activeTab] || networkPlaybookConfig.overview;
     return {
       ...active,
-      responseLane,
+      responseLane: getResponseLane(activeTab),
       findingCount: active.findings,
     };
-  }, [
-    activeTab,
-    beaconingList,
-    dpiList,
-    entropyList,
-    leadAddress,
-    protoAnomalies.length,
-    selfSignedList,
-    tlsList,
-    topTalkers,
-    unusualDests,
-  ]);
+  }, [activeTab, networkPlaybookConfig]);
+  const priorityTab =
+    beaconingList.length > 0
+      ? 'beaconing'
+      : tlsList.length > 0
+        ? 'tls'
+        : dpiList.length > 0
+          ? 'dpi'
+          : entropyList.length > 0
+            ? 'entropy'
+            : selfSignedList.length > 0
+              ? 'certs'
+              : 'overview';
+  const priorityFindingCount =
+    priorityTab === 'beaconing'
+      ? beaconingList.length
+      : priorityTab === 'tls'
+        ? tlsList.length
+        : priorityTab === 'dpi'
+          ? dpiList.length
+          : priorityTab === 'entropy'
+            ? entropyList.length
+            : priorityTab === 'certs'
+              ? selfSignedList.length
+            : unusualDests.length + protoAnomalies.length;
+  const priorityPlaybook = useMemo(() => {
+    const active = networkPlaybookConfig[priorityTab] || networkPlaybookConfig.overview;
+    return {
+      ...active,
+      responseLane: getResponseLane(priorityTab),
+      findingCount: active.findings,
+    };
+  }, [networkPlaybookConfig, priorityTab]);
+  const ndrFocusTitle =
+    priorityTab === 'beaconing' && beaconingList.length > 0
+      ? 'Beaconing cadence needs containment review'
+      : priorityTab === 'tls' && tlsList.length > 0
+        ? 'TLS anomalies are leading network pressure'
+        : priorityTab === 'dpi' && dpiList.length > 0
+          ? 'Protocol mismatch needs validation'
+          : priorityTab === 'entropy' && entropyList.length > 0
+            ? 'High-entropy traffic needs owner review'
+            : priorityTab === 'certs' && selfSignedList.length > 0
+              ? 'Certificate trust gaps need verification'
+              : unusualDests.length > 0
+                ? 'External destination drift needs review'
+                : 'Network telemetry is ready for routine monitoring';
+  const ndrFocusCopy =
+    priorityFindingCount > 0
+      ? `${priorityFindingCount} finding${priorityFindingCount === 1 ? ' is' : 's are'} driving the ${priorityPlaybook.label.toLowerCase()} lane, with ${priorityPlaybook.focus} as the fastest place to validate ownership and intent.`
+      : `No active anomaly lane is currently dominant, so operators can work from the overview and top talkers without immediate containment pressure.`;
+  const ndrFocusSummary = [
+    {
+      label: 'Priority lane',
+      value: priorityPlaybook.label,
+      meta: `${priorityFindingCount} finding${priorityFindingCount === 1 ? '' : 's'} in focus`,
+    },
+    {
+      label: 'Lead address',
+      value: priorityPlaybook.focus || '—',
+      meta: 'Primary destination or endpoint to validate first',
+    },
+    {
+      label: 'TLS + beaconing',
+      value: tlsList.length + beaconingList.length,
+      meta: `${tlsList.length} TLS ${tlsList.length === 1 ? 'anomaly' : 'anomalies'} • ${beaconingList.length} beacon signal${beaconingList.length === 1 ? '' : 's'}`,
+    },
+    {
+      label: 'External drift',
+      value: unusualDests.length,
+      meta: `${r.unique_external_destinations || 0} external destination${(r.unique_external_destinations || 0) === 1 ? '' : 's'} observed`,
+    },
+  ];
+  const ndrFocusRows = [
+    {
+      id: 'priority',
+      title: `Open ${priorityPlaybook.label}`,
+      detail:
+        priorityFindingCount > 0
+          ? `${priorityFindingCount} finding${priorityFindingCount === 1 ? ' is' : 's are'} currently routed to this lane.`
+          : 'This lane is ready if new network pressure appears.',
+      badge: priorityFindingCount > 0 ? 'Priority' : 'Clear',
+      tone: priorityFindingCount > 0 ? 'badge-warn' : 'badge-ok',
+      tab: priorityTab,
+      actionLabel: 'Open',
+    },
+    {
+      id: 'overview',
+      title: 'Review unusual destinations',
+      detail:
+        unusualDests.length > 0
+          ? `${unusualDests.length} unusual destination${unusualDests.length === 1 ? '' : 's'} need owner and service validation.`
+          : 'No unusual destination drift is currently visible.',
+      badge: unusualDests.length > 0 ? 'Drift' : 'Clear',
+      tone: unusualDests.length > 0 ? 'badge-info' : 'badge-ok',
+      tab: 'overview',
+      actionLabel: 'Open',
+    },
+    {
+      id: 'tls',
+      title: 'Inspect TLS anomalies',
+      detail:
+        tlsList.length > 0
+          ? `${tlsList.length} TLS fingerprint${tlsList.length === 1 ? '' : 's'} need owner validation.`
+          : 'No TLS anomalies are currently queued.',
+      badge: tlsList.length > 0 ? 'TLS' : 'Clear',
+      tone: tlsList.length > 0 ? 'badge-warn' : 'badge-ok',
+      tab: 'tls',
+      actionLabel: 'Open',
+    },
+    {
+      id: 'beaconing',
+      title: 'Check beaconing cadence',
+      detail:
+        beaconingList.length > 0
+          ? `${beaconingList.length} beaconing pattern${beaconingList.length === 1 ? '' : 's'} need containment context and evidence capture.`
+          : 'No beaconing patterns are active in this snapshot.',
+      badge: beaconingList.length > 0 ? 'Beacon' : 'Clear',
+      tone: beaconingList.length > 0 ? 'badge-err' : 'badge-ok',
+      tab: 'beaconing',
+      actionLabel: 'Open',
+    },
+  ];
   const workflowItems = useMemo(
     () => [
       {
@@ -234,7 +358,53 @@ export default function NDRDashboard() {
   }
 
   return (
-    <div style={{ display: 'grid', gap: 16 }}>
+    <div className="ndr-dashboard" style={{ display: 'grid', gap: 16 }}>
+      <section className="ndr-focus-strip" aria-label="Current NDR focus">
+        <div className="ndr-focus-hero">
+          <div className="summary-label">Current NDR focus</div>
+          <h3>{ndrFocusTitle}</h3>
+          <p>{ndrFocusCopy}</p>
+          <div className="ndr-focus-actions btn-group">
+            <button className="btn btn-sm btn-primary" onClick={() => updateParams({ tab: priorityTab })}>
+              Open Priority Lane
+            </button>
+            <button className="btn btn-sm" onClick={() => updateParams({ tab: 'overview' })}>
+              Review Overview
+            </button>
+            <a className="btn btn-sm" href="/soc#queue">
+              Escalate to SOC
+            </a>
+          </div>
+        </div>
+        <div className="summary-grid ndr-focus-summary-grid">
+          {ndrFocusSummary.map((item) => (
+            <div key={item.label} className="summary-card">
+              <div className="summary-label">{item.label}</div>
+              <div className="summary-value">{item.value}</div>
+              <div className="summary-meta">{item.meta}</div>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      <div className="ndr-focus-list" aria-label="NDR quick focus">
+        {ndrFocusRows.map((item) => (
+          <button
+            key={item.id}
+            className="ndr-focus-row"
+            type="button"
+            onClick={() => updateParams({ tab: item.tab })}
+          >
+            <span className={`badge ${item.tone}`}>{item.badge}</span>
+            <span className="ndr-focus-row-copy">
+              <strong>{item.title}</strong>
+              <span>{item.detail}</span>
+            </span>
+            <span className="ndr-focus-row-action">{item.actionLabel}</span>
+          </button>
+        ))}
+      </div>
+
       {/* Summary Cards */}
       <div
         style={{

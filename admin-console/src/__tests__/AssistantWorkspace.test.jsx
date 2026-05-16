@@ -325,4 +325,101 @@ describe('AssistantWorkspace', () => {
       );
     });
   });
+
+  it('renders the assistant focus layer and keeps its pivots intact', async () => {
+    const fetchMock = vi.fn(async (url, options = {}) => {
+      const href = String(url);
+      const method = options?.method || 'GET';
+
+      if (href.includes('/api/auth/session')) {
+        return jsonOk({ authenticated: true, role: 'analyst' });
+      }
+      if (href.includes('/api/assistant/status')) {
+        return jsonOk({
+          enabled: false,
+          provider: 'OpenAi',
+          model: 'retrieval-only',
+          has_api_key: false,
+          active_conversations: 0,
+          endpoint: 'https://example.invalid',
+          mode: 'retrieval-only',
+        });
+      }
+      if (href.includes('/api/cases') && method === 'GET') {
+        return jsonOk({
+          cases: [
+            {
+              id: 42,
+              title: 'Identity escalation case',
+              status: 'investigating',
+              priority: 'high',
+              assignee: 'analyst-1',
+            },
+          ],
+        });
+      }
+      if (href.includes('/api/investigations/active')) {
+        return jsonOk({ items: [] });
+      }
+      return jsonOk({});
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    renderWithProviders(<AssistantWorkspace />, '/assistant?case=42');
+
+    expect(await screen.findByText('Current assistant focus')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Open Priority Context' })).toHaveAttribute(
+      'href',
+      '/soc?case=42&drawer=case-workspace&casePanel=summary#cases',
+    );
+    expect(screen.getByRole('link', { name: 'Review Boundaries' })).toHaveAttribute(
+      'href',
+      '#safe-assistant-boundaries',
+    );
+    expect(screen.getByRole('link', { name: 'Ask Priority Question' })).toHaveAttribute(
+      'href',
+      '#assistant-question-card',
+    );
+  });
+
+  it('keeps URL-backed scope visible while attached assistant context is still loading', async () => {
+    const fetchMock = vi.fn(async (url, options = {}) => {
+      const href = String(url);
+      const method = options?.method || 'GET';
+
+      if (href.includes('/api/auth/session')) {
+        return jsonOk({ authenticated: true, role: 'analyst' });
+      }
+      if (href.includes('/api/assistant/status')) {
+        return jsonOk({
+          enabled: false,
+          provider: 'OpenAi',
+          model: 'retrieval-only',
+          has_api_key: false,
+          active_conversations: 0,
+          endpoint: 'https://example.invalid',
+          mode: 'retrieval-only',
+        });
+      }
+      if (href.includes('/api/cases') && method === 'GET') {
+        return jsonOk({ cases: [] });
+      }
+      if (href.includes('/api/investigations/active')) {
+        return jsonOk({ items: [] });
+      }
+      return jsonOk({});
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    renderWithProviders(<AssistantWorkspace />, '/assistant?case=42&incident=7');
+
+    expect(await screen.findByText('Current assistant focus')).toBeInTheDocument();
+    expect(screen.getByText('Incident #7 is loading into the assistant')).toBeInTheDocument();
+    expect(screen.getByText('Case #42')).toBeInTheDocument();
+    expect(screen.getByText('Incident #7')).toBeInTheDocument();
+    expect(
+      screen.getByText('Attached scope is loading from the URL. You can still ask a scoped question while the detail cards catch up.'),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/Open the assistant from a case, incident, or investigation/i)).not.toBeInTheDocument();
+  });
 });

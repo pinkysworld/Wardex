@@ -159,6 +159,13 @@ export default function UEBADashboard() {
 
   const topRiskCount = entities.filter((e) => (e.risk_score || 0) >= RISK_THRESHOLDS.high).length;
   const focusEntity = activeEntity;
+  const topEntity = entities[0] || null;
+  const focusEntityEntry =
+    entities.find((entry) => entry.entity_id === focusEntity) || topEntity || null;
+  const topPeerGroup = peerGroups[0] || null;
+  const topPeerEntity = topPeerGroup
+    ? entities.find((entry) => entry.peer_group === topPeerGroup.group) || null
+    : null;
   const entityPlaybook = useMemo(() => {
     if (!activeEntity) return null;
     const riskScore = Number(entityDetail?.risk_score) || 0;
@@ -261,9 +268,136 @@ export default function UEBADashboard() {
       },
     ];
   }, [entities, entityDetail, focusEntity]);
+  const uebaFocusTitle =
+    topRiskCount > 0
+      ? 'Entity risk is concentrated in a few identities'
+      : entities.length > 0
+        ? 'UEBA is ready for routine validation'
+        : 'No risky entities are currently above threshold';
+  const uebaFocusCopy =
+    topRiskCount > 0
+      ? `${topRiskCount} high-risk entit${topRiskCount === 1 ? 'y is' : 'ies are'} above the escalation threshold, with ${totalAnomalyCount} anomaly flags spread across ${peerGroups.length} peer group${peerGroups.length === 1 ? '' : 's'}.`
+      : entities.length > 0
+        ? `${entities.length} tracked entit${entities.length === 1 ? 'y remains' : 'ies remain'} available for peer-group validation and evidence packaging.`
+        : 'The current time range is clear, so the next step is to monitor for new risky-entity activity instead of forcing a drilldown.';
+  const uebaFocusSummary = [
+    {
+      label: 'High-risk entities',
+      value: topRiskCount,
+      meta:
+        topEntity != null
+          ? `${topEntity.entity_id} is the current lead entity`
+          : 'No lead entity is active',
+    },
+    {
+      label: 'Tracked entities',
+      value: entities.length,
+      meta: `${totalAnomalyCount} anomaly flag${totalAnomalyCount === 1 ? '' : 's'} in scope`,
+    },
+    {
+      label: 'Peer groups',
+      value: peerGroups.length,
+      meta: topPeerGroup
+        ? `${topPeerGroup.group} carries the highest average risk`
+        : 'No peer-group risk summary loaded',
+    },
+    {
+      label: 'Current entity',
+      value: focusEntityEntry ? Math.round(Number(focusEntityEntry.risk_score) || 0) : 0,
+      meta: focusEntityEntry
+        ? `${focusEntityEntry.entity_id} risk score`
+        : 'Select an entity to pin detail context',
+    },
+  ];
+  const uebaFocusRows = [
+    {
+      id: 'top-entity',
+      title: 'Review top-risk entity',
+      detail: topEntity
+        ? `${topEntity.entity_id} is carrying ${topEntity.anomaly_count || 0} anomaly flag${Number(topEntity.anomaly_count || 0) === 1 ? '' : 's'} at risk score ${Math.round(Number(topEntity.risk_score) || 0)}.`
+        : 'No risky entity is currently available for review.',
+      badge: topEntity ? riskLevel(Number(topEntity.risk_score) || 0).label : 'Clear',
+      tone: topEntity ? riskLevel(Number(topEntity.risk_score) || 0).cls : 'badge-ok',
+      onClick: () => updateParams({ entity: topEntity?.entity_id || null }),
+      actionLabel: 'Open',
+    },
+    {
+      id: 'peer-group',
+      title: 'Check peer-group concentration',
+      detail: topPeerGroup
+        ? `${topPeerGroup.group} averages ${Math.round(topPeerGroup.avg_risk)} risk across ${topPeerGroup.entity_count} entit${topPeerGroup.entity_count === 1 ? 'y' : 'ies'}.`
+        : 'No peer-group clustering is available in the current range.',
+      badge: topPeerGroup ? 'Peer' : 'Clear',
+      tone: topPeerGroup ? 'badge-info' : 'badge-ok',
+      onClick: () => updateParams({ entity: topPeerEntity?.entity_id || topEntity?.entity_id || null }),
+      actionLabel: 'Open',
+    },
+    {
+      id: 'anomaly-sort',
+      title: 'Sort by anomaly concentration',
+      detail:
+        totalAnomalyCount > 0
+          ? `Reorder the queue by anomaly volume to spot repeat offenders before peer drift review.`
+          : 'No anomaly concentration is currently driving the queue.',
+      badge: totalAnomalyCount > 0 ? 'Anomaly' : 'Stable',
+      tone: totalAnomalyCount > 0 ? 'badge-warn' : 'badge-ok',
+      onClick: () => updateParams({ sort: 'anomaly_count' }),
+      actionLabel: 'Sort',
+    },
+    {
+      id: 'reset-risk',
+      title: 'Return to risk-priority order',
+      detail: `Keep the highest risk entities first while preserving the current ${timeRange.label} window.`,
+      badge: sortBy === 'risk_score' ? 'Active' : 'Queue',
+      tone: sortBy === 'risk_score' ? 'badge-ok' : 'badge-info',
+      onClick: () => updateParams({ sort: 'risk_score' }),
+      actionLabel: 'Sort',
+    },
+  ];
 
   return (
     <div className="ueba-dashboard" style={{ display: 'grid', gap: 16 }}>
+      <section className="ueba-focus-strip" aria-label="Current UEBA focus">
+        <div className="ueba-focus-hero">
+          <div className="summary-label">Current UEBA focus</div>
+          <h3>{uebaFocusTitle}</h3>
+          <p>{uebaFocusCopy}</p>
+          <div className="ueba-focus-actions btn-group">
+            <button className="btn btn-sm btn-primary" onClick={() => updateParams({ entity: topEntity?.entity_id || null })}>
+              Open Top Entity
+            </button>
+            <button className="btn btn-sm" onClick={() => updateParams({ sort: 'anomaly_count' })}>
+              Sort Anomalies
+            </button>
+            <a className="btn btn-sm" href="/soc#investigations">
+              Escalate to SOC
+            </a>
+          </div>
+        </div>
+        <div className="summary-grid ueba-focus-summary-grid">
+          {uebaFocusSummary.map((item) => (
+            <div key={item.label} className="summary-card">
+              <div className="summary-label">{item.label}</div>
+              <div className="summary-value">{item.value}</div>
+              <div className="summary-meta">{item.meta}</div>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      <div className="ueba-focus-list" aria-label="UEBA quick focus">
+        {uebaFocusRows.map((item) => (
+          <button key={item.id} className="ueba-focus-row" type="button" onClick={item.onClick}>
+            <span className={`badge ${item.tone}`}>{item.badge}</span>
+            <span className="ueba-focus-row-copy">
+              <strong>{item.title}</strong>
+              <span>{item.detail}</span>
+            </span>
+            <span className="ueba-focus-row-action">{item.actionLabel}</span>
+          </button>
+        ))}
+      </div>
+
       {/* Summary Cards */}
       <div
         style={{

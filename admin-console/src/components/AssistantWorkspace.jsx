@@ -153,10 +153,12 @@ export default function AssistantWorkspace() {
     ? investigationList
     : investigationList?.items || [];
   const selectedCase = cases.find((entry) => String(entry.id) === String(caseId)) || null;
-  const selectedIncident = incidentDetail || null;
+  const selectedIncident = incidentDetail?.id ? incidentDetail : null;
   const selectedInvestigation =
     investigations.find((entry) => String(entry.id) === String(activeInvestigationId)) || null;
   const mode = statusData?.mode || 'retrieval-only';
+  const hasUrlScope = Boolean(caseId || activeIncidentId || activeInvestigationId);
+  const attachedScopeCount = [caseId, activeIncidentId, activeInvestigationId].filter(Boolean).length;
   const assistantBoundaryRows = [
     {
       name: 'Retrieval boundary',
@@ -245,11 +247,19 @@ export default function AssistantWorkspace() {
   const warnings = Array.isArray(response?.warnings) ? response.warnings : [];
   const qualityGates = Array.isArray(response?.quality_gates) ? response.quality_gates : [];
   const linkedCaseHref = caseContext?.case?.id
-    ? buildSocLink({ caseId: caseContext.case.id, hash: 'cases' })
-    : '/soc#cases';
-  const activeCaseHref = selectedCase
     ? buildSocLink({
-        caseId: selectedCase.id,
+        caseId: caseContext.case.id,
+        hash: 'cases',
+      })
+    : caseId
+      ? buildSocLink({
+          caseId,
+          hash: 'cases',
+        })
+      : '/soc#cases';
+  const activeCaseHref = caseId
+    ? buildSocLink({
+        caseId,
         hash: 'cases',
         drawer: 'case-workspace',
         casePanel: 'summary',
@@ -273,9 +283,167 @@ export default function AssistantWorkspace() {
         hash: 'investigations',
       })
     : null;
+  const scopeStatusLabel = selectedInvestigation
+    ? selectedInvestigation.workflow_name || selectedInvestigation.id
+    : activeInvestigationId
+      ? `Investigation ${activeInvestigationId}`
+      : selectedIncident
+        ? selectedIncident.title || `Incident #${selectedIncident.id}`
+        : activeIncidentId
+          ? `Incident #${activeIncidentId}`
+          : selectedCase
+            ? `Case #${selectedCase.id}`
+            : caseId
+              ? `Case #${caseId}`
+              : 'No scope attached';
+  const assistantFocusTitle = selectedInvestigation
+    ? `${selectedInvestigation.workflow_name || 'Investigation'} is ready for a cited handoff`
+    : activeInvestigationId
+      ? `Investigation ${activeInvestigationId} is loading into the assistant`
+    : selectedIncident
+      ? `Incident #${selectedIncident.id} needs a scoped explanation`
+      : activeIncidentId
+        ? `Incident #${activeIncidentId} is loading into the assistant`
+      : selectedCase
+        ? `Case #${selectedCase.id} is ready for a cited summary`
+        : caseId
+          ? `Case #${caseId} is loading into the assistant`
+        : mode === 'retrieval-only'
+          ? 'Assistant is ready for scoped investigation questions'
+          : 'Assistant boundary needs review before broader use';
+  const assistantFocusCopy = selectedInvestigation
+    ? `Keep ${selectedInvestigation.workflow_name || 'the investigation'} attached so the assistant can explain the current workflow and cite the strongest evidence without losing handoff state.`
+    : activeInvestigationId
+      ? `The investigation is already attached in the URL, so the assistant can keep the handoff path intact while the detailed workflow context finishes loading.`
+    : selectedIncident
+      ? 'Use the incident-linked scope to generate a concise explanation before pushing analysts deeper into the case drawer or investigation timeline.'
+      : activeIncidentId
+        ? 'The incident is already pinned in the URL, so the first response can stay scoped even before the incident detail finishes loading.'
+      : selectedCase
+        ? 'The case is already attached in the URL, so the next useful step is a cited summary or next-step recommendation instead of a blank prompt.'
+        : caseId
+          ? 'The case is already pinned in the URL, and the assistant will keep that context attached while the case detail finishes loading.'
+        : mode === 'retrieval-only'
+          ? 'Open the assistant from a case, incident, or investigation when possible so the first response starts with preserved evidence instead of a generic question.'
+          : 'The assistant is outside retrieval-only mode, so analysts should re-check the operating boundary before depending on it for broader guidance.';
+  const priorityContextHref = activeInvestigationHref || activeIncidentHref || activeCaseHref || '/soc#cases';
+  const assistantFocusRows = [
+    {
+      label: 'Priority context',
+      detail: selectedInvestigation
+        ? `${selectedInvestigation.workflow_name || activeInvestigationId} is linked to case ${selectedInvestigation.case_id || caseId || 'unknown'}`
+        : activeInvestigationId
+          ? `Investigation ${activeInvestigationId} is already attached from the current URL scope.`
+        : selectedIncident
+          ? `${selectedIncident.title || `Incident #${selectedIncident.id}`} is already attached to this assistant view`
+          : activeIncidentId
+            ? `Incident #${activeIncidentId} is already attached from the current URL scope.`
+          : selectedCase
+            ? `Case #${selectedCase.id} is pinned into the URL and ready for a cited answer`
+            : caseId
+              ? `Case #${caseId} is already pinned in the current URL scope.`
+              : 'Open a case, incident, or investigation first to preserve the investigation handoff.',
+      href: priorityContextHref,
+      action: hasUrlScope ? 'Open context' : 'Open SOC',
+    },
+    {
+      label: 'Boundary review',
+      detail:
+        mode === 'retrieval-only'
+          ? 'Retrieval-only mode keeps autonomous execution disabled.'
+          : `${mode} mode should be reviewed against response policy before wider use.`,
+      href: '#safe-assistant-boundaries',
+      action: 'Review boundaries',
+    },
+    {
+      label: 'Answer quality',
+      detail:
+        qualityGates.length > 0
+          ? `${qualityGates.length} quality gate${qualityGates.length === 1 ? '' : 's'} and ${citations.length} citation${citations.length === 1 ? '' : 's'} are available on the latest answer.`
+          : response
+            ? 'The last answer is available below; review warnings and context before sharing it.'
+            : 'Run one scoped prompt to populate quality gates, citations, and recent-turn history.',
+      href: response ? '#assistant-answer' : '#assistant-question-card',
+      action: response ? 'Review answer' : 'Ask question',
+    },
+  ];
 
   return (
     <div className="stack">
+      <section className="assistant-focus-strip" aria-label="Current assistant focus">
+        <div className="assistant-focus-hero">
+          <div className="summary-label">Current assistant focus</div>
+          <h3>{assistantFocusTitle}</h3>
+          <p>{assistantFocusCopy}</p>
+          <div className="btn-group assistant-focus-actions">
+            <Link className="btn btn-primary" to={priorityContextHref}>
+              Open Priority Context
+            </Link>
+            <a className="btn btn-sm" href="#safe-assistant-boundaries">
+              Review Boundaries
+            </a>
+            <a className="btn btn-sm" href={response ? '#assistant-answer' : '#assistant-question-card'}>
+              {response ? 'Review Answer' : 'Ask Priority Question'}
+            </a>
+          </div>
+        </div>
+        <div className="card assistant-focus-summary-grid summary-grid">
+            <div className="summary-card">
+              <div className="summary-label">Attached scope</div>
+            <div className="summary-value">{attachedScopeCount}</div>
+            <div className="summary-meta">
+              {selectedInvestigation
+                ? 'investigation linked'
+                : activeInvestigationId
+                  ? 'investigation loading'
+                : selectedIncident
+                  ? 'incident linked'
+                  : activeIncidentId
+                    ? 'incident loading'
+                  : selectedCase
+                    ? 'case linked'
+                    : caseId
+                      ? 'case loading'
+                      : 'open from SOC'}
+            </div>
+          </div>
+          <div className="summary-card">
+            <div className="summary-label">Mode</div>
+            <div className="summary-value">{mode}</div>
+            <div className="summary-meta">{statusData?.model || 'retrieval-only'}</div>
+          </div>
+          <div className="summary-card">
+            <div className="summary-label">Quality gates</div>
+            <div className="summary-value">{qualityGates.length}</div>
+            <div className="summary-meta">
+              {citations.length} citation{citations.length === 1 ? '' : 's'}
+            </div>
+          </div>
+          <div className="summary-card">
+            <div className="summary-label">Recent turns</div>
+            <div className="summary-value">{history.length}</div>
+            <div className="summary-meta">
+              {warnings.length > 0
+                ? `${warnings.length} warning${warnings.length === 1 ? '' : 's'} active`
+                : 'session history ready'}
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <div className="assistant-focus-list">
+        {assistantFocusRows.map((row) => (
+          <a key={row.label} className="assistant-focus-row" href={row.href}>
+            <span className="badge badge-info">{row.label}</span>
+            <span className="assistant-focus-row-copy">
+              <strong>{row.label}</strong>
+              <span>{row.detail}</span>
+            </span>
+            <span className="assistant-focus-row-action">{row.action}</span>
+          </a>
+        ))}
+      </div>
+
       <div className="card">
         <div className="card-header">
           <div>
@@ -341,24 +509,22 @@ export default function AssistantWorkspace() {
         </div>
       </div>
 
-      <div className="card">
+      <div className="card" id="assistant-question-card">
         <div className="card-header">
           <span className="card-title">Active investigation scope</span>
           <span className="badge badge-info">{formatScopeSource(activeSource)}</span>
         </div>
-        {selectedCase || selectedIncident || selectedInvestigation ? (
+        {hasUrlScope ? (
           <div style={{ display: 'grid', gap: 12 }}>
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-              {selectedCase ? (
-                <span className="badge badge-info">{`Case #${selectedCase.id}`}</span>
+              {caseId ? (
+                <span className="badge badge-info">{`Case #${caseId}`}</span>
               ) : null}
-              {selectedIncident ? (
-                <span className="badge badge-info">{`Incident #${selectedIncident.id}`}</span>
+              {activeIncidentId ? (
+                <span className="badge badge-info">{`Incident #${activeIncidentId}`}</span>
               ) : null}
-              {selectedInvestigation ? (
-                <span className="badge badge-info">
-                  {selectedInvestigation.workflow_name || selectedInvestigation.id}
-                </span>
+              {activeInvestigationId ? (
+                <span className="badge badge-info">{scopeStatusLabel}</span>
               ) : null}
             </div>
             <div className="hint">
@@ -382,6 +548,12 @@ export default function AssistantWorkspace() {
                 </Link>
               ) : null}
             </div>
+            {!selectedCase && !selectedIncident && !selectedInvestigation ? (
+              <div className="hint">
+                Attached scope is loading from the URL. You can still ask a scoped question while
+                the detail cards catch up.
+              </div>
+            ) : null}
             {selectedInvestigation ? (
               <div className="row-card">
                 <div className="row-primary">{selectedInvestigation.workflow_name}</div>
@@ -475,7 +647,7 @@ export default function AssistantWorkspace() {
           gridTemplateColumns: 'minmax(0, 1.35fr) minmax(300px, 0.95fr)',
         }}
       >
-        <div className="card">
+        <div className="card" id="assistant-answer">
           <div className="card-header">
             <span className="card-title">Answer</span>
             {response && (

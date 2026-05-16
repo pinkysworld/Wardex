@@ -12,6 +12,37 @@ const HUMANIZED_VALUE_KEYS = new Set([
   'context',
 ]);
 
+const HIDDEN_SCOPE_KEYS = new Set([
+  'source',
+  'context',
+  'drawer',
+  'casePanel',
+  'incidentPanel',
+  'intent',
+]);
+
+const SCOPE_KEY_PRIORITY = new Map([
+  ['case', 0],
+  ['incident', 1],
+  ['investigation', 2],
+  ['rule', 3],
+  ['entity', 4],
+  ['asset', 5],
+  ['status', 6],
+  ['tab', 7],
+  ['monitorTab', 8],
+  ['fleetTab', 9],
+  ['updatesPanel', 10],
+  ['panel', 11],
+  ['view', 12],
+  ['range', 13],
+  ['sort', 14],
+  ['scanPreset', 15],
+  ['queue', 16],
+  ['queueFilter', 17],
+  ['focus', 18],
+]);
+
 const COMMAND_ROUTE_CONFIG = {
   'open-launchpad': {
     path: '/launchpad',
@@ -239,14 +270,25 @@ export function buildContextualHelpHref(sectionId, currentSearch = '') {
 export function describeSearchScope(search = '') {
   const params = new URLSearchParams(search);
   const tokens = [];
+  let index = 0;
 
   params.forEach((value, key) => {
     const normalized = String(value || '').trim();
-    if (!normalized) return;
-    tokens.push(`${humanizeToken(key)}: ${humanizeTokenValue(key, normalized)}`);
+    if (!normalized || HIDDEN_SCOPE_KEYS.has(key)) return;
+    tokens.push({
+      key,
+      label: `${humanizeToken(key)}: ${humanizeTokenValue(key, normalized)}`,
+      priority: SCOPE_KEY_PRIORITY.get(key) ?? 99,
+      index,
+    });
+    index += 1;
   });
 
-  return tokens;
+  return tokens
+    .sort((left, right) =>
+      left.priority === right.priority ? left.index - right.index : left.priority - right.priority,
+    )
+    .map((token) => token.label);
 }
 
 export const SEARCH_COMMANDS = [

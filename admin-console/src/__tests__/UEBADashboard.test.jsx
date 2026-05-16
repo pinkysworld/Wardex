@@ -159,6 +159,34 @@ describe('UEBADashboard', () => {
     expect(packageEvidenceUrl.searchParams.get('target')).toBe('user-b');
   });
 
+  it('prioritizes the current UEBA focus and keeps quick actions route-backed', async () => {
+    const user = userEvent.setup();
+    renderWithProviders('/ueba?sort=entity_id&range=6h');
+
+    expect(await screen.findByText('Current UEBA focus')).toBeInTheDocument();
+    expect(screen.getByText('Entity risk is concentrated in a few identities')).toBeInTheDocument();
+    expect(screen.getByText('Review top-risk entity')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Open Top Entity' })).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Sort Anomalies' }));
+
+    await waitFor(() => {
+      const params = currentSearchParams();
+      expect(params.get('sort')).toBe('anomaly_count');
+      expect(params.get('range')).toBe('6h');
+    });
+
+    await user.click(screen.getByRole('button', { name: 'Open Top Entity' }));
+
+    await waitFor(() => {
+      const params = currentSearchParams();
+      expect(params.get('entity')).toBe('user-a');
+      expect(params.get('sort')).toBe('anomaly_count');
+    });
+
+    expect(await screen.findByText('Entity: user-a')).toBeInTheDocument();
+  });
+
   it('preserves route-backed UEBA context across refresh and entity pivots', async () => {
     const user = userEvent.setup();
     const requestCounts = installUebaFetchMock({ risky: 0, entity: {} });

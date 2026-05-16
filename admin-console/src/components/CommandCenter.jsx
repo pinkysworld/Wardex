@@ -163,6 +163,70 @@ export default function CommandCenter() {
     releaseCandidates: summaryMetrics.release_candidates ?? releases.length,
     compliancePacks: summaryMetrics.compliance_packs ?? reportTemplates.length,
   };
+  const commandHeroTitle =
+    commandMetrics.incidents > 0
+      ? 'Incidents are setting the pace for the current shift'
+      : commandMetrics.connectorIssues > 0
+        ? 'Collector proof needs attention before wider handoff'
+        : 'The command surface is ready for the next operator pass';
+  const commandHeroCopy =
+    commandMetrics.incidents > 0
+      ? `${formatCount(commandMetrics.incidents)} incident(s), ${formatCount(commandMetrics.pendingReviews)} approval item(s), and ${formatCount(shiftSlaBuckets.breached ?? 0)} breached SLA bucket(s) are driving the queue.`
+      : commandMetrics.connectorIssues > 0
+        ? `${formatCount(commandMetrics.connectorIssues)} connector lane(s) still need fresh evidence or validation before operators depend on them.`
+        : 'Incidents, connectors, release posture, and evidence exports are aligned enough for normal command flow.';
+  const commandFocusSummary = [
+    {
+      label: 'Incident pressure',
+      value: formatCount(commandMetrics.incidents),
+      meta: `${formatCount(commandMetrics.cases)} active case(s) • ${formatCount(shiftSlaBuckets.breached ?? 0)} SLA breach`,
+    },
+    {
+      label: 'Approval queue',
+      value: formatCount(commandMetrics.pendingReviews),
+      meta: `${formatCount(readyRollbacks.length)} rollback proof(s) ready`,
+    },
+    {
+      label: 'Connector recovery',
+      value: formatCount(commandMetrics.connectorIssues),
+      meta:
+        connectorIssues[0]?.detail ||
+        'All connector lanes have current validation and proof-of-life context.',
+    },
+    {
+      label: 'Release evidence',
+      value: formatCount(commandMetrics.releaseCandidates),
+      meta: `Compliance posture: ${complianceStatus}`,
+    },
+  ];
+  const commandFocusRows = [
+    {
+      title: 'Open SOC triage',
+      detail: `${formatCount(commandMetrics.incidents)} incident(s) and ${formatCount(shiftBoard.unassigned_cases ?? 0)} unassigned case(s) need ownership confirmation.`,
+      badge: commandMetrics.incidents > 0 ? 'triage now' : 'stable',
+      tone: commandMetrics.incidents > 0 ? 'badge-warn' : 'badge-ok',
+      to: '/soc#queue',
+    },
+    {
+      title: 'Clear approval blockers',
+      detail:
+        commandMetrics.pendingReviews > 0
+          ? `${formatCount(commandMetrics.pendingReviews)} remediation review(s) are waiting for quorum or rollback confirmation.`
+          : 'No live remediation reviews are blocked right now.',
+      badge: commandMetrics.pendingReviews > 0 ? 'review changes' : 'ready',
+      tone: commandMetrics.pendingReviews > 0 ? 'badge-warn' : 'badge-ok',
+      onClick: () => openDrawer('remediation'),
+    },
+    {
+      title: 'Recover connector proof',
+      detail:
+        connectorIssues[0]?.detail ||
+        'Connector validation, saved config, and sample-event proof are healthy across the active lanes.',
+      badge: commandMetrics.connectorIssues > 0 ? 'validate lane' : 'healthy',
+      tone: commandMetrics.connectorIssues > 0 ? 'badge-warn' : 'badge-ok',
+      onClick: () => openDrawer('connectors', connectorIssues[0] || null),
+    },
+  ];
   const laneSummaries = data.commandSummary?.lanes || {};
   const ruleReviewCalendar = laneSummaries?.rule_tuning?.review_calendar || {};
   const ruleReviewItems = asArray(ruleReviewCalendar, ['items']);
@@ -246,6 +310,34 @@ export default function CommandCenter() {
         </div>
       )}
 
+      <section className="command-focus-strip" aria-label="Current command focus">
+        <div className="command-focus-hero">
+          <div className="summary-label">Current focus</div>
+          <h3>{commandHeroTitle}</h3>
+          <p>{commandHeroCopy}</p>
+          <div className="command-focus-actions btn-group">
+            <Link className="btn btn-sm btn-primary" to="/soc#queue">
+              Open SOC Triage
+            </Link>
+            <button className="btn btn-sm" type="button" onClick={() => openDrawer('connectors')}>
+              Validate Connectors
+            </button>
+            <button className="btn btn-sm" type="button" onClick={() => openDrawer('release')}>
+              Check Release
+            </button>
+          </div>
+        </div>
+        <div className="summary-grid command-focus-summary-grid">
+          {commandFocusSummary.map((item) => (
+            <div key={item.label} className="summary-card">
+              <div className="summary-label">{item.label}</div>
+              <div className="summary-value">{item.value}</div>
+              <div className="summary-meta">{item.meta}</div>
+            </div>
+          ))}
+        </div>
+      </section>
+
       <div className="summary-grid command-summary-grid">
         <MetricCard
           label="Open incidents"
@@ -290,6 +382,20 @@ export default function CommandCenter() {
           onClick={() => openDrawer('evidence')}
         />
       </div>
+
+      <section className="command-focus-list" aria-label="Command quick focus">
+        {commandFocusRows.map((row) => (
+          <WorkItem
+            key={row.title}
+            title={row.title}
+            detail={row.detail}
+            badge={row.badge}
+            tone={row.tone}
+            to={row.to}
+            onClick={row.onClick}
+          />
+        ))}
+      </section>
 
       {(!loading || hasLoadedCommandData) && (
         <CommandActionDrawers

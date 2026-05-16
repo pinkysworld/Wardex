@@ -250,9 +250,9 @@ impl LicenseEnforcer {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use aes_gcm::aead::OsRng;
     use chrono::Duration;
     use ed25519_dalek::SigningKey;
-    use rand::rngs::OsRng;
 
     fn test_keypair() -> (Vec<u8>, Vec<u8>) {
         let sk = SigningKey::generate(&mut OsRng);

@@ -241,8 +241,38 @@ describe('FleetAgents', () => {
     await act(async () => {
       render(<FleetAgents />, { wrapper: Wrapper });
     });
+    expect(screen.getByText('Current fleet focus')).toBeInTheDocument();
+    expect(screen.getByText('Offline endpoints need recovery triage')).toBeInTheDocument();
     expect(screen.getByText('Total Agents')).toBeInTheDocument();
     expect(screen.getByText('Offline Now')).toBeInTheDocument();
+  });
+
+  it('keeps fleet quick-focus actions route-backed', async () => {
+    await act(async () => {
+      renderFleet('/');
+    });
+
+    expect(screen.getByRole('button', { name: 'Open Priority Lane' })).toBeInTheDocument();
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Open Priority Lane' }));
+    });
+
+    await waitFor(() => {
+      const params = currentLocation().searchParams;
+      expect(params.get('fleetTab')).toBe('updates');
+      expect(params.get('updatesPanel')).toBe('recovery');
+    });
+    expect(screen.getByText('Recovery Watchlist')).toBeInTheDocument();
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Review Agents' }));
+    });
+
+    await waitFor(() => {
+      expect(currentLocation().searchParams.get('fleetTab')).toBe('agents');
+    });
+    expect(screen.getByText(/Registered Agents/)).toBeInTheDocument();
   });
 
   it('switches to agents tab and shows agent table', async () => {
@@ -263,7 +293,7 @@ describe('FleetAgents', () => {
       render(<FleetAgents />, { wrapper: Wrapper });
     });
     await act(async () => {
-      fireEvent.click(screen.getByText('Agents'));
+      fireEvent.click(screen.getByRole('button', { name: 'Agents' }));
     });
     expect(screen.getByText('No agents match the current view')).toBeInTheDocument();
   });
@@ -361,7 +391,7 @@ describe('FleetAgents', () => {
     });
 
     expect(screen.getByText('Recovery Watchlist')).toBeInTheDocument();
-    expect(screen.getAllByText('db-01')).toHaveLength(1);
+    expect(screen.getAllByText('db-01').length).toBeGreaterThanOrEqual(1);
 
     await act(async () => {
       fireEvent.click(screen.getByRole('button', { name: 'Open Offline Agents' }));
@@ -649,8 +679,9 @@ describe('FleetAgents', () => {
   });
 
   it('assigns the latest release to the selected agent from the detail panel', async () => {
+    let view;
     await act(async () => {
-      render(<FleetAgents />, { wrapper: Wrapper });
+      view = render(<FleetAgents />, { wrapper: Wrapper });
     });
 
     const agentsTab = screen.getAllByText('Agents').find((el) => el.classList.contains('tab'));
@@ -658,8 +689,13 @@ describe('FleetAgents', () => {
       fireEvent.click(agentsTab);
     });
 
+    const desktopTable = view.container.querySelector('.desktop-table-only');
+    if (!desktopTable) {
+      throw new Error('desktop-table-only not rendered');
+    }
+
     await act(async () => {
-      fireEvent.click(screen.getAllByText('db-01')[0]);
+      fireEvent.click(within(desktopTable).getByText('db-01'));
     });
 
     const assignButton = await screen.findByRole('button', { name: 'Assign 0.53.5' });

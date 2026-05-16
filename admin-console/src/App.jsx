@@ -296,18 +296,21 @@ const SECTIONS = [
 
 const WORKFLOW_GROUPS = [
   {
-    id: 'overview',
-    label: 'Overview',
+    id: 'operations-home',
+    label: 'Operations Home',
+    description: 'Shift board, dashboard, and incident command.',
     sections: ['dashboard', 'operator-launchpad', 'command-center'],
   },
   {
-    id: 'analyze',
-    label: 'Analyze',
+    id: 'investigations',
+    label: 'Investigations',
+    description: 'Monitor, investigate, hunt, and explain threats.',
     sections: [
       'live-monitor',
       'soc-workbench',
       'assistant-workspace',
-      'infrastructure',
+      'threat-detection',
+      'detection-lab',
       'malware-scanning',
       'ueba',
       'ndr',
@@ -315,26 +318,29 @@ const WORKFLOW_GROUPS = [
     ],
   },
   {
-    id: 'detect',
-    label: 'Detect',
-    sections: ['threat-detection', 'detection-lab'],
+    id: 'response',
+    label: 'Response',
+    description: 'Approvals, rollback proof, and response policy.',
+    sections: ['response-safety', 'security-policy'],
   },
   {
-    id: 'respond',
-    label: 'Respond',
-    sections: ['response-safety', 'fleet-agents'],
+    id: 'platform',
+    label: 'Platform',
+    description: 'Fleet, collectors, infrastructure, and health.',
+    sections: [
+      'fleet-agents',
+      'infrastructure',
+      'integrations',
+      'operations-health',
+      'email-security',
+    ],
   },
   {
-    id: 'operate',
-    label: 'Operate',
-    sections: ['integrations', 'operations-health', 'reports-exports'],
+    id: 'governance',
+    label: 'Governance',
+    description: 'Reports, settings, and support material.',
+    sections: ['reports-exports', 'settings', 'help-docs'],
   },
-  {
-    id: 'govern',
-    label: 'Govern',
-    sections: ['security-policy', 'email-security', 'settings'],
-  },
-  { id: 'support', label: 'Support', sections: ['help-docs'] },
 ];
 
 const ROLE_LEVEL = { viewer: 0, analyst: 1, admin: 2 };
@@ -560,30 +566,30 @@ export default function App() {
   const primaryDestination =
     role === 'admin'
       ? {
-          label: 'System Status',
-          path: '/fleet',
-          description: 'Fleet health, rollouts, and platform posture.',
+          label: 'Platform Readiness',
+          path: '/operations-health',
+          description: 'Fleet, collector, and control-plane health.',
         }
       : role === 'analyst'
         ? {
-            label: 'Command Center',
-            path: '/command',
-            description: 'Incidents, approvals, connector gaps, and evidence actions.',
+            label: 'Operations Home',
+            path: '/launchpad',
+            description: 'Shift board, handoffs, and urgent operator work.',
           }
         : {
-            label: 'Live Monitor',
-            path: '/monitor',
-            description: 'Current alerts and system activity.',
+            label: 'Operations Home',
+            path: '/launchpad',
+            description: 'Current posture and guided next actions.',
           };
-  const scopeTokens = [
-    currentGroup?.label,
+  const workspaceLabel =
     role === 'admin'
       ? 'Admin Workspace'
       : role === 'analyst'
         ? 'Analyst Workspace'
-        : 'Viewer Workspace',
-    ...routeScopeTokens.slice(0, 3),
-    routeScopeTokens.length > 3 ? `+${routeScopeTokens.length - 3} more` : null,
+        : 'Viewer Workspace';
+  const scopeTokens = [
+    ...routeScopeTokens.slice(0, 2),
+    routeScopeTokens.length > 2 ? `+${routeScopeTokens.length - 2} more` : null,
   ].filter(Boolean);
   const inboxItems = Array.isArray(inboxData) ? inboxData : inboxData?.items || [];
   const inboxPending = inboxItems.filter((item) => !item.acknowledged).length;
@@ -741,7 +747,10 @@ export default function App() {
                   onClick={() => toggleGroup(group.id)}
                   aria-expanded={!collapsedGroups.includes(group.id)}
                 >
-                  <span>{group.label}</span>
+                  <span className="sidebar-group-heading">
+                    <span>{group.label}</span>
+                    <span className="sidebar-group-copy">{group.description}</span>
+                  </span>
                   <span aria-hidden="true">{collapsedGroups.includes(group.id) ? '▸' : '▾'}</span>
                 </button>
               )}
@@ -1186,17 +1195,29 @@ export default function App() {
         {authenticated && (
           <div className="scope-bar" aria-label="Current workspace scope">
             <div className="scope-copy">
-              <span className="scope-title">{primaryDestination.label}</span>
-              <span className="scope-separator">•</span>
-              <span>{currentSection.label}</span>
+              <span className="scope-eyebrow">{currentGroup?.label || primaryDestination.label}</span>
+              <span className="scope-title">{currentSection.label}</span>
+              <span className="scope-meta">
+                {workspaceLabel}
+                {currentGroup?.label ? (
+                  <>
+                    <span className="scope-separator">•</span>
+                    {primaryDestination.label}
+                  </>
+                ) : null}
+              </span>
             </div>
-            <div className="scope-chips">
-              {scopeTokens.map((token) => (
-                <span key={token} className="scope-chip">
-                  {token}
-                </span>
-              ))}
-            </div>
+            {scopeTokens.length > 0 ? (
+              <div className="scope-chips">
+                {scopeTokens.map((token) => (
+                  <span key={token} className="scope-chip">
+                    {token}
+                  </span>
+                ))}
+              </div>
+            ) : (
+              <span className="scope-empty">Overview</span>
+            )}
           </div>
         )}
 

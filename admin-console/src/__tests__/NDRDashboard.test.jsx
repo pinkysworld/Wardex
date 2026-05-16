@@ -112,6 +112,9 @@ describe('NDRDashboard', () => {
   it('renders overview summary cards and top-talkers from the NDR report', async () => {
     renderWithProviders(<NDRDashboard />);
 
+    expect(await screen.findByText('Current NDR focus')).toBeInTheDocument();
+    expect(screen.getByText('TLS anomalies are leading network pressure')).toBeInTheDocument();
+    expect(screen.getByText('Inspect TLS anomalies')).toBeInTheDocument();
     expect(await screen.findByText('12345')).toBeInTheDocument();
     expect(screen.getByText('50.0 MB')).toBeInTheDocument();
     expect(screen.getByText('42')).toBeInTheDocument();
@@ -152,7 +155,7 @@ describe('NDRDashboard', () => {
       'aria-selected',
       'true',
     );
-    expect(screen.getByText('TLS fingerprinting')).toBeInTheDocument();
+    expect((await screen.findAllByText('TLS fingerprinting')).length).toBeGreaterThan(0);
     expect(currentSearchParams().get('tab')).toBe('tls');
   });
 
@@ -170,7 +173,27 @@ describe('NDRDashboard', () => {
     await waitFor(() => {
       expect(currentSearchParams().get('tab')).toBe('tls');
     });
-    expect(screen.getByText('TLS fingerprinting')).toBeInTheDocument();
+    expect((await screen.findAllByText('TLS fingerprinting')).length).toBeGreaterThan(0);
+  });
+
+  it('keeps NDR quick-focus actions route-backed', async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<NDRDashboard />);
+
+    expect(await screen.findByRole('button', { name: 'Open Priority Lane' })).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Open Priority Lane' }));
+
+    await waitFor(() => {
+      expect(currentSearchParams().get('tab')).toBe('tls');
+    });
+    expect((await screen.findAllByText('TLS fingerprinting')).length).toBeGreaterThan(0);
+
+    await user.click(screen.getByRole('button', { name: 'Review Overview' }));
+
+    await waitFor(() => {
+      expect(currentSearchParams().get('tab')).toBe('overview');
+    });
   });
 
   it('preserves beaconing tab context across refresh and keeps delivery handoffs seeded', async () => {
@@ -194,7 +217,7 @@ describe('NDRDashboard', () => {
       'aria-selected',
       'true',
     );
-    expect(screen.getByText('Beaconing cadence')).toBeInTheDocument();
+    expect(screen.getByText('Beaconing cadence needs containment review')).toBeInTheDocument();
     expect(screen.getByText('Containment and evidence capture')).toBeInTheDocument();
     expect(screen.getByText('203.0.113.9:443')).toBeInTheDocument();
 

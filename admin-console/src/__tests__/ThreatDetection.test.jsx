@@ -680,6 +680,25 @@ describe('ThreatDetection', () => {
     });
   });
 
+  it('prioritizes current detection focus and keeps quick actions route-backed', async () => {
+    renderWithProviders('/detection?rule=rule-1');
+
+    expect(await screen.findByText('Current detection focus')).toBeInTheDocument();
+    expect(screen.getByText('Detection quality backlog needs review')).toBeInTheDocument();
+    expect(screen.getByText('Review detection quality')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Open Quality' })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Review Gaps' }));
+
+    await waitFor(() => {
+      expect(currentSearchParams().get('panel')).toBe('coverage');
+      expect(currentSearchParams().get('rulePanel')).toBe('efficacy');
+      expect(currentSearchParams().get('rule')).toBe('rule-1');
+    });
+
+    expect(await screen.findByText('ATT&CK Coverage Heatmap (Rules + Hunts)')).toBeInTheDocument();
+  });
+
   it('hydrates hunt drilldowns from route intent without losing the seeded query state', async () => {
     renderWithProviders(
       '/detection?rule=rule-1&rulePanel=hunts&intent=run-hunt&huntQuery=hostname:gateway-7&huntName=Gateway%20Hunt',
