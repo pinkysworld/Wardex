@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1778907719048,
+  "lastUpdate": 1778962923419,
   "repoUrl": "https://github.com/pinkysworld/Wardex",
   "entries": {
     "Wardex criterion benches": [
@@ -9395,6 +9395,114 @@ window.BENCHMARK_DATA = {
             "name": "sigma_evaluate_20_rules",
             "value": 35691,
             "range": "± 207",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "85413447+pinkysworld@users.noreply.github.com",
+            "name": "pinkysworld",
+            "username": "pinkysworld"
+          },
+          "committer": {
+            "email": "85413447+pinkysworld@users.noreply.github.com",
+            "name": "pinkysworld",
+            "username": "pinkysworld"
+          },
+          "distinct": true,
+          "id": "b3763961aaa78a75862f6fc3a0d07ab6e89523dc",
+          "message": "Refine admin console prioritization and harden backend surfaces",
+          "timestamp": "2026-05-16T22:13:49+02:00",
+          "tree_id": "30ffdb0bf23b9b2bc74d63e19311397a0b877693",
+          "url": "https://github.com/pinkysworld/Wardex/commit/b3763961aaa78a75862f6fc3a0d07ab6e89523dc"
+        },
+        "date": 1778962922959,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "full_pipeline/5",
+            "value": 49208,
+            "range": "± 165",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "full_pipeline/50",
+            "value": 412398,
+            "range": "± 1081",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "full_pipeline/200",
+            "value": 1923517,
+            "range": "± 11041",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "full_pipeline/1000",
+            "value": 18016314,
+            "range": "± 727167",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "detector_evaluate_single",
+            "value": 608,
+            "range": "± 4",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "detector_window_stream_256",
+            "value": 871411,
+            "range": "± 3397",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "shared_storage_observed_schema_read",
+            "value": 136,
+            "range": "± 1",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "shared_storage_4_threads_64_alerts",
+            "value": 145254,
+            "range": "± 1773",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "policy_evaluate_single",
+            "value": 234,
+            "range": "± 0",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "throughput/1000_samples",
+            "value": 18105545,
+            "range": "± 281109",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "search_500_events",
+            "value": 108628,
+            "range": "± 381",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "hunt_field_query",
+            "value": 89556,
+            "range": "± 312",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "ml_triage_rf",
+            "value": 51,
+            "range": "± 0",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "sigma_evaluate_20_rules",
+            "value": 35075,
+            "range": "± 280",
             "unit": "ns/iter"
           }
         ]
