@@ -109,15 +109,6 @@ Wardex is now positioned as a professional XDR/SIEM control plane with incident-
 - **Runtime and dependency hardening** — Node runtime, npm install, and dependency-refresh cleanup are carried into the release baseline.
 - **Release metadata alignment** — Rust, admin-console, Python SDK, TypeScript SDK, Helm, OTLP, OpenAPI, website, install docs, reproducibility docs, and test fixtures now point at the `v1.0.20` priority-lane baseline.
 
-## Recently shipped (v1.0.19)
-
-- **Live Monitor continuity** — tab, filter, selected-alert, and selected-process drawer state now stay synchronized with the route for safer handoff links.
-- **Collector lifecycle continuity** — Command Center connector rows now expose lifecycle proof, failure streaks, validation state, and next settings actions.
-- **Inline detection promotion guidance** — Threat Detection quality rows now show promotion-ready/blocked labels with the first actionable blocker from replay, suppressions, collector readiness, or stream guard state.
-- **SOC approval and escalation visibility** — response rows now show pending approvers, approval chain, notification status, escalation policy, and trace labels beside dry-run/rollback previews.
-- **Execution audit continuity** — Response Safety payloads now link request IDs to dry-run preview, approval ledger, trace endpoint, rollback, and post-action verification evidence.
-- **Help and website alignment** — Help & Docs, public site copy, OpenAPI, SDK/package metadata, Helm, OTLP, and release docs now describe the `v1.0.19` operator-trust continuity baseline.
-
 ## Recently shipped (v1.0.18)
 
 - **Operator-safe triage intelligence** — managed ML triage now includes calibrated confidence, quality gates, recommended operator journey, evidence mode, and human-approval requirements.

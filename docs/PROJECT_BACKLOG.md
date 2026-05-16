@@ -12,18 +12,6 @@ Recently completed for the `v1.0.20` priority-lane and API-hardening release:
 - [x] Node runtime, npm install, and dependency-refresh hardening carried into the release baseline.
 - [x] Release metadata, docs, website, Helm, OpenAPI, Python SDK, TypeScript SDK, OTLP, and install/reproducibility surfaces aligned on `v1.0.20`.
 
-## Previous strengthening checkpoint (`v1.0.19`)
-
-Recently completed for the `v1.0.19` operator-trust continuity release:
-
-- [x] Live Monitor now normalizes route-backed tabs and keeps alert/process drawer anchors synchronized with URL state.
-- [x] Command Center connector rows now surface lifecycle proof, failure/validation context, and next-action handoffs into settings.
-- [x] Threat Detection quality rows now expose inline promotion-ready/blocked status with the first actionable blocker.
-- [x] SOC response requests now show pending approvers, approval chain, notification state, escalation policy, and execution trace labels.
-- [x] Response Safety payloads now link dry-run preview, approval ledger, trace endpoint, rollback, and post-action verification continuity.
-- [x] Help & Docs now includes routed guidance for Live Monitor continuity, collector lifecycle, response approvals, and execution audit trails.
-- [x] Release metadata, docs, website, Helm, OpenAPI, Python SDK, TypeScript SDK, OTLP, and install/reproducibility surfaces aligned on `v1.0.19`.
-
 ## Previous strengthening checkpoint (`v1.0.18`)
 
 Recently completed for the `v1.0.18` intelligence-gates release:

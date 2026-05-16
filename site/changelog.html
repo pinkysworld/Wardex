@@ -54,7 +54,6 @@
             <ul>
       <li><a href="#vUnreleased"><span class="chl-ver">vUnreleased</span><span class="chl-nav-title"></span></a></li>
       <li><a href="#v1.0.20"><span class="chl-ver">v1.0.20</span><span class="chl-nav-title">2026-05-16 — priority lanes and API hardening</span></a></li>
-      <li><a href="#v1.0.19"><span class="chl-ver">v1.0.19</span><span class="chl-nav-title">2026-05-15 — operator trust continuity</span></a></li>
       <li><a href="#v1.0.18"><span class="chl-ver">v1.0.18</span><span class="chl-nav-title">2026-05-13 — intelligence gates and release cleanup</span></a></li>
       <li><a href="#v1.0.17"><span class="chl-ver">v1.0.17</span><span class="chl-nav-title">2026-05-12 — operator continuity and evidence closure</span></a></li>
       <li><a href="#v1.0.16"><span class="chl-ver">v1.0.16</span><span class="chl-nav-title">2026-05-11 — operator execution board</span></a></li>
@@ -193,28 +192,6 @@
         <h3>Security</h3>
         <ul>
         <li><strong>Authenticated API default</strong>: backend API routes now default to authenticated access unless explicitly classified as public, agent, or cluster traffic, keeping public exposure on a narrow allowlist for health, metrics, OpenAPI, session bootstrap, and SSO handshakes.</li>
-        </ul>
-      </div>
-    </article>
-    <article class="chl-release" id="v1.0.19">
-      <header class="chl-release-header">
-        <span class="chl-version-tag">v1.0.19</span>
-        <h2>2026-05-15 — operator trust continuity</h2>
-      </header>
-      <div class="chl-category">
-        <h3>Added</h3>
-        <ul>
-        <li><strong>Live Monitor continuity</strong>: keeps route-backed tabs, filters, selected alert drawers, and selected process drawers synchronized for handoff-safe live triage links.</li>
-        <li><strong>Collector lifecycle proof</strong>: adds Command Center connector lifecycle rows with last proof, validation/failure state, and next-action settings handoffs.</li>
-        <li><strong>Inline promotion guidance</strong>: surfaces promotion-ready or promotion-blocked status directly in Threat Detection quality rows with the first actionable blocker.</li>
-        <li><strong>SOC approval visibility</strong>: shows pending approvers, approval chain, notification state, escalation policy, and trace labels beside response dry-run and rollback previews.</li>
-        <li><strong>Execution audit continuity</strong>: links Response Safety request IDs to dry-run preview, approval ledger, trace endpoint, rollback, and post-action verification evidence.</li>
-        </ul>
-      </div>
-      <div class="chl-category">
-        <h3>Changed</h3>
-        <ul>
-        <li><strong>Help and website alignment</strong>: updates in-app help, OpenAPI descriptions, public website status/copy, docs, SDK metadata, Helm, OTLP, and test fixtures to the <code>v1.0.19</code> operator-trust continuity baseline.</li>
         </ul>
       </div>
     </article>
