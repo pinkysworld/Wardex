@@ -449,13 +449,22 @@ export default function Infrastructure() {
     }
     return {
       title: 'Infrastructure telemetry is ready for routine monitoring',
-      copy:
-        'No asset, exposure, or integrity lane is dominating right now, so operators can work from observability and inventory without immediate escalation pressure.',
+      copy: 'No asset, exposure, or integrity lane is dominating right now, so operators can work from observability and inventory without immediate escalation pressure.',
       lane: 'Observability',
       lead: slo?.health_gate || monSt?.health_gate || 'Healthy telemetry',
       tab: 'observability',
     };
-  }, [assets, counts.critical, exposureQueue, focusedMalware, integrityQueue, monSt?.health_gate, remediationReviewsData?.reviews, remediationSummary.pending, slo?.health_gate]);
+  }, [
+    assets,
+    counts.critical,
+    exposureQueue,
+    focusedMalware,
+    integrityQueue,
+    monSt?.health_gate,
+    remediationReviewsData?.reviews,
+    remediationSummary.pending,
+    slo?.health_gate,
+  ]);
   const infraFocusSummary = [
     {
       label: 'Priority lane',
@@ -1000,7 +1009,10 @@ export default function Infrastructure() {
             >
               Open Priority Lane
             </button>
-            <button className="btn btn-sm" onClick={() => updateParams({ tab: 'assets', asset: '' })}>
+            <button
+              className="btn btn-sm"
+              onClick={() => updateParams({ tab: 'assets', asset: '' })}
+            >
               Review Assets
             </button>
             <button

@@ -1008,7 +1008,10 @@ export default function LiveMonitor() {
       const processId = processIdFor(process);
       setSelectedProcess(processId ? { ...process } : null);
       if (processId) setTab('processes');
-      updateMonitorParams({ process: processId || null, monitorTab: processId ? 'processes' : tab });
+      updateMonitorParams({
+        process: processId || null,
+        monitorTab: processId ? 'processes' : tab,
+      });
     },
     [tab, updateMonitorParams],
   );

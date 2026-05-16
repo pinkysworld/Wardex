@@ -797,9 +797,8 @@ export default function AlertDrawer({
   const similarPastAlerts = Array.isArray(explainData?.similar_past_alerts)
     ? explainData.similar_past_alerts
     : [];
-  const alertSource = explainData?.source && typeof explainData.source === 'object'
-    ? explainData.source
-    : null;
+  const alertSource =
+    explainData?.source && typeof explainData.source === 'object' ? explainData.source : null;
   const freshnessRows =
     explainData?.freshness_badges && typeof explainData.freshness_badges === 'object'
       ? Object.entries(explainData.freshness_badges).map(([key, status]) => ({

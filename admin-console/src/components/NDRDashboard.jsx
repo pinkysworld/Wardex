@@ -187,7 +187,7 @@ export default function NDRDashboard() {
             ? entropyList.length
             : priorityTab === 'certs'
               ? selfSignedList.length
-            : unusualDests.length + protoAnomalies.length;
+              : unusualDests.length + protoAnomalies.length;
   const priorityPlaybook = useMemo(() => {
     const active = networkPlaybookConfig[priorityTab] || networkPlaybookConfig.overview;
     return {
@@ -365,7 +365,10 @@ export default function NDRDashboard() {
           <h3>{ndrFocusTitle}</h3>
           <p>{ndrFocusCopy}</p>
           <div className="ndr-focus-actions btn-group">
-            <button className="btn btn-sm btn-primary" onClick={() => updateParams({ tab: priorityTab })}>
+            <button
+              className="btn btn-sm btn-primary"
+              onClick={() => updateParams({ tab: priorityTab })}
+            >
               Open Priority Lane
             </button>
             <button className="btn btn-sm" onClick={() => updateParams({ tab: 'overview' })}>

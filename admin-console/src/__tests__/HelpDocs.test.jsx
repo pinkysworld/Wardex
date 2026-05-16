@@ -468,7 +468,9 @@ describe('HelpDocs', () => {
     expect(screen.getByLabelText('Filter endpoints')).toHaveValue('graphql');
     expect(screen.getByLabelText('Endpoint auth')).toHaveValue('authenticated');
     expect(await screen.findByText('/api/graphql')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Open live monitor continuity' })).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: 'Open live monitor continuity' }),
+    ).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Open collector lifecycle' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Open response approvals' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Open execution audit trail' })).toBeInTheDocument();

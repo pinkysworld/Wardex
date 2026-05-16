@@ -2551,10 +2551,16 @@ export default function ThreatDetection() {
               >
                 Open Quality
               </button>
-              <button className="btn btn-sm" onClick={() => focusWorkspacePanel('coverage', 'efficacy')}>
+              <button
+                className="btn btn-sm"
+                onClick={() => focusWorkspacePanel('coverage', 'efficacy')}
+              >
                 Review Gaps
               </button>
-              <button className="btn btn-sm" onClick={() => focusWorkspacePanel('rollout', 'hunts')}>
+              <button
+                className="btn btn-sm"
+                onClick={() => focusWorkspacePanel('rollout', 'hunts')}
+              >
                 Inspect Rollout
               </button>
             </div>

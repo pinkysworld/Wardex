@@ -256,7 +256,9 @@ function IntegrationsView({ data }) {
 
 function OperationsView({ data }) {
   const cards = asArray(data?.slo_cards);
-  const attentionCards = cards.filter((card) => !['pass', 'ready', 'ok'].includes(String(card.status || '').toLowerCase()));
+  const attentionCards = cards.filter(
+    (card) => !['pass', 'ready', 'ok'].includes(String(card.status || '').toLowerCase()),
+  );
   const leadCard = attentionCards[0] || cards[0] || null;
   const leadLabel = leadCard?.id
     ? String(leadCard.id)

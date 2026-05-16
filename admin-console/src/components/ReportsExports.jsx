@@ -728,7 +728,8 @@ export default function ReportsExports() {
     },
   ];
   const reportsFocusState =
-    (activeResponseTarget && (filteredResponsePending.length > 0 || filteredResponseRequests.length > 0)) ||
+    (activeResponseTarget &&
+      (filteredResponsePending.length > 0 || filteredResponseRequests.length > 0)) ||
     filteredResponsePending.length > 0
       ? {
           title: 'Response evidence needs delivery coordination',
@@ -775,8 +776,7 @@ export default function ReportsExports() {
                 }
               : {
                   title: 'Reporting workspace is ready for routine publishing',
-                  copy:
-                    'No delivery, compliance, or attestation lane is dominating right now, so operators can work from templates and privacy controls without immediate escalation pressure.',
+                  copy: 'No delivery, compliance, or attestation lane is dominating right now, so operators can work from templates and privacy controls without immediate escalation pressure.',
                   lane: 'Privacy',
                   lead: 'Routine publishing',
                   tab: 'privacy',
@@ -1483,7 +1483,10 @@ export default function ReportsExports() {
           <h3>{reportsFocusState.title}</h3>
           <p>{reportsFocusState.copy}</p>
           <div className="reports-focus-actions btn-group">
-            <button className="btn btn-sm btn-primary" onClick={() => switchTab(reportsFocusState.tab)}>
+            <button
+              className="btn btn-sm btn-primary"
+              onClick={() => switchTab(reportsFocusState.tab)}
+            >
               Open Priority Lane
             </button>
             <button className="btn btn-sm" onClick={() => switchTab('templates')}>
@@ -1507,12 +1510,7 @@ export default function ReportsExports() {
 
       <div className="reports-focus-list" aria-label="Reporting quick focus">
         {reportsFocusRows.map((item) => (
-          <button
-            key={item.id}
-            className="reports-focus-row"
-            type="button"
-            onClick={item.onClick}
-          >
+          <button key={item.id} className="reports-focus-row" type="button" onClick={item.onClick}>
             <span className={`badge ${item.tone}`}>{item.badge}</span>
             <span className="reports-focus-row-copy">
               <strong>{item.title}</strong>

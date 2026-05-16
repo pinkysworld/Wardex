@@ -158,7 +158,9 @@ export default function AssistantWorkspace() {
     investigations.find((entry) => String(entry.id) === String(activeInvestigationId)) || null;
   const mode = statusData?.mode || 'retrieval-only';
   const hasUrlScope = Boolean(caseId || activeIncidentId || activeInvestigationId);
-  const attachedScopeCount = [caseId, activeIncidentId, activeInvestigationId].filter(Boolean).length;
+  const attachedScopeCount = [caseId, activeIncidentId, activeInvestigationId].filter(
+    Boolean,
+  ).length;
   const assistantBoundaryRows = [
     {
       name: 'Retrieval boundary',
@@ -300,33 +302,34 @@ export default function AssistantWorkspace() {
     ? `${selectedInvestigation.workflow_name || 'Investigation'} is ready for a cited handoff`
     : activeInvestigationId
       ? `Investigation ${activeInvestigationId} is loading into the assistant`
-    : selectedIncident
-      ? `Incident #${selectedIncident.id} needs a scoped explanation`
-      : activeIncidentId
-        ? `Incident #${activeIncidentId} is loading into the assistant`
-      : selectedCase
-        ? `Case #${selectedCase.id} is ready for a cited summary`
-        : caseId
-          ? `Case #${caseId} is loading into the assistant`
-        : mode === 'retrieval-only'
-          ? 'Assistant is ready for scoped investigation questions'
-          : 'Assistant boundary needs review before broader use';
+      : selectedIncident
+        ? `Incident #${selectedIncident.id} needs a scoped explanation`
+        : activeIncidentId
+          ? `Incident #${activeIncidentId} is loading into the assistant`
+          : selectedCase
+            ? `Case #${selectedCase.id} is ready for a cited summary`
+            : caseId
+              ? `Case #${caseId} is loading into the assistant`
+              : mode === 'retrieval-only'
+                ? 'Assistant is ready for scoped investigation questions'
+                : 'Assistant boundary needs review before broader use';
   const assistantFocusCopy = selectedInvestigation
     ? `Keep ${selectedInvestigation.workflow_name || 'the investigation'} attached so the assistant can explain the current workflow and cite the strongest evidence without losing handoff state.`
     : activeInvestigationId
       ? `The investigation is already attached in the URL, so the assistant can keep the handoff path intact while the detailed workflow context finishes loading.`
-    : selectedIncident
-      ? 'Use the incident-linked scope to generate a concise explanation before pushing analysts deeper into the case drawer or investigation timeline.'
-      : activeIncidentId
-        ? 'The incident is already pinned in the URL, so the first response can stay scoped even before the incident detail finishes loading.'
-      : selectedCase
-        ? 'The case is already attached in the URL, so the next useful step is a cited summary or next-step recommendation instead of a blank prompt.'
-        : caseId
-          ? 'The case is already pinned in the URL, and the assistant will keep that context attached while the case detail finishes loading.'
-        : mode === 'retrieval-only'
-          ? 'Open the assistant from a case, incident, or investigation when possible so the first response starts with preserved evidence instead of a generic question.'
-          : 'The assistant is outside retrieval-only mode, so analysts should re-check the operating boundary before depending on it for broader guidance.';
-  const priorityContextHref = activeInvestigationHref || activeIncidentHref || activeCaseHref || '/soc#cases';
+      : selectedIncident
+        ? 'Use the incident-linked scope to generate a concise explanation before pushing analysts deeper into the case drawer or investigation timeline.'
+        : activeIncidentId
+          ? 'The incident is already pinned in the URL, so the first response can stay scoped even before the incident detail finishes loading.'
+          : selectedCase
+            ? 'The case is already attached in the URL, so the next useful step is a cited summary or next-step recommendation instead of a blank prompt.'
+            : caseId
+              ? 'The case is already pinned in the URL, and the assistant will keep that context attached while the case detail finishes loading.'
+              : mode === 'retrieval-only'
+                ? 'Open the assistant from a case, incident, or investigation when possible so the first response starts with preserved evidence instead of a generic question.'
+                : 'The assistant is outside retrieval-only mode, so analysts should re-check the operating boundary before depending on it for broader guidance.';
+  const priorityContextHref =
+    activeInvestigationHref || activeIncidentHref || activeCaseHref || '/soc#cases';
   const assistantFocusRows = [
     {
       label: 'Priority context',
@@ -334,15 +337,15 @@ export default function AssistantWorkspace() {
         ? `${selectedInvestigation.workflow_name || activeInvestigationId} is linked to case ${selectedInvestigation.case_id || caseId || 'unknown'}`
         : activeInvestigationId
           ? `Investigation ${activeInvestigationId} is already attached from the current URL scope.`
-        : selectedIncident
-          ? `${selectedIncident.title || `Incident #${selectedIncident.id}`} is already attached to this assistant view`
-          : activeIncidentId
-            ? `Incident #${activeIncidentId} is already attached from the current URL scope.`
-          : selectedCase
-            ? `Case #${selectedCase.id} is pinned into the URL and ready for a cited answer`
-            : caseId
-              ? `Case #${caseId} is already pinned in the current URL scope.`
-              : 'Open a case, incident, or investigation first to preserve the investigation handoff.',
+          : selectedIncident
+            ? `${selectedIncident.title || `Incident #${selectedIncident.id}`} is already attached to this assistant view`
+            : activeIncidentId
+              ? `Incident #${activeIncidentId} is already attached from the current URL scope.`
+              : selectedCase
+                ? `Case #${selectedCase.id} is pinned into the URL and ready for a cited answer`
+                : caseId
+                  ? `Case #${caseId} is already pinned in the current URL scope.`
+                  : 'Open a case, incident, or investigation first to preserve the investigation handoff.',
       href: priorityContextHref,
       action: hasUrlScope ? 'Open context' : 'Open SOC',
     },
@@ -382,29 +385,32 @@ export default function AssistantWorkspace() {
             <a className="btn btn-sm" href="#safe-assistant-boundaries">
               Review Boundaries
             </a>
-            <a className="btn btn-sm" href={response ? '#assistant-answer' : '#assistant-question-card'}>
+            <a
+              className="btn btn-sm"
+              href={response ? '#assistant-answer' : '#assistant-question-card'}
+            >
               {response ? 'Review Answer' : 'Ask Priority Question'}
             </a>
           </div>
         </div>
         <div className="card assistant-focus-summary-grid summary-grid">
-            <div className="summary-card">
-              <div className="summary-label">Attached scope</div>
+          <div className="summary-card">
+            <div className="summary-label">Attached scope</div>
             <div className="summary-value">{attachedScopeCount}</div>
             <div className="summary-meta">
               {selectedInvestigation
                 ? 'investigation linked'
                 : activeInvestigationId
                   ? 'investigation loading'
-                : selectedIncident
-                  ? 'incident linked'
-                  : activeIncidentId
-                    ? 'incident loading'
-                  : selectedCase
-                    ? 'case linked'
-                    : caseId
-                      ? 'case loading'
-                      : 'open from SOC'}
+                  : selectedIncident
+                    ? 'incident linked'
+                    : activeIncidentId
+                      ? 'incident loading'
+                      : selectedCase
+                        ? 'case linked'
+                        : caseId
+                          ? 'case loading'
+                          : 'open from SOC'}
             </div>
           </div>
           <div className="summary-card">
@@ -517,9 +523,7 @@ export default function AssistantWorkspace() {
         {hasUrlScope ? (
           <div style={{ display: 'grid', gap: 12 }}>
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-              {caseId ? (
-                <span className="badge badge-info">{`Case #${caseId}`}</span>
-              ) : null}
+              {caseId ? <span className="badge badge-info">{`Case #${caseId}`}</span> : null}
               {activeIncidentId ? (
                 <span className="badge badge-info">{`Incident #${activeIncidentId}`}</span>
               ) : null}

@@ -418,8 +418,12 @@ describe('AssistantWorkspace', () => {
     expect(screen.getByText('Case #42')).toBeInTheDocument();
     expect(screen.getByText('Incident #7')).toBeInTheDocument();
     expect(
-      screen.getByText('Attached scope is loading from the URL. You can still ask a scoped question while the detail cards catch up.'),
+      screen.getByText(
+        'Attached scope is loading from the URL. You can still ask a scoped question while the detail cards catch up.',
+      ),
     ).toBeInTheDocument();
-    expect(screen.queryByText(/Open the assistant from a case, incident, or investigation/i)).not.toBeInTheDocument();
+    expect(
+      screen.queryByText(/Open the assistant from a case, incident, or investigation/i),
+    ).not.toBeInTheDocument();
   });
 });

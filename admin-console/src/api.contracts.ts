@@ -10,8 +10,8 @@ import type {
   LaunchpadEvidencePackResponse,
   OperationalSnapshotsResponse,
   ReleaseDoctorResponse,
-} from "@wardex/sdk";
-import * as api from "./api.js";
+} from '@wardex/sdk';
+import * as api from './api.js';
 
 type NoArgEndpoint<T> = () => Promise<T>;
 

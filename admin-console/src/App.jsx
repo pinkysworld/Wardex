@@ -1195,7 +1195,9 @@ export default function App() {
         {authenticated && (
           <div className="scope-bar" aria-label="Current workspace scope">
             <div className="scope-copy">
-              <span className="scope-eyebrow">{currentGroup?.label || primaryDestination.label}</span>
+              <span className="scope-eyebrow">
+                {currentGroup?.label || primaryDestination.label}
+              </span>
               <span className="scope-title">{currentSection.label}</span>
               <span className="scope-meta">
                 {workspaceLabel}

@@ -782,8 +782,7 @@ export default function FleetAgents() {
     }
     return {
       title: 'Fleet coverage is ready for routine monitoring',
-      copy:
-        'No recovery or release-drift lane is dominating right now, so operators can work from the agent explorer and install queue without immediate escalation pressure.',
+      copy: 'No recovery or release-drift lane is dominating right now, so operators can work from the agent explorer and install queue without immediate escalation pressure.',
       lane: 'Fleet overview',
       lead: latestRelease?.version || 'Stable release',
       tab: 'fleet',
@@ -827,11 +826,7 @@ export default function FleetAgents() {
           : 'Recovery watchlist is currently clear.',
       badge: offlineAgents.length > 0 ? 'Recovery' : staleAgents.length > 0 ? 'Stale' : 'Clear',
       tone:
-        offlineAgents.length > 0
-          ? 'badge-err'
-          : staleAgents.length > 0
-            ? 'badge-warn'
-            : 'badge-ok',
+        offlineAgents.length > 0 ? 'badge-err' : staleAgents.length > 0 ? 'badge-warn' : 'badge-ok',
       onClick: () => {
         setTab('updates');
         setFleetQueryState({ fleetTab: 'updates', updatesPanel: 'recovery' });

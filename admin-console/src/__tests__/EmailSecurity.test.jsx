@@ -206,7 +206,10 @@ describe('EmailSecurity', () => {
     expect(await screen.findByText('Current email focus')).toBeInTheDocument();
 
     await user.click(screen.getByRole('button', { name: 'Review Quarantine' }));
-    expect(screen.getByRole('tab', { name: 'quarantine' })).toHaveAttribute('aria-selected', 'true');
+    expect(screen.getByRole('tab', { name: 'quarantine' })).toHaveAttribute(
+      'aria-selected',
+      'true',
+    );
     expect(screen.getByTestId('email-location')).toHaveTextContent('/email-security');
 
     await user.click(screen.getByRole('button', { name: 'Review Policies' }));
@@ -214,6 +217,9 @@ describe('EmailSecurity', () => {
     expect(screen.getByTestId('email-location')).toHaveTextContent('/email-security?tab=policies');
 
     await user.click(screen.getByRole('button', { name: 'Open Priority Lane' }));
-    expect(screen.getByRole('tab', { name: 'quarantine' })).toHaveAttribute('aria-selected', 'true');
+    expect(screen.getByRole('tab', { name: 'quarantine' })).toHaveAttribute(
+      'aria-selected',
+      'true',
+    );
   });
 });

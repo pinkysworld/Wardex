@@ -38,14 +38,13 @@ export default function EmailSecurity() {
   const emailLoading = loadingQ || loadingPolicies;
   const phishingDetected = Number(st.phishing_detected || 0);
   const attachmentsFlagged = Number(st.attachments_flagged || 0);
-  const priorityTab =
-    emailLoading
+  const priorityTab = emailLoading
+    ? 'quarantine'
+    : qItems.length > 0
       ? 'quarantine'
-      : qItems.length > 0
-        ? 'quarantine'
-        : policyList.length === 0
-          ? 'policies'
-          : 'analyze';
+      : policyList.length === 0
+        ? 'policies'
+        : 'analyze';
   const emailFocusTitle = emailLoading
     ? 'Email posture is loading'
     : qItems.length > 0
@@ -67,10 +66,9 @@ export default function EmailSecurity() {
   const emailFocusRows = [
     {
       label: 'Quarantine review',
-      detail:
-        emailLoading
-          ? 'Loading quarantine posture and release queue.'
-          : qItems.length > 0
+      detail: emailLoading
+        ? 'Loading quarantine posture and release queue.'
+        : qItems.length > 0
           ? `${qItems.length} message${qItems.length === 1 ? ' needs' : 's need'} release or delete decisions.`
           : 'No quarantined mail is waiting right now.',
       tab: 'quarantine',
@@ -94,10 +92,9 @@ export default function EmailSecurity() {
     },
     {
       label: 'Policy coverage',
-      detail:
-        emailLoading
-          ? 'Loading policy coverage and thresholds.'
-          : policyList.length > 0
+      detail: emailLoading
+        ? 'Loading policy coverage and thresholds.'
+        : policyList.length > 0
           ? `${policyList.length} active policy ${policyList.length === 1 ? 'profile' : 'profiles'} loaded in this view.`
           : 'No policy profile is loaded yet.',
       tab: 'policies',
@@ -167,7 +164,9 @@ export default function EmailSecurity() {
           <div className="summary-card">
             <div className="summary-label">Quarantine</div>
             <div className="summary-value">{displayMetric(qItems.length)}</div>
-            <div className="summary-meta">{emailLoading ? 'loading queue' : 'messages waiting'}</div>
+            <div className="summary-meta">
+              {emailLoading ? 'loading queue' : 'messages waiting'}
+            </div>
           </div>
           <div className="summary-card">
             <div className="summary-label">Blocked phishing</div>
@@ -218,7 +217,7 @@ export default function EmailSecurity() {
           gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))',
           gap: 12,
         }}
-        >
+      >
         <div className="card" style={{ padding: 16, textAlign: 'center' }}>
           <div style={{ fontSize: 28, fontWeight: 700 }}>
             {emailLoading ? '—' : st.total_scanned || 0}

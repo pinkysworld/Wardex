@@ -329,7 +329,8 @@ export default function UEBADashboard() {
         : 'No peer-group clustering is available in the current range.',
       badge: topPeerGroup ? 'Peer' : 'Clear',
       tone: topPeerGroup ? 'badge-info' : 'badge-ok',
-      onClick: () => updateParams({ entity: topPeerEntity?.entity_id || topEntity?.entity_id || null }),
+      onClick: () =>
+        updateParams({ entity: topPeerEntity?.entity_id || topEntity?.entity_id || null }),
       actionLabel: 'Open',
     },
     {
@@ -363,7 +364,10 @@ export default function UEBADashboard() {
           <h3>{uebaFocusTitle}</h3>
           <p>{uebaFocusCopy}</p>
           <div className="ueba-focus-actions btn-group">
-            <button className="btn btn-sm btn-primary" onClick={() => updateParams({ entity: topEntity?.entity_id || null })}>
+            <button
+              className="btn btn-sm btn-primary"
+              onClick={() => updateParams({ entity: topEntity?.entity_id || null })}
+            >
               Open Top Entity
             </button>
             <button className="btn btn-sm" onClick={() => updateParams({ sort: 'anomaly_count' })}>

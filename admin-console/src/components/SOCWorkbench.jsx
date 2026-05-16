@@ -307,7 +307,12 @@ function responseApprovalVisibility(request, preview, escalationItems, escalatio
   );
   const required = Math.max(
     1,
-    Number(preview?.required_approvals ?? request?.approvals_required ?? request?.required_approvals ?? 1),
+    Number(
+      preview?.required_approvals ??
+        request?.approvals_required ??
+        request?.required_approvals ??
+        1,
+    ),
   );
   const pendingCount = Math.max(0, required - approvedCount);
   const pendingApprovers = [
@@ -317,11 +322,14 @@ function responseApprovalVisibility(request, preview, escalationItems, escalatio
   const chain = [
     ...(Array.isArray(request?.approval_chain) ? request.approval_chain : []),
     ...(Array.isArray(preview?.approval_chain) ? preview.approval_chain : []),
-    ...approvals.map((approval) => approval.actor || approval.user || approval.approver).filter(Boolean),
+    ...approvals
+      .map((approval) => approval.actor || approval.user || approval.approver)
+      .filter(Boolean),
   ];
   const severity = String(request?.severity || '').toLowerCase();
   const activeEscalation = escalationItems.find((entry) => {
-    const haystack = `${entry?.request_id || ''} ${entry?.incident_id || ''} ${entry?.target || ''} ${entry?.severity || ''}`.toLowerCase();
+    const haystack =
+      `${entry?.request_id || ''} ${entry?.incident_id || ''} ${entry?.target || ''} ${entry?.severity || ''}`.toLowerCase();
     return (
       (request?.id && haystack.includes(String(request.id).toLowerCase())) ||
       (request?.target && haystack.includes(String(request.target).toLowerCase()))
@@ -346,7 +354,9 @@ function responseApprovalVisibility(request, preview, escalationItems, escalatio
           : 'quorum met',
     chainLabel:
       chain.length > 0
-        ? [...new Set(chain.map((item) => String(item).trim()).filter(Boolean))].slice(0, 3).join(' -> ')
+        ? [...new Set(chain.map((item) => String(item).trim()).filter(Boolean))]
+            .slice(0, 3)
+            .join(' -> ')
         : `${approvedCount}/${required} approvals recorded`,
     notificationStatus:
       request?.notification_status ||
@@ -878,7 +888,8 @@ export default function SOCWorkbench() {
       Object.fromEntries(
         responseSafetyRequests
           .map((entry) => {
-            const request = entry?.request && typeof entry.request === 'object' ? entry.request : {};
+            const request =
+              entry?.request && typeof entry.request === 'object' ? entry.request : {};
             const requestId = String(request.id ?? entry?.request_id ?? '').trim();
             if (!requestId) return null;
             return [requestId, entry?.preview || null];
@@ -1693,7 +1704,11 @@ export default function SOCWorkbench() {
           <h3>{socFocusTitle}</h3>
           <p>{socFocusCopy}</p>
           <div className="soc-priority-actions btn-group">
-            <button className="btn btn-sm btn-primary" type="button" onClick={() => setTab('queue')}>
+            <button
+              className="btn btn-sm btn-primary"
+              type="button"
+              onClick={() => setTab('queue')}
+            >
               Open Queue
             </button>
             <button className="btn btn-sm" type="button" onClick={() => setTab('response')}>
@@ -4063,13 +4078,20 @@ export default function SOCWorkbench() {
                               <td style={{ minWidth: 250 }}>
                                 {preview ? (
                                   <div
-                                    style={{ display: 'grid', gap: 4, fontSize: 12, color: 'var(--text-secondary)' }}
+                                    style={{
+                                      display: 'grid',
+                                      gap: 4,
+                                      fontSize: 12,
+                                      color: 'var(--text-secondary)',
+                                    }}
                                   >
                                     <span
                                       className={`badge ${preview.would_execute ? 'badge-ok' : 'badge-warn'}`}
                                       style={{ width: 'fit-content' }}
                                     >
-                                      {preview.would_execute ? 'Live after approval' : 'Dry-run gated'}
+                                      {preview.would_execute
+                                        ? 'Live after approval'
+                                        : 'Dry-run gated'}
                                     </span>
                                     <div>
                                       {preview.required_approvals || 0} approval
@@ -4142,11 +4164,12 @@ export default function SOCWorkbench() {
                         })}
                       </tbody>
                     </table>
-                      {responseSafetyGuardrails.length > 0 && (
-                        <div className="hint" style={{ marginTop: 12 }}>
-                          Response safety guardrails: {responseSafetyGuardrails.slice(0, 3).join(' • ')}
-                        </div>
-                      )}
+                    {responseSafetyGuardrails.length > 0 && (
+                      <div className="hint" style={{ marginTop: 12 }}>
+                        Response safety guardrails:{' '}
+                        {responseSafetyGuardrails.slice(0, 3).join(' • ')}
+                      </div>
+                    )}
                     {/* Per-step execution detail for in-progress/failed requests */}
                     {reqs
                       .filter(

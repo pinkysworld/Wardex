@@ -702,7 +702,8 @@ function installSocWorkbenchFetchMock(tracker = {}) {
       return Promise.resolve(jsonOk(fixtures.responseRequests));
     if (pathname === '/api/response/audit') return Promise.resolve(jsonOk(fixtures.responseAudit));
     if (pathname === '/api/response/stats') return Promise.resolve(jsonOk(fixtures.responseStats));
-    if (pathname === '/api/response/safety') return Promise.resolve(jsonOk(fixtures.responseSafety));
+    if (pathname === '/api/response/safety')
+      return Promise.resolve(jsonOk(fixtures.responseSafety));
     if (pathname === '/api/traces') return Promise.resolve(jsonOk(fixtures.traces));
     if (pathname === '/api/remediation/safety')
       return Promise.resolve(jsonOk(fixtures.remediationSafety));
@@ -1291,10 +1292,16 @@ describe('SOCWorkbench', () => {
     expect((await screen.findAllByText('rollback ready')).length).toBeGreaterThan(0);
     expect(await screen.findByText('verify queued')).toBeInTheDocument();
     expect(await screen.findByText('Dry-run gated')).toBeInTheDocument();
-    expect(await screen.findByText(/Linux: cgroup\/nftables isolation preview/i)).toBeInTheDocument();
-    expect(await screen.findByText(/Rollback: Restore network access after incident validation./i)).toBeInTheDocument();
+    expect(
+      await screen.findByText(/Linux: cgroup\/nftables isolation preview/i),
+    ).toBeInTheDocument();
+    expect(
+      await screen.findByText(/Rollback: Restore network access after incident validation./i),
+    ).toBeInTheDocument();
     expect(await screen.findByText(/Pending approver: incident commander/i)).toBeInTheDocument();
-    expect(await screen.findByText(/Approval chain: requester -> secops-lead/i)).toBeInTheDocument();
+    expect(
+      await screen.findByText(/Approval chain: requester -> secops-lead/i),
+    ).toBeInTheDocument();
     expect(await screen.findByText(/Notify: slack queued/i)).toBeInTheDocument();
     expect(await screen.findByText(/Escalate: Critical Route policy/i)).toBeInTheDocument();
     expect(await screen.findByText(/Trace: trace-response-1/i)).toBeInTheDocument();
