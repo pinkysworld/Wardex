@@ -4,6 +4,19 @@ All notable changes to Wardex are documented in this file.
 
 ## [Unreleased]
 
+## [1.0.20] — 2026-05-16 — priority lanes and API hardening
+
+### Added
+- **Workspace priority lanes**: Dashboard, Fleet, Infrastructure, NDR, UEBA, and SOC surfaces now compute the most pressured queue, identify the lead finding, and route operators directly into the matching priority lane.
+- **Operator focus narratives**: dashboard lead alerts, fleet drift/offline pressure, infrastructure remediation and asset exposure, network anomalies, and entity-risk escalations now surface concise context before operators pivot into detail.
+
+### Changed
+- **Release metadata alignment**: bumps Rust, admin-console, Python SDK, TypeScript SDK, Helm, OTLP, OpenAPI, installation, reproducibility, website, and test fixtures to the `v1.0.20` priority-lane baseline.
+- **Runtime and dependency hardening**: carries the Node runtime and npm install hardening plus dependency-refresh cleanup into the release baseline.
+
+### Security
+- **Authenticated API default**: backend API routes now default to authenticated access unless explicitly classified as public, agent, or cluster traffic, keeping public exposure on a narrow allowlist for health, metrics, OpenAPI, session bootstrap, and SSO handshakes.
+
 ## [1.0.19] — 2026-05-15 — operator trust continuity
 
 ### Added

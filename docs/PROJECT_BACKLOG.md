@@ -2,7 +2,17 @@
 
 This backlog lists the next concrete tasks in build order.
 
-## Current strengthening checkpoint (`v1.0.19`)
+## Current strengthening checkpoint (`v1.0.20`)
+
+Recently completed for the `v1.0.20` priority-lane and API-hardening release:
+
+- [x] Dashboard, Fleet, Infrastructure, NDR, UEBA, and SOC now compute the most pressured queue and route operators into a matching priority lane.
+- [x] Lead alert, endpoint, asset, network, and entity-risk findings now include concise focus narratives before drilldown.
+- [x] Backend `/api/*` routes now default to authenticated access unless explicitly allowlisted as public, agent, or cluster traffic.
+- [x] Node runtime, npm install, and dependency-refresh hardening carried into the release baseline.
+- [x] Release metadata, docs, website, Helm, OpenAPI, Python SDK, TypeScript SDK, OTLP, and install/reproducibility surfaces aligned on `v1.0.20`.
+
+## Previous strengthening checkpoint (`v1.0.19`)
 
 Recently completed for the `v1.0.19` operator-trust continuity release:
 

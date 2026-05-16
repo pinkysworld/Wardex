@@ -14,16 +14,15 @@ Wardex is a Rust-based XDR and SIEM platform for private-cloud and self-hosted s
 - **Scan across platforms:** malware, virus, trojan, and rootkit workflows cover Linux, macOS, and Windows with local engines plus optional open-source signature presets.
 - **Ship verifiably:** releases include checksums, SBOMs, provenance, signed artifacts, and documented verification gates.
 
-## Current Release: `v1.0.19`
+## Current Release: `v1.0.20`
 
-This operator-trust continuity release strengthens handoffs across live triage, collector readiness, detection promotion, and approval-gated response while keeping automated response execution behind existing approval gates.
+This priority-lane and API-hardening release helps operators jump to the most pressured workspace queue while tightening backend API route defaults for signed cross-platform release publication.
 
-- Live Monitor route state now preserves tabs, filters, selected alerts, and process drawer context for reliable handoff links.
-- Command Center connector rows now surface lifecycle proof, failure context, and next settings actions for collector recovery.
-- Threat Detection quality rows now show promotion-ready or promotion-blocked status with the first actionable blocker.
-- SOC response rows now expose pending approvers, approval chain, notification state, escalation policy, trace labels, rollback, and verification context.
-- Response Safety payloads now link request IDs to dry-run preview, approval ledger, trace endpoint, rollback, and post-action verification evidence.
-- All release metadata, docs, website, SDKs, Helm, OTLP, and test fixtures are aligned on `v1.0.19`.
+- Dashboard, Fleet, Infrastructure, NDR, UEBA, and SOC surfaces now compute the dominant queue pressure and expose a direct priority-lane action.
+- Lead alerts, endpoint drift, asset exposure, remediation backlog, network anomalies, and entity-risk escalations now carry concise focus narratives before drilldown.
+- Backend `/api/*` routes now default to authenticated access unless explicitly classified as public, agent, or cluster traffic.
+- Node runtime and npm install hardening plus dependency-refresh cleanup are folded into the release baseline.
+- All release metadata, docs, website, SDKs, Helm, OTLP, and test fixtures are aligned on `v1.0.20`.
 
 See [CHANGELOG.md](CHANGELOG.md) for full release history.
 

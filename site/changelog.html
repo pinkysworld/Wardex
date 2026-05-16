@@ -53,6 +53,7 @@
             <h2>Releases</h2>
             <ul>
       <li><a href="#vUnreleased"><span class="chl-ver">vUnreleased</span><span class="chl-nav-title"></span></a></li>
+      <li><a href="#v1.0.20"><span class="chl-ver">v1.0.20</span><span class="chl-nav-title">2026-05-16 — priority lanes and API hardening</span></a></li>
       <li><a href="#v1.0.19"><span class="chl-ver">v1.0.19</span><span class="chl-nav-title">2026-05-15 — operator trust continuity</span></a></li>
       <li><a href="#v1.0.18"><span class="chl-ver">v1.0.18</span><span class="chl-nav-title">2026-05-13 — intelligence gates and release cleanup</span></a></li>
       <li><a href="#v1.0.17"><span class="chl-ver">v1.0.17</span><span class="chl-nav-title">2026-05-12 — operator continuity and evidence closure</span></a></li>
@@ -168,6 +169,32 @@
         <span class="chl-version-tag">vUnreleased</span>
         <h2>Unreleased</h2>
       </header>
+    </article>
+    <article class="chl-release" id="v1.0.20">
+      <header class="chl-release-header">
+        <span class="chl-version-tag">v1.0.20</span>
+        <h2>2026-05-16 — priority lanes and API hardening</h2>
+      </header>
+      <div class="chl-category">
+        <h3>Added</h3>
+        <ul>
+        <li><strong>Workspace priority lanes</strong>: Dashboard, Fleet, Infrastructure, NDR, UEBA, and SOC surfaces now compute the most pressured queue, identify the lead finding, and route operators directly into the matching priority lane.</li>
+        <li><strong>Operator focus narratives</strong>: dashboard lead alerts, fleet drift/offline pressure, infrastructure remediation and asset exposure, network anomalies, and entity-risk escalations now surface concise context before operators pivot into detail.</li>
+        </ul>
+      </div>
+      <div class="chl-category">
+        <h3>Changed</h3>
+        <ul>
+        <li><strong>Release metadata alignment</strong>: bumps Rust, admin-console, Python SDK, TypeScript SDK, Helm, OTLP, OpenAPI, installation, reproducibility, website, and test fixtures to the <code>v1.0.20</code> priority-lane baseline.</li>
+        <li><strong>Runtime and dependency hardening</strong>: carries the Node runtime and npm install hardening plus dependency-refresh cleanup into the release baseline.</li>
+        </ul>
+      </div>
+      <div class="chl-category">
+        <h3>Security</h3>
+        <ul>
+        <li><strong>Authenticated API default</strong>: backend API routes now default to authenticated access unless explicitly classified as public, agent, or cluster traffic, keeping public exposure on a narrow allowlist for health, metrics, OpenAPI, session bootstrap, and SSO handshakes.</li>
+        </ul>
+      </div>
     </article>
     <article class="chl-release" id="v1.0.19">
       <header class="chl-release-header">

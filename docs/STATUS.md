@@ -2,10 +2,10 @@
 
 ## Current release
 
-- **Version:** `1.0.19`
+- **Version:** `1.0.20`
 - **Positioning:** private-cloud XDR and SIEM platform with enterprise detection engineering, malware scanning, analyst workflows, fleet operations, behavioural analytics, and automated incident response
 - **Source footprint:** 139 Rust source modules
-- **API contract:** versioned OpenAPI surface with REST, GraphQL, live `/api/openapi.json` export, generated SDK parity diagnostics, cursor page contracts, release observability/preflight proof APIs, production assurance endpoints, malware scan and response-action contracts, source-aware alert analysis, operator-trust workspaces, alert feedback/evidence-chain contracts, Detection Trust scoring and draft-only tuning APIs, detection validation lab APIs, response safety preview/verification APIs with execution-audit continuity, agent enrollment-token flows, connector marketplace summaries, operations health snapshots, and release verification readiness endpoints with evidence freshness metadata
+- **API contract:** versioned OpenAPI surface with REST, GraphQL, live `/api/openapi.json` export, generated SDK parity diagnostics, authenticated-by-default API route classification, cursor page contracts, release observability/preflight proof APIs, production assurance endpoints, malware scan and response-action contracts, source-aware alert analysis, operator-trust workspaces, alert feedback/evidence-chain contracts, Detection Trust scoring and draft-only tuning APIs, detection validation lab APIs, response safety preview/verification APIs with execution-audit continuity, agent enrollment-token flows, connector marketplace summaries, operations health snapshots, and release verification readiness endpoints with evidence freshness metadata
 - **Verification:** release preflight gating for Rust formatting, Clippy, admin-console linting, admin-console formatting, admin-console build, and release-doc validation, plus Rust integration coverage, focused Detection Trust endpoint tests, session-cookie exchange tests, collector lifecycle tests, remediation change-review tests, Command Center summary/action-drawer tests, Help & Docs unit coverage, assistant/ticketing/enterprise API regression tests, operator trust workspace unit coverage, SDK regeneration checks, strict Playwright a11y smoke coverage, local Developer ID `.p12` signing validation, focused admin-console regression coverage, thread pullout regression coverage, and Launchpad coverage for proof freshness badges and persisted snapshot evidence state
 - **Production hardening:** 100% (59/59 controls implemented)
 
@@ -99,7 +99,15 @@ The current release has been verified with:
 
 ## Current product posture
 
-Wardex is now positioned as a professional XDR/SIEM control plane with incident-first analyst workflows, explainable detections, context-preserving reporting, operator-visible recovery posture, and explicit shift-lead surfaces for ownership, handoff, and detection-review pressure. The runtime, admin console, release process, and website are aligned around operator trust, workflow closure, deployment readiness, clean release verification, and freshness-gated evidence. Alert explainability now keeps provenance and freshness context in the drawer, Live Monitor preserves tab/filter/alert/process route state, Command Center exposes collector lifecycle proof, Threat Detection shows promotion blockers inline, and SOC response requests carry pending approvers, approval-chain, notification, escalation, trace, rollback, and verification context.
+Wardex is now positioned as a professional XDR/SIEM control plane with incident-first analyst workflows, explainable detections, context-preserving reporting, operator-visible recovery posture, and explicit shift-lead surfaces for ownership, handoff, and detection-review pressure. The runtime, admin console, release process, and website are aligned around operator trust, workflow closure, deployment readiness, clean release verification, and freshness-gated evidence. Dashboard, Fleet, Infrastructure, NDR, UEBA, and SOC now expose computed priority lanes so operators can jump directly into the most pressured alert, endpoint, asset, network, entity, or case queue, while backend API routes default to authenticated access unless intentionally allowlisted.
+
+## Recently shipped (v1.0.20)
+
+- **Workspace priority lanes** — Dashboard, Fleet, Infrastructure, NDR, UEBA, and SOC now compute dominant queue pressure and provide a direct priority-lane action.
+- **Operator focus narratives** — lead alerts, endpoint drift, asset exposure, remediation backlog, network anomalies, and entity-risk escalations now show concise context before drilldown.
+- **Authenticated API default** — backend `/api/*` routes now require authenticated access unless explicitly classified as public, agent, or cluster traffic.
+- **Runtime and dependency hardening** — Node runtime, npm install, and dependency-refresh cleanup are carried into the release baseline.
+- **Release metadata alignment** — Rust, admin-console, Python SDK, TypeScript SDK, Helm, OTLP, OpenAPI, website, install docs, reproducibility docs, and test fixtures now point at the `v1.0.20` priority-lane baseline.
 
 ## Recently shipped (v1.0.19)
 
