@@ -492,10 +492,12 @@ describe('Workflow pivots', () => {
 
     expect(await screen.findByText('Attack Graph Pivots')).toBeInTheDocument();
     expect(screen.getByText('Campaign Intelligence')).toBeInTheDocument();
-    expect(screen.getByText('Credential campaign across 2 hosts')).toBeInTheDocument();
+    expect(await screen.findByText('Credential campaign across 2 hosts')).toBeInTheDocument();
     expect(screen.getByText('Temporal Chain Drilldown')).toBeInTheDocument();
-    expect(screen.getAllByText('Credential-access precursor observed').length).toBeGreaterThan(0);
-    expect(screen.getByText('Node Detail')).toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.getAllByText('Credential-access precursor observed').length).toBeGreaterThan(0);
+    });
+    expect(await screen.findByText('Node Detail')).toBeInTheDocument();
     expect(screen.getAllByText('user-1').length).toBeGreaterThan(0);
     expect(screen.getByText('Export Evidence Bundle')).toBeInTheDocument();
 
