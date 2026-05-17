@@ -477,10 +477,7 @@ impl PlaybookEngine {
             execution
                 .variables
                 .insert("last_approval_actor".into(), approved_by.to_string());
-            if let Some(feedback) = feedback
-                .map(str::trim)
-                .filter(|value| !value.is_empty())
-            {
+            if let Some(feedback) = feedback.map(str::trim).filter(|value| !value.is_empty()) {
                 execution
                     .variables
                     .insert("last_approval_feedback".into(), feedback.to_string());
@@ -544,10 +541,9 @@ impl PlaybookEngine {
                             execution
                                 .variables
                                 .insert("pending_approval_approver".into(), approver.clone());
-                            execution.variables.insert(
-                                "pending_approval_message".into(),
-                                approval_message,
-                            );
+                            execution
+                                .variables
+                                .insert("pending_approval_message".into(), approval_message);
                         }
                         return Ok(exec_id.to_string());
                     }
@@ -1081,7 +1077,9 @@ mod tests {
         assert_eq!(exec.status, ExecutionStatus::AwaitingApproval);
         assert_eq!(exec.finished_at, None);
         assert_eq!(
-            exec.variables.get("pending_approval_step").map(String::as_str),
+            exec.variables
+                .get("pending_approval_step")
+                .map(String::as_str),
             Some("s2")
         );
         assert_eq!(
@@ -1097,7 +1095,10 @@ mod tests {
             Some("Approve isolation for alert-42")
         );
         assert_eq!(exec.step_results[0].status, ExecutionStatus::Succeeded);
-        assert_eq!(exec.step_results[1].status, ExecutionStatus::AwaitingApproval);
+        assert_eq!(
+            exec.step_results[1].status,
+            ExecutionStatus::AwaitingApproval
+        );
         assert_eq!(exec.step_results[2].status, ExecutionStatus::Pending);
     }
 
@@ -1153,7 +1154,9 @@ mod tests {
         assert_eq!(exec.status, ExecutionStatus::Succeeded);
         assert!(exec.finished_at.is_some());
         assert_eq!(
-            exec.variables.get("last_approval_actor").map(String::as_str),
+            exec.variables
+                .get("last_approval_actor")
+                .map(String::as_str),
             Some("secops-lead")
         );
         assert_eq!(

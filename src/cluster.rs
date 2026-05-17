@@ -647,7 +647,8 @@ impl ClusterNode {
 
     pub fn replication_state(&self) -> ReplicationState {
         let inner = self.inner.lock().unwrap_or_else(|e| e.into_inner());
-        let primary_region = replication_region_hint(&inner.config.node_id, &inner.config.bind_addr);
+        let primary_region =
+            replication_region_hint(&inner.config.node_id, &inner.config.bind_addr);
         let replicas = inner
             .config
             .peers
@@ -788,7 +789,9 @@ impl ClusterNode {
 
 fn replication_region_hint(node_id: &NodeId, addr: &str) -> String {
     for candidate in [addr, node_id.0.as_str()] {
-        for token in candidate.split(|character: char| !character.is_ascii_alphanumeric() && character != '-') {
+        for token in candidate
+            .split(|character: char| !character.is_ascii_alphanumeric() && character != '-')
+        {
             let normalized = token.trim().to_ascii_lowercase();
             if looks_like_region(&normalized) {
                 return normalized;
@@ -819,8 +822,12 @@ fn looks_like_region(value: &str) -> bool {
         && first.len() <= 3
         && first.len() >= 2
         && second.len() >= 2
-        && first.chars().all(|character| character.is_ascii_lowercase())
-        && second.chars().all(|character| character.is_ascii_lowercase())
+        && first
+            .chars()
+            .all(|character| character.is_ascii_lowercase())
+        && second
+            .chars()
+            .all(|character| character.is_ascii_lowercase())
         && third.chars().all(|character| character.is_ascii_digit())
 }
 
