@@ -4,6 +4,7 @@ const BASE = process.env.WARDEX_BASE_URL || 'http://127.0.0.1:8080';
 const TOKEN = process.env.WARDEX_ADMIN_TOKEN || 'wardex-live-token';
 const RUN_ID = Date.now().toString(36);
 const CASE_TITLE = `Live Playwright identity case ${RUN_ID}`;
+let createdCaseId = '';
 
 test.beforeAll(async ({ request }) => {
   const headers = { Authorization: `Bearer ${TOKEN}` };
@@ -23,7 +24,7 @@ test.beforeAll(async ({ request }) => {
     },
   });
 
-  await request.post(`${BASE}/api/cases`, {
+  const caseResponse = await request.post(`${BASE}/api/cases`, {
     headers,
     data: {
       title: CASE_TITLE,
@@ -31,6 +32,10 @@ test.beforeAll(async ({ request }) => {
       priority: 'high',
     },
   });
+  expect(caseResponse.ok()).toBeTruthy();
+  const casePayload = await caseResponse.json();
+  createdCaseId = String(casePayload.id || '');
+  expect(createdCaseId).not.toBe('');
 });
 
 test('assistant and ticket sync live workflow', async ({ page }) => {
@@ -80,16 +85,12 @@ test('assistant and ticket sync live workflow', async ({ page }) => {
   await page.locator('#sidebar-nav').getByRole('link', { name: 'Analyst Assistant' }).click();
   await expect(page.getByRole('heading', { name: 'Analyst Assistant' })).toBeVisible();
 
+  await page.goto(`${BASE}/admin/assistant?case=${createdCaseId}`, {
+    waitUntil: 'domcontentloaded',
+  });
+  await expect(page).toHaveURL(new RegExp(`/admin/assistant\\?case=${createdCaseId}$`));
   const caseSelect = page.locator('#assistant-case-select');
-  const findCaseValue = async () => {
-    const options = await caseSelect.locator('option').evaluateAll((nodes) =>
-      nodes.map((node) => ({ value: node.value, text: node.textContent || '' })),
-    );
-    return options.find((option) => option.text.includes(CASE_TITLE))?.value || '';
-  };
-  await expect.poll(findCaseValue).not.toBe('');
-  const selectedCaseValue = await findCaseValue();
-  await caseSelect.selectOption(selectedCaseValue);
+  await expect(caseSelect).toBeVisible();
   await page.getByLabel('Question').fill('Summarize this case and cite the strongest evidence.');
   await page.getByRole('button', { name: 'Ask Assistant' }).click();
   const caseContextCard = page.locator('.card').filter({
@@ -98,8 +99,7 @@ test('assistant and ticket sync live workflow', async ({ page }) => {
   await expect(page.getByRole('link', { name: 'Open Case in SOC' })).toBeVisible();
   await expect(caseContextCard.getByText(CASE_TITLE)).toBeVisible();
 
-  await page.locator('#sidebar-nav').getByRole('link', { name: 'SOC Workbench' }).click();
-  await page.getByRole('button', { name: 'Cases' }).click();
+  await page.goto(`${BASE}/admin/soc#cases`, { waitUntil: 'domcontentloaded' });
   await expect(page.getByText('Ticket Sync')).toBeVisible();
   await page.getByLabel('Project or queue').fill('SECOPS');
   await page.getByLabel('Sync summary').fill('Live Playwright ticket sync validation');

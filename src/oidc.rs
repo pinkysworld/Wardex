@@ -9,8 +9,6 @@
 use base64::Engine;
 use jsonwebtoken::jwk::{Jwk, JwkSet, KeyOperations, PublicKeyUse};
 use jsonwebtoken::{DecodingKey, Header, TokenData, Validation, decode, decode_header};
-use rand::TryRngCore;
-use rand::rngs::OsRng;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::collections::HashMap;
@@ -602,10 +600,9 @@ pub struct SsoStatus {
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
 fn generate_random_string(len: usize) -> String {
-    let mut bytes = vec![0u8; len.div_ceil(2)];
-    let mut rng = OsRng;
-    rng.try_fill_bytes(&mut bytes)
-        .expect("system RNG unavailable for OIDC nonce");
+    let bytes = (0..len.div_ceil(2))
+        .map(|_| rand::random::<u8>())
+        .collect::<Vec<_>>();
     let encoded = hex::encode(bytes);
     encoded.chars().take(len).collect()
 }
@@ -618,10 +615,7 @@ fn current_unix_secs() -> u64 {
 }
 
 fn generate_pkce_code_verifier() -> String {
-    let mut bytes = [0u8; 64];
-    let mut rng = OsRng;
-    rng.try_fill_bytes(&mut bytes)
-        .expect("system RNG unavailable for PKCE verifier");
+    let bytes: [u8; 64] = rand::random();
     base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(bytes)
 }
 

@@ -101,7 +101,7 @@ test('advanced admin console workflows smoke', async ({ page }) => {
   await expect(page.getByRole('button', { name: 'Preview block IP' })).toBeVisible();
   await page.goto(`${BASE}/admin/integrations`, { waitUntil: 'domcontentloaded' });
   await expect(page.getByRole('heading', { name: 'Integrations' })).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Validate syslog' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Validate Splunk HEC' })).toBeVisible();
   await page.goto(`${BASE}/admin/operations-health`, { waitUntil: 'domcontentloaded' });
   await expect(page.getByRole('heading', { name: 'Operations Health' })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Export snapshot' })).toBeVisible();

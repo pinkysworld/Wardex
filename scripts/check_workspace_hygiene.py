@@ -69,7 +69,9 @@ def list_workspace_files() -> list[str]:
     untracked = _read_null_delimited_git_paths(
         ["git", "ls-files", "--others", "--exclude-standard", "-z"]
     )
-    return sorted(set(tracked) | set(untracked))
+    return sorted(
+        path for path in set(tracked) | set(untracked) if (ROOT / path).exists()
+    )
 
 
 def is_duplicate_copy(path: str) -> bool:

@@ -76,11 +76,7 @@ pub struct EnrollmentToken {
 
 impl EnrollmentToken {
     pub fn new(max_uses: u32) -> Self {
-        use rand::TryRngCore;
-        let mut bytes = [0u8; 16];
-        let mut rng = rand::rngs::OsRng;
-        rng.try_fill_bytes(&mut bytes)
-            .expect("system RNG unavailable for enrollment token");
+        let bytes: [u8; 16] = rand::random();
         Self {
             token: hex::encode(bytes),
             created_at: chrono::Utc::now().to_rfc3339(),

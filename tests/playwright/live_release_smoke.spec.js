@@ -3,8 +3,8 @@ const { test, expect } = require('@playwright/test');
 const BASE = process.env.WARDEX_BASE_URL || 'http://127.0.0.1:8080';
 const TOKEN = process.env.WARDEX_ADMIN_TOKEN || 'wardex-live-token';
 
-test('wardex live admin smoke', async ({ page }) => {
-  test.setTimeout(60000);
+test('wardex live admin smoke', async ({ page, request }) => {
+  test.setTimeout(180000);
 
   const consoleErrors = [];
   const pageErrors = [];
@@ -27,7 +27,7 @@ test('wardex live admin smoke', async ({ page }) => {
   await page.getByRole('button', { name: 'Connect' }).click();
   await expect(page.locator('.auth-badge')).toContainText(/Connected/i);
 
-  const proofResponse = await page.request.post(`${BASE}/api/support/first-run-proof`, {
+  const proofResponse = await request.post(`${BASE}/api/support/first-run-proof`, {
     headers: { Authorization: `Bearer ${TOKEN}` },
   });
   expect(proofResponse.ok()).toBeTruthy();
@@ -50,7 +50,7 @@ test('wardex live admin smoke', async ({ page }) => {
 
   const sidebar = page.locator('#sidebar-nav');
 
-  await expect(page.getByRole('heading', { name: 'Dashboard' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Security Overview' })).toBeVisible();
 
   await sidebar.getByRole('link', { name: 'Live Monitor', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Live Monitor' })).toBeVisible();

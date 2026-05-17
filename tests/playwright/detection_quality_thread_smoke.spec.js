@@ -145,14 +145,16 @@ test("live detection quality and thread evidence routes stay wired", async ({
     timeout: 15000,
   });
   await expect(page.getByText("Backend recommendation")).toBeVisible();
-  await expect(page.getByText("Collector readiness")).toBeVisible();
+  await expect(
+    page.locator(".summary-label", { hasText: "Collector readiness" }),
+  ).toBeVisible();
   await expect(page.getByText("Stream guard")).toBeVisible();
   await expect(
     page.getByRole("button", { name: "Run Action" }).first(),
   ).toBeVisible();
-  await expect(page.getByRole("button", { name: "Quality" })).toHaveClass(
-    /active/,
-  );
+  await expect(
+    page.getByRole("button", { name: "Quality", exact: true }),
+  ).toHaveClass(/active/);
 
   await page.goto(`${BASE}/admin/monitor?monitorTab=stream`, {
     waitUntil: "domcontentloaded",

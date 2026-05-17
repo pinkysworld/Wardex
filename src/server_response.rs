@@ -44,10 +44,9 @@ pub(crate) fn security_headers(
 
 pub(crate) fn safe_body(builder: axum::http::response::Builder, body: Body) -> Response<Body> {
     builder.body(body).unwrap_or_else(|_| {
-        Response::builder()
-            .status(500)
-            .body(Body::from("internal server error"))
-            .expect("fallback response must build")
+        let mut response = Response::new(Body::from("internal server error"));
+        *response.status_mut() = axum::http::StatusCode::INTERNAL_SERVER_ERROR;
+        response
     })
 }
 
