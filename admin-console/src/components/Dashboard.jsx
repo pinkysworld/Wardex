@@ -707,7 +707,14 @@ export default function Dashboard() {
         alerts: Number(entry.alerts || 0),
       })),
     };
-  }, [alertList.length, alertTimeline, managerDigest, qStats?.pending, respStats?.pending, staleAlerts.length]);
+  }, [
+    alertList.length,
+    alertTimeline,
+    managerDigest,
+    qStats?.pending,
+    respStats?.pending,
+    staleAlerts.length,
+  ]);
   const dashboardHomeSummary = [
     {
       label: 'Critical queue',
@@ -1500,7 +1507,8 @@ export default function Dashboard() {
                 </div>
               ) : (
                 <div className="hint" style={{ marginTop: 16 }}>
-                  Pressure trend appears once enough alert timestamps are available to chart recent windows.
+                  Pressure trend appears once enough alert timestamps are available to chart recent
+                  windows.
                 </div>
               )}
             </DashboardWidget>

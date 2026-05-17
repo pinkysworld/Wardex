@@ -4183,12 +4183,14 @@ export default function ThreatDetection() {
                     <div className="summary-value">
                       {Number.isFinite(
                         Number(
-                          recommendationsByRuleId[String(selectedRule?.id || '').trim()]?.confidence,
+                          recommendationsByRuleId[String(selectedRule?.id || '').trim()]
+                            ?.confidence,
                         ),
                       )
                         ? `${Math.round(
                             Number(
-                              recommendationsByRuleId[String(selectedRule?.id || '').trim()]?.confidence,
+                              recommendationsByRuleId[String(selectedRule?.id || '').trim()]
+                                ?.confidence,
                             ),
                           )}%`
                         : '—'}

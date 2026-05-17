@@ -135,7 +135,10 @@ const formatCompactLabel = (value) =>
     .trim()
     .replace(/\b\w/g, (character) => character.toUpperCase());
 
-const normalizeText = (value) => String(value || '').trim().toLowerCase();
+const normalizeText = (value) =>
+  String(value || '')
+    .trim()
+    .toLowerCase();
 
 const investigationStatusBadgeClass = (status) => {
   switch (status) {
@@ -204,9 +207,15 @@ const caseContainmentLabel = (status) => {
 const relatedCaseCandidates = (cases, activeCase) => {
   if (!activeCase) return [];
 
-  const activeTags = new Set(asArray(activeCase.tags).map((tag) => normalizeText(tag)).filter(Boolean));
+  const activeTags = new Set(
+    asArray(activeCase.tags)
+      .map((tag) => normalizeText(tag))
+      .filter(Boolean),
+  );
   const activeMitre = new Set(
-    asArray(activeCase.mitre_techniques).map((technique) => normalizeText(technique)).filter(Boolean),
+    asArray(activeCase.mitre_techniques)
+      .map((technique) => normalizeText(technique))
+      .filter(Boolean),
   );
   const activePriority = normalizeText(activeCase.priority);
 
@@ -218,7 +227,9 @@ const relatedCaseCandidates = (cases, activeCase) => {
         activeMitre.has(normalizeText(technique)),
       );
       const priorityMatch =
-        activePriority && normalizeText(caseItem.priority) && normalizeText(caseItem.priority) === activePriority;
+        activePriority &&
+        normalizeText(caseItem.priority) &&
+        normalizeText(caseItem.priority) === activePriority;
       const score = sharedTags.length * 2 + sharedMitre.length * 3 + (priorityMatch ? 1 : 0);
 
       return {
@@ -232,7 +243,9 @@ const relatedCaseCandidates = (cases, activeCase) => {
     .sort(
       (left, right) =>
         right.score - left.score ||
-        String(right.caseItem.updated_at || '').localeCompare(String(left.caseItem.updated_at || '')),
+        String(right.caseItem.updated_at || '').localeCompare(
+          String(left.caseItem.updated_at || ''),
+        ),
     )
     .slice(0, 3);
 };
@@ -3559,7 +3572,9 @@ export default function SOCWorkbench() {
                               }}
                             >
                               <div>
-                                <div className="row-primary">{caseItem.title || `Case #${caseItem.id}`}</div>
+                                <div className="row-primary">
+                                  {caseItem.title || `Case #${caseItem.id}`}
+                                </div>
                                 <div className="row-secondary">
                                   Case #{caseItem.id} · {caseContainmentLabel(caseItem.status)} ·{' '}
                                   {formatCompactLabel(caseItem.priority || 'Medium')}
@@ -3571,7 +3586,8 @@ export default function SOCWorkbench() {
                               Shared tags: {sharedTags.length > 0 ? sharedTags.join(' • ') : 'none'}
                             </div>
                             <div className="row-secondary" style={{ marginTop: 4 }}>
-                              Shared MITRE: {sharedMitre.length > 0 ? sharedMitre.join(' • ') : 'none'}
+                              Shared MITRE:{' '}
+                              {sharedMitre.length > 0 ? sharedMitre.join(' • ') : 'none'}
                             </div>
                             <div className="btn-group" style={{ marginTop: 10 }}>
                               <button

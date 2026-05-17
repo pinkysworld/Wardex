@@ -74,8 +74,7 @@ vi.mock('../api.js', () => ({
         validation: { status: 'ready' },
         destination: 'security_events / wardex:xdr',
         sample_event: { event_type: 'splunk.hec.alert' },
-        summary_line:
-          'https://splunk.example/services/collector -> security_events / wardex:xdr',
+        summary_line: 'https://splunk.example/services/collector -> security_events / wardex:xdr',
         secondary_line: '17 event(s) pushed, 0 pending',
         impact: ['SIEM export', 'external correlation'],
         required_permissions: ['HEC token write', 'HTTPS egress'],
