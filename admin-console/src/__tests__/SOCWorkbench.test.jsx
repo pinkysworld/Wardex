@@ -775,8 +775,12 @@ function installSocWorkbenchFetchMock(tracker = {}) {
     if (pathname === '/api/rbac/users') return Promise.resolve(jsonOk(fixtures.rbacUsers));
     if (pathname === '/api/correlation/campaigns')
       return Promise.resolve(jsonOk(fixtures.campaigns));
-    if (pathname === '/api/playbooks/credential-storm-playbook/run' && method === 'POST') {
-      tracker.playbookRunIds = [...(tracker.playbookRunIds || []), 'credential-storm-playbook'];
+    if (
+      ((pathname === '/api/playbooks/run' && method === 'POST') ||
+        (pathname === '/api/playbooks/credential-storm-playbook/run' && method === 'POST')) &&
+      (!body || typeof body === 'object')
+    ) {
+      tracker.playbookRunIds = [...(tracker.playbookRunIds || []), body?.playbook_id || 'credential-storm-playbook'];
       return Promise.resolve(jsonOk({ status: 'ok' }));
     }
     if (pathname === '/api/playbooks') return Promise.resolve(jsonOk(fixtures.playbooks));

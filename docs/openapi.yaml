@@ -2814,13 +2814,14 @@ paths:
         schema:
           type: string
           enum:
-            title: Wardex XDR/SIEM API
-            version: 1.0.22
+          - incidents
+          - remediation
           - connectors
           - rule_tuning
           - release
           - evidence
       responses:
+        '200':
           description: Single-lane payload with metric key, value, and shared timestamp
           content:
             application/json:

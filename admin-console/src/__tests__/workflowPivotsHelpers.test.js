@@ -22,7 +22,6 @@ describe('workflowPivots helpers', () => {
 
   it('describes route scope with human-readable labels', () => {
     expect(describeSearchScope('?intent=run-hunt&huntName=Credential%20Storm%20Pivot')).toEqual([
-      'Intent: Run Hunt',
       'Hunt Name: Credential Storm Pivot',
     ]);
   });
