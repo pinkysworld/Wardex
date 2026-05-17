@@ -1,7 +1,10 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
-import SearchPalette from '../components/SearchPalette';
-import { buildCommandHref } from '../components/workflowPivots.js';
+import SearchPalette, {
+  filterCommandsForRole,
+  prioritizeCommandsForPath,
+} from '../components/SearchPalette';
+import { buildCommandHref, SEARCH_COMMANDS } from '../components/workflowPivots.js';
 
 // Mock the API module
 vi.mock('../api', () => ({
@@ -176,5 +179,32 @@ describe('SearchPalette', () => {
         path: buildCommandHref('visual-regression-gate'),
       }),
     );
+  });
+
+  it('filters admin-oriented commands for analysts', () => {
+    const analystCommands = filterCommandsForRole(SEARCH_COMMANDS, 'analyst');
+    const actions = analystCommands.map((command) => command.action);
+
+    expect(actions).not.toContain('deployment-confidence');
+    expect(actions).not.toContain('release-gate');
+    expect(actions).not.toContain('connect-first-agent');
+    expect(actions).toContain('open-soc-queue');
+    expect(actions).toContain('detection-quality');
+  });
+
+  it('prioritizes route-relevant commands for the active path', () => {
+    const commands = SEARCH_COMMANDS.filter((command) =>
+      [
+        'connect-first-agent',
+        'guided-incident',
+        'open-soc-queue',
+        'deployment-confidence',
+      ].includes(command.action),
+    );
+
+    const prioritized = prioritizeCommandsForPath(commands, '/soc');
+
+    expect(prioritized[0]?.action).toBe('open-soc-queue');
+    expect(prioritized[1]?.action).toBe('guided-incident');
   });
 });

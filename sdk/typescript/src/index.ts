@@ -6505,6 +6505,16 @@ export class WardexClient {
     });
   }
 
+  async resumePlaybookExecution(
+    executionId: string,
+    feedback?: string,
+  ): Promise<PlaybookExecution> {
+    return this.request("POST", "/api/playbooks/resume", {
+      execution_id: executionId,
+      ...(feedback ? { feedback } : {}),
+    });
+  }
+
   async playbookExecution(executionId: string): Promise<PlaybookExecution> {
     return this.request(
       "GET",

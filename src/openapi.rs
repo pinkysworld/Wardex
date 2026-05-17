@@ -1692,7 +1692,7 @@ pub fn wardex_openapi_spec(version: &str) -> OpenApiSpec {
             "get",
             op(
                 "getIntegrationMarketplace",
-                "Connector marketplace summaries, health, sample event previews, and impact mapping",
+                "Connector, SIEM export, and ticketing marketplace summaries with health, sample event previews, and impact mapping",
                 &["config", "operator-trust"],
             ),
         )
@@ -1701,7 +1701,7 @@ pub fn wardex_openapi_spec(version: &str) -> OpenApiSpec {
             "post",
             op_post(
                 "validateIntegration",
-                "Validate connector setup and return sample-event guidance",
+                "Validate connector setup or outbound integration readiness and return sample-event guidance",
                 &["config", "operator-trust"],
                 "Connector validation request",
             ),
@@ -2924,6 +2924,26 @@ pub fn wardex_openapi_spec(version: &str) -> OpenApiSpec {
                 "Start a playbook execution for a specific alert",
                 &["response"],
                 "Playbook execution request",
+            ),
+        )
+        .path(
+            "/api/playbooks/run",
+            "post",
+            op_post(
+                "runPlaybook",
+                "Run a playbook until it completes or pauses for approval",
+                &["response"],
+                "Playbook run request",
+            ),
+        )
+        .path(
+            "/api/playbooks/resume",
+            "post",
+            op_post(
+                "resumePlaybook",
+                "Resume a playbook execution that is waiting for approval",
+                &["response"],
+                "Playbook approval resume request",
             ),
         )
         .path(

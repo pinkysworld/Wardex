@@ -2,7 +2,17 @@
 
 This backlog lists the next concrete tasks in build order.
 
-## Current strengthening checkpoint (`v1.0.20`)
+## Current strengthening checkpoint (`v1.0.21`)
+
+Recently completed for the `v1.0.21` workflow-continuity and documentation-refresh release:
+
+- [x] Search Palette, Dashboard, Threat Detection, and SOC Workbench now carry route-aware workflow depth for priority actions, forecasting, confidence gates, case journaling, and related-case continuity.
+- [x] Integrations marketplace now surfaces Splunk HEC validation and ServiceNow destination posture, while Help & Docs exposes replication region, lag, and health evidence.
+- [x] Playbook approval gates now pause durably in execution state and resume through runtime, OpenAPI, Python SDK, and TypeScript SDK helpers.
+- [x] Fresh documentation and API-reference screenshots are published through the website resources surface and the GitHub-visible docs index.
+- [x] Release metadata, docs, website, Helm, OpenAPI, Python SDK, TypeScript SDK, OTLP, and install/reproducibility surfaces aligned on `v1.0.21`.
+
+## Previous strengthening checkpoint (`v1.0.20`)
 
 Recently completed for the `v1.0.20` priority-lane and API-hardening release:
 

@@ -387,6 +387,18 @@ export default function HelpDocs() {
         cluster_peers: controlPlane.cluster
           ? `${controlPlane.cluster.peers_reachable || 0} / ${controlPlane.cluster.peers_total || 0}`
           : '—',
+        primary_region: controlPlane.cluster?.primary_region || '—',
+        replica_regions:
+          Array.isArray(controlPlane.cluster?.replica_regions) &&
+          controlPlane.cluster.replica_regions.length > 0
+            ? controlPlane.cluster.replica_regions.join(', ')
+            : '—',
+        replication_health: controlPlane.cluster
+          ? String(controlPlane.cluster.replication_health || 'review').replace(/_/g, ' ')
+          : 'Not clustered',
+        replica_lag: controlPlane.cluster
+          ? `${controlPlane.cluster.replica_lag_entries ?? 0} entries`
+          : '—',
         recovery_status: controlPlane.recovery_status,
         restore_ready: controlPlane.restore_ready ? 'Ready' : 'Review',
         backup_schedule: controlPlane.backup_schedule_cron,
@@ -443,6 +455,20 @@ export default function HelpDocs() {
                     : ''
                 }`,
               },
+              {
+                label: 'Replication posture',
+                ok: controlPlane.cluster.replication_health === 'healthy',
+                detail: `${controlPlane.cluster.primary_region || 'cluster-default'} · ${
+                  Array.isArray(controlPlane.cluster.replica_regions)
+                    ? controlPlane.cluster.replica_regions.length
+                    : 0
+                } replica region${
+                  Array.isArray(controlPlane.cluster.replica_regions) &&
+                  controlPlane.cluster.replica_regions.length === 1
+                    ? ''
+                    : 's'
+                } · max lag ${controlPlane.cluster.replica_lag_entries || 0} entries`,
+              },
             ]
           : []),
         {
@@ -459,6 +485,9 @@ export default function HelpDocs() {
     : [];
   const failoverDrillHistory = Array.isArray(controlPlane?.failover_drill_history)
     ? controlPlane.failover_drill_history.slice(0, 3)
+    : [];
+  const clusterReplicas = Array.isArray(controlPlane?.cluster?.replicas)
+    ? controlPlane.cluster.replicas
     : [];
   const recoveryTargets =
     Array.isArray(controlPlane?.recovery_targets) && controlPlane.recovery_targets.length > 0
@@ -1307,6 +1336,22 @@ export default function HelpDocs() {
                 <div className="summary-meta">Current raft leader node</div>
               </div>
               <div className="summary-card">
+                <div className="summary-label">Primary region</div>
+                <div className="summary-value" style={{ fontSize: 12 }}>
+                  {controlPlane.cluster.primary_region || 'cluster-default'}
+                </div>
+                <div className="summary-meta">Current replication origin for this node</div>
+              </div>
+              <div className="summary-card">
+                <div className="summary-label">Replication</div>
+                <div className="summary-value" style={{ fontSize: 12 }}>
+                  {String(controlPlane.cluster.replication_health || 'review').replace(/_/g, ' ')}
+                </div>
+                <div className="summary-meta">
+                  {`Max lag ${controlPlane.cluster.replica_lag_entries || 0} entries`}
+                </div>
+              </div>
+              <div className="summary-card">
                 <div className="summary-label">HA Mode</div>
                 <div className="summary-value" style={{ fontSize: 12 }}>
                   {controlPlane.ha_mode || 'standalone'}
@@ -1314,6 +1359,43 @@ export default function HelpDocs() {
                 <div className="summary-meta">Deployment topology</div>
               </div>
             </div>
+            {clusterReplicas.length > 0 ? (
+              <div style={{ display: 'grid', gap: 10, marginTop: 16 }}>
+                <div className="summary-label">Replica coverage</div>
+                {clusterReplicas.map((replica, index) => (
+                  <div
+                    key={`${replica.node_id || 'replica'}-${index}`}
+                    style={{
+                      border: '1px solid var(--border)',
+                      borderRadius: 12,
+                      padding: 12,
+                      background: 'var(--bg-card)',
+                      display: 'grid',
+                      gap: 4,
+                    }}
+                  >
+                    <div
+                      style={{
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        gap: 12,
+                        alignItems: 'center',
+                      }}
+                    >
+                      <strong>{replica.node_id || 'replica'}</strong>
+                      <span className={`badge ${replica.reachable ? 'badge-ok' : 'badge-warn'}`}>
+                        {replica.reachable ? 'reachable' : 'unreachable'}
+                      </span>
+                    </div>
+                    <div className="summary-meta">
+                      {`${replica.replica_region || 'cluster-default'} · lag ${
+                        replica.lag_entries || 0
+                      } entries · match ${replica.match_index || 0}`}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : null}
           </div>
         ) : null}
 

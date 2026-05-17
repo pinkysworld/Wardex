@@ -940,6 +940,7 @@ export const complianceSummary = () => get('/api/compliance/summary');
 
 // ── Playbook Run ─────────────────────────────────────────────
 export const runPlaybook = (body) => post('/api/playbooks/run', body);
+export const resumePlaybook = (body) => post('/api/playbooks/resume', body);
 
 // ── Alert Deduplication ──────────────────────────────────────
 export const dedupAlerts = () => get('/api/alerts/dedup');
@@ -1036,7 +1037,7 @@ export const dedupStats = () => get('/api/alerts/dedup-stats');
 export const noisyRules = () => get('/api/detection/noisy-rules');
 export const playbooks = () => get('/api/playbooks');
 export const playbookById = (id) => get(`/api/playbooks/${encodeURIComponent(id)}`);
-export const playbookRun = (id) => post(`/api/playbooks/${encodeURIComponent(id)}/run`);
+export const playbookRun = (id) => post('/api/playbooks/run', { playbook_id: id });
 export const canaryStatus = () => get('/api/canary/status');
 export const insiderRisk = (entityKind, entityId) =>
   get(`/api/ueba/insider-risk/${encodeURIComponent(entityKind)}/${encodeURIComponent(entityId)}`);

@@ -160,6 +160,27 @@ pub struct ClusterHealth {
     pub healthy: bool,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ReplicaStatus {
+    pub node_id: NodeId,
+    pub addr: String,
+    pub replica_region: String,
+    pub reachable: bool,
+    pub match_index: u64,
+    pub lag_entries: u64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ReplicationState {
+    pub primary_region: String,
+    pub replica_regions: Vec<String>,
+    pub replica_count: usize,
+    pub reachable_replicas: usize,
+    pub max_lag_entries: u64,
+    pub replication_health: String,
+    pub replicas: Vec<ReplicaStatus>,
+}
+
 // ── Snapshot ─────────────────────────────────────────────────────────────────
 
 /// A snapshot of the Raft state machine for log compaction.
@@ -624,6 +645,60 @@ impl ClusterNode {
         }
     }
 
+    pub fn replication_state(&self) -> ReplicationState {
+        let inner = self.inner.lock().unwrap_or_else(|e| e.into_inner());
+        let primary_region = replication_region_hint(&inner.config.node_id, &inner.config.bind_addr);
+        let replicas = inner
+            .config
+            .peers
+            .iter()
+            .map(|peer| {
+                let status = inner.peer_status.get(&peer.node_id);
+                let match_index = status.map(|value| value.match_index).unwrap_or_default();
+                let reachable = status.map(|value| value.reachable).unwrap_or(false);
+                ReplicaStatus {
+                    node_id: peer.node_id.clone(),
+                    addr: peer.addr.clone(),
+                    replica_region: replication_region_hint(&peer.node_id, &peer.addr),
+                    reachable,
+                    match_index,
+                    lag_entries: inner.state.commit_index.saturating_sub(match_index),
+                }
+            })
+            .collect::<Vec<_>>();
+        let reachable_replicas = replicas.iter().filter(|replica| replica.reachable).count();
+        let max_lag_entries = replicas
+            .iter()
+            .map(|replica| replica.lag_entries)
+            .max()
+            .unwrap_or_default();
+        let mut replica_regions = replicas
+            .iter()
+            .map(|replica| replica.replica_region.clone())
+            .collect::<Vec<_>>();
+        replica_regions.sort();
+        replica_regions.dedup();
+        let replication_health = if replicas.is_empty() {
+            "standalone"
+        } else if reachable_replicas == replicas.len() && max_lag_entries <= 1 {
+            "healthy"
+        } else if reachable_replicas > 0 {
+            "degraded"
+        } else {
+            "offline"
+        };
+
+        ReplicationState {
+            primary_region,
+            replica_regions,
+            replica_count: replicas.len(),
+            reachable_replicas,
+            max_lag_entries,
+            replication_health: replication_health.to_string(),
+            replicas,
+        }
+    }
+
     pub fn mark_peer_unreachable(&self, peer_id: &NodeId) {
         if let Ok(mut inner) = self.inner.lock()
             && let Some(status) = inner.peer_status.get_mut(peer_id)
@@ -709,6 +784,44 @@ impl ClusterNode {
         inner.log.retain(|e| e.index > up_to_index);
         before - inner.log.len()
     }
+}
+
+fn replication_region_hint(node_id: &NodeId, addr: &str) -> String {
+    for candidate in [addr, node_id.0.as_str()] {
+        for token in candidate.split(|character: char| !character.is_ascii_alphanumeric() && character != '-') {
+            let normalized = token.trim().to_ascii_lowercase();
+            if looks_like_region(&normalized) {
+                return normalized;
+            }
+        }
+    }
+
+    if addr.contains("127.0.0.1") || addr.contains("0.0.0.0") || addr.contains("localhost") {
+        "local-lab".to_string()
+    } else {
+        "cluster-default".to_string()
+    }
+}
+
+fn looks_like_region(value: &str) -> bool {
+    let mut parts = value.split('-');
+    let Some(first) = parts.next() else {
+        return false;
+    };
+    let Some(second) = parts.next() else {
+        return false;
+    };
+    let Some(third) = parts.next() else {
+        return false;
+    };
+
+    parts.next().is_none()
+        && first.len() <= 3
+        && first.len() >= 2
+        && second.len() >= 2
+        && first.chars().all(|character| character.is_ascii_lowercase())
+        && second.chars().all(|character| character.is_ascii_lowercase())
+        && third.chars().all(|character| character.is_ascii_digit())
 }
 
 // ── Tests ────────────────────────────────────────────────────────────────────

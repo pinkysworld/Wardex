@@ -28,11 +28,11 @@ const WORKSPACE_CONFIG = {
     title: 'Integrations',
     eyebrow: 'Operate',
     summary:
-      'Validate connector setup, sample events, freshness, health, and downstream detection impact from one marketplace view.',
+      'Validate connector setup, outbound SIEM export, sample events, freshness, health, and downstream ticketing impact from one marketplace view.',
     loader: api.integrationsMarketplace,
     primaryAction: {
-      label: 'Validate syslog',
-      run: () => api.validateIntegration({ provider: 'generic_syslog' }),
+      label: 'Validate Splunk HEC',
+      run: () => api.validateIntegration({ provider: 'splunk_hec' }),
     },
   },
   operations: {
@@ -230,17 +230,54 @@ function IntegrationsView({ data }) {
               <span>Health</span>
               <strong>{valueText(connector.health_score, '0')}%</strong>
             </div>
-            <div className="trust-card-footer">
-              <StatusPill value={connector.freshness} />
-              <span>{connector.next_fix}</span>
+            <div className="trust-score-row">
+              <span>Setup</span>
+              <strong>{valueText(connector.setup_status, 'unknown')}</strong>
             </div>
+            {connector.destination ? (
+              <div className="trust-score-row">
+                <span>Destination</span>
+                <strong>{valueText(connector.destination)}</strong>
+              </div>
+            ) : null}
+            {connector.sample_event?.event_type ? (
+              <div className="trust-score-row">
+                <span>Preview</span>
+                <strong>{valueText(connector.sample_event.event_type)}</strong>
+              </div>
+            ) : null}
+            <div className="trust-card-footer">
+              <StatusPill value={connector.validation?.status || connector.freshness} />
+              <span>{connector.summary_line || connector.next_fix}</span>
+            </div>
+            {connector.secondary_line ? (
+              <div className="trust-card-footer">
+                <span>{connector.secondary_line}</span>
+              </div>
+            ) : null}
             <div className="trust-chip-row">
               {asArray(connector.impact).map((impact) => (
-                <span className="trust-chip" key={impact}>
+                <span className="trust-chip" key={`${connector.id}-${impact}`}>
                   {impact}
                 </span>
               ))}
             </div>
+            {asArray(connector.required_permissions).length > 0 ? (
+              <div className="trust-chip-row">
+                {asArray(connector.required_permissions).map((permission) => (
+                  <span className="trust-chip" key={`${connector.id}-permission-${permission}`}>
+                    {permission}
+                  </span>
+                ))}
+              </div>
+            ) : null}
+            {connector.action_href ? (
+              <div className="btn-group" style={{ marginTop: 12 }}>
+                <Link className="btn btn-sm" to={connector.action_href}>
+                  {connector.action_label || 'Open workflow'}
+                </Link>
+              </div>
+            ) : null}
           </div>
         ))}
       </div>

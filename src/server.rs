@@ -2556,6 +2556,21 @@ struct ControlPlaneClusterSnapshot {
     peers_reachable: usize,
     commit_index: u64,
     healthy: bool,
+    primary_region: String,
+    replica_regions: Vec<String>,
+    replica_lag_entries: u64,
+    replication_health: String,
+    replicas: Vec<ControlPlaneReplicaSnapshot>,
+}
+
+#[derive(Debug, Clone, serde::Serialize)]
+struct ControlPlaneReplicaSnapshot {
+    node_id: String,
+    addr: String,
+    replica_region: String,
+    reachable: bool,
+    match_index: u64,
+    lag_entries: u64,
 }
 
 fn control_plane_cluster_snapshot(state: &AppState) -> Option<ControlPlaneClusterSnapshot> {
@@ -2563,6 +2578,8 @@ fn control_plane_cluster_snapshot(state: &AppState) -> Option<ControlPlaneCluste
     if health.peers_total == 0 {
         return None;
     }
+
+    let replication = state.cluster.replication_state();
 
     Some(ControlPlaneClusterSnapshot {
         node_id: health.node_id.to_string(),
@@ -2572,6 +2589,22 @@ fn control_plane_cluster_snapshot(state: &AppState) -> Option<ControlPlaneCluste
         peers_reachable: health.peers_reachable,
         commit_index: health.commit_index,
         healthy: health.healthy,
+        primary_region: replication.primary_region,
+        replica_regions: replication.replica_regions,
+        replica_lag_entries: replication.max_lag_entries,
+        replication_health: replication.replication_health,
+        replicas: replication
+            .replicas
+            .into_iter()
+            .map(|replica| ControlPlaneReplicaSnapshot {
+                node_id: replica.node_id.to_string(),
+                addr: replica.addr,
+                replica_region: replica.replica_region,
+                reachable: replica.reachable,
+                match_index: replica.match_index,
+                lag_entries: replica.lag_entries,
+            })
+            .collect(),
     })
 }
 
@@ -13034,7 +13067,7 @@ fn response_verify_from_body(body: &[u8]) -> Response<Body> {
 
 fn integrations_marketplace_payload(state: &AppState) -> serde_json::Value {
     let collectors = full_collector_status_entries(state);
-    let cards = collectors
+    let mut cards = collectors
         .iter()
         .map(|collector| {
             let provider = collector.get("provider").and_then(serde_json::Value::as_str).unwrap_or("connector");
@@ -13064,12 +13097,248 @@ fn integrations_marketplace_payload(state: &AppState) -> serde_json::Value {
             })
         })
         .collect::<Vec<_>>();
+    cards.extend(integration_destination_cards(state));
     serde_json::json!({
         "generated_at": chrono::Utc::now().to_rfc3339(),
         "connectors": cards,
         "guided_setup_categories": ["cloud", "identity", "saas", "edr", "syslog", "siem_export", "ticketing", "threat_intel", "malware_signatures"],
-        "settings_href": "/admin/settings?tab=integrations",
+        "settings_href": "/settings?tab=integrations",
     })
+}
+
+fn integration_destination_cards(state: &AppState) -> Vec<serde_json::Value> {
+    vec![
+        splunk_hec_marketplace_card(state),
+        servicenow_marketplace_card(state),
+    ]
+}
+
+fn splunk_hec_marketplace_card(state: &AppState) -> serde_json::Value {
+    let config = state.siem_connector.config();
+    let status = state.siem_connector.status();
+    let validation = siem_config_validation_json(config, status.last_error.as_deref());
+    let validation_status = validation
+        .get("status")
+        .and_then(serde_json::Value::as_str)
+        .unwrap_or("unknown");
+    let configured = config.enabled && config.siem_type == "splunk";
+    let health_score = match validation_status {
+        "ready" if configured => 95,
+        "warning" if configured => 68,
+        "error" => 36,
+        _ if configured => 58,
+        _ => 28,
+    };
+    let destination = format!(
+        "{} / {}",
+        if config.index.trim().is_empty() {
+            "wardex"
+        } else {
+            config.index.as_str()
+        },
+        if config.source_type.trim().is_empty() {
+            "wardex:xdr"
+        } else {
+            config.source_type.as_str()
+        }
+    );
+    let summary_line = if configured {
+        format!(
+            "{} -> {}",
+            if status.endpoint.trim().is_empty() {
+                "Endpoint pending"
+            } else {
+                status.endpoint.as_str()
+            },
+            destination
+        )
+    } else {
+        "Splunk HEC is available as the primary outbound SIEM export path.".to_string()
+    };
+    let secondary_line = if configured {
+        format!(
+            "{} event(s) pushed, {} pending{}",
+            status.total_pushed,
+            status.pending_events,
+            if config.pull_enabled { ", pull enabled" } else { "" }
+        )
+    } else {
+        "Configure the HEC endpoint, token, index, and sourcetype in Settings.".to_string()
+    };
+    let next_fix = if configured && validation_status == "ready" {
+        "Splunk HEC export is configured; keep token scope and index routing current."
+    } else if configured {
+        "Review the HEC endpoint, token, and TLS settings before enabling production export."
+    } else {
+        "Switch SIEM type to Splunk HEC and save the endpoint, token, index, and sourcetype."
+    };
+
+    serde_json::json!({
+        "id": "splunk_hec",
+        "label": "Splunk HEC Export",
+        "lane": "siem_export",
+        "setup_status": if configured { "configured" } else { "not_enabled" },
+        "health_score": health_score,
+        "last_success_at": serde_json::Value::Null,
+        "failure_streak": if status.last_error.is_some() { 1 } else { 0 },
+        "freshness": if configured && validation_status == "ready" { "fresh" } else if configured { "review" } else { "planned" },
+        "required_permissions": connector_permissions("splunk_hec"),
+        "next_fix": next_fix,
+        "sample_event": sample_event_for_connector("splunk_hec"),
+        "impact": connector_impact_for_provider("splunk_hec"),
+        "actions": ["validate_export_path", "preview_sample_event", "open_settings"],
+        "validation": validation,
+        "summary_line": summary_line,
+        "secondary_line": secondary_line,
+        "action_href": "/settings?tab=integrations",
+        "action_label": "Open Settings",
+        "destination": destination,
+        "export_path": {
+            "siem_type": config.siem_type,
+            "endpoint": config.endpoint,
+            "index": config.index,
+            "source_type": config.source_type,
+            "verify_tls": config.verify_tls,
+            "pull_enabled": config.pull_enabled,
+        },
+    })
+}
+
+fn servicenow_marketplace_card(state: &AppState) -> serde_json::Value {
+    let servicenow_syncs = state
+        .enterprise
+        .ticket_syncs()
+        .iter()
+        .filter(|sync| sync.provider.eq_ignore_ascii_case("servicenow"))
+        .collect::<Vec<_>>();
+    let latest_sync = servicenow_syncs
+        .iter()
+        .copied()
+        .max_by(|left, right| left.synced_at.cmp(&right.synced_at));
+    let has_sync = latest_sync.is_some();
+    let destination = latest_sync
+        .and_then(|sync| sync.queue_or_project.as_deref())
+        .unwrap_or("ServiceNow incident queue");
+    let validation_status = if has_sync { "ready" } else { "review" };
+    let validation_issues = if has_sync {
+        Vec::new()
+    } else {
+        vec![serde_json::json!({
+            "level": "info",
+            "field": "workflow",
+            "message": "Sync a case from SOC Workbench using provider=servicenow to establish outbound ticket visibility.",
+        })]
+    };
+    let summary_line = match latest_sync {
+        Some(sync) => format!(
+            "Last sync {} for {} #{}",
+            sync.external_key, sync.object_kind, sync.object_id
+        ),
+        None => "Outbound case sync is available from the SOC workbench ticketing panel."
+            .to_string(),
+    };
+    let secondary_line = match latest_sync {
+        Some(sync) => format!(
+            "{} sync(s) recorded; latest queue {}",
+            sync.sync_count, destination
+        ),
+        None => "Sync a case from SOC Workbench to establish queue and latency visibility."
+            .to_string(),
+    };
+    let next_fix = if has_sync {
+        "Review queue mapping and continue outbound case sync coverage."
+    } else {
+        "Seed ServiceNow visibility by syncing a case from the SOC workbench ticketing panel."
+    };
+
+    serde_json::json!({
+        "id": "servicenow",
+        "label": "ServiceNow Case Sync",
+        "lane": "ticketing",
+        "setup_status": if has_sync { "configured" } else { "manual_sync" },
+        "health_score": if has_sync { 86 } else { 44 },
+        "last_success_at": latest_sync.map(|sync| sync.synced_at.clone()),
+        "failure_streak": 0,
+        "freshness": if has_sync { "fresh" } else { "review" },
+        "required_permissions": connector_permissions("servicenow"),
+        "next_fix": next_fix,
+        "sample_event": sample_event_for_connector("servicenow"),
+        "impact": connector_impact_for_provider("servicenow"),
+        "actions": ["open_case_sync", "review_status_visibility"],
+        "validation": {
+            "status": validation_status,
+            "issues": validation_issues,
+        },
+        "summary_line": summary_line,
+        "secondary_line": secondary_line,
+        "action_href": "/soc#cases",
+        "action_label": "Open SOC Cases",
+        "destination": destination,
+        "sync_status": {
+            "provider": "servicenow",
+            "synced_total": servicenow_syncs.len(),
+            "latest_external_key": latest_sync.map(|sync| sync.external_key.clone()),
+            "latest_object_kind": latest_sync.map(|sync| sync.object_kind.clone()),
+            "latest_object_id": latest_sync.map(|sync| sync.object_id.clone()),
+            "latest_queue_or_project": latest_sync.and_then(|sync| sync.queue_or_project.clone()),
+            "latest_synced_at": latest_sync.map(|sync| sync.synced_at.clone()),
+            "last_ticket_sync_latency_ms": state.enterprise.metrics().last_ticket_sync_latency_ms,
+        },
+    })
+}
+
+fn integration_validation_payload(state: &AppState, provider: &str) -> serde_json::Value {
+    match provider {
+        "splunk_hec" => {
+            let card = splunk_hec_marketplace_card(state);
+            let validation = card
+                .get("validation")
+                .cloned()
+                .unwrap_or_else(|| serde_json::json!({"status": "unknown", "issues": []}));
+            let status = validation
+                .get("status")
+                .and_then(serde_json::Value::as_str)
+                .unwrap_or("unknown");
+            serde_json::json!({
+                "provider": provider,
+                "valid": status == "ready",
+                "status": status,
+                "sample_event": card.get("sample_event").cloned().unwrap_or_else(|| sample_event_for_connector(provider)),
+                "next_fix": card.get("next_fix").cloned().unwrap_or_else(|| serde_json::json!("Review required permissions and save connector settings before production ingestion.")),
+                "validation": validation,
+                "destination": card.get("destination").cloned().unwrap_or(serde_json::Value::Null),
+                "export_path": card.get("export_path").cloned().unwrap_or(serde_json::Value::Null),
+            })
+        }
+        "servicenow" => {
+            let card = servicenow_marketplace_card(state);
+            let validation = card
+                .get("validation")
+                .cloned()
+                .unwrap_or_else(|| serde_json::json!({"status": "unknown", "issues": []}));
+            let status = validation
+                .get("status")
+                .and_then(serde_json::Value::as_str)
+                .unwrap_or("unknown");
+            serde_json::json!({
+                "provider": provider,
+                "valid": true,
+                "status": status,
+                "sample_event": card.get("sample_event").cloned().unwrap_or_else(|| sample_event_for_connector(provider)),
+                "next_fix": card.get("next_fix").cloned().unwrap_or_else(|| serde_json::json!("Review outbound ticket mappings before production sync.")),
+                "validation": validation,
+                "destination": card.get("destination").cloned().unwrap_or(serde_json::Value::Null),
+                "sync_status": card.get("sync_status").cloned().unwrap_or(serde_json::Value::Null),
+            })
+        }
+        _ => serde_json::json!({
+            "provider": provider,
+            "valid": true,
+            "status": "preview_ready",
+            "sample_event": sample_event_for_connector(provider),
+            "next_fix": "Review required permissions and save connector settings before production ingestion.",
+        }),
+    }
 }
 
 fn connector_permissions(provider: &str) -> Vec<&'static str> {
@@ -13082,6 +13351,8 @@ fn connector_permissions(provider: &str) -> Vec<&'static str> {
         "okta_identity" => vec!["System log read"],
         "m365_saas" => vec!["Management Activity API"],
         "workspace_saas" => vec!["Admin SDK reports read"],
+        "splunk_hec" => vec!["HEC token write", "HTTPS egress", "index access"],
+        "servicenow" => vec!["incident write", "case queue access", "API credentials"],
         "generic_syslog" => vec!["syslog listener"],
         "crowdstrike_falcon" => vec!["EDR event read", "host containment read"],
         _ => vec!["configuration validation"],
@@ -13114,10 +13385,16 @@ fn sample_event_for_connector(provider: &str) -> serde_json::Value {
             "azure_activity" => "Administrative",
             "okta_identity" => "user.session.start",
             "m365_saas" => "Audit.Exchange",
+            "splunk_hec" => "splunk.hec.alert",
+            "servicenow" => "ticket.case.sync",
             "generic_syslog" => "syslog.auth",
             _ => "sample.audit",
         },
-        "normalized_fields": ["timestamp", "actor", "source_ip", "action", "outcome"],
+        "normalized_fields": match provider {
+            "splunk_hec" => vec!["time", "host", "source", "sourcetype", "event.alert_id"],
+            "servicenow" => vec!["external_key", "queue_or_project", "status", "object_id", "synced_at"],
+            _ => vec!["timestamp", "actor", "source_ip", "action", "outcome"],
+        },
     })
 }
 
@@ -13135,6 +13412,8 @@ fn connector_impact_for_provider(provider: &str) -> Vec<&'static str> {
             vec!["SaaS investigation", "mail/file activity", "audit reports"]
         }
         "crowdstrike_falcon" => vec!["EDR enrichment", "host containment", "malware context"],
+        "splunk_hec" => vec!["SIEM export", "external correlation", "retention search"],
+        "servicenow" => vec!["case sync", "ticket workflow", "status visibility"],
         "generic_syslog" => vec![
             "SIEM correlation",
             "network auth",
@@ -16284,7 +16563,7 @@ fn build_cluster_failover_execution(state: &AppState) -> serde_json::Value {
         .get("count")
         .and_then(serde_json::Value::as_u64)
         .unwrap_or_default();
-    let checks = vec![
+    let mut checks = vec![
         serde_json::json!({
             "id": "cluster_reference",
             "status": if has_cluster { "pass" } else { "warn" },
@@ -16301,6 +16580,18 @@ fn build_cluster_failover_execution(state: &AppState) -> serde_json::Value {
             "detail": "Release observability gates are available as failover preconditions.",
         }),
     ];
+    if let Some(cluster) = cluster_snapshot.as_ref() {
+        checks.push(serde_json::json!({
+            "id": "replication_health",
+            "status": if cluster.replication_health == "healthy" { "pass" } else { "warn" },
+            "detail": format!(
+                "{} primary with {} replica region(s); max lag {} entries.",
+                cluster.primary_region,
+                cluster.replica_regions.len(),
+                cluster.replica_lag_entries,
+            ),
+        }));
+    }
     let (fail_count, warn_count, status) = check_counts(&checks);
     let failover_evidence_status = if has_cluster && drill_count > 0 {
         "fresh"
@@ -19134,17 +19425,8 @@ fn handle_api(
                     .get("provider")
                     .and_then(serde_json::Value::as_str)
                     .unwrap_or("generic_syslog");
-                json_response(
-                    &serde_json::json!({
-                        "provider": provider,
-                        "valid": true,
-                        "status": "preview_ready",
-                        "sample_event": sample_event_for_connector(provider),
-                        "next_fix": "Review required permissions and save connector settings before production ingestion.",
-                    })
-                    .to_string(),
-                    200,
-                )
+                let s = state.lock().unwrap_or_else(|e| e.into_inner());
+                json_response(&integration_validation_payload(&s, provider).to_string(), 200)
             }
         },
         (Method::Get, "/api/integrations/sample-event") => {
@@ -20337,6 +20619,8 @@ fn handle_api(
                 {"method": "GET", "path": "/api/playbooks", "auth": true, "description": "List registered automated response playbooks"},
                 {"method": "POST", "path": "/api/playbooks", "auth": true, "description": "Register or update an automated response playbook"},
                 {"method": "POST", "path": "/api/playbooks/execute", "auth": true, "description": "Start a playbook execution for a specific alert"},
+                {"method": "POST", "path": "/api/playbooks/run", "auth": true, "description": "Run a playbook until it completes or pauses for approval"},
+                {"method": "POST", "path": "/api/playbooks/resume", "auth": true, "description": "Resume an approval-gated playbook execution"},
                 {"method": "GET", "path": "/api/playbooks/executions", "auth": true, "description": "List recent playbook execution records"},
                 {"method": "GET", "path": "/api/beacon/analyze", "auth": true, "description": "Analyze beaconing and DGA indicators from recorded network activity"},
                 {"method": "GET", "path": "/api/swarm/intel", "auth": true, "description": "Shared intelligence cache entries"},
@@ -28569,6 +28853,52 @@ fn handle_api(
                     }
                     Err(e) => error_json(&e, 400),
                 }
+            } else if method == Method::Post && url_path == "/api/playbooks/resume" {
+                match read_body_limited(body, 16 * 1024) {
+                    Ok(body_str) => {
+                        let parsed: serde_json::Value = match serde_json::from_str(&body_str) {
+                            Ok(v) => v,
+                            Err(e) => return error_json(&format!("invalid JSON: {e}"), 400),
+                        };
+                        let execution_id = parsed["execution_id"].as_str().unwrap_or("");
+                        if execution_id.is_empty() {
+                            return error_json("execution_id is required", 400);
+                        }
+                        let feedback = parsed["feedback"].as_str();
+                        let now = std::time::SystemTime::now()
+                            .duration_since(std::time::UNIX_EPOCH)
+                            .unwrap_or_default()
+                            .as_millis() as u64;
+                        let approved_by = playbook_executor(&auth_identity);
+                        let mut s = state.lock().unwrap_or_else(|e| e.into_inner());
+                        match s.playbook_engine.resume_execution(
+                            execution_id,
+                            &approved_by,
+                            feedback,
+                            now,
+                        ) {
+                            Ok(exec_id) => {
+                                if let Some(exec) =
+                                    s.playbook_engine.get_execution(&exec_id).cloned()
+                                {
+                                    s.enterprise.record_playbook_execution(&exec);
+                                    eprintln!(
+                                        "[AUDIT] playbook_resume execution={exec_id} by={approved_by}"
+                                    );
+                                    let body = serde_json::to_string(&exec).unwrap_or_default();
+                                    json_response(&body, 200)
+                                } else {
+                                    json_response(
+                                        &format!(r#"{{"execution_id":"{}"}}"#, exec_id),
+                                        200,
+                                    )
+                                }
+                            }
+                            Err(e) => error_json(&e, 400),
+                        }
+                    }
+                    Err(e) => error_json(&e, 400),
+                }
 
             // ── Alert Deduplication ──────────────────────────────────
             } else if method == Method::Get && url_path == "/api/alerts/dedup" {
@@ -33064,6 +33394,71 @@ mod tests {
     }
 
     #[test]
+    fn integrations_marketplace_surfaces_export_and_ticketing_cards() {
+        let (port, token, state) = spawn_test_server_with_state();
+        {
+            let mut s = state.lock().unwrap_or_else(|error| error.into_inner());
+            let splunk_config = crate::siem::SiemConfig {
+                enabled: true,
+                siem_type: "splunk".to_string(),
+                endpoint: "https://splunk.example/services/collector".to_string(),
+                auth_token: "test-hec-token".to_string(),
+                index: "security_events".to_string(),
+                source_type: "wardex:xdr".to_string(),
+                ..crate::siem::SiemConfig::default()
+            };
+            s.config.siem = splunk_config.clone();
+            s.siem_connector.update_config(splunk_config);
+            let _ = s.enterprise.sync_ticket(
+                "servicenow".to_string(),
+                "case".to_string(),
+                "42".to_string(),
+                Some("SECOPS".to_string()),
+                "Escalate identity investigation to the service desk".to_string(),
+                "tester".to_string(),
+            );
+            s.enterprise.record_ticket_sync_metrics(120);
+        }
+
+        let base_url = format!("http://127.0.0.1:{port}");
+        let agent = ureq::AgentBuilder::new().build();
+        let marketplace: serde_json::Value = serde_json::from_str(
+            &agent
+                .get(&format!("{base_url}/api/integrations/marketplace"))
+                .set("Authorization", &format!("Bearer {token}"))
+                .call()
+                .expect("marketplace response")
+                .into_string()
+                .expect("marketplace body"),
+        )
+        .expect("marketplace json");
+
+        let connectors = marketplace["connectors"]
+            .as_array()
+            .expect("connectors array");
+        let splunk = connectors
+            .iter()
+            .find(|entry| entry["id"] == serde_json::json!("splunk_hec"))
+            .expect("splunk marketplace card");
+        assert_eq!(splunk["setup_status"], serde_json::json!("configured"));
+        assert_eq!(splunk["validation"]["status"], serde_json::json!("ready"));
+        assert_eq!(splunk["destination"], serde_json::json!("security_events / wardex:xdr"));
+        assert_eq!(splunk["action_href"], serde_json::json!("/settings?tab=integrations"));
+
+        let servicenow = connectors
+            .iter()
+            .find(|entry| entry["id"] == serde_json::json!("servicenow"))
+            .expect("servicenow marketplace card");
+        assert_eq!(servicenow["setup_status"], serde_json::json!("configured"));
+        assert_eq!(servicenow["validation"]["status"], serde_json::json!("ready"));
+        assert_eq!(
+            servicenow["sync_status"]["latest_queue_or_project"],
+            serde_json::json!("SECOPS")
+        );
+        assert_eq!(servicenow["action_href"], serde_json::json!("/soc#cases"));
+    }
+
+    #[test]
     fn detection_trust_endpoints_are_draft_only_and_normalized() {
         let (port, token, _state) = spawn_test_server_with_state();
         let base_url = format!("http://127.0.0.1:{port}");
@@ -33384,6 +33779,18 @@ mod tests {
             serde_json::json!("cluster-node-1")
         );
         assert_eq!(
+            readiness["evidence"]["control_plane"]["cluster"]["primary_region"],
+            serde_json::json!("local-lab")
+        );
+        assert_eq!(
+            readiness["evidence"]["control_plane"]["cluster"]["replication_health"],
+            serde_json::json!("healthy")
+        );
+        assert_eq!(
+            readiness["evidence"]["control_plane"]["cluster"]["replica_lag_entries"],
+            serde_json::json!(0)
+        );
+        assert_eq!(
             readiness["evidence"]["control_plane"]["failover_drill_history"][0]["status"],
             serde_json::json!("passed")
         );
@@ -33427,6 +33834,24 @@ mod tests {
             dependencies["ha_mode"]["failover_drill_history_count"],
             serde_json::json!(1)
         );
+
+        let failover = {
+            let state = state.lock().unwrap_or_else(|e| e.into_inner());
+            build_cluster_failover_execution(&state)
+        };
+        assert_eq!(
+            failover["cluster"]["replication_health"],
+            serde_json::json!("healthy")
+        );
+        assert_eq!(
+            failover["cluster"]["replica_lag_entries"],
+            serde_json::json!(0)
+        );
+        assert!(failover["checks"]
+            .as_array()
+            .expect("failover checks")
+            .iter()
+            .any(|check| check["id"] == serde_json::json!("replication_health")));
 
         let reloaded = SupportStore::new(&support_store_path.to_string_lossy());
         assert_eq!(

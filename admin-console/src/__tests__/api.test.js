@@ -384,6 +384,25 @@ describe('POST endpoints', () => {
     expect(body.playbook_id).toBe('isolate-host');
   });
 
+  it('resumePlaybook() posts to /api/playbooks/resume', async () => {
+    mockFetch.mockResolvedValueOnce(jsonOk({ execution_id: 'e1', status: 'succeeded' }));
+    await api.resumePlaybook({ execution_id: 'e1', feedback: 'approved' });
+    expect(mockFetch.mock.calls[0][0]).toBe('/api/playbooks/resume');
+    expect(JSON.parse(mockFetch.mock.calls[0][1].body)).toEqual({
+      execution_id: 'e1',
+      feedback: 'approved',
+    });
+  });
+
+  it('playbookRun() routes named playbooks through /api/playbooks/run', async () => {
+    mockFetch.mockResolvedValueOnce(jsonOk({ execution_id: 'e2' }));
+    await api.playbookRun('credential-storm-playbook');
+    expect(mockFetch.mock.calls[0][0]).toBe('/api/playbooks/run');
+    expect(JSON.parse(mockFetch.mock.calls[0][1].body)).toEqual({
+      playbook_id: 'credential-storm-playbook',
+    });
+  });
+
   it('contentRuleTest() posts to the rule test endpoint', async () => {
     mockFetch.mockResolvedValueOnce(jsonOk({ status: 'tested' }));
     await api.contentRuleTest('rule-1');

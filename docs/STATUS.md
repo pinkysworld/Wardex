@@ -2,7 +2,7 @@
 
 ## Current release
 
-- **Version:** `1.0.20`
+- **Version:** `1.0.21`
 - **Positioning:** private-cloud XDR and SIEM platform with enterprise detection engineering, malware scanning, analyst workflows, fleet operations, behavioural analytics, and automated incident response
 - **Source footprint:** 139 Rust source modules
 - **API contract:** versioned OpenAPI surface with REST, GraphQL, live `/api/openapi.json` export, generated SDK parity diagnostics, authenticated-by-default API route classification, cursor page contracts, release observability/preflight proof APIs, production assurance endpoints, malware scan and response-action contracts, source-aware alert analysis, operator-trust workspaces, alert feedback/evidence-chain contracts, Detection Trust scoring and draft-only tuning APIs, detection validation lab APIs, response safety preview/verification APIs with execution-audit continuity, agent enrollment-token flows, connector marketplace summaries, operations health snapshots, and release verification readiness endpoints with evidence freshness metadata
@@ -99,7 +99,15 @@ The current release has been verified with:
 
 ## Current product posture
 
-Wardex is now positioned as a professional XDR/SIEM control plane with incident-first analyst workflows, explainable detections, context-preserving reporting, operator-visible recovery posture, and explicit shift-lead surfaces for ownership, handoff, and detection-review pressure. The runtime, admin console, release process, and website are aligned around operator trust, workflow closure, deployment readiness, clean release verification, and freshness-gated evidence. Dashboard, Fleet, Infrastructure, NDR, UEBA, and SOC now expose computed priority lanes so operators can jump directly into the most pressured alert, endpoint, asset, network, entity, or case queue, while backend API routes default to authenticated access unless intentionally allowlisted.
+Wardex is now positioned as a professional XDR/SIEM control plane with incident-first analyst workflows, explainable detections, context-preserving reporting, operator-visible recovery posture, and explicit shift-lead surfaces for ownership, handoff, and detection-review pressure. The runtime, admin console, release process, and website are aligned around operator trust, workflow closure, deployment readiness, clean release verification, and freshness-gated evidence. The current release extends that posture with route-aware search and dashboard forecasting, confidence-gated detection promotion, case-journal continuity, operator-visible integration and replication posture, durable approval-resume playbooks, and refreshed documentation plus API-reference captures.
+
+## Recently shipped (v1.0.21)
+
+- **Operator workflow depth** — Search Palette now prioritizes route-aware actions, Dashboard adds alert-pressure forecasting, Threat Detection shows promotion confidence gates, and SOC Workbench adds case-journal plus related-case continuity.
+- **Integration and recovery posture** — Operator Trust and Help & Docs now expose Splunk HEC and ServiceNow destination posture plus replication region, lag, and health visibility.
+- **Durable playbook approvals** — playbook approval steps now pause in stored execution state and resume through runtime, OpenAPI, Python SDK, and TypeScript SDK helpers.
+- **Documentation and website refresh** — GitHub README, docs index, website resources page, API reference, and fresh documentation screenshots are aligned with the release surface.
+- **Release metadata alignment** — Rust, admin-console, Python SDK, TypeScript SDK, Helm, OTLP, OpenAPI, website, install docs, reproducibility docs, and test fixtures now point at the `v1.0.21` workflow-continuity baseline.
 
 ## Recently shipped (v1.0.20)
 

@@ -11,6 +11,15 @@ Read it in this order:
 5. [`runbooks/README.md`](runbooks/README.md) for operator playbooks and integration guidance.
 6. [`ROADMAP_XDR_PROFESSIONAL.md`](ROADMAP_XDR_PROFESSIONAL.md) for post-release priorities.
 
+## Live docs surfaces
+
+- Website docs hub: [`site/resources.html`](../site/resources.html)
+- Website API reference: [`site/api.html`](../site/api.html)
+
+![Wardex documentation hub](../site/media/insights/resources-live.png)
+
+![Wardex API reference](../site/media/insights/api-reference-live.png)
+
 ## Topic index
 
 ### Operating the product

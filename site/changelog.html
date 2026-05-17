@@ -9,8 +9,8 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400;500&amp;display=swap" rel="stylesheet">
     <link rel="icon" href="favicon.svg" type="image/svg+xml">
-    <link rel="stylesheet" href="styles.css?v=11">
-    <script defer src="app.js?v=11"></script>
+    <link rel="stylesheet" href="styles.css?v=21">
+    <script defer src="app.js?v=21"></script>
   </head>
   <body>
     <nav class="site-nav" id="site-nav">
@@ -53,6 +53,7 @@
             <h2>Releases</h2>
             <ul>
       <li><a href="#vUnreleased"><span class="chl-ver">vUnreleased</span><span class="chl-nav-title"></span></a></li>
+      <li><a href="#v1.0.21"><span class="chl-ver">v1.0.21</span><span class="chl-nav-title">2026-05-17 — workflow continuity and documentation refresh</span></a></li>
       <li><a href="#v1.0.20"><span class="chl-ver">v1.0.20</span><span class="chl-nav-title">2026-05-16 — priority lanes and API hardening</span></a></li>
       <li><a href="#v1.0.18"><span class="chl-ver">v1.0.18</span><span class="chl-nav-title">2026-05-13 — intelligence gates and release cleanup</span></a></li>
       <li><a href="#v1.0.17"><span class="chl-ver">v1.0.17</span><span class="chl-nav-title">2026-05-12 — operator continuity and evidence closure</span></a></li>
@@ -168,6 +169,27 @@
         <span class="chl-version-tag">vUnreleased</span>
         <h2>Unreleased</h2>
       </header>
+    </article>
+    <article class="chl-release" id="v1.0.21">
+      <header class="chl-release-header">
+        <span class="chl-version-tag">v1.0.21</span>
+        <h2>2026-05-17 — workflow continuity and documentation refresh</h2>
+      </header>
+      <div class="chl-category">
+        <h3>Added</h3>
+        <ul>
+        <li><strong>Operator workflow depth</strong>: Search Palette now promotes route-aware actions, Dashboard adds alert-pressure forecasting, Threat Detection surfaces promotion confidence gates, and SOC Workbench adds case-journal plus related-case continuity.</li>
+        <li><strong>Integration and recovery posture</strong>: Operator Trust now surfaces Splunk HEC validation and ServiceNow destination posture, while Help &amp; Docs exposes replication region, lag, and health evidence.</li>
+        <li><strong>Durable playbook approvals</strong>: playbook approval steps now pause in stored execution state and resume through <code>/api/playbooks/resume</code>, with matching OpenAPI, Python SDK, and TypeScript SDK coverage.</li>
+        </ul>
+      </div>
+      <div class="chl-category">
+        <h3>Changed</h3>
+        <ul>
+        <li><strong>Documentation and website refresh</strong>: updates the GitHub README, docs index, website resources page, API reference, and fresh documentation screenshots so the public release surface matches the shipped product.</li>
+        <li><strong>Release metadata alignment</strong>: bumps Rust, admin-console, Python SDK, TypeScript SDK, Helm, OTLP, OpenAPI, installation, reproducibility, website, and test fixtures to the <code>v1.0.21</code> workflow-continuity baseline.</li>
+        </ul>
+      </div>
     </article>
     <article class="chl-release" id="v1.0.20">
       <header class="chl-release-header">

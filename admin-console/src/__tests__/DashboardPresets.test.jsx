@@ -91,6 +91,7 @@ describe('Dashboard presets', () => {
     expect(await screen.findByText('Operations home')).toBeInTheDocument();
     expect(screen.getByText('Dashboard Layout Presets')).toBeInTheDocument();
     expect(await screen.findByText('My Morning Queue')).toBeInTheDocument();
+    expect(screen.getByRole('option', { name: 'Shared · Forecasting' })).toBeInTheDocument();
 
     fireEvent.change(screen.getByLabelText('Dashboard preset'), {
       target: { value: 'shared:noc-wall' },

@@ -251,7 +251,27 @@ describe('HelpDocs', () => {
                   { scenario: 'Config corruption', rto: '< 5 min', rpo: 'Last backup' },
                   { scenario: 'Full disk loss', rto: '< 15 min', rpo: 'Daily backup (24 h)' },
                 ],
-                cluster: null,
+                cluster: {
+                  role: 'follower',
+                  leader_id: 'cluster-node-1',
+                  peers_reachable: 1,
+                  peers_total: 1,
+                  healthy: true,
+                  primary_region: 'local-lab',
+                  replica_regions: ['local-lab'],
+                  replica_lag_entries: 0,
+                  replication_health: 'healthy',
+                  replicas: [
+                    {
+                      node_id: 'cluster-node-1',
+                      addr: 'http://127.0.0.1:9078',
+                      replica_region: 'local-lab',
+                      reachable: true,
+                      match_index: 0,
+                      lag_entries: 0,
+                    },
+                  ],
+                },
                 failover_drill: failoverDrill,
                 failover_drill_history: failoverDrill.status === 'passed' ? [failoverDrill] : [],
               },
@@ -389,6 +409,13 @@ describe('HelpDocs', () => {
     expect(await screen.findByText('RTO < 5 min • RPO Last backup')).toBeInTheDocument();
     expect(await screen.findByRole('button', { name: 'Export timeline' })).toBeInTheDocument();
     expect(await screen.findByText('2 backups / 3 checkpoints')).toBeInTheDocument();
+    expect(await screen.findByText('Cluster Health')).toBeInTheDocument();
+    expect((await screen.findAllByText('Primary region')).length).toBeGreaterThan(0);
+    expect((await screen.findAllByText('local-lab')).length).toBeGreaterThan(0);
+    expect(await screen.findByText('Replication')).toBeInTheDocument();
+    expect(await screen.findByText('Max lag 0 entries')).toBeInTheDocument();
+    expect(await screen.findByText('Replica coverage')).toBeInTheDocument();
+    expect((await screen.findAllByText('cluster-node-1')).length).toBeGreaterThan(0);
     expect(
       (
         await screen.findAllByText(

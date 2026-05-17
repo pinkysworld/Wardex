@@ -14,15 +14,15 @@ Wardex is a Rust-based XDR and SIEM platform for private-cloud and self-hosted s
 - **Scan across platforms:** malware, virus, trojan, and rootkit workflows cover Linux, macOS, and Windows with local engines plus optional open-source signature presets.
 - **Ship verifiably:** releases include checksums, SBOMs, provenance, signed artifacts, and documented verification gates.
 
-## Current Release: `v1.0.20`
+## Current Release: `v1.0.21`
 
-This priority-lane and API-hardening release helps operators jump to the most pressured workspace queue while tightening backend API route defaults for signed cross-platform release publication.
+This workflow-continuity and release-surface refresh deepens operator flow across search, dashboard, detection, SOC, integrations, replication posture, and approval-gated playbooks while bringing the public docs and website captures up to date.
 
-- Dashboard, Fleet, Infrastructure, NDR, UEBA, and SOC surfaces now compute the dominant queue pressure and expose a direct priority-lane action.
-- Lead alerts, endpoint drift, asset exposure, remediation backlog, network anomalies, and entity-risk escalations now carry concise focus narratives before drilldown.
-- Backend `/api/*` routes now default to authenticated access unless explicitly classified as public, agent, or cluster traffic.
-- Node runtime and npm install hardening plus dependency-refresh cleanup are folded into the release baseline.
-- All release metadata, docs, website, SDKs, Helm, OTLP, and test fixtures are aligned on `v1.0.20`.
+- Search Palette now promotes route-aware actions with role-aware filtering, and the dashboard adds alert-pressure forecasting for faster queue triage.
+- Threat Detection now surfaces confidence gates, while SOC Workbench adds a first-class case journal and related-case continuity.
+- Operator Trust and Help & Docs now expose Splunk HEC and ServiceNow destination posture plus replication-region, lag, and health evidence.
+- Playbook approval gates now pause durably and resume through the runtime, OpenAPI contract, and both generated SDKs.
+- All release metadata, docs, website, screenshots, SDKs, Helm, OTLP, and test fixtures are aligned on `v1.0.21`.
 
 See [CHANGELOG.md](CHANGELOG.md) for full release history.
 
@@ -93,6 +93,14 @@ Start here:
 - [OpenAPI Contract](docs/openapi.yaml)
 
 The public website lives in [site/](site/) and mirrors the main product, release, and support information.
+
+## Documentation Surfaces
+
+The GitHub docs and the public website now share the same `v1.0.21` release surface for operator guides and API reference.
+
+![Wardex documentation hub](site/media/insights/resources-live.png)
+
+![Wardex API reference](site/media/insights/api-reference-live.png)
 
 ## Development and Verification
 

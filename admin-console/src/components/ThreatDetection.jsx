@@ -850,12 +850,23 @@ const buildPackDraft = ({ pack = null, rule = null, rules = [], suggestions = []
   ruleIds: derivePackRuleIds(pack, rules, rule?.id),
 });
 
-const buildPromotionChecklist = ({ rule, liveSuppressions, packCount, targetGroup }) => {
+const buildPromotionChecklist = ({
+  rule,
+  liveSuppressions,
+  packCount,
+  targetGroup,
+  recommendation,
+  readiness,
+}) => {
   const validationReady = Boolean(rule?.last_test_at);
   const matchCount = Number(rule?.last_test_match_count) || 0;
   const noiseReady = matchCount < 5 || liveSuppressions > 0;
   const routingReady = Boolean(String(targetGroup || '').trim());
   const bundleReady = packCount > 0;
+  const confidence = Number(recommendation?.confidence);
+  const hasConfidence = Number.isFinite(confidence);
+  const readinessBlocked = readiness?.status === 'blocked';
+  const confidenceReady = hasConfidence && confidence >= 80 && !readinessBlocked;
 
   return [
     {
@@ -891,6 +902,20 @@ const buildPromotionChecklist = ({ rule, liveSuppressions, packCount, targetGrou
       detail: bundleReady
         ? `${packCount} content pack bundle${packCount === 1 ? '' : 's'} provide saved-search and workflow pivots.`
         : 'Attach a content pack or saved hunt so analysts can pivot from the signal quickly.',
+    },
+    {
+      id: 'confidence',
+      label: 'Confidence gate',
+      done: confidenceReady,
+      detail: readinessBlocked
+        ? `Confidence ${hasConfidence ? `${Math.round(confidence)}%` : 'pending'} — ${
+            readiness?.reason || readiness?.detail || 'backend readiness is still blocked.'
+          }`
+        : hasConfidence
+          ? confidence >= 80
+            ? `Confidence ${Math.round(confidence)}% — ready for canary promotion.`
+            : `Confidence ${Math.round(confidence)}% — target 80% before broad promotion.`
+          : 'Wait for backend recommendation confidence before broad promotion.',
     },
   ];
 };
@@ -2000,6 +2025,15 @@ export default function ThreatDetection() {
         : [],
     [backendRecommendations],
   );
+  const recommendationsByRuleId = useMemo(
+    () =>
+      Object.fromEntries(
+        recommendationRows
+          .map((row) => [String(row.rule_id || row.id || '').trim(), row])
+          .filter(([ruleId]) => ruleId),
+      ),
+    [recommendationRows],
+  );
   const readinessRows = useMemo(
     () => (Array.isArray(backendReadiness?.rules) ? backendReadiness.rules : []),
     [backendReadiness],
@@ -2222,6 +2256,8 @@ export default function ThreatDetection() {
     liveSuppressions: selectedRule ? suppressionCount[selectedRule.id] || 0 : 0,
     packCount: selectedPacks.length,
     targetGroup: selectedPacks[0]?.target_group || huntDraft.targetGroup,
+    recommendation: recommendationsByRuleId[String(selectedRule?.id || '').trim()] || null,
+    readiness: readinessByRuleId[String(selectedRule?.id || '').trim()] || null,
   });
   const focusRule = (ruleId, panelId = rulePanel) => {
     if (!ruleId) return;
@@ -4140,6 +4176,27 @@ export default function ThreatDetection() {
                       {selectedRuleQuality.issues[0] ||
                         selectedRuleQuality.strengths[0] ||
                         selectedRuleQuality.label}
+                    </div>
+                  </div>
+                  <div className="summary-card">
+                    <div className="summary-label">Confidence Gate</div>
+                    <div className="summary-value">
+                      {Number.isFinite(
+                        Number(
+                          recommendationsByRuleId[String(selectedRule?.id || '').trim()]?.confidence,
+                        ),
+                      )
+                        ? `${Math.round(
+                            Number(
+                              recommendationsByRuleId[String(selectedRule?.id || '').trim()]?.confidence,
+                            ),
+                          )}%`
+                        : '—'}
+                    </div>
+                    <div className="summary-meta">
+                      {recommendationsByRuleId[String(selectedRule?.id || '').trim()]?.detail ||
+                        recommendationsByRuleId[String(selectedRule?.id || '').trim()]?.reason ||
+                        'Awaiting backend confidence before broad promotion.'}
                     </div>
                   </div>
                   <div className="summary-card">

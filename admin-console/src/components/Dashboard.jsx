@@ -63,6 +63,7 @@ const DASHBOARD_WIDGETS = [
   'collector-health',
   'telemetry',
   'threat-overview',
+  'alert-forecast',
   'charts',
   'process-security',
   'detection-engine',
@@ -144,6 +145,30 @@ const SHARED_DASHBOARD_PRESETS = [
     hidden: ['dns-threats'],
     audience: 'shared',
   },
+  {
+    id: 'forecasting',
+    name: 'Forecasting',
+    description:
+      'Project alert pressure, backlog clearance, and response blockers before the next shift handoff.',
+    widgets: [
+      'alert-forecast',
+      'manager-digest',
+      'charts',
+      'recent-alerts',
+      'threat-overview',
+      'collector-health',
+      'system-health',
+      'telemetry',
+      'detection-engine',
+      'lifecycle',
+      'process-security',
+      'malware-scanning',
+      'malware-ti',
+      'dns-threats',
+    ],
+    hidden: [],
+    audience: 'shared',
+  },
 ];
 
 function sharedPresetKey(id) {
@@ -223,6 +248,13 @@ function formatLagDuration(seconds) {
   if (value < 3600) return `${Math.round(value / 60)}m`;
   const hours = value / 3600;
   return `${hours >= 10 ? Math.round(hours) : hours.toFixed(1)}h`;
+}
+
+function formatForecastHours(hours) {
+  const value = Number(hours);
+  if (!Number.isFinite(value) || value <= 0) return 'Clear now';
+  if (value < 1) return `${Math.round(value * 60)}m`;
+  return `${value >= 10 ? Math.round(value) : value.toFixed(1)}h`;
 }
 
 function collectorFreshnessRank(freshness) {
@@ -647,6 +679,35 @@ export default function Dashboard() {
   const dashboardReportTarget = alertReportTarget(leadPriorityAlert);
   const dashboardReportTab = (respStats?.pending ?? 0) > 0 ? 'delivery' : 'evidence';
   const dashboardReportSubject = dashboardReportTarget || 'the current priority stack';
+  const alertPressureForecast = useMemo(() => {
+    const currentQueue = Number(qStats?.pending ?? alertList.length ?? 0);
+    const staleQueue = Number(managerDigest?.queue?.sla_breached ?? staleAlerts.length ?? 0);
+    const approvalBlockers = Number(respStats?.pending ?? 0);
+    const recentWindow = alertTimeline.slice(-3);
+    const previousWindow = alertTimeline.slice(-6, -3);
+    const recentCount = recentWindow.reduce((sum, entry) => sum + Number(entry.alerts || 0), 0);
+    const previousCount = previousWindow.reduce((sum, entry) => sum + Number(entry.alerts || 0), 0);
+    const trendDelta = recentCount - previousCount;
+    const projectedQueue = Math.max(currentQueue + trendDelta, 0);
+    const clearanceHours = staleQueue * 0.25;
+    let trend = 'stable';
+    if (trendDelta > 0) trend = 'rising';
+    else if (trendDelta < 0) trend = 'cooling';
+
+    return {
+      currentQueue,
+      staleQueue,
+      approvalBlockers,
+      trendDelta,
+      trend,
+      projectedQueue,
+      clearanceHours,
+      chart: alertTimeline.slice(-6).map((entry, index) => ({
+        slot: entry.time || `bucket-${index + 1}`,
+        alerts: Number(entry.alerts || 0),
+      })),
+    };
+  }, [alertList.length, alertTimeline, managerDigest, qStats?.pending, respStats?.pending, staleAlerts.length]);
   const dashboardHomeSummary = [
     {
       label: 'Critical queue',
@@ -1361,6 +1422,87 @@ export default function Dashboard() {
                   sub={respStats?.pending ? `${respStats.pending} pending` : undefined}
                 />
               </div>
+            </DashboardWidget>
+          );
+        if (wid === 'alert-forecast')
+          return (
+            <DashboardWidget
+              key={wid}
+              id={wid}
+              title="Alert Pressure Forecast"
+              index={order.indexOf(wid)}
+              onMove={moveWidget}
+              onRemove={removeWidget}
+              paused={widgetPaused}
+              onTogglePause={toggleWidgetRefresh}
+            >
+              <div className="card-grid">
+                <Metric
+                  label="Queue now"
+                  value={formatNumber(alertPressureForecast.currentQueue)}
+                  sub={`${alertPressureForecast.trend} over the last 6h`}
+                  accent={alertPressureForecast.currentQueue > 0}
+                />
+                <Metric
+                  label="Next shift projection"
+                  value={formatNumber(alertPressureForecast.projectedQueue)}
+                  sub={
+                    alertPressureForecast.trendDelta === 0
+                      ? 'No material queue change projected yet'
+                      : `${alertPressureForecast.trendDelta > 0 ? '+' : ''}${formatNumber(alertPressureForecast.trendDelta)} vs prior 6h`
+                  }
+                  accent={alertPressureForecast.trendDelta > 0}
+                />
+                <Metric
+                  label="SLA backlog clear ETA"
+                  value={formatForecastHours(alertPressureForecast.clearanceHours)}
+                  sub={`${formatNumber(alertPressureForecast.staleQueue)} item${alertPressureForecast.staleQueue === 1 ? '' : 's'} past SLA`}
+                  accent={alertPressureForecast.staleQueue > 0}
+                />
+                <Metric
+                  label="Approval blockers"
+                  value={formatNumber(alertPressureForecast.approvalBlockers)}
+                  sub={
+                    alertPressureForecast.approvalBlockers > 0
+                      ? 'Response actions are waiting for approval'
+                      : 'No response approvals are blocking queue movement'
+                  }
+                  accent={alertPressureForecast.approvalBlockers > 0}
+                />
+              </div>
+              {alertPressureForecast.chart.length > 0 ? (
+                <div className="card" style={{ padding: '12px 8px', marginTop: 16 }}>
+                  <div className="card-title" style={{ marginBottom: 8, paddingLeft: 8 }}>
+                    Pressure trend (last 12h)
+                  </div>
+                  <ResponsiveContainer width="100%" height={140}>
+                    <AreaChart data={alertPressureForecast.chart}>
+                      <XAxis dataKey="slot" tick={{ fontSize: 10 }} interval={0} />
+                      <YAxis width={25} tick={{ fontSize: 10 }} allowDecimals={false} />
+                      <Tooltip
+                        contentStyle={{
+                          background: 'var(--card-bg)',
+                          border: '1px solid var(--border)',
+                          borderRadius: 6,
+                          fontSize: 12,
+                        }}
+                      />
+                      <Area
+                        type="monotone"
+                        dataKey="alerts"
+                        name="Alerts"
+                        stroke="#f97316"
+                        fill="#f9731680"
+                        strokeWidth={2}
+                      />
+                    </AreaChart>
+                  </ResponsiveContainer>
+                </div>
+              ) : (
+                <div className="hint" style={{ marginTop: 16 }}>
+                  Pressure trend appears once enough alert timestamps are available to chart recent windows.
+                </div>
+              )}
             </DashboardWidget>
           );
         if (wid === 'charts' && (alertTimeline.length > 0 || sevBreakdown.length > 0))

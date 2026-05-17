@@ -1,7 +1,7 @@
 openapi: 3.0.3
 info:
   title: Wardex XDR/SIEM API
-  version: 1.0.20
+  version: 1.0.21
   description: "Wardex XDR/SIEM REST API \u2014 detection, fleet management, incident response, and platform operations."
   license:
     name: AGPL-3.0-only
@@ -8273,6 +8273,158 @@ paths:
                 $ref: '#/components/schemas/Error'
       security:
       - bearerAuth: []
+  /api/playbooks/run:
+    post:
+      summary: Run a playbook until it completes or pauses for approval
+      operationId: runPlaybook
+      tags:
+      - response
+      requestBody:
+        description: Playbook run request
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: Run a playbook until it completes or pauses for approval
+          content:
+            application/json:
+              schema:
+                type: object
+        '400':
+          description: Validation or request parsing error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: "Unauthorized \u2014 missing or invalid Bearer token"
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Resource not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: Conflict with existing resource state
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '413':
+          description: Payload too large
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '429':
+          description: Rate limit exceeded
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: Service unavailable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+      security:
+      - bearerAuth: []
+  /api/playbooks/resume:
+    post:
+      summary: Resume a playbook execution that is waiting for approval
+      operationId: resumePlaybook
+      tags:
+      - response
+      requestBody:
+        description: Playbook approval resume request
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: Resume a playbook execution that is waiting for approval
+          content:
+            application/json:
+              schema:
+                type: object
+        '400':
+          description: Validation or request parsing error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: "Unauthorized \u2014 missing or invalid Bearer token"
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Resource not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: Conflict with existing resource state
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '413':
+          description: Payload too large
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '429':
+          description: Rate limit exceeded
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: Service unavailable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+      security:
+      - bearerAuth: []
   /api/playbooks/executions:
     get:
       summary: List recent automated response playbook executions
@@ -11458,7 +11610,7 @@ paths:
       - bearerAuth: []
   /api/integrations/marketplace:
     get:
-      summary: Connector marketplace summaries, health, permissions, and impact mapping
+      summary: Connector, SIEM export, and ticketing marketplace summaries with health, permissions, and impact mapping
       operationId: getIntegrationsMarketplace
       tags:
       - config
@@ -11466,7 +11618,7 @@ paths:
       x-wardex-auth: authenticated
       responses:
         '200':
-          description: Connector marketplace summaries, health, permissions, and impact mapping
+          description: Connector, SIEM export, and ticketing marketplace summaries with health, permissions, and impact mapping
           content:
             application/json:
               schema:
@@ -11475,7 +11627,7 @@ paths:
       - bearerAuth: []
   /api/integrations/validate:
     post:
-      summary: Validate connector configuration support and preview sample evidence
+      summary: Validate connector configuration support or outbound integration readiness and preview sample evidence
       operationId: validateIntegration
       tags:
       - config
@@ -11490,7 +11642,7 @@ paths:
               type: object
       responses:
         '200':
-          description: Validate connector configuration support and preview sample evidence
+          description: Validate connector configuration support or outbound integration readiness and preview sample evidence
           content:
             application/json:
               schema:

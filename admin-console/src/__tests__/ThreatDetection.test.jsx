@@ -859,6 +859,8 @@ describe('ThreatDetection', () => {
     renderWithProviders('/detection?rule=rule-1&rulePanel=promotion');
 
     expect(await screen.findByText('Promotion checklist')).toBeInTheDocument();
+    expect(screen.getAllByText('Confidence Gate').length).toBeGreaterThan(0);
+    expect(screen.getByText(/Confidence 88%/)).toBeInTheDocument();
     expect(currentSearchParams().get('rulePanel')).toBe('promotion');
 
     const initialRuleCalls = tracker.contentRuleCalls || 0;

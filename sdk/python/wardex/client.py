@@ -1247,6 +1247,16 @@ class WardexClient:
             payload["variables"] = variables
         return self._post("/api/playbooks/run", payload)
 
+    def resume_playbook(
+        self,
+        execution_id: str,
+        feedback: str | None = None,
+    ) -> dict[str, Any]:
+        payload: dict[str, Any] = {"execution_id": execution_id}
+        if feedback:
+            payload["feedback"] = feedback
+        return self._post("/api/playbooks/resume", payload)
+
     # ── alert deduplication ──────────────────────────────────────────
 
     def dedup_alerts(self) -> list[dict[str, Any]]:

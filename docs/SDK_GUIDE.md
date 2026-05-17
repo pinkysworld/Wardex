@@ -35,7 +35,7 @@ git diff -- sdk/python sdk/typescript
 
 ### Release-proof helpers
 
-The `v1.0.20` clients expose the same resilience/proof contracts used by the admin console and release gate, plus the release verification, deployment-confidence, Detection Trust draft-only tuning tranche, Claude workbench layout metadata, operator onboarding workflow release metadata, operator-continuity surfaces, intelligence-gate metadata, response safety execution-audit continuity, and priority-lane baseline metadata:
+The `v1.0.21` clients expose the same resilience/proof contracts used by the admin console and release gate, plus the operator workflow-depth tranche, integration and replication posture metadata, approval-resume playbook helpers, and the refreshed documentation-release surfaces:
 
 ```python
 client.alerts_page(limit=100)
@@ -45,7 +45,7 @@ client.workflow_preflight(workflow="release")
 client.content_rule_preflight("rule-id", target_status="canary")
 client.release_observability_gates()
 client.release_provenance()
-client.release_upgrade_rehearsal(target_version="1.0.20")
+client.release_upgrade_rehearsal(target_version="1.0.21")
 client.clean_release_cut()
 client.container_release_parity()
 client.release_verification_center()
@@ -56,6 +56,8 @@ client.cluster_failover_execution()
 client.secrets_rotation_operations()
 client.operator_task_automation()
 client.detection_validation_packs()
+client.run_playbook("priority-lane-response", alert_id="alert-42")
+client.resume_playbook("exec-42", feedback="approved for containment")
 client.synthetic_console_monitor()
 client.incident_timeline_replay()
 client.detection_trust_score()
@@ -151,7 +153,7 @@ await client.workflowPreflight({ workflow: "release" });
 await client.contentRulePreflight("rule-id", { target_status: "canary" });
 await client.releaseObservabilityGates();
 await client.releaseProvenance();
-await client.releaseUpgradeRehearsal({ targetVersion: "1.0.20" });
+await client.releaseUpgradeRehearsal({ targetVersion: "1.0.21" });
 await client.cleanReleaseCut();
 await client.containerReleaseParity();
 await client.releaseVerificationCenter();
@@ -162,6 +164,8 @@ await client.clusterFailoverExecution();
 await client.secretsRotationOperations();
 await client.operatorTaskAutomation();
 await client.detectionValidationPacks();
+await client.runPlaybook("priority-lane-response", "alert-42");
+await client.resumePlaybookExecution("exec-42", "approved for containment");
 await client.syntheticConsoleMonitor();
 await client.incidentTimelineReplay();
 await client.detectionTrustScore();

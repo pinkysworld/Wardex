@@ -5714,6 +5714,29 @@ describe("WardexClient", () => {
     );
   });
 
+  it("resumePlaybookExecution() sends approval feedback", async () => {
+    const execution = {
+      execution_id: "exec-1",
+      playbook_id: "pb-1",
+      status: "succeeded",
+      started_at: 0,
+      step_results: [],
+    };
+    const mock = mockFetch(200, execution);
+    globalThis.fetch = mock;
+    const client = new WardexClient({ baseUrl: "http://localhost:8080" });
+    await client.resumePlaybookExecution("exec-1", "approved");
+    expect(mock).toHaveBeenCalledWith(
+      "http://localhost:8080/api/playbooks/resume",
+      expect.objectContaining({
+        body: JSON.stringify({
+          execution_id: "exec-1",
+          feedback: "approved",
+        }),
+      }),
+    );
+  });
+
   it("fleetInstalls() calls GET /api/fleet/installs", async () => {
     const body = { attempts: [], total: 0 };
     const mock = mockFetch(200, body);

@@ -54,9 +54,51 @@ vi.mock('../api.js', () => ({
         label: 'Generic Syslog',
         lane: 'syslog',
         health_score: 60,
+        setup_status: 'configured',
         freshness: 'stale',
         next_fix: 'Validate credentials.',
+        validation: { status: 'review' },
+        destination: 'Legacy syslog listener',
+        sample_event: { event_type: 'syslog.auth' },
         impact: ['SIEM correlation'],
+        required_permissions: ['syslog listener'],
+      },
+      {
+        id: 'splunk_hec',
+        label: 'Splunk HEC Export',
+        lane: 'siem_export',
+        health_score: 95,
+        setup_status: 'configured',
+        freshness: 'fresh',
+        next_fix: 'Splunk HEC export is configured; keep token scope and index routing current.',
+        validation: { status: 'ready' },
+        destination: 'security_events / wardex:xdr',
+        sample_event: { event_type: 'splunk.hec.alert' },
+        summary_line:
+          'https://splunk.example/services/collector -> security_events / wardex:xdr',
+        secondary_line: '17 event(s) pushed, 0 pending',
+        impact: ['SIEM export', 'external correlation'],
+        required_permissions: ['HEC token write', 'HTTPS egress'],
+        action_href: '/settings?tab=integrations',
+        action_label: 'Open Settings',
+      },
+      {
+        id: 'servicenow',
+        label: 'ServiceNow Case Sync',
+        lane: 'ticketing',
+        health_score: 86,
+        setup_status: 'configured',
+        freshness: 'fresh',
+        next_fix: 'Review queue mapping and continue outbound case sync coverage.',
+        validation: { status: 'ready' },
+        destination: 'SECOPS',
+        sample_event: { event_type: 'ticket.case.sync' },
+        summary_line: 'Last sync INC0012345 for case #42',
+        secondary_line: '2 sync(s) recorded; latest queue SECOPS',
+        impact: ['case sync', 'status visibility'],
+        required_permissions: ['incident write', 'API credentials'],
+        action_href: '/soc#cases',
+        action_label: 'Open SOC Cases',
       },
     ],
   }),
@@ -114,10 +156,26 @@ describe('Operator trust workspaces', () => {
     expect(screen.getByRole('button', { name: /Preview block IP/i })).toBeInTheDocument();
   });
 
-  it('renders connector marketplace impact', async () => {
+  it('renders connector marketplace impact and outbound paths', async () => {
     renderWorkspace(<IntegrationsMarketplace />);
     expect(await screen.findByText(/Generic Syslog/i)).toBeInTheDocument();
     expect(screen.getByText(/SIEM correlation/i)).toBeInTheDocument();
+    expect(screen.getByText(/Splunk HEC Export/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/security_events \/ wardex:xdr/i).length).toBeGreaterThan(0);
+    expect(screen.getByText(/splunk\.hec\.alert/i)).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /Open Settings/i })).toHaveAttribute(
+      'href',
+      '/settings?tab=integrations',
+    );
+    expect(screen.getByText(/ServiceNow Case Sync/i)).toBeInTheDocument();
+    expect(screen.getByText(/Last sync INC0012345 for case #42/i)).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /Open SOC Cases/i })).toHaveAttribute(
+      'href',
+      '/soc#cases',
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: /Validate Splunk HEC/i }));
+    await waitFor(() => expect(screen.getByText(/preview_ready/i)).toBeInTheDocument());
   });
 
   it('renders operations health cards', async () => {

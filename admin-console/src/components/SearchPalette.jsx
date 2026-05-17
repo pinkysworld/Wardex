@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import * as api from '../api.js';
+import { useRole } from '../hooks.jsx';
 import { safeStorageJsonGet, safeStorageJsonSet } from '../safeStorage.js';
 import { SEARCH_COMMANDS } from './workflowPivots.js';
 
@@ -65,6 +66,66 @@ const FEATURED_COMMANDS = [
   'Open SOC Queue',
   'Deployment Confidence',
   'Safe Assistant',
+];
+
+const ANALYST_RESTRICTED_ACTIONS = new Set([
+  'connect-first-agent',
+  'connect-agent-drawer',
+  'collector-onboarding-center',
+  'release-gate',
+  'release-acceptance-report',
+  'deployment-confidence',
+  'evidence-surface-coverage',
+  'visual-regression-gate',
+]);
+
+const ROUTE_PRIORITY_ACTIONS = [
+  {
+    match: (path) => path === '/launchpad' || path === '/',
+    actions: [
+      'shift-handoff-workspace',
+      'morning-brief',
+      'guided-incident',
+      'operator-task-queue',
+      'incident-timeline-builder',
+      'fleet-risk-heatmap',
+    ],
+  },
+  {
+    match: (path) => path === '/soc',
+    actions: [
+      'open-soc-queue',
+      'guided-incident',
+      'incident-timeline-builder',
+      'shift-handoff-workspace',
+      'open-process-workbench',
+      'safe-assistant',
+    ],
+  },
+  {
+    match: (path) => path === '/detection' || path === '/detection-lab',
+    actions: ['detection-quality', 'run-hunt', 'start-detection-lab', 'demo-scenarios'],
+  },
+  {
+    match: (path) => path === '/fleet',
+    actions: [
+      'connect-agent-drawer',
+      'review-offline-agents',
+      'fleet-health-drilldown',
+      'fleet-risk-heatmap',
+      'collector-onboarding-center',
+    ],
+  },
+  {
+    match: (path) => ['/operations-health', '/reports', '/settings'].includes(path),
+    actions: [
+      'deployment-confidence',
+      'release-gate',
+      'release-acceptance-report',
+      'evidence-surface-coverage',
+      'visual-regression-gate',
+    ],
+  },
 ];
 
 const CONTEXT_COMMANDS = [
@@ -138,31 +199,72 @@ function uniqueCommandsByAction(commands) {
   });
 }
 
-function contextualCommandsForPath(pathname = '') {
+export function filterCommandsForRole(commands, role = 'viewer') {
+  const commandList = Array.isArray(commands) ? commands : [];
+  if (role !== 'analyst') return commandList;
+  return commandList.filter((command) => !ANALYST_RESTRICTED_ACTIONS.has(command.action));
+}
+
+function routePriorityForPath(pathname = '') {
+  return ROUTE_PRIORITY_ACTIONS.find((entry) => entry.match(pathname))?.actions || [];
+}
+
+export function prioritizeCommandsForPath(commands, pathname = '') {
+  const commandList = Array.isArray(commands) ? commands : [];
+  const actionPriority = new Map(
+    routePriorityForPath(pathname).map((action, index) => [action, index]),
+  );
+  const originalOrder = new Map(
+    commandList.map((command, index) => [command.action || command.title, index]),
+  );
+
+  return [...commandList].sort((left, right) => {
+    const leftPriority = actionPriority.get(left.action) ?? Number.MAX_SAFE_INTEGER;
+    const rightPriority = actionPriority.get(right.action) ?? Number.MAX_SAFE_INTEGER;
+
+    if (leftPriority !== rightPriority) return leftPriority - rightPriority;
+
+    return (
+      (originalOrder.get(left.action || left.title) ?? Number.MAX_SAFE_INTEGER) -
+      (originalOrder.get(right.action || right.title) ?? Number.MAX_SAFE_INTEGER)
+    );
+  });
+}
+
+function contextualCommandsForPath(pathname = '', role = 'viewer') {
   const context = CONTEXT_COMMANDS.find((entry) => entry.match(pathname));
   if (!context) return { label: '', commands: [] };
   const commands = context.actions
-    .map((action) => COMMANDS.find((command) => command.action === action))
+    .map((action) =>
+      filterCommandsForRole(COMMANDS, role).find((command) => command.action === action),
+    )
     .filter(Boolean);
   return { label: context.label, commands: uniqueCommandsByAction(commands) };
 }
 
-function SearchPaletteDialog({ onClose, onNavigate, saved, setSaved, currentPath }) {
+function SearchPaletteDialog({ onClose, onNavigate, saved, setSaved, currentPath, role }) {
   const [query, setQuery] = useState('');
   const [results, setResults] = useState([]);
   const [loading, setLoading] = useState(false);
   const [selectedIdx, setSelectedIdx] = useState(0);
   const inputRef = useRef(null);
   const searchGenRef = useRef(0);
-  const contextualCommands = contextualCommandsForPath(currentPath);
+  const visibleCommands = filterCommandsForRole(COMMANDS, role);
+  const contextualCommands = contextualCommandsForPath(currentPath, role);
   const contextualActions = new Set(contextualCommands.commands.map((command) => command.action));
-  const featuredCommands = COMMANDS.filter(
-    (command) =>
-      FEATURED_COMMANDS.includes(command.title) && !contextualActions.has(command.action),
+  const featuredCommands = prioritizeCommandsForPath(
+    visibleCommands.filter(
+      (command) =>
+        FEATURED_COMMANDS.includes(command.title) && !contextualActions.has(command.action),
+    ),
+    currentPath,
   );
-  const remainingCommands = COMMANDS.filter(
-    (command) =>
-      !FEATURED_COMMANDS.includes(command.title) && !contextualActions.has(command.action),
+  const remainingCommands = prioritizeCommandsForPath(
+    visibleCommands.filter(
+      (command) =>
+        !FEATURED_COMMANDS.includes(command.title) && !contextualActions.has(command.action),
+    ),
+    currentPath,
   );
 
   useEffect(() => {
@@ -178,7 +280,7 @@ function SearchPaletteDialog({ onClose, onNavigate, saved, setSaved, currentPath
     setLoading(true);
     const gen = ++searchGenRef.current;
     const ql = q.toLowerCase();
-    const allResults = COMMANDS.filter((command) =>
+    const allResults = visibleCommands.filter((command) =>
       `${command.title} ${command.subtitle}`.toLowerCase().includes(ql),
     );
 
@@ -228,7 +330,7 @@ function SearchPaletteDialog({ onClose, onNavigate, saved, setSaved, currentPath
     setResults(allResults.slice(0, 20));
     setSelectedIdx(0);
     setLoading(false);
-  }, []);
+  }, [visibleCommands]);
 
   useEffect(() => {
     const timer = setTimeout(() => doSearch(query), 300);
@@ -483,6 +585,7 @@ function SearchPaletteDialog({ onClose, onNavigate, saved, setSaved, currentPath
 
 export default function SearchPalette({ open, onClose, onNavigate, currentPath = '' }) {
   const [saved, setSaved] = useState(loadSaved);
+  const { role } = useRole();
 
   useEffect(() => {
     const handler = (event) => {
@@ -504,6 +607,7 @@ export default function SearchPalette({ open, onClose, onNavigate, currentPath =
       saved={saved}
       setSaved={setSaved}
       currentPath={currentPath}
+      role={role}
     />
   );
 }

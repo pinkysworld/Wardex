@@ -4,6 +4,17 @@ All notable changes to Wardex are documented in this file.
 
 ## [Unreleased]
 
+## [1.0.21] — 2026-05-17 — workflow continuity and documentation refresh
+
+### Added
+- **Operator workflow depth**: Search Palette now promotes route-aware actions, Dashboard adds alert-pressure forecasting, Threat Detection surfaces promotion confidence gates, and SOC Workbench adds case-journal plus related-case continuity.
+- **Integration and recovery posture**: Operator Trust now surfaces Splunk HEC validation and ServiceNow destination posture, while Help & Docs exposes replication region, lag, and health evidence.
+- **Durable playbook approvals**: playbook approval steps now pause in stored execution state and resume through `/api/playbooks/resume`, with matching OpenAPI, Python SDK, and TypeScript SDK coverage.
+
+### Changed
+- **Documentation and website refresh**: updates the GitHub README, docs index, website resources page, API reference, and fresh documentation screenshots so the public release surface matches the shipped product.
+- **Release metadata alignment**: bumps Rust, admin-console, Python SDK, TypeScript SDK, Helm, OTLP, OpenAPI, installation, reproducibility, website, and test fixtures to the `v1.0.21` workflow-continuity baseline.
+
 ## [1.0.20] — 2026-05-16 — priority lanes and API hardening
 
 ### Added

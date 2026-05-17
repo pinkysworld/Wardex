@@ -402,16 +402,157 @@ impl PlaybookEngine {
         }
 
         let steps = pb.steps.clone();
+        self.continue_execution(&exec_id, &steps, 0, now_ms)
+    }
+
+    /// Resume an execution that is waiting on an approval gate.
+    pub fn resume_execution(
+        &mut self,
+        execution_id: &str,
+        approved_by: &str,
+        feedback: Option<&str>,
+        now_ms: u64,
+    ) -> Result<String, String> {
+        let (playbook_id, approval_step_id) = {
+            let execution = self
+                .executions
+                .iter()
+                .find(|execution| execution.execution_id == execution_id)
+                .ok_or_else(|| format!("execution not found: {execution_id}"))?;
+            if execution.status != ExecutionStatus::AwaitingApproval {
+                return Err(format!(
+                    "execution '{execution_id}' is not awaiting approval"
+                ));
+            }
+            let approval_step_id = execution
+                .variables
+                .get("pending_approval_step")
+                .cloned()
+                .or_else(|| {
+                    execution
+                        .step_results
+                        .iter()
+                        .find(|step| step.status == ExecutionStatus::AwaitingApproval)
+                        .map(|step| step.step_id.clone())
+                })
+                .ok_or("pending approval step not found")?;
+            (execution.playbook_id.clone(), approval_step_id)
+        };
+
+        let playbook = self
+            .playbooks
+            .iter()
+            .find(|playbook| playbook.id == playbook_id)
+            .ok_or_else(|| format!("playbook not found: {playbook_id}"))?
+            .clone();
+        let resume_index = playbook
+            .steps
+            .iter()
+            .position(|step| step.id == approval_step_id)
+            .ok_or_else(|| format!("approval step not found: {approval_step_id}"))?
+            + 1;
+        let approval_output = feedback
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .map(|value| format!("approved by '{approved_by}': {value}"))
+            .unwrap_or_else(|| format!("approved by '{approved_by}'"));
+
+        self.update_step(
+            execution_id,
+            &approval_step_id,
+            ExecutionStatus::Succeeded,
+            Some(approval_output),
+            None,
+            now_ms,
+        );
+        if let Some(execution) = self
+            .executions
+            .iter_mut()
+            .find(|execution| execution.execution_id == execution_id)
+        {
+            execution.status = ExecutionStatus::Running;
+            execution.variables.remove("pending_approval_step");
+            execution.variables.remove("pending_approval_approver");
+            execution.variables.remove("pending_approval_message");
+            execution
+                .variables
+                .insert("last_approval_actor".into(), approved_by.to_string());
+            if let Some(feedback) = feedback
+                .map(str::trim)
+                .filter(|value| !value.is_empty())
+            {
+                execution
+                    .variables
+                    .insert("last_approval_feedback".into(), feedback.to_string());
+            }
+            execution
+                .variables
+                .insert("last_approval_step".into(), approval_step_id.clone());
+        }
+
+        self.continue_execution(execution_id, &playbook.steps, resume_index, now_ms)
+    }
+
+    fn continue_execution(
+        &mut self,
+        exec_id: &str,
+        steps: &[PlaybookStep],
+        start_idx: usize,
+        now_ms: u64,
+    ) -> Result<String, String> {
         let mut i = 0;
+        if start_idx > 0 {
+            i = start_idx;
+        }
         while i < steps.len() {
             let step = &steps[i];
-            let step_now = now_ms + (i as u64 + 1) * 100;
+            let step_now = now_ms + ((i.saturating_sub(start_idx)) as u64 + 1) * 100;
 
-            let result = self.dispatch_step(step, &exec_id);
+            let result = self.dispatch_step(step, exec_id);
             match result {
                 Ok(output) => {
+                    if let StepType::Approval {
+                        approver,
+                        message_template,
+                    } = &step.step_type
+                    {
+                        let approval_message = self
+                            .executions
+                            .iter()
+                            .find(|execution| execution.execution_id == exec_id)
+                            .map(|execution| {
+                                substitute_template(message_template, &execution.variables)
+                            })
+                            .unwrap_or_else(|| message_template.clone());
+                        self.update_step(
+                            exec_id,
+                            &step.id,
+                            ExecutionStatus::AwaitingApproval,
+                            output,
+                            None,
+                            step_now,
+                        );
+                        if let Some(execution) = self
+                            .executions
+                            .iter_mut()
+                            .find(|execution| execution.execution_id == exec_id)
+                        {
+                            execution.status = ExecutionStatus::AwaitingApproval;
+                            execution
+                                .variables
+                                .insert("pending_approval_step".into(), step.id.clone());
+                            execution
+                                .variables
+                                .insert("pending_approval_approver".into(), approver.clone());
+                            execution.variables.insert(
+                                "pending_approval_message".into(),
+                                approval_message,
+                            );
+                        }
+                        return Ok(exec_id.to_string());
+                    }
                     self.update_step(
-                        &exec_id,
+                        exec_id,
                         &step.id,
                         ExecutionStatus::Succeeded,
                         output,
@@ -421,7 +562,7 @@ impl PlaybookEngine {
                 }
                 Err(err) => {
                     self.update_step(
-                        &exec_id,
+                        exec_id,
                         &step.id,
                         ExecutionStatus::Failed,
                         None,
@@ -435,16 +576,16 @@ impl PlaybookEngine {
                         i = jump_idx;
                         continue;
                     }
-                    self.finish_execution(&exec_id, ExecutionStatus::Failed, Some(err), step_now);
-                    return Ok(exec_id);
+                    self.finish_execution(exec_id, ExecutionStatus::Failed, Some(err), step_now);
+                    return Ok(exec_id.to_string());
                 }
             }
             i += 1;
         }
 
-        let final_time = now_ms + (steps.len() as u64 + 1) * 100;
-        self.finish_execution(&exec_id, ExecutionStatus::Succeeded, None, final_time);
-        Ok(exec_id)
+        let final_time = now_ms + (steps.len().saturating_sub(start_idx) as u64 + 1) * 100;
+        self.finish_execution(exec_id, ExecutionStatus::Succeeded, None, final_time);
+        Ok(exec_id.to_string())
     }
 
     /// Dispatch a single step and return its output or an error.
@@ -891,6 +1032,144 @@ mod tests {
         assert_eq!(exec.step_results.len(), 2);
         assert_eq!(exec.step_results[0].status, ExecutionStatus::Succeeded);
         assert_eq!(exec.step_results[1].status, ExecutionStatus::Succeeded);
+    }
+
+    #[test]
+    fn run_playbook_pauses_for_approval_steps() {
+        let mut engine = PlaybookEngine::new();
+        let mut playbook = sample_playbook("pb-approval");
+        playbook.steps = vec![
+            PlaybookStep {
+                id: "s1".into(),
+                name: "Collect context".into(),
+                step_type: StepType::CollectEvidence {
+                    artifact_types: vec!["timeline".into()],
+                },
+                on_failure: None,
+                timeout_secs: None,
+            },
+            PlaybookStep {
+                id: "s2".into(),
+                name: "Approval gate".into(),
+                step_type: StepType::Approval {
+                    approver: "secops-lead".into(),
+                    message_template: "Approve isolation for {alert_id}".into(),
+                },
+                on_failure: None,
+                timeout_secs: None,
+            },
+            PlaybookStep {
+                id: "s3".into(),
+                name: "Contain host".into(),
+                step_type: StepType::Contain {
+                    action: "isolate_host".into(),
+                    params: HashMap::new(),
+                },
+                on_failure: None,
+                timeout_secs: None,
+            },
+        ];
+        engine.register(playbook);
+
+        let mut vars = HashMap::new();
+        vars.insert("alert_id".into(), "alert-42".into());
+        let exec_id = engine
+            .run_playbook("pb-approval", Some("alert-42"), "analyst", vars, 1000)
+            .unwrap();
+
+        let exec = engine.get_execution(&exec_id).unwrap();
+        assert_eq!(exec.status, ExecutionStatus::AwaitingApproval);
+        assert_eq!(exec.finished_at, None);
+        assert_eq!(
+            exec.variables.get("pending_approval_step").map(String::as_str),
+            Some("s2")
+        );
+        assert_eq!(
+            exec.variables
+                .get("pending_approval_approver")
+                .map(String::as_str),
+            Some("secops-lead")
+        );
+        assert_eq!(
+            exec.variables
+                .get("pending_approval_message")
+                .map(String::as_str),
+            Some("Approve isolation for alert-42")
+        );
+        assert_eq!(exec.step_results[0].status, ExecutionStatus::Succeeded);
+        assert_eq!(exec.step_results[1].status, ExecutionStatus::AwaitingApproval);
+        assert_eq!(exec.step_results[2].status, ExecutionStatus::Pending);
+    }
+
+    #[test]
+    fn resume_execution_continues_after_approval() {
+        let mut engine = PlaybookEngine::new();
+        let mut playbook = sample_playbook("pb-resume");
+        playbook.steps = vec![
+            PlaybookStep {
+                id: "s1".into(),
+                name: "Collect context".into(),
+                step_type: StepType::CollectEvidence {
+                    artifact_types: vec!["timeline".into()],
+                },
+                on_failure: None,
+                timeout_secs: None,
+            },
+            PlaybookStep {
+                id: "s2".into(),
+                name: "Approval gate".into(),
+                step_type: StepType::Approval {
+                    approver: "secops-lead".into(),
+                    message_template: "Approve isolation for {alert_id}".into(),
+                },
+                on_failure: None,
+                timeout_secs: None,
+            },
+            PlaybookStep {
+                id: "s3".into(),
+                name: "Contain host".into(),
+                step_type: StepType::Contain {
+                    action: "isolate_host".into(),
+                    params: HashMap::new(),
+                },
+                on_failure: None,
+                timeout_secs: None,
+            },
+        ];
+        engine.register(playbook);
+
+        let mut vars = HashMap::new();
+        vars.insert("alert_id".into(), "alert-99".into());
+        let exec_id = engine
+            .run_playbook("pb-resume", Some("alert-99"), "analyst", vars, 1000)
+            .unwrap();
+
+        let resumed_id = engine
+            .resume_execution(&exec_id, "secops-lead", Some("contain immediately"), 2000)
+            .unwrap();
+        assert_eq!(resumed_id, exec_id);
+
+        let exec = engine.get_execution(&exec_id).unwrap();
+        assert_eq!(exec.status, ExecutionStatus::Succeeded);
+        assert!(exec.finished_at.is_some());
+        assert_eq!(
+            exec.variables.get("last_approval_actor").map(String::as_str),
+            Some("secops-lead")
+        );
+        assert_eq!(
+            exec.variables
+                .get("last_approval_feedback")
+                .map(String::as_str),
+            Some("contain immediately")
+        );
+        assert_eq!(exec.variables.get("pending_approval_step"), None);
+        assert_eq!(exec.step_results[0].status, ExecutionStatus::Succeeded);
+        assert_eq!(exec.step_results[1].status, ExecutionStatus::Succeeded);
+        assert_eq!(exec.step_results[2].status, ExecutionStatus::Succeeded);
+        assert_eq!(
+            exec.step_results[1].output.as_deref(),
+            Some("approved by 'secops-lead': contain immediately")
+        );
     }
 
     #[test]

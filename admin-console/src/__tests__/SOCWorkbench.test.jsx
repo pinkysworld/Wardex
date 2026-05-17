@@ -223,6 +223,28 @@ const BASE_SOC_FIXTURES = {
       ],
       mitre_techniques: ['T1110'],
     },
+    {
+      id: 43,
+      title: 'Okta follow-on review',
+      description: 'Related Okta sign-in anomalies still need shift-level review.',
+      status: 'triaging',
+      priority: 'high',
+      assignee: 'analyst-2',
+      created_at: '2024-01-01T00:20:00Z',
+      updated_at: '2024-01-01T00:25:00Z',
+      incident_ids: [8],
+      event_ids: [1003],
+      tags: ['identity', 'okta', 'mfa'],
+      comments: [
+        {
+          author: 'analyst-2',
+          timestamp: '2024-01-01T00:24:00Z',
+          text: 'Queue ownership transferred after matching Okta indicators were confirmed.',
+        },
+      ],
+      evidence: [],
+      mitre_techniques: ['T1110'],
+    },
   ],
   incidents: [
     {
@@ -954,6 +976,10 @@ describe('SOCWorkbench', () => {
     expect(
       (await screen.findAllByText(/Containment started with targeted password resets/i)).length,
     ).toBeGreaterThan(0);
+    expect(await screen.findByText('Case Journal')).toBeInTheDocument();
+    expect(await screen.findByText('Related Cases')).toBeInTheDocument();
+    expect(await screen.findByText('Okta follow-on review')).toBeInTheDocument();
+    expect(screen.getByText(/Shared tags: identity • okta/i)).toBeInTheDocument();
     expect(await screen.findByText('Ticket Sync')).toBeInTheDocument();
     expect(currentSearchParams().get('case')).toBe('42');
     expect(currentLocation().hash).toBe('#cases');

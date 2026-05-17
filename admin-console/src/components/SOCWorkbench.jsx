@@ -135,6 +135,8 @@ const formatCompactLabel = (value) =>
     .trim()
     .replace(/\b\w/g, (character) => character.toUpperCase());
 
+const normalizeText = (value) => String(value || '').trim().toLowerCase();
+
 const investigationStatusBadgeClass = (status) => {
   switch (status) {
     case 'handoff-ready':
@@ -197,6 +199,42 @@ const caseContainmentLabel = (status) => {
     default:
       return 'Open';
   }
+};
+
+const relatedCaseCandidates = (cases, activeCase) => {
+  if (!activeCase) return [];
+
+  const activeTags = new Set(asArray(activeCase.tags).map((tag) => normalizeText(tag)).filter(Boolean));
+  const activeMitre = new Set(
+    asArray(activeCase.mitre_techniques).map((technique) => normalizeText(technique)).filter(Boolean),
+  );
+  const activePriority = normalizeText(activeCase.priority);
+
+  return asArray(cases)
+    .filter((caseItem) => String(caseItem?.id || '') !== String(activeCase.id || ''))
+    .map((caseItem) => {
+      const sharedTags = asArray(caseItem.tags).filter((tag) => activeTags.has(normalizeText(tag)));
+      const sharedMitre = asArray(caseItem.mitre_techniques).filter((technique) =>
+        activeMitre.has(normalizeText(technique)),
+      );
+      const priorityMatch =
+        activePriority && normalizeText(caseItem.priority) && normalizeText(caseItem.priority) === activePriority;
+      const score = sharedTags.length * 2 + sharedMitre.length * 3 + (priorityMatch ? 1 : 0);
+
+      return {
+        caseItem,
+        score,
+        sharedTags,
+        sharedMitre,
+      };
+    })
+    .filter((entry) => entry.score > 0)
+    .sort(
+      (left, right) =>
+        right.score - left.score ||
+        String(right.caseItem.updated_at || '').localeCompare(String(left.caseItem.updated_at || '')),
+    )
+    .slice(0, 3);
 };
 
 const INCIDENT_DRAWER_PANELS = [
@@ -977,6 +1015,10 @@ export default function SOCWorkbench() {
   const activeCaseMitre = Array.isArray(activeWorkspaceCase?.mitre_techniques)
     ? activeWorkspaceCase.mitre_techniques
     : [];
+  const relatedCases = useMemo(
+    () => relatedCaseCandidates(caseArr, activeWorkspaceCase),
+    [activeWorkspaceCase, caseArr],
+  );
   const queueSeed = investigationContext || filteredQueueArr[0] || incArr[0] || null;
   const investigationDetailContext =
     selectedInvestigationCase ||
@@ -3427,10 +3469,10 @@ export default function SOCWorkbench() {
                     }}
                   >
                     <div className="card-title" style={{ marginBottom: 10 }}>
-                      Case Notes
+                      Case Journal
                     </div>
                     {activeCaseComments.length === 0 ? (
-                      <div className="empty">No case notes yet.</div>
+                      <div className="empty">No case journal entries yet.</div>
                     ) : (
                       <div style={{ display: 'grid', gap: 10 }}>
                         {activeCaseComments.map((comment, index) => (
@@ -3476,6 +3518,71 @@ export default function SOCWorkbench() {
                         </button>
                       </div>
                     </div>
+                  </div>
+
+                  <div
+                    style={{
+                      border: '1px solid var(--border)',
+                      borderRadius: 12,
+                      padding: 14,
+                      background: 'var(--bg-card)',
+                    }}
+                  >
+                    <div className="card-title" style={{ marginBottom: 10 }}>
+                      Related Cases
+                    </div>
+                    {relatedCases.length === 0 ? (
+                      <div className="empty">
+                        No similar cases matched the current tags, ATT&amp;CK coverage, or priority.
+                      </div>
+                    ) : (
+                      <div style={{ display: 'grid', gap: 10 }}>
+                        {relatedCases.map(({ caseItem, sharedTags, sharedMitre, score }) => (
+                          <div
+                            key={`related-case-${caseItem.id}`}
+                            style={{
+                              border: '1px solid var(--border)',
+                              borderRadius: 10,
+                              padding: 12,
+                              background: 'var(--bg)',
+                            }}
+                          >
+                            <div
+                              style={{
+                                display: 'flex',
+                                justifyContent: 'space-between',
+                                gap: 8,
+                                alignItems: 'flex-start',
+                              }}
+                            >
+                              <div>
+                                <div className="row-primary">{caseItem.title || `Case #${caseItem.id}`}</div>
+                                <div className="row-secondary">
+                                  Case #{caseItem.id} · {caseContainmentLabel(caseItem.status)} ·{' '}
+                                  {formatCompactLabel(caseItem.priority || 'Medium')}
+                                </div>
+                              </div>
+                              <span className="badge badge-info">Match {score}</span>
+                            </div>
+                            <div className="row-secondary" style={{ marginTop: 8 }}>
+                              Shared tags: {sharedTags.length > 0 ? sharedTags.join(' • ') : 'none'}
+                            </div>
+                            <div className="row-secondary" style={{ marginTop: 4 }}>
+                              Shared MITRE: {sharedMitre.length > 0 ? sharedMitre.join(' • ') : 'none'}
+                            </div>
+                            <div className="btn-group" style={{ marginTop: 10 }}>
+                              <button
+                                className="btn btn-sm"
+                                type="button"
+                                onClick={() => openCaseFocus(caseItem.id)}
+                              >
+                                Open Workspace
+                              </button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 </div>
 
@@ -5962,10 +6069,10 @@ export default function SOCWorkbench() {
                     }}
                   >
                     <div className="card-title" style={{ marginBottom: 10 }}>
-                      Case Notes
+                      Case Journal
                     </div>
                     {activeCaseComments.length === 0 ? (
-                      <div className="empty">No case notes yet.</div>
+                      <div className="empty">No case journal entries yet.</div>
                     ) : (
                       <div style={{ display: 'grid', gap: 10 }}>
                         {activeCaseComments.map((comment, index) => (
