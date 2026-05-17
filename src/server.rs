@@ -13160,7 +13160,11 @@ fn splunk_hec_marketplace_card(state: &AppState) -> serde_json::Value {
             "{} event(s) pushed, {} pending{}",
             status.total_pushed,
             status.pending_events,
-            if config.pull_enabled { ", pull enabled" } else { "" }
+            if config.pull_enabled {
+                ", pull enabled"
+            } else {
+                ""
+            }
         )
     } else {
         "Configure the HEC endpoint, token, index, and sourcetype in Settings.".to_string()
@@ -13234,16 +13238,18 @@ fn servicenow_marketplace_card(state: &AppState) -> serde_json::Value {
             "Last sync {} for {} #{}",
             sync.external_key, sync.object_kind, sync.object_id
         ),
-        None => "Outbound case sync is available from the SOC workbench ticketing panel."
-            .to_string(),
+        None => {
+            "Outbound case sync is available from the SOC workbench ticketing panel.".to_string()
+        }
     };
     let secondary_line = match latest_sync {
         Some(sync) => format!(
             "{} sync(s) recorded; latest queue {}",
             sync.sync_count, destination
         ),
-        None => "Sync a case from SOC Workbench to establish queue and latency visibility."
-            .to_string(),
+        None => {
+            "Sync a case from SOC Workbench to establish queue and latency visibility.".to_string()
+        }
     };
     let next_fix = if has_sync {
         "Review queue mapping and continue outbound case sync coverage."
@@ -19426,7 +19432,10 @@ fn handle_api(
                     .and_then(serde_json::Value::as_str)
                     .unwrap_or("generic_syslog");
                 let s = state.lock().unwrap_or_else(|e| e.into_inner());
-                json_response(&integration_validation_payload(&s, provider).to_string(), 200)
+                json_response(
+                    &integration_validation_payload(&s, provider).to_string(),
+                    200,
+                )
             }
         },
         (Method::Get, "/api/integrations/sample-event") => {
@@ -33442,15 +33451,24 @@ mod tests {
             .expect("splunk marketplace card");
         assert_eq!(splunk["setup_status"], serde_json::json!("configured"));
         assert_eq!(splunk["validation"]["status"], serde_json::json!("ready"));
-        assert_eq!(splunk["destination"], serde_json::json!("security_events / wardex:xdr"));
-        assert_eq!(splunk["action_href"], serde_json::json!("/settings?tab=integrations"));
+        assert_eq!(
+            splunk["destination"],
+            serde_json::json!("security_events / wardex:xdr")
+        );
+        assert_eq!(
+            splunk["action_href"],
+            serde_json::json!("/settings?tab=integrations")
+        );
 
         let servicenow = connectors
             .iter()
             .find(|entry| entry["id"] == serde_json::json!("servicenow"))
             .expect("servicenow marketplace card");
         assert_eq!(servicenow["setup_status"], serde_json::json!("configured"));
-        assert_eq!(servicenow["validation"]["status"], serde_json::json!("ready"));
+        assert_eq!(
+            servicenow["validation"]["status"],
+            serde_json::json!("ready")
+        );
         assert_eq!(
             servicenow["sync_status"]["latest_queue_or_project"],
             serde_json::json!("SECOPS")
@@ -33847,11 +33865,13 @@ mod tests {
             failover["cluster"]["replica_lag_entries"],
             serde_json::json!(0)
         );
-        assert!(failover["checks"]
-            .as_array()
-            .expect("failover checks")
-            .iter()
-            .any(|check| check["id"] == serde_json::json!("replication_health")));
+        assert!(
+            failover["checks"]
+                .as_array()
+                .expect("failover checks")
+                .iter()
+                .any(|check| check["id"] == serde_json::json!("replication_health"))
+        );
 
         let reloaded = SupportStore::new(&support_store_path.to_string_lossy());
         assert_eq!(
