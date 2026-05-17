@@ -2,11 +2,11 @@
 
 ## Current release
 
-- **Version:** `1.0.21`
+- **Version:** `1.0.22`
 - **Positioning:** private-cloud XDR and SIEM platform with enterprise detection engineering, malware scanning, analyst workflows, fleet operations, behavioural analytics, and automated incident response
 - **Source footprint:** 139 Rust source modules
 - **API contract:** versioned OpenAPI surface with REST, GraphQL, live `/api/openapi.json` export, generated SDK parity diagnostics, authenticated-by-default API route classification, cursor page contracts, release observability/preflight proof APIs, production assurance endpoints, malware scan and response-action contracts, source-aware alert analysis, operator-trust workspaces, alert feedback/evidence-chain contracts, Detection Trust scoring and draft-only tuning APIs, detection validation lab APIs, response safety preview/verification APIs with execution-audit continuity, agent enrollment-token flows, connector marketplace summaries, operations health snapshots, and release verification readiness endpoints with evidence freshness metadata
-- **Verification:** release preflight gating for Rust formatting, Clippy, admin-console linting, admin-console formatting, admin-console build, and release-doc validation, plus Rust integration coverage, focused Detection Trust endpoint tests, session-cookie exchange tests, collector lifecycle tests, remediation change-review tests, Command Center summary/action-drawer tests, Help & Docs unit coverage, assistant/ticketing/enterprise API regression tests, operator trust workspace unit coverage, SDK regeneration checks, strict Playwright a11y smoke coverage, local Developer ID `.p12` signing validation, focused admin-console regression coverage, thread pullout regression coverage, and Launchpad coverage for proof freshness badges and persisted snapshot evidence state
+- **Verification:** release preflight gating for Rust formatting, Clippy, admin-console linting, admin-console formatting, admin-console build, release-doc validation, workspace hygiene, and panic-policy compliance, plus Rust integration coverage, focused Detection Trust endpoint tests, session-cookie exchange tests, collector lifecycle tests, remediation change-review tests, Command Center summary/action-drawer tests, Help & Docs unit coverage, assistant/ticketing/enterprise API regression tests, operator trust workspace unit coverage, SDK regeneration checks, strict Playwright a11y smoke coverage, local Developer ID `.p12` signing validation, focused admin-console regression coverage, thread pullout regression coverage, managed release acceptance coverage, and Launchpad coverage for proof freshness badges and persisted snapshot evidence state
 - **Production hardening:** 100% (59/59 controls implemented)
 
 ## Shipped in the current platform
@@ -99,7 +99,14 @@ The current release has been verified with:
 
 ## Current product posture
 
-Wardex is now positioned as a professional XDR/SIEM control plane with incident-first analyst workflows, explainable detections, context-preserving reporting, operator-visible recovery posture, and explicit shift-lead surfaces for ownership, handoff, and detection-review pressure. The runtime, admin console, release process, and website are aligned around operator trust, workflow closure, deployment readiness, clean release verification, and freshness-gated evidence. The current release extends that posture with route-aware search and dashboard forecasting, confidence-gated detection promotion, case-journal continuity, operator-visible integration and replication posture, durable approval-resume playbooks, and refreshed documentation plus API-reference captures.
+Wardex is now positioned as a professional XDR/SIEM control plane with incident-first analyst workflows, explainable detections, context-preserving reporting, operator-visible recovery posture, and explicit shift-lead surfaces for ownership, handoff, and detection-review pressure. The runtime, admin console, release process, and website are aligned around operator trust, workflow closure, deployment readiness, clean release verification, and freshness-gated evidence. The current release extends that posture with release-integrity repair: duplicate-copy cleanup across the workspace, zero-panic production random and fallback paths, refreshed managed acceptance coverage for current console routes, and a repackaged documentation and distribution surface aligned on `v1.0.22`.
+
+## Recently shipped (v1.0.22)
+
+- **CI stability repair** — duplicate source-copy artifacts were removed, workspace hygiene now ignores tracked paths that are already deleted, and the frontend dead-code audit is back on the real source tree.
+- **Panic-policy compliance** — attestation nonce generation, enrollment token generation, OIDC random material, and fallback response building no longer depend on production panic paths.
+- **Managed release acceptance refresh** — release smoke coverage now matches the current assistant, detection, command-center, and release-proof flows.
+- **Release metadata alignment** — Rust, admin-console, Python SDK, TypeScript SDK, Helm, OTLP, OpenAPI, website, install docs, reproducibility docs, and test fixtures now point at the `v1.0.22` CI-repair baseline.
 
 ## Recently shipped (v1.0.21)
 

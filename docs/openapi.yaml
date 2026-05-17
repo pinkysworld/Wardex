@@ -1,7 +1,7 @@
 openapi: 3.0.3
 info:
   title: Wardex XDR/SIEM API
-  version: 1.0.21
+  version: 1.0.22
   description: "Wardex XDR/SIEM REST API \u2014 detection, fleet management, incident response, and platform operations."
   license:
     name: AGPL-3.0-only
@@ -2814,14 +2814,13 @@ paths:
         schema:
           type: string
           enum:
-          - incidents
-          - remediation
+            title: Wardex XDR/SIEM API
+            version: 1.0.22
           - connectors
           - rule_tuning
           - release
           - evidence
       responses:
-        '200':
           description: Single-lane payload with metric key, value, and shared timestamp
           content:
             application/json:

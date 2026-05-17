@@ -1,6 +1,6 @@
 {
   "updated_at": "2026-05-17",
-  "version": "1.0.21",
+  "version": "1.0.22",
   "backlog_completed": 220,
   "backlog_total": 220,
   "completed_phases": 30,
@@ -58,7 +58,7 @@
     "Retention cost and risk forecast",
     "Adversarial validation dashboard for shipped attack and baseline corpora",
     "Support bundle diffing with digest and redaction-policy status",
-    "Clean release cut readiness endpoint for the v1.0.21 target",
+    "Clean release cut readiness endpoint for the v1.0.22 target",
     "Cross-workspace priority lanes for Dashboard, Fleet, Infrastructure, NDR, UEBA, and SOC",
     "Authenticated-by-default backend API route classification",
     "Live Monitor route-state continuity for tabs, filters, selected alerts, and process drawers",

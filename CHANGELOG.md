@@ -4,6 +4,14 @@ All notable changes to Wardex are documented in this file.
 
 ## [Unreleased]
 
+## [1.0.22] — 2026-05-17 — CI repair and release cleanup
+
+### Changed
+- **CI stability repair**: removes duplicate source-copy artifacts that were tripping both workspace hygiene and the frontend dead-code audit, and hardens the hygiene script to ignore tracked files that no longer exist in the workspace.
+- **Managed release smoke upkeep**: refreshes Playwright selectors, route targeting, and long-running release-proof handling so the managed release acceptance suite matches the current console labels and flows.
+- **Panic-policy compliance**: replaces the remaining production panic paths in attestation nonce generation, enrollment token generation, OIDC random material, and fallback response construction so the zero-panic baseline stays green.
+- **Release metadata alignment**: bumps Rust, admin-console, Python SDK, TypeScript SDK, Helm, OTLP, OpenAPI, installation, reproducibility, website, and test fixtures to the `v1.0.22` CI-repair baseline.
+
 ## [1.0.21] — 2026-05-17 — workflow continuity and documentation refresh
 
 ### Added

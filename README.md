@@ -14,15 +14,14 @@ Wardex is a Rust-based XDR and SIEM platform for private-cloud and self-hosted s
 - **Scan across platforms:** malware, virus, trojan, and rootkit workflows cover Linux, macOS, and Windows with local engines plus optional open-source signature presets.
 - **Ship verifiably:** releases include checksums, SBOMs, provenance, signed artifacts, and documented verification gates.
 
-## Current Release: `v1.0.21`
+## Current Release: `v1.0.22`
 
-This workflow-continuity and release-surface refresh deepens operator flow across search, dashboard, detection, SOC, integrations, replication posture, and approval-gated playbooks while bringing the public docs and website captures up to date.
+This stability patch focuses on release integrity rather than new surface area. It repairs the CI gates that protect release cuts, repackages the release metadata on a new patch version, and keeps the signed distribution path clean.
 
-- Search Palette now promotes route-aware actions with role-aware filtering, and the dashboard adds alert-pressure forecasting for faster queue triage.
-- Threat Detection now surfaces confidence gates, while SOC Workbench adds a first-class case journal and related-case continuity.
-- Operator Trust and Help & Docs now expose Splunk HEC and ServiceNow destination posture plus replication-region, lag, and health evidence.
-- Playbook approval gates now pause durably and resume through the runtime, OpenAPI contract, and both generated SDKs.
-- All release metadata, docs, website, screenshots, SDKs, Helm, OTLP, and test fixtures are aligned on `v1.0.21`.
+- Duplicate Finder/iCloud-style source copies are gone, keeping workspace hygiene and the frontend dead-code audit aligned on the real source tree.
+- Attestation, enrollment, OIDC, and fallback-response paths no longer rely on production `expect`/`unwrap` behavior, so the panic-policy gate stays at zero.
+- Managed release acceptance now targets the current console labels, case routing, and long-running release-proof flow.
+- All release metadata, docs, website, screenshots, SDKs, Helm, OTLP, and test fixtures are aligned on `v1.0.22`.
 
 See [CHANGELOG.md](CHANGELOG.md) for full release history.
 
@@ -96,7 +95,7 @@ The public website lives in [site/](site/) and mirrors the main product, release
 
 ## Documentation Surfaces
 
-The GitHub docs and the public website now share the same `v1.0.21` release surface for operator guides and API reference.
+The GitHub docs and the public website now share the same `v1.0.22` release surface for operator guides and API reference.
 
 ![Wardex documentation hub](site/media/insights/resources-live.png)
 
