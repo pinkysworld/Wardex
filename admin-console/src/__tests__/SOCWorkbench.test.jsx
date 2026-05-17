@@ -780,7 +780,10 @@ function installSocWorkbenchFetchMock(tracker = {}) {
         (pathname === '/api/playbooks/credential-storm-playbook/run' && method === 'POST')) &&
       (!body || typeof body === 'object')
     ) {
-      tracker.playbookRunIds = [...(tracker.playbookRunIds || []), body?.playbook_id || 'credential-storm-playbook'];
+      tracker.playbookRunIds = [
+        ...(tracker.playbookRunIds || []),
+        body?.playbook_id || 'credential-storm-playbook',
+      ];
       return Promise.resolve(jsonOk({ status: 'ok' }));
     }
     if (pathname === '/api/playbooks') return Promise.resolve(jsonOk(fixtures.playbooks));
