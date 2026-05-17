@@ -886,7 +886,10 @@ export default function SOCWorkbench() {
   );
 
   const incArr = Array.isArray(incList) ? incList : incList?.incidents || [];
-  const caseArr = Array.isArray(caseList) ? caseList : caseList?.cases || [];
+  const caseArr = useMemo(() => {
+    if (Array.isArray(caseList)) return caseList;
+    return Array.isArray(caseList?.cases) ? caseList.cases : [];
+  }, [caseList]);
   const queueArr = Array.isArray(queue) ? queue : queue?.queue || queue?.alerts || [];
   const rbacArr = Array.isArray(rbacData) ? rbacData : rbacData?.users || [];
   const activeInvestigationArr = useMemo(() => {

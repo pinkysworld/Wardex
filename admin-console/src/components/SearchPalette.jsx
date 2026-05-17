@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import * as api from '../api.js';
 import { useRole } from '../hooks.jsx';
 import { safeStorageJsonGet, safeStorageJsonSet } from '../safeStorage.js';
@@ -199,6 +199,7 @@ function uniqueCommandsByAction(commands) {
   });
 }
 
+// eslint-disable-next-line react-refresh/only-export-components
 export function filterCommandsForRole(commands, role = 'viewer') {
   const commandList = Array.isArray(commands) ? commands : [];
   if (role !== 'analyst') return commandList;
@@ -209,6 +210,7 @@ function routePriorityForPath(pathname = '') {
   return ROUTE_PRIORITY_ACTIONS.find((entry) => entry.match(pathname))?.actions || [];
 }
 
+// eslint-disable-next-line react-refresh/only-export-components
 export function prioritizeCommandsForPath(commands, pathname = '') {
   const commandList = Array.isArray(commands) ? commands : [];
   const actionPriority = new Map(
@@ -272,70 +274,78 @@ function SearchPaletteDialog({ onClose, onNavigate, saved, setSaved, currentPath
     return () => window.clearTimeout(focusTimer);
   }, []);
 
-  const doSearch = useCallback(async (q) => {
-    if (!q || q.length < 2) {
-      setResults([]);
-      return;
-    }
-    setLoading(true);
-    const gen = ++searchGenRef.current;
-    const ql = q.toLowerCase();
-    const allResults = visibleCommands.filter((command) =>
-      `${command.title} ${command.subtitle}`.toLowerCase().includes(ql),
-    );
-
-    await Promise.allSettled(
-      CATEGORIES.map(async (cat) => {
-        try {
-          const data = await cat.search();
-          const items = Array.isArray(data)
-            ? data
-            : data?.items || data?.alerts || data?.agents || data?.incidents || data?.rules || [];
-          items.forEach((item) => {
-            const text = JSON.stringify(item).toLowerCase();
-            if (text.includes(ql)) {
-              const title =
-                item.name ||
-                item.hostname ||
-                item.title ||
-                item.id ||
-                item.alert_id ||
-                item.message ||
-                'Unknown';
-              const subtitle =
-                item.severity ||
-                item.status ||
-                item.protocol ||
-                item.hostname ||
-                item.category ||
-                '';
-              allResults.push({
-                category: cat.label,
-                icon: cat.icon,
-                title,
-                subtitle,
-                raw: item,
-                kind: cat.kind,
-                path: cat.path,
-              });
-            }
-          });
-        } catch {
-          /* ignore category errors */
-        }
-      }),
-    );
-
-    if (gen !== searchGenRef.current) return;
-    setResults(allResults.slice(0, 20));
-    setSelectedIdx(0);
-    setLoading(false);
-  }, [visibleCommands]);
-
   useEffect(() => {
-    const timer = setTimeout(() => doSearch(query), 300);
+    const timer = setTimeout(() => {
+      async function runSearch() {
+        if (!query || query.length < 2) {
+          setResults([]);
+          setLoading(false);
+          return;
+        }
+        setLoading(true);
+        const gen = ++searchGenRef.current;
+        const ql = query.toLowerCase();
+        const allResults = visibleCommands.filter((command) =>
+          `${command.title} ${command.subtitle}`.toLowerCase().includes(ql),
+        );
+
+        await Promise.allSettled(
+          CATEGORIES.map(async (cat) => {
+            try {
+              const data = await cat.search();
+              const items = Array.isArray(data)
+                ? data
+                : data?.items ||
+                  data?.alerts ||
+                  data?.agents ||
+                  data?.incidents ||
+                  data?.rules ||
+                  [];
+              items.forEach((item) => {
+                const text = JSON.stringify(item).toLowerCase();
+                if (text.includes(ql)) {
+                  const title =
+                    item.name ||
+                    item.hostname ||
+                    item.title ||
+                    item.id ||
+                    item.alert_id ||
+                    item.message ||
+                    'Unknown';
+                  const subtitle =
+                    item.severity ||
+                    item.status ||
+                    item.protocol ||
+                    item.hostname ||
+                    item.category ||
+                    '';
+                  allResults.push({
+                    category: cat.label,
+                    icon: cat.icon,
+                    title,
+                    subtitle,
+                    raw: item,
+                    kind: cat.kind,
+                    path: cat.path,
+                  });
+                }
+              });
+            } catch {
+              /* ignore category errors */
+            }
+          }),
+        );
+
+        if (gen !== searchGenRef.current) return;
+        setResults(allResults.slice(0, 20));
+        setSelectedIdx(0);
+        setLoading(false);
+      }
+
+      void runSearch();
+    }, 300);
     return () => clearTimeout(timer);
-  }, [query, doSearch]);
+  }, [query, visibleCommands]);
 
   const handleKeyDown = (e) => {
     if (e.key === 'ArrowDown') {
