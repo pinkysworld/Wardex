@@ -90,7 +90,7 @@ Wardex is a self-hosted XDR and SIEM platform built in Rust for teams that want 
   - Deception engine with randomised canary deployment and attacker behavior profiling
   - Privacy-preserving forensics with 4 redaction levels and ZK proofs
   - LLM-assisted security analyst with RAG pipeline (OpenAI/Azure/Anthropic/Ollama), conversation history, and citation generation
-  - ONNX Runtime ML inference for real-time anomaly detection and triage classification
+  - Gradient-boosted alert-triage classifier (real multiclass gradient boosting) with Random Forest shadow comparison and calibrated confidence
 
 - **Integrations and evidence**
   - Structured SIEM output, OCSF normalization, TAXII pull, and threat-intel enrichment
@@ -102,7 +102,7 @@ Wardex is a self-hosted XDR and SIEM platform built in Rust for teams that want 
   - TypeScript SDK (`@wardex/sdk`) with typed production assurance, cursor-page, preflight, snapshot, and release-proof methods
   - GraphQL query layer for threat-hunting with aliases, sub-field selection, and introspection
   - Prometheus metrics endpoint with 20+ wardex_* counters, gauges, and histograms
-  - OpenAPI 3.0.3 machine-readable spec with 220 documented operations and full schema definitions
+  - OpenAPI 3.0.3 machine-readable spec with 247 documented operations and full schema definitions
   - Homebrew formula for macOS/Linux with multi-platform binary selection and launchd/systemd integration
 
 - **Production hardening**

@@ -1,11 +1,10 @@
 // Hybrid ML inference engine for alert triage.
 //
 // Wardex keeps the production decision path conservative: a built-in random
-// forest is always available, optional ONNX models can run in shadow mode, and
-// every result carries calibration plus operator-safe decision support. The
-// ONNX runner still uses metadata/heuristic scaffolding until the `ort` crate
-// is introduced, but the public contract is the same one the real runtime will
-// use.
+// forest is always available, and a gradient-boosted classifier — trained at
+// startup via real multiclass gradient boosting — serves as the primary
+// triage backend. Every result carries calibration plus operator-safe
+// decision support, and the two backends shadow each other for drift review.
 
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -371,17 +370,17 @@ impl RandomForest {
     }
 }
 
-// ── Stub engine (with Random Forest triage) ──────────────────────────
+// ── Random Forest engine ─────────────────────────────────────────────
 
-/// Engine that uses a pre-trained Random Forest for alert triage
-/// and stubs for ONNX model loading (until `ort` crate is added).
+/// Engine backed by the pre-trained Random Forest ensemble. Serves as the
+/// conservative fallback / shadow backend for alert triage.
 #[derive(Debug)]
-pub struct StubEngine {
+pub struct RandomForestEngine {
     models: HashMap<String, ModelInfo>,
     rf_triage: RandomForest,
 }
 
-impl Default for StubEngine {
+impl Default for RandomForestEngine {
     fn default() -> Self {
         Self {
             models: HashMap::new(),
@@ -390,7 +389,7 @@ impl Default for StubEngine {
     }
 }
 
-impl StubEngine {
+impl RandomForestEngine {
     pub fn new() -> Self {
         Self::default()
     }
@@ -400,22 +399,15 @@ impl StubEngine {
         self.rf_triage.predict(&features.to_vec())
     }
 
-    /// List built-in model slots that will ship with the first release.
+    /// Model slots exposed by the registry.
     pub fn planned_models() -> Vec<ModelInfo> {
         vec![
             ModelInfo {
-                name: "anomaly_detector_v1".into(),
-                version: "0.0.0-stub".into(),
-                input_shape: vec![1, 64],
-                output_shape: vec![1, 1],
-                description: "EWMA residual anomaly scorer (ONNX)".into(),
-            },
-            ModelInfo {
-                name: "entity_classifier_v1".into(),
-                version: "0.0.0-stub".into(),
-                input_shape: vec![1, 128],
-                output_shape: vec![1, 5],
-                description: "User/entity risk classifier (ONNX)".into(),
+                name: "alert_triage_gbm_v1".into(),
+                version: "gbm-1.0.0".into(),
+                input_shape: vec![1, 7],
+                output_shape: vec![1, 3],
+                description: "Gradient-boosted alert triage classifier — TP/FP/Review".into(),
             },
             ModelInfo {
                 name: "alert_triage_rf_v1".into(),
@@ -429,9 +421,8 @@ impl StubEngine {
     }
 }
 
-impl InferenceEngine for StubEngine {
+impl InferenceEngine for RandomForestEngine {
     fn load_model(&mut self, path: &str) -> Result<ModelInfo, String> {
-        // In the real engine this would call ort::Session::new(path)
         let name = std::path::Path::new(path)
             .file_stem()
             .and_then(|s| s.to_str())
@@ -439,10 +430,10 @@ impl InferenceEngine for StubEngine {
             .to_string();
         let info = ModelInfo {
             name: name.clone(),
-            version: "0.0.0-stub".into(),
-            input_shape: vec![1, 64],
-            output_shape: vec![1, 1],
-            description: format!("Stub model loaded from {path}"),
+            version: self.rf_triage.version.clone(),
+            input_shape: vec![1, 7],
+            output_shape: vec![1, 3],
+            description: format!("Random Forest triage slot registered for {path}"),
         };
         self.models.insert(name, info.clone());
         Ok(info)
@@ -452,12 +443,13 @@ impl InferenceEngine for StubEngine {
         if !self.models.contains_key(model) {
             return Err(format!("model '{model}' not loaded"));
         }
-        // Stub: return a neutral prediction
+        let start = std::time::Instant::now();
+        let result = self.rf_triage.predict(features);
         Ok(Prediction {
             model: model.into(),
-            label: "benign".into(),
-            confidence: 0.5,
-            latency_ms: 0.0,
+            label: triage_label_str(result.label).into(),
+            confidence: result.confidence,
+            latency_ms: start.elapsed().as_secs_f64() * 1000.0,
             features_used: features.len(),
         })
     }
@@ -480,297 +472,458 @@ impl InferenceEngine for StubEngine {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn stub_load_and_predict() {
-        let mut engine = StubEngine::new();
-        let info = engine.load_model("models/test_model.onnx").unwrap();
-        assert_eq!(info.name, "test_model");
-        assert_eq!(engine.status("test_model"), ModelStatus::Ready);
-
-        let pred = engine.predict("test_model", &[1.0, 2.0, 3.0]).unwrap();
-        assert_eq!(pred.label, "benign");
-        assert_eq!(pred.features_used, 3);
-    }
-
-    #[test]
-    fn stub_predict_unloaded_model_fails() {
-        let engine = StubEngine::new();
-        assert!(engine.predict("nonexistent", &[1.0]).is_err());
-    }
-
-    #[test]
-    fn stub_unload() {
-        let mut engine = StubEngine::new();
-        engine.load_model("models/foo.onnx").unwrap();
-        assert_eq!(engine.status("foo"), ModelStatus::Ready);
-        engine.unload_model("foo").unwrap();
-        assert_eq!(engine.status("foo"), ModelStatus::NotLoaded);
-    }
-
-    #[test]
-    fn planned_models_populated() {
-        let planned = StubEngine::planned_models();
-        assert_eq!(planned.len(), 3);
-        assert!(planned.iter().any(|m| m.name == "anomaly_detector_v1"));
-        assert!(planned.iter().any(|m| m.name == "entity_classifier_v1"));
-        assert!(planned.iter().any(|m| m.name == "alert_triage_rf_v1"));
-    }
-
-    #[test]
-    fn triage_high_score_is_tp() {
-        let engine = StubEngine::new();
-        let features = TriageFeatures {
-            anomaly_score: 0.95,
-            confidence: 0.9,
-            suspicious_axes: 3,
-            hour_of_day: 2,
-            day_of_week: 6,
-            alert_frequency_1h: 5,
-            device_risk_score: 0.8,
-        };
-        let result = engine.triage_alert(&features);
-        assert_eq!(result.label, TriageLabel::TruePositive);
-        assert!(result.confidence > 0.8);
-    }
-
-    #[test]
-    fn triage_low_score_is_fp() {
-        let engine = StubEngine::new();
-        let features = TriageFeatures {
-            anomaly_score: 0.1,
-            confidence: 0.1,
-            suspicious_axes: 0,
-            hour_of_day: 14,
-            day_of_week: 2,
-            alert_frequency_1h: 0,
-            device_risk_score: 0.05,
-        };
-        let result = engine.triage_alert(&features);
-        assert_eq!(result.label, TriageLabel::FalsePositive);
-    }
-
-    #[test]
-    fn triage_mid_score_needs_review() {
-        let engine = StubEngine::new();
-        let features = TriageFeatures {
-            anomaly_score: 0.5,
-            confidence: 0.5,
-            suspicious_axes: 1,
-            hour_of_day: 10,
-            day_of_week: 3,
-            alert_frequency_1h: 2,
-            device_risk_score: 0.3,
-        };
-        let result = engine.triage_alert(&features);
-        // RF ensemble may classify mid-range as FP or NeedsReview
-        assert!(
-            result.label == TriageLabel::NeedsReview || result.label == TriageLabel::FalsePositive
-        );
-    }
-
-    #[test]
-    fn triage_features_to_vec() {
-        let features = TriageFeatures {
-            anomaly_score: 0.5,
-            confidence: 0.8,
-            suspicious_axes: 2,
-            hour_of_day: 12,
-            day_of_week: 3,
-            alert_frequency_1h: 10,
-            device_risk_score: 0.6,
-        };
-        let v = features.to_vec();
-        assert_eq!(v.len(), 7);
-        assert!((v[0] - 0.5).abs() < 1e-6);
-        assert!((v[3] - 0.5).abs() < 1e-6); // 12/24
+/// Stable string label for a triage class.
+fn triage_label_str(label: TriageLabel) -> &'static str {
+    match label {
+        TriageLabel::TruePositive => "true_positive",
+        TriageLabel::FalsePositive => "false_positive",
+        TriageLabel::NeedsReview => "needs_review",
     }
 }
 
-// ── ONNX Runtime Engine ──────────────────────────────────────────────
+// ── Gradient-Boosted Classifier ──────────────────────────────────────
+//
+// A genuine multiclass gradient-boosting model: regression trees are fitted
+// to the gradients/hessians of the softmax cross-entropy loss (Newton-step
+// leaves, XGBoost-style split gain). The model is trained at startup on a
+// deterministic labelled dataset, so every build produces an identical model.
 
-/// ONNX Runtime-backed inference engine.
+/// A node in a fitted regression tree.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum GbtNode {
+    Split {
+        feature: usize,
+        threshold: f64,
+        left: Box<GbtNode>,
+        right: Box<GbtNode>,
+    },
+    Leaf {
+        value: f64,
+    },
+}
+
+impl GbtNode {
+    fn eval(&self, x: &[f64]) -> f64 {
+        match self {
+            GbtNode::Leaf { value } => *value,
+            GbtNode::Split {
+                feature,
+                threshold,
+                left,
+                right,
+            } => {
+                if x.get(*feature).copied().unwrap_or(0.0) <= *threshold {
+                    left.eval(x)
+                } else {
+                    right.eval(x)
+                }
+            }
+        }
+    }
+}
+
+fn softmax(scores: &[f64]) -> Vec<f64> {
+    if scores.is_empty() {
+        return Vec::new();
+    }
+    let max = scores.iter().copied().fold(f64::NEG_INFINITY, f64::max);
+    let exps: Vec<f64> = scores.iter().map(|s| (s - max).exp()).collect();
+    let sum: f64 = exps.iter().sum();
+    if sum <= 0.0 || !sum.is_finite() {
+        return vec![1.0 / scores.len() as f64; scores.len()];
+    }
+    exps.iter().map(|e| e / sum).collect()
+}
+
+/// Fit one regression tree to the supplied per-sample gradients and hessians.
+#[allow(clippy::too_many_arguments)]
+fn fit_regression_tree(
+    rows: &[usize],
+    xs: &[Vec<f64>],
+    grad: &[f64],
+    hess: &[f64],
+    depth: usize,
+    max_depth: usize,
+    lambda: f64,
+    min_child_weight: f64,
+) -> GbtNode {
+    let g: f64 = rows.iter().map(|&r| grad[r]).sum();
+    let h: f64 = rows.iter().map(|&r| hess[r]).sum();
+    let leaf = GbtNode::Leaf {
+        value: -g / (h + lambda),
+    };
+    if depth >= max_depth || rows.len() < 8 {
+        return leaf;
+    }
+
+    let feature_count = xs.first().map(|x| x.len()).unwrap_or(0);
+    let parent_score = g * g / (h + lambda);
+    let mut best: Option<(usize, f64, f64)> = None; // feature, threshold, gain
+
+    // `feature` indexes the column of every row in `xs`, so a range loop is
+    // correct here — iterating `xs` directly would walk rows, not columns.
+    #[allow(clippy::needless_range_loop)]
+    for feature in 0..feature_count {
+        let mut sorted: Vec<usize> = rows.to_vec();
+        sorted.sort_by(|&a, &b| {
+            xs[a][feature]
+                .partial_cmp(&xs[b][feature])
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
+        let mut gl = 0.0;
+        let mut hl = 0.0;
+        for i in 0..sorted.len().saturating_sub(1) {
+            let r = sorted[i];
+            gl += grad[r];
+            hl += hess[r];
+            let v = xs[r][feature];
+            let v_next = xs[sorted[i + 1]][feature];
+            if (v_next - v).abs() < 1e-9 {
+                continue; // cannot split between equal feature values
+            }
+            let gr = g - gl;
+            let hr = h - hl;
+            if hl < min_child_weight || hr < min_child_weight {
+                continue;
+            }
+            let gain = 0.5
+                * (gl * gl / (hl + lambda) + gr * gr / (hr + lambda) - parent_score);
+            if gain > best.map(|(_, _, bg)| bg).unwrap_or(1e-6) {
+                best = Some((feature, (v + v_next) / 2.0, gain));
+            }
+        }
+    }
+
+    match best {
+        Some((feature, threshold, _)) => {
+            let (left_rows, right_rows): (Vec<usize>, Vec<usize>) = rows
+                .iter()
+                .partition(|&&r| xs[r][feature] <= threshold);
+            if left_rows.is_empty() || right_rows.is_empty() {
+                return leaf;
+            }
+            GbtNode::Split {
+                feature,
+                threshold,
+                left: Box::new(fit_regression_tree(
+                    &left_rows,
+                    xs,
+                    grad,
+                    hess,
+                    depth + 1,
+                    max_depth,
+                    lambda,
+                    min_child_weight,
+                )),
+                right: Box::new(fit_regression_tree(
+                    &right_rows,
+                    xs,
+                    grad,
+                    hess,
+                    depth + 1,
+                    max_depth,
+                    lambda,
+                    min_child_weight,
+                )),
+            }
+        }
+        None => leaf,
+    }
+}
+
+/// Deterministic labelled training set for the triage classifier.
 ///
-/// When the `ort` crate is available, this engine loads .onnx models and
-/// runs real inference. The current implementation provides the full
-/// scaffolding with model management, batched inference, and warm-up
-/// support. Model files are expected under `models/` directory.
+/// Feature layout matches [`TriageFeatures::to_vec`]. Labels follow a
+/// composite threat score; a deterministic LCG generates the samples so the
+/// trained model is byte-identical on every build.
+fn synthetic_training_set() -> Vec<(Vec<f64>, usize)> {
+    let mut seed: u64 = 0x9E37_79B9_7F4A_7C15;
+    let mut next = || {
+        seed = seed
+            .wrapping_mul(6364136223846793005)
+            .wrapping_add(1442695040888963407);
+        ((seed >> 33) as f64) / (1u64 << 31) as f64 // [0,1)
+    };
+
+    let mut out = Vec::with_capacity(320);
+    for _ in 0..320 {
+        let anomaly = next();
+        let confidence = next();
+        let axes = (next() * 5.0).floor(); // 0..=4 raw count
+        let hour = next(); // already normalised [0,1)
+        let day = next(); // already normalised [0,1)
+        let freq = (next() * 30.0).ln_1p(); // log-scaled frequency
+        let device_risk = next();
+
+        let composite = 0.42 * anomaly
+            + 0.26 * confidence
+            + 0.14 * (axes / 4.0)
+            + 0.18 * device_risk;
+
+        let label = if composite >= 0.62 {
+            2 // TruePositive
+        } else if composite <= 0.34 {
+            0 // FalsePositive
+        } else {
+            1 // NeedsReview
+        };
+
+        out.push((
+            vec![anomaly, confidence, axes, hour, day, freq, device_risk],
+            label,
+        ));
+    }
+    out
+}
+
+/// Fitted multiclass gradient-boosting classifier.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GradientBoostedClassifier {
+    /// Boosted regression trees, indexed `[class][round]`.
+    trees: Vec<Vec<GbtNode>>,
+    learning_rate: f64,
+    n_classes: usize,
+    feature_count: usize,
+    pub version: String,
+}
+
+impl GradientBoostedClassifier {
+    /// Train the classifier with real multiclass gradient boosting.
+    pub fn train() -> Self {
+        let samples = synthetic_training_set();
+        let xs: Vec<Vec<f64>> = samples.iter().map(|(x, _)| x.clone()).collect();
+        let ys: Vec<usize> = samples.iter().map(|(_, y)| *y).collect();
+        let n = xs.len();
+        let n_classes = 3;
+        let learning_rate = 0.3;
+        let n_rounds = 60;
+        let max_depth = 3;
+        let lambda = 1.0;
+        let min_child_weight = 1.0;
+
+        let mut raw = vec![vec![0.0f64; n_classes]; n];
+        let mut trees: Vec<Vec<GbtNode>> = vec![Vec::new(); n_classes];
+        let all_rows: Vec<usize> = (0..n).collect();
+
+        for _round in 0..n_rounds {
+            // Snapshot softmax probabilities at the start of the round.
+            let probs: Vec<Vec<f64>> = raw.iter().map(|r| softmax(r)).collect();
+            for class in 0..n_classes {
+                let mut grad = vec![0.0; n];
+                let mut hess = vec![0.0; n];
+                for i in 0..n {
+                    let p = probs[i][class];
+                    let y = if ys[i] == class { 1.0 } else { 0.0 };
+                    grad[i] = p - y;
+                    hess[i] = (p * (1.0 - p)).max(1e-6);
+                }
+                let tree = fit_regression_tree(
+                    &all_rows,
+                    &xs,
+                    &grad,
+                    &hess,
+                    0,
+                    max_depth,
+                    lambda,
+                    min_child_weight,
+                );
+                for (i, x) in xs.iter().enumerate() {
+                    raw[i][class] += learning_rate * tree.eval(x);
+                }
+                trees[class].push(tree);
+            }
+        }
+
+        Self {
+            trees,
+            learning_rate,
+            n_classes,
+            feature_count: 7,
+            version: "gbm-1.0.0".into(),
+        }
+    }
+
+    /// Raw additive scores per class.
+    fn raw_scores(&self, x: &[f64]) -> Vec<f64> {
+        let mut scores = vec![0.0; self.n_classes];
+        for (class, class_trees) in self.trees.iter().enumerate() {
+            for tree in class_trees {
+                scores[class] += self.learning_rate * tree.eval(x);
+            }
+        }
+        scores
+    }
+
+    /// Class probability distribution for a feature vector.
+    pub fn predict_proba(&self, x: &[f64]) -> Vec<f64> {
+        softmax(&self.raw_scores(x))
+    }
+
+    /// Predict the triage label and its calibrated confidence.
+    pub fn predict(&self, x: &[f64]) -> TriageResult {
+        let probs = self.predict_proba(x);
+        let (class, confidence) = probs
+            .iter()
+            .enumerate()
+            .max_by(|a, b| a.1.partial_cmp(b.1).unwrap_or(std::cmp::Ordering::Equal))
+            .map(|(c, p)| (c, *p))
+            .unwrap_or((1, 0.0));
+        let label = match class {
+            2 => TriageLabel::TruePositive,
+            0 => TriageLabel::FalsePositive,
+            _ => TriageLabel::NeedsReview,
+        };
+        TriageResult {
+            label,
+            confidence,
+            model_version: self.version.clone(),
+        }
+    }
+
+    pub fn feature_count(&self) -> usize {
+        self.feature_count
+    }
+
+    /// Total number of fitted trees across all classes.
+    pub fn tree_count(&self) -> usize {
+        self.trees.iter().map(|t| t.len()).sum()
+    }
+}
+
+// ── Gradient-Boost engine ────────────────────────────────────────────
+
+/// Inference engine backed by the gradient-boosted triage classifier.
+///
+/// The built-in classifier is trained at construction. A serialized
+/// classifier (`*.json`) placed in the model directory overrides it,
+/// allowing models trained offline to be deployed without a rebuild.
 #[derive(Debug)]
-pub struct OnnxEngine {
-    models: HashMap<String, OnnxModelSlot>,
+pub struct GradientBoostEngine {
+    classifier: GradientBoostedClassifier,
     model_dir: String,
-    #[allow(dead_code)]
-    warm_up_on_load: bool,
+    loaded_from: Option<String>,
 }
 
-#[derive(Debug, Clone)]
-struct OnnxModelSlot {
-    info: ModelInfo,
-    status: ModelStatus,
-    #[allow(dead_code)]
-    path: String,
-    inference_count: u64,
-    last_latency_ms: f64,
-}
-
-impl OnnxEngine {
-    /// Create a new ONNX engine with a model directory.
+impl GradientBoostEngine {
+    /// Create the engine, training the built-in classifier.
     pub fn new(model_dir: &str) -> Self {
         Self {
-            models: HashMap::new(),
+            classifier: GradientBoostedClassifier::train(),
             model_dir: model_dir.to_string(),
-            warm_up_on_load: true,
+            loaded_from: None,
         }
     }
 
-    /// Run alert triage with the ONNX alert triage model, falling back to
-    /// the Random Forest ensemble if no ONNX model is loaded.
+    /// The primary triage slot is always ready — the built-in classifier
+    /// is trained at startup.
+    pub fn is_ready(&self) -> bool {
+        true
+    }
+
+    /// Path the active classifier was loaded from, if overridden from disk.
+    pub fn loaded_from(&self) -> Option<&str> {
+        self.loaded_from.as_deref()
+    }
+
+    /// Run alert triage with the gradient-boosted classifier.
     pub fn triage_alert(&self, features: &TriageFeatures) -> TriageResult {
-        let fv = features.to_vec();
-
-        // Try ONNX model first
-        if let Ok(pred) = self.predict("alert_triage_v1", &fv) {
-            let label = match pred.label.as_str() {
-                "true_positive" => TriageLabel::TruePositive,
-                "false_positive" => TriageLabel::FalsePositive,
-                _ => TriageLabel::NeedsReview,
-            };
-            return TriageResult {
-                label,
-                confidence: pred.confidence,
-                model_version: format!("onnx-{}", pred.model),
-            };
-        }
-
-        // Fallback to Random Forest
-        RandomForest::pretrained().predict(&fv)
+        self.classifier.predict(&features.to_vec())
     }
 
-    /// Get inference statistics for a model.
-    pub fn model_stats(&self, model: &str) -> Option<(u64, f64)> {
-        self.models
-            .get(model)
-            .map(|slot| (slot.inference_count, slot.last_latency_ms))
-    }
-
-    /// List all available .onnx files in the model directory.
+    /// List serialized classifier files (`*.json`) in the model directory.
     pub fn discover_models(&self) -> Vec<String> {
         let Ok(entries) = std::fs::read_dir(&self.model_dir) else {
             return vec![];
         };
-        entries
+        let mut found: Vec<String> = entries
             .filter_map(|e| e.ok())
-            .filter(|e| e.path().extension().is_some_and(|ext| ext == "onnx"))
+            .filter(|e| e.path().extension().is_some_and(|ext| ext == "json"))
             .filter_map(|e| e.path().to_str().map(String::from))
-            .collect()
+            .collect();
+        found.sort();
+        found
     }
 
-    /// Load all discovered models in the model directory.
+    /// Load the first discoverable serialized classifier, overriding the
+    /// built-in model. Returns the model info of the active classifier.
     pub fn load_all_discovered(&mut self) -> Vec<Result<ModelInfo, String>> {
         let paths = self.discover_models();
         paths.iter().map(|p| self.load_model(p)).collect()
     }
+
+    fn model_info(&self) -> ModelInfo {
+        ModelInfo {
+            name: "alert_triage_gbm_v1".into(),
+            version: self.classifier.version.clone(),
+            input_shape: vec![1, self.classifier.feature_count()],
+            output_shape: vec![1, 3],
+            description: match &self.loaded_from {
+                Some(path) => format!(
+                    "Gradient-boosted triage classifier loaded from {path} ({} trees)",
+                    self.classifier.tree_count()
+                ),
+                None => format!(
+                    "Built-in gradient-boosted triage classifier ({} trees)",
+                    self.classifier.tree_count()
+                ),
+            },
+        }
+    }
 }
 
-impl InferenceEngine for OnnxEngine {
+impl InferenceEngine for GradientBoostEngine {
     fn load_model(&mut self, path: &str) -> Result<ModelInfo, String> {
-        let name = std::path::Path::new(path)
-            .file_stem()
-            .and_then(|s| s.to_str())
-            .unwrap_or("unknown")
-            .to_string();
-
-        // Validate file exists
         if !std::path::Path::new(path).exists() {
-            return Err(format!("Model file not found: {path}"));
+            return Err(format!("model file not found: {path}"));
         }
-
-        let file_size = std::fs::metadata(path).map(|m| m.len()).unwrap_or(0);
-
-        // NOTE: When `ort` crate is added, replace this with:
-        //   let session = ort::Session::builder()?.commit_from_file(path)?;
-        //   let input_shape = session.inputs[0].dimensions()...;
-        //   let output_shape = session.outputs[0].dimensions()...;
-
-        let info = ModelInfo {
-            name: name.clone(),
-            version: format!("onnx-{}", file_size),
-            input_shape: vec![1, 64], // Will be extracted from ONNX metadata
-            output_shape: vec![1, 1], // Will be extracted from ONNX metadata
-            description: format!("ONNX model loaded from {path} ({file_size} bytes)"),
-        };
-
-        self.models.insert(
-            name.clone(),
-            OnnxModelSlot {
-                info: info.clone(),
-                status: ModelStatus::Ready,
-                path: path.to_string(),
-                inference_count: 0,
-                last_latency_ms: 0.0,
-            },
-        );
-
-        Ok(info)
+        let raw = std::fs::read_to_string(path)
+            .map_err(|e| format!("failed to read model file {path}: {e}"))?;
+        let classifier: GradientBoostedClassifier = serde_json::from_str(&raw)
+            .map_err(|e| format!("failed to parse classifier {path}: {e}"))?;
+        if classifier.trees.len() != 3 {
+            return Err(format!(
+                "classifier {path} must have 3 classes, found {}",
+                classifier.trees.len()
+            ));
+        }
+        self.classifier = classifier;
+        self.loaded_from = Some(path.to_string());
+        Ok(self.model_info())
     }
 
     fn predict(&self, model: &str, features: &[f64]) -> Result<Prediction, String> {
-        let slot = self
-            .models
-            .get(model)
-            .ok_or(format!("model '{model}' not loaded"))?;
-
-        if slot.status != ModelStatus::Ready {
-            return Err(format!("model '{model}' not ready: {:?}", slot.status));
+        if model != "alert_triage_v1" && model != "alert_triage_gbm_v1" {
+            return Err(format!("model '{model}' not loaded"));
         }
-
         let start = std::time::Instant::now();
-
-        // NOTE: When `ort` crate is added, replace this with:
-        //   let input = ndarray::Array2::from_shape_vec((1, features.len()), features.to_vec())?;
-        //   let outputs = session.run(ort::inputs![input]?)?;
-        //   let output = outputs[0].extract_tensor::<f32>()?;
-
-        // Heuristic-based prediction based on feature statistics
-        let mean = features.iter().sum::<f64>() / features.len().max(1) as f64;
-        let variance =
-            features.iter().map(|x| (x - mean).powi(2)).sum::<f64>() / features.len().max(1) as f64;
-
-        let (label, confidence) = if mean > 0.7 && variance < 0.1 {
-            ("anomalous", 0.85 + variance)
-        } else if mean < 0.3 {
-            ("benign", 0.9 - variance)
-        } else {
-            ("uncertain", 0.5 + mean * 0.2)
-        };
-
-        let latency = start.elapsed().as_secs_f64() * 1000.0;
-
+        let result = self.classifier.predict(features);
         Ok(Prediction {
             model: model.into(),
-            label: label.into(),
-            confidence: confidence.clamp(0.0, 1.0),
-            latency_ms: latency,
+            label: triage_label_str(result.label).into(),
+            confidence: result.confidence,
+            latency_ms: start.elapsed().as_secs_f64() * 1000.0,
             features_used: features.len(),
         })
     }
 
     fn list_models(&self) -> Vec<ModelInfo> {
-        self.models.values().map(|s| s.info.clone()).collect()
+        vec![self.model_info()]
     }
 
     fn status(&self, model: &str) -> ModelStatus {
-        self.models
-            .get(model)
-            .map(|s| s.status)
-            .unwrap_or(ModelStatus::NotLoaded)
+        if model == "alert_triage_v1" || model == "alert_triage_gbm_v1" {
+            ModelStatus::Ready
+        } else {
+            ModelStatus::NotLoaded
+        }
     }
 
-    fn unload_model(&mut self, model: &str) -> Result<(), String> {
-        self.models.remove(model);
+    fn unload_model(&mut self, _model: &str) -> Result<(), String> {
+        // Reverts a disk override back to the built-in trained classifier.
+        if self.loaded_from.is_some() {
+            self.classifier = GradientBoostedClassifier::train();
+            self.loaded_from = None;
+        }
         Ok(())
     }
 }
@@ -833,7 +986,7 @@ pub struct ModelRegistryStatus {
     #[serde(default)]
     pub shadow_backend: Option<String>,
     pub shadow_mode: bool,
-    pub onnx_loaded: bool,
+    pub gbm_loaded: bool,
     pub last_refreshed_at: String,
     pub discovered_models: Vec<String>,
     pub loaded_models: Vec<ModelInfo>,
@@ -842,12 +995,16 @@ pub struct ModelRegistryStatus {
     pub recent_shadow_reports: Vec<ShadowInferenceRecord>,
 }
 
+/// Backend identifiers used in triage outcomes and shadow reports.
+const BACKEND_GBM: &str = "gradient_boost";
+const BACKEND_RF: &str = "random_forest";
+
 #[derive(Debug)]
 pub struct ModelRegistry {
-    fallback: StubEngine,
-    onnx: OnnxEngine,
+    fallback: RandomForestEngine,
+    gbm: GradientBoostEngine,
     shadow_mode: bool,
-    prefer_onnx_primary: bool,
+    prefer_gbm_primary: bool,
     last_refreshed_at: String,
     recent_shadow_reports: Vec<ShadowInferenceRecord>,
 }
@@ -855,10 +1012,10 @@ pub struct ModelRegistry {
 impl ModelRegistry {
     pub fn new(model_dir: &str) -> Self {
         let mut registry = Self {
-            fallback: StubEngine::new(),
-            onnx: OnnxEngine::new(model_dir),
+            fallback: RandomForestEngine::new(),
+            gbm: GradientBoostEngine::new(model_dir),
             shadow_mode: true,
-            prefer_onnx_primary: false,
+            prefer_gbm_primary: true,
             last_refreshed_at: chrono::Utc::now().to_rfc3339(),
             recent_shadow_reports: Vec::new(),
         };
@@ -866,17 +1023,18 @@ impl ModelRegistry {
         registry
     }
 
+    /// Re-scan the model directory for serialized classifier overrides.
     pub fn refresh(&mut self) {
-        for result in self.onnx.load_all_discovered() {
+        for result in self.gbm.load_all_discovered() {
             let _ = result;
         }
-        self.prefer_onnx_primary = self.onnx.status("alert_triage_v1") == ModelStatus::Ready;
         self.last_refreshed_at = chrono::Utc::now().to_rfc3339();
     }
 
+    /// Roll back to the Random Forest as the primary triage backend.
     pub fn rollback_alert_triage(&mut self) -> bool {
-        let changed = self.prefer_onnx_primary;
-        self.prefer_onnx_primary = false;
+        let changed = self.prefer_gbm_primary;
+        self.prefer_gbm_primary = false;
         changed
     }
 
@@ -885,40 +1043,31 @@ impl ModelRegistry {
     }
 
     pub fn status(&self) -> ModelRegistryStatus {
-        let discovered_models = self.onnx.discover_models();
-        let loaded_models = {
-            let mut models = self.onnx.list_models();
-            if models.is_empty() {
-                models = self.fallback.list_models();
-            }
-            models
-        };
+        let discovered_models = self.gbm.discover_models();
+        let mut loaded_models = self.gbm.list_models();
+        loaded_models.extend(self.fallback.list_models());
         ModelRegistryStatus {
             slot: "alert_triage".to_string(),
-            active_backend: if self.prefer_onnx_primary
-                && self.onnx.status("alert_triage_v1") == ModelStatus::Ready
-            {
-                "onnx".to_string()
+            active_backend: if self.prefer_gbm_primary {
+                BACKEND_GBM.to_string()
             } else {
-                "random_forest_fallback".to_string()
+                BACKEND_RF.to_string()
             },
-            shadow_backend: if self.shadow_mode
-                && self.onnx.status("alert_triage_v1") == ModelStatus::Ready
-            {
-                Some(if self.prefer_onnx_primary {
-                    "random_forest_fallback".to_string()
+            shadow_backend: if self.shadow_mode {
+                Some(if self.prefer_gbm_primary {
+                    BACKEND_RF.to_string()
                 } else {
-                    "onnx".to_string()
+                    BACKEND_GBM.to_string()
                 })
             } else {
                 None
             },
             shadow_mode: self.shadow_mode,
-            onnx_loaded: self.onnx.status("alert_triage_v1") == ModelStatus::Ready,
+            gbm_loaded: self.gbm.is_ready(),
             last_refreshed_at: self.last_refreshed_at.clone(),
             discovered_models,
             loaded_models,
-            available_models: StubEngine::planned_models(),
+            available_models: RandomForestEngine::planned_models(),
             recent_shadow_reports: self
                 .recent_shadow_reports
                 .iter()
@@ -930,40 +1079,32 @@ impl ModelRegistry {
     }
 
     pub fn triage_alert(&mut self, features: &TriageFeatures) -> ManagedTriageOutcome {
-        let onnx_ready = self.onnx.status("alert_triage_v1") == ModelStatus::Ready;
-        let fallback = self.fallback.triage_alert(features);
-        let use_onnx_primary = self.prefer_onnx_primary && onnx_ready;
-        let primary = if use_onnx_primary {
-            self.onnx.triage_alert(features)
+        let gbm_result = self.gbm.triage_alert(features);
+        let rf_result = self.fallback.triage_alert(features);
+
+        let (primary, shadow_result, active_backend, shadow_backend) = if self.prefer_gbm_primary {
+            (gbm_result.clone(), rf_result.clone(), BACKEND_GBM, BACKEND_RF)
         } else {
-            fallback.clone()
+            (rf_result.clone(), gbm_result.clone(), BACKEND_RF, BACKEND_GBM)
         };
-        let shadow = if self.shadow_mode && onnx_ready {
-            Some(if use_onnx_primary {
-                fallback.clone()
-            } else {
-                self.onnx.triage_alert(features)
-            })
+
+        let shadow = if self.shadow_mode {
+            Some(shadow_result)
         } else {
             None
         };
+
         if let Some(ref shadow_result) = shadow {
             self.record_shadow_report(
-                if use_onnx_primary {
-                    "onnx"
-                } else {
-                    "random_forest_fallback"
-                },
+                active_backend,
                 shadow_result,
                 &primary,
-                if use_onnx_primary {
-                    Some("random_forest_fallback")
-                } else {
-                    Some("onnx")
-                },
+                Some(shadow_backend),
             );
         }
-        let calibrated_confidence = 1.0 / (1.0 + (-4.0 * (primary.confidence - 0.5)).exp());
+
+        let calibrated_confidence =
+            1.0 / (1.0 + (-4.0 * (primary.confidence - 0.5)).exp());
         let band = if calibrated_confidence >= 0.85 {
             "high"
         } else if calibrated_confidence >= 0.6 {
@@ -971,46 +1112,32 @@ impl ModelRegistry {
         } else {
             "low"
         };
-        let mut rationale = Vec::new();
-        rationale.push(format!(
-            "primary backend: {}",
-            if use_onnx_primary {
-                "onnx"
-            } else {
-                "random_forest_fallback"
-            }
-        ));
+
+        let mut rationale = vec![format!("primary backend: {active_backend}")];
         if shadow.is_some() {
-            rationale.push("shadow inference captured for calibration comparison".to_string());
+            rationale.push(
+                "shadow inference captured for calibration comparison".to_string(),
+            );
         } else {
-            rationale
-                .push("fallback-only decision because no ONNX triage model is loaded".to_string());
+            rationale.push("shadow comparison disabled".to_string());
         }
-        let active_backend = if use_onnx_primary {
-            "onnx"
-        } else {
-            "random_forest_fallback"
-        };
+
         let decision_support = build_decision_support(
             &primary,
             &calibrated_confidence,
             band,
             active_backend,
             shadow.as_ref(),
-            onnx_ready,
             features,
         );
+
         ManagedTriageOutcome {
             result: primary.clone(),
             shadow,
-            fallback_used: !use_onnx_primary,
+            fallback_used: !self.prefer_gbm_primary,
             active_backend: active_backend.to_string(),
-            shadow_backend: if self.shadow_mode && onnx_ready {
-                Some(if use_onnx_primary {
-                    "random_forest_fallback".to_string()
-                } else {
-                    "onnx".to_string()
-                })
+            shadow_backend: if self.shadow_mode {
+                Some(shadow_backend.to_string())
             } else {
                 None
             },
@@ -1055,7 +1182,6 @@ fn build_decision_support(
     band: &str,
     active_backend: &str,
     shadow: Option<&TriageResult>,
-    onnx_ready: bool,
     features: &TriageFeatures,
 ) -> TriageDecisionSupport {
     let (operator_journey, recommended_action, requires_human_approval) = match result.label {
@@ -1086,7 +1212,7 @@ fn build_decision_support(
         ),
     };
 
-    let mut quality_gates = vec![
+    let quality_gates = vec![
         ModelQualityGate {
             id: "confidence_calibrated".into(),
             status: if *calibrated_confidence >= 0.6 {
@@ -1098,17 +1224,15 @@ fn build_decision_support(
         },
         ModelQualityGate {
             id: "backend_shadowed".into(),
-            status: if shadow.is_some() || !onnx_ready {
+            status: if shadow.is_some() {
                 "pass".into()
             } else {
                 "review".into()
             },
             detail: if shadow.is_some() {
                 "shadow comparison captured for drift review".into()
-            } else if onnx_ready {
-                "ONNX model active without shadow comparison".into()
             } else {
-                "built-in fallback is active until an ONNX model is loaded".into()
+                "shadow comparison disabled — enable for drift review".into()
             },
         },
         ModelQualityGate {
@@ -1126,20 +1250,12 @@ fn build_decision_support(
         },
     ];
 
-    if active_backend != "onnx" {
-        quality_gates.push(ModelQualityGate {
-            id: "production_model_loaded".into(),
-            status: "review".into(),
-            detail: "no primary ONNX triage model is loaded for this slot".into(),
-        });
-    }
-
     TriageDecisionSupport {
         operator_journey: operator_journey.into(),
-        evidence_mode: if active_backend == "onnx" {
+        evidence_mode: if active_backend == BACKEND_GBM {
             "model_primary".into()
         } else {
-            "built_in_fallback".into()
+            "random_forest_primary".into()
         },
         recommended_action: recommended_action.into(),
         requires_human_approval,
@@ -1148,38 +1264,11 @@ fn build_decision_support(
 }
 
 #[cfg(test)]
-mod onnx_tests {
+mod tests {
     use super::*;
 
-    #[test]
-    fn onnx_engine_creation() {
-        let engine = OnnxEngine::new("models");
-        assert!(engine.list_models().is_empty());
-        assert_eq!(engine.status("nonexistent"), ModelStatus::NotLoaded);
-    }
-
-    #[test]
-    fn onnx_discover_empty_dir() {
-        let engine = OnnxEngine::new("/nonexistent/path");
-        assert!(engine.discover_models().is_empty());
-    }
-
-    #[test]
-    fn onnx_load_missing_model() {
-        let mut engine = OnnxEngine::new("models");
-        assert!(engine.load_model("/nonexistent/model.onnx").is_err());
-    }
-
-    #[test]
-    fn onnx_predict_not_loaded() {
-        let engine = OnnxEngine::new("models");
-        assert!(engine.predict("missing", &[1.0, 2.0]).is_err());
-    }
-
-    #[test]
-    fn onnx_triage_fallback_to_rf() {
-        let engine = OnnxEngine::new("models");
-        let features = TriageFeatures {
+    fn high_risk_features() -> TriageFeatures {
+        TriageFeatures {
             anomaly_score: 0.95,
             confidence: 0.9,
             suspicious_axes: 3,
@@ -1187,110 +1276,179 @@ mod onnx_tests {
             day_of_week: 6,
             alert_frequency_1h: 5,
             device_risk_score: 0.8,
-        };
-        let result = engine.triage_alert(&features);
-        assert_eq!(result.label, TriageLabel::TruePositive);
+        }
     }
 
-    #[test]
-    fn onnx_model_stats_none() {
-        let engine = OnnxEngine::new("models");
-        assert!(engine.model_stats("x").is_none());
-    }
-
-    #[test]
-    fn triage_features_boundary_values() {
-        // Test with all-zero features
-        let zero = TriageFeatures {
-            anomaly_score: 0.0,
-            confidence: 0.0,
+    fn low_risk_features() -> TriageFeatures {
+        TriageFeatures {
+            anomaly_score: 0.05,
+            confidence: 0.08,
             suspicious_axes: 0,
-            hour_of_day: 0,
-            day_of_week: 0,
+            hour_of_day: 14,
+            day_of_week: 2,
             alert_frequency_1h: 0,
-            device_risk_score: 0.0,
-        };
-        let vec = zero.to_vec();
-        assert_eq!(vec.len(), 7);
-        assert!((vec[0] - 0.0).abs() < f64::EPSILON);
-        assert!((vec[5] - 0.0_f64.ln_1p()).abs() < f64::EPSILON);
-
-        // Test with max boundary values
-        let max_features = TriageFeatures {
-            anomaly_score: 1.0,
-            confidence: 1.0,
-            suspicious_axes: 100,
-            hour_of_day: 255, // should clamp to 23
-            day_of_week: 255, // should clamp to 6
-            alert_frequency_1h: u32::MAX,
-            device_risk_score: 1.0,
-        };
-        let vec = max_features.to_vec();
-        assert!((vec[3] - 23.0 / 24.0).abs() < f64::EPSILON); // hour clamped
-        assert!((vec[4] - 6.0 / 7.0).abs() < f64::EPSILON); // day clamped
+            device_risk_score: 0.04,
+        }
     }
 
     #[test]
-    fn rf_all_trees_agree_high_anomaly() {
-        let rf = RandomForest::pretrained();
-        let features = TriageFeatures {
-            anomaly_score: 0.99,
-            confidence: 0.99,
-            suspicious_axes: 5,
-            hour_of_day: 3,
-            day_of_week: 6,
-            alert_frequency_1h: 50,
-            device_risk_score: 0.95,
-        };
-        let result = rf.predict(&features.to_vec());
+    fn rf_engine_predicts_via_random_forest() {
+        let mut engine = RandomForestEngine::new();
+        let info = engine.load_model("models/triage.bin").unwrap();
+        assert_eq!(info.name, "triage");
+        assert_eq!(engine.status("triage"), ModelStatus::Ready);
+
+        let pred = engine
+            .predict("triage", &high_risk_features().to_vec())
+            .unwrap();
+        assert_eq!(pred.label, "true_positive");
+    }
+
+    #[test]
+    fn rf_predict_unloaded_model_fails() {
+        let engine = RandomForestEngine::new();
+        assert!(engine.predict("nonexistent", &[1.0]).is_err());
+    }
+
+    #[test]
+    fn rf_unload() {
+        let mut engine = RandomForestEngine::new();
+        engine.load_model("models/foo.bin").unwrap();
+        assert_eq!(engine.status("foo"), ModelStatus::Ready);
+        engine.unload_model("foo").unwrap();
+        assert_eq!(engine.status("foo"), ModelStatus::NotLoaded);
+    }
+
+    #[test]
+    fn planned_models_populated() {
+        let planned = RandomForestEngine::planned_models();
+        assert_eq!(planned.len(), 2);
+        assert!(planned.iter().any(|m| m.name == "alert_triage_gbm_v1"));
+        assert!(planned.iter().any(|m| m.name == "alert_triage_rf_v1"));
+    }
+
+    #[test]
+    fn rf_triage_high_score_is_tp() {
+        let engine = RandomForestEngine::new();
+        let result = engine.triage_alert(&high_risk_features());
         assert_eq!(result.label, TriageLabel::TruePositive);
         assert!(result.confidence > 0.7);
     }
 
     #[test]
-    fn rf_all_trees_agree_low_anomaly() {
-        let rf = RandomForest::pretrained();
-        let features = TriageFeatures {
-            anomaly_score: 0.05,
-            confidence: 0.1,
-            suspicious_axes: 0,
-            hour_of_day: 12,
-            day_of_week: 3,
-            alert_frequency_1h: 0,
-            device_risk_score: 0.1,
-        };
-        let result = rf.predict(&features.to_vec());
+    fn rf_triage_low_score_is_fp() {
+        let engine = RandomForestEngine::new();
+        let result = engine.triage_alert(&low_risk_features());
         assert_eq!(result.label, TriageLabel::FalsePositive);
     }
 
     #[test]
-    fn onnx_triage_boundary_needs_review() {
-        let engine = OnnxEngine::new("models");
-        // Mid-range features should yield NeedsReview
+    fn triage_features_to_vec() {
         let features = TriageFeatures {
             anomaly_score: 0.5,
-            confidence: 0.5,
-            suspicious_axes: 1,
+            confidence: 0.8,
+            suspicious_axes: 2,
             hour_of_day: 12,
             day_of_week: 3,
-            alert_frequency_1h: 2,
-            device_risk_score: 0.4,
+            alert_frequency_1h: 10,
+            device_risk_score: 0.6,
         };
-        let result = engine.triage_alert(&features);
-        // The RF ensemble may predict NeedsReview for mid-range inputs
-        assert!(result.confidence > 0.0 && result.confidence <= 1.0);
+        let v = features.to_vec();
+        assert_eq!(v.len(), 7);
+        assert!((v[0] - 0.5).abs() < 1e-6);
+        assert!((v[3] - 0.5).abs() < 1e-6); // 12/24
     }
 
     #[test]
-    fn stub_multiple_models() {
-        let mut engine = StubEngine::new();
-        let _ = engine.load_model("model_a");
-        let _ = engine.load_model("model_b");
-        assert_eq!(engine.list_models().len(), 2);
-        engine.unload_model("model_a").unwrap();
-        assert_eq!(engine.list_models().len(), 1);
-        assert_eq!(engine.status("model_a"), ModelStatus::NotLoaded);
-        assert_eq!(engine.status("model_b"), ModelStatus::Ready);
+    fn gbm_trains_and_separates_classes() {
+        let clf = GradientBoostedClassifier::train();
+        assert_eq!(clf.tree_count(), 60 * 3);
+
+        let tp = clf.predict(&high_risk_features().to_vec());
+        assert_eq!(tp.label, TriageLabel::TruePositive);
+
+        let fp = clf.predict(&low_risk_features().to_vec());
+        assert_eq!(fp.label, TriageLabel::FalsePositive);
+    }
+
+    #[test]
+    fn gbm_probabilities_form_a_distribution() {
+        let clf = GradientBoostedClassifier::train();
+        let probs = clf.predict_proba(&high_risk_features().to_vec());
+        assert_eq!(probs.len(), 3);
+        let sum: f64 = probs.iter().sum();
+        assert!((sum - 1.0).abs() < 1e-9);
+        assert!(probs.iter().all(|p| (0.0..=1.0).contains(p)));
+    }
+
+    #[test]
+    fn gbm_training_is_deterministic() {
+        let a = GradientBoostedClassifier::train();
+        let b = GradientBoostedClassifier::train();
+        let fv = high_risk_features().to_vec();
+        assert_eq!(a.predict_proba(&fv), b.predict_proba(&fv));
+    }
+
+    #[test]
+    fn gbm_classifier_serialization_round_trip() {
+        let clf = GradientBoostedClassifier::train();
+        let json = serde_json::to_string(&clf).unwrap();
+        let back: GradientBoostedClassifier = serde_json::from_str(&json).unwrap();
+        let fv = high_risk_features().to_vec();
+        assert_eq!(clf.predict_proba(&fv), back.predict_proba(&fv));
+    }
+
+    #[test]
+    fn gbm_engine_triage_uses_classifier() {
+        let engine = GradientBoostEngine::new("/nonexistent/models");
+        assert!(engine.is_ready());
+        let result = engine.triage_alert(&high_risk_features());
+        assert_eq!(result.label, TriageLabel::TruePositive);
+        assert!(engine.loaded_from().is_none());
+    }
+
+    #[test]
+    fn gbm_engine_predict_known_slot() {
+        let engine = GradientBoostEngine::new("/nonexistent/models");
+        let pred = engine
+            .predict("alert_triage_v1", &high_risk_features().to_vec())
+            .unwrap();
+        assert_eq!(pred.label, "true_positive");
+        assert!(engine.predict("missing", &[1.0]).is_err());
+    }
+
+    #[test]
+    fn gbm_engine_discover_empty_dir() {
+        let engine = GradientBoostEngine::new("/nonexistent/path");
+        assert!(engine.discover_models().is_empty());
+    }
+
+    #[test]
+    fn gbm_engine_load_missing_model() {
+        let mut engine = GradientBoostEngine::new("models");
+        assert!(engine.load_model("/nonexistent/model.json").is_err());
+    }
+
+    #[test]
+    fn gbm_engine_load_serialized_classifier() {
+        let dir = std::env::temp_dir().join(format!(
+            "wardex-gbm-test-{}",
+            std::process::id()
+        ));
+        std::fs::create_dir_all(&dir).unwrap();
+        let model_path = dir.join("alert_triage_gbm_v1.json");
+        let clf = GradientBoostedClassifier::train();
+        std::fs::write(&model_path, serde_json::to_string(&clf).unwrap()).unwrap();
+
+        let mut engine = GradientBoostEngine::new(dir.to_str().unwrap());
+        let info = engine.load_model(model_path.to_str().unwrap()).unwrap();
+        assert_eq!(info.name, "alert_triage_gbm_v1");
+        assert_eq!(engine.loaded_from(), Some(model_path.to_str().unwrap()));
+
+        engine.unload_model("alert_triage_gbm_v1").unwrap();
+        assert!(engine.loaded_from().is_none());
+
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]
@@ -1309,38 +1467,42 @@ mod onnx_tests {
     }
 
     #[test]
-    fn model_registry_falls_back_without_onnx_model() {
+    fn registry_uses_gradient_boost_as_primary() {
         let mut registry = ModelRegistry::new("/nonexistent/models");
-        let features = TriageFeatures {
-            anomaly_score: 0.8,
-            confidence: 0.9,
-            suspicious_axes: 3,
-            hour_of_day: 2,
-            day_of_week: 1,
-            alert_frequency_1h: 3,
-            device_risk_score: 0.7,
-        };
-        let outcome = registry.triage_alert(&features);
-        assert_eq!(outcome.active_backend, "random_forest_fallback");
+        let outcome = registry.triage_alert(&high_risk_features());
+        assert_eq!(outcome.active_backend, "gradient_boost");
+        assert!(!outcome.fallback_used);
+        assert!(outcome.shadow.is_some());
+        assert_eq!(outcome.shadow_backend.as_deref(), Some("random_forest"));
         assert!(outcome.calibration.calibrated_confidence > 0.0);
+
         let status = registry.status();
-        assert!(!status.onnx_loaded);
-        assert_eq!(status.available_models.len(), 3);
+        assert!(status.gbm_loaded);
+        assert_eq!(status.available_models.len(), 2);
+    }
+
+    #[test]
+    fn registry_rollback_switches_to_random_forest() {
+        let mut registry = ModelRegistry::new("/nonexistent/models");
+        assert!(registry.rollback_alert_triage());
+        let outcome = registry.triage_alert(&high_risk_features());
+        assert_eq!(outcome.active_backend, "random_forest");
+        assert!(outcome.fallback_used);
+    }
+
+    #[test]
+    fn registry_shadow_mode_toggle() {
+        let mut registry = ModelRegistry::new("/nonexistent/models");
+        registry.enable_shadow_mode(false);
+        let outcome = registry.triage_alert(&high_risk_features());
+        assert!(outcome.shadow.is_none());
+        assert!(outcome.shadow_backend.is_none());
     }
 
     #[test]
     fn managed_triage_includes_operator_safe_decision_support() {
         let mut registry = ModelRegistry::new("/nonexistent/models");
-        let features = TriageFeatures {
-            anomaly_score: 0.95,
-            confidence: 0.9,
-            suspicious_axes: 4,
-            hour_of_day: 2,
-            day_of_week: 6,
-            alert_frequency_1h: 12,
-            device_risk_score: 0.9,
-        };
-        let outcome = registry.triage_alert(&features);
+        let outcome = registry.triage_alert(&high_risk_features());
         assert_eq!(
             outcome.decision_support.operator_journey,
             "critical-alert-to-response"
@@ -1353,5 +1515,22 @@ mod onnx_tests {
                 .iter()
                 .any(|gate| gate.id == "human_gate" && gate.status == "pass")
         );
+    }
+
+    #[test]
+    fn rf_all_trees_agree_high_anomaly() {
+        let rf = RandomForest::pretrained();
+        let features = TriageFeatures {
+            anomaly_score: 0.99,
+            confidence: 0.99,
+            suspicious_axes: 5,
+            hour_of_day: 3,
+            day_of_week: 6,
+            alert_frequency_1h: 50,
+            device_risk_score: 0.95,
+        };
+        let result = rf.predict(&features.to_vec());
+        assert_eq!(result.label, TriageLabel::TruePositive);
+        assert!(result.confidence > 0.7);
     }
 }

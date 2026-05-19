@@ -76,7 +76,7 @@ cargo run
 - **Response automation:** playbooks, approval gates, platform-aware remediation actions, rollback evidence, and audit history.
 - **Fleet operations:** agent enrollment, heartbeat tracking, policy sync, rollout assignment, rollback, recovery focus, and inventory context.
 - **Governance:** RBAC, HttpOnly admin sessions, audit chain, retention controls, encrypted evidence buffering, compliance exports, and support bundles.
-- **Integrations:** SIEM export, OCSF normalization, threat-intel enrichment, ticket sync, OpenTelemetry, GraphQL, REST OpenAPI, and generated SDKs.
+- **Integrations:** SIEM export, OCSF normalization, live threat-intel feed ingestion (MalwareBazaar, URLhaus, Feodo Tracker), ticket sync, OpenTelemetry, GraphQL, REST OpenAPI, and generated SDKs.
 
 ## Documentation
 

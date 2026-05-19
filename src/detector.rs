@@ -6,7 +6,7 @@ use std::collections::VecDeque;
 use serde::{Deserialize, Serialize};
 
 use crate::baseline::PersistedBaseline;
-use crate::ml_engine::{StubEngine, TriageFeatures, TriageResult};
+use crate::ml_engine::{RandomForestEngine, TriageFeatures, TriageResult};
 use crate::telemetry::TelemetrySample;
 
 #[derive(Debug, Clone, Copy)]
@@ -121,7 +121,7 @@ pub struct AnomalyDetector {
     /// Last cumulative auth counter value that produced an auth-surge reason.
     last_auth_surge_count: u32,
     /// ML triage engine for alert classification.
-    ml_engine: StubEngine,
+    ml_engine: RandomForestEngine,
     /// FP feedback counts per signal/reason for auto-weight adjustment.
     fp_feedback: HashMap<String, u32>,
     /// Threshold of FP confirmations before auto-adjusting weight.
@@ -144,7 +144,7 @@ impl AnomalyDetector {
             custom_weights: None,
             auth_history: VecDeque::new(),
             last_auth_surge_count: 0,
-            ml_engine: StubEngine::new(),
+            ml_engine: RandomForestEngine::new(),
             fp_feedback: HashMap::new(),
             fp_auto_adjust_threshold: 5,
         }
