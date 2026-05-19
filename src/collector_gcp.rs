@@ -472,27 +472,7 @@ impl GcpAuditCollector {
             .unwrap_or_default()
             .as_secs();
 
-        // Build a JWT assertion for the token endpoint
-        let header =
-            base64_url_encode(&serde_json::json!({"alg": "RS256", "typ": "JWT"}).to_string());
-        let claims = base64_url_encode(
-            &serde_json::json!({
-                "iss": self.config.service_account_email,
-                "scope": "https://www.googleapis.com/auth/logging.read",
-                "aud": "https://oauth2.googleapis.com/token",
-                "iat": now,
-                "exp": now + 3600,
-            })
-            .to_string(),
-        );
-
-        let unsigned = format!("{header}.{claims}");
-
-        // NOTE: Real RS256 signing requires the `ring` or `rsa` crate.
-        // For now, we send the JWT assertion and let the token endpoint
-        // validate it. In production, replace with actual RS256 signing.
-        let _pem_ref = &pem; // Will be used for signing
-        let jwt = format!("{unsigned}.placeholder_signature");
+        let jwt = sign_service_account_jwt(&pem, &self.config.service_account_email, now)?;
 
         let resp: serde_json::Value = ureq::post("https://oauth2.googleapis.com/token")
             .set("Content-Type", "application/x-www-form-urlencoded")
@@ -519,9 +499,36 @@ impl GcpAuditCollector {
     }
 }
 
-fn base64_url_encode(data: &str) -> String {
-    use base64::Engine;
-    base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(data.as_bytes())
+/// Claims for the service-account JWT assertion used in the OAuth2
+/// jwt-bearer flow to obtain a Cloud Logging access token.
+#[derive(Serialize)]
+struct ServiceAccountClaims {
+    iss: String,
+    scope: String,
+    aud: String,
+    iat: u64,
+    exp: u64,
+}
+
+/// Build and RS256-sign a service-account JWT assertion from a PEM private key.
+fn sign_service_account_jwt(
+    private_key_pem: &str,
+    service_account_email: &str,
+    now: u64,
+) -> Result<String, String> {
+    use jsonwebtoken::{Algorithm, EncodingKey, Header, encode};
+
+    let claims = ServiceAccountClaims {
+        iss: service_account_email.to_string(),
+        scope: "https://www.googleapis.com/auth/logging.read".to_string(),
+        aud: "https://oauth2.googleapis.com/token".to_string(),
+        iat: now,
+        exp: now + 3600,
+    };
+    let key = EncodingKey::from_rsa_pem(private_key_pem.as_bytes())
+        .map_err(|e| format!("invalid service account private key: {e}"))?;
+    encode(&Header::new(Algorithm::RS256), &claims, &key)
+        .map_err(|e| format!("failed to sign service account JWT: {e}"))
 }
 
 // ── Tests ─────────────────────────────────────────────────────────────────────
@@ -644,5 +651,64 @@ mod tests {
         let result = collector.parse_response(r#"{"entries": []}"#);
         assert!(result.success);
         assert_eq!(result.event_count, 0);
+    }
+
+    // Throwaway 2048-bit RSA key for signing tests only — never used in production.
+    const TEST_RSA_PEM: &str = "-----BEGIN PRIVATE KEY-----\n\
+MIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQC84GY7mGFHbdaD\n\
+jc1FYO6uHVAyyYDCJxftjealIymIAus9XqWCB3UfVxjJec0qwD4FQfM6eljNORue\n\
+rClWL93ChWgoxHjgVwC73E8w6Y5WjS2LgppXAJxBxg4/TehJgW6qS4y3l0vtbS6G\n\
+AErjbV+qsOlfaXD5ybghyif2ENDxgpRfivQFNAz0shHNU1BD9GjLinZ57qEfsj8/\n\
+05aeeeoq7pUav3BzieoxGRbHR1S2tuX+c60FPqdsP7SK+K4oAFyERJYX8YKFKe+G\n\
+nSk/2GPKWSr4a8dT8989uKSovH5S/GAmW4hDHNSegrKOF3hFchvI2miyc4fOX5W9\n\
+QOH7EXTvAgMBAAECggEAGo5YgW+S2eatHxEMeAFBfdScRo/DXUj+2cU2VSik+b0j\n\
+Ux0gGzCuPIpT71wDR0wBTF7x8lpqauxpID2nkDkprmRweS7qqexBq6g1sDRecXfn\n\
+G/LwfWQWFD9jGG59Rvx+UU5PCi8pG0hbHrci0Gg757V5EpOyMUS18XZJeRTzM8mA\n\
+hr9YDs4XUx/Nwg/4OP9RgENJKETxmtzQF27nCWLZFYcdJ8AYfQJlnKJ7N3Ql0p5g\n\
+JDmshfcwx9VjSWZ5RjPmEU6IKrvfPSY01veMBIzx1GaCuS2RZM4VMBn3IpFgWJCi\n\
+2Q/yUA4Q9ryC1i7MJDQbfAyej9yV5D7s1FdmgDGfLQKBgQD4IbdxMk4xkFKMMEJo\n\
+b80jU/hIOImAkhUXz9SwdMMw5nzlxFfLobeSq9P56q3LRrU1h/SZ0WCEv/1lSFpu\n\
+iwRhfhbckPdgusP/iH1BeR4XPo2VWx/SN7DNLyeBwmdNQwVqG7Iyyc1gtYjQex1w\n\
++AybA7evp4+qTWCBK4i1SbRgbQKBgQDC3alQrDFoSLZYSloP9g+A7s3/ibkzLDYf\n\
+6mB8OJSbnPsTwqpeypn33YED+HgbaYce1tKflStV6qrSwn4rQf4SE+Z6TR6OKzUG\n\
+7BG8oK5QdCu8S8oLoajLreFZ5NUMVfZzFZJchEKMILjULXafhYKEMmL67cUopVOs\n\
+5GSmx47pSwKBgE/uzKFyiy38SBtREJOEMJlI25qoW+NHK/RXxzRw6NA/78w0y/OV\n\
+TQW6xLalmwb46DcubOWARY9+KasO+9LQhcDCVasIKCjJAYq39WG6Gq9yPzn1+PJH\n\
+bnUq05dBgPWquXvNIEKsL7UPxdsjTgCuZ6EoOWwklmtOMeBqnceIzsqhAoGBAIXb\n\
+tIJJNstXH4M41/Mc6Pt9j55ZIhJH7Yow+0R5rYPT6xlg4J2q+OcujoCGvyK9c+c4\n\
+VIjw9ErZn6yVlAvtEjWi2/DpZvLsNUnjAjAcBIIZuy1mto0U6Jm5gRK6QatupZPa\n\
+nqbU583QcIa4EEN2d/iNkDak/Il2QCuE3KtAbChPAoGASot/+5jyeobrn9kROPU7\n\
+X7e31rJLM9nBjQ9jyQD67leZFDYuE9NNdbt0ClEe5wVVm19CJFDFbw9qNdxuNlT9\n\
+HgPodx7ZsVpEIYzm1lrL6HI5zsdEGvW2p9Ssg2GXZWCC/2QMTdIn8/Cl7VErdWwu\n\
+PkuO1vaopMZbRmtehDfFSXA=\n\
+-----END PRIVATE KEY-----\n";
+
+    #[test]
+    fn signs_service_account_jwt() {
+        let jwt = sign_service_account_jwt(
+            TEST_RSA_PEM,
+            "sa@example.iam.gserviceaccount.com",
+            1_700_000_000,
+        )
+        .expect("signing should succeed with a valid RSA key");
+        let segments: Vec<&str> = jwt.split('.').collect();
+        assert_eq!(segments.len(), 3, "JWT must have header.claims.signature");
+        assert!(
+            !segments[2].is_empty(),
+            "signature segment must not be empty"
+        );
+
+        use base64::Engine;
+        let header = base64::engine::general_purpose::URL_SAFE_NO_PAD
+            .decode(segments[0])
+            .expect("header must be base64url");
+        let header: serde_json::Value = serde_json::from_slice(&header).unwrap();
+        assert_eq!(header["alg"], "RS256");
+    }
+
+    #[test]
+    fn rejects_invalid_private_key() {
+        let result = sign_service_account_jwt("not-a-pem-key", "sa@example.com", 1_700_000_000);
+        assert!(result.is_err());
     }
 }

@@ -219,9 +219,9 @@ fn bench_hunt_query(c: &mut Criterion) {
 }
 
 fn bench_ml_triage(c: &mut Criterion) {
-    use wardex::ml_engine::{StubEngine, TriageFeatures};
+    use wardex::ml_engine::{RandomForestEngine, TriageFeatures};
 
-    let engine = StubEngine::new();
+    let engine = RandomForestEngine::new();
     let features = TriageFeatures {
         anomaly_score: 0.75,
         confidence: 0.8,

@@ -232,7 +232,9 @@ impl ThreatIntelStore {
         self.feeds.push(feed);
     }
 
-    /// Ingest IoCs from a JSON-lines string (simulating a feed update).
+    /// Ingest IoCs from a JSON-lines payload (one IoC per line). The payload
+    /// is fetched over the network by the feed-ingestion engine; this is the
+    /// ingestion sink that parses and stores the indicators.
     pub fn ingest_feed(&mut self, feed_id: &str, data: &str) -> usize {
         let mut count = 0;
         for line in data.lines() {

@@ -1711,6 +1711,7 @@ pub async fn run_server(
     spawn_enterprise_hunt_scheduler(&state);
     spawn_retention_purge_scheduler(&state);
     spawn_cluster_runtime_loop(&state);
+    spawn_feed_ingestion_loop(&state);
 
     // ── Spawn local host monitoring thread ──────────────────────────
     {
@@ -2227,6 +2228,7 @@ fn spawn_test_server_with_state() -> (u16, String, Arc<Mutex<AppState>>) {
     }
     spawn_enterprise_hunt_scheduler(&state);
     spawn_cluster_runtime_loop(&state);
+    spawn_feed_ingestion_loop(&state);
     let site_dir = PathBuf::from("site");
     let shutdown = {
         let s = state.lock().unwrap_or_else(|e| e.into_inner());
@@ -17911,6 +17913,60 @@ fn spawn_cluster_runtime_loop(state: &Arc<Mutex<AppState>>) {
     });
 }
 
+/// Background loop that fetches and ingests threat feeds that are due for
+/// polling. Network requests are made without holding the state lock.
+fn spawn_feed_ingestion_loop(state: &Arc<Mutex<AppState>>) {
+    let state = Arc::clone(state);
+    std::thread::spawn(move || {
+        loop {
+            let shutdown = {
+                let s = state.lock().unwrap_or_else(|e| e.into_inner());
+                s.shutdown.load(Ordering::Relaxed)
+            };
+            if shutdown {
+                break;
+            }
+
+            let due: Vec<crate::feed_ingestion::FeedSource> = {
+                let s = state.lock().unwrap_or_else(|e| e.into_inner());
+                s.feed_engine
+                    .sources_due_for_poll()
+                    .into_iter()
+                    .cloned()
+                    .collect()
+            };
+
+            for source in due {
+                let fetched = crate::feed_ingestion::fetch_feed_data(&source);
+                let mut s = state.lock().unwrap_or_else(|e| e.into_inner());
+                match fetched {
+                    Ok(data) => {
+                        let AppState {
+                            ref mut feed_engine,
+                            ref mut threat_intel,
+                            ref mut malware_hash_db,
+                            ref mut yara_engine,
+                            ..
+                        } = *s;
+                        let _ = feed_engine.poll_feed(
+                            &source.id,
+                            &data,
+                            threat_intel,
+                            malware_hash_db,
+                            yara_engine,
+                        );
+                    }
+                    Err(e) => {
+                        s.feed_engine.record_feed_failure(&source.id, &e);
+                    }
+                }
+            }
+
+            std::thread::sleep(std::time::Duration::from_secs(30));
+        }
+    });
+}
+
 fn first_run_operator_proof(state: &Arc<Mutex<AppState>>, auth: &AuthIdentity) -> Response<Body> {
     let demo = runtime::demo_samples();
     let result = runtime::execute(&demo);
@@ -27956,7 +28012,7 @@ fn handle_api(
                     "active_backend": status.active_backend,
                     "shadow_backend": status.shadow_backend,
                     "shadow_mode": status.shadow_mode,
-                    "onnx_loaded": status.onnx_loaded,
+                    "gbm_loaded": status.gbm_loaded,
                 });
                 json_response(&body.to_string(), 200)
             } else if method == Method::Get && url_path == "/api/ml/models/status" {
@@ -27982,7 +28038,7 @@ fn handle_api(
                                     );
                                 }
                             };
-                        let engine = crate::ml_engine::StubEngine::new();
+                        let engine = crate::ml_engine::RandomForestEngine::new();
                         let result = engine.triage_alert(&features);
                         let body = serde_json::to_string(&result).unwrap_or_default();
                         json_response(&body, 200)
@@ -29153,6 +29209,54 @@ fn handle_api(
                         }
                     }
                     Err(e) => error_json(&e, 400),
+                }
+            } else if method == Method::Post
+                && url_path.starts_with("/api/feeds/")
+                && url_path.ends_with("/fetch")
+            {
+                let feed_id =
+                    url_path["/api/feeds/".len()..url_path.len() - "/fetch".len()].to_string();
+                let source = {
+                    let s = state.lock().unwrap_or_else(|e| e.into_inner());
+                    s.feed_engine
+                        .sources()
+                        .iter()
+                        .find(|src| src.id == feed_id)
+                        .cloned()
+                };
+                match source {
+                    None => error_json("feed source not found", 404),
+                    Some(source) if !source.enabled => error_json("feed source is disabled", 400),
+                    Some(source) => match crate::feed_ingestion::fetch_feed_data(&source) {
+                        Ok(data) => {
+                            let mut s = state.lock().unwrap_or_else(|e| e.into_inner());
+                            let AppState {
+                                ref mut feed_engine,
+                                ref mut threat_intel,
+                                ref mut malware_hash_db,
+                                ref mut yara_engine,
+                                ..
+                            } = *s;
+                            match feed_engine.poll_feed(
+                                &feed_id,
+                                &data,
+                                threat_intel,
+                                malware_hash_db,
+                                yara_engine,
+                            ) {
+                                Ok(result) => json_response(
+                                    &serde_json::to_string(&result).unwrap_or_default(),
+                                    200,
+                                ),
+                                Err(e) => error_json(&e, 400),
+                            }
+                        }
+                        Err(e) => {
+                            let mut s = state.lock().unwrap_or_else(|e| e.into_inner());
+                            s.feed_engine.record_feed_failure(&feed_id, &e);
+                            error_json(&e, 502)
+                        }
+                    },
                 }
             } else if method == Method::Get && url_path == "/api/feeds/stats" {
                 let s = state.lock().unwrap_or_else(|e| e.into_inner());

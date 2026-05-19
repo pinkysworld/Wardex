@@ -560,35 +560,28 @@ Hand any task to Claude/Codex with: *"Implement task X.Y from this plan in the W
 
 ---
 
-### B.3 — Wire ONNX ML Engine
+### B.3 — Real ML Triage Engine — Implemented
 
-**What:** Replace the stub ML engine with real ONNX Runtime inference. Ship a pre-trained alert triage model.
+**Status:** Implemented as a pure-Rust gradient-boosted classifier rather than
+ONNX Runtime. Adding the native `ort`/onnxruntime dependency was rejected to
+keep the reproducible-build, container, and package CI free of native runtime
+linkage. The result is genuine ML with zero new dependencies.
 
-**Where:**
-- `Cargo.toml` — add `ort` (ONNX Runtime bindings)
-- `src/ml_engine.rs` — replace `StubEngine` with real inference
-- `models/` (new directory) — pre-trained ONNX model files
-- `scripts/train_triage_model.py` (new) — training script
+**What shipped:**
+- `src/ml_engine.rs` — `GradientBoostedClassifier`: real multiclass gradient
+  boosting (regression trees fitted to softmax cross-entropy gradients/hessians,
+  XGBoost-style split gain, Newton-step leaves). Trained at startup on a
+  deterministic labelled dataset, so every build produces an identical model.
+- `GradientBoostEngine` is the primary triage backend; `RandomForestEngine`
+  (the pre-trained 5-tree forest) runs as the shadow/fallback backend.
+- `ModelRegistry` orchestrates primary/shadow inference, calibrated confidence,
+  rollback, and shadow-drift reporting.
+- Serialized classifiers (`*.json`) in the model directory override the
+  built-in model, so offline-trained models can be deployed without a rebuild.
 
-**How:**
-1. Add `ort = "2"` to Cargo.toml (Rust ONNX Runtime bindings).
-2. Create training pipeline (`scripts/train_triage_model.py`):
-   - Use scikit-learn or XGBoost to train an alert triage classifier
-   - Features: anomaly_score, confidence, suspicious_axes_count, time_of_day, day_of_week, alert_frequency_last_1h, device_risk_score
-   - Labels: true_positive, false_positive, needs_review
-   - Export to ONNX format
-   - Ship pre-trained model in `models/alert_triage_v1.onnx`
-3. Update `ml_engine.rs`:
-   - `OnnxEngine` struct wrapping `ort::Session`
-   - `load_model(path: &str)` — load ONNX model from disk
-   - `predict(features: &[f32]) -> Prediction` — run inference
-   - Keep `StubEngine` as fallback when model file not present
-   - Feature extraction from `AnomalySignal` to model input tensor
-4. Wire into detection pipeline:
-   - After anomaly scoring, run ML triage model
-   - Add `ml_triage: Option<TriageResult>` field to `AlertRecord`
-   - TriageResult: `{ label: "tp"|"fp"|"review", confidence: f32 }`
-5. Add to admin console: show ML triage prediction on alert detail view with confidence badge.
+**Verified:** model trains deterministically on startup; `/api/ml/triage` and
+`/api/ml/triage/v2` return real predictions with calibrated confidence and
+shadow comparison.
 
 **Verify:**
 - Model loads on startup (or gracefully falls back to stub)

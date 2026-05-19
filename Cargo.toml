@@ -28,6 +28,8 @@ ed25519-dalek = { version = "2", features = ["rand_core"] }
 base64 = "0.22"
 include_dir = "0.7"
 jsonwebtoken = { version = "10.4", features = ["rust_crypto"] }
+# Post-quantum signatures: FIPS 204 ML-DSA-65 (pure Rust, no native deps)
+ml-dsa = "0.1"
 # Axum async HTTP server stack
 axum = { version = "0.8", features = ["ws", "macros"] }
 tokio = { version = "1", features = ["full"] }
@@ -40,7 +42,9 @@ tracing-subscriber = { version = "0.3", features = ["json", "env-filter"] }
 tantivy = "0.26"
 
 [features]
-default = []
+# TLS is on by default: the platform's outbound integrations (threat feeds,
+# AWS/Azure/GCP collectors, OIDC discovery, webhooks) all require HTTPS.
+default = ["tls"]
 tls = ["ureq/tls"]
 
 [lib]

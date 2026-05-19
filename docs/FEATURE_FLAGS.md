@@ -9,7 +9,7 @@ removed.
 
 | Module          | Description                                       | Status   |
 |-----------------|---------------------------------------------------|----------|
-| `ml_engine`     | ONNX-based ML triage and anomaly scoring          | Stable ✓ |
+| `ml_engine`     | Gradient-boosted + Random Forest ML triage        | Stable ✓ |
 | `llm_analyst`   | LLM-assisted analyst (OpenAI, Anthropic, Ollama)  | Stable ✓ |
 | `quantum`       | Post-quantum key rotation (Kyber, Dilithium)      | Stable ✓ |
 | `proof`         | Zero-knowledge proofs for privacy forensics       | Stable ✓ |
@@ -18,14 +18,17 @@ removed.
 
 | Feature | Description |
 |---------|-------------|
-| `tls`   | Enables TLS support in the `ureq` HTTP client (opt-in) |
+| `tls`   | TLS support in the `ureq` HTTP client — **enabled by default** |
+
+`tls` is on by default because every outbound integration (threat feeds,
+AWS/Azure/GCP collectors, OIDC discovery, webhooks) requires HTTPS.
 
 ```bash
-# Standard build (all modules included)
+# Standard build (TLS + all modules included)
 cargo build --release
 
-# With TLS for outbound ureq calls
-cargo build --release --features tls
+# Without TLS (outbound HTTPS integrations will not work)
+cargo build --release --no-default-features
 ```
 
 ### Upgrading from 0.x

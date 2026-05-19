@@ -434,82 +434,133 @@ pub fn verify_checkpoint(checkpoint: &PqSignedCheckpoint, public_key: &LamportPu
     public_key.verify(message.as_bytes(), &checkpoint.signature)
 }
 
-// ── ML-DSA-65 Hybrid Signatures (FIPS 204 Simulation) ─────────────────────────
+// ── ML-DSA-65 Post-Quantum Signatures (FIPS 204) ──────────────────────────────
+//
+// Real ML-DSA-65 signatures via the pure-Rust `ml-dsa` crate (FIPS 204).
+// The signing key is derived deterministically from a 32-byte seed; signature
+// verification uses only the public key, as a real signature scheme requires.
+
+use ml_dsa::{
+    EncodedSignature, EncodedVerifyingKey, Keypair, MlDsa65, Signature, Signer, SigningKey,
+    Verifier, VerifyingKey,
+};
 
 /// Post-quantum algorithm identifier.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum PqAlgorithm {
-    /// NIST FIPS 204 (ML-DSA, formerly Dilithium) — lattice-based.
+    /// NIST FIPS 204 (ML-DSA-65, formerly Dilithium) — lattice-based.
     MlDsa65,
     /// Hash-based Lamport OTS (fallback).
     LamportSha256,
 }
 
-/// Simulated ML-DSA-65 keypair.
+/// Decode a hex seed into a fixed 32-byte array. Falls back to a SHA-256
+/// derivation if the stored value is malformed — defensive only, since seeds
+/// produced by `generate`/`from_seed_bytes` are always valid 32-byte hex.
+fn mldsa_seed_array(seed_hex: &str) -> [u8; 32] {
+    let mut out = [0u8; 32];
+    match hex::decode(seed_hex) {
+        Ok(bytes) if bytes.len() == 32 => out.copy_from_slice(&bytes),
+        _ => {
+            let digest = hex::decode(sha256_hex(seed_hex.as_bytes())).unwrap_or_default();
+            if digest.len() == 32 {
+                out.copy_from_slice(&digest);
+            }
+        }
+    }
+    out
+}
+
+fn mldsa_signing_key(seed_hex: &str) -> SigningKey<MlDsa65> {
+    let seed: ml_dsa::Seed = mldsa_seed_array(seed_hex).into();
+    SigningKey::<MlDsa65>::from_seed(&seed)
+}
+
+fn decode_mldsa_signature(sig_hex: &str) -> Option<Signature<MlDsa65>> {
+    let bytes = hex::decode(sig_hex).ok()?;
+    let encoded = EncodedSignature::<MlDsa65>::try_from(bytes.as_slice()).ok()?;
+    Signature::<MlDsa65>::decode(&encoded)
+}
+
+fn decode_mldsa_verifying_key(vk_hex: &str) -> Option<VerifyingKey<MlDsa65>> {
+    let bytes = hex::decode(vk_hex).ok()?;
+    let encoded = EncodedVerifyingKey::<MlDsa65>::try_from(bytes.as_slice()).ok()?;
+    Some(VerifyingKey::<MlDsa65>::decode(&encoded))
+}
+
+/// An ML-DSA-65 (FIPS 204) keypair.
 ///
-/// Uses a deterministic lattice-style construction based on SHA-256
-/// hashing of a seed. This is a research simulation — production use
-/// requires the actual ML-DSA-65 implementation from `pqcrypto-dilithium`
-/// or the RustCrypto `ml-dsa` crate.
+/// The signing key is derived deterministically from a 32-byte seed via the
+/// FIPS 204 key-generation procedure. The encoded verifying (public) key is
+/// retained so signatures can be verified without the secret seed.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MlDsaKeyPair {
     pub key_id: String,
-    /// Seed from which signing/verification keys are derived (32 bytes hex).
+    /// 32-byte ML-DSA seed, hex-encoded (secret).
     seed: String,
-    /// Simulated public key hash (derived from seed).
+    /// FIPS 204 encoded verifying key, hex-encoded (public, 1952 bytes).
+    public_key: String,
+    /// SHA-256 of the encoded verifying key, hex.
     pub public_key_hash: String,
     pub algorithm: PqAlgorithm,
 }
 
 impl MlDsaKeyPair {
-    /// Generate a new ML-DSA-65 keypair (simulated).
+    /// Generate a new ML-DSA-65 keypair from fresh random entropy.
     pub fn generate() -> Self {
         use rand::Rng;
         let mut rng = rand::rng();
-        let seed_bytes: Vec<u8> = (0..32).map(|_| rng.random()).collect();
-        let seed = hex::encode(&seed_bytes);
-        let pk_hash = sha256_hex(format!("mldsa65-pk:{seed}").as_bytes());
-        let key_id = hex::encode(&seed_bytes[..8]);
+        let seed_bytes: [u8; 32] = rng.random();
+        Self::from_seed_bytes(&seed_bytes)
+    }
+
+    /// Derive a keypair deterministically from a 32-byte seed (FIPS 204 keygen).
+    pub fn from_seed_bytes(seed_bytes: &[u8; 32]) -> Self {
+        let seed: ml_dsa::Seed = (*seed_bytes).into();
+        let signing_key = SigningKey::<MlDsa65>::from_seed(&seed);
+        let verifying_key = signing_key.verifying_key();
+        let vk_encoded = verifying_key.encode();
+        let public_key_hash = sha256_hex(&vk_encoded[..]);
+        let key_id = public_key_hash[..16].to_string();
         Self {
             key_id,
-            seed,
-            public_key_hash: pk_hash,
+            seed: hex::encode(seed_bytes),
+            public_key: hex::encode(&vk_encoded[..]),
+            public_key_hash,
             algorithm: PqAlgorithm::MlDsa65,
         }
     }
 
-    /// Sign a message using the simulated ML-DSA-65 scheme.
-    ///
-    /// Produces a deterministic signature: HMAC-like construction
-    /// H(seed || message) to simulate the lattice-based signature output.
+    /// Sign a message with ML-DSA-65 (deterministic FIPS 204 variant).
     pub fn sign(&self, message: &[u8]) -> MlDsaSignature {
-        let msg_hash = sha256_hex(message);
-        // Simulated signature: H(seed || "sign" || msg_hash)
-        let sig_input = format!("{}:sign:{}", self.seed, msg_hash);
-        let signature = sha256_hex(sig_input.as_bytes());
-        // In real ML-DSA-65, the signature is ~3293 bytes.
-        // We produce a compact simulation for testing.
+        let signing_key = mldsa_signing_key(&self.seed);
+        let sig = signing_key.sign(message);
         MlDsaSignature {
-            signature,
+            signature: hex::encode(&sig.encode()[..]),
             key_id: self.key_id.clone(),
             algorithm: PqAlgorithm::MlDsa65,
         }
     }
 
-    /// Verify a signature against this keypair.
+    /// Verify a signature using only the public (verifying) key.
     pub fn verify(&self, message: &[u8], signature: &MlDsaSignature) -> bool {
         if signature.key_id != self.key_id {
             return false;
         }
-        let expected = self.sign(message);
-        expected.signature == signature.signature
+        let (Some(verifying_key), Some(sig)) = (
+            decode_mldsa_verifying_key(&self.public_key),
+            decode_mldsa_signature(&signature.signature),
+        ) else {
+            return false;
+        };
+        verifying_key.verify(message, &sig).is_ok()
     }
 }
 
-/// A simulated ML-DSA-65 signature.
+/// An ML-DSA-65 (FIPS 204) signature — 3309 bytes, hex-encoded.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MlDsaSignature {
-    /// Hex-encoded signature value.
+    /// Hex-encoded FIPS 204 signature value.
     pub signature: String,
     pub key_id: String,
     pub algorithm: PqAlgorithm,

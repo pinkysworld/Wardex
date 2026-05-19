@@ -4,6 +4,18 @@ All notable changes to Wardex are documented in this file.
 
 ## [Unreleased]
 
+### Changed
+- **Real ML triage engine**: replaces the placeholder ONNX heuristic with a genuine multiclass gradient-boosted classifier (`GradientBoostedClassifier`) trained at startup via real gradient boosting — regression trees fitted to softmax cross-entropy gradients with XGBoost-style split gain. `GradientBoostEngine` is the primary triage backend; the Random Forest runs as the shadow/fallback backend. Engine types renamed `OnnxEngine`→`GradientBoostEngine` and `StubEngine`→`RandomForestEngine`.
+- **Real post-quantum signatures**: `quantum.rs` ML-DSA-65 now produces genuine FIPS 204 signatures via the pure-Rust `ml-dsa` crate, replacing the hash-based simulation. Verification uses only the public key, as a real signature scheme requires.
+- **TLS enabled by default**: the `tls` Cargo feature is now part of `default`, so release binaries can make outbound HTTPS calls (threat feeds, AWS/Azure/GCP collectors, OIDC discovery, webhooks). Previously only the container build enabled it.
+
+### Fixed
+- **GCP collector authentication**: the service-account JWT is now signed with real RS256 (via `jsonwebtoken`) instead of a placeholder signature, so Cloud Audit Log polling authenticates against Google.
+- **Threat-feed ingestion**: added a live HTTP fetch path and a background poll loop; corrected the default feed URLs and added format-specific parsers for Abuse.ch MalwareBazaar (CSV), URLhaus (`json_online`), and Feodo Tracker (C2 IP blocklist). The bundled feeds now ingest real indicators out of the box.
+
+### Added
+- `POST /api/feeds/{id}/fetch` — trigger a live fetch-and-ingest for a configured feed source.
+
 ## [1.0.22] — 2026-05-17 — CI repair and release cleanup
 
 ### Changed
