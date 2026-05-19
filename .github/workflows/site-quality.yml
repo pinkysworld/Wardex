@@ -50,6 +50,11 @@ jobs:
             @lhci/cli@0.14.0 \
             http-server@14.1.1
 
+      - name: Provision Chromium for pa11y
+        # `--ignore-scripts` above skips puppeteer's postinstall browser
+        # download; rebuild it explicitly so pa11y can launch a browser.
+        run: npm rebuild puppeteer
+
       - name: Build site preview (incl. changelog.html)
         run: |
           rm -rf site-build
