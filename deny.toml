@@ -23,6 +23,9 @@ allow = [
     "AGPL-3.0-only",
     "CC0-1.0",
     "OpenSSL",
+    # webpki-roots (Mozilla CA bundle) ships its root-cert data under this
+    # permissive data license; pulled in by ureq's TLS backend.
+    "CDLA-Permissive-2.0",
 ]
 confidence-threshold = 0.8
 
