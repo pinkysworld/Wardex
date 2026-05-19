@@ -28,7 +28,7 @@
     "react": "^19.1.0",
     "react-dom": "^19.2.6",
     "react-router-dom": "^7.14.0",
-    "recharts": "^2.15.3"
+    "recharts": "^3.8.1"
   },
   "devDependencies": {
     "@axe-core/playwright": "^4.11.2",
