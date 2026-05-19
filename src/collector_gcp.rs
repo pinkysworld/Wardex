@@ -685,11 +685,18 @@ PkuO1vaopMZbRmtehDfFSXA=\n\
 
     #[test]
     fn signs_service_account_jwt() {
-        let jwt = sign_service_account_jwt(TEST_RSA_PEM, "sa@example.iam.gserviceaccount.com", 1_700_000_000)
-            .expect("signing should succeed with a valid RSA key");
+        let jwt = sign_service_account_jwt(
+            TEST_RSA_PEM,
+            "sa@example.iam.gserviceaccount.com",
+            1_700_000_000,
+        )
+        .expect("signing should succeed with a valid RSA key");
         let segments: Vec<&str> = jwt.split('.').collect();
         assert_eq!(segments.len(), 3, "JWT must have header.claims.signature");
-        assert!(!segments[2].is_empty(), "signature segment must not be empty");
+        assert!(
+            !segments[2].is_empty(),
+            "signature segment must not be empty"
+        );
 
         use base64::Engine;
         let header = base64::engine::general_purpose::URL_SAFE_NO_PAD

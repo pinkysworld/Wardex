@@ -586,8 +586,7 @@ fn fit_regression_tree(
             if hl < min_child_weight || hr < min_child_weight {
                 continue;
             }
-            let gain = 0.5
-                * (gl * gl / (hl + lambda) + gr * gr / (hr + lambda) - parent_score);
+            let gain = 0.5 * (gl * gl / (hl + lambda) + gr * gr / (hr + lambda) - parent_score);
             if gain > best.map(|(_, _, bg)| bg).unwrap_or(1e-6) {
                 best = Some((feature, (v + v_next) / 2.0, gain));
             }
@@ -596,9 +595,8 @@ fn fit_regression_tree(
 
     match best {
         Some((feature, threshold, _)) => {
-            let (left_rows, right_rows): (Vec<usize>, Vec<usize>) = rows
-                .iter()
-                .partition(|&&r| xs[r][feature] <= threshold);
+            let (left_rows, right_rows): (Vec<usize>, Vec<usize>) =
+                rows.iter().partition(|&&r| xs[r][feature] <= threshold);
             if left_rows.is_empty() || right_rows.is_empty() {
                 return leaf;
             }
@@ -655,10 +653,8 @@ fn synthetic_training_set() -> Vec<(Vec<f64>, usize)> {
         let freq = (next() * 30.0).ln_1p(); // log-scaled frequency
         let device_risk = next();
 
-        let composite = 0.42 * anomaly
-            + 0.26 * confidence
-            + 0.14 * (axes / 4.0)
-            + 0.18 * device_risk;
+        let composite =
+            0.42 * anomaly + 0.26 * confidence + 0.14 * (axes / 4.0) + 0.18 * device_risk;
 
         let label = if composite >= 0.62 {
             2 // TruePositive
@@ -1083,9 +1079,19 @@ impl ModelRegistry {
         let rf_result = self.fallback.triage_alert(features);
 
         let (primary, shadow_result, active_backend, shadow_backend) = if self.prefer_gbm_primary {
-            (gbm_result.clone(), rf_result.clone(), BACKEND_GBM, BACKEND_RF)
+            (
+                gbm_result.clone(),
+                rf_result.clone(),
+                BACKEND_GBM,
+                BACKEND_RF,
+            )
         } else {
-            (rf_result.clone(), gbm_result.clone(), BACKEND_RF, BACKEND_GBM)
+            (
+                rf_result.clone(),
+                gbm_result.clone(),
+                BACKEND_RF,
+                BACKEND_GBM,
+            )
         };
 
         let shadow = if self.shadow_mode {
@@ -1103,8 +1109,7 @@ impl ModelRegistry {
             );
         }
 
-        let calibrated_confidence =
-            1.0 / (1.0 + (-4.0 * (primary.confidence - 0.5)).exp());
+        let calibrated_confidence = 1.0 / (1.0 + (-4.0 * (primary.confidence - 0.5)).exp());
         let band = if calibrated_confidence >= 0.85 {
             "high"
         } else if calibrated_confidence >= 0.6 {
@@ -1115,9 +1120,7 @@ impl ModelRegistry {
 
         let mut rationale = vec![format!("primary backend: {active_backend}")];
         if shadow.is_some() {
-            rationale.push(
-                "shadow inference captured for calibration comparison".to_string(),
-            );
+            rationale.push("shadow inference captured for calibration comparison".to_string());
         } else {
             rationale.push("shadow comparison disabled".to_string());
         }
@@ -1431,10 +1434,7 @@ mod tests {
 
     #[test]
     fn gbm_engine_load_serialized_classifier() {
-        let dir = std::env::temp_dir().join(format!(
-            "wardex-gbm-test-{}",
-            std::process::id()
-        ));
+        let dir = std::env::temp_dir().join(format!("wardex-gbm-test-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
         let model_path = dir.join("alert_triage_gbm_v1.json");
         let clf = GradientBoostedClassifier::train();

@@ -29226,9 +29226,7 @@ fn handle_api(
                 };
                 match source {
                     None => error_json("feed source not found", 404),
-                    Some(source) if !source.enabled => {
-                        error_json("feed source is disabled", 400)
-                    }
+                    Some(source) if !source.enabled => error_json("feed source is disabled", 400),
                     Some(source) => match crate::feed_ingestion::fetch_feed_data(&source) {
                         Ok(data) => {
                             let mut s = state.lock().unwrap_or_else(|e| e.into_inner());

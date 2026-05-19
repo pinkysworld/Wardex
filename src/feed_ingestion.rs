@@ -1054,10 +1054,22 @@ mod tests {
 
     #[test]
     fn host_from_url_strips_scheme_port_path() {
-        assert_eq!(host_from_url("http://evil.example.com/x"), Some("evil.example.com".into()));
-        assert_eq!(host_from_url("http://203.0.113.7:59614/bin.sh"), Some("203.0.113.7".into()));
-        assert_eq!(host_from_url("https://user:pw@bad.example.com:8443/p"), Some("bad.example.com".into()));
-        assert_eq!(host_from_url("http://[2001:db8::1]:80/x"), Some("2001:db8::1".into()));
+        assert_eq!(
+            host_from_url("http://evil.example.com/x"),
+            Some("evil.example.com".into())
+        );
+        assert_eq!(
+            host_from_url("http://203.0.113.7:59614/bin.sh"),
+            Some("203.0.113.7".into())
+        );
+        assert_eq!(
+            host_from_url("https://user:pw@bad.example.com:8443/p"),
+            Some("bad.example.com".into())
+        );
+        assert_eq!(
+            host_from_url("http://[2001:db8::1]:80/x"),
+            Some("2001:db8::1".into())
+        );
     }
 
     #[test]
@@ -1073,8 +1085,14 @@ mod tests {
         }"#;
         let iocs = parse_urlhaus_json(json);
         assert_eq!(iocs.len(), 2);
-        assert!(iocs.iter().any(|i| i.ioc_type == IoCType::Domain && i.value == "evil.example.com"));
-        assert!(iocs.iter().any(|i| i.ioc_type == IoCType::IpAddress && i.value == "203.0.113.7"));
+        assert!(
+            iocs.iter()
+                .any(|i| i.ioc_type == IoCType::Domain && i.value == "evil.example.com")
+        );
+        assert!(
+            iocs.iter()
+                .any(|i| i.ioc_type == IoCType::IpAddress && i.value == "203.0.113.7")
+        );
     }
 
     #[test]
