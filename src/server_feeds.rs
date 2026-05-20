@@ -65,7 +65,13 @@ pub(crate) fn handle_feeds_poll(
         ref mut yara_engine,
         ..
     } = *s;
-    match feed_engine.poll_feed(feed_id, &body_str, threat_intel, malware_hash_db, yara_engine) {
+    match feed_engine.poll_feed(
+        feed_id,
+        &body_str,
+        threat_intel,
+        malware_hash_db,
+        yara_engine,
+    ) {
         Ok(result) => {
             let body = serde_json::to_string(&result).unwrap_or_default();
             json_response(&body, 200)
