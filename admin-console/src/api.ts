@@ -260,9 +260,11 @@ export const setUserPreferences = (body: unknown) => put('/api/user/preferences'
 /** @returns {Promise<HealthStatus>} */
 export const health = (): Promise<HealthStatus> => get<HealthStatus>('/api/health');
 /** @returns {Promise<HealthLiveResponse>} */
-export const healthLive = (): Promise<HealthLiveResponse> => get<HealthLiveResponse>('/api/healthz/live');
+export const healthLive = (): Promise<HealthLiveResponse> =>
+  get<HealthLiveResponse>('/api/healthz/live');
 /** @returns {Promise<HealthReadyResponse>} */
-export const healthReady = (): Promise<HealthReadyResponse> => get<HealthReadyResponse>('/api/healthz/ready');
+export const healthReady = (): Promise<HealthReadyResponse> =>
+  get<HealthReadyResponse>('/api/healthz/ready');
 export const status = () => get('/api/status');
 export const report = () => get('/api/report');
 export const hostInfo = () => get('/api/host/info');
@@ -279,17 +281,25 @@ export const firstRunProof = () => post('/api/support/first-run-proof');
 export const failoverDrill = () => post('/api/control/failover-drill');
 export const productionDemoLab = () => post('/api/demo/lab');
 /** @returns {Promise<OperationalSnapshotsResponse>} */
-export const operationalSnapshots = ({ kind, limit }: { kind?: string; limit?: number } = {}): Promise<OperationalSnapshotsResponse> => {
+export const operationalSnapshots = ({
+  kind,
+  limit,
+}: { kind?: string; limit?: number } = {}): Promise<OperationalSnapshotsResponse> => {
   const query = new URLSearchParams();
   if (kind) query.set('kind', String(kind));
   if (limit) query.set('limit', String(limit));
   const suffix = query.toString();
-  return get<OperationalSnapshotsResponse>(`/api/operational/snapshots${suffix ? `?${suffix}` : ''}`);
+  return get<OperationalSnapshotsResponse>(
+    `/api/operational/snapshots${suffix ? `?${suffix}` : ''}`,
+  );
 };
 export const operationalSnapshotPolicy = () => get('/api/operational/snapshots/policy');
 export const pruneOperationalSnapshots = (body = { dry_run: true }) =>
   post('/api/operational/snapshots/prune', body);
-export const verifyOperationalSnapshot = ({ storageKey, digest }: { storageKey?: string; digest?: string } = {}) => {
+export const verifyOperationalSnapshot = ({
+  storageKey,
+  digest,
+}: { storageKey?: string; digest?: string } = {}) => {
   const query = new URLSearchParams();
   if (storageKey) query.set('storage_key', String(storageKey));
   if (digest) query.set('digest', String(digest));
@@ -297,12 +307,14 @@ export const verifyOperationalSnapshot = ({ storageKey, digest }: { storageKey?:
   return get(`/api/operational/snapshots/verify${suffix ? `?${suffix}` : ''}`);
 };
 /** @returns {Promise<LaunchpadEvidencePackResponse>} */
-export const launchpadEvidencePack = (): Promise<LaunchpadEvidencePackResponse> => get<LaunchpadEvidencePackResponse>('/api/launchpad/evidence-pack');
+export const launchpadEvidencePack = (): Promise<LaunchpadEvidencePackResponse> =>
+  get<LaunchpadEvidencePackResponse>('/api/launchpad/evidence-pack');
 export const launchpadReleaseDiff = () => get('/api/launchpad/release-diff');
 export const launchpadDemoStatus = () => get('/api/launchpad/demo-status');
 export const launchpadDemoReset = () => post('/api/launchpad/demo-reset');
 /** @returns {Promise<ReleaseDoctorResponse>} */
-export const releaseDoctor = (): Promise<ReleaseDoctorResponse> => get<ReleaseDoctorResponse>('/api/release/doctor');
+export const releaseDoctor = (): Promise<ReleaseDoctorResponse> =>
+  get<ReleaseDoctorResponse>('/api/release/doctor');
 export const releaseObservabilityGates = () => get('/api/release/observability-gates');
 export const releaseProvenance = () => get('/api/release/provenance');
 export const releaseUpgradeRehearsal = ({ targetVersion }: { targetVersion?: string } = {}) => {
@@ -344,7 +356,11 @@ export const tenantIsolationProof = () => get('/api/tenants/isolation-proof');
 export const threadDetectionProof = () => get('/api/processes/thread-proof');
 export const sdkContractStatus = () => get('/api/sdk/contract-status');
 export const supportParity = () => get('/api/support/parity');
-export const docsIndex = ({ q, section, limit }: { q?: string; section?: string; limit?: number } = {}) => {
+export const docsIndex = ({
+  q,
+  section,
+  limit,
+}: { q?: string; section?: string; limit?: number } = {}) => {
   const query = new URLSearchParams();
   if (q) query.set('q', String(q));
   if (section) query.set('section', String(section));
@@ -364,7 +380,10 @@ export const telemetryHistory = () => get('/api/telemetry/history');
 // ── Alerts ───────────────────────────────────────────────────
 export const alerts = () => get('/api/alerts');
 /** @returns {Promise<CursorPageResponse>} */
-export const alertsPage = ({ cursor, limit }: { cursor?: string | number; limit?: number } = {}): Promise<CursorPageResponse> => {
+export const alertsPage = ({
+  cursor,
+  limit,
+}: { cursor?: string | number; limit?: number } = {}): Promise<CursorPageResponse> => {
   const query = new URLSearchParams();
   if (cursor !== undefined) query.set('cursor', String(cursor));
   if (limit) query.set('limit', String(limit));
@@ -372,10 +391,15 @@ export const alertsPage = ({ cursor, limit }: { cursor?: string | number; limit?
   return get<CursorPageResponse>(`/api/alerts/page${suffix ? `?${suffix}` : ''}`);
 };
 /** @returns {Promise<AlertSeverityCounts>} */
-export const alertsCount = (): Promise<AlertSeverityCounts> => get<AlertSeverityCounts>('/api/alerts/count');
+export const alertsCount = (): Promise<AlertSeverityCounts> =>
+  get<AlertSeverityCounts>('/api/alerts/count');
 export const alertById = (id: string) => get(`/api/alerts/${encodeURIComponent(id)}`);
 export const alertsGrouped = () => get('/api/alerts/grouped');
-export const alertHistogram = ({ window = '24h', bucket = '1h', severity }: { window?: string; bucket?: string; severity?: string } = {}) => {
+export const alertHistogram = ({
+  window = '24h',
+  bucket = '1h',
+  severity,
+}: { window?: string; bucket?: string; severity?: string } = {}) => {
   const query = new URLSearchParams();
   if (window) query.set('window', String(window));
   if (bucket) query.set('bucket', String(bucket));
@@ -426,12 +450,14 @@ export const resetBaseline = () => post('/api/control/reset-baseline');
 export const checkpoint = () => post('/api/control/checkpoint');
 export const restoreCheckpoint = (body: unknown) => post('/api/control/restore-checkpoint', body);
 /** @returns {Promise<CommandSummaryResponse>} */
-export const commandSummary = (): Promise<CommandSummaryResponse> => get<CommandSummaryResponse>('/api/command/summary');
+export const commandSummary = (): Promise<CommandSummaryResponse> =>
+  get<CommandSummaryResponse>('/api/command/summary');
 /**
  * @param {string} lane
  * @returns {Promise<CommandLaneResponse>}
  */
-export const commandLane = (lane: string): Promise<CommandLaneResponse> => get<CommandLaneResponse>(`/api/command/lanes/${encodeURIComponent(lane)}`);
+export const commandLane = (lane: string): Promise<CommandLaneResponse> =>
+  get<CommandLaneResponse>(`/api/command/lanes/${encodeURIComponent(lane)}`);
 export const checkpoints = () => get('/api/checkpoints');
 export const detectionProfile = () => get('/api/detection/profile');
 export const setDetectionProfile = (body: unknown) => put('/api/detection/profile', body);
@@ -452,7 +478,8 @@ export const previewDetectionTrustTuningDraft = (id: string, body: unknown = {})
 export const approveDetectionTrustTuningDraft = (id: string, body: unknown = {}) =>
   post(`/api/detection/trust/tuning-drafts/${encodeURIComponent(id)}/approve`, body);
 export const detectionReplayCorpus = () => get('/api/detection/replay-corpus');
-export const evaluateDetectionReplayCorpus = (body: unknown) => post('/api/detection/replay-corpus', body);
+export const evaluateDetectionReplayCorpus = (body: unknown) =>
+  post('/api/detection/replay-corpus', body);
 export const efficacyCanaryPromote = () => post('/api/efficacy/canary-promote');
 export const detectionWeights = () => get('/api/detection/weights');
 export const setDetectionWeights = (body: unknown) => post('/api/detection/weights', body);
@@ -495,13 +522,26 @@ export const agentScope = (id: string) => get(`/api/agents/${encodeURIComponent(
 export const setAgentScope = (id: string, body: unknown) =>
   post(`/api/agents/${encodeURIComponent(id)}/scope`, body);
 export const agentLogs = (id: string) => get(`/api/agents/${encodeURIComponent(id)}/logs`);
-export const agentInventory = (id: string) => get(`/api/agents/${encodeURIComponent(id)}/inventory`);
+export const agentInventory = (id: string) =>
+  get(`/api/agents/${encodeURIComponent(id)}/inventory`);
 export const localConsoleInventory = () => get('/api/agents/local-console/inventory');
 export const deleteAgent = (id: string) => del(`/api/agents/${encodeURIComponent(id)}`);
 
 // ── Events ───────────────────────────────────────────────────
 export const events = () => get('/api/events');
-export const eventsPage = ({ cursor, limit, q, source, severity }: { cursor?: string | number; limit?: number; q?: string; source?: string; severity?: string } = {}) => {
+export const eventsPage = ({
+  cursor,
+  limit,
+  q,
+  source,
+  severity,
+}: {
+  cursor?: string | number;
+  limit?: number;
+  q?: string;
+  source?: string;
+  severity?: string;
+} = {}) => {
   const query = new URLSearchParams();
   if (cursor !== undefined) query.set('cursor', String(cursor));
   if (limit) query.set('limit', String(limit));
@@ -515,7 +555,8 @@ export const postEvents = (body: unknown) => post('/api/events', body);
 export const eventsExport = () => get('/api/events/export');
 export const eventsSummary = () => get('/api/events/summary');
 export const bulkTriage = (body: unknown) => post('/api/events/bulk-triage', body);
-export const triageEvent = (id: string, body: unknown) => post(`/api/events/${encodeURIComponent(id)}/triage`, body);
+export const triageEvent = (id: string, body: unknown) =>
+  post(`/api/events/${encodeURIComponent(id)}/triage`, body);
 
 // ── Incidents ────────────────────────────────────────────────
 export const incidents = () => get('/api/incidents');
@@ -523,17 +564,22 @@ export const createIncident = (body: unknown) => post('/api/incidents', body);
 export const incidentById = (id: string) => get(`/api/incidents/${encodeURIComponent(id)}`);
 export const updateIncident = (id: string, body: unknown) =>
   post(`/api/incidents/${encodeURIComponent(id)}/update`, body);
-export const incidentReport = (id: string) => get(`/api/incidents/${encodeURIComponent(id)}/report`);
-export const incidentStoryline = (id: string) => get(`/api/incidents/${encodeURIComponent(id)}/storyline`);
+export const incidentReport = (id: string) =>
+  get(`/api/incidents/${encodeURIComponent(id)}/report`);
+export const incidentStoryline = (id: string) =>
+  get(`/api/incidents/${encodeURIComponent(id)}/storyline`);
 
 // ── Cases ────────────────────────────────────────────────────
 export const cases = () => get('/api/cases');
 export const createCase = (body: unknown) => post('/api/cases', body);
 export const casesStats = () => get('/api/cases/stats');
 export const caseById = (id: string) => get(`/api/cases/${encodeURIComponent(id)}`);
-export const caseHandoffPacket = (id: string) => get(`/api/cases/${encodeURIComponent(id)}/handoff-packet`);
-export const caseComment = (id: string, body: unknown) => post(`/api/cases/${encodeURIComponent(id)}/comment`, body);
-export const updateCase = (id: string, body: unknown) => post(`/api/cases/${encodeURIComponent(id)}/update`, body);
+export const caseHandoffPacket = (id: string) =>
+  get(`/api/cases/${encodeURIComponent(id)}/handoff-packet`);
+export const caseComment = (id: string, body: unknown) =>
+  post(`/api/cases/${encodeURIComponent(id)}/comment`, body);
+export const updateCase = (id: string, body: unknown) =>
+  post(`/api/cases/${encodeURIComponent(id)}/update`, body);
 export const closeCase = (id: string) => post(`/api/cases/${encodeURIComponent(id)}/close`);
 
 // ── SOC Queue ────────────────────────────────────────────────
@@ -627,7 +673,21 @@ export const quantumKeyStatus = () => get('/api/quantum/key-status');
 export const quantumRotate = () => post('/api/quantum/rotate');
 
 // ── Audit & Retention ────────────────────────────────────────
-const buildAuditLogQuery = ({ limit, offset, q, method, status, auth }: { limit?: number; offset?: number; q?: string; method?: string; status?: string | number; auth?: string } = {}) => {
+const buildAuditLogQuery = ({
+  limit,
+  offset,
+  q,
+  method,
+  status,
+  auth,
+}: {
+  limit?: number;
+  offset?: number;
+  q?: string;
+  method?: string;
+  status?: string | number;
+  auth?: string;
+} = {}) => {
   const query = new URLSearchParams();
   if (limit != null) query.set('limit', String(limit));
   if (offset != null) query.set('offset', String(offset));
@@ -638,18 +698,51 @@ const buildAuditLogQuery = ({ limit, offset, q, method, status, auth }: { limit?
   return query.toString();
 };
 
-export const auditLog = ({ limit = 50, offset = 0, q, method, status, auth }: { limit?: number; offset?: number; q?: string; method?: string; status?: string | number; auth?: string } = {}) => {
+export const auditLog = ({
+  limit = 50,
+  offset = 0,
+  q,
+  method,
+  status,
+  auth,
+}: {
+  limit?: number;
+  offset?: number;
+  q?: string;
+  method?: string;
+  status?: string | number;
+  auth?: string;
+} = {}) => {
   const suffix = buildAuditLogQuery({ limit, offset, q, method, status, auth });
   return get(`/api/audit/log${suffix ? `?${suffix}` : ''}`);
 };
-export const auditLogPage = ({ cursor = 0, limit = 50, q, method, status, auth }: { cursor?: string | number; limit?: number; q?: string; method?: string; status?: string | number; auth?: string } = {}) => {
+export const auditLogPage = ({
+  cursor = 0,
+  limit = 50,
+  q,
+  method,
+  status,
+  auth,
+}: {
+  cursor?: string | number;
+  limit?: number;
+  q?: string;
+  method?: string;
+  status?: string | number;
+  auth?: string;
+} = {}) => {
   const suffix = buildAuditLogQuery({ limit, q, method, status, auth });
   const query = new URLSearchParams(suffix);
   query.set('cursor', String(cursor));
   const serialized = query.toString();
   return get(`/api/audit/log/page${serialized ? `?${serialized}` : ''}`);
 };
-export const auditLogExport = ({ q, method, status, auth }: { q?: string; method?: string; status?: string | number; auth?: string } = {}) => {
+export const auditLogExport = ({
+  q,
+  method,
+  status,
+  auth,
+}: { q?: string; method?: string; status?: string | number; auth?: string } = {}) => {
   const suffix = buildAuditLogQuery({ q, method, status, auth });
   return get(`/api/audit/log/export${suffix ? `?${suffix}` : ''}`);
 };
@@ -670,7 +763,8 @@ export const collectorsAws = () => get('/api/collectors/aws');
 export const saveAwsCollectorConfig = (body: unknown) => post('/api/collectors/aws/config', body);
 export const validateAwsCollector = () => post('/api/collectors/aws/validate', {});
 export const collectorsAzure = () => get('/api/collectors/azure');
-export const saveAzureCollectorConfig = (body: unknown) => post('/api/collectors/azure/config', body);
+export const saveAzureCollectorConfig = (body: unknown) =>
+  post('/api/collectors/azure/config', body);
 export const validateAzureCollector = () => post('/api/collectors/azure/validate', {});
 export const collectorsGcp = () => get('/api/collectors/gcp');
 export const saveGcpCollectorConfig = (body: unknown) => post('/api/collectors/gcp/config', body);
@@ -679,7 +773,8 @@ export const collectorsOkta = () => get('/api/collectors/okta');
 export const saveOktaCollectorConfig = (body: unknown) => post('/api/collectors/okta/config', body);
 export const validateOktaCollector = () => post('/api/collectors/okta/validate', {});
 export const collectorsEntra = () => get('/api/collectors/entra');
-export const saveEntraCollectorConfig = (body: unknown) => post('/api/collectors/entra/config', body);
+export const saveEntraCollectorConfig = (body: unknown) =>
+  post('/api/collectors/entra/config', body);
 export const validateEntraCollector = () => post('/api/collectors/entra/validate', {});
 export const collectorsM365 = () => get('/api/collectors/m365');
 export const saveM365CollectorConfig = (body: unknown) => post('/api/collectors/m365/config', body);
@@ -689,21 +784,35 @@ export const saveWorkspaceCollectorConfig = (body: unknown) =>
   post('/api/collectors/workspace/config', body);
 export const validateWorkspaceCollector = () => post('/api/collectors/workspace/validate', {});
 export const collectorsGithub = () => get('/api/collectors/github');
-export const saveGithubCollectorConfig = (body: unknown) => post('/api/collectors/github/config', body);
+export const saveGithubCollectorConfig = (body: unknown) =>
+  post('/api/collectors/github/config', body);
 export const validateGithubCollector = () => post('/api/collectors/github/validate', {});
 export const collectorsCrowdStrike = () => get('/api/collectors/crowdstrike');
 export const saveCrowdStrikeCollectorConfig = (body: unknown) =>
   post('/api/collectors/crowdstrike/config', body);
 export const validateCrowdStrikeCollector = () => post('/api/collectors/crowdstrike/validate', {});
 export const collectorsSyslog = () => get('/api/collectors/syslog');
-export const saveSyslogCollectorConfig = (body: unknown) => post('/api/collectors/syslog/config', body);
+export const saveSyslogCollectorConfig = (body: unknown) =>
+  post('/api/collectors/syslog/config', body);
 export const validateSyslogCollector = () => post('/api/collectors/syslog/validate', {});
 export const secretsStatus = () => get('/api/secrets/status');
 export const saveSecretsConfig = (body: unknown) => post('/api/secrets/config', body);
 export const validateSecretReference = (body: unknown) => post('/api/secrets/validate', body);
 
 // ── Reports ──────────────────────────────────────────────────
-export const reports = ({ caseId, incidentId, investigationId, source, scope }: { caseId?: string; incidentId?: string; investigationId?: string; source?: string; scope?: string } = {}) => {
+export const reports = ({
+  caseId,
+  incidentId,
+  investigationId,
+  source,
+  scope,
+}: {
+  caseId?: string;
+  incidentId?: string;
+  investigationId?: string;
+  source?: string;
+  scope?: string;
+} = {}) => {
   const query = new URLSearchParams();
   if (caseId) query.set('case_id', String(caseId));
   if (incidentId) query.set('incident_id', String(incidentId));
@@ -718,7 +827,19 @@ export const reportById = (id: string) => get(`/api/reports/${encodeURIComponent
 export const annotateReportContext = (id: string, body: unknown) =>
   post(`/api/reports/${encodeURIComponent(id)}/context`, body);
 export const deleteReport = (id: string) => del(`/api/reports/${encodeURIComponent(id)}`);
-export const reportTemplates = ({ caseId, incidentId, investigationId, source, scope }: { caseId?: string; incidentId?: string; investigationId?: string; source?: string; scope?: string } = {}) => {
+export const reportTemplates = ({
+  caseId,
+  incidentId,
+  investigationId,
+  source,
+  scope,
+}: {
+  caseId?: string;
+  incidentId?: string;
+  investigationId?: string;
+  source?: string;
+  scope?: string;
+} = {}) => {
   const query = new URLSearchParams();
   if (caseId) query.set('case_id', String(caseId));
   if (incidentId) query.set('incident_id', String(incidentId));
@@ -729,7 +850,19 @@ export const reportTemplates = ({ caseId, incidentId, investigationId, source, s
   return get(`/api/report-templates${suffix ? `?${suffix}` : ''}`);
 };
 export const saveReportTemplate = (body: unknown) => post('/api/report-templates', body);
-export const reportRuns = ({ caseId, incidentId, investigationId, source, scope }: { caseId?: string; incidentId?: string; investigationId?: string; source?: string; scope?: string } = {}) => {
+export const reportRuns = ({
+  caseId,
+  incidentId,
+  investigationId,
+  source,
+  scope,
+}: {
+  caseId?: string;
+  incidentId?: string;
+  investigationId?: string;
+  source?: string;
+  scope?: string;
+} = {}) => {
   const query = new URLSearchParams();
   if (caseId) query.set('case_id', String(caseId));
   if (incidentId) query.set('incident_id', String(incidentId));
@@ -740,7 +873,19 @@ export const reportRuns = ({ caseId, incidentId, investigationId, source, scope 
   return get(`/api/report-runs${suffix ? `?${suffix}` : ''}`);
 };
 export const createReportRun = (body: unknown) => post('/api/report-runs', body);
-export const reportSchedules = ({ caseId, incidentId, investigationId, source, scope }: { caseId?: string; incidentId?: string; investigationId?: string; source?: string; scope?: string } = {}) => {
+export const reportSchedules = ({
+  caseId,
+  incidentId,
+  investigationId,
+  source,
+  scope,
+}: {
+  caseId?: string;
+  incidentId?: string;
+  investigationId?: string;
+  source?: string;
+  scope?: string;
+} = {}) => {
   const query = new URLSearchParams();
   if (caseId) query.set('case_id', String(caseId));
   if (incidentId) query.set('incident_id', String(incidentId));
@@ -763,7 +908,8 @@ export const exportWitnesses = () => get('/api/export/witnesses');
 export const hunts = () => get('/api/hunts');
 export const createHunt = (body: unknown) => post('/api/hunts', body);
 export const huntById = (id: string) => get(`/api/hunts/${encodeURIComponent(id)}`);
-export const runHunt = (id: string, body: unknown = {}) => post(`/api/hunts/${encodeURIComponent(id)}/run`, body);
+export const runHunt = (id: string, body: unknown = {}) =>
+  post(`/api/hunts/${encodeURIComponent(id)}/run`, body);
 export const escalateHunt = (id: string, body: unknown = {}) =>
   post(`/api/hunts/${encodeURIComponent(id)}/escalate`, body);
 export const contentRules = () => get('/api/content/rules');
@@ -801,7 +947,8 @@ export const taxiiConfig = () => get('/api/taxii/config');
 export const setTaxiiConfig = (body: unknown) => post('/api/taxii/config', body);
 export const taxiiPull = () => post('/api/taxii/pull');
 export const enrichmentConnectors = () => get('/api/enrichments/connectors');
-export const createEnrichmentConnector = (body: unknown) => post('/api/enrichments/connectors', body);
+export const createEnrichmentConnector = (body: unknown) =>
+  post('/api/enrichments/connectors', body);
 export const ticketsSync = (body: unknown) => post('/api/tickets/sync', body);
 export const idpProviders = () => get('/api/idp/providers');
 export const createIdpProvider = (body: unknown) => post('/api/idp/providers', body);
@@ -823,8 +970,10 @@ export const processTree = () => get('/api/process-tree');
 export const deepChains = () => get('/api/process-tree/deep-chains');
 export const processesLive = () => get('/api/processes/live');
 export const processesAnalysis = () => get('/api/processes/analysis');
-export const processDetail = (pid: string | number) => get(`/api/processes/detail?pid=${encodeURIComponent(pid)}`);
-export const processThreads = (pid: string | number) => get(`/api/processes/threads?pid=${encodeURIComponent(pid)}`);
+export const processDetail = (pid: string | number) =>
+  get(`/api/processes/detail?pid=${encodeURIComponent(pid)}`);
+export const processThreads = (pid: string | number) =>
+  get(`/api/processes/threads?pid=${encodeURIComponent(pid)}`);
 
 // ── Host Info & Inventory ────────────────────────────────────
 export const hostApps = () => get('/api/host/apps');
@@ -901,7 +1050,8 @@ export const ndrProtocolDistribution = () => get('/api/ndr/protocol-distribution
 export const emailQuarantine = () => get('/api/email/quarantine');
 export const emailQuarantineRelease = (id: string) =>
   post(`/api/email/quarantine/${encodeURIComponent(id)}/release`);
-export const emailQuarantineDelete = (id: string) => del(`/api/email/quarantine/${encodeURIComponent(id)}`);
+export const emailQuarantineDelete = (id: string) =>
+  del(`/api/email/quarantine/${encodeURIComponent(id)}`);
 export const emailStats = () => get('/api/email/stats');
 export const emailPolicies = () => get('/api/email/policies');
 export const emailPolicyUpdate = (body: unknown) => put('/api/email/policies', body);
@@ -949,7 +1099,8 @@ export const scanBufferV2 = (body: unknown) => post('/api/scan/buffer/v2', body)
 export const scanHash = (body: unknown) => post('/api/scan/hash', body);
 export const malwareScanPath = (body: unknown) =>
   post('/api/malware/scan-path', body, { timeoutMs: 120000 });
-export const rootkitScan = (body: unknown) => post('/api/rootkit/scan', body, { timeoutMs: 120000 });
+export const rootkitScan = (body: unknown) =>
+  post('/api/rootkit/scan', body, { timeoutMs: 120000 });
 export const malwareStats = () => get('/api/malware/stats');
 export const malwareRecent = () => get('/api/malware/recent');
 export const malwareSignaturePresets = () => get('/api/malware/signatures/presets');
@@ -1009,7 +1160,8 @@ export const addDetectionRule = (body: unknown) => post('/api/detection/rules', 
 export const feeds = () => get('/api/feeds');
 export const addFeed = (body: unknown) => post('/api/feeds', body);
 export const removeFeed = (id: string) => del(`/api/feeds/${encodeURIComponent(id)}`);
-export const pollFeed = (id: string, body: unknown) => post(`/api/feeds/${encodeURIComponent(id)}/poll`, body);
+export const pollFeed = (id: string, body: unknown) =>
+  post(`/api/feeds/${encodeURIComponent(id)}/poll`, body);
 export const feedStats = () => get('/api/feeds/stats');
 export const hotReloadHashes = (body: unknown) => post('/api/feeds/hot-reload/hashes', body);
 
@@ -1031,7 +1183,8 @@ export const imagesCollect = () => post('/api/images/collect');
 export const quarantineList = () => get('/api/quarantine');
 export const quarantineAdd = (body: unknown) => post('/api/quarantine', body);
 export const quarantineStats = () => get('/api/quarantine/stats');
-export const quarantineRelease = (id: string) => post(`/api/quarantine/${encodeURIComponent(id)}/release`);
+export const quarantineRelease = (id: string) =>
+  post(`/api/quarantine/${encodeURIComponent(id)}/release`);
 export const quarantineDelete = (id: string) => del(`/api/quarantine/${encodeURIComponent(id)}`);
 
 // ── Agent Lifecycle ──────────────────────────────────────────
@@ -1053,7 +1206,8 @@ export const dnsThreatSummary = () => get('/api/dns-threat/summary');
 export const dnsThreatRecord = (query: string) => post('/api/dns-threat/record', query);
 export const processScoreAssess = (body: unknown) => post('/api/process-scoring/assess', body);
 export const emailAnalyze = (body: unknown) => post('/api/email/analyze', body);
-export const memoryIndicatorsScanMaps = (body: unknown) => post('/api/memory-indicators/scan-maps', body);
+export const memoryIndicatorsScanMaps = (body: unknown) =>
+  post('/api/memory-indicators/scan-maps', body);
 export const memoryIndicatorsScanBuffer = (body: unknown) =>
   post('/api/memory-indicators/scan-buffer', body);
 
@@ -1061,14 +1215,19 @@ export const memoryIndicatorsScanBuffer = (body: unknown) =>
 export const wsConnect = () => post('/api/ws/connect');
 export const wsDisconnect = (subscriberId: string) =>
   post('/api/ws/disconnect', { subscriber_id: subscriberId });
-export const wsPoll = (subscriberId: string) => post('/api/ws/poll', { subscriber_id: subscriberId });
+export const wsPoll = (subscriberId: string) =>
+  post('/api/ws/poll', { subscriber_id: subscriberId });
 export const wsStats = () => get('/api/ws/stats');
 export const wsHealth = () => get('/api/ws/health');
 export const streamReadiness = () => get('/api/stream/readiness');
 export const streamReliabilityLab = () => get('/api/stream/reliability-lab');
 export const createSubscription = (body = { lanes: ['alerts'], filters: {} }) =>
   post('/api/subscriptions', body);
-export const resumeSubscription = ({ subscriptionId, cursor, limit }: { subscriptionId?: string; cursor?: string | number; limit?: number } = {}) => {
+export const resumeSubscription = ({
+  subscriptionId,
+  cursor,
+  limit,
+}: { subscriptionId?: string; cursor?: string | number; limit?: number } = {}) => {
   const query = new URLSearchParams();
   if (subscriptionId) query.set('subscription_id', String(subscriptionId));
   if (cursor !== undefined && cursor !== null) query.set('cursor', String(cursor));
@@ -1090,4 +1249,5 @@ export const insiderRisk = (entityKind: string, entityId: string) =>
 export const credentialSprayAlerts = () => get('/api/correlation/credential-spray');
 export const campaigns = () => get('/api/correlation/campaigns');
 export const rbacCreateUser = (body: unknown) => post('/api/rbac/users', body);
-export const rbacDeleteUser = (username: string) => del(`/api/rbac/users/${encodeURIComponent(username)}`);
+export const rbacDeleteUser = (username: string) =>
+  del(`/api/rbac/users/${encodeURIComponent(username)}`);
