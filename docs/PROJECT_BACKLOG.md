@@ -2,15 +2,15 @@
 
 This backlog lists the next concrete tasks in build order.
 
-## Current strengthening checkpoint (`v1.0.22`)
+## Current strengthening checkpoint (`v1.0.23`)
 
-Recently completed for the `v1.0.22` CI-repair and release-cleanup release:
+Recently completed for the `v1.0.23` CI-repair and release-cleanup release:
 
 - [x] Duplicate source-copy artifacts were removed from the admin-console and design surfaces so workspace hygiene and dead-code auditing target only the canonical files.
 - [x] The workspace hygiene script now ignores tracked paths that have already been deleted locally, preventing false positives during cleanup.
 - [x] Production attestation, enrollment, OIDC, and fallback response paths now satisfy the zero-panic policy baseline.
 - [x] Managed release acceptance coverage is aligned with the current assistant, detection, command-center, and release-proof flows.
-- [x] Release metadata, docs, website, Helm, OpenAPI, Python SDK, TypeScript SDK, OTLP, and install/reproducibility surfaces aligned on `v1.0.22`.
+- [x] Release metadata, docs, website, Helm, OpenAPI, Python SDK, TypeScript SDK, OTLP, and install/reproducibility surfaces aligned on `v1.0.23`.
 
 ## Previous strengthening checkpoint (`v1.0.20`)
 

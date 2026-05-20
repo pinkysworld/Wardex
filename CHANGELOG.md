@@ -4,17 +4,35 @@ All notable changes to Wardex are documented in this file.
 
 ## [Unreleased]
 
+## [1.0.23] — 2026-05-20
+
 ### Changed
 - **Real ML triage engine**: replaces the placeholder ONNX heuristic with a genuine multiclass gradient-boosted classifier (`GradientBoostedClassifier`) trained at startup via real gradient boosting — regression trees fitted to softmax cross-entropy gradients with XGBoost-style split gain. `GradientBoostEngine` is the primary triage backend; the Random Forest runs as the shadow/fallback backend. Engine types renamed `OnnxEngine`→`GradientBoostEngine` and `StubEngine`→`RandomForestEngine`.
 - **Real post-quantum signatures**: `quantum.rs` ML-DSA-65 now produces genuine FIPS 204 signatures via the pure-Rust `ml-dsa` crate, replacing the hash-based simulation. Verification uses only the public key, as a real signature scheme requires.
 - **TLS enabled by default**: the `tls` Cargo feature is now part of `default`, so release binaries can make outbound HTTPS calls (threat feeds, AWS/Azure/GCP collectors, OIDC discovery, webhooks). Previously only the container build enabled it.
+- **Cluster peer-RPC encryption posture**: new `cluster.require_tls` flag (default `false` for back-compat) upgrades bare `host:port` peer addresses to `https://` and rejects explicit `http://` peer URLs at config validation. When off, a one-shot startup warning surfaces every plaintext peer so the gap is visible on every boot. Production HA deployments should set `cluster.require_tls = true`.
+- **Incremental `server.rs` decomposition** (`-253` lines across three PRs): the route-dispatch chain now delegates ML, feed-ingestion, and cluster-RPC handlers to dedicated `server_ml.rs`, `server_feeds.rs`, and `server_cluster.rs` modules. Visibility opened up for `AppState` plus the fields needed by extracted handlers (`pub(crate)`), so subsequent domain extractions need no further plumbing.
+- **TypeScript migration — first slices**: `safeStorage.js` → `safeStorage.ts` (typed utility) and `api.js` → `api.ts` (typed wrapper layer: generic `request<T = unknown>`, typed `WardexRequestOptions`/`WardexApiError`, ~220 endpoint parameter annotations, 11 endpoints typed end-to-end via `@wardex/sdk` SDK contracts).
+
+### Added
+- `POST /api/feeds/{id}/fetch` — live HTTPS fetch + ingest for a configured feed source.
+- `/api/feeds/*` family (7 routes) now in `openapi.rs` and `docs/openapi.yaml`; contract-parity reports **254 documented operations** (was 247).
 
 ### Fixed
 - **GCP collector authentication**: the service-account JWT is now signed with real RS256 (via `jsonwebtoken`) instead of a placeholder signature, so Cloud Audit Log polling authenticates against Google.
 - **Threat-feed ingestion**: added a live HTTP fetch path and a background poll loop; corrected the default feed URLs and added format-specific parsers for Abuse.ch MalwareBazaar (CSV), URLhaus (`json_online`), and Feodo Tracker (C2 IP blocklist). The bundled feeds now ingest real indicators out of the box.
+- **Accessibility / Lighthouse CI**: the site-quality job installed tooling with `npm install --ignore-scripts`, which skipped puppeteer's browser download so pa11y could not launch a browser. Added an explicit `npm rebuild puppeteer` step.
+- **Flaky `investigation-hunt.spec.js` ("queue hunt pivot")**: the loose `getByRole('button', { name: 'Hunt' })` locator matched a navigation button whose description contains the word *hunt* and clicked it before the queue row's real Hunt button rendered. Fixed with `exact: true`.
+- **Flaky `UEBADashboard.test.jsx` ("prioritizes the current UEBA focus")**: replaced synchronous `getByText` reads (which raced against the next React update) with `findByText`. Deterministic 10/10 locally.
 
-### Added
-- `POST /api/feeds/{id}/fetch` — trigger a live fetch-and-ingest for a configured feed source.
+### Removed
+- Dead `auth.rs::AuthManager` and its `TokenResponse` / `url_encode_component` helpers and the nine AuthManager-only tests. The struct was a legacy parallel auth implementation never referenced outside its own tests; the real OIDC flow runs through `OidcProvider` in `oidc.rs`.
+
+### Dependency bumps
+- `tower-http` 0.6.10 → 0.6.11 (patch).
+- `sigstore/cosign-installer` v4.1.1 → v4.1.2 (SHA-pinned).
+- `benchmark-action/github-action-benchmark` v1.22.0 → v1.22.1 (SHA-pinned).
+- Adds `ml-dsa = "0.1"` for FIPS 204 signatures (pure Rust, no native dependencies).
 
 ## [1.0.22] — 2026-05-17 — CI repair and release cleanup
 

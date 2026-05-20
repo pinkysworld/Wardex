@@ -2,7 +2,7 @@
 
 ## Current release
 
-- **Version:** `1.0.22`
+- **Version:** `1.0.23`
 - **Positioning:** private-cloud XDR and SIEM platform with enterprise detection engineering, malware scanning, analyst workflows, fleet operations, behavioural analytics, and automated incident response
 - **Source footprint:** 146 Rust source modules
 - **API contract:** versioned OpenAPI surface with REST, GraphQL, live `/api/openapi.json` export, generated SDK parity diagnostics, authenticated-by-default API route classification, cursor page contracts, release observability/preflight proof APIs, production assurance endpoints, malware scan and response-action contracts, source-aware alert analysis, operator-trust workspaces, alert feedback/evidence-chain contracts, Detection Trust scoring and draft-only tuning APIs, detection validation lab APIs, response safety preview/verification APIs with execution-audit continuity, agent enrollment-token flows, connector marketplace summaries, operations health snapshots, and release verification readiness endpoints with evidence freshness metadata
@@ -99,14 +99,19 @@ The current release has been verified with:
 
 ## Current product posture
 
-Wardex is now positioned as a professional XDR/SIEM control plane with incident-first analyst workflows, explainable detections, context-preserving reporting, operator-visible recovery posture, and explicit shift-lead surfaces for ownership, handoff, and detection-review pressure. The runtime, admin console, release process, and website are aligned around operator trust, workflow closure, deployment readiness, clean release verification, and freshness-gated evidence. The current release extends that posture with release-integrity repair: duplicate-copy cleanup across the workspace, zero-panic production random and fallback paths, refreshed managed acceptance coverage for current console routes, and a repackaged documentation and distribution surface aligned on `v1.0.22`.
+Wardex is now positioned as a professional XDR/SIEM control plane with incident-first analyst workflows, explainable detections, context-preserving reporting, operator-visible recovery posture, and explicit shift-lead surfaces for ownership, handoff, and detection-review pressure. The runtime, admin console, release process, and website are aligned around operator trust, workflow closure, deployment readiness, clean release verification, and freshness-gated evidence. The current release replaces several previously simulated or placeholder subsystems with genuine implementations, starts the per-domain decomposition of the monolithic `server.rs`, and opens the per-slice TypeScript migration of the admin console.
 
-## Recently shipped (v1.0.22)
+## Recently shipped (v1.0.23)
 
-- **CI stability repair** — duplicate source-copy artifacts were removed, workspace hygiene now ignores tracked paths that are already deleted, and the frontend dead-code audit is back on the real source tree.
-- **Panic-policy compliance** — attestation nonce generation, enrollment token generation, OIDC random material, and fallback response building no longer depend on production panic paths.
-- **Managed release acceptance refresh** — release smoke coverage now matches the current assistant, detection, command-center, and release-proof flows.
-- **Release metadata alignment** — Rust, admin-console, Python SDK, TypeScript SDK, Helm, OTLP, OpenAPI, website, install docs, reproducibility docs, and test fixtures now point at the `v1.0.22` CI-repair baseline.
+- **Real ML triage engine** — multiclass gradient-boosted classifier (regression trees fitted to softmax cross-entropy gradients, XGBoost-style split gain) trained at startup; Random Forest is retained as the shadow / fallback backend.
+- **Real post-quantum signatures** — FIPS 204 ML-DSA-65 via the pure-Rust `ml-dsa` crate; verification uses only the public key.
+- **Real GCP collector authentication** — service-account JWT signed with RS256 replaces the prior placeholder, so Cloud Audit Log polling actually authenticates.
+- **Live threat-feed ingestion** — background poll loop plus format-specific parsers for Abuse.ch MalwareBazaar (CSV), URLhaus (`json_online`), and Feodo Tracker (C2 IP blocklist); bundled feeds ingest real indicators out of the box.
+- **TLS on by default** so release binaries can make outbound HTTPS, plus a `cluster.require_tls` flag that upgrades peer RPCs to HTTPS and rejects plaintext peer URLs at config-validation time.
+- **Server decomposition step 1** — ML, feed-ingestion, and cluster-RPC handlers extracted into dedicated `server_ml.rs` / `server_feeds.rs` / `server_cluster.rs` modules (-253 lines net from `server.rs`).
+- **TypeScript migration first slices** — `safeStorage.ts` and `api.ts` (typed wrapper layer with generic `request<T>`, typed options/errors, 11 endpoints typed end-to-end via `@wardex/sdk`).
+- **OpenAPI surface** — `/api/feeds/*` family added; the contract now documents 254 operations and the parity gate is updated.
+- **Release metadata alignment** — Rust, admin-console, Python SDK, TypeScript SDK, Helm, OTLP, OpenAPI, website, install docs, reproducibility docs, and test fixtures now point at the `v1.0.23` baseline.
 
 ## Recently shipped (v1.0.21)
 

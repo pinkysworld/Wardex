@@ -14,14 +14,18 @@ Wardex is a Rust-based XDR and SIEM platform for private-cloud and self-hosted s
 - **Scan across platforms:** malware, virus, trojan, and rootkit workflows cover Linux, macOS, and Windows with local engines plus optional open-source signature presets.
 - **Ship verifiably:** releases include checksums, SBOMs, provenance, signed artifacts, and documented verification gates.
 
-## Current Release: `v1.0.22`
+## Current Release: `v1.0.23`
 
-This stability patch focuses on release integrity rather than new surface area. It repairs the CI gates that protect release cuts, repackages the release metadata on a new patch version, and keeps the signed distribution path clean.
+This release replaces several placeholder or simulated subsystems with genuine implementations, lays incremental groundwork for the `server.rs` decomposition, and starts the per-slice TypeScript migration of the admin console.
 
-- Duplicate Finder/iCloud-style source copies are gone, keeping workspace hygiene and the frontend dead-code audit aligned on the real source tree.
-- Attestation, enrollment, OIDC, and fallback-response paths no longer rely on production `expect`/`unwrap` behavior, so the panic-policy gate stays at zero.
-- Managed release acceptance now targets the current console labels, case routing, and long-running release-proof flow.
-- All release metadata, docs, website, screenshots, SDKs, Helm, OTLP, and test fixtures are aligned on `v1.0.22`.
+- **Real ML triage engine** — multiclass gradient-boosted classifier trained at startup (regression trees fitted to softmax cross-entropy gradients, XGBoost-style split gain). The Random Forest now runs as the shadow / fallback backend.
+- **Real FIPS 204 post-quantum signatures** — `quantum.rs` ML-DSA-65 via the pure-Rust `ml-dsa` crate; verification uses only the public key.
+- **Real GCP collector authentication** — service-account JWT signed with RS256 instead of a placeholder, so Cloud Audit Log polling actually authenticates.
+- **Live threat-feed ingestion** — background poll loop + format-specific parsers for Abuse.ch MalwareBazaar (CSV), URLhaus (`json_online`), and Feodo Tracker (C2 IP blocklist); the bundled feeds ingest real indicators out of the box.
+- **TLS on by default** so release binaries can make outbound HTTPS, plus a `cluster.require_tls` flag that upgrades peer RPCs to HTTPS and rejects plaintext peer URLs at config-validation time.
+- **Server decomposition step 1** — ML, feed-ingestion, and cluster-RPC handlers extracted into dedicated `server_ml.rs` / `server_feeds.rs` / `server_cluster.rs` modules. Visibility groundwork (`AppState` `pub(crate)` plus its needed fields) is in place for the remaining domain extractions.
+- **TypeScript migration first slices** — `safeStorage.ts` and `api.ts` (wrapper layer fully typed: generic `request<T>`, typed options/errors, 11 endpoints typed end-to-end via `@wardex/sdk`).
+- **OpenAPI 254 documented operations** — the `/api/feeds/*` family is now in the spec; contract-parity gate updated.
 
 See [CHANGELOG.md](CHANGELOG.md) for full release history.
 
@@ -95,7 +99,7 @@ The public website lives in [site/](site/) and mirrors the main product, release
 
 ## Documentation Surfaces
 
-The GitHub docs and the public website now share the same `v1.0.22` release surface for operator guides and API reference.
+The GitHub docs and the public website now share the same `v1.0.23` release surface for operator guides and API reference.
 
 ![Wardex documentation hub](site/media/insights/resources-live.png)
 
