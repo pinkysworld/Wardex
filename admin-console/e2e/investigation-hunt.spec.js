@@ -358,7 +358,9 @@ test('queue hunt pivot opens detection with prefilled hunt context', async ({ pa
   await login(page);
   await page.goto('./soc#queue');
 
-  await page.getByRole('button', { name: 'Hunt' }).click();
+  // `exact: true` so the queue row's "Hunt" pivot button is targeted rather
+  // than the navigation button whose description contains the word "hunt".
+  await page.getByRole('button', { name: 'Hunt', exact: true }).click();
   await expect(page).toHaveURL(/\/detection\?intent=run-hunt/);
   await expect(page.locator('#hunt-name')).toHaveValue(
     /Hunt Credential storm alert on finance identities/i,
