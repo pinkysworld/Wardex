@@ -555,13 +555,13 @@ pub(crate) struct AppState {
     proofs: ProofRegistry,
     last_report: Option<JsonReport>,
     last_failover_drill: Option<FailoverDrillRecord>,
-    token: String,
+    pub(crate) token: String,
     token_issued_at: std::time::Instant,
     session_store: crate::auth::SessionStore,
     oidc_providers: HashMap<String, crate::oidc::OidcProvider>,
     user_preferences: UserPreferencesStore,
     swarm: SwarmNode,
-    cluster: ClusterNode,
+    pub(crate) cluster: ClusterNode,
     enforcement: EnforcementEngine,
     pub(crate) threat_intel: ThreatIntelStore,
     digital_twin: DigitalTwinEngine,
@@ -579,7 +579,7 @@ pub(crate) struct AppState {
     patches: PatchManager,
     causal: CausalGraph,
     listener_mode: ListenerMode,
-    config: Config,
+    pub(crate) config: Config,
     config_path: PathBuf,
     alerts: VecDeque<AlertRecord>,
     server_start: std::time::Instant,
@@ -604,7 +604,7 @@ pub(crate) struct AppState {
     entropy: EntropyDetector,
     compound: CompoundThreatDetector,
     // Phase 22: shutdown support
-    shutdown: Arc<AtomicBool>,
+    pub(crate) shutdown: Arc<AtomicBool>,
     // Phase 25: rate limiter, audit, incidents, agent logs/inventory
     rate_limiter: RateLimiter,
     audit_log: AuditLog,
@@ -1710,7 +1710,7 @@ pub async fn run_server(
 
     spawn_enterprise_hunt_scheduler(&state);
     spawn_retention_purge_scheduler(&state);
-    spawn_cluster_runtime_loop(&state);
+    crate::server_cluster::spawn_cluster_runtime_loop(&state);
     spawn_feed_ingestion_loop(&state);
 
     // ── Spawn local host monitoring thread ──────────────────────────
@@ -2227,7 +2227,7 @@ fn spawn_test_server_with_state() -> (u16, String, Arc<Mutex<AppState>>) {
         s.sigma_engine.replace_rules(effective_rules);
     }
     spawn_enterprise_hunt_scheduler(&state);
-    spawn_cluster_runtime_loop(&state);
+    crate::server_cluster::spawn_cluster_runtime_loop(&state);
     spawn_feed_ingestion_loop(&state);
     let site_dir = PathBuf::from("site");
     let shutdown = {
@@ -3571,16 +3571,6 @@ fn secure_token_eq(provided: Option<&str>, expected: &str) -> bool {
     diff == 0
 }
 
-fn cluster_peer_auth_header(state: &AppState) -> String {
-    let token = state
-        .config
-        .cluster
-        .auth_token
-        .clone()
-        .unwrap_or_else(|| state.token.clone());
-    format!("Bearer {token}")
-}
-
 fn cluster_request_authorized(headers: &HeaderMap, state: &Arc<Mutex<AppState>>) -> bool {
     let provided = bearer_token(headers);
     let s = state.lock().unwrap_or_else(|e| e.into_inner());
@@ -3588,15 +3578,6 @@ fn cluster_request_authorized(headers: &HeaderMap, state: &Arc<Mutex<AppState>>)
         return secure_token_eq(provided.as_deref(), cluster_token);
     }
     secure_token_eq(provided.as_deref(), &s.token)
-}
-
-fn cluster_peer_url(addr: &str, path: &str) -> String {
-    let trimmed = addr.trim().trim_end_matches('/');
-    if trimmed.starts_with("http://") || trimmed.starts_with("https://") {
-        format!("{trimmed}{path}")
-    } else {
-        format!("http://{trimmed}{path}")
-    }
 }
 
 const SESSION_COOKIE_NAME: &str = "wardex_session";
@@ -17755,164 +17736,6 @@ fn run_failover_drill(state: &Arc<Mutex<AppState>>, auth: &AuthIdentity) -> Resp
     )
 }
 
-fn handle_cluster_vote(body: &[u8], state: &Arc<Mutex<AppState>>) -> Response<Body> {
-    match read_body_limited(body, 64 * 1024) {
-        Ok(raw) => match serde_json::from_str::<crate::cluster::VoteRequest>(&raw) {
-            Ok(request) => {
-                let response = {
-                    let s = state.lock().unwrap_or_else(|e| e.into_inner());
-                    s.cluster.handle_vote_request(&request)
-                };
-                match serde_json::to_string(&response) {
-                    Ok(json) => json_response(&json, 200),
-                    Err(e) => error_json(&format!("serialization error: {e}"), 500),
-                }
-            }
-            Err(e) => error_json(&format!("invalid JSON: {e}"), 400),
-        },
-        Err(e) => error_json(&e, 400),
-    }
-}
-
-fn handle_cluster_append(body: &[u8], state: &Arc<Mutex<AppState>>) -> Response<Body> {
-    match read_body_limited(body, 512 * 1024) {
-        Ok(raw) => match serde_json::from_str::<crate::cluster::AppendRequest>(&raw) {
-            Ok(request) => {
-                let response = {
-                    let s = state.lock().unwrap_or_else(|e| e.into_inner());
-                    s.cluster.handle_append(&request)
-                };
-                match serde_json::to_string(&response) {
-                    Ok(json) => json_response(&json, 200),
-                    Err(e) => error_json(&format!("serialization error: {e}"), 500),
-                }
-            }
-            Err(e) => error_json(&format!("invalid JSON: {e}"), 400),
-        },
-        Err(e) => error_json(&e, 400),
-    }
-}
-
-fn handle_cluster_snapshot(body: &[u8], state: &Arc<Mutex<AppState>>) -> Response<Body> {
-    match read_body_limited(body, 512 * 1024) {
-        Ok(raw) => match serde_json::from_str::<crate::cluster::InstallSnapshotRequest>(&raw) {
-            Ok(request) => {
-                let response = {
-                    let s = state.lock().unwrap_or_else(|e| e.into_inner());
-                    s.cluster.handle_install_snapshot(&request)
-                };
-                match serde_json::to_string(&response) {
-                    Ok(json) => json_response(&json, 200),
-                    Err(e) => error_json(&format!("serialization error: {e}"), 500),
-                }
-            }
-            Err(e) => error_json(&format!("invalid JSON: {e}"), 400),
-        },
-        Err(e) => error_json(&e, 400),
-    }
-}
-
-fn handle_cluster_health(state: &Arc<Mutex<AppState>>) -> Response<Body> {
-    let health = {
-        let s = state.lock().unwrap_or_else(|e| e.into_inner());
-        s.cluster.health()
-    };
-    match serde_json::to_string(&health) {
-        Ok(json) => json_response(&json, 200),
-        Err(e) => error_json(&format!("serialization error: {e}"), 500),
-    }
-}
-
-fn spawn_cluster_runtime_loop(state: &Arc<Mutex<AppState>>) {
-    let state = Arc::clone(state);
-    std::thread::spawn(move || {
-        loop {
-            let (shutdown, cluster, config, auth_header) = {
-                let s = state.lock().unwrap_or_else(|e| e.into_inner());
-                (
-                    s.shutdown.load(Ordering::Relaxed),
-                    s.cluster.clone(),
-                    s.config.cluster.clone(),
-                    cluster_peer_auth_header(&s),
-                )
-            };
-
-            if shutdown {
-                break;
-            }
-
-            if config.peers.is_empty() {
-                std::thread::sleep(std::time::Duration::from_millis(200));
-                continue;
-            }
-
-            if cluster.is_leader() {
-                for peer in &config.peers {
-                    let request = match cluster.prepare_append(&peer.node_id) {
-                        Some(request) => request,
-                        None => continue,
-                    };
-                    let url = cluster_peer_url(&peer.addr, "/api/cluster/append");
-                    let response = ureq::post(&url)
-                        .set("Authorization", &auth_header)
-                        .send_string(
-                            &serde_json::to_string(&request).unwrap_or_else(|_| "{}".to_string()),
-                        );
-
-                    match response {
-                        Ok(response) => {
-                            match response.into_json::<crate::cluster::AppendResponse>() {
-                                Ok(append_response) => {
-                                    cluster.handle_append_response(&peer.node_id, &append_response)
-                                }
-                                Err(_) => cluster.mark_peer_unreachable(&peer.node_id),
-                            }
-                        }
-                        Err(_) => cluster.mark_peer_unreachable(&peer.node_id),
-                    }
-                }
-                std::thread::sleep(std::time::Duration::from_millis(
-                    config.heartbeat_interval_ms.max(25),
-                ));
-                continue;
-            }
-
-            if cluster.should_start_election() {
-                let request = cluster.start_election();
-                let mut votes = 1usize;
-                let majority = config.peers.len().div_ceil(2) + 1;
-
-                for peer in &config.peers {
-                    let url = cluster_peer_url(&peer.addr, "/api/cluster/vote");
-                    match ureq::post(&url)
-                        .set("Authorization", &auth_header)
-                        .send_string(
-                            &serde_json::to_string(&request).unwrap_or_else(|_| "{}".to_string()),
-                        ) {
-                        Ok(response) => {
-                            match response.into_json::<crate::cluster::VoteResponse>() {
-                                Ok(vote_response) => {
-                                    if vote_response.vote_granted {
-                                        votes += 1;
-                                    }
-                                }
-                                Err(_) => cluster.mark_peer_unreachable(&peer.node_id),
-                            }
-                        }
-                        Err(_) => cluster.mark_peer_unreachable(&peer.node_id),
-                    }
-                }
-
-                if votes >= majority {
-                    cluster.become_leader();
-                }
-            }
-
-            std::thread::sleep(std::time::Duration::from_millis(50));
-        }
-    });
-}
-
 /// Background loop that fetches and ingests threat feeds that are due for
 /// polling. Network requests are made without holding the state lock.
 fn spawn_feed_ingestion_loop(state: &Arc<Mutex<AppState>>) {
@@ -18943,10 +18766,16 @@ fn handle_api(
             }
         }
         (Method::Post, "/api/control/failover-drill") => run_failover_drill(state, &auth_identity),
-        (Method::Get, "/api/cluster/health") => handle_cluster_health(state),
-        (Method::Post, "/api/cluster/vote") => handle_cluster_vote(body, state),
-        (Method::Post, "/api/cluster/append") => handle_cluster_append(body, state),
-        (Method::Post, "/api/cluster/snapshot") => handle_cluster_snapshot(body, state),
+        (Method::Get, "/api/cluster/health") => crate::server_cluster::handle_cluster_health(state),
+        (Method::Post, "/api/cluster/vote") => {
+            crate::server_cluster::handle_cluster_vote(body, state)
+        }
+        (Method::Post, "/api/cluster/append") => {
+            crate::server_cluster::handle_cluster_append(body, state)
+        }
+        (Method::Post, "/api/cluster/snapshot") => {
+            crate::server_cluster::handle_cluster_snapshot(body, state)
+        }
         (Method::Get, "/api/checkpoints") => {
             let s = state.lock().unwrap_or_else(|e| e.into_inner());
             let info = serde_json::json!({
