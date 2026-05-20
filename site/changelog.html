@@ -53,6 +53,7 @@
             <h2>Releases</h2>
             <ul>
       <li><a href="#vUnreleased"><span class="chl-ver">vUnreleased</span><span class="chl-nav-title"></span></a></li>
+      <li><a href="#v1.0.23"><span class="chl-ver">v1.0.23</span><span class="chl-nav-title">2026-05-20</span></a></li>
       <li><a href="#v1.0.22"><span class="chl-ver">v1.0.22</span><span class="chl-nav-title">2026-05-17 — CI repair and release cleanup</span></a></li>
       <li><a href="#v1.0.21"><span class="chl-ver">v1.0.21</span><span class="chl-nav-title">2026-05-17 — workflow continuity and documentation refresh</span></a></li>
       <li><a href="#v1.0.20"><span class="chl-ver">v1.0.20</span><span class="chl-nav-title">2026-05-16 — priority lanes and API hardening</span></a></li>
@@ -170,6 +171,55 @@
         <span class="chl-version-tag">vUnreleased</span>
         <h2>Unreleased</h2>
       </header>
+    </article>
+    <article class="chl-release" id="v1.0.23">
+      <header class="chl-release-header">
+        <span class="chl-version-tag">v1.0.23</span>
+        <h2>2026-05-20</h2>
+      </header>
+      <div class="chl-category">
+        <h3>Changed</h3>
+        <ul>
+        <li><strong>Real ML triage engine</strong>: replaces the placeholder ONNX heuristic with a genuine multiclass gradient-boosted classifier (<code>GradientBoostedClassifier</code>) trained at startup via real gradient boosting — regression trees fitted to softmax cross-entropy gradients with XGBoost-style split gain. <code>GradientBoostEngine</code> is the primary triage backend; the Random Forest runs as the shadow/fallback backend. Engine types renamed <code>OnnxEngine</code>→<code>GradientBoostEngine</code> and <code>StubEngine</code>→<code>RandomForestEngine</code>.</li>
+        <li><strong>Real post-quantum signatures</strong>: <code>quantum.rs</code> ML-DSA-65 now produces genuine FIPS 204 signatures via the pure-Rust <code>ml-dsa</code> crate, replacing the hash-based simulation. Verification uses only the public key, as a real signature scheme requires.</li>
+        <li><strong>TLS enabled by default</strong>: the <code>tls</code> Cargo feature is now part of <code>default</code>, so release binaries can make outbound HTTPS calls (threat feeds, AWS/Azure/GCP collectors, OIDC discovery, webhooks). Previously only the container build enabled it.</li>
+        <li><strong>Cluster peer-RPC encryption posture</strong>: new <code>cluster.require_tls</code> flag (default <code>false</code> for back-compat) upgrades bare <code>host:port</code> peer addresses to <code>https://</code> and rejects explicit <code>http://</code> peer URLs at config validation. When off, a one-shot startup warning surfaces every plaintext peer so the gap is visible on every boot. Production HA deployments should set <code>cluster.require_tls = true</code>.</li>
+        <li><strong>Incremental <code>server.rs</code> decomposition</strong> (<code>-253</code> lines across three PRs): the route-dispatch chain now delegates ML, feed-ingestion, and cluster-RPC handlers to dedicated <code>server_ml.rs</code>, <code>server_feeds.rs</code>, and <code>server_cluster.rs</code> modules. Visibility opened up for <code>AppState</code> plus the fields needed by extracted handlers (<code>pub(crate)</code>), so subsequent domain extractions need no further plumbing.</li>
+        <li><strong>TypeScript migration — first slices</strong>: <code>safeStorage.js</code> → <code>safeStorage.ts</code> (typed utility) and <code>api.js</code> → <code>api.ts</code> (typed wrapper layer: generic <code>request&lt;T = unknown&gt;</code>, typed <code>WardexRequestOptions</code>/<code>WardexApiError</code>, ~220 endpoint parameter annotations, 11 endpoints typed end-to-end via <code>@wardex/sdk</code> SDK contracts).</li>
+        </ul>
+      </div>
+      <div class="chl-category">
+        <h3>Added</h3>
+        <ul>
+        <li><code>POST /api/feeds/{id}/fetch</code> — live HTTPS fetch + ingest for a configured feed source.</li>
+        <li><code>/api/feeds/*</code> family (7 routes) now in <code>openapi.rs</code> and <code>docs/openapi.yaml</code>; contract-parity reports <strong>254 documented operations</strong> (was 247).</li>
+        </ul>
+      </div>
+      <div class="chl-category">
+        <h3>Fixed</h3>
+        <ul>
+        <li><strong>GCP collector authentication</strong>: the service-account JWT is now signed with real RS256 (via <code>jsonwebtoken</code>) instead of a placeholder signature, so Cloud Audit Log polling authenticates against Google.</li>
+        <li><strong>Threat-feed ingestion</strong>: added a live HTTP fetch path and a background poll loop; corrected the default feed URLs and added format-specific parsers for Abuse.ch MalwareBazaar (CSV), URLhaus (<code>json_online</code>), and Feodo Tracker (C2 IP blocklist). The bundled feeds now ingest real indicators out of the box.</li>
+        <li><strong>Accessibility / Lighthouse CI</strong>: the site-quality job installed tooling with <code>npm install --ignore-scripts</code>, which skipped puppeteer&#x27;s browser download so pa11y could not launch a browser. Added an explicit <code>npm rebuild puppeteer</code> step.</li>
+        <li><strong>Flaky <code>investigation-hunt.spec.js</code> (&quot;queue hunt pivot&quot;)</strong>: the loose <code>getByRole(&#x27;button&#x27;, { name: &#x27;Hunt&#x27; })</code> locator matched a navigation button whose description contains the word *hunt* and clicked it before the queue row&#x27;s real Hunt button rendered. Fixed with <code>exact: true</code>.</li>
+        <li><strong>Flaky <code>UEBADashboard.test.jsx</code> (&quot;prioritizes the current UEBA focus&quot;)</strong>: replaced synchronous <code>getByText</code> reads (which raced against the next React update) with <code>findByText</code>. Deterministic 10/10 locally.</li>
+        </ul>
+      </div>
+      <div class="chl-category">
+        <h3>Removed</h3>
+        <ul>
+        <li>Dead <code>auth.rs::AuthManager</code> and its <code>TokenResponse</code> / <code>url_encode_component</code> helpers and the nine AuthManager-only tests. The struct was a legacy parallel auth implementation never referenced outside its own tests; the real OIDC flow runs through <code>OidcProvider</code> in <code>oidc.rs</code>.</li>
+        </ul>
+      </div>
+      <div class="chl-category">
+        <h3>Dependency bumps</h3>
+        <ul>
+        <li><code>tower-http</code> 0.6.10 → 0.6.11 (patch).</li>
+        <li><code>sigstore/cosign-installer</code> v4.1.1 → v4.1.2 (SHA-pinned).</li>
+        <li><code>benchmark-action/github-action-benchmark</code> v1.22.0 → v1.22.1 (SHA-pinned).</li>
+        <li>Adds <code>ml-dsa = &quot;0.1&quot;</code> for FIPS 204 signatures (pure Rust, no native dependencies).</li>
+        </ul>
+      </div>
     </article>
     <article class="chl-release" id="v1.0.22">
       <header class="chl-release-header">
