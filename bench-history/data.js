@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1779296057764,
+  "lastUpdate": 1779303030491,
   "repoUrl": "https://github.com/pinkysworld/Wardex",
   "entries": {
     "Wardex criterion benches": [
@@ -11007,6 +11007,114 @@ window.BENCHMARK_DATA = {
             "name": "sigma_evaluate_20_rules",
             "value": 36899,
             "range": "± 230",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "85413447+pinkysworld@users.noreply.github.com",
+            "name": "pinkysworld",
+            "username": "pinkysworld"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "a9aae6ba6b85517eaeeaf060ff6b530dbc809abb",
+          "message": "Merge pull request #80 from pinkysworld/claude/cluster-tls\n\nfeat(cluster): add cluster.require_tls for peer RPC encryption",
+          "timestamp": "2026-05-20T20:42:22+02:00",
+          "tree_id": "6620f8be9e6ebca866c7b0c10a09db5fe54cfc78",
+          "url": "https://github.com/pinkysworld/Wardex/commit/a9aae6ba6b85517eaeeaf060ff6b530dbc809abb"
+        },
+        "date": 1779303030054,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "full_pipeline/5",
+            "value": 49201,
+            "range": "± 285",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "full_pipeline/50",
+            "value": 405272,
+            "range": "± 2945",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "full_pipeline/200",
+            "value": 1863987,
+            "range": "± 25902",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "full_pipeline/1000",
+            "value": 17267973,
+            "range": "± 140168",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "detector_evaluate_single",
+            "value": 620,
+            "range": "± 0",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "detector_window_stream_256",
+            "value": 872633,
+            "range": "± 9704",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "shared_storage_observed_schema_read",
+            "value": 126,
+            "range": "± 0",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "shared_storage_4_threads_64_alerts",
+            "value": 159702,
+            "range": "± 2374",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "policy_evaluate_single",
+            "value": 239,
+            "range": "± 0",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "throughput/1000_samples",
+            "value": 17342847,
+            "range": "± 738337",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "search_500_events",
+            "value": 111219,
+            "range": "± 382",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "hunt_field_query",
+            "value": 95854,
+            "range": "± 466",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "ml_triage_rf",
+            "value": 54,
+            "range": "± 0",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "sigma_evaluate_20_rules",
+            "value": 35418,
+            "range": "± 218",
             "unit": "ns/iter"
           }
         ]
