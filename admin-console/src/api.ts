@@ -1,5 +1,5 @@
 // Wardex Admin Console — API Client
-// Auth-aware fetch wrapper + all endpoint functions for ~160 API routes.
+// Auth-aware fetch wrapper + all endpoint functions for 254 API routes.
 //
 // Per-slice TypeScript migration: the wrapper layer (request / get / post /
 // put / del / toQuery) is fully typed; each endpoint export takes typed
