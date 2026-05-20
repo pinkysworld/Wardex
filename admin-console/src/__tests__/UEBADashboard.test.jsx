@@ -163,10 +163,16 @@ describe('UEBADashboard', () => {
     const user = userEvent.setup();
     renderWithProviders('/ueba?sort=entity_id&range=6h');
 
+    // Each finder awaits independently: "Current UEBA focus" can render in a
+    // different React update than the sibling body text / button, so a
+    // synchronous getByText on lines 2-4 races against a late render cycle
+    // (~1 in 3 runs locally). findBy* eliminates the race.
     expect(await screen.findByText('Current UEBA focus')).toBeInTheDocument();
-    expect(screen.getByText('Entity risk is concentrated in a few identities')).toBeInTheDocument();
-    expect(screen.getByText('Review top-risk entity')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Open Top Entity' })).toBeInTheDocument();
+    expect(
+      await screen.findByText('Entity risk is concentrated in a few identities'),
+    ).toBeInTheDocument();
+    expect(await screen.findByText('Review top-risk entity')).toBeInTheDocument();
+    expect(await screen.findByRole('button', { name: 'Open Top Entity' })).toBeInTheDocument();
 
     await user.click(screen.getByRole('button', { name: 'Sort Anomalies' }));
 
