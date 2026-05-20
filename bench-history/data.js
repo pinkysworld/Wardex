@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1779303030491,
+  "lastUpdate": 1779308445529,
   "repoUrl": "https://github.com/pinkysworld/Wardex",
   "entries": {
     "Wardex criterion benches": [
@@ -11115,6 +11115,114 @@ window.BENCHMARK_DATA = {
             "name": "sigma_evaluate_20_rules",
             "value": 35418,
             "range": "± 218",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "85413447+pinkysworld@users.noreply.github.com",
+            "name": "pinkysworld",
+            "username": "pinkysworld"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "261edf83b3bb49c192d6cdaf3796461e377adb58",
+          "message": "release: cut v1.0.23 (#82)\n\n* release: cut v1.0.23\n\nBump Rust crate, admin-console, Python SDK, TypeScript SDK, Helm chart,\nOTLP config, OpenAPI contract, install docs, reproducibility docs, and\nwebsite to 1.0.23. Reset CHANGELOG [Unreleased] into the 1.0.23 section\nand regenerate site/changelog.html.\n\nRefresh STATUS.md and README \"Current Release\" narrative to describe\nthe actual release content: real ML triage engine, real FIPS 204 PQC\nsignatures, real GCP collector auth, live threat-feed ingestion, TLS\non by default plus cluster.require_tls, server.rs decomposition\n(ml/feeds/cluster modules), first TypeScript slices, and the expanded\n254-operation OpenAPI surface.\n\n* sdk(ts): refresh package-lock.json for 1.0.23\n\n* sdk(py): bump __version__ to 1.0.23",
+          "timestamp": "2026-05-20T22:10:57+02:00",
+          "tree_id": "55f5d96858ded9ab7bfadf41a09071a0301af56c",
+          "url": "https://github.com/pinkysworld/Wardex/commit/261edf83b3bb49c192d6cdaf3796461e377adb58"
+        },
+        "date": 1779308445103,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "full_pipeline/5",
+            "value": 49595,
+            "range": "± 638",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "full_pipeline/50",
+            "value": 408356,
+            "range": "± 2390",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "full_pipeline/200",
+            "value": 1868012,
+            "range": "± 6258",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "full_pipeline/1000",
+            "value": 17055434,
+            "range": "± 64792",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "detector_evaluate_single",
+            "value": 685,
+            "range": "± 2",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "detector_window_stream_256",
+            "value": 917476,
+            "range": "± 8519",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "shared_storage_observed_schema_read",
+            "value": 127,
+            "range": "± 0",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "shared_storage_4_threads_64_alerts",
+            "value": 168610,
+            "range": "± 2058",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "policy_evaluate_single",
+            "value": 246,
+            "range": "± 0",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "throughput/1000_samples",
+            "value": 17212144,
+            "range": "± 69528",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "search_500_events",
+            "value": 114129,
+            "range": "± 539",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "hunt_field_query",
+            "value": 93405,
+            "range": "± 533",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "ml_triage_rf",
+            "value": 54,
+            "range": "± 0",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "sigma_evaluate_20_rules",
+            "value": 35395,
+            "range": "± 206",
             "unit": "ns/iter"
           }
         ]
