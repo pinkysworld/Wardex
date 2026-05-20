@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1779260405853,
+  "lastUpdate": 1779263910552,
   "repoUrl": "https://github.com/pinkysworld/Wardex",
   "entries": {
     "Wardex criterion benches": [
@@ -10683,6 +10683,114 @@ window.BENCHMARK_DATA = {
             "name": "sigma_evaluate_20_rules",
             "value": 35297,
             "range": "± 182",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "85413447+pinkysworld@users.noreply.github.com",
+            "name": "pinkysworld",
+            "username": "pinkysworld"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "b4f5927b4088392ca8589ad71ae81de3d149461a",
+          "message": "Merge pull request #74 from pinkysworld/claude/split-server-step1-v2\n\nrefactor: extract ML and feeds route handlers from server.rs",
+          "timestamp": "2026-05-20T09:50:33+02:00",
+          "tree_id": "b50df4875188d6eb2090d972fbf7d42aa3e9be89",
+          "url": "https://github.com/pinkysworld/Wardex/commit/b4f5927b4088392ca8589ad71ae81de3d149461a"
+        },
+        "date": 1779263909509,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "full_pipeline/5",
+            "value": 49084,
+            "range": "± 412",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "full_pipeline/50",
+            "value": 403376,
+            "range": "± 3073",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "full_pipeline/200",
+            "value": 1862992,
+            "range": "± 13661",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "full_pipeline/1000",
+            "value": 17083479,
+            "range": "± 78749",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "detector_evaluate_single",
+            "value": 623,
+            "range": "± 1",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "detector_window_stream_256",
+            "value": 876018,
+            "range": "± 2361",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "shared_storage_observed_schema_read",
+            "value": 126,
+            "range": "± 0",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "shared_storage_4_threads_64_alerts",
+            "value": 167113,
+            "range": "± 2037",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "policy_evaluate_single",
+            "value": 248,
+            "range": "± 1",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "throughput/1000_samples",
+            "value": 17225626,
+            "range": "± 181898",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "search_500_events",
+            "value": 112726,
+            "range": "± 347",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "hunt_field_query",
+            "value": 94198,
+            "range": "± 1789",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "ml_triage_rf",
+            "value": 54,
+            "range": "± 0",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "sigma_evaluate_20_rules",
+            "value": 35519,
+            "range": "± 247",
             "unit": "ns/iter"
           }
         ]
