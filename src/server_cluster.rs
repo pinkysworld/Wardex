@@ -36,13 +36,16 @@ fn cluster_peer_auth_header(state: &AppState) -> String {
     format!("Bearer {token}")
 }
 
-/// Build a full peer URL from a configured peer address and a path. If the
-/// address has no scheme, default to `http://` (operators can opt in to
-/// `https://` by configuring the peer address with the scheme explicitly).
-fn cluster_peer_url(addr: &str, path: &str) -> String {
+/// Build a full peer URL from a configured peer address and a path. Bare
+/// host:port addresses get a scheme prepended: `https://` when
+/// `require_tls` is on, otherwise `http://` (back-compat). Explicit schemes
+/// in the address are preserved.
+fn cluster_peer_url(addr: &str, path: &str, require_tls: bool) -> String {
     let trimmed = addr.trim().trim_end_matches('/');
     if trimmed.starts_with("http://") || trimmed.starts_with("https://") {
         format!("{trimmed}{path}")
+    } else if require_tls {
+        format!("https://{trimmed}{path}")
     } else {
         format!("http://{trimmed}{path}")
     }
@@ -123,12 +126,52 @@ pub(crate) fn handle_cluster_health(state: &Arc<Mutex<AppState>>) -> Response<Bo
     }
 }
 
+/// Returns true if the peer address will speak plaintext HTTP (either an
+/// explicit `http://` scheme or a bare host:port when `require_tls` is off).
+fn peer_uses_plaintext(addr: &str, require_tls: bool) -> bool {
+    let trimmed = addr.trim().trim_end_matches('/');
+    if trimmed.starts_with("https://") {
+        return false;
+    }
+    if trimmed.starts_with("http://") {
+        return true;
+    }
+    !require_tls
+}
+
+/// Log a warning if any peer would receive plaintext RPCs. Called once at
+/// driver-loop startup so operators see the gap on every restart.
+fn warn_if_plaintext_peers(config: &crate::cluster::ClusterConfig) {
+    if config.require_tls {
+        return;
+    }
+    let plaintext: Vec<&str> = config
+        .peers
+        .iter()
+        .filter(|p| peer_uses_plaintext(&p.addr, config.require_tls))
+        .map(|p| p.addr.as_str())
+        .collect();
+    if !plaintext.is_empty() {
+        log::warn!(
+            "[cluster] {} peer(s) will receive RPCs over plaintext HTTP — bearer token will travel unencrypted on the wire. Set cluster.require_tls=true (and use https:// peer URLs) for production.",
+            plaintext.len()
+        );
+    }
+}
+
 /// Background driver loop. Snapshots cluster state under the AppState lock
 /// at the start of each tick, then issues peer RPCs without holding the
 /// lock so a slow peer cannot stall the rest of the server.
 pub(crate) fn spawn_cluster_runtime_loop(state: &Arc<Mutex<AppState>>) {
     let state = Arc::clone(state);
     std::thread::spawn(move || {
+        // Emit the plaintext-peer warning once at startup so it is visible
+        // in the boot log rather than buried in per-tick output.
+        {
+            let s = state.lock().unwrap_or_else(|e| e.into_inner());
+            warn_if_plaintext_peers(&s.config.cluster);
+        }
+
         loop {
             let (shutdown, cluster, config, auth_header) = {
                 let s = state.lock().unwrap_or_else(|e| e.into_inner());
@@ -155,7 +198,8 @@ pub(crate) fn spawn_cluster_runtime_loop(state: &Arc<Mutex<AppState>>) {
                         Some(request) => request,
                         None => continue,
                     };
-                    let url = cluster_peer_url(&peer.addr, "/api/cluster/append");
+                    let url =
+                        cluster_peer_url(&peer.addr, "/api/cluster/append", config.require_tls);
                     let response = ureq::post(&url)
                         .set("Authorization", &auth_header)
                         .send_string(
@@ -186,7 +230,7 @@ pub(crate) fn spawn_cluster_runtime_loop(state: &Arc<Mutex<AppState>>) {
                 let majority = config.peers.len().div_ceil(2) + 1;
 
                 for peer in &config.peers {
-                    let url = cluster_peer_url(&peer.addr, "/api/cluster/vote");
+                    let url = cluster_peer_url(&peer.addr, "/api/cluster/vote", config.require_tls);
                     match ureq::post(&url)
                         .set("Authorization", &auth_header)
                         .send_string(
@@ -214,4 +258,50 @@ pub(crate) fn spawn_cluster_runtime_loop(state: &Arc<Mutex<AppState>>) {
             std::thread::sleep(std::time::Duration::from_millis(50));
         }
     });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn cluster_peer_url_keeps_explicit_scheme() {
+        assert_eq!(
+            cluster_peer_url("http://peer-a:9078", "/api/cluster/vote", false),
+            "http://peer-a:9078/api/cluster/vote",
+        );
+        assert_eq!(
+            cluster_peer_url("https://peer-b:9078", "/api/cluster/vote", true),
+            "https://peer-b:9078/api/cluster/vote",
+        );
+    }
+
+    #[test]
+    fn cluster_peer_url_defaults_to_http_without_require_tls() {
+        assert_eq!(
+            cluster_peer_url("peer-c:9078", "/api/cluster/append", false),
+            "http://peer-c:9078/api/cluster/append",
+        );
+    }
+
+    #[test]
+    fn cluster_peer_url_defaults_to_https_when_require_tls() {
+        assert_eq!(
+            cluster_peer_url("peer-d:9078", "/api/cluster/append", true),
+            "https://peer-d:9078/api/cluster/append",
+        );
+    }
+
+    #[test]
+    fn peer_uses_plaintext_classifies_schemes() {
+        // explicit https is never plaintext
+        assert!(!peer_uses_plaintext("https://peer", false));
+        assert!(!peer_uses_plaintext("https://peer", true));
+        // explicit http is always plaintext
+        assert!(peer_uses_plaintext("http://peer", false));
+        assert!(peer_uses_plaintext("http://peer", true));
+        // bare host:port follows the require_tls default
+        assert!(peer_uses_plaintext("peer:9078", false));
+        assert!(!peer_uses_plaintext("peer:9078", true));
+    }
 }

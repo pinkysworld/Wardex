@@ -33,6 +33,13 @@ pub struct ClusterConfig {
     pub heartbeat_interval_ms: u64,
     pub election_timeout_ms: u64,
     pub replication_batch_size: usize,
+    /// When true, every peer RPC must travel over HTTPS. Bare host:port
+    /// addresses are upgraded to `https://` and explicit `http://` peer URLs
+    /// are rejected by config validation. Default `false` for backward
+    /// compatibility — operators of multi-node deployments should turn this
+    /// on so the bearer token does not travel in plaintext between segments.
+    #[serde(default)]
+    pub require_tls: bool,
 }
 
 impl Default for ClusterConfig {
@@ -45,6 +52,7 @@ impl Default for ClusterConfig {
             heartbeat_interval_ms: 1000,
             election_timeout_ms: 5000,
             replication_batch_size: 100,
+            require_tls: false,
         }
     }
 }
@@ -855,6 +863,7 @@ mod tests {
             heartbeat_interval_ms: 100,
             election_timeout_ms: 500,
             replication_batch_size: 50,
+            require_tls: false,
         }
     }
 
