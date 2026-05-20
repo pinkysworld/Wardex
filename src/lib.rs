@@ -162,6 +162,8 @@ pub mod wasm_engine;
 // ── Infrastructure ───────────────────────────────────────────────────────────
 pub mod attestation;
 pub mod inventory;
+pub mod server_feeds;
+pub mod server_ml;
 pub mod server_response;
 pub mod server_routing;
 pub mod service;

@@ -547,7 +547,7 @@ struct ObservabilitySystems {
     alert_broadcaster: crate::ws_stream::AlertBroadcaster,
 }
 
-struct AppState {
+pub(crate) struct AppState {
     detector: AnomalyDetector,
     checkpoints: CheckpointStore,
     device: DeviceController,
@@ -563,7 +563,7 @@ struct AppState {
     swarm: SwarmNode,
     cluster: ClusterNode,
     enforcement: EnforcementEngine,
-    threat_intel: ThreatIntelStore,
+    pub(crate) threat_intel: ThreatIntelStore,
     digital_twin: DigitalTwinEngine,
     compliance: ComplianceManager,
     multi_tenant: MultiTenantManager,
@@ -663,16 +663,16 @@ struct AppState {
     efficacy_tracker: crate::detection_efficacy::EfficacyTracker,
     workflow_store: crate::investigation::WorkflowStore,
     llm_analyst: Arc<Mutex<crate::llm_analyst::LlmAnalyst>>,
-    model_registry: crate::ml_engine::ModelRegistry,
+    pub(crate) model_registry: crate::ml_engine::ModelRegistry,
     detection_feedback: crate::detection_feedback::DetectionFeedbackStore,
     // Phase 43: malware detection
-    malware_hash_db: crate::malware_signatures::MalwareHashDb,
+    pub(crate) malware_hash_db: crate::malware_signatures::MalwareHashDb,
     malware_scanner: crate::malware_scanner::MalwareScanner,
-    yara_engine: crate::yara_engine::YaraEngine,
+    pub(crate) yara_engine: crate::yara_engine::YaraEngine,
     api_analytics: crate::api_analytics::ApiAnalytics,
     trace_collector: crate::telemetry::TraceCollector,
     // Phase 44: advanced threat analysis, inventory, malware, UX
-    feed_engine: crate::feed_ingestion::FeedIngestionEngine,
+    pub(crate) feed_engine: crate::feed_ingestion::FeedIngestionEngine,
     playbook_dsl: crate::playbook_dsl::PlaybookDslStore,
     image_inventory: crate::container_image::ImageInventory,
     quarantine_store: crate::quarantine::QuarantineStore,
@@ -4371,7 +4371,7 @@ fn url_path(url: &str) -> &str {
     url.split('?').next().unwrap_or(url)
 }
 
-fn url_param(url: &str, key: &str) -> Option<String> {
+pub(crate) fn url_param(url: &str, key: &str) -> Option<String> {
     parse_query_string(url)
         .get(key)
         .cloned()
@@ -28003,50 +28003,17 @@ fn handle_api(
 
             // ── ML Engine ─────────────────────────────────────────
             } else if method == Method::Get && url_path == "/api/ml/models" {
-                let mut s = state.lock().unwrap_or_else(|e| e.into_inner());
-                s.model_registry.refresh();
-                let status = s.model_registry.status();
-                let body = serde_json::json!({
-                    "loaded": status.loaded_models,
-                    "available": status.available_models,
-                    "active_backend": status.active_backend,
-                    "shadow_backend": status.shadow_backend,
-                    "shadow_mode": status.shadow_mode,
-                    "gbm_loaded": status.gbm_loaded,
-                });
-                json_response(&body.to_string(), 200)
+                crate::server_ml::handle_ml_models(state)
             } else if method == Method::Get && url_path == "/api/ml/models/status" {
-                handle_ml_models_status(state)
+                crate::server_ml::handle_ml_models_status(state)
             } else if method == Method::Post && url_path == "/api/ml/models/rollback" {
-                handle_ml_models_rollback(state)
+                crate::server_ml::handle_ml_models_rollback(state)
             } else if method == Method::Get && url_path == "/api/ml/shadow/recent" {
-                handle_ml_shadow_recent(&url, state)
+                crate::server_ml::handle_ml_shadow_recent(&url, state)
             } else if method == Method::Post && url_path == "/api/ml/triage" {
-                match read_body_limited(body, 8192) {
-                    Ok(body_str) => {
-                        let features: crate::ml_engine::TriageFeatures =
-                            match serde_json::from_str(&body_str) {
-                                Ok(f) => f,
-                                Err(e) => {
-                                    return respond_api(
-                                        state,
-                                        &method,
-                                        &url,
-                                        remote_addr,
-                                        auth_used,
-                                        error_json(&format!("invalid features: {e}"), 400),
-                                    );
-                                }
-                            };
-                        let engine = crate::ml_engine::RandomForestEngine::new();
-                        let result = engine.triage_alert(&features);
-                        let body = serde_json::to_string(&result).unwrap_or_default();
-                        json_response(&body, 200)
-                    }
-                    Err(e) => error_json(&e, 400),
-                }
+                crate::server_ml::handle_ml_triage(body, state)
             } else if method == Method::Post && url_path == "/api/ml/triage/v2" {
-                handle_ml_triage_v2(body, state)
+                crate::server_ml::handle_ml_triage_v2(body, state)
 
             // ── Vulnerability Scanner ─────────────────────────────────
             } else if method == Method::Get && url_path == "/api/vulnerability/scan" {
@@ -29154,130 +29121,28 @@ fn handle_api(
 
             // ── Feed Ingestion ────────────────────────────────────────
             } else if method == Method::Get && url_path == "/api/feeds" {
-                let s = state.lock().unwrap_or_else(|e| e.into_inner());
-                let body = serde_json::to_string(s.feed_engine.sources()).unwrap_or_default();
-                json_response(&body, 200)
+                crate::server_feeds::handle_feeds_list(state)
             } else if method == Method::Post && url_path == "/api/feeds" {
-                match read_body_limited(body, 16384) {
-                    Ok(body_str) => {
-                        match serde_json::from_str::<crate::feed_ingestion::FeedSource>(&body_str) {
-                            Ok(src) => {
-                                let mut s = state.lock().unwrap_or_else(|e| e.into_inner());
-                                let id = s.feed_engine.add_source(src);
-                                json_response(&format!(r#"{{"id":"{id}"}}"#), 201)
-                            }
-                            Err(e) => error_json(&format!("invalid feed source: {e}"), 400),
-                        }
-                    }
-                    Err(e) => error_json(&e, 400),
-                }
-            } else if method == Method::Delete && url_path.starts_with("/api/feeds/") {
-                let feed_id = &url_path["/api/feeds/".len()..];
-                let mut s = state.lock().unwrap_or_else(|e| e.into_inner());
-                if s.feed_engine.remove_source(feed_id) {
-                    json_response(r#"{"deleted":true}"#, 204)
-                } else {
-                    error_json("feed source not found", 404)
-                }
+                crate::server_feeds::handle_feeds_create(body, state)
+            } else if method == Method::Get && url_path == "/api/feeds/stats" {
+                crate::server_feeds::handle_feeds_stats(state)
+            } else if method == Method::Post && url_path == "/api/feeds/hot-reload/hashes" {
+                crate::server_feeds::handle_feeds_hot_reload_hashes(body, state)
             } else if method == Method::Post
                 && url_path.starts_with("/api/feeds/")
                 && url_path.ends_with("/poll")
             {
                 let feed_id = &url_path["/api/feeds/".len()..url_path.len() - "/poll".len()];
-                match read_body_limited(body, 10 * 1024 * 1024) {
-                    Ok(body_str) => {
-                        let mut s = state.lock().unwrap_or_else(|e| e.into_inner());
-                        let AppState {
-                            ref mut feed_engine,
-                            ref mut threat_intel,
-                            ref mut malware_hash_db,
-                            ref mut yara_engine,
-                            ..
-                        } = *s;
-                        match feed_engine.poll_feed(
-                            feed_id,
-                            &body_str,
-                            threat_intel,
-                            malware_hash_db,
-                            yara_engine,
-                        ) {
-                            Ok(result) => {
-                                let body = serde_json::to_string(&result).unwrap_or_default();
-                                json_response(&body, 200)
-                            }
-                            Err(e) => error_json(&e, 400),
-                        }
-                    }
-                    Err(e) => error_json(&e, 400),
-                }
+                crate::server_feeds::handle_feeds_poll(feed_id, body, state)
             } else if method == Method::Post
                 && url_path.starts_with("/api/feeds/")
                 && url_path.ends_with("/fetch")
             {
-                let feed_id =
-                    url_path["/api/feeds/".len()..url_path.len() - "/fetch".len()].to_string();
-                let source = {
-                    let s = state.lock().unwrap_or_else(|e| e.into_inner());
-                    s.feed_engine
-                        .sources()
-                        .iter()
-                        .find(|src| src.id == feed_id)
-                        .cloned()
-                };
-                match source {
-                    None => error_json("feed source not found", 404),
-                    Some(source) if !source.enabled => error_json("feed source is disabled", 400),
-                    Some(source) => match crate::feed_ingestion::fetch_feed_data(&source) {
-                        Ok(data) => {
-                            let mut s = state.lock().unwrap_or_else(|e| e.into_inner());
-                            let AppState {
-                                ref mut feed_engine,
-                                ref mut threat_intel,
-                                ref mut malware_hash_db,
-                                ref mut yara_engine,
-                                ..
-                            } = *s;
-                            match feed_engine.poll_feed(
-                                &feed_id,
-                                &data,
-                                threat_intel,
-                                malware_hash_db,
-                                yara_engine,
-                            ) {
-                                Ok(result) => json_response(
-                                    &serde_json::to_string(&result).unwrap_or_default(),
-                                    200,
-                                ),
-                                Err(e) => error_json(&e, 400),
-                            }
-                        }
-                        Err(e) => {
-                            let mut s = state.lock().unwrap_or_else(|e| e.into_inner());
-                            s.feed_engine.record_feed_failure(&feed_id, &e);
-                            error_json(&e, 502)
-                        }
-                    },
-                }
-            } else if method == Method::Get && url_path == "/api/feeds/stats" {
-                let s = state.lock().unwrap_or_else(|e| e.into_inner());
-                let body = serde_json::to_string(&s.feed_engine.stats()).unwrap_or_default();
-                json_response(&body, 200)
-            } else if method == Method::Post && url_path == "/api/feeds/hot-reload/hashes" {
-                match read_body_limited(body, 10 * 1024 * 1024) {
-                    Ok(body_str) => {
-                        let mut s = state.lock().unwrap_or_else(|e| e.into_inner());
-                        let AppState {
-                            ref mut feed_engine,
-                            ref mut malware_hash_db,
-                            ..
-                        } = *s;
-                        match feed_engine.hot_reload_hashes(&body_str, malware_hash_db) {
-                            Ok(count) => json_response(&format!(r#"{{"imported":{count}}}"#), 200),
-                            Err(e) => error_json(&e, 400),
-                        }
-                    }
-                    Err(e) => error_json(&e, 400),
-                }
+                let feed_id = &url_path["/api/feeds/".len()..url_path.len() - "/fetch".len()];
+                crate::server_feeds::handle_feeds_fetch(feed_id, state)
+            } else if method == Method::Delete && url_path.starts_with("/api/feeds/") {
+                let feed_id = &url_path["/api/feeds/".len()..];
+                crate::server_feeds::handle_feeds_delete(feed_id, state)
 
             // ── Playbook DSL ──────────────────────────────────────────
             } else if method == Method::Get && url_path == "/api/playbook-dsl" {
@@ -29999,62 +29864,11 @@ fn handle_api(
 
 /// Read the request body with a size limit and a 30-second timeout to prevent
 /// both OOM from oversized bodies and slowloris-style attacks.
-fn read_body_limited(body: &[u8], limit: usize) -> Result<String, String> {
+pub(crate) fn read_body_limited(body: &[u8], limit: usize) -> Result<String, String> {
     if body.len() > limit {
         return Err("request body too large".to_string());
     }
     String::from_utf8(body.to_vec()).map_err(|_| "invalid UTF-8 in request body".to_string())
-}
-
-fn handle_ml_models_status(state: &Arc<Mutex<AppState>>) -> Response<Body> {
-    let mut s = state.lock().unwrap_or_else(|e| e.into_inner());
-    s.model_registry.refresh();
-    let body = serde_json::to_string(&s.model_registry.status()).unwrap_or_default();
-    json_response(&body, 200)
-}
-
-fn handle_ml_models_rollback(state: &Arc<Mutex<AppState>>) -> Response<Body> {
-    let mut s = state.lock().unwrap_or_else(|e| e.into_inner());
-    let changed = s.model_registry.rollback_alert_triage();
-    let body = serde_json::json!({
-        "status": s.model_registry.status(),
-        "changed": changed,
-        "rolled_back_at": chrono::Utc::now().to_rfc3339(),
-    });
-    json_response(&body.to_string(), 200)
-}
-
-fn handle_ml_shadow_recent(url: &str, state: &Arc<Mutex<AppState>>) -> Response<Body> {
-    let limit = url_param(url, "limit")
-        .and_then(|value| value.parse::<usize>().ok())
-        .unwrap_or(20)
-        .min(100);
-    let s = state.lock().unwrap_or_else(|e| e.into_inner());
-    let mut reports = s.model_registry.status().recent_shadow_reports;
-    reports.truncate(limit);
-    json_response(
-        &serde_json::json!({
-            "count": reports.len(),
-            "items": reports,
-        })
-        .to_string(),
-        200,
-    )
-}
-
-fn handle_ml_triage_v2(body: &[u8], state: &Arc<Mutex<AppState>>) -> Response<Body> {
-    let body = match read_body_limited(body, 8192) {
-        Ok(body) => body,
-        Err(error) => return error_json(&error, 400),
-    };
-    let features: crate::ml_engine::TriageFeatures = match serde_json::from_str(&body) {
-        Ok(features) => features,
-        Err(error) => return error_json(&format!("invalid features: {error}"), 400),
-    };
-    let mut s = state.lock().unwrap_or_else(|e| e.into_inner());
-    s.model_registry.refresh();
-    let body = serde_json::to_string(&s.model_registry.triage_alert(&features)).unwrap_or_default();
-    json_response(&body, 200)
 }
 
 fn handle_onboarding_readiness(state: &Arc<Mutex<AppState>>) -> Response<Body> {
