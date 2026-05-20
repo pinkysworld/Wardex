@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1779254217898,
+  "lastUpdate": 1779260405853,
   "repoUrl": "https://github.com/pinkysworld/Wardex",
   "entries": {
     "Wardex criterion benches": [
@@ -10575,6 +10575,114 @@ window.BENCHMARK_DATA = {
             "name": "sigma_evaluate_20_rules",
             "value": 34952,
             "range": "± 239",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "85413447+pinkysworld@users.noreply.github.com",
+            "name": "pinkysworld",
+            "username": "pinkysworld"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "51d2ae845c5dc15acaa7151358fe9dee6af573b9",
+          "message": "Merge pull request #73 from pinkysworld/claude/small-cleanups\n\nchore: remove dead AuthManager and apply safe dep bumps",
+          "timestamp": "2026-05-20T08:49:59+02:00",
+          "tree_id": "7c65f23b95f0122bfa40ab454570fcae1551801d",
+          "url": "https://github.com/pinkysworld/Wardex/commit/51d2ae845c5dc15acaa7151358fe9dee6af573b9"
+        },
+        "date": 1779260405346,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "full_pipeline/5",
+            "value": 48684,
+            "range": "± 305",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "full_pipeline/50",
+            "value": 408350,
+            "range": "± 1276",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "full_pipeline/200",
+            "value": 1895391,
+            "range": "± 28568",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "full_pipeline/1000",
+            "value": 18202822,
+            "range": "± 663241",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "detector_evaluate_single",
+            "value": 608,
+            "range": "± 14",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "detector_window_stream_256",
+            "value": 852323,
+            "range": "± 3390",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "shared_storage_observed_schema_read",
+            "value": 136,
+            "range": "± 0",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "shared_storage_4_threads_64_alerts",
+            "value": 144028,
+            "range": "± 1915",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "policy_evaluate_single",
+            "value": 238,
+            "range": "± 4",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "throughput/1000_samples",
+            "value": 18312499,
+            "range": "± 104465",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "search_500_events",
+            "value": 106221,
+            "range": "± 440",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "hunt_field_query",
+            "value": 89636,
+            "range": "± 329",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "ml_triage_rf",
+            "value": 55,
+            "range": "± 0",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "sigma_evaluate_20_rules",
+            "value": 35297,
+            "range": "± 182",
             "unit": "ns/iter"
           }
         ]
