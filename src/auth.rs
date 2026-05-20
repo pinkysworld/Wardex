@@ -59,17 +59,6 @@ impl Default for OidcConfig {
     }
 }
 
-// ── Token response ──────────────────────────────────────────────
-
-/// Response from the OIDC token endpoint.
-#[derive(Debug, Clone, Deserialize)]
-pub struct TokenResponse {
-    pub access_token: String,
-    pub id_token: String,
-    pub token_type: String,
-    pub expires_in: u64,
-}
-
 // ── Session ─────────────────────────────────────────────────────
 
 /// A user session created after successful authentication.
@@ -290,102 +279,6 @@ impl SessionStore {
     }
 }
 
-// ── AuthManager ─────────────────────────────────────────────────
-
-/// Central authentication manager holding OIDC config and session state.
-pub struct AuthManager {
-    pub config: OidcConfig,
-    pub sessions: SessionStore,
-}
-
-impl AuthManager {
-    pub fn new(config: OidcConfig) -> Self {
-        Self {
-            config,
-            sessions: SessionStore::with_persistence("var/sessions.json"),
-        }
-    }
-
-    /// Build the OIDC authorization URL and a random state nonce.
-    /// Returns `(authorization_url, state_nonce)`.
-    pub fn build_auth_url(&self) -> (String, String) {
-        let mut rng = rand::rng();
-        let mut nonce_buf = [0u8; 16];
-        rng.fill(&mut nonce_buf);
-        let nonce = hex::encode(nonce_buf);
-
-        let scope = self.config.scopes.join(" ");
-        let url = format!(
-            "{}/authorize?response_type=code&client_id={}&redirect_uri={}&scope={}&state={}",
-            self.config.issuer.trim_end_matches('/'),
-            url_encode_component(&self.config.client_id),
-            url_encode_component(&self.config.redirect_uri),
-            url_encode_component(&scope),
-            url_encode_component(&nonce),
-        );
-        (url, nonce)
-    }
-
-    /// Exchange an authorization code for tokens.
-    /// Placeholder — returns an error because real HTTP exchange is not wired up yet.
-    pub fn exchange_code(&self, _code: &str) -> Result<TokenResponse, String> {
-        Err("OIDC token exchange not configured".into())
-    }
-
-    /// Validate a session cookie value and return the session if still valid.
-    pub fn validate_session_cookie(&self, cookie: &str) -> Option<Session> {
-        self.sessions.get_session(cookie)
-    }
-
-    /// Map IdP group names to a Wardex role using the configured group_mapping.
-    /// Returns the highest-privilege matching role, or `"viewer"` if no group matches.
-    pub fn extract_role_from_groups(&self, groups: &[String]) -> String {
-        // Priority order: admin > analyst > viewer.
-        let priority = ["admin", "analyst", "viewer"];
-
-        let mut best: Option<&str> = None;
-        for group in groups {
-            if let Some(role) = self.config.group_mapping.get(group) {
-                let role_str = role.as_str();
-                match best {
-                    None => best = Some(role_str),
-                    Some(current) => {
-                        let cur_idx = priority
-                            .iter()
-                            .position(|&p| p == current)
-                            .unwrap_or(usize::MAX);
-                        let new_idx = priority
-                            .iter()
-                            .position(|&p| p == role_str)
-                            .unwrap_or(usize::MAX);
-                        if new_idx < cur_idx {
-                            best = Some(role_str);
-                        }
-                    }
-                }
-            }
-        }
-        best.unwrap_or("viewer").to_string()
-    }
-}
-
-fn url_encode_component(input: &str) -> String {
-    let mut out = String::with_capacity(input.len() * 3);
-    for byte in input.bytes() {
-        match byte {
-            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' => {
-                out.push(byte as char);
-            }
-            _ => {
-                out.push('%');
-                out.push(char::from(b"0123456789ABCDEF"[(byte >> 4) as usize]));
-                out.push(char::from(b"0123456789ABCDEF"[(byte & 0x0F) as usize]));
-            }
-        }
-    }
-    out
-}
-
 fn constant_time_eq(left: &[u8], right: &[u8]) -> bool {
     if left.len() != right.len() {
         return false;
@@ -402,28 +295,6 @@ fn constant_time_eq(left: &[u8], right: &[u8]) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    fn test_config() -> OidcConfig {
-        let mut group_mapping = HashMap::new();
-        group_mapping.insert("soc-admins".into(), "admin".into());
-        group_mapping.insert("soc-analysts".into(), "analyst".into());
-        group_mapping.insert("soc-viewers".into(), "viewer".into());
-
-        OidcConfig {
-            enabled: true,
-            issuer: "https://idp.example.com".into(),
-            client_id: "wardex-console".into(),
-            client_secret: "super-secret".into(),
-            redirect_uri: "https://wardex.local/callback".into(),
-            scopes: vec![
-                "openid".into(),
-                "profile".into(),
-                "email".into(),
-                "groups".into(),
-            ],
-            group_mapping,
-        }
-    }
 
     #[test]
     fn default_config_disabled() {
@@ -506,106 +377,6 @@ mod tests {
         store.cleanup_expired();
         assert!(store.get_session(&_expired).is_none());
         assert!(store.get_session(&alive).is_some());
-    }
-
-    // ── Role mapping ────────────────────────────────────────────
-
-    #[test]
-    fn role_mapping_admin() {
-        let mgr = AuthManager::new(test_config());
-        let role = mgr.extract_role_from_groups(&["soc-admins".into()]);
-        assert_eq!(role, "admin");
-    }
-
-    #[test]
-    fn role_mapping_highest_wins() {
-        let mgr = AuthManager::new(test_config());
-        let role = mgr.extract_role_from_groups(&[
-            "soc-viewers".into(),
-            "soc-analysts".into(),
-            "soc-admins".into(),
-        ]);
-        assert_eq!(role, "admin");
-    }
-
-    #[test]
-    fn role_mapping_unknown_defaults_to_viewer() {
-        let mgr = AuthManager::new(test_config());
-        let role = mgr.extract_role_from_groups(&["random-group".into()]);
-        assert_eq!(role, "viewer");
-    }
-
-    #[test]
-    fn role_mapping_empty_groups() {
-        let mgr = AuthManager::new(test_config());
-        let role = mgr.extract_role_from_groups(&[]);
-        assert_eq!(role, "viewer");
-    }
-
-    // ── Auth URL construction ───────────────────────────────────
-
-    #[test]
-    fn build_auth_url_has_required_params() {
-        let mgr = AuthManager::new(test_config());
-        let (url, nonce) = mgr.build_auth_url();
-
-        assert!(url.starts_with("https://idp.example.com/authorize?"));
-        assert!(url.contains("response_type=code"));
-        assert!(url.contains("client_id=wardex-console"));
-        assert!(url.contains("redirect_uri=https%3A%2F%2Fwardex.local%2Fcallback"));
-        assert!(url.contains("scope=openid%20profile%20email%20groups"));
-        assert!(url.contains(&format!("state={}", nonce)));
-        assert_eq!(nonce.len(), 32); // 16 bytes hex-encoded
-    }
-
-    #[test]
-    fn build_auth_url_encodes_special_characters() {
-        let mut cfg = test_config();
-        cfg.client_id = "wardex console".into();
-        cfg.redirect_uri = "https://wardex.local/callback?tenant=acme&next=/admin".into();
-        cfg.scopes = vec!["openid".into(), "profile email".into()];
-
-        let mgr = AuthManager::new(cfg);
-        let (url, _) = mgr.build_auth_url();
-
-        assert!(url.contains("client_id=wardex%20console"));
-        assert!(url.contains(
-            "redirect_uri=https%3A%2F%2Fwardex.local%2Fcallback%3Ftenant%3Dacme%26next%3D%2Fadmin"
-        ));
-        assert!(url.contains("scope=openid%20profile%20email"));
-    }
-
-    // ── Exchange code placeholder ───────────────────────────────
-
-    #[test]
-    fn exchange_code_returns_error() {
-        let mgr = AuthManager::new(test_config());
-        let result = mgr.exchange_code("auth-code-123");
-        assert!(result.is_err());
-        assert_eq!(result.unwrap_err(), "OIDC token exchange not configured");
-    }
-
-    // ── Session cookie validation ───────────────────────────────
-
-    #[test]
-    fn validate_session_cookie_valid() {
-        let mgr = AuthManager::new(test_config());
-        let sid = mgr.sessions.create_session(
-            "u5",
-            "u5@example.com",
-            "analyst",
-            &["soc-analysts".to_string()],
-            8,
-        );
-        let session = mgr.validate_session_cookie(&sid).expect("should be valid");
-        assert_eq!(session.email, "u5@example.com");
-        assert_eq!(session.groups, vec!["soc-analysts"]);
-    }
-
-    #[test]
-    fn validate_session_cookie_invalid() {
-        let mgr = AuthManager::new(test_config());
-        assert!(mgr.validate_session_cookie("bogus-cookie").is_none());
     }
 
     #[test]
