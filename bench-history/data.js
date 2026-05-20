@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1779263910552,
+  "lastUpdate": 1779276443432,
   "repoUrl": "https://github.com/pinkysworld/Wardex",
   "entries": {
     "Wardex criterion benches": [
@@ -10791,6 +10791,114 @@ window.BENCHMARK_DATA = {
             "name": "sigma_evaluate_20_rules",
             "value": 35519,
             "range": "± 247",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "85413447+pinkysworld@users.noreply.github.com",
+            "name": "pinkysworld",
+            "username": "pinkysworld"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "9189449b48e30ca231c31d2ecc82ada45742048f",
+          "message": "Merge pull request #75 from pinkysworld/claude/openapi-feeds\n\ndocs(openapi): document the /api/feeds/* route family",
+          "timestamp": "2026-05-20T13:19:21+02:00",
+          "tree_id": "b6652be31a3eff83288dfefb162776452b1ef3ab",
+          "url": "https://github.com/pinkysworld/Wardex/commit/9189449b48e30ca231c31d2ecc82ada45742048f"
+        },
+        "date": 1779276442684,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "full_pipeline/5",
+            "value": 49040,
+            "range": "± 221",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "full_pipeline/50",
+            "value": 403882,
+            "range": "± 2106",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "full_pipeline/200",
+            "value": 1865689,
+            "range": "± 35915",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "full_pipeline/1000",
+            "value": 17010530,
+            "range": "± 55500",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "detector_evaluate_single",
+            "value": 682,
+            "range": "± 1",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "detector_window_stream_256",
+            "value": 874540,
+            "range": "± 4476",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "shared_storage_observed_schema_read",
+            "value": 126,
+            "range": "± 1",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "shared_storage_4_threads_64_alerts",
+            "value": 164216,
+            "range": "± 1914",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "policy_evaluate_single",
+            "value": 240,
+            "range": "± 0",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "throughput/1000_samples",
+            "value": 17238751,
+            "range": "± 116826",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "search_500_events",
+            "value": 113256,
+            "range": "± 334",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "hunt_field_query",
+            "value": 94046,
+            "range": "± 1563",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "ml_triage_rf",
+            "value": 54,
+            "range": "± 0",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "sigma_evaluate_20_rules",
+            "value": 35524,
+            "range": "± 588",
             "unit": "ns/iter"
           }
         ]
