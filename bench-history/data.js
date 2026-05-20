@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1779195162921,
+  "lastUpdate": 1779254217898,
   "repoUrl": "https://github.com/pinkysworld/Wardex",
   "entries": {
     "Wardex criterion benches": [
@@ -10469,6 +10469,112 @@ window.BENCHMARK_DATA = {
             "name": "sigma_evaluate_20_rules",
             "value": 35928,
             "range": "± 251",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "name": "pinkysworld",
+            "username": "pinkysworld",
+            "email": "85413447+pinkysworld@users.noreply.github.com"
+          },
+          "committer": {
+            "name": "GitHub",
+            "username": "web-flow",
+            "email": "noreply@github.com"
+          },
+          "id": "95415173c3becda457cf7abd5661df6df7bd415f",
+          "message": "Merge pull request #71 from pinkysworld/claude/funny-clarke-404be4\n\nReal ML triage, post-quantum signatures, and live threat feeds",
+          "timestamp": "2026-05-19T12:42:48Z",
+          "url": "https://github.com/pinkysworld/Wardex/commit/95415173c3becda457cf7abd5661df6df7bd415f"
+        },
+        "date": 1779254217415,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "full_pipeline/5",
+            "value": 49153,
+            "range": "± 191",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "full_pipeline/50",
+            "value": 411072,
+            "range": "± 1435",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "full_pipeline/200",
+            "value": 1907260,
+            "range": "± 7854",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "full_pipeline/1000",
+            "value": 17954116,
+            "range": "± 44874",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "detector_evaluate_single",
+            "value": 645,
+            "range": "± 1",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "detector_window_stream_256",
+            "value": 851573,
+            "range": "± 1839",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "shared_storage_observed_schema_read",
+            "value": 136,
+            "range": "± 0",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "shared_storage_4_threads_64_alerts",
+            "value": 145535,
+            "range": "± 2233",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "policy_evaluate_single",
+            "value": 238,
+            "range": "± 0",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "throughput/1000_samples",
+            "value": 18196054,
+            "range": "± 346546",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "search_500_events",
+            "value": 109272,
+            "range": "± 799",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "hunt_field_query",
+            "value": 88566,
+            "range": "± 1840",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "ml_triage_rf",
+            "value": 51,
+            "range": "± 1",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "sigma_evaluate_20_rules",
+            "value": 34952,
+            "range": "± 239",
             "unit": "ns/iter"
           }
         ]
