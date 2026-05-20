@@ -776,6 +776,15 @@ impl Config {
                     peer.node_id
                 ));
             }
+            if cluster.require_tls {
+                let addr = peer.addr.trim().trim_end_matches('/');
+                if addr.starts_with("http://") {
+                    return Err(format!(
+                        "cluster peer {} uses http://; cluster.require_tls is on (peers must be https:// or a bare host:port that will be upgraded)",
+                        peer.node_id
+                    ));
+                }
+            }
         }
 
         Ok(())
