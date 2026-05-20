@@ -162,6 +162,7 @@ pub mod wasm_engine;
 // ── Infrastructure ───────────────────────────────────────────────────────────
 pub mod attestation;
 pub mod inventory;
+pub mod server_cluster;
 pub mod server_feeds;
 pub mod server_ml;
 pub mod server_response;
