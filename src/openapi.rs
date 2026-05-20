@@ -3897,6 +3897,74 @@ pub fn wardex_openapi_spec(version: &str) -> OpenApiSpec {
                 &["status"],
             ),
         )
+        // ── Threat-feed ingestion ────────────────────────────────────────────
+        .path(
+            "/api/feeds",
+            "get",
+            op(
+                "listFeeds",
+                "List all configured threat-intel feed sources",
+                &["threat-intel"],
+            ),
+        )
+        .path(
+            "/api/feeds",
+            "post",
+            op_post_status(
+                "201",
+                "createFeed",
+                "Register a new threat-intel feed source",
+                &["threat-intel"],
+                "FeedSource configuration JSON",
+            ),
+        )
+        .path(
+            "/api/feeds/{id}",
+            "delete",
+            op(
+                "deleteFeed",
+                "Remove a threat-intel feed source by ID",
+                &["threat-intel"],
+            ),
+        )
+        .path(
+            "/api/feeds/{id}/poll",
+            "post",
+            op_post(
+                "pollFeed",
+                "Ingest a caller-supplied payload through the feed's protocol parser",
+                &["threat-intel"],
+                "Raw feed payload (format depends on the feed's protocol)",
+            ),
+        )
+        .path(
+            "/api/feeds/{id}/fetch",
+            "post",
+            op_post_without_body(
+                "fetchFeed",
+                "Live HTTPS fetch from the feed URL and ingest the result",
+                &["threat-intel"],
+            ),
+        )
+        .path(
+            "/api/feeds/stats",
+            "get",
+            op(
+                "getFeedStats",
+                "Aggregate threat-feed ingestion statistics",
+                &["threat-intel"],
+            ),
+        )
+        .path(
+            "/api/feeds/hot-reload/hashes",
+            "post",
+            op_post(
+                "hotReloadMalwareHashes",
+                "Hot-reload the malware-hash database from a JSON payload without restart",
+                &["threat-intel"],
+                "JSON array of malware-hash entries",
+            ),
+        )
         .build()
 }
 
