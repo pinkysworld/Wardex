@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1779390587419,
+  "lastUpdate": 1779392232789,
   "repoUrl": "https://github.com/pinkysworld/Wardex",
   "entries": {
     "Wardex criterion benches": [
@@ -12193,6 +12193,114 @@ window.BENCHMARK_DATA = {
             "name": "sigma_evaluate_20_rules",
             "value": 35139,
             "range": "± 156",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "85413447+pinkysworld@users.noreply.github.com",
+            "name": "pinkysworld",
+            "username": "pinkysworld"
+          },
+          "committer": {
+            "email": "85413447+pinkysworld@users.noreply.github.com",
+            "name": "pinkysworld",
+            "username": "pinkysworld"
+          },
+          "distinct": true,
+          "id": "58e318efe94c1c75a06fe8548fbc5362422bf3fe",
+          "message": "feat(metrics): label per-request hot-path locks (authenticate_request, respond_api, is_feature_enabled)\n\nMigrates the three state.lock() callsites that sit on every authenticated API request to crate::state_lock::tracked_lock with descriptive labels:\n\n- authenticate_request bearer-token branch -> 'server/authenticate_request_bearer'\n\n- authenticate_request session-cookie branch -> 'server/authenticate_request_session'\n\n- respond_api audit-bump block -> 'server/respond_api_audit'\n\n- is_feature_enabled wrapper -> 'server/is_feature_enabled'\n\nThese four labels will dominate the wardex_state_lock_labeled_acquisitions_total series in production traffic, so they give the clearest signal of overall per-request lock pressure. Remaining state.lock() callsites (handle_api router @ line 18538, default_window match dispatcher @ 20328) sit inside large dispatch bodies and need a per-route label design before migration.\n\nVerification: cargo fmt --check, cargo clippy --all-targets -- -D warnings, cargo test --lib server::tests:: (67 pass), cargo test --test concurrent_smoke (1 pass), cargo test --test api_integration (239 pass).",
+          "timestamp": "2026-05-21T21:29:17+02:00",
+          "tree_id": "aebdff00c2d4a659784a0f9ab6643b505330fb89",
+          "url": "https://github.com/pinkysworld/Wardex/commit/58e318efe94c1c75a06fe8548fbc5362422bf3fe"
+        },
+        "date": 1779392231872,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "full_pipeline/5",
+            "value": 49074,
+            "range": "± 471",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "full_pipeline/50",
+            "value": 404620,
+            "range": "± 1388",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "full_pipeline/200",
+            "value": 1875247,
+            "range": "± 19986",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "full_pipeline/1000",
+            "value": 17033578,
+            "range": "± 180749",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "detector_evaluate_single",
+            "value": 672,
+            "range": "± 2",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "detector_window_stream_256",
+            "value": 872468,
+            "range": "± 5295",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "shared_storage_observed_schema_read",
+            "value": 127,
+            "range": "± 0",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "shared_storage_4_threads_64_alerts",
+            "value": 166897,
+            "range": "± 5575",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "policy_evaluate_single",
+            "value": 238,
+            "range": "± 1",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "throughput/1000_samples",
+            "value": 17188296,
+            "range": "± 58489",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "search_500_events",
+            "value": 112318,
+            "range": "± 289",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "hunt_field_query",
+            "value": 95956,
+            "range": "± 477",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "ml_triage_rf",
+            "value": 55,
+            "range": "± 0",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "sigma_evaluate_20_rules",
+            "value": 35302,
+            "range": "± 343",
             "unit": "ns/iter"
           }
         ]
