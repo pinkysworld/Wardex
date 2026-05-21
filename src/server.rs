@@ -745,7 +745,7 @@ fn load_local_open_source_av_signatures(state: &Arc<Mutex<AppState>>) -> usize {
         let Ok(content) = fs::read_to_string(&file_path) else {
             continue;
         };
-        let mut s = state.lock().unwrap_or_else(|e| e.into_inner());
+        let mut s = crate::state_lock::tracked_lock(state, "server/load_local_av_signatures");
         match s
             .malware_hash_db
             .load_clamav_hash_signatures(&content, Some(&format!("local:{}", file_path.display())))
@@ -1684,7 +1684,7 @@ pub async fn run_server(
     let shutdown_timeout_secs = initial_config.server.shutdown_timeout_secs;
 
     {
-        let mut s = state.lock().unwrap_or_else(|e| e.into_inner());
+        let mut s = crate::state_lock::tracked_lock(&state, "server/run_initial_config_apply");
         s.config = initial_config;
         let effective_rules = s.enterprise.effective_sigma_rules();
         s.sigma_engine.replace_rules(effective_rules);
@@ -2226,7 +2226,7 @@ fn spawn_test_server_with_state() -> (u16, String, Arc<Mutex<AppState>>) {
         extra: HashMap::new(),
     }));
     {
-        let mut s = state.lock().unwrap_or_else(|e| e.into_inner());
+        let mut s = crate::state_lock::tracked_lock(&state, "server/spawn_enterprise_rules_apply");
         let effective_rules = s.enterprise.effective_sigma_rules();
         s.sigma_engine.replace_rules(effective_rules);
     }
@@ -3402,6 +3402,8 @@ fn prometheus_metrics_payload(state: &AppState) -> String {
         .and_then(serde_json::Value::as_u64)
         .unwrap_or_default();
 
+    let lock_stats = crate::state_lock::snapshot();
+
     let metrics = [
         ("wardex_up", "gauge", 1_u64),
         ("wardex_alerts_total", "gauge", state.alerts.len() as u64),
@@ -3455,6 +3457,31 @@ fn prometheus_metrics_payload(state: &AppState) -> String {
             "gauge",
             state.server_start.elapsed().as_secs(),
         ),
+        (
+            "wardex_state_lock_acquisitions_total",
+            "counter",
+            lock_stats.acquisitions,
+        ),
+        (
+            "wardex_state_lock_wait_ns_total",
+            "counter",
+            lock_stats.wait_ns_total,
+        ),
+        (
+            "wardex_state_lock_slow_waits_total",
+            "counter",
+            lock_stats.slow_waits,
+        ),
+        (
+            "wardex_state_lock_max_wait_ns",
+            "gauge",
+            lock_stats.max_wait_ns,
+        ),
+        (
+            "wardex_state_lock_poisoned_total",
+            "counter",
+            lock_stats.poisoned,
+        ),
     ];
 
     let mut body = String::new();
@@ -3472,6 +3499,16 @@ fn prometheus_metrics_payload(state: &AppState) -> String {
         body.push_str(&value.to_string());
         body.push('\n');
     }
+
+    // Emit the derived mean-wait gauge separately because it is a float and
+    // does not fit the (name, type, u64) shape of the array above.
+    body.push_str("# HELP wardex_state_lock_mean_wait_ms\n");
+    body.push_str("# TYPE wardex_state_lock_mean_wait_ms gauge\n");
+    body.push_str(&format!(
+        "wardex_state_lock_mean_wait_ms {:.6}\n",
+        lock_stats.mean_wait_ms()
+    ));
+
     body
 }
 
@@ -4137,7 +4174,7 @@ fn complete_sso_callback(
     code: &str,
     csrf_state: &str,
 ) -> Result<(crate::auth::Session, String, String), String> {
-    let mut app_state = state.lock().unwrap_or_else(|e| e.into_inner());
+    let mut app_state = crate::state_lock::tracked_lock(state, "server/oidc_callback_exchange");
     let hinted_provider = provider_hint
         .as_deref()
         .map(str::trim)
@@ -18510,7 +18547,7 @@ fn handle_api(
 
     let response = match (method.clone(), route_path) {
         (Method::Get, "/api/auth/check") => {
-            let s = state.lock().unwrap_or_else(|e| e.into_inner());
+            let s = crate::state_lock::tracked_lock(state, "server/api_auth_check");
             let ttl = s.config.security.token_ttl_secs;
             let elapsed = s.token_issued_at.elapsed().as_secs();
             let remaining = if ttl > 0 {
@@ -18526,7 +18563,7 @@ fn handle_api(
         }
         (Method::Post, "/api/auth/rotate") => {
             let new_token = generate_token();
-            let mut s = state.lock().unwrap_or_else(|e| e.into_inner());
+            let mut s = crate::state_lock::tracked_lock(state, "server/api_auth_rotate");
             let old_token_prefix = s.token.chars().take(8).collect::<String>();
             s.token = new_token.clone();
             s.token_issued_at = std::time::Instant::now();

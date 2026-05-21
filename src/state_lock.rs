@@ -37,7 +37,6 @@ static LOCK_POISONED: AtomicU64 = AtomicU64::new(0);
 
 /// Read-only snapshot of the lock-instrumentation counters. Returned by
 /// [`snapshot`]; safe to render into Prometheus text or JSON diagnostics.
-#[allow(dead_code)] // Snapshot API is staged for the `/metrics` integration in the next tranche.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub(crate) struct LockStatsSnapshot {
     pub(crate) acquisitions: u64,
@@ -47,7 +46,6 @@ pub(crate) struct LockStatsSnapshot {
     pub(crate) poisoned: u64,
 }
 
-#[allow(dead_code)]
 impl LockStatsSnapshot {
     /// Convenience: returns the mean acquisition latency in milliseconds, or
     /// 0.0 when no acquisitions have been recorded yet.
@@ -61,7 +59,6 @@ impl LockStatsSnapshot {
 }
 
 /// Returns the current snapshot of lock-acquisition counters.
-#[allow(dead_code)]
 pub(crate) fn snapshot() -> LockStatsSnapshot {
     LockStatsSnapshot {
         acquisitions: LOCK_ACQUISITIONS.load(Ordering::Relaxed),

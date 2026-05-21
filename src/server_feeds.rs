@@ -15,7 +15,7 @@ use crate::server_response::{error_json, json_response};
 
 /// `GET /api/feeds` — list every configured feed source.
 pub(crate) fn handle_feeds_list(state: &Arc<Mutex<AppState>>) -> Response<Body> {
-    let s = state.lock().unwrap_or_else(|e| e.into_inner());
+    let s = crate::state_lock::tracked_lock(state, "server_feeds/handle_feeds_list");
     let body = serde_json::to_string(s.feed_engine.sources()).unwrap_or_default();
     json_response(&body, 200)
 }

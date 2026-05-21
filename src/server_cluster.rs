@@ -57,7 +57,10 @@ pub(crate) fn handle_cluster_vote(body: &[u8], state: &Arc<Mutex<AppState>>) -> 
         Ok(raw) => match serde_json::from_str::<crate::cluster::VoteRequest>(&raw) {
             Ok(request) => {
                 let response = {
-                    let s = state.lock().unwrap_or_else(|e| e.into_inner());
+                    let s = crate::state_lock::tracked_lock(
+                        state,
+                        "server_cluster/handle_cluster_vote",
+                    );
                     s.cluster.handle_vote_request(&request)
                 };
                 match serde_json::to_string(&response) {
