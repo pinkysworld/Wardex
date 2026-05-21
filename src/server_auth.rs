@@ -281,6 +281,51 @@ pub(crate) fn failed_auth_clear(ip: &str) {
     }
 }
 
+/// Test-only helper: records a synthetic failed-auth attempt for `ip`.
+///
+/// Exposed `#[doc(hidden)] pub` so integration tests in `tests/` can drive
+/// the process-global tracker with non-loopback IPs (loopback is exempt by
+/// design, which makes a real-IP HTTP E2E impossible from in-process tests).
+/// Production callers must continue to use the crate-private wrappers.
+#[doc(hidden)]
+pub fn __test_failed_auth_record(ip: &str) -> Option<u64> {
+    failed_auth_record(ip)
+}
+
+/// Test-only helper: clears the synthetic failed-auth state for `ip`.
+#[doc(hidden)]
+pub fn __test_failed_auth_clear(ip: &str) {
+    failed_auth_clear(ip);
+}
+
+/// Test-only helper: snapshots the failed-auth counters/stats.
+#[doc(hidden)]
+pub fn __test_failed_auth_stats() -> FailedAuthStatsSnapshot {
+    let s = failed_auth_stats();
+    FailedAuthStatsSnapshot {
+        failures_total: s.failures_total,
+        lockouts_triggered_total: s.lockouts_triggered_total,
+        lockout_breach_attempts_total: s.lockout_breach_attempts_total,
+        resets_total: s.resets_total,
+        exempt_skips_total: s.exempt_skips_total,
+        active_lockouts: s.active_lockouts,
+        tracked_entries: s.tracked_entries,
+    }
+}
+
+/// Public mirror of `FailedAuthStats` for test consumers.
+#[doc(hidden)]
+#[derive(Debug, Clone, Copy)]
+pub struct FailedAuthStatsSnapshot {
+    pub failures_total: u64,
+    pub lockouts_triggered_total: u64,
+    pub lockout_breach_attempts_total: u64,
+    pub resets_total: u64,
+    pub exempt_skips_total: u64,
+    pub active_lockouts: u64,
+    pub tracked_entries: u64,
+}
+
 /// Returns the 429 response carrying the retry-after, used when the IP is
 /// already locked out from prior failed auth attempts.
 pub(crate) fn failed_auth_locked_response(retry_after_secs: u64) -> Response<Body> {
