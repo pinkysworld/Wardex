@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1779388831141,
+  "lastUpdate": 1779390587419,
   "repoUrl": "https://github.com/pinkysworld/Wardex",
   "entries": {
     "Wardex criterion benches": [
@@ -12085,6 +12085,114 @@ window.BENCHMARK_DATA = {
             "name": "sigma_evaluate_20_rules",
             "value": 38281,
             "range": "± 205",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "85413447+pinkysworld@users.noreply.github.com",
+            "name": "pinkysworld",
+            "username": "pinkysworld"
+          },
+          "committer": {
+            "email": "85413447+pinkysworld@users.noreply.github.com",
+            "name": "pinkysworld",
+            "username": "pinkysworld"
+          },
+          "distinct": true,
+          "id": "5d22b05b93b686d1ed27966f7a792669b7da75f0",
+          "message": "feat(metrics): label-aware lock metrics + failed-auth observability\n\nBuilds on 90462e6:\n\n- src/state_lock.rs: per-label LabelStats registry (HashMap<&'static str, LabelStats>) populated by tracked_lock; MAX_TRACKED_LABELS=128 caps registry growth, label_snapshot() returns sorted entries for stable Prometheus output. Adds 2 new tests (per-label counter and sort determinism); loosens 2 global-counter equality asserts to >= 1 to be robust against parallel test execution.\n\n- src/server_auth.rs: AtomicU64 counters for failures_total, lockouts_triggered_total, lockout_breach_attempts_total, resets_total, exempt_skips_total + failed_auth_stats() snapshot fn that also reports active_lockouts (now < locked_until) and tracked_entries by briefly locking the tracker. Adds 3 new tests; brings the file to 15 unit tests.\n\n- src/server.rs prometheus_metrics_payload: emits 5 labeled lock series (wardex_state_lock_labeled_*) and 7 failed-auth series (wardex_failed_auth_*) including active_lockouts gauge. New helper prom_escape_label() backslash-escapes \\, \", \\n in label values.\n\nVerification: cargo fmt --check, cargo clippy --all-targets -- -D warnings, cargo test --lib state_lock:: (7 pass), cargo test --lib server_auth:: (15 pass).",
+          "timestamp": "2026-05-21T21:01:23+02:00",
+          "tree_id": "c840622d494d1ee42febfe2588d3d4c5fe11402c",
+          "url": "https://github.com/pinkysworld/Wardex/commit/5d22b05b93b686d1ed27966f7a792669b7da75f0"
+        },
+        "date": 1779390586933,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "full_pipeline/5",
+            "value": 48849,
+            "range": "± 538",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "full_pipeline/50",
+            "value": 407989,
+            "range": "± 1360",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "full_pipeline/200",
+            "value": 1896440,
+            "range": "± 16252",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "full_pipeline/1000",
+            "value": 17847172,
+            "range": "± 38138",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "detector_evaluate_single",
+            "value": 616,
+            "range": "± 1",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "detector_window_stream_256",
+            "value": 852626,
+            "range": "± 18328",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "shared_storage_observed_schema_read",
+            "value": 136,
+            "range": "± 0",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "shared_storage_4_threads_64_alerts",
+            "value": 146857,
+            "range": "± 1832",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "policy_evaluate_single",
+            "value": 244,
+            "range": "± 1",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "throughput/1000_samples",
+            "value": 17994066,
+            "range": "± 117167",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "search_500_events",
+            "value": 105502,
+            "range": "± 394",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "hunt_field_query",
+            "value": 89474,
+            "range": "± 1540",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "ml_triage_rf",
+            "value": 51,
+            "range": "± 0",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "sigma_evaluate_20_rules",
+            "value": 35139,
+            "range": "± 156",
             "unit": "ns/iter"
           }
         ]
