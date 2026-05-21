@@ -744,3 +744,146 @@ export async function loginThroughForm(page, { token = TOKEN, onboarded = true }
   await expect(page.locator('.auth-badge')).toContainText('Connected');
   await expect(page.locator('.role-badge')).toContainText('admin');
 }
+
+/**
+ * Install a WebSocket mock for the live-event stream so e2e specs can drive
+ * deterministic disconnect / backlog / replay regression scenarios without
+ * standing up the Rust backend.
+ *
+ * The app connects to `/ws/events` (see `useWebSocket` in src/hooks.jsx). We
+ * intercept that URL via Playwright's `page.routeWebSocket` (Playwright 1.48+)
+ * and:
+ *   * push the caller-supplied `initialMessages` as soon as the client opens,
+ *   * forward each subsequent app -> server frame through `onMessage(payload,
+ *     ws, page)` so specs can scripted-respond,
+ *   * optionally close the socket after `autoCloseAfterMs` with `closeCode`
+ *     and `closeReason` to exercise reconnect paths.
+ *
+ * The handle returned exposes:
+ *   * `connections` — array of `{ ws, opened, closed, messagesIn,
+ *     messagesOut }` records for assertions,
+ *   * `broadcast(payload)` — push a frame to every live client,
+ *   * `closeAll(code, reason)` — terminate every live client.
+ *
+ * Usage:
+ *   const ws = await mockWebSocket(page, {
+ *     initialMessages: [{ kind: 'hello' }],
+ *     onMessage(payload, socket) {
+ *       if (payload?.kind === 'subscribe') socket.send(JSON.stringify({ kind: 'ack' }));
+ *     },
+ *   });
+ *   // ...exercise UI...
+ *   ws.broadcast({ kind: 'tick', ts: 1 });
+ *   ws.closeAll(1006, 'simulated drop');
+ *
+ * @public
+ */
+export async function mockWebSocket(
+  page,
+  {
+    urlPattern = '**/ws/events',
+    initialMessages = [],
+    onMessage = null,
+    autoCloseAfterMs = null,
+    closeCode = 1000,
+    closeReason = 'mock close',
+  } = {},
+) {
+  const connections = [];
+
+  const encode = (payload) => {
+    if (payload == null) return '';
+    if (typeof payload === 'string') return payload;
+    if (payload instanceof ArrayBuffer || ArrayBuffer.isView(payload)) return payload;
+    return JSON.stringify(payload);
+  };
+
+  const decode = (raw) => {
+    if (raw == null) return raw;
+    if (typeof raw !== 'string') return raw;
+    try {
+      return JSON.parse(raw);
+    } catch {
+      return raw;
+    }
+  };
+
+  await page.routeWebSocket(urlPattern, (ws) => {
+    const record = {
+      ws,
+      opened: true,
+      closed: false,
+      closeCode: null,
+      closeReason: null,
+      messagesIn: [], // app -> server
+      messagesOut: [], // server -> app
+    };
+    connections.push(record);
+
+    const send = (payload) => {
+      if (record.closed) return;
+      const frame = encode(payload);
+      ws.send(frame);
+      record.messagesOut.push(payload);
+    };
+
+    for (const msg of initialMessages) {
+      send(msg);
+    }
+
+    ws.onMessage((raw) => {
+      const decoded = decode(raw);
+      record.messagesIn.push(decoded);
+      if (typeof onMessage === 'function') {
+        try {
+          onMessage(decoded, { send, close: (c, r) => ws.close(c, r) }, page);
+        } catch (err) {
+          // Surface handler errors in the test log without aborting the route.
+          console.error('[mockWebSocket] onMessage handler threw:', err);
+        }
+      }
+    });
+
+    ws.onClose((code, reason) => {
+      record.closed = true;
+      record.closeCode = code;
+      record.closeReason = reason;
+    });
+
+    if (autoCloseAfterMs != null) {
+      setTimeout(() => {
+        if (!record.closed) {
+          try {
+            ws.close(closeCode, closeReason);
+          } catch {
+            /* ignore double-close */
+          }
+        }
+      }, autoCloseAfterMs);
+    }
+  });
+
+  return {
+    connections,
+    broadcast(payload) {
+      const frame = encode(payload);
+      for (const rec of connections) {
+        if (!rec.closed) {
+          rec.ws.send(frame);
+          rec.messagesOut.push(payload);
+        }
+      }
+    },
+    closeAll(code = closeCode, reason = closeReason) {
+      for (const rec of connections) {
+        if (!rec.closed) {
+          try {
+            rec.ws.close(code, reason);
+          } catch {
+            /* ignore */
+          }
+        }
+      }
+    },
+  };
+}
