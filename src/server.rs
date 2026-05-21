@@ -18627,12 +18627,12 @@ fn handle_api(
         let provided = bearer_token(headers);
         let valid = secure_token_eq(provided.as_deref(), &required_agent_token);
         if !valid {
-            if let Some(lockout) = failed_auth_record(remote_addr) {
-                if let Ok(mut s) = state.lock() {
-                    s.audit_log
-                        .record("POST", "/api/_failed_auth", remote_addr, 429, false);
-                    let _ = lockout; // recorded; audit entry above carries the signal
-                }
+            if let Some(lockout) = failed_auth_record(remote_addr)
+                && let Ok(mut s) = state.lock()
+            {
+                s.audit_log
+                    .record("POST", "/api/_failed_auth", remote_addr, 429, false);
+                let _ = lockout; // recorded; audit entry above carries the signal
             }
             return respond_api(
                 state,
