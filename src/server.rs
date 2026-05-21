@@ -3510,126 +3510,14 @@ fn prometheus_metrics_payload(state: &AppState) -> String {
     ));
 
     // Per-callsite (labeled) lock metrics. The label is the static string
-    // passed to `tracked_lock(state, "...")`; values are sanitized to keep
-    // Prometheus exposition format valid.
-    let label_stats = crate::state_lock::label_snapshot();
-    if !label_stats.is_empty() {
-        body.push_str("# HELP wardex_state_lock_labeled_acquisitions_total\n");
-        body.push_str("# TYPE wardex_state_lock_labeled_acquisitions_total counter\n");
-        for (label, stats) in &label_stats {
-            body.push_str(&format!(
-                "wardex_state_lock_labeled_acquisitions_total{{label=\"{}\"}} {}\n",
-                prom_escape_label(label),
-                stats.acquisitions
-            ));
-        }
-        body.push_str("# HELP wardex_state_lock_labeled_wait_ns_total\n");
-        body.push_str("# TYPE wardex_state_lock_labeled_wait_ns_total counter\n");
-        for (label, stats) in &label_stats {
-            body.push_str(&format!(
-                "wardex_state_lock_labeled_wait_ns_total{{label=\"{}\"}} {}\n",
-                prom_escape_label(label),
-                stats.wait_ns_total
-            ));
-        }
-        body.push_str("# HELP wardex_state_lock_labeled_slow_waits_total\n");
-        body.push_str("# TYPE wardex_state_lock_labeled_slow_waits_total counter\n");
-        for (label, stats) in &label_stats {
-            body.push_str(&format!(
-                "wardex_state_lock_labeled_slow_waits_total{{label=\"{}\"}} {}\n",
-                prom_escape_label(label),
-                stats.slow_waits
-            ));
-        }
-        body.push_str("# HELP wardex_state_lock_labeled_max_wait_ns\n");
-        body.push_str("# TYPE wardex_state_lock_labeled_max_wait_ns gauge\n");
-        for (label, stats) in &label_stats {
-            body.push_str(&format!(
-                "wardex_state_lock_labeled_max_wait_ns{{label=\"{}\"}} {}\n",
-                prom_escape_label(label),
-                stats.max_wait_ns
-            ));
-        }
-        body.push_str("# HELP wardex_state_lock_labeled_mean_wait_ms\n");
-        body.push_str("# TYPE wardex_state_lock_labeled_mean_wait_ms gauge\n");
-        for (label, stats) in &label_stats {
-            body.push_str(&format!(
-                "wardex_state_lock_labeled_mean_wait_ms{{label=\"{}\"}} {:.6}\n",
-                prom_escape_label(label),
-                stats.mean_wait_ms()
-            ));
-        }
-    }
+    // passed to `tracked_lock(state, "...")`; the rendering helper lives in
+    // `src/server_metrics.rs` so this file stays focused on orchestration.
+    body.push_str(&crate::server_metrics::render_labeled_lock_metrics());
 
     // Failed-auth observability counters and active-lockout gauge.
-    let auth_stats = crate::server_auth::failed_auth_stats();
-    for (name, metric_type, value) in [
-        (
-            "wardex_failed_auth_failures_total",
-            "counter",
-            auth_stats.failures_total,
-        ),
-        (
-            "wardex_failed_auth_lockouts_triggered_total",
-            "counter",
-            auth_stats.lockouts_triggered_total,
-        ),
-        (
-            "wardex_failed_auth_lockout_breach_attempts_total",
-            "counter",
-            auth_stats.lockout_breach_attempts_total,
-        ),
-        (
-            "wardex_failed_auth_resets_total",
-            "counter",
-            auth_stats.resets_total,
-        ),
-        (
-            "wardex_failed_auth_exempt_skips_total",
-            "counter",
-            auth_stats.exempt_skips_total,
-        ),
-        (
-            "wardex_failed_auth_active_lockouts",
-            "gauge",
-            auth_stats.active_lockouts,
-        ),
-        (
-            "wardex_failed_auth_tracked_entries",
-            "gauge",
-            auth_stats.tracked_entries,
-        ),
-    ] {
-        body.push_str("# HELP ");
-        body.push_str(name);
-        body.push('\n');
-        body.push_str("# TYPE ");
-        body.push_str(name);
-        body.push(' ');
-        body.push_str(metric_type);
-        body.push('\n');
-        body.push_str(name);
-        body.push(' ');
-        body.push_str(&value.to_string());
-        body.push('\n');
-    }
+    body.push_str(&crate::server_metrics::render_failed_auth_metrics());
 
     body
-}
-
-/// Escape a Prometheus label value per the exposition format: backslash,
-/// double-quote, and newline must be backslash-escaped.
-fn prom_escape_label(value: &str) -> String {
-    let mut out = String::with_capacity(value.len());
-    for ch in value.chars() {
-        match ch {
-            '\\' => out.push_str("\\\\"),
-            '"' => out.push_str("\\\""),
-            '\n' => out.push_str("\\n"),
-            other => out.push(other),
-        }
-    }
-    out
 }
 
 fn respond_api(
