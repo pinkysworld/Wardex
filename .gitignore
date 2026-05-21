@@ -23,3 +23,29 @@ developerID_application.cer
 development.cer
 *.p12
 *.pfx
+
+# Local CLI scratch output (gh run watch, npm logs, ad-hoc dumps).
+# These accumulate in the repo root during release-day debugging.
+/out.txt
+/jobs_out.txt
+/jobs_status.json
+/job_info.json
+/run_out.txt
+/run_status.json
+/runs.json
+/runs_apt.json
+/runs_homebrew.json
+/runs_pages.json
+/recent_runs.json
+/release_out.txt
+/release_run.json
+/release_status.json
+/release_jobs.json
+/workflows.json
+admin-console/log.txt
+admin-console/npm_log.txt
+admin-console/npm_output.txt
+admin-console/status.txt
+admin-console/test_output.txt
+admin-console/test_results.log
+.claude/
