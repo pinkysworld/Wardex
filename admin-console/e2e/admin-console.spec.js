@@ -114,8 +114,15 @@ test.describe('Admin console smoke', () => {
     await expect(page.getByText('SSH burst detection')).toBeVisible({ timeout: 10000 });
     await page.getByText('SSH burst detection').click();
     await expect(page.locator('.topbar-title')).toHaveText('Threat Detection');
+    // Wait for the lazy-loaded Threat Detection route to fully commit before
+    // navigating again. Clicking "Help For View" while the /detection chunk is
+    // still suspended lets the late-resolving route mount and re-navigate via
+    // its mount effect, overriding the /help navigation (a CI-only race).
+    await expect(page).toHaveURL(/\/detection/);
+    await expect(page.getByText('Detection Engineering Workspace')).toBeVisible({ timeout: 15000 });
 
     await page.getByRole('button', { name: 'Help For View' }).click();
+    await expect(page).toHaveURL(/\/help/);
     await expect(page.locator('.topbar-title')).toHaveText('Help & Docs');
     await expect(page.getByText('Detection Support')).toBeVisible();
 
