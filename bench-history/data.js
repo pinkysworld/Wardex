@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1779367061441,
+  "lastUpdate": 1779382997485,
   "repoUrl": "https://github.com/pinkysworld/Wardex",
   "entries": {
     "Wardex criterion benches": [
@@ -11437,6 +11437,114 @@ window.BENCHMARK_DATA = {
             "name": "sigma_evaluate_20_rules",
             "value": 35962,
             "range": "± 189",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "85413447+pinkysworld@users.noreply.github.com",
+            "name": "pinkysworld",
+            "username": "pinkysworld"
+          },
+          "committer": {
+            "email": "85413447+pinkysworld@users.noreply.github.com",
+            "name": "pinkysworld",
+            "username": "pinkysworld"
+          },
+          "distinct": true,
+          "id": "4bf4b7da105dc4864ceaf787f70706fa0ae4d3c1",
+          "message": "release: cut v1.0.24 — secret hardening, nav-race CI guard, Settings flake fix\n\n- Failed-auth lockout with per-IP exponential backoff (30s→1h cap)\n  and audit-log evidence for every 429 lockout; loopback exempted\n- Constant-time agent-token comparison via shared secure_token_eq\n- Zeroize Drop on MlDsaKeyPair seed and LamportPrivateKey pairs\n- Nav-race pathname guards on Infrastructure.jsx and HelpDocs.jsx\n- scripts/check_nav_race_guard.py wired into contract-parity CI\n- Settings integrations flake fix via findBy* boundary lookups\n- Five new server::tests for tracker semantics (1518 lib tests pass)",
+          "timestamp": "2026-05-21T18:54:16+02:00",
+          "tree_id": "931f9293bb7a0db859e9bdabf67afea77da42cba",
+          "url": "https://github.com/pinkysworld/Wardex/commit/4bf4b7da105dc4864ceaf787f70706fa0ae4d3c1"
+        },
+        "date": 1779382996931,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "full_pipeline/5",
+            "value": 48665,
+            "range": "± 269",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "full_pipeline/50",
+            "value": 408524,
+            "range": "± 2594",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "full_pipeline/200",
+            "value": 1899242,
+            "range": "± 14547",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "full_pipeline/1000",
+            "value": 17848657,
+            "range": "± 279757",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "detector_evaluate_single",
+            "value": 608,
+            "range": "± 14",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "detector_window_stream_256",
+            "value": 853604,
+            "range": "± 2259",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "shared_storage_observed_schema_read",
+            "value": 136,
+            "range": "± 0",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "shared_storage_4_threads_64_alerts",
+            "value": 146208,
+            "range": "± 1770",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "policy_evaluate_single",
+            "value": 238,
+            "range": "± 0",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "throughput/1000_samples",
+            "value": 17981114,
+            "range": "± 46689",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "search_500_events",
+            "value": 106875,
+            "range": "± 528",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "hunt_field_query",
+            "value": 88032,
+            "range": "± 293",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "ml_triage_rf",
+            "value": 52,
+            "range": "± 0",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "sigma_evaluate_20_rules",
+            "value": 35235,
+            "range": "± 327",
             "unit": "ns/iter"
           }
         ]
