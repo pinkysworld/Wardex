@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1779392733098,
+  "lastUpdate": 1779393417830,
   "repoUrl": "https://github.com/pinkysworld/Wardex",
   "entries": {
     "Wardex criterion benches": [
@@ -12409,6 +12409,114 @@ window.BENCHMARK_DATA = {
             "name": "sigma_evaluate_20_rules",
             "value": 35050,
             "range": "± 505",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "85413447+pinkysworld@users.noreply.github.com",
+            "name": "pinkysworld",
+            "username": "pinkysworld"
+          },
+          "committer": {
+            "email": "85413447+pinkysworld@users.noreply.github.com",
+            "name": "pinkysworld",
+            "username": "pinkysworld"
+          },
+          "distinct": true,
+          "id": "c3e57e60811a92d6df03ee904665d633465acfc9",
+          "message": "refactor(server): extract Prometheus formatting helpers into server_metrics module\n\nLifts the labeled-lock rendering block, the failed-auth rendering block, and prom_escape_label out of src/server.rs into a new src/server_metrics.rs module. The orchestrator prometheus_metrics_payload stays in server.rs because it still needs many crate-private AppState fields, but it now delegates the two self-contained rendering segments via crate::server_metrics::render_labeled_lock_metrics() and ::render_failed_auth_metrics().\n\nNet effect: ~110 lines moved off server.rs (which now sits at ~20.7k lines down from ~20.8k), plus two unit tests added directly against the extracted helpers (prom_escape_label escaping rules, failed-auth block emits every expected series).\n\nVerification: cargo fmt, cargo clippy --all-targets -- -D warnings (0 warnings), cargo test --lib server_metrics:: (2 pass), cargo test --lib server::tests:: (67 pass), cargo test --test failed_auth_lockout (1 pass), cargo test --test concurrent_smoke (1 pass), cargo test --test api_integration (239 pass).",
+          "timestamp": "2026-05-21T21:48:32+02:00",
+          "tree_id": "b270b2f538fa2e9806f7d39237a3296b04064c96",
+          "url": "https://github.com/pinkysworld/Wardex/commit/c3e57e60811a92d6df03ee904665d633465acfc9"
+        },
+        "date": 1779393417390,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "full_pipeline/5",
+            "value": 49255,
+            "range": "± 192",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "full_pipeline/50",
+            "value": 408326,
+            "range": "± 1561",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "full_pipeline/200",
+            "value": 1894343,
+            "range": "± 26121",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "full_pipeline/1000",
+            "value": 18317264,
+            "range": "± 181205",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "detector_evaluate_single",
+            "value": 609,
+            "range": "± 1",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "detector_window_stream_256",
+            "value": 852405,
+            "range": "± 8259",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "shared_storage_observed_schema_read",
+            "value": 136,
+            "range": "± 0",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "shared_storage_4_threads_64_alerts",
+            "value": 147939,
+            "range": "± 2966",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "policy_evaluate_single",
+            "value": 237,
+            "range": "± 0",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "throughput/1000_samples",
+            "value": 18265230,
+            "range": "± 168445",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "search_500_events",
+            "value": 107827,
+            "range": "± 956",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "hunt_field_query",
+            "value": 86917,
+            "range": "± 416",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "ml_triage_rf",
+            "value": 50,
+            "range": "± 0",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "sigma_evaluate_20_rules",
+            "value": 35934,
+            "range": "± 722",
             "unit": "ns/iter"
           }
         ]
