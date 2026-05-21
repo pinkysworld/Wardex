@@ -3646,7 +3646,7 @@ fn respond_api(
     });
     let status_code = response.status().as_u16();
     {
-        let mut s = state.lock().unwrap_or_else(|e| e.into_inner());
+        let mut s = crate::state_lock::tracked_lock(state, "server/respond_api_audit");
         if status_code >= 400 {
             s.error_count += 1;
         }
@@ -4369,7 +4369,7 @@ fn complete_sso_callback(
 
 fn authenticate_request(headers: &HeaderMap, state: &Arc<Mutex<AppState>>) -> AuthIdentity {
     if let Some(token) = bearer_token(headers) {
-        let state = state.lock().unwrap_or_else(|e| e.into_inner());
+        let state = crate::state_lock::tracked_lock(state, "server/authenticate_request_bearer");
         let ttl = state.config.security.token_ttl_secs;
         if ttl == 0 || state.token_issued_at.elapsed().as_secs() <= ttl {
             let input = token.as_bytes();
@@ -4392,7 +4392,7 @@ fn authenticate_request(headers: &HeaderMap, state: &Arc<Mutex<AppState>>) -> Au
         }
     }
     if let Some(token) = session_cookie_token(headers) {
-        let state = state.lock().unwrap_or_else(|e| e.into_inner());
+        let state = crate::state_lock::tracked_lock(state, "server/authenticate_request_session");
         if let Some(identity) = session_identity_from_store(token, &state) {
             return identity;
         }
@@ -9449,7 +9449,7 @@ fn check_rbac(
 }
 
 fn is_feature_enabled(state: &Arc<Mutex<AppState>>, feature: &str) -> bool {
-    let s = state.lock().unwrap_or_else(|e| e.into_inner());
+    let s = crate::state_lock::tracked_lock(state, "server/is_feature_enabled");
     s.feature_flags.is_enabled(feature, "default")
 }
 
