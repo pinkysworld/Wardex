@@ -10,6 +10,7 @@
 use axum::body::Body;
 use axum::http::HeaderMap;
 use axum::response::Response;
+use std::sync::atomic::{AtomicU64, Ordering};
 
 /// Parses an `Authorization: Bearer <token>` header, returning the token.
 ///
@@ -179,26 +180,104 @@ fn failed_auth_tracker() -> &'static std::sync::Mutex<FailedAuthTracker> {
     TRACKER.get_or_init(|| std::sync::Mutex::new(FailedAuthTracker::new()))
 }
 
+// ── Observability counters ──────────────────────────────────────────────────
+//
+// All counters are observability-only and use `Ordering::Relaxed`. They are
+// surfaced by [`failed_auth_stats`] and rendered in `/api/metrics` so
+// operators can detect brute-force pressure even before a lockout fires.
+
+static FAILED_AUTH_FAILURES_TOTAL: AtomicU64 = AtomicU64::new(0);
+static FAILED_AUTH_LOCKOUTS_TRIGGERED: AtomicU64 = AtomicU64::new(0);
+static FAILED_AUTH_LOCKOUT_BREACH_ATTEMPTS: AtomicU64 = AtomicU64::new(0);
+static FAILED_AUTH_RESETS_TOTAL: AtomicU64 = AtomicU64::new(0);
+static FAILED_AUTH_EXEMPT_SKIPS: AtomicU64 = AtomicU64::new(0);
+
+/// Read-only snapshot of the failed-auth observability counters plus the
+/// currently-active lockout count.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub(crate) struct FailedAuthStats {
+    pub(crate) failures_total: u64,
+    pub(crate) lockouts_triggered_total: u64,
+    pub(crate) lockout_breach_attempts_total: u64,
+    pub(crate) resets_total: u64,
+    pub(crate) exempt_skips_total: u64,
+    pub(crate) active_lockouts: u64,
+    pub(crate) tracked_entries: u64,
+}
+
+/// Returns the current failed-auth observability snapshot. Locks the
+/// tracker briefly to count active lockouts; safe to call from
+/// `/api/metrics` request handlers.
+pub(crate) fn failed_auth_stats() -> FailedAuthStats {
+    let (active, tracked) = match failed_auth_tracker().lock() {
+        Ok(g) => {
+            let now = FailedAuthTracker::now_secs();
+            let active = g.entries.values().filter(|s| now < s.locked_until).count() as u64;
+            (active, g.entries.len() as u64)
+        }
+        Err(e) => {
+            let g = e.into_inner();
+            let now = FailedAuthTracker::now_secs();
+            let active = g.entries.values().filter(|s| now < s.locked_until).count() as u64;
+            (active, g.entries.len() as u64)
+        }
+    };
+    FailedAuthStats {
+        failures_total: FAILED_AUTH_FAILURES_TOTAL.load(Ordering::Relaxed),
+        lockouts_triggered_total: FAILED_AUTH_LOCKOUTS_TRIGGERED.load(Ordering::Relaxed),
+        lockout_breach_attempts_total: FAILED_AUTH_LOCKOUT_BREACH_ATTEMPTS.load(Ordering::Relaxed),
+        resets_total: FAILED_AUTH_RESETS_TOTAL.load(Ordering::Relaxed),
+        exempt_skips_total: FAILED_AUTH_EXEMPT_SKIPS.load(Ordering::Relaxed),
+        active_lockouts: active,
+        tracked_entries: tracked,
+    }
+}
+
 /// Returns Some(retry_after_secs) if the IP is locked out.
 pub(crate) fn failed_auth_locked(ip: &str) -> Option<u64> {
-    failed_auth_tracker()
+    if FailedAuthTracker::is_exempt(ip) {
+        FAILED_AUTH_EXEMPT_SKIPS.fetch_add(1, Ordering::Relaxed);
+        return None;
+    }
+    let remaining = failed_auth_tracker()
         .lock()
         .ok()
-        .and_then(|mut g| g.locked_remaining(ip))
+        .and_then(|mut g| g.locked_remaining(ip));
+    if remaining.is_some() {
+        FAILED_AUTH_LOCKOUT_BREACH_ATTEMPTS.fetch_add(1, Ordering::Relaxed);
+    }
+    remaining
 }
 
 /// Records a failed auth attempt. Returns Some(lockout_secs) if this attempt
 /// triggered a fresh lockout (callers can audit-log the event).
 pub(crate) fn failed_auth_record(ip: &str) -> Option<u64> {
-    failed_auth_tracker()
+    if FailedAuthTracker::is_exempt(ip) {
+        FAILED_AUTH_EXEMPT_SKIPS.fetch_add(1, Ordering::Relaxed);
+        return None;
+    }
+    FAILED_AUTH_FAILURES_TOTAL.fetch_add(1, Ordering::Relaxed);
+    let triggered = failed_auth_tracker()
         .lock()
         .ok()
-        .and_then(|mut g| g.record_failure(ip))
+        .and_then(|mut g| g.record_failure(ip));
+    if triggered.is_some() {
+        FAILED_AUTH_LOCKOUTS_TRIGGERED.fetch_add(1, Ordering::Relaxed);
+    }
+    triggered
 }
 
 pub(crate) fn failed_auth_clear(ip: &str) {
+    if FailedAuthTracker::is_exempt(ip) {
+        FAILED_AUTH_EXEMPT_SKIPS.fetch_add(1, Ordering::Relaxed);
+        return;
+    }
     if let Ok(mut g) = failed_auth_tracker().lock() {
+        let existed = g.entries.contains_key(ip);
         g.record_success(ip);
+        if existed {
+            FAILED_AUTH_RESETS_TOTAL.fetch_add(1, Ordering::Relaxed);
+        }
     }
 }
 
@@ -372,5 +451,71 @@ mod tests {
                 .and_then(|v| v.to_str().ok()),
             Some("application/json")
         );
+    }
+
+    #[test]
+    fn failed_auth_stats_increment_on_failure_and_lockout() {
+        // Use a unique IP so concurrent test cases cannot perturb the global
+        // counters; assert on deltas.
+        let ip = "203.0.113.77";
+        let before = failed_auth_stats();
+        // Below threshold: increments failures_total but not lockouts.
+        for _ in 0..(FAILED_AUTH_THRESHOLD - 1) {
+            failed_auth_record(ip);
+        }
+        let mid = failed_auth_stats();
+        assert_eq!(
+            mid.failures_total - before.failures_total,
+            (FAILED_AUTH_THRESHOLD - 1) as u64
+        );
+        assert_eq!(
+            mid.lockouts_triggered_total,
+            before.lockouts_triggered_total
+        );
+        // Threshold-th failure triggers a lockout.
+        failed_auth_record(ip);
+        let after = failed_auth_stats();
+        assert_eq!(
+            after.failures_total - before.failures_total,
+            FAILED_AUTH_THRESHOLD as u64
+        );
+        assert_eq!(
+            after.lockouts_triggered_total - before.lockouts_triggered_total,
+            1
+        );
+        // Probing while locked counts as a breach attempt.
+        let before_breach = failed_auth_stats().lockout_breach_attempts_total;
+        assert!(failed_auth_locked(ip).is_some());
+        let after_breach = failed_auth_stats().lockout_breach_attempts_total;
+        assert_eq!(after_breach - before_breach, 1);
+        // Cleanup so subsequent tests don't see a stale entry.
+        failed_auth_clear(ip);
+    }
+
+    #[test]
+    fn failed_auth_clear_records_reset_when_entry_existed() {
+        let ip = "198.51.100.9";
+        // Seed a failure so the IP has an entry.
+        failed_auth_record(ip);
+        let before = failed_auth_stats();
+        failed_auth_clear(ip);
+        let after = failed_auth_stats();
+        assert_eq!(after.resets_total - before.resets_total, 1);
+        // Clearing an unknown IP does NOT count as a reset.
+        let before2 = failed_auth_stats();
+        failed_auth_clear("198.51.100.10");
+        let after2 = failed_auth_stats();
+        assert_eq!(after2.resets_total, before2.resets_total);
+    }
+
+    #[test]
+    fn failed_auth_stats_count_exempt_skips() {
+        let before = failed_auth_stats();
+        // Loopback addresses are exempt and should bump the exempt counter.
+        assert!(failed_auth_record("127.0.0.1").is_none());
+        assert!(failed_auth_locked("::1").is_none());
+        failed_auth_clear("127.0.0.5");
+        let after = failed_auth_stats();
+        assert!(after.exempt_skips_total - before.exempt_skips_total >= 3);
     }
 }
