@@ -3661,12 +3661,15 @@ impl FailedAuthTracker {
         }
         let now = Self::now_secs();
         self.sweep(now);
-        let entry = self.entries.entry(ip.to_string()).or_insert(FailedAuthState {
-            fails: 0,
-            first_fail_at: now,
-            locked_until: 0,
-            lockout_secs: FAILED_AUTH_INITIAL_LOCKOUT_SECS,
-        });
+        let entry = self
+            .entries
+            .entry(ip.to_string())
+            .or_insert(FailedAuthState {
+                fails: 0,
+                first_fail_at: now,
+                locked_until: 0,
+                lockout_secs: FAILED_AUTH_INITIAL_LOCKOUT_SECS,
+            });
         if now.saturating_sub(entry.first_fail_at) > FAILED_AUTH_WINDOW_SECS {
             entry.fails = 0;
             entry.first_fail_at = now;
@@ -18626,13 +18629,8 @@ fn handle_api(
         if !valid {
             if let Some(lockout) = failed_auth_record(remote_addr) {
                 if let Ok(mut s) = state.lock() {
-                    s.audit_log.record(
-                        "POST",
-                        "/api/_failed_auth",
-                        remote_addr,
-                        429,
-                        false,
-                    );
+                    s.audit_log
+                        .record("POST", "/api/_failed_auth", remote_addr, 429, false);
                     let _ = lockout; // recorded; audit entry above carries the signal
                 }
             }
