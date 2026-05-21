@@ -215,3 +215,162 @@ pub(crate) fn failed_auth_locked_response(retry_after_secs: u64) -> Response<Bod
         .body(Body::from(body))
         .unwrap_or_else(|_| Response::new(Body::from("rate limited")))
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use axum::http::HeaderValue;
+
+    fn hdr(value: &str) -> HeaderMap {
+        let mut h = HeaderMap::new();
+        h.insert("authorization", HeaderValue::from_str(value).unwrap());
+        h
+    }
+
+    #[test]
+    fn bearer_token_rejects_empty_token_after_scheme() {
+        // "Bearer " with nothing after is not a valid token.
+        assert_eq!(bearer_token(&hdr("Bearer ")), None);
+        // Whitespace-only payload also rejected.
+        assert_eq!(bearer_token(&hdr("Bearer    ")), None);
+    }
+
+    #[test]
+    fn bearer_token_returns_none_for_non_bearer_schemes() {
+        assert_eq!(bearer_token(&hdr("Basic dXNlcjpwYXNz")), None);
+        assert_eq!(bearer_token(&hdr("Digest nonce=abc")), None);
+    }
+
+    #[test]
+    fn bearer_token_returns_none_when_header_missing() {
+        let headers = HeaderMap::new();
+        assert_eq!(bearer_token(&headers), None);
+    }
+
+    #[test]
+    fn bearer_token_trims_surrounding_whitespace() {
+        assert_eq!(
+            bearer_token(&hdr("Bearer   tok-42  ")).as_deref(),
+            Some("tok-42")
+        );
+    }
+
+    #[test]
+    fn secure_token_eq_rejects_length_mismatch_without_panic() {
+        // The early length check must not panic on differing-length inputs.
+        assert!(!secure_token_eq(Some("short"), "much-longer-token"));
+        assert!(!secure_token_eq(Some("much-longer-token"), "short"));
+    }
+
+    #[test]
+    fn secure_token_eq_handles_empty_expected() {
+        assert!(secure_token_eq(Some(""), ""));
+        assert!(!secure_token_eq(Some("x"), ""));
+    }
+
+    #[test]
+    fn failed_auth_tracker_exempts_unknown_and_ipv6_loopback() {
+        let mut t = FailedAuthTracker::new();
+        for _ in 0..(FAILED_AUTH_THRESHOLD + 2) {
+            assert!(t.record_failure("unknown").is_none());
+            assert!(t.record_failure("::1").is_none());
+            assert!(t.record_failure("[::1]").is_none());
+            assert!(t.record_failure("").is_none());
+        }
+        assert!(t.locked_remaining("unknown").is_none());
+        assert!(t.locked_remaining("::1").is_none());
+        assert!(t.locked_remaining("[::1]").is_none());
+        assert!(t.locked_remaining("").is_none());
+    }
+
+    #[test]
+    fn failed_auth_tracker_lockout_caps_at_max() {
+        let mut t = FailedAuthTracker::new();
+        // Force the lockout to grow until it hits the cap. Each lockout cycle
+        // requires THRESHOLD failures; we cap iteration so the test stays fast.
+        for _ in 0..40 {
+            for _ in 0..FAILED_AUTH_THRESHOLD {
+                t.record_failure("9.9.9.9");
+            }
+        }
+        let stored = t
+            .entries
+            .get("9.9.9.9")
+            .expect("entry exists after lockouts");
+        assert_eq!(stored.lockout_secs, FAILED_AUTH_MAX_LOCKOUT_SECS);
+    }
+
+    #[test]
+    fn failed_auth_tracker_sweep_drops_idle_entries() {
+        let mut t = FailedAuthTracker::new();
+        // Inject a stale entry that is past the window and not locked.
+        t.entries.insert(
+            "8.8.8.8".to_string(),
+            FailedAuthState {
+                fails: 1,
+                first_fail_at: 0,
+                locked_until: 0,
+                lockout_secs: FAILED_AUTH_INITIAL_LOCKOUT_SECS,
+            },
+        );
+        // last_sweep = 0 so the >=60s gate trivially passes.
+        t.sweep(FAILED_AUTH_WINDOW_SECS + 120);
+        assert!(!t.entries.contains_key("8.8.8.8"));
+    }
+
+    #[test]
+    fn failed_auth_tracker_sweep_keeps_locked_entries() {
+        let mut t = FailedAuthTracker::new();
+        let now = FailedAuthTracker::now_secs();
+        t.entries.insert(
+            "8.8.4.4".to_string(),
+            FailedAuthState {
+                fails: 0,
+                first_fail_at: 0,
+                locked_until: now + 300,
+                lockout_secs: FAILED_AUTH_INITIAL_LOCKOUT_SECS,
+            },
+        );
+        t.sweep(now);
+        assert!(t.entries.contains_key("8.8.4.4"));
+    }
+
+    #[test]
+    fn failed_auth_tracker_sweep_clears_when_entry_cap_exceeded() {
+        let mut t = FailedAuthTracker::new();
+        // Insert MAX_ENTRIES + 1 stale entries that would otherwise be retained.
+        let now = FailedAuthTracker::now_secs();
+        for i in 0..(FAILED_AUTH_MAX_ENTRIES + 1) {
+            t.entries.insert(
+                format!("10.0.{}.{}", i / 256, i % 256),
+                FailedAuthState {
+                    fails: 1,
+                    first_fail_at: now,
+                    locked_until: now + 600,
+                    lockout_secs: FAILED_AUTH_INITIAL_LOCKOUT_SECS,
+                },
+            );
+        }
+        // Force the sweep to run (last_sweep=0).
+        t.sweep(now);
+        assert!(t.entries.is_empty(), "sweep should clear when over cap");
+    }
+
+    #[test]
+    fn failed_auth_locked_response_carries_retry_after_header() {
+        let resp = failed_auth_locked_response(42);
+        assert_eq!(resp.status(), 429);
+        assert_eq!(
+            resp.headers()
+                .get("retry-after")
+                .and_then(|v| v.to_str().ok()),
+            Some("42")
+        );
+        assert_eq!(
+            resp.headers()
+                .get("content-type")
+                .and_then(|v| v.to_str().ok()),
+            Some("application/json")
+        );
+    }
+}

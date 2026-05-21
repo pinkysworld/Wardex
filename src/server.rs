@@ -3547,7 +3547,7 @@ impl AuthIdentity {
 
 fn cluster_request_authorized(headers: &HeaderMap, state: &Arc<Mutex<AppState>>) -> bool {
     let provided = bearer_token(headers);
-    let s = state.lock().unwrap_or_else(|e| e.into_inner());
+    let s = crate::state_lock::tracked_lock(state, "server/cluster_request_authorized");
     if let Some(cluster_token) = s.config.cluster.auth_token.as_deref() {
         return secure_token_eq(provided.as_deref(), cluster_token);
     }
