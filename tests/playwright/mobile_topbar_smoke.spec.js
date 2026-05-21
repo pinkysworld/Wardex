@@ -99,6 +99,13 @@ test("mobile help action preserves threat-detection route scope", async ({
     { waitUntil: "domcontentloaded" },
   );
   await expect(page).toHaveURL(/\/admin\/detection\?.*rule=/);
+  // Wait for the Threat Detection workspace to fully render so its rule-sync
+  // effect has already written rule= and settled. Otherwise a late
+  // setSearchParams (relative replace) can re-fire during the /help
+  // navigation and clobber it, leaving the route stuck on /detection.
+  await expect(page.getByText("Detection Engineering Workspace")).toBeVisible({
+    timeout: 15000,
+  });
 
   await page.getByRole("button", { name: "More", exact: true }).click();
   await expect(page.getByRole("menu", { name: "More actions" })).toBeVisible();

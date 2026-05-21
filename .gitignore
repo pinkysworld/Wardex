@@ -9,6 +9,7 @@ xdr_ai_handoff_pack/
 xdr_ai_handoff_pack.zip
 release/
 output/
+site-build/
 test-results/
 playwright-report/
 migrate_axum.py

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { useApi, useApiGroup, useToast } from '../hooks.jsx';
 import * as api from '../api.js';
 import { JsonDetails, SummaryGrid, SideDrawer, WorkspaceEmptyState } from './operator.jsx';
@@ -924,6 +924,7 @@ export default function ThreatDetection() {
   const toast = useToast();
   const [confirm, confirmUI] = useConfirm();
   const navigate = useNavigate();
+  const location = useLocation();
   const [searchParams, setSearchParams] = useSearchParams();
   const { data: profile } = useApi(api.detectionProfile);
   const { data: summary } = useApi(api.detectionSummary);
@@ -1234,10 +1235,17 @@ export default function ThreatDetection() {
 
   useEffect(() => {
     if (!selectedRule || selectedRule.id === selectedRuleId) return;
+    // Only sync the rule param while this route is actually mounted as the
+    // active location. `/help` (the contextual-help target) is lazy, so
+    // navigating there suspends and keeps this component mounted during the
+    // chunk load. Without this guard a late re-fire would issue a relative
+    // setSearchParams that resolves against /detection and clobbers the
+    // pending /help navigation, leaving the route stuck on Threat Detection.
+    if (location.pathname !== '/detection') return;
     const next = new URLSearchParams(searchParams);
     next.set('rule', selectedRule.id);
     setSearchParams(next, { replace: true });
-  }, [selectedRule, selectedRuleId, searchParams, setSearchParams]);
+  }, [selectedRule, selectedRuleId, searchParams, setSearchParams, location.pathname]);
 
   useEffect(() => {
     if (huntIntent && activeDrawerMode !== 'hunt') {

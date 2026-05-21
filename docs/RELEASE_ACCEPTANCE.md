@@ -166,6 +166,27 @@ Major-version release acceptance additionally requires:
 3. No `deprecated: true` endpoints in `docs/openapi.yaml` without a
    documented removal target version.
 
+## Cutting a release
+
+The version string lives in many files (Rust crate, both SDKs and their
+lockfiles, Helm chart, OTLP config, OpenAPI contract). `Cargo.toml` is the
+single source of truth; every other location must agree with it.
+
+Bump all of them at once, then regenerate the changelog surfaces:
+
+```bash
+python3 scripts/bump_version.py <new-version>          # e.g. 1.0.24
+python3 scripts/changelog_reset_unreleased.py <new-version>
+python3 scripts/build_changelog.py CHANGELOG.md site/changelog.html
+cargo build                                            # refresh Cargo.lock
+python3 scripts/bump_version.py --check                # verify no drift
+```
+
+`scripts/bump_version.py --check` also runs in CI (the `contract-parity`
+job), so a missed version location fails fast with a precise pointer to the
+offending file instead of surfacing later as an opaque `git diff` in the
+`sdk-generation` job.
+
 ## Manual release review
 
 The automated gate does not replace operator review. Before cutting a release:
