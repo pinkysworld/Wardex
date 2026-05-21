@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1779384304266,
+  "lastUpdate": 1779386392683,
   "repoUrl": "https://github.com/pinkysworld/Wardex",
   "entries": {
     "Wardex criterion benches": [
@@ -11761,6 +11761,114 @@ window.BENCHMARK_DATA = {
             "name": "sigma_evaluate_20_rules",
             "value": 35549,
             "range": "± 536",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "85413447+pinkysworld@users.noreply.github.com",
+            "name": "pinkysworld",
+            "username": "pinkysworld"
+          },
+          "committer": {
+            "email": "85413447+pinkysworld@users.noreply.github.com",
+            "name": "pinkysworld",
+            "username": "pinkysworld"
+          },
+          "distinct": true,
+          "id": "bc28f5519556c702478e466961f4737fc6579c8f",
+          "message": "refactor(server): extract auth helpers into server_auth.rs\n\nContinues the v1.0.23 decomposition pattern (server_ml/feeds/cluster/response/routing). Moves the self-contained token parsing (bearer_token, secure_token_eq) and per-IP failed-auth backoff tracker (FailedAuthTracker + failed_auth_locked/record/clear/locked_response and 5 constants) out of the monolithic server.rs into a dedicated module. ~200 lines extracted; zero AppState coupling; all 5 tracker tests + the case-insensitive bearer test + the constant-time eq test still pass.",
+          "timestamp": "2026-05-21T19:51:28+02:00",
+          "tree_id": "2c1798e1f1ffa65dd67d70d3dedb568b278739dd",
+          "url": "https://github.com/pinkysworld/Wardex/commit/bc28f5519556c702478e466961f4737fc6579c8f"
+        },
+        "date": 1779386391586,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "full_pipeline/5",
+            "value": 49226,
+            "range": "± 232",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "full_pipeline/50",
+            "value": 402826,
+            "range": "± 3065",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "full_pipeline/200",
+            "value": 1853224,
+            "range": "± 18356",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "full_pipeline/1000",
+            "value": 17035118,
+            "range": "± 103119",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "detector_evaluate_single",
+            "value": 628,
+            "range": "± 2",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "detector_window_stream_256",
+            "value": 875508,
+            "range": "± 4553",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "shared_storage_observed_schema_read",
+            "value": 127,
+            "range": "± 0",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "shared_storage_4_threads_64_alerts",
+            "value": 162797,
+            "range": "± 1697",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "policy_evaluate_single",
+            "value": 240,
+            "range": "± 0",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "throughput/1000_samples",
+            "value": 17200301,
+            "range": "± 249192",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "search_500_events",
+            "value": 114369,
+            "range": "± 859",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "hunt_field_query",
+            "value": 94749,
+            "range": "± 275",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "ml_triage_rf",
+            "value": 54,
+            "range": "± 0",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "sigma_evaluate_20_rules",
+            "value": 35410,
+            "range": "± 217",
             "unit": "ns/iter"
           }
         ]
