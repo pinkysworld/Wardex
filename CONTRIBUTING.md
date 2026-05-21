@@ -129,6 +129,53 @@ Run the guard locally with:
 python3 scripts/check_panic_policy.py
 ```
 
+## Testing Patterns
+
+### Process-global atomics under parallel `cargo test`
+
+`cargo test` runs tests inside a single binary in parallel by default. Any
+counter or gauge stored in a `static AtomicU64` / `OnceLock<Mutex<…>>` —
+`crate::state_lock::*`, `crate::server_auth::FAILED_AUTH_*`, the request
+counters on `AppState`, etc. — is therefore **process-global**: every test in
+the same binary observes the same value, and the order in which they run is
+not deterministic.
+
+That makes naïve assertions like
+
+```rust
+let before = STATE_LOCK_ACQUISITIONS.load(Ordering::Relaxed);
+do_something();
+let after = STATE_LOCK_ACQUISITIONS.load(Ordering::Relaxed);
+assert_eq!(after, before + 1); // flaky — another test may have bumped it
+```
+
+flaky in practice. Use one of these patterns instead:
+
+1. **Unique labels + `label_snapshot()` for exact equality.** When the metric
+   supports a label dimension (e.g. `crate::state_lock::tracked_lock(state,
+   "my_test/scenario_x")`), pick a label string that no other test will ever
+   emit, then assert on the per-label snapshot. The label is the natural test
+   isolation key, so equality is safe.
+
+2. **`>= N` for aggregate counter deltas.** When the metric is unlabeled
+   (`wardex_failed_auth_failures_total`, `wardex_state_lock_acquisitions_total`,
+   …), snapshot the value before the action, take the delta, and assert
+   `delta >= expected` rather than `delta == expected`. Other tests may
+   concurrently bump the counter; they cannot reduce your delta.
+
+3. **Per-binary integration tests for true equality assertions.** Each file
+   under `tests/` builds its own integration binary with a fresh process and
+   zeroed atomics. When a test must observe `active_lockouts == 1` or
+   `failures_total == THRESHOLD` exactly, put it in its own `tests/<name>.rs`
+   file. `tests/failed_auth_lockout.rs` is the canonical example.
+
+For HTTP-level scenarios that depend on the request's source IP (failed-auth
+lockouts, per-IP rate limiting), remember that `127.0.0.1` / `::1` are exempt
+by design. Drive the process-global tracker directly via the
+`#[doc(hidden)] pub` helpers in `src/server_auth.rs` (e.g.
+`__test_failed_auth_record`) instead of trying to spoof the client IP at the
+TCP layer.
+
 ## Project Structure
 
 | Directory | Contents |
