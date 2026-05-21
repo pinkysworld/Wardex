@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1779386392683,
+  "lastUpdate": 1779387847932,
   "repoUrl": "https://github.com/pinkysworld/Wardex",
   "entries": {
     "Wardex criterion benches": [
@@ -11869,6 +11869,114 @@ window.BENCHMARK_DATA = {
             "name": "sigma_evaluate_20_rules",
             "value": 35410,
             "range": "± 217",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "85413447+pinkysworld@users.noreply.github.com",
+            "name": "pinkysworld",
+            "username": "pinkysworld"
+          },
+          "committer": {
+            "email": "85413447+pinkysworld@users.noreply.github.com",
+            "name": "pinkysworld",
+            "username": "pinkysworld"
+          },
+          "distinct": true,
+          "id": "bb8d798a761ac28da6781c315e0d748e6d4d8c56",
+          "message": "feat(server): lock-hold instrumentation primitive + server_auth test ratchet\n\nAdds two improvements that continue the v1.0.24 hardening / decomposition tranche:\n\n1. src/state_lock.rs (new): tracked_lock(mutex, label) wrapper that records acquisition latency into atomic counters (acquisitions, wait_ns_total, slow_waits, max_wait_ns, poisoned) plus a LockStatsSnapshot read-only view + mean_wait_ms helper. Threshold for 'slow wait' classification is 25ms. Migration is opt-in; cluster_request_authorized is wired as the first call site (single state.lock() on every cluster RPC). The snapshot API is allow(dead_code) until the /metrics endpoint integration ships in a follow-up.\n\n2. src/server_auth.rs: 11 new unit tests covering bearer_token empty/non-bearer/missing/whitespace edge cases, secure_token_eq length-mismatch and empty-expected paths, FailedAuthTracker IPv6 loopback / unknown / empty-IP exemptions, lockout cap at FAILED_AUTH_MAX_LOCKOUT_SECS, sweep dropping idle entries, sweep keeping locked entries, sweep clearing when MAX_ENTRIES exceeded, and failed_auth_locked_response carrying the correct retry-after + content-type headers.\n\nVerification: cargo fmt --all --check, cargo clippy --all-targets -- -D warnings, cargo test --lib state_lock:: (5 passed), cargo test --lib server_auth:: (12 passed).",
+          "timestamp": "2026-05-21T20:15:54+02:00",
+          "tree_id": "ee365588889d93b9aa548f964843f91f6472868d",
+          "url": "https://github.com/pinkysworld/Wardex/commit/bb8d798a761ac28da6781c315e0d748e6d4d8c56"
+        },
+        "date": 1779387847507,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "full_pipeline/5",
+            "value": 49587,
+            "range": "± 274",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "full_pipeline/50",
+            "value": 409980,
+            "range": "± 1650",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "full_pipeline/200",
+            "value": 1880160,
+            "range": "± 12908",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "full_pipeline/1000",
+            "value": 17124071,
+            "range": "± 205940",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "detector_evaluate_single",
+            "value": 620,
+            "range": "± 2",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "detector_window_stream_256",
+            "value": 874687,
+            "range": "± 1931",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "shared_storage_observed_schema_read",
+            "value": 127,
+            "range": "± 0",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "shared_storage_4_threads_64_alerts",
+            "value": 168325,
+            "range": "± 6932",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "policy_evaluate_single",
+            "value": 242,
+            "range": "± 2",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "throughput/1000_samples",
+            "value": 17453083,
+            "range": "± 148741",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "search_500_events",
+            "value": 116142,
+            "range": "± 1157",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "hunt_field_query",
+            "value": 95376,
+            "range": "± 543",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "ml_triage_rf",
+            "value": 55,
+            "range": "± 0",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "sigma_evaluate_20_rules",
+            "value": 36118,
+            "range": "± 632",
             "unit": "ns/iter"
           }
         ]
