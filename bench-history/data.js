@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1779340655902,
+  "lastUpdate": 1779367061441,
   "repoUrl": "https://github.com/pinkysworld/Wardex",
   "entries": {
     "Wardex criterion benches": [
@@ -11329,6 +11329,114 @@ window.BENCHMARK_DATA = {
             "name": "sigma_evaluate_20_rules",
             "value": 36101,
             "range": "± 206",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "85413447+pinkysworld@users.noreply.github.com",
+            "name": "pinkysworld",
+            "username": "pinkysworld"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "cc4cd8fa059797b871b420ae8b2a738265a27d1e",
+          "message": "Harden release versioning, fix e2e flake, redact PQC secrets (#83)\n\n* release: add version bump+verify script and wire drift guard into CI\n\nv1.0.23 hit two late CI failures because the version string lives in many\nfiles but was bumped ad hoc: sdk/python/wardex/__init__.py (__version__)\nand sdk/typescript/package-lock.json were missed, surfacing only as opaque\ngit diffs in the sdk-generation job.\n\nAdd scripts/bump_version.py with two modes:\n- `<version>` rewrites all 12 version fields across 9 files (Cargo, both\n  SDKs + the TS lockfile, Helm chart/values, OTLP, OpenAPI). Round-trip is\n  byte-clean.\n- `--check` verifies every location matches Cargo.toml (the source of\n  truth) and fails with a precise pointer to any drift.\n\nWire `--check` into the contract-parity CI job so a missed location fails\nfast with a clear message. Document the release-cut flow in\ndocs/RELEASE_ACCEPTANCE.md and gitignore the generated site-build/ artifact.\n\n* test(e2e): wait for lazy route to commit before contextual-help nav\n\nadmin-console.spec.js:88 intermittently failed in CI: after navigating to\nThreat Detection via a search result, clicking \"Help For View\" left the\ntopbar stuck on \"Threat Detection\". Root cause is a navigation race — the\nclick landed while the lazy /detection chunk was still suspended, so the\nlate-resolving route mounted and its setSearchParams mount effect\nre-navigated, overriding /help.\n\nWait for the /detection URL and the rendered Detection Engineering\nWorkspace (Suspense resolved) before clicking, and assert the /help URL\nafter. This synchronizes on the prior navigation completing instead of\nrelying on the retry. Verified with --repeat-each across chromium,\nfirefox, and webkit.\n\n* security(quantum): redact secret key material from Debug output\n\nSecurity review of the v1.0.23 PQC code found two issues:\n\n- LamportPrivateKey (pairs) and MlDsaKeyPair (seed) derived Debug, so the\n  secret signing material could leak into logs via {:?}. Replace the\n  derived Debug with manual impls that redact the secret fields and add a\n  # Security note: the serialized form still carries the secret and must\n  only be persisted through the encrypted store, never returned via API.\n- The module doc still described ML-DSA-65 as a \"FIPS 204 simulation\"; it\n  is a real implementation via the pure-Rust ml-dsa crate. Correct the\n  wording.\n\nThe GCP RS256 JWT signing and cluster peer-RPC auth paths reviewed clean:\nconstant-time token comparison (secure_token_eq), TLS upgrade with config\nvalidation rejecting http:// peers under require_tls, body-size limits on\ninbound RPCs, and no key material in error messages.\n\n* fix(detection): stop rule-sync effect from clobbering outbound nav\n\nThe contextual-help flow (\"Help For View\") intermittently failed in CI on\nboth the desktop (admin-console.spec.js) and mobile\n(mobile_topbar_smoke.spec.js) paths: after navigating to Threat Detection,\nclicking Help For View left the route stuck on /detection instead of /help.\n\nRoot cause: /help is a lazy route, so navigating there suspends and keeps\nThreatDetection mounted during the chunk load. Its rule-sync effect derives\na default rule when the URL has none and writes it back via a *relative*\nsetSearchParams({replace:true}). If that re-fires during the suspended\ntransition, the relative navigation resolves against /detection and\nclobbers the pending /help navigation.\n\nGuard the effect so it only writes the rule param while location.pathname\nis actually /detection. During the suspended transition the pathname is\nalready /help, so the effect bails and the navigation completes.\n\nAlso wait for the Threat Detection workspace to fully render in the mobile\nsmoke before navigating, mirroring the desktop spec, so all rule-data\neffects have settled before the interaction.\n\nVerified: 14 ThreatDetection unit tests pass; desktop contextual-help e2e\npasses under --repeat-each across browsers.",
+          "timestamp": "2026-05-21T14:29:25+02:00",
+          "tree_id": "100c75b006e0302ecaa52ebc9924f5cf40c8d380",
+          "url": "https://github.com/pinkysworld/Wardex/commit/cc4cd8fa059797b871b420ae8b2a738265a27d1e"
+        },
+        "date": 1779367060954,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "full_pipeline/5",
+            "value": 49359,
+            "range": "± 269",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "full_pipeline/50",
+            "value": 408701,
+            "range": "± 2606",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "full_pipeline/200",
+            "value": 1880694,
+            "range": "± 9499",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "full_pipeline/1000",
+            "value": 17549835,
+            "range": "± 93740",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "detector_evaluate_single",
+            "value": 625,
+            "range": "± 1",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "detector_window_stream_256",
+            "value": 863559,
+            "range": "± 4200",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "shared_storage_observed_schema_read",
+            "value": 127,
+            "range": "± 0",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "shared_storage_4_threads_64_alerts",
+            "value": 163662,
+            "range": "± 3420",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "policy_evaluate_single",
+            "value": 240,
+            "range": "± 12",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "throughput/1000_samples",
+            "value": 17583816,
+            "range": "± 118811",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "search_500_events",
+            "value": 114843,
+            "range": "± 437",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "hunt_field_query",
+            "value": 94639,
+            "range": "± 291",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "ml_triage_rf",
+            "value": 54,
+            "range": "± 0",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "sigma_evaluate_20_rules",
+            "value": 35962,
+            "range": "± 189",
             "unit": "ns/iter"
           }
         ]
