@@ -131,6 +131,10 @@ use crate::response::{
     ApprovalRecord as ResponseApprovalRecord, ApprovalStatus, ResponseAction, ResponseOrchestrator,
     ResponseRequest, ResponseTarget,
 };
+use crate::server_auth::{
+    bearer_token, failed_auth_clear, failed_auth_locked, failed_auth_locked_response,
+    failed_auth_record, secure_token_eq,
+};
 use crate::server_response::{
     cors_origin, csv_response, error_json, json_response, safe_body, security_headers,
     text_response,
@@ -3539,204 +3543,6 @@ impl AuthIdentity {
             _ => &[],
         }
     }
-}
-
-fn bearer_token(headers: &HeaderMap) -> Option<String> {
-    if let Some(val) = headers.get("authorization")
-        && let Ok(s) = val.to_str()
-        && let Some((scheme, token)) = s.split_once(char::is_whitespace)
-        && scheme.eq_ignore_ascii_case("bearer")
-    {
-        let trimmed = token.trim();
-        if !trimmed.is_empty() {
-            return Some(trimmed.to_string());
-        }
-    }
-    None
-}
-
-fn secure_token_eq(provided: Option<&str>, expected: &str) -> bool {
-    let Some(provided) = provided else {
-        return false;
-    };
-    let a = provided.as_bytes();
-    let b = expected.as_bytes();
-    if a.len() != b.len() {
-        return false;
-    }
-    let mut diff = 0u8;
-    for (x, y) in a.iter().zip(b.iter()) {
-        diff |= x ^ y;
-    }
-    diff == 0
-}
-
-// ── Failed-auth backoff tracker ─────────────────────────────────────────────
-//
-// The generic per-route rate limiter doesn't distinguish successful from
-// failed auth, so a brute-force attempt against `/api/auth/*` or the agent /
-// cluster bearer-token paths gets the full read-quota of attempts per minute.
-// This tracker layers an exponential backoff on *failed* auth specifically:
-//   - 5 consecutive failures from the same IP within 5 minutes → 30 s lockout
-//   - Lockout doubles on every subsequent burst (cap 1 h)
-//   - A success resets the counter
-//   - Loopback addresses (127.0.0.1 / ::1 / unknown) are exempt so local
-//     tooling and cluster peers aren't penalized
-//
-// Stored as a process-global so we can add it without rewiring AppState
-// constructors. Bounded in size by a periodic sweep.
-
-struct FailedAuthState {
-    fails: u32,
-    first_fail_at: u64,
-    locked_until: u64,
-    lockout_secs: u64,
-}
-
-struct FailedAuthTracker {
-    entries: std::collections::HashMap<String, FailedAuthState>,
-    last_sweep: u64,
-}
-
-const FAILED_AUTH_THRESHOLD: u32 = 5;
-const FAILED_AUTH_WINDOW_SECS: u64 = 300;
-const FAILED_AUTH_INITIAL_LOCKOUT_SECS: u64 = 30;
-const FAILED_AUTH_MAX_LOCKOUT_SECS: u64 = 3600;
-const FAILED_AUTH_MAX_ENTRIES: usize = 1024;
-
-impl FailedAuthTracker {
-    fn new() -> Self {
-        Self {
-            entries: std::collections::HashMap::new(),
-            last_sweep: 0,
-        }
-    }
-
-    fn now_secs() -> u64 {
-        std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .map(|d| d.as_secs())
-            .unwrap_or(0)
-    }
-
-    fn is_exempt(ip: &str) -> bool {
-        ip.is_empty()
-            || ip == "unknown"
-            || ip.starts_with("127.")
-            || ip == "::1"
-            || ip.starts_with("[::1]")
-    }
-
-    fn sweep(&mut self, now: u64) {
-        if now.saturating_sub(self.last_sweep) < 60 {
-            return;
-        }
-        self.last_sweep = now;
-        self.entries.retain(|_, s| {
-            now < s.locked_until || now.saturating_sub(s.first_fail_at) < FAILED_AUTH_WINDOW_SECS
-        });
-        if self.entries.len() > FAILED_AUTH_MAX_ENTRIES {
-            self.entries.clear();
-        }
-    }
-
-    /// Returns Some(remaining_secs) if the IP is currently locked out.
-    fn locked_remaining(&mut self, ip: &str) -> Option<u64> {
-        if Self::is_exempt(ip) {
-            return None;
-        }
-        let now = Self::now_secs();
-        self.sweep(now);
-        let s = self.entries.get(ip)?;
-        if now < s.locked_until {
-            Some(s.locked_until - now)
-        } else {
-            None
-        }
-    }
-
-    fn record_failure(&mut self, ip: &str) -> Option<u64> {
-        if Self::is_exempt(ip) {
-            return None;
-        }
-        let now = Self::now_secs();
-        self.sweep(now);
-        let entry = self
-            .entries
-            .entry(ip.to_string())
-            .or_insert(FailedAuthState {
-                fails: 0,
-                first_fail_at: now,
-                locked_until: 0,
-                lockout_secs: FAILED_AUTH_INITIAL_LOCKOUT_SECS,
-            });
-        if now.saturating_sub(entry.first_fail_at) > FAILED_AUTH_WINDOW_SECS {
-            entry.fails = 0;
-            entry.first_fail_at = now;
-        }
-        entry.fails = entry.fails.saturating_add(1);
-        if entry.fails >= FAILED_AUTH_THRESHOLD {
-            entry.locked_until = now + entry.lockout_secs;
-            let triggered = entry.lockout_secs;
-            entry.lockout_secs =
-                (entry.lockout_secs.saturating_mul(2)).min(FAILED_AUTH_MAX_LOCKOUT_SECS);
-            entry.fails = 0;
-            entry.first_fail_at = now;
-            Some(triggered)
-        } else {
-            None
-        }
-    }
-
-    fn record_success(&mut self, ip: &str) {
-        if Self::is_exempt(ip) {
-            return;
-        }
-        self.entries.remove(ip);
-    }
-}
-
-fn failed_auth_tracker() -> &'static std::sync::Mutex<FailedAuthTracker> {
-    static TRACKER: std::sync::OnceLock<std::sync::Mutex<FailedAuthTracker>> =
-        std::sync::OnceLock::new();
-    TRACKER.get_or_init(|| std::sync::Mutex::new(FailedAuthTracker::new()))
-}
-
-/// Returns Some(retry_after_secs) if the IP is locked out.
-fn failed_auth_locked(ip: &str) -> Option<u64> {
-    failed_auth_tracker()
-        .lock()
-        .ok()
-        .and_then(|mut g| g.locked_remaining(ip))
-}
-
-/// Records a failed auth attempt. Returns Some(lockout_secs) if this attempt
-/// triggered a fresh lockout (callers can audit-log the event).
-fn failed_auth_record(ip: &str) -> Option<u64> {
-    failed_auth_tracker()
-        .lock()
-        .ok()
-        .and_then(|mut g| g.record_failure(ip))
-}
-
-fn failed_auth_clear(ip: &str) {
-    if let Ok(mut g) = failed_auth_tracker().lock() {
-        g.record_success(ip);
-    }
-}
-
-/// Returns the 429 response carrying the retry-after, used when the IP is
-/// already locked out from prior failed auth attempts.
-fn failed_auth_locked_response(retry_after_secs: u64) -> Response<Body> {
-    let body = format!(
-        "{{\"error\":\"too many failed authentication attempts\",\"retry_after_secs\":{retry_after_secs},\"status\":429}}"
-    );
-    Response::builder()
-        .status(429)
-        .header("content-type", "application/json")
-        .header("retry-after", retry_after_secs.to_string())
-        .body(Body::from(body))
-        .unwrap_or_else(|_| Response::new(Body::from("rate limited")))
 }
 
 fn cluster_request_authorized(headers: &HeaderMap, state: &Arc<Mutex<AppState>>) -> bool {
@@ -33262,6 +33068,10 @@ mod tests {
     use crate::enrollment::EnrollRequest;
     use crate::event_forward::EventBatch;
     use crate::response::{ApprovalDecision as ResponseApprovalDecision, ApprovalRecord};
+    use crate::server_auth::{
+        FAILED_AUTH_INITIAL_LOCKOUT_SECS, FAILED_AUTH_MAX_LOCKOUT_SECS, FAILED_AUTH_THRESHOLD,
+        FailedAuthTracker,
+    };
     use crate::telemetry::TelemetrySample;
     use std::collections::HashMap as StdHashMap;
     use std::path::PathBuf;
