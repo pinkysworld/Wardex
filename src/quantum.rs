@@ -1,8 +1,9 @@
 //! Post-quantum cryptography, quantum-walk propagation, and key rotation.
 //!
 //! Implements Lamport one-time signatures (hash-based, quantum-resistant),
-//! ML-DSA-65 hybrid signatures (lattice-based, NIST FIPS 204 simulation),
-//! quantum-walk threat propagation models, and automated key rotation.
+//! ML-DSA-65 hybrid signatures (lattice-based, NIST FIPS 204, via the
+//! pure-Rust `ml-dsa` crate), quantum-walk threat propagation models, and
+//! automated key rotation.
 //! Covers research tracks R04 (quantum walk), R11 (PQ audit), R21 (PQ key rotation).
 
 use serde::{Deserialize, Serialize};
@@ -13,12 +14,28 @@ use crate::audit::sha256_hex;
 // ── Lamport One-Time Signatures (Post-Quantum) ───────────────────────────────
 
 /// A Lamport private key: 256 pairs of 256-bit random values.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+///
+/// # Security
+/// The `pairs` are secret signing material. `Debug` is implemented manually to
+/// redact them so the key cannot leak into logs via `{:?}`. The serialized form
+/// contains the secret and must only be persisted through the encrypted store,
+/// never returned over an API.
+#[derive(Clone, Serialize, Deserialize)]
 pub struct LamportPrivateKey {
     /// 256 pairs of (zero_preimage, one_preimage), each 32 bytes hex-encoded
     pub pairs: Vec<(String, String)>,
     pub key_id: String,
     pub used: bool,
+}
+
+impl std::fmt::Debug for LamportPrivateKey {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("LamportPrivateKey")
+            .field("pairs", &"<redacted>")
+            .field("key_id", &self.key_id)
+            .field("used", &self.used)
+            .finish()
+    }
 }
 
 /// A Lamport public key: 256 pairs of hash values.
@@ -493,7 +510,13 @@ fn decode_mldsa_verifying_key(vk_hex: &str) -> Option<VerifyingKey<MlDsa65>> {
 /// The signing key is derived deterministically from a 32-byte seed via the
 /// FIPS 204 key-generation procedure. The encoded verifying (public) key is
 /// retained so signatures can be verified without the secret seed.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+///
+/// # Security
+/// The `seed` is the secret that fully reconstructs the signing key. `Debug` is
+/// implemented manually to redact it so it cannot leak into logs via `{:?}`.
+/// The serialized form contains the seed and must only be persisted through the
+/// encrypted store, never returned over an API.
+#[derive(Clone, Serialize, Deserialize)]
 pub struct MlDsaKeyPair {
     pub key_id: String,
     /// 32-byte ML-DSA seed, hex-encoded (secret).
@@ -503,6 +526,18 @@ pub struct MlDsaKeyPair {
     /// SHA-256 of the encoded verifying key, hex.
     pub public_key_hash: String,
     pub algorithm: PqAlgorithm,
+}
+
+impl std::fmt::Debug for MlDsaKeyPair {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("MlDsaKeyPair")
+            .field("key_id", &self.key_id)
+            .field("seed", &"<redacted>")
+            .field("public_key", &self.public_key)
+            .field("public_key_hash", &self.public_key_hash)
+            .field("algorithm", &self.algorithm)
+            .finish()
+    }
 }
 
 impl MlDsaKeyPair {
