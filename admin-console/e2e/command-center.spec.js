@@ -123,4 +123,31 @@ test.describe('Command Center smoke', () => {
     await releaseDrawer.getByRole('link', { name: 'Open rollouts' }).click();
     await expect(page).toHaveURL(/\/infrastructure/);
   });
+
+  test('restores drawer state through browser back/forward navigation', async ({ page }) => {
+    await installAppMocks(page);
+    await openAuthenticatedCommandCenter(page);
+
+    // Open a drawer via the lane action; URL should reflect the drawer slug
+    // (React Router's useSearchParams pushes a history entry per change).
+    await page.getByRole('button', { name: /Connector gaps/i }).click();
+    await expect(page.getByRole('dialog', { name: 'Connector Validation' })).toBeVisible();
+    await expect(page).toHaveURL(/drawer=connectors/);
+
+    // Close the drawer; the history entry without the drawer becomes current.
+    await page.getByRole('button', { name: 'Close' }).click();
+    await expect(page).not.toHaveURL(/drawer=connectors/);
+    await expect(page.getByRole('dialog', { name: 'Connector Validation' })).toBeHidden();
+
+    // Back should re-open the connector drawer from the prior history entry.
+    await page.goBack();
+    await expect(page).toHaveURL(/drawer=connectors/);
+    await expect(page.getByRole('dialog', { name: 'Connector Validation' })).toBeVisible();
+
+    // Forward should dismiss it again without losing lane data.
+    await page.goForward();
+    await expect(page).not.toHaveURL(/drawer=connectors/);
+    await expect(page.getByRole('dialog', { name: 'Connector Validation' })).toBeHidden();
+    await expect(page.getByRole('heading', { name: /Operate incidents/i })).toBeVisible();
+  });
 });
