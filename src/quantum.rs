@@ -8,6 +8,7 @@
 
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use zeroize::Zeroize;
 
 use crate::audit::sha256_hex;
 
@@ -35,6 +36,17 @@ impl std::fmt::Debug for LamportPrivateKey {
             .field("key_id", &self.key_id)
             .field("used", &self.used)
             .finish()
+    }
+}
+
+impl Drop for LamportPrivateKey {
+    fn drop(&mut self) {
+        // Best-effort wipe of the 256 secret preimage pairs. Each entry is a
+        // 32-byte hex-encoded random value that is the entire signing secret.
+        for (zero, one) in self.pairs.iter_mut() {
+            zero.zeroize();
+            one.zeroize();
+        }
     }
 }
 
@@ -537,6 +549,15 @@ impl std::fmt::Debug for MlDsaKeyPair {
             .field("public_key_hash", &self.public_key_hash)
             .field("algorithm", &self.algorithm)
             .finish()
+    }
+}
+
+impl Drop for MlDsaKeyPair {
+    fn drop(&mut self) {
+        // Best-effort wipe of the secret 32-byte ML-DSA seed (hex-encoded).
+        // Clone-on-write may have left other copies elsewhere; this only
+        // guarantees the bytes owned by *this* instance are cleared.
+        self.seed.zeroize();
     }
 }
 

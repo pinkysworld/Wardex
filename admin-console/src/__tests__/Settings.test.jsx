@@ -1687,10 +1687,10 @@ describe('Settings', () => {
     await user.click(screen.getByRole('tab', { name: 'Integrations' }));
     expect(await screen.findByText('Cloud Collectors & Secrets')).toBeInTheDocument();
 
-    const siemEndpointInput = screen.getByLabelText('SIEM Endpoint');
+    const siemEndpointInput = await screen.findByLabelText('SIEM Endpoint');
     await user.clear(siemEndpointInput);
     await user.type(siemEndpointInput, 'https://siem.example.test/hec-secondary');
-    await user.click(screen.getByRole('button', { name: 'Save SIEM Setup' }));
+    await user.click(await screen.findByRole('button', { name: 'Save SIEM Setup' }));
 
     await waitFor(() => {
       const siemSaveCall = globalThis.fetch.mock.calls.find(
@@ -1704,15 +1704,15 @@ describe('Settings', () => {
       });
     });
 
-    await user.click(screen.getByRole('button', { name: 'Validate SIEM' }));
+    await user.click(await screen.findByRole('button', { name: 'Validate SIEM' }));
     expect(
       await screen.findByText('SIEM configuration is valid and ready to save.'),
     ).toBeInTheDocument();
 
-    const regionInput = screen.getByLabelText('Region');
+    const regionInput = await screen.findByLabelText('Region');
     await user.clear(regionInput);
     await user.type(regionInput, 'eu-central-1');
-    await user.click(screen.getByRole('button', { name: 'Save AWS Setup' }));
+    await user.click(await screen.findByRole('button', { name: 'Save AWS Setup' }));
 
     await waitFor(() => {
       const awsSaveCall = globalThis.fetch.mock.calls.find(
@@ -1726,10 +1726,10 @@ describe('Settings', () => {
       });
     });
 
-    await user.click(screen.getByRole('button', { name: 'Validate AWS' }));
+    await user.click(await screen.findByRole('button', { name: 'Validate AWS' }));
     expect(await screen.findByText('Collected 2 events.')).toBeInTheDocument();
 
-    const m365SaveButton = screen.getByRole('button', {
+    const m365SaveButton = await screen.findByRole('button', {
       name: 'Save Microsoft 365 Setup',
     });
     const m365Card = m365SaveButton.closest('.card');
@@ -1754,7 +1754,7 @@ describe('Settings', () => {
     await user.click(within(m365Card).getByRole('button', { name: 'Validate Microsoft 365' }));
     expect(await screen.findByText('Microsoft 365 validation details')).toBeInTheDocument();
 
-    const workspaceSaveButton = screen.getByRole('button', {
+    const workspaceSaveButton = await screen.findByRole('button', {
       name: 'Save Workspace Setup',
     });
     const workspaceCard = workspaceSaveButton.closest('.card');
@@ -1784,10 +1784,10 @@ describe('Settings', () => {
     await user.click(within(workspaceCard).getByRole('button', { name: 'Validate Workspace' }));
     expect(await screen.findByText('Workspace validation details')).toBeInTheDocument();
 
-    const envPrefixInput = screen.getByLabelText('Environment Prefix');
+    const envPrefixInput = await screen.findByLabelText('Environment Prefix');
     await user.clear(envPrefixInput);
     await user.type(envPrefixInput, 'WARDEX_PROD_');
-    await user.click(screen.getByRole('button', { name: 'Save Secrets Setup' }));
+    await user.click(await screen.findByRole('button', { name: 'Save Secrets Setup' }));
 
     await waitFor(() => {
       const secretsSaveCall = globalThis.fetch.mock.calls.find(
@@ -1805,10 +1805,10 @@ describe('Settings', () => {
       });
     });
 
-    const secretReferenceInput = screen.getByLabelText('Test Secret Reference');
+    const secretReferenceInput = await screen.findByLabelText('Test Secret Reference');
     await user.clear(secretReferenceInput);
     await user.type(secretReferenceInput, 'vault://secret/wardex/api#token');
-    await user.click(screen.getByRole('button', { name: 'Validate Secret Reference' }));
+    await user.click(await screen.findByRole('button', { name: 'Validate Secret Reference' }));
 
     expect(await screen.findByText('Resolved vault secret with length 24.')).toBeInTheDocument();
 

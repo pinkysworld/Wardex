@@ -2,7 +2,7 @@
 
 ## Current release
 
-- **Version:** `1.0.23`
+- **Version:** `1.0.24`
 - **Positioning:** private-cloud XDR and SIEM platform with enterprise detection engineering, malware scanning, analyst workflows, fleet operations, behavioural analytics, and automated incident response
 - **Source footprint:** 146 Rust source modules
 - **API contract:** versioned OpenAPI surface with REST, GraphQL, live `/api/openapi.json` export, generated SDK parity diagnostics, authenticated-by-default API route classification, cursor page contracts, release observability/preflight proof APIs, production assurance endpoints, malware scan and response-action contracts, source-aware alert analysis, operator-trust workspaces, alert feedback/evidence-chain contracts, Detection Trust scoring and draft-only tuning APIs, detection validation lab APIs, response safety preview/verification APIs with execution-audit continuity, agent enrollment-token flows, connector marketplace summaries, operations health snapshots, and release verification readiness endpoints with evidence freshness metadata
@@ -100,6 +100,14 @@ The current release has been verified with:
 ## Current product posture
 
 Wardex is now positioned as a professional XDR/SIEM control plane with incident-first analyst workflows, explainable detections, context-preserving reporting, operator-visible recovery posture, and explicit shift-lead surfaces for ownership, handoff, and detection-review pressure. The runtime, admin console, release process, and website are aligned around operator trust, workflow closure, deployment readiness, clean release verification, and freshness-gated evidence. The current release replaces several previously simulated or placeholder subsystems with genuine implementations, starts the per-domain decomposition of the monolithic `server.rs`, and opens the per-slice TypeScript migration of the admin console.
+
+## Recently shipped (v1.0.24)
+
+- **Failed-auth lockout with exponential backoff** — `handle_api` now tracks failed authentications per source IP, serves HTTP 429 with `Retry-After` once a threshold is crossed, doubles the lockout window on each subsequent breach (30s → … capped at 1h), exempts loopback addresses, and records every lockout in the audit log. Successful auth from a previously-failing IP clears the counter.
+- **Constant-time agent token comparison** — the inline byte-loop comparison for `WARDEX_AGENT_TOKEN` was replaced with the existing `secure_token_eq` helper so all three privileged token paths (agent / cluster / user) share one constant-time implementation.
+- **Post-quantum key zeroization** — `MlDsaKeyPair` and `LamportPrivateKey` now implement `Drop` and wipe their secret material; `zeroize` is a direct dependency.
+- **Nav-race CI guard** — `scripts/check_nav_race_guard.py` is wired into the contract-parity job and flags any `useEffect` that writes `setSearchParams` without a `location.pathname` guard. The audit cleared the two remaining offenders (`Infrastructure.jsx`, `HelpDocs.jsx`).
+- **Settings integrations flake fix** — the `"saves SIEM, collector and secrets setup flows from the integrations tab"` test now uses `findBy*` for boundary lookups so re-renders triggered by the previous block's save/validate response settle before the next interaction. Deterministic 5/5 locally.
 
 ## Recently shipped (v1.0.23)
 

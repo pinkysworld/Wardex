@@ -3523,7 +3523,7 @@ dependencies = [
 
 [[package]]
 name = "wardex"
-version = "1.0.23"
+version = "1.0.24"
 dependencies = [
  "aes-gcm",
  "axum",
@@ -3555,6 +3555,7 @@ dependencies = [
  "tracing",
  "tracing-subscriber",
  "ureq",
+ "zeroize",
 ]
 
 [[package]]

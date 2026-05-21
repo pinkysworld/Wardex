@@ -1,6 +1,6 @@
 [package]
 name = "wardex"
-version = "1.0.23"
+version = "1.0.24"
 edition = "2024"
 rust-version = "1.88.0"
 build = "build.rs"
@@ -40,6 +40,10 @@ tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["json", "env-filter"] }
 # Full-text search
 tantivy = "0.26"
+# Best-effort zeroization of secret material on drop. Transitively already
+# present via several crypto crates; pinning a direct dependency lets us apply
+# it explicitly to long-lived secret fields (ML-DSA seed, transient API tokens).
+zeroize = { version = "1.8", features = ["zeroize_derive"] }
 
 [features]
 # TLS is on by default: the platform's outbound integrations (threat feeds,

@@ -4,6 +4,20 @@ All notable changes to Wardex are documented in this file.
 
 ## [Unreleased]
 
+## [1.0.24] — 2026-05-21
+
+### Security
+- **Failed-auth lockout with exponential backoff**: `handle_api` now tracks failed authentications per source IP and serves an HTTP 429 with `Retry-After` once a threshold is crossed. The lockout window doubles on each subsequent breach (30s → 60s → … capped at 1h), the bookkeeping table is bounded to 1024 entries with a 60s sweep, and loopback addresses (`127.x`, `::1`, empty, `"unknown"`) are exempted so local tooling and cluster peers stay unaffected. Each lockout is recorded in the audit log as `POST /api/_failed_auth`. Successful auth from a previously-failing IP clears the counter.
+- **Constant-time agent token comparison**: the inline byte-loop that compared the configured `WARDEX_AGENT_TOKEN` against the inbound header was replaced with the existing `secure_token_eq` helper so all three privileged token paths (agent / cluster / user) share one constant-time implementation. New unit test pins the contract.
+- **Post-quantum key zeroization**: `MlDsaKeyPair` and `LamportPrivateKey` now implement `Drop` and zeroize their secret material on the way out (`zeroize` is a direct dependency rather than transitive). The ML-DSA seed and every Lamport (zero,one) pair are wiped before deallocation, so a stale heap page cannot leak signing keys after a key rotation.
+
+### Fixed
+- **Admin-console nav-race in `Infrastructure.jsx` and `HelpDocs.jsx`**: both components had a `useEffect` that wrote search params without checking the current route. If the user navigated away while the effect was scheduled, the write resolved against the component's own pathname and clobbered the new URL. Added the `location.pathname === '/<route>'` guard that we shipped earlier for `ThreatDetection.jsx`.
+- **Flaky `Settings.test.jsx` ("saves SIEM, collector and secrets setup flows from the integrations tab")**: cross-block element lookups (Save/Validate buttons and form inputs in the Integrations tab) were synchronous `getByRole`/`getByLabelText` calls that raced with the re-render triggered by the previous block's save/validate response. Converted the boundary lookups to `findBy*` so each block waits for the prior async response to settle. 5/5 deterministic locally.
+
+### Added
+- **`scripts/check_nav_race_guard.py` (wired into CI `contract-parity` job)**: scans every admin-console component for `useEffect` blocks that call `setSearchParams` without a `location.pathname` guard or an explicit `// nav-race-ok` allowlist marker. Fails the build with file:line pointers when a regression lands. Codifies the nav-race pattern so the audit holds.
+
 ## [1.0.23] — 2026-05-20
 
 ### Changed

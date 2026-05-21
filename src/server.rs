@@ -3571,6 +3571,171 @@ fn secure_token_eq(provided: Option<&str>, expected: &str) -> bool {
     diff == 0
 }
 
+// ── Failed-auth backoff tracker ─────────────────────────────────────────────
+//
+// The generic per-route rate limiter doesn't distinguish successful from
+// failed auth, so a brute-force attempt against `/api/auth/*` or the agent /
+// cluster bearer-token paths gets the full read-quota of attempts per minute.
+// This tracker layers an exponential backoff on *failed* auth specifically:
+//   - 5 consecutive failures from the same IP within 5 minutes → 30 s lockout
+//   - Lockout doubles on every subsequent burst (cap 1 h)
+//   - A success resets the counter
+//   - Loopback addresses (127.0.0.1 / ::1 / unknown) are exempt so local
+//     tooling and cluster peers aren't penalized
+//
+// Stored as a process-global so we can add it without rewiring AppState
+// constructors. Bounded in size by a periodic sweep.
+
+struct FailedAuthState {
+    fails: u32,
+    first_fail_at: u64,
+    locked_until: u64,
+    lockout_secs: u64,
+}
+
+struct FailedAuthTracker {
+    entries: std::collections::HashMap<String, FailedAuthState>,
+    last_sweep: u64,
+}
+
+const FAILED_AUTH_THRESHOLD: u32 = 5;
+const FAILED_AUTH_WINDOW_SECS: u64 = 300;
+const FAILED_AUTH_INITIAL_LOCKOUT_SECS: u64 = 30;
+const FAILED_AUTH_MAX_LOCKOUT_SECS: u64 = 3600;
+const FAILED_AUTH_MAX_ENTRIES: usize = 1024;
+
+impl FailedAuthTracker {
+    fn new() -> Self {
+        Self {
+            entries: std::collections::HashMap::new(),
+            last_sweep: 0,
+        }
+    }
+
+    fn now_secs() -> u64 {
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_secs())
+            .unwrap_or(0)
+    }
+
+    fn is_exempt(ip: &str) -> bool {
+        ip.is_empty()
+            || ip == "unknown"
+            || ip.starts_with("127.")
+            || ip == "::1"
+            || ip.starts_with("[::1]")
+    }
+
+    fn sweep(&mut self, now: u64) {
+        if now.saturating_sub(self.last_sweep) < 60 {
+            return;
+        }
+        self.last_sweep = now;
+        self.entries.retain(|_, s| {
+            now < s.locked_until || now.saturating_sub(s.first_fail_at) < FAILED_AUTH_WINDOW_SECS
+        });
+        if self.entries.len() > FAILED_AUTH_MAX_ENTRIES {
+            self.entries.clear();
+        }
+    }
+
+    /// Returns Some(remaining_secs) if the IP is currently locked out.
+    fn locked_remaining(&mut self, ip: &str) -> Option<u64> {
+        if Self::is_exempt(ip) {
+            return None;
+        }
+        let now = Self::now_secs();
+        self.sweep(now);
+        let s = self.entries.get(ip)?;
+        if now < s.locked_until {
+            Some(s.locked_until - now)
+        } else {
+            None
+        }
+    }
+
+    fn record_failure(&mut self, ip: &str) -> Option<u64> {
+        if Self::is_exempt(ip) {
+            return None;
+        }
+        let now = Self::now_secs();
+        self.sweep(now);
+        let entry = self.entries.entry(ip.to_string()).or_insert(FailedAuthState {
+            fails: 0,
+            first_fail_at: now,
+            locked_until: 0,
+            lockout_secs: FAILED_AUTH_INITIAL_LOCKOUT_SECS,
+        });
+        if now.saturating_sub(entry.first_fail_at) > FAILED_AUTH_WINDOW_SECS {
+            entry.fails = 0;
+            entry.first_fail_at = now;
+        }
+        entry.fails = entry.fails.saturating_add(1);
+        if entry.fails >= FAILED_AUTH_THRESHOLD {
+            entry.locked_until = now + entry.lockout_secs;
+            let triggered = entry.lockout_secs;
+            entry.lockout_secs =
+                (entry.lockout_secs.saturating_mul(2)).min(FAILED_AUTH_MAX_LOCKOUT_SECS);
+            entry.fails = 0;
+            entry.first_fail_at = now;
+            Some(triggered)
+        } else {
+            None
+        }
+    }
+
+    fn record_success(&mut self, ip: &str) {
+        if Self::is_exempt(ip) {
+            return;
+        }
+        self.entries.remove(ip);
+    }
+}
+
+fn failed_auth_tracker() -> &'static std::sync::Mutex<FailedAuthTracker> {
+    static TRACKER: std::sync::OnceLock<std::sync::Mutex<FailedAuthTracker>> =
+        std::sync::OnceLock::new();
+    TRACKER.get_or_init(|| std::sync::Mutex::new(FailedAuthTracker::new()))
+}
+
+/// Returns Some(retry_after_secs) if the IP is locked out.
+fn failed_auth_locked(ip: &str) -> Option<u64> {
+    failed_auth_tracker()
+        .lock()
+        .ok()
+        .and_then(|mut g| g.locked_remaining(ip))
+}
+
+/// Records a failed auth attempt. Returns Some(lockout_secs) if this attempt
+/// triggered a fresh lockout (callers can audit-log the event).
+fn failed_auth_record(ip: &str) -> Option<u64> {
+    failed_auth_tracker()
+        .lock()
+        .ok()
+        .and_then(|mut g| g.record_failure(ip))
+}
+
+fn failed_auth_clear(ip: &str) {
+    if let Ok(mut g) = failed_auth_tracker().lock() {
+        g.record_success(ip);
+    }
+}
+
+/// Returns the 429 response carrying the retry-after, used when the IP is
+/// already locked out from prior failed auth attempts.
+fn failed_auth_locked_response(retry_after_secs: u64) -> Response<Body> {
+    let body = format!(
+        "{{\"error\":\"too many failed authentication attempts\",\"retry_after_secs\":{retry_after_secs},\"status\":429}}"
+    );
+    Response::builder()
+        .status(429)
+        .header("content-type", "application/json")
+        .header("retry-after", retry_after_secs.to_string())
+        .body(Body::from(body))
+        .unwrap_or_else(|_| Response::new(Body::from("rate limited")))
+}
+
 fn cluster_request_authorized(headers: &HeaderMap, state: &Arc<Mutex<AppState>>) -> bool {
     let provided = bearer_token(headers);
     let s = state.lock().unwrap_or_else(|e| e.into_inner());
@@ -18439,6 +18604,16 @@ fn handle_api(
     let is_agent_endpoint = matches!(route_access, ApiRouteAccess::Agent);
     let is_cluster_endpoint = matches!(route_access, ApiRouteAccess::Cluster);
 
+    // Up-front failed-auth lockout: if this IP has been throttled by repeated
+    // failures, return 429 immediately for any authenticated/agent/cluster
+    // route. Public routes are still served so health checks survive.
+    let auth_gated = is_agent_endpoint
+        || is_cluster_endpoint
+        || matches!(route_access, ApiRouteAccess::Authenticated);
+    if auth_gated && let Some(retry_after) = failed_auth_locked(remote_addr) {
+        return failed_auth_locked_response(retry_after);
+    }
+
     // Agent endpoints still require a valid enrollment token when
     // WARDEX_AGENT_TOKEN is set. This prevents arbitrary clients from
     // enrolling rogue agents or submitting forged events.
@@ -18447,19 +18622,20 @@ fn handle_api(
         && let Ok(required_agent_token) = std::env::var("WARDEX_AGENT_TOKEN")
     {
         let provided = bearer_token(headers);
-        let valid = provided.as_deref().is_some_and(|t| {
-            let a = t.as_bytes();
-            let b = required_agent_token.as_bytes();
-            if a.len() != b.len() {
-                return false;
-            }
-            let mut diff = 0u8;
-            for (x, y) in a.iter().zip(b.iter()) {
-                diff |= x ^ y;
-            }
-            diff == 0
-        });
+        let valid = secure_token_eq(provided.as_deref(), &required_agent_token);
         if !valid {
+            if let Some(lockout) = failed_auth_record(remote_addr) {
+                if let Ok(mut s) = state.lock() {
+                    s.audit_log.record(
+                        "POST",
+                        "/api/_failed_auth",
+                        remote_addr,
+                        429,
+                        false,
+                    );
+                    let _ = lockout; // recorded; audit entry above carries the signal
+                }
+            }
             return respond_api(
                 state,
                 &method,
@@ -18472,6 +18648,12 @@ fn handle_api(
     }
 
     if is_cluster_endpoint && !cluster_request_authorized(headers, state) {
+        if let Some(_lockout) = failed_auth_record(remote_addr)
+            && let Ok(mut s) = state.lock()
+        {
+            s.audit_log
+                .record("POST", "/api/_failed_auth", remote_addr, 429, false);
+        }
         return respond_api(
             state,
             &method,
@@ -18486,6 +18668,12 @@ fn handle_api(
 
     let auth_identity = authenticate_request(headers, state);
     if needs_auth && !auth_identity.is_authenticated() {
+        if let Some(_lockout) = failed_auth_record(remote_addr)
+            && let Ok(mut s) = state.lock()
+        {
+            s.audit_log
+                .record("POST", "/api/_failed_auth", remote_addr, 429, false);
+        }
         return respond_api(
             state,
             &method,
@@ -18494,6 +18682,12 @@ fn handle_api(
             false,
             error_json("unauthorized", 401),
         );
+    }
+
+    // Reset the failed-auth counter on any successful authenticated request so
+    // legitimate clients aren't penalised after a single bad attempt.
+    if auth_identity.is_authenticated() {
+        failed_auth_clear(remote_addr);
     }
 
     // RBAC enforcement for sensitive endpoints
@@ -33074,6 +33268,75 @@ mod tests {
     use std::collections::HashMap as StdHashMap;
     use std::path::PathBuf;
     use std::time::{Duration, Instant};
+
+    #[test]
+    fn secure_token_eq_compares_in_constant_time_semantics() {
+        // None provided fails.
+        assert!(!secure_token_eq(None, "anything"));
+        // Equal-length match succeeds.
+        assert!(secure_token_eq(Some("abc123"), "abc123"));
+        // Equal length but different fails.
+        assert!(!secure_token_eq(Some("abc123"), "abc124"));
+        // Length mismatch fails.
+        assert!(!secure_token_eq(Some("abc"), "abc123"));
+        assert!(!secure_token_eq(Some(""), "abc"));
+    }
+
+    #[test]
+    fn failed_auth_tracker_locks_after_threshold() {
+        let mut t = FailedAuthTracker::new();
+        let ip = "203.0.113.7";
+        for i in 0..(FAILED_AUTH_THRESHOLD - 1) {
+            assert!(
+                t.record_failure(ip).is_none(),
+                "should not lock before threshold (i={i})"
+            );
+            assert!(t.locked_remaining(ip).is_none());
+        }
+        // Final failure trips the lockout.
+        let lockout = t.record_failure(ip).expect("lockout triggered");
+        assert_eq!(lockout, FAILED_AUTH_INITIAL_LOCKOUT_SECS);
+        let remaining = t.locked_remaining(ip).expect("locked");
+        assert!(remaining > 0 && remaining <= FAILED_AUTH_INITIAL_LOCKOUT_SECS);
+    }
+
+    #[test]
+    fn failed_auth_tracker_exempts_loopback() {
+        let mut t = FailedAuthTracker::new();
+        for _ in 0..(FAILED_AUTH_THRESHOLD + 3) {
+            assert!(t.record_failure("127.0.0.1").is_none());
+        }
+        assert!(t.locked_remaining("127.0.0.1").is_none());
+        assert!(t.locked_remaining("::1").is_none());
+        assert!(t.locked_remaining("unknown").is_none());
+    }
+
+    #[test]
+    fn failed_auth_tracker_success_resets_counter() {
+        let mut t = FailedAuthTracker::new();
+        let ip = "198.51.100.4";
+        for _ in 0..(FAILED_AUTH_THRESHOLD - 1) {
+            assert!(t.record_failure(ip).is_none());
+        }
+        t.record_success(ip);
+        // Counter has been cleared, so one more failure should not lock.
+        assert!(t.record_failure(ip).is_none());
+        assert!(t.locked_remaining(ip).is_none());
+    }
+
+    #[test]
+    fn failed_auth_tracker_backoff_doubles() {
+        let mut t = FailedAuthTracker::new();
+        let ip = "198.51.100.99";
+        // First lockout window.
+        for _ in 0..FAILED_AUTH_THRESHOLD {
+            t.record_failure(ip);
+        }
+        let stored = t.entries.get(ip).expect("entry");
+        // After the first lockout, the next lockout window doubles (cap-bounded).
+        assert!(stored.lockout_secs >= FAILED_AUTH_INITIAL_LOCKOUT_SECS * 2);
+        assert!(stored.lockout_secs <= FAILED_AUTH_MAX_LOCKOUT_SECS);
+    }
 
     fn temp_path(name: &str) -> PathBuf {
         let mut path = std::env::temp_dir();

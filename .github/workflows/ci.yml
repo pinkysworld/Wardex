@@ -83,6 +83,8 @@ jobs:
         run: python3 scripts/bump_version.py --check
       - name: Check API and SDK contract parity
         run: python3 scripts/check_contract_parity.py
+      - name: Check admin-console nav-race guard
+        run: python3 scripts/check_nav_race_guard.py
 
   release-docs:
     runs-on: ubuntu-latest

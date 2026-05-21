@@ -43,6 +43,8 @@ LOCATIONS: list[tuple[str, str, int]] = [
     ("deploy/helm/wardex/values.yaml", rf'(?m)^\s*tag: "({VER})"', 1),
     ("deploy/otlp.yaml", rf'service\.version: "({VER})"', 2),
     ("docs/openapi.yaml", rf'(?m)^  version: ({VER})\s*$', 1),
+    ("admin-console/package.json", rf'"version": "({VER})"', 1),
+    ("admin-console/package-lock.json", rf'"name": "wardex-admin-console",\s*"version": "({VER})"', 2),
 ]
 
 

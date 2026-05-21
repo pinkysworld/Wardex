@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useLocation, useSearchParams } from 'react-router-dom';
 import { useApi, useToast } from '../hooks.jsx';
 import * as api from '../api.js';
 import { JsonDetails, RawJsonDetails, SummaryGrid } from './operator.jsx';
@@ -299,6 +299,7 @@ function FilterField({ label, children }) {
 export default function HelpDocs() {
   const toast = useToast();
   const [searchParams, setSearchParams] = useSearchParams();
+  const location = useLocation();
   const context = searchParams.get('context') || 'default';
   const guide = GUIDES[context] || GUIDES.default;
   const focusObject =
@@ -576,10 +577,13 @@ export default function HelpDocs() {
 
   useEffect(() => {
     if (selectedDocPath || docsEntries.length === 0) return;
+    // Nav-race guard: defer the URL write when the user has navigated away
+    // from /help so we don't clobber their new location with a stale `doc` param.
+    if (location.pathname !== '/help') return;
     const next = new URLSearchParams(searchParams);
     next.set('doc', docsEntries[0].path);
     setSearchParams(next, { replace: true });
-  }, [docsEntries, searchParams, selectedDocPath, setSearchParams]);
+  }, [docsEntries, searchParams, selectedDocPath, setSearchParams, location.pathname]);
 
   const filteredEndpoints = useMemo(() => {
     const query = endpointQuery.trim().toLowerCase();

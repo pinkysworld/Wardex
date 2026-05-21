@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useLocation, useSearchParams } from 'react-router-dom';
 import { useApi, useApiGroup, useToast } from '../hooks.jsx';
 import * as api from '../api.js';
 import { JsonDetails, SummaryGrid } from './operator.jsx';
@@ -242,6 +242,7 @@ function normalizeAssets(
 export default function Infrastructure() {
   const toast = useToast();
   const [searchParams, setSearchParams] = useSearchParams();
+  const location = useLocation();
   const { data: monSt } = useApi(api.monitorStatus);
   const { data: threads } = useApi(api.threadsStatus);
   const { data: slo } = useApi(api.sloStatus);
@@ -366,10 +367,14 @@ export default function Infrastructure() {
 
   useEffect(() => {
     if (!selectedAsset || selectedAsset.id === selectedAssetId) return;
+    // Nav-race guard: an in-flight render can fire this effect after the user
+    // has already navigated to another route. Writing search params then would
+    // resolve against /infrastructure and clobber the new location.
+    if (location.pathname !== '/infrastructure') return;
     const next = new URLSearchParams(searchParams);
     next.set('asset', selectedAsset.id);
     setSearchParams(next, { replace: true });
-  }, [selectedAsset, selectedAssetId, searchParams, setSearchParams]);
+  }, [selectedAsset, selectedAssetId, searchParams, setSearchParams, location.pathname]);
 
   useEffect(() => {
     if (focusedMalwareId && recentMalware.some((item) => item.id === focusedMalwareId)) return;
