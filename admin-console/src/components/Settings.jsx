@@ -4,6 +4,7 @@ import { useApi, useApiGroup, useToast } from '../hooks.jsx';
 import * as api from '../api.js';
 import { JsonDetails, SummaryGrid } from './operator.jsx';
 import { useConfirm } from './useConfirm.jsx';
+import { useCollectorForm } from './useCollectorForm.js';
 import { downloadData } from './operatorUtils.js';
 import { formatApiError } from '../utils/errors.js';
 import {
@@ -234,35 +235,194 @@ export default function Settings() {
   const [lastRetentionApply, setLastRetentionApply] = useState(null);
   const [siemDraft, setSiemDraft] = useState(() => createSiemDraft());
   const [siemDraftDirty, setSiemDraftDirty] = useState(false);
-  const [awsCollectorDraft, setAwsCollectorDraft] = useState(() => createAwsCollectorDraft());
-  const [azureCollectorDraft, setAzureCollectorDraft] = useState(() => createAzureCollectorDraft());
-  const [gcpCollectorDraft, setGcpCollectorDraft] = useState(() => createGcpCollectorDraft());
-  const [oktaCollectorDraft, setOktaCollectorDraft] = useState(() => createOktaCollectorDraft());
-  const [entraCollectorDraft, setEntraCollectorDraft] = useState(() => createEntraCollectorDraft());
-  const [m365CollectorDraft, setM365CollectorDraft] = useState(() => createM365CollectorDraft());
   const [workspaceCollectorDraft, setWorkspaceCollectorDraft] = useState(() =>
     createWorkspaceCollectorDraft(),
   );
   const [secretsDraft, setSecretsDraft] = useState(() => createSecretsDraft());
   const [siemSaving, setSiemSaving] = useState(false);
-  const [awsCollectorSaving, setAwsCollectorSaving] = useState(false);
-  const [azureCollectorSaving, setAzureCollectorSaving] = useState(false);
-  const [gcpCollectorSaving, setGcpCollectorSaving] = useState(false);
-  const [oktaCollectorSaving, setOktaCollectorSaving] = useState(false);
-  const [entraCollectorSaving, setEntraCollectorSaving] = useState(false);
-  const [m365CollectorSaving, setM365CollectorSaving] = useState(false);
   const [workspaceCollectorSaving, setWorkspaceCollectorSaving] = useState(false);
   const [secretsSaving, setSecretsSaving] = useState(false);
   const [siemValidationResult, setSiemValidationResult] = useState(null);
-  const [awsCollectorValidationResult, setAwsCollectorValidationResult] = useState(null);
-  const [azureCollectorValidationResult, setAzureCollectorValidationResult] = useState(null);
-  const [gcpCollectorValidationResult, setGcpCollectorValidationResult] = useState(null);
-  const [oktaCollectorValidationResult, setOktaCollectorValidationResult] = useState(null);
-  const [entraCollectorValidationResult, setEntraCollectorValidationResult] = useState(null);
-  const [m365CollectorValidationResult, setM365CollectorValidationResult] = useState(null);
   const [workspaceCollectorValidationResult, setWorkspaceCollectorValidationResult] =
     useState(null);
   const [secretValidationResult, setSecretValidationResult] = useState(null);
+
+  const {
+    draft: awsCollectorDraft,
+    setDraft: setAwsCollectorDraft,
+    saving: awsCollectorSaving,
+    validationResult: awsCollectorValidationResult,
+    save: saveAwsCollector,
+    validate: validateAwsCollector,
+  } = useCollectorForm({
+    createDraft: createAwsCollectorDraft,
+    saveApi: (payload) => api.saveAwsCollectorConfig(payload),
+    validateApi: () => api.validateAwsCollector(),
+    toPayload: (d) => ({
+      enabled: d.enabled,
+      region: d.region,
+      access_key_id: d.access_key_id,
+      secret_access_key: optionalTextValue(d.secret_access_key),
+      session_token: d.session_token,
+      poll_interval_secs: Number(d.poll_interval_secs),
+      max_results: Number(d.max_results),
+      event_name_filter: parseListInput(d.event_name_filter),
+    }),
+    labels: {
+      product: 'AWS CloudTrail',
+      saveError: 'Failed to save AWS CloudTrail setup',
+      validateError: 'AWS validation failed',
+      validateNeedsAttention: 'AWS validation needs attention',
+    },
+    toast,
+    onSaved: rIntegrations,
+  });
+
+  const {
+    draft: azureCollectorDraft,
+    setDraft: setAzureCollectorDraft,
+    saving: azureCollectorSaving,
+    validationResult: azureCollectorValidationResult,
+    save: saveAzureCollector,
+    validate: validateAzureCollector,
+  } = useCollectorForm({
+    createDraft: createAzureCollectorDraft,
+    saveApi: (payload) => api.saveAzureCollectorConfig(payload),
+    validateApi: () => api.validateAzureCollector(),
+    toPayload: (d) => ({
+      enabled: d.enabled,
+      tenant_id: d.tenant_id,
+      client_id: d.client_id,
+      client_secret: optionalTextValue(d.client_secret),
+      subscription_id: d.subscription_id,
+      poll_interval_secs: Number(d.poll_interval_secs),
+      categories: parseListInput(d.categories),
+    }),
+    labels: {
+      product: 'Azure Activity',
+      saveError: 'Failed to save Azure Activity setup',
+      validateError: 'Azure validation failed',
+      validateNeedsAttention: 'Azure validation needs attention',
+    },
+    toast,
+    onSaved: rIntegrations,
+  });
+
+  const {
+    draft: gcpCollectorDraft,
+    setDraft: setGcpCollectorDraft,
+    saving: gcpCollectorSaving,
+    validationResult: gcpCollectorValidationResult,
+    save: saveGcpCollector,
+    validate: validateGcpCollector,
+  } = useCollectorForm({
+    createDraft: createGcpCollectorDraft,
+    saveApi: (payload) => api.saveGcpCollectorConfig(payload),
+    validateApi: () => api.validateGcpCollector(),
+    toPayload: (d) => ({
+      enabled: d.enabled,
+      project_id: d.project_id,
+      service_account_email: d.service_account_email,
+      key_file_path: d.key_file_path,
+      private_key_pem: optionalTextValue(d.private_key_pem),
+      poll_interval_secs: Number(d.poll_interval_secs),
+      log_filter: d.log_filter,
+      page_size: Number(d.page_size),
+    }),
+    labels: {
+      product: 'GCP Audit',
+      saveError: 'Failed to save GCP Audit setup',
+      validateError: 'GCP validation failed',
+      validateNeedsAttention: 'GCP validation needs attention',
+    },
+    toast,
+    onSaved: rIntegrations,
+  });
+
+  const {
+    draft: oktaCollectorDraft,
+    setDraft: setOktaCollectorDraft,
+    saving: oktaCollectorSaving,
+    validationResult: oktaCollectorValidationResult,
+    save: saveOktaCollector,
+    validate: validateOktaCollector,
+  } = useCollectorForm({
+    createDraft: createOktaCollectorDraft,
+    saveApi: (payload) => api.saveOktaCollectorConfig(payload),
+    validateApi: () => api.validateOktaCollector(),
+    toPayload: (d) => ({
+      enabled: d.enabled,
+      domain: d.domain,
+      api_token: optionalTextValue(d.api_token),
+      poll_interval_secs: Number(d.poll_interval_secs),
+      event_type_filter: parseListInput(d.event_type_filter),
+    }),
+    labels: {
+      product: 'Okta identity',
+      saveError: 'Failed to save Okta identity setup',
+      validateError: 'Okta validation failed',
+      validateNeedsAttention: 'Okta validation needs attention',
+    },
+    toast,
+    onSaved: rIntegrations,
+  });
+
+  const {
+    draft: entraCollectorDraft,
+    setDraft: setEntraCollectorDraft,
+    saving: entraCollectorSaving,
+    validationResult: entraCollectorValidationResult,
+    save: saveEntraCollector,
+    validate: validateEntraCollector,
+  } = useCollectorForm({
+    createDraft: createEntraCollectorDraft,
+    saveApi: (payload) => api.saveEntraCollectorConfig(payload),
+    validateApi: () => api.validateEntraCollector(),
+    toPayload: (d) => ({
+      enabled: d.enabled,
+      tenant_id: d.tenant_id,
+      client_id: d.client_id,
+      client_secret: optionalTextValue(d.client_secret),
+      poll_interval_secs: Number(d.poll_interval_secs),
+    }),
+    labels: {
+      product: 'Microsoft Entra identity',
+      saveError: 'Failed to save Microsoft Entra identity setup',
+      validateError: 'Entra validation failed',
+      validateNeedsAttention: 'Entra validation needs attention',
+    },
+    toast,
+    onSaved: rIntegrations,
+  });
+
+  const {
+    draft: m365CollectorDraft,
+    setDraft: setM365CollectorDraft,
+    saving: m365CollectorSaving,
+    validationResult: m365CollectorValidationResult,
+    save: saveM365Collector,
+    validate: validateM365Collector,
+  } = useCollectorForm({
+    createDraft: createM365CollectorDraft,
+    saveApi: (payload) => api.saveM365CollectorConfig(payload),
+    validateApi: () => api.validateM365Collector(),
+    toPayload: (d) => ({
+      enabled: d.enabled,
+      tenant_id: d.tenant_id,
+      client_id: d.client_id,
+      client_secret: optionalTextValue(d.client_secret),
+      poll_interval_secs: Number(d.poll_interval_secs),
+      content_types: parseListInput(d.content_types),
+    }),
+    labels: {
+      product: 'Microsoft 365 activity',
+      saveError: 'Failed to save Microsoft 365 activity setup',
+      validateError: 'Microsoft 365 validation failed',
+      validateNeedsAttention: 'Microsoft 365 validation needs attention',
+    },
+    toast,
+    onSaved: rIntegrations,
+  });
 
   // ── Team (RBAC) ──
   const { data: teamUsers, reload: rTeam } = useApi(api.rbacUsers);
@@ -552,27 +712,27 @@ export default function Settings() {
 
   useEffect(() => {
     setAwsCollectorDraft(createAwsCollectorDraft(awsCollectorData));
-  }, [awsCollectorData]);
+  }, [awsCollectorData, setAwsCollectorDraft]);
 
   useEffect(() => {
     setAzureCollectorDraft(createAzureCollectorDraft(azureCollectorData));
-  }, [azureCollectorData]);
+  }, [azureCollectorData, setAzureCollectorDraft]);
 
   useEffect(() => {
     setGcpCollectorDraft(createGcpCollectorDraft(gcpCollectorData));
-  }, [gcpCollectorData]);
+  }, [gcpCollectorData, setGcpCollectorDraft]);
 
   useEffect(() => {
     setOktaCollectorDraft(createOktaCollectorDraft(oktaCollectorData));
-  }, [oktaCollectorData]);
+  }, [oktaCollectorData, setOktaCollectorDraft]);
 
   useEffect(() => {
     setEntraCollectorDraft(createEntraCollectorDraft(entraCollectorData));
-  }, [entraCollectorData]);
+  }, [entraCollectorData, setEntraCollectorDraft]);
 
   useEffect(() => {
     setM365CollectorDraft(createM365CollectorDraft(m365CollectorData));
-  }, [m365CollectorData]);
+  }, [m365CollectorData, setM365CollectorDraft]);
 
   useEffect(() => {
     setWorkspaceCollectorDraft(createWorkspaceCollectorDraft(workspaceCollectorData));
@@ -858,225 +1018,6 @@ export default function Settings() {
       );
     } catch (error) {
       toast(formatApiError(error, 'SIEM validation failed'), 'error');
-    }
-  };
-
-  const saveAwsCollector = async () => {
-    setAwsCollectorSaving(true);
-    try {
-      await api.saveAwsCollectorConfig({
-        enabled: awsCollectorDraft.enabled,
-        region: awsCollectorDraft.region,
-        access_key_id: awsCollectorDraft.access_key_id,
-        secret_access_key: optionalTextValue(awsCollectorDraft.secret_access_key),
-        session_token: awsCollectorDraft.session_token,
-        poll_interval_secs: Number(awsCollectorDraft.poll_interval_secs),
-        max_results: Number(awsCollectorDraft.max_results),
-        event_name_filter: parseListInput(awsCollectorDraft.event_name_filter),
-      });
-      setAwsCollectorValidationResult(null);
-      await rIntegrations();
-      toast('AWS CloudTrail setup saved', 'success');
-    } catch (error) {
-      toast(formatApiError(error, 'Failed to save AWS CloudTrail setup'), 'error');
-    } finally {
-      setAwsCollectorSaving(false);
-    }
-  };
-
-  const validateAwsCollector = async () => {
-    try {
-      const result = await api.validateAwsCollector();
-      setAwsCollectorValidationResult(result);
-      toast(
-        result.success
-          ? `AWS validation returned ${result.event_count ?? 0} event${result.event_count === 1 ? '' : 's'}`
-          : result.error || 'AWS validation needs attention',
-        result.success ? 'success' : 'warning',
-      );
-    } catch (error) {
-      toast(formatApiError(error, 'AWS validation failed'), 'error');
-    }
-  };
-
-  const saveAzureCollector = async () => {
-    setAzureCollectorSaving(true);
-    try {
-      await api.saveAzureCollectorConfig({
-        enabled: azureCollectorDraft.enabled,
-        tenant_id: azureCollectorDraft.tenant_id,
-        client_id: azureCollectorDraft.client_id,
-        client_secret: optionalTextValue(azureCollectorDraft.client_secret),
-        subscription_id: azureCollectorDraft.subscription_id,
-        poll_interval_secs: Number(azureCollectorDraft.poll_interval_secs),
-        categories: parseListInput(azureCollectorDraft.categories),
-      });
-      setAzureCollectorValidationResult(null);
-      await rIntegrations();
-      toast('Azure Activity setup saved', 'success');
-    } catch (error) {
-      toast(formatApiError(error, 'Failed to save Azure Activity setup'), 'error');
-    } finally {
-      setAzureCollectorSaving(false);
-    }
-  };
-
-  const validateAzureCollector = async () => {
-    try {
-      const result = await api.validateAzureCollector();
-      setAzureCollectorValidationResult(result);
-      toast(
-        result.success
-          ? `Azure validation returned ${result.event_count ?? 0} event${result.event_count === 1 ? '' : 's'}`
-          : result.error || 'Azure validation needs attention',
-        result.success ? 'success' : 'warning',
-      );
-    } catch (error) {
-      toast(formatApiError(error, 'Azure validation failed'), 'error');
-    }
-  };
-
-  const saveGcpCollector = async () => {
-    setGcpCollectorSaving(true);
-    try {
-      await api.saveGcpCollectorConfig({
-        enabled: gcpCollectorDraft.enabled,
-        project_id: gcpCollectorDraft.project_id,
-        service_account_email: gcpCollectorDraft.service_account_email,
-        key_file_path: gcpCollectorDraft.key_file_path,
-        private_key_pem: optionalTextValue(gcpCollectorDraft.private_key_pem),
-        poll_interval_secs: Number(gcpCollectorDraft.poll_interval_secs),
-        log_filter: gcpCollectorDraft.log_filter,
-        page_size: Number(gcpCollectorDraft.page_size),
-      });
-      setGcpCollectorValidationResult(null);
-      await rIntegrations();
-      toast('GCP Audit setup saved', 'success');
-    } catch (error) {
-      toast(formatApiError(error, 'Failed to save GCP Audit setup'), 'error');
-    } finally {
-      setGcpCollectorSaving(false);
-    }
-  };
-
-  const validateGcpCollector = async () => {
-    try {
-      const result = await api.validateGcpCollector();
-      setGcpCollectorValidationResult(result);
-      toast(
-        result.success
-          ? `GCP validation returned ${result.event_count ?? 0} event${result.event_count === 1 ? '' : 's'}`
-          : result.error || 'GCP validation needs attention',
-        result.success ? 'success' : 'warning',
-      );
-    } catch (error) {
-      toast(formatApiError(error, 'GCP validation failed'), 'error');
-    }
-  };
-
-  const saveOktaCollector = async () => {
-    setOktaCollectorSaving(true);
-    try {
-      await api.saveOktaCollectorConfig({
-        enabled: oktaCollectorDraft.enabled,
-        domain: oktaCollectorDraft.domain,
-        api_token: optionalTextValue(oktaCollectorDraft.api_token),
-        poll_interval_secs: Number(oktaCollectorDraft.poll_interval_secs),
-        event_type_filter: parseListInput(oktaCollectorDraft.event_type_filter),
-      });
-      setOktaCollectorValidationResult(null);
-      await rIntegrations();
-      toast('Okta identity setup saved', 'success');
-    } catch (error) {
-      toast(formatApiError(error, 'Failed to save Okta identity setup'), 'error');
-    } finally {
-      setOktaCollectorSaving(false);
-    }
-  };
-
-  const validateOktaCollector = async () => {
-    try {
-      const result = await api.validateOktaCollector();
-      setOktaCollectorValidationResult(result);
-      toast(
-        result.success
-          ? `Okta validation returned ${result.event_count ?? 0} event${result.event_count === 1 ? '' : 's'}`
-          : result.error || 'Okta validation needs attention',
-        result.success ? 'success' : 'warning',
-      );
-    } catch (error) {
-      toast(formatApiError(error, 'Okta validation failed'), 'error');
-    }
-  };
-
-  const saveEntraCollector = async () => {
-    setEntraCollectorSaving(true);
-    try {
-      await api.saveEntraCollectorConfig({
-        enabled: entraCollectorDraft.enabled,
-        tenant_id: entraCollectorDraft.tenant_id,
-        client_id: entraCollectorDraft.client_id,
-        client_secret: optionalTextValue(entraCollectorDraft.client_secret),
-        poll_interval_secs: Number(entraCollectorDraft.poll_interval_secs),
-      });
-      setEntraCollectorValidationResult(null);
-      await rIntegrations();
-      toast('Microsoft Entra identity setup saved', 'success');
-    } catch (error) {
-      toast(formatApiError(error, 'Failed to save Microsoft Entra identity setup'), 'error');
-    } finally {
-      setEntraCollectorSaving(false);
-    }
-  };
-
-  const validateEntraCollector = async () => {
-    try {
-      const result = await api.validateEntraCollector();
-      setEntraCollectorValidationResult(result);
-      toast(
-        result.success
-          ? `Entra validation returned ${result.event_count ?? 0} event${result.event_count === 1 ? '' : 's'}`
-          : result.error || 'Entra validation needs attention',
-        result.success ? 'success' : 'warning',
-      );
-    } catch (error) {
-      toast(formatApiError(error, 'Entra validation failed'), 'error');
-    }
-  };
-
-  const saveM365Collector = async () => {
-    setM365CollectorSaving(true);
-    try {
-      await api.saveM365CollectorConfig({
-        enabled: m365CollectorDraft.enabled,
-        tenant_id: m365CollectorDraft.tenant_id,
-        client_id: m365CollectorDraft.client_id,
-        client_secret: optionalTextValue(m365CollectorDraft.client_secret),
-        poll_interval_secs: Number(m365CollectorDraft.poll_interval_secs),
-        content_types: parseListInput(m365CollectorDraft.content_types),
-      });
-      setM365CollectorValidationResult(null);
-      await rIntegrations();
-      toast('Microsoft 365 activity setup saved', 'success');
-    } catch (error) {
-      toast(formatApiError(error, 'Failed to save Microsoft 365 activity setup'), 'error');
-    } finally {
-      setM365CollectorSaving(false);
-    }
-  };
-
-  const validateM365Collector = async () => {
-    try {
-      const result = await api.validateM365Collector();
-      setM365CollectorValidationResult(result);
-      toast(
-        result.success
-          ? `Microsoft 365 validation returned ${result.event_count ?? 0} event${result.event_count === 1 ? '' : 's'}`
-          : result.error || 'Microsoft 365 validation needs attention',
-        result.success ? 'success' : 'warning',
-      );
-    } catch (error) {
-      toast(formatApiError(error, 'Microsoft 365 validation failed'), 'error');
     }
   };
 
