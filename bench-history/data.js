@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1779392232789,
+  "lastUpdate": 1779392733098,
   "repoUrl": "https://github.com/pinkysworld/Wardex",
   "entries": {
     "Wardex criterion benches": [
@@ -12301,6 +12301,114 @@ window.BENCHMARK_DATA = {
             "name": "sigma_evaluate_20_rules",
             "value": 35302,
             "range": "± 343",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "85413447+pinkysworld@users.noreply.github.com",
+            "name": "pinkysworld",
+            "username": "pinkysworld"
+          },
+          "committer": {
+            "email": "85413447+pinkysworld@users.noreply.github.com",
+            "name": "pinkysworld",
+            "username": "pinkysworld"
+          },
+          "distinct": true,
+          "id": "fad2909005feb5f73e298cbae1ef78f0290af024",
+          "message": "test(server_auth): end-to-end failed-auth lockout assertions hitting /api/metrics\n\nAdds tests/failed_auth_lockout.rs which drives THRESHOLD synthetic failures through the process-global tracker, then asserts the live /api/metrics endpoint exposes the expected wardex_failed_auth_* counters and gauge. Also verifies that clearing the IP bumps resets_total and drops active_lockouts back to zero.\n\nLoopback addresses are exempt by design (see src/server_auth.rs::FailedAuthTracker::is_exempt), so a real-IP HTTP path can't be exercised in-process. To bridge that gap, src/server_auth.rs now exposes three #[doc(hidden)] pub helpers - __test_failed_auth_record / __test_failed_auth_clear / __test_failed_auth_stats - plus a FailedAuthStatsSnapshot mirror struct. The hidden-pub idiom keeps the helpers reachable from integration tests in tests/ without leaking the production crate-private API.\n\nVerification: cargo fmt, cargo clippy --all-targets -- -D warnings, cargo test --test failed_auth_lockout (1 pass), cargo test --lib server_auth:: (15 pass), cargo test --lib server::tests:: (67 pass), cargo test --test concurrent_smoke (1 pass), cargo test --test api_integration (239 pass).",
+          "timestamp": "2026-05-21T21:37:16+02:00",
+          "tree_id": "f71d158d5208d548d38b9f10300b3732df690260",
+          "url": "https://github.com/pinkysworld/Wardex/commit/fad2909005feb5f73e298cbae1ef78f0290af024"
+        },
+        "date": 1779392732652,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "full_pipeline/5",
+            "value": 48669,
+            "range": "± 1700",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "full_pipeline/50",
+            "value": 405880,
+            "range": "± 1220",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "full_pipeline/200",
+            "value": 1892635,
+            "range": "± 23151",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "full_pipeline/1000",
+            "value": 17813441,
+            "range": "± 97439",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "detector_evaluate_single",
+            "value": 609,
+            "range": "± 15",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "detector_window_stream_256",
+            "value": 882219,
+            "range": "± 21501",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "shared_storage_observed_schema_read",
+            "value": 136,
+            "range": "± 0",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "shared_storage_4_threads_64_alerts",
+            "value": 146237,
+            "range": "± 1231",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "policy_evaluate_single",
+            "value": 239,
+            "range": "± 7",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "throughput/1000_samples",
+            "value": 18002944,
+            "range": "± 343599",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "search_500_events",
+            "value": 109848,
+            "range": "± 270",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "hunt_field_query",
+            "value": 86962,
+            "range": "± 251",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "ml_triage_rf",
+            "value": 50,
+            "range": "± 0",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "sigma_evaluate_20_rules",
+            "value": 35050,
+            "range": "± 505",
             "unit": "ns/iter"
           }
         ]
