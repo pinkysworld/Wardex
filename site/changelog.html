@@ -53,6 +53,7 @@
             <h2>Releases</h2>
             <ul>
       <li><a href="#vUnreleased"><span class="chl-ver">vUnreleased</span><span class="chl-nav-title"></span></a></li>
+      <li><a href="#v1.0.24"><span class="chl-ver">v1.0.24</span><span class="chl-nav-title">2026-05-21 — Secret hardening + nav-race guard</span></a></li>
       <li><a href="#v1.0.23"><span class="chl-ver">v1.0.23</span><span class="chl-nav-title">2026-05-20</span></a></li>
       <li><a href="#v1.0.22"><span class="chl-ver">v1.0.22</span><span class="chl-nav-title">2026-05-17 — CI repair and release cleanup</span></a></li>
       <li><a href="#v1.0.21"><span class="chl-ver">v1.0.21</span><span class="chl-nav-title">2026-05-17 — workflow continuity and documentation refresh</span></a></li>
@@ -171,6 +172,33 @@
         <span class="chl-version-tag">vUnreleased</span>
         <h2>Unreleased</h2>
       </header>
+    </article>
+    <article class="chl-release" id="v1.0.24">
+      <header class="chl-release-header">
+        <span class="chl-version-tag">v1.0.24</span>
+        <h2>2026-05-21 — Secret hardening + nav-race guard</h2>
+      </header>
+      <div class="chl-category">
+        <h3>Security</h3>
+        <ul>
+        <li><strong>Failed-auth lockout with exponential backoff</strong>: <code>handle_api</code> now tracks failed authentications per source IP and serves an HTTP 429 with <code>Retry-After</code> once a threshold is crossed. The lockout window doubles on each subsequent breach (30s → 60s → … capped at 1h), the bookkeeping table is bounded to 1024 entries with a 60s sweep, and loopback addresses (<code>127.x</code>, <code>::1</code>, empty, <code>"unknown"</code>) are exempted so local tooling and cluster peers stay unaffected. Each lockout is recorded in the audit log as <code>POST /api/_failed_auth</code>. Successful auth from a previously-failing IP clears the counter.</li>
+        <li><strong>Constant-time agent token comparison</strong>: the inline byte-loop that compared the configured <code>WARDEX_AGENT_TOKEN</code> against the inbound header was replaced with the existing <code>secure_token_eq</code> helper so all three privileged token paths (agent / cluster / user) share one constant-time implementation. New unit test pins the contract.</li>
+        <li><strong>Post-quantum key zeroization</strong>: <code>MlDsaKeyPair</code> and <code>LamportPrivateKey</code> now implement <code>Drop</code> and zeroize their secret material on the way out (<code>zeroize</code> is a direct dependency rather than transitive). The ML-DSA seed and every Lamport (zero,one) pair are wiped before deallocation, so a stale heap page cannot leak signing keys after a key rotation.</li>
+        </ul>
+      </div>
+      <div class="chl-category">
+        <h3>Fixed</h3>
+        <ul>
+        <li><strong>Admin-console nav-race in <code>Infrastructure.jsx</code> and <code>HelpDocs.jsx</code></strong>: both components had a <code>useEffect</code> that wrote search params without checking the current route. If the user navigated away while the effect was scheduled, the write resolved against the component's own pathname and clobbered the new URL. Added the <code>location.pathname === '/&lt;route&gt;'</code> guard that we shipped earlier for <code>ThreatDetection.jsx</code>.</li>
+        <li><strong>Flaky <code>Settings.test.jsx</code> ("saves SIEM, collector and secrets setup flows from the integrations tab")</strong>: cross-block element lookups (Save/Validate buttons and form inputs in the Integrations tab) were synchronous <code>getByRole</code>/<code>getByLabelText</code> calls that raced with the re-render triggered by the previous block's save/validate response. Converted the boundary lookups to <code>findBy*</code> so each block waits for the prior async response to settle. 5/5 deterministic locally.</li>
+        </ul>
+      </div>
+      <div class="chl-category">
+        <h3>Added</h3>
+        <ul>
+        <li><strong><code>scripts/check_nav_race_guard.py</code> (wired into CI <code>contract-parity</code> job)</strong>: scans every admin-console component for <code>useEffect</code> blocks that call <code>setSearchParams</code> without a <code>location.pathname</code> guard or an explicit <code>// nav-race-ok</code> allowlist marker. Fails the build with file:line pointers when a regression lands. Codifies the nav-race pattern so the audit holds.</li>
+        </ul>
+      </div>
     </article>
     <article class="chl-release" id="v1.0.23">
       <header class="chl-release-header">
