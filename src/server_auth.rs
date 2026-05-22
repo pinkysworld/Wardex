@@ -615,13 +615,13 @@ mod tests {
         failed_auth_record(ip);
         let after = failed_auth_stats();
         assert!(after.failures_total >= before.failures_total + FAILED_AUTH_THRESHOLD as u64);
-        assert!(after.lockouts_triggered_total >= before.lockouts_triggered_total + 1);
+        assert!(after.lockouts_triggered_total > before.lockouts_triggered_total);
         // Probing while locked counts as a breach attempt.
         let before_breach = failed_auth_stats().lockout_breach_attempts_total;
         let subject = failed_auth_ip_subject(ip);
         assert!(failed_auth_locked_subject(ip, &subject).is_some());
         let after_breach = failed_auth_stats().lockout_breach_attempts_total;
-        assert!(after_breach >= before_breach + 1);
+        assert!(after_breach > before_breach);
         // Cleanup so subsequent tests don't see a stale entry.
         failed_auth_clear(ip);
     }
@@ -634,7 +634,7 @@ mod tests {
         let before = failed_auth_stats();
         failed_auth_clear(ip);
         let after = failed_auth_stats();
-        assert!(after.resets_total >= before.resets_total + 1);
+        assert!(after.resets_total > before.resets_total);
         // Clearing an unknown IP does NOT count as a reset.
         let before2 = failed_auth_stats();
         failed_auth_clear("198.51.100.10");
