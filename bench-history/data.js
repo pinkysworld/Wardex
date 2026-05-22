@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1779426979009,
+  "lastUpdate": 1779429421857,
   "repoUrl": "https://github.com/pinkysworld/Wardex",
   "entries": {
     "Wardex criterion benches": [
@@ -12623,6 +12623,114 @@ window.BENCHMARK_DATA = {
             "name": "sigma_evaluate_20_rules",
             "value": 35418,
             "range": "± 157",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "85413447+pinkysworld@users.noreply.github.com",
+            "name": "pinkysworld",
+            "username": "pinkysworld"
+          },
+          "committer": {
+            "email": "85413447+pinkysworld@users.noreply.github.com",
+            "name": "pinkysworld",
+            "username": "pinkysworld"
+          },
+          "distinct": true,
+          "id": "c1802386c66aae800076ee5fafda3c5d584b3cda",
+          "message": "release: bump to v1.0.25 with observability + Settings refactor\n\nRoll-up of the post-v1.0.24 hardening tranche: label-aware lock metrics (wardex_state_lock_labeled_*), failed-auth observability series (wardex_failed_auth_*), hot-path tracked_lock migration (authenticate_request_bearer/session, respond_api_audit, is_feature_enabled), src/server_metrics.rs extraction, tests/failed_auth_lockout.rs + #[doc(hidden)] pub test helpers in src/server_auth.rs, mockWebSocket Playwright helper, useCollectorForm hook collapsing six cloud-collector save/validate triplets in Settings.jsx, .gitignore sweep, CONTRIBUTING.md Testing Patterns section. CHANGELOG, site, docs, and the 15 canonical version fields all rewritten to 1.0.25. Gates green: cargo fmt + clippy -D warnings + cargo test --lib (1542) + failed_auth_lockout + concurrent_smoke + api_integration (239) + check_panic_policy.py; admin-console eslint/knip/tsc/vitest (323)/build; Playwright chromium (25/25); validate_release_docs.py + bump_version.py --check both clean.",
+          "timestamp": "2026-05-22T07:49:07+02:00",
+          "tree_id": "972fe8ad1f1d30dc7472b7b752834e047154c487",
+          "url": "https://github.com/pinkysworld/Wardex/commit/c1802386c66aae800076ee5fafda3c5d584b3cda"
+        },
+        "date": 1779429421402,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "full_pipeline/5",
+            "value": 49172,
+            "range": "± 301",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "full_pipeline/50",
+            "value": 405290,
+            "range": "± 1234",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "full_pipeline/200",
+            "value": 1863473,
+            "range": "± 28514",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "full_pipeline/1000",
+            "value": 17053584,
+            "range": "± 35475",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "detector_evaluate_single",
+            "value": 658,
+            "range": "± 1",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "detector_window_stream_256",
+            "value": 874831,
+            "range": "± 1819",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "shared_storage_observed_schema_read",
+            "value": 126,
+            "range": "± 0",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "shared_storage_4_threads_64_alerts",
+            "value": 155811,
+            "range": "± 1853",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "policy_evaluate_single",
+            "value": 233,
+            "range": "± 0",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "throughput/1000_samples",
+            "value": 17177799,
+            "range": "± 36745",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "search_500_events",
+            "value": 115047,
+            "range": "± 308",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "hunt_field_query",
+            "value": 97828,
+            "range": "± 458",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "ml_triage_rf",
+            "value": 57,
+            "range": "± 0",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "sigma_evaluate_20_rules",
+            "value": 36020,
+            "range": "± 184",
             "unit": "ns/iter"
           }
         ]
