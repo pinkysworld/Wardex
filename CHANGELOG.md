@@ -4,6 +4,26 @@ All notable changes to Wardex are documented in this file.
 
 ## [Unreleased]
 
+## [1.0.26] — 2026-05-22 — Product hardening and release proof
+
+### Security
+- **Failed-auth request bucketing**: authenticated, agent, and cluster API failures now record both the original IP-wide backoff bucket and a hashed presented-token bucket. Rotating bearer tokens still trip the IP-wide exponential lockout, while repeated attempts with one leaked token become visible without storing raw credentials.
+- **Lockout audit instrumentation**: failed-auth lockout audit writes now use labeled `tracked_lock` callsites, so operators can see whether abuse-pressure audit paths contribute to global state contention.
+
+### Added
+- **Lock-label budget drop metric**: `/api/metrics` now emits `wardex_metrics_dropped_total{family="wardex_state_lock_labeled",reason="label_limit"}` when the per-label lock registry is saturated, keeping observability cardinality bounded and auditable.
+- **Operator smoke target**: `make smoke` now runs the core Rust checks plus admin-console lint and Vitest sweeps as one documented local release gate.
+- **Detection explain contract guard**: contract parity now requires `/api/detection/explain` across runtime, OpenAPI/docs, and generated SDK endpoint inventories.
+
+### Changed
+- **Feature-flag registry concurrency**: runtime feature flags now use `RwLock<HashMap<...>>`, allowing read-heavy request paths to evaluate flags concurrently while preserving existing write semantics for toggles, rollouts, and kill switches.
+- **Google Workspace collector form reuse**: the admin console now drives Workspace collector save/validate state through the shared `useCollectorForm` hook, aligning it with the other cloud, identity, and SaaS collector lanes.
+- **Live Monitor continuity**: the console remembers the last selected alert in session storage and restores the alert drawer when the route is clean, preserving analyst context across refreshes without requiring a query param.
+- **Failed-auth audit pivot**: Settings adds a one-click Failed Auth audit filter so operators can jump directly to lockout evidence.
+
+### Documentation
+- README, status, roadmap, website version badges, and generated changelog pages now point at the `v1.0.26` release surface.
+
 ## [1.0.25] — 2026-05-22
 
 ### Added

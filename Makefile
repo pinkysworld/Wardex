@@ -1,5 +1,5 @@
 # ── Wardex — Developer Makefile ────────────────────────
-.PHONY: build run test lint fmt check clean release dev admin fuzz bench doc release-acceptance release-docs-check
+.PHONY: build run test lint fmt check clean release dev admin fuzz bench doc smoke release-acceptance release-docs-check
 
 # ── Build ──
 build:
@@ -76,6 +76,12 @@ clean:
 
 # ── CI convenience ──
 ci: fmt-check lint test admin-test
+
+smoke:
+	cargo check --all-targets
+	cargo test --lib
+	cd admin-console && CI=1 TERM=dumb npm_config_progress=false npm run lint
+	cd admin-console && CI=1 TERM=dumb npm_config_progress=false npm run test -- --run
 
 release-acceptance:
 	bash ./scripts/release_acceptance.sh

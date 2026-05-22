@@ -57,6 +57,7 @@ describe('LiveMonitor', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     localStorage.clear();
+    sessionStorage.clear();
     setToken('');
     delete globalThis.WebSocket;
     globalThis.fetch = vi.fn((url) => {
@@ -702,6 +703,49 @@ describe('LiveMonitor', () => {
     });
 
     expect(screen.getByRole('button', { name: 'Open Drawer' })).toBeInTheDocument();
+  });
+
+  it('restores the last selected alert from session storage when the route is clean', async () => {
+    sessionStorage.setItem('wardex.liveMonitor.lastSelectedAlert', 'alert-1');
+
+    globalThis.fetch = vi.fn((url) => {
+      const href = String(url);
+      if (href.includes('/api/alerts/count')) {
+        return Promise.resolve(jsonOk({ total: 1, critical: 1, severe: 0, elevated: 0 }));
+      }
+      if (href.includes('/api/ws/stats')) return Promise.resolve(jsonOk(wsStatsFixture()));
+      if (href.includes('/api/alerts/grouped')) return Promise.resolve(jsonOk([]));
+      if (href.includes('/api/alerts')) {
+        return Promise.resolve(
+          jsonOk([
+            {
+              id: 'alert-1',
+              timestamp: new Date().toISOString(),
+              hostname: 'edge-1',
+              severity: 'critical',
+              source: 'sensor',
+              category: 'auth',
+              score: 9.4,
+              reasons: ['failed login burst'],
+            },
+          ]),
+        );
+      }
+      if (href.includes('/api/processes/live')) return Promise.resolve(jsonOk({ processes: [] }));
+      if (href.includes('/api/processes/analysis')) {
+        return Promise.resolve(jsonOk({ total: 0, findings: [] }));
+      }
+      if (href.includes('/api/fp-feedback/stats')) return Promise.resolve(jsonOk([]));
+      if (href.includes('/api/health')) return Promise.resolve(jsonOk({ status: 'ok' }));
+      return Promise.resolve(jsonOk({}));
+    });
+
+    renderMonitor('/monitor');
+
+    expect(await screen.findByRole('button', { name: 'Close Drawer' })).toBeInTheDocument();
+    await waitFor(() => {
+      expect(currentLocation().searchParams.get('alert')).toBe('alert-1');
+    });
   });
 
   it('supports keyboard-first alert triage shortcuts', async () => {

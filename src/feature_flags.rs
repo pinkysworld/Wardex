@@ -2,7 +2,7 @@
 
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::sync::Mutex;
+use std::sync::RwLock;
 
 /// A runtime feature flag.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -21,19 +21,19 @@ pub struct FeatureFlag {
 
 /// Feature flag registry for runtime toggles.
 pub struct FeatureFlagRegistry {
-    flags: Mutex<HashMap<String, FeatureFlag>>,
+    flags: RwLock<HashMap<String, FeatureFlag>>,
 }
 
 impl FeatureFlagRegistry {
     pub fn new() -> Self {
         Self {
-            flags: Mutex::new(HashMap::new()),
+            flags: RwLock::new(HashMap::new()),
         }
     }
 
     pub fn register(&self, flag: FeatureFlag) {
         self.flags
-            .lock()
+            .write()
             .unwrap_or_else(|e| e.into_inner())
             .insert(flag.name.clone(), flag);
     }
@@ -41,7 +41,7 @@ impl FeatureFlagRegistry {
     pub fn set_enabled(&self, name: &str, enabled: bool) -> bool {
         if let Some(f) = self
             .flags
-            .lock()
+            .write()
             .unwrap_or_else(|e| e.into_inner())
             .get_mut(name)
         {
@@ -55,7 +55,7 @@ impl FeatureFlagRegistry {
     pub fn set_kill_switch(&self, name: &str, killed: bool) -> bool {
         if let Some(f) = self
             .flags
-            .lock()
+            .write()
             .unwrap_or_else(|e| e.into_inner())
             .get_mut(name)
         {
@@ -69,7 +69,7 @@ impl FeatureFlagRegistry {
     pub fn set_rollout_pct(&self, name: &str, pct: u8) -> bool {
         if let Some(f) = self
             .flags
-            .lock()
+            .write()
             .unwrap_or_else(|e| e.into_inner())
             .get_mut(name)
         {
@@ -82,7 +82,7 @@ impl FeatureFlagRegistry {
 
     /// Check if a feature is active for a given context key (e.g. agent_uid or hostname).
     pub fn is_enabled(&self, name: &str, context_key: &str) -> bool {
-        let flags = self.flags.lock().unwrap_or_else(|e| e.into_inner());
+        let flags = self.flags.read().unwrap_or_else(|e| e.into_inner());
         let Some(flag) = flags.get(name) else {
             return false;
         };
@@ -117,13 +117,13 @@ impl FeatureFlagRegistry {
 
     /// Check if enabled without rollout gating (admin/testing).
     pub fn is_globally_enabled(&self, name: &str) -> bool {
-        let flags = self.flags.lock().unwrap_or_else(|e| e.into_inner());
+        let flags = self.flags.read().unwrap_or_else(|e| e.into_inner());
         flags.get(name).is_some_and(|f| f.enabled && !f.kill_switch)
     }
 
     pub fn list_flags(&self) -> Vec<FeatureFlag> {
         self.flags
-            .lock()
+            .read()
             .unwrap_or_else(|e| e.into_inner())
             .values()
             .cloned()
@@ -136,7 +136,7 @@ impl FeatureFlagRegistry {
 
     pub fn get_flag(&self, name: &str) -> Option<FeatureFlag> {
         self.flags
-            .lock()
+            .read()
             .unwrap_or_else(|e| e.into_inner())
             .get(name)
             .cloned()

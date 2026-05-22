@@ -235,16 +235,10 @@ export default function Settings() {
   const [lastRetentionApply, setLastRetentionApply] = useState(null);
   const [siemDraft, setSiemDraft] = useState(() => createSiemDraft());
   const [siemDraftDirty, setSiemDraftDirty] = useState(false);
-  const [workspaceCollectorDraft, setWorkspaceCollectorDraft] = useState(() =>
-    createWorkspaceCollectorDraft(),
-  );
   const [secretsDraft, setSecretsDraft] = useState(() => createSecretsDraft());
   const [siemSaving, setSiemSaving] = useState(false);
-  const [workspaceCollectorSaving, setWorkspaceCollectorSaving] = useState(false);
   const [secretsSaving, setSecretsSaving] = useState(false);
   const [siemValidationResult, setSiemValidationResult] = useState(null);
-  const [workspaceCollectorValidationResult, setWorkspaceCollectorValidationResult] =
-    useState(null);
   const [secretValidationResult, setSecretValidationResult] = useState(null);
 
   const {
@@ -419,6 +413,36 @@ export default function Settings() {
       saveError: 'Failed to save Microsoft 365 activity setup',
       validateError: 'Microsoft 365 validation failed',
       validateNeedsAttention: 'Microsoft 365 validation needs attention',
+    },
+    toast,
+    onSaved: rIntegrations,
+  });
+
+  const {
+    draft: workspaceCollectorDraft,
+    setDraft: setWorkspaceCollectorDraft,
+    saving: workspaceCollectorSaving,
+    validationResult: workspaceCollectorValidationResult,
+    save: saveWorkspaceCollector,
+    validate: validateWorkspaceCollector,
+  } = useCollectorForm({
+    createDraft: createWorkspaceCollectorDraft,
+    saveApi: (payload) => api.saveWorkspaceCollectorConfig(payload),
+    validateApi: () => api.validateWorkspaceCollector(),
+    toPayload: (d) => ({
+      enabled: d.enabled,
+      customer_id: d.customer_id,
+      delegated_admin_email: d.delegated_admin_email,
+      service_account_email: d.service_account_email,
+      credentials_json: optionalTextValue(d.credentials_json),
+      poll_interval_secs: Number(d.poll_interval_secs),
+      applications: parseListInput(d.applications),
+    }),
+    labels: {
+      product: 'Google Workspace activity',
+      saveError: 'Failed to save Google Workspace activity setup',
+      validateError: 'Google Workspace validation failed',
+      validateNeedsAttention: 'Google Workspace validation needs attention',
     },
     toast,
     onSaved: rIntegrations,
@@ -736,7 +760,7 @@ export default function Settings() {
 
   useEffect(() => {
     setWorkspaceCollectorDraft(createWorkspaceCollectorDraft(workspaceCollectorData));
-  }, [workspaceCollectorData]);
+  }, [workspaceCollectorData, setWorkspaceCollectorDraft]);
 
   useEffect(() => {
     setSecretsDraft((prev) => ({
@@ -772,6 +796,14 @@ export default function Settings() {
     setAuditMethod('all');
     setAuditStatus('all');
     setAuditAuth('all');
+    setAuditPage(0);
+  };
+
+  const showFailedAuthAudit = () => {
+    setAuditQuery('/api/_failed_auth');
+    setAuditMethod('POST');
+    setAuditStatus('4xx');
+    setAuditAuth('anonymous');
     setAuditPage(0);
   };
 
@@ -1018,43 +1050,6 @@ export default function Settings() {
       );
     } catch (error) {
       toast(formatApiError(error, 'SIEM validation failed'), 'error');
-    }
-  };
-
-  const saveWorkspaceCollector = async () => {
-    setWorkspaceCollectorSaving(true);
-    try {
-      await api.saveWorkspaceCollectorConfig({
-        enabled: workspaceCollectorDraft.enabled,
-        customer_id: workspaceCollectorDraft.customer_id,
-        delegated_admin_email: workspaceCollectorDraft.delegated_admin_email,
-        service_account_email: workspaceCollectorDraft.service_account_email,
-        credentials_json: optionalTextValue(workspaceCollectorDraft.credentials_json),
-        poll_interval_secs: Number(workspaceCollectorDraft.poll_interval_secs),
-        applications: parseListInput(workspaceCollectorDraft.applications),
-      });
-      setWorkspaceCollectorValidationResult(null);
-      await rIntegrations();
-      toast('Google Workspace activity setup saved', 'success');
-    } catch (error) {
-      toast(formatApiError(error, 'Failed to save Google Workspace activity setup'), 'error');
-    } finally {
-      setWorkspaceCollectorSaving(false);
-    }
-  };
-
-  const validateWorkspaceCollector = async () => {
-    try {
-      const result = await api.validateWorkspaceCollector();
-      setWorkspaceCollectorValidationResult(result);
-      toast(
-        result.success
-          ? `Google Workspace validation returned ${result.event_count ?? 0} event${result.event_count === 1 ? '' : 's'}`
-          : result.error || 'Google Workspace validation needs attention',
-        result.success ? 'success' : 'warning',
-      );
-    } catch (error) {
-      toast(formatApiError(error, 'Google Workspace validation failed'), 'error');
     }
   };
 
@@ -3643,6 +3638,9 @@ export default function Settings() {
                 Filters apply to both the paged table and the CSV export.
               </span>
               <div className="btn-group">
+                <button className="btn btn-sm" onClick={showFailedAuthAudit}>
+                  Failed Auth
+                </button>
                 <button
                   className="btn btn-sm"
                   disabled={!auditFiltersActive}

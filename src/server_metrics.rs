@@ -88,6 +88,19 @@ pub(crate) fn render_labeled_lock_metrics() -> String {
     body
 }
 
+/// Render metric-budget drops for process-global observability sources.
+pub(crate) fn render_metrics_drop_metrics() -> String {
+    let dropped = crate::state_lock::label_drop_snapshot();
+    format!(
+        concat!(
+            "# HELP wardex_metrics_dropped_total\n",
+            "# TYPE wardex_metrics_dropped_total counter\n",
+            "wardex_metrics_dropped_total{{family=\"wardex_state_lock_labeled\",reason=\"label_limit\"}} {}\n"
+        ),
+        dropped
+    )
+}
+
 /// Render the failed-auth observability block.
 ///
 /// Pulls a snapshot from `crate::server_auth::failed_auth_stats()` and emits
@@ -181,5 +194,14 @@ mod tests {
                 "missing TYPE line for {name}",
             );
         }
+    }
+
+    #[test]
+    fn metrics_drop_block_emits_budget_series() {
+        let body = render_metrics_drop_metrics();
+        assert!(body.contains("# TYPE wardex_metrics_dropped_total counter"));
+        assert!(body.contains(
+            "wardex_metrics_dropped_total{family=\"wardex_state_lock_labeled\",reason=\"label_limit\"}"
+        ));
     }
 }

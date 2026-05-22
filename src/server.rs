@@ -132,8 +132,8 @@ use crate::response::{
     ResponseRequest, ResponseTarget,
 };
 use crate::server_auth::{
-    bearer_token, failed_auth_clear, failed_auth_locked, failed_auth_locked_response,
-    failed_auth_record, secure_token_eq,
+    bearer_token, failed_auth_clear_request, failed_auth_locked_request,
+    failed_auth_locked_response, failed_auth_record_request, failed_auth_subject, secure_token_eq,
 };
 use crate::server_response::{
     cors_origin, csv_response, error_json, json_response, safe_body, security_headers,
@@ -3513,6 +3513,10 @@ fn prometheus_metrics_payload(state: &AppState) -> String {
     // passed to `tracked_lock(state, "...")`; the rendering helper lives in
     // `src/server_metrics.rs` so this file stays focused on orchestration.
     body.push_str(&crate::server_metrics::render_labeled_lock_metrics());
+
+    // Cardinality-budget drop counters for metrics families that cap dynamic
+    // dimensions.
+    body.push_str(&crate::server_metrics::render_metrics_drop_metrics());
 
     // Failed-auth observability counters and active-lockout gauge.
     body.push_str(&crate::server_metrics::render_failed_auth_metrics());
@@ -17738,7 +17742,7 @@ fn production_readiness_evidence(state: &mut AppState) -> serde_json::Value {
 fn run_failover_drill(state: &Arc<Mutex<AppState>>, auth: &AuthIdentity) -> Response<Body> {
     let backup_status = BackupStatusSnapshot::gather();
     let actor = response_requested_by(auth);
-    let mut s = state.lock().unwrap_or_else(|e| e.into_inner());
+    let mut s = crate::state_lock::tracked_lock(state, "server/run_failover_drill");
     let drill = FailoverDrillRecord::evaluate(&s, &backup_status, &actor);
     s.last_failover_drill = Some(drill.clone());
     s.support_store.record_failover_drill(drill.clone());
@@ -17762,7 +17766,7 @@ fn spawn_feed_ingestion_loop(state: &Arc<Mutex<AppState>>) {
     std::thread::spawn(move || {
         loop {
             let shutdown = {
-                let s = state.lock().unwrap_or_else(|e| e.into_inner());
+                let s = crate::state_lock::tracked_lock(&state, "server/feed_ingestion_shutdown");
                 s.shutdown.load(Ordering::Relaxed)
             };
             if shutdown {
@@ -17770,7 +17774,8 @@ fn spawn_feed_ingestion_loop(state: &Arc<Mutex<AppState>>) {
             }
 
             let due: Vec<crate::feed_ingestion::FeedSource> = {
-                let s = state.lock().unwrap_or_else(|e| e.into_inner());
+                let s =
+                    crate::state_lock::tracked_lock(&state, "server/feed_ingestion_due_sources");
                 s.feed_engine
                     .sources_due_for_poll()
                     .into_iter()
@@ -17780,7 +17785,8 @@ fn spawn_feed_ingestion_loop(state: &Arc<Mutex<AppState>>) {
 
             for source in due {
                 let fetched = crate::feed_ingestion::fetch_feed_data(&source);
-                let mut s = state.lock().unwrap_or_else(|e| e.into_inner());
+                let mut s =
+                    crate::state_lock::tracked_lock(&state, "server/feed_ingestion_poll_result");
                 match fetched {
                     Ok(data) => {
                         let AppState {
@@ -17819,7 +17825,7 @@ fn first_run_operator_proof(state: &Arc<Mutex<AppState>>, auth: &AuthIdentity) -
     let requested_by = response_requested_by(auth);
     let now = chrono::Utc::now().to_rfc3339();
 
-    let mut s = state.lock().unwrap_or_else(|e| e.into_inner());
+    let mut s = crate::state_lock::tracked_lock(state, "server/first_run_operator_proof");
     for (sample, sample_report) in demo.iter().zip(result.reports.iter()) {
         let pre = s
             .detector
@@ -18458,13 +18464,18 @@ fn handle_api(
     let is_agent_endpoint = matches!(route_access, ApiRouteAccess::Agent);
     let is_cluster_endpoint = matches!(route_access, ApiRouteAccess::Cluster);
 
-    // Up-front failed-auth lockout: if this IP has been throttled by repeated
-    // failures, return 429 immediately for any authenticated/agent/cluster
-    // route. Public routes are still served so health checks survive.
+    // Up-front failed-auth lockout: if this IP or presented-token bucket has
+    // been throttled by repeated failures, return 429 immediately for any
+    // authenticated/agent/cluster route. Public routes are still served so
+    // health checks survive.
     let auth_gated = is_agent_endpoint
         || is_cluster_endpoint
         || matches!(route_access, ApiRouteAccess::Authenticated);
-    if auth_gated && let Some(retry_after) = failed_auth_locked(remote_addr) {
+    let presented_bearer_token = bearer_token(headers);
+    let failed_auth_key = failed_auth_subject(remote_addr, presented_bearer_token.as_deref());
+    if auth_gated
+        && let Some(retry_after) = failed_auth_locked_request(remote_addr, &failed_auth_key)
+    {
         return failed_auth_locked_response(retry_after);
     }
 
@@ -18475,12 +18486,14 @@ fn handle_api(
         && !route_path.starts_with("/api/updates/download/")
         && let Ok(required_agent_token) = std::env::var("WARDEX_AGENT_TOKEN")
     {
-        let provided = bearer_token(headers);
-        let valid = secure_token_eq(provided.as_deref(), &required_agent_token);
+        let provided = presented_bearer_token.as_deref();
+        let valid = secure_token_eq(provided, &required_agent_token);
         if !valid {
-            if let Some(lockout) = failed_auth_record(remote_addr)
-                && let Ok(mut s) = state.lock()
-            {
+            if let Some(lockout) = failed_auth_record_request(remote_addr, &failed_auth_key) {
+                let mut s = crate::state_lock::tracked_lock(
+                    state,
+                    "server/failed_auth_agent_lockout_audit",
+                );
                 s.audit_log
                     .record("POST", "/api/_failed_auth", remote_addr, 429, false);
                 let _ = lockout; // recorded; audit entry above carries the signal
@@ -18497,9 +18510,9 @@ fn handle_api(
     }
 
     if is_cluster_endpoint && !cluster_request_authorized(headers, state) {
-        if let Some(_lockout) = failed_auth_record(remote_addr)
-            && let Ok(mut s) = state.lock()
-        {
+        if let Some(_lockout) = failed_auth_record_request(remote_addr, &failed_auth_key) {
+            let mut s =
+                crate::state_lock::tracked_lock(state, "server/failed_auth_cluster_lockout_audit");
             s.audit_log
                 .record("POST", "/api/_failed_auth", remote_addr, 429, false);
         }
@@ -18517,9 +18530,9 @@ fn handle_api(
 
     let auth_identity = authenticate_request(headers, state);
     if needs_auth && !auth_identity.is_authenticated() {
-        if let Some(_lockout) = failed_auth_record(remote_addr)
-            && let Ok(mut s) = state.lock()
-        {
+        if let Some(_lockout) = failed_auth_record_request(remote_addr, &failed_auth_key) {
+            let mut s =
+                crate::state_lock::tracked_lock(state, "server/failed_auth_user_lockout_audit");
             s.audit_log
                 .record("POST", "/api/_failed_auth", remote_addr, 429, false);
         }
@@ -18536,7 +18549,7 @@ fn handle_api(
     // Reset the failed-auth counter on any successful authenticated request so
     // legitimate clients aren't penalised after a single bad attempt.
     if auth_identity.is_authenticated() {
-        failed_auth_clear(remote_addr);
+        failed_auth_clear_request(remote_addr, &failed_auth_key);
     }
 
     // RBAC enforcement for sensitive endpoints
@@ -18584,7 +18597,7 @@ fn handle_api(
             json_response(&body, 200)
         }
         (Method::Get, "/api/session/info") => {
-            let s = state.lock().unwrap_or_else(|e| e.into_inner());
+            let s = crate::state_lock::tracked_lock(state, "server/api_session_info");
             let ttl = s.config.security.token_ttl_secs;
             let elapsed = s.token_issued_at.elapsed().as_secs();
             let uptime = s.server_start.elapsed().as_secs();
@@ -18600,7 +18613,7 @@ fn handle_api(
         }
         (Method::Get, "/api/user/preferences") => {
             let prefs = {
-                let s = state.lock().unwrap_or_else(|e| e.into_inner());
+                let s = crate::state_lock::tracked_lock(state, "server/api_user_preferences_get");
                 s.user_preferences.get(auth_identity.actor())
             };
             match serde_json::to_string_pretty(&prefs) {
@@ -18612,7 +18625,10 @@ fn handle_api(
             Ok(raw) => match serde_json::from_str::<UserPreferencesPatch>(&raw) {
                 Ok(patch) => {
                     let result = {
-                        let mut s = state.lock().unwrap_or_else(|e| e.into_inner());
+                        let mut s = crate::state_lock::tracked_lock(
+                            state,
+                            "server/api_user_preferences_put",
+                        );
                         s.user_preferences.upsert(auth_identity.actor(), patch)
                     };
                     match result {
@@ -18635,7 +18651,7 @@ fn handle_api(
             }
         }
         (Method::Get, "/api/report") => {
-            let s = state.lock().unwrap_or_else(|e| e.into_inner());
+            let s = crate::state_lock::tracked_lock(state, "server/api_report_get");
             if let Some(ref report) = s.last_report {
                 match serde_json::to_string_pretty(report) {
                     Ok(json) => json_response(&json, 200),

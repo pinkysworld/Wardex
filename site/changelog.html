@@ -53,8 +53,9 @@
             <h2>Releases</h2>
             <ul>
       <li><a href="#vUnreleased"><span class="chl-ver">vUnreleased</span><span class="chl-nav-title"></span></a></li>
-      <li><a href="#v1.0.25"><span class="chl-ver">v1.0.25</span><span class="chl-nav-title">2026-05-22 — Observability depth + Settings refactor</span></a></li>
-      <li><a href="#v1.0.24"><span class="chl-ver">v1.0.24</span><span class="chl-nav-title">2026-05-21 — Secret hardening + nav-race guard</span></a></li>
+      <li><a href="#v1.0.26"><span class="chl-ver">v1.0.26</span><span class="chl-nav-title">2026-05-22 — Product hardening and release proof</span></a></li>
+      <li><a href="#v1.0.25"><span class="chl-ver">v1.0.25</span><span class="chl-nav-title">2026-05-22</span></a></li>
+      <li><a href="#v1.0.24"><span class="chl-ver">v1.0.24</span><span class="chl-nav-title">2026-05-21</span></a></li>
       <li><a href="#v1.0.23"><span class="chl-ver">v1.0.23</span><span class="chl-nav-title">2026-05-20</span></a></li>
       <li><a href="#v1.0.22"><span class="chl-ver">v1.0.22</span><span class="chl-nav-title">2026-05-17 — CI repair and release cleanup</span></a></li>
       <li><a href="#v1.0.21"><span class="chl-ver">v1.0.21</span><span class="chl-nav-title">2026-05-17 — workflow continuity and documentation refresh</span></a></li>
@@ -174,27 +175,63 @@
         <h2>Unreleased</h2>
       </header>
     </article>
+    <article class="chl-release" id="v1.0.26">
+      <header class="chl-release-header">
+        <span class="chl-version-tag">v1.0.26</span>
+        <h2>2026-05-22 — Product hardening and release proof</h2>
+      </header>
+      <div class="chl-category">
+        <h3>Security</h3>
+        <ul>
+        <li><strong>Failed-auth request bucketing</strong>: authenticated, agent, and cluster API failures now record both the original IP-wide backoff bucket and a hashed presented-token bucket. Rotating bearer tokens still trip the IP-wide exponential lockout, while repeated attempts with one leaked token become visible without storing raw credentials.</li>
+        <li><strong>Lockout audit instrumentation</strong>: failed-auth lockout audit writes now use labeled <code>tracked_lock</code> callsites, so operators can see whether abuse-pressure audit paths contribute to global state contention.</li>
+        </ul>
+      </div>
+      <div class="chl-category">
+        <h3>Added</h3>
+        <ul>
+        <li><strong>Lock-label budget drop metric</strong>: <code>/api/metrics</code> now emits <code>wardex_metrics_dropped_total{family=&quot;wardex_state_lock_labeled&quot;,reason=&quot;label_limit&quot;}</code> when the per-label lock registry is saturated, keeping observability cardinality bounded and auditable.</li>
+        <li><strong>Operator smoke target</strong>: <code>make smoke</code> now runs the core Rust checks plus admin-console lint and Vitest sweeps as one documented local release gate.</li>
+        <li><strong>Detection explain contract guard</strong>: contract parity now requires <code>/api/detection/explain</code> across runtime, OpenAPI/docs, and generated SDK endpoint inventories.</li>
+        </ul>
+      </div>
+      <div class="chl-category">
+        <h3>Changed</h3>
+        <ul>
+        <li><strong>Feature-flag registry concurrency</strong>: runtime feature flags now use <code>RwLock&lt;HashMap&lt;...&gt;&gt;</code>, allowing read-heavy request paths to evaluate flags concurrently while preserving existing write semantics for toggles, rollouts, and kill switches.</li>
+        <li><strong>Google Workspace collector form reuse</strong>: the admin console now drives Workspace collector save/validate state through the shared <code>useCollectorForm</code> hook, aligning it with the other cloud, identity, and SaaS collector lanes.</li>
+        <li><strong>Live Monitor continuity</strong>: the console remembers the last selected alert in session storage and restores the alert drawer when the route is clean, preserving analyst context across refreshes without requiring a query param.</li>
+        <li><strong>Failed-auth audit pivot</strong>: Settings adds a one-click Failed Auth audit filter so operators can jump directly to lockout evidence.</li>
+        </ul>
+      </div>
+      <div class="chl-category">
+        <h3>Documentation</h3>
+        <ul>
+        <li>README, status, roadmap, website version badges, and generated changelog pages now point at the <code>v1.0.26</code> release surface.</li>
+        </ul>
+      </div>
+    </article>
     <article class="chl-release" id="v1.0.25">
       <header class="chl-release-header">
         <span class="chl-version-tag">v1.0.25</span>
-        <h2>2026-05-22 — Observability depth + Settings refactor</h2>
+        <h2>2026-05-22</h2>
       </header>
       <div class="chl-category">
         <h3>Added</h3>
         <ul>
         <li><strong>Label-aware lock metrics</strong> (<code>wardex_state_lock_labeled_*</code>): every per-request <code>tracked_lock</code> site now emits <code>acquisitions_total</code>, <code>wait_ns_total</code>, <code>slow_waits_total</code>, <code>max_wait_ns</code>, and <code>mean_wait_ms</code> keyed by a call-site label, so we can attribute contention to specific handlers instead of inferring it from one aggregate counter.</li>
-        <li><strong>Failed-auth observability series</strong> (<code>wardex_failed_auth_*</code>): seven new Prometheus series surface the post-v1.0.24 lockout tracker for dashboards and alerts (<code>failures_total</code>, <code>lockouts_triggered_total</code>, <code>lockout_breach_attempts_total</code>, <code>resets_total</code>, <code>exempt_skips_total</code>, <code>active_lockouts</code>, <code>tracked_entries</code>).</li>
-        <li><strong>End-to-end failed-auth lockout test</strong> (<code>tests/failed_auth_lockout.rs</code>): drives the tracker through threshold, verifies <code>/api/metrics</code> reflects the expected counters, then asserts the clear path bumps <code>resets_total</code> and zeroes <code>active_lockouts</code>. Backed by new <code>#[doc(hidden)] pub</code> test helpers in <code>src/server_auth.rs</code>.</li>
+        <li><strong>Failed-auth observability series</strong> (<code>wardex_failed_auth_*</code>): seven new Prometheus series — <code>failures_total</code>, <code>lockouts_triggered_total</code>, <code>lockout_breach_attempts_total</code>, <code>resets_total</code>, <code>exempt_skips_total</code>, <code>active_lockouts</code>, <code>tracked_entries</code> — surface the post-v1.0.24 lockout tracker for dashboards and alerts.</li>
+        <li><strong>End-to-end failed-auth lockout test</strong> (<code>tests/failed_auth_lockout.rs</code>): drives the tracker through threshold, verifies an <code>/api/metrics</code> GET reflects the expected counters, then asserts the clear path bumps <code>resets_total</code> and zeroes <code>active_lockouts</code>. Backed by new <code>#[doc(hidden)] pub</code> test helpers in <code>src/server_auth.rs</code>.</li>
         <li><strong><code>mockWebSocket</code> Playwright helper</strong> (<code>admin-console/e2e/support/mockApi.js</code>): wraps <code>page.routeWebSocket</code> so future live-stream specs can script <code>/ws/events</code> traffic without a real backend.</li>
-        <li><strong><code>CONTRIBUTING.md</code> — Testing Patterns section</strong>: documents the three idioms we now use for process-global atomics under <code>cargo test</code>'s parallel runner (unique labels + <code>label_snapshot()</code> for exact equality, <code>&gt;= N</code> for unlabeled deltas, per-binary integration tests for fresh-process equality) and the loopback-exempt gotcha for IP-keyed trackers.</li>
+        <li><strong><code>CONTRIBUTING.md</code> — Testing Patterns section</strong>: documents the three idioms we now use for process-global atomics under <code>cargo test</code>&#x27;s parallel runner (unique labels + <code>label_snapshot()</code> for exact equality, <code>&gt;= N</code> for unlabeled deltas, per-binary integration tests for fresh-process equality) and the loopback-exempt gotcha for IP-keyed trackers.</li>
         </ul>
       </div>
       <div class="chl-category">
         <h3>Changed</h3>
         <ul>
         <li><strong>Hot-path locks migrated to <code>tracked_lock</code></strong>: <code>authenticate_request_bearer</code>, <code>authenticate_request_session</code>, <code>respond_api_audit</code>, and <code>is_feature_enabled</code> now go through <code>crate::state_lock::tracked_lock</code>, so request-path contention shows up in the labeled metrics rather than the unlabeled fallback.</li>
-        <li><strong><code>server_metrics</code> module extracted</strong>: Prometheus formatting helpers (<code>prom_escape_label</code>, <code>render_labeled_lock_metrics</code>, <code>render_failed_auth_metrics</code>) moved out of <code>src/server.rs</code> into a dedicated <code>src/server_metrics.rs</code> (~190 lines) with two focused unit tests. The orchestrator stays in <code>server.rs</code> to avoid widening <code>AppState</code> field visibility.</li>
-        <li><strong><code>useCollectorForm</code> hook in admin-console</strong>: collapses the six near-identical save/validate state triplets (AWS CloudTrail, Azure Activity, GCP Audit, Okta, Microsoft Entra, Microsoft 365) on <code>Settings.jsx</code> into a single hook that owns the draft/saving/validationResult triplet and the save + validate control flow. ~150 LOC out of <code>Settings.jsx</code> with no behaviour change.</li>
+        <li><strong><code>server_metrics</code> module extracted</strong>: Prometheus formatting helpers (<code>prom_escape_label</code>, <code>render_labeled_lock_metrics</code>, <code>render_failed_auth_metrics</code>) moved out of <code>src/server.rs</code> into a dedicated <code>src/server_metrics.rs</code> (~190 lines), with two focused unit tests. The orchestrator stays in <code>server.rs</code> to avoid widening <code>AppState</code> field visibility.</li>
+        <li><strong><code>useCollectorForm</code> hook in admin-console</strong>: collapses the six near-identical save/validate state triplets (AWS CloudTrail, Azure Activity, GCP Audit, Okta, Microsoft Entra, Microsoft 365) on <code>Settings.jsx</code> into a single hook that owns the draft/saving/validationResult triplet and the save + validate control flow. ~150 LOC out of Settings.jsx with no behaviour change.</li>
         </ul>
       </div>
       <div class="chl-category">
@@ -207,12 +244,12 @@
     <article class="chl-release" id="v1.0.24">
       <header class="chl-release-header">
         <span class="chl-version-tag">v1.0.24</span>
-        <h2>2026-05-21 — Secret hardening + nav-race guard</h2>
+        <h2>2026-05-21</h2>
       </header>
       <div class="chl-category">
         <h3>Security</h3>
         <ul>
-        <li><strong>Failed-auth lockout with exponential backoff</strong>: <code>handle_api</code> now tracks failed authentications per source IP and serves an HTTP 429 with <code>Retry-After</code> once a threshold is crossed. The lockout window doubles on each subsequent breach (30s → 60s → … capped at 1h), the bookkeeping table is bounded to 1024 entries with a 60s sweep, and loopback addresses (<code>127.x</code>, <code>::1</code>, empty, <code>"unknown"</code>) are exempted so local tooling and cluster peers stay unaffected. Each lockout is recorded in the audit log as <code>POST /api/_failed_auth</code>. Successful auth from a previously-failing IP clears the counter.</li>
+        <li><strong>Failed-auth lockout with exponential backoff</strong>: <code>handle_api</code> now tracks failed authentications per source IP and serves an HTTP 429 with <code>Retry-After</code> once a threshold is crossed. The lockout window doubles on each subsequent breach (30s → 60s → … capped at 1h), the bookkeeping table is bounded to 1024 entries with a 60s sweep, and loopback addresses (<code>127.x</code>, <code>::1</code>, empty, <code>&quot;unknown&quot;</code>) are exempted so local tooling and cluster peers stay unaffected. Each lockout is recorded in the audit log as <code>POST /api/_failed_auth</code>. Successful auth from a previously-failing IP clears the counter.</li>
         <li><strong>Constant-time agent token comparison</strong>: the inline byte-loop that compared the configured <code>WARDEX_AGENT_TOKEN</code> against the inbound header was replaced with the existing <code>secure_token_eq</code> helper so all three privileged token paths (agent / cluster / user) share one constant-time implementation. New unit test pins the contract.</li>
         <li><strong>Post-quantum key zeroization</strong>: <code>MlDsaKeyPair</code> and <code>LamportPrivateKey</code> now implement <code>Drop</code> and zeroize their secret material on the way out (<code>zeroize</code> is a direct dependency rather than transitive). The ML-DSA seed and every Lamport (zero,one) pair are wiped before deallocation, so a stale heap page cannot leak signing keys after a key rotation.</li>
         </ul>
@@ -220,8 +257,8 @@
       <div class="chl-category">
         <h3>Fixed</h3>
         <ul>
-        <li><strong>Admin-console nav-race in <code>Infrastructure.jsx</code> and <code>HelpDocs.jsx</code></strong>: both components had a <code>useEffect</code> that wrote search params without checking the current route. If the user navigated away while the effect was scheduled, the write resolved against the component's own pathname and clobbered the new URL. Added the <code>location.pathname === '/&lt;route&gt;'</code> guard that we shipped earlier for <code>ThreatDetection.jsx</code>.</li>
-        <li><strong>Flaky <code>Settings.test.jsx</code> ("saves SIEM, collector and secrets setup flows from the integrations tab")</strong>: cross-block element lookups (Save/Validate buttons and form inputs in the Integrations tab) were synchronous <code>getByRole</code>/<code>getByLabelText</code> calls that raced with the re-render triggered by the previous block's save/validate response. Converted the boundary lookups to <code>findBy*</code> so each block waits for the prior async response to settle. 5/5 deterministic locally.</li>
+        <li><strong>Admin-console nav-race in <code>Infrastructure.jsx</code> and <code>HelpDocs.jsx</code></strong>: both components had a <code>useEffect</code> that wrote search params without checking the current route. If the user navigated away while the effect was scheduled, the write resolved against the component&#x27;s own pathname and clobbered the new URL. Added the <code>location.pathname === &#x27;/&lt;route&gt;&#x27;</code> guard that we shipped earlier for <code>ThreatDetection.jsx</code>.</li>
+        <li><strong>Flaky <code>Settings.test.jsx</code> (&quot;saves SIEM, collector and secrets setup flows from the integrations tab&quot;)</strong>: cross-block element lookups (Save/Validate buttons and form inputs in the Integrations tab) were synchronous <code>getByRole</code>/<code>getByLabelText</code> calls that raced with the re-render triggered by the previous block&#x27;s save/validate response. Converted the boundary lookups to <code>findBy*</code> so each block waits for the prior async response to settle. 5/5 deterministic locally.</li>
         </ul>
       </div>
       <div class="chl-category">

@@ -14,18 +14,15 @@ Wardex is a Rust-based XDR and SIEM platform for private-cloud and self-hosted s
 - **Scan across platforms:** malware, virus, trojan, and rootkit workflows cover Linux, macOS, and Windows with local engines plus optional open-source signature presets.
 - **Ship verifiably:** releases include checksums, SBOMs, provenance, signed artifacts, and documented verification gates.
 
-## Current Release: `v1.0.23`
+## Current Release: `v1.0.26`
 
-This release replaces several placeholder or simulated subsystems with genuine implementations, lays incremental groundwork for the `server.rs` decomposition, and starts the per-slice TypeScript migration of the admin console.
+This release hardens runtime abuse handling, broadens operator workflow continuity, and turns the local release smoke path into a documented one-command gate.
 
-- **Real ML triage engine** — multiclass gradient-boosted classifier trained at startup (regression trees fitted to softmax cross-entropy gradients, XGBoost-style split gain). The Random Forest now runs as the shadow / fallback backend.
-- **Real FIPS 204 post-quantum signatures** — `quantum.rs` ML-DSA-65 via the pure-Rust `ml-dsa` crate; verification uses only the public key.
-- **Real GCP collector authentication** — service-account JWT signed with RS256 instead of a placeholder, so Cloud Audit Log polling actually authenticates.
-- **Live threat-feed ingestion** — background poll loop + format-specific parsers for Abuse.ch MalwareBazaar (CSV), URLhaus (`json_online`), and Feodo Tracker (C2 IP blocklist); the bundled feeds ingest real indicators out of the box.
-- **TLS on by default** so release binaries can make outbound HTTPS, plus a `cluster.require_tls` flag that upgrades peer RPCs to HTTPS and rejects plaintext peer URLs at config-validation time.
-- **Server decomposition step 1** — ML, feed-ingestion, and cluster-RPC handlers extracted into dedicated `server_ml.rs` / `server_feeds.rs` / `server_cluster.rs` modules. Visibility groundwork (`AppState` `pub(crate)` plus its needed fields) is in place for the remaining domain extractions.
-- **TypeScript migration first slices** — `safeStorage.ts` and `api.ts` (wrapper layer fully typed: generic `request<T>`, typed options/errors, 11 endpoints typed end-to-end via `@wardex/sdk`).
-- **OpenAPI 254 documented operations** — the `/api/feeds/*` family is now in the spec; contract-parity gate updated.
+- **Failed-auth hardening** — API failures now track both the IP-wide lockout bucket and a hashed presented-token bucket, preserving rotating-token protection without storing raw credentials.
+- **Bounded observability proof** — lock-label cardinality drops are counted in Prometheus, and additional state-lock sites are labeled for contention analysis.
+- **Operator workflow continuity** — Live Monitor restores the last selected alert, Settings adds a Failed Auth audit pivot, and the Google Workspace collector uses the shared collector form flow.
+- **Concurrency polish** — the runtime feature-flag registry now uses read/write locking for read-heavy request paths.
+- **Release proof** — `make smoke` is documented and verified as the local smoke gate, and contract parity now requires Detection Explain coverage.
 
 See [CHANGELOG.md](CHANGELOG.md) for full release history.
 
@@ -99,7 +96,7 @@ The public website lives in [site/](site/) and mirrors the main product, release
 
 ## Documentation Surfaces
 
-The GitHub docs and the public website now share the same `v1.0.23` release surface for operator guides and API reference.
+The GitHub docs and the public website now share the same `v1.0.26` release surface for operator guides and API reference.
 
 ![Wardex documentation hub](site/media/insights/resources-live.png)
 
@@ -112,6 +109,7 @@ Common checks:
 ```bash
 cargo test
 cargo build --release
+make smoke
 npm run build --prefix admin-console
 python3 scripts/validate_release_docs.py
 make release-acceptance

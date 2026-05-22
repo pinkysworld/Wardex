@@ -42,6 +42,7 @@ static LOCK_WAIT_NS_TOTAL: AtomicU64 = AtomicU64::new(0);
 static LOCK_SLOW_WAITS: AtomicU64 = AtomicU64::new(0);
 static LOCK_MAX_WAIT_NS: AtomicU64 = AtomicU64::new(0);
 static LOCK_POISONED: AtomicU64 = AtomicU64::new(0);
+static LOCK_LABELS_DROPPED: AtomicU64 = AtomicU64::new(0);
 
 /// Read-only snapshot of the lock-instrumentation counters. Returned by
 /// [`snapshot`]; safe to render into Prometheus text or JSON diagnostics.
@@ -114,6 +115,13 @@ pub(crate) fn label_snapshot() -> Vec<(&'static str, LabelStats)> {
     out
 }
 
+/// Number of per-label observations dropped because the label registry was
+/// already saturated. Aggregate lock counters are still recorded for these
+/// observations; only the dynamic label dimension is omitted.
+pub(crate) fn label_drop_snapshot() -> u64 {
+    LOCK_LABELS_DROPPED.load(Ordering::Relaxed)
+}
+
 fn record_label_sample(label: &'static str, waited_ns: u64, slow: bool) {
     let Ok(mut reg) = label_registry().lock() else {
         return;
@@ -121,6 +129,7 @@ fn record_label_sample(label: &'static str, waited_ns: u64, slow: bool) {
     if !reg.contains_key(label) && reg.len() >= MAX_TRACKED_LABELS {
         // Registry is saturated; aggregate counters already recorded the
         // observation so we just skip the per-label update.
+        LOCK_LABELS_DROPPED.fetch_add(1, Ordering::Relaxed);
         return;
     }
     let entry = reg.entry(label).or_default();

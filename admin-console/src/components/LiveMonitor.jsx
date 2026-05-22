@@ -51,9 +51,19 @@ const MONITOR_VIEW_META = {
 };
 
 const VALID_MONITOR_TABS = Object.keys(MONITOR_VIEW_META);
+const LAST_SELECTED_ALERT_STORAGE_KEY = 'wardex.liveMonitor.lastSelectedAlert';
 
 function normalizeMonitorTab(value) {
   return VALID_MONITOR_TABS.includes(value) ? value : 'stream';
+}
+
+function storedSelectedAlertId() {
+  if (typeof window === 'undefined') return null;
+  try {
+    return window.sessionStorage.getItem(LAST_SELECTED_ALERT_STORAGE_KEY);
+  } catch {
+    return null;
+  }
 }
 
 const MONITOR_SHORTCUTS = [
@@ -440,7 +450,9 @@ export default function LiveMonitor() {
   });
   const { procData, procAnalysis, procTree, procDeepChains } = processData;
   const { data: fpStats, reload: reloadFP } = useApi(api.fpFeedbackStats);
-  const [selectedId, setSelectedId] = useState(() => searchParams.get('alert'));
+  const [selectedId, setSelectedId] = useState(
+    () => searchParams.get('alert') || storedSelectedAlertId(),
+  );
   const [hoveredId, setHoveredId] = useState(null);
   const [analysisResult, setAnalysisResult] = useState(null);
   const [tab, setTab] = useState(() => normalizeMonitorTab(searchParams.get('monitorTab')));
@@ -487,8 +499,19 @@ export default function LiveMonitor() {
 
   useEffect(() => {
     const alertParam = searchParams.get('alert');
+    if (alertParam == null) return;
     setSelectedId((current) => (current === alertParam ? current : alertParam));
   }, [searchParams]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    try {
+      if (selectedId == null) window.sessionStorage.removeItem(LAST_SELECTED_ALERT_STORAGE_KEY);
+      else window.sessionStorage.setItem(LAST_SELECTED_ALERT_STORAGE_KEY, String(selectedId));
+    } catch {
+      // Ignore storage failures in private browsing and test shims.
+    }
+  }, [selectedId]);
 
   useEffect(() => {
     const nextSeverity = searchParams.get('sev') || 'all';

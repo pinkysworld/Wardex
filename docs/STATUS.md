@@ -2,7 +2,7 @@
 
 ## Current release
 
-- **Version:** `1.0.25`
+- **Version:** `1.0.26`
 - **Positioning:** private-cloud XDR and SIEM platform with enterprise detection engineering, malware scanning, analyst workflows, fleet operations, behavioural analytics, and automated incident response
 - **Source footprint:** 146 Rust source modules
 - **API contract:** versioned OpenAPI surface with REST, GraphQL, live `/api/openapi.json` export, generated SDK parity diagnostics, authenticated-by-default API route classification, cursor page contracts, release observability/preflight proof APIs, production assurance endpoints, malware scan and response-action contracts, source-aware alert analysis, operator-trust workspaces, alert feedback/evidence-chain contracts, Detection Trust scoring and draft-only tuning APIs, detection validation lab APIs, response safety preview/verification APIs with execution-audit continuity, agent enrollment-token flows, connector marketplace summaries, operations health snapshots, and release verification readiness endpoints with evidence freshness metadata
@@ -99,14 +99,15 @@ The current release has been verified with:
 
 ## Current product posture
 
-Wardex is now positioned as a professional XDR/SIEM control plane with incident-first analyst workflows, explainable detections, context-preserving reporting, operator-visible recovery posture, and explicit shift-lead surfaces for ownership, handoff, and detection-review pressure. The runtime, admin console, release process, and website are aligned around operator trust, workflow closure, deployment readiness, clean release verification, and freshness-gated evidence. The current release replaces several previously simulated or placeholder subsystems with genuine implementations, starts the per-domain decomposition of the monolithic `server.rs`, and opens the per-slice TypeScript migration of the admin console.
+Wardex is now positioned as a professional XDR/SIEM control plane with incident-first analyst workflows, explainable detections, context-preserving reporting, operator-visible recovery posture, and explicit shift-lead surfaces for ownership, handoff, and detection-review pressure. The runtime, admin console, release process, and website are aligned around operator trust, workflow closure, deployment readiness, clean release verification, and freshness-gated evidence. The current release strengthens abuse-pressure handling, bounded observability, collector setup reuse, Live Monitor continuity, and local smoke proof for signed-release readiness.
 
-## In flight (post-v1.0.25 hardening)
+## Recently shipped (v1.0.26)
 
-- **Lock-acquisition instrumentation** — `src/state_lock.rs` exposes a `tracked_lock(state, "<label>")` wrapper that records aggregate and per-label wait latency for every migrated callsite. Hot sites in `server.rs`, `server_cluster.rs`, `server_feeds.rs`, and `server_auth.rs` are wired.
-- **Prometheus observability families** — `GET /api/metrics` now emits the `wardex_state_lock_*` and `wardex_state_lock_labeled_*{label}` series plus the `wardex_failed_auth_*` family (counters for failures/lockouts/resets/exempt skips, gauges for active lockouts and tracked entries). See `docs/PRODUCTION_HARDENING.md#observability-metrics-post-v1024` for alert thresholds.
-- **Concurrent backend smoke guard** — `tests/concurrent_smoke.rs` validates that 192 mixed-route requests under 16 parallel workers produce zero 5xx responses, never poison the `AppState` mutex, and leave the new metrics families visible at `/api/metrics`.
-- **Drawer back/forward continuity** — `admin-console/e2e/command-center.spec.js` now covers browser back/forward across routed drawer state (`?drawer=connectors`) to lock down React Router's `useSearchParams` behaviour as a contract.
+- **Failed-auth request bucketing** — API failures now record both the original IP-wide backoff bucket and a hashed presented-token bucket, preserving rotating-token protection while making repeated leaked-token attempts visible without storing raw credentials.
+- **Bounded lock-label observability** — per-label state-lock metrics now expose a drop counter when the label registry cap is reached, so dynamic-label mistakes remain visible without unbounded Prometheus cardinality.
+- **Read-heavy feature flags** — the runtime flag registry moved to `RwLock`, letting request-path flag checks run concurrently while keeping writes explicit for rollout changes and kill switches.
+- **Operator workflow continuity** — Live Monitor restores the last selected alert from session storage, Settings adds a Failed Auth audit shortcut, and the Google Workspace collector uses the shared collector-form save/validate flow.
+- **Release smoke proof** — `make smoke` now documents and executes the local Rust/admin-console smoke path, and contract parity requires Detection Explain coverage.
 
 ## Recently shipped (v1.0.25)
 
