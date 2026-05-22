@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1779393417830,
+  "lastUpdate": 1779426979009,
   "repoUrl": "https://github.com/pinkysworld/Wardex",
   "entries": {
     "Wardex criterion benches": [
@@ -12517,6 +12517,112 @@ window.BENCHMARK_DATA = {
             "name": "sigma_evaluate_20_rules",
             "value": 35934,
             "range": "± 722",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "name": "pinkysworld",
+            "username": "pinkysworld",
+            "email": "85413447+pinkysworld@users.noreply.github.com"
+          },
+          "committer": {
+            "name": "pinkysworld",
+            "username": "pinkysworld",
+            "email": "85413447+pinkysworld@users.noreply.github.com"
+          },
+          "id": "32b28e748dccc9dfe61bc0b6dd1b2126df451307",
+          "message": "refactor(admin-console): extract useCollectorForm hook for cloud collector settings\n\nCollapses six near-identical save/validate state triplets (AWS CloudTrail, Azure Activity, GCP Audit, Okta, Microsoft Entra, Microsoft 365) into a single useCollectorForm hook. The hook owns the draft/saving/validationResult triplet and the save + validate control flow; each provider supplies only its draft factory, API methods, payload mapper, and toast labels. Net: ~150 LOC removed from Settings.jsx with no behaviour change; lint and knip stay clean and the existing 323 vitest cases continue to pass.",
+          "timestamp": "2026-05-21T19:57:19Z",
+          "url": "https://github.com/pinkysworld/Wardex/commit/32b28e748dccc9dfe61bc0b6dd1b2126df451307"
+        },
+        "date": 1779426978582,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "full_pipeline/5",
+            "value": 48951,
+            "range": "± 175",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "full_pipeline/50",
+            "value": 407592,
+            "range": "± 1652",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "full_pipeline/200",
+            "value": 1895306,
+            "range": "± 8867",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "full_pipeline/1000",
+            "value": 17856397,
+            "range": "± 246526",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "detector_evaluate_single",
+            "value": 608,
+            "range": "± 2",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "detector_window_stream_256",
+            "value": 857615,
+            "range": "± 3107",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "shared_storage_observed_schema_read",
+            "value": 136,
+            "range": "± 0",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "shared_storage_4_threads_64_alerts",
+            "value": 145205,
+            "range": "± 2192",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "policy_evaluate_single",
+            "value": 279,
+            "range": "± 2",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "throughput/1000_samples",
+            "value": 18014143,
+            "range": "± 43748",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "search_500_events",
+            "value": 110086,
+            "range": "± 376",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "hunt_field_query",
+            "value": 87759,
+            "range": "± 198",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "ml_triage_rf",
+            "value": 50,
+            "range": "± 0",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "sigma_evaluate_20_rules",
+            "value": 35418,
+            "range": "± 157",
             "unit": "ns/iter"
           }
         ]
