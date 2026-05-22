@@ -4,6 +4,23 @@ All notable changes to Wardex are documented in this file.
 
 ## [Unreleased]
 
+## [1.0.25] — 2026-05-22
+
+### Added
+- **Label-aware lock metrics** (`wardex_state_lock_labeled_*`): every per-request `tracked_lock` site now emits `acquisitions_total`, `wait_ns_total`, `slow_waits_total`, `max_wait_ns`, and `mean_wait_ms` keyed by a call-site label, so we can attribute contention to specific handlers instead of inferring it from one aggregate counter.
+- **Failed-auth observability series** (`wardex_failed_auth_*`): seven new Prometheus series — `failures_total`, `lockouts_triggered_total`, `lockout_breach_attempts_total`, `resets_total`, `exempt_skips_total`, `active_lockouts`, `tracked_entries` — surface the post-v1.0.24 lockout tracker for dashboards and alerts.
+- **End-to-end failed-auth lockout test** (`tests/failed_auth_lockout.rs`): drives the tracker through threshold, verifies an `/api/metrics` GET reflects the expected counters, then asserts the clear path bumps `resets_total` and zeroes `active_lockouts`. Backed by new `#[doc(hidden)] pub` test helpers in `src/server_auth.rs`.
+- **`mockWebSocket` Playwright helper** (`admin-console/e2e/support/mockApi.js`): wraps `page.routeWebSocket` so future live-stream specs can script `/ws/events` traffic without a real backend.
+- **`CONTRIBUTING.md` — Testing Patterns section**: documents the three idioms we now use for process-global atomics under `cargo test`'s parallel runner (unique labels + `label_snapshot()` for exact equality, `>= N` for unlabeled deltas, per-binary integration tests for fresh-process equality) and the loopback-exempt gotcha for IP-keyed trackers.
+
+### Changed
+- **Hot-path locks migrated to `tracked_lock`**: `authenticate_request_bearer`, `authenticate_request_session`, `respond_api_audit`, and `is_feature_enabled` now go through `crate::state_lock::tracked_lock`, so request-path contention shows up in the labeled metrics rather than the unlabeled fallback.
+- **`server_metrics` module extracted**: Prometheus formatting helpers (`prom_escape_label`, `render_labeled_lock_metrics`, `render_failed_auth_metrics`) moved out of `src/server.rs` into a dedicated `src/server_metrics.rs` (~190 lines), with two focused unit tests. The orchestrator stays in `server.rs` to avoid widening `AppState` field visibility.
+- **`useCollectorForm` hook in admin-console**: collapses the six near-identical save/validate state triplets (AWS CloudTrail, Azure Activity, GCP Audit, Okta, Microsoft Entra, Microsoft 365) on `Settings.jsx` into a single hook that owns the draft/saving/validationResult triplet and the save + validate control flow. ~150 LOC out of Settings.jsx with no behaviour change.
+
+### Repo hygiene
+- **`.gitignore` sweep** for release-day CLI scratch dumps (`runs*.json`, `jobs*.json`, `release_*.json`, `out.txt`, etc.) so future release rehearsals do not leave stragglers in `git status`.
+
 ## [1.0.24] — 2026-05-21
 
 ### Security

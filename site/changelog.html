@@ -53,6 +53,7 @@
             <h2>Releases</h2>
             <ul>
       <li><a href="#vUnreleased"><span class="chl-ver">vUnreleased</span><span class="chl-nav-title"></span></a></li>
+      <li><a href="#v1.0.25"><span class="chl-ver">v1.0.25</span><span class="chl-nav-title">2026-05-22 — Observability depth + Settings refactor</span></a></li>
       <li><a href="#v1.0.24"><span class="chl-ver">v1.0.24</span><span class="chl-nav-title">2026-05-21 — Secret hardening + nav-race guard</span></a></li>
       <li><a href="#v1.0.23"><span class="chl-ver">v1.0.23</span><span class="chl-nav-title">2026-05-20</span></a></li>
       <li><a href="#v1.0.22"><span class="chl-ver">v1.0.22</span><span class="chl-nav-title">2026-05-17 — CI repair and release cleanup</span></a></li>
@@ -172,6 +173,36 @@
         <span class="chl-version-tag">vUnreleased</span>
         <h2>Unreleased</h2>
       </header>
+    </article>
+    <article class="chl-release" id="v1.0.25">
+      <header class="chl-release-header">
+        <span class="chl-version-tag">v1.0.25</span>
+        <h2>2026-05-22 — Observability depth + Settings refactor</h2>
+      </header>
+      <div class="chl-category">
+        <h3>Added</h3>
+        <ul>
+        <li><strong>Label-aware lock metrics</strong> (<code>wardex_state_lock_labeled_*</code>): every per-request <code>tracked_lock</code> site now emits <code>acquisitions_total</code>, <code>wait_ns_total</code>, <code>slow_waits_total</code>, <code>max_wait_ns</code>, and <code>mean_wait_ms</code> keyed by a call-site label, so we can attribute contention to specific handlers instead of inferring it from one aggregate counter.</li>
+        <li><strong>Failed-auth observability series</strong> (<code>wardex_failed_auth_*</code>): seven new Prometheus series surface the post-v1.0.24 lockout tracker for dashboards and alerts (<code>failures_total</code>, <code>lockouts_triggered_total</code>, <code>lockout_breach_attempts_total</code>, <code>resets_total</code>, <code>exempt_skips_total</code>, <code>active_lockouts</code>, <code>tracked_entries</code>).</li>
+        <li><strong>End-to-end failed-auth lockout test</strong> (<code>tests/failed_auth_lockout.rs</code>): drives the tracker through threshold, verifies <code>/api/metrics</code> reflects the expected counters, then asserts the clear path bumps <code>resets_total</code> and zeroes <code>active_lockouts</code>. Backed by new <code>#[doc(hidden)] pub</code> test helpers in <code>src/server_auth.rs</code>.</li>
+        <li><strong><code>mockWebSocket</code> Playwright helper</strong> (<code>admin-console/e2e/support/mockApi.js</code>): wraps <code>page.routeWebSocket</code> so future live-stream specs can script <code>/ws/events</code> traffic without a real backend.</li>
+        <li><strong><code>CONTRIBUTING.md</code> — Testing Patterns section</strong>: documents the three idioms we now use for process-global atomics under <code>cargo test</code>'s parallel runner (unique labels + <code>label_snapshot()</code> for exact equality, <code>&gt;= N</code> for unlabeled deltas, per-binary integration tests for fresh-process equality) and the loopback-exempt gotcha for IP-keyed trackers.</li>
+        </ul>
+      </div>
+      <div class="chl-category">
+        <h3>Changed</h3>
+        <ul>
+        <li><strong>Hot-path locks migrated to <code>tracked_lock</code></strong>: <code>authenticate_request_bearer</code>, <code>authenticate_request_session</code>, <code>respond_api_audit</code>, and <code>is_feature_enabled</code> now go through <code>crate::state_lock::tracked_lock</code>, so request-path contention shows up in the labeled metrics rather than the unlabeled fallback.</li>
+        <li><strong><code>server_metrics</code> module extracted</strong>: Prometheus formatting helpers (<code>prom_escape_label</code>, <code>render_labeled_lock_metrics</code>, <code>render_failed_auth_metrics</code>) moved out of <code>src/server.rs</code> into a dedicated <code>src/server_metrics.rs</code> (~190 lines) with two focused unit tests. The orchestrator stays in <code>server.rs</code> to avoid widening <code>AppState</code> field visibility.</li>
+        <li><strong><code>useCollectorForm</code> hook in admin-console</strong>: collapses the six near-identical save/validate state triplets (AWS CloudTrail, Azure Activity, GCP Audit, Okta, Microsoft Entra, Microsoft 365) on <code>Settings.jsx</code> into a single hook that owns the draft/saving/validationResult triplet and the save + validate control flow. ~150 LOC out of <code>Settings.jsx</code> with no behaviour change.</li>
+        </ul>
+      </div>
+      <div class="chl-category">
+        <h3>Repo hygiene</h3>
+        <ul>
+        <li><strong><code>.gitignore</code> sweep</strong> for release-day CLI scratch dumps (<code>runs*.json</code>, <code>jobs*.json</code>, <code>release_*.json</code>, <code>out.txt</code>, etc.) so future release rehearsals do not leave stragglers in <code>git status</code>.</li>
+        </ul>
+      </div>
     </article>
     <article class="chl-release" id="v1.0.24">
       <header class="chl-release-header">

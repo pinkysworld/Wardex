@@ -152,7 +152,7 @@ or **Not started**, with a priority of Critical / High / Medium.
 3. **Cross-platform Homebrew validation** — `.github/workflows/validate-homebrew-formula.yml` should stay green on Apple Silicon macOS, Intel macOS, and x86_64 Linux before release cuts so the tap remains aligned with `homebrew/core` build and test expectations.
 4. **APT repository publication** — `.github/workflows/pages.yml` now rebuilds `site/apt/` from the latest published `.deb` asset on Pages deploys when `APT_GPG_PRIVATE_KEY` is configured with an automation-ready signing key. If the signing key is absent, Pages still deploys and APT repository generation is skipped so the optional public install path does not make the release red.
 
-## Observability Metrics (post-v1.0.24)
+## Observability Metrics (post-v1.0.25)
 
 `GET /api/metrics` (Prometheus text exposition format) now includes two new metric families surfaced from the in-process instrumentation work that began with the `src/state_lock.rs` extraction.
 

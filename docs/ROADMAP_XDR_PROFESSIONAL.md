@@ -2,7 +2,7 @@
 
 ## Current release baseline
 
-`v1.0.24` is the current stable patch release of Wardex. It carries all capabilities of `v1.0.0`, the `v1.0.1` CI hardening fixes, the `v1.0.2` macOS release-trust hardening, the Live Monitor process-analysis regression coverage, the refreshed Developer ID `.p12` signing-secret repair path, the `v1.0.6` resilience/proof tranche, the `v1.0.7` production assurance tranche, the `v1.0.8` release verification/deployment-confidence tranche, the evidence freshness tranche, the `v1.0.10` detection response and malware-scanning polish, the `v1.0.11` CI/release-trust hotfix, the `v1.0.12` operator-trust usability tranche, the `v1.0.13` detection-trust false-positive control tranche, the `v1.0.14` Claude workbench layout tranche, the `v1.0.15` operator onboarding/workflow-depth tranche, the `v1.0.16` operator execution-board tranche, the `v1.0.17` operator continuity/evidence-closure tranche, the `v1.0.18` intelligence-gates tranche, the operator-trust continuity tranche, the `v1.0.20` priority-lane/API-hardening tranche, the `v1.0.21` workflow-continuity plus approval-resume tranche, the `v1.0.23` CI-repair and release-cleanup tranche, and the `v1.0.24` secret-hardening plus nav-race-guard tranche.
+`v1.0.25` is the current stable patch release of Wardex. It carries all capabilities of `v1.0.0`, the `v1.0.1` CI hardening fixes, the `v1.0.2` macOS release-trust hardening, the Live Monitor process-analysis regression coverage, the refreshed Developer ID `.p12` signing-secret repair path, the `v1.0.6` resilience/proof tranche, the `v1.0.7` production assurance tranche, the `v1.0.8` release verification/deployment-confidence tranche, the evidence freshness tranche, the `v1.0.10` detection response and malware-scanning polish, the `v1.0.11` CI/release-trust hotfix, the `v1.0.12` operator-trust usability tranche, the `v1.0.13` detection-trust false-positive control tranche, the `v1.0.14` Claude workbench layout tranche, the `v1.0.15` operator onboarding/workflow-depth tranche, the `v1.0.16` operator execution-board tranche, the `v1.0.17` operator continuity/evidence-closure tranche, the `v1.0.18` intelligence-gates tranche, the operator-trust continuity tranche, the `v1.0.20` priority-lane/API-hardening tranche, the `v1.0.21` workflow-continuity plus approval-resume tranche, the `v1.0.23` CI-repair and release-cleanup tranche, and the `v1.0.25` secret-hardening plus nav-race-guard tranche.
 
 The current release adds secret hardening (per-IP failed-auth lockout with exponential backoff, constant-time agent-token comparison via the shared `secure_token_eq` helper, and post-quantum key zeroization for `MlDsaKeyPair` and `LamportPrivateKey`) and an admin-console nav-race CI guard (`scripts/check_nav_race_guard.py`) that locks in the route-pathname pattern shipped for `ThreatDetection`, `Infrastructure`, and `HelpDocs`. It also stabilises the Settings integrations test by switching cross-block lookups to `findBy*`.
 
@@ -93,7 +93,7 @@ The current release adds release-integrity repair: duplicate-source cleanup for 
 
 ## Success criteria
 
-| Metric | Current (`v1.0.24`) | Target |
+| Metric | Current (`v1.0.25`) | Target |
 |---|---|---|
 | Automated tests | 1503 lib + 239 integration + focused browser/admin regressions | maintained and expanded on every release |
 | OpenAPI and SDK contract | versioned OpenAPI plus generated Python and TypeScript SDKs | kept in lockstep on every release |

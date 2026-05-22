@@ -2,7 +2,7 @@
 
 ## Current release
 
-- **Version:** `1.0.24`
+- **Version:** `1.0.25`
 - **Positioning:** private-cloud XDR and SIEM platform with enterprise detection engineering, malware scanning, analyst workflows, fleet operations, behavioural analytics, and automated incident response
 - **Source footprint:** 146 Rust source modules
 - **API contract:** versioned OpenAPI surface with REST, GraphQL, live `/api/openapi.json` export, generated SDK parity diagnostics, authenticated-by-default API route classification, cursor page contracts, release observability/preflight proof APIs, production assurance endpoints, malware scan and response-action contracts, source-aware alert analysis, operator-trust workspaces, alert feedback/evidence-chain contracts, Detection Trust scoring and draft-only tuning APIs, detection validation lab APIs, response safety preview/verification APIs with execution-audit continuity, agent enrollment-token flows, connector marketplace summaries, operations health snapshots, and release verification readiness endpoints with evidence freshness metadata
@@ -101,14 +101,14 @@ The current release has been verified with:
 
 Wardex is now positioned as a professional XDR/SIEM control plane with incident-first analyst workflows, explainable detections, context-preserving reporting, operator-visible recovery posture, and explicit shift-lead surfaces for ownership, handoff, and detection-review pressure. The runtime, admin console, release process, and website are aligned around operator trust, workflow closure, deployment readiness, clean release verification, and freshness-gated evidence. The current release replaces several previously simulated or placeholder subsystems with genuine implementations, starts the per-domain decomposition of the monolithic `server.rs`, and opens the per-slice TypeScript migration of the admin console.
 
-## In flight (post-v1.0.24 hardening)
+## In flight (post-v1.0.25 hardening)
 
 - **Lock-acquisition instrumentation** — `src/state_lock.rs` exposes a `tracked_lock(state, "<label>")` wrapper that records aggregate and per-label wait latency for every migrated callsite. Hot sites in `server.rs`, `server_cluster.rs`, `server_feeds.rs`, and `server_auth.rs` are wired.
 - **Prometheus observability families** — `GET /api/metrics` now emits the `wardex_state_lock_*` and `wardex_state_lock_labeled_*{label}` series plus the `wardex_failed_auth_*` family (counters for failures/lockouts/resets/exempt skips, gauges for active lockouts and tracked entries). See `docs/PRODUCTION_HARDENING.md#observability-metrics-post-v1024` for alert thresholds.
 - **Concurrent backend smoke guard** — `tests/concurrent_smoke.rs` validates that 192 mixed-route requests under 16 parallel workers produce zero 5xx responses, never poison the `AppState` mutex, and leave the new metrics families visible at `/api/metrics`.
 - **Drawer back/forward continuity** — `admin-console/e2e/command-center.spec.js` now covers browser back/forward across routed drawer state (`?drawer=connectors`) to lock down React Router's `useSearchParams` behaviour as a contract.
 
-## Recently shipped (v1.0.24)
+## Recently shipped (v1.0.25)
 
 - **Failed-auth lockout with exponential backoff** — `handle_api` now tracks failed authentications per source IP, serves HTTP 429 with `Retry-After` once a threshold is crossed, doubles the lockout window on each subsequent breach (30s → … capped at 1h), exempts loopback addresses, and records every lockout in the audit log. Successful auth from a previously-failing IP clears the counter.
 - **Constant-time agent token comparison** — the inline byte-loop comparison for `WARDEX_AGENT_TOKEN` was replaced with the existing `secure_token_eq` helper so all three privileged token paths (agent / cluster / user) share one constant-time implementation.
