@@ -95,7 +95,7 @@ use crate::integration_setup::{
     AwsCollectorSetup, AwsCollectorSetupPatch, AzureCollectorSetup, AzureCollectorSetupPatch,
     EntraCollectorSetup, EntraCollectorSetupPatch, GcpCollectorSetup, GcpCollectorSetupPatch,
     M365CollectorSetup, M365CollectorSetupPatch, OktaCollectorSetup, OktaCollectorSetupPatch,
-    SecretsManagerSetup, SecretsManagerSetupPatch, SetupValidation, SetupValidationIssue,
+    SecretsManagerSetup, SetupValidation, SetupValidationIssue,
     WorkspaceCollectorSetup, WorkspaceCollectorSetupPatch,
 };
 use crate::monitor::Monitor;
@@ -649,7 +649,7 @@ pub(crate) struct AppState {
     // Phase 33: alert analysis & cross-agent intel
     last_alert_analysis: Option<crate::alert_analysis::AlertAnalysis>,
     // Phase 34: durable SQLite storage
-    storage: SharedStorage,
+    pub(crate) storage: SharedStorage,
     // Phase 34: slow-attack & ransomware detectors
     slow_attack: crate::detector::SlowAttackDetector,
     ransomware: crate::ransomware::RansomwareDetector,
@@ -9634,12 +9634,12 @@ fn spawn_retention_purge_scheduler(state: &Arc<Mutex<AppState>>) {
     });
 }
 
-fn read_json_value(body: &[u8], limit: usize) -> Result<serde_json::Value, String> {
+pub(crate) fn read_json_value(body: &[u8], limit: usize) -> Result<serde_json::Value, String> {
     let body_str = read_body_limited(body, limit)?;
     serde_json::from_str::<serde_json::Value>(&body_str).map_err(|e| format!("invalid JSON: {e}"))
 }
 
-fn read_json_body<T: DeserializeOwned>(body: &[u8], limit: usize) -> Result<T, String> {
+pub(crate) fn read_json_body<T: DeserializeOwned>(body: &[u8], limit: usize) -> Result<T, String> {
     let body_str = read_body_limited(body, limit)?;
     serde_json::from_str::<T>(&body_str).map_err(|e| format!("invalid JSON: {e}"))
 }
@@ -9712,7 +9712,7 @@ const WORKSPACE_COLLECTOR_SETUP_KEY: &str = "integrations.collectors.workspace";
 const GITHUB_COLLECTOR_SETUP_KEY: &str = "integrations.collectors.github";
 const CROWDSTRIKE_COLLECTOR_SETUP_KEY: &str = "integrations.collectors.crowdstrike";
 const SYSLOG_COLLECTOR_SETUP_KEY: &str = "integrations.collectors.syslog";
-const SECRETS_MANAGER_SETUP_KEY: &str = "integrations.secrets.manager";
+pub(crate) const SECRETS_MANAGER_SETUP_KEY: &str = "integrations.secrets.manager";
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize, Default)]
 struct CollectorCheckpoint {
@@ -10170,7 +10170,7 @@ where
         .unwrap_or_default()
 }
 
-fn save_stored_json<T>(storage: &SharedStorage, key: &str, value: &T) -> Result<(), String>
+pub(crate) fn save_stored_json<T>(storage: &SharedStorage, key: &str, value: &T) -> Result<(), String>
 where
     T: serde::Serialize,
 {
@@ -10540,7 +10540,7 @@ fn planned_collector_status_entry(storage: &SharedStorage, provider: &str) -> se
     )
 }
 
-fn load_secrets_manager_setup(storage: &SharedStorage) -> SecretsManagerSetup {
+pub(crate) fn load_secrets_manager_setup(storage: &SharedStorage) -> SecretsManagerSetup {
     load_stored_json(storage, SECRETS_MANAGER_SETUP_KEY)
 }
 
@@ -14353,7 +14353,7 @@ fn verify_operational_snapshot(
     }
 }
 
-fn persist_operational_snapshot(
+pub(crate) fn persist_operational_snapshot(
     storage: &crate::storage::SharedStorage,
     kind: &str,
     payload: &serde_json::Value,
@@ -14408,7 +14408,7 @@ fn persist_operational_snapshot(
     }
 }
 
-fn payload_with_snapshot(
+pub(crate) fn payload_with_snapshot(
     mut payload: serde_json::Value,
     snapshot: serde_json::Value,
 ) -> serde_json::Value {
@@ -17250,7 +17250,7 @@ fn build_cluster_failover_execution(state: &AppState) -> serde_json::Value {
     )
 }
 
-fn build_secrets_rotation_operations(state: &AppState) -> serde_json::Value {
+pub(crate) fn build_secrets_rotation_operations(state: &AppState) -> serde_json::Value {
     let token_age_secs = state.token_issued_at.elapsed().as_secs();
     let spool_stats = state.spool.stats();
     let checks = vec![
@@ -18629,7 +18629,7 @@ fn first_run_operator_proof(state: &Arc<Mutex<AppState>>, auth: &AuthIdentity) -
     )
 }
 
-fn secret_reference_kind(reference: &str) -> &'static str {
+pub(crate) fn secret_reference_kind(reference: &str) -> &'static str {
     let trimmed = reference.trim();
     if trimmed.starts_with("${") && trimmed.ends_with('}') {
         "env"
@@ -18642,7 +18642,7 @@ fn secret_reference_kind(reference: &str) -> &'static str {
     }
 }
 
-fn masked_secret_preview(value: &str) -> String {
+pub(crate) fn masked_secret_preview(value: &str) -> String {
     let chars: Vec<char> = value.chars().collect();
     if chars.is_empty() {
         return "".to_string();
@@ -23341,11 +23341,7 @@ fn handle_api(
             json_response(&payload_with_snapshot(body, snapshot).to_string(), 200)
         }
         (Method::Get, "/api/secrets/rotation-operations") => {
-            let s = state.lock().unwrap_or_else(|e| e.into_inner());
-            let body = build_secrets_rotation_operations(&s);
-            let snapshot =
-                persist_operational_snapshot(&s.storage, "secrets_rotation_operations", &body);
-            json_response(&payload_with_snapshot(body, snapshot).to_string(), 200)
+            crate::server_secrets::handle_secrets_rotation_operations(state)
         }
         (Method::Get, "/api/operator/task-automation") => {
             let s = state.lock().unwrap_or_else(|e| e.into_inner());
@@ -28468,77 +28464,11 @@ fn handle_api(
 
             // ── Secrets Manager ──────────────────────────────────
             } else if method == Method::Get && url_path == "/api/secrets/status" {
-                let s = state.lock().unwrap_or_else(|e| e.into_inner());
-                let setup = load_secrets_manager_setup(&s.storage);
-                let resolver = crate::secrets::SecretsResolver::new(setup.to_runtime());
-                let body = serde_json::json!({
-                    "config": setup.view(),
-                    "validation": setup.validate(),
-                    "status": resolver.status(),
-                });
-                json_response(&body.to_string(), 200)
+                crate::server_secrets::handle_secrets_status(state)
             } else if method == Method::Post && url_path == "/api/secrets/config" {
-                match read_json_body::<SecretsManagerSetupPatch>(body, 16 * 1024) {
-                    Ok(patch) => {
-                        let s = state.lock().unwrap_or_else(|e| e.into_inner());
-                        let mut setup = load_secrets_manager_setup(&s.storage);
-                        setup.apply_patch(patch);
-                        match save_stored_json(&s.storage, SECRETS_MANAGER_SETUP_KEY, &setup) {
-                            Ok(()) => {
-                                let resolver =
-                                    crate::secrets::SecretsResolver::new(setup.to_runtime());
-                                let body = serde_json::json!({
-                                    "status": "saved",
-                                    "config": setup.view(),
-                                    "validation": setup.validate(),
-                                    "status_summary": resolver.status(),
-                                });
-                                json_response(&body.to_string(), 200)
-                            }
-                            Err(error) => error_json(&error, 500),
-                        }
-                    }
-                    Err(error) => error_json(&error, 400),
-                }
+                crate::server_secrets::handle_secrets_config(body, state)
             } else if method == Method::Post && url_path == "/api/secrets/validate" {
-                match read_json_value(body, 12 * 1024) {
-                    Ok(payload) => {
-                        let reference = payload["reference"].as_str().unwrap_or("").trim();
-                        if reference.is_empty() {
-                            error_json("reference is required", 400)
-                        } else {
-                            let s = state.lock().unwrap_or_else(|e| e.into_inner());
-                            let setup = load_secrets_manager_setup(&s.storage);
-                            let resolver = crate::secrets::SecretsResolver::new(setup.to_runtime());
-                            match resolver.resolve(reference) {
-                                Ok(value) => {
-                                    let body = serde_json::json!({
-                                        "ok": true,
-                                        "reference_kind": secret_reference_kind(reference),
-                                        "resolved_length": value.chars().count(),
-                                        "preview": masked_secret_preview(&value),
-                                        "status": resolver.status(),
-                                        "validation": setup.validate(),
-                                    });
-                                    json_response(&body.to_string(), 200)
-                                }
-                                Err(error) => {
-                                    let body = serde_json::json!({
-                                        "ok": false,
-                                        "reference_kind": secret_reference_kind(reference),
-                                        "resolved_length": serde_json::Value::Null,
-                                        "preview": serde_json::Value::Null,
-                                        "status": resolver.status(),
-                                        "validation": setup.validate(),
-                                        "error": error,
-                                    });
-                                    json_response(&body.to_string(), 200)
-                                }
-                            }
-                        }
-                    }
-                    Err(error) => error_json(&error, 400),
-                }
+                crate::server_secrets::handle_secrets_validate(body, state)
 
             // ── ML Engine ─────────────────────────────────────────
             } else if method == Method::Get && url_path == "/api/ml/models" {
