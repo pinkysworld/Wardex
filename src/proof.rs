@@ -98,117 +98,6 @@ impl ProofBackend for ZkStubBackend {
     }
 }
 
-/// Hash-based Sigma-protocol ZK backend.
-///
-/// Implements a Schnorr-like commitment scheme over SHA-256:
-///   1. Prover picks a random nonce `k`, computes commitment `R = H(k)`.
-///   2. Challenge `c = H(R || message)`.
-///   3. Response `s = H(k || c)`.
-///   4. Verifier checks `H(s || c) == R` (simplified – real Schnorr uses
-///      group operations, but this hash-chain variant achieves the same
-///      zero-knowledge property for digest witnesses).
-///
-/// The `proof_hex` field is `R || c || s` (3 × 32 bytes = 192 hex chars).
-pub struct SigmaBackend;
-
-impl SigmaBackend {
-    fn commitment(nonce: &[u8]) -> String {
-        sha256_hex(nonce) // R = H(k)
-    }
-
-    fn challenge(commitment: &str, message: &str) -> String {
-        sha256_hex(format!("{commitment}:{message}").as_bytes())
-    }
-
-    fn response(nonce: &[u8], challenge: &str) -> String {
-        // s = H(k || c) — bind response to both nonce and challenge.
-        // Also store H(k) XOR H(c) as a verifiable link.
-        let nonce_hash = sha256_hex(nonce);
-        let challenge_hash = sha256_hex(challenge.as_bytes());
-        // Combine: the response encodes the nonce via XOR with challenge hash
-        // so the verifier can recover the commitment.
-        let n_bytes = hex::decode(&nonce_hash).unwrap_or_default();
-        let c_bytes = hex::decode(&challenge_hash).unwrap_or_default();
-        let xored: Vec<u8> = n_bytes
-            .iter()
-            .zip(c_bytes.iter())
-            .map(|(a, b)| a ^ b)
-            .collect();
-        hex::encode(xored)
-    }
-
-    fn verify_triple(commitment: &str, challenge: &str, response: &str, message: &str) -> bool {
-        // Re-derive challenge from commitment and message
-        let expected_challenge = Self::challenge(commitment, message);
-        if expected_challenge != challenge {
-            return false;
-        }
-        // Recover the commitment from the response:
-        // response = H(k) XOR H(c), so H(k) = response XOR H(c)
-        // Then verify H(k) == commitment (R)
-        let challenge_hash = sha256_hex(challenge.as_bytes());
-        let r_bytes = hex::decode(response).unwrap_or_default();
-        let c_bytes = hex::decode(&challenge_hash).unwrap_or_default();
-        if r_bytes.len() != 32 || c_bytes.len() != 32 {
-            return false;
-        }
-        let recovered: Vec<u8> = r_bytes
-            .iter()
-            .zip(c_bytes.iter())
-            .map(|(a, b)| a ^ b)
-            .collect();
-        let recovered_commitment = hex::encode(recovered);
-        recovered_commitment == commitment
-    }
-}
-
-impl ProofBackend for SigmaBackend {
-    fn backend_name(&self) -> &str {
-        "sigma-zk"
-    }
-
-    fn generate_witness(&self, entry: &ProofEntry) -> WitnessBundle {
-        use rand::Rng;
-        let mut rng = rand::rng();
-
-        // Generate random nonce (32 bytes)
-        let mut nonce = [0u8; 32];
-        rng.fill(&mut nonce);
-
-        let message = format!("{}:{}", entry.pre_digest, entry.post_digest);
-        let witness_hex = sha256_hex(message.as_bytes());
-
-        let r = Self::commitment(&nonce);
-        let c = Self::challenge(&r, &message);
-        let s = Self::response(&nonce, &c);
-
-        let proof_hex = format!("{r}{c}{s}");
-
-        WitnessBundle {
-            backend: self.backend_name().into(),
-            label: entry.label.clone(),
-            pre_digest: entry.pre_digest.clone(),
-            post_digest: entry.post_digest.clone(),
-            timestamp: entry.timestamp.clone(),
-            witness_hex,
-            proof_hex: Some(proof_hex),
-            verified: true,
-        }
-    }
-
-    fn verify_witness(&self, witness: &WitnessBundle) -> bool {
-        let proof = match &witness.proof_hex {
-            Some(p) if p.len() == 192 => p,
-            _ => return false,
-        };
-        let r = &proof[..64];
-        let c = &proof[64..128];
-        let s = &proof[128..192];
-        let message = format!("{}:{}", witness.pre_digest, witness.post_digest);
-        Self::verify_triple(r, c, s, &message)
-    }
-}
-
 #[derive(Default)]
 pub struct ProofRegistry {
     proofs: Vec<ProofEntry>,
@@ -253,7 +142,7 @@ impl ProofRegistry {
 
 #[cfg(test)]
 mod tests {
-    use super::{DigestBackend, ProofBackend, ProofRegistry, SigmaBackend, ZkStubBackend};
+    use super::{DigestBackend, ProofBackend, ProofRegistry, ZkStubBackend};
 
     #[test]
     fn record_and_retrieve() {
@@ -344,49 +233,5 @@ mod tests {
     fn backend_name_is_consistent() {
         assert_eq!(DigestBackend.backend_name(), "sha256-digest");
         assert_eq!(ZkStubBackend.backend_name(), "zk-stub");
-        assert_eq!(SigmaBackend.backend_name(), "sigma-zk");
-    }
-
-    #[test]
-    fn sigma_backend_generates_valid_proof() {
-        let mut registry = ProofRegistry::new();
-        registry.record("sigma-test", b"data_a", b"data_b");
-
-        let backend = SigmaBackend;
-        let witnesses = registry.export_witnesses(&backend);
-        assert_eq!(witnesses.len(), 1);
-        assert_eq!(witnesses[0].backend, "sigma-zk");
-        assert!(witnesses[0].verified);
-        assert!(witnesses[0].proof_hex.is_some());
-        assert_eq!(witnesses[0].proof_hex.as_ref().unwrap().len(), 192);
-        assert!(backend.verify_witness(&witnesses[0]));
-    }
-
-    #[test]
-    fn sigma_backend_rejects_tampered_proof() {
-        let mut registry = ProofRegistry::new();
-        registry.record("tamper", b"x", b"y");
-
-        let backend = SigmaBackend;
-        let mut witness = registry.export_witnesses(&backend).remove(0);
-        // Tamper with the pre_digest
-        witness.pre_digest = "ff".repeat(32);
-        assert!(!backend.verify_witness(&witness));
-    }
-
-    #[test]
-    fn sigma_backend_rejects_missing_proof() {
-        let backend = SigmaBackend;
-        let witness = super::WitnessBundle {
-            backend: "sigma-zk".into(),
-            label: "no-proof".into(),
-            pre_digest: "a".repeat(64),
-            post_digest: "b".repeat(64),
-            timestamp: String::new(),
-            witness_hex: String::new(),
-            proof_hex: None,
-            verified: false,
-        };
-        assert!(!backend.verify_witness(&witness));
     }
 }

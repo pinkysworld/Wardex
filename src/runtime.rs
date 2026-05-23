@@ -741,7 +741,6 @@ pub fn status_manifest() -> StatusManifest {
             "Post-quantum Lamport one-time signatures with full key lifecycle".into(),
             "Quantum-walk threat propagation engine on arbitrary graph topologies".into(),
             "Epoch-based key rotation manager with retire/expire lifecycle".into(),
-            "Sigma-protocol ZK proof backend (commitment, challenge, response)".into(),
             "Gossip-based swarm coordination with threat alert propagation".into(),
             "Fleet orchestration: device registry, health monitoring, policy distribution".into(),
             "Byzantine-tolerant weighted voting consensus for collective threat assessment".into(),

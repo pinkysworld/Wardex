@@ -280,7 +280,7 @@ Recommended next backlog slices:
 - [x] T120: Deep OS enforcement engine — process control, network isolation, filesystem quarantine (R07, R09, R16).
 - [x] T121: Hardware root-of-trust abstraction — software TPM with PCR extend/read/quote/seal/unseal (R16).
 - [x] T122: Post-quantum Lamport one-time signatures with epoch-based key rotation and quantum-walk threat propagation (R04, R11, R21).
-- [x] T123: Sigma-protocol ZK proof backend with commitment-challenge-response (R12).
+- [x] T123: Pluggable proof-backend interface with SHA-256 digest witness export; ZkStubBackend reserved for future real ZK (Halo2/SNARK) integration (R12).
 - [x] T124: Gossip-based swarm coordination with fleet orchestration, weighted voting, mesh self-organisation, and negotiated security posture (R03, R23, R24, R37).
 - [x] T125: Privacy-preserving coordination — differential privacy, federated averaging, secure aggregation, and forensic redaction (R08, R27, R40).
 - [x] T126: Sandboxed bytecode VM for extensible policy rules with step/stack limits and rule compiler (R17).
