@@ -288,6 +288,9 @@ class WardexClient {
     async detectionTrustTuningDrafts() {
         return this.request("GET", "/api/detection/trust/tuning-drafts");
     }
+    async detectionTuningFeedback() {
+        return this.request("GET", "/api/detection/tuning/feedback");
+    }
     async createDetectionTrustTuningDraft(draft) {
         return this.request("POST", "/api/detection/trust/tuning-drafts", draft);
     }
@@ -305,6 +308,9 @@ class WardexClient {
     }
     async retentionForecast() {
         return this.request("GET", "/api/retention/forecast");
+    }
+    async searchPerformanceSlo() {
+        return this.request("GET", "/api/search/performance-slo");
     }
     async adversarialValidation() {
         return this.request("GET", "/api/validation/adversarial");
@@ -713,8 +719,17 @@ class WardexClient {
             variables: variables ?? {},
         });
     }
+    async resumePlaybookExecution(executionId, feedback) {
+        return this.request("POST", "/api/playbooks/resume", {
+            execution_id: executionId,
+            ...(feedback ? { feedback } : {}),
+        });
+    }
     async playbookExecution(executionId) {
         return this.request("GET", `/api/playbooks/executions/${encodeURIComponent(executionId)}`);
+    }
+    async playbookExecutionRecoveryActions(executionId) {
+        return this.request("GET", `/api/playbook/execution/${encodeURIComponent(executionId)}/recovery-actions`);
     }
     // ── Compliance ───────────────────────────────────────────────────
     async complianceStatus() {
@@ -1127,6 +1142,21 @@ class WardexClient {
     }
     async responseRequests() {
         return this.request("GET", "/api/response/requests");
+    }
+    async responseAudit() {
+        return this.request("GET", "/api/response/audit");
+    }
+    async responseExecutionAudit(options = {}) {
+        const params = new URLSearchParams();
+        if (options.requestId)
+            params.set("request_id", options.requestId);
+        if (options.actionId)
+            params.set("action_id", options.actionId);
+        const query = params.toString();
+        return this.request("GET", `/api/response/execution-audit${query ? `?${query}` : ""}`);
+    }
+    async rbacCoverage() {
+        return this.request("GET", "/api/admin/rbac-coverage");
     }
     async requestResponseAction(action) {
         return this.request("POST", "/api/response/request", action);

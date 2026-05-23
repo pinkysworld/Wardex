@@ -376,7 +376,9 @@ pub fn endpoint_permission(method: &str, path: &str) -> Permission {
         ("POST", "/api/investigations/start")
         | ("POST", "/api/investigations/progress")
         | ("POST", "/api/investigations/handoff") => Permission::ManageIncidents,
-        ("GET", p) if p.starts_with("/api/playbooks") => Permission::ViewIncidents,
+        ("GET", p) if p.starts_with("/api/playbooks") || p.starts_with("/api/playbook/") => {
+            Permission::ViewIncidents
+        }
         ("POST", "/api/playbooks/execute") => Permission::ExecuteResponses,
         ("GET", p) if p.starts_with("/api/live-response/") => Permission::ViewAuditLog,
         ("POST", p) if p.starts_with("/api/live-response/") => Permission::ExecuteResponses,
@@ -415,18 +417,22 @@ pub fn endpoint_permission(method: &str, path: &str) -> Permission {
         ("POST", p) if p.starts_with("/api/policy") => Permission::ManageConfig,
         ("GET", p) if p.starts_with("/api/config") => Permission::ViewConfig,
         (_, p) if p.starts_with("/api/config") => Permission::ManageConfig,
+        ("GET", "/api/search/performance-slo") => Permission::ViewSupport,
         ("GET", p) if p.starts_with("/api/retention/") => Permission::ViewSupport,
         (_, p) if p.starts_with("/api/retention/") => Permission::ManageConfig,
 
         // Users
+        ("GET", "/api/admin/rbac-coverage") | ("GET", "/api/rbac/coverage") => {
+            Permission::ManageUsers
+        }
         (_, p) if p.starts_with("/api/users") || p.starts_with("/api/rbac/users") => {
             Permission::ManageUsers
         }
 
         // Response orchestration
-        ("GET", "/api/response/audit") | ("GET", "/api/response/approvals") => {
-            Permission::ViewAuditLog
-        }
+        ("GET", "/api/response/audit")
+        | ("GET", "/api/response/execution-audit")
+        | ("GET", "/api/response/approvals") => Permission::ViewAuditLog,
         ("GET", p) if p.starts_with("/api/response") => Permission::ViewIncidents,
         ("POST", "/api/response/request") => Permission::ApproveResponses,
         ("POST", p) if p.contains("approve") || p.contains("deny") => Permission::ApproveResponses,
@@ -437,6 +443,7 @@ pub fn endpoint_permission(method: &str, path: &str) -> Permission {
 
         // Rules / Detection Content
         ("GET", "/api/detection/validation-packs") => Permission::ViewSupport,
+        ("GET", "/api/detection/tuning/feedback") => Permission::ManageRules,
         ("GET", p)
             if p.starts_with("/api/rules")
                 || p.starts_with("/api/sigma")
@@ -975,6 +982,14 @@ mod tests {
         assert_eq!(
             endpoint_permission("GET", "/api/response/audit"),
             Permission::ViewAuditLog
+        );
+        assert_eq!(
+            endpoint_permission("GET", "/api/response/execution-audit"),
+            Permission::ViewAuditLog
+        );
+        assert_eq!(
+            endpoint_permission("GET", "/api/admin/rbac-coverage"),
+            Permission::ManageUsers
         );
         assert_eq!(
             endpoint_permission("GET", "/api/response/approvals"),

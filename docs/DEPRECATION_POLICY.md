@@ -11,7 +11,8 @@ onward.
 - Every deprecated item is given a **minimum sunset window** before it is
   removed.
 - Deprecation notices appear in: the OpenAPI document, the CHANGELOG, the
-  release notes, and (where applicable) runtime warning logs.
+  release notes, and (where applicable) runtime warning logs and HTTP response
+  headers.
 
 ## Sunset Windows
 
@@ -39,16 +40,36 @@ Active → Deprecated → Removed
 
 ### Marking an endpoint deprecated
 
-In `docs/openapi.yaml`, add `deprecated: true` to the operation:
+In `docs/openapi.yaml`, add `deprecated: true` plus the Wardex lifecycle
+extensions that CI enforces through `scripts/check_contract_parity.py`:
 
 ```yaml
 /api/v1/old-endpoint:
   get:
     deprecated: true
+    x-wardex-deprecated-since: v1.2.0
+    x-wardex-sunset: v2.0.0
+    x-wardex-replacement: /api/v1/new-endpoint
     description: |
-      **Deprecated since v1.2. Use `/api/v1/new-endpoint` instead.**
-      Will be removed in v2.0.
+      **Deprecated since v1.2.0. Use `/api/v1/new-endpoint` instead.**
+      Will be removed no earlier than v2.0.0.
 ```
+
+The SDK wrapper for a deprecated operation must carry matching `@deprecated`
+JSDoc in TypeScript and a `DeprecationWarning` path in Python when the wrapper
+name remains available.
+
+When the deprecated endpoint is still callable, the runtime response must also
+emit:
+
+- `Deprecation: true`
+- `Sunset: <version or sunset marker>`
+- `Link: <replacement>; rel="successor-version"`
+
+Wardex contract parity now enforces both halves of that lifecycle: every
+deprecated OpenAPI operation must carry `x-wardex-deprecated-since`,
+`x-wardex-sunset`, and `x-wardex-replacement`, and the runtime must expose the
+corresponding response-header support before the release gate passes.
 
 ### Marking a TOML key deprecated
 
@@ -85,6 +106,7 @@ Deprecation announcements are published in:
 
 1. The GitHub release notes for the release that introduces the deprecation.
 2. The `CHANGELOG.md` file under the relevant version heading.
-3. The `docs/openapi.yaml` document (`deprecated: true` + description update).
+3. The `docs/openapi.yaml` document (`deprecated: true`, lifecycle
+  extensions, and description update).
 4. A pinned GitHub issue tagged `deprecation` that lists all active deprecations
    and their planned removal versions.

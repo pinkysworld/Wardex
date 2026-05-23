@@ -208,12 +208,18 @@ def test_product_hardening_methods(monkeypatch):
         ("GET", f"{BASE}/api/detection/trust/rules"): DummyResponse(url=f"{BASE}/api/detection/trust/rules", json_data={"rules": []}, headers={"content-type": "application/json"}),
         ("GET", f"{BASE}/api/detection/trust/rules/rule-1"): DummyResponse(url=f"{BASE}/api/detection/trust/rules/rule-1", json_data={"found": True}, headers={"content-type": "application/json"}),
         ("GET", f"{BASE}/api/detection/trust/tuning-drafts"): DummyResponse(url=f"{BASE}/api/detection/trust/tuning-drafts", json_data={"drafts": []}, headers={"content-type": "application/json"}),
+        ("GET", f"{BASE}/api/detection/tuning/feedback"): DummyResponse(url=f"{BASE}/api/detection/tuning/feedback", json_data={"items": []}, headers={"content-type": "application/json"}),
         ("POST", f"{BASE}/api/detection/trust/tuning-drafts"): DummyResponse(url=f"{BASE}/api/detection/trust/tuning-drafts", json_data={"created": True}, headers={"content-type": "application/json"}),
         ("POST", f"{BASE}/api/detection/trust/tuning-drafts/draft-1/preview"): DummyResponse(url=f"{BASE}/api/detection/trust/tuning-drafts/draft-1/preview", json_data={"auto_apply": False}, headers={"content-type": "application/json"}),
         ("POST", f"{BASE}/api/detection/trust/tuning-drafts/draft-1/approve"): DummyResponse(url=f"{BASE}/api/detection/trust/tuning-drafts/draft-1/approve", json_data={"applied": False}, headers={"content-type": "application/json"}),
+        ("GET", f"{BASE}/api/response/audit"): DummyResponse(url=f"{BASE}/api/response/audit", json_data={"count": 1}, headers={"content-type": "application/json"}),
+        ("GET", f"{BASE}/api/response/execution-audit?request_id=req-1&action_id=kill-process"): DummyResponse(url=f"{BASE}/api/response/execution-audit", json_data={"count": 1}, headers={"content-type": "application/json"}),
+        ("GET", f"{BASE}/api/admin/rbac-coverage"): DummyResponse(url=f"{BASE}/api/admin/rbac-coverage", json_data={"protected_routes": 1}, headers={"content-type": "application/json"}),
+        ("GET", f"{BASE}/api/search/performance-slo"): DummyResponse(url=f"{BASE}/api/search/performance-slo", json_data={"status": "ready"}, headers={"content-type": "application/json"}),
         ("GET", f"{BASE}/api/response/approval-overview"): DummyResponse(url=f"{BASE}/api/response/approval-overview", json_data={"pending_count": 0}, headers={"content-type": "application/json"}),
         ("GET", f"{BASE}/api/remediation/safety"): DummyResponse(url=f"{BASE}/api/remediation/safety", json_data={"status": "ready"}, headers={"content-type": "application/json"}),
         ("POST", f"{BASE}/api/playbooks/resume"): DummyResponse(url=f"{BASE}/api/playbooks/resume", json_data={"execution_id": "exec-1", "status": "succeeded"}, headers={"content-type": "application/json"}),
+        ("GET", f"{BASE}/api/playbook/execution/exec-1/recovery-actions"): DummyResponse(url=f"{BASE}/api/playbook/execution/exec-1/recovery-actions", json_data={"actions": []}, headers={"content-type": "application/json"}),
         ("POST", f"{BASE}/api/subscriptions"): DummyResponse(url=f"{BASE}/api/subscriptions", json_data={"subscription": {"subscription_id": "sub-1"}}, headers={"content-type": "application/json"}),
         ("GET", f"{BASE}/api/subscriptions/resume", (("cursor", "7"), ("limit", "2"), ("subscription_id", "sub-1"))): DummyResponse(url=f"{BASE}/api/subscriptions/resume", json_data={"events": []}, headers={"content-type": "application/json"}),
     }
@@ -269,12 +275,18 @@ def test_product_hardening_methods(monkeypatch):
     assert client.detection_trust_rules()["rules"] == []
     assert client.detection_trust_rule("rule-1")["found"] is True
     assert client.detection_trust_tuning_drafts()["drafts"] == []
+    assert client.detection_tuning_feedback()["items"] == []
     assert client.create_detection_trust_tuning_draft({"rule_id": "rule-1"})["created"] is True
     assert client.preview_detection_trust_tuning_draft("draft-1")["auto_apply"] is False
     assert client.approve_detection_trust_tuning_draft("draft-1")["applied"] is False
+    assert client.response_audit()["count"] == 1
+    assert client.response_execution_audit(request_id="req-1", action_id="kill-process")["count"] == 1
+    assert client.rbac_coverage()["protected_routes"] == 1
+    assert client.search_performance_slo()["status"] == "ready"
     assert client.response_approval_overview()["pending_count"] == 0
     assert client.remediation_safety()["status"] == "ready"
     assert client.resume_playbook("exec-1", feedback="approved")["status"] == "succeeded"
+    assert client.playbook_execution_recovery_actions("exec-1")["actions"] == []
     assert client.create_subscription()["subscription"]["subscription_id"] == "sub-1"
     assert client.resume_subscription("sub-1", cursor=7, limit=2)["events"] == []
     assert calls[-1]["method"] == "GET"

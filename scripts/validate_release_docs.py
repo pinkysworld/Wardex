@@ -160,6 +160,8 @@ def main() -> int:
             )
     if "validate_release_docs.py" not in release_acceptance:
         failures.append("docs/RELEASE_ACCEPTANCE.md does not document the release-doc validation step")
+    if "check_release_trust_gates.py" not in release_acceptance:
+        failures.append("docs/RELEASE_ACCEPTANCE.md does not document the release-trust validation step")
     if "Release acceptance gate" not in feature_coverage:
         failures.append("docs/FEATURE_UI_COVERAGE.md is missing its release acceptance section")
 

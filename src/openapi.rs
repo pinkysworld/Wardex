@@ -84,6 +84,20 @@ pub struct Operation {
     pub summary: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub deprecated: Option<bool>,
+    #[serde(
+        rename = "x-wardex-deprecated-since",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub deprecated_since: Option<String>,
+    #[serde(rename = "x-wardex-sunset", skip_serializing_if = "Option::is_none")]
+    pub sunset: Option<String>,
+    #[serde(
+        rename = "x-wardex-replacement",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub replacement: Option<String>,
     pub operation_id: String,
     pub tags: Vec<String>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
@@ -95,6 +109,21 @@ pub struct Operation {
     pub security: Vec<BTreeMap<String, Vec<String>>>,
     #[serde(rename = "x-wardex-auth", skip_serializing_if = "Option::is_none")]
     pub wardex_auth: Option<String>,
+}
+
+impl Operation {
+    pub fn with_deprecation(
+        mut self,
+        since: impl Into<String>,
+        sunset: impl Into<String>,
+        replacement: impl Into<String>,
+    ) -> Self {
+        self.deprecated = Some(true);
+        self.deprecated_since = Some(since.into());
+        self.sunset = Some(sunset.into());
+        self.replacement = Some(replacement.into());
+        self
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -503,6 +532,10 @@ fn operation(
     Operation {
         summary: summary.into(),
         description: None,
+        deprecated: None,
+        deprecated_since: None,
+        sunset: None,
+        replacement: None,
         operation_id: id.into(),
         tags: tags.iter().map(|t| t.to_string()).collect(),
         parameters: vec![],
@@ -2459,6 +2492,15 @@ pub fn wardex_openapi_spec(version: &str) -> OpenApiSpec {
             ),
         )
         .path(
+            "/api/detection/tuning/feedback",
+            "get",
+            op(
+                "getDetectionTuningFeedback",
+                "Seven-day detection tuning feedback with draft-only impact recommendations",
+                &["detection"],
+            ),
+        )
+        .path(
             "/api/detection/readiness",
             "get",
             op(
@@ -2851,6 +2893,24 @@ pub fn wardex_openapi_spec(version: &str) -> OpenApiSpec {
             ),
         )
         .path(
+            "/api/response/audit",
+            "get",
+            op(
+                "listResponseAudit",
+                "Response approval and execution audit ledger",
+                &["response"],
+            ),
+        )
+        .path(
+            "/api/response/execution-audit",
+            "get",
+            op(
+                "listResponseExecutionAudit",
+                "Structured response execution command transcripts and verification state",
+                &["response"],
+            ),
+        )
+        .path(
             "/api/response/approve",
             "post",
             op_post(
@@ -2886,6 +2946,24 @@ pub fn wardex_openapi_spec(version: &str) -> OpenApiSpec {
                 "getResponseApprovalOverview",
                 "SOC approval backlog, ready-to-execute counts, and queue guardrails",
                 &["response"],
+            ),
+        )
+        .path(
+            "/api/admin/rbac-coverage",
+            "get",
+            op(
+                "getAdminRbacCoverage",
+                "Route-level RBAC coverage proof for administrators",
+                &["admin"],
+            ),
+        )
+        .path(
+            "/api/rbac/coverage",
+            "get",
+            op(
+                "getRbacCoverage",
+                "Route-level RBAC coverage proof",
+                &["admin"],
             ),
         )
         .path(
@@ -2952,6 +3030,15 @@ pub fn wardex_openapi_spec(version: &str) -> OpenApiSpec {
             op(
                 "listPlaybookExecutions",
                 "List recent automated response playbook executions",
+                &["response"],
+            ),
+        )
+        .path(
+            "/api/playbook/execution/{id}/recovery-actions",
+            "get",
+            op(
+                "getPlaybookExecutionRecoveryActions",
+                "Suggested recovery actions for failed, paused, or completed playbook executions",
                 &["response"],
             ),
         )
@@ -3780,6 +3867,15 @@ pub fn wardex_openapi_spec(version: &str) -> OpenApiSpec {
             ),
         )
         .path(
+            "/api/search/performance-slo",
+            "get",
+            op(
+                "getSearchPerformanceSlo",
+                "Long-retention search p95 and p99 latency SLO evidence",
+                &["observability"],
+            ),
+        )
+        .path(
             "/api/validation/adversarial",
             "get",
             op(
@@ -4047,6 +4143,8 @@ mod tests {
         assert!(spec.paths.contains_key("/api/launchpad/demo-reset"));
         assert!(spec.paths.contains_key("/api/remediation/safety"));
         assert!(spec.paths.contains_key("/api/response/approval-overview"));
+        assert!(spec.paths.contains_key("/api/response/execution-audit"));
+        assert!(spec.paths.contains_key("/api/admin/rbac-coverage"));
         assert!(spec.paths.contains_key("/api/sdk/contract-status"));
         assert!(spec.paths.contains_key("/api/support/first-run-proof"));
         assert!(spec.paths.contains_key("/api/control/failover-drill"));
@@ -4063,6 +4161,20 @@ mod tests {
         assert!(spec.paths.contains_key("/api/secrets/rotation-operations"));
         assert!(spec.paths.contains_key("/api/operator/task-automation"));
         assert!(spec.paths.contains_key("/api/detection/validation-packs"));
+    }
+
+    #[test]
+    fn operation_deprecation_metadata_serializes() {
+        let operation = op("getLegacyEndpoint", "Legacy endpoint", &["admin"]).with_deprecation(
+            "v1.0.27",
+            "v1.2.0",
+            "/api/replacement",
+        );
+        let value = serde_json::to_value(operation).unwrap();
+        assert_eq!(value["deprecated"], true);
+        assert_eq!(value["x-wardex-deprecated-since"], "v1.0.27");
+        assert_eq!(value["x-wardex-sunset"], "v1.2.0");
+        assert_eq!(value["x-wardex-replacement"], "/api/replacement");
     }
 
     #[test]

@@ -64,11 +64,17 @@ pub(crate) fn secure_token_eq(provided: Option<&str>, expected: &str) -> bool {
 // Stored as a process-global so we can add it without rewiring AppState
 // constructors. Bounded in size by a periodic sweep.
 
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub(crate) struct FailedAuthState {
     pub(crate) fails: u32,
     pub(crate) first_fail_at: u64,
     pub(crate) locked_until: u64,
     pub(crate) lockout_secs: u64,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub(crate) struct FailedAuthSnapshot {
+    pub(crate) entries: std::collections::BTreeMap<String, FailedAuthState>,
 }
 
 pub(crate) struct FailedAuthTracker {
@@ -172,6 +178,33 @@ impl FailedAuthTracker {
         }
         self.entries.remove(ip);
     }
+
+    pub(crate) fn snapshot(&mut self, now: u64) -> FailedAuthSnapshot {
+        self.sweep(now);
+        FailedAuthSnapshot {
+            entries: self
+                .entries
+                .iter()
+                .map(|(subject, state)| (subject.clone(), state.clone()))
+                .collect(),
+        }
+    }
+
+    pub(crate) fn restore(&mut self, snapshot: FailedAuthSnapshot, now: u64) {
+        self.entries.clear();
+        self.last_sweep = now;
+        for (subject, state) in snapshot.entries {
+            if self.entries.len() >= FAILED_AUTH_MAX_ENTRIES {
+                break;
+            }
+            let still_relevant =
+                now < state.locked_until
+                    || now.saturating_sub(state.first_fail_at) < FAILED_AUTH_WINDOW_SECS;
+            if still_relevant {
+                self.entries.insert(subject, state);
+            }
+        }
+    }
 }
 
 fn failed_auth_token_bucket(presented_token: Option<&str>) -> String {
@@ -255,6 +288,22 @@ pub(crate) fn failed_auth_stats() -> FailedAuthStats {
         exempt_skips_total: FAILED_AUTH_EXEMPT_SKIPS.load(Ordering::Relaxed),
         active_lockouts: active,
         tracked_entries: tracked,
+    }
+}
+
+pub(crate) fn failed_auth_snapshot() -> FailedAuthSnapshot {
+    let now = FailedAuthTracker::now_secs();
+    match failed_auth_tracker().lock() {
+        Ok(mut tracker) => tracker.snapshot(now),
+        Err(e) => e.into_inner().snapshot(now),
+    }
+}
+
+pub(crate) fn failed_auth_restore_snapshot(snapshot: FailedAuthSnapshot) {
+    let now = FailedAuthTracker::now_secs();
+    match failed_auth_tracker().lock() {
+        Ok(mut tracker) => tracker.restore(snapshot, now),
+        Err(e) => e.into_inner().restore(snapshot, now),
     }
 }
 
@@ -342,13 +391,13 @@ pub(crate) fn failed_auth_record_request(ip: &str, subject: &str) -> Option<u64>
 
 pub(crate) fn failed_auth_clear(ip: &str) {
     let subject = failed_auth_ip_subject(ip);
-    failed_auth_clear_subject(ip, &subject);
+    let _ = failed_auth_clear_subject(ip, &subject);
 }
 
-pub(crate) fn failed_auth_clear_subject(ip: &str, subject: &str) {
+pub(crate) fn failed_auth_clear_subject(ip: &str, subject: &str) -> bool {
     if FailedAuthTracker::is_exempt(ip) {
         FAILED_AUTH_EXEMPT_SKIPS.fetch_add(1, Ordering::Relaxed);
-        return;
+        return false;
     }
     if let Ok(mut g) = failed_auth_tracker().lock() {
         let existed = g.entries.contains_key(subject);
@@ -356,13 +405,16 @@ pub(crate) fn failed_auth_clear_subject(ip: &str, subject: &str) {
         if existed {
             FAILED_AUTH_RESETS_TOTAL.fetch_add(1, Ordering::Relaxed);
         }
+        existed
+    } else {
+        false
     }
 }
 
-pub(crate) fn failed_auth_clear_request(ip: &str, subject: &str) {
+pub(crate) fn failed_auth_clear_request(ip: &str, subject: &str) -> bool {
     if FailedAuthTracker::is_exempt(ip) {
         FAILED_AUTH_EXEMPT_SKIPS.fetch_add(1, Ordering::Relaxed);
-        return;
+        return false;
     }
     if let Ok(mut g) = failed_auth_tracker().lock() {
         let ip_subject = failed_auth_ip_subject(ip);
@@ -378,6 +430,9 @@ pub(crate) fn failed_auth_clear_request(ip: &str, subject: &str) {
         if ip_existed || subject_existed {
             FAILED_AUTH_RESETS_TOTAL.fetch_add(1, Ordering::Relaxed);
         }
+        ip_existed || subject_existed
+    } else {
+        false
     }
 }
 
@@ -560,6 +615,44 @@ mod tests {
     }
 
     #[test]
+    fn failed_auth_snapshot_round_trips_active_entries() {
+        let now = 1_000;
+        let mut tracker = FailedAuthTracker::new();
+        tracker.entries.insert(
+            "203.0.113.9".to_string(),
+            FailedAuthState {
+                fails: 2,
+                first_fail_at: now - 10,
+                locked_until: now + 30,
+                lockout_secs: FAILED_AUTH_INITIAL_LOCKOUT_SECS,
+            },
+        );
+        tracker.entries.insert(
+            "stale".to_string(),
+            FailedAuthState {
+                fails: 1,
+                first_fail_at: now - FAILED_AUTH_WINDOW_SECS - 120,
+                locked_until: now - 1,
+                lockout_secs: FAILED_AUTH_INITIAL_LOCKOUT_SECS,
+            },
+        );
+
+        let snapshot = tracker.snapshot(now);
+        assert_eq!(snapshot.entries.len(), 1);
+        assert!(snapshot.entries.contains_key("203.0.113.9"));
+
+        let mut restored = FailedAuthTracker::new();
+        restored.restore(snapshot, now);
+        assert_eq!(restored.entries.len(), 1);
+        let restored_state = restored
+            .entries
+            .get("203.0.113.9")
+            .expect("active entry restored");
+        assert_eq!(restored_state.fails, 2);
+        assert_eq!(restored_state.locked_until, now + 30);
+    }
+
+    #[test]
     fn failed_auth_tracker_sweep_clears_when_entry_cap_exceeded() {
         let mut t = FailedAuthTracker::new();
         // Insert MAX_ENTRIES + 1 stale entries that would otherwise be retained.
@@ -673,6 +766,17 @@ mod tests {
         assert!(failed_auth_locked_subject(ip, &token_b).is_none());
         failed_auth_clear_subject(ip, &token_a);
         failed_auth_clear_subject(ip, &token_b);
+    }
+
+    #[test]
+    fn failed_auth_clear_request_reports_when_state_changed() {
+        let ip = "198.51.100.46";
+        let subject = failed_auth_subject(ip, Some("token-z"));
+
+        assert!(!failed_auth_clear_request(ip, &subject));
+        failed_auth_record_request(ip, &subject);
+        assert!(failed_auth_clear_request(ip, &subject));
+        assert!(!failed_auth_clear_request(ip, &subject));
     }
 
     #[test]

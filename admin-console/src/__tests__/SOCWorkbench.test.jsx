@@ -1457,6 +1457,49 @@ describe('SOCWorkbench', () => {
     });
   });
 
+  it('restores SOC escalation and investigation drafts from safe storage', async () => {
+    localStorage.setItem(
+      'wardex_soc_escalation_draft_v1',
+      JSON.stringify({
+        name: 'Restored Follow-up',
+        targets: 'secops@corp.test',
+        timeout_minutes: 45,
+      }),
+    );
+    localStorage.setItem('wardex_soc_selected_investigation_v1', 'inv-7');
+    localStorage.setItem(
+      'wardex_soc_step_note_drafts_v1',
+      JSON.stringify({ 'inv-7:1': 'VPN telemetry draft restored' }),
+    );
+
+    const view = renderWithProviders('/soc#escalation');
+
+    const policiesHeading = await screen.findByText('Escalation Policies');
+    const policiesCard = policiesHeading.closest('.card');
+    if (!policiesCard) throw new Error('escalation policies card not found');
+
+    fireEvent.click(within(policiesCard).getByRole('button', { name: '+ New Policy' }));
+
+    expect(screen.getByDisplayValue('Restored Follow-up')).toBeInTheDocument();
+    expect(screen.getByDisplayValue('secops@corp.test')).toBeInTheDocument();
+    expect(screen.getByDisplayValue('45')).toBeInTheDocument();
+
+    fireEvent.change(screen.getByPlaceholderText('Policy name'), {
+      target: { value: 'Updated Follow-up' },
+    });
+
+    await waitFor(() => {
+      expect(JSON.parse(localStorage.getItem('wardex_soc_escalation_draft_v1'))).toMatchObject({
+        name: 'Updated Follow-up',
+      });
+    });
+
+    view.unmount();
+    renderWithProviders('/soc#investigations');
+
+    expect(await screen.findByDisplayValue('VPN telemetry draft restored')).toBeInTheDocument();
+  });
+
   it('restores the process tree tab and refreshes grouped process data', async () => {
     renderWithProviders('/soc#process-tree');
 

@@ -198,7 +198,7 @@ pub(crate) fn tracked_lock<'a, T>(mutex: &'a Mutex<T>, label: &'static str) -> M
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::sync::Arc;
+    use std::sync::{Arc, Barrier};
     use std::thread;
     use std::time::Duration;
 
@@ -305,6 +305,52 @@ mod tests {
             "expected at least one slow wait, got {:?}",
             d
         );
+    }
+
+    #[test]
+    fn tracked_lock_records_fanout_contention_by_label() {
+        let label = "test/contention_fanout";
+        let m = Arc::new(Mutex::new(0_u32));
+        let waiters = 6_u32;
+        let ready = Arc::new(Barrier::new(waiters as usize + 1));
+        let before = snapshot();
+        let before_label = label_snapshot()
+            .into_iter()
+            .find(|(k, _)| *k == label)
+            .map(|(_, stats)| stats)
+            .unwrap_or_default();
+        let guard = m.lock().unwrap();
+        let handles = (0..waiters)
+            .map(|_| {
+                let m = Arc::clone(&m);
+                let ready = Arc::clone(&ready);
+                thread::spawn(move || {
+                    ready.wait();
+                    let mut g = tracked_lock(&m, label);
+                    *g += 1;
+                })
+            })
+            .collect::<Vec<_>>();
+
+        ready.wait();
+        thread::sleep(Duration::from_millis(SLOW_LOCK_WAIT_THRESHOLD_MS + 10));
+        drop(guard);
+
+        for handle in handles {
+            handle.join().unwrap();
+        }
+
+        assert_eq!(*m.lock().unwrap(), waiters);
+        let d = delta(before, snapshot());
+        assert!(d.acquisitions >= u64::from(waiters));
+        assert!(d.slow_waits >= u64::from(waiters));
+        let after_label = label_snapshot()
+            .into_iter()
+            .find(|(k, _)| *k == label)
+            .map(|(_, stats)| stats)
+            .expect("contention label should be present");
+        assert!(after_label.acquisitions >= before_label.acquisitions + u64::from(waiters));
+        assert!(after_label.slow_waits >= before_label.slow_waits + u64::from(waiters));
     }
 
     #[test]

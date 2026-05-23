@@ -344,6 +344,7 @@ export const detectionTrustScore = () => get('/api/detection/trust-score');
 export const fleetDriftCompliance = () => get('/api/fleet/drift-compliance');
 export const operatorWorkQueue = () => get('/api/operator/work-queue');
 export const retentionForecast = () => get('/api/retention/forecast');
+export const searchPerformanceSlo = () => get('/api/search/performance-slo');
 export const adversarialValidation = () => get('/api/validation/adversarial');
 export const supportBundleDiff = () => get('/api/support/bundle-diff');
 export const workflowPreflight = ({ workflow }: { workflow?: string } = {}) => {
@@ -595,6 +596,16 @@ export const responseExecute = (body: unknown) => post('/api/response/execute', 
 export const responsePending = () => get('/api/response/pending');
 export const responseRequests = () => get('/api/response/requests');
 export const responseAudit = () => get('/api/response/audit');
+export const responseExecutionAudit = ({
+  requestId,
+  actionId,
+}: { requestId?: string; actionId?: string } = {}) => {
+  const query = new URLSearchParams();
+  if (requestId) query.set('request_id', String(requestId));
+  if (actionId) query.set('action_id', String(actionId));
+  const suffix = query.toString();
+  return get(`/api/response/execution-audit${suffix ? `?${suffix}` : ''}`);
+};
 export const responseStats = () => get('/api/response/stats');
 export const responseApprovals = () => get('/api/response/approvals');
 export const responseApprovalOverview = () => get('/api/response/approval-overview');
@@ -957,6 +968,7 @@ export const setScimConfig = (body: unknown) => post('/api/scim/config', body);
 
 // ── RBAC ─────────────────────────────────────────────────────
 export const rbacUsers = () => get('/api/rbac/users');
+export const rbacCoverage = () => get('/api/admin/rbac-coverage');
 export const createRbacUser = (body: unknown) => post('/api/rbac/users', body);
 export const deleteRbacUser = (u: string) => del(`/api/rbac/users/${encodeURIComponent(u)}`);
 
@@ -1114,6 +1126,7 @@ export const detectionExplain = (params: Record<string, unknown> = {}) =>
   get(`/api/detection/explain${toQuery(params) ? `?${toQuery(params)}` : ''}`);
 export const detectionFeedback = (params: Record<string, unknown> = {}) =>
   get(`/api/detection/feedback${toQuery(params) ? `?${toQuery(params)}` : ''}`);
+export const detectionTuningFeedback = () => get('/api/detection/tuning/feedback');
 export const recordDetectionFeedback = (body: unknown) => post('/api/detection/feedback', body);
 export const threatIntelLibraryV2 = () => get('/api/threat-intel/library/v2');
 export const threatIntelSightings = (limit = 50) =>
@@ -1243,6 +1256,8 @@ export const noisyRules = () => get('/api/detection/noisy-rules');
 export const playbooks = () => get('/api/playbooks');
 export const playbookById = (id: string) => get(`/api/playbooks/${encodeURIComponent(id)}`);
 export const playbookRun = (id: string) => post('/api/playbooks/run', { playbook_id: id });
+export const playbookRecoveryActions = (executionId: string) =>
+  get(`/api/playbook/execution/${encodeURIComponent(executionId)}/recovery-actions`);
 export const canaryStatus = () => get('/api/canary/status');
 export const insiderRisk = (entityKind: string, entityId: string) =>
   get(`/api/ueba/insider-risk/${encodeURIComponent(entityKind)}/${encodeURIComponent(entityId)}`);

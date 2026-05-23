@@ -1163,6 +1163,54 @@ export interface RemediationSafetyResponse {
     snapshot?: OperationalSnapshotMetadata;
     [key: string]: unknown;
 }
+export interface OperatorWorkQueueItem {
+    id: string;
+    priority: string;
+    title: string;
+    status: string;
+    href: string;
+    detail: string;
+}
+export interface OperatorWorkQueueResponse {
+    generated_at: string;
+    status: string;
+    item_count: number;
+    high_priority_count: number;
+    items: OperatorWorkQueueItem[];
+}
+export interface OperatorTaskActionBlueprint {
+    action: string;
+    method: string;
+    required_fields: string[];
+    audit: boolean;
+}
+export interface OperatorTaskAutomationEntry {
+    task_id: string;
+    status: string;
+    available_actions: string[];
+    owner: string;
+    due_at: string;
+    sla_age: string;
+    next_escalation_target: string;
+    recommended_action: string;
+    action_blueprint: OperatorTaskActionBlueprint;
+    source: OperatorWorkQueueItem;
+}
+export interface OperatorTaskAutomationMutationGuard {
+    status: string;
+    reason: string;
+}
+export interface OperatorTaskAutomationResponse {
+    generated_at: string;
+    status: string;
+    automation_count: number;
+    queue: OperatorWorkQueueResponse;
+    automations: OperatorTaskAutomationEntry[];
+    action_blueprints: OperatorTaskActionBlueprint[];
+    mutation_guard: OperatorTaskAutomationMutationGuard;
+    audit_requirements: string[];
+    next_action: string;
+}
 export interface SubscriptionCreateRequest {
     lanes?: string[];
     filters?: Record<string, unknown>;
@@ -4690,7 +4738,7 @@ export declare class WardexClient {
     performanceScaleBaseline(): Promise<ProductionAssuranceResponse>;
     clusterFailoverExecution(): Promise<ProductionAssuranceResponse>;
     secretsRotationOperations(): Promise<ProductionAssuranceResponse>;
-    operatorTaskAutomation(): Promise<ProductionAssuranceResponse>;
+    operatorTaskAutomation(): Promise<OperatorTaskAutomationResponse>;
     detectionValidationPacks(): Promise<ProductionAssuranceResponse>;
     syntheticConsoleMonitor(): Promise<ProductionAssuranceResponse>;
     incidentTimelineReplay(params?: {
@@ -4701,12 +4749,14 @@ export declare class WardexClient {
     detectionTrustRules(): Promise<Record<string, unknown>>;
     detectionTrustRule(id: string): Promise<Record<string, unknown>>;
     detectionTrustTuningDrafts(): Promise<Record<string, unknown>>;
+    detectionTuningFeedback(): Promise<Record<string, unknown>>;
     createDetectionTrustTuningDraft(draft: Record<string, unknown>): Promise<Record<string, unknown>>;
     previewDetectionTrustTuningDraft(id: string, request?: Record<string, unknown>): Promise<Record<string, unknown>>;
     approveDetectionTrustTuningDraft(id: string, request?: Record<string, unknown>): Promise<Record<string, unknown>>;
     fleetDriftCompliance(): Promise<ProductionAssuranceResponse>;
-    operatorWorkQueue(): Promise<ProductionAssuranceResponse>;
+    operatorWorkQueue(): Promise<OperatorWorkQueueResponse>;
     retentionForecast(): Promise<ProductionAssuranceResponse>;
+    searchPerformanceSlo(): Promise<Record<string, unknown>>;
     adversarialValidation(): Promise<ProductionAssuranceResponse>;
     supportBundleDiff(): Promise<ProductionAssuranceResponse>;
     workflowPreflight(params?: {
@@ -4839,7 +4889,9 @@ export declare class WardexClient {
     sigmaStats(): Promise<SigmaStatsResponse>;
     listPlaybooks(): Promise<unknown[]>;
     runPlaybook(playbookId: string, alertId?: string, variables?: Record<string, string>): Promise<PlaybookExecution>;
+    resumePlaybookExecution(executionId: string, feedback?: string): Promise<PlaybookExecution>;
     playbookExecution(executionId: string): Promise<PlaybookExecution>;
+    playbookExecutionRecoveryActions(executionId: string): Promise<Record<string, unknown>>;
     complianceStatus(): Promise<ComplianceReport>;
     complianceReport(frameworkId?: string): Promise<ComplianceReport | ComplianceReport[]>;
     complianceSummary(): Promise<ComplianceSummaryResponse>;
@@ -4962,6 +5014,12 @@ export declare class WardexClient {
     sloStatus(): Promise<SloStatus>;
     feedStats(): Promise<FeedIngestionStatsResponse>;
     responseRequests(): Promise<ResponseRequestsResponse>;
+    responseAudit(): Promise<Record<string, unknown>>;
+    responseExecutionAudit(options?: {
+        requestId?: string;
+        actionId?: string;
+    }): Promise<Record<string, unknown>>;
+    rbacCoverage(): Promise<Record<string, unknown>>;
     requestResponseAction(action: ResponseRequestCreateRequest | Record<string, unknown>): Promise<ResponseRequestSubmissionResponse>;
     responseRequest(action: ResponseRequestCreateRequest): Promise<ResponseRequestSubmissionResponse>;
     approveResponseAction(requestId: string, approve?: boolean): Promise<ResponseApprovalResponse>;

@@ -1,6 +1,8 @@
 import { useState } from 'react';
-import { useApi, useToast } from '../hooks.jsx';
+import { useApi, useDraftPersistence, useToast } from '../hooks.jsx';
 import * as api from '../api.js';
+
+const PLAYBOOK_EDITOR_DRAFT_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 
 const STEP_TYPES = [
   { value: 'CheckThreshold', label: 'Check Threshold', icon: '📊' },
@@ -67,8 +69,13 @@ export default function PlaybookEditor() {
   const toast = useToast();
   const { data: playbookList } = useApi(api.playbooks);
   const [selected, setSelected] = useState(null);
-  const [steps, setSteps] = useState([]);
-  const [pbName, setPbName] = useState('');
+  const [steps, setSteps] = useDraftPersistence('wardex_playbook_editor_steps_v1', [], {
+    ttlMs: PLAYBOOK_EDITOR_DRAFT_TTL_MS,
+  });
+  const [pbName, setPbName] = useDraftPersistence('wardex_playbook_editor_name_v1', '', {
+    ttlMs: PLAYBOOK_EDITOR_DRAFT_TTL_MS,
+  });
+  const [recovery, setRecovery] = useState(null);
   const [running, setRunning] = useState(false);
 
   const selectPlaybook = async (pb) => {
@@ -98,7 +105,10 @@ export default function PlaybookEditor() {
     if (!selected) return;
     setRunning(true);
     try {
-      await api.playbookRun(selected.id || selected.name);
+      const result = await api.playbookRun(selected.id || selected.name);
+      if (result?.execution_id) {
+        setRecovery(await api.playbookRecoveryActions(result.execution_id));
+      }
       toast('Playbook executed', 'success');
     } catch (e) {
       toast('Playbook run failed: ' + (e.message || e), 'error');
@@ -154,7 +164,10 @@ export default function PlaybookEditor() {
                         onClick={async (e) => {
                           e.stopPropagation();
                           try {
-                            await api.playbookRun(pb.id || pb.name);
+                            const result = await api.playbookRun(pb.id || pb.name);
+                            if (result?.execution_id) {
+                              setRecovery(await api.playbookRecoveryActions(result.execution_id));
+                            }
                             toast('Playbook executed', 'success');
                           } catch (err) {
                             toast('Run failed: ' + (err.message || err), 'error');
@@ -205,6 +218,23 @@ export default function PlaybookEditor() {
               {running ? 'Running…' : '▶ Run Playbook'}
             </button>
           </div>
+          {recovery && (
+            <div className="stat-box" style={{ marginTop: 12 }}>
+              <div style={{ fontWeight: 600, marginBottom: 8 }}>
+                Recovery actions • {recovery.status || 'ready'}
+              </div>
+              <div className="chip-row">
+                {(recovery.actions || []).map((action) => (
+                  <span className="scope-chip" key={action.id || action.action}>
+                    {action.label || action.action}
+                  </span>
+                ))}
+              </div>
+              <div className="hint" style={{ marginTop: 8 }}>
+                {recovery.next_action}
+              </div>
+            </div>
+          )}
         </div>
       )}
     </div>

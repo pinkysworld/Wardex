@@ -1,10 +1,11 @@
 import { Link, useSearchParams } from 'react-router-dom';
-import { useCallback, useMemo, useState } from 'react';
-import { useApiGroup } from '../hooks.jsx';
+import { useCallback, useMemo } from 'react';
+import { useApiGroup, useDraftPersistence } from '../hooks.jsx';
 import * as api from '../api.js';
 import { JsonDetails, SummaryGrid, WorkspaceEmptyState } from './operator.jsx';
 import { buildHref } from './workflowPivots.js';
 import CommandActionDrawers from './command/CommandActionDrawers.jsx';
+import ErrorBoundary from './ErrorBoundary.jsx';
 import RuleTuningChecklist from './command/RuleTuningChecklist.jsx';
 import {
   CONNECTOR_LANES,
@@ -21,13 +22,24 @@ import {
 import { CommandSection, MetricCard, WorkItem } from './command/primitives.jsx';
 
 const VALID_DRAWER_TYPES = ['remediation', 'connectors', 'rules', 'release', 'evidence'];
+const COMMAND_DRAWER_STORAGE_KEY = 'wardex_command_drawer_v1';
 
 export default function CommandCenter() {
   const [searchParams, setSearchParams] = useSearchParams();
   const drawerParam = searchParams.get('drawer');
-  const [drawerItem, setDrawerItem] = useState(null);
+  const [drawerState, setDrawerState] = useDraftPersistence(COMMAND_DRAWER_STORAGE_KEY, null);
+  const restoredDrawer = useMemo(() => {
+    if (!VALID_DRAWER_TYPES.includes(drawerParam) || drawerState?.type === drawerParam) {
+      return null;
+    }
+    return drawerState?.type === drawerParam ? drawerState : null;
+  }, [drawerParam, drawerState]);
   const drawer = VALID_DRAWER_TYPES.includes(drawerParam)
-    ? { type: drawerParam, item: drawerItem }
+    ? drawerState?.type === drawerParam
+      ? { type: drawerParam, item: drawerState.item || null }
+      : restoredDrawer
+        ? { type: drawerParam, item: restoredDrawer.item || null }
+        : { type: drawerParam, item: null }
     : null;
   const { data, loading, errors, reload } = useApiGroup({
     commandSummary: api.commandSummary,
@@ -248,7 +260,7 @@ export default function CommandCenter() {
   const openDrawer = useCallback(
     (type, item = null) => {
       if (!VALID_DRAWER_TYPES.includes(type)) return;
-      setDrawerItem(item);
+      setDrawerState({ type, item });
       setSearchParams(
         (prev) => {
           const next = new URLSearchParams(prev);
@@ -258,10 +270,10 @@ export default function CommandCenter() {
         { replace: false },
       );
     },
-    [setSearchParams, setDrawerItem],
+    [setDrawerState, setSearchParams],
   );
   const closeDrawer = useCallback(() => {
-    setDrawerItem(null);
+    setDrawerState(null);
     setSearchParams(
       (prev) => {
         const next = new URLSearchParams(prev);
@@ -270,7 +282,7 @@ export default function CommandCenter() {
       },
       { replace: false },
     );
-  }, [setSearchParams, setDrawerItem]);
+  }, [setDrawerState, setSearchParams]);
 
   return (
     <div className="workspace command-center-workspace">
@@ -398,18 +410,20 @@ export default function CommandCenter() {
       </section>
 
       {(!loading || hasLoadedCommandData) && (
-        <CommandActionDrawers
-          drawer={drawer}
-          connectorRows={connectorRows}
-          reviews={reviews}
-          rules={rules}
-          releases={releases}
-          reportTemplates={reportTemplates}
-          suppressionCount={suppressionCount}
-          data={data}
-          onClose={closeDrawer}
-          onReload={reload}
-        />
+        <ErrorBoundary>
+          <CommandActionDrawers
+            drawer={drawer}
+            connectorRows={connectorRows}
+            reviews={reviews}
+            rules={rules}
+            releases={releases}
+            reportTemplates={reportTemplates}
+            suppressionCount={suppressionCount}
+            data={data}
+            onClose={closeDrawer}
+            onReload={reload}
+          />
+        </ErrorBoundary>
       )}
 
       <CommandSection

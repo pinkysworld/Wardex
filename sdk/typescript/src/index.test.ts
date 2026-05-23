@@ -216,9 +216,15 @@ describe("WardexClient", () => {
     await client.detectionTrustRules();
     await client.detectionTrustRule("rule-1");
     await client.detectionTrustTuningDrafts();
+    await client.detectionTuningFeedback();
     await client.createDetectionTrustTuningDraft({ rule_id: "rule-1" });
     await client.previewDetectionTrustTuningDraft("draft-1");
     await client.approveDetectionTrustTuningDraft("draft-1");
+    await client.responseAudit();
+    await client.responseExecutionAudit({ requestId: "req-1", actionId: "kill-process" });
+    await client.rbacCoverage();
+    await client.searchPerformanceSlo();
+    await client.playbookExecutionRecoveryActions("exec-1");
     await client.responseApprovalOverview();
     await client.remediationSafety();
     await client.createSubscription();
@@ -283,6 +289,18 @@ describe("WardexClient", () => {
     expect(mock).toHaveBeenCalledWith(
       "http://localhost:8080/api/response/verify",
       expect.objectContaining({ method: "POST" }),
+    );
+    expect(mock).toHaveBeenCalledWith(
+      "http://localhost:8080/api/response/audit",
+      expect.objectContaining({ method: "GET" }),
+    );
+    expect(mock).toHaveBeenCalledWith(
+      "http://localhost:8080/api/response/execution-audit?request_id=req-1&action_id=kill-process",
+      expect.objectContaining({ method: "GET" }),
+    );
+    expect(mock).toHaveBeenCalledWith(
+      "http://localhost:8080/api/admin/rbac-coverage",
+      expect.objectContaining({ method: "GET" }),
     );
     expect(mock).toHaveBeenCalledWith(
       "http://localhost:8080/api/integrations/marketplace",
@@ -406,6 +424,18 @@ describe("WardexClient", () => {
     );
     expect(mock).toHaveBeenCalledWith(
       "http://localhost:8080/api/detection/readiness?limit=5",
+      expect.objectContaining({ method: "GET" }),
+    );
+    expect(mock).toHaveBeenCalledWith(
+      "http://localhost:8080/api/detection/tuning/feedback",
+      expect.objectContaining({ method: "GET" }),
+    );
+    expect(mock).toHaveBeenCalledWith(
+      "http://localhost:8080/api/search/performance-slo",
+      expect.objectContaining({ method: "GET" }),
+    );
+    expect(mock).toHaveBeenCalledWith(
+      "http://localhost:8080/api/playbook/execution/exec-1/recovery-actions",
       expect.objectContaining({ method: "GET" }),
     );
     expect(mock).toHaveBeenCalledWith(

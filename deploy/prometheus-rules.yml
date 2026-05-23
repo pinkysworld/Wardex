@@ -81,6 +81,33 @@ groups:
           summary: "Wardex p95 latency above 2s"
           description: "p95 request latency is {{ $value }}ms."
 
+      - alert: WardexEndpointP99LatencyHigh
+        expr: max(wardex_api_endpoint_latency_p99_ms) > 5000
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Wardex endpoint p99 latency above 5s"
+          description: "Worst endpoint p99 latency is {{ $value }}ms."
+
+      - alert: WardexCollectorIngestionSlaBreached
+        expr: wardex_collector_ingestion_sla_breach_count > 0
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Collector ingestion SLA breach detected"
+          description: "{{ $value }} collector ingestion lane(s) are outside the configured SLA."
+
+      - alert: WardexFailedAuthLockoutsActive
+        expr: wardex_failed_auth_active_lockouts > 0
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Failed-auth lockouts active"
+          description: "{{ $value }} subject(s) are currently locked out by failed-auth backoff."
+
       - alert: WardexCriticalAlertsHigh
         expr: wardex:alerts_critical:active > 10
         for: 2m

@@ -5808,6 +5808,10 @@ export class WardexClient {
     return this.request("GET", "/api/detection/trust/tuning-drafts");
   }
 
+  async detectionTuningFeedback(): Promise<Record<string, unknown>> {
+    return this.request("GET", "/api/detection/tuning/feedback");
+  }
+
   async createDetectionTrustTuningDraft(
     draft: Record<string, unknown>,
   ): Promise<Record<string, unknown>> {
@@ -5846,6 +5850,10 @@ export class WardexClient {
 
   async retentionForecast(): Promise<ProductionAssuranceResponse> {
     return this.request("GET", "/api/retention/forecast");
+  }
+
+  async searchPerformanceSlo(): Promise<Record<string, unknown>> {
+    return this.request("GET", "/api/search/performance-slo");
   }
 
   async adversarialValidation(): Promise<ProductionAssuranceResponse> {
@@ -6522,6 +6530,15 @@ export class WardexClient {
     );
   }
 
+  async playbookExecutionRecoveryActions(
+    executionId: string,
+  ): Promise<Record<string, unknown>> {
+    return this.request(
+      "GET",
+      `/api/playbook/execution/${encodeURIComponent(executionId)}/recovery-actions`,
+    );
+  }
+
   // ── Compliance ───────────────────────────────────────────────────
 
   async complianceStatus(): Promise<ComplianceReport> {
@@ -7143,6 +7160,28 @@ export class WardexClient {
 
   async responseRequests(): Promise<ResponseRequestsResponse> {
     return this.request("GET", "/api/response/requests");
+  }
+
+  async responseAudit(): Promise<Record<string, unknown>> {
+    return this.request("GET", "/api/response/audit");
+  }
+
+  async responseExecutionAudit(options: {
+    requestId?: string;
+    actionId?: string;
+  } = {}): Promise<Record<string, unknown>> {
+    const params = new URLSearchParams();
+    if (options.requestId) params.set("request_id", options.requestId);
+    if (options.actionId) params.set("action_id", options.actionId);
+    const query = params.toString();
+    return this.request(
+      "GET",
+      `/api/response/execution-audit${query ? `?${query}` : ""}`,
+    );
+  }
+
+  async rbacCoverage(): Promise<Record<string, unknown>> {
+    return this.request("GET", "/api/admin/rbac-coverage");
   }
 
   async requestResponseAction(

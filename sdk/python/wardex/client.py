@@ -489,6 +489,9 @@ class WardexClient:
     def detection_trust_tuning_drafts(self) -> dict[str, Any]:
         return self._get("/api/detection/trust/tuning-drafts")
 
+    def detection_tuning_feedback(self) -> dict[str, Any]:
+        return self._get("/api/detection/tuning/feedback")
+
     def create_detection_trust_tuning_draft(self, draft: dict[str, Any]) -> dict[str, Any]:
         return self._post("/api/detection/trust/tuning-drafts", draft)
 
@@ -520,6 +523,9 @@ class WardexClient:
 
     def retention_forecast(self) -> dict[str, Any]:
         return self._get("/api/retention/forecast")
+
+    def search_performance_slo(self) -> dict[str, Any]:
+        return self._get("/api/search/performance-slo")
 
     def adversarial_validation(self) -> dict[str, Any]:
         return self._get("/api/validation/adversarial")
@@ -859,6 +865,26 @@ class WardexClient:
 
     def list_actions(self) -> list[dict[str, Any]]:
         return self._get("/api/response/requests")
+
+    def response_audit(self) -> dict[str, Any]:
+        return self._get("/api/response/audit")
+
+    def response_execution_audit(
+        self,
+        *,
+        request_id: str | None = None,
+        action_id: str | None = None,
+    ) -> dict[str, Any]:
+        query: list[str] = []
+        if request_id:
+            query.append(f"request_id={quote(str(request_id), safe='')}")
+        if action_id:
+            query.append(f"action_id={quote(str(action_id), safe='')}")
+        suffix = f"?{'&'.join(query)}" if query else ""
+        return self._get(f"/api/response/execution-audit{suffix}")
+
+    def rbac_coverage(self) -> dict[str, Any]:
+        return self._get("/api/admin/rbac-coverage")
 
     def execute_action(self, action: dict[str, Any]) -> dict[str, Any]:
         raise self._unsupported(
@@ -1256,6 +1282,11 @@ class WardexClient:
         if feedback:
             payload["feedback"] = feedback
         return self._post("/api/playbooks/resume", payload)
+
+    def playbook_execution_recovery_actions(self, execution_id: str) -> dict[str, Any]:
+        return self._get(
+            f"/api/playbook/execution/{quote(str(execution_id), safe='')}/recovery-actions"
+        )
 
     # ── alert deduplication ──────────────────────────────────────────
 

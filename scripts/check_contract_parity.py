@@ -74,14 +74,18 @@ REQUIRED_RUNTIME_OPENAPI_ENDPOINTS = {
     ("GET", "/api/processes/thread-proof"),
     ("GET", "/api/detection/recommendations"),
     ("GET", "/api/detection/readiness"),
+    ("GET", "/api/detection/tuning/feedback"),
     ("GET", "/api/detection/explain"),
     ("POST", "/api/response/request"),
     ("GET", "/api/response/requests"),
+    ("GET", "/api/response/audit"),
+    ("GET", "/api/response/execution-audit"),
     ("POST", "/api/response/approve"),
     ("POST", "/api/response/execute"),
     ("GET", "/api/response/approvals"),
     ("GET", "/api/response/approval-overview"),
     ("GET", "/api/remediation/safety"),
+    ("GET", "/api/playbook/execution/{id}/recovery-actions"),
     ("GET", "/api/support/bundle"),
     ("GET", "/api/ws/stats"),
     ("GET", "/api/ws/health"),
@@ -106,6 +110,9 @@ REQUIRED_RUNTIME_OPENAPI_ENDPOINTS = {
     ("GET", "/api/malware/explain"),
     ("GET", "/api/malware/scan-diff"),
     ("GET", "/api/sdk/contract-status"),
+    ("GET", "/api/admin/rbac-coverage"),
+    ("GET", "/api/rbac/coverage"),
+    ("GET", "/api/search/performance-slo"),
     ("POST", "/api/subscriptions"),
     ("GET", "/api/subscriptions/resume"),
 }
@@ -163,12 +170,17 @@ REQUIRED_SDK_ENDPOINTS = {
     "/api/processes/thread-proof",
     "/api/detection/recommendations",
     "/api/detection/readiness",
+    "/api/detection/tuning/feedback",
     "/api/detection/explain",
     "/api/response/request",
+    "/api/response/audit",
+    "/api/response/execution-audit",
     "/api/response/approve",
     "/api/response/execute",
     "/api/response/approval-overview",
     "/api/remediation/safety",
+    "/api/playbook/execution/",
+    "/recovery-actions",
     "/api/support/bundle",
     "/api/ws/stats",
     "/api/ws/health",
@@ -193,6 +205,8 @@ REQUIRED_SDK_ENDPOINTS = {
     "/api/malware/explain",
     "/api/malware/scan-diff",
     "/api/sdk/contract-status",
+    "/api/admin/rbac-coverage",
+    "/api/search/performance-slo",
     "/api/subscriptions",
     "/api/subscriptions/resume",
 }
@@ -254,28 +268,106 @@ def openapi_yaml_operations(source: str) -> set[tuple[str, str]]:
     return operations
 
 
-def openapi_yaml_auth_metadata(source: str) -> dict[tuple[str, str], str]:
-    metadata: dict[tuple[str, str], str] = {}
+def openapi_yaml_operation_metadata(source: str) -> dict[tuple[str, str], dict[str, str | None]]:
+    metadata: dict[tuple[str, str], dict[str, str | None]] = {}
     current_path: str | None = None
     current_method: str | None = None
+    in_security_block = False
     for line in source.splitlines():
         path_match = re.match(r"^  (/api/[^:]+):\s*$", line)
         if path_match:
             current_path = path_match.group(1)
             current_method = None
+            in_security_block = False
             continue
         if re.match(r"^[^ ].*", line):
             current_path = None
             current_method = None
+            in_security_block = False
             continue
         operation_match = re.match(r"^    (get|post|put|delete|patch):\s*$", line)
         if operation_match and current_path:
             current_method = operation_match.group(1).upper()
+            metadata[(current_method, current_path)] = {
+                "operation_id": None,
+                "auth": None,
+            }
+            in_security_block = False
+            continue
+        operation_id_match = re.match(r"^      operationId:\s*(\S+)\s*$", line)
+        if operation_id_match and current_path and current_method:
+            metadata[(current_method, current_path)]["operation_id"] = operation_id_match.group(1)
             continue
         auth_match = re.match(r"^      x-wardex-auth:\s*([a-z_]+)\s*$", line)
         if auth_match and current_path and current_method:
-            metadata[(current_method, current_path)] = auth_match.group(1)
+            metadata[(current_method, current_path)]["auth"] = auth_match.group(1)
+            in_security_block = False
+            continue
+        if re.match(r"^      security:\s*$", line) and current_path and current_method:
+            in_security_block = True
+            continue
+        if in_security_block and re.match(r"^      - \{\}\s*$", line):
+            metadata[(current_method, current_path)]["auth"] = metadata[(current_method, current_path)][
+                "auth"
+            ] or "public"
+            continue
+        if in_security_block and re.match(r"^      - bearerAuth:\s*\[\]\s*$", line):
+            metadata[(current_method, current_path)]["auth"] = metadata[(current_method, current_path)][
+                "auth"
+            ] or "authenticated"
+            continue
+        if in_security_block and re.match(r"^      [A-Za-z-]", line):
+            in_security_block = False
     return metadata
+
+
+def openapi_yaml_auth_metadata(source: str) -> dict[tuple[str, str], str]:
+    return {
+        operation: values["auth"]
+        for operation, values in openapi_yaml_operation_metadata(source).items()
+        if values["auth"]
+    }
+
+
+def openapi_yaml_deprecations(source: str) -> dict[tuple[str, str], dict[str, str]]:
+    deprecations: dict[tuple[str, str], dict[str, str]] = {}
+    current_path: str | None = None
+    current_method: str | None = None
+    current_fields: dict[str, str] | None = None
+
+    def flush() -> None:
+        if current_path and current_method and current_fields and current_fields.get("deprecated") == "true":
+            deprecations[(current_method, current_path)] = dict(current_fields)
+
+    for line in source.splitlines():
+        path_match = re.match(r"^  (/api/[^:]+):\s*$", line)
+        if path_match:
+            flush()
+            current_path = path_match.group(1)
+            current_method = None
+            current_fields = None
+            continue
+        if re.match(r"^[^ ].*", line):
+            flush()
+            current_path = None
+            current_method = None
+            current_fields = None
+            continue
+        operation_match = re.match(r"^    (get|post|put|delete|patch):\s*$", line)
+        if operation_match and current_path:
+            flush()
+            current_method = operation_match.group(1).upper()
+            current_fields = {}
+            continue
+        field_match = re.match(
+            r"^      (deprecated|x-wardex-deprecated-since|x-wardex-sunset|x-wardex-replacement):\s*(.*?)\s*$",
+            line,
+        )
+        if field_match and current_fields is not None:
+            current_fields[field_match.group(1)] = field_match.group(2).strip().strip('"\'')
+
+    flush()
+    return deprecations
 
 
 def main() -> int:
@@ -294,7 +386,9 @@ def main() -> int:
     py_sdk_source = (ROOT / "sdk/python/wardex/client.py").read_text(errors="ignore")
     openapi_inventory = openapi_operations(openapi_source)
     docs_openapi_inventory = openapi_yaml_operations(docs_openapi_source)
+    docs_operation_metadata = openapi_yaml_operation_metadata(docs_openapi_source)
     docs_auth_metadata = openapi_yaml_auth_metadata(docs_openapi_source)
+    docs_deprecations = openapi_yaml_deprecations(docs_openapi_source)
 
     for method, endpoint in sorted(REQUIRED_RUNTIME_OPENAPI_ENDPOINTS):
         if endpoint not in endpoint_source:
@@ -312,6 +406,25 @@ def main() -> int:
 
     if "x-wardex-auth" not in openapi_source:
         failures.append("OpenAPI builder missing x-wardex-auth operation metadata")
+
+    operation_id_index: dict[str, list[tuple[str, str]]] = {}
+    for (method, endpoint), metadata in sorted(docs_operation_metadata.items()):
+        operation_id = metadata["operation_id"]
+        auth = metadata["auth"]
+        if not operation_id:
+            failures.append(f"{method} {endpoint} missing operationId in docs/openapi.yaml")
+        else:
+            operation_id_index.setdefault(operation_id, []).append((method, endpoint))
+        if not auth:
+            failures.append(f"{method} {endpoint} missing x-wardex-auth in docs/openapi.yaml")
+
+    for operation_id, operations in sorted(operation_id_index.items()):
+        if len(operations) > 1:
+            rendered = ", ".join(f"{method} {path}" for method, path in operations)
+            failures.append(
+                f"duplicate operationId {operation_id} in docs/openapi.yaml for {rendered}"
+            )
+
     for operation, expected_auth in sorted(REQUIRED_AUTH_METADATA.items()):
         if docs_auth_metadata.get(operation) != expected_auth:
             method, endpoint = operation
@@ -319,6 +432,27 @@ def main() -> int:
             failures.append(
                 f"{method} {endpoint} docs/openapi.yaml x-wardex-auth {actual} != {expected_auth}"
             )
+
+    for operation, fields in sorted(docs_deprecations.items()):
+        missing = [
+            name
+            for name in (
+                "x-wardex-deprecated-since",
+                "x-wardex-sunset",
+                "x-wardex-replacement",
+            )
+            if not fields.get(name)
+        ]
+        if missing:
+            method, endpoint = operation
+            failures.append(
+                f"{method} {endpoint} deprecated in docs/openapi.yaml without {', '.join(missing)}"
+            )
+
+    if docs_deprecations and "Deprecation" not in endpoint_source:
+        failures.append("runtime response wrapper missing Deprecation header support")
+    if docs_deprecations and "Sunset" not in endpoint_source:
+        failures.append("runtime response wrapper missing Sunset header support")
 
     if len(openapi_inventory) < MIN_OPENAPI_OPERATIONS:
         failures.append(
@@ -338,7 +472,7 @@ def main() -> int:
             print(f"contract-parity: {failure}", file=sys.stderr)
         return 1
     print(
-        f"contract-parity: runtime, OpenAPI builder ({len(openapi_inventory)} operations), docs/openapi.yaml ({len(docs_openapi_inventory)} operations), GraphQL, and SDK versions aligned at {version}"
+        f"contract-parity: runtime, OpenAPI builder ({len(openapi_inventory)} operations), docs/openapi.yaml ({len(docs_openapi_inventory)} operations), GraphQL, SDK versions, and {len(docs_deprecations)} active deprecation(s) aligned at {version}"
     )
     return 0
 

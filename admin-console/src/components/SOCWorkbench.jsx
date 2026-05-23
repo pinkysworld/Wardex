@@ -16,6 +16,7 @@ import {
   safeStorageSet,
 } from '../safeStorage.js';
 
+import ErrorBoundary from './ErrorBoundary.jsx';
 import PlaybookEditor from './PlaybookEditor.jsx';
 
 // ── Tab Groups ─────────────────────────────────────────────────
@@ -38,6 +39,16 @@ const TAB_GROUPS = [
 ];
 const MAX_QUEUE_RENDER_ROWS = 250;
 const MAX_PROCESS_FINDING_ROWS = 120;
+const SOC_ESCALATION_DRAFT_STORAGE_KEY = 'wardex_soc_escalation_draft_v1';
+const SOC_SELECTED_INVESTIGATION_STORAGE_KEY = 'wardex_soc_selected_investigation_v1';
+const SOC_STEP_NOTE_DRAFT_STORAGE_KEY = 'wardex_soc_step_note_drafts_v1';
+const DEFAULT_ESCALATION_FORM = {
+  name: '',
+  severity: 'critical',
+  channel: 'email',
+  targets: '',
+  timeout_minutes: 30,
+};
 
 // ── Investigation Checklist Templates ──────────────────────────
 const CHECKLIST_TEMPLATES = {
@@ -787,12 +798,11 @@ export default function SOCWorkbench() {
   const [incStoryline, setIncStoryline] = useState(null);
   const [entityInput, setEntityInput] = useState('');
   const [entityResult, setEntityResult] = useState(null);
-  const [escForm, setEscForm] = useState({
-    name: '',
-    severity: 'critical',
-    channel: 'email',
-    targets: '',
-    timeout_minutes: 30,
+  const [escForm, setEscForm] = useState(() => {
+    const parsed = safeStorageJsonGet(SOC_ESCALATION_DRAFT_STORAGE_KEY, DEFAULT_ESCALATION_FORM);
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed)
+      ? { ...DEFAULT_ESCALATION_FORM, ...parsed }
+      : DEFAULT_ESCALATION_FORM;
   });
   const [showEscForm, setShowEscForm] = useState(false);
   const [selectedProcess, setSelectedProcess] = useState(null);
@@ -800,8 +810,13 @@ export default function SOCWorkbench() {
   const [plannerSuggestions, setPlannerSuggestions] = useState([]);
   const [plannerLoading, setPlannerLoading] = useState(false);
   const [startingWorkflowId, setStartingWorkflowId] = useState(null);
-  const [selectedInvestigationId, setSelectedInvestigationId] = useState('');
-  const [stepNoteDrafts, setStepNoteDrafts] = useState({});
+  const [selectedInvestigationId, setSelectedInvestigationId] = useState(
+    () => safeStorageGet(SOC_SELECTED_INVESTIGATION_STORAGE_KEY, '') || '',
+  );
+  const [stepNoteDrafts, setStepNoteDrafts] = useState(() => {
+    const parsed = safeStorageJsonGet(SOC_STEP_NOTE_DRAFT_STORAGE_KEY, {});
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
+  });
   const [findingDraft, setFindingDraft] = useState('');
   const [savingProgressKey, setSavingProgressKey] = useState('');
   const [handoffDraft, setHandoffDraft] = useState({
@@ -876,6 +891,18 @@ export default function SOCWorkbench() {
     safeStorageJsonSet('wardex_checklist', checklist);
     safeStorageSet('wardex_checklist_type', checklistType);
   }, [checklist, checklistType]);
+
+  useEffect(() => {
+    safeStorageJsonSet(SOC_ESCALATION_DRAFT_STORAGE_KEY, escForm);
+  }, [escForm]);
+
+  useEffect(() => {
+    safeStorageSet(SOC_SELECTED_INVESTIGATION_STORAGE_KEY, selectedInvestigationId || '');
+  }, [selectedInvestigationId]);
+
+  useEffect(() => {
+    safeStorageJsonSet(SOC_STEP_NOTE_DRAFT_STORAGE_KEY, stepNoteDrafts);
+  }, [stepNoteDrafts]);
 
   useInterval(() => {
     reloadSocTriage();
@@ -4568,13 +4595,7 @@ export default function SOCWorkbench() {
                       });
                       toast('Policy created', 'success');
                       setShowEscForm(false);
-                      setEscForm({
-                        name: '',
-                        severity: 'critical',
-                        channel: 'email',
-                        targets: '',
-                        timeout_minutes: 30,
-                      });
+                      setEscForm(DEFAULT_ESCALATION_FORM);
                       rEsc();
                     } catch {
                       toast('Failed', 'error');
@@ -5875,7 +5896,11 @@ export default function SOCWorkbench() {
         </div>
       )}
 
-      {tab === 'playbooks' && <PlaybookEditor />}
+      {tab === 'playbooks' && (
+        <ErrorBoundary>
+          <PlaybookEditor />
+        </ErrorBoundary>
+      )}
 
       {tab === 'campaigns' && <CampaignGraph campaignData={campaignData} />}
 

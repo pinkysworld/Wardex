@@ -16,11 +16,13 @@ The wrapper is implemented in `scripts/release_acceptance.sh` and runs these che
 2. Root `cargo build` so embedded assets and backend routes match the browser bundle.
 3. API/OpenAPI/SDK contract parity via `python3 scripts/check_contract_parity.py`, including report workflows, cursor pagination, workflow/rule preflight, tenant/thread proof, snapshot retention controls, release observability gates, production assurance endpoints, operator-trust workspaces, alert evidence/feedback, Detection Trust scoring and draft-only tuning endpoints, Detection Lab, Response Safety, Integrations, Operations Health, Malware transparency, and release verification readiness endpoints across runtime routing, the live OpenAPI builder, `docs/openapi.yaml`, and both SDK clients.
 4. Release-document consistency via `python3 scripts/validate_release_docs.py`, including `STATUS`, roadmap, feature UI coverage, and routed smoke mappings.
-5. Published marketing-site link validation across `site/*.html`.
-6. Managed mode only: start a temporary local Wardex instance on a loopback port with a cloned acceptance config that disables request throttling for the smoke run.
-7. Live admin reachability check against `WARDEX_BASE_URL`.
-8. Release verification helper gates: `scripts/detection_validation_packs.sh` confirms validation-pack fixtures, and `scripts/performance_scale_baseline.sh --launchpad` verifies release-verification endpoint latency against the smoke budget.
-9. Routed browser release suite:
+5. Documentation freshness via `python3 scripts/validate_docs_freshness.py`, confirming the shipped release docs and website-facing status copy still match the current runtime baseline.
+6. Release trust workflow coverage via `python3 scripts/check_release_trust_gates.py`, confirming panic policy, contract parity, docs, provenance, pinned release actions, and checksum verification remain wired into CI and tag builds.
+7. Published marketing-site link validation across `site/*.html`.
+8. Managed mode only: start a temporary local Wardex instance on a loopback port with a cloned acceptance config that disables request throttling for the smoke run.
+9. Live admin reachability check against `WARDEX_BASE_URL`.
+10. Release verification helper gates: `scripts/detection_validation_packs.sh` confirms validation-pack fixtures, and `scripts/performance_scale_baseline.sh --launchpad` verifies release-verification endpoint latency against the smoke budget.
+11. Routed browser release suite:
    - `tests/playwright/live_release_smoke.spec.js`
   - `tests/playwright/detection_quality_thread_smoke.spec.js`
    - `tests/playwright/advanced_console_workflows.spec.js`
@@ -125,6 +127,8 @@ cargo test --all-targets
 python3 scripts/check_panic_policy.py
 ```
 
+The matrix also runs a public-endpoint SDK live smoke job that boots a real local Wardex instance, waits on `/api/openapi.json`, then exercises the TypeScript and Python SDK smoke tests against that live server before sign-off.
+
 The matrix runs Linux, macOS, and Windows without fail-fast cancellation so each platform reports its own failure context.
 
 ## Preconditions
@@ -163,8 +167,9 @@ Major-version release acceptance additionally requires:
 
 1. `docs/UPGRADE_<prev>_TO_<major>.md` exists and covers all breaking changes.
 2. `docs/DEPRECATION_POLICY.md` and `docs/COMPATIBILITY.md` are current.
-3. No `deprecated: true` endpoints in `docs/openapi.yaml` without a
-   documented removal target version.
+3. No `deprecated: true` endpoints in `docs/openapi.yaml` without
+  `x-wardex-deprecated-since`, `x-wardex-sunset`, and
+  `x-wardex-replacement` metadata enforced by contract parity.
 
 ## Cutting a release
 

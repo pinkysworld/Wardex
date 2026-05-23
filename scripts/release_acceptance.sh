@@ -466,6 +466,7 @@ run_step "Build admin console" bash -lc "cd '$ROOT_DIR/admin-console' && npm run
 run_step "Build Wardex" bash -lc "cd '$ROOT_DIR' && cargo build"
 run_step "Check API and SDK contract parity" python3 "$ROOT_DIR/scripts/check_contract_parity.py"
 run_step "Check release documentation consistency" python3 "$ROOT_DIR/scripts/validate_release_docs.py"
+run_step "Check release trust gates" python3 "$ROOT_DIR/scripts/check_release_trust_gates.py"
 run_step "Check published site links" check_site_links
 if [[ "$RELEASE_MODE" == "managed" ]]; then
   run_step "Start temporary Wardex release instance at $WARDEX_BASE_URL" start_managed_wardex

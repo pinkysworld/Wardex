@@ -99,7 +99,7 @@ The current release has been verified with:
 
 ## Current product posture
 
-Wardex is now positioned as a professional XDR/SIEM control plane with incident-first analyst workflows, explainable detections, context-preserving reporting, operator-visible recovery posture, and explicit shift-lead surfaces for ownership, handoff, and detection-review pressure. The runtime, admin console, release process, and website are aligned around operator trust, workflow closure, deployment readiness, clean release verification, and freshness-gated evidence. The current release strengthens abuse-pressure handling, bounded observability, collector setup reuse, Live Monitor continuity, and local smoke proof for signed-release readiness.
+Wardex is now positioned as a professional XDR/SIEM control plane with incident-first analyst workflows, explainable detections, context-preserving reporting, operator-visible recovery posture, and explicit shift-lead surfaces for ownership, handoff, and detection-review pressure. The runtime, admin console, release process, and website are aligned around operator trust, workflow closure, deployment readiness, clean release verification, and freshness-gated evidence. The current release strengthens abuse-pressure handling, bounded observability, persisted lockout continuity, operator-visible transport recovery, and live SDK proof for signed-release readiness.
 
 ## Recently shipped (v1.0.26)
 
@@ -108,6 +108,8 @@ Wardex is now positioned as a professional XDR/SIEM control plane with incident-
 - **Read-heavy feature flags** — the runtime flag registry moved to `RwLock`, letting request-path flag checks run concurrently while keeping writes explicit for rollout changes and kill switches.
 - **Operator workflow continuity** — Live Monitor restores the last selected alert from session storage, Settings adds a Failed Auth audit shortcut, and the Google Workspace collector uses the shared collector-form save/validate flow.
 - **Release smoke proof** — `make smoke` now documents and executes the local Rust/admin-console smoke path, and contract parity requires Detection Explain coverage.
+- **Live SDK and doc trust gates** — CI now boots a real local Wardex instance for TypeScript and Python SDK smoke tests, and the release gate validates both docs freshness and release-trust workflow coverage before sign-off.
+- **Operator-facing recovery signals** — API endpoint analytics now canonicalize dynamic paths and export Prometheus latency histograms, failed-auth lockouts survive restart through persisted snapshots, Live Monitor keeps the last recovery cause visible after fallback, and ErrorBoundary can focus the failure state and copy a route-aware diagnostic report.
 
 ## Recently shipped (v1.0.25)
 

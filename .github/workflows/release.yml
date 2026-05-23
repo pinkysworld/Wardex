@@ -54,8 +54,20 @@ jobs:
       - name: Build admin console
         run: npm run build --prefix admin-console
 
+      - name: Check panic policy
+        run: python3 scripts/check_panic_policy.py
+
+      - name: Check API and SDK contract parity
+        run: python3 scripts/check_contract_parity.py
+
       - name: Check release docs consistency
         run: python3 scripts/validate_release_docs.py
+
+      - name: Check docs freshness
+        run: python3 scripts/validate_docs_freshness.py
+
+      - name: Check release trust gates
+        run: python3 scripts/check_release_trust_gates.py
 
   build:
     name: Build & Package — ${{ matrix.platform }}
@@ -120,13 +132,12 @@ jobs:
       - name: Sign and notarize macOS binary
         if: startsWith(matrix.platform, 'macos-')
         env:
-          WARDEX_MACOS_CERTIFICATE_BASE64: ${{ secrets['MACOS_DEVELOPER_ID_CERTIFICATE_BASE64'] }}
-          WARDEX_MACOS_CERTIFICATE_PASSWORD: ${{ secrets['MACOS_DEVELOPER_ID_CERTIFICATE_PASSWORD'] }}
-          WARDEX_MACOS_CODESIGN_IDENTITY: ${{ secrets['MACOS_CODESIGN_IDENTITY'] }}
-          WARDEX_MACOS_KEYCHAIN_PASSWORD: ${{ secrets['MACOS_KEYCHAIN_PASSWORD'] }}
-          WARDEX_MACOS_NOTARY_APPLE_ID: ${{ secrets['MACOS_NOTARY_APPLE_ID'] }}
-          WARDEX_MACOS_NOTARY_PASSWORD: ${{ secrets['MACOS_NOTARY_APP_PASSWORD'] }}
-          WARDEX_MACOS_NOTARY_TEAM_ID: ${{ secrets['MACOS_NOTARY_TEAM_ID'] }}
+            WARDEX_MACOS_CERTIFICATE_BASE64: ${{ secrets.MACOS_DEVELOPER_ID_CERTIFICATE_BASE64 }}
+            WARDEX_MACOS_CERTIFICATE_PASSWORD: ${{ secrets.MACOS_DEVELOPER_ID_CERTIFICATE_PASSWORD }}
+            WARDEX_MACOS_KEYCHAIN_PASSWORD: ${{ secrets.MACOS_KEYCHAIN_PASSWORD }}
+            WARDEX_MACOS_NOTARY_APPLE_ID: ${{ secrets.MACOS_NOTARY_APPLE_ID }}
+            WARDEX_MACOS_NOTARY_PASSWORD: ${{ secrets.MACOS_NOTARY_APP_PASSWORD }}
+            WARDEX_MACOS_NOTARY_TEAM_ID: ${{ secrets.MACOS_NOTARY_TEAM_ID }}
         run: |
           set -euo pipefail
           scripts/sign_notarize_macos_release.sh \
@@ -446,6 +457,9 @@ jobs:
             | xargs -0 sha256sum > "${sums_tmp}"
           mv "${sums_tmp}" SHA256SUMS
           sha256sum -c SHA256SUMS
+
+      - name: Verify release artifacts
+        run: python3 scripts/verify_release_artifacts.py release-assets
 
       # Extract the changelog section matching the pushed tag as the release body
       - name: Extract release notes

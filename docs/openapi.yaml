@@ -10,6 +10,38 @@ servers:
 - url: http://localhost:8080
   description: Local development server
 paths:
+  /api/admin/rbac-coverage:
+    get:
+      summary: Route-level RBAC coverage proof for administrators
+      operationId: getAdminRbacCoverage
+      tags:
+      - admin
+      responses:
+        '200':
+          description: Route-level RBAC coverage proof for administrators
+          content:
+            application/json:
+              schema:
+                type: object
+      security:
+      - bearerAuth: []
+      x-wardex-auth: authenticated
+  /api/rbac/coverage:
+    get:
+      summary: Route-level RBAC coverage proof
+      operationId: getRbacCoverage
+      tags:
+      - admin
+      responses:
+        '200':
+          description: Route-level RBAC coverage proof
+          content:
+            application/json:
+              schema:
+                type: object
+      security:
+      - bearerAuth: []
+      x-wardex-auth: authenticated
   /api/agents:
     get:
       summary: List enrolled agents
@@ -8997,6 +9029,22 @@ paths:
                 $ref: '#/components/schemas/Error'
       security:
       - bearerAuth: []
+  /api/playbook/execution/{id}/recovery-actions:
+    get:
+      summary: Suggested recovery actions for failed, paused, or completed playbook executions
+      operationId: getPlaybookExecutionRecoveryActions
+      tags:
+      - response
+      responses:
+        '200':
+          description: Playbook execution recovery actions response
+          content:
+            application/json:
+              schema:
+                type: object
+      security:
+      - bearerAuth: []
+      x-wardex-auth: authenticated
   /api/policy/current:
     get:
       summary: Get current active policy
@@ -10912,6 +10960,51 @@ paths:
                 $ref: '#/components/schemas/Error'
       security:
       - bearerAuth: []
+  /api/response/audit:
+    get:
+      summary: Response approval and execution audit ledger
+      operationId: listResponseAudit
+      tags:
+      - response
+      responses:
+        '200':
+          description: Response approval and execution audit ledger
+          content:
+            application/json:
+              schema:
+                type: object
+      security:
+      - bearerAuth: []
+      x-wardex-auth: authenticated
+  /api/response/execution-audit:
+    get:
+      summary: Structured response execution command transcripts and verification state
+      operationId: listResponseExecutionAudit
+      tags:
+      - response
+      parameters:
+      - name: request_id
+        in: query
+        description: Optional response request ID filter
+        required: false
+        schema:
+          type: string
+      - name: action_id
+        in: query
+        description: Optional response action ID filter
+        required: false
+        schema:
+          type: string
+      responses:
+        '200':
+          description: Structured response execution command transcripts and verification state
+          content:
+            application/json:
+              schema:
+                type: object
+      security:
+      - bearerAuth: []
+      x-wardex-auth: authenticated
   /api/retention/apply:
     post:
       summary: Apply retention policy now
@@ -13892,6 +13985,22 @@ paths:
       security:
       - bearerAuth: []
       x-wardex-auth: authenticated
+  /api/detection/tuning/feedback:
+    get:
+      summary: Seven-day detection tuning feedback with draft-only impact recommendations
+      operationId: getDetectionTuningFeedback
+      tags:
+      - detection
+      responses:
+        '200':
+          description: Detection tuning feedback response
+          content:
+            application/json:
+              schema:
+                type: object
+      security:
+      - bearerAuth: []
+      x-wardex-auth: authenticated
   /api/detection/trust/rules:
     get:
       summary: Per-rule Detection Trust scores with feedback rollups, suppression pressure, replay freshness, source quality, enrichment, ATT&CK coverage, and volume trend
@@ -14074,6 +14183,22 @@ paths:
                 type: object
       security:
       - bearerAuth: []
+  /api/search/performance-slo:
+    get:
+      summary: Long-retention search p95 and p99 latency SLO evidence
+      operationId: getSearchPerformanceSlo
+      tags:
+      - observability
+      responses:
+        '200':
+          description: Search performance SLO response
+          content:
+            application/json:
+              schema:
+                type: object
+      security:
+      - bearerAuth: []
+      x-wardex-auth: authenticated
   /api/validation/adversarial:
     get:
       summary: Adversarial validation dashboard for shipped attack and baseline corpora

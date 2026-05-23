@@ -53,9 +53,12 @@ def main() -> int:
         print(f"error: src/ not found at {SRC_ROOT}", file=sys.stderr)
         return 2
 
-    total = 0
+    counts_by_file: list[tuple[Path, int]] = []
     for path in sorted(SRC_ROOT.rglob("*.rs")):
-        total += count_in_file(path)
+        count = count_in_file(path)
+        if count:
+            counts_by_file.append((path, count))
+    total = sum(count for _, count in counts_by_file)
 
     if not BASELINE_FILE.is_file():
         print(
@@ -77,6 +80,12 @@ def main() -> int:
 
     print(f"panic-policy: {total} non-test unwrap/expect (baseline {baseline})")
 
+    top_counts = sorted(counts_by_file, key=lambda item: (-item[1], str(item[0])))[:10]
+    if top_counts:
+        print("panic-policy: top production call sites by file")
+        for path, count in top_counts:
+            print(f"  {path.relative_to(REPO_ROOT)}: {count}")
+
     if total > baseline:
         print(
             "error: panic-policy regression detected.\n"
@@ -93,10 +102,12 @@ def main() -> int:
 
     if total < baseline:
         print(
-            "note: panic count is below baseline. Consider lowering "
-            "scripts/panic-baseline.txt to lock in the improvement.",
+            "error: panic count is below baseline. Lower "
+            "scripts/panic-baseline.txt in the same change so the release "
+            "gate locks in the improvement.",
             file=sys.stderr,
         )
+        return 1
 
     return 0
 

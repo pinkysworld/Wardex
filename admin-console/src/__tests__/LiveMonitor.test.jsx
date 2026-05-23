@@ -206,6 +206,59 @@ describe('LiveMonitor', () => {
     expect(await screen.findByText('Credential misuse follow-up')).toBeInTheDocument();
   });
 
+  it('surfaces transport recovery errors after websocket fallback', async () => {
+    const sockets = [];
+    const baseFetch = globalThis.fetch;
+
+    globalThis.fetch = vi.fn((url, options) => {
+      const href = String(url);
+      if (href.includes('/api/ws/connect')) {
+        return Promise.resolve(jsonOk({ subscriber_id: 7 }));
+      }
+      if (href.includes('/api/ws/disconnect')) {
+        return Promise.resolve(jsonOk({ ok: true }));
+      }
+      if (href.includes('/api/ws/poll')) {
+        return Promise.resolve(jsonOk([]));
+      }
+      return baseFetch(url, options);
+    });
+
+    globalThis.WebSocket = class MockWebSocket {
+      constructor(url) {
+        this.url = url;
+        sockets.push(this);
+      }
+
+      close() {}
+
+      emitError() {
+        this.onerror?.(new Event('error'));
+      }
+    };
+
+    renderMonitor('/monitor');
+    await waitFor(() => {
+      expect(sockets).toHaveLength(1);
+    });
+
+    act(() => {
+      sockets[0].emitError();
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText('Live feed: Polling')).toBeInTheDocument();
+    });
+
+    const recoveryCard = screen.getByText('Recovery Attempts').closest('.summary-card');
+    expect(recoveryCard).not.toBeNull();
+    expect(within(recoveryCard).getByText('1')).toBeInTheDocument();
+    expect(screen.getByText('Last Transport Error')).toBeInTheDocument();
+    expect(
+      screen.getByText('native websocket unavailable, falling back to polling'),
+    ).toBeInTheDocument();
+  });
+
   it('restores live event filters from the route for shared stream links', async () => {
     const sockets = [];
 

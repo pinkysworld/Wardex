@@ -432,6 +432,7 @@ export default function LiveMonitor() {
     lastConnectAt,
     lastDisconnectAt,
     lastError,
+    lastRecoveryError,
     clearEvents: clearStreamEvents,
     reconnect: reconnectStream,
   } = useWebSocket(2000, { nativeSupported: nativeStreamSupported });
@@ -1294,6 +1295,15 @@ export default function LiveMonitor() {
                 <div className="summary-label">Recovery Attempts</div>
                 <div className="summary-value">{recoveryAttempts}</div>
                 <div className="summary-meta">Reconnects attempted since this monitor mounted.</div>
+              </div>
+              <div className="summary-card">
+                <div className="summary-label">Last Transport Error</div>
+                <div className="summary-value">
+                  {lastRecoveryError ? 'Attention needed' : 'None'}
+                </div>
+                <div className="summary-meta">
+                  {lastRecoveryError || 'The live transport has not reported a recent error.'}
+                </div>
               </div>
               <div className="summary-card">
                 <div className="summary-label">Live Buffer</div>

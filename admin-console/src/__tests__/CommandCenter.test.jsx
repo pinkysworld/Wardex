@@ -338,6 +338,18 @@ describe('CommandCenter', () => {
     view.unmount();
   });
 
+  it('restores the persisted drawer item when a routed drawer is reopened', async () => {
+    localStorage.setItem(
+      'wardex_command_drawer_v1',
+      JSON.stringify({ type: 'connectors', item: { id: 'aws' } }),
+    );
+
+    renderWithProviders('/command?drawer=connectors');
+
+    const drawer = await screen.findByRole('dialog', { name: 'Connector Validation' });
+    expect(within(drawer).getByLabelText('Connector lane')).toHaveValue('aws');
+  });
+
   it('opens each command drawer from lane trigger buttons and updates route state', async () => {
     const user = userEvent.setup();
     renderWithProviders('/command');

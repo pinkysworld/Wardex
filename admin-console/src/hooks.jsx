@@ -14,7 +14,13 @@ import {
   wsPoll,
   withSignal,
 } from './api.js';
-import { safeStorageGet, safeStorageRemove, safeStorageSet } from './safeStorage.js';
+import {
+  safeStorageGet,
+  safeStorageJsonGet,
+  safeStorageJsonSet,
+  safeStorageRemove,
+  safeStorageSet,
+} from './safeStorage.js';
 
 // ── Auth Context ─────────────────────────────────────────────
 
@@ -169,6 +175,39 @@ export function RoleProvider({ children }) {
 
 export function useRole() {
   return useContext(RoleContext);
+}
+
+function resolveDraftInitialValue(storageKey, initialValue, ttlMs) {
+  const fallback = typeof initialValue === 'function' ? initialValue() : initialValue;
+  const saved = safeStorageJsonGet(storageKey, null);
+  if (!saved || typeof saved !== 'object' || !saved.__wardexDraftPersistence) {
+    return saved ?? fallback;
+  }
+  if (ttlMs && saved.expiresAt && Date.now() > Number(saved.expiresAt)) {
+    return fallback;
+  }
+  return saved.value ?? fallback;
+}
+
+export function useDraftPersistence(storageKey, initialValue, options = {}) {
+  const ttlMs = Number(options.ttlMs || 0);
+  const [value, setValue] = useState(() =>
+    resolveDraftInitialValue(storageKey, initialValue, ttlMs),
+  );
+
+  useEffect(() => {
+    const payload = ttlMs
+      ? {
+          __wardexDraftPersistence: true,
+          value,
+          updatedAt: Date.now(),
+          expiresAt: Date.now() + ttlMs,
+        }
+      : value;
+    safeStorageJsonSet(storageKey, payload);
+  }, [storageKey, ttlMs, value]);
+
+  return [value, setValue];
 }
 
 // ── Theme Context ────────────────────────────────────────────
@@ -455,6 +494,7 @@ export function useWebSocket(pollIntervalMs = 2000, { nativeSupported = true } =
   const [lastConnectAt, setLastConnectAt] = useState(null);
   const [lastDisconnectAt, setLastDisconnectAt] = useState(null);
   const [lastError, setLastError] = useState('');
+  const [lastRecoveryError, setLastRecoveryError] = useState('');
   const [reconnectToken, setReconnectToken] = useState(0);
   const subscriberIdRef = useRef(null);
   const wsRef = useRef(null);
@@ -466,6 +506,7 @@ export function useWebSocket(pollIntervalMs = 2000, { nativeSupported = true } =
     setStatus('connecting');
     setSubscriberId(null);
     setLastError('');
+    setLastRecoveryError('');
     setReconnectToken((current) => current + 1);
   }, []);
 
@@ -475,6 +516,7 @@ export function useWebSocket(pollIntervalMs = 2000, { nativeSupported = true } =
     setTransport('connecting');
     setStatus('connecting');
     setSubscriberId(null);
+    setLastRecoveryError('');
     let pollTimer = null;
     let retryDelay = 2000;
     let retryTimer = null;
@@ -518,7 +560,10 @@ export function useWebSocket(pollIntervalMs = 2000, { nativeSupported = true } =
       setConnected(false);
       setStatus('reconnecting');
       setLastDisconnectAt(new Date().toISOString());
-      if (message) setLastError(message);
+      if (message) {
+        setLastError(message);
+        setLastRecoveryError(message);
+      }
       setRecoveryAttempts((count) => count + 1);
     };
 
@@ -718,6 +763,7 @@ export function useWebSocket(pollIntervalMs = 2000, { nativeSupported = true } =
     lastConnectAt,
     lastDisconnectAt,
     lastError,
+    lastRecoveryError,
     clearEvents,
     reconnect,
   };

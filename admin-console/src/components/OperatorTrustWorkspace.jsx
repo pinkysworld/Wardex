@@ -11,6 +11,7 @@ const WORKSPACE_CONFIG = {
     summary:
       'Replay telemetry, run safe simulations, and validate Sigma, YARA, and signature packs before promotion.',
     loader: api.detectionLabStatus,
+    secondaryLoaders: { tuningFeedback: api.detectionTuningFeedback },
     primaryAction: { label: 'Run validation', run: api.runDetectionLab },
   },
   response: {
@@ -19,6 +20,7 @@ const WORKSPACE_CONFIG = {
     summary:
       'Review dry-run previews, approvals, rollback paths, blast radius, and post-action verification before live response.',
     loader: api.responseSafety,
+    secondaryLoaders: { audit: api.responseExecutionAudit, rbac: api.rbacCoverage },
     primaryAction: {
       label: 'Preview block IP',
       run: () => api.responsePreview({ action: 'block_ip', ip: '203.0.113.10' }),
@@ -30,6 +32,7 @@ const WORKSPACE_CONFIG = {
     summary:
       'Validate connector setup, outbound SIEM export, sample events, freshness, health, and downstream ticketing impact from one marketplace view.',
     loader: api.integrationsMarketplace,
+    secondaryLoaders: { collectors: api.collectorsStatus },
     primaryAction: {
       label: 'Validate Splunk HEC',
       run: () => api.validateIntegration({ provider: 'splunk_hec' }),
@@ -41,6 +44,7 @@ const WORKSPACE_CONFIG = {
     summary:
       'Track ingestion, queues, scans, API errors, storage pressure, connector freshness, and fleet drift as production SLO cards.',
     loader: api.operationsHealth,
+    secondaryLoaders: { searchSlo: api.searchPerformanceSlo },
     primaryAction: { label: 'Export snapshot', run: api.operationsHealthSnapshot },
   },
   malware: {
@@ -89,10 +93,12 @@ function MetricCard({ label, value, detail, status }) {
   );
 }
 
-function DetectionLabView({ data }) {
+function DetectionLabView({ data, secondary }) {
   const modes = asArray(data?.modes);
   const history = asArray(data?.history);
   const recommendations = asArray(data?.recommendations);
+  const tuning = secondary?.tuningFeedback || {};
+  const tuningRows = asArray(tuning.items);
   const expected = data?.expected_vs_observed || {};
   return (
     <>
@@ -141,6 +147,34 @@ function DetectionLabView({ data }) {
           )}
         />
       </TrustSection>
+      <TrustSection title="Tuning impact feedback">
+        <div className="trust-grid trust-grid-3">
+          <MetricCard label="Rules to review" value={tuning.review_count} status={tuning.status} />
+          <MetricCard
+            label="Feedback events"
+            value={tuning.feedback_summary?.total}
+            status="feedback"
+          />
+          <MetricCard
+            label="Mode"
+            value={tuning.draft_only ? 'Draft only' : 'Live'}
+            status="guarded"
+          />
+        </div>
+        <TrustList
+          items={tuningRows}
+          empty="No tuning feedback needs review."
+          render={(item) => (
+            <>
+              <strong>{item.rule_name || item.rule_id}</strong>
+              <span>
+                {item.false_positive_count || 0} FP • {item.active_suppressions || 0} suppression
+              </span>
+              <StatusPill value={item.suggested_action || 'monitor'} />
+            </>
+          )}
+        />
+      </TrustSection>
       <TrustSection title="Validation history">
         <TrustList
           items={history}
@@ -160,10 +194,12 @@ function DetectionLabView({ data }) {
   );
 }
 
-function ResponseSafetyView({ data }) {
+function ResponseSafetyView({ data, secondary }) {
   const overview = data?.overview || {};
   const requests = asArray(data?.requests);
   const actions = asArray(data?.available_actions);
+  const audits = asArray(secondary?.audit?.audits);
+  const rbac = secondary?.rbac || {};
   return (
     <>
       <div className="trust-grid trust-grid-4">
@@ -213,14 +249,57 @@ function ResponseSafetyView({ data }) {
           )}
         />
       </TrustSection>
+      <TrustSection title="Execution audit and access proof">
+        <div className="trust-grid trust-grid-3">
+          <MetricCard label="Execution audits" value={secondary?.audit?.count} status="audit" />
+          <MetricCard
+            label="RBAC coverage"
+            value={`${valueText(rbac.coverage_pct, '0')}%`}
+            status={rbac.status}
+          />
+          <MetricCard label="Protected routes" value={rbac.protected_routes} status="guarded" />
+        </div>
+        <TrustList
+          items={audits.slice(0, 5)}
+          empty="No response execution audit records yet."
+          render={(item) => (
+            <>
+              <strong>{item.action_label || item.action || item.request_id}</strong>
+              <span>
+                {item.trace_id || item.command || item.notification_status || 'audit-ready'}
+              </span>
+              <StatusPill value={item.exit_status === 0 ? 'verified' : item.status || 'recorded'} />
+            </>
+          )}
+        />
+      </TrustSection>
     </>
   );
 }
 
-function IntegrationsView({ data }) {
+function IntegrationsView({ data, secondary }) {
   const connectors = asArray(data?.connectors);
+  const collectorSla = secondary?.collectors?.ingestion_sla || {};
+  const breached = asArray(collectorSla.breaches || collectorSla.breached_collectors);
   return (
     <>
+      <div className="trust-grid trust-grid-3">
+        <MetricCard
+          label="Collector SLA"
+          value={collectorSla.status || 'unknown'}
+          status={collectorSla.status}
+        />
+        <MetricCard
+          label="Breaches"
+          value={collectorSla.breach_count || breached.length}
+          status={breached.length ? 'breach' : 'pass'}
+        />
+        <MetricCard
+          label="Enabled collectors"
+          value={secondary?.collectors?.enabled}
+          status="configured"
+        />
+      </div>
       <div className="trust-grid trust-grid-3">
         {connectors.map((connector) => (
           <div className="trust-card" key={connector.id}>
@@ -291,8 +370,9 @@ function IntegrationsView({ data }) {
   );
 }
 
-function OperationsView({ data }) {
+function OperationsView({ data, secondary }) {
   const cards = asArray(data?.slo_cards);
+  const searchSlo = secondary?.searchSlo || {};
   const attentionCards = cards.filter(
     (card) => !['pass', 'ready', 'ok'].includes(String(card.status || '').toLowerCase()),
   );
@@ -369,6 +449,27 @@ function OperationsView({ data }) {
           <Link className="btn btn-sm" to="/help?context=operations-health">
             Open support
           </Link>
+        </div>
+      </TrustSection>
+      <TrustSection title="Long-retention query SLO">
+        <div className="trust-grid trust-grid-3">
+          <MetricCard
+            label="Search SLO"
+            value={searchSlo.status || 'unknown'}
+            status={searchSlo.status}
+          />
+          <MetricCard
+            label="p95 latency"
+            value={searchSlo.observed_ms?.p95 ?? 0}
+            detail="ms"
+            status="p95"
+          />
+          <MetricCard
+            label="p99 latency"
+            value={searchSlo.observed_ms?.p99 ?? 0}
+            detail="ms"
+            status="p99"
+          />
         </div>
       </TrustSection>
     </>
@@ -461,10 +562,10 @@ function TrustList({ items, empty, render }) {
 function OperatorTrustWorkspace({ kind }) {
   const config = WORKSPACE_CONFIG[kind] || WORKSPACE_CONFIG.detection;
   const { data, loading, error, reload } = useApi(config.loader, [kind]);
-  const { data: secondaryData } = useApiGroup(
-    config.secondaryLoader ? { secondary: config.secondaryLoader } : {},
-    [kind],
-  );
+  const secondaryLoaders =
+    config.secondaryLoaders ||
+    (config.secondaryLoader ? { secondary: config.secondaryLoader } : {});
+  const { data: secondaryData } = useApiGroup(secondaryLoaders, [kind]);
   const [actionResult, setActionResult] = useState(null);
   const [actionBusy, setActionBusy] = useState(false);
 
@@ -491,10 +592,10 @@ function OperatorTrustWorkspace({ kind }) {
         />
       );
     }
-    if (kind === 'detection') return <DetectionLabView data={data} />;
-    if (kind === 'response') return <ResponseSafetyView data={data} />;
-    if (kind === 'integrations') return <IntegrationsView data={data} />;
-    if (kind === 'operations') return <OperationsView data={data} />;
+    if (kind === 'detection') return <DetectionLabView data={data} secondary={secondaryData} />;
+    if (kind === 'response') return <ResponseSafetyView data={data} secondary={secondaryData} />;
+    if (kind === 'integrations') return <IntegrationsView data={data} secondary={secondaryData} />;
+    if (kind === 'operations') return <OperationsView data={data} secondary={secondaryData} />;
     if (kind === 'malware') return <MalwareView data={data} secondary={secondaryData.secondary} />;
     return null;
   };

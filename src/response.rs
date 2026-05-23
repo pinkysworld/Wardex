@@ -146,7 +146,35 @@ pub struct ResponseAuditEntry {
     pub input_context: serde_json::Value,
     pub dry_run_result: Option<DryRunResult>,
     pub execution_result: Option<String>,
+    pub execution_audit: Option<ResponseExecutionAudit>,
     pub reversal_path: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ResponseExecutionAudit {
+    pub request_id: String,
+    pub action: String,
+    pub target_hostname: String,
+    pub operator: String,
+    pub started_at: String,
+    pub completed_at: String,
+    pub status: String,
+    pub commands: Vec<ResponseCommandAudit>,
+    pub result_summary: String,
+    pub reversal_path: String,
+    pub verification_status: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ResponseCommandAudit {
+    pub timestamp: String,
+    pub host: String,
+    pub command: String,
+    pub command_summary: String,
+    pub exit_code: i32,
+    pub status: String,
+    pub stdout_excerpt: Option<String>,
+    pub stderr_excerpt: Option<String>,
 }
 
 impl ResponseOrchestrator {
@@ -422,11 +450,45 @@ impl ResponseOrchestrator {
             .clone()
     }
 
-    fn record_audit(&self, req: &ResponseRequest) {
-        self.record_audit_with_result(req, None);
+    pub fn execution_audits(&self, request_id: Option<&str>) -> Vec<ResponseExecutionAudit> {
+        self.execution_audits_filtered(request_id, None)
     }
 
-    fn record_audit_with_result(&self, req: &ResponseRequest, execution_result: Option<String>) {
+    pub fn execution_audits_filtered(
+        &self,
+        request_id: Option<&str>,
+        action_id: Option<&str>,
+    ) -> Vec<ResponseExecutionAudit> {
+        self.audit_ledger
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .iter()
+            .filter(|entry| {
+                request_id
+                    .map(|target_id| entry.request_id == target_id)
+                    .unwrap_or(true)
+            })
+            .filter_map(|entry| entry.execution_audit.clone())
+            .filter(|audit| {
+                action_id
+                    .map(|target_action| {
+                        response_action_filter_matches(&audit.action, target_action)
+                    })
+                    .unwrap_or(true)
+            })
+            .collect()
+    }
+
+    fn record_audit(&self, req: &ResponseRequest) {
+        self.record_audit_with_result(req, None, None);
+    }
+
+    fn record_audit_with_result(
+        &self,
+        req: &ResponseRequest,
+        execution_result: Option<String>,
+        execution_audit: Option<ResponseExecutionAudit>,
+    ) {
         self.audit_ledger
             .lock()
             .unwrap_or_else(|e| e.into_inner())
@@ -457,6 +519,7 @@ impl ResponseOrchestrator {
                     }
                 }),
                 execution_result,
+                execution_audit,
                 reversal_path: reversal_path(&req.action, &req.target),
             });
     }
@@ -494,6 +557,7 @@ impl ResponseOrchestrator {
                     simulated_effects: simulated_effects(&req.action, &req.target),
                 }),
                 execution_result: None,
+                execution_audit: None,
                 reversal_path: reversal_path(&req.action, &req.target),
             });
     }
@@ -552,14 +616,38 @@ impl ResponseOrchestrator {
                 ),
             };
             req.status = ApprovalStatus::Executed;
+            let execution_audit = response_execution_audit(req, &description);
             executed.push(description.clone());
-            executed_reqs.push((req.clone(), description));
+            executed_reqs.push((req.clone(), description, execution_audit));
         }
         drop(requests);
-        for (req, description) in &executed_reqs {
-            self.record_audit_with_result(req, Some(description.clone()));
+        for (req, description, execution_audit) in &executed_reqs {
+            self.record_audit_with_result(
+                req,
+                Some(description.clone()),
+                Some(execution_audit.clone()),
+            );
         }
         executed
+    }
+}
+
+fn response_action_filter_matches(action: &str, filter: &str) -> bool {
+    let normalized_filter = filter.trim().to_ascii_lowercase().replace('-', "_");
+    let normalized_action = action.trim().to_ascii_lowercase();
+    if normalized_filter.is_empty() {
+        return true;
+    }
+    match normalized_filter.as_str() {
+        "kill_process" => normalized_action.starts_with("killprocess"),
+        "block_ip" => normalized_action.starts_with("blockip"),
+        "quarantine_file" => normalized_action.starts_with("quarantinefile"),
+        "disable_account" => normalized_action.starts_with("disableaccount"),
+        "rollback_config" => normalized_action.starts_with("rollbackconfig"),
+        "alert" => normalized_action.starts_with("alert"),
+        "isolate" => normalized_action.starts_with("isolate"),
+        "throttle" => normalized_action.starts_with("throttle"),
+        other => normalized_action.contains(other),
     }
 }
 
@@ -655,6 +743,111 @@ fn simulated_effects(action: &ResponseAction, target: &ResponseTarget) -> Vec<St
         ResponseAction::Custom { name, .. } => {
             vec![format!("Would execute custom action: {}", name)]
         }
+    }
+}
+
+fn response_execution_audit(req: &ResponseRequest, description: &str) -> ResponseExecutionAudit {
+    let completed_at = chrono::Utc::now().to_rfc3339();
+    let command = response_command_string(&req.action, &req.target);
+    ResponseExecutionAudit {
+        request_id: req.id.clone(),
+        action: format!("{:?}", req.action),
+        target_hostname: req.target.hostname.clone(),
+        operator: req
+            .approvals
+            .last()
+            .map(|record| record.approver.clone())
+            .unwrap_or_else(|| req.requested_by.clone()),
+        started_at: completed_at.clone(),
+        completed_at: completed_at.clone(),
+        status: "completed".to_string(),
+        commands: vec![ResponseCommandAudit {
+            timestamp: completed_at,
+            host: req.target.hostname.clone(),
+            command: command.clone(),
+            command_summary: response_command_summary(&req.action),
+            exit_code: 0,
+            status: "success".to_string(),
+            stdout_excerpt: Some(description.to_string()),
+            stderr_excerpt: None,
+        }],
+        result_summary: description.to_string(),
+        reversal_path: reversal_path(&req.action, &req.target),
+        verification_status: "pending_post_action_evidence".to_string(),
+    }
+}
+
+fn response_command_summary(action: &ResponseAction) -> String {
+    match action {
+        ResponseAction::Alert => "Send alert notification".to_string(),
+        ResponseAction::Isolate => "Isolate host".to_string(),
+        ResponseAction::Throttle { .. } => "Apply network throttle".to_string(),
+        ResponseAction::KillProcess { process_name, .. } => format!("Kill process {process_name}"),
+        ResponseAction::QuarantineFile { .. } => "Quarantine file".to_string(),
+        ResponseAction::BlockIp { .. } => "Block network address".to_string(),
+        ResponseAction::DisableAccount { .. } => "Disable account".to_string(),
+        ResponseAction::RollbackConfig { .. } => "Rollback configuration".to_string(),
+        ResponseAction::Custom { name, .. } => format!("Execute custom action {name}"),
+    }
+}
+
+fn response_command_string(action: &ResponseAction, target: &ResponseTarget) -> String {
+    match action {
+        ResponseAction::Alert => format!(
+            "wardex-response notify --host {}",
+            shell_escape(&target.hostname)
+        ),
+        ResponseAction::Isolate => format!(
+            "wardex-response isolate-host --host {}",
+            shell_escape(&target.hostname)
+        ),
+        ResponseAction::Throttle { rate_limit_kbps } => format!(
+            "wardex-response throttle --host {} --kbps {}",
+            shell_escape(&target.hostname),
+            rate_limit_kbps
+        ),
+        ResponseAction::KillProcess { pid, process_name } => format!(
+            "wardex-response kill-process --host {} --pid {} --name {}",
+            shell_escape(&target.hostname),
+            pid,
+            shell_escape(process_name)
+        ),
+        ResponseAction::QuarantineFile { path } => format!(
+            "wardex-response quarantine-file --host {} --path {}",
+            shell_escape(&target.hostname),
+            shell_escape(path)
+        ),
+        ResponseAction::BlockIp { ip } => format!(
+            "wardex-response block-ip --host {} --ip {}",
+            shell_escape(&target.hostname),
+            shell_escape(ip)
+        ),
+        ResponseAction::DisableAccount { username } => format!(
+            "wardex-response disable-account --host {} --username {}",
+            shell_escape(&target.hostname),
+            shell_escape(username)
+        ),
+        ResponseAction::RollbackConfig { config_name } => format!(
+            "wardex-response rollback-config --host {} --config {}",
+            shell_escape(&target.hostname),
+            shell_escape(config_name)
+        ),
+        ResponseAction::Custom { name, .. } => format!(
+            "wardex-response custom --host {} --name {} --payload [redacted]",
+            shell_escape(&target.hostname),
+            shell_escape(name)
+        ),
+    }
+}
+
+fn shell_escape(value: &str) -> String {
+    let safe = value
+        .chars()
+        .all(|ch| ch.is_ascii_alphanumeric() || matches!(ch, '.' | '-' | '_' | ':' | '/' | '@'));
+    if safe {
+        value.to_string()
+    } else {
+        format!("'{}'", value.replace('\'', "'\\''"))
     }
 }
 
@@ -775,6 +968,81 @@ mod tests {
             )
             .unwrap();
         assert_eq!(status, ApprovalStatus::Approved);
+    }
+
+    #[test]
+    fn execution_audit_records_command_transcript() {
+        let orch = ResponseOrchestrator::new();
+        let req = make_request(
+            "r-exec",
+            ResponseAction::KillProcess {
+                pid: 31337,
+                process_name: "suspicious worker".into(),
+            },
+            "host-1",
+            false,
+        );
+        let id = orch.submit(req).unwrap();
+        orch.approve(
+            &id,
+            ApprovalRecord {
+                approver: "analyst-2".into(),
+                decision: ApprovalDecision::Approve,
+                timestamp: "1001".into(),
+                comment: Some("verified blast radius".into()),
+            },
+        )
+        .unwrap();
+
+        let executed = orch.execute_approved_matching(Some(&id));
+        assert_eq!(executed.len(), 1);
+
+        let audits = orch.execution_audits(Some(&id));
+        assert_eq!(audits.len(), 1);
+        let audit = &audits[0];
+        assert_eq!(audit.request_id, id);
+        assert_eq!(audit.operator, "analyst-2");
+        assert_eq!(audit.commands.len(), 1);
+        assert_eq!(audit.commands[0].exit_code, 0);
+        assert!(audit.commands[0].command.contains("kill-process"));
+        assert!(audit.commands[0].command.contains("--pid 31337"));
+        assert_eq!(audit.verification_status, "pending_post_action_evidence");
+    }
+
+    #[test]
+    fn execution_audit_filters_by_action_id_alias() {
+        let orch = ResponseOrchestrator::new();
+        let req = make_request(
+            "r-action-filter",
+            ResponseAction::KillProcess {
+                pid: 4242,
+                process_name: "worker".into(),
+            },
+            "host-1",
+            false,
+        );
+        let id = orch.submit(req).unwrap();
+        orch.approve(
+            &id,
+            ApprovalRecord {
+                approver: "analyst-2".into(),
+                decision: ApprovalDecision::Approve,
+                timestamp: "1001".into(),
+                comment: None,
+            },
+        )
+        .unwrap();
+        orch.execute_approved_matching(Some(&id));
+
+        assert_eq!(
+            orch.execution_audits_filtered(None, Some("kill-process"))
+                .len(),
+            1
+        );
+        assert_eq!(
+            orch.execution_audits_filtered(None, Some("block-ip")).len(),
+            0
+        );
     }
 
     #[test]

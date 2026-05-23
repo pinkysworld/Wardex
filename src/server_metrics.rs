@@ -164,6 +164,106 @@ pub(crate) fn render_failed_auth_metrics() -> String {
     body
 }
 
+/// Render bounded per-endpoint request SLO metrics from the in-memory API
+/// analytics tracker.
+pub(crate) fn render_api_endpoint_metrics(
+    metrics: &[crate::api_analytics::EndpointMetrics],
+) -> String {
+    if metrics.is_empty() {
+        return String::new();
+    }
+
+    let mut body = String::new();
+    body.push_str("# HELP wardex_api_endpoint_requests_total\n");
+    body.push_str("# TYPE wardex_api_endpoint_requests_total counter\n");
+
+    fn endpoint_p95(metric: &crate::api_analytics::EndpointMetrics) -> f64 {
+        metric.p95_latency_ms
+    }
+
+    fn endpoint_p99(metric: &crate::api_analytics::EndpointMetrics) -> f64 {
+        metric.p99_latency_ms
+    }
+    for metric in metrics.iter().take(50) {
+        body.push_str(&format!(
+            "wardex_api_endpoint_requests_total{{method=\"{}\",path=\"{}\"}} {}\n",
+            prom_escape_label(&metric.method),
+            prom_escape_label(&metric.path),
+            metric.request_count
+        ));
+    }
+
+    body.push_str("# HELP wardex_api_endpoint_errors_total\n");
+    body.push_str("# TYPE wardex_api_endpoint_errors_total counter\n");
+    for metric in metrics.iter().take(50) {
+        body.push_str(&format!(
+            "wardex_api_endpoint_errors_total{{method=\"{}\",path=\"{}\"}} {}\n",
+            prom_escape_label(&metric.method),
+            prom_escape_label(&metric.path),
+            metric.error_count
+        ));
+    }
+
+    body.push_str("# HELP wardex_api_endpoint_latency_ms Request latency histogram per canonical endpoint\n");
+    body.push_str("# TYPE wardex_api_endpoint_latency_ms histogram\n");
+    for metric in metrics.iter().take(50) {
+        for bucket in &metric.latency_histogram {
+            body.push_str(&format!(
+                "wardex_api_endpoint_latency_ms_bucket{{method=\"{}\",path=\"{}\",le=\"{}\"}} {}\n",
+                prom_escape_label(&metric.method),
+                prom_escape_label(&metric.path),
+                prom_format_bucket(bucket.le_ms),
+                bucket.count
+            ));
+        }
+        body.push_str(&format!(
+            "wardex_api_endpoint_latency_ms_bucket{{method=\"{}\",path=\"{}\",le=\"+Inf\"}} {}\n",
+            prom_escape_label(&metric.method),
+            prom_escape_label(&metric.path),
+            metric.request_count
+        ));
+        body.push_str(&format!(
+            "wardex_api_endpoint_latency_ms_sum{{method=\"{}\",path=\"{}\"}} {:.3}\n",
+            prom_escape_label(&metric.method),
+            prom_escape_label(&metric.path),
+            metric.total_latency_ms
+        ));
+        body.push_str(&format!(
+            "wardex_api_endpoint_latency_ms_count{{method=\"{}\",path=\"{}\"}} {}\n",
+            prom_escape_label(&metric.method),
+            prom_escape_label(&metric.path),
+            metric.request_count
+        ));
+    }
+
+    let latency_fields: [(&str, fn(&crate::api_analytics::EndpointMetrics) -> f64); 2] = [
+        ("wardex_api_endpoint_latency_p95_ms", endpoint_p95),
+        ("wardex_api_endpoint_latency_p99_ms", endpoint_p99),
+    ];
+    for (name, field) in latency_fields {
+        body.push_str(&format!("# HELP {name}\n"));
+        body.push_str(&format!("# TYPE {name} gauge\n"));
+        for metric in metrics.iter().take(50) {
+            body.push_str(&format!(
+                "{name}{{method=\"{}\",path=\"{}\"}} {:.3}\n",
+                prom_escape_label(&metric.method),
+                prom_escape_label(&metric.path),
+                field(metric)
+            ));
+        }
+    }
+
+    body
+}
+
+fn prom_format_bucket(value: f64) -> String {
+    if value.fract() == 0.0 {
+        format!("{value:.0}")
+    } else {
+        format!("{value:.3}")
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -175,6 +275,40 @@ mod tests {
         assert_eq!(prom_escape_label("a\"b"), "a\\\"b");
         assert_eq!(prom_escape_label("a\nb"), "a\\nb");
         assert_eq!(prom_escape_label("\\\"\n"), "\\\\\\\"\\n");
+    }
+
+    #[test]
+    fn api_endpoint_metrics_render_request_error_and_tail_latency() {
+        let metrics = vec![crate::api_analytics::EndpointMetrics {
+            path: "/api/example\"route".to_string(),
+            method: "GET".to_string(),
+            request_count: 7,
+            error_count: 2,
+            total_latency_ms: 70.0,
+            min_latency_ms: 1.0,
+            max_latency_ms: 30.0,
+            avg_latency_ms: 10.0,
+            p95_latency_ms: 25.0,
+            p99_latency_ms: 30.0,
+            latency_histogram: vec![
+                crate::api_analytics::LatencyBucket {
+                    le_ms: 50.0,
+                    count: 7,
+                },
+                crate::api_analytics::LatencyBucket {
+                    le_ms: 100.0,
+                    count: 7,
+                },
+            ],
+        }];
+
+        let rendered = render_api_endpoint_metrics(&metrics);
+        assert!(rendered.contains("wardex_api_endpoint_requests_total"));
+        assert!(rendered.contains("wardex_api_endpoint_errors_total"));
+        assert!(rendered.contains("wardex_api_endpoint_latency_ms_bucket"));
+        assert!(rendered.contains("le=\"50\""));
+        assert!(rendered.contains("wardex_api_endpoint_latency_p99_ms"));
+        assert!(rendered.contains("/api/example\\\"route"));
     }
 
     #[test]
