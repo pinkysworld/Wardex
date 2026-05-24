@@ -165,6 +165,7 @@ pub mod inventory;
 pub mod server_agents;
 pub mod server_auth;
 pub mod server_cluster;
+pub mod server_collectors;
 pub mod server_feeds;
 pub mod server_fleet;
 pub mod server_metrics;

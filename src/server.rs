@@ -89,11 +89,9 @@ use crate::fleet_install::RemoteInstallRecord;
 use crate::graphql::{AggregateOp, GqlExecutor, GqlRequest, aggregate, wardex_schema};
 use crate::incident::IncidentStore;
 use crate::integration_setup::{
-    AwsCollectorSetup, AwsCollectorSetupPatch, AzureCollectorSetup, AzureCollectorSetupPatch,
-    EntraCollectorSetup, EntraCollectorSetupPatch, GcpCollectorSetup, GcpCollectorSetupPatch,
-    M365CollectorSetup, M365CollectorSetupPatch, OktaCollectorSetup, OktaCollectorSetupPatch,
-    SecretsManagerSetup, SetupValidation, SetupValidationIssue,
-    WorkspaceCollectorSetup, WorkspaceCollectorSetupPatch,
+    AwsCollectorSetup, AzureCollectorSetup, EntraCollectorSetup, GcpCollectorSetup,
+    M365CollectorSetup, OktaCollectorSetup, SecretsManagerSetup, SetupValidation,
+    SetupValidationIssue, WorkspaceCollectorSetup,
 };
 use crate::monitor::Monitor;
 use crate::multi_tenant::MultiTenantManager;
@@ -9538,20 +9536,20 @@ const ASSISTANT_STOP_WORDS: &[&str] = &[
     "that", "the", "this", "what", "when", "where", "with", "why",
 ];
 
-const AWS_COLLECTOR_SETUP_KEY: &str = "integrations.collectors.aws";
-const AZURE_COLLECTOR_SETUP_KEY: &str = "integrations.collectors.azure";
-const GCP_COLLECTOR_SETUP_KEY: &str = "integrations.collectors.gcp";
-const OKTA_COLLECTOR_SETUP_KEY: &str = "integrations.collectors.okta";
-const ENTRA_COLLECTOR_SETUP_KEY: &str = "integrations.collectors.entra";
-const M365_COLLECTOR_SETUP_KEY: &str = "integrations.collectors.m365";
-const WORKSPACE_COLLECTOR_SETUP_KEY: &str = "integrations.collectors.workspace";
+pub(crate) const AWS_COLLECTOR_SETUP_KEY: &str = "integrations.collectors.aws";
+pub(crate) const AZURE_COLLECTOR_SETUP_KEY: &str = "integrations.collectors.azure";
+pub(crate) const GCP_COLLECTOR_SETUP_KEY: &str = "integrations.collectors.gcp";
+pub(crate) const OKTA_COLLECTOR_SETUP_KEY: &str = "integrations.collectors.okta";
+pub(crate) const ENTRA_COLLECTOR_SETUP_KEY: &str = "integrations.collectors.entra";
+pub(crate) const M365_COLLECTOR_SETUP_KEY: &str = "integrations.collectors.m365";
+pub(crate) const WORKSPACE_COLLECTOR_SETUP_KEY: &str = "integrations.collectors.workspace";
 const GITHUB_COLLECTOR_SETUP_KEY: &str = "integrations.collectors.github";
 const CROWDSTRIKE_COLLECTOR_SETUP_KEY: &str = "integrations.collectors.crowdstrike";
 const SYSLOG_COLLECTOR_SETUP_KEY: &str = "integrations.collectors.syslog";
 pub(crate) const SECRETS_MANAGER_SETUP_KEY: &str = "integrations.secrets.manager";
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize, Default)]
-struct CollectorCheckpoint {
+pub(crate) struct CollectorCheckpoint {
     last_success_at: Option<String>,
     last_error_at: Option<String>,
     error_category: Option<String>,
@@ -10105,31 +10103,31 @@ pub(crate) fn reconcile_fleet_remote_install_heartbeat(
     Ok(matched)
 }
 
-fn load_aws_collector_setup(storage: &SharedStorage) -> AwsCollectorSetup {
+pub(crate) fn load_aws_collector_setup(storage: &SharedStorage) -> AwsCollectorSetup {
     load_stored_json(storage, AWS_COLLECTOR_SETUP_KEY)
 }
 
-fn load_azure_collector_setup(storage: &SharedStorage) -> AzureCollectorSetup {
+pub(crate) fn load_azure_collector_setup(storage: &SharedStorage) -> AzureCollectorSetup {
     load_stored_json(storage, AZURE_COLLECTOR_SETUP_KEY)
 }
 
-fn load_gcp_collector_setup(storage: &SharedStorage) -> GcpCollectorSetup {
+pub(crate) fn load_gcp_collector_setup(storage: &SharedStorage) -> GcpCollectorSetup {
     load_stored_json(storage, GCP_COLLECTOR_SETUP_KEY)
 }
 
-fn load_okta_collector_setup(storage: &SharedStorage) -> OktaCollectorSetup {
+pub(crate) fn load_okta_collector_setup(storage: &SharedStorage) -> OktaCollectorSetup {
     load_stored_json(storage, OKTA_COLLECTOR_SETUP_KEY)
 }
 
-fn load_entra_collector_setup(storage: &SharedStorage) -> EntraCollectorSetup {
+pub(crate) fn load_entra_collector_setup(storage: &SharedStorage) -> EntraCollectorSetup {
     load_stored_json(storage, ENTRA_COLLECTOR_SETUP_KEY)
 }
 
-fn load_m365_collector_setup(storage: &SharedStorage) -> M365CollectorSetup {
+pub(crate) fn load_m365_collector_setup(storage: &SharedStorage) -> M365CollectorSetup {
     load_stored_json(storage, M365_COLLECTOR_SETUP_KEY)
 }
 
-fn load_workspace_collector_setup(storage: &SharedStorage) -> WorkspaceCollectorSetup {
+pub(crate) fn load_workspace_collector_setup(storage: &SharedStorage) -> WorkspaceCollectorSetup {
     load_stored_json(storage, WORKSPACE_COLLECTOR_SETUP_KEY)
 }
 
@@ -10362,7 +10360,7 @@ fn planned_collector_config_payload(storage: &SharedStorage, provider: &str) -> 
     })
 }
 
-fn planned_collector_status_entry(storage: &SharedStorage, provider: &str) -> serde_json::Value {
+pub(crate) fn planned_collector_status_entry(storage: &SharedStorage, provider: &str) -> serde_json::Value {
     let setup = load_planned_collector_setup(storage, provider);
     let validation = planned_collector_validation(provider, &setup);
     collector_status_entry(
@@ -10388,11 +10386,11 @@ fn collector_lifecycle_key(provider: &str) -> String {
     format!("integrations.collectors.{provider}.lifecycle")
 }
 
-fn load_collector_checkpoint(storage: &SharedStorage, provider: &str) -> CollectorCheckpoint {
+pub(crate) fn load_collector_checkpoint(storage: &SharedStorage, provider: &str) -> CollectorCheckpoint {
     load_stored_json(storage, &collector_checkpoint_key(provider))
 }
 
-fn load_collector_lifecycle(storage: &SharedStorage, provider: &str) -> Vec<serde_json::Value> {
+pub(crate) fn load_collector_lifecycle(storage: &SharedStorage, provider: &str) -> Vec<serde_json::Value> {
     load_stored_json(storage, &collector_lifecycle_key(provider))
 }
 
@@ -10642,7 +10640,7 @@ fn record_collector_checkpoint_with_queue(
     checkpoint
 }
 
-fn collector_validation_response(
+pub(crate) fn collector_validation_response(
     storage: &SharedStorage,
     provider: &str,
     mut body: serde_json::Value,
@@ -10678,12 +10676,12 @@ fn collector_validation_response(
     json_response(&body.to_string(), 200)
 }
 
-fn build_secrets_resolver(storage: &SharedStorage) -> crate::secrets::SecretsResolver {
+pub(crate) fn build_secrets_resolver(storage: &SharedStorage) -> crate::secrets::SecretsResolver {
     let setup = load_secrets_manager_setup(storage);
     crate::secrets::SecretsResolver::new(setup.to_runtime())
 }
 
-fn config_validation_payload<T>(config: T, validation: SetupValidation) -> serde_json::Value
+pub(crate) fn config_validation_payload<T>(config: T, validation: SetupValidation) -> serde_json::Value
 where
     T: serde::Serialize,
 {
@@ -10693,7 +10691,7 @@ where
     })
 }
 
-fn validate_okta_collector(
+pub(crate) fn validate_okta_collector(
     setup: &OktaCollectorSetup,
     resolver: &crate::secrets::SecretsResolver,
 ) -> serde_json::Value {
@@ -10770,7 +10768,7 @@ fn validate_okta_collector(
     }
 }
 
-fn validate_entra_collector(
+pub(crate) fn validate_entra_collector(
     setup: &EntraCollectorSetup,
     resolver: &crate::secrets::SecretsResolver,
 ) -> serde_json::Value {
@@ -10902,7 +10900,7 @@ fn validate_entra_collector(
     }
 }
 
-fn validate_m365_collector(
+pub(crate) fn validate_m365_collector(
     setup: &M365CollectorSetup,
     resolver: &crate::secrets::SecretsResolver,
 ) -> serde_json::Value {
@@ -10995,7 +10993,7 @@ fn validate_m365_collector(
     })
 }
 
-fn validate_workspace_collector(
+pub(crate) fn validate_workspace_collector(
     setup: &WorkspaceCollectorSetup,
     resolver: &crate::secrets::SecretsResolver,
 ) -> serde_json::Value {
@@ -11296,7 +11294,7 @@ fn build_collector_timeline(
     ]
 }
 
-fn collector_status_entry(
+pub(crate) fn collector_status_entry(
     name: &str,
     enabled: bool,
     poll_interval_secs: u64,
@@ -18845,522 +18843,6 @@ fn monitoring_paths_payload(host: &HostInfo, config: &Config) -> serde_json::Val
             "scheduled_tasks": config.monitor.scope.scheduled_tasks,
         }
     })
-}
-
-// ── Collector route handlers (extracted from handle_api dispatch) ──
-
-fn handle_collectors_status(state: &Arc<Mutex<AppState>>) -> Response<Body> {
-    let s = state.lock().unwrap_or_else(|e| e.into_inner());
-    let aws = load_aws_collector_setup(&s.storage);
-    let azure = load_azure_collector_setup(&s.storage);
-    let gcp = load_gcp_collector_setup(&s.storage);
-    let okta = load_okta_collector_setup(&s.storage);
-    let entra = load_entra_collector_setup(&s.storage);
-    let m365 = load_m365_collector_setup(&s.storage);
-    let workspace = load_workspace_collector_setup(&s.storage);
-    let aws_validation = aws.validate();
-    let azure_validation = azure.validate();
-    let gcp_validation = gcp.validate();
-    let okta_validation = okta.validate();
-    let entra_validation = entra.validate();
-    let m365_validation = m365.validate();
-    let workspace_validation = workspace.validate();
-    let body = serde_json::json!({
-        "collectors": [
-            collector_status_entry(
-                "aws_cloudtrail",
-                aws.enabled,
-                aws.poll_interval_secs,
-                serde_json::json!({
-                    "region": aws.region,
-                    "access_key_id": aws.access_key_id,
-                    "has_secret_access_key": !aws.secret_access_key.trim().is_empty(),
-                    "has_session_token": aws.session_token.as_ref().is_some_and(|value| !value.trim().is_empty()),
-                }),
-                aws_validation,
-                load_collector_checkpoint(&s.storage, "aws_cloudtrail"),
-                load_collector_lifecycle(&s.storage, "aws_cloudtrail"),
-            ),
-            collector_status_entry(
-                "azure_activity",
-                azure.enabled,
-                azure.poll_interval_secs,
-                serde_json::json!({
-                    "tenant_id": azure.tenant_id,
-                    "client_id": azure.client_id,
-                    "subscription_id": azure.subscription_id,
-                    "has_client_secret": !azure.client_secret.trim().is_empty(),
-                }),
-                azure_validation,
-                load_collector_checkpoint(&s.storage, "azure_activity"),
-                load_collector_lifecycle(&s.storage, "azure_activity"),
-            ),
-            collector_status_entry(
-                "gcp_audit",
-                gcp.enabled,
-                gcp.poll_interval_secs,
-                serde_json::json!({
-                    "project_id": gcp.project_id,
-                    "service_account_email": gcp.service_account_email,
-                    "key_file_path": gcp.key_file_path,
-                    "has_private_key_pem": gcp.private_key_pem.as_ref().is_some_and(|value| !value.trim().is_empty()),
-                }),
-                gcp_validation,
-                load_collector_checkpoint(&s.storage, "gcp_audit"),
-                load_collector_lifecycle(&s.storage, "gcp_audit"),
-            ),
-            collector_status_entry(
-                "okta_identity",
-                okta.enabled,
-                okta.poll_interval_secs,
-                serde_json::json!({
-                    "domain": okta.domain,
-                    "event_type_count": okta.event_type_filter.len(),
-                    "has_api_token": !okta.api_token.trim().is_empty(),
-                }),
-                okta_validation,
-                load_collector_checkpoint(&s.storage, "okta_identity"),
-                load_collector_lifecycle(&s.storage, "okta_identity"),
-            ),
-            collector_status_entry(
-                "entra_identity",
-                entra.enabled,
-                entra.poll_interval_secs,
-                serde_json::json!({
-                    "tenant_id": entra.tenant_id,
-                    "client_id": entra.client_id,
-                    "has_client_secret": !entra.client_secret.trim().is_empty(),
-                }),
-                entra_validation,
-                load_collector_checkpoint(&s.storage, "entra_identity"),
-                load_collector_lifecycle(&s.storage, "entra_identity"),
-            ),
-            collector_status_entry(
-                "m365_saas",
-                m365.enabled,
-                m365.poll_interval_secs,
-                serde_json::json!({
-                    "tenant_id": m365.tenant_id,
-                    "client_id": m365.client_id,
-                    "content_type_count": m365.content_types.len(),
-                    "has_client_secret": !m365.client_secret.trim().is_empty(),
-                }),
-                m365_validation,
-                load_collector_checkpoint(&s.storage, "m365_saas"),
-                load_collector_lifecycle(&s.storage, "m365_saas"),
-            ),
-            collector_status_entry(
-                "workspace_saas",
-                workspace.enabled,
-                workspace.poll_interval_secs,
-                serde_json::json!({
-                    "customer_id": workspace.customer_id,
-                    "delegated_admin_email": workspace.delegated_admin_email,
-                    "service_account_email": workspace.service_account_email,
-                    "application_count": workspace.applications.len(),
-                    "has_credentials_json": !workspace.credentials_json.trim().is_empty(),
-                }),
-                workspace_validation,
-                load_collector_checkpoint(&s.storage, "workspace_saas"),
-                load_collector_lifecycle(&s.storage, "workspace_saas"),
-            ),
-            planned_collector_status_entry(&s.storage, "github_audit"),
-            planned_collector_status_entry(&s.storage, "crowdstrike_falcon"),
-            planned_collector_status_entry(&s.storage, "generic_syslog"),
-        ],
-    });
-    json_response(&body.to_string(), 200)
-}
-
-fn handle_collector_aws_get(state: &Arc<Mutex<AppState>>) -> Response<Body> {
-    let s = state.lock().unwrap_or_else(|e| e.into_inner());
-    let setup = load_aws_collector_setup(&s.storage);
-    let body = config_validation_payload(setup.view(), setup.validate());
-    json_response(&body.to_string(), 200)
-}
-
-fn handle_collector_aws_config(body: &[u8], state: &Arc<Mutex<AppState>>) -> Response<Body> {
-    match read_json_body::<AwsCollectorSetupPatch>(body, 16 * 1024) {
-        Ok(patch) => {
-            let s = state.lock().unwrap_or_else(|e| e.into_inner());
-            let mut setup = load_aws_collector_setup(&s.storage);
-            setup.apply_patch(patch);
-            match save_stored_json(&s.storage, AWS_COLLECTOR_SETUP_KEY, &setup) {
-                Ok(()) => {
-                    let body = serde_json::json!({
-                        "status": "saved",
-                        "provider": "aws_cloudtrail",
-                        "config": setup.view(),
-                        "validation": setup.validate(),
-                    });
-                    json_response(&body.to_string(), 200)
-                }
-                Err(error) => error_json(&error, 500),
-            }
-        }
-        Err(error) => error_json(&error, 400),
-    }
-}
-
-fn handle_collector_aws_validate(state: &Arc<Mutex<AppState>>) -> Response<Body> {
-    let s = state.lock().unwrap_or_else(|e| e.into_inner());
-    let setup = load_aws_collector_setup(&s.storage);
-    let validation = setup.validate();
-    if validation.status != "ready" {
-        let body = serde_json::json!({
-            "provider": "aws_cloudtrail",
-            "success": false,
-            "event_count": 0,
-            "sample_events": [],
-            "validation": validation,
-            "error": "Collector configuration is incomplete.",
-        });
-        collector_validation_response(&s.storage, "aws_cloudtrail", body)
-    } else {
-        let resolver = build_secrets_resolver(&s.storage);
-        match setup.to_runtime(&resolver) {
-            Ok(runtime) => {
-                let mut collector =
-                    crate::collector_aws::AwsCloudTrailCollector::new(runtime);
-                let result = collector.poll();
-                let sample_events: Vec<_> =
-                    result.events.iter().take(5).cloned().collect();
-                let body = serde_json::json!({
-                    "provider": "aws_cloudtrail",
-                    "success": result.success,
-                    "event_count": result.event_count,
-                    "polled_at": result.polled_at,
-                    "next_token": result.next_token,
-                    "sample_events": sample_events,
-                    "validation": validation,
-                    "error": result.error,
-                });
-                collector_validation_response(&s.storage, "aws_cloudtrail", body)
-            }
-            Err(error) => {
-                let body = serde_json::json!({
-                    "provider": "aws_cloudtrail",
-                    "success": false,
-                    "event_count": 0,
-                    "sample_events": [],
-                    "validation": validation,
-                    "error": error,
-                });
-                collector_validation_response(&s.storage, "aws_cloudtrail", body)
-            }
-        }
-    }
-}
-
-fn handle_collector_azure_get(state: &Arc<Mutex<AppState>>) -> Response<Body> {
-    let s = state.lock().unwrap_or_else(|e| e.into_inner());
-    let setup = load_azure_collector_setup(&s.storage);
-    let body = config_validation_payload(setup.view(), setup.validate());
-    json_response(&body.to_string(), 200)
-}
-
-fn handle_collector_azure_config(body: &[u8], state: &Arc<Mutex<AppState>>) -> Response<Body> {
-    match read_json_body::<AzureCollectorSetupPatch>(body, 16 * 1024) {
-        Ok(patch) => {
-            let s = state.lock().unwrap_or_else(|e| e.into_inner());
-            let mut setup = load_azure_collector_setup(&s.storage);
-            setup.apply_patch(patch);
-            match save_stored_json(&s.storage, AZURE_COLLECTOR_SETUP_KEY, &setup) {
-                Ok(()) => {
-                    let body = serde_json::json!({
-                        "status": "saved",
-                        "provider": "azure_activity",
-                        "config": setup.view(),
-                        "validation": setup.validate(),
-                    });
-                    json_response(&body.to_string(), 200)
-                }
-                Err(error) => error_json(&error, 500),
-            }
-        }
-        Err(error) => error_json(&error, 400),
-    }
-}
-
-fn handle_collector_azure_validate(state: &Arc<Mutex<AppState>>) -> Response<Body> {
-    let s = state.lock().unwrap_or_else(|e| e.into_inner());
-    let setup = load_azure_collector_setup(&s.storage);
-    let validation = setup.validate();
-    if validation.status != "ready" {
-        let body = serde_json::json!({
-            "provider": "azure_activity",
-            "success": false,
-            "event_count": 0,
-            "sample_events": [],
-            "validation": validation,
-            "error": "Collector configuration is incomplete.",
-        });
-        collector_validation_response(&s.storage, "azure_activity", body)
-    } else {
-        let resolver = build_secrets_resolver(&s.storage);
-        match setup.to_runtime(&resolver) {
-            Ok(runtime) => {
-                let mut collector =
-                    crate::collector_azure::AzureActivityCollector::new(runtime);
-                let result = collector.poll();
-                let sample_events: Vec<_> =
-                    result.events.iter().take(5).cloned().collect();
-                let body = serde_json::json!({
-                    "provider": "azure_activity",
-                    "success": result.success,
-                    "event_count": result.event_count,
-                    "polled_at": result.polled_at,
-                    "sample_events": sample_events,
-                    "validation": validation,
-                    "error": result.error,
-                });
-                collector_validation_response(&s.storage, "azure_activity", body)
-            }
-            Err(error) => {
-                let body = serde_json::json!({
-                    "provider": "azure_activity",
-                    "success": false,
-                    "event_count": 0,
-                    "sample_events": [],
-                    "validation": validation,
-                    "error": error,
-                });
-                collector_validation_response(&s.storage, "azure_activity", body)
-            }
-        }
-    }
-}
-
-fn handle_collector_gcp_get(state: &Arc<Mutex<AppState>>) -> Response<Body> {
-    let s = state.lock().unwrap_or_else(|e| e.into_inner());
-    let setup = load_gcp_collector_setup(&s.storage);
-    let body = config_validation_payload(setup.view(), setup.validate());
-    json_response(&body.to_string(), 200)
-}
-
-fn handle_collector_gcp_config(body: &[u8], state: &Arc<Mutex<AppState>>) -> Response<Body> {
-    match read_json_body::<GcpCollectorSetupPatch>(body, 20 * 1024) {
-        Ok(patch) => {
-            let s = state.lock().unwrap_or_else(|e| e.into_inner());
-            let mut setup = load_gcp_collector_setup(&s.storage);
-            setup.apply_patch(patch);
-            match save_stored_json(&s.storage, GCP_COLLECTOR_SETUP_KEY, &setup) {
-                Ok(()) => {
-                    let body = serde_json::json!({
-                        "status": "saved",
-                        "provider": "gcp_audit",
-                        "config": setup.view(),
-                        "validation": setup.validate(),
-                    });
-                    json_response(&body.to_string(), 200)
-                }
-                Err(error) => error_json(&error, 500),
-            }
-        }
-        Err(error) => error_json(&error, 400),
-    }
-}
-
-fn handle_collector_gcp_validate(state: &Arc<Mutex<AppState>>) -> Response<Body> {
-    let s = state.lock().unwrap_or_else(|e| e.into_inner());
-    let setup = load_gcp_collector_setup(&s.storage);
-    let validation = setup.validate();
-    if validation.status != "ready" {
-        let body = serde_json::json!({
-            "provider": "gcp_audit",
-            "success": false,
-            "event_count": 0,
-            "sample_events": [],
-            "validation": validation,
-            "error": "Collector configuration is incomplete.",
-        });
-        collector_validation_response(&s.storage, "gcp_audit", body)
-    } else {
-        let resolver = build_secrets_resolver(&s.storage);
-        match setup.to_runtime(&resolver) {
-            Ok(runtime) => {
-                let mut collector =
-                    crate::collector_gcp::GcpAuditCollector::new(runtime);
-                let result = collector.poll();
-                let sample_events: Vec<_> =
-                    result.events.iter().take(5).cloned().collect();
-                let body = serde_json::json!({
-                    "provider": "gcp_audit",
-                    "success": result.success,
-                    "event_count": result.event_count,
-                    "polled_at": result.polled_at,
-                    "next_page_token": result.next_page_token,
-                    "sample_events": sample_events,
-                    "validation": validation,
-                    "error": result.error,
-                });
-                collector_validation_response(&s.storage, "gcp_audit", body)
-            }
-            Err(error) => {
-                let body = serde_json::json!({
-                    "provider": "gcp_audit",
-                    "success": false,
-                    "event_count": 0,
-                    "sample_events": [],
-                    "validation": validation,
-                    "error": error,
-                });
-                collector_validation_response(&s.storage, "gcp_audit", body)
-            }
-        }
-    }
-}
-
-fn handle_collector_okta_get(state: &Arc<Mutex<AppState>>) -> Response<Body> {
-    let s = state.lock().unwrap_or_else(|e| e.into_inner());
-    let setup = load_okta_collector_setup(&s.storage);
-    let body = config_validation_payload(setup.view(), setup.validate());
-    json_response(&body.to_string(), 200)
-}
-
-fn handle_collector_okta_config(body: &[u8], state: &Arc<Mutex<AppState>>) -> Response<Body> {
-    match read_json_body::<OktaCollectorSetupPatch>(body, 16 * 1024) {
-        Ok(patch) => {
-            let s = state.lock().unwrap_or_else(|e| e.into_inner());
-            let mut setup = load_okta_collector_setup(&s.storage);
-            setup.apply_patch(patch);
-            match save_stored_json(&s.storage, OKTA_COLLECTOR_SETUP_KEY, &setup) {
-                Ok(()) => {
-                    let body = serde_json::json!({
-                        "status": "saved",
-                        "provider": "okta_identity",
-                        "config": setup.view(),
-                        "validation": setup.validate(),
-                    });
-                    json_response(&body.to_string(), 200)
-                }
-                Err(error) => error_json(&error, 500),
-            }
-        }
-        Err(error) => error_json(&error, 400),
-    }
-}
-
-fn handle_collector_okta_validate(state: &Arc<Mutex<AppState>>) -> Response<Body> {
-    let s = state.lock().unwrap_or_else(|e| e.into_inner());
-    let setup = load_okta_collector_setup(&s.storage);
-    let resolver = build_secrets_resolver(&s.storage);
-    let body = validate_okta_collector(&setup, &resolver);
-    collector_validation_response(&s.storage, "okta_identity", body)
-}
-
-fn handle_collector_entra_get(state: &Arc<Mutex<AppState>>) -> Response<Body> {
-    let s = state.lock().unwrap_or_else(|e| e.into_inner());
-    let setup = load_entra_collector_setup(&s.storage);
-    let body = config_validation_payload(setup.view(), setup.validate());
-    json_response(&body.to_string(), 200)
-}
-
-fn handle_collector_entra_config(body: &[u8], state: &Arc<Mutex<AppState>>) -> Response<Body> {
-    match read_json_body::<EntraCollectorSetupPatch>(body, 16 * 1024) {
-        Ok(patch) => {
-            let s = state.lock().unwrap_or_else(|e| e.into_inner());
-            let mut setup = load_entra_collector_setup(&s.storage);
-            setup.apply_patch(patch);
-            match save_stored_json(&s.storage, ENTRA_COLLECTOR_SETUP_KEY, &setup) {
-                Ok(()) => {
-                    let body = serde_json::json!({
-                        "status": "saved",
-                        "provider": "entra_identity",
-                        "config": setup.view(),
-                        "validation": setup.validate(),
-                    });
-                    json_response(&body.to_string(), 200)
-                }
-                Err(error) => error_json(&error, 500),
-            }
-        }
-        Err(error) => error_json(&error, 400),
-    }
-}
-
-fn handle_collector_entra_validate(state: &Arc<Mutex<AppState>>) -> Response<Body> {
-    let s = state.lock().unwrap_or_else(|e| e.into_inner());
-    let setup = load_entra_collector_setup(&s.storage);
-    let resolver = build_secrets_resolver(&s.storage);
-    let body = validate_entra_collector(&setup, &resolver);
-    collector_validation_response(&s.storage, "entra_identity", body)
-}
-
-fn handle_collector_m365_get(state: &Arc<Mutex<AppState>>) -> Response<Body> {
-    let s = state.lock().unwrap_or_else(|e| e.into_inner());
-    let setup = load_m365_collector_setup(&s.storage);
-    let body = config_validation_payload(setup.view(), setup.validate());
-    json_response(&body.to_string(), 200)
-}
-
-fn handle_collector_m365_config(body: &[u8], state: &Arc<Mutex<AppState>>) -> Response<Body> {
-    match read_json_body::<M365CollectorSetupPatch>(body, 16 * 1024) {
-        Ok(patch) => {
-            let s = state.lock().unwrap_or_else(|e| e.into_inner());
-            let mut setup = load_m365_collector_setup(&s.storage);
-            setup.apply_patch(patch);
-            match save_stored_json(&s.storage, M365_COLLECTOR_SETUP_KEY, &setup) {
-                Ok(()) => {
-                    let body = serde_json::json!({
-                        "status": "saved",
-                        "provider": "m365_saas",
-                        "config": setup.view(),
-                        "validation": setup.validate(),
-                    });
-                    json_response(&body.to_string(), 200)
-                }
-                Err(error) => error_json(&error, 500),
-            }
-        }
-        Err(error) => error_json(&error, 400),
-    }
-}
-
-fn handle_collector_m365_validate(state: &Arc<Mutex<AppState>>) -> Response<Body> {
-    let s = state.lock().unwrap_or_else(|e| e.into_inner());
-    let setup = load_m365_collector_setup(&s.storage);
-    let resolver = build_secrets_resolver(&s.storage);
-    let body = validate_m365_collector(&setup, &resolver);
-    collector_validation_response(&s.storage, "m365_saas", body)
-}
-
-fn handle_collector_workspace_get(state: &Arc<Mutex<AppState>>) -> Response<Body> {
-    let s = state.lock().unwrap_or_else(|e| e.into_inner());
-    let setup = load_workspace_collector_setup(&s.storage);
-    let body = config_validation_payload(setup.view(), setup.validate());
-    json_response(&body.to_string(), 200)
-}
-
-fn handle_collector_workspace_config(body: &[u8], state: &Arc<Mutex<AppState>>) -> Response<Body> {
-    match read_json_body::<WorkspaceCollectorSetupPatch>(body, 32 * 1024) {
-        Ok(patch) => {
-            let s = state.lock().unwrap_or_else(|e| e.into_inner());
-            let mut setup = load_workspace_collector_setup(&s.storage);
-            setup.apply_patch(patch);
-            match save_stored_json(&s.storage, WORKSPACE_COLLECTOR_SETUP_KEY, &setup) {
-                Ok(()) => {
-                    let body = serde_json::json!({
-                        "status": "saved",
-                        "provider": "workspace_saas",
-                        "config": setup.view(),
-                        "validation": setup.validate(),
-                    });
-                    json_response(&body.to_string(), 200)
-                }
-                Err(error) => error_json(&error, 500),
-            }
-        }
-        Err(error) => error_json(&error, 400),
-    }
-}
-
-fn handle_collector_workspace_validate(state: &Arc<Mutex<AppState>>) -> Response<Body> {
-    let s = state.lock().unwrap_or_else(|e| e.into_inner());
-    let setup = load_workspace_collector_setup(&s.storage);
-    let resolver = build_secrets_resolver(&s.storage);
-    let body = validate_workspace_collector(&setup, &resolver);
-    collector_validation_response(&s.storage, "workspace_saas", body)
 }
 
 #[allow(clippy::nonminimal_bool)]
@@ -28278,49 +27760,49 @@ fn handle_api(
 
             // ── Cloud Collectors ──────────────────────────────────
             } else if method == Method::Get && url_path == "/api/collectors/status" {
-                handle_collectors_status(state)
+                crate::server_collectors::handle_collectors_status(state)
             } else if method == Method::Get && url_path == "/api/collectors/aws" {
-                handle_collector_aws_get(state)
+                crate::server_collectors::handle_collector_aws_get(state)
             } else if method == Method::Post && url_path == "/api/collectors/aws/config" {
-                handle_collector_aws_config(body, state)
+                crate::server_collectors::handle_collector_aws_config(body, state)
             } else if method == Method::Post && url_path == "/api/collectors/aws/validate" {
-                handle_collector_aws_validate(state)
+                crate::server_collectors::handle_collector_aws_validate(state)
             } else if method == Method::Get && url_path == "/api/collectors/azure" {
-                handle_collector_azure_get(state)
+                crate::server_collectors::handle_collector_azure_get(state)
             } else if method == Method::Post && url_path == "/api/collectors/azure/config" {
-                handle_collector_azure_config(body, state)
+                crate::server_collectors::handle_collector_azure_config(body, state)
             } else if method == Method::Post && url_path == "/api/collectors/azure/validate" {
-                handle_collector_azure_validate(state)
+                crate::server_collectors::handle_collector_azure_validate(state)
             } else if method == Method::Get && url_path == "/api/collectors/gcp" {
-                handle_collector_gcp_get(state)
+                crate::server_collectors::handle_collector_gcp_get(state)
             } else if method == Method::Post && url_path == "/api/collectors/gcp/config" {
-                handle_collector_gcp_config(body, state)
+                crate::server_collectors::handle_collector_gcp_config(body, state)
             } else if method == Method::Post && url_path == "/api/collectors/gcp/validate" {
-                handle_collector_gcp_validate(state)
+                crate::server_collectors::handle_collector_gcp_validate(state)
             } else if method == Method::Get && url_path == "/api/collectors/okta" {
-                handle_collector_okta_get(state)
+                crate::server_collectors::handle_collector_okta_get(state)
             } else if method == Method::Post && url_path == "/api/collectors/okta/config" {
-                handle_collector_okta_config(body, state)
+                crate::server_collectors::handle_collector_okta_config(body, state)
             } else if method == Method::Post && url_path == "/api/collectors/okta/validate" {
-                handle_collector_okta_validate(state)
+                crate::server_collectors::handle_collector_okta_validate(state)
             } else if method == Method::Get && url_path == "/api/collectors/entra" {
-                handle_collector_entra_get(state)
+                crate::server_collectors::handle_collector_entra_get(state)
             } else if method == Method::Post && url_path == "/api/collectors/entra/config" {
-                handle_collector_entra_config(body, state)
+                crate::server_collectors::handle_collector_entra_config(body, state)
             } else if method == Method::Post && url_path == "/api/collectors/entra/validate" {
-                handle_collector_entra_validate(state)
+                crate::server_collectors::handle_collector_entra_validate(state)
             } else if method == Method::Get && url_path == "/api/collectors/m365" {
-                handle_collector_m365_get(state)
+                crate::server_collectors::handle_collector_m365_get(state)
             } else if method == Method::Post && url_path == "/api/collectors/m365/config" {
-                handle_collector_m365_config(body, state)
+                crate::server_collectors::handle_collector_m365_config(body, state)
             } else if method == Method::Post && url_path == "/api/collectors/m365/validate" {
-                handle_collector_m365_validate(state)
+                crate::server_collectors::handle_collector_m365_validate(state)
             } else if method == Method::Get && url_path == "/api/collectors/workspace" {
-                handle_collector_workspace_get(state)
+                crate::server_collectors::handle_collector_workspace_get(state)
             } else if method == Method::Post && url_path == "/api/collectors/workspace/config" {
-                handle_collector_workspace_config(body, state)
+                crate::server_collectors::handle_collector_workspace_config(body, state)
             } else if method == Method::Post && url_path == "/api/collectors/workspace/validate" {
-                handle_collector_workspace_validate(state)
+                crate::server_collectors::handle_collector_workspace_validate(state)
             } else if let Some(slug) = url_path
                 .strip_prefix("/api/collectors/")
                 .and_then(|tail| tail.split('/').next())
