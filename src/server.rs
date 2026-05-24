@@ -30893,9 +30893,12 @@ mod tests {
             audit["audits"][0]["operator"],
             serde_json::json!("integration-approver")
         );
+        // PID 31337 is not present on the test node, so the local enforcement
+        // engine honestly reports the kill as not executed rather than
+        // fabricating success.
         assert_eq!(
             audit["audits"][0]["verification_status"],
-            serde_json::json!("pending_post_action_evidence")
+            serde_json::json!("not_executed")
         );
         assert!(
             audit["audits"][0]["commands"][0]["command"]

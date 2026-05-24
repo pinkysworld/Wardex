@@ -2,7 +2,12 @@
 // ADR-0008: Response guardrails.
 
 use serde::{Deserialize, Serialize};
+use std::path::Path;
 use std::sync::Mutex;
+
+use crate::enforcement::{
+    EnforcementResult, FilesystemEnforcer, NetworkEnforcer, ProcessEnforcer, ProcessTarget,
+};
 
 // ── Data model ──────────────────────────────────────────────────
 
@@ -69,6 +74,11 @@ pub enum ApprovalStatus {
     Expired,
     Executed,
     DryRunCompleted,
+    /// Execution was attempted but the enforcement engine reported failure
+    /// (e.g. the target process/host is not present on this node, or no
+    /// enforcement backend is wired for the action). Never used to mean
+    /// "succeeded" — this is the honest outcome for a non-effecting action.
+    Failed,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -129,6 +139,13 @@ pub struct ResponseOrchestrator {
     audit_ledger: Mutex<Vec<ResponseAuditEntry>>,
     /// SLA timeout for approval in seconds (default 300).
     pub approval_sla_secs: u64,
+    /// Node-local OS enforcement engines. Approved/auto actions are carried out
+    /// by these (real syscalls on Unix; honestly labelled simulation on other
+    /// platforms). Actions targeting a resource not present on this node report
+    /// failure rather than a fabricated success.
+    process_enforcer: Mutex<ProcessEnforcer>,
+    network_enforcer: Mutex<NetworkEnforcer>,
+    filesystem_enforcer: Mutex<FilesystemEnforcer>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -184,6 +201,70 @@ impl ResponseOrchestrator {
             protected_assets: Vec::new(),
             audit_ledger: Mutex::new(Vec::new()),
             approval_sla_secs: 300,
+            process_enforcer: Mutex::new(ProcessEnforcer::new()),
+            network_enforcer: Mutex::new(NetworkEnforcer::new()),
+            filesystem_enforcer: Mutex::new(FilesystemEnforcer::new()),
+        }
+    }
+
+    /// Carry out a response action via the node-local enforcement engines and
+    /// return the real [`EnforcementResult`]. Actions with no wired backend
+    /// return an unsuccessful result with an honest explanation — they are
+    /// never reported as executed.
+    fn enforce_action(&self, action: &ResponseAction, target: &ResponseTarget) -> EnforcementResult {
+        let unsupported = |what: &str, why: &str| EnforcementResult {
+            action: what.to_string(),
+            success: false,
+            detail: format!("not executed: {why}"),
+            rollback_command: None,
+        };
+        match action {
+            ResponseAction::KillProcess { pid, process_name } => self
+                .process_enforcer
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .kill_process(&ProcessTarget {
+                    pid: *pid,
+                    name: process_name.clone(),
+                    user: String::new(),
+                }),
+            ResponseAction::Isolate => self
+                .network_enforcer
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .block_all(&target.hostname),
+            ResponseAction::Throttle { rate_limit_kbps } => self
+                .network_enforcer
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .rate_limit(&target.hostname, *rate_limit_kbps),
+            ResponseAction::QuarantineFile { path } => self
+                .filesystem_enforcer
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .quarantine_path(Path::new(path)),
+            ResponseAction::Alert => EnforcementResult {
+                action: "alert".to_string(),
+                success: true,
+                detail: format!("Alert notification recorded for {}", target.hostname),
+                rollback_command: None,
+            },
+            ResponseAction::BlockIp { ip } => unsupported(
+                &format!("block_ip({ip})"),
+                "no network ACL/firewall backend is wired for IP blocking on this node",
+            ),
+            ResponseAction::DisableAccount { username } => unsupported(
+                &format!("disable_account({username})"),
+                "no identity-provider backend is wired for account disabling on this node",
+            ),
+            ResponseAction::RollbackConfig { config_name } => unsupported(
+                &format!("rollback_config({config_name})"),
+                "no configuration-management backend is wired for config rollback on this node",
+            ),
+            ResponseAction::Custom { name, .. } => unsupported(
+                &format!("custom({name})"),
+                "custom actions have no automated enforcement backend",
+            ),
         }
     }
 
@@ -311,16 +392,32 @@ impl ResponseOrchestrator {
             return Err("Break-glass required: this action on a protected asset requires emergency authorization".into());
         }
 
-        // Auto-tier actions execute immediately (or simulate in dry-run)
-        if tier == ActionTier::Auto {
-            request.status = if request.dry_run {
-                ApprovalStatus::DryRunCompleted
-            } else {
+        // Auto-tier actions execute immediately (or simulate in dry-run). The
+        // non-dry-run path performs real enforcement and records the actual
+        // result; status reflects whether the enforcement engine succeeded.
+        if tier == ActionTier::Auto && !request.dry_run {
+            let result = self.enforce_action(&request.action, &request.target);
+            request.status = if result.success {
                 ApprovalStatus::Executed
+            } else {
+                ApprovalStatus::Failed
             };
-        } else {
-            request.status = ApprovalStatus::Pending;
+            let id = request.id.clone();
+            let description = result.detail.clone();
+            let execution_audit = response_execution_audit(&request, &result);
+            self.record_audit_with_result(&request, Some(description), Some(execution_audit));
+            self.requests
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .push(request);
+            return Ok(id);
         }
+
+        request.status = if tier == ActionTier::Auto {
+            ApprovalStatus::DryRunCompleted
+        } else {
+            ApprovalStatus::Pending
+        };
 
         let id = request.id.clone();
         self.record_audit(&request);
@@ -562,10 +659,12 @@ impl ResponseOrchestrator {
             });
     }
 
-    /// Execute all approved (non-dry-run) requests. Returns a summary of
-    /// executed actions.  In production this would call out to enforcement
-    /// agents; here we record the execution transition and produce a
-    /// human-readable log line for each action.
+    /// Execute all approved (non-dry-run) requests by invoking the node-local
+    /// enforcement engine for each action, and return the real per-action
+    /// result detail. Each request's status becomes `Executed` only when the
+    /// enforcement engine reports success, otherwise `Failed`. Actions whose
+    /// target resource is not present on this node (or that have no wired
+    /// backend) report failure rather than a fabricated success.
     pub fn execute_approved(&self) -> Vec<String> {
         self.execute_approved_matching(None)
     }
@@ -584,39 +683,14 @@ impl ResponseOrchestrator {
             if req.status != ApprovalStatus::Approved || req.dry_run {
                 continue;
             }
-            let description = match &req.action {
-                ResponseAction::KillProcess { pid, process_name } => format!(
-                    "Killed process {} (PID {}) on {}",
-                    process_name, pid, req.target.hostname
-                ),
-                ResponseAction::Isolate => format!("Isolated host {}", req.target.hostname),
-                ResponseAction::BlockIp { ip } => {
-                    format!("Blocked IP {} via {}", ip, req.target.hostname)
-                }
-                ResponseAction::QuarantineFile { path } => {
-                    format!("Quarantined file {} on {}", path, req.target.hostname)
-                }
-                ResponseAction::DisableAccount { username } => {
-                    format!("Disabled account {} on {}", username, req.target.hostname)
-                }
-                ResponseAction::Throttle { rate_limit_kbps } => format!(
-                    "Throttled {} to {} kbps",
-                    req.target.hostname, rate_limit_kbps
-                ),
-                ResponseAction::RollbackConfig { config_name } => format!(
-                    "Rolled back config {} on {}",
-                    config_name, req.target.hostname
-                ),
-                ResponseAction::Alert => {
-                    format!("Alert notification sent for {}", req.target.hostname)
-                }
-                ResponseAction::Custom { name, .. } => format!(
-                    "Custom action '{}' executed on {}",
-                    name, req.target.hostname
-                ),
+            let result = self.enforce_action(&req.action, &req.target);
+            req.status = if result.success {
+                ApprovalStatus::Executed
+            } else {
+                ApprovalStatus::Failed
             };
-            req.status = ApprovalStatus::Executed;
-            let execution_audit = response_execution_audit(req, &description);
+            let description = result.detail.clone();
+            let execution_audit = response_execution_audit(req, &result);
             executed.push(description.clone());
             executed_reqs.push((req.clone(), description, execution_audit));
         }
@@ -746,9 +820,13 @@ fn simulated_effects(action: &ResponseAction, target: &ResponseTarget) -> Vec<St
     }
 }
 
-fn response_execution_audit(req: &ResponseRequest, description: &str) -> ResponseExecutionAudit {
+fn response_execution_audit(
+    req: &ResponseRequest,
+    result: &EnforcementResult,
+) -> ResponseExecutionAudit {
     let completed_at = chrono::Utc::now().to_rfc3339();
     let command = response_command_string(&req.action, &req.target);
+    let success = result.success;
     ResponseExecutionAudit {
         request_id: req.id.clone(),
         action: format!("{:?}", req.action),
@@ -760,20 +838,25 @@ fn response_execution_audit(req: &ResponseRequest, description: &str) -> Respons
             .unwrap_or_else(|| req.requested_by.clone()),
         started_at: completed_at.clone(),
         completed_at: completed_at.clone(),
-        status: "completed".to_string(),
+        status: if success { "completed" } else { "failed" }.to_string(),
         commands: vec![ResponseCommandAudit {
             timestamp: completed_at,
             host: req.target.hostname.clone(),
             command: command.clone(),
             command_summary: response_command_summary(&req.action),
-            exit_code: 0,
-            status: "success".to_string(),
-            stdout_excerpt: Some(description.to_string()),
-            stderr_excerpt: None,
+            exit_code: if success { 0 } else { 1 },
+            status: if success { "success" } else { "failed" }.to_string(),
+            stdout_excerpt: success.then(|| result.detail.clone()),
+            stderr_excerpt: (!success).then(|| result.detail.clone()),
         }],
-        result_summary: description.to_string(),
+        result_summary: result.detail.clone(),
         reversal_path: reversal_path(&req.action, &req.target),
-        verification_status: "pending_post_action_evidence".to_string(),
+        verification_status: if success {
+            "pending_post_action_evidence"
+        } else {
+            "not_executed"
+        }
+        .to_string(),
     }
 }
 
@@ -1003,10 +1086,33 @@ mod tests {
         assert_eq!(audit.request_id, id);
         assert_eq!(audit.operator, "analyst-2");
         assert_eq!(audit.commands.len(), 1);
-        assert_eq!(audit.commands[0].exit_code, 0);
+        // PID 31337 does not exist on the test node, so the local enforcement
+        // engine honestly reports failure rather than a fabricated success.
+        assert_eq!(audit.commands[0].exit_code, 1);
+        assert_eq!(audit.status, "failed");
         assert!(audit.commands[0].command.contains("kill-process"));
         assert!(audit.commands[0].command.contains("--pid 31337"));
+        assert_eq!(audit.verification_status, "not_executed");
+    }
+
+    #[test]
+    fn execution_audit_records_successful_action() {
+        // An Alert action always succeeds (it records a notification), so the
+        // audit reflects a real completed execution — proving the success path.
+        let orch = ResponseOrchestrator::new();
+        let req = make_request("r-alert", ResponseAction::Alert, "host-1", false);
+        // Alert is auto-tier, so submit() executes it immediately.
+        let id = orch.submit(req).unwrap();
+
+        let audits = orch.execution_audits(Some(&id));
+        assert_eq!(audits.len(), 1);
+        let audit = &audits[0];
+        assert_eq!(audit.status, "completed");
+        assert_eq!(audit.commands[0].exit_code, 0);
         assert_eq!(audit.verification_status, "pending_post_action_evidence");
+
+        let status = orch.get_request(&id).map(|r| r.status).unwrap();
+        assert_eq!(status, ApprovalStatus::Executed);
     }
 
     #[test]
