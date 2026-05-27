@@ -129,6 +129,9 @@ use crate::server_alerts::{
     alert_process_resolution, assemble_alert_process_catalog, extract_alert_process_names,
     host_matches_local, resolve_alert_process_pivots, AlertProcessPivot,
 };
+use crate::server_av::{
+    load_local_open_source_av_signatures, local_av_signature_presets_json,
+};
 #[cfg(test)]
 use crate::server_alerts::{
     alert_process_matches_name, live_alert_process_catalog, normalized_process_token,
@@ -154,17 +157,8 @@ use sha2::Digest;
 
 pub use crate::server_routing::{ApiRouteAccess, classify_api_route_access};
 
-const LOCAL_AV_SIGNATURE_PRESET_DIRS: &[&str] = &[
-    "rules/clamav",
-    "rules/malware_hashes",
-    "var/signatures/clamav",
-    "/var/lib/clamav",
-    "/usr/local/share/clamav",
-    "/opt/homebrew/share/clamav",
-];
 const FAILED_AUTH_TRACKER_STORAGE_KEY: &str = "server.failed_auth_tracker";
 
-const LOCAL_AV_SIGNATURE_EXTENSIONS: &[&str] = &["hdb", "hsb", "hashes", "txt"];
 
 // ── Rate Limiter ────────────────────────────────────────────
 
@@ -695,76 +689,6 @@ pub(crate) struct AppState {
     extra: HashMap<String, serde_json::Value>,
 }
 
-fn local_av_signature_files() -> Vec<PathBuf> {
-    let mut files = Vec::new();
-    for dir in LOCAL_AV_SIGNATURE_PRESET_DIRS {
-        let path = Path::new(dir);
-        let Ok(entries) = fs::read_dir(path) else {
-            continue;
-        };
-        for entry in entries.flatten() {
-            let file_path = entry.path();
-            let ext = file_path
-                .extension()
-                .and_then(|value| value.to_str())
-                .unwrap_or("")
-                .to_ascii_lowercase();
-            if LOCAL_AV_SIGNATURE_EXTENSIONS.contains(&ext.as_str()) {
-                files.push(file_path);
-            }
-        }
-    }
-    files.sort();
-    files
-}
-
-fn local_av_signature_presets_json() -> serde_json::Value {
-    let files = local_av_signature_files();
-    let directories: Vec<_> = LOCAL_AV_SIGNATURE_PRESET_DIRS
-        .iter()
-        .map(|dir| {
-            let path = Path::new(dir);
-            let detected_files = files
-                .iter()
-                .filter(|file| file.parent().is_some_and(|parent| parent == path))
-                .map(|file| file.display().to_string())
-                .collect::<Vec<_>>();
-            serde_json::json!({
-                "path": dir,
-                "exists": path.exists(),
-                "detected_files": detected_files,
-            })
-        })
-        .collect();
-    serde_json::json!({
-        "preset": "local_open_source_av",
-        "formats": ["clamav_hdb_md5", "clamav_hsb_sha256", "plain_hash_lines"],
-        "operator_decision_required": true,
-        "auto_download": false,
-        "directories": directories,
-    })
-}
-
-fn load_local_open_source_av_signatures(state: &Arc<Mutex<AppState>>) -> usize {
-    let mut imported = 0usize;
-    for file_path in local_av_signature_files() {
-        let Ok(content) = fs::read_to_string(&file_path) else {
-            continue;
-        };
-        let mut s = crate::state_lock::tracked_lock(state, "server/load_local_av_signatures");
-        match s
-            .malware_hash_db
-            .load_clamav_hash_signatures(&content, Some(&format!("local:{}", file_path.display())))
-        {
-            Ok(count) => imported += count,
-            Err(error) => tracing::warn!(
-                "failed to load local malware signatures {}: {error}",
-                file_path.display()
-            ),
-        }
-    }
-    imported
-}
 
 fn build_search_index_from_events(
     events: &[crate::event_forward::StoredEvent],
