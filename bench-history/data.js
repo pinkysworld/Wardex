@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1779888355865,
+  "lastUpdate": 1779888877852,
   "repoUrl": "https://github.com/pinkysworld/Wardex",
   "entries": {
     "Wardex criterion benches": [
@@ -13909,6 +13909,114 @@ window.BENCHMARK_DATA = {
             "name": "sigma_evaluate_20_rules",
             "value": 35312,
             "range": "± 378",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "85413447+pinkysworld@users.noreply.github.com",
+            "name": "pinkysworld",
+            "username": "pinkysworld"
+          },
+          "committer": {
+            "email": "85413447+pinkysworld@users.noreply.github.com",
+            "name": "pinkysworld",
+            "username": "pinkysworld"
+          },
+          "distinct": true,
+          "id": "17ff705c716401236cdd871d7c36cfb58450a462",
+          "message": "refactor(server): extract alert↔process pivot helpers into server_alerts\n\nMove the AlertProcessPivot struct, the normalization/host-match helpers,\nthe local + remote process-catalog assemblers, and alert_process_resolution\nout of server.rs into a new server_alerts module (~260 lines).\n\nThe local-OS catalog stays platform-conditional (#[cfg(target_os = ...)]).\nprocess_basename is duplicated as a small private helper rather than\nexporting from server.rs, mirroring the existing pattern in\ncollector_linux/collector_macos.\n\nserver.rs drops from ~33,900 to ~33,670 lines; the platform now has 14\nextracted server_* submodules. Docs (CHANGELOG.md, docs/STATUS.md) are\nupdated to reflect the new module count (156 Rust source modules) and\nthe latest extraction.\n\nAll 1799 tests still pass (1556 lib + 239 api_integration + 4 misc).",
+          "timestamp": "2026-05-27T15:24:25+02:00",
+          "tree_id": "f9e8d2e04f00ce7436d420c803d11b15da34bb97",
+          "url": "https://github.com/pinkysworld/Wardex/commit/17ff705c716401236cdd871d7c36cfb58450a462"
+        },
+        "date": 1779888877288,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "full_pipeline/5",
+            "value": 49221,
+            "range": "± 151",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "full_pipeline/50",
+            "value": 407795,
+            "range": "± 4729",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "full_pipeline/200",
+            "value": 1904087,
+            "range": "± 14402",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "full_pipeline/1000",
+            "value": 17957145,
+            "range": "± 56402",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "detector_evaluate_single",
+            "value": 615,
+            "range": "± 1",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "detector_window_stream_256",
+            "value": 855925,
+            "range": "± 1780",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "shared_storage_observed_schema_read",
+            "value": 136,
+            "range": "± 0",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "shared_storage_4_threads_64_alerts",
+            "value": 146761,
+            "range": "± 2917",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "policy_evaluate_single",
+            "value": 243,
+            "range": "± 1",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "throughput/1000_samples",
+            "value": 18082856,
+            "range": "± 287443",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "search_500_events",
+            "value": 109110,
+            "range": "± 622",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "hunt_field_query",
+            "value": 87367,
+            "range": "± 1615",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "ml_triage_rf",
+            "value": 51,
+            "range": "± 0",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "sigma_evaluate_20_rules",
+            "value": 35465,
+            "range": "± 315",
             "unit": "ns/iter"
           }
         ]
