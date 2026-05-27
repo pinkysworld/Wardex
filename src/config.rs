@@ -270,7 +270,7 @@ pub struct SecuritySettings {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct UpdateSigningSettings {
     /// Reject unsigned update artifacts immediately when true.
-    #[serde(default)]
+    #[serde(default = "default_require_signed_updates")]
     pub require_signed_updates: bool,
     /// Additional trusted Ed25519 signer public keys, base64-encoded.
     #[serde(default)]
@@ -279,15 +279,15 @@ pub struct UpdateSigningSettings {
     #[serde(default)]
     pub signing_key_path: Option<String>,
     /// Grace-period cutoff for accepting legacy unsigned releases.
-    #[serde(default = "default_legacy_unsigned_grace_until")]
+    #[serde(default)]
     pub legacy_unsigned_grace_until: Option<String>,
     /// Last accepted update counter seed for agent-side replay protection.
     #[serde(default)]
     pub last_accepted_update_counter: Option<u64>,
 }
 
-fn default_legacy_unsigned_grace_until() -> Option<String> {
-    Some("2026-08-01T00:00:00Z".to_string())
+fn default_require_signed_updates() -> bool {
+    true
 }
 
 fn default_token_ttl_secs() -> u64 {
@@ -352,10 +352,10 @@ impl Default for SecuritySettings {
 impl Default for UpdateSigningSettings {
     fn default() -> Self {
         Self {
-            require_signed_updates: false,
+            require_signed_updates: default_require_signed_updates(),
             trusted_update_signers: Vec::new(),
             signing_key_path: None,
-            legacy_unsigned_grace_until: default_legacy_unsigned_grace_until(),
+            legacy_unsigned_grace_until: None,
             last_accepted_update_counter: None,
         }
     }

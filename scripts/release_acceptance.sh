@@ -362,6 +362,20 @@ verify_product_hardening_endpoints() {
       "$WARDEX_BASE_URL$endpoint" >/dev/null
   done
 
+  # /api/playbook/execution/{id}/recovery-actions is contract-listed but only
+  # exists for a real execution id. Rather than seed a full playbook run, verify
+  # the route is wired and behaves correctly for a missing execution (a sane
+  # 404, not a route-miss or 5xx). 200 is also accepted in case an execution
+  # happens to exist.
+  recovery_actions_code="$(curl --silent --output /dev/null --write-out '%{http_code}' \
+    --max-time "$WARDEX_RELEASE_ACCEPTANCE_CURL_TIMEOUT" \
+    -H "Authorization: Bearer $WARDEX_ADMIN_TOKEN" \
+    "$WARDEX_BASE_URL/api/playbook/execution/release-acceptance-smoke/recovery-actions")"
+  if [[ "$recovery_actions_code" != "404" && "$recovery_actions_code" != "200" ]]; then
+    echo "error: /api/playbook/execution/{id}/recovery-actions returned unexpected status $recovery_actions_code" >&2
+    exit 1
+  fi
+
   WARDEX_BASE_URL="$WARDEX_BASE_URL" WARDEX_ADMIN_TOKEN="$WARDEX_ADMIN_TOKEN" \
     bash scripts/detection_validation_packs.sh >/dev/null
   WARDEX_BASE_URL="$WARDEX_BASE_URL" WARDEX_ADMIN_TOKEN="$WARDEX_ADMIN_TOKEN" \

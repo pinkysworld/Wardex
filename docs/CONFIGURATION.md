@@ -42,19 +42,19 @@ rate_limit_per_min = 120       # API rate limit per client IP
 brute_force_lockout = 5        # Lock IP after N failed auth attempts
 
 [security.update_signing]
-require_signed_updates = false # true = reject unsigned agent update releases immediately
+require_signed_updates = true  # reject unsigned agent update releases
 trusted_update_signers = []    # additional base64 Ed25519 public keys; bundled defaults remain trusted
 signing_key_path = ""          # optional file containing a base64, hex, or raw 32-byte Ed25519 signing key
-legacy_unsigned_grace_until = "2026-08-01T00:00:00Z"
+legacy_unsigned_grace_until = "" # optional temporary override for lab-only unsigned release acceptance
 last_accepted_update_counter = 0 # optional agent-side replay counter seed
 ```
 
 Agent update releases are signed at publish time when `WARDEX_UPDATE_SIGNING_KEY_BASE64` or
 `security.update_signing.signing_key_path` is configured. Deployments verify the stored release binary against the
 signature payload before assignment, downloads expose signature headers, and agents verify checksum, signer trust,
-payload hash, replay counter, downgrade policy, and binary size before install. Leave `require_signed_updates = false`
-only during the legacy unsigned grace period; set it to `true` once every managed agent has been upgraded to the signed
-update verifier.
+payload hash, replay counter, downgrade policy, and binary size before install. Production deployments should keep
+`require_signed_updates = true`; unsigned update grace is now an explicit lab compatibility override instead of the
+default.
 
 ### `[collection]`
 

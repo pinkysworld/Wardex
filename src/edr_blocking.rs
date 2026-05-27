@@ -1,13 +1,23 @@
-//! EDR behavioral blocking engine.
+//! EDR behavioral blocking decision engine.
 //!
-//! Provides real-time process blocking based on behavioral analysis,
-//! memory corruption detection (ROP chains, heap spraying), and
-//! exploit mitigation. Integrates with platform-specific endpoint
-//! security frameworks (macOS Endpoint Security, Linux eBPF,
-//! Windows ETW).
+//! Scores per-process behavioral indicators over a sliding window and produces
+//! [`BlockingDecision`]s (alert / suspend / kill) once configurable thresholds
+//! are crossed, with heuristic detectors for memory-corruption patterns (ROP
+//! chains, heap spraying, shellcode).
+//!
+//! Scope/limitations (honest status):
+//! - This engine computes *decisions*; it does not itself carry out the block.
+//!   Enforcement of a decision is the responsibility of the OS enforcement
+//!   engine (`enforcement.rs`) / on-host agent.
+//! - It is not yet wired into the live ingestion pipeline, and it does not
+//!   integrate with platform endpoint-security frameworks (macOS Endpoint
+//!   Security, Linux eBPF, Windows ETW) — those integrations are not
+//!   implemented. The detectors operate on byte/allocation samples passed in by
+//!   the caller.
 
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, VecDeque};
+use std::path::Path;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 // ── Configuration ───────────────────────────────────────────────────
@@ -233,13 +243,9 @@ impl EdrBlockingEngine {
         let now = indicator.timestamp_ms;
         let pid = indicator.pid;
 
-        // Skip allowlisted processes
-        if self
-            .config
-            .allowlist
-            .iter()
-            .any(|p| indicator.process_name.contains(p))
-        {
+        // Skip allowlisted processes only on exact path/name/hash matches.
+        // Substring allowlists are too broad for destructive response logic.
+        if process_matches_allowlist(&indicator, &self.config.allowlist) {
             return None;
         }
 
@@ -336,6 +342,42 @@ impl EdrBlockingEngine {
         let now = now_ms();
         self.processes
             .retain(|_, s| now.saturating_sub(s.last_seen_ms) < max_age_ms);
+    }
+}
+
+fn process_matches_allowlist(indicator: &BehaviorIndicator, allowlist: &[String]) -> bool {
+    let process = normalize_process_identity(&indicator.process_name);
+    let file_name = Path::new(&indicator.process_name)
+        .file_name()
+        .and_then(|value| value.to_str())
+        .map(normalize_process_identity);
+    let process_hash = indicator
+        .details
+        .get("sha256")
+        .or_else(|| indicator.details.get("hash"))
+        .map(|value| value.trim().to_ascii_lowercase());
+
+    allowlist.iter().any(|entry| {
+        let entry = entry.trim();
+        if entry.is_empty() {
+            return false;
+        }
+        if let Some(hash) = entry.strip_prefix("sha256:") {
+            return process_hash
+                .as_deref()
+                .is_some_and(|observed| observed == hash.trim().to_ascii_lowercase());
+        }
+        let normalized = normalize_process_identity(entry.strip_prefix("path:").unwrap_or(entry));
+        normalized == process || file_name.as_deref() == Some(normalized.as_str())
+    })
+}
+
+fn normalize_process_identity(value: &str) -> String {
+    let trimmed = value.trim();
+    if cfg!(windows) {
+        trimmed.replace('\\', "/").to_ascii_lowercase()
+    } else {
+        trimmed.to_string()
     }
 }
 
@@ -605,7 +647,7 @@ mod tests {
     }
 
     #[test]
-    fn test_allowlisted_process_not_blocked() {
+    fn test_allowlisted_exact_process_not_blocked() {
         let config = EdrBlockingConfig {
             allowlist: vec!["/usr/bin/systemd".into()],
             ..Default::default()
@@ -619,7 +661,48 @@ mod tests {
             },
             1000,
         );
+        ind.process_name = "/usr/bin/systemd".into();
+        let decision = engine.evaluate(ind);
+        assert!(decision.is_none());
+    }
+
+    #[test]
+    fn test_allowlist_substring_does_not_match() {
+        let config = EdrBlockingConfig {
+            allowlist: vec!["/usr/bin/systemd".into()],
+            alert_threshold: 0.1,
+            ..Default::default()
+        };
+        let mut engine = EdrBlockingEngine::new(config);
+        let mut ind = make_indicator(
+            401,
+            IndicatorType::MemoryAnomaly {
+                attack_type: MemoryAttackType::ProcessInjection,
+                confidence: 1.0,
+            },
+            1000,
+        );
         ind.process_name = "/usr/bin/systemd-journald".into();
+        let decision = engine.evaluate(ind);
+        assert!(decision.is_some());
+    }
+
+    #[test]
+    fn test_allowlist_sha256_match() {
+        let config = EdrBlockingConfig {
+            allowlist: vec!["sha256:abc123".into()],
+            ..Default::default()
+        };
+        let mut engine = EdrBlockingEngine::new(config);
+        let mut ind = make_indicator(
+            402,
+            IndicatorType::MemoryAnomaly {
+                attack_type: MemoryAttackType::ProcessInjection,
+                confidence: 1.0,
+            },
+            1000,
+        );
+        ind.details.insert("sha256".into(), "ABC123".into());
         let decision = engine.evaluate(ind);
         assert!(decision.is_none());
     }

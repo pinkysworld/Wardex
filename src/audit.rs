@@ -12,6 +12,35 @@ pub fn sha256_hex(data: &[u8]) -> String {
     hex::encode(hasher.finalize())
 }
 
+/// Compute an HMAC-SHA256 hex digest without adding another crypto dependency.
+pub fn hmac_sha256_hex(key: &[u8], data: &[u8]) -> String {
+    const BLOCK_SIZE: usize = 64;
+    let mut key_block = [0u8; BLOCK_SIZE];
+    if key.len() > BLOCK_SIZE {
+        let digest = Sha256::digest(key);
+        key_block[..digest.len()].copy_from_slice(&digest);
+    } else {
+        key_block[..key.len()].copy_from_slice(key);
+    }
+
+    let mut ipad = [0x36u8; BLOCK_SIZE];
+    let mut opad = [0x5cu8; BLOCK_SIZE];
+    for i in 0..BLOCK_SIZE {
+        ipad[i] ^= key_block[i];
+        opad[i] ^= key_block[i];
+    }
+
+    let mut inner = Sha256::new();
+    inner.update(ipad);
+    inner.update(data);
+    let inner_digest = inner.finalize();
+
+    let mut outer = Sha256::new();
+    outer.update(opad);
+    outer.update(inner_digest);
+    hex::encode(outer.finalize())
+}
+
 #[derive(Debug, Clone)]
 pub struct AuditRecord {
     pub sequence: usize,
@@ -35,8 +64,8 @@ pub struct AuditLog {
     records: Vec<AuditRecord>,
     checkpoints: Vec<AuditCheckpoint>,
     checkpoint_interval: usize,
-    /// HMAC key for checkpoint signatures. When empty, falls back to
-    /// a deterministic SHA-256 derivation (prototype mode).
+    /// HMAC key for checkpoint signatures. Empty means checkpoints are marked
+    /// unsigned rather than pretending to be cryptographically signed.
     hmac_key: String,
 }
 
@@ -94,13 +123,12 @@ impl AuditLog {
     fn insert_checkpoint(&mut self) {
         let seq = self.records.len();
         let cumulative = self.previous_hash.clone();
-        // Use HMAC key if available; otherwise fall back to deterministic derivation.
-        let sig_payload = if self.hmac_key.is_empty() {
-            format!("checkpoint|{}|{}", seq, cumulative)
+        let sig_payload = format!("checkpoint|{}|{}", seq, cumulative);
+        let signature = if self.hmac_key.is_empty() {
+            format!("unsigned:{}", sha256_hex(sig_payload.as_bytes()))
         } else {
-            format!("{}|checkpoint|{}|{}", self.hmac_key, seq, cumulative)
+            hmac_sha256_hex(self.hmac_key.as_bytes(), sig_payload.as_bytes())
         };
-        let signature = sha256_hex(sig_payload.as_bytes());
 
         self.checkpoints.push(AuditCheckpoint {
             after_sequence: seq,
@@ -239,7 +267,7 @@ pub struct AuditVerifyReport {
 
 #[cfg(test)]
 mod tests {
-    use super::AuditLog;
+    use super::{AuditLog, hmac_sha256_hex};
 
     #[test]
     fn hash_chain_progresses() {
@@ -279,6 +307,30 @@ mod tests {
         assert_eq!(audit.checkpoints().len(), 3);
         assert_eq!(audit.checkpoints()[0].after_sequence, 3);
         assert_eq!(audit.checkpoints()[2].after_sequence, 9);
+    }
+
+    #[test]
+    fn checkpoint_uses_real_hmac_when_keyed() {
+        let mut audit = AuditLog::with_checkpoint_interval(1);
+        audit.set_hmac_key("checkpoint-secret");
+        audit.record("boot", "started");
+        let checkpoint = &audit.checkpoints()[0];
+        let payload = format!(
+            "checkpoint|{}|{}",
+            checkpoint.after_sequence, checkpoint.cumulative_hash
+        );
+        assert_eq!(
+            checkpoint.signature,
+            hmac_sha256_hex(b"checkpoint-secret", payload.as_bytes())
+        );
+        assert!(!checkpoint.signature.starts_with("unsigned:"));
+    }
+
+    #[test]
+    fn checkpoint_without_key_is_marked_unsigned() {
+        let mut audit = AuditLog::with_checkpoint_interval(1);
+        audit.record("boot", "started");
+        assert!(audit.checkpoints()[0].signature.starts_with("unsigned:"));
     }
 
     #[test]

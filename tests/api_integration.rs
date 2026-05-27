@@ -2924,6 +2924,53 @@ fn enforcement_quarantine_without_auth_returns_401() {
     }
 }
 
+#[test]
+fn quarantine_rejects_server_side_path_capture_without_content() {
+    let (port, token) = spawn_test_server();
+    let temp_file = test_state_root(port).join("server-side-capture.bin");
+    std::fs::write(&temp_file, b"do-not-read-from-server").expect("write temp sample");
+
+    let err = ureq::post(&format!("{}/api/quarantine", base(port)))
+        .set("Authorization", &auth_header(&token))
+        .send_json(serde_json::json!({
+            "path": temp_file.display().to_string(),
+            "verdict": "suspicious"
+        }));
+    match err {
+        Err(ureq::Error::Status(400, response)) => {
+            let body = response.into_string().unwrap();
+            assert!(body.contains("content_base64"));
+        }
+        other => panic!("expected 400 for server-side path capture, got {other:?}"),
+    }
+}
+
+#[test]
+fn quarantine_accepts_agent_uploaded_content_with_digest() {
+    use base64::Engine;
+    use sha2::{Digest, Sha256};
+
+    let (port, token) = spawn_test_server();
+    let content = b"agent-uploaded-sample";
+    let encoded = base64::engine::general_purpose::STANDARD.encode(content);
+    let sha256 = hex::encode(Sha256::digest(content));
+
+    let resp = ureq::post(&format!("{}/api/quarantine", base(port)))
+        .set("Authorization", &auth_header(&token))
+        .send_json(serde_json::json!({
+            "path": "/agent/evidence/sample.bin",
+            "content_base64": encoded,
+            "sha256": sha256,
+            "agent_id": "agent-test",
+            "hostname": "host-test",
+            "verdict": "malicious"
+        }))
+        .expect("agent-uploaded quarantine content");
+    assert_eq!(resp.status(), 201);
+    let body: serde_json::Value = resp.into_json().unwrap();
+    assert!(body["id"].as_str().is_some());
+}
+
 // ── GET /api/threat-intel/status ───────────────────────────────
 
 #[test]

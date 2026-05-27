@@ -121,36 +121,29 @@ use crate::response::{
     ApprovalRecord as ResponseApprovalRecord, ApprovalStatus, ResponseAction, ResponseOrchestrator,
     ResponseRequest, ResponseTarget,
 };
+use crate::server_alerts::{
+    AlertProcessPivot, alert_process_resolution, assemble_alert_process_catalog,
+    extract_alert_process_names, host_matches_local, resolve_alert_process_pivots,
+};
 use crate::server_auth::{
     bearer_token, failed_auth_clear_request, failed_auth_locked_request,
     failed_auth_locked_response, failed_auth_record_request, failed_auth_subject, secure_token_eq,
 };
-use crate::server_alerts::{
-    alert_process_resolution, assemble_alert_process_catalog, extract_alert_process_names,
-    host_matches_local, resolve_alert_process_pivots, AlertProcessPivot,
-};
-use crate::server_av::{
-    load_local_open_source_av_signatures, local_av_signature_presets_json,
+use crate::server_av::{load_local_open_source_av_signatures, local_av_signature_presets_json};
+#[cfg(test)]
+use crate::server_control_plane::backup_records_in_dir;
+use crate::server_control_plane::{
+    BackupStatusSnapshot, ControlPlanePostureSnapshot, backup_file_record,
+    control_plane_cluster_snapshot, control_plane_failover_history_preview, is_runtime_backup_file,
 };
 #[cfg(test)]
-use crate::server_alerts::{
-    alert_process_matches_name, live_alert_process_catalog, normalized_process_token,
-    remote_alert_process_catalog,
-};
-use crate::server_control_plane::{
-    backup_file_record, control_plane_cluster_snapshot, control_plane_failover_history_preview,
-    is_runtime_backup_file, BackupStatusSnapshot, ControlPlanePostureSnapshot,
-};
+use crate::server_evidence::snapshot_entry_from_path;
 use crate::server_evidence::{
     build_snapshot_policy_payload, evidence_freshness, evidence_freshness_check,
     list_operational_snapshots, payload_with_snapshot, persist_operational_snapshot,
     prune_operational_snapshots, storage_root_path, verify_operational_snapshot,
     with_evidence_freshness,
 };
-#[cfg(test)]
-use crate::server_evidence::snapshot_entry_from_path;
-#[cfg(test)]
-use crate::server_control_plane::backup_records_in_dir;
 use crate::server_response::{
     cors_origin, csv_response, error_json, json_response, safe_body, security_headers,
     text_response,
@@ -166,7 +159,6 @@ use sha2::Digest;
 pub use crate::server_routing::{ApiRouteAccess, classify_api_route_access};
 
 const FAILED_AUTH_TRACKER_STORAGE_KEY: &str = "server.failed_auth_tracker";
-
 
 // ── Rate Limiter ────────────────────────────────────────────
 
@@ -696,7 +688,6 @@ pub(crate) struct AppState {
     // Phase 46: extensible key-value store for webhooks etc.
     extra: HashMap<String, serde_json::Value>,
 }
-
 
 fn build_search_index_from_events(
     events: &[crate::event_forward::StoredEvent],
@@ -2475,7 +2466,6 @@ fn build_report_run_preview(
     }
 }
 
-
 /// Scan text for common PII patterns (email, IPv4, SSN, credit card).
 /// Returns a list of category names found.
 fn scan_pii(text: &str) -> Vec<String> {
@@ -2965,6 +2955,32 @@ impl AuthIdentity {
             AuthIdentity::SessionToken { groups, .. } => groups,
             _ => &[],
         }
+    }
+
+    fn tenant_id(&self) -> Option<&str> {
+        self.user()
+            .and_then(|user| user.tenant_id.as_deref())
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+    }
+}
+
+fn tenant_filter_for_request(
+    auth: &AuthIdentity,
+    requested_tenant: Option<&str>,
+) -> Result<Option<String>, Response<Body>> {
+    let requested = requested_tenant
+        .map(str::trim)
+        .filter(|value| !value.is_empty());
+    let Some(bound_tenant) = auth.tenant_id() else {
+        return Ok(requested.map(str::to_string));
+    };
+    match requested {
+        Some(tenant) if tenant != bound_tenant => Err(error_json(
+            "forbidden: requested tenant_id is outside the active identity scope",
+            403,
+        )),
+        _ => Ok(Some(bound_tenant.to_string())),
     }
 }
 
@@ -5029,7 +5045,10 @@ pub(crate) fn normalize_rollout_group(value: Option<&str>) -> String {
     }
 }
 
-pub(crate) fn deployment_requires_action(deployment: &AgentDeployment, current_version: &str) -> bool {
+pub(crate) fn deployment_requires_action(
+    deployment: &AgentDeployment,
+    current_version: &str,
+) -> bool {
     match compare_versions(&deployment.version, current_version) {
         std::cmp::Ordering::Greater => true,
         std::cmp::Ordering::Less => deployment.allow_downgrade,
@@ -5078,7 +5097,10 @@ fn age_secs_since(timestamp: &str) -> Option<u64> {
     Some(seconds.max(0) as u64)
 }
 
-pub(crate) fn computed_agent_status(agent: &AgentIdentity, heartbeat_interval: u64) -> (String, Option<u64>) {
+pub(crate) fn computed_agent_status(
+    agent: &AgentIdentity,
+    heartbeat_interval: u64,
+) -> (String, Option<u64>) {
     if matches!(agent.status, crate::enrollment::AgentStatus::Deregistered) {
         return ("deregistered".to_string(), age_secs_since(&agent.last_seen));
     }
@@ -9277,7 +9299,11 @@ where
         .unwrap_or_default()
 }
 
-pub(crate) fn save_stored_json<T>(storage: &SharedStorage, key: &str, value: &T) -> Result<(), String>
+pub(crate) fn save_stored_json<T>(
+    storage: &SharedStorage,
+    key: &str,
+    value: &T,
+) -> Result<(), String>
 where
     T: serde::Serialize,
 {
@@ -15747,7 +15773,13 @@ fn first_run_operator_proof(state: &Arc<Mutex<AppState>>, auth: &AuthIdentity) -
         ("workspace_saas", 5_u64, None),
     ];
     for (provider, event_count, error) in demo_collectors {
-        let _ = crate::server_collectors::record_collector_checkpoint(&s.storage, provider, true, event_count, error);
+        let _ = crate::server_collectors::record_collector_checkpoint(
+            &s.storage,
+            provider,
+            true,
+            event_count,
+            error,
+        );
     }
     let demo_surface_evidence = serde_json::json!({
         "cloud": {"provider": "aws_cloudtrail", "events": 18, "pivot": "/settings?tab=integrations"},
@@ -16769,7 +16801,9 @@ fn handle_api(
                 Err(e) => error_json(&format!("serialization error: {e}"), 500),
             }
         }
-        (Method::Post, "/api/fleet/register") => crate::server_fleet::handle_fleet_register(body, state),
+        (Method::Post, "/api/fleet/register") => {
+            crate::server_fleet::handle_fleet_register(body, state)
+        }
 
         // ── Enforcement ───────────────────────────────────────────
         (Method::Get, "/api/enforcement/status") => {
@@ -16801,7 +16835,9 @@ fn handle_api(
             });
             json_response(&info.to_string(), 200)
         }
-        (Method::Post, "/api/enforcement/quarantine") => handle_enforcement_quarantine(body, state),
+        (Method::Post, "/api/enforcement/quarantine") => {
+            handle_enforcement_quarantine(body, state, &auth_identity, remote_addr)
+        }
 
         // ── Threat Intelligence ───────────────────────────────────
         (Method::Get, "/api/threat-intel/status") => {
@@ -18682,9 +18718,15 @@ fn handle_api(
         }
 
         // ── XDR Agent Management ──────────────────────────────────
-        (Method::Post, "/api/agents/enroll") => crate::server_agents::handle_agent_enroll(body, state),
-        (Method::Post, "/api/agents/token") => crate::server_agents::handle_agent_create_token(body, state),
-        (Method::Get, "/api/fleet/installs") => crate::server_fleet::handle_fleet_install_history(state),
+        (Method::Post, "/api/agents/enroll") => {
+            crate::server_agents::handle_agent_enroll(body, state)
+        }
+        (Method::Post, "/api/agents/token") => {
+            crate::server_agents::handle_agent_create_token(body, state)
+        }
+        (Method::Get, "/api/fleet/installs") => {
+            crate::server_fleet::handle_fleet_install_history(state)
+        }
         (Method::Post, "/api/fleet/install/ssh") => {
             crate::server_fleet::handle_fleet_install_ssh(body, state, &auth_identity)
         }
@@ -18815,11 +18857,15 @@ fn handle_api(
         (Method::Post, "/api/updates/publish") => {
             crate::server_fleet::handle_update_publish(body, state, &auth_identity)
         }
-        (Method::Post, "/api/updates/deploy") => crate::server_fleet::handle_update_deploy(body, state, &auth_identity),
+        (Method::Post, "/api/updates/deploy") => {
+            crate::server_fleet::handle_update_deploy(body, state, &auth_identity)
+        }
         (Method::Post, "/api/updates/rollback") => {
             crate::server_fleet::handle_update_rollback(body, state, &auth_identity)
         }
-        (Method::Post, "/api/updates/cancel") => crate::server_fleet::handle_update_cancel(body, state, &auth_identity),
+        (Method::Post, "/api/updates/cancel") => {
+            crate::server_fleet::handle_update_cancel(body, state, &auth_identity)
+        }
         (Method::Post, "/api/events/bulk-triage") => handle_bulk_triage(body, state),
 
         // ── Detection Analysis ─────────────────────────────────
@@ -19557,7 +19603,8 @@ fn handle_api(
             s.agent_registry.refresh_staleness();
             let analytics = s.event_store.analytics();
             let api_analytics = s.api_analytics.summary();
-            let connector_status_entries = crate::server_collectors::full_collector_status_entries(&s);
+            let connector_status_entries =
+                crate::server_collectors::full_collector_status_entries(&s);
             let overview = build_workbench_overview(
                 &s.alert_queue,
                 &s.case_store,
@@ -24171,8 +24218,15 @@ fn handle_api(
             // ── Phase 4B: Historical / durable storage endpoints ───
             } else if method == Method::Get && url_path == "/api/storage/alerts" {
                 let query = parse_query_string(&url);
+                let tenant_id = match tenant_filter_for_request(
+                    &auth_identity,
+                    query.get("tenant_id").map(String::as_str),
+                ) {
+                    Ok(tenant_id) => tenant_id,
+                    Err(response) => return response,
+                };
                 let filter = crate::storage::QueryFilter {
-                    tenant_id: query.get("tenant_id").cloned(),
+                    tenant_id,
                     level: query.get("level").cloned(),
                     device_id: query.get("device_id").cloned(),
                     since: query.get("since").cloned(),
@@ -24190,8 +24244,15 @@ fn handle_api(
                 }
             } else if method == Method::Get && url_path == "/api/storage/cases" {
                 let query = parse_query_string(&url);
+                let tenant_id = match tenant_filter_for_request(
+                    &auth_identity,
+                    query.get("tenant_id").map(String::as_str),
+                ) {
+                    Ok(tenant_id) => tenant_id,
+                    Err(response) => return response,
+                };
                 let filter = crate::storage::QueryFilter {
-                    tenant_id: query.get("tenant_id").cloned(),
+                    tenant_id,
                     status: query.get("status").cloned(),
                     limit: query.get("limit").and_then(|v| v.parse().ok()),
                     ..Default::default()
@@ -24289,10 +24350,13 @@ fn handle_api(
                     }
                 };
                 let filter = crate::storage_clickhouse::EventFilter {
-                    tenant_id: query
-                        .get("tenant_id")
-                        .cloned()
-                        .filter(|value| !value.trim().is_empty()),
+                    tenant_id: match tenant_filter_for_request(
+                        &auth_identity,
+                        query.get("tenant_id").map(String::as_str),
+                    ) {
+                        Ok(tenant_id) => tenant_id,
+                        Err(response) => return response,
+                    },
                     from,
                     to,
                     severity_min: query
@@ -24396,9 +24460,18 @@ fn handle_api(
                 json_response(&body.to_string(), 200)
             } else if method == Method::Get && url_path == "/api/storage/agents" {
                 let query = parse_query_string(&url);
-                let tenant = query.get("tenant_id").map(|s| s.as_str());
+                let tenant = match tenant_filter_for_request(
+                    &auth_identity,
+                    query.get("tenant_id").map(String::as_str),
+                ) {
+                    Ok(tenant_id) => tenant_id,
+                    Err(response) => return response,
+                };
                 let s = state.lock().unwrap_or_else(|e| e.into_inner());
-                match s.storage.with(|store| Ok(store.list_agents(tenant))) {
+                match s
+                    .storage
+                    .with(|store| Ok(store.list_agents(tenant.as_deref())))
+                {
                     Ok(agents) => {
                         json_response(&serde_json::to_string(&agents).unwrap_or_default(), 200)
                     }
@@ -25206,7 +25279,8 @@ fn handle_api(
                 .and_then(|tail| tail.split('/').next())
                 .filter(|slug| matches!(*slug, "github" | "crowdstrike" | "syslog"))
             {
-                let Some(provider) = crate::server_collectors::planned_collector_provider(slug) else {
+                let Some(provider) = crate::server_collectors::planned_collector_provider(slug)
+                else {
                     return error_json("unknown planned collector", 404);
                 };
                 let expected_base = format!("/api/collectors/{slug}");
@@ -25214,7 +25288,9 @@ fn handle_api(
                 let expected_validate = format!("/api/collectors/{slug}/validate");
                 if method == Method::Get && url_path == expected_base {
                     let s = state.lock().unwrap_or_else(|e| e.into_inner());
-                    let payload = crate::server_collectors::planned_collector_config_payload(&s.storage, provider);
+                    let payload = crate::server_collectors::planned_collector_config_payload(
+                        &s.storage, provider,
+                    );
                     json_response(&payload.to_string(), 200)
                 } else if method == Method::Post && url_path == expected_config {
                     match read_json_value(body, 32 * 1024) {
@@ -25225,13 +25301,18 @@ fn handle_api(
                                     .entry("enabled".to_string())
                                     .or_insert(serde_json::json!(true));
                             }
-                            let Some(key) = crate::server_collectors::planned_collector_key(provider) else {
+                            let Some(key) =
+                                crate::server_collectors::planned_collector_key(provider)
+                            else {
                                 return error_json("unknown planned collector", 404);
                             };
                             let s = state.lock().unwrap_or_else(|e| e.into_inner());
                             match save_stored_json(&s.storage, key, &setup) {
                                 Ok(()) => {
-                                    let validation = crate::server_collectors::planned_collector_validation(provider, &setup);
+                                    let validation =
+                                        crate::server_collectors::planned_collector_validation(
+                                            provider, &setup,
+                                        );
                                     let payload = serde_json::json!({
                                         "status": "saved",
                                         "provider": provider,
@@ -25247,8 +25328,11 @@ fn handle_api(
                     }
                 } else if method == Method::Post && url_path == expected_validate {
                     let s = state.lock().unwrap_or_else(|e| e.into_inner());
-                    let setup = crate::server_collectors::load_planned_collector_setup(&s.storage, provider);
-                    let validation = crate::server_collectors::planned_collector_validation(provider, &setup);
+                    let setup = crate::server_collectors::load_planned_collector_setup(
+                        &s.storage, provider,
+                    );
+                    let validation =
+                        crate::server_collectors::planned_collector_validation(provider, &setup);
                     let sample_events = if validation.status == "ready" {
                         crate::server_collectors::planned_collector_sample_events(provider, &setup)
                     } else {
@@ -25263,7 +25347,9 @@ fn handle_api(
                         "validation": validation,
                         "error": if validation.status == "ready" { serde_json::Value::Null } else { serde_json::json!("Collector configuration is incomplete.") },
                     });
-                    crate::server_collectors::collector_validation_response(&s.storage, provider, body)
+                    crate::server_collectors::collector_validation_response(
+                        &s.storage, provider, body,
+                    )
                 } else {
                     error_json("planned collector route not found", 404)
                 }
@@ -26488,11 +26574,15 @@ fn handle_api(
                 let body = serde_json::to_string(&s.quarantine_store.list()).unwrap_or_default();
                 json_response(&body, 200)
             } else if method == Method::Post && url_path == "/api/quarantine" {
-                match read_body_limited(body, 65536) {
+                match read_body_limited(body, 10 * 1024 * 1024) {
                     Ok(body_str) => {
                         #[derive(serde::Deserialize)]
                         struct QuarantineReq {
                             path: String,
+                            #[serde(default)]
+                            content_base64: Option<String>,
+                            #[serde(default)]
+                            sha256: Option<String>,
                             agent_id: Option<String>,
                             hostname: Option<String>,
                             verdict: Option<String>,
@@ -26500,9 +26590,40 @@ fn handle_api(
                         }
                         match serde_json::from_str::<QuarantineReq>(&body_str) {
                             Ok(req) => {
-                                let file_data = std::fs::read(&req.path).unwrap_or_default();
+                                let Some(content_base64) = req.content_base64 else {
+                                    return error_json(
+                                        "quarantine capture must include agent-uploaded content_base64; server-side path reads are disabled",
+                                        400,
+                                    );
+                                };
+                                let file_data = match base64::Engine::decode(
+                                    &base64::engine::general_purpose::STANDARD,
+                                    &content_base64,
+                                ) {
+                                    Ok(data) => data,
+                                    Err(error) => {
+                                        return error_json(
+                                            &format!("invalid content_base64: {error}"),
+                                            400,
+                                        );
+                                    }
+                                };
                                 if file_data.is_empty() {
-                                    return error_json("cannot read file or file is empty", 400);
+                                    return error_json("quarantine content is empty", 400);
+                                }
+                                if let Some(expected_sha256) = req
+                                    .sha256
+                                    .as_deref()
+                                    .map(str::trim)
+                                    .filter(|v| !v.is_empty())
+                                {
+                                    let observed_sha256 = crate::audit::sha256_hex(&file_data);
+                                    if !observed_sha256.eq_ignore_ascii_case(expected_sha256) {
+                                        return error_json(
+                                            "quarantine content sha256 does not match request metadata",
+                                            400,
+                                        );
+                                    }
                                 }
                                 let mut s = state.lock().unwrap_or_else(|e| e.into_inner());
                                 let record = s.quarantine_store.quarantine(
@@ -26513,6 +26634,13 @@ fn handle_api(
                                     vec![],
                                     req.agent_id.map(|s| s.to_string()),
                                     req.hostname.map(|s| s.to_string()),
+                                );
+                                s.audit_log.record(
+                                    "POST",
+                                    &format!("/api/quarantine actor={}", auth_identity.actor()),
+                                    remote_addr,
+                                    201,
+                                    true,
                                 );
                                 json_response(&format!(r#"{{"id":"{}"}}"#, record.id), 201)
                             }
@@ -26530,9 +26658,16 @@ fn handle_api(
                 && url_path.ends_with("/release")
             {
                 let qid = &url_path["/api/quarantine/".len()..url_path.len() - "/release".len()];
-                let analyst = "api_user";
+                let analyst = auth_identity.actor();
                 let mut s = state.lock().unwrap_or_else(|e| e.into_inner());
                 if s.quarantine_store.release(qid, analyst) {
+                    s.audit_log.record(
+                        "POST",
+                        &format!("/api/quarantine/{qid}/release actor={analyst}"),
+                        remote_addr,
+                        200,
+                        true,
+                    );
                     json_response(r#"{"released":true}"#, 200)
                 } else {
                     error_json("quarantine entry not found", 404)
@@ -26541,6 +26676,13 @@ fn handle_api(
                 let qid = &url_path["/api/quarantine/".len()..];
                 let mut s = state.lock().unwrap_or_else(|e| e.into_inner());
                 if s.quarantine_store.delete(qid) {
+                    s.audit_log.record(
+                        "DELETE",
+                        &format!("/api/quarantine/{qid} actor={}", auth_identity.actor()),
+                        remote_addr,
+                        204,
+                        true,
+                    );
                     json_response(r#"{"deleted":true}"#, 204)
                 } else {
                     error_json("quarantine entry not found", 404)
@@ -27918,7 +28060,12 @@ fn handle_mode(body: &[u8], state: &Arc<Mutex<AppState>>) -> Response<Body> {
     json_response(&body.to_string(), 200)
 }
 
-fn handle_enforcement_quarantine(body: &[u8], state: &Arc<Mutex<AppState>>) -> Response<Body> {
+fn handle_enforcement_quarantine(
+    body: &[u8],
+    state: &Arc<Mutex<AppState>>,
+    auth_identity: &AuthIdentity,
+    remote_addr: &str,
+) -> Response<Body> {
     let body = match read_body_limited(body, 10 * 1024 * 1024) {
         Ok(b) => b,
         Err(e) => return error_json(&e, 400),
@@ -27936,13 +28083,29 @@ fn handle_enforcement_quarantine(body: &[u8], state: &Arc<Mutex<AppState>>) -> R
         &crate::enforcement::EnforcementLevel::Quarantine,
         &req.target,
     );
+    let success = results.iter().all(|result| result.success);
+    s.audit_log.record(
+        "POST",
+        &format!(
+            "/api/enforcement/quarantine target={} actor={}",
+            req.target,
+            auth_identity.actor()
+        ),
+        remote_addr,
+        if success { 200 } else { 207 },
+        true,
+    );
     let info = serde_json::json!({
         "target": req.target,
+        "actor": auth_identity.actor(),
+        "approval_state": "rbac_authorized",
         "actions": results.len(),
+        "success": success,
         "results": results.iter().map(|r| serde_json::json!({
             "action": r.action,
             "success": r.success,
             "detail": r.detail,
+            "rollback_command": r.rollback_command,
         })).collect::<Vec<_>>(),
     });
     json_response(&info.to_string(), 200)
@@ -29491,7 +29654,13 @@ mod tests {
             serde_json::json!({ "lag_seconds": 60 }),
             serde_json::json!({ "lag_seconds": 120 }),
         ];
-        let breached = crate::server_collectors::collector_ingestion_sla_payload(true, 30, Some(400), 2, &lifecycle);
+        let breached = crate::server_collectors::collector_ingestion_sla_payload(
+            true,
+            30,
+            Some(400),
+            2,
+            &lifecycle,
+        );
 
         assert_eq!(breached["status"], serde_json::json!("breach"));
         assert_eq!(breached["target_lag_seconds"], serde_json::json!(300));
@@ -29509,8 +29678,10 @@ mod tests {
             serde_json::json!(400)
         );
 
-        let healthy = crate::server_collectors::collector_ingestion_sla_payload(true, 600, Some(10), 0, &[]);
-        let disabled = crate::server_collectors::collector_ingestion_sla_payload(false, 600, None, 0, &[]);
+        let healthy =
+            crate::server_collectors::collector_ingestion_sla_payload(true, 600, Some(10), 0, &[]);
+        let disabled =
+            crate::server_collectors::collector_ingestion_sla_payload(false, 600, None, 0, &[]);
         let summary = crate::server_collectors::collector_sla_summary(&[
             serde_json::json!({
                 "enabled": true,
@@ -30564,7 +30735,8 @@ mod tests {
         };
 
         let body = serde_json::json!({ "version": "2.0.0" }).to_string();
-        let response = crate::server_agents::handle_agent_heartbeat(body.as_bytes(), &state, &canary_id);
+        let response =
+            crate::server_agents::handle_agent_heartbeat(body.as_bytes(), &state, &canary_id);
         assert_eq!(response.status(), StatusCode::OK);
 
         let state = state.lock().unwrap_or_else(|e| e.into_inner());
@@ -30622,7 +30794,8 @@ mod tests {
         };
 
         let body = serde_json::json!({ "version": "2.0.0" }).to_string();
-        let response = crate::server_agents::handle_agent_heartbeat(body.as_bytes(), &state, &canary_id);
+        let response =
+            crate::server_agents::handle_agent_heartbeat(body.as_bytes(), &state, &canary_id);
         assert_eq!(response.status(), StatusCode::OK);
 
         let state = state.lock().unwrap_or_else(|e| e.into_inner());
@@ -32908,6 +33081,37 @@ mod tests {
     }
 
     #[test]
+    fn tenant_filter_for_bound_identity_overrides_missing_query() {
+        let auth = AuthIdentity::UserToken(User {
+            username: "tenant-user".into(),
+            role: Role::Analyst,
+            token_hash: "rbac-token".into(),
+            enabled: true,
+            created_at: "now".into(),
+            tenant_id: Some("tenant-a".into()),
+        });
+
+        assert_eq!(
+            tenant_filter_for_request(&auth, None).unwrap(),
+            Some("tenant-a".into())
+        );
+        assert_eq!(
+            tenant_filter_for_request(&auth, Some("tenant-a")).unwrap(),
+            Some("tenant-a".into())
+        );
+        assert!(tenant_filter_for_request(&auth, Some("tenant-b")).is_err());
+    }
+
+    #[test]
+    fn tenant_filter_for_unbound_identity_preserves_query() {
+        let auth = AuthIdentity::AdminToken;
+        assert_eq!(
+            tenant_filter_for_request(&auth, Some("tenant-b")).unwrap(),
+            Some("tenant-b".into())
+        );
+    }
+
+    #[test]
     fn error_json_includes_structured_code() {
         let resp = error_json("not found", 404);
         assert_eq!(resp.status(), 404);
@@ -33035,7 +33239,9 @@ mod tests {
         );
 
         assert_eq!(
-            headers.get("Deprecation").and_then(|value| value.to_str().ok()),
+            headers
+                .get("Deprecation")
+                .and_then(|value| value.to_str().ok()),
             Some("true")
         );
         assert_eq!(
@@ -33081,12 +33287,19 @@ mod tests {
         ));
         let storage = SharedStorage::open(dir.to_str().unwrap()).expect("shared storage");
 
-        let success = crate::server_collectors::record_collector_checkpoint(&storage, "aws_cloudtrail", true, 9, None);
+        let success = crate::server_collectors::record_collector_checkpoint(
+            &storage,
+            "aws_cloudtrail",
+            true,
+            9,
+            None,
+        );
         assert_eq!(success.events_ingested, 9);
         assert!(success.last_success_at.is_some());
         assert!(success.checkpoint_id.is_some());
 
-        let reloaded = crate::server_collectors::load_collector_checkpoint(&storage, "aws_cloudtrail");
+        let reloaded =
+            crate::server_collectors::load_collector_checkpoint(&storage, "aws_cloudtrail");
         assert_eq!(reloaded.events_ingested, 9);
         assert_eq!(reloaded.retry_count, 0);
 

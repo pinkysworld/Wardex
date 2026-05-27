@@ -196,7 +196,10 @@ pub(crate) fn handle_agent_enroll(body: &[u8], state: &Arc<Mutex<AppState>>) -> 
     }
 }
 
-pub(crate) fn handle_agent_create_token(body: &[u8], state: &Arc<Mutex<AppState>>) -> Response<Body> {
+pub(crate) fn handle_agent_create_token(
+    body: &[u8],
+    state: &Arc<Mutex<AppState>>,
+) -> Response<Body> {
     let body = match read_body_limited(body, 10 * 1024 * 1024) {
         Ok(b) => b,
         Err(e) => return error_json(&e, 400),
@@ -205,25 +208,31 @@ pub(crate) fn handle_agent_create_token(body: &[u8], state: &Arc<Mutex<AppState>
     struct TokenReq {
         #[serde(default = "default_max_uses")]
         max_uses: u32,
-        /// Optional TTL in seconds. If set, the token expires after this duration.
-        #[serde(default)]
+        /// Optional TTL in seconds. Defaults to one hour so enrollment tokens
+        /// are short lived unless an operator deliberately extends them.
+        #[serde(default = "default_ttl_secs")]
         ttl_secs: Option<u64>,
     }
     fn default_max_uses() -> u32 {
-        10
+        1
+    }
+    fn default_ttl_secs() -> Option<u64> {
+        Some(3600)
     }
     let req: TokenReq = match serde_json::from_str(&body) {
         Ok(r) => r,
         Err(_) => TokenReq {
-            max_uses: 10,
-            ttl_secs: None,
+            max_uses: default_max_uses(),
+            ttl_secs: default_ttl_secs(),
         },
     };
     let mut s = state.lock().unwrap_or_else(|e| e.into_inner());
+    let max_uses = req.max_uses.max(1);
     let token = if let Some(ttl) = req.ttl_secs {
-        s.agent_registry.create_token_with_ttl(req.max_uses, ttl)
+        s.agent_registry
+            .create_token_with_ttl(max_uses, ttl.max(60))
     } else {
-        s.agent_registry.create_token(req.max_uses)
+        s.agent_registry.create_token(max_uses)
     };
     match serde_json::to_string(&token) {
         Ok(json) => json_response(&json, 200),
@@ -578,7 +587,10 @@ pub(crate) fn handle_agent_set_scope(
     }
 }
 
-pub(crate) fn handle_agent_get_scope(state: &Arc<Mutex<AppState>>, agent_id: &str) -> Response<Body> {
+pub(crate) fn handle_agent_get_scope(
+    state: &Arc<Mutex<AppState>>,
+    agent_id: &str,
+) -> Response<Body> {
     let s = state.lock().unwrap_or_else(|e| e.into_inner());
     match s.agent_registry.get(agent_id) {
         Some(agent) => {
@@ -597,4 +609,3 @@ pub(crate) fn handle_agent_get_scope(state: &Arc<Mutex<AppState>>, agent_id: &st
         None => error_json("agent not found", 404),
     }
 }
-

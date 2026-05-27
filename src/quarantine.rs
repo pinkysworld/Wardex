@@ -1,8 +1,11 @@
 //! Malware quarantine workflow.
 //!
-//! Captures, isolates, and stores suspected malicious files for
-//! analyst retrieval and forensic analysis. Files are encrypted
-//! at rest to prevent accidental execution.
+//! Captures and stores suspected malicious files for analyst retrieval and
+//! forensic analysis. Stored content is XOR-obfuscated (not encrypted) so the
+//! raw bytes are not directly executable/extractable from the store; this is a
+//! safety measure against accidental execution, not a cryptographic guarantee.
+//! Removing the file from the endpoint is performed separately by the
+//! filesystem enforcement engine (`enforcement::FilesystemEnforcer`).
 
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
