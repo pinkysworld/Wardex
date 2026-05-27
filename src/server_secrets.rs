@@ -14,10 +14,10 @@ use axum::response::Response;
 use crate::integration_setup::SecretsManagerSetupPatch;
 use crate::server::{
     AppState, SECRETS_MANAGER_SETUP_KEY, build_secrets_rotation_operations,
-    load_secrets_manager_setup, masked_secret_preview, payload_with_snapshot,
-    persist_operational_snapshot, read_json_body, read_json_value, save_stored_json,
-    secret_reference_kind,
+    load_secrets_manager_setup, masked_secret_preview, read_json_body, read_json_value,
+    save_stored_json, secret_reference_kind,
 };
+use crate::server_evidence::{payload_with_snapshot, persist_operational_snapshot};
 use crate::server_response::{error_json, json_response};
 
 /// `GET /api/secrets/rotation-operations` — rotation-operations dashboard with
