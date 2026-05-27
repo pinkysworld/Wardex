@@ -20,10 +20,18 @@ fn main() {
 
     match admin_build_skip_reason(&admin_dir) {
         Some(reason) => {
-            ensure_placeholder_admin_dist(&dist_index);
-            println!(
-                "cargo:warning=embedded admin console build skipped: {reason}; using placeholder dist/index.html"
-            );
+            if env_flag("WARDEX_SKIP_ADMIN_BUILD") {
+                ensure_placeholder_admin_dist(&dist_index);
+                println!(
+                    "cargo:warning=embedded admin console build skipped by WARDEX_SKIP_ADMIN_BUILD: {reason}; using placeholder dist/index.html"
+                );
+            } else {
+                panic!(
+                    "embedded admin console cannot be built: {reason}. \
+                     Install Node.js and run `npm ci --prefix admin-console`, \
+                     or set WARDEX_SKIP_ADMIN_BUILD=1 to ship a placeholder UI."
+                );
+            }
         }
         None => run_admin_build(&admin_dir),
     }
@@ -90,19 +98,47 @@ fn admin_build_skip_reason(admin_dir: &Path) -> Option<String> {
     if env_flag("WARDEX_SKIP_ADMIN_BUILD") {
         return Some("WARDEX_SKIP_ADMIN_BUILD is set".to_string());
     }
-    if !admin_dir.join("node_modules").is_dir() {
-        return Some("admin-console/node_modules is missing in this checkout".to_string());
-    }
     let npm = npm_command();
     match Command::new(&npm).arg("--version").status() {
-        Ok(status) if status.success() => None,
-        Ok(status) => Some(format!(
-            "{} --version exited with status {}",
-            npm.to_string_lossy(),
-            status
-        )),
-        Err(err) => Some(format!("{} is unavailable: {err}", npm.to_string_lossy())),
+        Ok(status) if status.success() => {}
+        Ok(status) => {
+            return Some(format!(
+                "{} --version exited with status {}",
+                npm.to_string_lossy(),
+                status
+            ));
+        }
+        Err(err) => {
+            return Some(format!("{} is unavailable: {err}", npm.to_string_lossy()));
+        }
     }
+    if !admin_dir.join("node_modules").is_dir() {
+        if !admin_dir.join("package-lock.json").is_file() {
+            return Some(
+                "admin-console/node_modules and admin-console/package-lock.json are both missing"
+                    .to_string(),
+            );
+        }
+        println!(
+            "cargo:warning=admin-console/node_modules missing; running `npm ci` to install dependencies"
+        );
+        let status = Command::new(&npm)
+            .arg("ci")
+            .current_dir(admin_dir)
+            .status();
+        match status {
+            Ok(s) if s.success() => {}
+            Ok(s) => {
+                return Some(format!(
+                    "`npm ci` for admin console exited with status {s}"
+                ));
+            }
+            Err(err) => {
+                return Some(format!("failed to run `npm ci` for admin console: {err}"));
+            }
+        }
+    }
+    None
 }
 
 fn ensure_placeholder_admin_dist(dist_index: &Path) {
