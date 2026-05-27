@@ -24,9 +24,16 @@ export default defineConfig({
     reportCompressedSize: true,
     rollupOptions: {
       output: {
-        manualChunks: {
-          vendor: ['react', 'react-dom', 'react-router-dom'],
-          charts: ['recharts'],
+        manualChunks(id) {
+          if (id.includes('node_modules')) {
+            if (/[\\/]node_modules[\\/](react|react-dom|react-router|react-router-dom|scheduler)[\\/]/.test(id)) {
+              return 'vendor';
+            }
+            if (/[\\/]node_modules[\\/](recharts|d3-[^/\\]+|victory-vendor)[\\/]/.test(id)) {
+              return 'charts';
+            }
+          }
+          return undefined;
         },
       },
     },

@@ -39,7 +39,7 @@
     "@testing-library/user-event": "^14.6.1",
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
-    "@vitejs/plugin-react": "^4.4.1",
+    "@vitejs/plugin-react": "^6.0.2",
     "@vitest/coverage-v8": "^4.1.5",
     "@wardex/sdk": "file:../sdk/typescript",
     "axe-core": "^4.11.3",
@@ -55,7 +55,7 @@
     "playwright": "^1.59.1",
     "prettier": "^3.8.1",
     "typescript": "^6.0.2",
-    "vite": "^6.3.5",
+    "vite": "^8.0.14",
     "vitest": "^4.1.3"
   }
 }
