@@ -4,6 +4,11 @@ All notable changes to Wardex are documented in this file.
 
 ## [Unreleased]
 
+### Changed
+- **`server_control_plane` module extracted**: the backup-record scanning helpers, `BackupStatusSnapshot`, `ControlPlaneClusterSnapshot`/`ReplicaSnapshot`, `ControlPlanePostureSnapshot` + its `gather`/`ha_mode_payload` impl, the `control_plane_*` and `failover_drill_*` free functions, and the inherent impl block on `crate::support::FailoverDrillRecord` (`not_run` / `evaluate`) now live in `src/server_control_plane.rs` (~450 lines). `AppState` widens `pub(crate)` visibility for the three fields the new module reads (`checkpoints`, `last_failover_drill`, `support_store`).
+- **`server_alerts` module extracted**: the `AlertProcessPivot` data shape and the alert↔process pivot helpers (`normalized_process_token`, `host_matches_local`, `extract_alert_process_names`, `alert_process_matches_name`, `resolve_alert_process_pivots`, the platform-conditional `live_alert_process_catalog`, `remote_alert_process_catalog`, `assemble_alert_process_catalog`, `alert_process_resolution`) now live in `src/server_alerts.rs` (~260 lines). No behaviour changes; the same 1799 lib + integration tests still pass.
+- **`server.rs` decomposition progress**: monolith size now ~33,670 lines, down from 34,330 at the start of this round (−660). Extracted submodule count is 14 (`server_agents`, `server_alerts`, `server_auth`, `server_cluster`, `server_collectors`, `server_control_plane`, `server_feeds`, `server_fleet`, `server_metrics`, `server_ml`, `server_response`, `server_routing`, `server_secrets`, `server_static`).
+
 ## [1.0.26] — 2026-05-22 — Product hardening and release proof
 
 ### Security
