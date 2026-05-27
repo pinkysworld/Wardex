@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1779879551736,
+  "lastUpdate": 1779888355865,
   "repoUrl": "https://github.com/pinkysworld/Wardex",
   "entries": {
     "Wardex criterion benches": [
@@ -13801,6 +13801,114 @@ window.BENCHMARK_DATA = {
             "name": "sigma_evaluate_20_rules",
             "value": 40373,
             "range": "± 198",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "85413447+pinkysworld@users.noreply.github.com",
+            "name": "pinkysworld",
+            "username": "pinkysworld"
+          },
+          "committer": {
+            "email": "85413447+pinkysworld@users.noreply.github.com",
+            "name": "pinkysworld",
+            "username": "pinkysworld"
+          },
+          "distinct": false,
+          "id": "273b668fb1bf17d75893835090d27bc7376cbf10",
+          "message": "refactor(server): extract control-plane and failover-drill helpers\n\nMove the backup-record scanning helpers, BackupStatusSnapshot,\nControlPlaneClusterSnapshot/ReplicaSnapshot, ControlPlanePostureSnapshot\nplus its gather/ha_mode_payload impl, the control_plane_* and\nfailover_drill_* free functions, and the inherent impl block on\ncrate::support::FailoverDrillRecord (not_run / evaluate) out of\nserver.rs into a new server_control_plane module.\n\nThis is part of the incremental decomposition of the 34k-line server.rs\nmonolith — the new file is 453 lines, server.rs drops from 34330 to\n33901. AppState gains pub(crate) on the three fields the extracted\nmodule needs (checkpoints, last_failover_drill, support_store).\nNo behaviour changes; all 1556 lib tests + 239 api-integration tests\nstill pass.",
+          "timestamp": "2026-05-27T12:58:59+02:00",
+          "tree_id": "652483357711d82812e84d7f4f28ad0e9d645175",
+          "url": "https://github.com/pinkysworld/Wardex/commit/273b668fb1bf17d75893835090d27bc7376cbf10"
+        },
+        "date": 1779888355272,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "full_pipeline/5",
+            "value": 51545,
+            "range": "± 210",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "full_pipeline/50",
+            "value": 423648,
+            "range": "± 3997",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "full_pipeline/200",
+            "value": 1947591,
+            "range": "± 10441",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "full_pipeline/1000",
+            "value": 17675485,
+            "range": "± 40779",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "detector_evaluate_single",
+            "value": 692,
+            "range": "± 1",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "detector_window_stream_256",
+            "value": 873570,
+            "range": "± 3581",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "shared_storage_observed_schema_read",
+            "value": 126,
+            "range": "± 0",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "shared_storage_4_threads_64_alerts",
+            "value": 156545,
+            "range": "± 1959",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "policy_evaluate_single",
+            "value": 244,
+            "range": "± 0",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "throughput/1000_samples",
+            "value": 17380191,
+            "range": "± 136098",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "search_500_events",
+            "value": 112495,
+            "range": "± 1285",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "hunt_field_query",
+            "value": 100788,
+            "range": "± 266",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "ml_triage_rf",
+            "value": 54,
+            "range": "± 0",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "sigma_evaluate_20_rules",
+            "value": 35312,
+            "range": "± 378",
             "unit": "ns/iter"
           }
         ]
