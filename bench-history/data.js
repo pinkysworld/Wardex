@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1779888877852,
+  "lastUpdate": 1779890106821,
   "repoUrl": "https://github.com/pinkysworld/Wardex",
   "entries": {
     "Wardex criterion benches": [
@@ -14017,6 +14017,114 @@ window.BENCHMARK_DATA = {
             "name": "sigma_evaluate_20_rules",
             "value": 35465,
             "range": "± 315",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "85413447+pinkysworld@users.noreply.github.com",
+            "name": "pinkysworld",
+            "username": "pinkysworld"
+          },
+          "committer": {
+            "email": "85413447+pinkysworld@users.noreply.github.com",
+            "name": "pinkysworld",
+            "username": "pinkysworld"
+          },
+          "distinct": true,
+          "id": "4b6ecff20c686db681c45deb57fe1a1eee5eefe6",
+          "message": "refactor(server): extract local-AV signature loader into server_av\n\nMove the LOCAL_AV_SIGNATURE_PRESET_DIRS + LOCAL_AV_SIGNATURE_EXTENSIONS\nconstants and the three helpers — local_av_signature_files,\nlocal_av_signature_presets_json, load_local_open_source_av_signatures —\nout of server.rs into a new server_av module (~100 lines).\n\nBehaviour is unchanged: discovery still scans the same fixed preset\ndirectories for .hdb / .hsb / .hashes / .txt files, presets_json still\nreturns the same operator-gated payload, and the loader still imports\nvia MalwareHashDb::load_clamav_hash_signatures behind the per-state\ntracked_lock. No auto-download path is introduced.\n\nserver.rs drops from ~33,670 to ~33,600 lines; total Rust source\nmodules: 157. CHANGELOG.md and docs/STATUS.md updated to reflect the\nnew extraction count (15 server_* submodules) and module count.\n\nAll 1799 tests still pass.",
+          "timestamp": "2026-05-27T15:46:24+02:00",
+          "tree_id": "aef5ce2f90142add15b4e7fcfd26cef2c2388d39",
+          "url": "https://github.com/pinkysworld/Wardex/commit/4b6ecff20c686db681c45deb57fe1a1eee5eefe6"
+        },
+        "date": 1779890106284,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "full_pipeline/5",
+            "value": 48832,
+            "range": "± 195",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "full_pipeline/50",
+            "value": 406348,
+            "range": "± 7474",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "full_pipeline/200",
+            "value": 1897198,
+            "range": "± 14279",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "full_pipeline/1000",
+            "value": 17882141,
+            "range": "± 425948",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "detector_evaluate_single",
+            "value": 662,
+            "range": "± 2",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "detector_window_stream_256",
+            "value": 870395,
+            "range": "± 3117",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "shared_storage_observed_schema_read",
+            "value": 136,
+            "range": "± 0",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "shared_storage_4_threads_64_alerts",
+            "value": 145176,
+            "range": "± 1649",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "policy_evaluate_single",
+            "value": 241,
+            "range": "± 5",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "throughput/1000_samples",
+            "value": 17989513,
+            "range": "± 158677",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "search_500_events",
+            "value": 108172,
+            "range": "± 2089",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "hunt_field_query",
+            "value": 87519,
+            "range": "± 796",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "ml_triage_rf",
+            "value": 50,
+            "range": "± 0",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "sigma_evaluate_20_rules",
+            "value": 35456,
+            "range": "± 194",
             "unit": "ns/iter"
           }
         ]
