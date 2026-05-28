@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1779890766891,
+  "lastUpdate": 1779945474839,
   "repoUrl": "https://github.com/pinkysworld/Wardex",
   "entries": {
     "Wardex criterion benches": [
@@ -14233,6 +14233,112 @@ window.BENCHMARK_DATA = {
             "name": "sigma_evaluate_20_rules",
             "value": 35375,
             "range": "± 803",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "name": "pinkysworld",
+            "username": "pinkysworld",
+            "email": "85413447+pinkysworld@users.noreply.github.com"
+          },
+          "committer": {
+            "name": "pinkysworld",
+            "username": "pinkysworld",
+            "email": "85413447+pinkysworld@users.noreply.github.com"
+          },
+          "id": "afce143611690eb3aa3926238f5c95f16661650a",
+          "message": "refactor(server): extract evidence-freshness and snapshot helpers into server_evidence\n\nMove the entire evidence-freshness and operational-snapshot persistence\ncluster out of server.rs into a new server_evidence module (~470\nlines, 17 helpers):\n\n  * Schema-versioned evidence envelopes (EVIDENCE_FRESHNESS_WINDOW_SECS,\n    evidence_freshness, with_evidence_freshness, payload_evidence_freshness,\n    evidence_freshness_check)\n  * Snapshot persistence (persist_operational_snapshot,\n    list_operational_snapshots, verify_operational_snapshot,\n    snapshot_entry_from_path, safe_snapshot_lookup_path,\n    payload_with_snapshot)\n  * Snapshot policy and prune (build_snapshot_policy_payload,\n    prune_operational_snapshots)\n  * Shared support (operational_snapshot_kind, storage_root_path,\n    short_digest, evidence_request_id, evidence_environment_id)\n\nserver_secrets.rs now imports payload_with_snapshot and\npersist_operational_snapshot from the new module. AppState widens\npub(crate) on config_path and local_host_info (read by\nevidence_environment_id).\n\nserver.rs drops from ~33,600 to ~33,130 lines (−470). Total Rust\nsource modules: 158. CHANGELOG.md and docs/STATUS.md reflect the new\nextraction count (16 server_* submodules).\n\nAll 1799 tests pass (1556 lib + 239 api_integration + 4 misc).",
+          "timestamp": "2026-05-27T13:57:47Z",
+          "url": "https://github.com/pinkysworld/Wardex/commit/afce143611690eb3aa3926238f5c95f16661650a"
+        },
+        "date": 1779945474122,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "full_pipeline/5",
+            "value": 49429,
+            "range": "± 555",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "full_pipeline/50",
+            "value": 407798,
+            "range": "± 1807",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "full_pipeline/200",
+            "value": 1874076,
+            "range": "± 13860",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "full_pipeline/1000",
+            "value": 17230204,
+            "range": "± 124349",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "detector_evaluate_single",
+            "value": 636,
+            "range": "± 1",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "detector_window_stream_256",
+            "value": 872132,
+            "range": "± 8542",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "shared_storage_observed_schema_read",
+            "value": 126,
+            "range": "± 0",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "shared_storage_4_threads_64_alerts",
+            "value": 168489,
+            "range": "± 2798",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "policy_evaluate_single",
+            "value": 242,
+            "range": "± 1",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "throughput/1000_samples",
+            "value": 17294783,
+            "range": "± 383193",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "search_500_events",
+            "value": 112458,
+            "range": "± 460",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "hunt_field_query",
+            "value": 94962,
+            "range": "± 650",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "ml_triage_rf",
+            "value": 55,
+            "range": "± 0",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "sigma_evaluate_20_rules",
+            "value": 35319,
+            "range": "± 205",
             "unit": "ns/iter"
           }
         ]
