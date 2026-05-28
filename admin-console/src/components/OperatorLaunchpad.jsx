@@ -408,7 +408,7 @@ export default function OperatorLaunchpad() {
     try {
       const report = await api.deploymentTrustReport();
       const version = report?.customer_artifact?.version || currentVersion || 'unknown';
-      downloadData(report, `sentineledge-deployment-trust-report-${version}.json`);
+      downloadData(report, `wardex-deployment-trust-report-${version}.json`);
       toast?.('Deployment trust report exported', 'success');
       await reload();
     } catch {

@@ -609,7 +609,7 @@ mod tests {
     fn stored_reports_preserve_execution_context_updates() {
         let path = std::env::temp_dir()
             .join(format!(
-                "sentineledge-report-store-{}.json",
+                "wardex-report-store-{}.json",
                 std::time::SystemTime::now()
                     .duration_since(std::time::UNIX_EPOCH)
                     .expect("system time after unix epoch")
@@ -684,7 +684,7 @@ mod tests {
     fn list_filtered_matches_execution_context_and_unscoped_modes() {
         let path = std::env::temp_dir()
             .join(format!(
-                "sentineledge-report-filter-store-{}.json",
+                "wardex-report-filter-store-{}.json",
                 std::time::SystemTime::now()
                     .duration_since(std::time::UNIX_EPOCH)
                     .expect("system time after unix epoch")

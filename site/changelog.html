@@ -53,6 +53,7 @@
             <h2>Releases</h2>
             <ul>
       <li><a href="#vUnreleased"><span class="chl-ver">vUnreleased</span><span class="chl-nav-title"></span></a></li>
+      <li><a href="#v1.0.27"><span class="chl-ver">v1.0.27</span><span class="chl-nav-title">2026-05-28 — Trust boundaries and release verification stabilization</span></a></li>
       <li><a href="#v1.0.26"><span class="chl-ver">v1.0.26</span><span class="chl-nav-title">2026-05-22 — Product hardening and release proof</span></a></li>
       <li><a href="#v1.0.25"><span class="chl-ver">v1.0.25</span><span class="chl-nav-title">2026-05-22</span></a></li>
       <li><a href="#v1.0.24"><span class="chl-ver">v1.0.24</span><span class="chl-nav-title">2026-05-21</span></a></li>
@@ -174,6 +175,38 @@
         <span class="chl-version-tag">vUnreleased</span>
         <h2>Unreleased</h2>
       </header>
+    </article>
+    <article class="chl-release" id="v1.0.27">
+      <header class="chl-release-header">
+        <span class="chl-version-tag">v1.0.27</span>
+        <h2>2026-05-28 — Trust boundaries and release verification stabilization</h2>
+      </header>
+      <div class="chl-category">
+        <h3>Security</h3>
+        <ul>
+        <li><strong>Trust-boundary hardening</strong>: quarantine now rejects server-side path capture without uploaded content, tenant-bound route reads respect scoped identities, enrollment-token issuance and default TTL handling are stricter, signed-update trust verification stays explicit in test and runtime flows, audit checkpoints keep their signing guarantees, and EDR blocking rules now enforce exact allowlist intent instead of broader matches.</li>
+        </ul>
+      </div>
+      <div class="chl-category">
+        <h3>Added</h3>
+        <ul>
+        <li><strong>Deployment trust report</strong>: <code>/api/release/deployment-trust-report</code> now exports a structured customer artifact that bundles release acceptance, SBOM/provenance, backup and failover freshness, collector health, and smoke posture into one proof object. The Operator Launchpad and fleet/update surfaces now expose that report path in the console.</li>
+        <li><strong>Product identity gate</strong>: <code>scripts/check_product_identity.py</code> is now wired into CI and release workflows so product metadata, docs, and admin-console branding cannot drift silently.</li>
+        </ul>
+      </div>
+      <div class="chl-category">
+        <h3>Changed</h3>
+        <ul>
+        <li><strong>Release acceptance stabilization</strong>: <code>scripts/release_acceptance.sh</code> now treats ID-scoped hardening routes as route-wiring checks instead of unconditional success paths, and the live detection-quality smoke waits long enough for the authenticated connect transition under full release load.</li>
+        <li><strong>Deterministic update-signing tests</strong>: the server test harness seeds a local signing key and trusted signer for remote update flows, making publish/deploy/download verification stable under integration and smoke runs.</li>
+        </ul>
+      </div>
+      <div class="chl-category">
+        <h3>Documentation</h3>
+        <ul>
+        <li>README, status, roadmap, release-acceptance, OpenAPI metadata, Helm, OTLP, SDK package metadata, website version surfaces, and generated changelog pages now point at the <code>v1.0.27</code> release surface.</li>
+        </ul>
+      </div>
     </article>
     <article class="chl-release" id="v1.0.26">
       <header class="chl-release-header">

@@ -1,6 +1,6 @@
 [package]
 name = "wardex"
-version = "1.0.26"
+version = "1.0.27"
 edition = "2024"
 rust-version = "1.88.0"
 build = "build.rs"
@@ -81,7 +81,7 @@ type_complexity = "allow"
 large_enum_variant = "allow"
 
 [package.metadata.product_identity]
-product_name = "SentinelEdge"
+product_name = "Wardex"
 runtime_name = "Wardex"
 admin_console_name = "Wardex Admin Console"
 repository = "pinkysworld/Wardex"

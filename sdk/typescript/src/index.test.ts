@@ -6660,7 +6660,7 @@ describe("WardexClient", () => {
     const body = [
       {
         id: "local-console",
-        hostname: "sentineledge.local",
+        hostname: "wardex.local",
         platform: "aarch64-apple-darwin",
         version: "0.56.0",
         current_version: "0.56.0",

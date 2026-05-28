@@ -11,6 +11,22 @@ All notable changes to Wardex are documented in this file.
 - **`server_evidence` module extracted**: the entire evidence-freshness and operational-snapshot persistence cluster now lives in `src/server_evidence.rs` (~470 lines, 17 helpers): the `EVIDENCE_FRESHNESS_WINDOW_SECS` window, `evidence_freshness` + `with_evidence_freshness` + `payload_evidence_freshness` + `evidence_freshness_check`, the snapshot persistence helpers (`persist_operational_snapshot`, `list_operational_snapshots`, `verify_operational_snapshot`, `snapshot_entry_from_path`, `safe_snapshot_lookup_path`, `payload_with_snapshot`), the policy and prune helpers (`build_snapshot_policy_payload`, `prune_operational_snapshots`), and the shared support helpers (`operational_snapshot_kind`, `storage_root_path`, `short_digest`, `evidence_request_id`, `evidence_environment_id`). `server_secrets` updated to import the snapshot helpers from the new location. `AppState` widens `pub(crate)` on the two fields the new module reads (`config_path`, `local_host_info`).
 - **`server.rs` decomposition progress**: monolith size now ~33,130 lines, down from 34,330 at the start of this round (−1,200). Extracted submodule count is 16 (`server_agents`, `server_alerts`, `server_auth`, `server_av`, `server_cluster`, `server_collectors`, `server_control_plane`, `server_evidence`, `server_feeds`, `server_fleet`, `server_metrics`, `server_ml`, `server_response`, `server_routing`, `server_secrets`, `server_static`).
 
+## [1.0.27] — 2026-05-28 — Trust boundaries and release verification stabilization
+
+### Security
+- **Trust-boundary hardening**: quarantine now rejects server-side path capture without uploaded content, tenant-bound route reads respect scoped identities, enrollment-token issuance and default TTL handling are stricter, signed-update trust verification stays explicit in test and runtime flows, audit checkpoints keep their signing guarantees, and EDR blocking rules now enforce exact allowlist intent instead of broader matches.
+
+### Added
+- **Deployment trust report**: `/api/release/deployment-trust-report` now exports a structured customer artifact that bundles release acceptance, SBOM/provenance, backup and failover freshness, collector health, and smoke posture into one proof object. The Operator Launchpad and fleet/update surfaces now expose that report path in the console.
+- **Product identity gate**: `scripts/check_product_identity.py` is now wired into CI and release workflows so product metadata, docs, and admin-console branding cannot drift silently.
+
+### Changed
+- **Release acceptance stabilization**: `scripts/release_acceptance.sh` now treats ID-scoped hardening routes as route-wiring checks instead of unconditional success paths, and the live detection-quality smoke waits long enough for the authenticated connect transition under full release load.
+- **Deterministic update-signing tests**: the server test harness seeds a local signing key and trusted signer for remote update flows, making publish/deploy/download verification stable under integration and smoke runs.
+
+### Documentation
+- README, status, roadmap, release-acceptance, OpenAPI metadata, Helm, OTLP, SDK package metadata, website version surfaces, and generated changelog pages now point at the `v1.0.27` release surface.
+
 ## [1.0.26] — 2026-05-22 — Product hardening and release proof
 
 ### Security

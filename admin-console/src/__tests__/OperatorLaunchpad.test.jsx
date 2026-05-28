@@ -144,7 +144,7 @@ describe('OperatorLaunchpad', () => {
           fail_count: 0,
           warn_count: 0,
           customer_artifact: {
-            product_name: 'SentinelEdge',
+            product_name: 'Wardex',
             runtime_name: 'Wardex',
             version: '1.0.8',
           },

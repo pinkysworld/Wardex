@@ -14524,16 +14524,16 @@ fn build_deployment_trust_report(state: &AppState) -> serde_json::Value {
     let (fail_count, warn_count, status) = check_counts(&checks);
 
     let payload = serde_json::json!({
-        "schema": "sentineledge.deployment_trust_report.v1",
+        "schema": "wardex.deployment_trust_report.v1",
         "generated_at": chrono::Utc::now().to_rfc3339(),
         "status": status,
         "fail_count": fail_count,
         "warn_count": warn_count,
         "customer_artifact": {
-            "product_name": "SentinelEdge",
+            "product_name": "Wardex",
             "runtime_name": "Wardex",
             "version": env!("CARGO_PKG_VERSION"),
-            "report_name": "SentinelEdge Deployment Trust Report",
+            "report_name": "Wardex Deployment Trust Report",
             "report_purpose": "Customer-facing proof of release trust, parity, recovery freshness, collector health, and smoke readiness.",
         },
         "checks": checks,

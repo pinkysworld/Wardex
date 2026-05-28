@@ -6279,7 +6279,7 @@ fn deployment_trust_report_endpoint_returns_customer_artifact_and_sections() {
         .expect("deployment trust report");
     assert_eq!(resp.status(), 200);
     let body: serde_json::Value = resp.into_json().unwrap();
-    assert_eq!(body["customer_artifact"]["product_name"], "SentinelEdge");
+    assert_eq!(body["customer_artifact"]["product_name"], "Wardex");
     assert_eq!(body["customer_artifact"]["runtime_name"], "Wardex");
     assert!(body["checks"].as_array().is_some());
     assert!(body["sections"]["verification_center"].is_object());

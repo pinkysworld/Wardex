@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Validate SentinelEdge/Wardex product identity coherence across release surfaces."""
+"""Validate Wardex product identity coherence across release surfaces."""
 
 from __future__ import annotations
 

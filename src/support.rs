@@ -657,7 +657,7 @@ mod tests {
             .expect("system time after unix epoch")
             .as_nanos();
         std::env::temp_dir()
-            .join(format!("sentineledge-support-{label}-{nanos}.json"))
+            .join(format!("wardex-support-{label}-{nanos}.json"))
             .to_string_lossy()
             .to_string()
     }

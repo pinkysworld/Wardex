@@ -1,7 +1,7 @@
 # Wardex Release Acceptance
 
 This checklist gates release candidates against the shipped routed UI, structured operator workflows, and the live browser paths that replaced earlier ad hoc audits.
-SentinelEdge is the customer-facing product name for the Wardex runtime and release artifacts.
+Wardex is the shipped product name for the runtime, admin console, and release artifacts.
 
 ## Automated gate
 
@@ -18,7 +18,7 @@ The wrapper is implemented in `scripts/release_acceptance.sh` and runs these che
 3. API/OpenAPI/SDK contract parity via `python3 scripts/check_contract_parity.py`, including report workflows, cursor pagination, workflow/rule preflight, tenant/thread proof, snapshot retention controls, release observability gates, production assurance endpoints, operator-trust workspaces, alert evidence/feedback, Detection Trust scoring and draft-only tuning endpoints, Detection Lab, Response Safety, Integrations, Operations Health, Malware transparency, and release verification readiness endpoints across runtime routing, the live OpenAPI builder, `docs/openapi.yaml`, and both SDK clients.
 4. Release-document consistency via `python3 scripts/validate_release_docs.py`, including `STATUS`, roadmap, feature UI coverage, and routed smoke mappings.
 5. Documentation freshness via `python3 scripts/validate_docs_freshness.py`, confirming the shipped release docs and website-facing status copy still match the current runtime baseline.
-6. Product identity coherence via `python3 scripts/check_product_identity.py`, confirming SentinelEdge/Wardex branding and metadata stay aligned across docs and console surfaces.
+6. Product identity coherence via `python3 scripts/check_product_identity.py`, confirming Wardex branding and metadata stay aligned across docs and console surfaces.
 7. Release trust workflow coverage via `python3 scripts/check_release_trust_gates.py`, confirming panic policy, contract parity, docs, product identity, provenance, pinned release actions, and checksum verification remain wired into CI and tag builds.
 8. Published marketing-site link validation across `site/*.html`.
 9. Managed mode only: start a temporary local Wardex instance on a loopback port with a cloned acceptance config that disables request throttling for the smoke run.

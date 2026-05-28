@@ -1,10 +1,10 @@
-# SentinelEdge (Wardex Runtime)
+# Wardex
 
 [![Site](https://img.shields.io/badge/site-minh.systems%2FWardex-1a6b5a?style=flat-square)](https://minh.systems/Wardex/)
 [![Support](https://img.shields.io/badge/support-GitHub%20Sponsors-c47a2e?style=flat-square)](https://github.com/sponsors/pinkysworld)
 [![Release](https://img.shields.io/github/v/release/pinkysworld/Wardex?style=flat-square)](https://github.com/pinkysworld/Wardex/releases)
 
-SentinelEdge is delivered through the Wardex runtime and repository (`pinkysworld/Wardex`): a Rust-based XDR and SIEM platform for private-cloud and self-hosted security operations. It brings telemetry collection, detection engineering, malware analysis, analyst workflows, approval-gated response, fleet management, evidence handling, and release verification into one deployable product.
+Wardex (`pinkysworld/Wardex`) is a Rust-based XDR and SIEM platform for private-cloud and self-hosted security operations. It brings telemetry collection, detection engineering, malware analysis, analyst workflows, approval-gated response, fleet management, evidence handling, and release verification into one deployable product.
 
 ## Why Wardex
 
@@ -14,15 +14,14 @@ SentinelEdge is delivered through the Wardex runtime and repository (`pinkysworl
 - **Scan across platforms:** malware, virus, trojan, and rootkit workflows cover Linux, macOS, and Windows with local engines plus optional open-source signature presets.
 - **Ship verifiably:** releases include checksums, SBOMs, provenance, signed artifacts, and documented verification gates.
 
-## Current Release: `v1.0.26`
+## Current Release: `v1.0.27`
 
-This release hardens runtime abuse handling, broadens operator workflow continuity, and turns the local release smoke path into a documented one-command gate.
+This release hardens trust boundaries, adds customer-facing deployment trust reporting, and stabilizes the release acceptance path so local and CI verification prove the same contracts.
 
-- **Failed-auth hardening** — API failures now track both the IP-wide lockout bucket and a hashed presented-token bucket, preserving rotating-token protection without storing raw credentials.
-- **Bounded observability proof** — lock-label cardinality drops are counted in Prometheus, and additional state-lock sites are labeled for contention analysis.
-- **Operator workflow continuity** — Live Monitor restores the last selected alert, Settings adds a Failed Auth audit pivot, and the Google Workspace collector uses the shared collector form flow.
-- **Concurrency polish** — the runtime feature-flag registry now uses read/write locking for read-heavy request paths.
-- **Release proof** — `make smoke` is documented and verified as the local smoke gate, and contract parity now requires Detection Explain coverage.
+- **Trust-boundary hardening** — quarantine, tenancy, enrollment-token handling, signed-update validation, audit signing, and exact EDR blocking paths now enforce stricter server-side guarantees.
+- **Deployment trust reporting** — Wardex now exports a structured deployment trust report that ties release acceptance, provenance, parity, backup freshness, collector health, and smoke posture into one artifact.
+- **Release gate stabilization** — `make smoke` and `make release-acceptance` now cover the deployment trust report plus route-aware hardening checks without flaking on ID-specific endpoints or slow connect transitions.
+- **Identity and metadata coherence** — release docs, OpenAPI, Helm, SDK packages, OTLP metadata, and website version surfaces now align on the Wardex `v1.0.27` baseline.
 
 See [CHANGELOG.md](CHANGELOG.md) for full release history.
 
@@ -96,7 +95,7 @@ The public website lives in [site/](site/) and mirrors the main product, release
 
 ## Documentation Surfaces
 
-The GitHub docs and the public website now share the same `v1.0.26` release surface for operator guides and API reference.
+The GitHub docs and the public website now share the same `v1.0.27` release surface for operator guides and API reference.
 
 ![Wardex documentation hub](site/media/insights/resources-live.png)
 
