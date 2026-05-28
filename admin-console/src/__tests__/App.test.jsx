@@ -219,7 +219,7 @@ describe('App', () => {
     await renderApp('/settings?tab=integrations');
 
     expect(await screen.findByRole('heading', { name: 'Settings' })).toBeInTheDocument();
-    expect(screen.queryByText('Welcome to Wardex Admin Console')).not.toBeInTheDocument();
+    expect(screen.queryByText('Welcome to SentinelEdge Admin Console')).not.toBeInTheDocument();
     expect(localStorage.getItem('wardex_token')).toBeNull();
   });
 
@@ -262,7 +262,7 @@ describe('App', () => {
 
     await renderApp();
 
-    expect(await screen.findByText('Welcome to Wardex Admin Console')).toBeInTheDocument();
+    expect(await screen.findByText('Welcome to SentinelEdge Admin Console')).toBeInTheDocument();
     expect((await screen.findAllByText('Sign in with Corporate SSO')).length).toBeGreaterThan(0);
     expect(localStorage.getItem('wardex_token')).toBeNull();
   });
@@ -378,12 +378,12 @@ describe('App', () => {
 
   it('renders welcome message when unauthenticated', async () => {
     await renderApp();
-    expect(screen.getByText('Welcome to Wardex Admin Console')).toBeInTheDocument();
+    expect(screen.getByText('Welcome to SentinelEdge Admin Console')).toBeInTheDocument();
   });
 
   it('does not block unauthenticated login with onboarding', async () => {
     await renderApp();
-    expect(screen.queryByText('Set up the Wardex admin console')).not.toBeInTheDocument();
+    expect(screen.queryByText('Set up the SentinelEdge admin console')).not.toBeInTheDocument();
   });
 
   it('keeps a recovery navigation toggle after collapsing the sidebar', async () => {

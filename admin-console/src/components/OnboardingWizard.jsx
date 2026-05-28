@@ -365,7 +365,7 @@ export default function OnboardingWizard({ onComplete }) {
         <div className="onboarding-header">
           <div>
             <div className="onboarding-eyebrow">Workspace Setup</div>
-            <h3 id="onboarding-title">Set up the Wardex admin console</h3>
+            <h3 id="onboarding-title">Set up the SentinelEdge admin console</h3>
             <p>
               This checklist moves beyond basic login setup and checks whether the workspace is
               actually ready for analyst work.
@@ -419,7 +419,7 @@ export default function OnboardingWizard({ onComplete }) {
                 autoComplete="current-password"
               />
               <div className="form-helper">
-                The token is printed in the terminal when the Wardex backend starts. Existing
+                The token is printed in the terminal when the SentinelEdge backend starts. Existing
                 console sessions can continue without re-entering it.
               </div>
             </div>

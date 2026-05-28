@@ -38,7 +38,7 @@ describe('OnboardingWizard', () => {
   it('creates and copies a first-agent enrollment command', async () => {
     render(<OnboardingWizard onComplete={vi.fn()} />);
 
-    expect(screen.getByText('Set up the Wardex admin console')).toBeInTheDocument();
+    expect(screen.getByText('Set up the SentinelEdge admin console')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Verify Token/i })).toBeDisabled();
 
     fireEvent.click(screen.getByRole('radio', { name: /Linux/i }));

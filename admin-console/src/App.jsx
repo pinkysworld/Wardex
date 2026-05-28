@@ -880,7 +880,7 @@ export default function App() {
           </div>
           <div className={`topbar-right ${showTopbarActions ? 'topbar-menu-open' : ''}`}>
             {hp?.version && (
-              <span className="version-badge" title="Wardex version">
+              <span className="version-badge" title="SentinelEdge version">
                 v{hp.version}
               </span>
             )}
@@ -1183,7 +1183,7 @@ export default function App() {
                 {authError && <span className="auth-error">{authError}</span>}
               </form>
             ) : (
-              <span className="auth-badge" aria-label="Connected to Wardex">
+              <span className="auth-badge" aria-label="Connected to SentinelEdge">
                 <span className="auth-badge-full">● Connected</span>
                 <span className="auth-badge-compact" aria-hidden="true">
                   ● On
@@ -1227,8 +1227,8 @@ export default function App() {
         <div className="content" id="main-content">
           {!authenticated ? (
             <div className="auth-prompt">
-              <h2>Welcome to Wardex Admin Console</h2>
-              <p>Enter your API token to connect to the Wardex backend.</p>
+              <h2>Welcome to SentinelEdge Admin Console</h2>
+              <p>Enter your API token to connect to the SentinelEdge backend.</p>
               <p className="hint">
                 Read it from var/.wardex_token, or start Wardex with WARDEX_ADMIN_TOKEN.
               </p>
