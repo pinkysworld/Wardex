@@ -6,7 +6,7 @@
 
 SentinelEdge is delivered through the Wardex runtime and repository (`pinkysworld/Wardex`): a Rust-based XDR and SIEM platform for private-cloud and self-hosted security operations. It brings telemetry collection, detection engineering, malware analysis, analyst workflows, approval-gated response, fleet management, evidence handling, and release verification into one deployable product.
 
-## Why SentinelEdge
+## Why Wardex
 
 - **Own the control plane:** run the console, APIs, telemetry, and evidence workflows in your own environment.
 - **Investigate in one place:** triage alerts, inspect threads/processes, pivot into cases, and keep source evidence attached.
