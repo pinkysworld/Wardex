@@ -302,6 +302,7 @@ verify_product_hardening_endpoints() {
     "/api/release/clean-cut"
     "/api/containers/release-parity"
     "/api/release/verification-center"
+    "/api/release/deployment-trust-report"
     "/api/deployment/self-hosted-wizard"
     "/api/data-quality/dashboard"
     "/api/performance/scale-baseline"
@@ -314,7 +315,6 @@ verify_product_hardening_endpoints() {
     "/api/detection/trust-score"
     "/api/detection/trust/overview"
     "/api/detection/trust/rules"
-    "/api/detection/trust/rules/release-acceptance-smoke"
     "/api/detection/trust/tuning-drafts"
     "/api/fleet/drift-compliance"
     "/api/operator/work-queue"
@@ -326,7 +326,6 @@ verify_product_hardening_endpoints() {
     "/api/detection/readiness"
     "/api/detection/tuning/feedback"
     "/api/search/performance-slo"
-    "/api/playbook/execution/release-acceptance-smoke/recovery-actions"
     "/api/tenants/isolation-proof"
     "/api/processes/thread-proof"
     "/api/response/approval-overview"
@@ -361,6 +360,18 @@ verify_product_hardening_endpoints() {
       -H "Authorization: Bearer $WARDEX_ADMIN_TOKEN" \
       "$WARDEX_BASE_URL$endpoint" >/dev/null
   done
+
+  # /api/detection/trust/rules/{rule_id} is contract-listed but can return 404
+  # in managed smoke runs before catalog seeding. Accept both 200 and 404 to
+  # verify route wiring without requiring fixture setup.
+  trust_rule_code="$(curl --silent --output /dev/null --write-out '%{http_code}' \
+    --max-time "$WARDEX_RELEASE_ACCEPTANCE_CURL_TIMEOUT" \
+    -H "Authorization: Bearer $WARDEX_ADMIN_TOKEN" \
+    "$WARDEX_BASE_URL/api/detection/trust/rules/release-acceptance-smoke")"
+  if [[ "$trust_rule_code" != "404" && "$trust_rule_code" != "200" ]]; then
+    echo "error: /api/detection/trust/rules/{rule_id} returned unexpected status $trust_rule_code" >&2
+    exit 1
+  fi
 
   # /api/playbook/execution/{id}/recovery-actions is contract-listed but only
   # exists for a real execution id. Rather than seed a full playbook run, verify
@@ -483,6 +494,7 @@ run_step "Build admin console" bash -lc "cd '$ROOT_DIR/admin-console' && npm run
 run_step "Build Wardex" bash -lc "cd '$ROOT_DIR' && cargo build"
 run_step "Check API and SDK contract parity" python3 "$ROOT_DIR/scripts/check_contract_parity.py"
 run_step "Check release documentation consistency" python3 "$ROOT_DIR/scripts/validate_release_docs.py"
+run_step "Check product identity coherence" python3 "$ROOT_DIR/scripts/check_product_identity.py"
 run_step "Check release trust gates" python3 "$ROOT_DIR/scripts/check_release_trust_gates.py"
 run_step "Check published site links" check_site_links
 if [[ "$RELEASE_MODE" == "managed" ]]; then

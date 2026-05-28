@@ -298,6 +298,7 @@ describe('GET endpoints', () => {
     await api.cleanReleaseCut();
     await api.containerReleaseParity();
     await api.releaseVerificationCenter();
+    await api.deploymentTrustReport();
     await api.selfHostedDeploymentWizard();
     await api.dataQualityDashboard();
     await api.performanceScaleBaseline();
@@ -329,26 +330,27 @@ describe('GET endpoints', () => {
     expect(mockFetch.mock.calls[9][0]).toBe('/api/release/clean-cut');
     expect(mockFetch.mock.calls[10][0]).toBe('/api/containers/release-parity');
     expect(mockFetch.mock.calls[11][0]).toBe('/api/release/verification-center');
-    expect(mockFetch.mock.calls[12][0]).toBe('/api/deployment/self-hosted-wizard');
-    expect(mockFetch.mock.calls[13][0]).toBe('/api/data-quality/dashboard');
-    expect(mockFetch.mock.calls[14][0]).toBe('/api/performance/scale-baseline');
-    expect(mockFetch.mock.calls[15][0]).toBe('/api/cluster/failover-execution');
-    expect(mockFetch.mock.calls[16][0]).toBe('/api/secrets/rotation-operations');
-    expect(mockFetch.mock.calls[17][0]).toBe('/api/operator/task-automation');
-    expect(mockFetch.mock.calls[18][0]).toBe('/api/detection/validation-packs');
-    expect(mockFetch.mock.calls[19][0]).toBe('/api/workflows/preflight?workflow=release');
-    expect(mockFetch.mock.calls[20][0]).toBe('/api/tenants/isolation-proof');
-    expect(mockFetch.mock.calls[21][0]).toBe('/api/processes/thread-proof');
-    expect(mockFetch.mock.calls[22][0]).toBe('/api/support/bundle');
-    expect(mockFetch.mock.calls[23][0]).toBe(
+    expect(mockFetch.mock.calls[12][0]).toBe('/api/release/deployment-trust-report');
+    expect(mockFetch.mock.calls[13][0]).toBe('/api/deployment/self-hosted-wizard');
+    expect(mockFetch.mock.calls[14][0]).toBe('/api/data-quality/dashboard');
+    expect(mockFetch.mock.calls[15][0]).toBe('/api/performance/scale-baseline');
+    expect(mockFetch.mock.calls[16][0]).toBe('/api/cluster/failover-execution');
+    expect(mockFetch.mock.calls[17][0]).toBe('/api/secrets/rotation-operations');
+    expect(mockFetch.mock.calls[18][0]).toBe('/api/operator/task-automation');
+    expect(mockFetch.mock.calls[19][0]).toBe('/api/detection/validation-packs');
+    expect(mockFetch.mock.calls[20][0]).toBe('/api/workflows/preflight?workflow=release');
+    expect(mockFetch.mock.calls[21][0]).toBe('/api/tenants/isolation-proof');
+    expect(mockFetch.mock.calls[22][0]).toBe('/api/processes/thread-proof');
+    expect(mockFetch.mock.calls[23][0]).toBe('/api/support/bundle');
+    expect(mockFetch.mock.calls[24][0]).toBe(
       '/api/alerts/histogram?window=24h&bucket=1h&severity=high',
     );
-    expect(mockFetch.mock.calls[24][0]).toBe('/api/alerts/page?cursor=10&limit=5');
-    expect(mockFetch.mock.calls[25][0]).toBe(
+    expect(mockFetch.mock.calls[25][0]).toBe('/api/alerts/page?cursor=10&limit=5');
+    expect(mockFetch.mock.calls[26][0]).toBe(
       '/api/events/page?cursor=2&limit=4&q=login&severity=high',
     );
-    expect(mockFetch.mock.calls[26][0]).toBe('/api/audit/log/page?limit=3&status=2xx&cursor=6');
-    expect(mockFetch.mock.calls[27][0]).toBe(
+    expect(mockFetch.mock.calls[27][0]).toBe('/api/audit/log/page?limit=3&status=2xx&cursor=6');
+    expect(mockFetch.mock.calls[28][0]).toBe(
       '/api/subscriptions/resume?subscription_id=sub-1&cursor=7&limit=2',
     );
   });

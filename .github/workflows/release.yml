@@ -66,6 +66,9 @@ jobs:
       - name: Check docs freshness
         run: python3 scripts/validate_docs_freshness.py
 
+      - name: Check product identity coherence
+        run: python3 scripts/check_product_identity.py
+
       - name: Check release trust gates
         run: python3 scripts/check_release_trust_gates.py
 

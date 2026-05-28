@@ -80,6 +80,12 @@ too_many_arguments = "allow"
 type_complexity = "allow"
 large_enum_variant = "allow"
 
+[package.metadata.product_identity]
+product_name = "SentinelEdge"
+runtime_name = "Wardex"
+admin_console_name = "Wardex Admin Console"
+repository = "pinkysworld/Wardex"
+
 [package.metadata.deb]
 maintainer = "Wardex Team <support@wardex.dev>"
 copyright = "2025, Wardex Team"

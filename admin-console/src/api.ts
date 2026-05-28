@@ -326,6 +326,7 @@ export const releaseUpgradeRehearsal = ({ targetVersion }: { targetVersion?: str
 export const cleanReleaseCut = () => get('/api/release/clean-cut');
 export const containerReleaseParity = () => get('/api/containers/release-parity');
 export const releaseVerificationCenter = () => get('/api/release/verification-center');
+export const deploymentTrustReport = () => get('/api/release/deployment-trust-report');
 export const selfHostedDeploymentWizard = () => get('/api/deployment/self-hosted-wizard');
 export const dataQualityDashboard = () => get('/api/data-quality/dashboard');
 export const performanceScaleBaseline = () => get('/api/performance/scale-baseline');

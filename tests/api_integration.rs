@@ -4156,6 +4156,9 @@ fn endpoints_returns_array() {
         arr.iter()
             .any(|entry| entry["path"] == "/api/fleet/dashboard" && entry["auth"] == true)
     );
+    assert!(arr.iter().any(
+        |entry| entry["path"] == "/api/release/deployment-trust-report" && entry["auth"] == true
+    ));
     assert!(
         arr.iter()
             .any(|entry| entry["path"] == "/api/agents" && entry["auth"] == true)
@@ -4803,6 +4806,8 @@ fn fleet_dashboard_returns_summary() {
     assert!(body.get("events").is_some());
     assert!(body.get("policy").is_some());
     assert!(body.get("updates").is_some());
+    assert!(body["updates"]["campaign"].is_object());
+    assert!(body["updates"]["campaign"]["current_stage_counts"]["prepared"].is_u64());
     assert!(body.get("siem").is_some());
     assert_eq!(body["fleet"]["total_agents"].as_u64().unwrap(), 1);
     assert!(body["events"]["analytics"].is_object());
@@ -6257,6 +6262,30 @@ fn agents_summary_includes_freshness_versions_and_rollout_fields() {
         enrolled_agent["deployment_status"].as_str().unwrap(),
         "assigned"
     );
+    assert!(enrolled_agent["campaign_state"].as_str().is_some());
+    assert!(enrolled_agent["campaign_progress"].is_object());
+    assert_eq!(
+        enrolled_agent["campaign_progress"]["prepared"].as_bool(),
+        Some(true)
+    );
+}
+
+#[test]
+fn deployment_trust_report_endpoint_returns_customer_artifact_and_sections() {
+    let (port, token) = spawn_test_server();
+    let resp = ureq::get(&format!("{}/api/release/deployment-trust-report", base(port)))
+        .set("Authorization", &auth_header(&token))
+        .call()
+        .expect("deployment trust report");
+    assert_eq!(resp.status(), 200);
+    let body: serde_json::Value = resp.into_json().unwrap();
+    assert_eq!(body["customer_artifact"]["product_name"], "SentinelEdge");
+    assert_eq!(body["customer_artifact"]["runtime_name"], "Wardex");
+    assert!(body["checks"].as_array().is_some());
+    assert!(body["sections"]["verification_center"].is_object());
+    assert!(body["sections"]["fleet_campaign"].is_object());
+    assert!(body["evidence_freshness"].is_object());
+    assert!(body["snapshot"].is_object());
 }
 
 #[test]
@@ -7667,6 +7696,7 @@ fn openapi_endpoint_returns_live_json_spec() {
     assert!(paths.contains_key("/api/events/search"));
     assert!(paths.contains_key("/api/queue/stats"));
     assert!(paths.contains_key("/api/rollout/config"));
+    assert!(paths.contains_key("/api/release/deployment-trust-report"));
     assert!(paths.contains_key("/api/investigations/workflows"));
     assert!(paths.contains_key("/api/investigations/workflows/{id}"));
     assert!(paths.contains_key("/api/investigations/start"));

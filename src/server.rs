@@ -1315,6 +1315,7 @@ fn local_console_agent_summary_json(state: &AppState) -> serde_json::Value {
         &local_agent,
         None,
         state.agent_registry.heartbeat_interval(),
+        state.policy_store.current_version(),
     );
     if let Some(object) = summary.as_object_mut() {
         object.insert("local_console".to_string(), serde_json::Value::Bool(true));
@@ -2017,6 +2018,22 @@ fn spawn_test_server_with_state() -> (u16, String, Arc<Mutex<AppState>>) {
     let _ = std::fs::remove_dir_all(&state_root);
     std::fs::create_dir_all(&state_root).expect("create test state root");
     let config_path = state_root.join("wardex.toml");
+    let mut test_config = Config::default();
+    let test_signing_key = [7u8; 32];
+    let test_signing_key_path = state_root.join("update-signing-key.bin");
+    std::fs::write(&test_signing_key_path, test_signing_key).expect("write update signing key");
+    let signing_key = ed25519_dalek::SigningKey::from_bytes(&test_signing_key);
+    let signer_pubkey = base64::Engine::encode(
+        &base64::engine::general_purpose::STANDARD,
+        signing_key.verifying_key().to_bytes(),
+    );
+    test_config.security.update_signing.signing_key_path =
+        Some(test_signing_key_path.to_string_lossy().to_string());
+    test_config
+        .security
+        .update_signing
+        .trusted_update_signers
+        .push(signer_pubkey);
     let session_store = crate::auth::SessionStore::with_persistence_key(
         &session_store_path(&config_path),
         Some(load_or_create_session_seal_key(&config_path)),
@@ -2038,7 +2055,7 @@ fn spawn_test_server_with_state() -> (u16, String, Arc<Mutex<AppState>>) {
         oidc_providers: HashMap::new(),
         user_preferences,
         swarm: SwarmNode::new("test-node-0"),
-        cluster: ClusterNode::new(Config::default().cluster.clone()),
+        cluster: ClusterNode::new(test_config.cluster.clone()),
         enforcement: EnforcementEngine::new(),
         threat_intel: ThreatIntelStore::new(),
         digital_twin: DigitalTwinEngine::new(),
@@ -2056,7 +2073,7 @@ fn spawn_test_server_with_state() -> (u16, String, Arc<Mutex<AppState>>) {
         patches: PatchManager::new(),
         causal: CausalGraph::new(),
         listener_mode: ListenerMode::Plain { port },
-        config: Config::default(),
+        config: test_config,
         config_path,
         alerts: VecDeque::new(),
         server_start: std::time::Instant::now(),
@@ -5056,6 +5073,17 @@ pub(crate) fn deployment_requires_action(
     }
 }
 
+const DEPLOYMENT_CAMPAIGN_STAGES: [&str; 8] = [
+    "prepared",
+    "sent",
+    "installed",
+    "enrolled",
+    "healthy",
+    "policy_synced",
+    "telemetry_verified",
+    "failed",
+];
+
 pub(crate) fn is_terminal_deployment_status(status: &str) -> bool {
     matches!(
         status.trim().to_ascii_lowercase().as_str(),
@@ -5068,6 +5096,78 @@ fn deployment_is_pending(deployment: &AgentDeployment, registry: &AgentRegistry)
         Some(agent) => deployment_requires_action(deployment, &agent.version),
         None => !is_terminal_deployment_status(&deployment.status),
     }
+}
+
+fn deployment_failed_status(status: &str) -> bool {
+    matches!(
+        status.trim().to_ascii_lowercase().as_str(),
+        "failed" | "error" | "cancelled"
+    )
+}
+
+fn deployment_campaign_progress(
+    computed_status: &str,
+    age_secs: Option<u64>,
+    heartbeat_interval: u64,
+    deployment: Option<&AgentDeployment>,
+    policy_version: u64,
+) -> (String, serde_json::Value) {
+    let prepared = deployment.is_some();
+    let sent = prepared;
+    let installed = deployment.is_some_and(|entry| {
+        entry.acknowledged_at.is_some()
+            || entry.completed_at.is_some()
+            || matches!(
+                entry.status.trim().to_ascii_lowercase().as_str(),
+                "completed" | "applied" | "healthy"
+            )
+    });
+    let deployment_failed = deployment
+        .map(|entry| deployment_failed_status(&entry.status))
+        .unwrap_or(false);
+    let enrolled = true;
+    let healthy = computed_status == "online" && !deployment_failed;
+    let policy_synced = healthy
+        && (policy_version == 0
+            || deployment.is_none()
+            || deployment.is_some_and(|entry| is_terminal_deployment_status(&entry.status)));
+    let telemetry_verified = policy_synced
+        && age_secs.unwrap_or(u64::MAX) <= heartbeat_interval.saturating_mul(2);
+    let failed = deployment_failed;
+
+    let current_state = if failed {
+        "failed"
+    } else if telemetry_verified {
+        "telemetry_verified"
+    } else if policy_synced {
+        "policy_synced"
+    } else if healthy {
+        "healthy"
+    } else if installed {
+        "installed"
+    } else if sent {
+        "sent"
+    } else if prepared {
+        "prepared"
+    } else if enrolled {
+        "enrolled"
+    } else {
+        "prepared"
+    };
+
+    (
+        current_state.to_string(),
+        serde_json::json!({
+            "prepared": prepared,
+            "sent": sent,
+            "installed": installed,
+            "enrolled": enrolled,
+            "healthy": healthy,
+            "policy_synced": policy_synced,
+            "telemetry_verified": telemetry_verified,
+            "failed": failed,
+        }),
+    )
 }
 
 pub(crate) fn severity_rank(level: &str) -> u8 {
@@ -8309,8 +8409,16 @@ fn agent_summary_json(
     agent: &AgentIdentity,
     deployment: Option<&AgentDeployment>,
     heartbeat_interval: u64,
+    policy_version: u64,
 ) -> serde_json::Value {
     let (computed_status_value, age_secs) = computed_agent_status(agent, heartbeat_interval);
+    let (campaign_state, campaign_progress) = deployment_campaign_progress(
+        &computed_status_value,
+        age_secs,
+        heartbeat_interval,
+        deployment,
+        policy_version,
+    );
     serde_json::json!({
         "id": agent.id,
         "hostname": agent.hostname,
@@ -8330,6 +8438,8 @@ fn agent_summary_json(
             .or_else(|| agent.health.update_target_version.clone()),
         "rollout_group": deployment.map(|entry| entry.rollout_group.clone()),
         "deployment_status": deployment.map(|entry| entry.status.clone()),
+        "campaign_state": campaign_state,
+        "campaign_progress": campaign_progress,
         "scope_override": agent.monitor_scope.is_some(),
     })
 }
@@ -9400,6 +9510,148 @@ pub(crate) fn reconcile_fleet_remote_install_heartbeat(
         save_stored_json(storage, FLEET_REMOTE_INSTALLS_KEY, &installs)?;
     }
     Ok(matched)
+}
+
+fn increment_stage_count(counts: &mut BTreeMap<String, usize>, stage: &str) {
+    *counts.entry(stage.to_string()).or_insert(0) += 1;
+}
+
+fn summarize_deployment_campaign(state: &AppState) -> serde_json::Value {
+    let heartbeat_interval = state.agent_registry.heartbeat_interval();
+    let policy_version = state.policy_store.current_version();
+    let agents = state.agent_registry.list();
+    let installs = load_fleet_remote_installs(&state.storage);
+
+    let mut current_stage_counts = BTreeMap::new();
+    let mut milestone_counts = BTreeMap::new();
+    for stage in DEPLOYMENT_CAMPAIGN_STAGES {
+        current_stage_counts.insert(stage.to_string(), 0usize);
+        milestone_counts.insert(stage.to_string(), 0usize);
+    }
+    let mut remediation = Vec::new();
+
+    for agent in &agents {
+        let deployment = state.remote_deployments.get(&agent.id);
+        let (computed_status, age_secs) = computed_agent_status(agent, heartbeat_interval);
+        let (campaign_state, campaign_progress) = deployment_campaign_progress(
+            &computed_status,
+            age_secs,
+            heartbeat_interval,
+            deployment,
+            policy_version,
+        );
+        increment_stage_count(&mut current_stage_counts, &campaign_state);
+        for stage in DEPLOYMENT_CAMPAIGN_STAGES {
+            if campaign_progress
+                .get(stage)
+                .and_then(serde_json::Value::as_bool)
+                .unwrap_or(false)
+            {
+                increment_stage_count(&mut milestone_counts, stage);
+            }
+        }
+    }
+
+    for attempt in installs.iter().filter(|attempt| {
+        attempt
+            .agent_id
+            .as_ref()
+            .and_then(|agent_id| state.agent_registry.get(agent_id))
+            .is_none()
+    }) {
+        let normalized = attempt.status.trim().to_ascii_lowercase();
+        let stage = if normalized == "failed" {
+            "failed"
+        } else if normalized == "heartbeat_received" {
+            "enrolled"
+        } else if normalized == "awaiting_heartbeat" {
+            "installed"
+        } else if normalized == "pending" {
+            "sent"
+        } else {
+            "prepared"
+        };
+        increment_stage_count(&mut current_stage_counts, stage);
+        increment_stage_count(&mut milestone_counts, "prepared");
+        if stage != "prepared" {
+            increment_stage_count(&mut milestone_counts, "sent");
+        }
+        if stage == "installed" || stage == "enrolled" || stage == "failed" {
+            increment_stage_count(&mut milestone_counts, "installed");
+        }
+        if stage == "enrolled" || stage == "failed" {
+            increment_stage_count(&mut milestone_counts, "enrolled");
+        }
+        if stage == "failed" {
+            increment_stage_count(&mut milestone_counts, "failed");
+        }
+        if stage == "failed" {
+            remediation.push(serde_json::json!({
+                "kind": "remote_install",
+                "transport": attempt.transport,
+                "hostname": attempt.hostname,
+                "status": attempt.status,
+                "recommended_action": if attempt.transport == "winrm" {
+                    "Validate WinRM reachability, credentials, and TLS policy; then retry with a fresh one-use enrollment token."
+                } else {
+                    "Validate SSH connectivity, privileges, and host key acceptance; then retry with a fresh one-use enrollment token."
+                },
+                "error": attempt.error,
+                "started_at": attempt.started_at,
+                "completed_at": attempt.completed_at,
+            }));
+        }
+    }
+
+    for deployment in state
+        .remote_deployments
+        .values()
+        .filter(|deployment| deployment_failed_status(&deployment.status))
+    {
+        remediation.push(serde_json::json!({
+            "kind": "deployment",
+            "agent_id": deployment.agent_id,
+            "hostname": state
+                .agent_registry
+                .get(&deployment.agent_id)
+                .map(|agent| agent.hostname.clone()),
+            "status": deployment.status,
+            "target_version": deployment.version,
+            "rollout_group": deployment.rollout_group,
+            "recommended_action": "Review deployment status reason, confirm endpoint heartbeat, and retry assignment only after host health checks pass.",
+            "status_reason": deployment.status_reason,
+            "assigned_at": deployment.assigned_at,
+            "completed_at": deployment.completed_at,
+        }));
+    }
+
+    let failed = current_stage_counts.get("failed").copied().unwrap_or_default();
+    let telemetry_verified = current_stage_counts
+        .get("telemetry_verified")
+        .copied()
+        .unwrap_or_default();
+    let enrolled = agents.len();
+    let status = if failed > 0 {
+        "failed"
+    } else if enrolled > 0 && telemetry_verified == enrolled {
+        "healthy"
+    } else if enrolled == 0 {
+        "prepared"
+    } else {
+        "in_progress"
+    };
+
+    serde_json::json!({
+        "generated_at": chrono::Utc::now().to_rfc3339(),
+        "status": status,
+        "stages": DEPLOYMENT_CAMPAIGN_STAGES,
+        "current_stage_counts": current_stage_counts,
+        "milestone_counts": milestone_counts,
+        "enrolled_agents": enrolled,
+        "remote_install_attempts": installs.len(),
+        "failed_items": failed,
+        "remediation": remediation.into_iter().take(25).collect::<Vec<_>>(),
+    })
 }
 
 pub(crate) fn load_secrets_manager_setup(storage: &SharedStorage) -> SecretsManagerSetup {
@@ -11623,6 +11875,7 @@ const PRODUCT_CONTRACT_ENDPOINTS: &[(&str, &str)] = &[
     ("GET", "/api/release/clean-cut"),
     ("GET", "/api/containers/release-parity"),
     ("GET", "/api/release/verification-center"),
+    ("GET", "/api/release/deployment-trust-report"),
     ("GET", "/api/deployment/self-hosted-wizard"),
     ("GET", "/api/data-quality/dashboard"),
     ("GET", "/api/performance/scale-baseline"),
@@ -14133,6 +14386,208 @@ fn build_release_verification_center(state: &AppState) -> serde_json::Value {
                 "sbom_exists": sbom_exists,
                 "fail_count": fail_count,
                 "warn_count": warn_count,
+            }),
+        ),
+    )
+}
+
+fn trust_check_status(status: &str) -> &'static str {
+    match status.trim().to_ascii_lowercase().as_str() {
+        "blocked" | "fail" | "failed" => "fail",
+        "review" | "warn" | "warning" | "attention" | "unknown" => "warn",
+        _ => "pass",
+    }
+}
+
+fn build_deployment_trust_report(state: &AppState) -> serde_json::Value {
+    let release_doctor = release_doctor_payload(state);
+    let provenance = build_release_provenance(state);
+    let sdk_contract = build_sdk_contract_status(state);
+    let failover = build_cluster_failover_execution(state);
+    let synthetic_console = build_synthetic_console_monitor(state);
+    let validation_packs = build_detection_validation_packs(state);
+    let verification_center = build_release_verification_center(state);
+    let deployment_campaign = summarize_deployment_campaign(state);
+    let collector_rows = crate::server_collectors::full_collector_status_entries(state);
+
+    let collector_enabled = collector_rows
+        .iter()
+        .filter(|row| row.get("enabled").and_then(serde_json::Value::as_bool) != Some(false))
+        .count();
+    let collector_degraded = collector_rows
+        .iter()
+        .filter(|row| {
+            let status = row
+                .get("status")
+                .or_else(|| row.get("freshness"))
+                .and_then(serde_json::Value::as_str)
+                .unwrap_or("unknown")
+                .to_ascii_lowercase();
+            matches!(
+                status.as_str(),
+                "stale" | "error" | "failed" | "disabled" | "missing" | "warn" | "review"
+            )
+        })
+        .count();
+
+    let synthetic_status = trust_check_status(
+        synthetic_console
+            .get("status")
+            .and_then(serde_json::Value::as_str)
+            .unwrap_or("unknown"),
+    );
+    let validation_status = trust_check_status(
+        validation_packs
+            .get("status")
+            .and_then(serde_json::Value::as_str)
+            .unwrap_or("unknown"),
+    );
+    let smoke_status = if synthetic_status == "fail" || validation_status == "fail" {
+        "fail"
+    } else if synthetic_status == "warn" || validation_status == "warn" {
+        "warn"
+    } else {
+        "pass"
+    };
+    let failover_freshness = failover
+        .get("evidence_freshness")
+        .and_then(|value| value.get("status"))
+        .and_then(serde_json::Value::as_str)
+        .unwrap_or("unknown");
+    let failover_status = match failover_freshness {
+        "fresh" => "pass",
+        "stale" => "warn",
+        _ => "warn",
+    };
+
+    let checks = vec![
+        serde_json::json!({
+            "id": "release_acceptance",
+            "status": trust_check_status(release_doctor.get("status").and_then(serde_json::Value::as_str).unwrap_or("unknown")),
+            "detail": release_doctor.get("next_action").cloned().unwrap_or_else(|| serde_json::json!("Release doctor status summarized.")),
+        }),
+        serde_json::json!({
+            "id": "sbom_provenance",
+            "status": trust_check_status(provenance.get("status").and_then(serde_json::Value::as_str).unwrap_or("unknown")),
+            "detail": format!(
+                "{} artifact checksum row(s); attestation digest {}.",
+                provenance.get("artifact_count").and_then(serde_json::Value::as_u64).unwrap_or_default(),
+                provenance.get("attestation_digest").and_then(serde_json::Value::as_str).unwrap_or("unavailable"),
+            ),
+        }),
+        serde_json::json!({
+            "id": "sdk_api_parity",
+            "status": if sdk_contract.get("drift_count").and_then(serde_json::Value::as_u64).unwrap_or_default() == 0 { "pass" } else { "fail" },
+            "detail": format!(
+                "{} parity drift item(s) across REST, GraphQL, and generated SDKs.",
+                sdk_contract.get("drift_count").and_then(serde_json::Value::as_u64).unwrap_or_default(),
+            ),
+        }),
+        serde_json::json!({
+            "id": "backup_failover_freshness",
+            "status": failover_status,
+            "detail": format!(
+                "Failover evidence freshness is {} with {} drill record(s).",
+                failover_freshness,
+                failover.get("history").and_then(|value| value.get("count")).and_then(serde_json::Value::as_u64).unwrap_or_default(),
+            ),
+        }),
+        serde_json::json!({
+            "id": "collector_health",
+            "status": if collector_enabled > 0 && collector_degraded == 0 { "pass" } else if collector_enabled == 0 { "warn" } else { "warn" },
+            "detail": format!(
+                "{collector_enabled} enabled collector lane(s), {collector_degraded} degraded lane(s).",
+            ),
+        }),
+        serde_json::json!({
+            "id": "smoke_status",
+            "status": smoke_status,
+            "detail": format!(
+                "Synthetic console is {} and detection validation packs are {}.",
+                synthetic_console.get("status").and_then(serde_json::Value::as_str).unwrap_or("unknown"),
+                validation_packs.get("status").and_then(serde_json::Value::as_str).unwrap_or("unknown"),
+            ),
+        }),
+        serde_json::json!({
+            "id": "verification_center",
+            "status": trust_check_status(verification_center.get("status").and_then(serde_json::Value::as_str).unwrap_or("unknown")),
+            "detail": format!(
+                "{} verification rows attached.",
+                verification_center
+                    .get("verification_rows")
+                    .and_then(serde_json::Value::as_array)
+                    .map(|rows| rows.len())
+                    .unwrap_or_default(),
+            ),
+        }),
+    ];
+    let (fail_count, warn_count, status) = check_counts(&checks);
+
+    let payload = serde_json::json!({
+        "schema": "sentineledge.deployment_trust_report.v1",
+        "generated_at": chrono::Utc::now().to_rfc3339(),
+        "status": status,
+        "fail_count": fail_count,
+        "warn_count": warn_count,
+        "customer_artifact": {
+            "product_name": "SentinelEdge",
+            "runtime_name": "Wardex",
+            "version": env!("CARGO_PKG_VERSION"),
+            "report_name": "SentinelEdge Deployment Trust Report",
+            "report_purpose": "Customer-facing proof of release trust, parity, recovery freshness, collector health, and smoke readiness.",
+        },
+        "checks": checks,
+        "sections": {
+            "release_acceptance": release_doctor,
+            "sbom_provenance": provenance,
+            "sdk_api_parity": sdk_contract,
+            "backup_failover_freshness": failover,
+            "collector_health": {
+                "enabled": collector_enabled,
+                "degraded": collector_degraded,
+                "rows": collector_rows,
+            },
+            "smoke_status": {
+                "synthetic_console": synthetic_console,
+                "detection_validation_packs": validation_packs,
+            },
+            "verification_center": verification_center,
+            "fleet_campaign": deployment_campaign,
+        },
+    });
+    let digest = crate::audit::sha256_hex(payload.to_string().as_bytes());
+    let mut payload = payload;
+    if let Some(object) = payload.as_object_mut() {
+        object.insert(
+            "digest".to_string(),
+            serde_json::Value::String(digest.clone()),
+        );
+    }
+    with_evidence_freshness(
+        payload,
+        evidence_freshness(
+            state,
+            "deployment_trust_report",
+            "composed_release_readiness",
+            "release_doctor+provenance+sdk_parity+failover+collectors+smoke",
+            if fail_count > 0 {
+                "stale"
+            } else if warn_count > 0 {
+                "stale"
+            } else {
+                "fresh"
+            },
+            if fail_count > 0 {
+                Some("deployment_trust_report_blocked")
+            } else {
+                None
+            },
+            true,
+            serde_json::json!({
+                "digest": digest,
+                "fail_count": fail_count,
+                "warn_count": warn_count,
+                "collector_degraded": collector_degraded,
             }),
         ),
     )
@@ -18755,6 +19210,7 @@ fn handle_api(
                     agent,
                     s.remote_deployments.get(&agent.id),
                     heartbeat_interval,
+                    s.policy_store.current_version(),
                 )
             }));
             let payload = payload
@@ -19588,6 +20044,7 @@ fn handle_api(
                         *acc.entry(deployment.rollout_group.clone()).or_insert(0usize) += 1;
                         acc
                     }),
+                    "campaign": summarize_deployment_campaign(&s),
                 },
                 "siem": {
                     "enabled": siem_status.enabled,
@@ -20589,6 +21046,13 @@ fn handle_api(
             let body = build_release_verification_center(&s);
             let snapshot =
                 persist_operational_snapshot(&s.storage, "release_verification_center", &body);
+            json_response(&payload_with_snapshot(body, snapshot).to_string(), 200)
+        }
+        (Method::Get, "/api/release/deployment-trust-report") => {
+            let s = state.lock().unwrap_or_else(|e| e.into_inner());
+            let body = build_deployment_trust_report(&s);
+            let snapshot =
+                persist_operational_snapshot(&s.storage, "deployment_trust_report", &body);
             json_response(&payload_with_snapshot(body, snapshot).to_string(), 200)
         }
         (Method::Get, "/api/deployment/self-hosted-wizard") => {

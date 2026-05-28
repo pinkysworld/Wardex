@@ -121,7 +121,28 @@ function installFleetFetchMock(agents = AGENTS, installAttempts = []) {
     if (u.includes('/api/agents')) return Promise.resolve(jsonOk(agents));
     if (u.includes('/api/fleet/status')) return Promise.resolve(jsonOk({ status: 'ok' }));
     if (u.includes('/api/fleet/dashboard')) {
-      return Promise.resolve(jsonOk({ total_agents: agents.length, agents: agents.length }));
+      return Promise.resolve(
+        jsonOk({
+          total_agents: agents.length,
+          agents: agents.length,
+          updates: {
+            campaign: {
+              status: 'in_progress',
+              failed_items: 0,
+              current_stage_counts: {
+                prepared: 1,
+                sent: 1,
+                installed: 1,
+                enrolled: 1,
+                healthy: 1,
+                policy_synced: 1,
+                telemetry_verified: 1,
+                failed: 0,
+              },
+            },
+          },
+        }),
+      );
     }
     if (u.includes('/api/ws/stats')) {
       return Promise.resolve(jsonOk({ connected_subscribers: 2, events_emitted: 7 }));
@@ -383,6 +404,16 @@ describe('FleetAgents', () => {
     expect(rolloutButton.className).toContain('active');
     expect(screen.getByText('Recent Rollout History')).toBeInTheDocument();
     expect(screen.getByText('Rollback after agent health regression')).toBeInTheDocument();
+  });
+
+  it('shows deployment campaign stages in the updates workspace', async () => {
+    await act(async () => {
+      renderFleet('/?fleetTab=updates&updatesPanel=versions');
+    });
+
+    expect(screen.getByText('Campaign Status')).toBeInTheDocument();
+    expect(screen.getByText('in_progress')).toBeInTheDocument();
+    expect(screen.getByText('0 failed items requiring remediation')).toBeInTheDocument();
   });
 
   it('opens the offline-agent recovery scope from the updates workspace', async () => {

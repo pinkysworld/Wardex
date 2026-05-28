@@ -13818,6 +13818,21 @@ paths:
                 type: object
       security:
       - bearerAuth: []
+  /api/release/deployment-trust-report:
+    get:
+      summary: Deployment trust report across release acceptance, provenance, parity, failover freshness, collector health, and fleet campaign evidence
+      operationId: getDeploymentTrustReport
+      tags:
+      - status
+      responses:
+        '200':
+          description: Deployment trust report response
+          content:
+            application/json:
+              schema:
+                type: object
+      security:
+      - bearerAuth: []
   /api/deployment/self-hosted-wizard:
     get:
       summary: Self-hosted deployment wizard readiness for Docker, Helm, systemd, and local binary installs

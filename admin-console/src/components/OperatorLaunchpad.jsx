@@ -251,6 +251,7 @@ export default function OperatorLaunchpad() {
   const [demoResetBusy, setDemoResetBusy] = useState(false);
   const [evidenceBusy, setEvidenceBusy] = useState(false);
   const [supportBundleBusy, setSupportBundleBusy] = useState(false);
+  const [trustReportBusy, setTrustReportBusy] = useState(false);
   const [handoffOwner, setHandoffOwner] = useState('');
   const [handoffNote, setHandoffNote] = useState('');
   const { data, loading, errors, reload } = useApiGroup({
@@ -272,6 +273,7 @@ export default function OperatorLaunchpad() {
     cleanReleaseCut: api.cleanReleaseCut,
     containerParity: api.containerReleaseParity,
     releaseVerification: api.releaseVerificationCenter,
+    deploymentTrustReport: api.deploymentTrustReport,
     deploymentWizard: api.selfHostedDeploymentWizard,
     dataQuality: api.dataQualityDashboard,
     scaleBaseline: api.performanceScaleBaseline,
@@ -397,6 +399,22 @@ export default function OperatorLaunchpad() {
       toast?.('Support bundle could not be generated', 'error');
     } finally {
       setSupportBundleBusy(false);
+    }
+  };
+
+  const exportDeploymentTrustReport = async () => {
+    if (trustReportBusy) return;
+    setTrustReportBusy(true);
+    try {
+      const report = await api.deploymentTrustReport();
+      const version = report?.customer_artifact?.version || currentVersion || 'unknown';
+      downloadData(report, `sentineledge-deployment-trust-report-${version}.json`);
+      toast?.('Deployment trust report exported', 'success');
+      await reload();
+    } catch {
+      toast?.('Deployment trust report export failed', 'error');
+    } finally {
+      setTrustReportBusy(false);
     }
   };
 
@@ -528,6 +546,15 @@ export default function OperatorLaunchpad() {
         data.releaseVerification,
       ),
       data.releaseVerification,
+    ],
+    [
+      'Deployment trust report',
+      data.deploymentTrustReport?.status,
+      freshnessDetail(
+        `${countValue(data.deploymentTrustReport, ['warn_count'])} warnings`,
+        data.deploymentTrustReport,
+      ),
+      data.deploymentTrustReport,
     ],
     [
       'Deployment wizard',
@@ -2153,6 +2180,14 @@ export default function OperatorLaunchpad() {
               </div>
               <button type="button" className="btn btn-sm" onClick={exportReleaseAcceptance}>
                 Export report
+              </button>
+              <button
+                type="button"
+                className="btn btn-sm"
+                onClick={exportDeploymentTrustReport}
+                disabled={trustReportBusy}
+              >
+                {trustReportBusy ? 'Exporting…' : 'Export trust report'}
               </button>
             </div>
             <div className="operator-kv-list">

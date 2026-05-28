@@ -138,6 +138,22 @@ describe('OperatorLaunchpad', () => {
           evidence_freshness: evidence('release_verification_center'),
         });
       }
+      if (path === '/api/release/deployment-trust-report') {
+        return jsonOk({
+          status: 'ready',
+          fail_count: 0,
+          warn_count: 0,
+          customer_artifact: {
+            product_name: 'SentinelEdge',
+            runtime_name: 'Wardex',
+            version: '1.0.8',
+          },
+          sections: {
+            fleet_campaign: { status: 'in_progress', failed_items: 0 },
+          },
+          evidence_freshness: evidence('deployment_trust_report'),
+        });
+      }
       if (path === '/api/deployment/self-hosted-wizard') {
         return jsonOk({
           status: 'ready',
@@ -333,6 +349,7 @@ describe('OperatorLaunchpad', () => {
     expect(screen.getByText('Ship readiness matrix')).toBeInTheDocument();
     expect(screen.getByText('API and SDK contract')).toBeInTheDocument();
     expect(screen.getByText('Backup and failover')).toBeInTheDocument();
+    expect(screen.getAllByText('Deployment trust report').length).toBeGreaterThan(0);
     expect(screen.getAllByText('Container parity').length).toBeGreaterThan(0);
     expect(screen.getAllByText('Validation packs').length).toBeGreaterThan(0);
     expect(screen.getByText('Artifact rows')).toBeInTheDocument();
@@ -376,6 +393,7 @@ describe('OperatorLaunchpad', () => {
     expect(screen.getByText('Scenario count')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Evidence Pack' })).toBeEnabled();
     expect(screen.getByRole('button', { name: 'Support Bundle' })).toBeEnabled();
+    expect(screen.getByRole('button', { name: 'Export trust report' })).toBeEnabled();
     expect(screen.getByText('Runtime and release catalog are aligned.')).toBeInTheDocument();
     expect(screen.getByText('Release acceptance signals are ready.')).toBeInTheDocument();
     expect(screen.getAllByText('dry_run_only').length).toBeGreaterThan(0);
@@ -430,6 +448,15 @@ describe('OperatorLaunchpad', () => {
 
     await waitFor(() => {
       expect(fetchMock).toHaveBeenCalledWith('/api/support/bundle', expect.any(Object));
+    });
+
+    await userEvent.click(screen.getByRole('button', { name: 'Export trust report' }));
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith(
+        '/api/release/deployment-trust-report',
+        expect.any(Object),
+      );
     });
 
     await userEvent.click(screen.getByRole('button', { name: 'Reset' }));

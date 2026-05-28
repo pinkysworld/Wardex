@@ -189,6 +189,8 @@ function normalizeAgent(agent, index) {
     version: source.version || '—',
     status: agent.computed_status || source.status || 'unknown',
     lastSeen: source.last_seen || agent.last_seen || agent.last_heartbeat || null,
+    campaignState: source.campaign_state || agent.campaign_state || null,
+    campaignProgress: source.campaign_progress || agent.campaign_progress || null,
     isLocalConsole: Boolean(agent.local_console || source.labels?.local_console === 'true'),
     raw: agent,
   };
@@ -406,6 +408,23 @@ export default function FleetAgents() {
     if (!latestRelease?.version) return [];
     return agentArr.filter((agent) => agent.version && agent.version !== latestRelease.version);
   }, [agentArr, latestRelease]);
+  const deploymentCampaign = useMemo(
+    () => dash?.updates?.campaign || dash?.campaign || null,
+    [dash],
+  );
+  const campaignStageRows = useMemo(() => {
+    const counts = deploymentCampaign?.current_stage_counts || {};
+    return [
+      ['Prepared', counts.prepared || 0],
+      ['Sent', counts.sent || 0],
+      ['Installed', counts.installed || 0],
+      ['Enrolled', counts.enrolled || 0],
+      ['Healthy', counts.healthy || 0],
+      ['Policy Synced', counts.policy_synced || 0],
+      ['Telemetry Verified', counts.telemetry_verified || 0],
+      ['Failed', counts.failed || 0],
+    ];
+  }, [deploymentCampaign]);
   const remoteInstallHistory = useMemo(
     () =>
       Array.isArray(installHistory?.attempts)
@@ -1509,6 +1528,12 @@ export default function FleetAgents() {
                     <div className="summary-value">{currentPreview.version}</div>
                   </div>
                   <div className="summary-card">
+                    <div className="summary-label">Campaign Stage</div>
+                    <div className="summary-value">
+                      {currentPreview.campaignState || 'not_started'}
+                    </div>
+                  </div>
+                  <div className="summary-card">
                     <div className="summary-label">Last Seen</div>
                     <div className="summary-value">
                       {formatRelativeTime(currentPreview.lastSeen)}
@@ -1667,6 +1692,16 @@ export default function FleetAgents() {
                   {latestRelease?.version
                     ? `${latestRelease.version} is the current release reference.`
                     : 'No latest release reference is currently available.'}
+                </div>
+              </div>
+              <div className="summary-card">
+                <div className="summary-label">Campaign Status</div>
+                <div className="summary-value">
+                  {deploymentCampaign?.status || 'unavailable'}
+                </div>
+                <div className="summary-meta">
+                  {deploymentCampaign?.failed_items || 0} failed item
+                  {(deploymentCampaign?.failed_items || 0) === 1 ? '' : 's'} requiring remediation
                 </div>
               </div>
             </div>
@@ -2193,6 +2228,8 @@ export default function FleetAgents() {
                     version_drift: driftAgents.length,
                     rollout_targets: rollout?.rollout_targets ?? rollout?.targets ?? 0,
                     rollback_events: rollout?.rollback_events ?? 0,
+                    campaign_status: deploymentCampaign?.status || 'unavailable',
+                    campaign_failed_items: deploymentCampaign?.failed_items ?? 0,
                   }}
                   limit={10}
                 />
@@ -2214,6 +2251,21 @@ export default function FleetAgents() {
                 ) : (
                   <div className="hint">Release metadata is not available yet.</div>
                 )}
+                <div style={{ marginTop: 16 }}>
+                  <div className="row-primary" style={{ marginBottom: 8 }}>
+                    Deployment campaign stages
+                  </div>
+                  {campaignStageRows.map(([label, count]) => (
+                    <div
+                      key={label}
+                      style={{ padding: '8px 0', borderBottom: '1px solid var(--border)' }}
+                    >
+                      <div className="row-secondary">
+                        {label} • {count}
+                      </div>
+                    </div>
+                  ))}
+                </div>
               </div>
             </div>
           )}

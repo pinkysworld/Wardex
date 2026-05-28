@@ -1,6 +1,7 @@
 # Wardex Documentation
 
 This folder tracks the current shipping product, not just the historical implementation journey.
+SentinelEdge is the customer-facing product name, and Wardex is the runtime/control-plane implementation.
 
 Read it in this order:
 

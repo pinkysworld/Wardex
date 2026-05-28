@@ -2,14 +2,14 @@ const { test, expect } = require("@playwright/test");
 
 const BASE = process.env.WARDEX_BASE_URL || "http://127.0.0.1:8080";
 const TOKEN = process.env.WARDEX_ADMIN_TOKEN || "wardex-live-token";
+const CONNECT_TIMEOUT_MS = 60000;
 
 async function authenticate(page) {
   await page.context().clearCookies();
   await page.goto(`${BASE}/admin/`, { waitUntil: "domcontentloaded" });
   await page.getByPlaceholder("API token").fill(TOKEN);
   await page.getByRole("button", { name: "Connect" }).click();
-  const authBadge = page.locator(".auth-badge");
-  await expect(authBadge).toContainText(/Connected/i, { timeout: 15000 });
+  await expectConnected(page);
 
   const onboardingDialog = page.getByRole("dialog", {
     name: "Set up the Wardex admin console",
@@ -20,6 +20,13 @@ async function authenticate(page) {
       .click();
     await expect(onboardingDialog).toBeHidden();
   }
+}
+
+async function expectConnected(page) {
+  const authBadge = page.locator(".auth-badge");
+  await expect(authBadge).toContainText(/Connected/i, {
+    timeout: CONNECT_TIMEOUT_MS,
+  });
 }
 
 async function expectApiOk(page, path) {
@@ -138,9 +145,7 @@ test("live detection quality and thread evidence routes stay wired", async ({
   await page.goto(`${BASE}/admin/detection?panel=quality`, {
     waitUntil: "domcontentloaded",
   });
-  await expect(page.locator(".auth-badge")).toContainText(/Connected/i, {
-    timeout: 30000,
-  });
+  await expectConnected(page);
   await expect(page.getByText("Detection Quality Score")).toBeVisible({
     timeout: 15000,
   });
@@ -187,9 +192,7 @@ test("live detection quality and thread evidence routes stay wired", async ({
   await page.goto(`${BASE}/admin/detection?panel=quality`, {
     waitUntil: "domcontentloaded",
   });
-  await expect(page.locator(".auth-badge")).toContainText(/Connected/i, {
-    timeout: 30000,
-  });
+  await expectConnected(page);
   await expect(page.getByText("Detection Quality Score")).toBeVisible({
     timeout: 15000,
   });

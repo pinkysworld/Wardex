@@ -32,6 +32,12 @@ vi.mock('../api.js', () => ({
       },
     ],
   }),
+  detectionTuningFeedback: vi.fn().mockResolvedValue({
+    status: 'ready',
+    total_feedback: 4,
+    recommendation_count: 1,
+    recommendations: [{ rule_id: 'r1', action: 'review_threshold' }],
+  }),
   runDetectionLab: vi.fn().mockResolvedValue({ status: 'completed' }),
   responseSafety: vi.fn().mockResolvedValue({
     overview: {
@@ -45,6 +51,21 @@ vi.mock('../api.js', () => ({
     requests: [
       { request: { action_label: 'Block IP', target_hostname: 'edge-01', status: 'Pending' } },
     ],
+  }),
+  responseExecutionAudit: vi.fn().mockResolvedValue({
+    count: 1,
+    audits: [
+      {
+        request_id: 'req-1',
+        approval_state: 'approved',
+        execution_result: 'completed',
+      },
+    ],
+  }),
+  rbacCoverage: vi.fn().mockResolvedValue({
+    coverage_pct: 100,
+    status: 'ready',
+    protected_routes: 12,
   }),
   responsePreview: vi.fn().mockResolvedValue({ status: 'preview_ready' }),
   integrationsMarketplace: vi.fn().mockResolvedValue({
@@ -101,6 +122,9 @@ vi.mock('../api.js', () => ({
       },
     ],
   }),
+  collectorsStatus: vi.fn().mockResolvedValue({
+    summary: { active_collectors: 1, healthy_collectors: 1, stale_collectors: 0 },
+  }),
   validateIntegration: vi.fn().mockResolvedValue({ status: 'preview_ready' }),
   operationsHealth: vi.fn().mockResolvedValue({
     slo_cards: [
@@ -111,6 +135,11 @@ vi.mock('../api.js', () => ({
         recommended_action: 'No action needed.',
       },
     ],
+  }),
+  searchPerformanceSlo: vi.fn().mockResolvedValue({
+    status: 'pass',
+    p95_ms: 120,
+    target_ms: 250,
   }),
   operationsHealthSnapshot: vi.fn().mockResolvedValue({ status: 'snapshot_saved' }),
   malwareExplain: vi.fn().mockResolvedValue({

@@ -17,6 +17,7 @@ REQUIRED_CI_SNIPPETS = {
     "contract parity": "python3 scripts/check_contract_parity.py",
     "release docs": "python3 scripts/validate_release_docs.py",
     "docs freshness": "python3 scripts/validate_docs_freshness.py",
+    "product identity": "python3 scripts/check_product_identity.py",
 }
 
 REQUIRED_RELEASE_SNIPPETS = {
@@ -24,6 +25,7 @@ REQUIRED_RELEASE_SNIPPETS = {
     "release contract parity": "python3 scripts/check_contract_parity.py",
     "release docs": "python3 scripts/validate_release_docs.py",
     "release docs freshness": "python3 scripts/validate_docs_freshness.py",
+    "release product identity": "python3 scripts/check_product_identity.py",
     "release trust checker": "python3 scripts/check_release_trust_gates.py",
     "provenance attestation": "actions/attest-build-provenance@",
     "OIDC provenance permission": "id-token: write",
@@ -89,7 +91,9 @@ def main() -> int:
             print(f"release-trust: {failure}", file=sys.stderr)
         return 1
 
-    print("release-trust: CI and release workflows retain panic, contract, docs, provenance, checksum, and artifact gates")
+    print(
+        "release-trust: CI and release workflows retain panic, contract, docs, identity, provenance, checksum, and artifact gates"
+    )
     return 0
 
 

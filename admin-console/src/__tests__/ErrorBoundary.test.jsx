@@ -84,7 +84,9 @@ describe('ErrorBoundary', () => {
     expect(writeText.mock.calls[0][0]).toContain('Wardex admin console error report');
     expect(writeText.mock.calls[0][0]).toContain('Message: Test explosion');
     expect(writeText.mock.calls[0][0]).toContain('Route: /monitor?eventType=alert');
-    expect(screen.getByText(/error report copied to the clipboard/i)).toBeInTheDocument();
+    await waitFor(() =>
+      expect(screen.getByText(/error report copied to the clipboard/i)).toBeInTheDocument(),
+    );
     spy.mockRestore();
   });
 

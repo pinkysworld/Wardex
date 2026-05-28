@@ -3682,6 +3682,15 @@ pub fn wardex_openapi_spec(version: &str) -> OpenApiSpec {
             ),
         )
         .path(
+            "/api/release/deployment-trust-report",
+            "get",
+            op(
+                "getDeploymentTrustReport",
+                "Deployment trust report across release acceptance, provenance, parity, failover freshness, collector health, and fleet campaign evidence",
+                &["status"],
+            ),
+        )
+        .path(
             "/api/deployment/self-hosted-wizard",
             "get",
             op(
@@ -4151,6 +4160,7 @@ mod tests {
         assert!(spec.paths.contains_key("/api/release/clean-cut"));
         assert!(spec.paths.contains_key("/api/containers/release-parity"));
         assert!(spec.paths.contains_key("/api/release/verification-center"));
+        assert!(spec.paths.contains_key("/api/release/deployment-trust-report"));
         assert!(
             spec.paths
                 .contains_key("/api/deployment/self-hosted-wizard")
