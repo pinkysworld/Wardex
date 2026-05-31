@@ -3,10 +3,10 @@
    Product-oriented landing page with lightweight progressive enhancement.
    ═══════════════════════════════════════════════════════════════════════════ */
 
-const RELEASE_VERSION = "1.0.22";
-const MODULE_COUNT = "139";
-const API_COUNT = "247";
-const TEST_COUNT = "1500+";
+const RELEASE_VERSION = "1.0.27";
+const MODULE_COUNT = "158";
+const API_COUNT = "262";
+const TEST_COUNT = "3967";
 
 const SITE_ROUTES = [
   { id: "overview", label: "Overview", file: "index.html", slug: "", nav: "primary" },
@@ -15,7 +15,7 @@ const SITE_ROUTES = [
   { id: "rules", label: "Rules", file: "rules.html", slug: "rules", nav: "primary" },
   { id: "resources", label: "Resources", file: "resources.html", slug: "resources", nav: "primary" },
   { id: "pricing", label: "Pricing", file: "pricing.html", slug: "pricing", nav: "primary" },
-  { id: "support", label: "Support", file: "donate.html", slug: "support", nav: "primary" },
+  { id: "support", label: "Support", file: "support/index.html", slug: "support", nav: "primary" },
   { id: "comparison", label: "Comparison", file: "comparison.html", slug: "comparison", nav: "secondary" },
   { id: "integrations", label: "Integrations", file: "integrations.html", slug: "integrations", nav: "secondary" },
   { id: "api", label: "API", file: "api.html", slug: "api", nav: "secondary" },

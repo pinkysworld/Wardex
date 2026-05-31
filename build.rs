@@ -122,16 +122,11 @@ fn admin_build_skip_reason(admin_dir: &Path) -> Option<String> {
         println!(
             "cargo:warning=admin-console/node_modules missing; running `npm ci` to install dependencies"
         );
-        let status = Command::new(&npm)
-            .arg("ci")
-            .current_dir(admin_dir)
-            .status();
+        let status = Command::new(&npm).arg("ci").current_dir(admin_dir).status();
         match status {
             Ok(s) if s.success() => {}
             Ok(s) => {
-                return Some(format!(
-                    "`npm ci` for admin console exited with status {s}"
-                ));
+                return Some(format!("`npm ci` for admin console exited with status {s}"));
             }
             Err(err) => {
                 return Some(format!("failed to run `npm ci` for admin console: {err}"));

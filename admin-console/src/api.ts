@@ -47,6 +47,7 @@ export class WardexApiError extends Error {
 let _token = '';
 let _baseUrl = '';
 let _pendingSignal: AbortSignal | null = null;
+let _csrfToken = '';
 
 const DEFAULT_TIMEOUT_MS = 15000;
 const RETRYABLE_STATUS = new Set<number>([408, 429, 500, 502, 503, 504]);
@@ -126,6 +127,12 @@ export function setToken(t: string): void {
 export function getToken(): string {
   return _token;
 }
+export function setCsrfToken(t: string): void {
+  _csrfToken = t;
+}
+export function getCsrfToken(): string {
+  return _csrfToken;
+}
 export function setBaseUrl(u: string): void {
   _baseUrl = u;
 }
@@ -151,6 +158,7 @@ async function request<T = unknown>(
   const signal = opts.signal ?? _pendingSignal;
   const headers: Record<string, string> = {};
   if (_token) headers['Authorization'] = 'Bearer ' + _token;
+  if (!_token && _csrfToken && method !== 'GET') headers['X-Wardex-CSRF'] = _csrfToken;
   let payload: BodyInit | null = null;
   if (body && typeof body === 'object') {
     headers['Content-Type'] = 'application/json';
@@ -187,7 +195,18 @@ async function request<T = unknown>(
         throw err;
       }
       const ct = res.headers.get('content-type') || '';
-      if (ct.includes('json')) return (await res.json()) as T;
+      if (ct.includes('json')) {
+        const parsed = (await res.json()) as T;
+        if (
+          parsed &&
+          typeof parsed === 'object' &&
+          'csrf_token' in parsed &&
+          typeof (parsed as { csrf_token?: unknown }).csrf_token === 'string'
+        ) {
+          _csrfToken = (parsed as { csrf_token: string }).csrf_token;
+        }
+        return parsed;
+      }
       return (await res.text()) as unknown as T;
     } catch (err) {
       if (signal?.aborted) {

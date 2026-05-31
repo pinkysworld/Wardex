@@ -59,7 +59,7 @@ impl Default for LlmConfig {
             provider: LlmProvider::OpenAi,
             api_endpoint: "https://api.openai.com/v1/chat/completions".into(),
             api_key: String::new(),
-            model: "gpt-4o-mini".into(),
+            model: "gpt-5.2".into(),
             max_tokens: 2048,
             temperature: 0.1,
             context_window: 8192,

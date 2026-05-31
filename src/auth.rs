@@ -69,6 +69,10 @@ pub struct Session {
     pub role: String,
     #[serde(default)]
     pub groups: Vec<String>,
+    #[serde(default)]
+    pub tenant_id: Option<String>,
+    #[serde(default)]
+    pub csrf_token: String,
     pub created_at: DateTime<Utc>,
     pub expires_at: DateTime<Utc>,
 }
@@ -133,6 +137,8 @@ impl SessionStore {
                 return;
             }
             envelope.sessions
+        } else if production_env() {
+            return;
         } else if let Ok(legacy_map) = serde_json::from_str::<HashMap<String, Session>>(&data) {
             legacy_map
         } else {
@@ -208,10 +214,27 @@ impl SessionStore {
         groups: &[String],
         ttl_hours: i64,
     ) -> String {
+        self.create_session_scoped(user_id, email, role, groups, None, ttl_hours)
+    }
+
+    /// Create a new session with optional tenant scope and return an opaque
+    /// session ID. The session also carries a non-HttpOnly CSRF token that the
+    /// console must echo for cookie-authenticated unsafe requests.
+    pub fn create_session_scoped(
+        &self,
+        user_id: &str,
+        email: &str,
+        role: &str,
+        groups: &[String],
+        tenant_id: Option<String>,
+        ttl_hours: i64,
+    ) -> String {
         let mut rng = rand::rng();
         let mut buf = [0u8; 32];
         rng.fill(&mut buf);
         let session_id = hex::encode(buf);
+        let mut csrf = [0u8; 32];
+        rng.fill(&mut csrf);
 
         let now = Utc::now();
         let session = Session {
@@ -219,6 +242,8 @@ impl SessionStore {
             email: email.to_string(),
             role: role.to_string(),
             groups: groups.to_vec(),
+            tenant_id: tenant_id.filter(|value| !value.trim().is_empty()),
+            csrf_token: hex::encode(csrf),
             created_at: now,
             expires_at: now + Duration::hours(ttl_hours),
         };
@@ -279,6 +304,20 @@ impl SessionStore {
     }
 }
 
+#[cfg(test)]
+static PRODUCTION_ENV_OVERRIDE: std::sync::atomic::AtomicBool =
+    std::sync::atomic::AtomicBool::new(false);
+
+fn production_env() -> bool {
+    #[cfg(test)]
+    if PRODUCTION_ENV_OVERRIDE.load(std::sync::atomic::Ordering::Relaxed) {
+        return true;
+    }
+    std::env::var("WARDEX_ENV")
+        .map(|value| value.eq_ignore_ascii_case("production"))
+        .unwrap_or(false)
+}
+
 fn constant_time_eq(left: &[u8], right: &[u8]) -> bool {
     if left.len() != right.len() {
         return false;
@@ -295,6 +334,8 @@ fn constant_time_eq(left: &[u8], right: &[u8]) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    static ENV_LOCK: Mutex<()> = Mutex::new(());
 
     #[test]
     fn default_config_disabled() {
@@ -336,6 +377,8 @@ mod tests {
                 email: "sso@example.com".into(),
                 role: "analyst".into(),
                 groups: vec!["Security".into()],
+                tenant_id: Some("tenant-a".into()),
+                csrf_token: "csrf-token".into(),
                 created_at: Utc::now(),
                 expires_at,
             },
@@ -464,6 +507,8 @@ mod tests {
 
     #[test]
     fn session_persistence_loads_legacy_unsigned_payload() {
+        let _guard = ENV_LOCK.lock().unwrap();
+        PRODUCTION_ENV_OVERRIDE.store(false, std::sync::atomic::Ordering::Relaxed);
         let dir = tempfile::tempdir().expect("tempdir");
         let path = dir.path().join("sessions.json");
         let path_str = path.to_string_lossy().to_string();
@@ -472,6 +517,8 @@ mod tests {
             email: "legacy@example.com".into(),
             role: "analyst".into(),
             groups: vec!["Security".into()],
+            tenant_id: None,
+            csrf_token: "legacy-csrf".into(),
             created_at: Utc::now(),
             expires_at: Utc::now() + Duration::hours(8),
         };
@@ -489,6 +536,38 @@ mod tests {
             .get_session("legacy-session")
             .expect("legacy session should load");
         assert_eq!(session.email, "legacy@example.com");
+    }
+
+    #[test]
+    fn production_session_persistence_rejects_legacy_unsigned_payload() {
+        let _guard = ENV_LOCK.lock().unwrap();
+        PRODUCTION_ENV_OVERRIDE.store(true, std::sync::atomic::Ordering::Relaxed);
+        let dir = tempfile::tempdir().expect("tempdir");
+        let path = dir.path().join("sessions.json");
+        let path_str = path.to_string_lossy().to_string();
+        let session = Session {
+            user_id: "legacy-user".into(),
+            email: "legacy@example.com".into(),
+            role: "analyst".into(),
+            groups: vec!["Security".into()],
+            tenant_id: None,
+            csrf_token: "legacy-csrf".into(),
+            created_at: Utc::now(),
+            expires_at: Utc::now() + Duration::hours(8),
+        };
+        let mut legacy = HashMap::new();
+        legacy.insert("legacy-session".to_string(), session);
+        std::fs::write(
+            &path,
+            serde_json::to_string(&legacy).expect("serialize legacy payload"),
+        )
+        .expect("write legacy payload");
+
+        let store =
+            SessionStore::with_persistence_key(&path_str, Some(b"legacy-migration-key".to_vec()));
+
+        assert!(store.get_session("legacy-session").is_none());
+        PRODUCTION_ENV_OVERRIDE.store(false, std::sync::atomic::Ordering::Relaxed);
     }
 
     #[test]

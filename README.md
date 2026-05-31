@@ -65,7 +65,10 @@ Useful local commands:
 cargo run -- demo
 cargo run -- analyze examples/credential_storm.csv
 cargo run
+WARDEX_ADMIN_TOKEN="$(cat var/.wardex_token)" bash scripts/evaluate_to_value.sh
 ```
+
+The evaluation script exercises the 15-minute path with evaluation-only seeded proof data: readiness, first-run proof seeding, first alert, response dry-run, evidence export, and deployment trust reporting. The exported artifacts land in `output/evaluate-to-value/`.
 
 ## Core Capabilities
 
@@ -83,6 +86,7 @@ cargo run
 Start here:
 
 - [Getting Started](docs/GETTING_STARTED.md)
+- [Evaluate Wardex in 15 Minutes](docs/EVALUATE_WARDEX.md)
 - [Architecture](docs/ARCHITECTURE.md)
 - [Status](docs/STATUS.md)
 - [Compatibility](docs/COMPATIBILITY.md)
@@ -143,4 +147,4 @@ Wardex is dual-licensed:
 - **Open source:** [AGPL-3.0](LICENSE)
 - **Commercial:** [commercial license](LICENSE.COMMERCIAL) for organizations that cannot use AGPL network-service copyleft terms
 
-Support and sponsorship details are available on the [Wardex support page](https://minh.systems/Wardex/donate.html) and through [GitHub Sponsors](https://github.com/sponsors/pinkysworld). For production deployment or commercial licensing, contact **support@wardex.dev**.
+Support details are available on the [Wardex support page](https://minh.systems/Wardex/support/) and through [GitHub Sponsors](https://github.com/sponsors/pinkysworld). For production deployment, licensing, or operator support, contact **support@wardex.dev**. Security disclosures should go to **security@wardex.dev** or the private GitHub advisory flow.

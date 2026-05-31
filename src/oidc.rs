@@ -139,6 +139,8 @@ pub struct OidcUserInfo {
     pub roles: Vec<String>,
     #[serde(default)]
     pub groups: Vec<String>,
+    #[serde(default, alias = "tid", alias = "tenant")]
+    pub tenant_id: Option<String>,
 }
 
 /// SSO session stored server-side.
@@ -790,6 +792,7 @@ mod tests {
             preferred_username: Some("testuser".into()),
             roles: vec!["SecurityAdmin".into()],
             groups: vec![],
+            tenant_id: None,
         };
         assert_eq!(provider.resolve_role(&user), "admin");
 
@@ -839,6 +842,7 @@ mod tests {
                 preferred_username: None,
                 roles: vec![],
                 groups: vec![],
+                tenant_id: None,
             },
             wardex_role: "analyst".into(),
             created_at: now,
@@ -1061,6 +1065,7 @@ mod tests {
                     preferred_username: None,
                     roles: vec![],
                     groups: vec![],
+                    tenant_id: None,
                 },
                 wardex_role: "analyst".into(),
                 created_at: now - 7200,
@@ -1082,6 +1087,7 @@ mod tests {
                     preferred_username: None,
                     roles: vec![],
                     groups: vec![],
+                    tenant_id: None,
                 },
                 wardex_role: "admin".into(),
                 created_at: now,
@@ -1118,6 +1124,7 @@ mod tests {
                     preferred_username: None,
                     roles: vec![],
                     groups: vec![],
+                    tenant_id: None,
                 },
                 wardex_role: "analyst".into(),
                 created_at: now - 7200,
@@ -1145,6 +1152,7 @@ mod tests {
             preferred_username: None,
             roles: vec!["UnknownRole".into()],
             groups: vec!["SecurityOps".into()], // should match via group
+            tenant_id: None,
         };
         assert_eq!(provider.resolve_role(&user), "admin");
     }
@@ -1175,6 +1183,7 @@ mod tests {
                 preferred_username: None,
                 roles: vec!["admin".into()],
                 groups: vec![],
+                tenant_id: None,
             },
             wardex_role: "admin".into(),
             created_at: now,

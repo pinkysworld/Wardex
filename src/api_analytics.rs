@@ -137,7 +137,10 @@ impl ApiAnalytics {
                 .into_iter()
                 .map(|le_ms| LatencyBucket {
                     le_ms,
-                    count: latencies.iter().filter(|latency| **latency <= le_ms).count() as u64,
+                    count: latencies
+                        .iter()
+                        .filter(|latency| **latency <= le_ms)
+                        .count() as u64,
                 })
                 .collect();
 
@@ -284,7 +287,10 @@ mod tests {
         assert!(m.p99_latency_ms >= 99.0);
         assert_eq!(m.min_latency_ms, 1.0);
         assert_eq!(m.max_latency_ms, 100.0);
-        assert_eq!(m.latency_histogram.last().map(|bucket| bucket.count), Some(100));
+        assert_eq!(
+            m.latency_histogram.last().map(|bucket| bucket.count),
+            Some(100)
+        );
     }
 
     #[test]
@@ -320,10 +326,28 @@ mod tests {
         );
 
         let metrics = analytics.metrics();
-        assert!(metrics.iter().any(|metric| metric.path == "/api/cases/{id}"));
-        assert!(metrics.iter().any(|metric| metric.path == "/api/playbook/execution/{id}/recovery-actions"));
-        assert!(metrics.iter().any(|metric| metric.path == "/api/agents/{id}"));
-        assert_eq!(metrics.iter().filter(|metric| metric.path == "/api/cases/{id}").count(), 1);
+        assert!(
+            metrics
+                .iter()
+                .any(|metric| metric.path == "/api/cases/{id}")
+        );
+        assert!(
+            metrics
+                .iter()
+                .any(|metric| metric.path == "/api/playbook/execution/{id}/recovery-actions")
+        );
+        assert!(
+            metrics
+                .iter()
+                .any(|metric| metric.path == "/api/agents/{id}")
+        );
+        assert_eq!(
+            metrics
+                .iter()
+                .filter(|metric| metric.path == "/api/cases/{id}")
+                .count(),
+            1
+        );
     }
 
     #[test]

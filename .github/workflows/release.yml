@@ -59,9 +59,21 @@ jobs:
 
       - name: Check API and SDK contract parity
         run: python3 scripts/check_contract_parity.py
+      - name: Check architecture guardrails
+        run: python3 scripts/check_architecture_guardrails.py
+      - name: Check product workflow metrics
+        run: python3 scripts/check_product_workflow_metrics.py
+      - name: Run API integration gate
+        run: cargo test --test api_integration
+      - name: Run concurrent smoke gate
+        run: cargo test --test concurrent_smoke
+      - name: Run failed-auth lockout gate
+        run: cargo test --test failed_auth_lockout
 
       - name: Check release docs consistency
         run: python3 scripts/validate_release_docs.py
+      - name: Check release facts consistency
+        run: python3 scripts/check_release_facts.py
 
       - name: Check docs freshness
         run: python3 scripts/validate_docs_freshness.py
@@ -523,3 +535,182 @@ jobs:
             -R "${{ github.repository }}" \
             --ref "${{ github.event.repository.default_branch }}" \
             -f tag="${GITHUB_REF_NAME}"
+
+  published-release-smoke:
+    name: Published Artifact Smoke — ${{ matrix.label }}
+    needs: [release]
+    runs-on: ${{ matrix.os }}
+    if: success()
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            label: github-linux-archive
+            pattern: wardex-linux-x86_64.tar.gz
+            mode: archive
+          - os: ubuntu-latest
+            label: github-deb-package
+            pattern: "*.deb"
+            mode: deb
+          - os: ubuntu-latest
+            label: github-rpm-package
+            pattern: "*.rpm"
+            mode: rpm
+          - os: macos-latest
+            label: github-macos-aarch64-archive
+            pattern: wardex-macos-aarch64.tar.gz
+            mode: archive
+          - os: macos-15-intel
+            label: github-macos-x86_64-archive
+            pattern: wardex-macos-x86_64.tar.gz
+            mode: archive
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Download published artifact
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p published-artifact
+          gh release download "${GITHUB_REF_NAME}" \
+            --repo "${GITHUB_REPOSITORY}" \
+            --pattern "${{ matrix.pattern }}" \
+            --dir published-artifact
+
+      - name: Install rpm tooling
+        if: matrix.mode == 'rpm'
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y rpm
+
+      - name: Smoke published artifact
+        run: |
+          shopt -s nullglob
+          files=(published-artifact/*)
+          shopt -u nullglob
+          if [[ "${#files[@]}" -ne 1 ]]; then
+            echo "expected exactly one published artifact for pattern ${{ matrix.pattern }}" >&2
+            printf '%s\n' "${files[@]}"
+            exit 1
+          fi
+          bash scripts/smoke_release_artifact.sh "${{ matrix.mode }}" "${files[0]}"
+
+  published-release-smoke-windows:
+    name: Published Artifact Smoke — github-windows-archive
+    needs: [release]
+    runs-on: windows-latest
+    if: success()
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Download published Windows archive
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Path published-artifact | Out-Null
+          gh release download $env:GITHUB_REF_NAME `
+            --repo $env:GITHUB_REPOSITORY `
+            --pattern "wardex-windows-x86_64.zip" `
+            --dir published-artifact
+
+      - name: Smoke published Windows archive
+        shell: pwsh
+        run: |
+          $artifact = Get-ChildItem -Path published-artifact -Filter *.zip | Select-Object -First 1
+          if (-not $artifact) {
+            throw "expected a published Windows archive"
+          }
+          ./scripts/smoke_release_artifact.ps1 archive $artifact.FullName
+
+  published-distribution-proof:
+    name: Published Distribution Proof
+    needs: [container-push, published-release-smoke, published-release-smoke-windows, sync-release-distribution]
+    runs-on: ubuntu-latest
+    if: success()
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Download published attestable archives
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p published-release-assets
+          gh release download "${GITHUB_REF_NAME}" \
+            --repo "${GITHUB_REPOSITORY}" \
+            --pattern "wardex-linux-x86_64.tar.gz" \
+            --pattern "wardex-macos-aarch64.tar.gz" \
+            --pattern "wardex-macos-x86_64.tar.gz" \
+            --pattern "wardex-windows-x86_64.zip" \
+            --dir published-release-assets
+
+      - name: Install release verification tooling
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y ca-certificates curl gnupg
+
+      - name: Install cosign
+        uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
+
+      - name: Verify published release surfaces
+        run: python3 scripts/verify_published_release.py --tag "${GITHUB_REF_NAME}"
+
+      - name: Verify archive attestations
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          for asset in published-release-assets/*; do
+            gh attestation verify "$asset" --repo "${GITHUB_REPOSITORY}"
+          done
+
+      - name: Verify and smoke GHCR image
+        env:
+          COSIGN_EXPERIMENTAL: "1"
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          image="ghcr.io/${GITHUB_REPOSITORY,,}:${GITHUB_REF_NAME#v}"
+          cosign verify \
+            --certificate-identity-regexp "^https://github.com/${GITHUB_REPOSITORY}/\\.github/workflows/release\\.yml@refs/tags/v[0-9]+\\.[0-9]+\\.[0-9]+$" \
+            --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+            "$image"
+          gh attestation verify "oci://$image" --repo "${GITHUB_REPOSITORY}"
+          bash scripts/smoke_release_artifact.sh container "$image"
+
+      - name: Install from public APT repository and smoke
+        run: |
+          sudo install -d -m 0755 /usr/share/keyrings
+          curl -fsSL "https://pinkysworld.github.io/Wardex/apt/wardex-archive-key.asc" \
+            | gpg --dearmor \
+            | sudo tee /usr/share/keyrings/wardex-archive-keyring.gpg >/dev/null
+          echo "deb [arch=amd64 signed-by=/usr/share/keyrings/wardex-archive-keyring.gpg] https://pinkysworld.github.io/Wardex/apt stable main" \
+            | sudo tee /etc/apt/sources.list.d/wardex.list >/dev/null
+          sudo apt-get update -qq
+          sudo apt-get install -y wardex
+          bash scripts/smoke_release_artifact.sh binary /usr/bin/wardex /usr/share/wardex/site
+
+  published-homebrew-proof:
+    name: Published Homebrew Proof
+    needs: [published-distribution-proof]
+    runs-on: macos-latest
+    if: success()
+    env:
+      HOMEBREW_NO_AUTO_UPDATE: "1"
+      HOMEBREW_NO_INSTALL_FROM_API: "1"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Install from published tap
+        run: |
+          brew untap pinkysworld/wardex >/dev/null 2>&1 || true
+          brew tap pinkysworld/wardex
+          brew install wardex
+
+      - name: Smoke Homebrew installation
+        run: |
+          prefix="$(brew --prefix wardex)"
+          bash scripts/smoke_release_artifact.sh binary "$(command -v wardex)" "$prefix/share/wardex/site"

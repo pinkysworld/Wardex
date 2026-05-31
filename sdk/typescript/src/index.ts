@@ -540,6 +540,8 @@ export interface AuthSession {
   groups: string[];
   authenticated: boolean;
   source: AuthSessionSource;
+  tenant_id?: string | null;
+  csrf_token?: string | null;
 }
 
 export interface AuthSessionCookie {
@@ -1787,9 +1789,19 @@ export interface AssistantCaseContext {
   linked_events: AssistantContextEvent[];
 }
 
+export interface AssistantScopeContext {
+  case_id?: number;
+  incident_id?: number;
+  investigation_id?: string;
+  source?: string;
+}
+
 export interface AssistantQueryRequest {
   question: string;
   case_id?: number;
+  incident_id?: number;
+  investigation_id?: string;
+  source?: string;
   conversation_id?: string;
   context_filter?: AssistantContextFilter;
   limit?: number;
@@ -1804,6 +1816,7 @@ export interface AssistantQueryResponse {
   response_time_ms: number;
   conversation_id: string;
   mode: string;
+  scope: AssistantScopeContext;
   case_context: AssistantCaseContext | null;
   context_events: AssistantContextEvent[];
   warnings: string[];

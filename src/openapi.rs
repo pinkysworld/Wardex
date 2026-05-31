@@ -109,6 +109,11 @@ pub struct Operation {
     pub security: Vec<BTreeMap<String, Vec<String>>>,
     #[serde(rename = "x-wardex-auth", skip_serializing_if = "Option::is_none")]
     pub wardex_auth: Option<String>,
+    #[serde(
+        rename = "x-wardex-auth-conditions",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub wardex_auth_conditions: Option<Vec<String>>,
 }
 
 impl Operation {
@@ -286,6 +291,7 @@ impl OpenApiBuilder {
         let access = endpoint_route_access(method, path);
         op.security = security_for_route_access(access);
         op.wardex_auth = Some(access.as_str().to_string());
+        op.wardex_auth_conditions = endpoint_auth_conditions(path);
         for parameter in inferred_path_parameters(path) {
             let exists = op.parameters.iter().any(|existing| {
                 existing.location == parameter.location && existing.name == parameter.name
@@ -511,6 +517,18 @@ fn endpoint_route_access(method: &str, path: &str) -> crate::server::ApiRouteAcc
     })
 }
 
+fn endpoint_auth_conditions(path: &str) -> Option<Vec<String>> {
+    match path {
+        "/api/metrics" => Some(vec![
+            "Requires bearer auth when `server.metrics_bearer_token` or `WARDEX_METRICS_TOKEN` is set.".to_string(),
+        ]),
+        "/api/openapi.json" => Some(vec![
+            "Requires authentication in production when `server.openapi_public=false` or `WARDEX_OPENAPI_PUBLIC=false`.".to_string(),
+        ]),
+        _ => None,
+    }
+}
+
 fn security_for_route_access(
     access: crate::server::ApiRouteAccess,
 ) -> Vec<BTreeMap<String, Vec<String>>> {
@@ -543,6 +561,7 @@ fn operation(
         responses,
         security,
         wardex_auth: None,
+        wardex_auth_conditions: None,
     }
 }
 
@@ -4160,7 +4179,10 @@ mod tests {
         assert!(spec.paths.contains_key("/api/release/clean-cut"));
         assert!(spec.paths.contains_key("/api/containers/release-parity"));
         assert!(spec.paths.contains_key("/api/release/verification-center"));
-        assert!(spec.paths.contains_key("/api/release/deployment-trust-report"));
+        assert!(
+            spec.paths
+                .contains_key("/api/release/deployment-trust-report")
+        );
         assert!(
             spec.paths
                 .contains_key("/api/deployment/self-hosted-wizard")
@@ -4385,6 +4407,38 @@ mod tests {
     fn metrics_endpoint_included() {
         let spec = wardex_openapi_spec("0.35.0");
         assert!(spec.paths.contains_key("/api/metrics"));
+    }
+
+    #[test]
+    fn conditional_public_auth_annotations_are_exposed() {
+        let spec = wardex_openapi_spec("0.35.0");
+        let metrics = spec
+            .paths
+            .get("/api/metrics")
+            .and_then(|item| item.get.as_ref())
+            .expect("metrics route");
+        assert!(
+            metrics
+                .wardex_auth_conditions
+                .as_ref()
+                .is_some_and(|conditions| conditions
+                    .iter()
+                    .any(|item| item.contains("metrics_bearer_token")))
+        );
+
+        let openapi = spec
+            .paths
+            .get("/api/openapi.json")
+            .and_then(|item| item.get.as_ref())
+            .expect("openapi route");
+        assert!(
+            openapi
+                .wardex_auth_conditions
+                .as_ref()
+                .is_some_and(|conditions| conditions
+                    .iter()
+                    .any(|item| item.contains("openapi_public")))
+        );
     }
 
     #[test]

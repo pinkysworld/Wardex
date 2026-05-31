@@ -33,6 +33,9 @@ pub struct AgentIdentity {
     pub last_seen: String,
     pub status: AgentStatus,
     pub labels: HashMap<String, String>,
+    /// Hash of the per-agent bearer secret returned once during enrollment.
+    #[serde(default)]
+    pub agent_token_hash: String,
     #[serde(default)]
     pub health: AgentHealth,
     /// Per-agent monitoring scope override. When `None`, the server-global scope applies.
@@ -142,6 +145,15 @@ fn enrollment_token_hash(token: &str) -> String {
     sha256_hex(format!("wardex-enrollment-token-v1:{token}").as_bytes())
 }
 
+fn generate_agent_token() -> String {
+    let bytes: [u8; 32] = rand::random();
+    hex::encode(bytes)
+}
+
+fn agent_token_hash(token: &str) -> String {
+    sha256_hex(format!("wardex-agent-token-v1:{token}").as_bytes())
+}
+
 /// Enrollment request sent by an agent.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct EnrollRequest {
@@ -156,6 +168,8 @@ pub struct EnrollRequest {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct EnrollResponse {
     pub agent_id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub agent_token: Option<String>,
     pub server_version: String,
     pub heartbeat_interval_secs: u64,
     pub policy_poll_interval_secs: u64,
@@ -218,6 +232,7 @@ impl AgentRegistry {
         }
 
         let agent_id = generate_agent_id();
+        let agent_token = generate_agent_token();
         let now = chrono::Utc::now().to_rfc3339();
 
         let identity = AgentIdentity {
@@ -229,6 +244,7 @@ impl AgentRegistry {
             last_seen: now,
             status: AgentStatus::Online,
             labels: req.labels.clone().unwrap_or_default(),
+            agent_token_hash: agent_token_hash(&agent_token),
             health: AgentHealth::default(),
             monitor_scope: None,
         };
@@ -238,6 +254,7 @@ impl AgentRegistry {
 
         Ok(EnrollResponse {
             agent_id,
+            agent_token: Some(agent_token),
             server_version: env!("CARGO_PKG_VERSION").to_string(),
             heartbeat_interval_secs: self.heartbeat_interval,
             policy_poll_interval_secs: 60,
@@ -279,6 +296,13 @@ impl AgentRegistry {
     /// Get a single agent by ID.
     pub fn get(&self, agent_id: &str) -> Option<&AgentIdentity> {
         self.agents.get(agent_id)
+    }
+
+    pub fn agent_token_matches(&self, agent_id: &str, presented: &str) -> bool {
+        self.agents
+            .get(agent_id)
+            .filter(|agent| !agent.agent_token_hash.trim().is_empty())
+            .is_some_and(|agent| ct_eq(&agent.agent_token_hash, &agent_token_hash(presented)))
     }
 
     /// List all registered agents.

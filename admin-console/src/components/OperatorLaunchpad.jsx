@@ -2661,7 +2661,7 @@ export default function OperatorLaunchpad() {
               </div>
             </div>
             <div className="summary-meta">
-              {data.demoStatus?.status || 'available'} • {demoSampleAlerts} sample alerts
+              evaluation only • {data.demoStatus?.status || 'available'} • {demoSampleAlerts} sample alerts
             </div>
           </div>
 

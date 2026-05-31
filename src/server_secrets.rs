@@ -25,8 +25,7 @@ use crate::server_response::{error_json, json_response};
 pub(crate) fn handle_secrets_rotation_operations(state: &Arc<Mutex<AppState>>) -> Response<Body> {
     let s = state.lock().unwrap_or_else(|e| e.into_inner());
     let body = build_secrets_rotation_operations(&s);
-    let snapshot =
-        persist_operational_snapshot(&s.storage, "secrets_rotation_operations", &body);
+    let snapshot = persist_operational_snapshot(&s.storage, "secrets_rotation_operations", &body);
     json_response(&payload_with_snapshot(body, snapshot).to_string(), 200)
 }
 

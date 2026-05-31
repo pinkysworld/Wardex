@@ -1045,6 +1045,17 @@ struct WorkbenchRecommendation {
 }
 
 #[derive(Debug, Clone, serde::Serialize)]
+struct WorkbenchValueBrief {
+    status: String,
+    analyst_hours_saved_estimate: f64,
+    coverage_growth_items: usize,
+    collector_freshness_risk: usize,
+    blocked_high_risk_actions: usize,
+    approval_latency_watch: usize,
+    priority_actions: Vec<String>,
+}
+
+#[derive(Debug, Clone, serde::Serialize)]
 struct WorkbenchOverview {
     generated_at: String,
     queue: WorkbenchQueueOverview,
@@ -1059,6 +1070,7 @@ struct WorkbenchOverview {
     team_load: WorkbenchTeamLoadOverview,
     connector_impact: WorkbenchConnectorImpactOverview,
     detection_review: WorkbenchDetectionReviewOverview,
+    value_brief: WorkbenchValueBrief,
     hot_agents: Vec<HotAgentSummary>,
     urgent_items: Vec<UrgentItem>,
     recommendations: Vec<WorkbenchRecommendation>,
@@ -1295,6 +1307,7 @@ pub(crate) fn local_console_identity(state: &AppState) -> AgentIdentity {
         last_seen,
         status: AgentStatus::Online,
         labels,
+        agent_token_hash: String::new(),
         health: AgentHealth {
             pending_alerts: state
                 .alerts
@@ -1355,7 +1368,7 @@ pub async fn run_server(
     port: u16,
     site_dir: &Path,
     shutdown: Arc<AtomicBool>,
-    initial_config: Config,
+    mut initial_config: Config,
 ) -> Result<(), String> {
     let addr = format!("0.0.0.0:{port}");
 
@@ -1400,6 +1413,8 @@ pub async fn run_server(
         .map_err(|e| format!("failed to bind {addr}: {e}"))?;
 
     let config_path = crate::config::runtime_config_path();
+    apply_server_env_overrides(&mut initial_config);
+    validate_production_trust_config(&initial_config)?;
 
     // Use persistent token from environment if set, otherwise generate a random one
     let token = std::env::var("WARDEX_ADMIN_TOKEN").unwrap_or_else(|_| generate_token());
@@ -2938,7 +2953,12 @@ pub(crate) enum AuthIdentity {
     None,
     AdminToken,
     UserToken(User),
-    SessionToken { user: User, groups: Vec<String> },
+    SessionToken {
+        user: User,
+        groups: Vec<String>,
+        csrf_token: String,
+        cookie_authenticated: bool,
+    },
 }
 
 impl AuthIdentity {
@@ -2972,6 +2992,25 @@ impl AuthIdentity {
             AuthIdentity::SessionToken { groups, .. } => groups,
             _ => &[],
         }
+    }
+
+    fn csrf_token(&self) -> Option<&str> {
+        match self {
+            AuthIdentity::SessionToken { csrf_token, .. } if !csrf_token.is_empty() => {
+                Some(csrf_token)
+            }
+            _ => None,
+        }
+    }
+
+    fn is_cookie_authenticated(&self) -> bool {
+        matches!(
+            self,
+            AuthIdentity::SessionToken {
+                cookie_authenticated: true,
+                ..
+            }
+        )
     }
 
     fn tenant_id(&self) -> Option<&str> {
@@ -3011,6 +3050,12 @@ fn cluster_request_authorized(headers: &HeaderMap, state: &Arc<Mutex<AppState>>)
 }
 
 const SESSION_COOKIE_NAME: &str = "wardex_session";
+const CSRF_HEADER_NAME: &str = "x-wardex-csrf";
+const MTLS_VERIFY_HEADER: &str = "x-ssl-client-verify";
+const MTLS_CERT_HEADER: &str = "x-forwarded-client-cert";
+const MTLS_PRESENT_HEADER: &str = "x-client-cert-present";
+const AGENT_ID_HEADER: &str = "x-wardex-agent-id";
+const AGENT_TOKEN_HEADER: &str = "x-wardex-agent-token";
 
 fn session_cookie_token(headers: &HeaderMap) -> Option<String> {
     let cookie_header = headers.get(COOKIE)?.to_str().ok()?;
@@ -3027,6 +3072,164 @@ fn session_cookie_token(headers: &HeaderMap) -> Option<String> {
         }
     }
     None
+}
+
+fn csrf_header_token(headers: &HeaderMap) -> Option<&str> {
+    headers
+        .get(CSRF_HEADER_NAME)
+        .and_then(|value| value.to_str().ok())
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+}
+
+fn unsafe_method_requires_csrf(method: &Method) -> bool {
+    matches!(
+        method,
+        Method::Post | Method::Put | Method::Patch | Method::Delete
+    )
+}
+
+fn csrf_request_authorized(headers: &HeaderMap, auth: &AuthIdentity, method: &Method) -> bool {
+    if !unsafe_method_requires_csrf(method) || !auth.is_cookie_authenticated() {
+        return true;
+    }
+    let Some(expected) = auth.csrf_token() else {
+        return false;
+    };
+    secure_token_eq(csrf_header_token(headers), expected)
+}
+
+fn bool_header_is_true(headers: &HeaderMap, name: &str) -> bool {
+    headers
+        .get(name)
+        .and_then(|value| value.to_str().ok())
+        .map(str::trim)
+        .is_some_and(|value| {
+            value.eq_ignore_ascii_case("true") || value.eq_ignore_ascii_case("yes") || value == "1"
+        })
+}
+
+fn agent_mtls_request_verified(headers: &HeaderMap) -> bool {
+    let verification_ok = headers
+        .get(MTLS_VERIFY_HEADER)
+        .and_then(|value| value.to_str().ok())
+        .map(str::trim)
+        .is_some_and(|value| {
+            value.eq_ignore_ascii_case("success") || value.eq_ignore_ascii_case("verified")
+        });
+    let cert_present = headers
+        .get(MTLS_CERT_HEADER)
+        .and_then(|value| value.to_str().ok())
+        .map(str::trim)
+        .is_some_and(|value| {
+            !value.is_empty() && !value.eq_ignore_ascii_case("none") && value != "-"
+        })
+        || bool_header_is_true(headers, MTLS_PRESENT_HEADER);
+    verification_ok && cert_present
+}
+
+fn remote_ip(remote_addr: &str) -> &str {
+    remote_addr
+        .rsplit_once(':')
+        .map(|(host, _)| host.trim_matches(['[', ']']))
+        .unwrap_or(remote_addr)
+}
+
+fn trusted_mtls_proxy(config: &Config, remote_addr: &str) -> bool {
+    let ip = remote_ip(remote_addr);
+    config
+        .security
+        .trusted_mtls_proxy_addrs
+        .iter()
+        .any(|allowed| allowed.trim() == ip || allowed.trim() == remote_addr)
+}
+
+fn agent_mtls_request_trusted(headers: &HeaderMap, config: &Config, remote_addr: &str) -> bool {
+    if !agent_mtls_request_verified(headers) {
+        return false;
+    }
+    if is_production_env() {
+        return trusted_mtls_proxy(config, remote_addr);
+    }
+    true
+}
+
+fn header_value<'a>(headers: &'a HeaderMap, name: &str) -> Option<&'a str> {
+    headers
+        .get(name)
+        .and_then(|value| value.to_str().ok())
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+}
+
+fn path_agent_id(route_path: &str, suffix: &str) -> Option<String> {
+    route_path
+        .strip_prefix("/api/agents/")
+        .and_then(|rest| rest.strip_suffix(suffix))
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(ToOwned::to_owned)
+}
+
+fn requested_agent_id(
+    method: &Method,
+    url: &str,
+    headers: &HeaderMap,
+    body: &[u8],
+) -> Option<String> {
+    let route_path = url_path(url);
+    if *method == Method::Post
+        && let Some(agent_id) = path_agent_id(route_path, "/heartbeat")
+    {
+        return Some(agent_id);
+    }
+    if *method == Method::Post
+        && let Some(agent_id) = path_agent_id(route_path, "/logs")
+    {
+        return Some(agent_id);
+    }
+    if *method == Method::Post
+        && let Some(agent_id) = path_agent_id(route_path, "/inventory")
+    {
+        return Some(agent_id);
+    }
+    if route_path == "/api/agents/update" {
+        return parse_query_string(url).get("agent_id").cloned();
+    }
+    if route_path == "/api/events" {
+        return serde_json::from_slice::<serde_json::Value>(body)
+            .ok()
+            .and_then(|value| {
+                value
+                    .get("agent_id")
+                    .and_then(serde_json::Value::as_str)
+                    .map(str::to_string)
+            });
+    }
+    header_value(headers, AGENT_ID_HEADER).map(str::to_string)
+}
+
+fn agent_request_bound_to_agent(
+    method: &Method,
+    url: &str,
+    headers: &HeaderMap,
+    body: &[u8],
+    state: &Arc<Mutex<AppState>>,
+) -> bool {
+    let Some(header_agent_id) = header_value(headers, AGENT_ID_HEADER) else {
+        return false;
+    };
+    let Some(agent_token) = header_value(headers, AGENT_TOKEN_HEADER) else {
+        return false;
+    };
+    if let Some(requested_agent_id) = requested_agent_id(method, url, headers, body)
+        && requested_agent_id != header_agent_id
+    {
+        return false;
+    }
+    let s = crate::state_lock::tracked_lock(state, "server/agent_identity_check");
+    s.agent_registry
+        .agent_token_matches(header_agent_id, agent_token)
 }
 
 fn session_store_path(config_path: &Path) -> String {
@@ -3226,7 +3429,11 @@ fn ensure_target_group_access(
     }
 }
 
-fn auth_identity_from_session(token: String, session: crate::auth::Session) -> AuthIdentity {
+fn auth_identity_from_session(
+    token: String,
+    session: crate::auth::Session,
+    cookie_authenticated: bool,
+) -> AuthIdentity {
     AuthIdentity::SessionToken {
         user: User {
             username: session.user_id,
@@ -3234,21 +3441,31 @@ fn auth_identity_from_session(token: String, session: crate::auth::Session) -> A
             token_hash: token,
             enabled: true,
             created_at: session.created_at.to_rfc3339(),
-            tenant_id: None,
+            tenant_id: session.tenant_id,
         },
         groups: session.groups,
+        csrf_token: session.csrf_token,
+        cookie_authenticated,
     }
 }
 
-fn session_identity_from_store(token: String, state: &AppState) -> Option<AuthIdentity> {
+fn session_identity_from_store(
+    token: String,
+    state: &AppState,
+    cookie_authenticated: bool,
+) -> Option<AuthIdentity> {
     if let Some(session) = state.session_store.get_session(&token) {
-        return Some(auth_identity_from_session(token, session));
+        return Some(auth_identity_from_session(
+            token,
+            session,
+            cookie_authenticated,
+        ));
     }
     state.session_store.reload();
     state
         .session_store
         .get_session(&token)
-        .map(|session| auth_identity_from_session(token, session))
+        .map(|session| auth_identity_from_session(token, session, cookie_authenticated))
 }
 
 pub(crate) fn encode_query_component(value: &str) -> String {
@@ -3294,20 +3511,121 @@ fn session_cookie_header(session_id: &str, expires_at: chrono::DateTime<chrono::
         .signed_duration_since(chrono::Utc::now())
         .num_seconds()
         .max(0);
-    let secure = std::env::var("WARDEX_SESSION_COOKIE_SECURE")
-        .ok()
-        .and_then(|value| parse_bool_query(&value))
-        .unwrap_or(false);
+    let secure = session_cookie_secure();
     let secure_attr = if secure { "; Secure" } else { "" };
     format!(
-        "{SESSION_COOKIE_NAME}={session_id}; Path=/; HttpOnly; SameSite=Lax; Max-Age={max_age}{secure_attr}"
+        "{SESSION_COOKIE_NAME}={session_id}; Path=/; HttpOnly; SameSite=Strict; Max-Age={max_age}{secure_attr}"
     )
 }
 
 fn clear_session_cookie_header() -> String {
     format!(
-        "{SESSION_COOKIE_NAME}=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0; Expires=Thu, 01 Jan 1970 00:00:00 GMT"
+        "{SESSION_COOKIE_NAME}=; Path=/; HttpOnly; SameSite=Strict; Max-Age=0; Expires=Thu, 01 Jan 1970 00:00:00 GMT"
     )
+}
+
+fn is_production_env() -> bool {
+    std::env::var("WARDEX_ENV")
+        .map(|value| value.eq_ignore_ascii_case("production"))
+        .unwrap_or(false)
+}
+
+fn env_bool(name: &str) -> Option<bool> {
+    std::env::var(name)
+        .ok()
+        .and_then(|value| parse_bool_query(&value))
+}
+
+fn session_cookie_secure() -> bool {
+    env_bool("WARDEX_SESSION_COOKIE_SECURE").unwrap_or_else(is_production_env)
+}
+
+fn apply_server_env_overrides(config: &mut Config) {
+    if let Ok(token) = std::env::var("WARDEX_METRICS_TOKEN")
+        && !token.trim().is_empty()
+    {
+        config.server.metrics_bearer_token = Some(token);
+    }
+    if let Some(public) = env_bool("WARDEX_OPENAPI_PUBLIC") {
+        config.server.openapi_public = public;
+    }
+}
+
+fn validate_production_trust_config(config: &Config) -> Result<(), String> {
+    if !is_production_env() {
+        return Ok(());
+    }
+    if std::env::var("WARDEX_ADMIN_TOKEN")
+        .map(|token| token.trim().is_empty())
+        .unwrap_or(true)
+    {
+        return Err("WARDEX_ENV=production requires explicit WARDEX_ADMIN_TOKEN".to_string());
+    }
+    if std::env::var("WARDEX_SPOOL_KEY")
+        .map(|key| key.trim().is_empty())
+        .unwrap_or(true)
+    {
+        return Err("WARDEX_ENV=production requires explicit WARDEX_SPOOL_KEY".to_string());
+    }
+    if std::env::var("WARDEX_OPENAPI_PUBLIC")
+        .map(|value| value.trim().is_empty())
+        .unwrap_or(true)
+    {
+        return Err(
+            "WARDEX_ENV=production requires explicit WARDEX_OPENAPI_PUBLIC=true or false"
+                .to_string(),
+        );
+    }
+    if config
+        .security
+        .cors_allowed_origins
+        .iter()
+        .any(|origin| origin.trim() == "*")
+        || std::env::var("WARDEX_CORS_ORIGIN")
+            .or_else(|_| std::env::var("SENTINEL_CORS_ORIGIN"))
+            .map(|origin| origin.trim() == "*")
+            .unwrap_or(false)
+    {
+        return Err("WARDEX_ENV=production rejects wildcard CORS origins".to_string());
+    }
+    let has_agent_bearer = std::env::var("WARDEX_AGENT_TOKEN")
+        .map(|token| !token.trim().is_empty())
+        .unwrap_or(false);
+    let has_mtls = config.security.require_mtls_agents
+        && config
+            .security
+            .agent_ca_cert_path
+            .as_deref()
+            .is_some_and(|path| !path.trim().is_empty());
+    let has_trusted_mtls_proxy = config
+        .security
+        .trusted_mtls_proxy_addrs
+        .iter()
+        .any(|addr| !addr.trim().is_empty());
+    if !has_agent_bearer && !has_mtls {
+        return Err(
+            "WARDEX_ENV=production requires WARDEX_AGENT_TOKEN or configured agent mTLS"
+                .to_string(),
+        );
+    }
+    if has_mtls && !has_trusted_mtls_proxy {
+        return Err(
+            "WARDEX_ENV=production requires security.trusted_mtls_proxy_addrs when trusting agent mTLS headers"
+                .to_string(),
+        );
+    }
+    if config
+        .server
+        .metrics_bearer_token
+        .as_deref()
+        .is_none_or(|token| token.trim().is_empty())
+    {
+        return Err(
+            "WARDEX_ENV=production requires server.metrics_bearer_token or WARDEX_METRICS_TOKEN"
+                .to_string(),
+        );
+    }
+    Ok(())
 }
 
 fn apply_set_cookie(mut response: Response<Body>, cookie: &str) -> Response<Body> {
@@ -3350,13 +3668,14 @@ fn create_console_session_for_identity(
                 .get_session(&session_id)
                 .map(|session| (session, session_id))
         }
-        AuthIdentity::SessionToken { user, groups } => {
+        AuthIdentity::SessionToken { user, groups, .. } => {
             let role = role_label(user.role);
-            let session_id = state.session_store.create_session(
+            let session_id = state.session_store.create_session_scoped(
                 &user.username,
                 &format!("{}@local.wardex", user.username),
                 role,
                 groups,
+                user.tenant_id.clone(),
                 ttl_hours,
             );
             state
@@ -3653,6 +3972,12 @@ fn complete_sso_callback(
         email,
         role: sso_session.wardex_role.clone(),
         groups: sso_session.user_info.groups.clone(),
+        tenant_id: sso_session
+            .user_info
+            .tenant_id
+            .clone()
+            .filter(|value| !value.trim().is_empty()),
+        csrf_token: generate_token(),
         created_at,
         expires_at,
     };
@@ -3686,13 +4011,13 @@ fn authenticate_request(headers: &HeaderMap, state: &Arc<Mutex<AppState>>) -> Au
         if let Some(user) = state.rbac.authenticate(&token) {
             return AuthIdentity::UserToken(user);
         }
-        if let Some(identity) = session_identity_from_store(token, &state) {
+        if let Some(identity) = session_identity_from_store(token, &state, false) {
             return identity;
         }
     }
     if let Some(token) = session_cookie_token(headers) {
         let state = crate::state_lock::tracked_lock(state, "server/authenticate_request_session");
-        if let Some(identity) = session_identity_from_store(token, &state) {
+        if let Some(identity) = session_identity_from_store(token, &state, true) {
             return identity;
         }
     }
@@ -5131,8 +5456,8 @@ fn deployment_campaign_progress(
         && (policy_version == 0
             || deployment.is_none()
             || deployment.is_some_and(|entry| is_terminal_deployment_status(&entry.status)));
-    let telemetry_verified = policy_synced
-        && age_secs.unwrap_or(u64::MAX) <= heartbeat_interval.saturating_mul(2);
+    let telemetry_verified =
+        policy_synced && age_secs.unwrap_or(u64::MAX) <= heartbeat_interval.saturating_mul(2);
     let failed = deployment_failed;
 
     let current_state = if failed {
@@ -5861,6 +6186,62 @@ fn build_connector_impact_overview(
     }
 }
 
+fn build_value_brief(
+    connector_impact: &WorkbenchConnectorImpactOverview,
+    detection_review: &WorkbenchDetectionReviewOverview,
+    response: &WorkbenchResponseOverview,
+    content: &WorkbenchContentOverview,
+) -> WorkbenchValueBrief {
+    let blocked_high_risk_actions = response.pending_approval;
+    let coverage_growth_items = content.enabled_packs + content.hunt_library;
+    let analyst_hours_saved_estimate = ((detection_review.replay_blockers
+        + detection_review.due_this_week
+        + connector_impact.impacted_detections) as f64
+        * 0.35)
+        .max(0.0);
+    let mut priority_actions = Vec::new();
+    if connector_impact.collectors_at_risk > 0 {
+        priority_actions.push(format!(
+            "Restore {} collector lane(s) before relying on downstream detections.",
+            connector_impact.collectors_at_risk
+        ));
+    }
+    if detection_review.replay_blockers > 0 {
+        priority_actions.push(format!(
+            "Replay {} blocked detection review item(s) before promotion.",
+            detection_review.replay_blockers
+        ));
+    }
+    if blocked_high_risk_actions > 0 {
+        priority_actions.push(format!(
+            "Review {} blocked or approval-gated response action(s).",
+            blocked_high_risk_actions
+        ));
+    }
+    if priority_actions.is_empty() {
+        priority_actions.push(
+            "Package current coverage, collector freshness, and response proof for leadership."
+                .to_string(),
+        );
+    }
+    WorkbenchValueBrief {
+        status: if connector_impact.collectors_at_risk > 0
+            || detection_review.replay_blockers > 0
+            || blocked_high_risk_actions > 0
+        {
+            "attention".to_string()
+        } else {
+            "ready".to_string()
+        },
+        analyst_hours_saved_estimate,
+        coverage_growth_items,
+        collector_freshness_risk: connector_impact.collectors_at_risk,
+        blocked_high_risk_actions,
+        approval_latency_watch: response.pending_approval,
+        priority_actions,
+    }
+}
+
 fn build_workbench_overview(
     alert_queue: &AlertQueue,
     case_store: &CaseStore,
@@ -6362,6 +6743,37 @@ fn build_workbench_overview(
         });
     }
 
+    let response_overview = WorkbenchResponseOverview {
+        pending_approval: *response_counts.get("Pending").unwrap_or(&0),
+        ready_to_execute,
+        denied: *response_counts.get("Denied").unwrap_or(&0),
+        executed: *response_counts.get("Executed").unwrap_or(&0),
+        protected_assets: response_orchestrator.protected_asset_count(),
+        recent_requests,
+        recent_approvals,
+    };
+    let content_overview = WorkbenchContentOverview {
+        packs: packs.len(),
+        enabled_packs: packs.iter().filter(|pack| pack.enabled).count(),
+        hunt_library: hunts.len(),
+        scheduled_hunts: hunts
+            .iter()
+            .filter(|hunt| hunt.schedule_interval_secs.is_some())
+            .count(),
+        saved_searches,
+        packs_with_workflows: packs
+            .iter()
+            .filter(|pack| !pack.recommended_workflows.is_empty())
+            .count(),
+        latest_pack_update,
+    };
+    let value_brief = build_value_brief(
+        &connector_impact,
+        &detection_review,
+        &response_overview,
+        &content_overview,
+    );
+
     WorkbenchOverview {
         generated_at: chrono::Utc::now().to_rfc3339(),
         queue: WorkbenchQueueOverview {
@@ -6389,15 +6801,7 @@ fn build_workbench_overview(
             by_status: incident_statuses,
             items: incident_items.into_iter().take(8).collect(),
         },
-        response: WorkbenchResponseOverview {
-            pending_approval: *response_counts.get("Pending").unwrap_or(&0),
-            ready_to_execute,
-            denied: *response_counts.get("Denied").unwrap_or(&0),
-            executed: *response_counts.get("Executed").unwrap_or(&0),
-            protected_assets: response_orchestrator.protected_asset_count(),
-            recent_requests,
-            recent_approvals,
-        },
+        response: response_overview,
         identity: WorkbenchIdentityOverview {
             providers_configured: identity_summaries.len(),
             ready_providers,
@@ -6418,21 +6822,7 @@ fn build_workbench_overview(
             last_rollout_at,
             recent_history: recent_rollout_history,
         },
-        content: WorkbenchContentOverview {
-            packs: packs.len(),
-            enabled_packs: packs.iter().filter(|pack| pack.enabled).count(),
-            hunt_library: hunts.len(),
-            scheduled_hunts: hunts
-                .iter()
-                .filter(|hunt| hunt.schedule_interval_secs.is_some())
-                .count(),
-            saved_searches,
-            packs_with_workflows: packs
-                .iter()
-                .filter(|pack| !pack.recommended_workflows.is_empty())
-                .count(),
-            latest_pack_update,
-        },
+        content: content_overview,
         automation: WorkbenchAutomationOverview {
             playbooks: playbook_engine.list_playbooks().len(),
             workflow_templates: workflow_store.workflow_count(),
@@ -6466,6 +6856,7 @@ fn build_workbench_overview(
         team_load,
         connector_impact,
         detection_review,
+        value_brief,
         hot_agents,
         urgent_items,
         recommendations,
@@ -8206,6 +8597,67 @@ fn case_linked_events(
         .collect()
 }
 
+fn case_closure_readiness_json(
+    case: &crate::analyst::Case,
+    handoff: Option<&crate::investigation::InvestigationHandoff>,
+    linked_events: &[serde_json::Value],
+    related_response_requests: &[&crate::response::ResponseRequest],
+    related_response_audit: &[&crate::response::ResponseAuditEntry],
+    related_ticket_syncs: &[crate::enterprise::TicketSyncRecord],
+) -> serde_json::Value {
+    let evidence_complete = !case.evidence.is_empty() || !linked_events.is_empty();
+    let questions_closed = handoff
+        .map(|entry| entry.questions.is_empty())
+        .unwrap_or(false);
+    let approval_state = related_response_requests
+        .iter()
+        .all(|request| !matches!(request.status, ApprovalStatus::Pending));
+    let execution_result =
+        related_response_requests.is_empty() || !related_response_audit.is_empty();
+    let rollback_path = related_response_audit
+        .iter()
+        .any(|entry| !entry.reversal_path.trim().is_empty());
+    let ticket_synced = !related_ticket_syncs.is_empty();
+    let exportable = evidence_complete && case.comments.len() + linked_events.len() > 0;
+    let checks = vec![
+        (
+            "evidence",
+            evidence_complete,
+            "Evidence or linked events attached",
+        ),
+        (
+            "questions",
+            questions_closed,
+            "Open handoff questions closed",
+        ),
+        ("approvals", approval_state, "No pending response approvals"),
+        (
+            "execution",
+            execution_result,
+            "Execution result recorded or not required",
+        ),
+        (
+            "rollback",
+            rollback_path || related_response_requests.is_empty(),
+            "Rollback path recorded",
+        ),
+        ("ticket", ticket_synced, "External ticket sync recorded"),
+        ("export", exportable, "Handoff packet exportable"),
+    ];
+    let passed = checks.iter().filter(|(_, ok, _)| *ok).count();
+    serde_json::json!({
+        "status": if passed == checks.len() { "ready" } else { "review_required" },
+        "score": ((passed as f64 / checks.len() as f64) * 100.0).round() as u64,
+        "passed": passed,
+        "total": checks.len(),
+        "checks": checks.into_iter().map(|(id, ok, detail)| serde_json::json!({
+            "id": id,
+            "status": if ok { "pass" } else { "review" },
+            "detail": detail,
+        })).collect::<Vec<_>>(),
+    })
+}
+
 fn case_handoff_packet_json(
     case: &crate::analyst::Case,
     incident_store: &IncidentStore,
@@ -8335,6 +8787,14 @@ fn case_handoff_packet_json(
         .iter()
         .max_by(|left, right| left.synced_at.cmp(&right.synced_at))
         .cloned();
+    let closure_readiness = case_closure_readiness_json(
+        case,
+        handoff.as_ref(),
+        &linked_events,
+        &related_response_requests,
+        &related_response_audit,
+        &related_ticket_syncs,
+    );
 
     serde_json::json!({
         "case": {
@@ -8392,6 +8852,7 @@ fn case_handoff_packet_json(
             "unresolved_questions": handoff.as_ref().map(|entry| entry.questions.len()).unwrap_or_default(),
             "ticket_syncs": related_ticket_syncs.len(),
         },
+        "closure_readiness": closure_readiness,
         "ticket_sync_result": latest_ticket_sync.as_ref().map(|sync| serde_json::json!({
             "provider": sync.provider,
             "external_key": sync.external_key,
@@ -8889,6 +9350,12 @@ struct AssistantQueryRequest {
     #[serde(default)]
     case_id: Option<u64>,
     #[serde(default)]
+    incident_id: Option<u64>,
+    #[serde(default)]
+    investigation_id: Option<String>,
+    #[serde(default)]
+    source: Option<String>,
+    #[serde(default)]
     conversation_id: Option<String>,
     #[serde(default)]
     context_filter: Option<crate::llm_analyst::ContextFilter>,
@@ -8900,6 +9367,14 @@ struct AssistantQueryRequest {
 struct AssistantCaseContext {
     case: crate::analyst::Case,
     linked_events: Vec<crate::llm_analyst::ContextEvent>,
+}
+
+#[derive(Debug, Clone, serde::Serialize)]
+struct AssistantScopeContext {
+    case_id: Option<u64>,
+    incident_id: Option<u64>,
+    investigation_id: Option<String>,
+    source: Option<String>,
 }
 
 #[derive(Debug, Clone, serde::Serialize)]
@@ -8916,6 +9391,7 @@ struct AssistantStatusResponse {
 #[derive(Debug, Clone, serde::Serialize)]
 struct AssistantQueryResponse {
     answer: String,
+    structured: AssistantStructuredOutput,
     citations: Vec<crate::llm_analyst::Citation>,
     confidence: f32,
     model_used: String,
@@ -8923,10 +9399,24 @@ struct AssistantQueryResponse {
     response_time_ms: u64,
     conversation_id: String,
     mode: String,
+    scope: AssistantScopeContext,
     case_context: Option<AssistantCaseContext>,
     context_events: Vec<crate::llm_analyst::ContextEvent>,
     warnings: Vec<String>,
     quality_gates: Vec<AssistantQualityGate>,
+}
+
+#[derive(Debug, Clone, serde::Serialize)]
+struct AssistantStructuredOutput {
+    summary: String,
+    strongest_evidence: Vec<String>,
+    open_questions: Vec<String>,
+    recommended_pivots: Vec<String>,
+    draft_hunt: Option<String>,
+    draft_ticket: Option<String>,
+    draft_handoff: Option<String>,
+    not_ready_reason: Option<String>,
+    approval_state: String,
 }
 
 #[derive(Debug, Clone, serde::Serialize)]
@@ -9045,6 +9535,17 @@ fn assistant_level_rank(level: &str) -> u8 {
     }
 }
 
+fn assistant_normalize_optional(value: Option<String>) -> Option<String> {
+    value.and_then(|entry| {
+        let trimmed = entry.trim();
+        if trimmed.is_empty() {
+            None
+        } else {
+            Some(trimmed.to_string())
+        }
+    })
+}
+
 fn assistant_event_summary(event: &StoredEvent) -> String {
     let reasons = if event.alert.reasons.is_empty() {
         event.alert.action.clone()
@@ -9156,15 +9657,17 @@ fn assistant_terms(question: &str, case: Option<&crate::analyst::Case>) -> Vec<S
     terms.into_iter().collect()
 }
 
-fn assistant_linked_case_events(
-    case: &crate::analyst::Case,
+fn assistant_linked_events_by_ids(
+    event_ids: &[u64],
     event_store: &EventStore,
     limit: usize,
 ) -> Vec<crate::llm_analyst::ContextEvent> {
-    let mut linked: Vec<_> = case
-        .event_ids
+    let mut linked: Vec<_> = event_ids
         .iter()
-        .filter_map(|id| event_store.get_event(*id))
+        .copied()
+        .collect::<BTreeSet<_>>()
+        .into_iter()
+        .filter_map(|id| event_store.get_event(id))
         .map(|event| {
             assistant_context_event(event, (0.3 + (event.alert.score / 15.0)).clamp(0.4, 0.99))
         })
@@ -9185,11 +9688,13 @@ fn assistant_context_events(
     request: &AssistantQueryRequest,
     case: Option<&crate::analyst::Case>,
     linked_events: &[crate::llm_analyst::ContextEvent],
+    scope_event_ids: Option<&HashSet<u64>>,
 ) -> Vec<crate::llm_analyst::ContextEvent> {
     let limit = request.limit.unwrap_or(8).clamp(1, 20);
-    let linked_ids: HashSet<u64> = case
-        .map(|case| case.event_ids.iter().copied().collect())
-        .unwrap_or_default();
+    let linked_ids: HashSet<u64> = linked_events
+        .iter()
+        .filter_map(|event| event.id.parse::<u64>().ok())
+        .collect();
     let terms = assistant_terms(&request.question, case);
     let mut context = linked_events
         .iter()
@@ -9204,6 +9709,11 @@ fn assistant_context_events(
         .all_events()
         .iter()
         .filter(|event| !linked_ids.contains(&event.id))
+        .filter(|event| {
+            scope_event_ids
+                .map(|ids| ids.contains(&event.id))
+                .unwrap_or(true)
+        })
         .filter(|event| assistant_matches_filter(event, request.context_filter.as_ref()))
         .filter_map(|event| {
             let haystack = format!(
@@ -9311,8 +9821,103 @@ fn assistant_fallback_answer(
     answer
 }
 
+fn assistant_structured_output(
+    answer: &str,
+    case_context: Option<&AssistantCaseContext>,
+    context_events: &[crate::llm_analyst::ContextEvent],
+    citations: &[crate::llm_analyst::Citation],
+    confidence: f32,
+) -> AssistantStructuredOutput {
+    let summary = answer
+        .lines()
+        .find(|line| !line.trim().is_empty())
+        .map(|line| line.trim().trim_start_matches(['-', '*', ' ']).to_string())
+        .unwrap_or_else(|| "No assistant summary was produced.".to_string());
+    let strongest_evidence = citations
+        .iter()
+        .take(3)
+        .map(|citation| {
+            format!(
+                "{} {}: {}",
+                citation.source_type, citation.source_id, citation.summary
+            )
+        })
+        .collect::<Vec<_>>();
+    let mut open_questions = Vec::new();
+    if citations.is_empty() {
+        open_questions
+            .push("Which retained event or case artifact should anchor this answer?".to_string());
+    }
+    if confidence < 0.5 {
+        open_questions
+            .push("Is there additional evidence that can raise answer confidence?".to_string());
+    }
+    if let Some(context) = case_context
+        && context
+            .case
+            .assignee
+            .as_deref()
+            .unwrap_or("")
+            .trim()
+            .is_empty()
+    {
+        open_questions.push("Who owns the next investigation step for this case?".to_string());
+    }
+    let recommended_pivots = context_events
+        .iter()
+        .take(3)
+        .map(|event| {
+            format!(
+                "Pivot on {} {} in SOC Workbench",
+                event.event_type, event.id
+            )
+        })
+        .collect::<Vec<_>>();
+    let draft_hunt = context_events.first().map(|event| {
+        format!(
+            "Search for related {} activity on {} around {}",
+            event.event_type,
+            event.device.as_deref().unwrap_or("the affected host"),
+            event.timestamp
+        )
+    });
+    let draft_ticket = case_context.map(|context| {
+        format!(
+            "Case #{} {}: {} cited evidence item(s), {} open question(s).",
+            context.case.id,
+            context.case.title,
+            citations.len(),
+            open_questions.len()
+        )
+    });
+    let draft_handoff = case_context.map(|context| {
+        format!(
+            "Handoff case #{} with {} linked event(s), latest summary: {}",
+            context.case.id,
+            context.linked_events.len(),
+            summary
+        )
+    });
+    AssistantStructuredOutput {
+        summary,
+        strongest_evidence,
+        open_questions,
+        recommended_pivots,
+        draft_hunt,
+        draft_ticket,
+        draft_handoff,
+        not_ready_reason: if citations.is_empty() || confidence < 0.5 {
+            Some("Answer needs stronger cited evidence before response execution.".to_string())
+        } else {
+            None
+        },
+        approval_state: "assistant_suggestion_only_no_execution".to_string(),
+    }
+}
+
 fn assistant_response_from_fallback(
     request: &AssistantQueryRequest,
+    scope: AssistantScopeContext,
     case_context: Option<AssistantCaseContext>,
     context_events: Vec<crate::llm_analyst::ContextEvent>,
     warnings: Vec<String>,
@@ -9336,8 +9941,18 @@ fn assistant_response_from_fallback(
 
     let quality_gates = assistant_quality_gates(&citations, confidence, "retrieval-only");
 
+    let answer = assistant_fallback_answer(case_context.as_ref(), &context_events);
+    let structured = assistant_structured_output(
+        &answer,
+        case_context.as_ref(),
+        &context_events,
+        &citations,
+        confidence,
+    );
+
     AssistantQueryResponse {
-        answer: assistant_fallback_answer(case_context.as_ref(), &context_events),
+        answer,
+        structured,
         citations,
         confidence,
         model_used: "retrieval-only".to_string(),
@@ -9354,6 +9969,7 @@ fn assistant_response_from_fallback(
             )
         }),
         mode: "retrieval-only".to_string(),
+        scope,
         case_context,
         context_events,
         warnings,
@@ -9625,7 +10241,10 @@ fn summarize_deployment_campaign(state: &AppState) -> serde_json::Value {
         }));
     }
 
-    let failed = current_stage_counts.get("failed").copied().unwrap_or_default();
+    let failed = current_stage_counts
+        .get("failed")
+        .copied()
+        .unwrap_or_default();
     let telemetry_verified = current_stage_counts
         .get("telemetry_verified")
         .copied()
@@ -12021,11 +12640,38 @@ fn build_sdk_contract_status(state: &AppState) -> serde_json::Value {
     let missing_python_sdk = product_contract_missing_from_source(python_sdk);
     let missing_typescript_sdk = product_contract_missing_from_source(typescript_sdk);
     let missing_release_gate = product_contract_missing_from_source(release_acceptance);
+    let critical_field_checks = [
+        (
+            "assistant_structured_output",
+            docs_openapi.contains("structured")
+                || typescript_sdk.contains("Assistant")
+                || python_sdk.contains("assistant"),
+        ),
+        (
+            "session_csrf_token",
+            typescript_sdk.contains("csrf_token") && python_sdk.contains("auth/session"),
+        ),
+        (
+            "collector_first_value_journey",
+            docs_openapi.contains("first_value")
+                || typescript_sdk.contains("collectors")
+                || python_sdk.contains("collectors"),
+        ),
+        (
+            "case_closure_readiness",
+            docs_openapi.contains("handoff-packet") && typescript_sdk.contains("handoff"),
+        ),
+    ];
+    let missing_critical_fields = critical_field_checks
+        .iter()
+        .filter_map(|(field, present)| (!*present).then_some(*field))
+        .collect::<Vec<_>>();
     let drift_count = missing_openapi_builder.len()
         + missing_docs.len()
         + missing_python_sdk.len()
         + missing_typescript_sdk.len()
-        + missing_release_gate.len();
+        + missing_release_gate.len()
+        + missing_critical_fields.len();
     serde_json::json!({
         "generated_at": chrono::Utc::now().to_rfc3339(),
         "runtime_version": env!("CARGO_PKG_VERSION"),
@@ -12041,6 +12687,14 @@ fn build_sdk_contract_status(state: &AppState) -> serde_json::Value {
         "missing_python_sdk": missing_python_sdk,
         "missing_typescript_sdk": missing_typescript_sdk,
         "missing_release_gate": missing_release_gate,
+        "critical_field_checks": critical_field_checks
+            .iter()
+            .map(|(field, present)| serde_json::json!({
+                "field": field,
+                "status": if *present { "pass" } else { "drift" },
+            }))
+            .collect::<Vec<_>>(),
+        "missing_critical_fields": missing_critical_fields,
         "drift_count": drift_count,
         "status": if drift_count == 0 { "tracked" } else { "drift" },
     })
@@ -16782,37 +17436,70 @@ fn handle_api(
         return failed_auth_locked_response(retry_after);
     }
 
-    // Agent endpoints still require a valid enrollment token when
-    // WARDEX_AGENT_TOKEN is set. This prevents arbitrary clients from
-    // enrolling rogue agents or submitting forged events.
-    if is_agent_endpoint
-        && !route_path.starts_with("/api/updates/download/")
-        && let Ok(required_agent_token) = std::env::var("WARDEX_AGENT_TOKEN")
-    {
-        let provided = presented_bearer_token.as_deref();
-        let valid = secure_token_eq(provided, &required_agent_token);
-        if !valid {
-            let lockout = failed_auth_record_request(remote_addr, &failed_auth_key);
-            if !crate::server_auth::FailedAuthTracker::is_exempt(remote_addr) {
-                persist_failed_auth_tracker_snapshot_from_state(state);
-            }
-            if let Some(lockout) = lockout {
-                let mut s = crate::state_lock::tracked_lock(
+    // Agent endpoints require either a configured bearer token or production
+    // mTLS posture. Development keeps legacy tokenless routes for local labs,
+    // while production fails closed at startup and at request time.
+    if is_agent_endpoint {
+        let required_agent_token = std::env::var("WARDEX_AGENT_TOKEN")
+            .ok()
+            .filter(|token| !token.trim().is_empty());
+        let (mtls_configured, mtls_verified) = {
+            let s = crate::state_lock::tracked_lock(state, "server/agent_trust_config_check");
+            let configured = s.config.security.require_mtls_agents
+                && s.config
+                    .security
+                    .agent_ca_cert_path
+                    .as_deref()
+                    .is_some_and(|path| !path.trim().is_empty());
+            (
+                configured,
+                configured && agent_mtls_request_trusted(headers, &s.config, remote_addr),
+            )
+        };
+        let bound_agent_identity = route_path != "/api/agents/enroll"
+            && agent_request_bound_to_agent(&method, &url, headers, body, state);
+        let trust_configured = required_agent_token.is_some() || mtls_configured;
+        if trust_configured || is_production_env() {
+            let valid = required_agent_token.as_deref().is_some_and(|expected| {
+                secure_token_eq(presented_bearer_token.as_deref(), expected)
+            }) || mtls_verified
+                || bound_agent_identity;
+            if !valid {
+                let lockout = failed_auth_record_request(remote_addr, &failed_auth_key);
+                if !crate::server_auth::FailedAuthTracker::is_exempt(remote_addr) {
+                    persist_failed_auth_tracker_snapshot_from_state(state);
+                }
+                if let Some(lockout) = lockout {
+                    let mut s = crate::state_lock::tracked_lock(
+                        state,
+                        "server/failed_auth_agent_lockout_audit",
+                    );
+                    s.audit_log
+                        .record("POST", "/api/_failed_auth", remote_addr, 429, false);
+                    let _ = lockout; // recorded; audit entry above carries the signal
+                }
+                return respond_api(
                     state,
-                    "server/failed_auth_agent_lockout_audit",
+                    &method,
+                    &url,
+                    remote_addr,
+                    false,
+                    error_json(
+                        "agent bearer identity or verified mTLS identity required",
+                        401,
+                    ),
                 );
-                s.audit_log
-                    .record("POST", "/api/_failed_auth", remote_addr, 429, false);
-                let _ = lockout; // recorded; audit entry above carries the signal
             }
-            return respond_api(
-                state,
-                &method,
-                &url,
-                remote_addr,
-                false,
-                error_json("agent token required", 401),
-            );
+            if is_production_env() && route_path != "/api/agents/enroll" && !bound_agent_identity {
+                return respond_api(
+                    state,
+                    &method,
+                    &url,
+                    remote_addr,
+                    false,
+                    error_json("per-agent identity binding required", 401),
+                );
+            }
         }
     }
 
@@ -16858,6 +17545,17 @@ fn handle_api(
             remote_addr,
             false,
             error_json("unauthorized", 401),
+        );
+    }
+
+    if needs_auth && !csrf_request_authorized(headers, &auth_identity, &method) {
+        return respond_api(
+            state,
+            &method,
+            &url,
+            remote_addr,
+            true,
+            error_json("csrf token required", 403),
         );
     }
 
@@ -18243,10 +18941,26 @@ fn handle_api(
                 200,
             )
         }
-        (Method::Get, "/api/openapi.json") => json_response(
-            &crate::openapi::openapi_json(env!("CARGO_PKG_VERSION")),
-            200,
-        ),
+        (Method::Get, "/api/openapi.json") => {
+            let openapi_public = {
+                let s = state.lock().unwrap_or_else(|e| e.into_inner());
+                s.config.server.openapi_public
+            };
+            if is_production_env() && !openapi_public && !auth_identity.is_authenticated() {
+                return respond_api(
+                    state,
+                    &method,
+                    &url,
+                    remote_addr,
+                    false,
+                    error_json("openapi endpoint requires authentication", 401),
+                );
+            }
+            json_response(
+                &crate::openapi::openapi_json(env!("CARGO_PKG_VERSION")),
+                200,
+            )
+        }
         (Method::Get, "/api/metrics") => {
             let s = state.lock().unwrap_or_else(|e| e.into_inner());
             // Optional bearer-token gate (config.server.metrics_bearer_token).
@@ -22367,40 +23081,118 @@ fn handle_api(
             match read_json_body::<AssistantQueryRequest>(body, 16 * 1024) {
                 Ok(mut request) => {
                     request.question = request.question.trim().to_string();
+                    request.investigation_id =
+                        assistant_normalize_optional(request.investigation_id);
+                    request.source = assistant_normalize_optional(request.source);
                     if request.question.is_empty() {
                         error_json("question is required", 400)
                     } else {
-                        let (assistant, case_context, context_events) = {
+                        let (assistant, scope, case_context, context_events) = {
                             let s = state.lock().unwrap_or_else(|e| e.into_inner());
-                            let case = match request.case_id {
+                            let investigation = match request.investigation_id.as_deref() {
+                                Some(investigation_id) => {
+                                    match s.workflow_store.get_snapshot(investigation_id) {
+                                        Some(snapshot) => Some(snapshot),
+                                        None => return error_json("investigation not found", 404),
+                                    }
+                                }
+                                None => None,
+                            };
+                            let incident = match request.incident_id {
+                                Some(incident_id) => {
+                                    match s.incident_store.get(incident_id).cloned() {
+                                        Some(incident) => Some(incident),
+                                        None => return error_json("incident not found", 404),
+                                    }
+                                }
+                                None => None,
+                            };
+                            let investigation_case_id = match investigation
+                                .as_ref()
+                                .and_then(|snapshot| snapshot.case_id.as_deref())
+                            {
+                                Some(raw_case_id) => {
+                                    let trimmed = raw_case_id.trim();
+                                    if trimmed.is_empty() {
+                                        None
+                                    } else {
+                                        match trimmed.parse::<u64>() {
+                                            Ok(parsed) => Some(parsed),
+                                            Err(_) => {
+                                                return error_json(
+                                                    "investigation scope has an invalid case reference",
+                                                    400,
+                                                );
+                                            }
+                                        }
+                                    }
+                                }
+                                None => None,
+                            };
+                            if let (Some(case_id), Some(linked_case_id)) =
+                                (request.case_id, investigation_case_id)
+                                && case_id != linked_case_id
+                            {
+                                return error_json(
+                                    "case scope conflicts with investigation scope",
+                                    400,
+                                );
+                            }
+                            let resolved_case_id = request.case_id.or(investigation_case_id);
+                            let case = match resolved_case_id {
                                 Some(case_id) => match s.case_store.get(case_id).cloned() {
                                     Some(case) => Some(case),
                                     None => return error_json("case not found", 404),
                                 },
                                 None => None,
                             };
-                            let linked_events = case
+                            if let (Some(incident), Some(case)) = (incident.as_ref(), case.as_ref())
+                                && !case.incident_ids.contains(&incident.id)
+                            {
+                                return error_json(
+                                    "incident scope is not linked to the selected case",
+                                    400,
+                                );
+                            }
+
+                            let mut scoped_event_ids = case
                                 .as_ref()
-                                .map(|case| {
-                                    assistant_linked_case_events(
-                                        case,
-                                        &s.event_store,
-                                        request.limit.unwrap_or(8).clamp(1, 20),
-                                    )
-                                })
+                                .map(|entry| entry.event_ids.clone())
                                 .unwrap_or_default();
+                            if let Some(incident) = incident.as_ref() {
+                                scoped_event_ids.extend(incident.event_ids.iter().copied());
+                            }
+                            let linked_events = assistant_linked_events_by_ids(
+                                &scoped_event_ids,
+                                &s.event_store,
+                                request.limit.unwrap_or(8).clamp(1, 20),
+                            );
                             let case_context = case.map(|case| AssistantCaseContext {
                                 case,
                                 linked_events: linked_events.clone(),
                             });
+                            let scope_event_ids = (!scoped_event_ids.is_empty())
+                                .then(|| scoped_event_ids.iter().copied().collect::<HashSet<_>>());
                             let context_events = assistant_context_events(
                                 &s.event_store,
                                 &request,
                                 case_context.as_ref().map(|context| &context.case),
                                 &linked_events,
+                                scope_event_ids.as_ref(),
                             );
+                            let scope = AssistantScopeContext {
+                                case_id: case_context.as_ref().map(|context| context.case.id),
+                                incident_id: incident.as_ref().map(|entry| entry.id),
+                                investigation_id: investigation.map(|entry| entry.id),
+                                source: request.source.clone(),
+                            };
 
-                            (Arc::clone(&s.llm_analyst), case_context, context_events)
+                            (
+                                Arc::clone(&s.llm_analyst),
+                                scope,
+                                case_context,
+                                context_events,
+                            )
                         };
 
                         let status = assistant.lock().unwrap_or_else(|e| e.into_inner()).status();
@@ -22422,8 +23214,16 @@ fn handle_api(
                                         response.confidence,
                                         &mode,
                                     );
+                                    let structured = assistant_structured_output(
+                                        &response.answer,
+                                        case_context.as_ref(),
+                                        &context_events,
+                                        &response.citations,
+                                        response.confidence,
+                                    );
                                     let payload = AssistantQueryResponse {
                                         answer: response.answer,
+                                        structured,
                                         citations: response.citations,
                                         confidence: response.confidence,
                                         model_used: response.model_used,
@@ -22431,6 +23231,7 @@ fn handle_api(
                                         response_time_ms: response.response_time_ms,
                                         conversation_id: response.conversation_id,
                                         mode,
+                                        scope,
                                         case_context,
                                         context_events,
                                         warnings: Vec::new(),
@@ -22445,6 +23246,7 @@ fn handle_api(
                                 Err(error) => {
                                     let payload = assistant_response_from_fallback(
                                         &request,
+                                        scope,
                                         case_context,
                                         context_events,
                                         vec![format!(
@@ -22462,6 +23264,7 @@ fn handle_api(
                         } else {
                             let payload = assistant_response_from_fallback(
                                 &request,
+                                scope,
                                 case_context,
                                 context_events,
                                 vec![
@@ -22725,11 +23528,20 @@ fn handle_api(
                                 );
                             }
                         };
-                        let approver = v["approver"]
-                            .as_str()
-                            .filter(|s| !s.is_empty())
-                            .map(|s| s.to_string())
-                            .unwrap_or_else(|| response_approver(&auth_identity));
+                        if let Some(submitted) = v["approver"].as_str().map(str::trim)
+                            && !submitted.is_empty()
+                            && submitted != response_approver(&auth_identity)
+                        {
+                            return respond_api(
+                                state,
+                                &method,
+                                &url,
+                                remote_addr,
+                                auth_used,
+                                error_json("approver must match the authenticated actor", 403),
+                            );
+                        }
+                        let approver = response_approver(&auth_identity);
                         let reason = v["reason"].as_str().unwrap_or("").to_string();
                         let mut s = state.lock().unwrap_or_else(|e| e.into_inner());
                         let status = s.response_orchestrator.approve(
@@ -25580,6 +26392,8 @@ fn handle_api(
                                             "user_id": session.user_id,
                                             "role": session.role,
                                             "groups": session.groups,
+                                            "tenant_id": session.tenant_id,
+                                            "csrf_token": session.csrf_token,
                                         })
                                         .to_string(),
                                         200,
@@ -25606,30 +26420,41 @@ fn handle_api(
                     return error_json("unauthorized", 401);
                 }
                 let groups = identity.groups().to_vec();
-                let (user_id, role, authenticated, source) = match &identity {
+                let (user_id, role, authenticated, source, tenant_id, csrf_token) = match &identity
+                {
                     AuthIdentity::AdminToken => (
                         "admin".to_string(),
                         "admin".to_string(),
                         true,
                         "admin_token",
+                        None,
+                        None,
                     ),
                     AuthIdentity::UserToken(u) => (
                         u.username.clone(),
                         role_label(u.role).to_string(),
                         true,
                         "rbac_token",
+                        u.tenant_id.clone(),
+                        None,
                     ),
-                    AuthIdentity::SessionToken { user, .. } => (
+                    AuthIdentity::SessionToken {
+                        user, csrf_token, ..
+                    } => (
                         user.username.clone(),
                         role_label(user.role).to_string(),
                         true,
                         "session",
+                        user.tenant_id.clone(),
+                        (!csrf_token.is_empty()).then(|| csrf_token.clone()),
                     ),
                     AuthIdentity::None => (
                         "anonymous".to_string(),
                         "viewer".to_string(),
                         false,
                         "anonymous",
+                        None,
+                        None,
                     ),
                 };
                 let body = serde_json::json!({
@@ -25638,6 +26463,8 @@ fn handle_api(
                     "groups": groups,
                     "authenticated": authenticated,
                     "source": source,
+                    "tenant_id": tenant_id,
+                    "csrf_token": csrf_token,
                 });
                 json_response(&body.to_string(), 200)
             } else if method == Method::Post && url_path == "/api/auth/session" {
@@ -25658,15 +26485,14 @@ fn handle_api(
                         "user_id": session.user_id,
                         "role": session.role,
                         "groups": session.groups,
+                        "tenant_id": session.tenant_id,
                         "source": "session",
                         "expires_at": session.expires_at,
+                        "csrf_token": session.csrf_token,
                         "cookie": {
                             "http_only": true,
-                            "same_site": "Lax",
-                            "secure": std::env::var("WARDEX_SESSION_COOKIE_SECURE")
-                                .ok()
-                                .and_then(|value| parse_bool_query(&value))
-                                .unwrap_or(false),
+                            "same_site": "Strict",
+                            "secure": session_cookie_secure(),
                         },
                     });
                     apply_set_cookie(json_response(&body.to_string(), 200), &cookie)
@@ -30269,14 +31095,25 @@ mod tests {
 
     #[test]
     fn response_execution_audit_endpoint_links_request_approval_and_execution() {
-        let (port, token, _state) = spawn_test_server_with_state();
+        let (port, token, state) = spawn_test_server_with_state();
         let base_url = format!("http://127.0.0.1:{port}");
         let auth_header = format!("Bearer {token}");
+        let submit_auth_header = {
+            let state = state.lock().unwrap_or_else(|e| e.into_inner());
+            let session_id = state.session_store.create_session(
+                "analyst-1",
+                "analyst-1@local.wardex",
+                "admin",
+                &["wardex-admins".to_string()],
+                1,
+            );
+            format!("Bearer {session_id}")
+        };
         let agent = ureq::AgentBuilder::new().build();
 
         let submitted: serde_json::Value = agent
             .post(&format!("{base_url}/api/response/request"))
-            .set("Authorization", &auth_header)
+            .set("Authorization", &submit_auth_header)
             .send_json(serde_json::json!({
                 "action": "kill_process",
                 "hostname": "audit-host",
@@ -30299,7 +31136,7 @@ mod tests {
             .send_json(serde_json::json!({
                 "request_id": request_id.clone(),
                 "decision": "approved",
-                "approver": "integration-approver",
+                "approver": "admin",
                 "reason": "blast radius reviewed"
             }))
             .expect("approve response request")
@@ -30330,10 +31167,7 @@ mod tests {
             audit["audits"][0]["request_id"],
             serde_json::json!(request_id)
         );
-        assert_eq!(
-            audit["audits"][0]["operator"],
-            serde_json::json!("integration-approver")
-        );
+        assert_eq!(audit["audits"][0]["operator"], serde_json::json!("admin"));
         // PID 31337 is not present on the test node, so the local enforcement
         // engine honestly reports the kill as not executed rather than
         // fabricating success.
@@ -33517,9 +34351,12 @@ mod tests {
                 email: "analyst-3@example.test".to_string(),
                 role: "analyst".to_string(),
                 groups: vec!["soc-analysts".to_string(), "canary-lane".to_string()],
+                tenant_id: Some("tenant-a".to_string()),
+                csrf_token: "csrf-token".to_string(),
                 created_at: chrono::Utc::now(),
                 expires_at: chrono::Utc::now() + chrono::Duration::hours(1),
             },
+            true,
         );
 
         assert!(ensure_target_group_access(&auth, Some("soc-analysts")).is_ok());
@@ -33688,6 +34525,106 @@ mod tests {
             axum::http::HeaderValue::from_static("bearer secret-token"),
         );
         assert_eq!(bearer_token(&headers).as_deref(), Some("secret-token"));
+    }
+
+    #[test]
+    fn agent_mtls_request_verified_requires_cert_and_verification_headers() {
+        let mut headers = HeaderMap::new();
+        headers.insert(
+            MTLS_VERIFY_HEADER,
+            axum::http::HeaderValue::from_static("SUCCESS"),
+        );
+        headers.insert(
+            MTLS_CERT_HEADER,
+            axum::http::HeaderValue::from_static("Hash=abc123;Subject=\"CN=agent-1\""),
+        );
+        assert!(agent_mtls_request_verified(&headers));
+    }
+
+    #[test]
+    fn agent_mtls_request_verified_rejects_partial_or_empty_headers() {
+        let mut verification_only = HeaderMap::new();
+        verification_only.insert(
+            MTLS_VERIFY_HEADER,
+            axum::http::HeaderValue::from_static("SUCCESS"),
+        );
+        assert!(!agent_mtls_request_verified(&verification_only));
+
+        let mut cert_only = HeaderMap::new();
+        cert_only.insert(
+            MTLS_CERT_HEADER,
+            axum::http::HeaderValue::from_static("Hash=abc123;Subject=\"CN=agent-1\""),
+        );
+        assert!(!agent_mtls_request_verified(&cert_only));
+
+        let mut empty_cert = HeaderMap::new();
+        empty_cert.insert(
+            MTLS_VERIFY_HEADER,
+            axum::http::HeaderValue::from_static("SUCCESS"),
+        );
+        empty_cert.insert(MTLS_CERT_HEADER, axum::http::HeaderValue::from_static("-"));
+        assert!(!agent_mtls_request_verified(&empty_cert));
+    }
+
+    #[test]
+    fn trusted_mtls_proxy_requires_configured_remote_address() {
+        let mut config = Config::default();
+        config
+            .security
+            .trusted_mtls_proxy_addrs
+            .push("10.0.0.5".to_string());
+
+        assert!(trusted_mtls_proxy(&config, "10.0.0.5:443"));
+        assert!(!trusted_mtls_proxy(&config, "10.0.0.6:443"));
+    }
+
+    #[test]
+    fn agent_identity_binding_requires_matching_agent_token_and_requested_agent() {
+        let (_port, _token, state) = spawn_test_server_with_state();
+        let (agent_id, agent_token) = {
+            let mut s = state.lock().unwrap_or_else(|e| e.into_inner());
+            let token = s.agent_registry.create_token(1);
+            let enrolled = s
+                .agent_registry
+                .enroll(&EnrollRequest {
+                    enrollment_token: token.token,
+                    hostname: "bound-agent".to_string(),
+                    platform: "linux".to_string(),
+                    version: env!("CARGO_PKG_VERSION").to_string(),
+                    labels: None,
+                })
+                .expect("agent enroll");
+            (
+                enrolled.agent_id,
+                enrolled.agent_token.expect("agent token"),
+            )
+        };
+        let url = format!("/api/agents/{agent_id}/heartbeat");
+        let mut headers = HeaderMap::new();
+        headers.insert(
+            AGENT_ID_HEADER,
+            axum::http::HeaderValue::from_str(&agent_id).expect("agent id header"),
+        );
+        headers.insert(
+            AGENT_TOKEN_HEADER,
+            axum::http::HeaderValue::from_str(&agent_token).expect("agent token header"),
+        );
+
+        assert!(agent_request_bound_to_agent(
+            &Method::Post,
+            &url,
+            &headers,
+            br#"{"version":"1.0.27"}"#,
+            &state,
+        ));
+
+        assert!(!agent_request_bound_to_agent(
+            &Method::Post,
+            "/api/agents/other-agent/heartbeat",
+            &headers,
+            br#"{"version":"1.0.27"}"#,
+            &state,
+        ));
     }
 
     #[test]

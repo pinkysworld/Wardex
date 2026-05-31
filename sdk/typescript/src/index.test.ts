@@ -5038,6 +5038,9 @@ describe("WardexClient", () => {
     const payload = {
       question: "Summarize the current case and cite the strongest evidence",
       case_id: 1,
+      incident_id: 7,
+      investigation_id: "inv-7",
+      source: "case",
       conversation_id: "conv-123",
       context_filter: {
         time_range_hours: 24,
@@ -5067,6 +5070,12 @@ describe("WardexClient", () => {
       response_time_ms: 85,
       conversation_id: "conv-123",
       mode: "retrieval-only",
+      scope: {
+        case_id: 1,
+        incident_id: 7,
+        investigation_id: "inv-7",
+        source: "case",
+      },
       case_context: {
         case: {
           id: 1,

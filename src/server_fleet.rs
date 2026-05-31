@@ -12,9 +12,12 @@ use std::sync::{Arc, Mutex};
 use axum::body::Body;
 use axum::response::Response;
 
+use crate::fleet_install::{
+    RemoteInstallRecord, SshInstallRequest, WinRmInstallRequest, execute_ssh_install,
+    execute_winrm_install,
+};
 #[allow(unused_imports)]
 use crate::server::*;
-use crate::fleet_install::{RemoteInstallRecord, SshInstallRequest, WinRmInstallRequest, execute_ssh_install, execute_winrm_install};
 use crate::server_response::{error_json, json_response};
 use crate::structured_log::generate_request_id;
 use crate::swarm::{DeviceRecord, DeviceStatus};
@@ -594,4 +597,3 @@ pub(crate) fn handle_update_publish(
         Err(e) => error_json(&e, 500),
     }
 }
-

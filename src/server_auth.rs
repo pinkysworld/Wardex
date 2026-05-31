@@ -197,9 +197,8 @@ impl FailedAuthTracker {
             if self.entries.len() >= FAILED_AUTH_MAX_ENTRIES {
                 break;
             }
-            let still_relevant =
-                now < state.locked_until
-                    || now.saturating_sub(state.first_fail_at) < FAILED_AUTH_WINDOW_SECS;
+            let still_relevant = now < state.locked_until
+                || now.saturating_sub(state.first_fail_at) < FAILED_AUTH_WINDOW_SECS;
             if still_relevant {
                 self.entries.insert(subject, state);
             }

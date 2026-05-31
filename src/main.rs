@@ -563,6 +563,11 @@ fn print_usage() {
     println!();
     println!("Quick start (no args needed):");
     println!("  cargo run                          Start server + live monitor with defaults");
+    println!("  cat var/.wardex_token              Read the generated admin token");
+    println!(
+        "  bash scripts/evaluate_to_value.sh  Run the 15-minute evaluation proof (set WARDEX_ADMIN_TOKEN)"
+    );
+    println!("  cargo run -- doctor                Review local release and readiness diagnostics");
     println!();
     println!("XDR Commands:");
     println!("  server  [port]                     Start XDR central server");
@@ -575,13 +580,13 @@ fn print_usage() {
     println!("  start   [--port <port>] [flags]    Server + monitor (same as no args)");
     println!("  monitor [flags]                    CLI-only monitor (no web server)");
     println!("  serve   [port] [site_dir]          Web server only (no monitor)");
-    println!("  demo    [audit_path]               Run demo telemetry analysis");
+    println!("  demo    [audit_path]               Run evaluation-only demo telemetry analysis");
     println!("  analyze <csv|jsonl> [audit_path]   Analyze telemetry file");
     println!("  report  <csv|jsonl> [report_path]  Generate JSON report");
     println!("  init-config [config_path]          Write default config file");
     println!("  status                             Print project status");
     println!("  status-json [output_path]          Export status as JSON");
-    println!("  doctor                             Run preflight diagnostics");
+    println!("  doctor                             Run local release and readiness diagnostics");
     println!("  harness                            Run adversarial harness");
     println!("  export-model <tla|alloy> [path]    Export formal model");
     println!("  attest <binary> [manifest] [...]   Generate build manifest");
@@ -604,6 +609,11 @@ fn print_usage() {
     println!("  All settings can be changed via the admin console at");
     println!("  http://localhost:8080/admin/ (Settings panel).");
     println!("  Config is stored in var/wardex.toml and persists across restarts.");
+    println!();
+    println!("Evaluation path:");
+    println!("  Open /admin/, paste the admin token, then run the versioned");
+    println!("  evaluation guide in docs/EVALUATE_WARDEX.md or the matching");
+    println!("  scripts/evaluate_to_value.sh helper against the running server.");
 }
 
 fn load_or_create_config() -> Config {

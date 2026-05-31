@@ -85,6 +85,12 @@ describe('AssistantWorkspace', () => {
           conversation_id: 'local-42',
           mode: 'retrieval-only',
           warnings: ['LLM assistant is not configured; using retrieval-only synthesis'],
+          scope: {
+            case_id: 42,
+            incident_id: null,
+            investigation_id: null,
+            source: 'case',
+          },
           quality_gates: [
             {
               id: 'citation_required',
@@ -160,6 +166,8 @@ describe('AssistantWorkspace', () => {
     );
     expect(await screen.findByText('Context & citations')).toBeInTheDocument();
     expect(await screen.findByText('Answer quality gates')).toBeInTheDocument();
+    expect(await screen.findByText('Resolved scope')).toBeInTheDocument();
+    expect(screen.getByText('Case #42 • Source Case')).toBeInTheDocument();
     expect(screen.getByText('citation required')).toBeInTheDocument();
     expect(
       (await screen.findAllByText('Credential dumping observed on db-01')).length,
@@ -376,7 +384,7 @@ describe('AssistantWorkspace', () => {
       'href',
       '#safe-assistant-boundaries',
     );
-    expect(screen.getByRole('link', { name: 'Ask Priority Question' })).toHaveAttribute(
+    expect(screen.getByRole('link', { name: 'Ask Scoped Question' })).toHaveAttribute(
       'href',
       '#assistant-question-card',
     );

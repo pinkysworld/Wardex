@@ -101,37 +101,38 @@
         <div class="container">
           <div class="section-header">
             <p class="label">Quick Start</p>
-            <h2>Running in under five minutes.</h2>
+            <h2>Evaluate Wardex in one guided path.</h2>
           </div>
           <div class="start-grid">
             <div class="start-card">
               <h3>Build from source</h3>
-              <div class="code-block"><code>cargo build --release</code></div>
+              <div class="code-block"><code>npm ci --prefix admin-console &amp;&amp; cargo build --release</code></div>
               <p>Requires Rust edition 2024, MSRV 1.88.0.</p>
             </div>
             <div class="start-card">
-              <h3>Launch the server</h3>
-              <div class="code-block"><code>cargo run -- serve</code></div>
+              <h3>Launch the control plane</h3>
+              <div class="code-block"><code>cargo run</code></div>
               <p>API, browser console, and embedded monitor on port 8080.</p>
             </div>
             <div class="start-card">
-              <h3>Analyse a scenario</h3>
-              <div class="code-block"><code>cargo run -- analyze examples/credential_storm.csv</code></div>
-              <p>Run a canned attack scenario through the detection pipeline.</p>
+              <h3>Read the admin token</h3>
+              <div class="code-block"><code>cat var/.wardex_token</code></div>
+              <p>Use the token for the browser session and the scripted evaluation flow.</p>
             </div>
             <div class="start-card">
-              <h3>Run the test suite</h3>
-              <div class="code-block"><code>cargo test</code></div>
-              <p>1,500+ automated tests with stable CI signal.</p>
+              <h3>Run the evaluation proof</h3>
+              <div class="code-block"><code>WARDEX_ADMIN_TOKEN="$(cat var/.wardex_token)" bash scripts/evaluate_to_value.sh</code></div>
+              <p>Evaluation-only first-run proof data proves the first alert, response dry-run, evidence export, and deployment trust report in one pass.</p>
             </div>
             <div class="start-card">
-              <h3>Install on macOS</h3>
-              <div class="code-block"><code>brew tap pinkysworld/wardex &amp;&amp; brew install wardex</code></div>
+              <h3>Inspect local readiness</h3>
+              <div class="code-block"><code>cargo run -- doctor</code></div>
+              <p>Review the same local diagnostics that back the release posture.</p>
             </div>
             <div class="start-card">
-              <h3>Install on Debian / Ubuntu</h3>
-              <div class="code-block"><code>sudo apt install wardex</code></div>
-              <p>Via the signed Wardex APT repository.</p>
+              <h3>Open the full guide</h3>
+              <div class="code-block"><code>docs/EVALUATE_WARDEX.md</code></div>
+              <p>The canonical 15-minute path is versioned with the product and release gate.</p>
             </div>
           </div>
         </div>
@@ -153,7 +154,7 @@
               <span>Search resources</span>
               <input id="resource-search" type="search" placeholder="Search runbooks, deployment, SDK, API, threat model…">
             </label>
-            <div class="resource-count" id="resource-count">12 resources visible</div>
+            <div class="resource-count" id="resource-count">14 resources visible</div>
           </div>
 
           <div class="start-grid">
@@ -162,6 +163,11 @@
               <p>Step-by-step guide from fresh clone to running control plane with a sample agent enrolled.</p>
               <p><a href="https://github.com/pinkysworld/Wardex/blob/main/docs/GETTING_STARTED.md" class="btn btn-outline" target="_blank" rel="noopener">Open Guide</a></p>
             </div>
+            <div class="start-card" data-resource-card data-search="evaluate wardex 15 minutes first alert response dry run deployment trust report first run proof">
+              <h3>Evaluate in 15 Minutes</h3>
+              <p>The canonical evaluation-only journey from start, token, and first-run proof seed through first alert, evidence export, and deployment trust reporting.</p>
+              <p><a href="https://github.com/pinkysworld/Wardex/blob/main/docs/EVALUATE_WARDEX.md" class="btn btn-outline" target="_blank" rel="noopener">Open Evaluation Guide</a></p>
+            </div>
             <div class="start-card" data-resource-card data-search="docs architecture deployment status runbooks index">
               <h3>Documentation Index</h3>
               <p>The master map of all in-repo documentation — architecture, operations, research, and roadmap.</p>
@@ -169,7 +175,7 @@
             </div>
             <div class="start-card" data-resource-card data-search="openapi api contract integrations automation sdk rest http">
               <h3>OpenAPI Contract</h3>
-              <p>The versioned HTTP contract for every REST operation Wardex exposes. Track 247 documented operations and feed them directly into your OpenAPI tooling.</p>
+              <p>The versioned HTTP contract for every REST operation Wardex exposes. Track 262 documented operations and feed them directly into your OpenAPI tooling.</p>
               <p><a href="https://github.com/pinkysworld/Wardex/blob/main/docs/openapi.yaml" class="btn btn-outline" target="_blank" rel="noopener">View OpenAPI</a></p>
             </div>
             <div class="start-card" data-resource-card data-search="deployment models sizing high availability relay federation multi-tenant helm kubernetes">
@@ -265,7 +271,7 @@
               <a href="https://github.com/pinkysworld/Wardex" target="_blank" rel="noopener">GitHub</a>
               <a href="support/">Support</a>
               <a href="https://github.com/pinkysworld/Wardex/blob/main/SECURITY.md" target="_blank" rel="noopener">Security</a>
-              <a href="mailto:mip@gmx.biz">Contact</a>
+              <a href="mailto:support@wardex.dev">Contact</a>
             </div>
           </div>
           <div class="footer-bottom">

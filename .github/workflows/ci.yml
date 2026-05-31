@@ -83,8 +83,29 @@ jobs:
         run: python3 scripts/bump_version.py --check
       - name: Check API and SDK contract parity
         run: python3 scripts/check_contract_parity.py
+      - name: Check architecture guardrails
+        run: python3 scripts/check_architecture_guardrails.py
+      - name: Check product workflow metrics
+        run: python3 scripts/check_product_workflow_metrics.py
       - name: Check admin-console nav-race guard
         run: python3 scripts/check_nav_race_guard.py
+
+  architecture-stability-gates:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - name: Install Rust
+        run: |
+          rustup toolchain install stable --profile minimal
+          rustup default stable
+      - name: Check no-orphan API route guardrail
+        run: python3 scripts/check_architecture_guardrails.py
+      - name: Run API integration gate
+        run: cargo test --test api_integration
+      - name: Run concurrent smoke gate
+        run: cargo test --test concurrent_smoke
+      - name: Run failed-auth lockout gate
+        run: cargo test --test failed_auth_lockout
 
   release-docs:
     runs-on: ubuntu-latest
@@ -96,6 +117,8 @@ jobs:
           python-version: "3.12"
       - name: Check release docs consistency
         run: python3 scripts/validate_release_docs.py
+      - name: Check release facts consistency
+        run: python3 scripts/check_release_facts.py
       - name: Check docs freshness
         run: python3 scripts/validate_docs_freshness.py
       - name: Check product identity coherence

@@ -16,15 +16,19 @@ The wrapper is implemented in `scripts/release_acceptance.sh` and runs these che
 1. `admin-console` production build via `npm run build`.
 2. Root `cargo build` so embedded assets and backend routes match the browser bundle.
 3. API/OpenAPI/SDK contract parity via `python3 scripts/check_contract_parity.py`, including report workflows, cursor pagination, workflow/rule preflight, tenant/thread proof, snapshot retention controls, release observability gates, production assurance endpoints, operator-trust workspaces, alert evidence/feedback, Detection Trust scoring and draft-only tuning endpoints, Detection Lab, Response Safety, Integrations, Operations Health, Malware transparency, and release verification readiness endpoints across runtime routing, the live OpenAPI builder, `docs/openapi.yaml`, and both SDK clients.
-4. Release-document consistency via `python3 scripts/validate_release_docs.py`, including `STATUS`, roadmap, feature UI coverage, and routed smoke mappings.
-5. Documentation freshness via `python3 scripts/validate_docs_freshness.py`, confirming the shipped release docs and website-facing status copy still match the current runtime baseline.
-6. Product identity coherence via `python3 scripts/check_product_identity.py`, confirming Wardex branding and metadata stay aligned across docs and console surfaces.
-7. Release trust workflow coverage via `python3 scripts/check_release_trust_gates.py`, confirming panic policy, contract parity, docs, product identity, provenance, pinned release actions, and checksum verification remain wired into CI and tag builds.
-8. Published marketing-site link validation across `site/*.html`.
-9. Managed mode only: start a temporary local Wardex instance on a loopback port with a cloned acceptance config that disables request throttling for the smoke run.
-10. Live admin reachability check against `WARDEX_BASE_URL`.
-11. Release verification helper gates: `scripts/detection_validation_packs.sh` confirms validation-pack fixtures, and `scripts/performance_scale_baseline.sh --launchpad` verifies release-verification endpoint latency against the smoke budget, including `/api/release/deployment-trust-report`.
-12. Routed browser release suite:
+4. Architecture guardrails via `python3 scripts/check_architecture_guardrails.py`, confirming route ownership, auth classification, no-orphan runtime API routes, release-blocking stability-test wiring, and `AppState` decomposition anchors remain aligned with the documented contract/state spine.
+5. Product workflow and metrics guardrails via `python3 scripts/check_product_workflow_metrics.py`, confirming Wardex workflow states, first-value definitions, KPI hooks, and product surface anchors remain aligned with the documented workflow spine.
+6. Release facts consistency via `python3 scripts/check_release_facts.py`, confirming version, module count, OpenAPI operation count, automated-check counts, install channels, support contacts, and Homebrew license metadata stay aligned across docs, the site, and package surfaces.
+7. Release-document consistency via `python3 scripts/validate_release_docs.py`, including `STATUS`, roadmap, feature UI coverage, and routed smoke mappings.
+8. Documentation freshness via `python3 scripts/validate_docs_freshness.py`, confirming the shipped release docs and website-facing status copy still match the current runtime baseline.
+9. Product identity coherence via `python3 scripts/check_product_identity.py`, confirming Wardex branding and metadata stay aligned across docs and console surfaces.
+10. Release trust workflow coverage via `python3 scripts/check_release_trust_gates.py`, confirming panic policy, contract parity, architecture, product workflow, release facts, docs, product identity, provenance, pinned release actions, and checksum verification remain wired into CI and tag builds.
+11. Published marketing-site link validation across `site/*.html`.
+12. Managed mode only: start a temporary local Wardex instance on a loopback port with a cloned acceptance config that disables request throttling for the smoke run.
+13. Live admin reachability check against `WARDEX_BASE_URL`.
+14. Evaluation-to-value proof via `bash scripts/evaluate_to_value.sh`, confirming the documented 15-minute journey still produces readiness, first-run proof seed, first alert, response preview, evidence export, support bundle, and deployment trust artifacts against a live server.
+15. Release verification helper gates: `scripts/detection_validation_packs.sh` confirms validation-pack fixtures, and `scripts/performance_scale_baseline.sh --launchpad` verifies release-verification endpoint latency against the smoke budget, including `/api/release/deployment-trust-report`.
+16. Routed browser release suite:
    - `tests/playwright/live_release_smoke.spec.js`
   - `tests/playwright/detection_quality_thread_smoke.spec.js`
    - `tests/playwright/advanced_console_workflows.spec.js`
@@ -32,6 +36,14 @@ The wrapper is implemented in `scripts/release_acceptance.sh` and runs these che
    - `tests/playwright/assistant_ticketing_live.spec.js`
    - `tests/playwright/siem_settings_live.spec.js`
    - `tests/playwright/mobile_topbar_smoke.spec.js`
+
+Tagged release publication adds a second proof layer after the GitHub Release is created:
+
+1. `python3 scripts/verify_published_release.py --tag "$GITHUB_REF_NAME"` downloads the public GitHub assets, re-checks `SHA256SUMS`, and polls GitHub Pages release facts, the published APT metadata, the Homebrew tap formula, and the canonical support page until they reflect the tag.
+2. `bash scripts/smoke_release_artifact.sh` re-smokes the published Linux archive, `.deb`, `.rpm`, and GHCR image using the real downloadable/installable surfaces rather than local build outputs.
+3. `scripts/smoke_release_artifact.ps1` re-smokes the published Windows archive.
+4. The release workflow re-verifies `gh attestation verify` for each published archive and `cosign verify` plus `gh attestation verify` for the published GHCR image before stable sign-off.
+5. Public-install proof now includes `apt install wardex` from `https://pinkysworld.github.io/Wardex/apt` and `brew install wardex` from `pinkysworld/homebrew-wardex`, with the same `wardex --version`, `wardex doctor`, `/api/healthz/ready`, `/admin/`, and `/api/support/bundle` smoke contract.
 
 ## macOS release trust
 
@@ -126,10 +138,17 @@ The GitHub CI matrix also gates release branches with the Rust checks that are i
 cargo fmt -- --check
 cargo clippy --all-targets -- -D warnings
 cargo test --all-targets
+cargo test --test api_integration
+cargo test --test concurrent_smoke
+cargo test --test failed_auth_lockout
 python3 scripts/check_panic_policy.py
 ```
 
 The matrix also runs a public-endpoint SDK live smoke job that boots a real local Wardex instance, waits on `/api/openapi.json`, then exercises the TypeScript and Python SDK smoke tests against that live server before sign-off.
+
+## Evaluation path
+
+The release gate now expects the documented evaluation journey in [`EVALUATE_WARDEX.md`](EVALUATE_WARDEX.md) and `scripts/evaluate_to_value.sh` to stay valid. If the operator-facing 15-minute path changes, update the guide, the script, and the acceptance wrapper together.
 
 The matrix runs Linux, macOS, and Windows without fail-fast cancellation so each platform reports its own failure context.
 

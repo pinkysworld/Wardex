@@ -12,18 +12,18 @@ use std::sync::{Arc, Mutex};
 use axum::body::Body;
 use axum::response::Response;
 
-#[allow(unused_imports)]
-use crate::server::*;
-use crate::integration_setup::{
-    AwsCollectorSetupPatch, AzureCollectorSetupPatch, EntraCollectorSetupPatch,
-    GcpCollectorSetupPatch, M365CollectorSetupPatch, OktaCollectorSetupPatch,
-    WorkspaceCollectorSetupPatch,
-};
 use crate::integration_setup::{
     AwsCollectorSetup, AzureCollectorSetup, EntraCollectorSetup, GcpCollectorSetup,
     M365CollectorSetup, OktaCollectorSetup, SetupValidation, SetupValidationIssue,
     WorkspaceCollectorSetup,
 };
+use crate::integration_setup::{
+    AwsCollectorSetupPatch, AzureCollectorSetupPatch, EntraCollectorSetupPatch,
+    GcpCollectorSetupPatch, M365CollectorSetupPatch, OktaCollectorSetupPatch,
+    WorkspaceCollectorSetupPatch,
+};
+#[allow(unused_imports)]
+use crate::server::*;
 use crate::server_response::{error_json, json_response};
 use crate::storage::SharedStorage;
 
@@ -157,7 +157,10 @@ pub(crate) fn handle_collector_aws_get(state: &Arc<Mutex<AppState>>) -> Response
     json_response(&body.to_string(), 200)
 }
 
-pub(crate) fn handle_collector_aws_config(body: &[u8], state: &Arc<Mutex<AppState>>) -> Response<Body> {
+pub(crate) fn handle_collector_aws_config(
+    body: &[u8],
+    state: &Arc<Mutex<AppState>>,
+) -> Response<Body> {
     match read_json_body::<AwsCollectorSetupPatch>(body, 16 * 1024) {
         Ok(patch) => {
             let s = state.lock().unwrap_or_else(|e| e.into_inner());
@@ -198,11 +201,9 @@ pub(crate) fn handle_collector_aws_validate(state: &Arc<Mutex<AppState>>) -> Res
         let resolver = build_secrets_resolver(&s.storage);
         match setup.to_runtime(&resolver) {
             Ok(runtime) => {
-                let mut collector =
-                    crate::collector_aws::AwsCloudTrailCollector::new(runtime);
+                let mut collector = crate::collector_aws::AwsCloudTrailCollector::new(runtime);
                 let result = collector.poll();
-                let sample_events: Vec<_> =
-                    result.events.iter().take(5).cloned().collect();
+                let sample_events: Vec<_> = result.events.iter().take(5).cloned().collect();
                 let body = serde_json::json!({
                     "provider": "aws_cloudtrail",
                     "success": result.success,
@@ -237,7 +238,10 @@ pub(crate) fn handle_collector_azure_get(state: &Arc<Mutex<AppState>>) -> Respon
     json_response(&body.to_string(), 200)
 }
 
-pub(crate) fn handle_collector_azure_config(body: &[u8], state: &Arc<Mutex<AppState>>) -> Response<Body> {
+pub(crate) fn handle_collector_azure_config(
+    body: &[u8],
+    state: &Arc<Mutex<AppState>>,
+) -> Response<Body> {
     match read_json_body::<AzureCollectorSetupPatch>(body, 16 * 1024) {
         Ok(patch) => {
             let s = state.lock().unwrap_or_else(|e| e.into_inner());
@@ -278,11 +282,9 @@ pub(crate) fn handle_collector_azure_validate(state: &Arc<Mutex<AppState>>) -> R
         let resolver = build_secrets_resolver(&s.storage);
         match setup.to_runtime(&resolver) {
             Ok(runtime) => {
-                let mut collector =
-                    crate::collector_azure::AzureActivityCollector::new(runtime);
+                let mut collector = crate::collector_azure::AzureActivityCollector::new(runtime);
                 let result = collector.poll();
-                let sample_events: Vec<_> =
-                    result.events.iter().take(5).cloned().collect();
+                let sample_events: Vec<_> = result.events.iter().take(5).cloned().collect();
                 let body = serde_json::json!({
                     "provider": "azure_activity",
                     "success": result.success,
@@ -316,7 +318,10 @@ pub(crate) fn handle_collector_gcp_get(state: &Arc<Mutex<AppState>>) -> Response
     json_response(&body.to_string(), 200)
 }
 
-pub(crate) fn handle_collector_gcp_config(body: &[u8], state: &Arc<Mutex<AppState>>) -> Response<Body> {
+pub(crate) fn handle_collector_gcp_config(
+    body: &[u8],
+    state: &Arc<Mutex<AppState>>,
+) -> Response<Body> {
     match read_json_body::<GcpCollectorSetupPatch>(body, 20 * 1024) {
         Ok(patch) => {
             let s = state.lock().unwrap_or_else(|e| e.into_inner());
@@ -357,11 +362,9 @@ pub(crate) fn handle_collector_gcp_validate(state: &Arc<Mutex<AppState>>) -> Res
         let resolver = build_secrets_resolver(&s.storage);
         match setup.to_runtime(&resolver) {
             Ok(runtime) => {
-                let mut collector =
-                    crate::collector_gcp::GcpAuditCollector::new(runtime);
+                let mut collector = crate::collector_gcp::GcpAuditCollector::new(runtime);
                 let result = collector.poll();
-                let sample_events: Vec<_> =
-                    result.events.iter().take(5).cloned().collect();
+                let sample_events: Vec<_> = result.events.iter().take(5).cloned().collect();
                 let body = serde_json::json!({
                     "provider": "gcp_audit",
                     "success": result.success,
@@ -396,7 +399,10 @@ pub(crate) fn handle_collector_okta_get(state: &Arc<Mutex<AppState>>) -> Respons
     json_response(&body.to_string(), 200)
 }
 
-pub(crate) fn handle_collector_okta_config(body: &[u8], state: &Arc<Mutex<AppState>>) -> Response<Body> {
+pub(crate) fn handle_collector_okta_config(
+    body: &[u8],
+    state: &Arc<Mutex<AppState>>,
+) -> Response<Body> {
     match read_json_body::<OktaCollectorSetupPatch>(body, 16 * 1024) {
         Ok(patch) => {
             let s = state.lock().unwrap_or_else(|e| e.into_inner());
@@ -434,7 +440,10 @@ pub(crate) fn handle_collector_entra_get(state: &Arc<Mutex<AppState>>) -> Respon
     json_response(&body.to_string(), 200)
 }
 
-pub(crate) fn handle_collector_entra_config(body: &[u8], state: &Arc<Mutex<AppState>>) -> Response<Body> {
+pub(crate) fn handle_collector_entra_config(
+    body: &[u8],
+    state: &Arc<Mutex<AppState>>,
+) -> Response<Body> {
     match read_json_body::<EntraCollectorSetupPatch>(body, 16 * 1024) {
         Ok(patch) => {
             let s = state.lock().unwrap_or_else(|e| e.into_inner());
@@ -472,7 +481,10 @@ pub(crate) fn handle_collector_m365_get(state: &Arc<Mutex<AppState>>) -> Respons
     json_response(&body.to_string(), 200)
 }
 
-pub(crate) fn handle_collector_m365_config(body: &[u8], state: &Arc<Mutex<AppState>>) -> Response<Body> {
+pub(crate) fn handle_collector_m365_config(
+    body: &[u8],
+    state: &Arc<Mutex<AppState>>,
+) -> Response<Body> {
     match read_json_body::<M365CollectorSetupPatch>(body, 16 * 1024) {
         Ok(patch) => {
             let s = state.lock().unwrap_or_else(|e| e.into_inner());
@@ -510,7 +522,10 @@ pub(crate) fn handle_collector_workspace_get(state: &Arc<Mutex<AppState>>) -> Re
     json_response(&body.to_string(), 200)
 }
 
-pub(crate) fn handle_collector_workspace_config(body: &[u8], state: &Arc<Mutex<AppState>>) -> Response<Body> {
+pub(crate) fn handle_collector_workspace_config(
+    body: &[u8],
+    state: &Arc<Mutex<AppState>>,
+) -> Response<Body> {
     match read_json_body::<WorkspaceCollectorSetupPatch>(body, 32 * 1024) {
         Ok(patch) => {
             let s = state.lock().unwrap_or_else(|e| e.into_inner());
@@ -601,7 +616,10 @@ pub(crate) fn planned_collector_default_setup(provider: &str) -> serde_json::Val
     }
 }
 
-pub(crate) fn load_planned_collector_setup(storage: &SharedStorage, provider: &str) -> serde_json::Value {
+pub(crate) fn load_planned_collector_setup(
+    storage: &SharedStorage,
+    provider: &str,
+) -> serde_json::Value {
     let Some(key) = planned_collector_key(provider) else {
         return planned_collector_default_setup(provider);
     };
@@ -628,7 +646,10 @@ pub(crate) fn planned_collector_poll_interval(setup: &serde_json::Value) -> u64 
         .clamp(30, 86_400)
 }
 
-pub(crate) fn planned_collector_validation(provider: &str, setup: &serde_json::Value) -> SetupValidation {
+pub(crate) fn planned_collector_validation(
+    provider: &str,
+    setup: &serde_json::Value,
+) -> SetupValidation {
     let enabled = planned_collector_enabled(setup);
     let issues = planned_collector_required_fields(provider)
         .iter()
@@ -658,7 +679,10 @@ pub(crate) fn planned_collector_validation(provider: &str, setup: &serde_json::V
     }
 }
 
-pub(crate) fn planned_collector_public_view(provider: &str, setup: &serde_json::Value) -> serde_json::Value {
+pub(crate) fn planned_collector_public_view(
+    provider: &str,
+    setup: &serde_json::Value,
+) -> serde_json::Value {
     let mut view = setup.clone();
     if let Some(object) = view.as_object_mut() {
         object.insert("provider".to_string(), serde_json::json!(provider));
@@ -688,7 +712,10 @@ pub(crate) fn planned_collector_public_view(provider: &str, setup: &serde_json::
     view
 }
 
-pub(crate) fn planned_collector_summary(provider: &str, setup: &serde_json::Value) -> serde_json::Value {
+pub(crate) fn planned_collector_summary(
+    provider: &str,
+    setup: &serde_json::Value,
+) -> serde_json::Value {
     match provider {
         "github_audit" => serde_json::json!({
             "organization": setup.get("organization").and_then(serde_json::Value::as_str).unwrap_or(""),
@@ -762,7 +789,10 @@ pub(crate) fn planned_collector_sample_events(
     }
 }
 
-pub(crate) fn planned_collector_config_payload(storage: &SharedStorage, provider: &str) -> serde_json::Value {
+pub(crate) fn planned_collector_config_payload(
+    storage: &SharedStorage,
+    provider: &str,
+) -> serde_json::Value {
     let setup = load_planned_collector_setup(storage, provider);
     let validation = planned_collector_validation(provider, &setup);
     serde_json::json!({
@@ -772,7 +802,10 @@ pub(crate) fn planned_collector_config_payload(storage: &SharedStorage, provider
     })
 }
 
-pub(crate) fn planned_collector_status_entry(storage: &SharedStorage, provider: &str) -> serde_json::Value {
+pub(crate) fn planned_collector_status_entry(
+    storage: &SharedStorage,
+    provider: &str,
+) -> serde_json::Value {
     let setup = load_planned_collector_setup(storage, provider);
     let validation = planned_collector_validation(provider, &setup);
     collector_status_entry(
@@ -785,7 +818,6 @@ pub(crate) fn planned_collector_status_entry(storage: &SharedStorage, provider: 
         load_collector_lifecycle(storage, provider),
     )
 }
-
 
 // ── Collector setup loaders, checkpoint/SLA analytics, validation & status builders ──
 
@@ -825,11 +857,17 @@ pub(crate) fn collector_lifecycle_key(provider: &str) -> String {
     format!("integrations.collectors.{provider}.lifecycle")
 }
 
-pub(crate) fn load_collector_checkpoint(storage: &SharedStorage, provider: &str) -> CollectorCheckpoint {
+pub(crate) fn load_collector_checkpoint(
+    storage: &SharedStorage,
+    provider: &str,
+) -> CollectorCheckpoint {
     load_stored_json(storage, &collector_checkpoint_key(provider))
 }
 
-pub(crate) fn load_collector_lifecycle(storage: &SharedStorage, provider: &str) -> Vec<serde_json::Value> {
+pub(crate) fn load_collector_lifecycle(
+    storage: &SharedStorage,
+    provider: &str,
+) -> Vec<serde_json::Value> {
     load_stored_json(storage, &collector_lifecycle_key(provider))
 }
 
@@ -1120,7 +1158,10 @@ pub(crate) fn build_secrets_resolver(storage: &SharedStorage) -> crate::secrets:
     crate::secrets::SecretsResolver::new(setup.to_runtime())
 }
 
-pub(crate) fn config_validation_payload<T>(config: T, validation: SetupValidation) -> serde_json::Value
+pub(crate) fn config_validation_payload<T>(
+    config: T,
+    validation: SetupValidation,
+) -> serde_json::Value
 where
     T: serde::Serialize,
 {
@@ -1781,6 +1822,8 @@ pub(crate) fn collector_status_entry(
             {"surface": "Infrastructure", "href": format!("/infrastructure?tab=observability&collector={name}"), "label": "Open infrastructure evidence"}
         ],
     });
+    let first_value_journey =
+        collector_first_value_journey(name, enabled, &validation, &reliability, lag_seconds);
     serde_json::json!({
         "name": name,
         "provider": name,
@@ -1812,11 +1855,81 @@ pub(crate) fn collector_status_entry(
         },
         "route_targets": collector_route_targets(name),
         "ingestion_evidence": ingestion_evidence,
+        "first_value_journey": first_value_journey,
         "lifecycle": lifecycle.iter().rev().take(8).cloned().collect::<Vec<_>>(),
         "lifecycle_analytics": lifecycle_analytics,
         "summary": summary,
         "validation": validation,
         "timeline": build_collector_timeline(name, enabled, poll_interval_secs, &summary, &validation),
+    })
+}
+
+fn collector_first_value_journey(
+    provider: &str,
+    enabled: bool,
+    validation: &SetupValidation,
+    reliability: &CollectorCheckpoint,
+    lag_seconds: Option<u64>,
+) -> serde_json::Value {
+    let saved_config = enabled;
+    let validation_ready = validation.status == "ready";
+    let sample_event = reliability.events_ingested > 0 || reliability.last_success_at.is_some();
+    let normalized_event = reliability.events_ingested > 0;
+    let mapped_detection = normalized_event && reliability.error_category.is_none();
+    let soc_ready = mapped_detection
+        && lag_seconds
+            .map(|lag| lag <= collector_sla_target_seconds(300))
+            .unwrap_or(true);
+    let stages = [
+        ("saved_config", saved_config, "Save connector configuration"),
+        (
+            "validation",
+            validation_ready,
+            "Validate credentials and scope",
+        ),
+        (
+            "sample_event",
+            sample_event,
+            "Collect or preview the first sample event",
+        ),
+        (
+            "normalized_event",
+            normalized_event,
+            "Normalize the first event into Wardex",
+        ),
+        (
+            "mapped_detection",
+            mapped_detection,
+            "Map event context to detection workflows",
+        ),
+        (
+            "soc_ready",
+            soc_ready,
+            "Make the lane SOC-ready for alerts or hunts",
+        ),
+    ];
+    let completed = stages.iter().filter(|(_, done, _)| *done).count();
+    let next_step = stages
+        .iter()
+        .find(|(_, done, _)| !*done)
+        .map(|(_, _, label)| *label)
+        .unwrap_or("Keep the connector fresh and tied to SOC workflows");
+    serde_json::json!({
+        "provider": provider,
+        "status": if soc_ready { "first_value_reached" } else { "in_progress" },
+        "completed_stages": completed,
+        "total_stages": stages.len(),
+        "next_step": next_step,
+        "proof": {
+            "events_ingested": reliability.events_ingested,
+            "last_success_at": reliability.last_success_at,
+            "checkpoint_id": reliability.checkpoint_id,
+        },
+        "stages": stages.iter().map(|(id, done, label)| serde_json::json!({
+            "id": id,
+            "label": label,
+            "status": if *done { "complete" } else { "pending" },
+        })).collect::<Vec<_>>(),
     })
 }
 
@@ -1935,7 +2048,10 @@ pub(crate) fn full_collector_status_entries(state: &AppState) -> Vec<serde_json:
             load_collector_lifecycle(&state.storage, "workspace_saas"),
         ),
         crate::server_collectors::planned_collector_status_entry(&state.storage, "github_audit"),
-        crate::server_collectors::planned_collector_status_entry(&state.storage, "crowdstrike_falcon"),
+        crate::server_collectors::planned_collector_status_entry(
+            &state.storage,
+            "crowdstrike_falcon",
+        ),
         crate::server_collectors::planned_collector_status_entry(&state.storage, "generic_syslog"),
     ]
 }
@@ -1949,4 +2065,3 @@ pub(crate) fn collector_readiness_summary(state: &AppState) -> serde_json::Value
         "collectors": collectors,
     })
 }
-

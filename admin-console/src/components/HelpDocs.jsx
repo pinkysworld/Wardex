@@ -665,7 +665,7 @@ export default function HelpDocs() {
     try {
       const result = await api.productionDemoLab();
       setFirstRunProof(result);
-      toast('Production demo lab seeded.', 'success');
+      toast('Production demo lab seeded for evaluation.', 'success');
     } catch (error) {
       const message = error?.body || error?.message || 'Production demo lab failed';
       setFirstRunProof({ error: message });

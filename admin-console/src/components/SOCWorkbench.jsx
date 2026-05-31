@@ -199,6 +199,19 @@ const casePriorityBadgeClass = (priority) => {
   }
 };
 
+const readinessBadgeClass = (status) => {
+  switch (String(status || '').toLowerCase()) {
+    case 'pass':
+    case 'ready':
+      return 'badge-ok';
+    case 'review':
+    case 'review_required':
+      return 'badge-warn';
+    default:
+      return 'badge-info';
+  }
+};
+
 const caseContainmentLabel = (status) => {
   switch (String(status || '').toLowerCase()) {
     case 'resolved':
@@ -1124,6 +1137,8 @@ export default function SOCWorkbench() {
   );
   const caseHandoffPacket = caseDrawerData.handoffPacket || null;
   const handoffChecklistState = caseHandoffPacket?.checklist_state || {};
+  const handoffClosureReadiness = caseHandoffPacket?.closure_readiness || null;
+  const handoffClosureChecks = asArray(handoffClosureReadiness?.checks);
   const handoffResponseStatus = caseHandoffPacket?.response_status || {};
   const handoffTimeline = asArray(caseHandoffPacket?.timeline);
   const handoffQuestions = asArray(caseHandoffPacket?.unresolved_questions);
@@ -6221,9 +6236,12 @@ export default function SOCWorkbench() {
                         ticket_syncs: handoffChecklistState.ticket_syncs || 0,
                         next_actions: handoffChecklistState.next_actions || 0,
                         open_questions: handoffChecklistState.unresolved_questions || 0,
+                        closure_readiness: handoffClosureReadiness
+                          ? `${handoffClosureReadiness.status || 'review'} · ${handoffClosureReadiness.score || 0}%`
+                          : 'Not scored',
                         linked_workflow: handoffLinkedInvestigation?.workflow_name || 'Not linked',
                       }}
-                      limit={10}
+                      limit={11}
                     />
 
                     <div
@@ -6256,6 +6274,46 @@ export default function SOCWorkbench() {
                             {handoffLinkedInvestigation.completion_percent || 0}% complete
                           </div>
                         ) : null}
+                      </div>
+
+                      <div
+                        style={{
+                          border: '1px solid var(--border)',
+                          borderRadius: 12,
+                          padding: 14,
+                          background: 'var(--bg-card)',
+                        }}
+                      >
+                        <div className="card-title" style={{ marginBottom: 8 }}>
+                          Closure Readiness
+                        </div>
+                        {handoffClosureReadiness ? (
+                          <div style={{ display: 'grid', gap: 8 }}>
+                            <div>
+                              <strong>
+                                {formatCompactLabel(handoffClosureReadiness.status) || 'Review'} ·{' '}
+                                {handoffClosureReadiness.score || 0}%
+                              </strong>
+                            </div>
+                            {handoffClosureChecks.slice(0, 7).map((check) => (
+                              <div
+                                key={check.id}
+                                style={{
+                                  display: 'flex',
+                                  justifyContent: 'space-between',
+                                  gap: 12,
+                                }}
+                              >
+                                <span>{formatCompactLabel(check.id)}</span>
+                                <span className={`badge ${readinessBadgeClass(check.status)}`}>
+                                  {check.status}
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+                        ) : (
+                          <div className="empty">Closure readiness has not been scored yet.</div>
+                        )}
                       </div>
 
                       <div

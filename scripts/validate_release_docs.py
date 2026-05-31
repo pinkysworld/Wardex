@@ -10,12 +10,17 @@ import tomllib
 
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
+README_DOC = ROOT / "README.md"
+DOCS_INDEX_DOC = ROOT / "docs/README.md"
+GETTING_STARTED_DOC = ROOT / "docs/GETTING_STARTED.md"
+EVALUATION_DOC = ROOT / "docs/EVALUATE_WARDEX.md"
 STATUS_DOC = ROOT / "docs/STATUS.md"
 ROADMAP_DOC = ROOT / "docs/ROADMAP_XDR_PROFESSIONAL.md"
 FEATURE_COVERAGE_DOC = ROOT / "docs/FEATURE_UI_COVERAGE.md"
 RELEASE_ACCEPTANCE_DOC = ROOT / "docs/RELEASE_ACCEPTANCE.md"
 IMPLEMENTATION_PLAN_DOC = ROOT / "docs/IMPLEMENTATION_PLAN.md"
 RELEASE_ACCEPTANCE_SCRIPT = ROOT / "scripts/release_acceptance.sh"
+RESOURCES_PAGE = ROOT / "site/resources.html"
 HELM_CHART = ROOT / "deploy/helm/wardex/Chart.yaml"
 HELM_VALUES = ROOT / "deploy/helm/wardex/values.yaml"
 
@@ -120,11 +125,16 @@ def main() -> int:
     version = cargo_version()
     failures: list[str] = []
 
+    readme = read(README_DOC)
+    docs_index = read(DOCS_INDEX_DOC)
+    getting_started = read(GETTING_STARTED_DOC)
+    evaluation_doc = read(EVALUATION_DOC)
     status = read(STATUS_DOC)
     roadmap = read(ROADMAP_DOC)
     feature_coverage = read(FEATURE_COVERAGE_DOC)
     release_acceptance = read(RELEASE_ACCEPTANCE_DOC)
     implementation_plan = read(IMPLEMENTATION_PLAN_DOC)
+    resources_page = read(RESOURCES_PAGE)
     helm_chart = read(HELM_CHART)
     smoke_specs = release_smoke_specs()
 
@@ -160,10 +170,24 @@ def main() -> int:
             )
     if "validate_release_docs.py" not in release_acceptance:
         failures.append("docs/RELEASE_ACCEPTANCE.md does not document the release-doc validation step")
+    if "check_release_facts.py" not in release_acceptance:
+        failures.append("docs/RELEASE_ACCEPTANCE.md does not document the release-facts validation step")
     if "check_release_trust_gates.py" not in release_acceptance:
         failures.append("docs/RELEASE_ACCEPTANCE.md does not document the release-trust validation step")
+    if "evaluate_to_value.sh" not in release_acceptance:
+        failures.append("docs/RELEASE_ACCEPTANCE.md does not document the evaluation-to-value helper")
     if "Release acceptance gate" not in feature_coverage:
         failures.append("docs/FEATURE_UI_COVERAGE.md is missing its release acceptance section")
+    if "scripts/evaluate_to_value.sh" not in readme:
+        failures.append("README.md does not mention the evaluation helper")
+    if "EVALUATE_WARDEX.md" not in docs_index:
+        failures.append("docs/README.md does not index the evaluation guide")
+    if "scripts/evaluate_to_value.sh" not in getting_started:
+        failures.append("docs/GETTING_STARTED.md does not mention the evaluation helper")
+    if "scripts/evaluate_to_value.sh" not in evaluation_doc:
+        failures.append("docs/EVALUATE_WARDEX.md does not mention the evaluation helper")
+    if "scripts/evaluate_to_value.sh" not in resources_page or "EVALUATE_WARDEX.md" not in resources_page:
+        failures.append("site/resources.html does not surface the evaluation guide and helper")
 
     for capability, status_value in feature_rows():
         if status_value not in VALID_FEATURE_STATUSES:

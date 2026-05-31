@@ -16,6 +16,7 @@ use crate::enrollment::{AgentHealth, EnrollRequest, EnrollResponse};
 pub struct AgentClient {
     server_url: String,
     agent_id: Option<String>,
+    agent_token: Option<String>,
     heartbeat_interval: u64,
     policy_poll_interval: u64,
     runtime_status: Option<Arc<Mutex<AgentRuntimeStatus>>>,
@@ -63,6 +64,7 @@ impl AgentClient {
         Self {
             server_url: server_url.trim_end_matches('/').to_string(),
             agent_id: None,
+            agent_token: None,
             heartbeat_interval: 30,
             policy_poll_interval: 60,
             runtime_status: None,
@@ -116,6 +118,7 @@ impl AgentClient {
             .map_err(|e| format!("invalid enrollment response: {e}"))?;
 
         self.agent_id = Some(enroll_resp.agent_id.clone());
+        self.agent_token = enroll_resp.agent_token.clone();
         self.heartbeat_interval = enroll_resp.heartbeat_interval_secs;
         self.policy_poll_interval = enroll_resp.policy_poll_interval_secs;
 
@@ -133,8 +136,13 @@ impl AgentClient {
             .map_err(|e| format!("failed to serialize heartbeat: {e}"))?;
 
         let url = format!("{}/api/agents/{}/heartbeat", self.server_url, agent_id);
-        let resp = ureq::post(&url)
-            .set("Content-Type", "application/json")
+        let mut request = ureq::post(&url).set("Content-Type", "application/json");
+        if let Some(token) = &self.agent_token {
+            request = request
+                .set("X-Wardex-Agent-Id", agent_id)
+                .set("X-Wardex-Agent-Token", token);
+        }
+        let resp = request
             .send_string(&body)
             .map_err(|e| format!("heartbeat failed: {e}"))?;
 
@@ -164,8 +172,13 @@ impl AgentClient {
             .map_err(|e| format!("failed to serialize events: {e}"))?;
 
         let url = format!("{}/api/events", self.server_url);
-        let resp = ureq::post(&url)
-            .set("Content-Type", "application/json")
+        let mut request = ureq::post(&url).set("Content-Type", "application/json");
+        if let Some(token) = &self.agent_token {
+            request = request
+                .set("X-Wardex-Agent-Id", agent_id)
+                .set("X-Wardex-Agent-Token", token);
+        }
+        let resp = request
             .send_string(&body)
             .map_err(|e| format!("event forward failed: {e}"))?;
 
@@ -178,7 +191,15 @@ impl AgentClient {
     /// Fetch the latest policy from the server.
     pub fn fetch_policy(&self) -> Result<Option<PolicyPayload>, String> {
         let url = format!("{}/api/policy/current", self.server_url);
-        let resp = ureq::get(&url)
+        let mut request = ureq::get(&url);
+        if let Some(token) = &self.agent_token
+            && let Some(agent_id) = &self.agent_id
+        {
+            request = request
+                .set("X-Wardex-Agent-Id", agent_id)
+                .set("X-Wardex-Agent-Token", token);
+        }
+        let resp = request
             .call()
             .map_err(|e| format!("policy fetch failed: {e}"))?;
 
@@ -316,7 +337,15 @@ impl AgentClient {
             "{}/api/agents/update?agent_id={}&current_version={}",
             self.server_url, agent_id, current_version
         );
-        let resp = ureq::get(&url)
+        let mut request = ureq::get(&url);
+        if let Some(token) = &self.agent_token
+            && let Some(agent_id) = &self.agent_id
+        {
+            request = request
+                .set("X-Wardex-Agent-Id", agent_id)
+                .set("X-Wardex-Agent-Token", token);
+        }
+        let resp = request
             .call()
             .map_err(|e| format!("update check failed: {e}"))?;
 
@@ -343,7 +372,15 @@ impl AgentClient {
             format!("{}{}", self.server_url, info.download_url)
         };
 
-        let resp = ureq::get(&download_url)
+        let mut request = ureq::get(&download_url);
+        if let Some(token) = &self.agent_token
+            && let Some(agent_id) = &self.agent_id
+        {
+            request = request
+                .set("X-Wardex-Agent-Id", agent_id)
+                .set("X-Wardex-Agent-Token", token);
+        }
+        let resp = request
             .call()
             .map_err(|e| format!("download failed: {e}"))?;
 
@@ -412,8 +449,13 @@ impl AgentClient {
         let body =
             serde_json::to_string(logs).map_err(|e| format!("failed to serialize logs: {e}"))?;
         let url = format!("{}/api/agents/{}/logs", self.server_url, agent_id);
-        let resp = ureq::post(&url)
-            .set("Content-Type", "application/json")
+        let mut request = ureq::post(&url).set("Content-Type", "application/json");
+        if let Some(token) = &self.agent_token {
+            request = request
+                .set("X-Wardex-Agent-Id", agent_id)
+                .set("X-Wardex-Agent-Token", token);
+        }
+        let resp = request
             .send_string(&body)
             .map_err(|e| format!("log forward failed: {e}"))?;
         if resp.status() != 200 {
@@ -431,8 +473,13 @@ impl AgentClient {
         let body = serde_json::to_string(inventory)
             .map_err(|e| format!("failed to serialize inventory: {e}"))?;
         let url = format!("{}/api/agents/{}/inventory", self.server_url, agent_id);
-        let resp = ureq::post(&url)
-            .set("Content-Type", "application/json")
+        let mut request = ureq::post(&url).set("Content-Type", "application/json");
+        if let Some(token) = &self.agent_token {
+            request = request
+                .set("X-Wardex-Agent-Id", agent_id)
+                .set("X-Wardex-Agent-Token", token);
+        }
+        let resp = request
             .send_string(&body)
             .map_err(|e| format!("inventory report failed: {e}"))?;
         if resp.status() != 200 {
@@ -563,11 +610,19 @@ pub fn run_agent(
         .map(str::trim)
         .filter(|value| !value.is_empty())
         .map(ToOwned::to_owned);
+    let persisted_agent_token = config
+        .agent
+        .agent_token
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(ToOwned::to_owned);
 
     let (agent_id, heartbeat_interval, policy_poll_interval) =
         if let Some(agent_id) = persisted_agent_id {
             log::info!("  Resuming enrolled agent: {agent_id}");
             client.agent_id = Some(agent_id.clone());
+            client.agent_token = persisted_agent_token.clone();
             (
                 agent_id,
                 DEFAULT_AGENT_HEARTBEAT_INTERVAL_SECS,
@@ -579,7 +634,12 @@ pub fn run_agent(
                 &host_info.hostname,
                 &host_info.platform.to_string(),
             )?;
-            persist_agent_runtime_config(config, server_url, &resp.agent_id)?;
+            persist_agent_runtime_config(
+                config,
+                server_url,
+                &resp.agent_id,
+                resp.agent_token.as_deref(),
+            )?;
             log::info!("  Enrolled as: {}", resp.agent_id);
             log::info!("  Heartbeat interval: {}s", resp.heartbeat_interval_secs);
             log::info!("");
@@ -594,12 +654,14 @@ pub fn run_agent(
     let heartbeat_shutdown = shutdown.clone();
     let heartbeat_server = server_url.to_string();
     let heartbeat_agent_id = agent_id.clone();
+    let heartbeat_agent_token = client.agent_token.clone();
     let heartbeat_runtime_status = runtime_status.clone();
     let heartbeat_update_trust_policy = update_trust_policy.clone();
     let heartbeat_update_counter = last_accepted_update_counter.clone();
     thread::spawn(move || {
         let mut hb_client = AgentClient::new(&heartbeat_server);
         hb_client.agent_id = Some(heartbeat_agent_id);
+        hb_client.agent_token = heartbeat_agent_token;
         hb_client.attach_runtime_status(heartbeat_runtime_status);
         hb_client.configure_update_trust(heartbeat_update_trust_policy, heartbeat_update_counter);
         loop {
@@ -625,6 +687,7 @@ pub fn run_agent(
     let update_shutdown = shutdown.clone();
     let update_server = server_url.to_string();
     let update_agent_id = agent_id.clone();
+    let update_agent_token = client.agent_token.clone();
     let update_runtime_status = runtime_status.clone();
     let update_interval_secs = config.agent.update_check_interval_secs.max(60);
     let periodic_update_trust_policy = update_trust_policy.clone();
@@ -632,6 +695,7 @@ pub fn run_agent(
     thread::spawn(move || {
         let mut upd_client = AgentClient::new(&update_server);
         upd_client.agent_id = Some(update_agent_id);
+        upd_client.agent_token = update_agent_token;
         upd_client.attach_runtime_status(update_runtime_status);
         upd_client.configure_update_trust(periodic_update_trust_policy, periodic_update_counter);
         loop {
@@ -660,11 +724,13 @@ pub fn run_agent(
     let policy_shutdown = shutdown.clone();
     let policy_server = server_url.to_string();
     let policy_agent_id = agent_id.clone();
+    let policy_agent_token = client.agent_token.clone();
     let policy_threshold = active_threshold.clone();
     let policy_interval_secs = active_interval.clone();
     thread::spawn(move || {
         let mut pol_client = AgentClient::new(&policy_server);
         pol_client.agent_id = Some(policy_agent_id);
+        pol_client.agent_token = policy_agent_token;
         let mut current_version: u64 = 0;
         loop {
             if policy_shutdown.load(Ordering::Relaxed) {
@@ -873,21 +939,24 @@ fn persist_agent_runtime_config(
     config: &Config,
     server_url: &str,
     agent_id: &str,
+    agent_token: Option<&str>,
 ) -> Result<(), String> {
     let path = crate::config::runtime_config_path();
-    persist_agent_runtime_config_at_path(config, server_url, agent_id, &path)
+    persist_agent_runtime_config_at_path(config, server_url, agent_id, agent_token, &path)
 }
 
 fn persist_agent_runtime_config_at_path(
     config: &Config,
     server_url: &str,
     agent_id: &str,
+    agent_token: Option<&str>,
     path: &Path,
 ) -> Result<(), String> {
     let mut next = config.clone();
     next.agent.server_url = server_url.to_string();
     next.agent.enrollment_token.clear();
     next.agent.agent_id = Some(agent_id.to_string());
+    next.agent.agent_token = agent_token.map(str::to_string);
 
     if let Some(parent) = path.parent() {
         std::fs::create_dir_all(parent)
@@ -953,6 +1022,7 @@ mod tests {
             &config,
             "https://manager.example.com:9090",
             "agent-123",
+            Some("agent-secret"),
             &path,
         )
         .unwrap();
@@ -960,6 +1030,7 @@ mod tests {
         let saved = std::fs::read_to_string(path).unwrap();
         assert!(saved.contains("server_url = \"https://manager.example.com:9090\""));
         assert!(saved.contains("agent_id = \"agent-123\""));
+        assert!(saved.contains("agent_token = \"agent-secret\""));
         assert!(saved.contains("enrollment_token = \"\""));
     }
 }

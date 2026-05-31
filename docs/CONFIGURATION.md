@@ -8,14 +8,34 @@ This document covers all configuration options for the Wardex XDR agent and serv
 |---|---|---|
 | `WARDEX_PORT` | `8080` | HTTP server bind port |
 | `WARDEX_HOST` | `127.0.0.1` | HTTP server bind address |
-| `WARDEX_TOKEN` | *(required)* | Admin API authentication token |
-| `WARDEX_AGENT_TOKEN` | *(optional)* | Enrollment token for XDR agents |
+| `WARDEX_ENV` | `development` | Set to `production` to enable fail-closed production startup validation |
+| `WARDEX_ADMIN_TOKEN` | generated in development | Admin API authentication token; required explicitly in production |
+| `WARDEX_SPOOL_KEY` | derived development key | Persistent spool encryption key; required explicitly in production |
+| `WARDEX_AGENT_TOKEN` | *(optional)* | Bootstrap bearer for enrollment and legacy shared-token agent auth; production agent routes also require the per-agent token returned at enrollment |
+| `WARDEX_METRICS_TOKEN` | *(optional)* | Bearer token for `/api/metrics`; required in production unless `server.metrics_bearer_token` is set |
+| `WARDEX_OPENAPI_PUBLIC` | config default | Required as explicit `true` or `false` in production so public API metadata exposure is intentional |
+| `WARDEX_CORS_ORIGIN` | `http://localhost` | Allowed admin-console CORS origin; wildcard origins are rejected in production |
+| `SENTINEL_CORS_ORIGIN` | — | Legacy alias for `WARDEX_CORS_ORIGIN`; prefer the Wardex variable in new deployments |
+| `WARDEX_SESSION_KEY` | local key file | Optional explicit session sealing key. Production rejects legacy unsigned session payloads. |
 | `WARDEX_UPDATE_SIGNING_KEY_BASE64` | — | Base64 Ed25519 update signing key used by the server when publishing agent releases; overrides `security.update_signing.signing_key_path` when set |
 | `WARDEX_TLS_CERT` | — | Path to TLS certificate (PEM) |
 | `WARDEX_TLS_KEY` | — | Path to TLS private key (PEM) |
 | `WARDEX_DB_PATH` | `var/wardex.db` | SQLite database path |
 | `RUST_LOG` | `info` | Log level filter (`debug`, `info`, `warn`, `error`) |
 | `OTEL_EXPORTER_OTLP_ENDPOINT` | — | OpenTelemetry collector endpoint |
+
+### Production fail-closed baseline
+
+When `WARDEX_ENV=production`, startup fails until the deployment states its trust posture explicitly:
+
+- Set `WARDEX_ADMIN_TOKEN` and `WARDEX_SPOOL_KEY` to persistent high-entropy secrets.
+- Protect metrics with `WARDEX_METRICS_TOKEN` or `server.metrics_bearer_token`.
+- Set `WARDEX_OPENAPI_PUBLIC=true` or `WARDEX_OPENAPI_PUBLIC=false`; omit it only in development.
+- Configure agent trust with `WARDEX_AGENT_TOKEN` for enrollment/bootstrap or `security.require_mtls_agents=true` with a trusted proxy allowlist.
+- Use a specific `WARDEX_CORS_ORIGIN`; `*` is rejected in production.
+- Do not rely on legacy unsigned session files. Production loads only sealed session state.
+
+Agents receive a one-time per-agent token during enrollment. Store that token in the agent runtime config and send it with `X-Wardex-Agent-Id` and `X-Wardex-Agent-Token` on heartbeat, event, inventory, policy, log, and update requests. The shared `WARDEX_AGENT_TOKEN` remains useful for enrollment and development/legacy bootstrap, but production agent routes bind requests to the enrolled agent identity.
 
 ## Configuration File (`wardex.toml`)
 
@@ -40,6 +60,9 @@ shutdown_timeout_secs = 30
 token_ttl_secs = 86400        # Token lifetime (0 = no expiry)
 rate_limit_per_min = 120       # API rate limit per client IP
 brute_force_lockout = 5        # Lock IP after N failed auth attempts
+require_mtls_agents = false    # When true, require verified agent mTLS identity
+agent_ca_cert_path = ""        # Optional CA bundle used by the TLS terminator or listener
+trusted_mtls_proxy_addrs = []  # Required in production when trusting mTLS identity headers
 
 [security.update_signing]
 require_signed_updates = true  # reject unsigned agent update releases

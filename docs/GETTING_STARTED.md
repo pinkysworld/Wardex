@@ -63,6 +63,24 @@ This starts the HTTP server on port `8080`, launches the embedded local monitor,
 - review per-agent activity, deployment health, rollout targets, and rollback controls
 - inspect diagnostics, dependency health, audit posture, and identity/provisioning configuration
 
+## Evaluate Wardex in 15 minutes
+
+This is the canonical evaluation path for Wardex. Seeded first-run proof data and exported artifacts are for evaluation only.
+
+1. Start the control plane with `cargo run`.
+2. Open `http://localhost:8080/admin/`.
+3. Paste the token from `var/.wardex_token`.
+4. Run the scripted proof path:
+
+```bash
+WARDEX_ADMIN_TOKEN="$(cat var/.wardex_token)" bash scripts/evaluate_to_value.sh
+```
+
+5. Review the exported artifacts in `output/evaluate-to-value/`.
+6. Run `cargo run -- doctor` to inspect the local release posture.
+
+The script proves readiness, evaluation-only first-run proof seeding, first alert visibility, response dry-run preview, evidence export, support bundle export, and deployment trust reporting through the same routes used by the admin console. The full guide lives in [`EVALUATE_WARDEX.md`](EVALUATE_WARDEX.md).
+
 ## Export the static status snapshot
 
 ```bash
@@ -77,7 +95,7 @@ This refreshes the structured status payload consumed by the static site and off
 cargo test
 ```
 
-The current release passes 1345 automated tests (1161 lib + 184 integration) across unit and integration coverage, including API regression coverage for hunts, content lifecycle, suppressions, entity pivots, incident storyline, governance, and supportability.
+The current release tracks 3631 Rust test functions, 328 admin-console tests, and 8 managed Playwright checks across 7 browser specs. Treat seeded demo data as evaluation-only when you validate the first-run operator journey.
 
 ## Frontend development (admin-console)
 
@@ -187,12 +205,20 @@ JSONL line example:
 
 | Variable | Description | Default |
 |----------|-------------|---------|
-| `WARDEX_ADMIN_TOKEN` | Override the auto-generated admin token. Set this in production to a 256-bit random hex string. | Auto-generated at startup |
+| `WARDEX_ENV` | Set to `production` to enable fail-closed startup validation. | `development` |
+| `WARDEX_ADMIN_TOKEN` | Override the auto-generated admin token. Required in production; use a 256-bit random hex string or stronger secret. | Auto-generated at startup |
+| `WARDEX_SPOOL_KEY` | Persistent spool encryption key. Required in production so queued records survive restart and cannot fall back to derived development material. | Development fallback |
+| `WARDEX_AGENT_TOKEN` | Bootstrap bearer for enrollment and legacy shared-token agent auth. Production agents also use the one-time per-agent token returned by enrollment. | unset |
+| `WARDEX_METRICS_TOKEN` | Bearer token for `/api/metrics`, unless `server.metrics_bearer_token` is set in config. Required in production. | unset |
+| `WARDEX_OPENAPI_PUBLIC` | Explicitly allow or deny public OpenAPI metadata in production (`true` or `false`). | Config default |
 | `WARDEX_BIND` | Listen address and port. | `0.0.0.0:8080` |
 | `WARDEX_CONFIG_PATH` | Explicit path to the runtime config file. Useful for packaged service installs. | Auto-discovered `var/wardex.toml` |
-| `SENTINEL_CORS_ORIGIN` | Allowed CORS origin(s) for the admin console. | `http://localhost:8080` |
+| `WARDEX_CORS_ORIGIN` | Allowed CORS origin for the admin console. Wildcards are rejected in production. | `http://localhost:8080` |
+| `SENTINEL_CORS_ORIGIN` | Legacy alias for `WARDEX_CORS_ORIGIN`. Prefer the Wardex variable for new deployments. | unset |
 | `WARDEX_LOG_LEVEL` | Log verbosity (`trace`, `debug`, `info`, `warn`, `error`). | `info` |
 | `WARDEX_DATA_DIR` | Path to the data directory. | `var/` |
+
+Production startup refuses insecure defaults when `WARDEX_ENV=production`. Before switching a deployment from evaluation to production, set the required secrets, choose the OpenAPI exposure posture, protect metrics, and define agent trust through `WARDEX_AGENT_TOKEN` or mTLS. Agent enrollment returns a per-agent token; keep it in the agent runtime config because heartbeat, event, inventory, policy, log, and update requests are bound to that enrolled identity in production.
 
 ### TLS configuration
 
@@ -207,11 +233,13 @@ key_path  = "/path/to/key.pem"
 For mutual TLS (mTLS) agent authentication, add:
 
 ```toml
-[tls]
-cert_path      = "/path/to/cert.pem"
-key_path       = "/path/to/key.pem"
-client_ca_path = "/path/to/ca.pem"
+[security]
+require_mtls_agents = true
+agent_ca_cert_path = "/path/to/agent-ca.pem"
+trusted_mtls_proxy_addrs = ["10.0.0.10"]
 ```
+
+Wardex only trusts mTLS identity headers in production when the remote address matches `security.trusted_mtls_proxy_addrs`. Put the TLS-terminating reverse proxy or load balancer address in that allowlist, or terminate TLS directly in the Wardex listener when that deployment mode is available.
 
 ### Kubernetes / Helm secrets
 
@@ -219,11 +247,30 @@ When deploying via Helm, configure secrets in `values.yaml`:
 
 ```yaml
 env:
+  - name: WARDEX_ENV
+    value: production
   - name: WARDEX_ADMIN_TOKEN
     valueFrom:
       secretKeyRef:
         name: wardex-secrets
         key: admin-token
+  - name: WARDEX_SPOOL_KEY
+    valueFrom:
+      secretKeyRef:
+        name: wardex-secrets
+        key: spool-key
+  - name: WARDEX_AGENT_TOKEN
+    valueFrom:
+      secretKeyRef:
+        name: wardex-secrets
+        key: agent-bootstrap-token
+  - name: WARDEX_METRICS_TOKEN
+    valueFrom:
+      secretKeyRef:
+        name: wardex-secrets
+        key: metrics-token
+  - name: WARDEX_OPENAPI_PUBLIC
+    value: "false"
 
 # Mount TLS certs from a Secret or cert-manager
 extraVolumes:
@@ -242,8 +289,13 @@ extraVolumeMounts:
 Create a `.env` file (never committed to version control):
 
 ```env
+WARDEX_ENV=production
 WARDEX_ADMIN_TOKEN=your-256-bit-hex-token-here
-SENTINEL_CORS_ORIGIN=https://wardex.example.com
+WARDEX_SPOOL_KEY=your-persistent-spool-key-here
+WARDEX_AGENT_TOKEN=your-agent-bootstrap-token-here
+WARDEX_METRICS_TOKEN=your-metrics-token-here
+WARDEX_OPENAPI_PUBLIC=false
+WARDEX_CORS_ORIGIN=https://wardex.example.com
 ```
 
 Reference it in `docker-compose.yml`:

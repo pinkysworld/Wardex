@@ -31,6 +31,19 @@ function formatScopeSource(value) {
     .replace(/\b\w/g, (char) => char.toUpperCase());
 }
 
+function formatResolvedScope(scope) {
+  if (!scope) return '';
+
+  const parts = [];
+  if (scope.case_id != null && scope.case_id !== '') parts.push(`Case #${scope.case_id}`);
+  if (scope.incident_id != null && scope.incident_id !== '') {
+    parts.push(`Incident #${scope.incident_id}`);
+  }
+  if (scope.investigation_id) parts.push(`Investigation ${scope.investigation_id}`);
+  if (scope.source) parts.push(`Source ${formatScopeSource(scope.source)}`);
+  return parts.length > 0 ? parts.join(' • ') : 'Unscoped';
+}
+
 function mergeAssistantParams(searchParams, updates = {}) {
   const next = new URLSearchParams(searchParams);
   Object.entries(updates).forEach(([key, value]) => {
@@ -157,6 +170,8 @@ export default function AssistantWorkspace() {
   const selectedInvestigation =
     investigations.find((entry) => String(entry.id) === String(activeInvestigationId)) || null;
   const mode = statusData?.mode || 'retrieval-only';
+  const resolvedScope = response?.scope || null;
+  const resolvedScopeSummary = formatResolvedScope(resolvedScope);
   const hasUrlScope = Boolean(caseId || activeIncidentId || activeInvestigationId);
   const attachedScopeCount = [caseId, activeIncidentId, activeInvestigationId].filter(
     Boolean,
@@ -248,6 +263,13 @@ export default function AssistantWorkspace() {
   const contextEvents = Array.isArray(response?.context_events) ? response.context_events : [];
   const warnings = Array.isArray(response?.warnings) ? response.warnings : [];
   const qualityGates = Array.isArray(response?.quality_gates) ? response.quality_gates : [];
+  const structured = response?.structured || null;
+  const structuredPivots = Array.isArray(structured?.recommended_pivots)
+    ? structured.recommended_pivots
+    : [];
+  const structuredQuestions = Array.isArray(structured?.open_questions)
+    ? structured.open_questions
+    : [];
   const linkedCaseHref = caseContext?.case?.id
     ? buildSocLink({
         caseId: caseContext.case.id,
@@ -389,7 +411,7 @@ export default function AssistantWorkspace() {
               className="btn btn-sm"
               href={response ? '#assistant-answer' : '#assistant-question-card'}
             >
-              {response ? 'Review Answer' : 'Ask Priority Question'}
+              {response ? 'Review Answer' : 'Ask Scoped Question'}
             </a>
           </div>
         </div>
@@ -455,8 +477,8 @@ export default function AssistantWorkspace() {
           <div>
             <div className="card-title">Analyst Assistant</div>
             <div className="hint" style={{ marginTop: 6 }}>
-              Ask case-aware questions, review citations, and keep investigation context attached to
-              the response.
+              Ask scoped questions, review citations, and keep the resolved handoff context visible
+              in every answer.
             </div>
           </div>
           <div className="btn-group">
@@ -490,7 +512,7 @@ export default function AssistantWorkspace() {
             </select>
             <div className="hint" style={{ marginTop: 8 }}>
               The assistant keeps case, incident, and investigation scope in the URL so the same
-              handoff can be reopened directly.
+              handoff can reopen directly.
             </div>
           </div>
           <div>
@@ -580,7 +602,7 @@ export default function AssistantWorkspace() {
         ) : (
           <WorkspaceEmptyState
             compact
-            description="Open the assistant from a case, incident, or investigation to preserve investigation state."
+            description="Open the assistant from a case, incident, or investigation to keep the handoff state attached."
           />
         )}
       </div>
@@ -662,6 +684,41 @@ export default function AssistantWorkspace() {
           </div>
           {response ? (
             <div style={{ display: 'grid', gap: 12 }}>
+              {resolvedScopeSummary ? (
+                <div className="row-card">
+                  <div className="row-primary">Resolved scope</div>
+                  <div className="row-secondary" style={{ marginTop: 4 }}>
+                    {resolvedScopeSummary}
+                  </div>
+                </div>
+              ) : null}
+              {structured && (
+                <div className="row-card">
+                  <div className="row-primary">{structured.summary || 'Structured summary'}</div>
+                  <div className="row-secondary" style={{ marginTop: 6 }}>
+                    {structured.approval_state || 'assistant suggestion only'}
+                  </div>
+                  {(structuredPivots.length > 0 || structuredQuestions.length > 0) && (
+                    <div style={{ display: 'grid', gap: 6, marginTop: 10 }}>
+                      {structuredPivots.slice(0, 3).map((pivot) => (
+                        <div key={`pivot-${pivot}`} className="hint">
+                          Pivot: {pivot}
+                        </div>
+                      ))}
+                      {structuredQuestions.slice(0, 3).map((question) => (
+                        <div key={`question-${question}`} className="hint">
+                          Open: {question}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  {structured.not_ready_reason && (
+                    <div className="hint" style={{ marginTop: 8 }}>
+                      {structured.not_ready_reason}
+                    </div>
+                  )}
+                </div>
+              )}
               <div
                 style={{
                   whiteSpace: 'pre-wrap',

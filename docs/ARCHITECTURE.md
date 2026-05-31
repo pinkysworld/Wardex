@@ -1,5 +1,12 @@
 # Architecture
 
+For the current API contract and server-state decomposition decisions, see
+[`ARCHITECTURE_CONTRACT_STATE_SPINE.md`](ARCHITECTURE_CONTRACT_STATE_SPINE.md).
+
+For the current product workflow and KPI decisions that bind operator journeys
+to proof-bearing value, see
+[`PRODUCT_WORKFLOW_METRICS_SPINE.md`](PRODUCT_WORKFLOW_METRICS_SPINE.md).
+
 ## Runtime pipeline
 
 Wardex follows an edge-first control loop:

@@ -204,7 +204,9 @@ pub(crate) fn render_api_endpoint_metrics(
         ));
     }
 
-    body.push_str("# HELP wardex_api_endpoint_latency_ms Request latency histogram per canonical endpoint\n");
+    body.push_str(
+        "# HELP wardex_api_endpoint_latency_ms Request latency histogram per canonical endpoint\n",
+    );
     body.push_str("# TYPE wardex_api_endpoint_latency_ms histogram\n");
     for metric in metrics.iter().take(50) {
         for bucket in &metric.latency_histogram {

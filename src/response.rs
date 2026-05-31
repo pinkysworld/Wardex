@@ -211,7 +211,11 @@ impl ResponseOrchestrator {
     /// return the real [`EnforcementResult`]. Actions with no wired backend
     /// return an unsuccessful result with an honest explanation — they are
     /// never reported as executed.
-    fn enforce_action(&self, action: &ResponseAction, target: &ResponseTarget) -> EnforcementResult {
+    fn enforce_action(
+        &self,
+        action: &ResponseAction,
+        target: &ResponseTarget,
+    ) -> EnforcementResult {
         let unsupported = |what: &str, why: &str| EnforcementResult {
             action: what.to_string(),
             success: false,

@@ -2,13 +2,203 @@
 <html lang="en">
   <head>
     <meta charset="utf-8">
-    <title>Redirecting...</title>
-    <link rel="canonical" href="../donate.html">
-    <meta http-equiv="refresh" content="0; url=../donate.html">
-    <meta name="robots" content="noindex">
-    <script>location.replace("../donate.html" + location.search + location.hash);</script>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Support - Wardex</title>
+    <meta name="description" content="Canonical Wardex support page for operator help, commercial support, and responsible disclosure.">
+    <meta property="og:type" content="website">
+    <meta property="og:site_name" content="Wardex">
+    <meta property="og:title" content="Support - Wardex">
+    <meta property="og:description" content="Operator support, support SLAs, licensing contact, and responsible disclosure for Wardex.">
+    <meta property="og:url" content="https://pinkysworld.github.io/Wardex/support/">
+    <meta name="twitter:card" content="summary">
+    <meta name="twitter:title" content="Support - Wardex">
+    <meta name="twitter:description" content="Operator support, support SLAs, licensing contact, and responsible disclosure for Wardex.">
+    <link rel="canonical" href="https://pinkysworld.github.io/Wardex/support/">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <link rel="icon" href="../favicon.svg" type="image/svg+xml">
+    <link rel="stylesheet" href="../styles.css?v=21">
+    <script defer src="../app.js?v=21"></script>
   </head>
   <body>
-    <p>Redirecting to <a href="../donate.html">../donate.html</a>...</p>
+    <nav class="site-nav" id="site-nav" data-shared-nav="true">
+      <div class="nav-inner">
+        <a class="nav-brand" href="../index.html">
+          <span class="nav-logo">WX</span>
+          <span class="nav-title">Wardex</span>
+        </a>
+        <button class="nav-toggle" id="nav-toggle" aria-label="Toggle navigation" aria-expanded="false">
+          <span></span><span></span><span></span>
+        </button>
+        <div class="nav-links" id="nav-links">
+          <a href="../index.html" class="nav-link">Overview</a>
+          <a href="../features.html" class="nav-link">Features</a>
+          <a href="../architecture.html" class="nav-link">Architecture</a>
+          <a href="../rules.html" class="nav-link">Rules</a>
+          <a href="../resources.html" class="nav-link">Resources</a>
+          <a href="../pricing.html" class="nav-link">Pricing</a>
+          <a href="../support/" class="nav-link active">Support</a>
+          <div class="nav-dropdown">
+            <button type="button" class="nav-link nav-dropdown-trigger" aria-haspopup="true" aria-expanded="false">
+              More
+              <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M4.47 6.97a.75.75 0 0 1 1.06 0L8 9.44l2.47-2.47a.75.75 0 1 1 1.06 1.06l-3 3a.75.75 0 0 1-1.06 0l-3-3a.75.75 0 0 1 0-1.06z"/></svg>
+            </button>
+            <div class="nav-dropdown-menu">
+              <a href="../comparison.html">Comparison</a>
+              <a href="../integrations.html">Integrations</a>
+              <a href="../api.html">API</a>
+              <a href="../status.html">Status</a>
+              <a href="../changelog.html">Changelog</a>
+            </div>
+          </div>
+          <a href="https://github.com/pinkysworld/Wardex" class="nav-link nav-link-icon" target="_blank" rel="noopener" aria-label="GitHub">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
+          </a>
+        </div>
+      </div>
+    </nav>
+
+    <main class="main">
+      <section class="section page-hero support-hero">
+        <div class="container">
+          <p class="label">Support</p>
+          <h1>Support, licensing, and disclosure in one place.</h1>
+          <p class="page-hero-desc">
+            This is the canonical Wardex support page. Use <strong>support@wardex.dev</strong> for product, deployment, evaluation, and licensing questions. Use <strong>security@wardex.dev</strong> or the private advisory flow for sensitive security reports.
+          </p>
+          <div class="hero-cta">
+            <a href="mailto:support@wardex.dev?subject=Wardex%20Support%20Request" class="btn btn-primary">Email Support</a>
+            <a href="mailto:support@wardex.dev?subject=Wardex%20Commercial%20Inquiry" class="btn btn-outline">Commercial Support</a>
+            <a href="mailto:security@wardex.dev?subject=Wardex%20Security%20Report" class="btn btn-ghost">Security Report</a>
+          </div>
+        </div>
+      </section>
+
+      <section class="section section-alt">
+        <div class="container">
+          <div class="section-header">
+            <p class="label">Response Paths</p>
+            <h2>Send the request to the right lane.</h2>
+          </div>
+          <div class="support-grid">
+            <article class="support-card support-card-featured">
+              <span class="support-badge">Default</span>
+              <div class="support-card-header">
+                <h3>General Product Support</h3>
+                <span class="support-price">support@wardex.dev</span>
+              </div>
+              <p class="support-copy">Use for setup questions, rollout help, operator issues, release regressions, or integration guidance.</p>
+              <ul class="support-list">
+                <li>Evaluation and first-run help</li>
+                <li>Deployment and upgrade guidance</li>
+                <li>Console, API, and evidence export issues</li>
+              </ul>
+            </article>
+            <article class="support-card">
+              <div class="support-card-header">
+                <h3>Commercial and Licensing</h3>
+                <span class="support-price">support@wardex.dev</span>
+              </div>
+              <p class="support-copy">Use for production licensing, support renewals, procurement, or rollout planning.</p>
+              <ul class="support-list">
+                <li>Community guidance</li>
+                <li>72h email</li>
+                <li>24h email</li>
+                <li>8x5 business coverage</li>
+                <li>24/7 enterprise coverage</li>
+              </ul>
+            </article>
+            <article class="support-card">
+              <div class="support-card-header">
+                <h3>Security and Responsible Disclosure</h3>
+                <span class="support-price">security@wardex.dev</span>
+              </div>
+              <p class="support-copy">Use for vulnerabilities, exposed credentials, supply-chain concerns, or any issue that should stay private.</p>
+              <ul class="support-list">
+                <li>Email the summary and affected version</li>
+                <li>Prefer the private GitHub advisory flow for proofs</li>
+                <li>90-day default coordinated disclosure window</li>
+              </ul>
+              <p><a href="https://github.com/pinkysworld/Wardex/security/advisories/new" class="btn btn-outline" target="_blank" rel="noopener">Open Private Advisory</a></p>
+            </article>
+          </div>
+        </div>
+      </section>
+
+      <section class="section">
+        <div class="container">
+          <div class="section-header">
+            <p class="label">Before You Email</p>
+            <h2>Make the first reply useful.</h2>
+          </div>
+          <div class="impact-grid">
+            <article class="impact-card">
+              <span class="analytics-num">01</span>
+              <div>
+                <h3>Version and install channel</h3>
+                <p>Include the Wardex version plus whether you installed from source, release archive, APT, RPM, Homebrew, container image, or Helm.</p>
+              </div>
+            </article>
+            <article class="impact-card">
+              <span class="analytics-num">02</span>
+              <div>
+                <h3>Deployment shape</h3>
+                <p>Say whether this is evaluation, a live control plane, an air-gapped rollout, or a staged fleet deployment.</p>
+              </div>
+            </article>
+            <article class="impact-card">
+              <span class="analytics-num">03</span>
+              <div>
+                <h3>Exact failure and expected result</h3>
+                <p>Attach the failing route, page, or command plus what you expected to happen instead.</p>
+              </div>
+            </article>
+            <article class="impact-card">
+              <span class="analytics-num">04</span>
+              <div>
+                <h3>Proof artifacts</h3>
+                <p>Logs, screenshots, request IDs, support bundles, and deployment trust reports save a lot of back-and-forth.</p>
+              </div>
+            </article>
+          </div>
+        </div>
+      </section>
+
+      <footer class="site-footer">
+        <div class="container">
+          <div class="footer-grid">
+            <div class="footer-col footer-about">
+              <span class="nav-logo footer-logo">WX</span>
+              <p>Private-cloud XDR and SIEM built in Rust. One binary. Full data sovereignty.</p>
+              <p class="footer-version"><span id="footer-version">v1.0.27</span> · AGPL 3.0</p>
+            </div>
+            <div class="footer-col">
+              <h3>Product</h3>
+              <a href="../features.html">Features</a>
+              <a href="../architecture.html">Architecture</a>
+              <a href="../pricing.html">Pricing</a>
+              <a href="https://github.com/pinkysworld/Wardex/releases" target="_blank" rel="noopener">Releases</a>
+            </div>
+            <div class="footer-col">
+              <h3>Resources</h3>
+              <a href="../resources.html">Documentation</a>
+              <a href="https://github.com/pinkysworld/Wardex/blob/main/docs/openapi.yaml" target="_blank" rel="noopener">OpenAPI</a>
+              <a href="https://github.com/pinkysworld/Wardex/blob/main/docs/SDK_GUIDE.md" target="_blank" rel="noopener">SDK Guide</a>
+              <a href="https://github.com/pinkysworld/Wardex/blob/main/SECURITY.md" target="_blank" rel="noopener">Security</a>
+            </div>
+            <div class="footer-col">
+              <h3>Contact</h3>
+              <a href="mailto:support@wardex.dev">support@wardex.dev</a>
+              <a href="mailto:security@wardex.dev">security@wardex.dev</a>
+              <a href="https://github.com/pinkysworld/Wardex/security/advisories/new" target="_blank" rel="noopener">Private advisory</a>
+            </div>
+          </div>
+          <div class="footer-bottom">
+            <p>Wardex · © 2024–2026 · AGPL 3.0 · Commercial production use requires a separate license.</p>
+          </div>
+        </div>
+      </footer>
+    </main>
   </body>
 </html>

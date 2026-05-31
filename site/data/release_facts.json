@@ -1,0 +1,46 @@
+{
+  "counts": {
+    "admin_console_tests": 328,
+    "openapi_operations": 262,
+    "playwright_specs": 7,
+    "playwright_tests": 8,
+    "rust_modules": 158,
+    "rust_tests": 3631,
+    "total_automated_checks": 3967
+  },
+  "distribution": {
+    "apt_repo": "https://pinkysworld.github.io/Wardex/apt",
+    "ghcr_image": "ghcr.io/pinkysworld/wardex",
+    "homebrew_tap": "pinkysworld/wardex",
+    "install_channels": [
+      "source",
+      "github-release-archives",
+      "apt",
+      "rpm",
+      "homebrew",
+      "container-image",
+      "helm"
+    ]
+  },
+  "hardening": {
+    "implemented_controls": 59,
+    "label": "100% (59/59 controls implemented)",
+    "production_controls": 59
+  },
+  "license": {
+    "commercial_file": "LICENSE.COMMERCIAL",
+    "spdx": "AGPL-3.0-only"
+  },
+  "notes": {
+    "evaluation_label": "Seeded demo data is for evaluation only.",
+    "support_sla_summary": "Community guidance, 72h starter email, 24h team email, 8x5 business, 24/7 enterprise."
+  },
+  "product_name": "Wardex",
+  "support": {
+    "email": "support@wardex.dev",
+    "page_url": "https://minh.systems/Wardex/support/",
+    "security_advisory_url": "https://github.com/pinkysworld/Wardex/security/advisories/new",
+    "security_email": "security@wardex.dev"
+  },
+  "version": "1.0.27"
+}

@@ -3,6 +3,7 @@ import { useState, useEffect, useCallback, useRef, createContext, useContext } f
 import {
   getToken,
   setToken,
+  setCsrfToken,
   authCheck,
   authLogout,
   authSession,
@@ -44,6 +45,7 @@ export function AuthProvider({ children }) {
     } catch {
       setAuthenticated(false);
       setToken('');
+      setCsrfToken('');
       safeStorageRemove('wardex_token');
       return false;
     } finally {
@@ -56,6 +58,7 @@ export function AuthProvider({ children }) {
       void error;
     });
     setToken('');
+    setCsrfToken('');
     setAuthenticated(false);
     safeStorageRemove('wardex_token');
   }, []);

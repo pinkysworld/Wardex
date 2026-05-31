@@ -194,9 +194,7 @@ pub(crate) fn failover_drill_type(topology: &str) -> &'static str {
     }
 }
 
-pub(crate) fn control_plane_ha_mode(
-    cluster: Option<&ControlPlaneClusterSnapshot>,
-) -> &'static str {
+pub(crate) fn control_plane_ha_mode(cluster: Option<&ControlPlaneClusterSnapshot>) -> &'static str {
     match cluster.map(|cluster| cluster.role.as_str()) {
         None => "active_passive_reference",
         Some("leader") => "leader_handoff_primary",

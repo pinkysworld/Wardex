@@ -268,6 +268,15 @@ check_site_links() {
   fi
 }
 
+run_evaluation_to_value_path() {
+  local evaluation_dir
+  evaluation_dir="$(mktemp -d "${TMPDIR:-/tmp}/wardex-evaluation-XXXXXX")"
+  WARDEX_BASE_URL="$WARDEX_BASE_URL" \
+    WARDEX_ADMIN_TOKEN="$WARDEX_ADMIN_TOKEN" \
+    WARDEX_EVALUATION_OUTPUT_DIR="$evaluation_dir" \
+    bash "$ROOT_DIR/scripts/evaluate_to_value.sh" >/dev/null
+}
+
 run_live_smokes() {
   cd "$ROOT_DIR"
   PLAYWRIGHT_HTML_OUTPUT_DIR="${PLAYWRIGHT_HTML_OUTPUT_DIR:-$ROOT_DIR/playwright-report}" \
@@ -493,6 +502,9 @@ export NODE_PATH="$PLAYWRIGHT_NODE_MODULES${NODE_PATH:+:$NODE_PATH}"
 run_step "Build admin console" bash -lc "cd '$ROOT_DIR/admin-console' && npm run build"
 run_step "Build Wardex" bash -lc "cd '$ROOT_DIR' && cargo build"
 run_step "Check API and SDK contract parity" python3 "$ROOT_DIR/scripts/check_contract_parity.py"
+run_step "Check architecture guardrails" python3 "$ROOT_DIR/scripts/check_architecture_guardrails.py"
+run_step "Check product workflow metrics" python3 "$ROOT_DIR/scripts/check_product_workflow_metrics.py"
+run_step "Check release facts consistency" python3 "$ROOT_DIR/scripts/check_release_facts.py"
 run_step "Check release documentation consistency" python3 "$ROOT_DIR/scripts/validate_release_docs.py"
 run_step "Check product identity coherence" python3 "$ROOT_DIR/scripts/check_product_identity.py"
 run_step "Check release trust gates" python3 "$ROOT_DIR/scripts/check_release_trust_gates.py"
@@ -501,6 +513,7 @@ if [[ "$RELEASE_MODE" == "managed" ]]; then
   run_step "Start temporary Wardex release instance at $WARDEX_BASE_URL" start_managed_wardex
 fi
 run_step "Verify live Wardex admin is reachable at $WARDEX_BASE_URL" acceptance_curl "$WARDEX_BASE_URL/admin/"
+run_step "Exercise evaluation-to-value path" run_evaluation_to_value_path
 run_step "Verify product hardening endpoints" verify_product_hardening_endpoints
 run_step "Run routed release smoke suite" run_live_smokes
 

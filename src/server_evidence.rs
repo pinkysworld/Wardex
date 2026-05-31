@@ -223,7 +223,8 @@ pub(crate) fn list_operational_snapshots(
     let requested_kind = kind_filter
         .map(operational_snapshot_kind)
         .filter(|value| !value.is_empty());
-    let mut snapshots = Vec::new();
+    let limit = limit.clamp(1, 500);
+    let mut candidates = Vec::new();
     if let Ok(kind_dirs) = fs::read_dir(&root) {
         for kind_dir in kind_dirs.flatten() {
             let Ok(file_type) = kind_dir.file_type() else {
@@ -245,22 +246,33 @@ pub(crate) fn list_operational_snapshots(
                     };
                     if file_type.is_file()
                         && file.path().extension().and_then(|value| value.to_str()) == Some("json")
-                        && let Some(entry) = snapshot_entry_from_path(&root, &file.path(), false)
                     {
-                        snapshots.push(entry);
+                        let modified = file
+                            .metadata()
+                            .ok()
+                            .and_then(|metadata| metadata.modified().ok());
+                        candidates.push((modified, file.path()));
                     }
                 }
             }
         }
     }
+    candidates.sort_by(|(left_modified, left_path), (right_modified, right_path)| {
+        right_modified
+            .cmp(left_modified)
+            .then_with(|| right_path.cmp(left_path))
+    });
+    let mut snapshots = candidates
+        .into_iter()
+        .take(limit)
+        .filter_map(|(_, path)| snapshot_entry_from_path(&root, &path, false))
+        .collect::<Vec<_>>();
     snapshots.sort_by(|left, right| {
         right
             .get("generated_at")
             .and_then(serde_json::Value::as_str)
             .cmp(&left.get("generated_at").and_then(serde_json::Value::as_str))
     });
-    let limit = limit.clamp(1, 500);
-    snapshots.truncate(limit);
     let verified_count = snapshots
         .iter()
         .filter(|entry| {

@@ -8,6 +8,8 @@
 - **API contract:** versioned OpenAPI surface with REST, GraphQL, live `/api/openapi.json` export, generated SDK parity diagnostics, authenticated-by-default API route classification, cursor page contracts, release observability/preflight proof APIs, production assurance endpoints, malware scan and response-action contracts, source-aware alert analysis, operator-trust workspaces, alert feedback/evidence-chain contracts, Detection Trust scoring and draft-only tuning APIs, detection validation lab APIs, response safety preview/verification APIs with execution-audit continuity, agent enrollment-token flows, connector marketplace summaries, operations health snapshots, and release verification readiness endpoints with evidence freshness metadata
 - **Verification:** release preflight gating for Rust formatting, Clippy, admin-console linting, admin-console formatting, admin-console build, release-doc validation, workspace hygiene, and panic-policy compliance, plus Rust integration coverage, focused Detection Trust endpoint tests, session-cookie exchange tests, collector lifecycle tests, remediation change-review tests, Command Center summary/action-drawer tests, Help & Docs unit coverage, assistant/ticketing/enterprise API regression tests, operator trust workspace unit coverage, SDK regeneration checks, strict Playwright a11y smoke coverage, local Developer ID `.p12` signing validation, focused admin-console regression coverage, thread pullout regression coverage, managed release acceptance coverage, and Launchpad coverage for proof freshness badges and persisted snapshot evidence state
 - **Production hardening:** 100% (59/59 controls implemented)
+- **Support:** canonical operator support at `support@wardex.dev`, security disclosure at `security@wardex.dev`, and the public support page at `https://minh.systems/Wardex/support/`
+- **Install channels:** source, GitHub release archives, signed APT, RPM, Homebrew, container image, and Helm
 
 ## Shipped in the current platform
 
@@ -73,7 +75,7 @@
 
 ### Analyst assistance and case collaboration
 
-- Analyst Assistant routed workspace with case-aware queries, citations, retrieval-first fallback answers, context windows, recent turns, scoped investigation context, and direct pivots back into SOC case workflows
+- Analyst Assistant routed workspace with case-aware queries, citations, retrieval-first fallback answers, resolved scope visibility, context windows, recent turns, scoped investigation context, and direct pivots back into SOC case workflows
 - SOC Workbench case ticket-sync workflow with provider, queue/project, and summary inputs plus the last sync result rendered in place
 
 ### Supportability and documentation

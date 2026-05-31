@@ -1373,13 +1373,16 @@ pub fn apply_remediation_review_approval(
     if !matches!(decision.as_str(), "approve" | "deny") {
         return Err("decision must be approve or deny".to_string());
     }
-    let approver = payload
+    if let Some(submitted) = payload
         .get("approver")
         .and_then(serde_json::Value::as_str)
         .map(str::trim)
         .filter(|value| !value.is_empty())
-        .unwrap_or(actor)
-        .to_string();
+        && submitted != actor
+    {
+        return Err("approver must match the authenticated actor".to_string());
+    }
+    let approver = actor.to_string();
     let comment = payload
         .get("comment")
         .and_then(serde_json::Value::as_str)
@@ -2310,7 +2313,7 @@ mod tests {
                 "approver": "primary-reviewer",
                 "decision": "approve"
             }),
-            "operator",
+            "primary-reviewer",
         )
         .expect("first approval should succeed");
         assert_eq!(review.approval_status, "pending_review");
@@ -2323,7 +2326,7 @@ mod tests {
                 "decision": "approve",
                 "comment": "Recovery checkpoint verified."
             }),
-            "operator",
+            "secondary-reviewer",
         )
         .expect("second approval should succeed");
 
@@ -2371,7 +2374,7 @@ mod tests {
             &storage,
             "review-json-1",
             json!({"approver": "primary-reviewer", "decision": "approve"}),
-            "operator",
+            "primary-reviewer",
         )
         .expect("approve review json");
         let approved: serde_json::Value = serde_json::from_str(&approved).expect("approved json");

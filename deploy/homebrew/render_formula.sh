@@ -21,7 +21,7 @@ class Wardex < Formula
   homepage "https://github.com/pinkysworld/Wardex"
   url "$source_url"
   sha256 "$source_sha256"
-  license "BUSL-1.1"
+  license "AGPL-3.0-only"
 
   depends_on "node" => :build if OS.mac?
   depends_on "rust" => :build if OS.mac?

@@ -22,6 +22,22 @@ fn auth_header(token: &str) -> String {
     format!("Bearer {token}")
 }
 
+fn create_rbac_user_token(port: u16, admin_token: &str, username: &str, role: &str) -> String {
+    let created: serde_json::Value = ureq::post(&format!("{}/api/rbac/users", base(port)))
+        .set("Authorization", &auth_header(admin_token))
+        .send_json(serde_json::json!({
+            "username": username,
+            "role": role
+        }))
+        .unwrap_or_else(|error| panic!("create rbac user {username}: {error}"))
+        .into_json()
+        .unwrap_or_else(|error| panic!("rbac user {username} json: {error}"));
+    created["token"]
+        .as_str()
+        .unwrap_or_else(|| panic!("rbac user {username} token"))
+        .to_string()
+}
+
 const LOCAL_CONSOLE_AGENT_ID: &str = "local-console";
 
 fn find_agent_by_id<'a>(agents: &'a serde_json::Value, agent_id: &str) -> &'a serde_json::Value {
@@ -73,13 +89,24 @@ fn create_approved_remediation_review(
         .expect("review id")
         .to_string();
 
-    for approver in ["primary-reviewer", "secondary-reviewer"] {
+    let approvers = [
+        (
+            "primary-reviewer",
+            create_rbac_user_token(port, token, "primary-reviewer", "admin"),
+        ),
+        (
+            "secondary-reviewer",
+            create_rbac_user_token(port, token, "secondary-reviewer", "admin"),
+        ),
+    ];
+
+    for (approver, approver_token) in approvers {
         ureq::post(&format!(
             "{}/api/remediation/change-reviews/{}/approval",
             base(port),
             review_id
         ))
-        .set("Authorization", &auth_header(token))
+        .set("Authorization", &auth_header(&approver_token))
         .send_json(serde_json::json!({
             "approver": approver,
             "decision": "approve",
@@ -1422,7 +1449,7 @@ fn auth_session_exchange_sets_cookie_and_accepts_cookie_session() {
     assert_eq!(body["authenticated"], true);
     assert_eq!(body["role"], "admin");
     assert_eq!(body["cookie"]["http_only"], true);
-    assert_eq!(body["cookie"]["same_site"], "Lax");
+    assert_eq!(body["cookie"]["same_site"], "Strict");
 
     let session = ureq::get(&format!("{}/api/auth/session", base(port)))
         .set("Cookie", &cookie)
@@ -1510,12 +1537,15 @@ fn remediation_change_reviews_can_be_recorded_and_listed() {
     );
 
     let review_id = created_body["review"]["id"].as_str().unwrap();
+    let primary_approver_token = create_rbac_user_token(port, &token, "primary-reviewer", "admin");
+    let second_approver_token = create_rbac_user_token(port, &token, "secondary-reviewer", "admin");
+
     let first_approval = ureq::post(&format!(
         "{}/api/remediation/change-reviews/{}/approval",
         base(port),
         review_id
     ))
-    .set("Authorization", &auth_header(&token))
+    .set("Authorization", &auth_header(&primary_approver_token))
     .send_json(serde_json::json!({
         "approver": "primary-reviewer",
         "decision": "approve",
@@ -1534,7 +1564,7 @@ fn remediation_change_reviews_can_be_recorded_and_listed() {
         base(port),
         review_id
     ))
-    .set("Authorization", &auth_header(&token))
+    .set("Authorization", &auth_header(&second_approver_token))
     .send_json(serde_json::json!({
         "approver": "secondary-reviewer",
         "decision": "approve",
@@ -5870,6 +5900,147 @@ fn case_handoff_packet_includes_linked_handoff_context() {
 }
 
 #[test]
+fn assistant_query_scope_accepts_case_incident_investigation_and_source() {
+    let (port, token) = spawn_test_server();
+    let (agent_id, event_ids) = setup_agent_with_events(port, &token, "assistant-scope-host", 2);
+
+    let incident: serde_json::Value = ureq::post(&format!("{}/api/incidents", base(port)))
+        .set("Authorization", &auth_header(&token))
+        .send_json(serde_json::json!({
+            "title": "Assistant scope incident",
+            "severity": "Critical",
+            "event_ids": event_ids,
+            "agent_ids": [agent_id],
+            "summary": "Scope parity incident"
+        }))
+        .expect("create assistant scope incident")
+        .into_json()
+        .unwrap();
+    let incident_id = incident["id"].as_u64().expect("incident id");
+
+    let case: serde_json::Value = ureq::post(&format!("{}/api/cases", base(port)))
+        .set("Authorization", &auth_header(&token))
+        .send_json(serde_json::json!({
+            "title": "Assistant scope case",
+            "priority": "high",
+            "description": "Case linked to scoped incident",
+            "incident_ids": [incident_id],
+            "event_ids": event_ids,
+            "tags": ["assistant", "scope"]
+        }))
+        .expect("create assistant scope case")
+        .into_json()
+        .unwrap();
+    let case_id = case["id"].as_u64().expect("case id");
+
+    let started: serde_json::Value =
+        ureq::post(&format!("{}/api/investigations/start", base(port)))
+            .set("Authorization", &auth_header(&token))
+            .send_json(serde_json::json!({
+                "workflow_id": "credential-storm",
+                "analyst": "analyst-1",
+                "case_id": case_id.to_string()
+            }))
+            .expect("start scoped investigation")
+            .into_json()
+            .unwrap();
+    let investigation_id = started["id"].as_str().expect("investigation id");
+
+    let response: serde_json::Value = ureq::post(&format!("{}/api/assistant/query", base(port)))
+        .set("Authorization", &auth_header(&token))
+        .send_json(serde_json::json!({
+            "question": "Summarize the current investigation and cite the strongest evidence.",
+            "case_id": case_id,
+            "incident_id": incident_id,
+            "investigation_id": investigation_id,
+            "source": "case"
+        }))
+        .expect("assistant scoped query")
+        .into_json()
+        .unwrap();
+
+    assert_eq!(response["mode"].as_str(), Some("retrieval-only"));
+    assert_eq!(response["scope"]["case_id"].as_u64(), Some(case_id));
+    assert_eq!(response["scope"]["incident_id"].as_u64(), Some(incident_id));
+    assert_eq!(
+        response["scope"]["investigation_id"].as_str(),
+        Some(investigation_id)
+    );
+    assert_eq!(response["scope"]["source"].as_str(), Some("case"));
+    assert_eq!(
+        response["case_context"]["case"]["id"].as_u64(),
+        Some(case_id)
+    );
+    assert!(
+        response["citations"]
+            .as_array()
+            .map(|items| !items.is_empty())
+            .unwrap_or(false)
+    );
+}
+
+#[test]
+fn assistant_query_rejects_conflicting_case_and_investigation_scope() {
+    let (port, token) = spawn_test_server();
+
+    let first_case: serde_json::Value = ureq::post(&format!("{}/api/cases", base(port)))
+        .set("Authorization", &auth_header(&token))
+        .send_json(serde_json::json!({
+            "title": "Case A",
+            "priority": "high",
+            "description": "Linked to investigation",
+            "tags": ["assistant", "scope"]
+        }))
+        .expect("create case A")
+        .into_json()
+        .unwrap();
+    let first_case_id = first_case["id"].as_u64().expect("case A id");
+
+    let second_case: serde_json::Value = ureq::post(&format!("{}/api/cases", base(port)))
+        .set("Authorization", &auth_header(&token))
+        .send_json(serde_json::json!({
+            "title": "Case B",
+            "priority": "medium",
+            "description": "Conflicting scope case",
+            "tags": ["assistant", "scope"]
+        }))
+        .expect("create case B")
+        .into_json()
+        .unwrap();
+    let second_case_id = second_case["id"].as_u64().expect("case B id");
+
+    let started: serde_json::Value =
+        ureq::post(&format!("{}/api/investigations/start", base(port)))
+            .set("Authorization", &auth_header(&token))
+            .send_json(serde_json::json!({
+                "workflow_id": "credential-storm",
+                "analyst": "analyst-1",
+                "case_id": first_case_id.to_string()
+            }))
+            .expect("start investigation with case A")
+            .into_json()
+            .unwrap();
+    let investigation_id = started["id"].as_str().expect("investigation id");
+
+    match ureq::post(&format!("{}/api/assistant/query", base(port)))
+        .set("Authorization", &auth_header(&token))
+        .send_json(serde_json::json!({
+            "question": "Should we hand this off?",
+            "case_id": second_case_id,
+            "investigation_id": investigation_id
+        })) {
+        Err(ureq::Error::Status(400, response)) => {
+            let body: serde_json::Value = response.into_json().expect("conflict response json");
+            assert!(body["error"].as_str().is_some_and(|value| {
+                value.contains("case scope conflicts with investigation scope")
+            }));
+        }
+        Err(error) => panic!("expected assistant scope conflict, got {error}"),
+        Ok(_) => panic!("assistant query unexpectedly accepted conflicting case scope"),
+    }
+}
+
+#[test]
 fn timeline_prefix_aliases_do_not_match_exact_routes() {
     let (port, token) = spawn_test_server();
 
@@ -5977,13 +6148,14 @@ fn workbench_overview_surfaces_queue_cases_incidents_and_ready_actions() {
         .into_json()
         .unwrap();
     let request_id = submitted["request"]["id"].as_str().unwrap().to_string();
+    let approver_token = create_rbac_user_token(port, &token, "workbench-approver", "admin");
 
     ureq::post(&format!("{}/api/response/approve", base(port)))
-        .set("Authorization", &auth_header(&token))
+        .set("Authorization", &auth_header(&approver_token))
         .send_json(serde_json::json!({
             "request_id": request_id,
             "decision": "approved",
-            "approver": "analyst-1",
+            "approver": "workbench-approver",
             "reason": "ready for overview",
         }))
         .expect("approve response request");
@@ -6273,10 +6445,13 @@ fn agents_summary_includes_freshness_versions_and_rollout_fields() {
 #[test]
 fn deployment_trust_report_endpoint_returns_customer_artifact_and_sections() {
     let (port, token) = spawn_test_server();
-    let resp = ureq::get(&format!("{}/api/release/deployment-trust-report", base(port)))
-        .set("Authorization", &auth_header(&token))
-        .call()
-        .expect("deployment trust report");
+    let resp = ureq::get(&format!(
+        "{}/api/release/deployment-trust-report",
+        base(port)
+    ))
+    .set("Authorization", &auth_header(&token))
+    .call()
+    .expect("deployment trust report");
     assert_eq!(resp.status(), 200);
     let body: serde_json::Value = resp.into_json().unwrap();
     assert_eq!(body["customer_artifact"]["product_name"], "Wardex");
@@ -6365,13 +6540,14 @@ fn analyst_flow_links_queue_case_incident_and_response_actions() {
         .into_json()
         .unwrap();
     let request_id = submitted["request"]["id"].as_str().unwrap().to_string();
+    let approver_token = create_rbac_user_token(port, &token, "analyst-flow-approver", "admin");
 
     ureq::post(&format!("{}/api/response/approve", base(port)))
-        .set("Authorization", &auth_header(&token))
+        .set("Authorization", &auth_header(&approver_token))
         .send_json(serde_json::json!({
             "request_id": request_id,
             "decision": "approved",
-            "approver": "analyst-1",
+            "approver": "analyst-flow-approver",
             "reason": "approved in analyst flow",
         }))
         .expect("approve response request");
@@ -6886,6 +7062,7 @@ fn response_request_approval_execute_flow_works() {
         .as_str()
         .unwrap()
         .to_string();
+    let approver_token = create_rbac_user_token(port, &token, "response-approver", "admin");
 
     let listed = ureq::get(&format!("{}/api/response/requests", base(port)))
         .set("Authorization", &auth_header(&token))
@@ -6902,11 +7079,11 @@ fn response_request_approval_execute_flow_works() {
     );
 
     let approved = ureq::post(&format!("{}/api/response/approve", base(port)))
-        .set("Authorization", &auth_header(&token))
+        .set("Authorization", &auth_header(&approver_token))
         .send_json(serde_json::json!({
             "request_id": request_id,
             "decision": "approved",
-            "approver": "analyst-1",
+            "approver": "response-approver",
             "reason": "validated by integration test",
         }))
         .expect("approve response request");

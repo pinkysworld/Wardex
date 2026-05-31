@@ -258,6 +258,9 @@ pub struct SecuritySettings {
     /// Path to CA certificate for verifying agent client certs.
     #[serde(default)]
     pub agent_ca_cert_path: Option<String>,
+    /// Reverse-proxy source addresses allowed to assert verified agent mTLS headers.
+    #[serde(default)]
+    pub trusted_mtls_proxy_addrs: Vec<String>,
     /// Allowed CORS origins (empty = allow same-origin only).
     #[serde(default)]
     pub cors_allowed_origins: Vec<String>,
@@ -314,6 +317,13 @@ pub struct ServerSettings {
     /// at startup if the config value is empty.
     #[serde(default)]
     pub metrics_bearer_token: Option<String>,
+    /// Whether `/api/openapi.json` remains public in production.
+    ///
+    /// Development keeps the historical public contract endpoint, but
+    /// production deployments should set this explicitly when anonymous
+    /// contract discovery is intended.
+    #[serde(default = "default_openapi_public")]
+    pub openapi_public: bool,
 }
 
 fn default_read_rate_limit() -> u32 {
@@ -325,6 +335,9 @@ fn default_write_rate_limit() -> u32 {
 fn default_shutdown_timeout_secs() -> u64 {
     30
 }
+fn default_openapi_public() -> bool {
+    true
+}
 
 impl Default for ServerSettings {
     fn default() -> Self {
@@ -333,6 +346,7 @@ impl Default for ServerSettings {
             rate_limit_write_per_minute: default_write_rate_limit(),
             shutdown_timeout_secs: default_shutdown_timeout_secs(),
             metrics_bearer_token: None,
+            openapi_public: default_openapi_public(),
         }
     }
 }
@@ -343,6 +357,7 @@ impl Default for SecuritySettings {
             token_ttl_secs: default_token_ttl_secs(),
             require_mtls_agents: false,
             agent_ca_cert_path: None,
+            trusted_mtls_proxy_addrs: Vec::new(),
             cors_allowed_origins: Vec::new(),
             update_signing: UpdateSigningSettings::default(),
         }
@@ -560,6 +575,9 @@ pub struct AgentSettings {
     /// Persisted agent identity used after the first successful enrollment.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub agent_id: Option<String>,
+    /// Per-agent bearer secret returned after enrollment.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub agent_token: Option<String>,
     /// Enable auto-update checking.
     #[serde(default = "default_auto_update")]
     pub auto_update: bool,
@@ -626,6 +644,7 @@ impl Default for AgentSettings {
             server_url: "http://localhost:8080".into(),
             enrollment_token: String::new(),
             agent_id: None,
+            agent_token: None,
             auto_update: true,
             update_check_interval_secs: 300,
         }

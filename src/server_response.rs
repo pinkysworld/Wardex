@@ -2,8 +2,9 @@ use axum::body::Body;
 use axum::response::Response;
 
 pub(crate) fn cors_origin() -> String {
-    let origin =
-        std::env::var("SENTINEL_CORS_ORIGIN").unwrap_or_else(|_| "http://localhost".into());
+    let origin = std::env::var("WARDEX_CORS_ORIGIN")
+        .or_else(|_| std::env::var("SENTINEL_CORS_ORIGIN"))
+        .unwrap_or_else(|_| "http://localhost".into());
     // Block wildcard CORS origin — credentials must not use "*"
     if origin == "*" {
         return "http://localhost".into();

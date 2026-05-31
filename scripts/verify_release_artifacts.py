@@ -15,6 +15,10 @@ EXPECTED_PATTERNS = [
     re.compile(r"wardex-macos-aarch64\.tar\.gz$"),
     re.compile(r"wardex-macos-x86_64\.tar\.gz$"),
     re.compile(r"wardex-windows-x86_64\.zip$"),
+    re.compile(r"wardex-macos-aarch64-gatekeeper\.txt$"),
+    re.compile(r"wardex-macos-x86_64-gatekeeper\.txt$"),
+    re.compile(r"wardex_[0-9]+\.[0-9]+\.[0-9]+_amd64\.deb$"),
+    re.compile(r"wardex-[0-9]+\.[0-9]+\.[0-9]+-1\.x86_64\.rpm$"),
     re.compile(r"wardex-sbom\.cdx\.json$"),
 ]
 

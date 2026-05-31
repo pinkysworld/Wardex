@@ -29,6 +29,8 @@ gh attestation verify wardex-linux-x86_64.tar.gz \
 A successful verification confirms the archive was produced by
 `.github/workflows/release.yml` on `pinkysworld/Wardex` for the expected tag.
 
+The release workflow also runs `python3 scripts/verify_published_release.py --tag vX.Y.Z` after publication so public GitHub assets, Pages metadata, APT metadata, Homebrew tap content, and the canonical support page all have to converge on the same tag before the stable proof job goes green.
+
 ## Verify macOS Gatekeeper trust
 
 macOS release archives are signed with a Developer ID Application certificate
@@ -63,6 +65,8 @@ cosign verify \
 # 2. SLSA v1.0 build provenance
 gh attestation verify "oci://$IMAGE" --repo pinkysworld/Wardex
 ```
+
+The same workflow then runs `bash scripts/smoke_release_artifact.sh container "$IMAGE"` so the published GHCR image must also prove `wardex --version`, `wardex doctor`, server startup, `/api/healthz/ready`, `/admin/`, and `/api/support/bundle`.
 
 ## Verify SBOM coverage
 

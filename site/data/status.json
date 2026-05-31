@@ -58,7 +58,7 @@
     "Retention cost and risk forecast",
     "Adversarial validation dashboard for shipped attack and baseline corpora",
     "Support bundle diffing with digest and redaction-policy status",
-    "Clean release cut readiness endpoint for the v1.0.22 target",
+    "Clean release cut readiness endpoint for the v1.0.27 target",
     "Cross-workspace priority lanes for Dashboard, Fleet, Infrastructure, NDR, UEBA, and SOC",
     "Authenticated-by-default backend API route classification",
     "Live Monitor route-state continuity for tabs, filters, selected alerts, and process drawers",

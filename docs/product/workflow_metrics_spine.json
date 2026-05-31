@@ -1,0 +1,465 @@
+{
+  "canonical_product_name": "Wardex",
+  "target_release": "1.0.28",
+  "shared_event_schema": {
+    "required_fields": [
+      "workflow",
+      "entity_id",
+      "state_from",
+      "state_to",
+      "event",
+      "timestamp",
+      "context"
+    ]
+  },
+  "implementation_priorities": [
+    {
+      "id": "assistant_scope_parity",
+      "target_version": "1.0.28",
+      "detail": "Align assistant backend request scope with the frontend case, incident, investigation, and source context."
+    },
+    {
+      "id": "workflow_event_taxonomy",
+      "target_version": "1.0.28",
+      "detail": "Introduce a shared product workflow taxonomy and WorkflowEvent envelope before broader analytics."
+    },
+    {
+      "id": "first_value_instrumentation",
+      "target_version": "1.0.28",
+      "detail": "Instrument first-run, connector, closure, and reporting transitions with proof-bearing workflow events."
+    }
+  ],
+  "workflows": [
+    {
+      "id": "connector_setup_to_value",
+      "label": "Connector Setup To Value",
+      "target_version": "1.0.28",
+      "first_value_state": "used_in_case",
+      "states": [
+        "not_started",
+        "configured",
+        "validated",
+        "ingesting",
+        "fresh",
+        "used_in_queue",
+        "used_in_case",
+        "used_in_report",
+        "degraded"
+      ],
+      "events": [
+        "connector_config_saved",
+        "connector_validation_run",
+        "connector_validation_passed",
+        "connector_validation_failed",
+        "connector_first_event_ingested",
+        "connector_first_alert_visible",
+        "connector_first_case_linked",
+        "connector_first_report_scoped",
+        "connector_stale",
+        "connector_recovered"
+      ],
+      "metrics": [
+        {
+          "id": "time_to_validate",
+          "kind": "duration",
+          "aggregation": "median"
+        },
+        {
+          "id": "time_to_first_ingested_event",
+          "kind": "duration",
+          "aggregation": "median"
+        },
+        {
+          "id": "time_to_first_case_usage",
+          "kind": "duration",
+          "aggregation": "median"
+        },
+        {
+          "id": "freshness_breach_rate",
+          "kind": "ratio",
+          "aggregation": "daily"
+        }
+      ],
+      "api_paths": [
+        "/api/collectors/status"
+      ],
+      "backend_hooks": [
+        {
+          "path": "src/server_collectors.rs",
+          "pattern": "collector_first_value_journey("
+        },
+        {
+          "path": "src/server.rs",
+          "pattern": "\"collector_first_value_journey\""
+        }
+      ],
+      "frontend_hooks": [
+        {
+          "path": "admin-console/src/components/CommandCenter.jsx",
+          "pattern": "connectorReadiness"
+        },
+        {
+          "path": "admin-console/src/components/CommandCenter.jsx",
+          "pattern": "Collector proof needs attention"
+        }
+      ]
+    },
+    {
+      "id": "first_run_protected_endpoint_journey",
+      "label": "First-Run Protected Endpoint Journey",
+      "target_version": "1.0.28",
+      "first_value_state": "first_value_reached",
+      "states": [
+        "authenticated",
+        "wizard_seen",
+        "wizard_completed",
+        "agent_enrolled",
+        "telemetry_live",
+        "alert_visible",
+        "intel_ready",
+        "malware_verified",
+        "response_dry_run_verified",
+        "first_value_reached"
+      ],
+      "events": [
+        "auth_session_created",
+        "onboarding_opened",
+        "onboarding_finished",
+        "agent_token_created",
+        "agent_first_online",
+        "telemetry_first_seen",
+        "alert_first_seen",
+        "intel_feed_first_healthy",
+        "malware_scan_first_completed",
+        "response_dry_run_first_completed",
+        "first_protected_page_opened"
+      ],
+      "metrics": [
+        {
+          "id": "auth_to_first_value_time",
+          "kind": "duration",
+          "aggregation": "median"
+        },
+        {
+          "id": "wizard_completion_without_value_1h",
+          "kind": "ratio",
+          "aggregation": "hourly"
+        },
+        {
+          "id": "wizard_completion_without_value_24h",
+          "kind": "ratio",
+          "aggregation": "daily"
+        },
+        {
+          "id": "token_to_first_agent_online_time",
+          "kind": "duration",
+          "aggregation": "median"
+        }
+      ],
+      "api_paths": [
+        "/api/support/first-run-proof",
+        "/api/launchpad/evidence-pack"
+      ],
+      "backend_hooks": [
+        {
+          "path": "src/server.rs",
+          "pattern": "\"/api/support/first-run-proof\""
+        },
+        {
+          "path": "src/server.rs",
+          "pattern": "build_launchpad_evidence_pack("
+        }
+      ],
+      "frontend_hooks": [
+        {
+          "path": "admin-console/src/components/OnboardingWizard.jsx",
+          "pattern": "first-alert-visible"
+        },
+        {
+          "path": "admin-console/src/components/OperatorLaunchpad.jsx",
+          "pattern": "First-run readiness"
+        }
+      ]
+    },
+    {
+      "id": "case_closure_and_handoff_readiness",
+      "label": "Case Closure And Handoff Readiness",
+      "target_version": "1.0.28",
+      "first_value_state": "handoff_ready",
+      "states": [
+        "new",
+        "triaging",
+        "investigating",
+        "handoff_ready",
+        "closure_ready",
+        "closed",
+        "reopened"
+      ],
+      "events": [
+        "case_status_changed",
+        "case_note_added",
+        "evidence_added",
+        "handoff_submitted",
+        "closure_score_changed",
+        "ticket_sync_submitted",
+        "ticket_sync_succeeded",
+        "ticket_sync_failed",
+        "case_closed",
+        "case_reopened"
+      ],
+      "metrics": [
+        {
+          "id": "closure_readiness_score",
+          "kind": "score",
+          "aggregation": "point_in_time"
+        },
+        {
+          "id": "blocking_check_frequency",
+          "kind": "count",
+          "aggregation": "daily"
+        },
+        {
+          "id": "ticket_sync_before_close_rate",
+          "kind": "ratio",
+          "aggregation": "weekly"
+        },
+        {
+          "id": "reopen_rate_30d",
+          "kind": "ratio",
+          "aggregation": "monthly"
+        }
+      ],
+      "api_paths": [
+        "/api/cases/{id}/handoff-packet"
+      ],
+      "backend_hooks": [
+        {
+          "path": "src/server.rs",
+          "pattern": "case_closure_readiness_json("
+        },
+        {
+          "path": "src/server.rs",
+          "pattern": "case_handoff_packet_json("
+        }
+      ],
+      "frontend_hooks": [
+        {
+          "path": "admin-console/src/components/SOCWorkbench.jsx",
+          "pattern": "Closure Readiness"
+        },
+        {
+          "path": "admin-console/src/components/SOCWorkbench.jsx",
+          "pattern": "Ticket Sync"
+        }
+      ]
+    },
+    {
+      "id": "scoped_analyst_copilot",
+      "label": "Scoped Analyst Copilot",
+      "target_version": "1.0.29",
+      "first_value_state": "answered",
+      "states": [
+        "unscoped",
+        "case_scoped",
+        "incident_scoped",
+        "investigation_scoped",
+        "source_scoped",
+        "answered",
+        "needs_review",
+        "adopted"
+      ],
+      "events": [
+        "assistant_query_submitted",
+        "assistant_scope_resolved",
+        "assistant_answer_returned",
+        "assistant_quality_gate_failed",
+        "assistant_pivot_clicked",
+        "assistant_note_created",
+        "assistant_ticket_drafted",
+        "assistant_handoff_drafted"
+      ],
+      "metrics": [
+        {
+          "id": "scope_mix",
+          "kind": "distribution",
+          "aggregation": "daily"
+        },
+        {
+          "id": "citation_coverage",
+          "kind": "ratio",
+          "aggregation": "daily"
+        },
+        {
+          "id": "quality_gate_fail_rate",
+          "kind": "ratio",
+          "aggregation": "daily"
+        },
+        {
+          "id": "answer_to_pivot_rate",
+          "kind": "ratio",
+          "aggregation": "weekly"
+        }
+      ],
+      "api_paths": [
+        "/api/assistant/query"
+      ],
+      "backend_hooks": [
+        {
+          "path": "src/server.rs",
+          "pattern": "\"/api/assistant/query\""
+        },
+        {
+          "path": "src/server.rs",
+          "pattern": "conversation_id"
+        }
+      ],
+      "frontend_hooks": [
+        {
+          "path": "admin-console/src/components/AssistantWorkspace.jsx",
+          "pattern": "incident_id: activeIncidentId ? Number(activeIncidentId) : undefined"
+        },
+        {
+          "path": "admin-console/src/components/AssistantWorkspace.jsx",
+          "pattern": "Current assistant focus"
+        }
+      ]
+    },
+    {
+      "id": "command_center_and_soc_workbench_value_flow",
+      "label": "Command Center And SOC Workbench Value Flow",
+      "target_version": "1.0.28",
+      "first_value_state": "attention",
+      "states": [
+        "quiet",
+        "attention",
+        "blocked",
+        "recovering"
+      ],
+      "events": [
+        "command_center_viewed",
+        "lane_opened",
+        "lane_item_clicked",
+        "workbench_case_opened",
+        "workbench_incident_opened",
+        "recommended_action_started",
+        "recommended_action_completed"
+      ],
+      "metrics": [
+        {
+          "id": "lane_click_through_rate",
+          "kind": "ratio",
+          "aggregation": "daily"
+        },
+        {
+          "id": "drawer_to_action_rate",
+          "kind": "ratio",
+          "aggregation": "daily"
+        },
+        {
+          "id": "lane_open_to_first_action_time",
+          "kind": "duration",
+          "aggregation": "median"
+        },
+        {
+          "id": "value_share_by_lane",
+          "kind": "distribution",
+          "aggregation": "weekly"
+        }
+      ],
+      "api_paths": [
+        "/api/workbench/overview",
+        "/api/manager/overview"
+      ],
+      "backend_hooks": [
+        {
+          "path": "src/server.rs",
+          "pattern": "build_value_brief("
+        },
+        {
+          "path": "src/server.rs",
+          "pattern": "\"/api/workbench/overview\""
+        }
+      ],
+      "frontend_hooks": [
+        {
+          "path": "admin-console/src/components/CommandCenter.jsx",
+          "pattern": "commandHeroTitle"
+        },
+        {
+          "path": "admin-console/src/components/OperatorLaunchpad.jsx",
+          "pattern": "Operator Launchpad"
+        }
+      ]
+    },
+    {
+      "id": "customer_facing_value_reporting",
+      "label": "Customer-Facing Value Reporting",
+      "target_version": "1.0.29",
+      "first_value_state": "delivered",
+      "states": [
+        "scoped_template_saved",
+        "run_created",
+        "delivered",
+        "reused",
+        "stale"
+      ],
+      "events": [
+        "report_template_saved",
+        "report_run_created",
+        "report_schedule_saved",
+        "evidence_bundle_built",
+        "report_delivered",
+        "report_rerun",
+        "report_scope_replayed"
+      ],
+      "metrics": [
+        {
+          "id": "execution_context_coverage",
+          "kind": "ratio",
+          "aggregation": "daily"
+        },
+        {
+          "id": "evidence_freshness_at_export",
+          "kind": "duration",
+          "aggregation": "median"
+        },
+        {
+          "id": "rerun_reuse_rate",
+          "kind": "ratio",
+          "aggregation": "weekly"
+        },
+        {
+          "id": "case_close_to_pack_time",
+          "kind": "duration",
+          "aggregation": "median"
+        }
+      ],
+      "api_paths": [
+        "/api/report-templates",
+        "/api/report-runs",
+        "/api/report-schedules",
+        "/api/launchpad/evidence-pack"
+      ],
+      "backend_hooks": [
+        {
+          "path": "src/server.rs",
+          "pattern": "\"/api/report-runs\""
+        },
+        {
+          "path": "src/server.rs",
+          "pattern": "has_execution_context"
+        }
+      ],
+      "frontend_hooks": [
+        {
+          "path": "admin-console/src/components/ReportsExports.jsx",
+          "pattern": "report_scope: hasActiveScope ? activeExecutionContext : null"
+        },
+        {
+          "path": "admin-console/src/components/ReportsExports.jsx",
+          "pattern": "Evidence Bundle Preview"
+        }
+      ]
+    }
+  ]
+}

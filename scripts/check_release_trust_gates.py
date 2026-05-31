@@ -15,23 +15,43 @@ RELEASE_WORKFLOW = ROOT / ".github" / "workflows" / "release.yml"
 REQUIRED_CI_SNIPPETS = {
     "panic policy": "python3 scripts/check_panic_policy.py",
     "contract parity": "python3 scripts/check_contract_parity.py",
+    "architecture guardrails": "python3 scripts/check_architecture_guardrails.py",
+    "product workflow": "python3 scripts/check_product_workflow_metrics.py",
+    "release facts": "python3 scripts/check_release_facts.py",
     "release docs": "python3 scripts/validate_release_docs.py",
     "docs freshness": "python3 scripts/validate_docs_freshness.py",
     "product identity": "python3 scripts/check_product_identity.py",
+    "API integration gate": "cargo test --test api_integration",
+    "concurrent smoke gate": "cargo test --test concurrent_smoke",
+    "failed-auth lockout gate": "cargo test --test failed_auth_lockout",
 }
 
 REQUIRED_RELEASE_SNIPPETS = {
     "release panic policy": "python3 scripts/check_panic_policy.py",
     "release contract parity": "python3 scripts/check_contract_parity.py",
+    "release architecture guardrails": "python3 scripts/check_architecture_guardrails.py",
+    "release product workflow": "python3 scripts/check_product_workflow_metrics.py",
+    "release facts": "python3 scripts/check_release_facts.py",
     "release docs": "python3 scripts/validate_release_docs.py",
     "release docs freshness": "python3 scripts/validate_docs_freshness.py",
     "release product identity": "python3 scripts/check_product_identity.py",
+    "release API integration gate": "cargo test --test api_integration",
+    "release concurrent smoke gate": "cargo test --test concurrent_smoke",
+    "release failed-auth lockout gate": "cargo test --test failed_auth_lockout",
     "release trust checker": "python3 scripts/check_release_trust_gates.py",
     "provenance attestation": "actions/attest-build-provenance@",
     "OIDC provenance permission": "id-token: write",
     "attestation permission": "attestations: write",
     "checksum verification": "sha256sum -c SHA256SUMS",
     "artifact verifier": "python3 scripts/verify_release_artifacts.py release-assets",
+    "published release verifier": "python3 scripts/verify_published_release.py --tag",
+    "artifact smoke helper": "bash scripts/smoke_release_artifact.sh",
+    "windows artifact smoke helper": "./scripts/smoke_release_artifact.ps1 archive",
+    "archive attestation verify": "gh attestation verify \"$asset\" --repo",
+    "container signature verify": "cosign verify",
+    "container provenance verify": "gh attestation verify \"oci://$image\" --repo",
+    "public APT install smoke": "Install from public APT repository and smoke",
+    "published Homebrew smoke": "Published Homebrew Proof",
     "release notes extraction": "Extract release notes",
 }
 
@@ -92,7 +112,7 @@ def main() -> int:
         return 1
 
     print(
-        "release-trust: CI and release workflows retain panic, contract, docs, identity, provenance, checksum, and artifact gates"
+        "release-trust: CI and release workflows retain panic, contract, architecture, product workflow, focused stability, release-facts, docs, identity, provenance, checksum, public distribution, and artifact gates"
     )
     return 0
 

@@ -6,11 +6,12 @@ Wardex is the product, runtime, and control-plane implementation in this reposit
 Read it in this order:
 
 1. [`GETTING_STARTED.md`](GETTING_STARTED.md) for local build, test, and control-plane startup.
-2. [`ARCHITECTURE.md`](ARCHITECTURE.md) for the platform pipeline and major subsystems.
-3. [`STATUS.md`](STATUS.md) for the current release posture, verification snapshot, and shipped enterprise capabilities.
-4. [`DEPLOYMENT_MODELS.md`](DEPLOYMENT_MODELS.md) and [`PRODUCTION_HARDENING.md`](PRODUCTION_HARDENING.md) for deployment and operational readiness.
-5. [`runbooks/README.md`](runbooks/README.md) for operator playbooks and integration guidance.
-6. [`ROADMAP_XDR_PROFESSIONAL.md`](ROADMAP_XDR_PROFESSIONAL.md) for post-release priorities.
+2. [`EVALUATE_WARDEX.md`](EVALUATE_WARDEX.md) for the canonical 15-minute evaluation path.
+3. [`ARCHITECTURE.md`](ARCHITECTURE.md) for the platform pipeline and major subsystems.
+4. [`STATUS.md`](STATUS.md) for the current release posture, verification snapshot, and shipped enterprise capabilities.
+5. [`DEPLOYMENT_MODELS.md`](DEPLOYMENT_MODELS.md) and [`PRODUCTION_HARDENING.md`](PRODUCTION_HARDENING.md) for deployment and operational readiness.
+6. [`runbooks/README.md`](runbooks/README.md) for operator playbooks and integration guidance.
+7. [`ROADMAP_XDR_PROFESSIONAL.md`](ROADMAP_XDR_PROFESSIONAL.md) for post-release priorities.
 
 ## Live docs surfaces
 
@@ -25,6 +26,7 @@ Read it in this order:
 
 ### Operating the product
 
+- [`EVALUATE_WARDEX.md`](EVALUATE_WARDEX.md) — canonical evaluation-to-value path with exported proof artifacts
 - [`CONFIGURATION.md`](CONFIGURATION.md) — configuration surface, `wardex.toml`, environment variables
 - [`DEPLOYMENT_MODELS.md`](DEPLOYMENT_MODELS.md) — single-node, HA, air-gapped
 - [`PRODUCTION_HARDENING.md`](PRODUCTION_HARDENING.md) — TLS, auth, rate limits, system tuning

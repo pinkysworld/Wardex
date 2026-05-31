@@ -11,6 +11,20 @@ or **Not started**, with a priority of Critical / High / Medium.
 
 ---
 
+## Production trust baseline
+
+Set `WARDEX_ENV=production` before calling a deployment production. In that mode Wardex fails closed until the deployment provides explicit production trust settings:
+
+- `WARDEX_ADMIN_TOKEN` and `WARDEX_SPOOL_KEY` are required high-entropy secrets.
+- Metrics must be protected with `WARDEX_METRICS_TOKEN` or `server.metrics_bearer_token`.
+- OpenAPI metadata exposure must be intentional with `WARDEX_OPENAPI_PUBLIC=true` or `WARDEX_OPENAPI_PUBLIC=false`.
+- Agent trust must be configured with `WARDEX_AGENT_TOKEN` for bootstrap/enrollment or with `security.require_mtls_agents=true`.
+- When mTLS identity is forwarded by a proxy, `security.trusted_mtls_proxy_addrs` must list that proxy address. Wardex does not trust agent identity headers from arbitrary remotes in production.
+- CORS must use an explicit origin through `WARDEX_CORS_ORIGIN` or config. Wildcard origins are rejected in production.
+- Legacy unsigned session persistence is rejected in production; only sealed session state is loaded.
+
+Enrollment returns a per-agent token once. Production agent heartbeat, logs, inventory, policy, event, and update requests must include both `X-Wardex-Agent-Id` and `X-Wardex-Agent-Token`, binding the request to the enrolled agent identity instead of relying only on a shared bootstrap token.
+
 ## 1. Tenant Isolation
 
 | # | Control | Priority | Status |
@@ -179,6 +193,11 @@ Recommended alerts:
 - **Critical** when `rate(wardex_state_lock_slow_waits_total[5m]) > 1` (i.e. more than one slow acquisition per second sustained for 5 minutes) — likely lock-ordering regression.
 - **Warning** when `wardex_state_lock_poisoned_total > 0` — a panic inside a locked section is leaving `AppState` poisoned; investigate the panic source even though the wrapper auto-recovers.
 - **Capacity** when any `wardex_state_lock_labeled_mean_wait_ms{label}` exceeds 5 ms for over an hour — the labeled callsite is a candidate for narrowing or extraction into its own mutex.
+
+Release SLO: `cargo test --test concurrent_smoke` is release-blocking and must
+observe `wardex_state_lock_poisoned_total == 0` while the lock wait metrics stay
+exported. The SLO uses exported max/mean wait metrics today; p95 should be added
+before a future shard-by-domain extraction claims per-domain latency objectives.
 
 ### Failed-auth observability (`wardex_failed_auth_*`)
 
