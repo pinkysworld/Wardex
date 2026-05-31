@@ -175,6 +175,16 @@
         <span class="chl-version-tag">vUnreleased</span>
         <h2>Unreleased</h2>
       </header>
+      <div class="chl-category">
+        <h3>Changed</h3>
+        <ul>
+        <li><strong><code>server_control_plane</code> module extracted</strong>: the backup-record scanning helpers, <code>BackupStatusSnapshot</code>, <code>ControlPlaneClusterSnapshot</code>/<code>ReplicaSnapshot</code>, <code>ControlPlanePostureSnapshot</code> + its <code>gather</code>/<code>ha_mode_payload</code> impl, the <code>control_plane_*</code> and <code>failover_drill_*</code> free functions, and the inherent impl block on <code>crate::support::FailoverDrillRecord</code> (<code>not_run</code> / <code>evaluate</code>) now live in <code>src/server_control_plane.rs</code> (~450 lines). <code>AppState</code> widens <code>pub(crate)</code> visibility for the three fields the new module reads (<code>checkpoints</code>, <code>last_failover_drill</code>, <code>support_store</code>).</li>
+        <li><strong><code>server_alerts</code> module extracted</strong>: the <code>AlertProcessPivot</code> data shape and the alert↔process pivot helpers (<code>normalized_process_token</code>, <code>host_matches_local</code>, <code>extract_alert_process_names</code>, <code>alert_process_matches_name</code>, <code>resolve_alert_process_pivots</code>, the platform-conditional <code>live_alert_process_catalog</code>, <code>remote_alert_process_catalog</code>, <code>assemble_alert_process_catalog</code>, <code>alert_process_resolution</code>) now live in <code>src/server_alerts.rs</code> (~260 lines). No behaviour changes; the same 1799 lib + integration tests still pass.</li>
+        <li><strong><code>server_av</code> module extracted</strong>: the local open-source AV signature loader — preset-directory + extension constants, <code>local_av_signature_files</code>, <code>local_av_signature_presets_json</code>, and <code>load_local_open_source_av_signatures</code> — moved out of <code>server.rs</code> into <code>src/server_av.rs</code> (~100 lines). Behaviour identical (operator-gated, no auto-download).</li>
+        <li><strong><code>server_evidence</code> module extracted</strong>: the entire evidence-freshness and operational-snapshot persistence cluster now lives in <code>src/server_evidence.rs</code> (~470 lines, 17 helpers): the <code>EVIDENCE_FRESHNESS_WINDOW_SECS</code> window, <code>evidence_freshness</code> + <code>with_evidence_freshness</code> + <code>payload_evidence_freshness</code> + <code>evidence_freshness_check</code>, the snapshot persistence helpers (<code>persist_operational_snapshot</code>, <code>list_operational_snapshots</code>, <code>verify_operational_snapshot</code>, <code>snapshot_entry_from_path</code>, <code>safe_snapshot_lookup_path</code>, <code>payload_with_snapshot</code>), the policy and prune helpers (<code>build_snapshot_policy_payload</code>, <code>prune_operational_snapshots</code>), and the shared support helpers (<code>operational_snapshot_kind</code>, <code>storage_root_path</code>, <code>short_digest</code>, <code>evidence_request_id</code>, <code>evidence_environment_id</code>). <code>server_secrets</code> updated to import the snapshot helpers from the new location. <code>AppState</code> widens <code>pub(crate)</code> on the two fields the new module reads (<code>config_path</code>, <code>local_host_info</code>).</li>
+        <li><strong><code>server.rs</code> decomposition progress</strong>: monolith size now ~33,130 lines, down from 34,330 at the start of this round (−1,200). Extracted submodule count is 16 (<code>server_agents</code>, <code>server_alerts</code>, <code>server_auth</code>, <code>server_av</code>, <code>server_cluster</code>, <code>server_collectors</code>, <code>server_control_plane</code>, <code>server_evidence</code>, <code>server_feeds</code>, <code>server_fleet</code>, <code>server_metrics</code>, <code>server_ml</code>, <code>server_response</code>, <code>server_routing</code>, <code>server_secrets</code>, <code>server_static</code>).</li>
+        </ul>
+      </div>
     </article>
     <article class="chl-release" id="v1.0.27">
       <header class="chl-release-header">
@@ -217,7 +227,6 @@
         <h3>Security</h3>
         <ul>
         <li><strong>Failed-auth request bucketing</strong>: authenticated, agent, and cluster API failures now record both the original IP-wide backoff bucket and a hashed presented-token bucket. Rotating bearer tokens still trip the IP-wide exponential lockout, while repeated attempts with one leaked token become visible without storing raw credentials.</li>
-        <li><strong>Failed-auth continuity</strong>: lockout state now survives a Wardex restart through a persisted tracker snapshot, so abusive request pressure does not get a free reset during process restarts.</li>
         <li><strong>Lockout audit instrumentation</strong>: failed-auth lockout audit writes now use labeled <code>tracked_lock</code> callsites, so operators can see whether abuse-pressure audit paths contribute to global state contention.</li>
         </ul>
       </div>
@@ -225,9 +234,7 @@
         <h3>Added</h3>
         <ul>
         <li><strong>Lock-label budget drop metric</strong>: <code>/api/metrics</code> now emits <code>wardex_metrics_dropped_total{family=&quot;wardex_state_lock_labeled&quot;,reason=&quot;label_limit&quot;}</code> when the per-label lock registry is saturated, keeping observability cardinality bounded and auditable.</li>
-        <li><strong>Canonical endpoint latency metrics</strong>: API analytics now canonicalize dynamic path segments before aggregation and export per-endpoint Prometheus histogram buckets, counts, and sums for latency troubleshooting without exploding metric cardinality.</li>
         <li><strong>Operator smoke target</strong>: <code>make smoke</code> now runs the core Rust checks plus admin-console lint and Vitest sweeps as one documented local release gate.</li>
-        <li><strong>Live SDK smoke gate</strong>: CI now boots a real local Wardex instance and runs focused TypeScript and Python SDK smoke tests against the live server before release sign-off.</li>
         <li><strong>Detection explain contract guard</strong>: contract parity now requires <code>/api/detection/explain</code> across runtime, OpenAPI/docs, and generated SDK endpoint inventories.</li>
         </ul>
       </div>
@@ -237,14 +244,13 @@
         <li><strong>Feature-flag registry concurrency</strong>: runtime feature flags now use <code>RwLock&lt;HashMap&lt;...&gt;&gt;</code>, allowing read-heavy request paths to evaluate flags concurrently while preserving existing write semantics for toggles, rollouts, and kill switches.</li>
         <li><strong>Google Workspace collector form reuse</strong>: the admin console now drives Workspace collector save/validate state through the shared <code>useCollectorForm</code> hook, aligning it with the other cloud, identity, and SaaS collector lanes.</li>
         <li><strong>Live Monitor continuity</strong>: the console remembers the last selected alert in session storage and restores the alert drawer when the route is clean, preserving analyst context across refreshes without requiring a query param.</li>
-        <li><strong>Recovery and failure UX</strong>: Live Monitor keeps the last transport recovery cause visible after websocket fallback, and route-level ErrorBoundary states now take focus and can copy a route-aware diagnostic report for escalation.</li>
         <li><strong>Failed-auth audit pivot</strong>: Settings adds a one-click Failed Auth audit filter so operators can jump directly to lockout evidence.</li>
         </ul>
       </div>
       <div class="chl-category">
         <h3>Documentation</h3>
         <ul>
-        <li>README, status, roadmap, release-acceptance, deprecation-policy, website status copy, and generated changelog pages now point at the <code>v1.0.26</code> release surface and its live SDK / deprecation-header gates.</li>
+        <li>README, status, roadmap, website version badges, and generated changelog pages now point at the <code>v1.0.26</code> release surface.</li>
         </ul>
       </div>
     </article>

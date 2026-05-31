@@ -13,6 +13,14 @@ Read it in this order:
 6. [`runbooks/README.md`](runbooks/README.md) for operator playbooks and integration guidance.
 7. [`ROADMAP_XDR_PROFESSIONAL.md`](ROADMAP_XDR_PROFESSIONAL.md) for post-release priorities.
 
+## Documentation Lanes
+
+- [`OPERATE_WARDEX.md`](OPERATE_WARDEX.md) — stable operator workflows
+- [`INSTALL_UPGRADE.md`](INSTALL_UPGRADE.md) — install, upgrade, rollback references
+- [`TROUBLESHOOT.md`](TROUBLESHOOT.md) — diagnostics and incident triage
+- [`DEVELOPMENT_ARCHIVE.md`](DEVELOPMENT_ARCHIVE.md) — historical planning/design references
+- [`RESEARCH.md`](RESEARCH.md) — active research tracks and question sets
+
 ## Live docs surfaces
 
 - Website docs hub: [`site/resources.html`](../site/resources.html)
@@ -24,7 +32,7 @@ Read it in this order:
 
 ## Topic index
 
-### Operating the product
+### Operate Wardex
 
 - [`EVALUATE_WARDEX.md`](EVALUATE_WARDEX.md) — canonical evaluation-to-value path with exported proof artifacts
 - [`CONFIGURATION.md`](CONFIGURATION.md) — configuration surface, `wardex.toml`, environment variables
@@ -34,6 +42,17 @@ Read it in this order:
 - [`DISASTER_RECOVERY.md`](DISASTER_RECOVERY.md) — backup and restore planning
 - [`FEATURE_FLAGS.md`](FEATURE_FLAGS.md) — runtime feature toggles
 - [`runbooks/`](runbooks/) — agent, SIEM, and response runbooks (incl. [`AGENT_ROLLBACK.md`](runbooks/AGENT_ROLLBACK.md))
+
+### Install/Upgrade
+
+- [`INSTALL_UPGRADE.md`](INSTALL_UPGRADE.md) — install channels and upgrade safety entrypoint
+- [`runbooks/installation.md`](runbooks/installation.md) — installation command reference
+- [`UPGRADE_0_56_TO_1_0.md`](UPGRADE_0_56_TO_1_0.md) — historical major-upgrade guide
+
+### Troubleshoot
+
+- [`TROUBLESHOOT.md`](TROUBLESHOOT.md) — troubleshooting index and escalation evidence
+- [`runbooks/troubleshooting.md`](runbooks/troubleshooting.md) — runtime triage commands
 
 ### Security & supply chain
 
@@ -49,8 +68,13 @@ Read it in this order:
 - [`SCHEMA_LIFECYCLE.md`](SCHEMA_LIFECYCLE.md) — compatibility and schema evolution policy
 - [`SDK_GUIDE.md`](SDK_GUIDE.md) — Python and TypeScript SDK usage
 
-### Research & design
+### Development archive
 
+- [`DEVELOPMENT_ARCHIVE.md`](DEVELOPMENT_ARCHIVE.md) — historical planning and non-release references
+
+### Research
+
+- [`RESEARCH.md`](RESEARCH.md) — research index
 - [`RESEARCH_TRACKS.md`](RESEARCH_TRACKS.md) — active research agenda
 - [`RESEARCH_QUESTIONS_R26_R30.md`](RESEARCH_QUESTIONS_R26_R30.md), [`R31_R35`](RESEARCH_QUESTIONS_R31_R35.md), [`R36_R40`](RESEARCH_QUESTIONS_R36_R40.md)
 - `DESIGN_*.md` — per-subsystem design notes (adversarial harness, digital twin, policy composition, swarm, temporal logic, WASM, …)

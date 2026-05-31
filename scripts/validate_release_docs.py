@@ -19,6 +19,11 @@ ROADMAP_DOC = ROOT / "docs/ROADMAP_XDR_PROFESSIONAL.md"
 FEATURE_COVERAGE_DOC = ROOT / "docs/FEATURE_UI_COVERAGE.md"
 RELEASE_ACCEPTANCE_DOC = ROOT / "docs/RELEASE_ACCEPTANCE.md"
 IMPLEMENTATION_PLAN_DOC = ROOT / "docs/IMPLEMENTATION_PLAN.md"
+OPERATE_DOC = ROOT / "docs/OPERATE_WARDEX.md"
+INSTALL_UPGRADE_DOC = ROOT / "docs/INSTALL_UPGRADE.md"
+TROUBLESHOOT_DOC = ROOT / "docs/TROUBLESHOOT.md"
+DEVELOPMENT_ARCHIVE_DOC = ROOT / "docs/DEVELOPMENT_ARCHIVE.md"
+RESEARCH_DOC = ROOT / "docs/RESEARCH.md"
 RELEASE_ACCEPTANCE_SCRIPT = ROOT / "scripts/release_acceptance.sh"
 RESOURCES_PAGE = ROOT / "site/resources.html"
 HELM_CHART = ROOT / "deploy/helm/wardex/Chart.yaml"
@@ -134,6 +139,11 @@ def main() -> int:
     feature_coverage = read(FEATURE_COVERAGE_DOC)
     release_acceptance = read(RELEASE_ACCEPTANCE_DOC)
     implementation_plan = read(IMPLEMENTATION_PLAN_DOC)
+    operate_doc = read(OPERATE_DOC)
+    install_upgrade_doc = read(INSTALL_UPGRADE_DOC)
+    troubleshoot_doc = read(TROUBLESHOOT_DOC)
+    development_archive_doc = read(DEVELOPMENT_ARCHIVE_DOC)
+    research_doc = read(RESEARCH_DOC)
     resources_page = read(RESOURCES_PAGE)
     helm_chart = read(HELM_CHART)
     smoke_specs = release_smoke_specs()
@@ -182,6 +192,19 @@ def main() -> int:
         failures.append("README.md does not mention the evaluation helper")
     if "EVALUATE_WARDEX.md" not in docs_index:
         failures.append("docs/README.md does not index the evaluation guide")
+    for lane_doc in ("OPERATE_WARDEX.md", "INSTALL_UPGRADE.md", "TROUBLESHOOT.md", "DEVELOPMENT_ARCHIVE.md", "RESEARCH.md"):
+        if lane_doc not in docs_index:
+            failures.append(f"docs/README.md does not index {lane_doc}")
+    if "wardex doctor --json" not in operate_doc:
+        failures.append("docs/OPERATE_WARDEX.md does not document `wardex doctor --json`")
+    if "runbooks/installation.md" not in install_upgrade_doc:
+        failures.append("docs/INSTALL_UPGRADE.md does not index runbooks/installation.md")
+    if "runbooks/troubleshooting.md" not in troubleshoot_doc:
+        failures.append("docs/TROUBLESHOOT.md does not index runbooks/troubleshooting.md")
+    if "historical context" not in development_archive_doc.lower():
+        failures.append("docs/DEVELOPMENT_ARCHIVE.md must declare historical-context scope")
+    if "RESEARCH_TRACKS.md" not in research_doc:
+        failures.append("docs/RESEARCH.md does not index RESEARCH_TRACKS.md")
     if "scripts/evaluate_to_value.sh" not in getting_started:
         failures.append("docs/GETTING_STARTED.md does not mention the evaluation helper")
     if "scripts/evaluate_to_value.sh" not in evaluation_doc:

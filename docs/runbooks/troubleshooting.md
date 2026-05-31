@@ -4,6 +4,8 @@
 
 ### 1. Service Won't Start
 
+Illustrative commands (paths/ports may differ by deployment):
+
 ```bash
 # Check binary exists and is executable
 ls -la ./target/release/wardex
@@ -29,6 +31,8 @@ cargo run -- validate-config --config /etc/wardex/config.toml
 
 ### 3. High Memory Usage
 
+Illustrative commands:
+
 ```bash
 # Check process memory
 ps aux | grep wardex
@@ -41,6 +45,8 @@ curl -X POST http://localhost:8080/api/admin/purge-retention
 ```
 
 ### 4. Alerts Not Firing
+
+Illustrative commands:
 
 ```bash
 # Verify detection mode
@@ -66,6 +72,8 @@ curl -X POST http://localhost:8080/api/test-alert \
 | Email | SMTP auth rejected | Verify credentials, check STARTTLS vs SSL |
 
 ### 6. Update / Rollback Issues
+
+Illustrative commands:
 
 ```bash
 # Check current update state
@@ -94,6 +102,8 @@ cp /var/lib/wardex/staging/backup/wardex /usr/local/bin/wardex
 ---
 
 ## Log Analysis
+
+Illustrative commands:
 
 ```bash
 # Tail last 100 log lines

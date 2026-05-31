@@ -77,7 +77,7 @@ WARDEX_ADMIN_TOKEN="$(cat var/.wardex_token)" bash scripts/evaluate_to_value.sh
 ```
 
 5. Review the exported artifacts in `output/evaluate-to-value/`.
-6. Run `cargo run -- doctor` to inspect the local release posture.
+6. Run `cargo run -- doctor` for the terminal report and `cargo run -- doctor --json` for machine-readable diagnostics.
 
 The script proves readiness, evaluation-only first-run proof seeding, first alert visibility, response dry-run preview, evidence export, support bundle export, and deployment trust reporting through the same routes used by the admin console. The full guide lives in [`EVALUATE_WARDEX.md`](EVALUATE_WARDEX.md).
 
@@ -95,7 +95,7 @@ This refreshes the structured status payload consumed by the static site and off
 cargo test
 ```
 
-The current release tracks 3631 Rust test functions, 328 admin-console tests, and 8 managed Playwright checks across 7 browser specs. Treat seeded demo data as evaluation-only when you validate the first-run operator journey.
+The current release tracks 3635 Rust test functions, 328 admin-console tests, and 8 managed Playwright checks across 7 browser specs. Treat seeded demo data as evaluation-only when you validate the first-run operator journey.
 
 ## Frontend development (admin-console)
 

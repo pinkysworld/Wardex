@@ -14,14 +14,14 @@ Wardex (`pinkysworld/Wardex`) is a Rust-based XDR and SIEM platform for private-
 - **Scan across platforms:** malware, virus, trojan, and rootkit workflows cover Linux, macOS, and Windows with local engines plus optional open-source signature presets.
 - **Ship verifiably:** releases include checksums, SBOMs, provenance, signed artifacts, and documented verification gates.
 
-## Current Release: `v1.0.27`
+## Current Release: `v1.0.28`
 
 This release hardens trust boundaries, adds customer-facing deployment trust reporting, and stabilizes the release acceptance path so local and CI verification prove the same contracts.
 
 - **Trust-boundary hardening** — quarantine, tenancy, enrollment-token handling, signed-update validation, audit signing, and exact EDR blocking paths now enforce stricter server-side guarantees.
 - **Deployment trust reporting** — Wardex now exports a structured deployment trust report that ties release acceptance, provenance, parity, backup freshness, collector health, and smoke posture into one artifact.
 - **Release gate stabilization** — `make smoke` and `make release-acceptance` now cover the deployment trust report plus route-aware hardening checks without flaking on ID-specific endpoints or slow connect transitions.
-- **Identity and metadata coherence** — release docs, OpenAPI, Helm, SDK packages, OTLP metadata, and website version surfaces now align on the Wardex `v1.0.27` baseline.
+- **Identity and metadata coherence** — release docs, OpenAPI, Helm, SDK packages, OTLP metadata, and website version surfaces now align on the Wardex `v1.0.28` baseline.
 
 See [CHANGELOG.md](CHANGELOG.md) for full release history.
 
@@ -58,6 +58,7 @@ Notes:
 - `http://localhost:8080/admin/` serves the authenticated admin console.
 - If `WARDEX_ADMIN_TOKEN` is set, Wardex uses that token and may not create `var/.wardex_token`.
 - Check the running version with `./target/release/wardex --version`.
+- Export machine-readable diagnostics with `./target/release/wardex doctor --json`.
 
 Useful local commands:
 
@@ -92,6 +93,9 @@ Start here:
 - [Compatibility](docs/COMPATIBILITY.md)
 - [Release Acceptance](docs/RELEASE_ACCEPTANCE.md)
 - [Runbooks](docs/runbooks/README.md)
+- [Operate Wardex](docs/OPERATE_WARDEX.md)
+- [Install/Upgrade](docs/INSTALL_UPGRADE.md)
+- [Troubleshoot](docs/TROUBLESHOOT.md)
 - [SDK Guide](docs/SDK_GUIDE.md)
 - [OpenAPI Contract](docs/openapi.yaml)
 
@@ -99,7 +103,7 @@ The public website lives in [site/](site/) and mirrors the main product, release
 
 ## Documentation Surfaces
 
-The GitHub docs and the public website now share the same `v1.0.27` release surface for operator guides and API reference.
+The GitHub docs and the public website now share the same `v1.0.28` release surface for operator guides and API reference.
 
 ![Wardex documentation hub](site/media/insights/resources-live.png)
 

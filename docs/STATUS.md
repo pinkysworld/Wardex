@@ -2,7 +2,7 @@
 
 ## Current release
 
-- **Version:** `1.0.27`
+- **Version:** `1.0.28`
 - **Positioning:** private-cloud XDR and SIEM platform with enterprise detection engineering, malware scanning, analyst workflows, fleet operations, behavioural analytics, and automated incident response
 - **Source footprint:** 158 Rust source modules (server.rs decomposition ongoing — `server.rs` now ~33,130 lines after extracting 16 dedicated `server_*` submodules including the latest `server_control_plane`, `server_alerts`, `server_av`, and `server_evidence`)
 - **API contract:** versioned OpenAPI surface with REST, GraphQL, live `/api/openapi.json` export, generated SDK parity diagnostics, authenticated-by-default API route classification, cursor page contracts, release observability/preflight proof APIs, production assurance endpoints, malware scan and response-action contracts, source-aware alert analysis, operator-trust workspaces, alert feedback/evidence-chain contracts, Detection Trust scoring and draft-only tuning APIs, detection validation lab APIs, response safety preview/verification APIs with execution-audit continuity, agent enrollment-token flows, connector marketplace summaries, operations health snapshots, and release verification readiness endpoints with evidence freshness metadata
@@ -103,12 +103,12 @@ The current release has been verified with:
 
 Wardex is now positioned as a professional XDR/SIEM control plane with incident-first analyst workflows, explainable detections, context-preserving reporting, operator-visible recovery posture, and explicit shift-lead surfaces for ownership, handoff, and detection-review pressure. The runtime, admin console, release process, and website are aligned around operator trust, workflow closure, deployment readiness, clean release verification, and freshness-gated evidence. The current release strengthens abuse-pressure handling, bounded observability, persisted lockout continuity, operator-visible transport recovery, and live SDK proof for signed-release readiness.
 
-## Recently shipped (v1.0.27)
+## Recently shipped (v1.0.28)
 
 - **Trust-boundary hardening** — quarantine path handling, tenant-bound route enforcement, enrollment-token issuance, signed-update validation, audit checkpoint signing, and EDR blocking rules were tightened so privileged flows prove intent and scope more explicitly.
 - **Deployment trust artifact** — `/api/release/deployment-trust-report` now exports a structured customer-facing proof bundle covering release acceptance, SBOM/provenance, backup freshness, collector health, and smoke posture.
 - **Release verification stability** — managed release acceptance now treats ID-specific hardening routes as route-wiring checks instead of unconditional 200s, and the detection-quality Playwright connect path waits long enough to stay stable under the full acceptance load.
-- **Release metadata coherence** — docs, OpenAPI, Helm, SDK packages, OTLP metadata, and website release surfaces now align on the Wardex `v1.0.27` baseline.
+- **Release metadata coherence** — docs, OpenAPI, Helm, SDK packages, OTLP metadata, and website release surfaces now align on the Wardex `v1.0.28` baseline.
 
 ## Recently shipped (v1.0.26)
 

@@ -221,11 +221,18 @@ async fn run() -> Result<(), String> {
             println!("{}", runtime::status_snapshot());
         }
         "doctor" => {
-            if args.next().is_some() {
-                return Err("`doctor` does not accept extra arguments".into());
-            }
+            let doctor_args: Vec<String> = args.collect();
+            let json_mode = match doctor_args.as_slice() {
+                [] => false,
+                [flag] if flag == "--json" => true,
+                _ => return Err("`doctor` accepts at most one flag: --json".into()),
+            };
             let checks = wardex::doctor::run();
-            print!("{}", wardex::doctor::format_report(&checks));
+            if json_mode {
+                println!("{}", wardex::doctor::format_report_json(&checks));
+            } else {
+                print!("{}", wardex::doctor::format_report(&checks));
+            }
             let failures = checks
                 .iter()
                 .filter(|c| c.status == wardex::doctor::Status::Fail)
@@ -586,7 +593,9 @@ fn print_usage() {
     println!("  init-config [config_path]          Write default config file");
     println!("  status                             Print project status");
     println!("  status-json [output_path]          Export status as JSON");
-    println!("  doctor                             Run local release and readiness diagnostics");
+    println!(
+        "  doctor [--json]                    Run local release/readiness diagnostics (text or JSON)"
+    );
     println!("  harness                            Run adversarial harness");
     println!("  export-model <tla|alloy> [path]    Export formal model");
     println!("  attest <binary> [manifest] [...]   Generate build manifest");

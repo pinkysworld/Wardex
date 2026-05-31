@@ -2,6 +2,8 @@
 
 ## macOS (Homebrew)
 
+Release-tested commands:
+
 ```bash
 brew tap pinkysworld/wardex
 brew install wardex
@@ -18,6 +20,8 @@ The Homebrew tap is published from the dedicated repository `pinkysworld/homebre
 ## Linux (Debian / Ubuntu)
 
 Add the published APT repository and install with `apt-get`:
+
+Release-tested commands:
 
 ```bash
 curl -fsSL https://pinkysworld.github.io/Wardex/apt/wardex-archive-key.asc \
@@ -37,6 +41,8 @@ The APT repository is rebuilt from the latest published Debian release asset and
 
 ## Linux (RPM / Fedora / RHEL)
 
+Release-tested commands:
+
 ```bash
 curl -LO https://github.com/pinkysworld/Wardex/releases/latest/download/wardex.x86_64.rpm
 sudo rpm -i wardex.x86_64.rpm
@@ -45,6 +51,8 @@ sudo systemctl start wardex
 ```
 
 ## Docker
+
+Release-tested commands:
 
 ```bash
 docker pull ghcr.io/pinkysworld/wardex:latest
@@ -58,6 +66,8 @@ docker run -d \
 
 ## Kubernetes (Helm)
 
+Illustrative commands (cluster values vary by environment):
+
 ```bash
 helm repo add wardex https://pinkysworld.github.io/wardex-charts
 helm repo update
@@ -70,6 +80,8 @@ helm install wardex wardex/wardex \
 
 Custom values:
 
+Illustrative command:
+
 ```bash
 helm install wardex wardex/wardex \
   --namespace wardex \
@@ -80,6 +92,8 @@ helm install wardex wardex/wardex \
 See `deploy/helm/wardex/values.yaml` for all configurable options.
 
 ## From Source
+
+Release-tested commands:
 
 ```bash
 git clone https://github.com/pinkysworld/Wardex.git
@@ -93,6 +107,8 @@ cargo build --release
 
 Disable experimental features at compile time:
 
+Illustrative commands:
+
 ```bash
 # Minimal build (no ML, LLM, quantum, or proof modules)
 cargo build --release --no-default-features
@@ -104,6 +120,8 @@ cargo build --release --no-default-features --features experimental-ml
 ## Verification
 
 After installation, verify the service is running:
+
+Release-tested commands:
 
 ```bash
 # Check version
@@ -120,17 +138,23 @@ curl http://localhost:9077/api/status-json
 
 ### Python
 
+Illustrative command:
+
 ```bash
 pip install wardex-sdk
 ```
 
 ### TypeScript / Node.js
 
+Illustrative command:
+
 ```bash
 npm install @wardex/sdk
 ```
 
 To regenerate SDKs from the OpenAPI spec:
+
+Release-tested command:
 
 ```bash
 cd sdk && bash generate.sh

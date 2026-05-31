@@ -49,11 +49,16 @@ pub fn run() -> Vec<Check> {
     vec![
         check_version(),
         check_rustc_info(),
+        check_install_layout(),
         check_config(),
         check_data_dir(),
         check_site_dir(),
         check_rules_dir(),
         check_var_dir(),
+        check_logs_location(),
+        check_service_layout(),
+        check_support_bundle_digest(),
+        check_redaction_policy(),
     ]
 }
 
@@ -82,6 +87,58 @@ pub fn format_report(checks: &[Check]) -> String {
     out
 }
 
+/// Render machine-readable doctor output used by release/support tooling.
+pub fn format_report_json(checks: &[Check]) -> String {
+    let failures = checks.iter().filter(|c| c.status == Status::Fail).count();
+    let warnings = checks.iter().filter(|c| c.status == Status::Warn).count();
+    let config_path = config::runtime_config_path();
+    let layout = install_layout();
+    let logs = log_paths();
+    let support_digest = latest_support_bundle_digest();
+    let payload = serde_json::json!({
+        "schema": "wardex.doctor.v1",
+        "version": env!("CARGO_PKG_VERSION"),
+        "runtime": {
+            "os": std::env::consts::OS,
+            "arch": std::env::consts::ARCH,
+            "family": std::env::consts::FAMILY,
+        },
+        "installation": layout,
+        "summary": {
+            "checks": checks.len(),
+            "warnings": warnings,
+            "failures": failures,
+            "status": if failures > 0 { "fail" } else if warnings > 0 { "warn" } else { "ok" },
+        },
+        "config": {
+            "path": config_path.display().to_string(),
+            "exists": config_path.exists(),
+        },
+        "service_health": service_health_summary(),
+        "logs": {
+            "locations": logs,
+        },
+        "support_bundle": {
+            "latest_digest": support_digest,
+        },
+        "redaction": {
+            "summary": "support bundle snapshots redact secrets and sensitive headers before persistence",
+            "sensitive_keys": ["authorization", "api_key", "x-api-key", "cookie", "set-cookie", "token", "secret"],
+        },
+        "checks": checks
+            .iter()
+            .map(|check| {
+                serde_json::json!({
+                    "name": check.name,
+                    "status": check.status.label().to_ascii_lowercase(),
+                    "detail": check.detail,
+                })
+            })
+            .collect::<Vec<_>>(),
+    });
+    serde_json::to_string_pretty(&payload).unwrap_or_else(|_| "{}".to_string())
+}
+
 fn check_version() -> Check {
     Check {
         name: "Wardex build",
@@ -103,6 +160,25 @@ fn check_rustc_info() -> Check {
             std::env::consts::OS,
             std::env::consts::ARCH,
             std::env::consts::FAMILY,
+        ),
+    }
+}
+
+fn check_install_layout() -> Check {
+    let layout = install_layout();
+    Check {
+        name: "Installation layout",
+        status: Status::Info,
+        detail: format!(
+            "{} ({})",
+            layout
+                .get("type")
+                .and_then(serde_json::Value::as_str)
+                .unwrap_or("unknown"),
+            layout
+                .get("root")
+                .and_then(serde_json::Value::as_str)
+                .unwrap_or("unreported")
         ),
     }
 }
@@ -195,6 +271,81 @@ fn check_var_dir() -> Check {
     }
 }
 
+fn check_logs_location() -> Check {
+    let locations = log_paths();
+    let existing = locations
+        .iter()
+        .filter_map(serde_json::Value::as_object)
+        .filter(|entry| {
+            entry
+                .get("exists")
+                .and_then(serde_json::Value::as_bool)
+                .unwrap_or(false)
+        })
+        .count();
+    Check {
+        name: "Logs location",
+        status: if existing > 0 {
+            Status::Ok
+        } else {
+            Status::Warn
+        },
+        detail: if existing > 0 {
+            format!("{existing} configured log path(s) currently exist")
+        } else {
+            "no known log path exists yet; first runtime start usually creates logs".to_string()
+        },
+    }
+}
+
+fn check_service_layout() -> Check {
+    let summary = service_health_summary();
+    let status = summary
+        .get("status")
+        .and_then(serde_json::Value::as_str)
+        .unwrap_or("info");
+    let detail = summary
+        .get("detail")
+        .and_then(serde_json::Value::as_str)
+        .unwrap_or("service metadata unavailable")
+        .to_string();
+    Check {
+        name: "Service health",
+        status: match status {
+            "ok" => Status::Ok,
+            "warn" => Status::Warn,
+            "fail" => Status::Fail,
+            _ => Status::Info,
+        },
+        detail,
+    }
+}
+
+fn check_support_bundle_digest() -> Check {
+    let digest = latest_support_bundle_digest();
+    Check {
+        name: "Support bundle digest",
+        status: if digest.is_some() {
+            Status::Ok
+        } else {
+            Status::Warn
+        },
+        detail: digest.unwrap_or_else(|| {
+            "no support bundle digest found yet (generate /api/support/bundle once)".to_string()
+        }),
+    }
+}
+
+fn check_redaction_policy() -> Check {
+    Check {
+        name: "Redaction summary",
+        status: Status::Info,
+        detail:
+            "Support snapshots redact authorization, cookie, API key, token, and secret fields."
+                .to_string(),
+    }
+}
+
 fn describe_dir(name: &'static str, path: &Path, required: bool) -> Check {
     match std::fs::metadata(path) {
         Ok(meta) if meta.is_dir() => Check {
@@ -225,6 +376,123 @@ fn count_files(dir: &Path, ext: &str) -> usize {
         .count()
 }
 
+fn install_layout() -> serde_json::Value {
+    let root = config::runtime_root_dir();
+    let exe = std::env::current_exe().unwrap_or_else(|_| PathBuf::from("wardex"));
+    let exe_str = exe.to_string_lossy();
+    let root_str = root.to_string_lossy();
+    let is_container = Path::new("/.dockerenv").exists()
+        || std::env::var("container")
+            .map(|value| !value.is_empty())
+            .unwrap_or(false);
+    let layout = if is_container {
+        "container"
+    } else if exe_str.contains("/Cellar/wardex/")
+        || exe_str.contains("/homebrew/")
+        || root_str.contains("Homebrew")
+    {
+        "homebrew"
+    } else if exe_str.starts_with("/usr/bin/")
+        || exe_str.starts_with("/usr/local/bin/")
+        || exe_str.starts_with("/opt/wardex/")
+    {
+        "package"
+    } else if root.join("Cargo.toml").exists() {
+        "source"
+    } else {
+        "unknown"
+    };
+    serde_json::json!({
+        "type": layout,
+        "root": root.display().to_string(),
+        "binary": exe.display().to_string(),
+        "config_path": config::runtime_config_path().display().to_string(),
+    })
+}
+
+fn service_health_summary() -> serde_json::Value {
+    let mut signals = Vec::new();
+    let mut status = "info";
+
+    if Path::new("/etc/systemd/system/wardex.service").exists()
+        || Path::new("/lib/systemd/system/wardex.service").exists()
+    {
+        signals.push("systemd unit installed");
+        status = "ok";
+    }
+    if Path::new("/Library/LaunchDaemons/dev.wardex.agent.plist").exists() {
+        signals.push("launchd plist installed");
+        status = "ok";
+    }
+    if Path::new("var/wardex.pid").exists() {
+        signals.push("runtime pid file present");
+        status = "ok";
+    }
+
+    let detail = if signals.is_empty() {
+        "no service unit markers detected; source/dev mode is likely active"
+    } else {
+        "service layout markers found"
+    };
+    serde_json::json!({
+        "status": status,
+        "detail": detail,
+        "signals": signals,
+    })
+}
+
+fn log_paths() -> Vec<serde_json::Value> {
+    let candidates = [
+        "var/crash.log",
+        "var/server.log",
+        "var/wardex.log",
+        "/var/log/wardex/server.log",
+        "/usr/local/var/log/wardex/server.log",
+        "/opt/homebrew/var/log/wardex/server.log",
+    ];
+    candidates
+        .iter()
+        .map(|path| {
+            let p = Path::new(path);
+            serde_json::json!({
+                "path": path,
+                "exists": p.exists(),
+            })
+        })
+        .collect()
+}
+
+fn latest_support_bundle_digest() -> Option<String> {
+    let support_store = Path::new("var/support.json");
+    if support_store.exists()
+        && let Ok(bytes) = std::fs::read(support_store)
+    {
+        return Some(crate::audit::sha256_hex(&bytes));
+    }
+
+    let root = Path::new("var/operational_snapshots/support_bundle");
+    let entries = std::fs::read_dir(root).ok()?;
+    let mut candidates = Vec::new();
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if path.extension().and_then(|value| value.to_str()) != Some("json") {
+            continue;
+        }
+        let modified = entry.metadata().ok().and_then(|meta| meta.modified().ok());
+        candidates.push((modified, path));
+    }
+    candidates.sort_by(|(left_modified, left_path), (right_modified, right_path)| {
+        right_modified
+            .cmp(left_modified)
+            .then_with(|| right_path.cmp(left_path))
+    });
+    let latest = candidates.into_iter().next()?.1;
+    let json = serde_json::from_slice::<serde_json::Value>(&std::fs::read(latest).ok()?).ok()?;
+    json.get("digest")
+        .and_then(serde_json::Value::as_str)
+        .map(str::to_string)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -245,6 +513,18 @@ mod tests {
         let report = format_report(&run());
         assert!(report.contains("Wardex doctor"));
         assert!(report.contains("Summary:"));
+    }
+
+    #[test]
+    fn format_report_json_has_schema_and_summary() {
+        let report = format_report_json(&run());
+        let payload =
+            serde_json::from_str::<serde_json::Value>(&report).expect("doctor json should parse");
+        assert_eq!(
+            payload.get("schema").and_then(serde_json::Value::as_str),
+            Some("wardex.doctor.v1")
+        );
+        assert!(payload.get("summary").is_some(), "summary should be present");
     }
 
     #[test]
