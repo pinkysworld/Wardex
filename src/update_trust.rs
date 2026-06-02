@@ -197,9 +197,11 @@ mod tests {
     fn unsigned_release_uses_grace_but_strict_rejects() {
         let binary = b"unsigned update";
         let release = release_for(binary);
-        let mut policy = UpdateTrustPolicy::default();
-        policy.require_signed_updates = false;
-        policy.legacy_unsigned_grace_until = Some("2999-01-01T00:00:00Z".to_string());
+        let policy = UpdateTrustPolicy {
+            require_signed_updates: false,
+            legacy_unsigned_grace_until: Some("2999-01-01T00:00:00Z".to_string()),
+            ..UpdateTrustPolicy::default()
+        };
         assert_eq!(
             verify_release_artifact(&release, binary, &policy, "1.0.0", None, false)
                 .unwrap()

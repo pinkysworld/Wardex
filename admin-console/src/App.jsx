@@ -425,7 +425,6 @@ export default function App() {
     if (error) {
       // SSO redirect surfaces auth errors via URL params; mirroring into state
       // is the only way to display them in the auth form below.
-      // eslint-disable-next-line react-hooks/set-state-in-effect
       setAuthError(error);
     }
   }, [authenticated, location.search]);
