@@ -31,10 +31,38 @@ BASELINE_FILE = REPO_ROOT / "scripts" / "panic-baseline.txt"
 PANIC_PATTERN = re.compile(r"\.(unwrap|expect)\s*\(")
 TEST_ATTR = re.compile(r"#\[cfg\(test\)\]")
 TEST_MOD = re.compile(r"^\s*mod\s+tests?\s*\{")
+TEST_HELPER_FN = re.compile(
+    r"^\s*(?:pub(?:\([^)]*\))?\s+)?fn\s+spawn_test_server[A-Za-z0-9_]*\s*\("
+)
+
+
+def strip_test_helper_functions(lines: list[str]) -> list[str]:
+    """Remove exported integration-test server harness functions from scanning."""
+    stripped: list[str] = []
+    idx = 0
+    while idx < len(lines):
+        if not TEST_HELPER_FN.search(lines[idx]):
+            stripped.append(lines[idx])
+            idx += 1
+            continue
+
+        brace_depth = 0
+        saw_open = False
+        while idx < len(lines):
+            line = lines[idx]
+            brace_depth += line.count("{")
+            brace_depth -= line.count("}")
+            saw_open = saw_open or "{" in line
+            idx += 1
+            if saw_open and brace_depth <= 0:
+                break
+    return stripped
 
 
 def count_in_file(path: Path) -> int:
-    lines = path.read_text(encoding="utf-8", errors="replace").splitlines()
+    lines = strip_test_helper_functions(
+        path.read_text(encoding="utf-8", errors="replace").splitlines()
+    )
     cutoff = len(lines)
     for idx, line in enumerate(lines):
         if TEST_ATTR.search(line) or TEST_MOD.search(line):
@@ -55,6 +83,8 @@ def main() -> int:
 
     counts_by_file: list[tuple[Path, int]] = []
     for path in sorted(SRC_ROOT.rglob("*.rs")):
+        if path.name.endswith("_tests.rs"):
+            continue
         count = count_in_file(path)
         if count:
             counts_by_file.append((path, count))

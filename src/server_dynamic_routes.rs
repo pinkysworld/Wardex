@@ -2775,10 +2775,9 @@ pub(super) fn handle_dynamic_api_route(
                 crate::oidc::OidcProvider::new(oidc_config),
             );
         }
-        let provider = s
-            .oidc_providers
-            .get_mut(&provider_id)
-            .expect("oidc provider must exist after insertion");
+        let Some(provider) = s.oidc_providers.get_mut(&provider_id) else {
+            return error_json("oidc provider setup failed", 500);
+        };
         if let Err(error) = provider.discover() {
             return if redirect_after.is_some() {
                 auth_redirect_response(&sso_error_redirect(redirect_after, &error))
