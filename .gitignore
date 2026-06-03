@@ -5,6 +5,7 @@ var/
 admin-console/node_modules/
 admin-console/dist/
 admin-console/coverage/
+coverage.lcov
 xdr_ai_handoff_pack/
 xdr_ai_handoff_pack.zip
 release/
