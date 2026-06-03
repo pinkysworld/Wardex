@@ -69,6 +69,35 @@ load_additional_certificate_paths() {
   append_cert_path "${repo_root}/developerID_application.cer"
 }
 
+sign_and_verify_binary() {
+  local attempt=1
+  local max_attempts="${WARDEX_MACOS_CODESIGN_ATTEMPTS:-3}"
+
+  while ((attempt <= max_attempts)); do
+    echo "==> Code sign ${binary_path} (attempt ${attempt}/${max_attempts})"
+    if codesign \
+      --force \
+      --timestamp \
+      --options runtime \
+      --sign "$codesign_identity" \
+      "$binary_path" &&
+      codesign --verify --strict --verbose=2 "$binary_path"; then
+      return 0
+    fi
+
+    if ((attempt == max_attempts)); then
+      break
+    fi
+
+    echo "warning: codesign verification failed; retrying after timestamp service backoff" >&2
+    sleep $((attempt * 10))
+    attempt=$((attempt + 1))
+  done
+
+  echo "error: failed to code sign ${binary_path} with a verifiable Developer ID timestamp" >&2
+  return 1
+}
+
 prepare_signing_identity() {
   if [[ -n "${WARDEX_MACOS_CERTIFICATE_BASE64:-}" ]]; then
     decode_base64 "$WARDEX_MACOS_CERTIFICATE_BASE64" "$cert_path"
@@ -230,14 +259,7 @@ if ! security set-key-partition-list \
   echo "warning: unable to update key partition list; continuing because the identity was imported with codesign access" >&2
 fi
 
-echo "==> Code sign ${binary_path}"
-codesign \
-  --force \
-  --timestamp \
-  --options runtime \
-  --sign "$codesign_identity" \
-  "$binary_path"
-codesign --verify --strict --verbose=2 "$binary_path"
+sign_and_verify_binary
 
 echo "==> Submit ${platform} binary for Apple notarization"
 rm -f "$notary_archive"
