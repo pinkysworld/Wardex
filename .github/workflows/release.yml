@@ -529,7 +529,7 @@ jobs:
         run: |
           gh workflow run pages.yml \
             -R "${{ github.repository }}" \
-            --ref "${{ github.event.repository.default_branch }}" \
+            --ref "${GITHUB_REF_NAME}" \
             -f tag="${GITHUB_REF_NAME}"
 
       - name: Dispatch Homebrew tap sync
@@ -543,7 +543,7 @@ jobs:
           fi
           gh workflow run sync-homebrew-tap.yml \
             -R "${{ github.repository }}" \
-            --ref "${{ github.event.repository.default_branch }}" \
+            --ref "${GITHUB_REF_NAME}" \
             -f tag="${GITHUB_REF_NAME}"
 
   published-release-smoke:
