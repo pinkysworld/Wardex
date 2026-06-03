@@ -53,6 +53,8 @@
             <h2>Releases</h2>
             <ul>
       <li><a href="#vUnreleased"><span class="chl-ver">vUnreleased</span><span class="chl-nav-title"></span></a></li>
+      <li><a href="#v1.0.29"><span class="chl-ver">v1.0.29</span><span class="chl-nav-title">2026-06-03 — Structural hardening and coverage baseline</span></a></li>
+      <li><a href="#v1.0.28"><span class="chl-ver">v1.0.28</span><span class="chl-nav-title">2026-05-31</span></a></li>
       <li><a href="#v1.0.27"><span class="chl-ver">v1.0.27</span><span class="chl-nav-title">2026-05-28 — Trust boundaries and release verification stabilization</span></a></li>
       <li><a href="#v1.0.26"><span class="chl-ver">v1.0.26</span><span class="chl-nav-title">2026-05-22 — Product hardening and release proof</span></a></li>
       <li><a href="#v1.0.25"><span class="chl-ver">v1.0.25</span><span class="chl-nav-title">2026-05-22</span></a></li>
@@ -174,6 +176,40 @@
       <header class="chl-release-header">
         <span class="chl-version-tag">vUnreleased</span>
         <h2>Unreleased</h2>
+      </header>
+    </article>
+    <article class="chl-release" id="v1.0.29">
+      <header class="chl-release-header">
+        <span class="chl-version-tag">v1.0.29</span>
+        <h2>2026-06-03 — Structural hardening and coverage baseline</h2>
+      </header>
+      <div class="chl-category">
+        <h3>Added</h3>
+        <ul>
+        <li><strong>Coverage baseline</strong>: <code>docs/COVERAGE_BASELINE.md</code> now records the first <code>cargo llvm-cov</code> workspace summary for Wardex, with <code>76.16%</code> line coverage and generated LCOV output excluded from git.</li>
+        </ul>
+      </div>
+      <div class="chl-category">
+        <h3>Changed</h3>
+        <ul>
+        <li><strong><code>server.rs</code> decomposition target met</strong>: <code>src/server.rs</code> is now 7,600 lines, down from 34,750 at the start of the sweep. Dynamic fallback API routing moved into <code>src/server_dynamic_routes.rs</code>, joining the dedicated <code>server_*</code> modules for runtime, helpers, operator, process, detection, workbench, assistant, support, and view responsibilities.</li>
+        <li><strong>API integration suite split</strong>: the former 8,577-line <code>tests/api_integration.rs</code> file is removed and replaced with domain-focused API integration files plus <code>tests/common/mod.rs</code>, keeping the API test inventory navigable.</li>
+        <li><strong>OpenAPI and enterprise sources trimmed</strong>: <code>src/openapi.rs</code> now delegates route registration into focused OpenAPI modules, and <code>src/enterprise.rs</code> delegates store implementation into <code>src/enterprise_store.rs</code>, keeping both files below their release targets.</li>
+        <li><strong>Dependency hygiene refreshed</strong>: Cargo and admin-console package locks carry the latest allowed patch/minor updates while major-only upgrades remain intentionally deferred.</li>
+        <li><strong>Safe Clippy pedantic cleanup</strong>: mechanical pedantic findings such as redundant closures, uninlined format args, literal readability, and clone/copy/default access issues were addressed without adopting readability-hostile or policy-heavy lints.</li>
+        </ul>
+      </div>
+      <div class="chl-category">
+        <h3>Documentation</h3>
+        <ul>
+        <li>README, status, roadmap, Getting Started, release facts, website metadata, OpenAPI, Helm, OTLP, SDK package metadata, and generated changelog pages now point at the <code>v1.0.29</code> release surface.</li>
+        </ul>
+      </div>
+    </article>
+    <article class="chl-release" id="v1.0.28">
+      <header class="chl-release-header">
+        <span class="chl-version-tag">v1.0.28</span>
+        <h2>2026-05-31</h2>
       </header>
       <div class="chl-category">
         <h3>Changed</h3>

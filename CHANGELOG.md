@@ -4,6 +4,21 @@ All notable changes to Wardex are documented in this file.
 
 ## [Unreleased]
 
+## [1.0.29] — 2026-06-03 — Structural hardening and coverage baseline
+
+### Added
+- **Coverage baseline**: `docs/COVERAGE_BASELINE.md` now records the first `cargo llvm-cov` workspace summary for Wardex, with `76.16%` line coverage and generated LCOV output excluded from git.
+
+### Changed
+- **`server.rs` decomposition target met**: `src/server.rs` is now 7,600 lines, down from 34,750 at the start of the sweep. Dynamic fallback API routing moved into `src/server_dynamic_routes.rs`, joining the dedicated `server_*` modules for runtime, helpers, operator, process, detection, workbench, assistant, support, and view responsibilities.
+- **API integration suite split**: the former 8,577-line `tests/api_integration.rs` file is removed and replaced with domain-focused API integration files plus `tests/common/mod.rs`, keeping the API test inventory navigable.
+- **OpenAPI and enterprise sources trimmed**: `src/openapi.rs` now delegates route registration into focused OpenAPI modules, and `src/enterprise.rs` delegates store implementation into `src/enterprise_store.rs`, keeping both files below their release targets.
+- **Dependency hygiene refreshed**: Cargo and admin-console package locks carry the latest allowed patch/minor updates while major-only upgrades remain intentionally deferred.
+- **Safe Clippy pedantic cleanup**: mechanical pedantic findings such as redundant closures, uninlined format args, literal readability, and clone/copy/default access issues were addressed without adopting readability-hostile or policy-heavy lints.
+
+### Documentation
+- README, status, roadmap, Getting Started, release facts, website metadata, OpenAPI, Helm, OTLP, SDK package metadata, and generated changelog pages now point at the `v1.0.29` release surface.
+
 ## [1.0.28] — 2026-05-31
 
 ### Changed

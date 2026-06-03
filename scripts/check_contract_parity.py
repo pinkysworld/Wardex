@@ -379,8 +379,12 @@ def main() -> int:
     if typescript_sdk_version() != version:
         failures.append(f"TypeScript SDK version {typescript_sdk_version()} != runtime {version}")
 
-    endpoint_source = (ROOT / "src/server.rs").read_text(errors="ignore")
-    openapi_source = (ROOT / "src/openapi.rs").read_text(errors="ignore")
+    endpoint_source = "\n".join(
+        path.read_text(errors="ignore") for path in sorted((ROOT / "src").glob("server*.rs"))
+    )
+    openapi_source = "\n".join(
+        path.read_text(errors="ignore") for path in sorted((ROOT / "src").glob("openapi*.rs"))
+    )
     docs_openapi_source = (ROOT / "docs/openapi.yaml").read_text(errors="ignore")
     ts_sdk_source = (ROOT / "sdk/typescript/src/index.ts").read_text(errors="ignore")
     py_sdk_source = (ROOT / "sdk/python/wardex/client.py").read_text(errors="ignore")

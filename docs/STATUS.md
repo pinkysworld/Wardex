@@ -2,9 +2,9 @@
 
 ## Current release
 
-- **Version:** `1.0.28`
+- **Version:** `1.0.29`
 - **Positioning:** private-cloud XDR and SIEM platform with enterprise detection engineering, malware scanning, analyst workflows, fleet operations, behavioural analytics, and automated incident response
-- **Source footprint:** 158 Rust source modules (server.rs decomposition ongoing — `server.rs` now ~33,130 lines after extracting 16 dedicated `server_*` submodules including the latest `server_control_plane`, `server_alerts`, `server_av`, and `server_evidence`)
+- **Source footprint:** 174 Rust source modules (`server.rs` decomposition target met — `server.rs` is now 7,600 lines after extracting dedicated `server_*` modules including dynamic fallback route delegation)
 - **API contract:** versioned OpenAPI surface with REST, GraphQL, live `/api/openapi.json` export, generated SDK parity diagnostics, authenticated-by-default API route classification, cursor page contracts, release observability/preflight proof APIs, production assurance endpoints, malware scan and response-action contracts, source-aware alert analysis, operator-trust workspaces, alert feedback/evidence-chain contracts, Detection Trust scoring and draft-only tuning APIs, detection validation lab APIs, response safety preview/verification APIs with execution-audit continuity, agent enrollment-token flows, connector marketplace summaries, operations health snapshots, and release verification readiness endpoints with evidence freshness metadata
 - **Verification:** release preflight gating for Rust formatting, Clippy, admin-console linting, admin-console formatting, admin-console build, release-doc validation, workspace hygiene, and panic-policy compliance, plus Rust integration coverage, focused Detection Trust endpoint tests, session-cookie exchange tests, collector lifecycle tests, remediation change-review tests, Command Center summary/action-drawer tests, Help & Docs unit coverage, assistant/ticketing/enterprise API regression tests, operator trust workspace unit coverage, SDK regeneration checks, strict Playwright a11y smoke coverage, local Developer ID `.p12` signing validation, focused admin-console regression coverage, thread pullout regression coverage, managed release acceptance coverage, and Launchpad coverage for proof freshness badges and persisted snapshot evidence state
 - **Production hardening:** 100% (59/59 controls implemented)
@@ -101,7 +101,15 @@ The current release has been verified with:
 
 ## Current product posture
 
-Wardex is now positioned as a professional XDR/SIEM control plane with incident-first analyst workflows, explainable detections, context-preserving reporting, operator-visible recovery posture, and explicit shift-lead surfaces for ownership, handoff, and detection-review pressure. The runtime, admin console, release process, and website are aligned around operator trust, workflow closure, deployment readiness, clean release verification, and freshness-gated evidence. The current release strengthens abuse-pressure handling, bounded observability, persisted lockout continuity, operator-visible transport recovery, and live SDK proof for signed-release readiness.
+Wardex is now positioned as a professional XDR/SIEM control plane with incident-first analyst workflows, explainable detections, context-preserving reporting, operator-visible recovery posture, and explicit shift-lead surfaces for ownership, handoff, and detection-review pressure. The runtime, admin console, release process, and website are aligned around operator trust, workflow closure, deployment readiness, clean release verification, and freshness-gated evidence. The current release strengthens structural maintainability, release hygiene, dependency freshness, safe lint conformance, and coverage trend visibility.
+
+## Recently shipped (v1.0.29)
+
+- **Server decomposition target met** — `src/server.rs` is now below the release target at 7,600 lines, with dynamic fallback API routing extracted into a sibling module and public route behavior preserved.
+- **Integration-test navigation improved** — the previous monolithic API integration suite is split into domain files with shared fixtures, preserving the test inventory while making focused API work easier.
+- **OpenAPI and enterprise modules trimmed** — route-registration and enterprise store responsibilities now sit in cohesive sibling modules so both source files remain below their target sizes.
+- **Dependency and lint hygiene refreshed** — Cargo and admin-console patch/minor updates are applied, safe Clippy pedantic findings are addressed, and noisy policy-style pedantic categories remain intentionally unforced.
+- **Coverage baseline captured** — `docs/COVERAGE_BASELINE.md` records the first cargo-llvm-cov baseline at `76.16%` line coverage, with generated LCOV output kept out of git.
 
 ## Recently shipped (v1.0.28)
 

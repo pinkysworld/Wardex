@@ -14,14 +14,14 @@ Wardex (`pinkysworld/Wardex`) is a Rust-based XDR and SIEM platform for private-
 - **Scan across platforms:** malware, virus, trojan, and rootkit workflows cover Linux, macOS, and Windows with local engines plus optional open-source signature presets.
 - **Ship verifiably:** releases include checksums, SBOMs, provenance, signed artifacts, and documented verification gates.
 
-## Current Release: `v1.0.28`
+## Current Release: `v1.0.29`
 
-This release hardens trust boundaries, adds customer-facing deployment trust reporting, and stabilizes the release acceptance path so local and CI verification prove the same contracts.
+This release is a structural hardening and release-hygiene baseline: it completes the Wardex decomposition sweep, refreshes patch/minor dependencies, tightens safe Clippy pedantic findings, and publishes the first cargo-llvm-cov coverage baseline.
 
-- **Trust-boundary hardening** — quarantine, tenancy, enrollment-token handling, signed-update validation, audit signing, and exact EDR blocking paths now enforce stricter server-side guarantees.
-- **Deployment trust reporting** — Wardex now exports a structured deployment trust report that ties release acceptance, provenance, parity, backup freshness, collector health, and smoke posture into one artifact.
-- **Release gate stabilization** — `make smoke` and `make release-acceptance` now cover the deployment trust report plus route-aware hardening checks without flaking on ID-specific endpoints or slow connect transitions.
-- **Identity and metadata coherence** — release docs, OpenAPI, Helm, SDK packages, OTLP metadata, and website version surfaces now align on the Wardex `v1.0.28` baseline.
+- **Server decomposition complete** — `src/server.rs` is now below the release target, with exact routing preserved through focused `server_*` modules including dynamic fallback route delegation.
+- **API test suite split** — the former monolithic API integration file is divided into domain files with shared fixtures, keeping navigation and compile units manageable.
+- **Dependency and lint hygiene** — Cargo/admin-console patch and minor dependency updates are applied, and safe Clippy pedantic fixes remove mechanical noise without changing behavior.
+- **Coverage baseline** — `docs/COVERAGE_BASELINE.md` records a real cargo-llvm-cov baseline with `76.16%` line coverage for future trend tracking.
 
 See [CHANGELOG.md](CHANGELOG.md) for full release history.
 
@@ -103,7 +103,7 @@ The public website lives in [site/](site/) and mirrors the main product, release
 
 ## Documentation Surfaces
 
-The GitHub docs and the public website now share the same `v1.0.28` release surface for operator guides and API reference.
+The GitHub docs and the public website now share the same `v1.0.29` release surface for operator guides and API reference.
 
 ![Wardex documentation hub](site/media/insights/resources-live.png)
 

@@ -52,7 +52,10 @@ def docs_path_matches(path: str, openapi_paths: set[str], openapi_templates: lis
 
 def docs_prefix_matches(prefix: str, openapi_paths: set[str]) -> bool:
     normalized = prefix.rstrip("/")
-    return any(path == normalized or path.startswith(prefix) for path in openapi_paths)
+    return any(
+        path == normalized or path.startswith(prefix) or prefix.startswith(f"{path}/")
+        for path in openapi_paths
+    )
 
 
 def runtime_api_paths(source: str) -> tuple[set[str], set[str]]:
@@ -172,7 +175,10 @@ def main() -> int:
                 if not app_state_has_field(state_body, field):
                     failures.append(f"{domain['id']} state field {field} missing from AppState")
 
-    runtime_exact_paths, runtime_prefix_paths = runtime_api_paths(server_source)
+    runtime_route_source = "\n".join(
+        path.read_text(errors="ignore") for path in sorted((ROOT / "src").glob("server*.rs"))
+    )
+    runtime_exact_paths, runtime_prefix_paths = runtime_api_paths(runtime_route_source)
     internal_routes = set(manifest.get("internal_runtime_routes", []))
     internal_prefixes = set(manifest.get("internal_runtime_route_prefixes", []))
     for path in sorted(runtime_exact_paths):

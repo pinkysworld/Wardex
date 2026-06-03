@@ -4,9 +4,9 @@
     "openapi_operations": 262,
     "playwright_specs": 7,
     "playwright_tests": 8,
-    "rust_modules": 158,
-    "rust_tests": 3635,
-    "total_automated_checks": 3971
+    "rust_modules": 174,
+    "rust_tests": 1827,
+    "total_automated_checks": 2163
   },
   "distribution": {
     "apt_repo": "https://pinkysworld.github.io/Wardex/apt",
@@ -42,5 +42,5 @@
     "security_advisory_url": "https://github.com/pinkysworld/Wardex/security/advisories/new",
     "security_email": "security@wardex.dev"
   },
-  "version": "1.0.28"
+  "version": "1.0.29"
 }
