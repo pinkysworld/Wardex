@@ -81,7 +81,8 @@ export default class ErrorBoundary extends Component {
       typeof window === 'undefined'
         ? 'unknown'
         : `${window.location.pathname}${window.location.search}${window.location.hash}`;
-    const userAgent = typeof navigator === 'undefined' ? 'unknown' : navigator.userAgent || 'unknown';
+    const userAgent =
+      typeof navigator === 'undefined' ? 'unknown' : navigator.userAgent || 'unknown';
     const componentStack = this.state.errorInfo?.componentStack?.trim();
 
     return [
@@ -129,8 +130,8 @@ export default class ErrorBoundary extends Component {
         >
           <h2 id="error-boundary-title">Something went wrong</h2>
           <p id="error-boundary-description">
-            An unexpected error occurred in the Wardex admin console. Retry the section or
-            copy the diagnostic report before escalating it.
+            An unexpected error occurred in the Wardex admin console. Retry the section or copy the
+            diagnostic report before escalating it.
           </p>
           <pre style={{ overflow: 'auto', maxHeight: '200px', fontSize: '0.85rem' }}>
             {this.state.error?.message || 'Unknown error'}
@@ -149,7 +150,8 @@ export default class ErrorBoundary extends Component {
             aria-live="polite"
             style={{ marginTop: '0.75rem' }}
           >
-            {copyStatusMessage || 'Captured report includes the route, component stack, and error details.'}
+            {copyStatusMessage ||
+              'Captured report includes the route, component stack, and error details.'}
           </div>
         </div>
       );

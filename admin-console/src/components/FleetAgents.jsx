@@ -1696,9 +1696,7 @@ export default function FleetAgents() {
               </div>
               <div className="summary-card">
                 <div className="summary-label">Campaign Status</div>
-                <div className="summary-value">
-                  {deploymentCampaign?.status || 'unavailable'}
-                </div>
+                <div className="summary-value">{deploymentCampaign?.status || 'unavailable'}</div>
                 <div className="summary-meta">
                   {deploymentCampaign?.failed_items || 0} failed item
                   {(deploymentCampaign?.failed_items || 0) === 1 ? '' : 's'} requiring remediation

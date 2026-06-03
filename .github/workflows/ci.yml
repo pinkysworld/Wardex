@@ -101,7 +101,16 @@ jobs:
       - name: Check no-orphan API route guardrail
         run: python3 scripts/check_architecture_guardrails.py
       - name: Run API integration gate
-        run: cargo test --test api_integration
+        run: |
+          cargo test \
+            --test api_agent_updates \
+            --test api_alerts_events \
+            --test api_chaos_misc \
+            --test api_core_detection_auth \
+            --test api_deployments_enterprise \
+            --test api_investigations \
+            --test api_platform_services \
+            --test api_remediation
       - name: Run concurrent smoke gate
         run: cargo test --test concurrent_smoke
       - name: Run failed-auth lockout gate

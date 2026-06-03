@@ -140,7 +140,7 @@ required_docker_context_inputs=(
   "site/index.html"
   "examples/README.md"
   "benches/pipeline.rs"
-  "tests/api_integration.rs"
+  "tests/api_agent_updates.rs"
 )
 
 required_dockerfile_copy_inputs=(

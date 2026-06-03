@@ -551,8 +551,36 @@
   },
   "release_blocking_tests": [
     {
-      "name": "api_integration",
-      "command": "cargo test --test api_integration"
+      "name": "api_agent_updates",
+      "command": "--test api_agent_updates"
+    },
+    {
+      "name": "api_alerts_events",
+      "command": "--test api_alerts_events"
+    },
+    {
+      "name": "api_chaos_misc",
+      "command": "--test api_chaos_misc"
+    },
+    {
+      "name": "api_core_detection_auth",
+      "command": "--test api_core_detection_auth"
+    },
+    {
+      "name": "api_deployments_enterprise",
+      "command": "--test api_deployments_enterprise"
+    },
+    {
+      "name": "api_investigations",
+      "command": "--test api_investigations"
+    },
+    {
+      "name": "api_platform_services",
+      "command": "--test api_platform_services"
+    },
+    {
+      "name": "api_remediation",
+      "command": "--test api_remediation"
     },
     {
       "name": "concurrent_smoke",
