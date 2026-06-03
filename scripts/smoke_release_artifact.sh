@@ -214,6 +214,7 @@ install_deb() {
   local artifact_path="$1"
   require_cmd sudo
   require_cmd dpkg
+  artifact_path="$(cd "$(dirname "$artifact_path")" && pwd)/$(basename "$artifact_path")"
   sudo apt-get update -qq
   sudo apt-get install -y "$artifact_path" >/dev/null
   PACKAGE_MANAGER="apt"
@@ -224,6 +225,7 @@ install_rpm() {
   local artifact_path="$1"
   require_cmd sudo
   require_cmd rpm
+  artifact_path="$(cd "$(dirname "$artifact_path")" && pwd)/$(basename "$artifact_path")"
   sudo rpm -i --replacepkgs "$artifact_path" >/dev/null
   PACKAGE_MANAGER="rpm"
   smoke_installed_binary "/usr/bin/wardex" "/usr/share/wardex/site"
