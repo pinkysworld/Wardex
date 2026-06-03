@@ -128,7 +128,10 @@ impl BillingManager {
     }
 
     fn gen_id(&self, prefix: &str) -> String {
-        let mut id = self.next_id.lock().unwrap_or_else(|e| e.into_inner());
+        let mut id = self
+            .next_id
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         let val = *id;
         *id += 1;
         format!("{prefix}_{val}")
@@ -150,7 +153,7 @@ impl BillingManager {
         };
         self.subscriptions
             .lock()
-            .unwrap_or_else(|e| e.into_inner())
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
             .insert(tenant_id.to_string(), sub.clone());
         sub
     }
@@ -158,13 +161,16 @@ impl BillingManager {
     pub fn get_subscription(&self, tenant_id: &str) -> Option<Subscription> {
         self.subscriptions
             .lock()
-            .unwrap_or_else(|e| e.into_inner())
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
             .get(tenant_id)
             .cloned()
     }
 
     pub fn cancel_subscription(&self, tenant_id: &str, immediate: bool) -> Result<(), String> {
-        let mut subs = self.subscriptions.lock().unwrap_or_else(|e| e.into_inner());
+        let mut subs = self
+            .subscriptions
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         let sub = subs.get_mut(tenant_id).ok_or("Subscription not found")?;
         if immediate {
             sub.status = SubscriptionStatus::Canceled;
@@ -175,7 +181,10 @@ impl BillingManager {
     }
 
     pub fn change_plan(&self, tenant_id: &str, new_plan: BillingPlan) -> Result<(), String> {
-        let mut subs = self.subscriptions.lock().unwrap_or_else(|e| e.into_inner());
+        let mut subs = self
+            .subscriptions
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         let sub = subs.get_mut(tenant_id).ok_or("Subscription not found")?;
         if sub.status == SubscriptionStatus::Canceled {
             return Err("Cannot change plan on canceled subscription".into());
@@ -185,7 +194,10 @@ impl BillingManager {
     }
 
     pub fn generate_invoice(&self, tenant_id: &str) -> Result<Invoice, String> {
-        let subs = self.subscriptions.lock().unwrap_or_else(|e| e.into_inner());
+        let subs = self
+            .subscriptions
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         let sub = subs.get(tenant_id).ok_or("Subscription not found")?;
         let now = Utc::now();
         let amount = sub.plan.monthly_price_cents();
@@ -208,13 +220,16 @@ impl BillingManager {
         drop(subs);
         self.invoices
             .lock()
-            .unwrap_or_else(|e| e.into_inner())
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
             .push(invoice.clone());
         Ok(invoice)
     }
 
     pub fn mark_invoice_paid(&self, invoice_id: &str) -> Result<(), String> {
-        let mut invoices = self.invoices.lock().unwrap_or_else(|e| e.into_inner());
+        let mut invoices = self
+            .invoices
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         let inv = invoices
             .iter_mut()
             .find(|i| i.id == invoice_id)
@@ -227,7 +242,7 @@ impl BillingManager {
     pub fn list_invoices(&self, tenant_id: &str) -> Vec<Invoice> {
         self.invoices
             .lock()
-            .unwrap_or_else(|e| e.into_inner())
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
             .iter()
             .filter(|i| i.tenant_id == tenant_id)
             .cloned()
@@ -248,13 +263,16 @@ impl BillingManager {
         };
         self.webhook_events
             .lock()
-            .unwrap_or_else(|e| e.into_inner())
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
             .push(event);
         Ok(())
     }
 
     pub fn revenue_summary(&self) -> HashMap<String, u64> {
-        let invoices = self.invoices.lock().unwrap_or_else(|e| e.into_inner());
+        let invoices = self
+            .invoices
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         let mut summary = HashMap::new();
         let paid_total: u64 = invoices
             .iter()

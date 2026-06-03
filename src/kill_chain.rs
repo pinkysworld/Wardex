@@ -344,8 +344,14 @@ mod tests {
             timestamp_ms: ts,
             hostname: "host1".into(),
             agent_uid: None,
-            reasons: reasons.iter().map(|s| s.to_string()).collect(),
-            mitre_technique_ids: techniques.iter().map(|s| s.to_string()).collect(),
+            reasons: reasons
+                .iter()
+                .map(std::string::ToString::to_string)
+                .collect(),
+            mitre_technique_ids: techniques
+                .iter()
+                .map(std::string::ToString::to_string)
+                .collect(),
             score,
             process: None,
             dst_addr: None,

@@ -217,9 +217,9 @@ pub fn deduplicate_alerts(alerts: &[AlertRecord], config: &DedupConfig) -> Vec<D
 }
 
 fn build_incident(id: usize, fp: &str, members: &[(usize, &AlertRecord)]) -> DedupIncident {
-    let scores: Vec<f64> = members.iter().map(|(_, a)| a.score as f64).collect();
+    let scores: Vec<f64> = members.iter().map(|(_, a)| f64::from(a.score)).collect();
     let avg = scores.iter().sum::<f64>() / scores.len().max(1) as f64;
-    let max = scores.iter().cloned().fold(0.0_f64, f64::max);
+    let max = scores.iter().copied().fold(0.0_f64, f64::max);
     let levels: Vec<&str> = members.iter().map(|(_, a)| a.level.as_str()).collect();
     let mut device_ids: Vec<String> = members.iter().map(|(_, a)| a.hostname.clone()).collect();
     device_ids.sort();
@@ -372,9 +372,9 @@ pub fn group_alerts(alerts: &[AlertRecord]) -> Vec<AlertGroup> {
                 .last()
                 .map(|(_, a)| a.timestamp.clone())
                 .unwrap_or_default();
-            let scores: Vec<f64> = members.iter().map(|(_, a)| a.score as f64).collect();
+            let scores: Vec<f64> = members.iter().map(|(_, a)| f64::from(a.score)).collect();
             let avg_score = scores.iter().sum::<f64>() / count as f64;
-            let max_score = scores.iter().cloned().fold(0.0_f64, f64::max);
+            let max_score = scores.iter().copied().fold(0.0_f64, f64::max);
             let level = highest_level(
                 &members
                     .iter()
@@ -629,9 +629,9 @@ fn compute_clusters(alerts: &[AlertRecord], gap_secs: f64) -> Vec<AlertCluster> 
         .filter(|c| c.len() >= 2) // Only clusters with ≥2 alerts
         .map(|indices| {
             let subset: Vec<&AlertRecord> = indices.iter().map(|&i| &alerts[i]).collect();
-            let scores: Vec<f64> = subset.iter().map(|a| a.score as f64).collect();
+            let scores: Vec<f64> = subset.iter().map(|a| f64::from(a.score)).collect();
             let avg = scores.iter().sum::<f64>() / scores.len() as f64;
-            let max = scores.iter().cloned().fold(0.0_f64, f64::max);
+            let max = scores.iter().copied().fold(0.0_f64, f64::max);
             let levels: Vec<&str> = subset.iter().map(|a| a.level.as_str()).collect();
             let top_reason =
                 compute_reason_histogram(&subset.iter().copied().cloned().collect::<Vec<_>>())
@@ -663,7 +663,7 @@ fn compute_anomalies(alerts: &[AlertRecord]) -> Vec<AlertAnomaly> {
     if alerts.len() < 3 {
         return Vec::new();
     }
-    let scores: Vec<f64> = alerts.iter().map(|a| a.score as f64).collect();
+    let scores: Vec<f64> = alerts.iter().map(|a| f64::from(a.score)).collect();
     let mean = scores.iter().sum::<f64>() / scores.len() as f64;
     let variance = scores.iter().map(|s| (s - mean).powi(2)).sum::<f64>() / scores.len() as f64;
     let std_dev = variance.sqrt();
@@ -674,12 +674,12 @@ fn compute_anomalies(alerts: &[AlertRecord]) -> Vec<AlertAnomaly> {
     let threshold = 2.0; // 2 standard deviations
     let mut anomalies: Vec<AlertAnomaly> = Vec::new();
     for (i, a) in alerts.iter().enumerate() {
-        let deviation = (a.score as f64 - mean) / std_dev;
+        let deviation = (f64::from(a.score) - mean) / std_dev;
         if deviation.abs() >= threshold {
             anomalies.push(AlertAnomaly {
                 index: i,
                 timestamp: a.timestamp.clone(),
-                score: a.score as f64,
+                score: f64::from(a.score),
                 reasons: a.reasons.clone(),
                 deviation_from_mean: (deviation * 100.0).round() / 100.0,
             });
@@ -694,7 +694,7 @@ fn compute_trend(alerts: &[AlertRecord]) -> ScoreTrend {
         return ScoreTrend::Stable;
     }
     let n = alerts.len() as f64;
-    let scores: Vec<f64> = alerts.iter().map(|a| a.score as f64).collect();
+    let scores: Vec<f64> = alerts.iter().map(|a| f64::from(a.score)).collect();
     let mean_x = (n - 1.0) / 2.0;
     let mean_y = scores.iter().sum::<f64>() / n;
 
@@ -1056,7 +1056,7 @@ fn generate_isolation_guidance(dominant_reasons: &[(String, usize)]) -> Vec<Isol
             // Generic guidance for unrecognised reasons
             IsolationGuidance {
                 reason: reason.clone(),
-                threat_description: format!("Detection trigger: {} — review the affected host for anomalous behaviour.", reason),
+                threat_description: format!("Detection trigger: {reason} — review the affected host for anomalous behaviour."),
                 steps: vec![
                     "Correlate this alert with other concurrent detections for a complete threat picture.".into(),
                     "Review host logs, process lists, and network connections for suspicious activity.".into(),
@@ -1440,7 +1440,7 @@ mod tests {
         let alerts: Vec<AlertRecord> = (0..10)
             .map(|i| {
                 alert(
-                    &format!("2026-04-02T10:00:{:02}Z", i),
+                    &format!("2026-04-02T10:00:{i:02}Z"),
                     3.0,
                     "Severe",
                     vec!["same reason"],

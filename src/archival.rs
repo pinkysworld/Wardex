@@ -121,7 +121,7 @@ impl ArchivalEngine {
         }
 
         let dir = Path::new(&self.config.archive_dir);
-        std::fs::create_dir_all(dir).map_err(|e| format!("mkdir: {}", e))?;
+        std::fs::create_dir_all(dir).map_err(|e| format!("mkdir: {e}"))?;
 
         let now = Utc::now();
         let filename = format!(
@@ -146,7 +146,7 @@ impl ArchivalEngine {
             jsonl.clone()
         };
 
-        std::fs::write(&path, &final_data).map_err(|e| format!("write: {}", e))?;
+        std::fs::write(&path, &final_data).map_err(|e| format!("write: {e}"))?;
 
         // Compute SHA-256
         let checksum = sha256_hex(&final_data);
@@ -174,7 +174,7 @@ impl ArchivalEngine {
         }
 
         // Write manifest sidecar
-        let manifest_path = dir.join(format!("{}.manifest.json", filename));
+        let manifest_path = dir.join(format!("{filename}.manifest.json"));
         if let Ok(json) = serde_json::to_string_pretty(&manifest) {
             let _ = std::fs::write(manifest_path, json);
         }
@@ -196,7 +196,7 @@ impl ArchivalEngine {
         }
 
         let dir = Path::new(&self.config.archive_dir);
-        std::fs::create_dir_all(dir).map_err(|e| format!("mkdir: {}", e))?;
+        std::fs::create_dir_all(dir).map_err(|e| format!("mkdir: {e}"))?;
 
         let now = Utc::now();
         let filename = format!("{}-{}.csv", record_type, now.format("%Y%m%dT%H%M%SZ"));
@@ -240,7 +240,7 @@ impl ArchivalEngine {
             csv.push('\n');
         }
 
-        std::fs::write(&path, &csv).map_err(|e| format!("write: {}", e))?;
+        std::fs::write(&path, &csv).map_err(|e| format!("write: {e}"))?;
         Ok(filename)
     }
 
@@ -307,7 +307,7 @@ fn csv_escape(s: &str) -> String {
         || s.starts_with('\r'))
         || (s.starts_with('-') && s.parse::<f64>().is_err());
     let s = if needs_prefix {
-        format!("'{}", s)
+        format!("'{s}")
     } else {
         s.to_string()
     };

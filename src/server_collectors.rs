@@ -28,7 +28,9 @@ use crate::server_response::{error_json, json_response};
 use crate::storage::SharedStorage;
 
 pub(crate) fn handle_collectors_status(state: &Arc<Mutex<AppState>>) -> Response<Body> {
-    let s = state.lock().unwrap_or_else(|e| e.into_inner());
+    let s = state
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
     let aws = load_aws_collector_setup(&s.storage);
     let azure = load_azure_collector_setup(&s.storage);
     let gcp = load_gcp_collector_setup(&s.storage);
@@ -151,7 +153,9 @@ pub(crate) fn handle_collectors_status(state: &Arc<Mutex<AppState>>) -> Response
 }
 
 pub(crate) fn handle_collector_aws_get(state: &Arc<Mutex<AppState>>) -> Response<Body> {
-    let s = state.lock().unwrap_or_else(|e| e.into_inner());
+    let s = state
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
     let setup = load_aws_collector_setup(&s.storage);
     let body = config_validation_payload(setup.view(), setup.validate());
     json_response(&body.to_string(), 200)
@@ -163,7 +167,9 @@ pub(crate) fn handle_collector_aws_config(
 ) -> Response<Body> {
     match read_json_body::<AwsCollectorSetupPatch>(body, 16 * 1024) {
         Ok(patch) => {
-            let s = state.lock().unwrap_or_else(|e| e.into_inner());
+            let s = state
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
             let mut setup = load_aws_collector_setup(&s.storage);
             setup.apply_patch(patch);
             match save_stored_json(&s.storage, AWS_COLLECTOR_SETUP_KEY, &setup) {
@@ -184,7 +190,9 @@ pub(crate) fn handle_collector_aws_config(
 }
 
 pub(crate) fn handle_collector_aws_validate(state: &Arc<Mutex<AppState>>) -> Response<Body> {
-    let s = state.lock().unwrap_or_else(|e| e.into_inner());
+    let s = state
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
     let setup = load_aws_collector_setup(&s.storage);
     let validation = setup.validate();
     if validation.status != "ready" {
@@ -232,7 +240,9 @@ pub(crate) fn handle_collector_aws_validate(state: &Arc<Mutex<AppState>>) -> Res
 }
 
 pub(crate) fn handle_collector_azure_get(state: &Arc<Mutex<AppState>>) -> Response<Body> {
-    let s = state.lock().unwrap_or_else(|e| e.into_inner());
+    let s = state
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
     let setup = load_azure_collector_setup(&s.storage);
     let body = config_validation_payload(setup.view(), setup.validate());
     json_response(&body.to_string(), 200)
@@ -244,7 +254,9 @@ pub(crate) fn handle_collector_azure_config(
 ) -> Response<Body> {
     match read_json_body::<AzureCollectorSetupPatch>(body, 16 * 1024) {
         Ok(patch) => {
-            let s = state.lock().unwrap_or_else(|e| e.into_inner());
+            let s = state
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
             let mut setup = load_azure_collector_setup(&s.storage);
             setup.apply_patch(patch);
             match save_stored_json(&s.storage, AZURE_COLLECTOR_SETUP_KEY, &setup) {
@@ -265,7 +277,9 @@ pub(crate) fn handle_collector_azure_config(
 }
 
 pub(crate) fn handle_collector_azure_validate(state: &Arc<Mutex<AppState>>) -> Response<Body> {
-    let s = state.lock().unwrap_or_else(|e| e.into_inner());
+    let s = state
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
     let setup = load_azure_collector_setup(&s.storage);
     let validation = setup.validate();
     if validation.status != "ready" {
@@ -312,7 +326,9 @@ pub(crate) fn handle_collector_azure_validate(state: &Arc<Mutex<AppState>>) -> R
 }
 
 pub(crate) fn handle_collector_gcp_get(state: &Arc<Mutex<AppState>>) -> Response<Body> {
-    let s = state.lock().unwrap_or_else(|e| e.into_inner());
+    let s = state
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
     let setup = load_gcp_collector_setup(&s.storage);
     let body = config_validation_payload(setup.view(), setup.validate());
     json_response(&body.to_string(), 200)
@@ -324,7 +340,9 @@ pub(crate) fn handle_collector_gcp_config(
 ) -> Response<Body> {
     match read_json_body::<GcpCollectorSetupPatch>(body, 20 * 1024) {
         Ok(patch) => {
-            let s = state.lock().unwrap_or_else(|e| e.into_inner());
+            let s = state
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
             let mut setup = load_gcp_collector_setup(&s.storage);
             setup.apply_patch(patch);
             match save_stored_json(&s.storage, GCP_COLLECTOR_SETUP_KEY, &setup) {
@@ -345,7 +363,9 @@ pub(crate) fn handle_collector_gcp_config(
 }
 
 pub(crate) fn handle_collector_gcp_validate(state: &Arc<Mutex<AppState>>) -> Response<Body> {
-    let s = state.lock().unwrap_or_else(|e| e.into_inner());
+    let s = state
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
     let setup = load_gcp_collector_setup(&s.storage);
     let validation = setup.validate();
     if validation.status != "ready" {
@@ -393,7 +413,9 @@ pub(crate) fn handle_collector_gcp_validate(state: &Arc<Mutex<AppState>>) -> Res
 }
 
 pub(crate) fn handle_collector_okta_get(state: &Arc<Mutex<AppState>>) -> Response<Body> {
-    let s = state.lock().unwrap_or_else(|e| e.into_inner());
+    let s = state
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
     let setup = load_okta_collector_setup(&s.storage);
     let body = config_validation_payload(setup.view(), setup.validate());
     json_response(&body.to_string(), 200)
@@ -405,7 +427,9 @@ pub(crate) fn handle_collector_okta_config(
 ) -> Response<Body> {
     match read_json_body::<OktaCollectorSetupPatch>(body, 16 * 1024) {
         Ok(patch) => {
-            let s = state.lock().unwrap_or_else(|e| e.into_inner());
+            let s = state
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
             let mut setup = load_okta_collector_setup(&s.storage);
             setup.apply_patch(patch);
             match save_stored_json(&s.storage, OKTA_COLLECTOR_SETUP_KEY, &setup) {
@@ -426,7 +450,9 @@ pub(crate) fn handle_collector_okta_config(
 }
 
 pub(crate) fn handle_collector_okta_validate(state: &Arc<Mutex<AppState>>) -> Response<Body> {
-    let s = state.lock().unwrap_or_else(|e| e.into_inner());
+    let s = state
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
     let setup = load_okta_collector_setup(&s.storage);
     let resolver = build_secrets_resolver(&s.storage);
     let body = validate_okta_collector(&setup, &resolver);
@@ -434,7 +460,9 @@ pub(crate) fn handle_collector_okta_validate(state: &Arc<Mutex<AppState>>) -> Re
 }
 
 pub(crate) fn handle_collector_entra_get(state: &Arc<Mutex<AppState>>) -> Response<Body> {
-    let s = state.lock().unwrap_or_else(|e| e.into_inner());
+    let s = state
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
     let setup = load_entra_collector_setup(&s.storage);
     let body = config_validation_payload(setup.view(), setup.validate());
     json_response(&body.to_string(), 200)
@@ -446,7 +474,9 @@ pub(crate) fn handle_collector_entra_config(
 ) -> Response<Body> {
     match read_json_body::<EntraCollectorSetupPatch>(body, 16 * 1024) {
         Ok(patch) => {
-            let s = state.lock().unwrap_or_else(|e| e.into_inner());
+            let s = state
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
             let mut setup = load_entra_collector_setup(&s.storage);
             setup.apply_patch(patch);
             match save_stored_json(&s.storage, ENTRA_COLLECTOR_SETUP_KEY, &setup) {
@@ -467,7 +497,9 @@ pub(crate) fn handle_collector_entra_config(
 }
 
 pub(crate) fn handle_collector_entra_validate(state: &Arc<Mutex<AppState>>) -> Response<Body> {
-    let s = state.lock().unwrap_or_else(|e| e.into_inner());
+    let s = state
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
     let setup = load_entra_collector_setup(&s.storage);
     let resolver = build_secrets_resolver(&s.storage);
     let body = validate_entra_collector(&setup, &resolver);
@@ -475,7 +507,9 @@ pub(crate) fn handle_collector_entra_validate(state: &Arc<Mutex<AppState>>) -> R
 }
 
 pub(crate) fn handle_collector_m365_get(state: &Arc<Mutex<AppState>>) -> Response<Body> {
-    let s = state.lock().unwrap_or_else(|e| e.into_inner());
+    let s = state
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
     let setup = load_m365_collector_setup(&s.storage);
     let body = config_validation_payload(setup.view(), setup.validate());
     json_response(&body.to_string(), 200)
@@ -487,7 +521,9 @@ pub(crate) fn handle_collector_m365_config(
 ) -> Response<Body> {
     match read_json_body::<M365CollectorSetupPatch>(body, 16 * 1024) {
         Ok(patch) => {
-            let s = state.lock().unwrap_or_else(|e| e.into_inner());
+            let s = state
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
             let mut setup = load_m365_collector_setup(&s.storage);
             setup.apply_patch(patch);
             match save_stored_json(&s.storage, M365_COLLECTOR_SETUP_KEY, &setup) {
@@ -508,7 +544,9 @@ pub(crate) fn handle_collector_m365_config(
 }
 
 pub(crate) fn handle_collector_m365_validate(state: &Arc<Mutex<AppState>>) -> Response<Body> {
-    let s = state.lock().unwrap_or_else(|e| e.into_inner());
+    let s = state
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
     let setup = load_m365_collector_setup(&s.storage);
     let resolver = build_secrets_resolver(&s.storage);
     let body = validate_m365_collector(&setup, &resolver);
@@ -516,7 +554,9 @@ pub(crate) fn handle_collector_m365_validate(state: &Arc<Mutex<AppState>>) -> Re
 }
 
 pub(crate) fn handle_collector_workspace_get(state: &Arc<Mutex<AppState>>) -> Response<Body> {
-    let s = state.lock().unwrap_or_else(|e| e.into_inner());
+    let s = state
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
     let setup = load_workspace_collector_setup(&s.storage);
     let body = config_validation_payload(setup.view(), setup.validate());
     json_response(&body.to_string(), 200)
@@ -528,7 +568,9 @@ pub(crate) fn handle_collector_workspace_config(
 ) -> Response<Body> {
     match read_json_body::<WorkspaceCollectorSetupPatch>(body, 32 * 1024) {
         Ok(patch) => {
-            let s = state.lock().unwrap_or_else(|e| e.into_inner());
+            let s = state
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
             let mut setup = load_workspace_collector_setup(&s.storage);
             setup.apply_patch(patch);
             match save_stored_json(&s.storage, WORKSPACE_COLLECTOR_SETUP_KEY, &setup) {
@@ -549,7 +591,9 @@ pub(crate) fn handle_collector_workspace_config(
 }
 
 pub(crate) fn handle_collector_workspace_validate(state: &Arc<Mutex<AppState>>) -> Response<Body> {
-    let s = state.lock().unwrap_or_else(|e| e.into_inner());
+    let s = state
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
     let setup = load_workspace_collector_setup(&s.storage);
     let resolver = build_secrets_resolver(&s.storage);
     let body = validate_workspace_collector(&setup, &resolver);
@@ -719,7 +763,7 @@ pub(crate) fn planned_collector_summary(
     match provider {
         "github_audit" => serde_json::json!({
             "organization": setup.get("organization").and_then(serde_json::Value::as_str).unwrap_or(""),
-            "repository_count": setup.get("repositories").and_then(serde_json::Value::as_array).map(Vec::len).unwrap_or(0),
+            "repository_count": setup.get("repositories").and_then(serde_json::Value::as_array).map_or(0, Vec::len),
             "has_token_ref": setup.get("token_ref").and_then(serde_json::Value::as_str).is_some_and(|value| !value.trim().is_empty()),
             "has_webhook_secret_ref": setup.get("webhook_secret_ref").and_then(serde_json::Value::as_str).is_some_and(|value| !value.trim().is_empty()),
         }),
@@ -1197,7 +1241,9 @@ pub(crate) fn validate_okta_collector(
                 .call()
             {
                 Ok(response) => {
-                    let next_link = response.header("Link").map(|value| value.to_string());
+                    let next_link = response
+                        .header("Link")
+                        .map(std::string::ToString::to_string);
                     match response.into_string() {
                         Ok(body) => {
                             let result = collector.parse_response(&body, next_link.as_deref());
@@ -1312,7 +1358,7 @@ pub(crate) fn validate_entra_collector(
                         access_token,
                         token_body
                             .get("expires_in")
-                            .and_then(|value| value.as_u64())
+                            .and_then(serde_json::Value::as_u64)
                             .unwrap_or(3600),
                     );
                     let request_url = collector.build_url();
@@ -1787,7 +1833,7 @@ pub(crate) fn collector_status_entry(
         checkpoint_lag_seconds(reliability.last_success_at.as_deref()).or(reliability.lag_seconds);
     let lifecycle_analytics = collector_lifecycle_analytics(&lifecycle);
     let queue_depth = reliability.queue_depth.max(if reliability.retry_count > 0 {
-        reliability.retry_count as u64
+        u64::from(reliability.retry_count)
     } else {
         0
     });
@@ -1876,10 +1922,8 @@ fn collector_first_value_journey(
     let sample_event = reliability.events_ingested > 0 || reliability.last_success_at.is_some();
     let normalized_event = reliability.events_ingested > 0;
     let mapped_detection = normalized_event && reliability.error_category.is_none();
-    let soc_ready = mapped_detection
-        && lag_seconds
-            .map(|lag| lag <= collector_sla_target_seconds(300))
-            .unwrap_or(true);
+    let soc_ready =
+        mapped_detection && lag_seconds.is_none_or(|lag| lag <= collector_sla_target_seconds(300));
     let stages = [
         ("saved_config", saved_config, "Save connector configuration"),
         (
@@ -1909,11 +1953,10 @@ fn collector_first_value_journey(
         ),
     ];
     let completed = stages.iter().filter(|(_, done, _)| *done).count();
-    let next_step = stages
-        .iter()
-        .find(|(_, done, _)| !*done)
-        .map(|(_, _, label)| *label)
-        .unwrap_or("Keep the connector fresh and tied to SOC workflows");
+    let next_step = stages.iter().find(|(_, done, _)| !*done).map_or(
+        "Keep the connector fresh and tied to SOC workflows",
+        |(_, _, label)| *label,
+    );
     serde_json::json!({
         "provider": provider,
         "status": if soc_ready { "first_value_reached" } else { "in_progress" },

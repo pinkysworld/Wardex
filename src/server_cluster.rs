@@ -81,7 +81,9 @@ pub(crate) fn handle_cluster_append(body: &[u8], state: &Arc<Mutex<AppState>>) -
         Ok(raw) => match serde_json::from_str::<crate::cluster::AppendRequest>(&raw) {
             Ok(request) => {
                 let response = {
-                    let s = state.lock().unwrap_or_else(|e| e.into_inner());
+                    let s = state
+                        .lock()
+                        .unwrap_or_else(std::sync::PoisonError::into_inner);
                     s.cluster.handle_append(&request)
                 };
                 match serde_json::to_string(&response) {
@@ -102,7 +104,9 @@ pub(crate) fn handle_cluster_snapshot(body: &[u8], state: &Arc<Mutex<AppState>>)
         Ok(raw) => match serde_json::from_str::<crate::cluster::InstallSnapshotRequest>(&raw) {
             Ok(request) => {
                 let response = {
-                    let s = state.lock().unwrap_or_else(|e| e.into_inner());
+                    let s = state
+                        .lock()
+                        .unwrap_or_else(std::sync::PoisonError::into_inner);
                     s.cluster.handle_install_snapshot(&request)
                 };
                 match serde_json::to_string(&response) {
@@ -120,7 +124,9 @@ pub(crate) fn handle_cluster_snapshot(body: &[u8], state: &Arc<Mutex<AppState>>)
 /// leader, peer reachability, commit index, uptime).
 pub(crate) fn handle_cluster_health(state: &Arc<Mutex<AppState>>) -> Response<Body> {
     let health = {
-        let s = state.lock().unwrap_or_else(|e| e.into_inner());
+        let s = state
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         s.cluster.health()
     };
     match serde_json::to_string(&health) {
@@ -171,13 +177,17 @@ pub(crate) fn spawn_cluster_runtime_loop(state: &Arc<Mutex<AppState>>) {
         // Emit the plaintext-peer warning once at startup so it is visible
         // in the boot log rather than buried in per-tick output.
         {
-            let s = state.lock().unwrap_or_else(|e| e.into_inner());
+            let s = state
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
             warn_if_plaintext_peers(&s.config.cluster);
         }
 
         loop {
             let (shutdown, cluster, config, auth_header) = {
-                let s = state.lock().unwrap_or_else(|e| e.into_inner());
+                let s = state
+                    .lock()
+                    .unwrap_or_else(std::sync::PoisonError::into_inner);
                 (
                     s.shutdown.load(Ordering::Relaxed),
                     s.cluster.clone(),

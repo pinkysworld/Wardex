@@ -160,7 +160,7 @@ impl SharedIntelCache {
         let now = chrono::Utc::now();
         self.entries.retain(|e| {
             if let Ok(received) = chrono::DateTime::parse_from_rfc3339(&e.received_at) {
-                let expiry = received + chrono::Duration::hours(e.ttl_hours as i64);
+                let expiry = received + chrono::Duration::hours(i64::from(e.ttl_hours));
                 now < expiry
             } else {
                 false
@@ -1025,7 +1025,7 @@ impl SwarmNode {
         }
         let count = self.peer_scores.len();
         let sum: f32 = self.peer_scores.values().sum();
-        let max = self.peer_scores.values().cloned().fold(0.0_f32, f32::max);
+        let max = self.peer_scores.values().copied().fold(0.0_f32, f32::max);
         (sum / count as f32, max, count)
     }
 
@@ -1500,7 +1500,10 @@ mod tests {
         MeshNode {
             id: id.to_string(),
             role,
-            neighbors: neighbors.iter().map(|s| s.to_string()).collect(),
+            neighbors: neighbors
+                .iter()
+                .map(std::string::ToString::to_string)
+                .collect(),
             load: 0.0,
             capacity,
         }

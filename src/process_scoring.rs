@@ -310,12 +310,11 @@ impl ProcessScorer {
         cmdline: Option<&str>,
     ) -> ProcessRiskAssessment {
         let (lineage_score, mut reasons) = Self::score_lineage(chain);
-        let (cmdline_score, cmd_reasons) =
-            cmdline.map(Self::score_cmdline).unwrap_or((0.0, vec![]));
+        let (cmdline_score, cmd_reasons) = cmdline.map_or((0.0, vec![]), Self::score_cmdline);
         reasons.extend(cmd_reasons);
 
         let lolbin_match = Self::check_lolbin(name);
-        let lolbin_bonus = lolbin_match.as_ref().map(|(_, r)| *r).unwrap_or(0.0);
+        let lolbin_bonus = lolbin_match.as_ref().map_or(0.0, |(_, r)| *r);
 
         if let Some((ref lb, _)) = lolbin_match {
             reasons.push(format!("LOLBIN: {lb}"));
@@ -553,7 +552,7 @@ mod tests {
     #[test]
     fn persistence_commands_are_flagged() {
         let (score, reasons) = ProcessScorer::score_cmdline(
-            r#"schtasks /create /sc onlogon /tn updater /tr C:\Users\Public\updater.exe"#,
+            r"schtasks /create /sc onlogon /tn updater /tr C:\Users\Public\updater.exe",
         );
         assert!(score >= 0.4, "score={score}");
         assert!(reasons.iter().any(|reason| reason.contains("persistence")));
@@ -562,7 +561,7 @@ mod tests {
     #[test]
     fn startup_paths_are_flagged() {
         let (score, reasons) = ProcessScorer::score_cmdline(
-            r#"reg add HKCU\Software\Microsoft\Windows\CurrentVersion\Run /v updater /d C:\Temp\updater.exe"#,
+            r"reg add HKCU\Software\Microsoft\Windows\CurrentVersion\Run /v updater /d C:\Temp\updater.exe",
         );
         assert!(score >= 0.5, "score={score}");
         assert!(

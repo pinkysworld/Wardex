@@ -302,7 +302,7 @@ mod tests {
                     theme: Some("light".into()),
                     pinned_sections: None,
                     dashboard_presets: None,
-                    active_dashboard_preset: Some("".into()),
+                    active_dashboard_preset: Some(String::new()),
                 },
             )
             .expect("update theme");

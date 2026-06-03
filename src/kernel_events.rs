@@ -342,7 +342,10 @@ impl KernelEventStream {
 
     /// Push a new event into the stream, assigning a sequential ID.
     pub fn push(&self, mut event: KernelEvent) {
-        let mut inner = self.inner.lock().unwrap_or_else(|e| e.into_inner());
+        let mut inner = self
+            .inner
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         event.id = inner.next_id;
         inner.next_id += 1;
         if inner.events.len() >= inner.capacity {
@@ -353,7 +356,10 @@ impl KernelEventStream {
 
     /// Return the most recent `limit` events, optionally filtered by kind.
     pub fn recent(&self, limit: usize, type_filter: Option<&[&str]>) -> Vec<KernelEvent> {
-        let inner = self.inner.lock().unwrap_or_else(|e| e.into_inner());
+        let inner = self
+            .inner
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         let iter = inner.events.iter().rev();
         let filtered: Vec<_> = if let Some(types) = type_filter {
             iter.filter(|e| {
@@ -371,19 +377,28 @@ impl KernelEventStream {
 
     /// Total events ever pushed (including evicted ones).
     pub fn total_count(&self) -> u64 {
-        let inner = self.inner.lock().unwrap_or_else(|e| e.into_inner());
+        let inner = self
+            .inner
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         inner.next_id.saturating_sub(1)
     }
 
     /// Current buffered event count.
     pub fn buffered_count(&self) -> usize {
-        let inner = self.inner.lock().unwrap_or_else(|e| e.into_inner());
+        let inner = self
+            .inner
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         inner.events.len()
     }
 
     /// Return events with ID greater than `since_id`.
     pub fn since(&self, since_id: u64, limit: usize) -> Vec<KernelEvent> {
-        let inner = self.inner.lock().unwrap_or_else(|e| e.into_inner());
+        let inner = self
+            .inner
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         inner
             .events
             .iter()

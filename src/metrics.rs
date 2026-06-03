@@ -122,7 +122,7 @@ impl MetricsRegistry {
                     } => {
                         for (le, c) in buckets {
                             let mut lb = e.labels.clone();
-                            lb.insert("le".into(), format!("{}", le));
+                            lb.insert("le".into(), format!("{le}"));
                             out.push_str(&format!(
                                 "{}_bucket{} {}\n",
                                 e.name,

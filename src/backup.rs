@@ -155,7 +155,7 @@ impl BackupManager {
                 fs::create_dir_all(parent)
                     .map_err(|e| format!("failed to create dir {}: {e}", parent.display()))?;
             }
-            fs::copy(&src, &dst).map_err(|e| format!("failed to copy {}: {e}", rel))?;
+            fs::copy(&src, &dst).map_err(|e| format!("failed to copy {rel}: {e}"))?;
         }
 
         // Write data.json with serialized state
@@ -371,7 +371,7 @@ mod tests {
             // Mutate the last record's timestamp to force ordering
             let idx = mgr.records.len() - 1;
             mgr.records[idx].timestamp = format!("2025-01-0{}T02:00:00+00:00", i + 1);
-            mgr.records[idx].name = format!("wardex-backup-{}", i);
+            mgr.records[idx].name = format!("wardex-backup-{i}");
         }
 
         // Auto-pruning keeps at most retention_count (2) records

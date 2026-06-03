@@ -124,8 +124,7 @@ pub struct Selection {
 pub fn parse_query(query: &str) -> Result<ParsedQuery, String> {
     if query.len() > MAX_QUERY_SIZE {
         return Err(format!(
-            "Query exceeds maximum size of {} bytes",
-            MAX_QUERY_SIZE
+            "Query exceeds maximum size of {MAX_QUERY_SIZE} bytes"
         ));
     }
     let trimmed = query.trim();
@@ -178,8 +177,7 @@ pub fn parse_query(query: &str) -> Result<ParsedQuery, String> {
 fn parse_selection_set(input: &str, depth: usize) -> Result<Vec<Selection>, String> {
     if depth >= MAX_DEPTH {
         return Err(format!(
-            "Selection nesting exceeds maximum depth of {}",
-            MAX_DEPTH
+            "Selection nesting exceeds maximum depth of {MAX_DEPTH}"
         ));
     }
     let trimmed = input.trim();
@@ -238,7 +236,7 @@ fn parse_fields(input: &str, depth: usize) -> Result<Vec<Selection>, String> {
         if buf.is_empty() {
             // Report unexpected character instead of silently skipping
             if let Some(&c) = chars.peek() {
-                return Err(format!("Unexpected character '{}' in selection set", c));
+                return Err(format!("Unexpected character '{c}' in selection set"));
             }
             break;
         }
@@ -606,7 +604,7 @@ fn field(name: &str, ftype: &str, args: &[GqlArg], desc: Option<&str>) -> GqlFie
         name: name.into(),
         field_type: ftype.into(),
         args: args.to_vec(),
-        description: desc.map(|s| s.into()),
+        description: desc.map(std::convert::Into::into),
     }
 }
 
@@ -614,7 +612,7 @@ fn arg(name: &str, atype: &str, default: Option<&str>) -> GqlArg {
     GqlArg {
         name: name.into(),
         arg_type: atype.into(),
-        default_value: default.map(|s| s.into()),
+        default_value: default.map(std::convert::Into::into),
     }
 }
 
@@ -707,13 +705,13 @@ pub fn aggregate(
         // GROUP BY mode
         let mut groups: HashMap<String, Vec<&serde_json::Value>> = HashMap::new();
         for item in data {
-            let key = item
-                .get(gb)
-                .map(|v| match v {
+            let key = item.get(gb).map_or_else(
+                || "null".to_string(),
+                |v| match v {
                     serde_json::Value::String(s) => s.clone(),
                     other => other.to_string(),
-                })
-                .unwrap_or_else(|| "null".to_string());
+                },
+            );
             groups.entry(key).or_default().push(item);
         }
 
@@ -722,7 +720,7 @@ pub fn aggregate(
             .map(|(key, items)| {
                 let vals: Vec<f64> = items
                     .iter()
-                    .filter_map(|i| i.get(field).and_then(|v| v.as_f64()))
+                    .filter_map(|i| i.get(field).and_then(serde_json::Value::as_f64))
                     .collect();
                 let value = compute_agg(op, &vals, items.len(), &items, field);
                 AggregateGroup {
@@ -745,7 +743,7 @@ pub fn aggregate(
         // Simple aggregation
         let vals: Vec<f64> = data
             .iter()
-            .filter_map(|i| i.get(field).and_then(|v| v.as_f64()))
+            .filter_map(|i| i.get(field).and_then(serde_json::Value::as_f64))
             .collect();
         let refs: Vec<&serde_json::Value> = data.iter().collect();
         let value = compute_agg(op, &vals, data.len(), &refs, field);
@@ -785,14 +783,12 @@ fn compute_agg(
             .iter()
             .copied()
             .reduce(f64::min)
-            .map(|v| serde_json::json!(v))
-            .unwrap_or(serde_json::Value::Null),
+            .map_or(serde_json::Value::Null, |v| serde_json::json!(v)),
         AggregateOp::Max => vals
             .iter()
             .copied()
             .reduce(f64::max)
-            .map(|v| serde_json::json!(v))
-            .unwrap_or(serde_json::Value::Null),
+            .map_or(serde_json::Value::Null, |v| serde_json::json!(v)),
         AggregateOp::Distinct => {
             let mut unique: Vec<String> = items
                 .iter()
@@ -844,8 +840,7 @@ impl GqlExecutor {
             .unwrap_or(true)
         {
             return GqlResponse::error(format!(
-                "Variables exceed maximum size of {} bytes",
-                MAX_QUERY_SIZE
+                "Variables exceed maximum size of {MAX_QUERY_SIZE} bytes"
             ));
         }
 
@@ -1065,7 +1060,10 @@ mod tests {
         exec.register_resolver(
             "alerts",
             Box::new(|args| {
-                let limit = args.get("limit").and_then(|v| v.as_i64()).unwrap_or(50);
+                let limit = args
+                    .get("limit")
+                    .and_then(serde_json::Value::as_i64)
+                    .unwrap_or(50);
                 let alerts: Vec<_> = (0..limit.min(3))
                     .map(|i| {
                         serde_json::json!({
@@ -1080,7 +1078,7 @@ mod tests {
         );
 
         let req = GqlRequest {
-            query: r#"{ alerts(limit: 2) { id level } }"#.into(),
+            query: r"{ alerts(limit: 2) { id level } }".into(),
             variables: HashMap::new(),
             operation_name: None,
         };

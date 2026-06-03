@@ -159,8 +159,7 @@ fn extract_from_text(text: &str) -> Vec<ExtractedEntity> {
             let after = offset + pat.len();
             let num_end = text[after..]
                 .find(|c: char| !c.is_ascii_digit())
-                .map(|p| after + p)
-                .unwrap_or(text.len());
+                .map_or(text.len(), |p| after + p);
             if num_end > after
                 && let Ok(port) = text[after..num_end].parse::<u16>()
                 && port > 0
@@ -185,8 +184,7 @@ fn extract_from_text(text: &str) -> Vec<ExtractedEntity> {
         }
         let word_start = text[domain_search_from..]
             .find(word)
-            .map(|p| p + domain_search_from)
-            .unwrap_or(domain_search_from);
+            .map_or(domain_search_from, |p| p + domain_search_from);
         domain_search_from = word_start + word.len();
         let w = word.trim_matches(|c: char| !c.is_ascii_alphanumeric() && c != '.' && c != '-');
         if looks_like_domain(w) {
@@ -401,7 +399,7 @@ mod tests {
             "hôte=evil.example.com — hash a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2".into(),
             "…domain test.example seen alongside curl 🐚".into(),
             "ＷＩＮＤＯＷＳ path C:\\Users\\漢字\\bad.exe — process cmd.exe".into(),
-            "".into(),
+            String::new(),
             "—".into(),
             "T".into(),
         ];

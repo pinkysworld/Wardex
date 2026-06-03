@@ -685,7 +685,7 @@ pub fn detect_suid_binaries() -> Vec<LinuxPrivEscIndicator> {
                     timestamp: now.clone(),
                     indicator_type: PrivEscType::SuidBinary,
                     path: path.clone(),
-                    details: format!("mode={:#o}", mode),
+                    details: format!("mode={mode:#o}"),
                     risk,
                     ocsf_class_id: OCSF_AUTH,
                 });
@@ -696,7 +696,7 @@ pub fn detect_suid_binaries() -> Vec<LinuxPrivEscIndicator> {
                     timestamp: now.clone(),
                     indicator_type: PrivEscType::SgidBinary,
                     path,
-                    details: format!("mode={:#o}", mode),
+                    details: format!("mode={mode:#o}"),
                     risk: PrivEscRisk::Info,
                     ocsf_class_id: OCSF_AUTH,
                 });
@@ -1173,8 +1173,7 @@ pub fn analyze_processes(procs: &[LinuxProcessEvent]) -> Vec<ProcessFinding> {
                 user: uid_to_name(p.uid),
                 risk_level: "elevated",
                 reason: format!(
-                    "High CPU usage: {:.1}% — possible crypto-miner or resource abuse",
-                    cpu
+                    "High CPU usage: {cpu:.1}% — possible crypto-miner or resource abuse"
                 ),
                 cpu_percent: cpu,
                 mem_percent: mem,
@@ -1189,8 +1188,7 @@ pub fn analyze_processes(procs: &[LinuxProcessEvent]) -> Vec<ProcessFinding> {
                 user: uid_to_name(p.uid),
                 risk_level: "elevated",
                 reason: format!(
-                    "High memory usage: {:.1}% — possible memory-resident malware or DoS",
-                    mem
+                    "High memory usage: {mem:.1}% — possible memory-resident malware or DoS"
                 ),
                 cpu_percent: cpu,
                 mem_percent: mem,

@@ -26,14 +26,16 @@ impl ApiRouteAccess {
 fn is_public_api_endpoint(method: &Method, route_path: &str) -> bool {
     matches!(
         (method, route_path),
-        (&Method::Get, "/api/health")
-            | (&Method::Get, "/api/metrics")
-            | (&Method::Get, "/api/openapi.json")
-            | (&Method::Get, "/api/auth/session")
-            | (&Method::Get, "/api/auth/sso/config")
-            | (&Method::Get, "/api/auth/sso/login")
-            | (&Method::Get, "/api/auth/sso/callback")
-            | (&Method::Post, "/api/auth/sso/callback")
+        (
+            &Method::Get,
+            "/api/health"
+                | "/api/metrics"
+                | "/api/openapi.json"
+                | "/api/auth/session"
+                | "/api/auth/sso/config"
+                | "/api/auth/sso/login"
+                | "/api/auth/sso/callback"
+        ) | (&Method::Post, "/api/auth/sso/callback")
     )
 }
 

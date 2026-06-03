@@ -77,7 +77,7 @@ pub fn migrations() -> Vec<Migration> {
         Migration {
             version: 1,
             name: "initial_schema".into(),
-            sql_up: r#"
+            sql_up: r"
 CREATE TABLE IF NOT EXISTS alerts (
     id TEXT PRIMARY KEY,
     timestamp TEXT NOT NULL,
@@ -149,21 +149,21 @@ CREATE TABLE IF NOT EXISTS schema_version (
     name TEXT NOT NULL,
     applied_at TEXT NOT NULL
 );
-"#.into(),
-            sql_down: r#"
+".into(),
+            sql_down: r"
 DROP TABLE IF EXISTS alerts;
 DROP TABLE IF EXISTS cases;
 DROP TABLE IF EXISTS audit_log;
 DROP TABLE IF EXISTS fleet_state;
 DROP TABLE IF EXISTS config_store;
 DROP TABLE IF EXISTS schema_version;
-"#.into(),
+".into(),
             applied_at: None,
         },
         Migration {
             version: 2,
             name: "add_threat_intel".into(),
-            sql_up: r#"
+            sql_up: r"
 CREATE TABLE IF NOT EXISTS threat_indicators (
     id TEXT PRIMARY KEY,
     ioc_type TEXT NOT NULL,
@@ -190,17 +190,17 @@ CREATE TABLE IF NOT EXISTS response_actions (
     created_at TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_response_status ON response_actions(status);
-"#.into(),
-            sql_down: r#"
+".into(),
+            sql_down: r"
 DROP TABLE IF EXISTS threat_indicators;
 DROP TABLE IF EXISTS response_actions;
-"#.into(),
+".into(),
             applied_at: None,
         },
         Migration {
             version: 3,
             name: "add_retention_and_metrics".into(),
-            sql_up: r#"
+            sql_up: r"
 CREATE TABLE IF NOT EXISTS metrics (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     timestamp TEXT NOT NULL,
@@ -221,11 +221,11 @@ INSERT OR IGNORE INTO retention_policy (table_name, retention_days) VALUES ('ale
 INSERT OR IGNORE INTO retention_policy (table_name, retention_days) VALUES ('audit_log', 365);
 INSERT OR IGNORE INTO retention_policy (table_name, retention_days) VALUES ('metrics', 30);
 INSERT OR IGNORE INTO retention_policy (table_name, retention_days) VALUES ('response_actions', 180);
-"#.into(),
-            sql_down: r#"
+".into(),
+            sql_down: r"
 DROP TABLE IF EXISTS metrics;
 DROP TABLE IF EXISTS retention_policy;
-"#.into(),
+".into(),
             applied_at: None,
         },
     ]
@@ -431,7 +431,7 @@ impl StorageBackend {
             }
         }
         // Add unapplied migrations
-        let applied_max = result.last().map(|m| m.version).unwrap_or(0);
+        let applied_max = result.last().map_or(0, |m| m.version);
         for m in &all {
             if m.version > applied_max {
                 result.push(Migration {
@@ -515,7 +515,7 @@ impl StorageBackend {
             "INSERT INTO alerts (id, timestamp, device_id, score, level, reasons, acknowledged, assigned_to, case_id, tenant_id, created_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
             params![
                 alert.id, alert.timestamp, alert.device_id, alert.score,
-                alert.level, reasons_json, alert.acknowledged as i32,
+                alert.level, reasons_json, i32::from(alert.acknowledged),
                 alert.assigned_to, alert.case_id, alert.tenant_id, now
             ],
         ).map(|_| ()).map_err(|e| {
@@ -582,8 +582,10 @@ impl StorageBackend {
 
         let _ = idx; // suppress unused warning
 
-        let params_ref: Vec<&dyn rusqlite::types::ToSql> =
-            param_values.iter().map(|p| p.as_ref()).collect();
+        let params_ref: Vec<&dyn rusqlite::types::ToSql> = param_values
+            .iter()
+            .map(std::convert::AsRef::as_ref)
+            .collect();
 
         let mut stmt = match self.conn.prepare(&sql) {
             Ok(s) => s,
@@ -608,7 +610,7 @@ impl StorageBackend {
         });
 
         match rows {
-            Ok(mapped) => mapped.filter_map(|r| r.ok()).collect(),
+            Ok(mapped) => mapped.filter_map(std::result::Result::ok).collect(),
             Err(_) => Vec::new(),
         }
     }
@@ -657,7 +659,7 @@ impl StorageBackend {
             self.conn
                 .execute(
                     "UPDATE alerts SET acknowledged = ?1 WHERE id = ?2",
-                    params![ack as i32, id],
+                    params![i32::from(ack), id],
                 )
                 .map_err(|e| StorageError {
                     code: StorageErrorCode::QueryFailed,
@@ -692,7 +694,7 @@ impl StorageBackend {
     /// Count alerts by level for a tenant.
     pub fn alert_counts(&self, tenant_id: Option<&str>) -> HashMap<String, usize> {
         let mut counts = HashMap::new();
-        let tid_owned = tenant_id.map(|s| s.to_string());
+        let tid_owned = tenant_id.map(std::string::ToString::to_string);
         let (sql, param): (&str, Vec<Box<dyn rusqlite::types::ToSql>>) = match &tid_owned {
             Some(tid) => (
                 "SELECT level, COUNT(*) FROM alerts WHERE tenant_id = ?1 GROUP BY level",
@@ -701,7 +703,7 @@ impl StorageBackend {
             None => ("SELECT level, COUNT(*) FROM alerts GROUP BY level", vec![]),
         };
         let params_ref: Vec<&dyn rusqlite::types::ToSql> =
-            param.iter().map(|p| p.as_ref()).collect();
+            param.iter().map(std::convert::AsRef::as_ref).collect();
 
         if let Ok(mut stmt) = self.conn.prepare(sql) {
             let _ = stmt
@@ -799,8 +801,10 @@ impl StorageBackend {
 
         let _ = idx;
 
-        let params_ref: Vec<&dyn rusqlite::types::ToSql> =
-            param_values.iter().map(|p| p.as_ref()).collect();
+        let params_ref: Vec<&dyn rusqlite::types::ToSql> = param_values
+            .iter()
+            .map(std::convert::AsRef::as_ref)
+            .collect();
 
         let mut stmt = match self.conn.prepare(&sql) {
             Ok(s) => s,
@@ -824,7 +828,7 @@ impl StorageBackend {
         });
 
         match rows {
-            Ok(mapped) => mapped.filter_map(|r| r.ok()).collect(),
+            Ok(mapped) => mapped.filter_map(std::result::Result::ok).collect(),
             Err(_) => Vec::new(),
         }
     }
@@ -898,8 +902,8 @@ impl StorageBackend {
             timestamp,
             actor: actor.to_string(),
             action: action.to_string(),
-            target: target.map(|t| t.to_string()),
-            detail: detail.map(|d| d.to_string()),
+            target: target.map(std::string::ToString::to_string),
+            detail: detail.map(std::string::ToString::to_string),
             digest,
             prev_digest,
             tenant_id: tenant_id.to_string(),
@@ -939,7 +943,7 @@ impl StorageBackend {
                 code: StorageErrorCode::QueryFailed,
                 message: format!("audit query failed: {e}"),
             })?
-            .filter_map(|r| r.ok())
+            .filter_map(std::result::Result::ok)
             .collect();
 
         let mut prev_expected: Option<String> = None;
@@ -956,7 +960,7 @@ impl StorageBackend {
             if expected != *digest {
                 return Err(StorageError {
                     code: StorageErrorCode::CorruptData,
-                    message: format!("audit chain broken at entry {}", id),
+                    message: format!("audit chain broken at entry {id}"),
                 });
             }
             prev_expected = Some(digest.clone());
@@ -1000,8 +1004,10 @@ impl StorageBackend {
             )
         };
 
-        let params_ref: Vec<&dyn rusqlite::types::ToSql> =
-            param_values.iter().map(|p| p.as_ref()).collect();
+        let params_ref: Vec<&dyn rusqlite::types::ToSql> = param_values
+            .iter()
+            .map(std::convert::AsRef::as_ref)
+            .collect();
 
         let mut stmt = match self.conn.prepare(sql) {
             Ok(s) => s,
@@ -1025,7 +1031,7 @@ impl StorageBackend {
         });
 
         match rows {
-            Ok(mapped) => mapped.filter_map(|r| r.ok()).collect(),
+            Ok(mapped) => mapped.filter_map(std::result::Result::ok).collect(),
             Err(_) => Vec::new(),
         }
     }
@@ -1085,7 +1091,7 @@ impl StorageBackend {
 
     /// Purge alerts older than `retention_days`.
     pub fn purge_old_alerts(&mut self, retention_days: u32) -> Result<usize, StorageError> {
-        let cutoff = chrono::Utc::now() - chrono::Duration::days(retention_days as i64);
+        let cutoff = chrono::Utc::now() - chrono::Duration::days(i64::from(retention_days));
         let cutoff_str = cutoff.to_rfc3339();
         let purged = self
             .conn
@@ -1102,7 +1108,7 @@ impl StorageBackend {
 
     /// Purge audit entries older than `retention_days` and recompute chain.
     pub fn purge_old_audit(&mut self, retention_days: u32) -> Result<usize, StorageError> {
-        let cutoff = chrono::Utc::now() - chrono::Duration::days(retention_days as i64);
+        let cutoff = chrono::Utc::now() - chrono::Duration::days(i64::from(retention_days));
         let cutoff_str = cutoff.to_rfc3339();
         let purged = self
             .conn
@@ -1141,7 +1147,7 @@ impl StorageBackend {
                     code: StorageErrorCode::QueryFailed,
                     message: format!("audit rechain failed: {e}"),
                 })?
-                .filter_map(|r| r.ok())
+                .filter_map(std::result::Result::ok)
                 .collect();
 
             let mut prev_digest: Option<String> = None;
@@ -1173,7 +1179,7 @@ impl StorageBackend {
 
     /// Purge metrics older than `retention_days`.
     pub fn purge_old_metrics(&mut self, retention_days: u32) -> Result<usize, StorageError> {
-        let cutoff = chrono::Utc::now() - chrono::Duration::days(retention_days as i64);
+        let cutoff = chrono::Utc::now() - chrono::Duration::days(i64::from(retention_days));
         let cutoff_str = cutoff.to_rfc3339();
         let purged = self
             .conn
@@ -1193,7 +1199,7 @@ impl StorageBackend {
         &mut self,
         retention_days: u32,
     ) -> Result<usize, StorageError> {
-        let cutoff = chrono::Utc::now() - chrono::Duration::days(retention_days as i64);
+        let cutoff = chrono::Utc::now() - chrono::Duration::days(i64::from(retention_days));
         let cutoff_str = cutoff.to_rfc3339();
         let purged = self
             .conn
@@ -1952,8 +1958,7 @@ mod tests {
         let before = store.verify_audit_chain();
         assert!(
             before.is_ok(),
-            "chain should be valid before purge: {:?}",
-            before
+            "chain should be valid before purge: {before:?}"
         );
 
         // Backdate the first 3 entries so they fall outside retention
@@ -1970,16 +1975,14 @@ mod tests {
         let purged = store.purge_old_audit(1).unwrap();
         assert!(
             purged >= 3,
-            "should purge at least 3 old entries, got {}",
-            purged
+            "should purge at least 3 old entries, got {purged}"
         );
 
         // Verify chain survives purge (rechain should rebuild)
         let after = store.verify_audit_chain();
         assert!(
             after.is_ok(),
-            "chain should be valid after purge: {:?}",
-            after
+            "chain should be valid after purge: {after:?}"
         );
     }
 }

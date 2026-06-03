@@ -1138,8 +1138,7 @@ pub fn execute_and_record_review_rollback(
         .payload
         .get("confirm_hostname")
         .and_then(serde_json::Value::as_str)
-        .map(str::trim)
-        .unwrap_or("");
+        .map_or("", str::trim);
 
     let mut reviews = load_remediation_change_reviews(storage);
     let Some(position) = reviews
@@ -1289,13 +1288,15 @@ pub fn remediation_review_from_payload(
             .and_then(serde_json::Value::as_str)
             .map(str::trim)
             .filter(|value| !value.is_empty())
-            .map(str::to_string)
-            .unwrap_or_else(|| {
-                format!(
-                    "review-{}",
-                    chrono::Utc::now().timestamp_millis().unsigned_abs()
-                )
-            }),
+            .map_or_else(
+                || {
+                    format!(
+                        "review-{}",
+                        chrono::Utc::now().timestamp_millis().unsigned_abs()
+                    )
+                },
+                str::to_string,
+            ),
         title: title.to_string(),
         asset_id: payload
             .get("asset_id")
@@ -1780,7 +1781,7 @@ fn resolve_execution_program(program: &str) -> Result<PathBuf, String> {
     let override_dir = EXECUTION_COMMAND_OVERRIDE_DIR
         .get_or_init(|| Mutex::new(None))
         .lock()
-        .unwrap_or_else(|e| e.into_inner())
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
         .clone();
 
     if let Some(dir) = override_dir {
@@ -1833,7 +1834,7 @@ pub fn set_execution_command_override_dir(path: Option<PathBuf>) {
     let mut guard = EXECUTION_COMMAND_OVERRIDE_DIR
         .get_or_init(|| Mutex::new(None))
         .lock()
-        .unwrap_or_else(|e| e.into_inner());
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
     *guard = path;
 }
 

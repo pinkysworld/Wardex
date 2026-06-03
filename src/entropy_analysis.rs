@@ -327,8 +327,7 @@ fn parse_elf_sections(data: &[u8]) -> Vec<SectionEntropy> {
             let end = data[start..]
                 .iter()
                 .position(|&b| b == 0)
-                .map(|p| start + p)
-                .unwrap_or(start + 32.min(data.len() - start));
+                .map_or(start + 32.min(data.len() - start), |p| start + p);
             std::str::from_utf8(&data[start..end])
                 .unwrap_or("???")
                 .to_string()

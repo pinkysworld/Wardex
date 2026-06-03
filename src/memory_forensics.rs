@@ -178,12 +178,11 @@ impl MemoryForensics {
                 process_name: process_name.to_string(),
                 finding_type: FindingType::HollowedProcess,
                 description: format!(
-                    "Process {} (PID {}) shows signs of hollowing: image base mismatch + high entropy ({:.2})",
-                    process_name, pid, section_entropy
+                    "Process {process_name} (PID {pid}) shows signs of hollowing: image base mismatch + high entropy ({section_entropy:.2})"
                 ),
                 severity: "critical".into(),
                 evidence: HashMap::from([
-                    ("entropy".into(), format!("{:.2}", section_entropy)),
+                    ("entropy".into(), format!("{section_entropy:.2}")),
                     ("image_match".into(), "false".into()),
                 ]),
             };
@@ -329,7 +328,7 @@ mod tests {
         let regions = vec![MemoryRegion {
             pid: 1234,
             process_name: "suspicious".into(),
-            base_address: 0x7f0000,
+            base_address: 0x007f_0000,
             size_bytes: 4096,
             permissions: "rwx".into(),
             region_type: RegionType::Anonymous,
@@ -351,7 +350,7 @@ mod tests {
         let regions = vec![MemoryRegion {
             pid: 5678,
             process_name: "victim".into(),
-            base_address: 0x400000,
+            base_address: 0x0040_0000,
             size_bytes: 8192,
             permissions: "r-x".into(),
             region_type: RegionType::Anonymous,

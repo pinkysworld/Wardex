@@ -494,8 +494,8 @@ fn precedence(tok: &Token) -> u8 {
         Token::And => 2,
         Token::Not => 3,
         Token::Gt | Token::Lt | Token::Ge | Token::Le | Token::Eq => 4,
-        Token::Op('+') | Token::Op('-') => 5,
-        Token::Op('*') | Token::Op('/') => 6,
+        Token::Op('+' | '-') => 5,
+        Token::Op('*' | '/') => 6,
         _ => 0,
     }
 }

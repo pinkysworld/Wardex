@@ -282,7 +282,9 @@ pub async fn run_server(
         if yara_path.exists()
             && let Ok(json) = std::fs::read_to_string(yara_path)
         {
-            let mut s = state.lock().unwrap_or_else(|e| e.into_inner());
+            let mut s = state
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
             match s.yara_engine.load_rules_json(&json) {
                 Ok(n) => tracing::info!("loaded {n} community YARA malware rules"),
                 Err(e) => tracing::warn!("failed to load YARA malware rules: {e}"),
@@ -316,7 +318,9 @@ pub async fn run_server(
             const CONFIRM_SAMPLES: u32 = 2; // require N consecutive elevated before alerting
             loop {
                 let (scope, watch_paths, host_platform) = {
-                    let s = monitor_state.lock().unwrap_or_else(|e| e.into_inner());
+                    let s = monitor_state
+                        .lock()
+                        .unwrap_or_else(std::sync::PoisonError::into_inner);
                     (
                         s.config.monitor.scope.clone(),
                         s.config.monitor.watch_paths.clone(),
@@ -417,7 +421,7 @@ pub async fn run_server(
                             let host = s.local_host_info.clone();
                             let mitre = crate::telemetry::map_alert_to_mitre(&signal.reasons);
                             let recent_samples: Vec<_> =
-                                s.local_telemetry.iter().cloned().collect();
+                                s.local_telemetry.iter().copied().collect();
                             let mut alert = AlertRecord {
                                 timestamp: chrono::Utc::now().to_rfc3339(),
                                 hostname: host.hostname.clone(),
@@ -562,9 +566,8 @@ pub async fn run_server(
                                 false,
                                 error_json("rate limit exceeded", 429),
                             );
-                        } else {
-                            return error_json("rate limit exceeded", 429);
                         }
+                        return error_json("rate limit exceeded", 429);
                     }
                 }
 
@@ -837,7 +840,9 @@ pub(crate) fn spawn_test_server_with_state() -> (u16, String, Arc<Mutex<AppState
     spawn_feed_ingestion_loop(&state);
     let site_dir = PathBuf::from("site");
     let shutdown = {
-        let s = state.lock().unwrap_or_else(|e| e.into_inner());
+        let s = state
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         s.shutdown.clone()
     };
     let server_state = Arc::clone(&state);
@@ -937,7 +942,9 @@ pub fn spawn_test_server() -> (u16, String) {
 pub fn spawn_test_server_with_seeded_alerts(alerts: Vec<AlertRecord>) -> (u16, String) {
     let (port, token, state) = spawn_test_server_with_state();
     if !alerts.is_empty() {
-        let mut s = state.lock().unwrap_or_else(|e| e.into_inner());
+        let mut s = state
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         for alert in alerts {
             if s.alerts.len() >= 10_000 {
                 s.alerts.pop_front();
@@ -954,7 +961,9 @@ pub fn spawn_test_server_with_seeded_remote_installs(
 ) -> (u16, String) {
     let (port, token, state) = spawn_test_server_with_state();
     if !installs.is_empty() {
-        let s = state.lock().unwrap_or_else(|e| e.into_inner());
+        let s = state
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         let _ = save_stored_json(&s.storage, FLEET_REMOTE_INSTALLS_KEY, &installs);
     }
     (port, token)
@@ -964,7 +973,9 @@ pub fn spawn_test_server_with_seeded_remote_installs(
 pub fn spawn_test_server_with_live_rollback_enabled() -> (u16, String) {
     let (port, token, state) = spawn_test_server_with_state();
     {
-        let mut s = state.lock().unwrap_or_else(|e| e.into_inner());
+        let mut s = state
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         s.config.remediation.allow_live_rollback = true;
     }
     (port, token)
@@ -974,7 +985,9 @@ pub fn spawn_test_server_with_live_rollback_enabled() -> (u16, String) {
 pub fn spawn_test_server_with_live_rollback_execution_enabled() -> (u16, String) {
     let (port, token, state) = spawn_test_server_with_state();
     {
-        let mut s = state.lock().unwrap_or_else(|e| e.into_inner());
+        let mut s = state
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         s.config.remediation.allow_live_rollback = true;
         s.config.remediation.execute_live_rollback_commands = true;
     }
@@ -1001,10 +1014,10 @@ fn flush_to_storage(state: &Arc<Mutex<AppState>>) {
     // Flush in-memory alerts
     for (i, alert) in alerts.iter().enumerate() {
         let stored_alert = crate::storage::StoredAlert {
-            id: format!("mem-{}-{}", hostname, i),
+            id: format!("mem-{hostname}-{i}"),
             timestamp: alert.timestamp.clone(),
             device_id: hostname.clone(),
-            score: alert.score as f64,
+            score: f64::from(alert.score),
             level: alert.level.clone(),
             reasons: alert.reasons.clone(),
             acknowledged: false,
@@ -1053,7 +1066,7 @@ fn flush_to_storage(state: &Arc<Mutex<AppState>>) {
             id: format!("evt-{}", event.id),
             timestamp: event.received_at.clone(),
             device_id: event.agent_id.clone(),
-            score: event.alert.score as f64,
+            score: f64::from(event.alert.score),
             level: event.alert.level.clone(),
             reasons: event.alert.reasons.clone(),
             acknowledged: false,
@@ -1075,4 +1088,3 @@ fn flush_to_storage(state: &Arc<Mutex<AppState>>) {
         "Shutdown flush: {stored} alerts, {audit_stored} audit entries, {event_stored} events written to storage ({errors} errors)",
     );
 }
-

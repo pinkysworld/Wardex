@@ -732,7 +732,7 @@ mod tests {
             Some(ControlEvidence {
                 evidence_type: "automated_test".into(),
                 description: "RBAC enforcement verified".into(),
-                collected_at: 1700000000,
+                collected_at: 1_700_000_000,
                 source: "wardex-ci".into(),
             }),
         ));
@@ -759,7 +759,7 @@ mod tests {
         let mut mgr = HipaaComplianceManager::new();
         mgr.record_breach(BreachRecord {
             id: "BR-001".into(),
-            detected_at: 1700000000,
+            detected_at: 1_700_000_000,
             reported_at: None,
             description: "Unauthorized access to patient records".into(),
             affected_individuals: 150,
@@ -784,7 +784,7 @@ mod tests {
             encryption: EncryptionStatus::EncryptedBoth,
             access_controls: vec!["rbac".into(), "mfa".into()],
             retention_days: 365,
-            last_reviewed: 1700000000,
+            last_reviewed: 1_700_000_000,
         });
         assert_eq!(mgr.phi_data_flows.len(), 1);
     }
@@ -830,8 +830,8 @@ mod tests {
             request_type: DsarType::Access,
             subject_id: "user-42".into(),
             subject_email: "user@example.com".into(),
-            requested_at: 1700000000,
-            due_by: 1702592000,
+            requested_at: 1_700_000_000,
+            due_by: 1_702_592_000,
             status: DsarStatus::Received,
             data_categories: vec!["personal".into(), "usage".into()],
             notes: vec![],
@@ -860,8 +860,8 @@ mod tests {
             request_type: DsarType::Erasure,
             subject_id: "user-99".into(),
             subject_email: "del@example.com".into(),
-            requested_at: 1700000000,
-            due_by: 1702592000,
+            requested_at: 1_700_000_000,
+            due_by: 1_702_592_000,
             status: DsarStatus::Received,
             data_categories: vec!["all".into()],
             notes: vec![],

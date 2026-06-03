@@ -134,7 +134,7 @@ impl EventStore {
                 let _ = fs::create_dir_all(parent);
             }
             // Atomic write: write to temp file then rename to prevent corruption on crash
-            let tmp_path = format!("{}.tmp", path);
+            let tmp_path = format!("{path}.tmp");
             if fs::write(&tmp_path, &json).is_ok() {
                 let _ = fs::rename(&tmp_path, path_ref);
             }
@@ -483,7 +483,7 @@ impl EventStore {
                     agents,
                     event_ids: events.iter().map(|event| event.id).collect(),
                     severity: "high".into(),
-                    description: format!("Cross-agent pattern: '{}'", reason),
+                    description: format!("Cross-agent pattern: '{reason}'"),
                 });
             }
         }
@@ -709,7 +709,10 @@ mod tests {
             confidence: 0.9,
             level: "critical".into(),
             action: "isolate".into(),
-            reasons: reasons.iter().map(|reason| reason.to_string()).collect(),
+            reasons: reasons
+                .iter()
+                .map(std::string::ToString::to_string)
+                .collect(),
             sample: TelemetrySample {
                 timestamp_ms: 0,
                 cpu_load_pct: 0.0,

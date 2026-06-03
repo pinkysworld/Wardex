@@ -109,16 +109,28 @@ impl SearchIndex {
             user_name: fields.get("user_name").cloned().unwrap_or_default(),
             raw_text: fields.get("raw_text").cloned().unwrap_or_default(),
         };
-        let mut docs = self.documents.lock().unwrap_or_else(|e| e.into_inner());
+        let mut docs = self
+            .documents
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         docs.push(doc);
-        let mut stats = self.stats.lock().unwrap_or_else(|e| e.into_inner());
+        let mut stats = self
+            .stats
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         stats.pending_docs += 1;
         Ok(())
     }
 
     pub fn commit(&self) -> Result<u64, String> {
-        let mut stats = self.stats.lock().unwrap_or_else(|e| e.into_inner());
-        let docs = self.documents.lock().unwrap_or_else(|e| e.into_inner());
+        let mut stats = self
+            .stats
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let docs = self
+            .documents
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         stats.total_documents = docs.len() as u64;
         stats.pending_docs = 0;
         stats.last_commit = Some(Utc::now());
@@ -128,7 +140,10 @@ impl SearchIndex {
 
     pub fn search(&self, query: &SearchQuery) -> Result<SearchResult, String> {
         let start = std::time::Instant::now();
-        let docs = self.documents.lock().unwrap_or_else(|e| e.into_inner());
+        let docs = self
+            .documents
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         let q_lower = query.query.to_lowercase();
 
         let mut hits: Vec<SearchHit> = docs
@@ -179,15 +194,21 @@ impl SearchIndex {
     }
 
     pub fn stats(&self) -> IndexStats {
-        self.stats.lock().unwrap_or_else(|e| e.into_inner()).clone()
+        self.stats
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .clone()
     }
 
     pub fn clear(&self) -> Result<(), String> {
         self.documents
             .lock()
-            .unwrap_or_else(|e| e.into_inner())
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
             .clear();
-        let mut stats = self.stats.lock().unwrap_or_else(|e| e.into_inner());
+        let mut stats = self
+            .stats
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         stats.total_documents = 0;
         stats.pending_docs = 0;
         stats.index_size_bytes = 0;
@@ -200,7 +221,10 @@ impl SearchIndex {
     pub fn hunt(&self, hunt_query: &str) -> Result<SearchResult, String> {
         let start = std::time::Instant::now();
         let predicate = parse_hunt_query(hunt_query)?;
-        let docs = self.documents.lock().unwrap_or_else(|e| e.into_inner());
+        let docs = self
+            .documents
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
 
         let mut hits: Vec<SearchHit> = docs
             .iter()
@@ -260,7 +284,7 @@ pub fn parse_hunt_query(input: &str) -> Result<HuntPredicate, String> {
     }
     let (pred, rest) = parse_or(&tokens)?;
     if !rest.is_empty() {
-        return Err(format!("unexpected tokens after query: {:?}", rest));
+        return Err(format!("unexpected tokens after query: {rest:?}"));
     }
     Ok(pred)
 }
@@ -397,7 +421,7 @@ fn parse_primary(tokens: &[HuntToken]) -> Result<(HuntPredicate, &[HuntToken]), 
             &tokens[1..],
         )),
         HuntToken::Word(w) => Ok((HuntPredicate::FreeText(w.clone()), &tokens[1..])),
-        other => Err(format!("unexpected token: {:?}", other)),
+        other => Err(format!("unexpected token: {other:?}")),
     }
 }
 
@@ -569,7 +593,7 @@ impl PersistentEventStore {
 
     /// Apply retention policy, removing events older than retention_days.
     pub fn apply_retention(&self) -> Result<u64, String> {
-        let cutoff = Utc::now() - chrono::Duration::days(self.config.retention_days as i64);
+        let cutoff = Utc::now() - chrono::Duration::days(i64::from(self.config.retention_days));
         let _cutoff_str = cutoff.to_rfc3339();
         // In a full Tantivy implementation, we would use a delete query:
         //   index.delete_term(Term::from_field_date(timestamp_field, cutoff));
@@ -649,10 +673,7 @@ fn parse_hunt_pipe(input: &str) -> Result<(String, Option<HuntAggregation>), Str
         if agg_part.is_empty() {
             return Err("missing aggregation after pipe".into());
         }
-        let tokens: Vec<String> = agg_part
-            .split_whitespace()
-            .map(|token| token.to_lowercase())
-            .collect();
+        let tokens: Vec<String> = agg_part.split_whitespace().map(str::to_lowercase).collect();
 
         let agg = match tokens.first().map(String::as_str) {
             Some("count") => {
@@ -725,7 +746,10 @@ impl SearchIndex {
             Some(parse_hunt_query(&filter_part)?)
         };
 
-        let docs = self.documents.lock().unwrap_or_else(|e| e.into_inner());
+        let docs = self
+            .documents
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
 
         let matching: Vec<&SearchDocument> = docs
             .iter()
@@ -930,7 +954,7 @@ mod tests {
     fn test_search_pagination() {
         let idx = make_index();
         let q = SearchQuery {
-            query: "".into(), // empty matches nothing with contains
+            query: String::new(), // empty matches nothing with contains
             fields: vec![],
             from: None,
             to: None,

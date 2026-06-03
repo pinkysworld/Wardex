@@ -799,9 +799,7 @@ impl AlertSuppression {
             return false;
         }
         match &self.expires_at {
-            Some(expires_at) => parse_time(expires_at)
-                .map(|ts| ts > chrono::Utc::now())
-                .unwrap_or(true),
+            Some(expires_at) => parse_time(expires_at).is_none_or(|ts| ts > chrono::Utc::now()),
             None => true,
         }
     }
@@ -1514,8 +1512,7 @@ pub fn build_entity_profile(
                 .triage
                 .assignee
                 .as_deref()
-                .map(|assignee| assignee.eq_ignore_ascii_case(id))
-                .unwrap_or(false),
+                .is_some_and(|assignee| assignee.eq_ignore_ascii_case(id)),
             _ => false,
         };
         if matched {
@@ -1528,8 +1525,7 @@ pub fn build_entity_profile(
             }));
             if last_seen
                 .as_deref()
-                .map(|ts| ts < event.received_at.as_str())
-                .unwrap_or(true)
+                .is_none_or(|ts| ts < event.received_at.as_str())
             {
                 last_seen = Some(event.received_at.clone());
             }
@@ -1545,8 +1541,7 @@ pub fn build_entity_profile(
             "user" | "account" => incident
                 .assignee
                 .as_deref()
-                .map(|assignee| assignee.eq_ignore_ascii_case(id))
-                .unwrap_or(false),
+                .is_some_and(|assignee| assignee.eq_ignore_ascii_case(id)),
             _ => incident
                 .summary
                 .to_ascii_lowercase()
@@ -1566,8 +1561,7 @@ pub fn build_entity_profile(
             "user" | "account" => case
                 .assignee
                 .as_deref()
-                .map(|assignee| assignee.eq_ignore_ascii_case(id))
-                .unwrap_or(false),
+                .is_some_and(|assignee| assignee.eq_ignore_ascii_case(id)),
             _ => {
                 case.title
                     .to_ascii_lowercase()
@@ -1724,8 +1718,7 @@ pub fn build_entity_timeline(
                 .triage
                 .assignee
                 .as_deref()
-                .map(|assignee| assignee.eq_ignore_ascii_case(id))
-                .unwrap_or(false),
+                .is_some_and(|assignee| assignee.eq_ignore_ascii_case(id)),
             _ => event
                 .alert
                 .reasons
@@ -1751,8 +1744,7 @@ pub fn build_entity_timeline(
             "user" | "account" => incident
                 .assignee
                 .as_deref()
-                .map(|assignee| assignee.eq_ignore_ascii_case(id))
-                .unwrap_or(false),
+                .is_some_and(|assignee| assignee.eq_ignore_ascii_case(id)),
             _ => incident
                 .summary
                 .to_ascii_lowercase()
@@ -1773,8 +1765,7 @@ pub fn build_entity_timeline(
             "user" | "account" => case
                 .assignee
                 .as_deref()
-                .map(|assignee| assignee.eq_ignore_ascii_case(id))
-                .unwrap_or(false),
+                .is_some_and(|assignee| assignee.eq_ignore_ascii_case(id)),
             _ => case
                 .title
                 .to_ascii_lowercase()
@@ -1997,7 +1988,10 @@ mod tests {
                 confidence: 0.95,
                 level: level.to_string(),
                 action: "alert".to_string(),
-                reasons: reasons.iter().map(|reason| reason.to_string()).collect(),
+                reasons: reasons
+                    .iter()
+                    .map(std::string::ToString::to_string)
+                    .collect(),
                 sample: TelemetrySample {
                     timestamp_ms: 0,
                     cpu_load_pct: 0.0,
@@ -2019,7 +2013,7 @@ mod tests {
                 narrative: None,
             },
             correlated: false,
-            triage: Default::default(),
+            triage: crate::event_forward::EventTriage::default(),
         }
     }
 
@@ -2318,7 +2312,7 @@ mod tests {
             matched_event_ids: vec![],
             matched_agent_ids: vec![],
             sample_event_ids: vec![],
-            summary: "".into(),
+            summary: String::new(),
         };
 
         let results = hunt.evaluate_responses(&run);
@@ -2380,7 +2374,7 @@ mod tests {
             matched_event_ids: vec![1],
             matched_agent_ids: vec!["agent-1".into()],
             sample_event_ids: vec![1],
-            summary: "".into(),
+            summary: String::new(),
         };
 
         let results = hunt.evaluate_responses(&run);

@@ -229,7 +229,7 @@ impl BeaconDetector {
 
             // Median interval (more robust than mean for beaconing)
             let mut sorted_intervals = intervals.clone();
-            sorted_intervals.sort();
+            sorted_intervals.sort_unstable();
             let median = sorted_intervals[sorted_intervals.len() / 2];
 
             if median == 0 {
@@ -416,7 +416,7 @@ fn shannon_entropy(s: &str) -> f32 {
 
 /// Consonant-to-total ratio of alphabetic characters.
 fn compute_consonant_ratio(s: &str) -> f32 {
-    let alpha: Vec<char> = s.chars().filter(|c| c.is_ascii_alphabetic()).collect();
+    let alpha: Vec<char> = s.chars().filter(char::is_ascii_alphabetic).collect();
     if alpha.is_empty() {
         return 0.0;
     }
@@ -491,7 +491,7 @@ mod tests {
         let mut det = BeaconDetector::default();
         // Irregular connection timing
         let times = [
-            0, 100, 5000, 5100, 20000, 21000, 50000, 50500, 100000, 105000,
+            0, 100, 5000, 5100, 20000, 21000, 50000, 50500, 100_000, 105_000,
         ];
         for ts in &times {
             det.record_connection(make_conn("1.2.3.4", 80, *ts));

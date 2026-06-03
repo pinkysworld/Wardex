@@ -149,7 +149,10 @@ impl SessionStore {
             .into_iter()
             .filter(|(_, s)| s.expires_at > now)
             .collect();
-        let mut store = self.sessions.lock().unwrap_or_else(|e| e.into_inner());
+        let mut store = self
+            .sessions
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         *store = valid;
     }
 
@@ -164,7 +167,10 @@ impl SessionStore {
             return;
         };
         let sessions = {
-            let store = self.sessions.lock().unwrap_or_else(|e| e.into_inner());
+            let store = self
+                .sessions
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
             store.clone()
         };
         let envelope = PersistedSessionEnvelope {
@@ -248,7 +254,10 @@ impl SessionStore {
             expires_at: now + Duration::hours(ttl_hours),
         };
 
-        let mut store = self.sessions.lock().unwrap_or_else(|e| e.into_inner());
+        let mut store = self
+            .sessions
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         store.insert(session_id.clone(), session);
         drop(store);
         self.save();
@@ -257,7 +266,10 @@ impl SessionStore {
 
     /// Insert or replace a session using a caller-supplied session ID.
     pub fn insert_session(&self, session_id: String, session: Session) {
-        let mut store = self.sessions.lock().unwrap_or_else(|e| e.into_inner());
+        let mut store = self
+            .sessions
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         store.insert(session_id, session);
         drop(store);
         self.save();
@@ -266,7 +278,10 @@ impl SessionStore {
     /// Retrieve a session by ID. Returns `None` if missing or expired.
     /// Expired sessions are removed on access.
     pub fn get_session(&self, id: &str) -> Option<Session> {
-        let mut store = self.sessions.lock().unwrap_or_else(|e| e.into_inner());
+        let mut store = self
+            .sessions
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         if let Some(session) = store.get(id) {
             if Utc::now() < session.expires_at {
                 return Some(session.clone());
@@ -281,7 +296,10 @@ impl SessionStore {
 
     /// Destroy a session. Returns `true` if it existed.
     pub fn destroy_session(&self, id: &str) -> bool {
-        let mut store = self.sessions.lock().unwrap_or_else(|e| e.into_inner());
+        let mut store = self
+            .sessions
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         let existed = store.remove(id).is_some();
         drop(store);
         if existed {
@@ -292,7 +310,10 @@ impl SessionStore {
 
     /// Remove all expired sessions.
     pub fn cleanup_expired(&self) {
-        let mut store = self.sessions.lock().unwrap_or_else(|e| e.into_inner());
+        let mut store = self
+            .sessions
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         let before = store.len();
         let now = Utc::now();
         store.retain(|_, s| s.expires_at > now);

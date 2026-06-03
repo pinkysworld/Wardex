@@ -21,8 +21,7 @@ pub(super) fn queue_alert_summary(
         .sla_deadline
         .as_deref()
         .and_then(|deadline| chrono::DateTime::parse_from_rfc3339(deadline).ok())
-        .map(|deadline| chrono::Utc::now() > deadline.with_timezone(&chrono::Utc))
-        .unwrap_or(false);
+        .is_some_and(|deadline| chrono::Utc::now() > deadline.with_timezone(&chrono::Utc));
     QueueAlertSummary {
         event_id: item.event_id,
         agent_id: linked_event.map(|event| event.agent_id.clone()),
@@ -87,9 +86,10 @@ fn build_hot_agent_summaries(
         .map(|agent| {
             let registry_agent = registry.get(&agent.agent_id);
             let deployment = deployments.get(&agent.agent_id);
-            let (status, _) = registry_agent
-                .map(|entry| computed_agent_status(entry, registry.heartbeat_interval()))
-                .unwrap_or_else(|| ("unknown".to_string(), None));
+            let (status, _) = registry_agent.map_or_else(
+                || ("unknown".to_string(), None),
+                |entry| computed_agent_status(entry, registry.heartbeat_interval()),
+            );
             HotAgentSummary {
                 agent_id: agent.agent_id.clone(),
                 hostname: registry_agent.map(|entry| entry.hostname.clone()),
@@ -678,8 +678,7 @@ fn build_value_brief(
     }
     if blocked_high_risk_actions > 0 {
         priority_actions.push(format!(
-            "Review {} blocked or approval-gated response action(s).",
-            blocked_high_risk_actions
+            "Review {blocked_high_risk_actions} blocked or approval-gated response action(s)."
         ));
     }
     if priority_actions.is_empty() {
@@ -1154,8 +1153,7 @@ pub(super) fn build_workbench_overview(
             priority: "medium".to_string(),
             title: "Promote validated canaries".to_string(),
             summary: format!(
-                "{} rule(s) and {} hunt(s) are still in canary.",
-                canary_rules, canary_hunts
+                "{canary_rules} rule(s) and {canary_hunts} hunt(s) are still in canary."
             ),
             action_hint:
                 "Use the detection workspace to confirm tests and push mature content to active."
@@ -1371,8 +1369,9 @@ pub(super) fn build_manager_overview(
                     .sla_deadline
                     .as_deref()
                     .and_then(|deadline| chrono::DateTime::parse_from_rfc3339(deadline).ok())
-                    .map(|deadline| chrono::Utc::now() > deadline.with_timezone(&chrono::Utc))
-                    .unwrap_or(false)
+                    .is_some_and(|deadline| {
+                        chrono::Utc::now() > deadline.with_timezone(&chrono::Utc)
+                    })
         })
         .count();
     let critical_pending = queue_items

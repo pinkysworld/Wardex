@@ -270,7 +270,7 @@ impl PatchManager {
             .get_mut(patch_id)
             .ok_or_else(|| "patch not found".to_string())?;
         if patch.status != PatchStatus::Available && patch.status != PatchStatus::Failed {
-            return Err(format!("patch {} not in stageable state", patch_id));
+            return Err(format!("patch {patch_id} not in stageable state"));
         }
         patch.status = PatchStatus::Staged;
         patch.staged_at = Some(chrono::Utc::now().to_rfc3339());
@@ -284,7 +284,7 @@ impl PatchManager {
             .get_mut(patch_id)
             .ok_or_else(|| "patch not found".to_string())?;
         if patch.status != PatchStatus::Staged {
-            return Err(format!("patch {} not staged", patch_id));
+            return Err(format!("patch {patch_id} not staged"));
         }
         patch.status = PatchStatus::Installed;
         let ts = chrono::Utc::now().to_rfc3339();

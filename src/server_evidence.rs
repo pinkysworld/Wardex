@@ -476,7 +476,7 @@ pub(crate) fn prune_operational_snapshots(
             let mut files = fs::read_dir(kind_dir.path())
                 .ok()
                 .into_iter()
-                .flat_map(|entries| entries.flatten())
+                .flat_map(std::iter::Iterator::flatten)
                 .filter(|entry| {
                     entry.path().extension().and_then(|value| value.to_str()) == Some("json")
                 })

@@ -226,7 +226,7 @@ impl ResponseOrchestrator {
             ResponseAction::KillProcess { pid, process_name } => self
                 .process_enforcer
                 .lock()
-                .unwrap_or_else(|e| e.into_inner())
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
                 .kill_process(&ProcessTarget {
                     pid: *pid,
                     name: process_name.clone(),
@@ -235,17 +235,17 @@ impl ResponseOrchestrator {
             ResponseAction::Isolate => self
                 .network_enforcer
                 .lock()
-                .unwrap_or_else(|e| e.into_inner())
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
                 .block_all(&target.hostname),
             ResponseAction::Throttle { rate_limit_kbps } => self
                 .network_enforcer
                 .lock()
-                .unwrap_or_else(|e| e.into_inner())
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
                 .rate_limit(&target.hostname, *rate_limit_kbps),
             ResponseAction::QuarantineFile { path } => self
                 .filesystem_enforcer
                 .lock()
-                .unwrap_or_else(|e| e.into_inner())
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
                 .quarantine_path(Path::new(path)),
             ResponseAction::Alert => EnforcementResult {
                 action: "alert".to_string(),
@@ -412,7 +412,7 @@ impl ResponseOrchestrator {
             self.record_audit_with_result(&request, Some(description), Some(execution_audit));
             self.requests
                 .lock()
-                .unwrap_or_else(|e| e.into_inner())
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
                 .push(request);
             return Ok(id);
         }
@@ -427,7 +427,7 @@ impl ResponseOrchestrator {
         self.record_audit(&request);
         self.requests
             .lock()
-            .unwrap_or_else(|e| e.into_inner())
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
             .push(request);
         Ok(id)
     }
@@ -438,11 +438,14 @@ impl ResponseOrchestrator {
         request_id: &str,
         record: ApprovalRecord,
     ) -> Result<ApprovalStatus, String> {
-        let mut requests = self.requests.lock().unwrap_or_else(|e| e.into_inner());
+        let mut requests = self
+            .requests
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         let req = requests
             .iter_mut()
             .find(|r| r.id == request_id)
-            .ok_or_else(|| format!("Request {} not found", request_id))?;
+            .ok_or_else(|| format!("Request {request_id} not found"))?;
 
         if req.status != ApprovalStatus::Pending {
             return Err(format!(
@@ -498,7 +501,7 @@ impl ResponseOrchestrator {
     pub fn pending_requests(&self) -> Vec<ResponseRequest> {
         self.requests
             .lock()
-            .unwrap_or_else(|e| e.into_inner())
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
             .iter()
             .filter(|r| r.status == ApprovalStatus::Pending)
             .cloned()
@@ -509,7 +512,7 @@ impl ResponseOrchestrator {
     pub fn all_requests(&self) -> Vec<ResponseRequest> {
         self.requests
             .lock()
-            .unwrap_or_else(|e| e.into_inner())
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
             .clone()
     }
 
@@ -517,7 +520,7 @@ impl ResponseOrchestrator {
     pub fn get_request(&self, id: &str) -> Option<ResponseRequest> {
         self.requests
             .lock()
-            .unwrap_or_else(|e| e.into_inner())
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
             .iter()
             .find(|r| r.id == id)
             .cloned()
@@ -525,7 +528,10 @@ impl ResponseOrchestrator {
 
     /// Expire pending requests past SLA.
     pub fn expire_stale(&self, now_epoch: u64) {
-        let mut requests = self.requests.lock().unwrap_or_else(|e| e.into_inner());
+        let mut requests = self
+            .requests
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         for req in requests.iter_mut() {
             if req.status == ApprovalStatus::Pending {
                 // Try RFC3339 first, then fall back to plain epoch
@@ -547,7 +553,7 @@ impl ResponseOrchestrator {
     pub fn audit_ledger(&self) -> Vec<ResponseAuditEntry> {
         self.audit_ledger
             .lock()
-            .unwrap_or_else(|e| e.into_inner())
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
             .clone()
     }
 
@@ -562,20 +568,14 @@ impl ResponseOrchestrator {
     ) -> Vec<ResponseExecutionAudit> {
         self.audit_ledger
             .lock()
-            .unwrap_or_else(|e| e.into_inner())
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
             .iter()
-            .filter(|entry| {
-                request_id
-                    .map(|target_id| entry.request_id == target_id)
-                    .unwrap_or(true)
-            })
+            .filter(|entry| request_id.is_none_or(|target_id| entry.request_id == target_id))
             .filter_map(|entry| entry.execution_audit.clone())
             .filter(|audit| {
-                action_id
-                    .map(|target_action| {
-                        response_action_filter_matches(&audit.action, target_action)
-                    })
-                    .unwrap_or(true)
+                action_id.is_none_or(|target_action| {
+                    response_action_filter_matches(&audit.action, target_action)
+                })
             })
             .collect()
     }
@@ -592,7 +592,7 @@ impl ResponseOrchestrator {
     ) {
         self.audit_ledger
             .lock()
-            .unwrap_or_else(|e| e.into_inner())
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
             .push(ResponseAuditEntry {
                 request_id: req.id.clone(),
                 action: format!("{:?}", req.action),
@@ -628,7 +628,7 @@ impl ResponseOrchestrator {
     fn record_audit_inner(&self, req: &ResponseRequest) {
         self.audit_ledger
             .lock()
-            .unwrap_or_else(|e| e.into_inner())
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
             .push(ResponseAuditEntry {
                 request_id: req.id.clone(),
                 action: format!("{:?}", req.action),
@@ -638,11 +638,10 @@ impl ResponseOrchestrator {
                 timestamp: chrono::Utc::now().to_rfc3339(),
                 dry_run: req.dry_run,
                 approvals: req.approvals.clone(),
-                actor: req
-                    .approvals
-                    .last()
-                    .map(|record| record.approver.clone())
-                    .unwrap_or_else(|| req.requested_by.clone()),
+                actor: req.approvals.last().map_or_else(
+                    || req.requested_by.clone(),
+                    |record| record.approver.clone(),
+                ),
                 reason: req.reason.clone(),
                 input_context: response_input_context(req),
                 dry_run_result: req.dry_run.then(|| DryRunResult {
@@ -675,7 +674,10 @@ impl ResponseOrchestrator {
 
     /// Execute approved requests, optionally narrowing to a specific request id.
     pub fn execute_approved_matching(&self, request_id: Option<&str>) -> Vec<String> {
-        let mut requests = self.requests.lock().unwrap_or_else(|e| e.into_inner());
+        let mut requests = self
+            .requests
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         let mut executed = Vec::new();
         let mut executed_reqs = Vec::new();
         for req in requests.iter_mut() {
@@ -835,11 +837,10 @@ fn response_execution_audit(
         request_id: req.id.clone(),
         action: format!("{:?}", req.action),
         target_hostname: req.target.hostname.clone(),
-        operator: req
-            .approvals
-            .last()
-            .map(|record| record.approver.clone())
-            .unwrap_or_else(|| req.requested_by.clone()),
+        operator: req.approvals.last().map_or_else(
+            || req.requested_by.clone(),
+            |record| record.approver.clone(),
+        ),
         started_at: completed_at.clone(),
         completed_at: completed_at.clone(),
         status: if success { "completed" } else { "failed" }.to_string(),

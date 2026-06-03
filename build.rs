@@ -12,10 +12,10 @@ fn main() {
     let dist_index = admin_dir.join("dist").join("index.html");
 
     println!("cargo:rerun-if-changed=build.rs");
-    emit_rerun_for_file(admin_dir.join("index.html"));
-    emit_rerun_for_file(admin_dir.join("package.json"));
-    emit_rerun_for_file(admin_dir.join("package-lock.json"));
-    emit_rerun_for_file(admin_dir.join("vite.config.js"));
+    emit_rerun_for_file(&admin_dir.join("index.html"));
+    emit_rerun_for_file(&admin_dir.join("package.json"));
+    emit_rerun_for_file(&admin_dir.join("package-lock.json"));
+    emit_rerun_for_file(&admin_dir.join("vite.config.js"));
     emit_rerun_for_dir(&src_dir);
 
     match admin_build_skip_reason(&admin_dir) {
@@ -36,15 +36,14 @@ fn main() {
         None => run_admin_build(&admin_dir),
     }
 
-    if !dist_index.is_file() {
-        panic!(
-            "admin console build did not produce {}",
-            dist_index.display()
-        );
-    }
+    assert!(
+        dist_index.is_file(),
+        "admin console build did not produce {}",
+        dist_index.display()
+    );
 }
 
-fn emit_rerun_for_file(path: PathBuf) {
+fn emit_rerun_for_file(path: &Path) {
     if path.exists() {
         println!("cargo:rerun-if-changed={}", path.display());
     }
@@ -85,13 +84,12 @@ fn run_admin_build(admin_dir: &Path) {
                 admin_dir.display()
             )
         });
-    if !status.success() {
-        panic!(
-            "embedded admin console build failed in {} with status {}. run `npm ci --prefix admin-console` before cargo build when building from a clean checkout",
-            admin_dir.display(),
-            status
-        );
-    }
+    assert!(
+        status.success(),
+        "embedded admin console build failed in {} with status {}. run `npm ci --prefix admin-console` before cargo build when building from a clean checkout",
+        admin_dir.display(),
+        status
+    );
 }
 
 fn admin_build_skip_reason(admin_dir: &Path) -> Option<String> {
@@ -169,15 +167,12 @@ fn ensure_placeholder_admin_dist(dist_index: &Path) {
 }
 
 fn env_flag(key: &str) -> bool {
-    env::var(key)
-        .ok()
-        .map(|value| {
-            matches!(
-                value.to_ascii_lowercase().as_str(),
-                "1" | "true" | "yes" | "on"
-            )
-        })
-        .unwrap_or(false)
+    env::var(key).ok().is_some_and(|value| {
+        matches!(
+            value.to_ascii_lowercase().as_str(),
+            "1" | "true" | "yes" | "on"
+        )
+    })
 }
 
 fn npm_command() -> OsString {

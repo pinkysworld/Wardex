@@ -197,11 +197,11 @@ pub fn compute_accept_key(client_key: &str) -> String {
 /// Minimal SHA-1 (RFC 3174) — used only for the WebSocket accept key.
 #[allow(clippy::needless_range_loop)]
 fn sha1_digest(msg: &[u8]) -> [u8; 20] {
-    let mut h0: u32 = 0x67452301;
-    let mut h1: u32 = 0xEFCDAB89;
-    let mut h2: u32 = 0x98BADCFE;
-    let mut h3: u32 = 0x10325476;
-    let mut h4: u32 = 0xC3D2E1F0;
+    let mut h0: u32 = 0x6745_2301;
+    let mut h1: u32 = 0xEFCD_AB89;
+    let mut h2: u32 = 0x98BA_DCFE;
+    let mut h3: u32 = 0x1032_5476;
+    let mut h4: u32 = 0xC3D2_E1F0;
 
     // Pre-processing: pad message
     let ml = msg.len() as u64 * 8;
@@ -224,10 +224,10 @@ fn sha1_digest(msg: &[u8]) -> [u8; 20] {
         let (mut a, mut b, mut c, mut d, mut e) = (h0, h1, h2, h3, h4);
         for i in 0..80 {
             let (f, k) = match i {
-                0..=19 => ((b & c) | ((!b) & d), 0x5A827999u32),
-                20..=39 => (b ^ c ^ d, 0x6ED9EBA1u32),
-                40..=59 => ((b & c) | (b & d) | (c & d), 0x8F1BBCDCu32),
-                _ => (b ^ c ^ d, 0xCA62C1D6u32),
+                0..=19 => ((b & c) | ((!b) & d), 0x5A82_7999_u32),
+                20..=39 => (b ^ c ^ d, 0x6ED9_EBA1_u32),
+                40..=59 => ((b & c) | (b & d) | (c & d), 0x8F1B_BCDC_u32),
+                _ => (b ^ c ^ d, 0xCA62_C1D6_u32),
             };
             let temp = a
                 .rotate_left(5)
@@ -261,9 +261,17 @@ fn base64_encode(input: &[u8]) -> String {
     const CHARS: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
     let mut result = String::new();
     for chunk in input.chunks(3) {
-        let b0 = chunk[0] as u32;
-        let b1 = if chunk.len() > 1 { chunk[1] as u32 } else { 0 };
-        let b2 = if chunk.len() > 2 { chunk[2] as u32 } else { 0 };
+        let b0 = u32::from(chunk[0]);
+        let b1 = if chunk.len() > 1 {
+            u32::from(chunk[1])
+        } else {
+            0
+        };
+        let b2 = if chunk.len() > 2 {
+            u32::from(chunk[2])
+        } else {
+            0
+        };
         let triple = (b0 << 16) | (b1 << 8) | b2;
         result.push(CHARS[((triple >> 18) & 0x3F) as usize] as char);
         result.push(CHARS[((triple >> 12) & 0x3F) as usize] as char);
@@ -286,9 +294,8 @@ pub fn build_handshake_response(accept_key: &str) -> String {
         "HTTP/1.1 101 Switching Protocols\r\n\
          Upgrade: websocket\r\n\
          Connection: Upgrade\r\n\
-         Sec-WebSocket-Accept: {}\r\n\
-         \r\n",
-        accept_key
+         Sec-WebSocket-Accept: {accept_key}\r\n\
+         \r\n"
     )
 }
 
@@ -744,7 +751,7 @@ mod tests {
     fn event_bus_recent() {
         let bus = EventBus::new(100);
         for i in 0..5 {
-            bus.publish(alert_event("elevated", &format!("dev-{}", i), &[]));
+            bus.publish(alert_event("elevated", &format!("dev-{i}"), &[]));
         }
         let recent = bus.recent(3);
         assert_eq!(recent.len(), 3);
@@ -754,7 +761,7 @@ mod tests {
     fn event_bus_ring_buffer_limit() {
         let bus = EventBus::new(3);
         for i in 0..10 {
-            bus.publish(alert_event("nominal", &format!("dev-{}", i), &[]));
+            bus.publish(alert_event("nominal", &format!("dev-{i}"), &[]));
         }
         let recent = bus.recent(100);
         assert_eq!(recent.len(), 3);
@@ -767,11 +774,11 @@ mod tests {
         let id = bus.subscribe(vec![]);
         let h = std::thread::spawn(move || {
             for i in 0..50 {
-                bus2.publish(alert_event("elevated", &format!("t-{}", i), &[]));
+                bus2.publish(alert_event("elevated", &format!("t-{i}"), &[]));
             }
         });
         for i in 0..50 {
-            bus.publish(alert_event("critical", &format!("m-{}", i), &[]));
+            bus.publish(alert_event("critical", &format!("m-{i}"), &[]));
         }
         h.join().unwrap();
         let events = bus.drain(id);

@@ -173,15 +173,21 @@ impl PreventionEngine {
         };
         self.policies
             .lock()
-            .unwrap_or_else(|e| e.into_inner())
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
             .insert(default_policy.id.clone(), default_policy);
     }
 
     pub fn evaluate(&self, event: &PreventionEvent) -> Vec<PreventionDecision> {
-        let policies = self.policies.lock().unwrap_or_else(|e| e.into_inner());
+        let policies = self
+            .policies
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         let mut decisions = Vec::new();
 
-        let mut stats = self.stats.lock().unwrap_or_else(|e| e.into_inner());
+        let mut stats = self
+            .stats
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         stats.events_evaluated += 1;
 
         for policy in policies.values() {
@@ -230,7 +236,7 @@ impl PreventionEngine {
         if !decisions.is_empty() {
             self.decisions
                 .lock()
-                .unwrap_or_else(|e| e.into_inner())
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
                 .extend(decisions.clone());
         }
         decisions
@@ -278,14 +284,14 @@ impl PreventionEngine {
     pub fn add_policy(&self, policy: PreventionPolicy) {
         self.policies
             .lock()
-            .unwrap_or_else(|e| e.into_inner())
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
             .insert(policy.id.clone(), policy);
     }
 
     pub fn remove_policy(&self, policy_id: &str) -> Result<(), String> {
         self.policies
             .lock()
-            .unwrap_or_else(|e| e.into_inner())
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
             .remove(policy_id)
             .ok_or("Policy not found".into())
             .map(|_| ())
@@ -294,25 +300,31 @@ impl PreventionEngine {
     pub fn list_policies(&self) -> Vec<PreventionPolicy> {
         self.policies
             .lock()
-            .unwrap_or_else(|e| e.into_inner())
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
             .values()
             .cloned()
             .collect()
     }
 
     pub fn recent_decisions(&self, limit: usize) -> Vec<PreventionDecision> {
-        let decisions = self.decisions.lock().unwrap_or_else(|e| e.into_inner());
+        let decisions = self
+            .decisions
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         decisions.iter().rev().take(limit).cloned().collect()
     }
 
     pub fn stats(&self) -> PreventionStats {
-        self.stats.lock().unwrap_or_else(|e| e.into_inner()).clone()
+        self.stats
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .clone()
     }
 
     pub fn report_false_positive(&self, _rule_id: &str) {
         self.stats
             .lock()
-            .unwrap_or_else(|e| e.into_inner())
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
             .false_positives_reported += 1;
     }
 }

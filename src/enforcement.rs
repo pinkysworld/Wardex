@@ -69,10 +69,9 @@ impl ProcessEnforcer {
         let er = EnforcementResult {
             action: format!("suspend_process(pid={})", target.pid),
             success: result.is_ok(),
-            detail: result
-                .as_ref()
-                .map(|_| format!("SIGSTOP sent to pid {}", target.pid))
-                .unwrap_or_else(|e| e.clone()),
+            detail: result.as_ref().map_or_else(std::clone::Clone::clone, |_| {
+                format!("SIGSTOP sent to pid {}", target.pid)
+            }),
             rollback_command: Some(format!("kill -CONT {}", target.pid)),
         };
         self.active.entry(target.pid).or_default().push(er.clone());
@@ -85,10 +84,9 @@ impl ProcessEnforcer {
         let er = EnforcementResult {
             action: format!("kill_process(pid={})", target.pid),
             success: result.is_ok(),
-            detail: result
-                .as_ref()
-                .map(|_| format!("SIGKILL sent to pid {}", target.pid))
-                .unwrap_or_else(|e| e.clone()),
+            detail: result.as_ref().map_or_else(std::clone::Clone::clone, |_| {
+                format!("SIGKILL sent to pid {}", target.pid)
+            }),
             rollback_command: None, // irreversible
         };
         self.active.entry(target.pid).or_default().push(er.clone());
@@ -101,10 +99,9 @@ impl ProcessEnforcer {
         let er = EnforcementResult {
             action: format!("resume_process(pid={})", target.pid),
             success: result.is_ok(),
-            detail: result
-                .as_ref()
-                .map(|_| format!("SIGCONT sent to pid {}", target.pid))
-                .unwrap_or_else(|e| e.clone()),
+            detail: result.as_ref().map_or_else(std::clone::Clone::clone, |_| {
+                format!("SIGCONT sent to pid {}", target.pid)
+            }),
             rollback_command: None,
         };
         self.active.entry(target.pid).or_default().push(er.clone());
@@ -649,10 +646,7 @@ impl NetworkTopology {
                 actions.push(HealingAction {
                     action_type: "load_balance".into(),
                     affected_nodes: vec![node_id.clone()],
-                    detail: format!(
-                        "node {} has {} connections; redistributing load",
-                        node_id, count
-                    ),
+                    detail: format!("node {node_id} has {count} connections; redistributing load"),
                 });
             }
         }
@@ -1133,7 +1127,7 @@ impl EnforcementExecutor {
         }
         let cmd = ContainmentCommand::new(
             "quarantine_file",
-            &format!("mkdir -p '{}' && mv '{}' '{}/'", vault_dir, path, vault_dir),
+            &format!("mkdir -p '{vault_dir}' && mv '{path}' '{vault_dir}/'"),
             true,
         );
         self.execute(&cmd)

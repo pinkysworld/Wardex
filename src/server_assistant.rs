@@ -89,7 +89,6 @@ const ASSISTANT_STOP_WORDS: &[&str] = &[
     "that", "the", "this", "what", "when", "where", "with", "why",
 ];
 
-
 fn assistant_provider_from_env(value: &str) -> crate::llm_analyst::LlmProvider {
     match value.trim().to_ascii_lowercase().as_str() {
         "azure" | "azure-openai" | "azure_openai" => crate::llm_analyst::LlmProvider::AzureOpenAi,
@@ -345,11 +344,7 @@ pub(super) fn assistant_context_events(
         .all_events()
         .iter()
         .filter(|event| !linked_ids.contains(&event.id))
-        .filter(|event| {
-            scope_event_ids
-                .map(|ids| ids.contains(&event.id))
-                .unwrap_or(true)
-        })
+        .filter(|event| scope_event_ids.is_none_or(|ids| ids.contains(&event.id)))
         .filter(|event| assistant_matches_filter(event, request.context_filter.as_ref()))
         .filter_map(|event| {
             let haystack = format!(
@@ -403,7 +398,7 @@ fn assistant_fallback_answer(
             context.case.id, context.case.title, context.case.status, context.case.priority
         );
         if let Some(assignee) = context.case.assignee.as_deref() {
-            summary.push_str(&format!(", assigned to {}.", assignee));
+            summary.push_str(&format!(", assigned to {assignee}."));
         } else {
             summary.push('.');
         }
@@ -467,8 +462,10 @@ pub(super) fn assistant_structured_output(
     let summary = answer
         .lines()
         .find(|line| !line.trim().is_empty())
-        .map(|line| line.trim().trim_start_matches(['-', '*', ' ']).to_string())
-        .unwrap_or_else(|| "No assistant summary was produced.".to_string());
+        .map_or_else(
+            || "No assistant summary was produced.".to_string(),
+            |line| line.trim().trim_start_matches(['-', '*', ' ']).to_string(),
+        );
     let strongest_evidence = citations
         .iter()
         .take(3)

@@ -446,7 +446,7 @@ mod tests {
         let mut fa = FrequencyAnalyzer::new(100.0);
         // Generate a signal with a strong 10 Hz component
         for i in 0..200 {
-            let t = i as f64 / 100.0;
+            let t = f64::from(i) / 100.0;
             let val = (2.0 * std::f64::consts::PI * 10.0 * t).sin() * 100.0;
             fa.push(val);
         }
@@ -461,7 +461,7 @@ mod tests {
         let mut fa = FrequencyAnalyzer::new(1000.0);
         // Use 500 samples so freq 50 Hz lands on exact DFT bin (k=25)
         for i in 0..500 {
-            let t = i as f64 / 1000.0;
+            let t = f64::from(i) / 1000.0;
             let signal = (2.0 * std::f64::consts::PI * 50.0 * t).sin() * 500.0;
             fa.push(signal + 100.0);
         }

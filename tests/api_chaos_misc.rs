@@ -95,11 +95,11 @@ fn chaos_expired_token_rejected() {
             .set("Authorization", &auth_header(&token))
             .call();
         match result {
-            Ok(resp) => assert_eq!(resp.status(), 401, "Expected 401 for {}", ep),
+            Ok(resp) => assert_eq!(resp.status(), 401, "Expected 401 for {ep}"),
             Err(ureq::Error::Status(status, _)) => {
-                assert_eq!(status, 401, "Expected 401 for {}", ep)
+                assert_eq!(status, 401, "Expected 401 for {ep}")
             }
-            Err(e) => panic!("Unexpected error for {}: {}", ep, e),
+            Err(e) => panic!("Unexpected error for {ep}: {e}"),
         }
     }
 }
@@ -117,12 +117,7 @@ fn chaos_path_traversal_rejected() {
     for path in &traversal_attempts {
         let resp = ureq::get(&format!("{}{}", base(port), path)).call();
         if let Ok(r) = resp {
-            assert_ne!(
-                r.status(),
-                200,
-                "Path traversal should not succeed: {}",
-                path
-            );
+            assert_ne!(r.status(), 200, "Path traversal should not succeed: {path}");
         }
     }
 }
@@ -313,9 +308,9 @@ fn chaos_empty_and_invalid_auth_headers() {
             .set("Authorization", bad)
             .call();
         match result {
-            Ok(r) => assert_eq!(r.status(), 401, "Expected 401 for auth: {:?}", bad),
+            Ok(r) => assert_eq!(r.status(), 401, "Expected 401 for auth: {bad:?}"),
             Err(ureq::Error::Status(401, _)) => {}
-            Err(e) => panic!("Unexpected error for auth {:?}: {}", bad, e),
+            Err(e) => panic!("Unexpected error for auth {bad:?}: {e}"),
         }
     }
     // Server still healthy
@@ -591,7 +586,7 @@ fn pii_scan_returns_detected_categories() {
     assert_eq!(resp.status(), 200);
     let body: serde_json::Value = resp.into_json().expect("pii scan payload");
     assert_eq!(
-        body.get("has_pii").and_then(|value| value.as_bool()),
+        body.get("has_pii").and_then(serde_json::Value::as_bool),
         Some(true)
     );
     let categories = body

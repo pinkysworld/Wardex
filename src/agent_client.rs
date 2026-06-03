@@ -323,7 +323,7 @@ impl AgentClient {
         let timestamp = chrono::Utc::now().to_rfc3339();
         self.update_runtime_status(|status| {
             status.update_state = Some(state.to_string());
-            status.update_target_version = target_version.map(|value| value.to_string());
+            status.update_target_version = target_version.map(std::string::ToString::to_string);
             status.last_update_error = error;
             status.last_update_at = Some(timestamp);
         });
@@ -590,7 +590,7 @@ pub fn run_agent(
         host_info.platform,
         host_info.hostname
     );
-    log::info!("  Server: {}", server_url);
+    log::info!("  Server: {server_url}");
 
     let mut client = AgentClient::new(server_url);
     let runtime_status = Arc::new(Mutex::new(AgentRuntimeStatus::default()));

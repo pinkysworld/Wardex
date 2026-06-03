@@ -391,8 +391,7 @@ impl QuantumWalkEngine {
                     .partial_cmp(&b.threat_level)
                     .unwrap_or(std::cmp::Ordering::Equal)
             })
-            .map(|(i, n)| (i, n.threat_level))
-            .unwrap_or((0, 0.0));
+            .map_or((0, 0.0), |(i, n)| (i, n.threat_level));
 
         QwStepResult {
             step: 0, // caller tracks step count
@@ -836,8 +835,7 @@ mod tests {
         // Total probability should be approximately 1.0 (normalized)
         assert!(
             (final_prob - 1.0).abs() < 0.1,
-            "total probability should be ~1.0, got {}",
-            final_prob
+            "total probability should be ~1.0, got {final_prob}"
         );
     }
 

@@ -141,8 +141,10 @@ fn get_os_version() -> String {
         std::process::Command::new("sw_vers")
             .arg("-productVersion")
             .output()
-            .map(|o| format!("macOS {}", String::from_utf8_lossy(&o.stdout).trim()))
-            .unwrap_or_else(|_| "macOS".into())
+            .map_or_else(
+                |_| "macOS".into(),
+                |o| format!("macOS {}", String::from_utf8_lossy(&o.stdout).trim()),
+            )
     }
     #[cfg(target_os = "windows")]
     {
@@ -192,12 +194,12 @@ pub fn collect_sample_scoped(
         .as_millis() as u64;
 
     let file_integrity_drift = if scope.file_integrity {
-        fim.map_or(0.0, |f| f.check())
+        fim.map_or(0.0, FileIntegrityMonitor::check)
     } else {
         0.0
     };
     let persistence_drift = if scope.service_persistence {
-        persistence.map_or(0.0, |p| p.check())
+        persistence.map_or(0.0, FileIntegrityMonitor::check)
     } else {
         0.0
     };
@@ -1693,8 +1695,7 @@ fn timestamp_window(samples: &[TelemetrySample]) -> Option<String> {
     let last_rfc =
         chrono::DateTime::<chrono::Utc>::from_timestamp_millis(last as i64)?.to_rfc3339();
     Some(format!(
-        "{} → {} ({}s of telemetry)",
-        first_rfc, last_rfc, span_secs
+        "{first_rfc} → {last_rfc} ({span_secs}s of telemetry)"
     ))
 }
 
@@ -2400,10 +2401,7 @@ mod tests {
             r#"node,"C:\Windows\System32\cmd.exe /c echo alpha,beta",cmd.exe,1234,2097152"#,
         );
 
-        assert_eq!(
-            fields[1],
-            r#"C:\Windows\System32\cmd.exe /c echo alpha,beta"#
-        );
+        assert_eq!(fields[1], r"C:\Windows\System32\cmd.exe /c echo alpha,beta");
         assert_eq!(fields[2], "cmd.exe");
         assert_eq!(fields[3], "1234");
     }

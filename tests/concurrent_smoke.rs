@@ -48,7 +48,7 @@ fn concurrent_mixed_route_smoke_keeps_server_healthy() {
             let routes = ["/api/status", "/api/health", "/api/metrics", "/api/version"];
             for i in 0..ITERATIONS_PER_WORKER {
                 let route = routes[(worker + i) % routes.len()];
-                let url = format!("{}{}", base_url, route);
+                let url = format!("{base_url}{route}");
                 let result = ureq::get(&url)
                     .set("Authorization", &auth_header(&token))
                     .timeout(Duration::from_secs(10))
@@ -89,7 +89,7 @@ fn concurrent_mixed_route_smoke_keeps_server_healthy() {
 
     // Pull /metrics and ensure the new state-lock and failed-auth series are
     // visible (sanity check that load actually exercised tracked_lock paths).
-    let metrics = ureq::get(&format!("{}/api/metrics", base_url))
+    let metrics = ureq::get(&format!("{base_url}/api/metrics"))
         .set("Authorization", &auth_header(&token))
         .call()
         .expect("metrics fetch")

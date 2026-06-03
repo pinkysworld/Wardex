@@ -178,8 +178,14 @@ impl RbacStore {
 
     /// Register a user. Raw tokens are hashed before storage.
     pub fn add_user(&self, user: User) {
-        let mut users = self.users.lock().unwrap_or_else(|e| e.into_inner());
-        let mut tokens = self.tokens.lock().unwrap_or_else(|e| e.into_inner());
+        let mut users = self
+            .users
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let mut tokens = self
+            .tokens
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
 
         let mut user = user;
         user.token_hash = token_lookup_key(&user.token_hash);
@@ -195,11 +201,14 @@ impl RbacStore {
 
     /// Remove a user.
     pub fn remove_user(&self, username: &str) -> bool {
-        let mut users = self.users.lock().unwrap_or_else(|e| e.into_inner());
+        let mut users = self
+            .users
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         if let Some(user) = users.remove(username) {
             self.tokens
                 .lock()
-                .unwrap_or_else(|e| e.into_inner())
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
                 .remove(&user.token_hash);
             true
         } else {
@@ -209,8 +218,14 @@ impl RbacStore {
 
     /// Authenticate by token, returning the user if valid.
     pub fn authenticate(&self, token: &str) -> Option<User> {
-        let users = self.users.lock().unwrap_or_else(|e| e.into_inner());
-        let tokens = self.tokens.lock().unwrap_or_else(|e| e.into_inner());
+        let users = self
+            .users
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let tokens = self
+            .tokens
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         let lookup = token_lookup_key(token);
         let username = tokens.get(&lookup)?;
         let user = users.get(username)?;
@@ -224,8 +239,7 @@ impl RbacStore {
     /// Check if a token grants a specific permission.
     pub fn has_permission(&self, token: &str, perm: Permission) -> bool {
         self.authenticate(token)
-            .map(|u| role_permissions(u.role).contains(&perm))
-            .unwrap_or(false)
+            .is_some_and(|u| role_permissions(u.role).contains(&perm))
     }
 
     /// Check if a token grants access to a specific API path.
@@ -251,7 +265,7 @@ impl RbacStore {
     pub fn get_user(&self, username: &str) -> Option<User> {
         self.users
             .lock()
-            .unwrap_or_else(|e| e.into_inner())
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
             .get(username)
             .cloned()
             .map(redact_user_token)
@@ -260,7 +274,7 @@ impl RbacStore {
     pub fn list_users(&self) -> Vec<User> {
         self.users
             .lock()
-            .unwrap_or_else(|e| e.into_inner())
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
             .values()
             .cloned()
             .map(redact_user_token)
@@ -271,7 +285,7 @@ impl RbacStore {
         if let Some(user) = self
             .users
             .lock()
-            .unwrap_or_else(|e| e.into_inner())
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
             .get_mut(username)
         {
             user.role = role;
@@ -285,7 +299,7 @@ impl RbacStore {
         if let Some(user) = self
             .users
             .lock()
-            .unwrap_or_else(|e| e.into_inner())
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
             .get_mut(username)
         {
             user.enabled = false;
@@ -299,7 +313,7 @@ impl RbacStore {
         if let Some(user) = self
             .users
             .lock()
-            .unwrap_or_else(|e| e.into_inner())
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
             .get_mut(username)
         {
             user.enabled = true;
@@ -361,9 +375,7 @@ pub fn endpoint_permission(method: &str, path: &str) -> Permission {
 
         // Investigation workspace
         ("GET", p) if p.starts_with("/api/queue/") => Permission::ViewAlerts,
-        ("POST", "/api/queue/acknowledge") | ("POST", "/api/queue/assign") => {
-            Permission::ManageAlerts
-        }
+        ("POST", "/api/queue/acknowledge" | "/api/queue/assign") => Permission::ManageAlerts,
         ("GET", p) if p.starts_with("/api/timeline/") || p.starts_with("/api/process-tree") => {
             Permission::ViewIncidents
         }
@@ -373,9 +385,12 @@ pub fn endpoint_permission(method: &str, path: &str) -> Permission {
         ("GET", p) if p.starts_with("/api/investigations/workflows") => Permission::ViewIncidents,
         ("GET", "/api/investigations/active") => Permission::ViewIncidents,
         ("POST", "/api/investigations/suggest") => Permission::ViewIncidents,
-        ("POST", "/api/investigations/start")
-        | ("POST", "/api/investigations/progress")
-        | ("POST", "/api/investigations/handoff") => Permission::ManageIncidents,
+        (
+            "POST",
+            "/api/investigations/start"
+            | "/api/investigations/progress"
+            | "/api/investigations/handoff",
+        ) => Permission::ManageIncidents,
         ("GET", p) if p.starts_with("/api/playbooks") || p.starts_with("/api/playbook/") => {
             Permission::ViewIncidents
         }
@@ -422,17 +437,16 @@ pub fn endpoint_permission(method: &str, path: &str) -> Permission {
         (_, p) if p.starts_with("/api/retention/") => Permission::ManageConfig,
 
         // Users
-        ("GET", "/api/admin/rbac-coverage") | ("GET", "/api/rbac/coverage") => {
-            Permission::ManageUsers
-        }
+        ("GET", "/api/admin/rbac-coverage" | "/api/rbac/coverage") => Permission::ManageUsers,
         (_, p) if p.starts_with("/api/users") || p.starts_with("/api/rbac/users") => {
             Permission::ManageUsers
         }
 
         // Response orchestration
-        ("GET", "/api/response/audit")
-        | ("GET", "/api/response/execution-audit")
-        | ("GET", "/api/response/approvals") => Permission::ViewAuditLog,
+        (
+            "GET",
+            "/api/response/audit" | "/api/response/execution-audit" | "/api/response/approvals",
+        ) => Permission::ViewAuditLog,
         ("GET", p) if p.starts_with("/api/response") => Permission::ViewIncidents,
         ("POST", "/api/response/request") => Permission::ApproveResponses,
         ("POST", p) if p.contains("approve") || p.contains("deny") => Permission::ApproveResponses,

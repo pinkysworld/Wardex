@@ -364,11 +364,11 @@ impl UpdateManager {
             return Err("invalid version or platform name".into());
         }
         let sha256 = hex::encode(Sha256::digest(binary));
-        let file_name = format!("wardex-{}-{}", version, platform);
+        let file_name = format!("wardex-{version}-{platform}");
 
         let releases_dir = format!("{}/releases", self.store_dir);
         let _ = fs::create_dir_all(&releases_dir);
-        let file_path = format!("{}/{}", releases_dir, file_name);
+        let file_path = format!("{releases_dir}/{file_name}");
 
         fs::write(&file_path, binary)
             .map_err(|e| format!("failed to write release binary: {e}"))?;

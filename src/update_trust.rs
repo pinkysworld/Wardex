@@ -30,7 +30,7 @@ impl UpdateTrustPolicy {
     pub fn from_settings(settings: &UpdateSigningSettings) -> Self {
         let mut trusted_update_signers = BUNDLED_TRUSTED_UPDATE_SIGNERS
             .iter()
-            .map(|value| value.to_string())
+            .map(std::string::ToString::to_string)
             .collect::<Vec<_>>();
         for signer in &settings.trusted_update_signers {
             let trimmed = signer.trim();

@@ -269,7 +269,7 @@ impl PlaybookEngine {
         self.executions.push(PlaybookExecution {
             execution_id: exec_id.clone(),
             playbook_id: playbook_id.to_string(),
-            alert_id: alert_id.map(|s| s.to_string()),
+            alert_id: alert_id.map(std::string::ToString::to_string),
             executed_by: executed_by.to_string(),
             status: ExecutionStatus::Running,
             started_at: now_ms,
@@ -454,8 +454,10 @@ impl PlaybookEngine {
         let approval_output = feedback
             .map(str::trim)
             .filter(|value| !value.is_empty())
-            .map(|value| format!("approved by '{approved_by}': {value}"))
-            .unwrap_or_else(|| format!("approved by '{approved_by}'"));
+            .map_or_else(
+                || format!("approved by '{approved_by}'"),
+                |value| format!("approved by '{approved_by}': {value}"),
+            );
 
         self.update_step(
             execution_id,
@@ -517,10 +519,12 @@ impl PlaybookEngine {
                             .executions
                             .iter()
                             .find(|execution| execution.execution_id == exec_id)
-                            .map(|execution| {
-                                substitute_template(message_template, &execution.variables)
-                            })
-                            .unwrap_or_else(|| message_template.clone());
+                            .map_or_else(
+                                || message_template.clone(),
+                                |execution| {
+                                    substitute_template(message_template, &execution.variables)
+                                },
+                            );
                         self.update_step(
                             exec_id,
                             &step.id,
@@ -603,14 +607,14 @@ impl PlaybookEngine {
                 message_template,
             } => {
                 let msg = substitute_template(message_template, &exec.variables);
-                Ok(Some(format!("notified {:?}: {}", channel, msg)))
+                Ok(Some(format!("notified {channel:?}: {msg}")))
             }
             StepType::Enrich {
                 source,
                 query_template,
             } => {
                 let query = substitute_template(query_template, &exec.variables);
-                Ok(Some(format!("enriched from '{}': {}", source, query)))
+                Ok(Some(format!("enriched from '{source}': {query}")))
             }
             StepType::Conditional {
                 condition,
@@ -619,9 +623,9 @@ impl PlaybookEngine {
             } => {
                 let result = evaluate_condition(condition, &exec.variables);
                 if result {
-                    Ok(Some(format!("condition true → {}", then_step)))
+                    Ok(Some(format!("condition true → {then_step}")))
                 } else if let Some(el) = else_step {
-                    Ok(Some(format!("condition false → {}", el)))
+                    Ok(Some(format!("condition false → {el}")))
                 } else {
                     Ok(Some("condition false → skip".into()))
                 }
@@ -629,30 +633,26 @@ impl PlaybookEngine {
             StepType::Parallel { step_ids } => {
                 Ok(Some(format!("parallel fan-out: {} steps", step_ids.len())))
             }
-            StepType::Wait { seconds } => Ok(Some(format!("waited {} seconds", seconds))),
+            StepType::Wait { seconds } => Ok(Some(format!("waited {seconds} seconds"))),
             StepType::Escalate {
                 target,
                 message_template,
             } => {
                 let msg = substitute_template(message_template, &exec.variables);
-                Ok(Some(format!("escalated to '{}': {}", target, msg)))
+                Ok(Some(format!("escalated to '{target}': {msg}")))
             }
             StepType::CreateCase { case_template } => Ok(Some(format!(
-                "created case from template '{}'",
-                case_template
+                "created case from template '{case_template}'"
             ))),
             StepType::Approval {
                 approver,
                 message_template,
             } => {
                 let msg = substitute_template(message_template, &exec.variables);
-                Ok(Some(format!(
-                    "approval requested from '{}': {}",
-                    approver, msg
-                )))
+                Ok(Some(format!("approval requested from '{approver}': {msg}")))
             }
             StepType::CollectEvidence { artifact_types } => {
-                Ok(Some(format!("collected evidence: {:?}", artifact_types)))
+                Ok(Some(format!("collected evidence: {artifact_types:?}")))
             }
             StepType::Contain { action, params } => Ok(Some(format!(
                 "containment '{}' with {} params",
@@ -669,7 +669,7 @@ impl PlaybookEngine {
 fn substitute_template(template: &str, variables: &HashMap<String, String>) -> String {
     let mut result = template.to_string();
     for (key, value) in variables {
-        result = result.replace(&format!("{{{}}}", key), value);
+        result = result.replace(&format!("{{{key}}}"), value);
     }
     result
 }
@@ -723,8 +723,7 @@ pub fn evaluate_condition(condition: &str, variables: &HashMap<String, String>) 
     // fallback: treat as truthy variable lookup
     variables
         .get(condition.trim())
-        .map(|v| v != "0" && v != "false" && !v.is_empty())
-        .unwrap_or(false)
+        .is_some_and(|v| v != "0" && v != "false" && !v.is_empty())
 }
 
 fn find_top_level(s: &str, sep: &str) -> Option<usize> {

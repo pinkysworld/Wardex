@@ -104,12 +104,15 @@ impl MeteringManager {
         };
         self.meters
             .lock()
-            .unwrap_or_else(|e| e.into_inner())
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
             .insert(tenant_id.to_string(), meter);
     }
 
     pub fn record_events(&self, tenant_id: &str, count: u64) -> Result<(), String> {
-        let mut meters = self.meters.lock().unwrap_or_else(|e| e.into_inner());
+        let mut meters = self
+            .meters
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         let meter = meters
             .get_mut(tenant_id)
             .ok_or_else(|| format!("Unknown tenant: {tenant_id}"))?;
@@ -124,7 +127,10 @@ impl MeteringManager {
     }
 
     pub fn record_api_call(&self, tenant_id: &str) -> Result<(), String> {
-        let mut meters = self.meters.lock().unwrap_or_else(|e| e.into_inner());
+        let mut meters = self
+            .meters
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         let meter = meters
             .get_mut(tenant_id)
             .ok_or_else(|| format!("Unknown tenant: {tenant_id}"))?;
@@ -136,7 +142,10 @@ impl MeteringManager {
     }
 
     pub fn record_storage(&self, tenant_id: &str, bytes: u64) -> Result<(), String> {
-        let mut meters = self.meters.lock().unwrap_or_else(|e| e.into_inner());
+        let mut meters = self
+            .meters
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         let meter = meters
             .get_mut(tenant_id)
             .ok_or_else(|| format!("Unknown tenant: {tenant_id}"))?;
@@ -150,13 +159,16 @@ impl MeteringManager {
     pub fn get_usage(&self, tenant_id: &str) -> Option<UsageMeter> {
         self.meters
             .lock()
-            .unwrap_or_else(|e| e.into_inner())
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
             .get(tenant_id)
             .cloned()
     }
 
     pub fn snapshot(&self, tenant_id: &str) -> Option<UsageSnapshot> {
-        let meters = self.meters.lock().unwrap_or_else(|e| e.into_inner());
+        let meters = self
+            .meters
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         let meter = meters.get(tenant_id)?;
         let utilization = (meter.events_ingested as f64 / meter.events_limit.max(1) as f64) * 100.0;
         let snap = UsageSnapshot {
@@ -169,13 +181,16 @@ impl MeteringManager {
         };
         self.snapshots
             .lock()
-            .unwrap_or_else(|e| e.into_inner())
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
             .push(snap.clone());
         Some(snap)
     }
 
     pub fn check_trial_expiry(&self, tenant_id: &str) -> Option<bool> {
-        let meters = self.meters.lock().unwrap_or_else(|e| e.into_inner());
+        let meters = self
+            .meters
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         let meter = meters.get(tenant_id)?;
         match &meter.plan {
             MeteringPlan::Trial { expires } => Some(Utc::now() > *expires),
@@ -186,14 +201,17 @@ impl MeteringManager {
     pub fn list_tenants(&self) -> Vec<String> {
         self.meters
             .lock()
-            .unwrap_or_else(|e| e.into_inner())
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
             .keys()
             .cloned()
             .collect()
     }
 
     pub fn reset_period(&self, tenant_id: &str) -> Result<(), String> {
-        let mut meters = self.meters.lock().unwrap_or_else(|e| e.into_inner());
+        let mut meters = self
+            .meters
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         let meter = meters.get_mut(tenant_id).ok_or("Unknown tenant")?;
         meter.events_ingested = 0;
         meter.api_calls = 0;

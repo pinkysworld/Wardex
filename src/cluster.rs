@@ -220,7 +220,7 @@ pub struct InstallSnapshotResponse {
 
 /// SQL schema for persistent Raft log storage.
 pub fn raft_log_schema() -> &'static str {
-    r#"
+    r"
 CREATE TABLE IF NOT EXISTS raft_log (
     idx        INTEGER PRIMARY KEY,
     term       INTEGER NOT NULL,
@@ -240,7 +240,7 @@ CREATE TABLE IF NOT EXISTS raft_snapshots (
     created_at           TEXT    NOT NULL,
     size_bytes           INTEGER NOT NULL
 );
-"#
+"
 }
 
 // ── Cluster Node ─────────────────────────────────────────────────────────────
@@ -310,7 +310,7 @@ impl ClusterNode {
     pub fn node_id(&self) -> NodeId {
         self.inner
             .lock()
-            .unwrap_or_else(|e| e.into_inner())
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
             .config
             .node_id
             .clone()
@@ -319,7 +319,7 @@ impl ClusterNode {
     pub fn state(&self) -> NodeState {
         self.inner
             .lock()
-            .unwrap_or_else(|e| e.into_inner())
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
             .state
             .clone()
     }
@@ -327,7 +327,7 @@ impl ClusterNode {
     pub fn role(&self) -> NodeRole {
         self.inner
             .lock()
-            .unwrap_or_else(|e| e.into_inner())
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
             .state
             .role
     }
@@ -339,7 +339,7 @@ impl ClusterNode {
     pub fn term(&self) -> u64 {
         self.inner
             .lock()
-            .unwrap_or_else(|e| e.into_inner())
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
             .state
             .term
     }
@@ -347,7 +347,7 @@ impl ClusterNode {
     pub fn commit_index(&self) -> u64 {
         self.inner
             .lock()
-            .unwrap_or_else(|e| e.into_inner())
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
             .state
             .commit_index
     }
@@ -355,7 +355,7 @@ impl ClusterNode {
     pub fn log_len(&self) -> u64 {
         self.inner
             .lock()
-            .unwrap_or_else(|e| e.into_inner())
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
             .log
             .len() as u64
     }
@@ -363,7 +363,10 @@ impl ClusterNode {
     // ── Election ─────────────────────────────────────────────────────────
 
     pub fn start_election(&self) -> VoteRequest {
-        let mut inner = self.inner.lock().unwrap_or_else(|e| e.into_inner());
+        let mut inner = self
+            .inner
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         inner.state.term += 1;
         inner.state.role = NodeRole::Candidate;
         inner.state.leader_id = None;
@@ -386,7 +389,10 @@ impl ClusterNode {
     }
 
     pub fn handle_vote_request(&self, req: &VoteRequest) -> VoteResponse {
-        let mut inner = self.inner.lock().unwrap_or_else(|e| e.into_inner());
+        let mut inner = self
+            .inner
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
 
         if req.term < inner.state.term {
             return VoteResponse {
@@ -430,7 +436,10 @@ impl ClusterNode {
     }
 
     pub fn become_leader(&self) {
-        let mut inner = self.inner.lock().unwrap_or_else(|e| e.into_inner());
+        let mut inner = self
+            .inner
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         inner.state.role = NodeRole::Leader;
         inner.state.leader_id = Some(inner.config.node_id.clone());
 
@@ -444,7 +453,10 @@ impl ClusterNode {
     // ── Log Replication ──────────────────────────────────────────────────
 
     pub fn append_entry(&self, entry_type: EntryType, data: serde_json::Value) -> Option<u64> {
-        let mut inner = self.inner.lock().unwrap_or_else(|e| e.into_inner());
+        let mut inner = self
+            .inner
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         if inner.state.role != NodeRole::Leader {
             return None;
         }
@@ -462,7 +474,10 @@ impl ClusterNode {
     }
 
     pub fn handle_append(&self, req: &AppendRequest) -> AppendResponse {
-        let mut inner = self.inner.lock().unwrap_or_else(|e| e.into_inner());
+        let mut inner = self
+            .inner
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
 
         if req.term < inner.state.term {
             return AppendResponse {
@@ -548,7 +563,10 @@ impl ClusterNode {
     }
 
     pub fn prepare_append(&self, peer_id: &NodeId) -> Option<AppendRequest> {
-        let inner = self.inner.lock().unwrap_or_else(|e| e.into_inner());
+        let inner = self
+            .inner
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         if inner.state.role != NodeRole::Leader {
             return None;
         }
@@ -581,7 +599,10 @@ impl ClusterNode {
     }
 
     pub fn handle_append_response(&self, peer_id: &NodeId, resp: &AppendResponse) {
-        let mut inner = self.inner.lock().unwrap_or_else(|e| e.into_inner());
+        let mut inner = self
+            .inner
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         if resp.term > inner.state.term {
             inner.state.term = resp.term;
             inner.state.role = NodeRole::Follower;
@@ -592,7 +613,7 @@ impl ClusterNode {
         }
 
         let Some(status) = inner.peer_status.get_mut(peer_id) else {
-            log::warn!("[cluster] append response from unknown peer {}", peer_id);
+            log::warn!("[cluster] append response from unknown peer {peer_id}");
             return;
         };
 
@@ -634,7 +655,10 @@ impl ClusterNode {
     // ── Health ────────────────────────────────────────────────────────────
 
     pub fn health(&self) -> ClusterHealth {
-        let inner = self.inner.lock().unwrap_or_else(|e| e.into_inner());
+        let inner = self
+            .inner
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         let reachable = inner.peer_status.values().filter(|s| s.reachable).count();
         let total = inner.peer_status.len();
         let leader_visible = inner.state.role == NodeRole::Leader
@@ -654,7 +678,10 @@ impl ClusterNode {
     }
 
     pub fn replication_state(&self) -> ReplicationState {
-        let inner = self.inner.lock().unwrap_or_else(|e| e.into_inner());
+        let inner = self
+            .inner
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         let primary_region =
             replication_region_hint(&inner.config.node_id, &inner.config.bind_addr);
         let replicas = inner
@@ -664,7 +691,7 @@ impl ClusterNode {
             .map(|peer| {
                 let status = inner.peer_status.get(&peer.node_id);
                 let match_index = status.map(|value| value.match_index).unwrap_or_default();
-                let reachable = status.map(|value| value.reachable).unwrap_or(false);
+                let reachable = status.is_some_and(|value| value.reachable);
                 ReplicaStatus {
                     node_id: peer.node_id.clone(),
                     addr: peer.addr.clone(),
@@ -717,13 +744,19 @@ impl ClusterNode {
     }
 
     pub fn should_start_election(&self) -> bool {
-        let inner = self.inner.lock().unwrap_or_else(|e| e.into_inner());
+        let inner = self
+            .inner
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         inner.state.role != NodeRole::Leader && Instant::now() > inner.election_deadline
     }
 
     /// Create a snapshot of all committed log entries up to commit_index.
     pub fn create_snapshot(&self) -> Option<Snapshot> {
-        let inner = self.inner.lock().unwrap_or_else(|e| e.into_inner());
+        let inner = self
+            .inner
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         if inner.state.commit_index == 0 {
             return None;
         }
@@ -754,7 +787,10 @@ impl ClusterNode {
 
     /// Handle an incoming InstallSnapshot request from the leader.
     pub fn handle_install_snapshot(&self, req: &InstallSnapshotRequest) -> InstallSnapshotResponse {
-        let mut inner = self.inner.lock().unwrap_or_else(|e| e.into_inner());
+        let mut inner = self
+            .inner
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         if req.term < inner.state.term {
             return InstallSnapshotResponse {
                 term: inner.state.term,
@@ -788,7 +824,10 @@ impl ClusterNode {
 
     /// Compact the log by removing entries before the given index.
     pub fn compact_log(&self, up_to_index: u64) -> usize {
-        let mut inner = self.inner.lock().unwrap_or_else(|e| e.into_inner());
+        let mut inner = self
+            .inner
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         let before = inner.log.len();
         inner.log.retain(|e| e.index > up_to_index);
         before - inner.log.len()

@@ -504,8 +504,8 @@ impl AnomalyDetector {
                 let triage = if score > 0.3 {
                     let now = chrono::Utc::now();
                     let features = TriageFeatures {
-                        anomaly_score: score as f64,
-                        confidence: history_factor as f64,
+                        anomaly_score: f64::from(score),
+                        confidence: f64::from(history_factor),
                         suspicious_axes: suspicious_axes as u32,
                         hour_of_day: now.format("%H").to_string().parse().unwrap_or(12),
                         day_of_week: now
@@ -515,7 +515,7 @@ impl AnomalyDetector {
                             .unwrap_or(1)
                             .saturating_sub(1),
                         alert_frequency_1h: 0, // caller can update this from alert store
-                        device_risk_score: score.min(1.0) as f64,
+                        device_risk_score: f64::from(score.min(1.0)),
                     };
                     Some(self.ml_engine.triage_alert(&features))
                 } else {
@@ -1070,7 +1070,7 @@ impl ContinualLearner {
         }
         self.window.push(*sample);
 
-        let drift = self.drift_score.update(signal.score as f64);
+        let drift = self.drift_score.update(f64::from(signal.score));
         if drift.drifted {
             // Concept drift detected — reset baseline and re-learn from window
             self.detector.reset_baseline();
@@ -1927,7 +1927,7 @@ impl SlowAttackDetector {
 
     /// Evaluate slow-attack signals.
     pub fn evaluate(&self) -> SlowAttackReport {
-        let cumulative_auth: u64 = self.long_auth.iter().map(|&f| f as u64).sum();
+        let cumulative_auth: u64 = self.long_auth.iter().map(|&f| u64::from(f)).sum();
         let short_auth_sum: u32 = self.short_auth.iter().sum();
         let auth_rate = if self.short_auth.is_empty() {
             0.0
@@ -1935,7 +1935,7 @@ impl SlowAttackDetector {
             short_auth_sum as f32 / self.short_auth.len() as f32
         };
 
-        let cumulative_network_kb: f64 = self.long_network.iter().map(|&k| k as f64).sum();
+        let cumulative_network_kb: f64 = self.long_network.iter().map(|&k| f64::from(k)).sum();
 
         let mut score = 0.0f32;
         let mut patterns = Vec::new();

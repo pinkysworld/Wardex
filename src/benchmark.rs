@@ -357,8 +357,7 @@ mod tests {
         // but allow normal debug-build variance on clean machines and CI runners.
         assert!(
             elapsed.as_secs_f64() < 2.0,
-            "10k benchmark took {:?}",
-            elapsed
+            "10k benchmark took {elapsed:?}"
         );
 
         // Sanity: we should have some of each category

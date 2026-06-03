@@ -139,7 +139,7 @@ impl LogSink for StdoutSink {
         } else {
             entry.to_json()
         };
-        let _ = writeln!(std::io::stdout(), "{}", json);
+        let _ = writeln!(std::io::stdout(), "{json}");
     }
 
     fn flush(&self) {
@@ -379,7 +379,7 @@ pub fn request_log(
         LogLevel::Info
     };
 
-    let mut entry = LogEntry::new(level, format!("{} {} → {}", method, path, status))
+    let mut entry = LogEntry::new(level, format!("{method} {path} → {status}"))
         .with_target("http")
         .with_field("method", method)
         .with_field("path", path)
@@ -393,7 +393,7 @@ pub fn request_log(
 }
 
 pub fn security_log(event: &str, source_ip: &str, details: &str) -> LogEntry {
-    LogEntry::new(LogLevel::Warn, format!("security: {}", event))
+    LogEntry::new(LogLevel::Warn, format!("security: {event}"))
         .with_target("security")
         .with_field("event", event)
         .with_field("source_ip", source_ip)
@@ -403,7 +403,7 @@ pub fn security_log(event: &str, source_ip: &str, details: &str) -> LogEntry {
 pub fn audit_log(actor: &str, action: &str, resource: &str) -> LogEntry {
     LogEntry::new(
         LogLevel::Info,
-        format!("audit: {} {} {}", actor, action, resource),
+        format!("audit: {actor} {action} {resource}"),
     )
     .with_target("audit")
     .with_field("actor", actor)
@@ -644,11 +644,11 @@ mod tests {
         let logger2 = logger.clone();
         let h = std::thread::spawn(move || {
             for i in 0..20 {
-                logger2.info(format!("thread msg {}", i));
+                logger2.info(format!("thread msg {i}"));
             }
         });
         for i in 0..20 {
-            logger.info(format!("main msg {}", i));
+            logger.info(format!("main msg {i}"));
         }
         h.join().unwrap();
         assert_eq!(sink.len(), 40);

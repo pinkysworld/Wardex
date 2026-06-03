@@ -552,7 +552,7 @@ fn parse_malwarebazaar_csv(data: &str) -> AbusechParsed {
             "" | "n/a" => "unknown",
             other => other,
         };
-        let file_type = fields.get(6).map(String::as_str).unwrap_or("");
+        let file_type = fields.get(6).map_or("", String::as_str);
 
         let mut tags = vec!["malwarebazaar".to_string()];
         if !file_type.is_empty() && file_type != "n/a" {
@@ -776,16 +776,15 @@ fn parse_abusech_feed(data: &str) -> AbusechParsed {
                     .get("md5_hash")
                     .and_then(|v| v.as_str())
                     .filter(|s| !s.is_empty())
-                    .map(|s| s.to_lowercase());
-                let tags: Vec<String> = entry
-                    .get("tags")
-                    .and_then(|v| v.as_array())
-                    .map(|arr| {
+                    .map(str::to_lowercase);
+                let tags: Vec<String> = entry.get("tags").and_then(|v| v.as_array()).map_or_else(
+                    || vec!["malwarebazaar".into()],
+                    |arr| {
                         arr.iter()
                             .filter_map(|v| v.as_str().map(String::from))
                             .collect()
-                    })
-                    .unwrap_or_else(|| vec!["malwarebazaar".into()]);
+                    },
+                );
                 malware_entries.push(MalwareEntry {
                     sha256: sha256.to_lowercase(),
                     md5,

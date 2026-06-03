@@ -320,7 +320,7 @@ impl ThreatIntelStore {
             let name = obj.get("name").and_then(|n| n.as_str()).unwrap_or("");
             let confidence = obj
                 .get("confidence")
-                .and_then(|c| c.as_f64())
+                .and_then(serde_json::Value::as_f64)
                 .unwrap_or(50.0) as f32
                 / 100.0;
             let now = chrono::Utc::now().to_rfc3339();

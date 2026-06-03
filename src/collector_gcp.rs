@@ -235,7 +235,7 @@ impl GcpAuditCollector {
         let next_page_token = root
             .get("nextPageToken")
             .and_then(|v| v.as_str())
-            .map(|s| s.to_string());
+            .map(std::string::ToString::to_string);
 
         let raw_entries = match root.get("entries").and_then(|v| v.as_array()) {
             Some(arr) => arr,
@@ -270,14 +270,14 @@ impl GcpAuditCollector {
             let status_code = proto
                 .and_then(|p| p.get("status"))
                 .and_then(|s| s.get("code"))
-                .and_then(|v| v.as_i64())
+                .and_then(serde_json::Value::as_i64)
                 .unwrap_or(0) as i32;
 
             let status_message = proto
                 .and_then(|p| p.get("status"))
                 .and_then(|s| s.get("message"))
                 .and_then(|v| v.as_str())
-                .map(|s| s.to_string());
+                .map(std::string::ToString::to_string);
 
             let (risk_score, mitre_techniques) = score_gcp_event(&method_name, status_code);
 
@@ -294,12 +294,12 @@ impl GcpAuditCollector {
                     .and_then(|r| r.get("labels"))
                     .and_then(|l| l.get("instance_id").or(l.get("bucket_name")))
                     .and_then(|v| v.as_str())
-                    .map(|s| s.to_string()),
+                    .map(std::string::ToString::to_string),
                 resource_type: entry
                     .get("resource")
                     .and_then(|r| r.get("type"))
                     .and_then(|v| v.as_str())
-                    .map(|s| s.to_string()),
+                    .map(std::string::ToString::to_string),
                 timestamp: entry
                     .get("timestamp")
                     .and_then(|v| v.as_str())
@@ -309,12 +309,12 @@ impl GcpAuditCollector {
                     .and_then(|p| p.get("requestMetadata"))
                     .and_then(|r| r.get("callerIp"))
                     .and_then(|v| v.as_str())
-                    .map(|s| s.to_string()),
+                    .map(std::string::ToString::to_string),
                 principal_email: proto
                     .and_then(|p| p.get("authenticationInfo"))
                     .and_then(|a| a.get("principalEmail"))
                     .and_then(|v| v.as_str())
-                    .map(|s| s.to_string()),
+                    .map(std::string::ToString::to_string),
                 severity: entry
                     .get("severity")
                     .and_then(|v| v.as_str())
@@ -477,8 +477,7 @@ impl GcpAuditCollector {
         let resp: serde_json::Value = ureq::post("https://oauth2.googleapis.com/token")
             .set("Content-Type", "application/x-www-form-urlencoded")
             .send_string(&format!(
-                "grant_type=urn%3Aietf%3Aparams%3Aoauth%3Agrant-type%3Ajwt-bearer&assertion={}",
-                jwt
+                "grant_type=urn%3Aietf%3Aparams%3Aoauth%3Agrant-type%3Ajwt-bearer&assertion={jwt}"
             ))
             .map_err(|e| format!("GCP token request failed: {e}"))?
             .into_json()
@@ -491,7 +490,7 @@ impl GcpAuditCollector {
 
         let expires_in = resp
             .get("expires_in")
-            .and_then(|v| v.as_u64())
+            .and_then(serde_json::Value::as_u64)
             .unwrap_or(3600);
 
         self.set_token(token, expires_in);

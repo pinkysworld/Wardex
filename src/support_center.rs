@@ -129,7 +129,7 @@ fn markdown_headings(content: &str, limit: usize) -> Vec<String> {
 }
 
 fn document_tags(path: &str, title: &str, summary: &str) -> Vec<String> {
-    let haystack = format!("{} {} {}", path, title, summary).to_ascii_lowercase();
+    let haystack = format!("{path} {title} {summary}").to_ascii_lowercase();
     let mut tags = Vec::new();
     if path.starts_with("runbooks/") {
         tags.push("runbooks".to_string());
@@ -190,7 +190,7 @@ fn document_matches_section(entry: &DocumentEntry, section: &str) -> bool {
 fn document_match_score(entry: &DocumentEntry, query: &str, content: &str) -> Option<usize> {
     let terms = query
         .split_whitespace()
-        .map(|term| term.to_ascii_lowercase())
+        .map(str::to_ascii_lowercase)
         .filter(|term| !term.is_empty())
         .collect::<Vec<_>>();
     if terms.is_empty() {
@@ -457,8 +457,7 @@ pub fn support_parity(version: &str) -> serde_json::Value {
     let openapi_path_count = openapi_value
         .get("paths")
         .and_then(serde_json::Value::as_object)
-        .map(|paths| paths.len())
-        .unwrap_or(0);
+        .map_or(0, serde_json::Map::len);
     let runtime_openapi_inventory = runtime_openapi_operations(&openapi_value);
     let endpoint_catalog = crate::openapi::endpoint_catalog(version);
     let graphql_schema = crate::graphql::wardex_schema();

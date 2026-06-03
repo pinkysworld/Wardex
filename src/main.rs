@@ -137,8 +137,7 @@ async fn run() -> Result<(), String> {
         "demo" => {
             let audit_path = args
                 .next()
-                .map(PathBuf::from)
-                .unwrap_or_else(|| PathBuf::from("var/demo.audit.log"));
+                .map_or_else(|| PathBuf::from("var/demo.audit.log"), PathBuf::from);
 
             if args.next().is_some() {
                 return Err("too many arguments for `demo`".into());
@@ -161,8 +160,7 @@ async fn run() -> Result<(), String> {
                 .ok_or_else(|| "missing telemetry path for `analyze`".to_string())?;
             let audit_path = args
                 .next()
-                .map(PathBuf::from)
-                .unwrap_or_else(|| PathBuf::from("var/last-run.audit.log"));
+                .map_or_else(|| PathBuf::from("var/last-run.audit.log"), PathBuf::from);
 
             if args.next().is_some() {
                 return Err("too many arguments for `analyze`".into());
@@ -187,8 +185,7 @@ async fn run() -> Result<(), String> {
                 .ok_or_else(|| "missing telemetry path for `report`".to_string())?;
             let report_path = args
                 .next()
-                .map(PathBuf::from)
-                .unwrap_or_else(|| PathBuf::from("var/last-run.report.json"));
+                .map_or_else(|| PathBuf::from("var/last-run.report.json"), PathBuf::from);
 
             if args.next().is_some() {
                 return Err("too many arguments for `report`".into());
@@ -204,8 +201,7 @@ async fn run() -> Result<(), String> {
         "init-config" => {
             let config_path = args
                 .next()
-                .map(PathBuf::from)
-                .unwrap_or_else(|| PathBuf::from("wardex.toml"));
+                .map_or_else(|| PathBuf::from("wardex.toml"), PathBuf::from);
 
             if args.next().is_some() {
                 return Err("too many arguments for `init-config`".into());
@@ -343,11 +339,13 @@ async fn run() -> Result<(), String> {
                 .ok_or_else(|| "missing binary path for `attest`".to_string())?;
             let output_path = args
                 .next()
-                .map(PathBuf::from)
-                .unwrap_or_else(|| PathBuf::from("var/manifest.json"));
+                .map_or_else(|| PathBuf::from("var/manifest.json"), PathBuf::from);
 
             let artifact_paths: Vec<PathBuf> = args.map(PathBuf::from).collect();
-            let artifact_refs: Vec<&Path> = artifact_paths.iter().map(|p| p.as_path()).collect();
+            let artifact_refs: Vec<&Path> = artifact_paths
+                .iter()
+                .map(std::path::PathBuf::as_path)
+                .collect();
 
             let manifest = BuildManifest::generate(&binary_path, &artifact_refs)?;
             manifest.write_to_path(&output_path)?;
@@ -393,8 +391,7 @@ async fn run() -> Result<(), String> {
 
             let site_dir = args
                 .next()
-                .map(PathBuf::from)
-                .unwrap_or_else(|| PathBuf::from("site"));
+                .map_or_else(|| PathBuf::from("site"), PathBuf::from);
             let site_dir = resolve_site_dir(&site_dir)?;
 
             if args.next().is_some() {
@@ -732,7 +729,7 @@ fn run_bench(benign_path: &str, attack_path: &str, threshold: f32) -> Result<(),
                         .map(|(n, _)| n.as_str()),
                 )
                 .collect();
-            s.sort();
+            s.sort_unstable();
             s.dedup();
             s
         };
@@ -741,14 +738,12 @@ fn run_bench(benign_path: &str, attack_path: &str, threshold: f32) -> Result<(),
                 .signal_contributions
                 .iter()
                 .find(|(n, _)| n == signal)
-                .map(|(_, v)| *v)
-                .unwrap_or(0.0);
+                .map_or(0.0, |(_, v)| *v);
             let fixed_val = fixed_result
                 .signal_contributions
                 .iter()
                 .find(|(n, _)| n == signal)
-                .map(|(_, v)| *v)
-                .unwrap_or(0.0);
+                .map_or(0.0, |(_, v)| *v);
             println!("    {signal:<22} EWMA={ewma_val:.4}  Fixed={fixed_val:.4}");
         }
     }

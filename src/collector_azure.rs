@@ -305,7 +305,7 @@ impl AzureActivityCollector {
                 caller: raw
                     .get("caller")
                     .and_then(|v| v.as_str())
-                    .map(|s| s.to_string()),
+                    .map(std::string::ToString::to_string),
                 timestamp: raw
                     .get("eventTimestamp")
                     .and_then(|v| v.as_str())
@@ -314,11 +314,11 @@ impl AzureActivityCollector {
                 resource_id: raw
                     .get("resourceId")
                     .and_then(|v| v.as_str())
-                    .map(|s| s.to_string()),
+                    .map(std::string::ToString::to_string),
                 resource_group: raw
                     .get("resourceGroupName")
                     .and_then(|v| v.as_str())
-                    .map(|s| s.to_string()),
+                    .map(std::string::ToString::to_string),
                 level: raw
                     .get("level")
                     .and_then(|v| v.as_str())
@@ -329,7 +329,7 @@ impl AzureActivityCollector {
                     .get("claims")
                     .and_then(|c| c.get("ipaddr"))
                     .and_then(|v| v.as_str())
-                    .map(|s| s.to_string()),
+                    .map(std::string::ToString::to_string),
                 risk_score,
                 mitre_techniques,
             };

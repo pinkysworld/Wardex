@@ -325,15 +325,14 @@ impl OktaCollector {
                 .get("securityContext")
                 .and_then(|s| s.get("riskLevel"))
                 .and_then(|v| v.as_str())
-                .map(|s| s.to_lowercase());
+                .map(str::to_lowercase);
 
             // Check for MFA
             let mfa_used = entry
                 .get("authenticationContext")
                 .and_then(|a| a.get("credentialType"))
                 .and_then(|v| v.as_str())
-                .map(|c| c.contains("MFA"))
-                .unwrap_or(false);
+                .is_some_and(|c| c.contains("MFA"));
 
             let (risk_score, mitre_techniques) =
                 score_identity_event(&event_type, &outcome, mfa_used, provider_risk.as_deref());
@@ -358,32 +357,32 @@ impl OktaCollector {
                 user_principal: actor
                     .and_then(|a| a.get("alternateId"))
                     .and_then(|v| v.as_str())
-                    .map(|s| s.to_string()),
+                    .map(std::string::ToString::to_string),
                 user_display_name: actor
                     .and_then(|a| a.get("displayName"))
                     .and_then(|v| v.as_str())
-                    .map(|s| s.to_string()),
+                    .map(std::string::ToString::to_string),
                 source_ip: client
                     .and_then(|c| c.get("ipAddress"))
                     .and_then(|v| v.as_str())
-                    .map(|s| s.to_string()),
+                    .map(std::string::ToString::to_string),
                 user_agent: client
                     .and_then(|c| c.get("userAgent"))
                     .and_then(|u| u.get("rawUserAgent"))
                     .and_then(|v| v.as_str())
-                    .map(|s| s.to_string()),
+                    .map(std::string::ToString::to_string),
                 location: client
                     .and_then(|c| c.get("geographicalContext"))
                     .and_then(|g| g.get("country"))
                     .and_then(|v| v.as_str())
-                    .map(|s| s.to_string()),
+                    .map(std::string::ToString::to_string),
                 target_app: entry
                     .get("target")
                     .and_then(|t| t.as_array())
                     .and_then(|arr| arr.first())
                     .and_then(|t| t.get("displayName"))
                     .and_then(|v| v.as_str())
-                    .map(|s| s.to_string()),
+                    .map(std::string::ToString::to_string),
                 mfa_used,
                 provider_risk,
                 risk_score,
@@ -393,7 +392,7 @@ impl OktaCollector {
                         .get("outcome")
                         .and_then(|o| o.get("reason"))
                         .and_then(|v| v.as_str())
-                        .map(|s| s.to_string())
+                        .map(std::string::ToString::to_string)
                 } else {
                     None
                 },
@@ -533,7 +532,7 @@ impl EntraCollector {
             let status = entry.get("status");
             let error_code = status
                 .and_then(|s| s.get("errorCode"))
-                .and_then(|v| v.as_i64())
+                .and_then(serde_json::Value::as_i64)
                 .unwrap_or(0);
 
             let outcome = if error_code == 0 {
@@ -551,7 +550,7 @@ impl EntraCollector {
                 .get("riskLevelDuringSignIn")
                 .and_then(|v| v.as_str())
                 .and_then(|r| if r == "none" { None } else { Some(r) })
-                .map(|s| s.to_string());
+                .map(std::string::ToString::to_string);
 
             let (risk_score, mitre_techniques) =
                 score_identity_event("signIn", &outcome, mfa_used, risk_level.as_deref());
@@ -573,28 +572,28 @@ impl EntraCollector {
                 user_principal: entry
                     .get("userPrincipalName")
                     .and_then(|v| v.as_str())
-                    .map(|s| s.to_string()),
+                    .map(std::string::ToString::to_string),
                 user_display_name: entry
                     .get("userDisplayName")
                     .and_then(|v| v.as_str())
-                    .map(|s| s.to_string()),
+                    .map(std::string::ToString::to_string),
                 source_ip: entry
                     .get("ipAddress")
                     .and_then(|v| v.as_str())
-                    .map(|s| s.to_string()),
+                    .map(std::string::ToString::to_string),
                 user_agent: entry
                     .get("clientAppUsed")
                     .and_then(|v| v.as_str())
-                    .map(|s| s.to_string()),
+                    .map(std::string::ToString::to_string),
                 location: entry
                     .get("location")
                     .and_then(|l| l.get("countryOrRegion"))
                     .and_then(|v| v.as_str())
-                    .map(|s| s.to_string()),
+                    .map(std::string::ToString::to_string),
                 target_app: entry
                     .get("appDisplayName")
                     .and_then(|v| v.as_str())
-                    .map(|s| s.to_string()),
+                    .map(std::string::ToString::to_string),
                 mfa_used,
                 provider_risk: risk_level,
                 risk_score,
@@ -603,7 +602,7 @@ impl EntraCollector {
                     status
                         .and_then(|s| s.get("failureReason"))
                         .and_then(|v| v.as_str())
-                        .map(|s| s.to_string())
+                        .map(std::string::ToString::to_string)
                 } else {
                     None
                 },

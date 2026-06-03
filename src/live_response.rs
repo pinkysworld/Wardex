@@ -158,7 +158,7 @@ impl AllowedCommand {
         Self {
             name: name.into(),
             description: desc.into(),
-            allowed_args: args.iter().map(|a| a.to_string()).collect(),
+            allowed_args: args.iter().map(std::string::ToString::to_string).collect(),
         }
     }
 }
@@ -301,14 +301,11 @@ impl LiveResponseEngine {
                         args,
                         status: CommandStatus::Denied,
                         output: None,
-                        error: Some(format!("Argument '{}' not in allowlist", bad_arg)),
+                        error: Some(format!("Argument '{bad_arg}' not in allowlist")),
                         submitted_at: now_ms,
                         completed_at: Some(now_ms),
                     });
-                    return Err(format!(
-                        "Argument '{}' not allowed for '{}'",
-                        bad_arg, command
-                    ));
+                    return Err(format!("Argument '{bad_arg}' not allowed for '{command}'"));
                 }
             }
         }

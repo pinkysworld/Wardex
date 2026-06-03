@@ -34,7 +34,7 @@ impl FeatureFlagRegistry {
     pub fn register(&self, flag: FeatureFlag) {
         self.flags
             .write()
-            .unwrap_or_else(|e| e.into_inner())
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
             .insert(flag.name.clone(), flag);
     }
 
@@ -42,7 +42,7 @@ impl FeatureFlagRegistry {
         if let Some(f) = self
             .flags
             .write()
-            .unwrap_or_else(|e| e.into_inner())
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
             .get_mut(name)
         {
             f.enabled = enabled;
@@ -56,7 +56,7 @@ impl FeatureFlagRegistry {
         if let Some(f) = self
             .flags
             .write()
-            .unwrap_or_else(|e| e.into_inner())
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
             .get_mut(name)
         {
             f.kill_switch = killed;
@@ -70,7 +70,7 @@ impl FeatureFlagRegistry {
         if let Some(f) = self
             .flags
             .write()
-            .unwrap_or_else(|e| e.into_inner())
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
             .get_mut(name)
         {
             f.rollout_pct = pct.min(100);
@@ -82,7 +82,10 @@ impl FeatureFlagRegistry {
 
     /// Check if a feature is active for a given context key (e.g. agent_uid or hostname).
     pub fn is_enabled(&self, name: &str, context_key: &str) -> bool {
-        let flags = self.flags.read().unwrap_or_else(|e| e.into_inner());
+        let flags = self
+            .flags
+            .read()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         let Some(flag) = flags.get(name) else {
             return false;
         };
@@ -117,14 +120,17 @@ impl FeatureFlagRegistry {
 
     /// Check if enabled without rollout gating (admin/testing).
     pub fn is_globally_enabled(&self, name: &str) -> bool {
-        let flags = self.flags.read().unwrap_or_else(|e| e.into_inner());
+        let flags = self
+            .flags
+            .read()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         flags.get(name).is_some_and(|f| f.enabled && !f.kill_switch)
     }
 
     pub fn list_flags(&self) -> Vec<FeatureFlag> {
         self.flags
             .read()
-            .unwrap_or_else(|e| e.into_inner())
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
             .values()
             .cloned()
             .collect()
@@ -137,7 +143,7 @@ impl FeatureFlagRegistry {
     pub fn get_flag(&self, name: &str) -> Option<FeatureFlag> {
         self.flags
             .read()
-            .unwrap_or_else(|e| e.into_inner())
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
             .get(name)
             .cloned()
     }
@@ -152,7 +158,7 @@ impl Default for FeatureFlagRegistry {
 fn simple_hash(s: &str) -> u64 {
     let mut h: u64 = 5381;
     for b in s.bytes() {
-        h = h.wrapping_mul(33).wrapping_add(b as u64);
+        h = h.wrapping_mul(33).wrapping_add(u64::from(b));
     }
     h
 }
@@ -270,7 +276,7 @@ mod tests {
         let reg = FeatureFlagRegistry::new();
         reg.register(FeatureFlag {
             name: "killable".into(),
-            description: "".into(),
+            description: String::new(),
             enabled: true,
             rollout_pct: 100,
             os_filter: vec![],
@@ -286,7 +292,7 @@ mod tests {
         let reg = FeatureFlagRegistry::new();
         reg.register(FeatureFlag {
             name: "canary".into(),
-            description: "".into(),
+            description: String::new(),
             enabled: true,
             rollout_pct: 50,
             os_filter: vec![],
@@ -295,15 +301,14 @@ mod tests {
         // With 50% rollout, roughly half of random keys should pass
         let mut enabled_count = 0;
         for i in 0..100 {
-            if reg.is_enabled("canary", &format!("agent-{}", i)) {
+            if reg.is_enabled("canary", &format!("agent-{i}")) {
                 enabled_count += 1;
             }
         }
         // Should be roughly 50 +/- 20
         assert!(
             enabled_count > 20 && enabled_count < 80,
-            "Got {} enabled out of 100",
-            enabled_count
+            "Got {enabled_count} enabled out of 100"
         );
     }
 
@@ -312,14 +317,14 @@ mod tests {
         let reg = FeatureFlagRegistry::new();
         reg.register(FeatureFlag {
             name: "blocked".into(),
-            description: "".into(),
+            description: String::new(),
             enabled: true,
             rollout_pct: 0,
             os_filter: vec![],
             kill_switch: false,
         });
         for i in 0..50 {
-            assert!(!reg.is_enabled("blocked", &format!("k{}", i)));
+            assert!(!reg.is_enabled("blocked", &format!("k{i}")));
         }
     }
 
@@ -328,7 +333,7 @@ mod tests {
         let reg = FeatureFlagRegistry::new();
         reg.register(FeatureFlag {
             name: "off".into(),
-            description: "".into(),
+            description: String::new(),
             enabled: false,
             rollout_pct: 100,
             os_filter: vec![],
@@ -342,7 +347,7 @@ mod tests {
         let reg = FeatureFlagRegistry::new();
         reg.register(FeatureFlag {
             name: "toggle".into(),
-            description: "".into(),
+            description: String::new(),
             enabled: false,
             rollout_pct: 100,
             os_filter: vec![],
@@ -376,7 +381,7 @@ mod tests {
         let reg = FeatureFlagRegistry::new();
         reg.register(FeatureFlag {
             name: "killme".into(),
-            description: "".into(),
+            description: String::new(),
             enabled: true,
             rollout_pct: 100,
             os_filter: vec![],
@@ -393,7 +398,7 @@ mod tests {
         let reg = Arc::new(FeatureFlagRegistry::new());
         reg.register(FeatureFlag {
             name: "before_poison".into(),
-            description: "".into(),
+            description: String::new(),
             enabled: true,
             rollout_pct: 100,
             os_filter: vec![],
@@ -408,8 +413,8 @@ mod tests {
             // so just verify operations are safe under concurrent stress
             for i in 0..100 {
                 reg2.register(FeatureFlag {
-                    name: format!("f{}", i),
-                    description: "".into(),
+                    name: format!("f{i}"),
+                    description: String::new(),
                     enabled: true,
                     rollout_pct: 100,
                     os_filter: vec![],

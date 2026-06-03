@@ -49,7 +49,9 @@ pub(crate) fn handle_fleet_register(body: &[u8], state: &Arc<Mutex<AppState>>) -
         status: DeviceStatus::Online,
         tags: Vec::new(),
     };
-    let mut s = state.lock().unwrap_or_else(|e| e.into_inner());
+    let mut s = state
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
     s.swarm.register_device(record);
     let body = serde_json::json!({"status": "registered", "device": req.device_id});
     json_response(&body.to_string(), 200)
@@ -57,7 +59,9 @@ pub(crate) fn handle_fleet_register(body: &[u8], state: &Arc<Mutex<AppState>>) -
 
 pub(crate) fn handle_fleet_install_history(state: &Arc<Mutex<AppState>>) -> Response<Body> {
     let storage = {
-        let s = state.lock().unwrap_or_else(|e| e.into_inner());
+        let s = state
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         s.storage.clone()
     };
     let installs = load_fleet_remote_installs(&storage);
@@ -90,7 +94,9 @@ pub(crate) fn handle_fleet_install_ssh(
 
     let started_at = chrono::Utc::now().to_rfc3339();
     let (storage, token, actor) = {
-        let mut s = state.lock().unwrap_or_else(|e| e.into_inner());
+        let mut s = state
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         let token = s
             .agent_registry
             .create_token_with_ttl(1, request.effective_ttl_secs());
@@ -181,7 +187,9 @@ pub(crate) fn handle_fleet_install_winrm(
 
     let started_at = chrono::Utc::now().to_rfc3339();
     let (storage, token, actor) = {
-        let mut s = state.lock().unwrap_or_else(|e| e.into_inner());
+        let mut s = state
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         let token = s
             .agent_registry
             .create_token_with_ttl(1, request.effective_ttl_secs());
@@ -284,7 +292,9 @@ pub(crate) fn handle_update_deploy(
         Err(e) => return error_json(&format!("invalid JSON: {e}"), 400),
     };
 
-    let mut s = state.lock().unwrap_or_else(|e| e.into_inner());
+    let mut s = state
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
     let agent = match s.agent_registry.get(&req.agent_id) {
         Some(agent) => agent.clone(),
         None => return error_json("agent not found", 404),
@@ -393,7 +403,9 @@ pub(crate) fn handle_update_rollback(
         Ok(r) => r,
         Err(e) => return error_json(&format!("invalid JSON: {e}"), 400),
     };
-    let mut s = state.lock().unwrap_or_else(|e| e.into_inner());
+    let mut s = state
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
     let agent = match s.agent_registry.get(&req.agent_id) {
         Some(a) => a.clone(),
         None => return error_json("agent not found", 404),
@@ -483,7 +495,9 @@ pub(crate) fn handle_update_cancel(
         Ok(r) => r,
         Err(e) => return error_json(&format!("invalid JSON: {e}"), 400),
     };
-    let mut s = state.lock().unwrap_or_else(|e| e.into_inner());
+    let mut s = state
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
     match s.remote_deployments.get_mut(&req.agent_id) {
         Some(deployment) => {
             if is_terminal_deployment_status(&deployment.status) {
@@ -543,7 +557,9 @@ pub(crate) fn handle_update_publish(
         Err(e) => return error_json(&format!("invalid base64: {e}"), 400),
     };
 
-    let mut s = state.lock().unwrap_or_else(|e| e.into_inner());
+    let mut s = state
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
     let signing_key =
         match crate::update_trust::load_update_signing_key(&s.config.security.update_signing) {
             Ok(signing_key) => signing_key,

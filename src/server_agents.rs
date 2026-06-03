@@ -186,7 +186,9 @@ pub(crate) fn handle_agent_enroll(body: &[u8], state: &Arc<Mutex<AppState>>) -> 
         Ok(r) => r,
         Err(e) => return error_json(&format!("invalid JSON: {e}"), 400),
     };
-    let mut s = state.lock().unwrap_or_else(|e| e.into_inner());
+    let mut s = state
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
     match s.agent_registry.enroll(&req) {
         Ok(resp) => match serde_json::to_string(&resp) {
             Ok(json) => json_response(&json, 200),
@@ -226,7 +228,9 @@ pub(crate) fn handle_agent_create_token(
             ttl_secs: default_ttl_secs(),
         },
     };
-    let mut s = state.lock().unwrap_or_else(|e| e.into_inner());
+    let mut s = state
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
     let max_uses = req.max_uses.max(1);
     let token = if let Some(ttl) = req.ttl_secs {
         s.agent_registry
@@ -260,7 +264,9 @@ pub(crate) fn handle_agent_heartbeat(
         version: env!("CARGO_PKG_VERSION").to_string(),
         health: None,
     });
-    let mut s = state.lock().unwrap_or_else(|e| e.into_inner());
+    let mut s = state
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
     match s
         .agent_registry
         .heartbeat(agent_id, &req.version, req.health.clone())
@@ -402,8 +408,7 @@ pub(crate) fn handle_agent_heartbeat(
                         let already_deployed = s
                             .remote_deployments
                             .get(&eid)
-                            .map(|d| d.version == version)
-                            .unwrap_or(false);
+                            .is_some_and(|d| d.version == version);
                         if !already_deployed {
                             let last_counter = s
                                 .remote_deployments
@@ -474,7 +479,9 @@ pub(crate) fn handle_agent_heartbeat(
 }
 
 pub(crate) fn handle_agent_details(state: &Arc<Mutex<AppState>>, agent_id: &str) -> Response<Body> {
-    let s = state.lock().unwrap_or_else(|e| e.into_inner());
+    let s = state
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
     match build_agent_activity_snapshot(&s, agent_id) {
         Ok(snapshot) => match serde_json::to_string(&snapshot) {
             Ok(json) => json_response(&json, 200),
@@ -500,7 +507,9 @@ pub(crate) fn handle_agent_update_check(
     if current_version.is_empty() {
         current_version = env!("CARGO_PKG_VERSION").to_string();
     }
-    let s = state.lock().unwrap_or_else(|e| e.into_inner());
+    let s = state
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
     if let Some(agent_id) = agent_id.as_deref() {
         if platform == "universal"
             && let Some(agent) = s.agent_registry.get(agent_id)
@@ -557,10 +566,12 @@ pub(crate) fn handle_agent_set_scope(
         .as_ref()
         .ok()
         .and_then(|v| v.get("clear"))
-        .and_then(|v| v.as_bool())
+        .and_then(serde_json::Value::as_bool)
         .unwrap_or(false);
 
-    let mut s = state.lock().unwrap_or_else(|e| e.into_inner());
+    let mut s = state
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
     if is_clear {
         match s.agent_registry.set_monitor_scope(agent_id, None) {
             Ok(()) => json_response(
@@ -591,7 +602,9 @@ pub(crate) fn handle_agent_get_scope(
     state: &Arc<Mutex<AppState>>,
     agent_id: &str,
 ) -> Response<Body> {
-    let s = state.lock().unwrap_or_else(|e| e.into_inner());
+    let s = state
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
     match s.agent_registry.get(agent_id) {
         Some(agent) => {
             let effective_scope = agent

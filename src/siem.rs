@@ -843,7 +843,7 @@ fn urlencoding(s: &str) -> String {
             b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' => {
                 (b as char).to_string()
             }
-            _ => format!("%{:02X}", b),
+            _ => format!("%{b:02X}"),
         })
         .collect()
 }
@@ -984,7 +984,10 @@ impl TaxiiClient {
                     .unwrap_or(name);
 
                 // Map confidence (0-100) to severity
-                let confidence = obj.get("confidence").and_then(|c| c.as_u64()).unwrap_or(50);
+                let confidence = obj
+                    .get("confidence")
+                    .and_then(serde_json::Value::as_u64)
+                    .unwrap_or(50);
                 let severity = if confidence >= 80 {
                     "critical"
                 } else if confidence >= 60 {

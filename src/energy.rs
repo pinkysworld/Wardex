@@ -219,9 +219,9 @@ pub struct QuantizedModel {
 pub fn quantize_model(name: &str, weights: &[f64], bit_width: u8) -> QuantizedModel {
     assert!((2..=8).contains(&bit_width), "bit_width must be 2..=8");
 
-    let abs_max = weights.iter().cloned().fold(0.0_f64, |a, w| a.max(w.abs()));
+    let abs_max = weights.iter().copied().fold(0.0_f64, |a, w| a.max(w.abs()));
 
-    let half_range = (1i32 << (bit_width - 1)) as f64; // 128 for 8-bit
+    let half_range = f64::from(1i32 << (bit_width - 1)); // 128 for 8-bit
     let scale = if abs_max > 0.0 {
         abs_max / (half_range - 1.0)
     } else {
@@ -235,15 +235,15 @@ pub fn quantize_model(name: &str, weights: &[f64], bit_width: u8) -> QuantizedMo
         .collect();
 
     // Estimate accuracy loss as mean absolute quantization error
-    let max_val = weights.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
-    let min_val = weights.iter().cloned().fold(f64::INFINITY, f64::min);
+    let max_val = weights.iter().copied().fold(f64::NEG_INFINITY, f64::max);
+    let min_val = weights.iter().copied().fold(f64::INFINITY, f64::min);
     let range = (max_val - min_val).max(1e-10);
 
     let total_error: f64 = weights
         .iter()
         .zip(quantized.iter())
         .map(|(orig, q)| {
-            let reconstructed = *q as f64 * scale;
+            let reconstructed = f64::from(*q) * scale;
             (orig - reconstructed).abs()
         })
         .sum();
@@ -289,7 +289,7 @@ pub fn quantization_proof(original: &[f64], quantized: &QuantizedModel) -> Quant
         .iter()
         .zip(quantized.weights.iter())
         .map(|(orig, q)| {
-            let reconstructed = *q as f64 * quantized.scale;
+            let reconstructed = f64::from(*q) * quantized.scale;
             (orig - reconstructed).abs()
         })
         .fold(0.0_f64, f64::max);
@@ -350,7 +350,7 @@ mod tests {
     #[test]
     fn power_state_transitions() {
         let mut budget = EnergyBudget::new(100.0);
-        budget.drain_rate_mw = 360000.0; // 100 mWh/s → drains fast
+        budget.drain_rate_mw = 360_000.0; // 100 mWh/s → drains fast
         budget.tick();
         // After one tick, should drop significantly
         assert_ne!(budget.state, PowerState::Full);
@@ -421,7 +421,7 @@ mod tests {
 
     #[test]
     fn quantization_proof_verifies() {
-        let weights: Vec<f64> = (0..100).map(|i| (i as f64 - 50.0) / 100.0).collect();
+        let weights: Vec<f64> = (0..100).map(|i| (f64::from(i) - 50.0) / 100.0).collect();
         let qm = quantize_model("proof-test", &weights, 8);
         let proof = quantization_proof(&weights, &qm);
         assert!(proof.verified);
@@ -430,7 +430,7 @@ mod tests {
 
     #[test]
     fn quantize_4bit() {
-        let weights: Vec<f64> = (0..64).map(|i| i as f64 / 64.0).collect();
+        let weights: Vec<f64> = (0..64).map(|i| f64::from(i) / 64.0).collect();
         let qm = quantize_model("4bit", &weights, 4);
         assert_eq!(qm.bit_width, 4);
         // 4-bit has higher compression than 8-bit

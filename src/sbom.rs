@@ -88,7 +88,7 @@ impl SbomGenerator {
             if line == "[[package]]" {
                 if !name.is_empty() {
                     components.push(SbomComponent {
-                        purl: format!("pkg:cargo/{}@{}", name, version),
+                        purl: format!("pkg:cargo/{name}@{version}"),
                         name: std::mem::take(&mut name),
                         version: std::mem::take(&mut version),
                         kind: ComponentKind::Library,
@@ -108,7 +108,7 @@ impl SbomGenerator {
         // Flush last package.
         if !name.is_empty() {
             components.push(SbomComponent {
-                purl: format!("pkg:cargo/{}@{}", name, version),
+                purl: format!("pkg:cargo/{name}@{version}"),
                 name,
                 version,
                 kind: ComponentKind::Library,

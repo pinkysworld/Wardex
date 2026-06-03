@@ -156,19 +156,13 @@ fn investigation_progress_endpoint_updates_active_snapshot() {
     assert!(
         updated["completed_steps"]
             .as_array()
-            .map(|items| items.iter().any(|value| value.as_u64() == Some(1)))
-            .unwrap_or(false)
+            .is_some_and(|items| items.iter().any(|value| value.as_u64() == Some(1)))
     );
-    assert!(
-        updated["findings"]
-            .as_array()
-            .map(|items| {
-                items.iter().any(|value| {
-                    value.as_str() == Some("Lockout pattern confirmed from single ASN")
-                })
-            })
-            .unwrap_or(false)
-    );
+    assert!(updated["findings"].as_array().is_some_and(|items| {
+        items
+            .iter()
+            .any(|value| value.as_str() == Some("Lockout pattern confirmed from single ASN"))
+    }));
     assert!(updated["completion_percent"].as_u64().unwrap_or_default() > 0);
     assert_eq!(updated["next_step"]["order"].as_u64(), Some(2));
 
@@ -257,12 +251,11 @@ fn investigation_handoff_updates_linked_case_assignment_and_commentary() {
     assert!(
         handed_off["handoff"]["next_actions"]
             .as_array()
-            .map(|items| {
+            .is_some_and(|items| {
                 items
                     .iter()
                     .any(|value| value.as_str() == Some("Confirm all targeted accounts were reset"))
             })
-            .unwrap_or(false)
     );
 
     let detail: serde_json::Value = ureq::get(&format!("{}/api/cases/{}", base(port), case_id))
@@ -275,13 +268,10 @@ fn investigation_handoff_updates_linked_case_assignment_and_commentary() {
     assert_eq!(detail["assignee"].as_str(), Some("analyst-2"));
     let comments = detail["comments"].as_array().expect("case comments");
     assert!(comments.iter().any(|entry| {
-        entry["text"]
-            .as_str()
-            .map(|text| {
-                text.contains("Investigation handoff from analyst-1 to analyst-2")
-                    && text.contains("Validate VPN source IP blocks")
-            })
-            .unwrap_or(false)
+        entry["text"].as_str().is_some_and(|text| {
+            text.contains("Investigation handoff from analyst-1 to analyst-2")
+                && text.contains("Validate VPN source IP blocks")
+        })
     }));
 }
 
@@ -501,8 +491,7 @@ fn assistant_query_scope_accepts_case_incident_investigation_and_source() {
     assert!(
         response["citations"]
             .as_array()
-            .map(|items| !items.is_empty())
-            .unwrap_or(false)
+            .is_some_and(|items| !items.is_empty())
     );
 }
 
@@ -604,8 +593,7 @@ fn agent_status_requires_auth() {
     let enroll = ureq::post(&format!("{}/api/agents/enroll", base(port)))
         .set("Content-Type", "application/json")
         .send_string(&format!(
-            r#"{{"enrollment_token":"{}","hostname":"auth-check-agent","platform":"linux","version":"1.0.0"}}"#,
-            enrollment_token
+            r#"{{"enrollment_token":"{enrollment_token}","hostname":"auth-check-agent","platform":"linux","version":"1.0.0"}}"#
         ))
         .expect("enroll agent for status auth test");
     let agent_id = enroll.into_json::<serde_json::Value>().unwrap()["agent_id"]

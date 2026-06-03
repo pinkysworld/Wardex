@@ -33,7 +33,9 @@ use crate::support::FailoverDrillRecord;
 #[allow(unused_imports)]
 use super::*;
 
-pub(crate) fn active_rule_metadata(state: &AppState) -> Vec<crate::enterprise::ManagedRuleMetadata> {
+pub(crate) fn active_rule_metadata(
+    state: &AppState,
+) -> Vec<crate::enterprise::ManagedRuleMetadata> {
     state
         .enterprise
         .builtin_rules()
@@ -64,7 +66,10 @@ pub(crate) fn rule_active_suppression_count(state: &AppState, rule_id: &str) -> 
         .count()
 }
 
-pub(crate) fn rule_pack_count(state: &AppState, rule: &crate::enterprise::ManagedRuleMetadata) -> usize {
+pub(crate) fn rule_pack_count(
+    state: &AppState,
+    rule: &crate::enterprise::ManagedRuleMetadata,
+) -> usize {
     let direct = rule.pack_ids.len();
     if direct > 0 {
         return direct;
@@ -100,9 +105,7 @@ pub(crate) fn build_launchpad_release_diff(state: &AppState) -> serde_json::Valu
         })
         .or_else(|| releases.first());
     let current_version = env!("CARGO_PKG_VERSION");
-    let latest_version = latest
-        .map(release_item_version)
-        .unwrap_or_else(|| current_version.into());
+    let latest_version = latest.map_or_else(|| current_version.into(), release_item_version);
     let status = if latest_version == current_version {
         "current"
     } else if latest.is_some() {
@@ -377,7 +380,10 @@ pub(crate) fn rule_stale_suppression_count(state: &AppState, rule_id: &str) -> u
         .count()
 }
 
-pub(crate) fn rule_volume_trend(state: &AppState, rule: &crate::enterprise::ManagedRuleMetadata) -> u64 {
+pub(crate) fn rule_volume_trend(
+    state: &AppState,
+    rule: &crate::enterprise::ManagedRuleMetadata,
+) -> u64 {
     let title = rule.title.to_ascii_lowercase();
     let id = rule.id.to_ascii_lowercase();
     state
@@ -809,7 +815,10 @@ pub(crate) fn build_detection_trust_rules(state: &AppState) -> serde_json::Value
     })
 }
 
-pub(crate) fn build_detection_trust_rule_detail(state: &AppState, rule_id: &str) -> serde_json::Value {
+pub(crate) fn build_detection_trust_rule_detail(
+    state: &AppState,
+    rule_id: &str,
+) -> serde_json::Value {
     let rule = active_rule_metadata(state)
         .into_iter()
         .find(|rule| rule.id == rule_id);
@@ -835,7 +844,10 @@ pub(crate) fn build_detection_trust_rule_detail(state: &AppState, rule_id: &str)
     }
 }
 
-pub(crate) fn build_detection_trust_draft_preview(state: &AppState, draft_id: &str) -> serde_json::Value {
+pub(crate) fn build_detection_trust_draft_preview(
+    state: &AppState,
+    draft_id: &str,
+) -> serde_json::Value {
     let drafts = detection_trust_drafts(state);
     let draft = drafts
         .iter()
@@ -1119,7 +1131,10 @@ pub(crate) fn alert_feedback_summary(state: &AppState) -> serde_json::Value {
     })
 }
 
-pub(crate) fn alert_evidence_chain_payload(state: &AppState, alert_id: Option<usize>) -> serde_json::Value {
+pub(crate) fn alert_evidence_chain_payload(
+    state: &AppState,
+    alert_id: Option<usize>,
+) -> serde_json::Value {
     let local_hostname = state.local_host_info.hostname.clone();
     let process_catalog = assemble_alert_process_catalog(&local_hostname, &state.process_tree);
     let resolved_index = alert_id.unwrap_or_else(|| state.alerts.len().saturating_sub(1));
@@ -1127,31 +1142,33 @@ pub(crate) fn alert_evidence_chain_payload(state: &AppState, alert_id: Option<us
         .alerts
         .get(resolved_index)
         .or_else(|| state.alerts.back());
-    let alert_json = alert
-        .map(|alert| alert_json_value(alert, resolved_index, &local_hostname, &process_catalog))
-        .unwrap_or_else(|| serde_json::json!({}));
+    let alert_json = alert.map_or_else(
+        || serde_json::json!({}),
+        |alert| alert_json_value(alert, resolved_index, &local_hostname, &process_catalog),
+    );
     let reasons = alert.map(|alert| alert.reasons.clone()).unwrap_or_default();
     let entities = crate::entity_extract::extract_entities(&reasons);
-    let source = alert
-        .map(|alert| {
+    let source = alert.map_or_else(
+        || {
+            serde_json::json!({
+                "source_type": "none",
+                "detail": "No alert has been observed yet.",
+            })
+        },
+        |alert| {
             serde_json::json!({
                 "hostname": alert.hostname,
                 "platform": alert.platform,
                 "timestamp": alert.timestamp,
                 "source_type": "live_alert_stream",
             })
-        })
-        .unwrap_or_else(|| {
-            serde_json::json!({
-                "source_type": "none",
-                "detail": "No alert has been observed yet.",
-            })
-        });
+        },
+    );
     let confidence = alert.map(|alert| alert.confidence).unwrap_or_default();
     let score = alert.map(|alert| alert.score).unwrap_or_default();
     serde_json::json!({
         "generated_at": chrono::Utc::now().to_rfc3339(),
-        "alert_id": alert_id.map(|id| id.to_string()).unwrap_or_else(|| "latest".into()),
+        "alert_id": alert_id.map_or_else(|| "latest".into(), |id| id.to_string()),
         "source": source,
         "raw_event": alert_json,
         "normalized_event": {
@@ -1578,7 +1595,7 @@ pub(crate) fn rbac_coverage_payload() -> serde_json::Value {
         "roles": roles.iter().map(|role| {
             serde_json::json!({
                 "role": role_label(*role),
-                "permissions": role_permissions(*role).into_iter().map(|permission| format!("{:?}", permission)).collect::<Vec<_>>(),
+                "permissions": role_permissions(*role).into_iter().map(|permission| format!("{permission:?}")).collect::<Vec<_>>(),
             })
         }).collect::<Vec<_>>(),
         "routes": protected_routes,
@@ -1772,7 +1789,10 @@ pub(crate) fn servicenow_marketplace_card(state: &AppState) -> serde_json::Value
     })
 }
 
-pub(crate) fn integration_validation_payload(state: &AppState, provider: &str) -> serde_json::Value {
+pub(crate) fn integration_validation_payload(
+    state: &AppState,
+    provider: &str,
+) -> serde_json::Value {
     match provider {
         "splunk_hec" => {
             let card = splunk_hec_marketplace_card(state);
@@ -1935,7 +1955,7 @@ pub(crate) fn operations_health_payload(state: &AppState) -> serde_json::Value {
         serde_json::json!({"id": "dropped_events", "status": if ws_stats.get("dropped_events").and_then(serde_json::Value::as_u64).unwrap_or_default() > 0 { "warn" } else { "pass" }, "value": ws_stats.get("dropped_events").cloned().unwrap_or_else(|| serde_json::json!(0)), "target": 0, "trend": "stream", "recommended_action": "Check WebSocket backpressure and subscriber lag.", "drilldown": "/admin/monitor"}),
         serde_json::json!({"id": "scanner_backlog", "status": "pass", "value": scan_stats.total_scans, "target": "on-demand", "trend": "scanner", "recommended_action": "Run a malware preset if scan evidence is stale.", "drilldown": "/admin/malware"}),
         serde_json::json!({"id": "api_error_rate", "status": if error_rate_pct > 5.0 { "warn" } else { "pass" }, "value": format!("{error_rate_pct:.1}%"), "target": "<=5%", "trend": "runtime", "recommended_action": "Open support bundle if API errors remain elevated.", "drilldown": "/admin/help"}),
-        serde_json::json!({"id": "storage_growth", "status": "pass", "value": storage_stats.as_ref().map(|stats| stats.total_alerts + stats.total_audit_entries).unwrap_or(state.alerts.len()), "target": "within retention", "trend": "storage", "recommended_action": "Review retention forecast when stored records grow quickly.", "drilldown": "/admin/settings?tab=retention"}),
+        serde_json::json!({"id": "storage_growth", "status": "pass", "value": storage_stats.as_ref().map_or(state.alerts.len(), |stats| stats.total_alerts + stats.total_audit_entries), "target": "within retention", "trend": "storage", "recommended_action": "Review retention forecast when stored records grow quickly.", "drilldown": "/admin/settings?tab=retention"}),
         serde_json::json!({"id": "agent_version_drift", "status": if drifted_agents > 0 { "warn" } else { "pass" }, "value": drifted_agents, "target": 0, "trend": "fleet", "recommended_action": "Open Fleet rollout health and recover stale agents.", "drilldown": "/admin/fleet"}),
         serde_json::json!({"id": "connector_freshness", "status": if stale_connectors > 0 { "warn" } else { "pass" }, "value": stale_connectors, "target": 0, "trend": "integrations", "recommended_action": "Validate stale connectors and preview sample events.", "drilldown": "/admin/integrations"}),
     ];
@@ -2259,9 +2279,10 @@ pub(crate) fn parse_duration_seconds(value: &str) -> Option<i64> {
 }
 
 pub(crate) fn alert_timestamp(alert: &AlertRecord) -> chrono::DateTime<chrono::Utc> {
-    chrono::DateTime::parse_from_rfc3339(&alert.timestamp)
-        .map(|value| value.with_timezone(&chrono::Utc))
-        .unwrap_or_else(|_| chrono::Utc::now())
+    chrono::DateTime::parse_from_rfc3339(&alert.timestamp).map_or_else(
+        |_| chrono::Utc::now(),
+        |value| value.with_timezone(&chrono::Utc),
+    )
 }
 
 pub(crate) fn build_alert_histogram(
@@ -2327,7 +2348,11 @@ pub(crate) fn build_alert_histogram(
     })
 }
 
-pub(crate) fn parse_cursor_page_params(url: &str, default_limit: usize, max_limit: usize) -> (usize, usize) {
+pub(crate) fn parse_cursor_page_params(
+    url: &str,
+    default_limit: usize,
+    max_limit: usize,
+) -> (usize, usize) {
     let query = parse_query_string(url);
     let cursor = query
         .get("cursor")
@@ -2366,7 +2391,11 @@ pub(crate) fn cursor_page_payload(
     })
 }
 
-pub(crate) fn alert_cursor_page_payload(state: &AppState, cursor: usize, limit: usize) -> serde_json::Value {
+pub(crate) fn alert_cursor_page_payload(
+    state: &AppState,
+    cursor: usize,
+    limit: usize,
+) -> serde_json::Value {
     let total = state.alerts.len();
     let items = state
         .alerts
@@ -2585,7 +2614,7 @@ pub(crate) fn release_doctor_payload(state: &AppState) -> serde_json::Value {
         release_diff
             .get("status")
             .and_then(serde_json::Value::as_str),
-        Some("current") | Some("aligned") | Some("unknown")
+        Some("current" | "aligned" | "unknown")
     );
     let contract_drift = contract
         .get("drift_count")
@@ -2668,7 +2697,11 @@ pub(crate) fn support_sensitive_key(key: &str) -> bool {
     .any(|needle| normalized.contains(needle))
 }
 
-pub(crate) fn redact_support_payload(value: &mut serde_json::Value, path: &str, redacted: &mut Vec<String>) {
+pub(crate) fn redact_support_payload(
+    value: &mut serde_json::Value,
+    path: &str,
+    redacted: &mut Vec<String>,
+) {
     match value {
         serde_json::Value::Object(map) => {
             for (key, child) in map.iter_mut() {
@@ -3396,8 +3429,17 @@ pub(crate) fn build_incident_timeline_replay(
                 .iter()
                 .max_by_key(|incident| incident.updated_at.as_str())
         });
-    let timeline = selected
-        .map(|incident| {
+    let timeline = selected.map_or_else(
+        || {
+            serde_json::json!({
+                "incident": serde_json::Value::Null,
+                "event_count": 0,
+                "matched_event_count": 0,
+                "events": [],
+                "notes": [],
+            })
+        },
+        |incident| {
             let event_ids = incident.event_ids.iter().copied().collect::<HashSet<_>>();
             let matching_events = state
                 .event_store
@@ -3414,16 +3456,8 @@ pub(crate) fn build_incident_timeline_replay(
                 "events": matching_events,
                 "notes": incident.notes,
             })
-        })
-        .unwrap_or_else(|| {
-            serde_json::json!({
-                "incident": serde_json::Value::Null,
-                "event_count": 0,
-                "matched_event_count": 0,
-                "events": [],
-                "notes": [],
-            })
-        });
+        },
+    );
     let alert_tail = state
         .alerts
         .iter()
@@ -3711,12 +3745,12 @@ pub(crate) fn build_retention_forecast(state: &AppState) -> serde_json::Value {
     let storage_stats = state.storage.with(|store| Ok(store.stats())).ok();
     let audit_count = storage_stats
         .as_ref()
-        .map(|stats| stats.total_audit_entries)
-        .unwrap_or(state.audit_log.entries.len());
+        .map_or(state.audit_log.entries.len(), |stats| {
+            stats.total_audit_entries
+        });
     let alert_count = storage_stats
         .as_ref()
-        .map(|stats| stats.total_alerts)
-        .unwrap_or(state.alerts.len());
+        .map_or(state.alerts.len(), |stats| stats.total_alerts);
     let event_count = state.event_store.all_events().len();
     let retention = &state.config.retention;
     let audit_utilization = retention_utilization(audit_count, retention.audit_max_records);
@@ -4706,7 +4740,7 @@ pub(crate) fn build_deployment_trust_report(state: &AppState) -> serde_json::Val
                 verification_center
                     .get("verification_rows")
                     .and_then(serde_json::Value::as_array)
-                    .map(|rows| rows.len())
+                    .map(std::vec::Vec::len)
                     .unwrap_or_default(),
             ),
         }),
@@ -5016,10 +5050,10 @@ pub(crate) fn build_performance_scale_baseline(state: &AppState) -> serde_json::
     };
     let ws_stats = state.alert_broadcaster.stats();
     let storage_stats = state.storage.with(|store| Ok(store.stats())).ok();
-    let total_records = storage_stats
-        .as_ref()
-        .map(|stats| stats.total_alerts + stats.total_audit_entries)
-        .unwrap_or(state.alerts.len() + state.audit_log.entries.len());
+    let total_records = storage_stats.as_ref().map_or(
+        state.alerts.len() + state.audit_log.entries.len(),
+        |stats| stats.total_alerts + stats.total_audit_entries,
+    );
     let checks = vec![
         serde_json::json!({
             "id": "api_error_rate",
@@ -5567,7 +5601,9 @@ pub(crate) fn increment_owner_count(owners: &mut HashMap<String, usize>, owner: 
     *owners.entry(owner.to_string()).or_insert(0) += 1;
 }
 
-pub(crate) fn command_rule_review_interval_days(rule: &crate::enterprise::ManagedRuleMetadata) -> Option<i64> {
+pub(crate) fn command_rule_review_interval_days(
+    rule: &crate::enterprise::ManagedRuleMetadata,
+) -> Option<i64> {
     if !rule.enabled || rule.lifecycle == crate::enterprise::ContentLifecycle::Deprecated {
         return None;
     }
@@ -5609,8 +5645,7 @@ pub(crate) fn command_rule_replay_stale(rule: &crate::enterprise::ManagedRuleMet
         .as_deref()
         .and_then(|value| chrono::DateTime::parse_from_rfc3339(value).ok())
         .map(|tested_at| chrono::Utc::now() - tested_at.with_timezone(&chrono::Utc))
-        .map(|age| age >= chrono::Duration::days(14))
-        .unwrap_or(false)
+        .is_some_and(|age| age >= chrono::Duration::days(14))
 }
 
 pub(crate) fn command_rule_promotion_blockers(
@@ -5795,19 +5830,19 @@ pub(crate) fn build_detection_review_overview(
                     .unwrap_or(0) as usize,
                 latest_replay_tested_at: latest_replay["tested_at"]
                     .as_str()
-                    .map(|value| value.to_string()),
+                    .map(std::string::ToString::to_string),
                 latest_feedback_verdict: analyst_feedback["latest_verdict"]
                     .as_str()
-                    .map(|value| value.to_string()),
+                    .map(std::string::ToString::to_string),
                 latest_feedback_analyst: analyst_feedback["latest_analyst"]
                     .as_str()
-                    .map(|value| value.to_string()),
+                    .map(std::string::ToString::to_string),
                 latest_feedback_notes: analyst_feedback["latest_notes"]
                     .as_str()
-                    .map(|value| value.to_string()),
+                    .map(std::string::ToString::to_string),
                 latest_feedback_at: analyst_feedback["latest_at"]
                     .as_str()
-                    .map(|value| value.to_string()),
+                    .map(std::string::ToString::to_string),
                 href: format!("/detection?rule={}&rulePanel=promotion", rule.id),
             }
         })
@@ -5885,8 +5920,7 @@ pub(crate) fn shift_sla_age_buckets(state: &AppState) -> serde_json::Value {
             .sla_deadline
             .as_deref()
             .and_then(|deadline| chrono::DateTime::parse_from_rfc3339(deadline).ok())
-            .map(|deadline| chrono::Utc::now() > deadline.with_timezone(&chrono::Utc))
-            .unwrap_or(false);
+            .is_some_and(|deadline| chrono::Utc::now() > deadline.with_timezone(&chrono::Utc));
         if item_breached {
             breached += 1;
         }
@@ -5947,8 +5981,7 @@ pub(crate) fn command_shift_board_payload(
     let mut blockers = Vec::new();
     if unassigned_queue > 0 || unassigned_cases > 0 {
         blockers.push(format!(
-            "{} queue item(s) and {} case(s) need an owner",
-            unassigned_queue, unassigned_cases
+            "{unassigned_queue} queue item(s) and {unassigned_cases} case(s) need an owner"
         ));
     }
     if sla_breached > 0 {
@@ -6066,8 +6099,7 @@ pub(crate) fn production_readiness_evidence(state: &mut AppState) -> serde_json:
     let parity_issue_count = parity
         .get("issues")
         .and_then(serde_json::Value::as_array)
-        .map(Vec::len)
-        .unwrap_or(0);
+        .map_or(0, Vec::len);
     let storage_stats = state.storage.with(|store| Ok(store.stats())).ok();
     let audit_chain = state.storage.with(|store| store.verify_audit_chain()).ok();
     let backup_status = BackupStatusSnapshot::gather();
@@ -6223,7 +6255,10 @@ pub(crate) fn production_readiness_evidence(state: &mut AppState) -> serde_json:
     })
 }
 
-pub(crate) fn run_failover_drill(state: &Arc<Mutex<AppState>>, auth: &AuthIdentity) -> Response<Body> {
+pub(crate) fn run_failover_drill(
+    state: &Arc<Mutex<AppState>>,
+    auth: &AuthIdentity,
+) -> Response<Body> {
     let backup_status = BackupStatusSnapshot::gather();
     let actor = response_requested_by(auth);
     let mut s = crate::state_lock::tracked_lock(state, "server/run_failover_drill");

@@ -102,7 +102,7 @@ pub fn auth_burst_detected(buffer: &ReplayBuffer) -> bool {
         .collect::<Vec<_>>()
         .windows(burst_window.min(samples.len()))
     {
-        let total_auth: u64 = window.iter().map(|s| s.auth_failures as u64).sum();
+        let total_auth: u64 = window.iter().map(|s| u64::from(s.auth_failures)).sum();
         if total_auth >= burst_threshold {
             burst_count += 1;
         }

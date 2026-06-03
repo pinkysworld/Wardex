@@ -94,7 +94,7 @@ pub(crate) fn scan_pii(text: &str) -> Vec<String> {
     }
 
     // Credit card pattern (4 groups of 4 digits separated by spaces or dashes)
-    let digits_only: String = text.chars().filter(|c| c.is_ascii_digit()).collect();
+    let digits_only: String = text.chars().filter(char::is_ascii_digit).collect();
     if digits_only.len() >= 13 {
         // Luhn check on first 16-digit sequence
         let candidate: Vec<u8> = digits_only.bytes().take(16).map(|b| b - b'0').collect();
@@ -102,7 +102,7 @@ pub(crate) fn scan_pii(text: &str) -> Vec<String> {
             let mut sum = 0u32;
             let mut double = false;
             for &d in candidate.iter().rev() {
-                let mut n = d as u32;
+                let mut n = u32::from(d);
                 if double {
                     n *= 2;
                     if n > 9 {
@@ -217,8 +217,8 @@ pub(crate) fn incidents_json(
     incident_store: &IncidentStore,
     query: &HashMap<String, String>,
 ) -> Result<String, String> {
-    let status = query.get("status").map(|value| value.as_str());
-    let severity = query.get("severity").map(|value| value.as_str());
+    let status = query.get("status").map(std::string::String::as_str);
+    let severity = query.get("severity").map(std::string::String::as_str);
     let offset = query
         .get("offset")
         .and_then(|value| value.parse::<usize>().ok())
@@ -419,9 +419,8 @@ pub(crate) fn respond_api_with_timing(
         format!("req-fallback-{random_suffix:016x}")
     });
     let status_code = response.status().as_u16();
-    let latency_ms = request_started
-        .map(|started| started.elapsed().as_secs_f64() * 1000.0)
-        .unwrap_or(0.0);
+    let latency_ms =
+        request_started.map_or(0.0, |started| started.elapsed().as_secs_f64() * 1000.0);
     let route_path = url_path(url);
     {
         let mut s = crate::state_lock::tracked_lock(state, "server/respond_api_audit");
@@ -450,7 +449,10 @@ pub(crate) struct ApiDeprecationMetadata {
     pub(crate) replacement: String,
 }
 
-pub(crate) fn apply_api_deprecation_headers(headers: &mut HeaderMap, metadata: &ApiDeprecationMetadata) {
+pub(crate) fn apply_api_deprecation_headers(
+    headers: &mut HeaderMap,
+    metadata: &ApiDeprecationMetadata,
+) {
     headers.insert("Deprecation", HeaderValue::from_static("true"));
     if let Ok(value) = HeaderValue::from_str(&metadata.since) {
         headers.insert("X-Wardex-Deprecated-Since", value);
@@ -464,7 +466,10 @@ pub(crate) fn apply_api_deprecation_headers(headers: &mut HeaderMap, metadata: &
     }
 }
 
-pub(crate) fn api_deprecation_metadata(method: &Method, path: &str) -> Option<ApiDeprecationMetadata> {
+pub(crate) fn api_deprecation_metadata(
+    method: &Method,
+    path: &str,
+) -> Option<ApiDeprecationMetadata> {
     static DEPRECATIONS: OnceLock<HashMap<(String, String), ApiDeprecationMetadata>> =
         OnceLock::new();
     let deprecations = DEPRECATIONS.get_or_init(|| {
@@ -601,7 +606,10 @@ pub(crate) fn tenant_filter_for_request(
     }
 }
 
-pub(crate) fn cluster_request_authorized(headers: &HeaderMap, state: &Arc<Mutex<AppState>>) -> bool {
+pub(crate) fn cluster_request_authorized(
+    headers: &HeaderMap,
+    state: &Arc<Mutex<AppState>>,
+) -> bool {
     let provided = bearer_token(headers);
     let s = crate::state_lock::tracked_lock(state, "server/cluster_request_authorized");
     if let Some(cluster_token) = s.config.cluster.auth_token.as_deref() {
@@ -650,7 +658,11 @@ pub(crate) fn unsafe_method_requires_csrf(method: &Method) -> bool {
     )
 }
 
-pub(crate) fn csrf_request_authorized(headers: &HeaderMap, auth: &AuthIdentity, method: &Method) -> bool {
+pub(crate) fn csrf_request_authorized(
+    headers: &HeaderMap,
+    auth: &AuthIdentity,
+    method: &Method,
+) -> bool {
     if !unsafe_method_requires_csrf(method) || !auth.is_cookie_authenticated() {
         return true;
     }
@@ -692,8 +704,7 @@ pub(crate) fn agent_mtls_request_verified(headers: &HeaderMap) -> bool {
 pub(crate) fn remote_ip(remote_addr: &str) -> &str {
     remote_addr
         .rsplit_once(':')
-        .map(|(host, _)| host.trim_matches(['[', ']']))
-        .unwrap_or(remote_addr)
+        .map_or(remote_addr, |(host, _)| host.trim_matches(['[', ']']))
 }
 
 pub(crate) fn trusted_mtls_proxy(config: &Config, remote_addr: &str) -> bool {
@@ -705,7 +716,11 @@ pub(crate) fn trusted_mtls_proxy(config: &Config, remote_addr: &str) -> bool {
         .any(|allowed| allowed.trim() == ip || allowed.trim() == remote_addr)
 }
 
-pub(crate) fn agent_mtls_request_trusted(headers: &HeaderMap, config: &Config, remote_addr: &str) -> bool {
+pub(crate) fn agent_mtls_request_trusted(
+    headers: &HeaderMap,
+    config: &Config,
+    remote_addr: &str,
+) -> bool {
     if !agent_mtls_request_verified(headers) {
         return false;
     }
@@ -1067,7 +1082,10 @@ pub(crate) fn sso_error_redirect(redirect_after: Option<String>, message: &str) 
     )
 }
 
-pub(crate) fn session_cookie_header(session_id: &str, expires_at: chrono::DateTime<chrono::Utc>) -> String {
+pub(crate) fn session_cookie_header(
+    session_id: &str,
+    expires_at: chrono::DateTime<chrono::Utc>,
+) -> String {
     let max_age = expires_at
         .signed_duration_since(chrono::Utc::now())
         .num_seconds()
@@ -1552,7 +1570,10 @@ pub(crate) fn complete_sso_callback(
     ))
 }
 
-pub(crate) fn authenticate_request(headers: &HeaderMap, state: &Arc<Mutex<AppState>>) -> AuthIdentity {
+pub(crate) fn authenticate_request(
+    headers: &HeaderMap,
+    state: &Arc<Mutex<AppState>>,
+) -> AuthIdentity {
     if let Some(token) = bearer_token(headers) {
         let state = crate::state_lock::tracked_lock(state, "server/authenticate_request_bearer");
         let ttl = state.config.security.token_ttl_secs;
@@ -1715,7 +1736,11 @@ pub(crate) fn parse_numeric_path_suffix<T: FromStr>(path: &str, prefix: &str) ->
     path.strip_prefix(prefix).and_then(parse_numeric_segment)
 }
 
-pub(crate) fn parse_numeric_path_between<T: FromStr>(path: &str, prefix: &str, suffix: &str) -> Option<T> {
+pub(crate) fn parse_numeric_path_between<T: FromStr>(
+    path: &str,
+    prefix: &str,
+    suffix: &str,
+) -> Option<T> {
     path.strip_prefix(prefix)
         .and_then(|rest| rest.strip_suffix(suffix))
         .map(|segment| segment.trim_end_matches('/'))
@@ -1807,7 +1832,10 @@ pub(crate) fn is_terminal_deployment_status(status: &str) -> bool {
     )
 }
 
-pub(crate) fn deployment_is_pending(deployment: &AgentDeployment, registry: &AgentRegistry) -> bool {
+pub(crate) fn deployment_is_pending(
+    deployment: &AgentDeployment,
+    registry: &AgentRegistry,
+) -> bool {
     match registry.get(&deployment.agent_id) {
         Some(agent) => deployment_requires_action(deployment, &agent.version),
         None => !is_terminal_deployment_status(&deployment.status),
@@ -1838,9 +1866,7 @@ pub(crate) fn deployment_campaign_progress(
                 "completed" | "applied" | "healthy"
             )
     });
-    let deployment_failed = deployment
-        .map(|entry| deployment_failed_status(&entry.status))
-        .unwrap_or(false);
+    let deployment_failed = deployment.is_some_and(|entry| deployment_failed_status(&entry.status));
     let enrolled = true;
     let healthy = computed_status == "online" && !deployment_failed;
     let policy_synced = healthy
@@ -2047,7 +2073,10 @@ pub(crate) fn parse_event_query(url: &str) -> EventQuery {
     }
 }
 
-pub(crate) fn event_matches_query(event: &crate::event_forward::StoredEvent, query: &EventQuery) -> bool {
+pub(crate) fn event_matches_query(
+    event: &crate::event_forward::StoredEvent,
+    query: &EventQuery,
+) -> bool {
     if let Some(agent_id) = &query.agent_id
         && &event.agent_id != agent_id
     {
@@ -2115,7 +2144,7 @@ pub(crate) fn csv_escape(value: &str) -> String {
     let sanitised = value.replace(['\r', '\n'], " ");
     let safe = sanitised.replace('"', "\"\"");
     // Prevent CSV formula injection — unconditionally prefix with single quote
-    format!("\"'{}\"", safe)
+    format!("\"'{safe}\"")
 }
 
 pub(crate) fn ocsf_class_for_event(event: &crate::event_forward::StoredEvent) -> u32 {
@@ -2191,7 +2220,9 @@ pub(crate) fn check_rbac(
     if auth.is_admin() {
         return true;
     }
-    let s = state.lock().unwrap_or_else(|e| e.into_inner());
+    let s = state
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
     let Some(user) = auth.user() else {
         return false;
     };

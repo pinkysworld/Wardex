@@ -12,13 +12,17 @@ pub(crate) fn read_body_limited(body: &[u8], limit: usize) -> Result<String, Str
 }
 
 pub(super) fn handle_onboarding_readiness(state: &Arc<Mutex<AppState>>) -> Response<Body> {
-    let mut s = state.lock().unwrap_or_else(|e| e.into_inner());
+    let mut s = state
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
     let body = serde_json::to_string(&build_onboarding_readiness(&mut s)).unwrap_or_default();
     json_response(&body, 200)
 }
 
 pub(super) fn handle_manager_queue_digest(state: &Arc<Mutex<AppState>>) -> Response<Body> {
-    let mut s = state.lock().unwrap_or_else(|e| e.into_inner());
+    let mut s = state
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
     let body = serde_json::to_string(&build_manager_queue_digest(&mut s)).unwrap_or_default();
     json_response(&body, 200)
 }
@@ -26,7 +30,9 @@ pub(super) fn handle_manager_queue_digest(state: &Arc<Mutex<AppState>>) -> Respo
 pub(super) fn handle_detection_explain(url: &str, state: &Arc<Mutex<AppState>>) -> Response<Body> {
     let event_id = url_param(url, "event_id").and_then(|value| value.parse::<u64>().ok());
     let alert_id = url_param(url, "alert_id");
-    let s = state.lock().unwrap_or_else(|e| e.into_inner());
+    let s = state
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
     match build_detection_explainability(&s, event_id, alert_id.as_deref()) {
         Some(explanation) => {
             let body = serde_json::to_string(&explanation).unwrap_or_default();
@@ -46,7 +52,9 @@ pub(super) fn handle_detection_feedback_get(
         .and_then(|value| value.parse::<usize>().ok())
         .unwrap_or(50)
         .min(200);
-    let s = state.lock().unwrap_or_else(|e| e.into_inner());
+    let s = state
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
     let items = if let Some(event_id) = event_id {
         s.detection_feedback.for_event(event_id)
     } else if let Some(rule_id) = rule_id {
@@ -104,7 +112,9 @@ pub(super) fn handle_detection_feedback_post(
         return error_json("verdict is required", 400);
     }
     let verdict = normalize_detection_outcome(&req.verdict).to_string();
-    let mut s = state.lock().unwrap_or_else(|e| e.into_inner());
+    let mut s = state
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
     let entry = s.detection_feedback.record(
         req.event_id,
         req.alert_id,
@@ -120,7 +130,9 @@ pub(super) fn handle_detection_feedback_post(
 }
 
 pub(super) fn handle_threat_intel_library_v2(state: &Arc<Mutex<AppState>>) -> Response<Body> {
-    let s = state.lock().unwrap_or_else(|e| e.into_inner());
+    let s = state
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
     let mut indicators = s.threat_intel.all_iocs();
     indicators.sort_by(|left, right| {
         right
@@ -154,7 +166,9 @@ pub(super) fn handle_threat_intel_sightings(
         .and_then(|value| value.parse::<usize>().ok())
         .unwrap_or(50)
         .min(200);
-    let s = state.lock().unwrap_or_else(|e| e.into_inner());
+    let s = state
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
     let sightings = s.threat_intel.recent_sightings(limit);
     json_response(
         &serde_json::json!({
@@ -295,11 +309,13 @@ pub(super) fn handle_malware_path_scan(
                 continue;
             }
         };
-        let filename = path
-            .file_name()
-            .map(|name| name.to_string_lossy().to_string())
-            .unwrap_or_else(|| path.display().to_string());
-        let mut s = state.lock().unwrap_or_else(|e| e.into_inner());
+        let filename = path.file_name().map_or_else(
+            || path.display().to_string(),
+            |name| name.to_string_lossy().to_string(),
+        );
+        let mut s = state
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         let AppState {
             ref mut malware_scanner,
             ref mut malware_hash_db,
@@ -449,7 +465,7 @@ fn default_system_scan_roots() -> Vec<String> {
     ]
     .iter()
     .filter(|path| Path::new(path).exists())
-    .map(|path| path.to_string())
+    .map(std::string::ToString::to_string)
     .collect()
 }
 
@@ -472,7 +488,7 @@ fn default_rootkit_scan_roots() -> Vec<String> {
     ]
     .iter()
     .filter(|path| Path::new(path).exists())
-    .map(|path| path.to_string())
+    .map(std::string::ToString::to_string)
     .collect()
 }
 
@@ -637,7 +653,9 @@ pub(super) fn handle_scan_buffer_v2(body: &[u8], state: &Arc<Mutex<AppState>>) -
             Err(error) => return error_json(&format!("invalid base64: {error}"), 400),
         };
     let filename = req.filename.unwrap_or_else(|| "upload".to_string());
-    let mut s = state.lock().unwrap_or_else(|e| e.into_inner());
+    let mut s = state
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
     let AppState {
         ref mut malware_scanner,
         ref mut malware_hash_db,
@@ -709,7 +727,9 @@ pub(super) fn handle_analyze(body: &[u8], state: &Arc<Mutex<AppState>>) -> Respo
             let chunk_size = 200;
             for chunk_start in (0..total).step_by(chunk_size) {
                 let chunk_end = (chunk_start + chunk_size).min(total);
-                let mut s = state.lock().unwrap_or_else(|e| e.into_inner());
+                let mut s = state
+                    .lock()
+                    .unwrap_or_else(std::sync::PoisonError::into_inner);
                 for (sample, report_entry) in samples[chunk_start..chunk_end]
                     .iter()
                     .zip(result.reports[chunk_start..chunk_end].iter())
@@ -781,7 +801,9 @@ pub(super) fn handle_mode(body: &[u8], state: &Arc<Mutex<AppState>>) -> Response
         other => return error_json(&format!("unknown mode: {other}"), 400),
     };
 
-    let mut s = state.lock().unwrap_or_else(|e| e.into_inner());
+    let mut s = state
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
     s.detector.set_adaptation(mode);
     let body = serde_json::json!({"status": format!("mode set to {}", mode_req.mode)});
     json_response(&body.to_string(), 200)
@@ -805,7 +827,9 @@ pub(super) fn handle_enforcement_quarantine(
         Ok(r) => r,
         Err(e) => return error_json(&format!("invalid JSON: {e}"), 400),
     };
-    let mut s = state.lock().unwrap_or_else(|e| e.into_inner());
+    let mut s = state
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
     let results = s.enforcement.enforce(
         &crate::enforcement::EnforcementLevel::Quarantine,
         &req.target,
@@ -867,7 +891,9 @@ pub(super) fn handle_threat_intel_ioc(body: &[u8], state: &Arc<Mutex<AppState>>)
     };
 
     let now = chrono::Utc::now().to_rfc3339();
-    let mut s = state.lock().unwrap_or_else(|e| e.into_inner());
+    let mut s = state
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
     s.threat_intel.add_ioc(crate::threat_intel::IoC {
         ioc_type,
         value: req.value.clone(),
@@ -939,7 +965,9 @@ pub(super) fn handle_digital_twin_simulate(
         events: vec![event],
     };
 
-    let mut s = state.lock().unwrap_or_else(|e| e.into_inner());
+    let mut s = state
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
     let seeded_device = if s.digital_twin.snapshot(&req.device_id).is_none() {
         s.digital_twin
             .register(crate::digital_twin::TwinSnapshot::new(&req.device_id));
@@ -1079,7 +1107,9 @@ pub(super) fn handle_energy_consume(body: &[u8], state: &Arc<Mutex<AppState>>) -
         Ok(r) => r,
         Err(e) => return error_json(&format!("invalid JSON: {e}"), 400),
     };
-    let mut s = state.lock().unwrap_or_else(|e| e.into_inner());
+    let mut s = state
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
     s.energy.drain_rate_mw = req.drain_rate_mw;
     let new_state = s.energy.tick();
     let info = serde_json::json!({
@@ -1106,7 +1136,9 @@ pub(super) fn handle_policy_vm_execute(
         Ok(r) => r,
         Err(e) => return error_json(&format!("invalid JSON: {e}"), 400),
     };
-    let s = state.lock().unwrap_or_else(|e| e.into_inner());
+    let s = state
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
     // Build a simple program that loads env values and computes a risk composite
     let program = crate::wasm_engine::PolicyProgram::new(
         "api-eval",
@@ -1152,7 +1184,9 @@ pub(super) fn handle_deception_deploy(body: &[u8], state: &Arc<Mutex<AppState>>)
         "canary" => crate::threat_intel::DecoyType::Canary,
         _ => crate::threat_intel::DecoyType::Honeypot,
     };
-    let mut s = state.lock().unwrap_or_else(|e| e.into_inner());
+    let mut s = state
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
     let id = s.deception.deploy(
         decoy_type,
         &req.name,
@@ -1256,7 +1290,9 @@ pub(super) fn handle_config_reload(body: &[u8], state: &Arc<Mutex<AppState>>) ->
         Ok(p) => p,
         Err(e) => return error_json(&format!("invalid JSON: {e}"), 400),
     };
-    let mut s = state.lock().unwrap_or_else(|e| e.into_inner());
+    let mut s = state
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
     let result = patch.apply(&mut s.config);
     if result.success {
         s.cluster = ClusterNode::new(s.config.cluster.clone());
@@ -1318,7 +1354,9 @@ pub(super) fn handle_event_triage(
         Err(e) => return error_json(&format!("invalid JSON: {e}"), 400),
     };
 
-    let mut s = state.lock().unwrap_or_else(|e| e.into_inner());
+    let mut s = state
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
     match s.event_store.update_triage(event_id, update) {
         Ok(event) => json_response(
             &serde_json::json!({ "status": "updated", "event": event }).to_string(),
@@ -1338,7 +1376,9 @@ pub(super) fn handle_event_ingest(body: &[u8], state: &Arc<Mutex<AppState>>) -> 
         Ok(b) => b,
         Err(e) => return error_json(&format!("invalid JSON: {e}"), 400),
     };
-    let mut s = state.lock().unwrap_or_else(|e| e.into_inner());
+    let mut s = state
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
     let native_rule_matches: usize = batch
         .events
         .iter_mut()
@@ -1376,7 +1416,7 @@ pub(super) fn handle_event_ingest(body: &[u8], state: &Arc<Mutex<AppState>>) -> 
         if severity_rank(&event.alert.level) > 0 {
             s.alert_queue.enqueue(
                 event.id,
-                event.alert.score as f64,
+                f64::from(event.alert.score),
                 event.alert.level.clone(),
                 event.alert.hostname.clone(),
                 event.received_at.clone(),
@@ -1449,7 +1489,9 @@ pub(super) fn handle_bulk_triage(body: &[u8], state: &Arc<Mutex<AppState>>) -> R
     if req.event_ids.len() > 500 {
         return error_json("too many event_ids (max 500)", 400);
     }
-    let mut s = state.lock().unwrap_or_else(|e| e.into_inner());
+    let mut s = state
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
     let result = s
         .event_store
         .bulk_update_triage(&req.event_ids, &req.update);
@@ -1469,7 +1511,9 @@ pub(super) fn handle_policy_publish(body: &[u8], state: &Arc<Mutex<AppState>>) -
         Ok(p) => p,
         Err(e) => return error_json(&format!("invalid JSON: {e}"), 400),
     };
-    let mut s = state.lock().unwrap_or_else(|e| e.into_inner());
+    let mut s = state
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
     s.policy_store.publish(policy);
     let version = s.policy_store.current_version();
     json_response(
@@ -1620,10 +1664,9 @@ pub(crate) fn response_action_from_json(
                 .ok_or("pid is required for kill_process")? as u32;
             let process_name = value["process_name"]
                 .as_str()
-                .map(|s| s.trim())
+                .map(str::trim)
                 .filter(|s| !s.is_empty())
-                .map(|s| s.to_string())
-                .unwrap_or_else(|| format!("pid-{pid}"));
+                .map_or_else(|| format!("pid-{pid}"), std::string::ToString::to_string);
             Ok(ResponseAction::KillProcess { pid, process_name })
         }
         "quarantine_file" => {
@@ -2070,8 +2113,7 @@ pub(super) fn execute_hunt_response_actions(
                 if request_ids.is_empty() {
                     result.executed = false;
                     result.detail = format!(
-                        "Skipped notify channel '{}' because no eligible hosts were found",
-                        channel
+                        "Skipped notify channel '{channel}' because no eligible hosts were found"
                     );
                 } else {
                     result.detail = format!(
@@ -2209,7 +2251,7 @@ pub(super) fn execute_hunt_response_actions(
                     };
                     match response_orchestrator.submit(request) {
                         Ok(request_id) => request_ids.push(request_id),
-                        Err(err) => failures.push(format!("{}: {}", hostname, err)),
+                        Err(err) => failures.push(format!("{hostname}: {err}")),
                     }
                 }
                 if request_ids.is_empty() {

@@ -394,10 +394,7 @@ fn build_thread_anomaly_summary(
                 "hot_thread",
                 "high",
                 30,
-                format!(
-                    "Thread CPU peaked at {:.1}% during collection.",
-                    top_cpu_percent
-                ),
+                format!("Thread CPU peaked at {top_cpu_percent:.1}% during collection."),
                 thread_evidence(top_thread),
             );
             add_recommendation(
@@ -411,8 +408,7 @@ fn build_thread_anomaly_summary(
                 "medium",
                 16,
                 format!(
-                    "{hot_thread_count} threads exceeded 5% CPU with a {:.1}% peak.",
-                    top_cpu_percent
+                    "{hot_thread_count} threads exceeded 5% CPU with a {top_cpu_percent:.1}% peak."
                 ),
                 serde_json::json!({
                     "hot_thread_count": hot_thread_count,
@@ -467,12 +463,7 @@ fn build_thread_anomaly_summary(
 
     let stopped_threads = threads
         .iter()
-        .filter(|thread| {
-            matches!(
-                thread["state_label"].as_str(),
-                Some("stopped") | Some("zombie")
-            )
-        })
+        .filter(|thread| matches!(thread["state_label"].as_str(), Some("stopped" | "zombie")))
         .take(3)
         .cloned()
         .collect::<Vec<_>>();
@@ -569,12 +560,7 @@ fn build_process_threads_response(
     hot_threads.truncate(3);
     let blocked_threads = threads
         .iter()
-        .filter(|thread| {
-            matches!(
-                thread["state_label"].as_str(),
-                Some("blocked") | Some("stopped")
-            )
-        })
+        .filter(|thread| matches!(thread["state_label"].as_str(), Some("blocked" | "stopped")))
         .take(4)
         .cloned()
         .collect::<Vec<_>>();
@@ -583,8 +569,7 @@ fn build_process_threads_response(
         .filter(|thread| {
             thread["wait_reason"]
                 .as_str()
-                .map(|value| !value.trim().is_empty())
-                .unwrap_or(false)
+                .is_some_and(|value| !value.trim().is_empty())
         })
         .count();
     let running_count = threads
@@ -593,21 +578,11 @@ fn build_process_threads_response(
         .count();
     let sleeping_count = threads
         .iter()
-        .filter(|thread| {
-            matches!(
-                thread["state_label"].as_str(),
-                Some("sleeping") | Some("idle")
-            )
-        })
+        .filter(|thread| matches!(thread["state_label"].as_str(), Some("sleeping" | "idle")))
         .count();
     let blocked_count = threads
         .iter()
-        .filter(|thread| {
-            matches!(
-                thread["state_label"].as_str(),
-                Some("blocked") | Some("stopped")
-            )
-        })
+        .filter(|thread| matches!(thread["state_label"].as_str(), Some("blocked" | "stopped")))
         .count();
     let hot_thread_count = threads
         .iter()
@@ -854,10 +829,10 @@ pub(crate) fn process_detail_json(pid: u32, hostname: &str) -> Option<serde_json
             .first()
             .and_then(|finding| finding["risk_level"].as_str())
             .unwrap_or("nominal");
-        let signature = exe_path
-            .as_deref()
-            .map(code_signature_summary)
-            .unwrap_or_else(|| serde_json::json!({"status": "unknown"}));
+        let signature = exe_path.as_deref().map_or_else(
+            || serde_json::json!({"status": "unknown"}),
+            code_signature_summary,
+        );
 
         Some(serde_json::json!({
             "pid": process.pid,

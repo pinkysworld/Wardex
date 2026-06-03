@@ -141,7 +141,7 @@ impl EncryptedSpool {
             attempts: 0,
             payload: payload.into(),
             destination: destination.into(),
-            tenant_id: tenant_id.map(|s| s.to_string()),
+            tenant_id: tenant_id.map(std::string::ToString::to_string),
         };
         let seq = self.next_seq;
         self.next_seq += 1;
@@ -308,7 +308,7 @@ impl EncryptedSpool {
         let mut lines = text.lines();
         let header_line = lines.next().ok_or("Empty persist data")?;
         let header: SpoolPersistHeader =
-            serde_json::from_str(header_line).map_err(|e| format!("Invalid header: {}", e))?;
+            serde_json::from_str(header_line).map_err(|e| format!("Invalid header: {e}"))?;
 
         // Parse all entries FIRST before updating state
         let mut temp_queue = std::collections::VecDeque::new();
@@ -317,7 +317,7 @@ impl EncryptedSpool {
             if line.is_empty() {
                 continue;
             }
-            let encrypted = hex::decode(line).map_err(|e| format!("Invalid hex: {}", e))?;
+            let encrypted = hex::decode(line).map_err(|e| format!("Invalid hex: {e}"))?;
             temp_queue.push_back(encrypted);
             count += 1;
         }
@@ -524,7 +524,7 @@ mod tests {
     fn drain_all() {
         let mut spool = EncryptedSpool::new(b"key", 100);
         for i in 0..5 {
-            spool.enqueue(&format!("event-{}", i), "dst", "now");
+            spool.enqueue(&format!("event-{i}"), "dst", "now");
         }
         let drained = spool.drain_all();
         assert_eq!(drained.len(), 5);

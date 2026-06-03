@@ -149,7 +149,10 @@ impl MarketplaceManager {
             ),
         ];
 
-        let mut registry = self.registry.lock().unwrap_or_else(|e| e.into_inner());
+        let mut registry = self
+            .registry
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         let now = Utc::now();
         for (id, name, category, description, author) in packs {
             registry.insert(
@@ -177,7 +180,10 @@ impl MarketplaceManager {
     }
 
     pub fn list_packs(&self, category: Option<PackCategory>) -> Vec<ContentPack> {
-        let registry = self.registry.lock().unwrap_or_else(|e| e.into_inner());
+        let registry = self
+            .registry
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         registry
             .values()
             .filter(|p| category.as_ref().is_none_or(|c| &p.category == c))
@@ -188,7 +194,7 @@ impl MarketplaceManager {
     pub fn get_pack(&self, pack_id: &str) -> Option<ContentPack> {
         self.registry
             .lock()
-            .unwrap_or_else(|e| e.into_inner())
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
             .get(pack_id)
             .cloned()
     }
@@ -197,7 +203,7 @@ impl MarketplaceManager {
         let q = query.to_lowercase();
         self.registry
             .lock()
-            .unwrap_or_else(|e| e.into_inner())
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
             .values()
             .filter(|p| {
                 p.name.to_lowercase().contains(&q)
@@ -209,12 +215,18 @@ impl MarketplaceManager {
     }
 
     pub fn install_pack(&self, pack_id: &str, tenant_id: &str) -> Result<PackInstallation, String> {
-        let mut registry = self.registry.lock().unwrap_or_else(|e| e.into_inner());
+        let mut registry = self
+            .registry
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         let pack = registry.get(pack_id).ok_or("Pack not found")?;
         // Check for dependencies before mutating state
         let deps = pack.dependencies.clone();
         for dep in &deps {
-            let installed = self.installations.lock().unwrap_or_else(|e| e.into_inner());
+            let installed = self
+                .installations
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
             if !installed
                 .iter()
                 .any(|i| i.pack_id == *dep && i.tenant_id == tenant_id)
@@ -235,13 +247,16 @@ impl MarketplaceManager {
         drop(registry);
         self.installations
             .lock()
-            .unwrap_or_else(|e| e.into_inner())
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
             .push(installation.clone());
         Ok(installation)
     }
 
     pub fn uninstall_pack(&self, pack_id: &str, tenant_id: &str) -> Result<(), String> {
-        let mut installations = self.installations.lock().unwrap_or_else(|e| e.into_inner());
+        let mut installations = self
+            .installations
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         let before = installations.len();
         installations.retain(|i| !(i.pack_id == pack_id && i.tenant_id == tenant_id));
         if installations.len() == before {
@@ -253,7 +268,7 @@ impl MarketplaceManager {
     pub fn installed_packs(&self, tenant_id: &str) -> Vec<PackInstallation> {
         self.installations
             .lock()
-            .unwrap_or_else(|e| e.into_inner())
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
             .iter()
             .filter(|i| i.tenant_id == tenant_id)
             .cloned()
@@ -261,7 +276,10 @@ impl MarketplaceManager {
     }
 
     pub fn publish_pack(&self, pack: ContentPack) -> Result<(), String> {
-        let mut registry = self.registry.lock().unwrap_or_else(|e| e.into_inner());
+        let mut registry = self
+            .registry
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         if registry.contains_key(&pack.id) {
             return Err(format!("Pack {} already exists", pack.id));
         }
@@ -270,7 +288,10 @@ impl MarketplaceManager {
     }
 
     pub fn update_pack(&self, pack_id: &str, new_version: &str) -> Result<(), String> {
-        let mut registry = self.registry.lock().unwrap_or_else(|e| e.into_inner());
+        let mut registry = self
+            .registry
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         let pack = registry.get_mut(pack_id).ok_or("Pack not found")?;
         pack.version = new_version.to_string();
         pack.updated = Utc::now();

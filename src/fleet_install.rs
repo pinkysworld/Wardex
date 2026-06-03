@@ -563,8 +563,7 @@ pub fn execute_ssh_install(
             output
                 .status
                 .code()
-                .map(|code| code.to_string())
-                .unwrap_or_else(|| "unknown".to_string())
+                .map_or_else(|| "unknown".to_string(), |code| code.to_string())
         ))
     }
 }
@@ -618,8 +617,7 @@ pub fn execute_winrm_install(
             output
                 .status
                 .code()
-                .map(|code| code.to_string())
-                .unwrap_or_else(|| "unknown".to_string())
+                .map_or_else(|| "unknown".to_string(), |code| code.to_string())
         ))
     }
 }

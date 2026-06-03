@@ -576,13 +576,11 @@ impl EnterpriseStore {
                     .next_run_at
                     .as_deref()
                     .and_then(parse_time)
-                    .map(|next| next <= now)
-                    .unwrap_or(false);
+                    .is_some_and(|next| next <= now);
                 let cron_due_now = hunt
                     .schedule_cron
                     .as_deref()
-                    .map(|expr| cron_is_due(expr, now, hunt.last_run_at.as_deref()))
-                    .unwrap_or(false);
+                    .is_some_and(|expr| cron_is_due(expr, now, hunt.last_run_at.as_deref()));
                 interval_due || cron_due_now
             })
             .map(|hunt| hunt.id.clone())
@@ -1053,7 +1051,7 @@ impl EnterpriseStore {
                 } else {
                     format!(
                         "only {} of {min_alerts} required alerts",
-                        eff.map(|e| e.total_alerts).unwrap_or(0)
+                        eff.map_or(0, |e| e.total_alerts)
                     )
                 },
             });
@@ -1622,4 +1620,3 @@ impl EnterpriseStore {
         Ok(self.snapshot.scim.clone())
     }
 }
-

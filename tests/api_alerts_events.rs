@@ -150,7 +150,7 @@ fn process_threads_endpoint_returns_snapshot_for_self_pid() {
     assert_eq!(resp.status(), 200);
 
     let body: serde_json::Value = resp.into_json().unwrap();
-    assert_eq!(body["pid"].as_u64(), Some(pid as u64));
+    assert_eq!(body["pid"].as_u64(), Some(u64::from(pid)));
     assert!(body["hostname"].is_string());
     assert!(body["platform"].is_string());
     assert!(body["identifier_type"].is_string());

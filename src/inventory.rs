@@ -342,7 +342,7 @@ fn collect_network_ports(platform: &str) -> Vec<NetworkPort> {
                             protocol: "tcp".into(),
                             port,
                             state: parts[0].to_string(),
-                            process: parts.get(6).map(|s| s.to_string()),
+                            process: parts.get(6).map(std::string::ToString::to_string),
                         });
                     }
                 }
@@ -389,7 +389,7 @@ fn collect_network_ports(platform: &str) -> Vec<NetworkPort> {
                             protocol: "tcp".into(),
                             port,
                             state: parts[3].to_string(),
-                            process: parts.get(4).map(|s| s.to_string()),
+                            process: parts.get(4).map(std::string::ToString::to_string),
                         });
                     }
                 }

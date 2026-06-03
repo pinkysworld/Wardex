@@ -224,12 +224,12 @@ pub fn execute(samples: &[TelemetrySample]) -> RunResult {
         // --- Enforcement escalation (R05) ---
         if decision.level >= ThreatLevel::Severe {
             let action_desc = if decision.level == ThreatLevel::Critical {
-                let result = net_enforcer.block_all(&format!("device-{}", index));
+                let result = net_enforcer.block_all(&format!("device-{index}"));
                 format!("network_block: {}", result.detail)
             } else {
                 let target = ProcessTarget {
                     pid: (index + 1000) as u32,
-                    name: format!("suspect-{}", index),
+                    name: format!("suspect-{index}"),
                     user: "system".into(),
                 };
                 let result = proc_enforcer.suspend_process(&target);
@@ -248,12 +248,12 @@ pub fn execute(samples: &[TelemetrySample]) -> RunResult {
             events: vec![
                 SimEvent::CpuSpike {
                     target: "local-node".into(),
-                    load: sample.cpu_load_pct as f64,
+                    load: f64::from(sample.cpu_load_pct),
                 },
                 SimEvent::CustomMetric {
                     target: "local-node".into(),
                     key: "threat_score".into(),
-                    value: signal.score as f64,
+                    value: f64::from(signal.score),
                 },
             ],
         }];
@@ -545,7 +545,7 @@ pub fn render_console_report(result: &RunResult, audit_path: Option<&Path>) -> S
             result.enforcement_actions.len()
         );
         for ea in &result.enforcement_actions {
-            let _ = writeln!(output, "  {}", ea);
+            let _ = writeln!(output, "  {ea}");
         }
     }
     if !result.threat_intel_matches.is_empty() {
@@ -555,7 +555,7 @@ pub fn render_console_report(result: &RunResult, audit_path: Option<&Path>) -> S
             result.threat_intel_matches.len()
         );
         for m in &result.threat_intel_matches {
-            let _ = writeln!(output, "  {}", m);
+            let _ = writeln!(output, "  {m}");
         }
     }
     let _ = writeln!(

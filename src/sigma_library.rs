@@ -66,7 +66,7 @@ impl SigmaLibrary {
     pub fn load_directory(&mut self, dir: &str) -> Result<usize, String> {
         let path = Path::new(dir);
         if !path.is_dir() {
-            return Err(format!("{} is not a directory", dir));
+            return Err(format!("{dir} is not a directory"));
         }
 
         let mut count = 0;
@@ -386,7 +386,7 @@ pub fn builtin_rules_dir() -> &'static str {
 mod tests {
     use super::*;
 
-    const SAMPLE_YAML: &str = r#"
+    const SAMPLE_YAML: &str = r"
 title: Test Rule Alpha
 id: test-001
 status: stable
@@ -426,7 +426,7 @@ detection:
   condition: selection
 falsepositives:
   - Normal traffic
-"#;
+";
 
     #[test]
     fn parse_multi_document_yaml() {

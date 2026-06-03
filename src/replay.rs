@@ -103,7 +103,7 @@ impl ReplayBuffer {
             net_min = net_min.min(s.network_kbps);
             net_max = net_max.max(s.network_kbps);
 
-            auth_sum += s.auth_failures as u64;
+            auth_sum += u64::from(s.auth_failures);
             auth_max = auth_max.max(s.auth_failures);
 
             drift_sum += s.integrity_drift;

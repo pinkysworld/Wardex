@@ -348,8 +348,7 @@ pub fn redact_forensic_bundle(
                     while let Some(idx) = s.find("/home/") {
                         let end = s[idx..]
                             .find(|c: char| c.is_whitespace())
-                            .map(|e| idx + e)
-                            .unwrap_or(s.len());
+                            .map_or(s.len(), |e| idx + e);
                         s.replace_range(idx..end, "[REDACTED_PATH]");
                     }
                     s
@@ -357,9 +356,9 @@ pub fn redact_forensic_bundle(
                 RedactionLevel::Minimal => {
                     // Only keep category and severity keywords
                     if summary.contains("critical") || summary.contains("severe") {
-                        format!("[ALERT] {}", cat)
+                        format!("[ALERT] {cat}")
                     } else {
-                        format!("[{}]", cat)
+                        format!("[{cat}]")
                     }
                 }
                 RedactionLevel::ZeroKnowledge => "[REDACTED]".into(),
@@ -436,7 +435,7 @@ mod tests {
             let noise = dp.laplace_noise();
             sum += noise;
         }
-        let mean = sum / n as f64;
+        let mean = sum / f64::from(n);
         // Mean of Laplace(0, 1) should be ~0
         assert!(
             mean.abs() < 0.5,

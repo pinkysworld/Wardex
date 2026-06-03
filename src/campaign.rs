@@ -175,7 +175,7 @@ impl CampaignDetector {
             let comp_alerts: Vec<&FleetAlert> = component.iter().map(|&i| sorted[i]).collect();
             let scores: Vec<f32> = comp_alerts.iter().map(|a| a.score).collect();
             let avg_score = scores.iter().sum::<f32>() / scores.len() as f32;
-            let max_score = scores.iter().cloned().fold(0.0_f32, f32::max);
+            let max_score = scores.iter().copied().fold(0.0_f32, f32::max);
 
             let shared_techniques = find_shared_strings(
                 &comp_alerts
@@ -239,7 +239,7 @@ impl CampaignDetector {
 
         let campaign_hosts: HashSet<&str> = campaigns
             .iter()
-            .flat_map(|c| c.hosts.iter().map(|h| h.as_str()))
+            .flat_map(|c| c.hosts.iter().map(std::string::String::as_str))
             .collect();
         let fleet_coverage = if all_hosts.is_empty() {
             0.0
@@ -354,8 +354,8 @@ impl CampaignDetector {
             chain_id,
             host: host.to_string(),
             alert_count: alerts.len(),
-            first_seen_ms: alerts.first().map(|alert| alert.timestamp_ms).unwrap_or(0),
-            last_seen_ms: alerts.last().map(|alert| alert.timestamp_ms).unwrap_or(0),
+            first_seen_ms: alerts.first().map_or(0, |alert| alert.timestamp_ms),
+            last_seen_ms: alerts.last().map_or(0, |alert| alert.timestamp_ms),
             avg_score,
             max_score,
             severity: severity.to_string(),
@@ -372,13 +372,13 @@ fn alert_similarity(a: &FleetAlert, b: &FleetAlert) -> f32 {
         .mitre_techniques
         .iter()
         .chain(a.reasons.iter())
-        .map(|s| s.as_str())
+        .map(std::string::String::as_str)
         .collect();
     let b_set: HashSet<&str> = b
         .mitre_techniques
         .iter()
         .chain(b.reasons.iter())
-        .map(|s| s.as_str())
+        .map(std::string::String::as_str)
         .collect();
     if a_set.is_empty() && b_set.is_empty() {
         return 0.0; // No evidence of similarity when both have empty metadata
@@ -399,7 +399,7 @@ fn find_shared_strings(groups: &[&Vec<String>]) -> Vec<String> {
     }
     let mut freq: HashMap<&str, usize> = HashMap::new();
     for group in groups {
-        let unique: HashSet<&str> = group.iter().map(|s| s.as_str()).collect();
+        let unique: HashSet<&str> = group.iter().map(std::string::String::as_str).collect();
         for s in unique {
             *freq.entry(s).or_default() += 1;
         }

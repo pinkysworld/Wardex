@@ -281,14 +281,12 @@ impl EmailAnalyzer {
         let reply_mismatch = input
             .reply_to
             .as_ref()
-            .map(|r| extract_domain(r) != from_domain)
-            .unwrap_or(false);
+            .is_some_and(|r| extract_domain(r) != from_domain);
 
         let return_mismatch = input
             .return_path
             .as_ref()
-            .map(|r| extract_domain(r) != from_domain)
-            .unwrap_or(false);
+            .is_some_and(|r| extract_domain(r) != from_domain);
 
         if reply_mismatch {
             indicators.push(format!(
@@ -488,7 +486,7 @@ impl EmailAnalyzer {
             && subject
                 .chars()
                 .filter(|c| c.is_alphabetic())
-                .all(|c| c.is_uppercase())
+                .all(char::is_uppercase)
         {
             score += 0.2;
             indicators.push("ALL CAPS subject".into());

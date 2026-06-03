@@ -246,7 +246,7 @@ impl UebaEngine {
         if profile.last_seen_ms > 0 && obs.timestamp_ms > profile.last_seen_ms {
             let hours_elapsed = (obs.timestamp_ms - profile.last_seen_ms) as f64 / 3_600_000.0;
             if hours_elapsed >= 1.0 {
-                let decay = (self.config.risk_decay_per_hour as f64).powf(hours_elapsed.floor());
+                let decay = f64::from(self.config.risk_decay_per_hour).powf(hours_elapsed.floor());
                 profile.risk_score *= decay as f32;
             }
         }
@@ -391,7 +391,7 @@ impl UebaEngine {
                     });
                 }
             }
-            profile.avg_data_bytes = blend_f64(profile.avg_data_bytes, vol, alpha as f64);
+            profile.avg_data_bytes = blend_f64(profile.avg_data_bytes, vol, f64::from(alpha));
         }
 
         // ── Service / port anomaly ───────────────────────────
@@ -522,7 +522,7 @@ impl UebaEngine {
         }
         let n = peers.len() as f64;
         let avg_data_bytes = peers.iter().map(|p| p.avg_data_bytes).sum::<f64>() / n;
-        let avg_risk = peers.iter().map(|p| p.risk_score as f64).sum::<f64>() / n;
+        let avg_risk = peers.iter().map(|p| f64::from(p.risk_score)).sum::<f64>() / n;
         let mut avg_hours = [0.0f32; 24];
         for p in &peers {
             for (i, &h) in p.hour_histogram.iter().enumerate() {
@@ -575,7 +575,7 @@ impl UebaEngine {
         }
         let n = peers.len() as f64;
         let peer_avg_data = peers.iter().map(|p| p.avg_data_bytes).sum::<f64>() / n;
-        let peer_avg_risk = peers.iter().map(|p| p.risk_score as f64).sum::<f64>() / n;
+        let peer_avg_risk = peers.iter().map(|p| f64::from(p.risk_score)).sum::<f64>() / n;
 
         let mut anomalies = Vec::new();
 
@@ -589,7 +589,7 @@ impl UebaEngine {
                 description: format!(
                     "Risk score {:.1} is {:.1}x peer group '{}' average ({:.1})",
                     profile.risk_score,
-                    profile.risk_score as f64 / peer_avg_risk,
+                    f64::from(profile.risk_score) / peer_avg_risk,
                     group,
                     peer_avg_risk
                 ),
@@ -663,7 +663,7 @@ impl UebaEngine {
         let n = peers.len() as f64;
 
         // z-score for risk
-        let peer_risks: Vec<f64> = peers.iter().map(|p| p.risk_score as f64).collect();
+        let peer_risks: Vec<f64> = peers.iter().map(|p| f64::from(p.risk_score)).collect();
         let mean_risk = peer_risks.iter().sum::<f64>() / n;
         let var_risk = peer_risks
             .iter()
@@ -671,7 +671,7 @@ impl UebaEngine {
             .sum::<f64>()
             / n;
         let std_risk = var_risk.sqrt().max(0.01);
-        let peer_deviation = ((profile.risk_score as f64 - mean_risk) / std_risk) as f32;
+        let peer_deviation = ((f64::from(profile.risk_score) - mean_risk) / std_risk) as f32;
 
         // z-score for data volume
         let peer_vols: Vec<f64> = peers.iter().map(|p| p.avg_data_bytes).collect();

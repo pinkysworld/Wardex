@@ -240,7 +240,10 @@ pub fn parse_tls_config(table: &toml::Value) -> Result<TlsConfig, String> {
         };
     }
 
-    if let Some(req) = obj.get("require_client_cert").and_then(|v| v.as_bool()) {
+    if let Some(req) = obj
+        .get("require_client_cert")
+        .and_then(toml::Value::as_bool)
+    {
         config.require_client_cert = req;
     }
 

@@ -358,7 +358,7 @@ impl IncidentStore {
             }
             let mitre: Vec<MitreAttack> =
                 group.iter().flat_map(|e| e.alert.mitre.clone()).collect();
-            let title = format!("Severe event burst on {}", agent_id);
+            let title = format!("Severe event burst on {agent_id}");
             let summary = format!(
                 "{} severe+ events on agent {} within 2-minute window",
                 event_ids.len(),
@@ -564,7 +564,7 @@ mod tests {
             vec![],
             vec![],
             vec![],
-            "".into(),
+            String::new(),
         );
         store.create(
             "Inc 2".into(),
@@ -572,7 +572,7 @@ mod tests {
             vec![],
             vec![],
             vec![],
-            "".into(),
+            String::new(),
         );
         store.update_status(1, IncidentStatus::Resolved).unwrap();
 

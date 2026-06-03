@@ -233,7 +233,7 @@ pub fn compose_decisions(
                     left_action: l.action,
                     right_level: r.level,
                     right_action: r.action,
-                    resolution: format!("{:?}", op),
+                    resolution: format!("{op:?}"),
                 })
             } else {
                 None

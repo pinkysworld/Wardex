@@ -62,8 +62,10 @@ fn detect_windows_version() -> (String, u32) {
     let version = std::process::Command::new("cmd")
         .args(["/c", "ver"])
         .output()
-        .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
-        .unwrap_or_else(|_| "Windows (unknown)".into());
+        .map_or_else(
+            |_| "Windows (unknown)".into(),
+            |o| String::from_utf8_lossy(&o.stdout).trim().to_string(),
+        );
     let build = version
         .rsplit('.')
         .next()

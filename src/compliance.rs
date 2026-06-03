@@ -509,8 +509,7 @@ impl CausalGraph {
                             .edges
                             .iter()
                             .find(|e| e.from == current && e.to == *neighbour)
-                            .map(|e| e.weight)
-                            .unwrap_or(1.0);
+                            .map_or(1.0, |e| e.weight);
                         strengths.insert(neighbour.clone(), cur_strength * edge_weight);
                         queue.push_back(neighbour.clone());
                     }

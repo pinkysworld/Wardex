@@ -221,7 +221,7 @@ impl LateralMovementDetector {
                             src_host: current.to_string(),
                             dst_host: dst.to_string(),
                             protocol: (*proto).clone(),
-                            credential: cred.map(|s| s.to_string()),
+                            credential: cred.map(std::string::ToString::to_string),
                         });
 
                         if new_hops.len() >= self.config.min_hops {
@@ -320,7 +320,7 @@ impl LateralMovementDetector {
             .filter_map(|c| c.credential.as_deref())
             .collect();
 
-        let highest = paths.first().map(|p| p.risk_score).unwrap_or(0.0);
+        let highest = paths.first().map_or(0.0, |p| p.risk_score);
 
         LateralSummary {
             active_paths: paths,

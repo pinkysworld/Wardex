@@ -28,7 +28,9 @@ pub(crate) fn handle_feeds_create(body: &[u8], state: &Arc<Mutex<AppState>>) -> 
     };
     match serde_json::from_str::<crate::feed_ingestion::FeedSource>(&body_str) {
         Ok(src) => {
-            let mut s = state.lock().unwrap_or_else(|e| e.into_inner());
+            let mut s = state
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
             let id = s.feed_engine.add_source(src);
             json_response(&format!(r#"{{"id":"{id}"}}"#), 201)
         }
@@ -38,7 +40,9 @@ pub(crate) fn handle_feeds_create(body: &[u8], state: &Arc<Mutex<AppState>>) -> 
 
 /// `DELETE /api/feeds/{id}` — remove a feed source.
 pub(crate) fn handle_feeds_delete(feed_id: &str, state: &Arc<Mutex<AppState>>) -> Response<Body> {
-    let mut s = state.lock().unwrap_or_else(|e| e.into_inner());
+    let mut s = state
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
     if s.feed_engine.remove_source(feed_id) {
         json_response(r#"{"deleted":true}"#, 204)
     } else {
@@ -57,7 +61,9 @@ pub(crate) fn handle_feeds_poll(
         Ok(value) => value,
         Err(error) => return error_json(&error, 400),
     };
-    let mut s = state.lock().unwrap_or_else(|e| e.into_inner());
+    let mut s = state
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
     let AppState {
         ref mut feed_engine,
         ref mut threat_intel,
@@ -85,7 +91,9 @@ pub(crate) fn handle_feeds_poll(
 /// the lock.
 pub(crate) fn handle_feeds_fetch(feed_id: &str, state: &Arc<Mutex<AppState>>) -> Response<Body> {
     let source = {
-        let s = state.lock().unwrap_or_else(|e| e.into_inner());
+        let s = state
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         s.feed_engine
             .sources()
             .iter()
@@ -97,7 +105,9 @@ pub(crate) fn handle_feeds_fetch(feed_id: &str, state: &Arc<Mutex<AppState>>) ->
         Some(source) if !source.enabled => error_json("feed source is disabled", 400),
         Some(source) => match crate::feed_ingestion::fetch_feed_data(&source) {
             Ok(data) => {
-                let mut s = state.lock().unwrap_or_else(|e| e.into_inner());
+                let mut s = state
+                    .lock()
+                    .unwrap_or_else(std::sync::PoisonError::into_inner);
                 let AppState {
                     ref mut feed_engine,
                     ref mut threat_intel,
@@ -119,7 +129,9 @@ pub(crate) fn handle_feeds_fetch(feed_id: &str, state: &Arc<Mutex<AppState>>) ->
                 }
             }
             Err(error) => {
-                let mut s = state.lock().unwrap_or_else(|e| e.into_inner());
+                let mut s = state
+                    .lock()
+                    .unwrap_or_else(std::sync::PoisonError::into_inner);
                 s.feed_engine.record_feed_failure(feed_id, &error);
                 error_json(&error, 502)
             }
@@ -129,7 +141,9 @@ pub(crate) fn handle_feeds_fetch(feed_id: &str, state: &Arc<Mutex<AppState>>) ->
 
 /// `GET /api/feeds/stats` — aggregate ingestion statistics.
 pub(crate) fn handle_feeds_stats(state: &Arc<Mutex<AppState>>) -> Response<Body> {
-    let s = state.lock().unwrap_or_else(|e| e.into_inner());
+    let s = state
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
     let body = serde_json::to_string(&s.feed_engine.stats()).unwrap_or_default();
     json_response(&body, 200)
 }
@@ -144,7 +158,9 @@ pub(crate) fn handle_feeds_hot_reload_hashes(
         Ok(value) => value,
         Err(error) => return error_json(&error, 400),
     };
-    let mut s = state.lock().unwrap_or_else(|e| e.into_inner());
+    let mut s = state
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
     let AppState {
         ref mut feed_engine,
         ref mut malware_hash_db,

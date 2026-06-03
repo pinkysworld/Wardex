@@ -62,7 +62,7 @@ fn urlencoded(value: &str) -> String {
                 out.push(byte as char)
             }
             b' ' => out.push_str("%20"),
-            _ => out.push_str(&format!("%{:02X}", byte)),
+            _ => out.push_str(&format!("%{byte:02X}")),
         }
     }
     out
@@ -437,7 +437,7 @@ impl ClickHouseStorage {
     /// Returns the DDL for creating the events table.
     pub fn create_table_sql(&self) -> String {
         format!(
-            r#"CREATE TABLE IF NOT EXISTS {db}.events (
+            r"CREATE TABLE IF NOT EXISTS {db}.events (
     timestamp DateTime64(3),
     tenant_id String,
     event_class UInt16,
@@ -451,7 +451,7 @@ impl ClickHouseStorage {
 ) ENGINE = MergeTree()
 PARTITION BY toYYYYMM(timestamp)
 ORDER BY (tenant_id, timestamp, event_class)
-TTL timestamp + INTERVAL {days} DAY"#,
+TTL timestamp + INTERVAL {days} DAY",
             db = self.config.database,
             days = self.config.retention_days,
         )
@@ -460,7 +460,7 @@ TTL timestamp + INTERVAL {days} DAY"#,
     /// DDL for the pre-aggregated alerts-per-hour materialized view.
     pub fn alerts_per_hour_mv_sql(&self) -> String {
         format!(
-            r#"CREATE MATERIALIZED VIEW IF NOT EXISTS {db}.alerts_per_hour
+            r"CREATE MATERIALIZED VIEW IF NOT EXISTS {db}.alerts_per_hour
 ENGINE = SummingMergeTree()
 PARTITION BY toYYYYMM(hour)
 ORDER BY (tenant_id, hour, severity)
@@ -470,14 +470,17 @@ AS SELECT
     severity,
     count() AS cnt
 FROM {db}.events
-GROUP BY tenant_id, hour, severity"#,
+GROUP BY tenant_id, hour, severity",
             db = self.config.database,
         )
     }
 
     /// Number of events currently buffered.
     pub fn buffer_len(&self) -> usize {
-        self.buffer.lock().unwrap_or_else(|e| e.into_inner()).len()
+        self.buffer
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .len()
     }
 
     /// Total events inserted since start.
@@ -570,8 +573,7 @@ impl EventStore for ClickHouseStorage {
             .map(serde_json::from_str::<CountRow>)
             .transpose()
             .map_err(|error| format!("ClickHouse count parse failed: {error}"))?
-            .map(|row| row.count)
-            .unwrap_or(0);
+            .map_or(0, |row| row.count);
         Ok(count + buffered.len() as u64)
     }
 
@@ -612,8 +614,7 @@ impl EventStore for ClickHouseStorage {
             .map(serde_json::from_str::<CountRow>)
             .transpose()
             .map_err(|error| format!("ClickHouse purge count parse failed: {error}"))?
-            .map(|row| row.count)
-            .unwrap_or(0);
+            .map_or(0, |row| row.count);
         self.execute_query(
             &format!(
                 "ALTER TABLE {}.events DELETE WHERE timestamp < parseDateTime64BestEffort({})",

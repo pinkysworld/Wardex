@@ -42,7 +42,10 @@ pub fn create_rbac_user_token(port: u16, admin_token: &str, username: &str, role
 
 pub const LOCAL_CONSOLE_AGENT_ID: &str = "local-console";
 
-pub fn find_agent_by_id<'a>(agents: &'a serde_json::Value, agent_id: &str) -> &'a serde_json::Value {
+pub fn find_agent_by_id<'a>(
+    agents: &'a serde_json::Value,
+    agent_id: &str,
+) -> &'a serde_json::Value {
     agents
         .as_array()
         .and_then(|entries| {
@@ -230,7 +233,11 @@ pub fn with_stubbed_commands_path<T>(commands: &[(&str, &str)], test: impl FnOnc
     }
 }
 
-pub fn with_stubbed_command_path<T>(command_name: &str, script: &str, test: impl FnOnce() -> T) -> T {
+pub fn with_stubbed_command_path<T>(
+    command_name: &str,
+    script: &str,
+    test: impl FnOnce() -> T,
+) -> T {
     with_stubbed_commands_path(&[(command_name, script)], test)
 }
 
@@ -295,7 +302,7 @@ pub fn setup_agent_with_events(
             "timestamp": format!("2025-01-01T00:{:02}:00Z", i),
             "hostname": agent_name,
             "platform": "linux",
-            "score": 5.0 + (i as f64),
+            "score": 5.0 + f64::from(i),
             "confidence": 0.9,
             "level": if i % 2 == 0 { "Critical" } else { "Elevated" },
             "action": "alert",

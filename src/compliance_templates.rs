@@ -611,8 +611,14 @@ fn ctrl(
         control_id: id.into(),
         title: title.into(),
         description: desc.into(),
-        wardex_mapping: mappings.iter().map(|s| s.to_string()).collect(),
-        evidence_sources: evidence.iter().map(|s| s.to_string()).collect(),
+        wardex_mapping: mappings
+            .iter()
+            .map(std::string::ToString::to_string)
+            .collect(),
+        evidence_sources: evidence
+            .iter()
+            .map(std::string::ToString::to_string)
+            .collect(),
         auto_check: check,
     }
 }
@@ -768,7 +774,7 @@ fn evaluate_check(check: &AutoCheck, state: &SystemState) -> (FindingStatus, Str
                         "Retention: {} days (< {} required)",
                         state.retention_days, required
                     ),
-                    format!("Increase retention to at least {} days", required),
+                    format!("Increase retention to at least {required} days"),
                 )
             }
         }

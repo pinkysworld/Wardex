@@ -106,10 +106,10 @@ impl QuarantineStore {
         let id = format!("q-{}", self.next_id);
         self.next_id += 1;
 
-        let filename = std::path::Path::new(original_path)
-            .file_name()
-            .map(|n| n.to_string_lossy().to_string())
-            .unwrap_or_else(|| "unknown".to_string());
+        let filename = std::path::Path::new(original_path).file_name().map_or_else(
+            || "unknown".to_string(),
+            |n| n.to_string_lossy().to_string(),
+        );
 
         let record = QuarantinedFile {
             id: id.clone(),

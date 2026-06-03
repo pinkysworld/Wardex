@@ -228,12 +228,12 @@ impl YaraEngine {
         }
 
         let haystack: Vec<u8> = if nocase {
-            data.iter().map(|b| b.to_ascii_lowercase()).collect()
+            data.iter().map(u8::to_ascii_lowercase).collect()
         } else {
             data.to_vec()
         };
         let needle_norm: Vec<u8> = if nocase {
-            needle.iter().map(|b| b.to_ascii_lowercase()).collect()
+            needle.iter().map(u8::to_ascii_lowercase).collect()
         } else {
             needle.to_vec()
         };

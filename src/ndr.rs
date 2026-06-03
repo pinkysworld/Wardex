@@ -423,7 +423,10 @@ impl NdrEngine {
                 total_bytes: bytes,
                 flow_count: count,
                 unique_destinations: dests.len(),
-                protocols: protos.into_iter().map(|s| s.to_string()).collect(),
+                protocols: protos
+                    .into_iter()
+                    .map(std::string::ToString::to_string)
+                    .collect(),
             })
             .collect();
         talkers.sort_by_key(|b| std::cmp::Reverse(b.total_bytes));
@@ -459,8 +462,7 @@ impl NdrEngine {
                     first_seen_ms: first,
                     risk_score: (risk * 100.0).round() / 100.0,
                     reason: format!(
-                        "High-volume external transfer: {} bytes to {}:{}",
-                        bytes, addr, port
+                        "High-volume external transfer: {bytes} bytes to {addr}:{port}"
                     ),
                 }
             })
@@ -668,7 +670,7 @@ impl NdrEngine {
                 let entry = groups
                     .entry((&f.src_addr, &f.dst_addr, f.dst_port))
                     .or_insert((0.0, 0, 0));
-                entry.0 += entropy as f64;
+                entry.0 += f64::from(entropy);
                 entry.1 += f.bytes_sent + f.bytes_received;
                 entry.2 += 1;
             }

@@ -135,7 +135,7 @@ fn dga_score(domain: &str) -> (f32, Vec<String>) {
     }
 
     // 3. Digit ratio (DGA often mixes many digits)
-    let digit_count = sld.bytes().filter(|b| b.is_ascii_digit()).count();
+    let digit_count = sld.bytes().filter(u8::is_ascii_digit).count();
     let digit_ratio = digit_count as f32 / len.max(1) as f32;
     if digit_ratio > 0.4 {
         score += 0.2;
@@ -293,9 +293,9 @@ fn fast_flux_score(queries: &[DnsQuery], domain: &str) -> (f32, Vec<String>) {
     // 1. Unique IP addresses
     let mut all_ips: Vec<&str> = domain_queries
         .iter()
-        .flat_map(|q| q.response_ips.iter().map(|s| s.as_str()))
+        .flat_map(|q| q.response_ips.iter().map(std::string::String::as_str))
         .collect();
-    all_ips.sort();
+    all_ips.sort_unstable();
     all_ips.dedup();
 
     if all_ips.len() > 10 {
@@ -309,7 +309,7 @@ fn fast_flux_score(queries: &[DnsQuery], domain: &str) -> (f32, Vec<String>) {
     // 2. Low TTL
     let low_ttl_count = domain_queries
         .iter()
-        .filter(|q| q.ttl.map(|t| t < 300).unwrap_or(false))
+        .filter(|q| q.ttl.is_some_and(|t| t < 300))
         .count();
     let low_ttl_ratio = low_ttl_count as f32 / domain_queries.len().max(1) as f32;
     if low_ttl_ratio > 0.5 {

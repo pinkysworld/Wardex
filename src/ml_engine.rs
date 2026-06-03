@@ -65,10 +65,10 @@ impl TriageFeatures {
         vec![
             self.anomaly_score,
             self.confidence,
-            self.suspicious_axes as f64,
-            self.hour_of_day.min(23) as f64 / 24.0, // normalise [0,1)
-            self.day_of_week.min(6) as f64 / 7.0,   // normalise [0,1)
-            (self.alert_frequency_1h as f64).ln_1p(), // log-scale
+            f64::from(self.suspicious_axes),
+            f64::from(self.hour_of_day.min(23)) / 24.0, // normalise [0,1)
+            f64::from(self.day_of_week.min(6)) / 7.0,   // normalise [0,1)
+            f64::from(self.alert_frequency_1h).ln_1p(), // log-scale
             self.device_risk_score,
         ]
     }
@@ -364,7 +364,7 @@ impl RandomForest {
 
         TriageResult {
             label,
-            confidence: (total_conf / n) * (votes as f64 / n),
+            confidence: (total_conf / n) * (f64::from(votes) / n),
             model_version: self.version.clone(),
         }
     }
@@ -556,7 +556,7 @@ fn fit_regression_tree(
         return leaf;
     }
 
-    let feature_count = xs.first().map(|x| x.len()).unwrap_or(0);
+    let feature_count = xs.first().map_or(0, std::vec::Vec::len);
     let parent_score = g * g / (h + lambda);
     let mut best: Option<(usize, f64, f64)> = None; // feature, threshold, gain
 
@@ -587,7 +587,7 @@ fn fit_regression_tree(
                 continue;
             }
             let gain = 0.5 * (gl * gl / (hl + lambda) + gr * gr / (hr + lambda) - parent_score);
-            if gain > best.map(|(_, _, bg)| bg).unwrap_or(1e-6) {
+            if gain > best.map_or(1e-6, |(_, _, bg)| bg) {
                 best = Some((feature, (v + v_next) / 2.0, gain));
             }
         }
@@ -638,8 +638,8 @@ fn synthetic_training_set() -> Vec<(Vec<f64>, usize)> {
     let mut seed: u64 = 0x9E37_79B9_7F4A_7C15;
     let mut next = || {
         seed = seed
-            .wrapping_mul(6364136223846793005)
-            .wrapping_add(1442695040888963407);
+            .wrapping_mul(6_364_136_223_846_793_005)
+            .wrapping_add(1_442_695_040_888_963_407);
         ((seed >> 33) as f64) / (1u64 << 31) as f64 // [0,1)
     };
 
@@ -762,8 +762,7 @@ impl GradientBoostedClassifier {
             .iter()
             .enumerate()
             .max_by(|a, b| a.1.partial_cmp(b.1).unwrap_or(std::cmp::Ordering::Equal))
-            .map(|(c, p)| (c, *p))
-            .unwrap_or((1, 0.0));
+            .map_or((1, 0.0), |(c, p)| (c, *p));
         let label = match class {
             2 => TriageLabel::TruePositive,
             0 => TriageLabel::FalsePositive,
@@ -782,7 +781,7 @@ impl GradientBoostedClassifier {
 
     /// Total number of fitted trees across all classes.
     pub fn tree_count(&self) -> usize {
-        self.trees.iter().map(|t| t.len()).sum()
+        self.trees.iter().map(std::vec::Vec::len).sum()
     }
 }
 
@@ -832,7 +831,7 @@ impl GradientBoostEngine {
             return vec![];
         };
         let mut found: Vec<String> = entries
-            .filter_map(|e| e.ok())
+            .filter_map(std::result::Result::ok)
             .filter(|e| e.path().extension().is_some_and(|ext| ext == "json"))
             .filter_map(|e| e.path().to_str().map(String::from))
             .collect();

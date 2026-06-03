@@ -267,7 +267,7 @@ mod tests {
     fn summary_totals() {
         let mut analytics = ApiAnalytics::new();
         for i in 0..10 {
-            analytics.record("GET", "/api/alerts", i as f64, i == 5);
+            analytics.record("GET", "/api/alerts", f64::from(i), i == 5);
         }
         let summary = analytics.summary();
         assert_eq!(summary.total_requests, 10);
@@ -279,7 +279,7 @@ mod tests {
     fn p95_calculation() {
         let mut analytics = ApiAnalytics::new();
         for i in 1..=100 {
-            analytics.record("GET", "/api/test", i as f64, false);
+            analytics.record("GET", "/api/test", f64::from(i), false);
         }
         let metrics = analytics.metrics();
         let m = &metrics[0];

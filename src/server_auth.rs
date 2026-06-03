@@ -656,7 +656,7 @@ mod tests {
         let mut t = FailedAuthTracker::new();
         // Insert MAX_ENTRIES + 1 stale entries that would otherwise be retained.
         let now = FailedAuthTracker::now_secs();
-        for i in 0..(FAILED_AUTH_MAX_ENTRIES + 1) {
+        for i in 0..=FAILED_AUTH_MAX_ENTRIES {
             t.entries.insert(
                 format!("10.0.{}.{}", i / 256, i % 256),
                 FailedAuthState {
@@ -702,11 +702,11 @@ mod tests {
             failed_auth_record(ip);
         }
         let mid = failed_auth_stats();
-        assert!(mid.failures_total >= before.failures_total + (FAILED_AUTH_THRESHOLD - 1) as u64);
+        assert!(mid.failures_total >= before.failures_total + u64::from(FAILED_AUTH_THRESHOLD - 1));
         // Threshold-th failure triggers a lockout.
         failed_auth_record(ip);
         let after = failed_auth_stats();
-        assert!(after.failures_total >= before.failures_total + FAILED_AUTH_THRESHOLD as u64);
+        assert!(after.failures_total >= before.failures_total + u64::from(FAILED_AUTH_THRESHOLD));
         assert!(after.lockouts_triggered_total > before.lockouts_triggered_total);
         // Probing while locked counts as a breach attempt.
         let before_breach = failed_auth_stats().lockout_breach_attempts_total;
@@ -785,13 +785,13 @@ mod tests {
         failed_auth_clear_request(ip, &cleanup_subject);
 
         for i in 0..FAILED_AUTH_THRESHOLD {
-            let subject = failed_auth_subject(ip, Some(&format!("token-{}", i)));
+            let subject = failed_auth_subject(ip, Some(&format!("token-{i}")));
             failed_auth_record_request(ip, &subject);
         }
 
         assert!(failed_auth_locked_request(ip, &cleanup_subject).is_some());
         for i in 0..FAILED_AUTH_THRESHOLD {
-            let subject = failed_auth_subject(ip, Some(&format!("token-{}", i)));
+            let subject = failed_auth_subject(ip, Some(&format!("token-{i}")));
             failed_auth_clear_request(ip, &subject);
         }
         failed_auth_clear_request(ip, &cleanup_subject);

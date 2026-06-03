@@ -9,10 +9,10 @@ use std::collections::BTreeMap;
 
 #[path = "openapi_core_routes.rs"]
 mod openapi_core_routes;
-#[path = "openapi_operational_routes.rs"]
-mod openapi_operational_routes;
 #[path = "openapi_enterprise_routes.rs"]
 mod openapi_enterprise_routes;
+#[path = "openapi_operational_routes.rs"]
+mod openapi_operational_routes;
 
 // ── Core types ───────────────────────────────────────────────────────────────
 
@@ -404,7 +404,12 @@ fn string_array_schema() -> SchemaRef {
 fn string_enum_schema(values: &[&str]) -> SchemaRef {
     SchemaRef::Inline(Schema {
         schema_type: Some("string".into()),
-        enum_values: Some(values.iter().map(|value| value.to_string()).collect()),
+        enum_values: Some(
+            values
+                .iter()
+                .map(std::string::ToString::to_string)
+                .collect(),
+        ),
         ..Default::default()
     })
 }
@@ -562,7 +567,7 @@ fn operation(
         sunset: None,
         replacement: None,
         operation_id: id.into(),
-        tags: tags.iter().map(|t| t.to_string()).collect(),
+        tags: tags.iter().map(std::string::ToString::to_string).collect(),
         parameters: vec![],
         request_body,
         responses,
@@ -1067,7 +1072,10 @@ pub fn wardex_openapi_spec(version: &str) -> OpenApiSpec {
     let builder = OpenApiBuilder::new("Wardex XDR/SIEM API", version)
         .tag("auth", "Authentication, session, and token management")
         .tag("status", "Platform health, status, and diagnostics")
-        .tag("command", "Command Center lane health and operator action surfaces")
+        .tag(
+            "command",
+            "Command Center lane health and operator action surfaces",
+        )
         .tag("detection", "Detection engineering, rules, and analysis")
         .tag("alerts", "Alert queue, triage, and analysis")
         .tag("incidents", "Incident and case management")
@@ -1118,7 +1126,10 @@ pub fn wardex_openapi_spec(version: &str) -> OpenApiSpec {
             "OperationalSnapshotMetadata",
             operational_snapshot_metadata_schema(),
         )
-        .schema("OperationalSnapshotEntry", operational_snapshot_entry_schema())
+        .schema(
+            "OperationalSnapshotEntry",
+            operational_snapshot_entry_schema(),
+        )
         .schema(
             "OperationalSnapshotsResponse",
             operational_snapshots_response_schema(),
@@ -1127,7 +1138,10 @@ pub fn wardex_openapi_spec(version: &str) -> OpenApiSpec {
             "OperationalSnapshotVerifyResponse",
             operational_snapshot_verify_response_schema(),
         )
-        .schema("StreamReadinessResponse", stream_readiness_response_schema())
+        .schema(
+            "StreamReadinessResponse",
+            stream_readiness_response_schema(),
+        )
         .schema(
             "StreamReliabilityLabResponse",
             stream_reliability_lab_response_schema(),
@@ -1135,7 +1149,10 @@ pub fn wardex_openapi_spec(version: &str) -> OpenApiSpec {
         .schema("ReleaseDoctorResponse", release_doctor_response_schema())
         .schema("SupportBundleResponse", support_bundle_response_schema())
         .schema("OperatorWorkQueueItem", operator_work_queue_item_schema())
-        .schema("OperatorWorkQueueResponse", operator_work_queue_response_schema())
+        .schema(
+            "OperatorWorkQueueResponse",
+            operator_work_queue_response_schema(),
+        )
         .schema(
             "OperatorTaskActionBlueprint",
             operator_task_action_blueprint_schema(),

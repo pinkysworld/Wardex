@@ -171,7 +171,7 @@ pub(crate) fn tracked_lock<'a, T>(mutex: &'a Mutex<T>, label: &'static str) -> M
         }
     };
     let waited = started.elapsed();
-    let waited_ns = waited.as_nanos().min(u64::MAX as u128) as u64;
+    let waited_ns = waited.as_nanos().min(u128::from(u64::MAX)) as u64;
     let slow = waited.as_millis() as u64 >= SLOW_LOCK_WAIT_THRESHOLD_MS;
     LOCK_ACQUISITIONS.fetch_add(1, Ordering::Relaxed);
     LOCK_WAIT_NS_TOTAL.fetch_add(waited_ns, Ordering::Relaxed);
@@ -302,8 +302,7 @@ mod tests {
         assert!(d.acquisitions >= 1);
         assert!(
             d.slow_waits >= 1,
-            "expected at least one slow wait, got {:?}",
-            d
+            "expected at least one slow wait, got {d:?}"
         );
     }
 
@@ -362,8 +361,7 @@ mod tests {
         let before_acq = label_snapshot()
             .into_iter()
             .find(|(k, _)| *k == label)
-            .map(|(_, v)| v.acquisitions)
-            .unwrap_or(0);
+            .map_or(0, |(_, v)| v.acquisitions);
         for _ in 0..3 {
             let _g = tracked_lock(&m, label);
         }
@@ -386,7 +384,7 @@ mod tests {
         let snap = label_snapshot();
         let keys: Vec<&'static str> = snap.iter().map(|(k, _)| *k).collect();
         let mut sorted = keys.clone();
-        sorted.sort();
+        sorted.sort_unstable();
         assert_eq!(keys, sorted, "label_snapshot must be sorted");
     }
 }

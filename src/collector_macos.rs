@@ -124,13 +124,17 @@ fn detect_macos_version() -> (String, String) {
     let version = std::process::Command::new("sw_vers")
         .arg("-productVersion")
         .output()
-        .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
-        .unwrap_or_else(|_| "unknown".into());
+        .map_or_else(
+            |_| "unknown".into(),
+            |o| String::from_utf8_lossy(&o.stdout).trim().to_string(),
+        );
     let build = std::process::Command::new("sw_vers")
         .arg("-buildVersion")
         .output()
-        .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
-        .unwrap_or_else(|_| "unknown".into());
+        .map_or_else(
+            |_| "unknown".into(),
+            |o| String::from_utf8_lossy(&o.stdout).trim().to_string(),
+        );
     (version, build)
 }
 
@@ -699,7 +703,7 @@ pub fn collect_persistence_items() -> Vec<MacosPersistenceItem> {
 
     // Also scan user-level LaunchAgents
     if let Ok(home) = std::env::var("HOME") {
-        let user_agents = format!("{}/Library/LaunchAgents", home);
+        let user_agents = format!("{home}/Library/LaunchAgents");
         if let Ok(entries) = fs::read_dir(&user_agents) {
             for entry in entries.flatten() {
                 let path = entry.path();

@@ -651,7 +651,7 @@ pub fn build_investigation_graph(
             if !technique_set.contains_key(tid) {
                 technique_set.insert(tid.clone(), true);
                 nodes.push(GraphNode {
-                    id: format!("technique-{}", tid),
+                    id: format!("technique-{tid}"),
                     kind: "technique".into(),
                     label: format!("{} ({})", m.technique_name, tid),
                     metadata: serde_json::json!({"tactic": m.tactic}),
@@ -659,7 +659,7 @@ pub fn build_investigation_graph(
             }
             edges.push(GraphEdge {
                 source: event_node.clone(),
-                target: format!("technique-{}", tid),
+                target: format!("technique-{tid}"),
                 relation: "uses_technique".into(),
             });
         }
@@ -791,7 +791,7 @@ mod tests {
                 if score >= 5.0 { "critical" } else { "elevated" },
             ),
             correlated: false,
-            triage: Default::default(),
+            triage: crate::event_forward::EventTriage::default(),
         }
     }
 

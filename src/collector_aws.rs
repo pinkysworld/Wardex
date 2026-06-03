@@ -205,7 +205,7 @@ impl AwsCloudTrailCollector {
         let next_token = root
             .get("NextToken")
             .and_then(|v| v.as_str())
-            .map(|s| s.to_string());
+            .map(std::string::ToString::to_string);
 
         let raw_events = match root.get("Events").and_then(|v| v.as_array()) {
             Some(arr) => arr,
@@ -243,7 +243,7 @@ impl AwsCloudTrailCollector {
             let error_code = raw
                 .get("ErrorCode")
                 .and_then(|v| v.as_str())
-                .map(|s| s.to_string());
+                .map(std::string::ToString::to_string);
             let (risk_score, mitre_techniques) = score_event(&event_name, error_code.as_deref());
 
             let event = CloudTrailEvent {
@@ -267,20 +267,20 @@ impl AwsCloudTrailCollector {
                 source_ip: raw
                     .get("SourceIPAddress")
                     .and_then(|v| v.as_str())
-                    .map(|s| s.to_string()),
+                    .map(std::string::ToString::to_string),
                 user_arn: raw
                     .get("Username")
                     .and_then(|v| v.as_str())
-                    .map(|s| s.to_string()),
+                    .map(std::string::ToString::to_string),
                 user_agent: raw
                     .get("UserAgent")
                     .and_then(|v| v.as_str())
-                    .map(|s| s.to_string()),
+                    .map(std::string::ToString::to_string),
                 error_code,
                 error_message: raw
                     .get("ErrorMessage")
                     .and_then(|v| v.as_str())
-                    .map(|s| s.to_string()),
+                    .map(std::string::ToString::to_string),
                 read_only: raw.get("ReadOnly").and_then(|v| v.as_str()) == Some("true"),
                 risk_score,
                 mitre_techniques,
@@ -292,8 +292,7 @@ impl AwsCloudTrailCollector {
                             .char_indices()
                             .take_while(|(i, _)| *i < 4096)
                             .last()
-                            .map(|(i, c)| i + c.len_utf8())
-                            .unwrap_or(0);
+                            .map_or(0, |(i, c)| i + c.len_utf8());
                         Some(s[..end].to_string())
                     } else {
                         Some(s)
@@ -403,10 +402,8 @@ impl AwsCloudTrailCollector {
             self.config.region, date
         );
         let signed_headers = "content-type;host;x-amz-date;x-amz-target";
-        let canonical_request = format!(
-            "POST\n/\n\n{}\n{}\n{}",
-            canonical_headers, signed_headers, content_hash
-        );
+        let canonical_request =
+            format!("POST\n/\n\n{canonical_headers}\n{signed_headers}\n{content_hash}");
 
         let credential_scope = format!(
             "{}/{}/cloudtrail/aws4_request",

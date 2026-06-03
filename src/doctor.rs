@@ -524,7 +524,10 @@ mod tests {
             payload.get("schema").and_then(serde_json::Value::as_str),
             Some("wardex.doctor.v1")
         );
-        assert!(payload.get("summary").is_some(), "summary should be present");
+        assert!(
+            payload.get("summary").is_some(),
+            "summary should be present"
+        );
     }
 
     #[test]

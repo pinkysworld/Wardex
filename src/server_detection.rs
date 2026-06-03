@@ -120,8 +120,7 @@ fn detection_graph_context(event: &StoredEvent) -> Vec<String> {
         ],
     ) {
         context.push(format!(
-            "network_destination:{} appears in the evidence.",
-            destination
+            "network_destination:{destination} appears in the evidence."
         ));
     }
     if !event.alert.mitre.is_empty() {
@@ -198,18 +197,19 @@ fn build_entity_risk_scores(event: &StoredEvent) -> Vec<EntityRiskScore> {
     let sequence_bonus = (sequence_signals.len() as f64 * 0.35).min(1.4);
     let mitre_bonus = (event.alert.mitre.len() as f64 * 0.25).min(1.0);
     let correlation_bonus = if event.correlated { 0.8 } else { 0.0 };
-    let host_score = event.alert.score as f64 + sequence_bonus + mitre_bonus + correlation_bonus;
+    let host_score =
+        f64::from(event.alert.score) + sequence_bonus + mitre_bonus + correlation_bonus;
     let peer_group = Some(format!("{} hosts", event.alert.platform));
     let mut scores = vec![entity_score(
         "host",
         event.alert.hostname.clone(),
         host_score,
-        event.alert.confidence as f64,
+        f64::from(event.alert.confidence),
         peer_group,
         vec![
             risk_component(
                 "alert_score",
-                event.alert.score as f64,
+                f64::from(event.alert.score),
                 0.55,
                 format!("Detector score for this alert is {:.2}.", event.alert.score),
             ),
@@ -248,13 +248,13 @@ fn build_entity_risk_scores(event: &StoredEvent) -> Vec<EntityRiskScore> {
         scores.push(entity_score(
             "agent",
             event.agent_id.clone(),
-            (event.alert.score as f64 * 0.9 + correlation_bonus).min(10.0),
-            event.alert.confidence as f64,
+            (f64::from(event.alert.score) * 0.9 + correlation_bonus).min(10.0),
+            f64::from(event.alert.confidence),
             Some("reporting agents".to_string()),
             vec![
                 risk_component(
                     "inherited_host_signal",
-                    event.alert.score as f64 * 0.9,
+                    f64::from(event.alert.score) * 0.9,
                     0.75,
                     "Reporting-agent risk inherits most of the host alert score.",
                 ),
@@ -274,13 +274,13 @@ fn build_entity_risk_scores(event: &StoredEvent) -> Vec<EntityRiskScore> {
         scores.push(entity_score(
             "process_or_action",
             event.alert.action.clone(),
-            (event.alert.score as f64 * 0.8 + sequence_bonus).min(10.0),
-            (event.alert.confidence as f64 * 0.95).min(1.0),
+            (f64::from(event.alert.score) * 0.8 + sequence_bonus).min(10.0),
+            (f64::from(event.alert.confidence) * 0.95).min(1.0),
             Some("same-action executions".to_string()),
             vec![
                 risk_component(
                     "action_frequency_proxy",
-                    event.alert.score as f64 * 0.8,
+                    f64::from(event.alert.score) * 0.8,
                     0.65,
                     "Action-level risk is derived from the alert score and attached reasons.",
                 ),
@@ -321,13 +321,13 @@ fn build_entity_risk_scores(event: &StoredEvent) -> Vec<EntityRiskScore> {
         scores.push(entity_score(
             "user",
             user,
-            (event.alert.score as f64 * 0.75 + sequence_bonus).min(10.0),
-            (event.alert.confidence as f64 * 0.9).min(1.0),
+            (f64::from(event.alert.score) * 0.75 + sequence_bonus).min(10.0),
+            (f64::from(event.alert.confidence) * 0.9).min(1.0),
             Some("identity peer group".to_string()),
             vec![
                 risk_component(
                     "identity_signal",
-                    event.alert.score as f64 * 0.75,
+                    f64::from(event.alert.score) * 0.75,
                     0.7,
                     "Identity risk is inferred from user/account evidence in the detection context.",
                 ),
@@ -352,13 +352,13 @@ fn build_entity_risk_scores(event: &StoredEvent) -> Vec<EntityRiskScore> {
         scores.push(entity_score(
             "network_destination",
             destination,
-            (event.alert.score as f64 * 0.7 + if reason_contains_any(&event.alert.reasons, &["beacon", "c2", "dns", "http"]) { 1.0 } else { 0.0 }).min(10.0),
-            (event.alert.confidence as f64 * 0.9).min(1.0),
+            (f64::from(event.alert.score) * 0.7 + if reason_contains_any(&event.alert.reasons, &["beacon", "c2", "dns", "http"]) { 1.0 } else { 0.0 }).min(10.0),
+            (f64::from(event.alert.confidence) * 0.9).min(1.0),
             Some("network destinations".to_string()),
             vec![
                 risk_component(
                     "destination_signal",
-                    event.alert.score as f64 * 0.7,
+                    f64::from(event.alert.score) * 0.7,
                     0.65,
                     "Destination risk is inferred from network indicators attached to the alert.",
                 ),
@@ -529,7 +529,7 @@ pub(super) fn build_detection_explainability(
     why_fired.push(format!(
         "The alert scored {:.2} with {:.0}% confidence.",
         event.alert.score,
-        event.alert.confidence as f64 * 100.0
+        f64::from(event.alert.confidence) * 100.0
     ));
     if event.correlated {
         why_fired.push(
@@ -1465,9 +1465,7 @@ fn case_closure_readiness_json(
     related_ticket_syncs: &[crate::enterprise::TicketSyncRecord],
 ) -> serde_json::Value {
     let evidence_complete = !case.evidence.is_empty() || !linked_events.is_empty();
-    let questions_closed = handoff
-        .map(|entry| entry.questions.is_empty())
-        .unwrap_or(false);
+    let questions_closed = handoff.is_some_and(|entry| entry.questions.is_empty());
     let approval_state = related_response_requests
         .iter()
         .all(|request| !matches!(request.status, ApprovalStatus::Pending));
@@ -1531,7 +1529,7 @@ pub(super) fn case_handoff_packet_json(
     let related_hosts = linked_events
         .iter()
         .filter_map(|event| event.get("hostname").and_then(serde_json::Value::as_str))
-        .map(|host| host.to_ascii_lowercase())
+        .map(str::to_ascii_lowercase)
         .collect::<HashSet<_>>();
     let linked_investigation = workflow_store
         .active_snapshots()

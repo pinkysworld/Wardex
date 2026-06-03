@@ -282,8 +282,7 @@ impl MultiTenantManager {
     pub fn device_belongs_to(&self, tenant_id: &str, device_id: &str) -> bool {
         self.tenants
             .get(tenant_id)
-            .map(|t| t.device_ids.contains(&device_id.to_string()))
-            .unwrap_or(false)
+            .is_some_and(|t| t.device_ids.contains(&device_id.to_string()))
     }
 
     /// Get the tenant that owns a device.
@@ -313,16 +312,11 @@ impl MultiTenantManager {
         let active: Vec<&Tenant> = self.tenants.values().filter(|t| t.active).collect();
         let total_devices: usize = active
             .iter()
-            .map(|t| self.usage.get(&t.id).map(|u| u.devices).unwrap_or(0))
+            .map(|t| self.usage.get(&t.id).map_or(0, |u| u.devices))
             .sum();
         let total_events: u64 = active
             .iter()
-            .map(|t| {
-                self.usage
-                    .get(&t.id)
-                    .map(|u| u.events_processed)
-                    .unwrap_or(0)
-            })
+            .map(|t| self.usage.get(&t.id).map_or(0, |u| u.events_processed))
             .sum();
         let tier_counts: HashMap<String, usize> = {
             let mut m = HashMap::new();

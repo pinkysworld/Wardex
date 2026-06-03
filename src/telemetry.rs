@@ -15,13 +15,13 @@ static SPAN_ID_COUNTER: AtomicU64 = AtomicU64::new(1);
 /// Generate a new trace ID (hex string).
 pub fn new_trace_id() -> String {
     let id = TRACE_ID_COUNTER.fetch_add(1, Ordering::Relaxed);
-    format!("{:032x}", id)
+    format!("{id:032x}")
 }
 
 /// Generate a new span ID (hex string).
 pub fn new_span_id() -> String {
     let id = SPAN_ID_COUNTER.fetch_add(1, Ordering::Relaxed);
-    format!("{:016x}", id)
+    format!("{id:016x}")
 }
 
 /// An OpenTelemetry-compatible span.
@@ -174,7 +174,7 @@ impl TraceCollector {
             .filter(|s| s.status == SpanStatus::Error)
             .count();
         let avg_duration = if total > 0 {
-            let sum: u64 = self.spans.iter().filter_map(|s| s.duration_ms()).sum();
+            let sum: u64 = self.spans.iter().filter_map(OtelSpan::duration_ms).sum();
             sum as f64 / total as f64
         } else {
             0.0

@@ -664,8 +664,7 @@ pub(crate) fn first_run_operator_proof(
         .unwrap_or_else(|_| {
             s.response_orchestrator
                 .get_request(&stored_response_id)
-                .map(|request| request.status)
-                .unwrap_or(ApprovalStatus::Pending)
+                .map_or(ApprovalStatus::Pending, |request| request.status)
         });
     let response_record = s.response_orchestrator.get_request(&stored_response_id);
     let demo_collectors = [
@@ -811,7 +810,7 @@ pub(crate) fn secret_reference_kind(reference: &str) -> &'static str {
 pub(crate) fn masked_secret_preview(value: &str) -> String {
     let chars: Vec<char> = value.chars().collect();
     if chars.is_empty() {
-        return "".to_string();
+        return String::new();
     }
     if chars.len() <= 4 {
         return "*".repeat(chars.len());

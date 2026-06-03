@@ -395,8 +395,7 @@ impl ControlPlanePostureSnapshot {
             ha_mode: control_plane_ha_mode(cluster.as_ref()).to_string(),
             leader: cluster
                 .as_ref()
-                .map(|cluster| cluster.role == "leader")
-                .unwrap_or(true),
+                .is_none_or(|cluster| cluster.role == "leader"),
             durable_storage,
             event_store_path: state
                 .event_store

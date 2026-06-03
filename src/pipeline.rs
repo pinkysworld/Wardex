@@ -127,7 +127,10 @@ impl PipelineManager {
     }
 
     pub fn submit(&self, _event: PipelineEvent) -> Result<(), String> {
-        let mut m = self.metrics.lock().unwrap_or_else(|e| e.into_inner());
+        let mut m = self
+            .metrics
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         m.events_ingested += 1;
         let pending = m.events_ingested - m.events_stored;
         if pending > self.config.backpressure_threshold as u64 {
@@ -147,7 +150,10 @@ impl PipelineManager {
 
     pub fn submit_to_dlq(&self, event: PipelineEvent, stage: PipelineStage, error: String) {
         let dlq_len = {
-            let mut dlq = self.dlq.lock().unwrap_or_else(|e| e.into_inner());
+            let mut dlq = self
+                .dlq
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
             if dlq.len() >= self.config.dlq_max_size {
                 dlq.pop_front();
             }
@@ -160,21 +166,24 @@ impl PipelineManager {
             });
             dlq.len() as u64
         };
-        let mut m = self.metrics.lock().unwrap_or_else(|e| e.into_inner());
+        let mut m = self
+            .metrics
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         m.dlq_count = dlq_len;
     }
 
     pub fn metrics(&self) -> PipelineMetrics {
         self.metrics
             .lock()
-            .unwrap_or_else(|e| e.into_inner())
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
             .clone()
     }
 
     pub fn dlq_entries(&self) -> Vec<DlqEntry> {
         self.dlq
             .lock()
-            .unwrap_or_else(|e| e.into_inner())
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
             .iter()
             .cloned()
             .collect()
@@ -183,7 +192,7 @@ impl PipelineManager {
     pub fn dlq_drain(&self) -> Vec<DlqEntry> {
         self.dlq
             .lock()
-            .unwrap_or_else(|e| e.into_inner())
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
             .drain(..)
             .collect()
     }

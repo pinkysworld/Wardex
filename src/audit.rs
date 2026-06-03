@@ -123,7 +123,7 @@ impl AuditLog {
     fn insert_checkpoint(&mut self) {
         let seq = self.records.len();
         let cumulative = self.previous_hash.clone();
-        let sig_payload = format!("checkpoint|{}|{}", seq, cumulative);
+        let sig_payload = format!("checkpoint|{seq}|{cumulative}");
         let signature = if self.hmac_key.is_empty() {
             format!("unsigned:{}", sha256_hex(sig_payload.as_bytes()))
         } else {
@@ -249,8 +249,7 @@ impl AuditLog {
         self.previous_hash = self
             .records
             .last()
-            .map(|r| r.current_hash.clone())
-            .unwrap_or_else(|| "0".repeat(64));
+            .map_or_else(|| "0".repeat(64), |r| r.current_hash.clone());
         trim
     }
 }

@@ -16,7 +16,9 @@ use crate::server_response::{error_json, json_response};
 
 /// `GET /api/ml/models` — public summary of the model registry.
 pub(crate) fn handle_ml_models(state: &Arc<Mutex<AppState>>) -> Response<Body> {
-    let mut s = state.lock().unwrap_or_else(|e| e.into_inner());
+    let mut s = state
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
     s.model_registry.refresh();
     let status = s.model_registry.status();
     let body = serde_json::json!({
@@ -32,7 +34,9 @@ pub(crate) fn handle_ml_models(state: &Arc<Mutex<AppState>>) -> Response<Body> {
 
 /// `GET /api/ml/models/status` — full registry status payload.
 pub(crate) fn handle_ml_models_status(state: &Arc<Mutex<AppState>>) -> Response<Body> {
-    let mut s = state.lock().unwrap_or_else(|e| e.into_inner());
+    let mut s = state
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
     s.model_registry.refresh();
     let body = serde_json::to_string(&s.model_registry.status()).unwrap_or_default();
     json_response(&body, 200)
@@ -41,7 +45,9 @@ pub(crate) fn handle_ml_models_status(state: &Arc<Mutex<AppState>>) -> Response<
 /// `POST /api/ml/models/rollback` — flip the primary triage backend off GBM
 /// back onto the Random Forest fallback.
 pub(crate) fn handle_ml_models_rollback(state: &Arc<Mutex<AppState>>) -> Response<Body> {
-    let mut s = state.lock().unwrap_or_else(|e| e.into_inner());
+    let mut s = state
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
     let changed = s.model_registry.rollback_alert_triage();
     let body = serde_json::json!({
         "status": s.model_registry.status(),
@@ -58,7 +64,9 @@ pub(crate) fn handle_ml_shadow_recent(url: &str, state: &Arc<Mutex<AppState>>) -
         .and_then(|value| value.parse::<usize>().ok())
         .unwrap_or(20)
         .min(100);
-    let s = state.lock().unwrap_or_else(|e| e.into_inner());
+    let s = state
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
     let mut reports = s.model_registry.status().recent_shadow_reports;
     reports.truncate(limit);
     json_response(
@@ -99,7 +107,9 @@ pub(crate) fn handle_ml_triage_v2(body: &[u8], state: &Arc<Mutex<AppState>>) -> 
         Ok(features) => features,
         Err(error) => return error_json(&format!("invalid features: {error}"), 400),
     };
-    let mut s = state.lock().unwrap_or_else(|e| e.into_inner());
+    let mut s = state
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
     s.model_registry.refresh();
     let body = serde_json::to_string(&s.model_registry.triage_alert(&features)).unwrap_or_default();
     json_response(&body, 200)
