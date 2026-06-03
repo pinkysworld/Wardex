@@ -512,6 +512,7 @@ jobs:
           body_path: release_notes.md
           draft: false
           prerelease: false
+          overwrite_files: true
           files: |
             release-assets/*
 
