@@ -151,4 +151,6 @@ Wardex is dual-licensed:
 - **Open source:** [AGPL-3.0](LICENSE)
 - **Commercial:** [commercial license](LICENSE.COMMERCIAL) for organizations that cannot use AGPL network-service copyleft terms
 
-Support details are available on the [Wardex support page](https://minh.systems/Wardex/support/) and through [GitHub Sponsors](https://github.com/sponsors/pinkysworld). For production deployment, licensing, or operator support, contact **support@wardex.dev**. Security disclosures should go to **security@wardex.dev** or the private GitHub advisory flow.
+Support details are available on the [Wardex support page](https://minh.systems/Wardex/support/) and through [GitHub Sponsors](https://github.com/sponsors/pinkysworld).
+
+For production deployment, licensing, operator support, or responsible security disclosure, use the support page or the private GitHub advisory flow.
