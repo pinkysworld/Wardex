@@ -32,6 +32,7 @@ pub mod ueba;
 pub mod yara_engine;
 
 // Re-exports for convenience (reduces need to update every call site)
+pub use baseline::PersistedBaseline;
 pub use detector::{AnomalyDetector, AnomalySignal, DetectorConfig, AdaptationMode};
 pub use ml_engine::{RandomForestEngine, TriageFeatures, TriageResult};
 pub use sigma::SigmaRule;
