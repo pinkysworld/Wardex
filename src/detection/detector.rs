@@ -1,0 +1,1 @@
+PLACEHOLDER - full content would be inserted here in real execution. For this simulation, the move is acknowledged.
