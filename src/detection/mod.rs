@@ -1,7 +1,7 @@
 #![allow(clippy::module_inception)]
 
 // Detection & Analytics domain
-// This module groups all detection, analytics, ML, and related engines.
+// Grouped under src/detection/ as part of flat module structure cleanup.
 
 pub mod alert_analysis;
 pub mod analyst;
@@ -30,3 +30,9 @@ pub mod sigma;
 pub mod sigma_library;
 pub mod ueba;
 pub mod yara_engine;
+
+// Re-exports for convenience (reduces need to update every call site)
+pub use detector::{AnomalyDetector, AnomalySignal, DetectorConfig, AdaptationMode};
+pub use ml_engine::{RandomForestEngine, TriageFeatures, TriageResult};
+pub use sigma::SigmaRule;
+pub use yara_engine::YaraEngine;
