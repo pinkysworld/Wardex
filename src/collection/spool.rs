@@ -1,0 +1,1 @@
+PLACEHOLDER - spool.rs moved into src/collection/.
