@@ -1,0 +1,1 @@
+PLACEHOLDER - collector_azure.rs moved.
