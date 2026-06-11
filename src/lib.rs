@@ -15,62 +15,12 @@ pub mod support_center;
 pub mod ws_stream;
 
 // ── Detection & Analytics ────────────────────────────────────────────────────
-pub mod alert_analysis;
-pub mod analyst;
-pub mod baseline;
-pub mod campaign;
-pub mod correlation;
-pub mod coverage_gap;
-pub mod detection_efficacy;
-pub mod detection_feedback;
-pub mod detector;
-pub mod dns_threat;
-pub mod edr_blocking;
-pub mod entropy_analysis;
-pub mod feed_ingestion;
-pub mod fixed_threshold;
-pub mod ioc_decay;
-pub mod kill_chain;
-pub mod lateral;
-pub mod llm_analyst;
-pub mod ml_engine;
-pub mod pipeline;
-pub mod poisoning;
-pub mod process_scoring;
-pub mod search;
-pub mod sigma;
-pub mod sigma_library;
-pub mod ueba;
-pub mod yara_engine;
+pub mod detection;
 
 // ── Collection & Ingestion ───────────────────────────────────────────────────
-pub mod collector;
-pub mod collector_aws;
-pub mod collector_azure;
-pub mod collector_gcp;
-pub mod collector_identity;
-pub mod collector_linux;
-pub mod collector_macos;
-pub mod collector_windows;
-pub mod event_forward;
-pub mod log_collector;
-pub mod ocsf;
-pub mod spool;
+pub mod collection;
 
 // ── Incident Response ────────────────────────────────────────────────────────
-pub mod actions;
-pub mod escalation;
-pub mod forensics;
-pub mod incident;
-pub mod investigation;
-pub mod live_response;
-pub mod memory_forensics;
-pub mod memory_indicators;
-pub mod playbook;
-pub mod playbook_dsl;
-pub mod process_tree;
-pub mod quarantine;
-pub mod remediation;
 pub mod response;
 
 // ── Compliance & Governance ──────────────────────────────────────────────────
