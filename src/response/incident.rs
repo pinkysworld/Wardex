@@ -1,0 +1,1 @@
+PLACEHOLDER - incident.rs moved into src/response/ with import updates if needed.
