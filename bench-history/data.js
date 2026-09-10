@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1788926258999,
+  "lastUpdate": 1789012577558,
   "repoUrl": "https://github.com/pinkysworld/Wardex",
   "entries": {
     "Wardex criterion benches": [
@@ -26229,6 +26229,112 @@ window.BENCHMARK_DATA = {
             "name": "sigma_evaluate_20_rules",
             "value": 35898,
             "range": "± 813",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "name": "pinkysworld",
+            "username": "pinkysworld",
+            "email": "85413447+pinkysworld@users.noreply.github.com"
+          },
+          "committer": {
+            "name": "GitHub",
+            "username": "web-flow",
+            "email": "noreply@github.com"
+          },
+          "id": "e203f694f0605ea445c930054fd55221ce32db69",
+          "message": "ci(release): fix pages deploy ref and homebrew tap trust in release pipeline (#142)\n\nTwo systemic release-pipeline bugs surfaced cutting v1.0.30 (both required\nmanual intervention to complete the release):\n\n1. sync-release-distribution dispatched pages.yml with --ref <tag>. The\n   github-pages environment protection rules reject deploys from tag refs,\n   so the dispatched build succeeded but its deploy was rejected and the APT\n   repository index was never republished (stayed at the prior version).\n   Dispatch on the default branch instead; the tag input still selects the\n   correct release .deb for the apt index.\n\n2. published-homebrew-proof ran 'brew install' straight after 'brew tap'.\n   Recent Homebrew refuses to load formulae from non-official taps until they\n   are trusted, failing the smoke with 'untrusted tap'. Trust the tap first,\n   tolerating older Homebrew that lacks 'brew trust'.\n\nNeither affected the published v1.0.30 artifacts (release, container, apt,\nrpm, and Homebrew tap formula are all correct); they broke the pipeline's\npost-publish verification and distribution refresh.",
+          "timestamp": "2026-07-10T18:02:15Z",
+          "url": "https://github.com/pinkysworld/Wardex/commit/e203f694f0605ea445c930054fd55221ce32db69"
+        },
+        "date": 1789012576238,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "full_pipeline/5",
+            "value": 38267,
+            "range": "± 569",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "full_pipeline/50",
+            "value": 321747,
+            "range": "± 1167",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "full_pipeline/200",
+            "value": 1480279,
+            "range": "± 8129",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "full_pipeline/1000",
+            "value": 14002612,
+            "range": "± 42035",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "detector_evaluate_single",
+            "value": 471,
+            "range": "± 2",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "detector_window_stream_256",
+            "value": 666885,
+            "range": "± 15214",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "shared_storage_observed_schema_read",
+            "value": 106,
+            "range": "± 0",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "shared_storage_4_threads_64_alerts",
+            "value": 110909,
+            "range": "± 1619",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "policy_evaluate_single",
+            "value": 190,
+            "range": "± 1",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "throughput/1000_samples",
+            "value": 14062467,
+            "range": "± 44962",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "search_500_events",
+            "value": 84519,
+            "range": "± 467",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "hunt_field_query",
+            "value": 67653,
+            "range": "± 315",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "ml_triage_rf",
+            "value": 40,
+            "range": "± 0",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "sigma_evaluate_20_rules",
+            "value": 27364,
+            "range": "± 156",
             "unit": "ns/iter"
           }
         ]
