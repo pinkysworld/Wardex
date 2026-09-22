@@ -98,7 +98,23 @@ pub enum KernelEventSeverity {
 /// Source platform that generated the event.
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 pub enum EventSource {
+    /// Reserved for a real in-kernel eBPF telemetry backend. Not produced
+    /// by any collector today — see the `ebpf` cargo feature and
+    /// `src/kernel_linux/mod.rs`. Do not use this for /proc-polled or
+    /// netlink/fanotify/inotify-sourced events; use the dedicated variants
+    /// below instead so downstream consumers can trust the label.
     EbpfLinux,
+    /// Process lifecycle events (exec/fork/exit/uid-change) pushed by the
+    /// kernel over the `CN_PROC` netlink process connector.
+    NetlinkProcConnector,
+    /// File activity events pushed by the kernel via `fanotify(7)`.
+    Fanotify,
+    /// File activity events pushed by the kernel via `inotify(7)` — used
+    /// as a fallback when fanotify is unavailable.
+    Inotify,
+    /// Telemetry produced by periodic `/proc` (and directory metadata)
+    /// polling rather than a kernel-pushed event source.
+    ProcPoll,
     AuditdLinux,
     SelinuxLinux,
     EsfMacos,

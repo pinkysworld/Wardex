@@ -59,6 +59,7 @@ pub fn run() -> Vec<Check> {
         check_service_layout(),
         check_support_bundle_digest(),
         check_redaction_policy(),
+        check_kernel_telemetry(),
     ]
 }
 
@@ -115,6 +116,7 @@ pub fn format_report_json(checks: &[Check]) -> String {
             "exists": config_path.exists(),
         },
         "service_health": service_health_summary(),
+        "kernel_telemetry": kernel_telemetry_summary(),
         "logs": {
             "locations": logs,
         },
@@ -336,6 +338,39 @@ fn check_support_bundle_digest() -> Check {
     }
 }
 
+/// Report which kernel telemetry backend is actually active for process
+/// and file events on Linux, and why — instead of the old single
+/// `has_ebpf` boolean, which only meant "the kernel is new enough" and was
+/// easy to misread as "eBPF telemetry is running" (it never was; Linux
+/// collection has always been /proc & /sys polling plus, now, real
+/// kernel-pushed CN_PROC/fanotify/inotify events where privileges allow).
+#[cfg(target_os = "linux")]
+fn check_kernel_telemetry() -> Check {
+    let cap = crate::kernel_linux::detect_capability();
+    let status = if cap.fully_degraded() {
+        Status::Warn
+    } else {
+        Status::Ok
+    };
+    Check {
+        name: "Kernel telemetry (Linux)",
+        status,
+        detail: cap.summary(),
+    }
+}
+
+#[cfg(not(target_os = "linux"))]
+fn check_kernel_telemetry() -> Check {
+    Check {
+        name: "Kernel telemetry (Linux)",
+        status: Status::Info,
+        detail: format!(
+            "not applicable on {} — this backend selection only applies on Linux",
+            std::env::consts::OS
+        ),
+    }
+}
+
 fn check_redaction_policy() -> Check {
     Check {
         name: "Redaction summary",
@@ -408,6 +443,28 @@ fn install_layout() -> serde_json::Value {
         "binary": exe.display().to_string(),
         "config_path": config::runtime_config_path().display().to_string(),
     })
+}
+
+#[cfg(target_os = "linux")]
+fn kernel_telemetry_summary() -> serde_json::Value {
+    let cap = crate::kernel_linux::detect_capability();
+    serde_json::json!({
+        "applicable": true,
+        "process_backend": format!("{:?}", cap.process_backend),
+        "process_backend_reason": cap.process_backend_reason,
+        "file_backend": format!("{:?}", cap.file_backend),
+        "file_backend_reason": cap.file_backend_reason,
+        "has_cap_net_admin": cap.has_cap_net_admin,
+        "has_cap_sys_admin": cap.has_cap_sys_admin,
+        "ebpf_kernel_capable": cap.ebpf_kernel_capable,
+        "ebpf_active": cap.ebpf_active,
+        "fully_degraded": cap.fully_degraded(),
+    })
+}
+
+#[cfg(not(target_os = "linux"))]
+fn kernel_telemetry_summary() -> serde_json::Value {
+    serde_json::json!({ "applicable": false })
 }
 
 fn service_health_summary() -> serde_json::Value {

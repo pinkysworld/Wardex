@@ -304,6 +304,7 @@ pub async fn run_server(
     spawn_retention_purge_scheduler(&state);
     crate::server_cluster::spawn_cluster_runtime_loop(&state);
     spawn_feed_ingestion_loop(&state);
+    spawn_linux_kernel_telemetry(&state);
 
     // ── Spawn local host monitoring thread ──────────────────────────
     {
@@ -1093,3 +1094,48 @@ fn flush_to_storage(state: &Arc<Mutex<AppState>>) {
         "Shutdown flush: {stored} alerts, {audit_stored} audit entries, {event_stored} events written to storage ({errors} errors)",
     );
 }
+
+/// Start real, kernel-driven Linux telemetry (CN_PROC netlink process
+/// connector, fanotify/inotify file events) feeding the shared
+/// `kernel_event_stream`, degrading to the existing /proc-polling collector
+/// per-domain when a backend can't be opened. See `src/kernel_linux/`.
+///
+/// This augments, rather than replaces, the periodic `/proc`/`/sys`
+/// collector thread spawned below: that thread still drives snapshot-based
+/// findings (SUID scans, privilege escalation indicators, socket tables),
+/// while this one adds real-time, kernel-pushed process/file events into
+/// `kernel_event_stream`.
+#[cfg(target_os = "linux")]
+fn spawn_linux_kernel_telemetry(state: &Arc<Mutex<AppState>>) {
+    let (stream, hostname, agent_uid, watch_paths) = {
+        let s = state
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        (
+            s.kernel_event_stream.clone(),
+            s.local_host_info.hostname.clone(),
+            s.config.agent.agent_id.clone(),
+            s.config.monitor.watch_paths.clone(),
+        )
+    };
+    let handle = crate::kernel_linux::spawn(stream, hostname, agent_uid, watch_paths);
+    log::info!(
+        "kernel_linux: telemetry backends selected — {}",
+        handle.capability.summary()
+    );
+    if handle.capability.fully_degraded() {
+        log::warn!(
+            "kernel_linux: no kernel-pushed event source is active; all Linux telemetry is \
+             /proc-polling only. Grant CAP_NET_ADMIN (process events) and CAP_SYS_ADMIN or \
+             inotify access (file events) for real-time telemetry."
+        );
+    }
+    // Dropping `handle` here does not stop its backend threads — a
+    // `JoinHandle`'s `Drop` only detaches, it never joins — so they keep
+    // running for the life of the process, matching every other spawn_*
+    // collector loop in this file.
+    drop(handle);
+}
+
+#[cfg(not(target_os = "linux"))]
+fn spawn_linux_kernel_telemetry(_state: &Arc<Mutex<AppState>>) {}
