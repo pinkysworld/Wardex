@@ -26,6 +26,8 @@ import { useWidgetLayout } from './useWidgetLayout.js';
 import { buildHref } from './workflowPivots.js';
 import { safeStorageGet, safeStorageJsonGet, safeStorageJsonSet } from '../safeStorage.js';
 import { MALWARE_SCAN_PRESETS } from './malwareScanningPresets.js';
+import PageHeader from './PageHeader.jsx';
+import { IconLayoutReset, IconMonitorPlay, IconRefresh } from './icons.jsx';
 
 function Metric({ label, value, sub, accent, onClick, tip }) {
   return (
@@ -715,44 +717,9 @@ export default function Dashboard() {
     respStats?.pending,
     staleAlerts.length,
   ]);
-  const dashboardHomeSummary = [
-    {
-      label: 'Critical queue',
-      value: formatNumber(critical),
-      tone: critical > 0 ? 'critical' : 'neutral',
-      meta:
-        critical > 0
-          ? `${critical} alert${critical === 1 ? '' : 's'} need immediate review`
-          : 'No critical alerts are active',
-    },
-    {
-      label: 'Stale queue',
-      value: formatNumber(staleAlerts.length),
-      tone: staleAlerts.length > 0 ? 'high' : 'neutral',
-      meta:
-        staleAlerts.length > 0
-          ? 'Alerts older than 30 minutes still need ownership'
-          : 'No alerts are beyond the stale threshold',
-    },
-    {
-      label: 'Response blockers',
-      value: formatNumber(respStats?.pending ?? 0),
-      tone: (respStats?.pending ?? 0) > 0 ? 'medium' : 'neutral',
-      meta:
-        (respStats?.pending ?? 0) > 0
-          ? 'Response steps are waiting for approval'
-          : 'No response actions are blocked',
-    },
-    {
-      label: 'Collectors degraded',
-      value: formatNumber(degradedCollectors.length),
-      tone: degradedCollectors.length > 0 ? 'high' : 'neutral',
-      meta:
-        degradedCollectors.length > 0
-          ? `${collectorFreshnessCounts.error ?? 0} error • ${collectorFreshnessCounts.stale ?? 0} stale`
-          : 'All enabled collectors are fresh',
-    },
-  ];
+  // A single merged KPI row: each card pairs a severity-toned count with a
+  // one-click action, replacing what used to be two separate rows repeating
+  // the same critical/stale/response numbers.
   const situationCards = [
     {
       title: 'Critical Now',
@@ -786,6 +753,17 @@ export default function Dashboard() {
           : 'No response actions are blocked right now.',
       action: 'Review Response',
       onAction: () => navigate('/soc#response'),
+    },
+    {
+      title: 'Collectors Degraded',
+      value: formatNumber(degradedCollectors.length),
+      tone: degradedCollectors.length > 0 ? 'high' : 'neutral',
+      detail:
+        degradedCollectors.length > 0
+          ? `${collectorFreshnessCounts.error ?? 0} error • ${collectorFreshnessCounts.stale ?? 0} stale collector(s).`
+          : 'All enabled collectors are fresh.',
+      action: 'Review Collectors',
+      onAction: () => navigate('/infrastructure?tab=collectors'),
     },
   ];
   const coverageGapCount = Array.isArray(gaps?.gaps)
@@ -878,32 +856,41 @@ export default function Dashboard() {
 
   return (
     <div>
-      <div className="section-header">
-        <h2>Security Overview</h2>
-        <div className="btn-group">
-          {hostInf && (
-            <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
-              {hostInf.hostname} · {hostInf.platform} {hostInf.os_version} · {hostInf.arch}
-            </span>
-          )}
-          <button className="btn btn-sm" onClick={reloadAll} disabled={refreshing}>
-            {refreshing ? 'Refreshing…' : '↻ Refresh'}
-          </button>
-          <button className="btn btn-sm" onClick={resetLayout} title="Reset widget layout">
-            ⊞ Reset Layout
-          </button>
-          <button
-            className="btn btn-sm"
-            onClick={() => {
-              setNocMode(true);
-              document.documentElement.requestFullscreen?.().catch(() => {});
-            }}
-            title="NOC wall display (fullscreen)"
-          >
-            📺 NOC
-          </button>
-        </div>
-      </div>
+      <PageHeader
+        eyebrow="Operations Home"
+        actions={
+          <>
+            {hostInf && (
+              <span className="hint" style={{ alignSelf: 'center', marginRight: 4 }}>
+                {hostInf.hostname} · {hostInf.platform} {hostInf.os_version} · {hostInf.arch}
+              </span>
+            )}
+            <button className="btn btn-sm" onClick={reloadAll} disabled={refreshing}>
+              <IconRefresh size={14} />
+              {refreshing ? 'Refreshing…' : 'Refresh'}
+            </button>
+            <button
+              className="btn btn-sm btn-ghost"
+              onClick={resetLayout}
+              title="Reset widget layout"
+            >
+              <IconLayoutReset size={14} />
+              Reset Layout
+            </button>
+            <button
+              className="btn btn-sm btn-ghost"
+              onClick={() => {
+                setNocMode(true);
+                document.documentElement.requestFullscreen?.().catch(() => {});
+              }}
+              title="NOC wall display (fullscreen)"
+            >
+              <IconMonitorPlay size={14} />
+              NOC
+            </button>
+          </>
+        }
+      />
 
       <section className="dashboard-home-strip" aria-label="Dashboard operating summary">
         <div className="dashboard-home-hero">
@@ -939,15 +926,6 @@ export default function Dashboard() {
               Open Launchpad
             </button>
           </div>
-        </div>
-        <div className="summary-grid dashboard-home-summary-grid">
-          {dashboardHomeSummary.map((item) => (
-            <div key={item.label} className="summary-card" data-tone={item.tone}>
-              <div className="summary-label">{item.label}</div>
-              <div className="summary-value">{item.value}</div>
-              <div className="summary-meta">{item.meta}</div>
-            </div>
-          ))}
         </div>
       </section>
 

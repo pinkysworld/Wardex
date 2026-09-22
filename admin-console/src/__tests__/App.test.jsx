@@ -679,6 +679,8 @@ describe('App', () => {
 
     await waitFor(() => expect(writeText).toHaveBeenCalledTimes(1));
     await waitFor(() => expect(execCommand).toHaveBeenCalledWith('copy'));
-    expect(screen.getByRole('button', { name: 'Copied' })).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('button', { name: 'More' }));
+    expect(screen.getByRole('menuitem', { name: 'Copied' })).toBeInTheDocument();
   });
 });
