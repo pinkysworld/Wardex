@@ -15,7 +15,7 @@
 
 ### Deep OS-native monitoring
 
-- Unified kernel-event stream normalising eBPF (Linux), ESF (macOS), and ETW (Windows) telemetry
+- Unified kernel-event stream normalising real kernel-pushed Linux telemetry (`CN_PROC` netlink process connector for exec/fork/exit/uid-change, fanotify/inotify for file activity — falling back to `/proc` polling per-domain when the required capability is missing), ESF (macOS), and ETW (Windows) telemetry. eBPF is not implemented; see `docs/kernel-telemetry-linux.md`
 - 22 event kinds: process lifecycle, file ops, network, registry, AMSI, WMI persistence, TCC, Gatekeeper, SELinux/AppArmor denials, container events
 - Automatic MITRE ATT&CK technique tagging for kernel events
 - Thread-safe ring-buffer with capacity management and type-filtered queries

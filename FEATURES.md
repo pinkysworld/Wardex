@@ -124,6 +124,7 @@ Wardex is a self-hosted XDR and SIEM platform built in Rust for teams that want 
   - HA cluster snapshots with log compaction and persistent Raft state schema
   - OIDC/SAML SSO with session management (config, login, callback, session, logout)
   - Cloud collectors for AWS CloudTrail (SigV4), Azure Activity Log (OAuth2), and GCP Audit Log (JWT/RS256) with live polling
+  - Real-time Linux kernel telemetry: `CN_PROC` netlink process connector for exec/fork/exit/uid-change events, fanotify/inotify for file activity, with automatic capability-aware fallback to `/proc` polling (see `docs/kernel-telemetry-linux.md`)
   - Collector lifecycle history with last-success/error checkpoints, retry/backoff context, freshness, failure-streak analytics, and 24h ingestion counters
   - Collector ingestion evidence with SOC Workbench and Infrastructure pivots for cloud, identity, and SaaS lanes
   - Full-text search index with Tantivy persistent event store, query parsing, and faceted results
