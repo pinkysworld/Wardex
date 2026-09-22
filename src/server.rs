@@ -631,6 +631,7 @@ pub(crate) struct AppState {
     // XDR fleet management
     pub(crate) agent_registry: AgentRegistry,
     pub(crate) event_store: EventStore,
+    pub(crate) search_index: Arc<crate::search::PersistentEventStore>,
     clickhouse_store: Option<crate::storage_clickhouse::ClickHouseStorage>,
     policy_store: PolicyStore,
     pub(crate) update_manager: UpdateManager,
@@ -730,32 +731,42 @@ pub(crate) struct AppState {
     extra: HashMap<String, serde_json::Value>,
 }
 
+/// Map a stored event to the field set the search index understands. Shared
+/// by the ephemeral test/rebuild helper below and by the incremental
+/// ingestion hook that feeds the persistent search index.
+pub(crate) fn event_to_search_fields(
+    event: &crate::event_forward::StoredEvent,
+) -> HashMap<String, String> {
+    let mut fields = HashMap::new();
+    fields.insert("timestamp".to_string(), event.alert.timestamp.clone());
+    fields.insert("device_id".to_string(), event.alert.hostname.clone());
+    fields.insert("event_class".to_string(), "alert".to_string());
+    fields.insert("process_name".to_string(), event.alert.action.clone());
+    fields.insert("command_line".to_string(), event.alert.reasons.join("; "));
+    fields.insert("src_ip".to_string(), String::new());
+    fields.insert("dst_ip".to_string(), String::new());
+    fields.insert("user_name".to_string(), String::new());
+    fields.insert(
+        "raw_text".to_string(),
+        format!(
+            "{} {} {} {} {}",
+            event.agent_id,
+            event.alert.hostname,
+            event.alert.action,
+            event.alert.level,
+            event.alert.reasons.join(" ")
+        ),
+    );
+    fields
+}
+
+#[cfg(test)]
 fn build_search_index_from_events(
     events: &[crate::event_forward::StoredEvent],
 ) -> Result<crate::search::SearchIndex, String> {
-    let index = crate::search::SearchIndex::new("/tmp/wardex-search")?;
+    let index = crate::search::SearchIndex::in_memory()?;
     for event in events {
-        let mut fields = HashMap::new();
-        fields.insert("timestamp".to_string(), event.alert.timestamp.clone());
-        fields.insert("device_id".to_string(), event.alert.hostname.clone());
-        fields.insert("event_class".to_string(), "alert".to_string());
-        fields.insert("process_name".to_string(), event.alert.action.clone());
-        fields.insert("command_line".to_string(), event.alert.reasons.join("; "));
-        fields.insert("src_ip".to_string(), String::new());
-        fields.insert("dst_ip".to_string(), String::new());
-        fields.insert("user_name".to_string(), String::new());
-        fields.insert(
-            "raw_text".to_string(),
-            format!(
-                "{} {} {} {} {}",
-                event.agent_id,
-                event.alert.hostname,
-                event.alert.action,
-                event.alert.level,
-                event.alert.reasons.join(" ")
-            ),
-        );
-        index.index_event(fields)?;
+        index.index_event(event_to_search_fields(event))?;
     }
     let _ = index.commit()?;
     Ok(index)
@@ -2660,12 +2671,37 @@ fn handle_api(
             if max_events > 0 {
                 trimmed_events = s.event_store.apply_retention(max_events);
             }
+            // Keep the search index in sync: apply its own day-based
+            // retention, and additionally drop anything older than the
+            // oldest event now remaining in the primary store (so a
+            // count-based trim above doesn't leave orphaned, unreachable
+            // documents searchable).
+            let mut trimmed_search_docs = 0u64;
+            match s.search_index.apply_retention() {
+                Ok(n) => trimmed_search_docs += n,
+                Err(e) => log::warn!("[SEARCH] retention apply failed: {e}"),
+            }
+            if trimmed_events > 0
+                && let Some(oldest) = s
+                    .event_store
+                    .all_events()
+                    .iter()
+                    .filter_map(|e| chrono::DateTime::parse_from_rfc3339(&e.alert.timestamp).ok())
+                    .map(|dt| dt.with_timezone(&chrono::Utc))
+                    .min()
+            {
+                match s.search_index.delete_before(oldest) {
+                    Ok(n) => trimmed_search_docs += n,
+                    Err(e) => log::warn!("[SEARCH] retention sync delete failed: {e}"),
+                }
+            }
             s.audit_log
                 .record("POST", "/api/retention/apply", "admin", 200, true);
             let body = serde_json::json!({
                 "status": "applied",
                 "trimmed_alerts": trimmed_alerts,
                 "trimmed_events": trimmed_events,
+                "trimmed_search_docs": trimmed_search_docs,
             });
             json_response(&body.to_string(), 200)
         }

@@ -61,6 +61,7 @@ pub fn run() -> Vec<Check> {
         check_redaction_policy(),
         check_kernel_telemetry(),
         check_container_runtime(),
+        check_search_index(),
     ]
 }
 
@@ -445,6 +446,47 @@ fn check_redaction_policy() -> Check {
         detail:
             "Support snapshots redact authorization, cookie, API key, token, and secret fields."
                 .to_string(),
+    }
+}
+
+/// Report the on-disk full-text search index's health without opening the
+/// live Tantivy index (which may be locked by a running server). Reads the
+/// same `wardex_search_meta.json` sidecar the running server maintains.
+fn check_search_index() -> Check {
+    let index_path = Config::load_from_path(&config::runtime_config_path())
+        .ok()
+        .map(|c| c.search.index_path)
+        .unwrap_or_else(|| crate::search::EventStoreConfig::default().index_path);
+
+    match crate::search::read_index_meta(&index_path) {
+        Some(meta) => {
+            let status = if meta.schema_version == crate::search::SEARCH_SCHEMA_VERSION {
+                Status::Ok
+            } else {
+                Status::Warn
+            };
+            Check {
+                name: "Search index (Tantivy)",
+                status,
+                detail: format!(
+                    "{} · {} documents · {:.1} MiB · schema v{} · last commit: {}",
+                    index_path,
+                    meta.total_events,
+                    meta.index_size_bytes as f64 / (1024.0 * 1024.0),
+                    meta.schema_version,
+                    meta.last_commit
+                        .map(|t| t.to_rfc3339())
+                        .unwrap_or_else(|| "never".to_string()),
+                ),
+            }
+        }
+        None => Check {
+            name: "Search index (Tantivy)",
+            status: Status::Info,
+            detail: format!(
+                "{index_path}: no index found yet (created on first server start or ingest)"
+            ),
+        },
     }
 }
 

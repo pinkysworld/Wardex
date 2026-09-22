@@ -1388,6 +1388,23 @@ pub(super) fn handle_event_ingest(body: &[u8], state: &Arc<Mutex<AppState>>) -> 
         })
         .sum();
     let result = s.event_store.ingest(&batch);
+    // Feed the newly ingested events into the persistent search index
+    // incrementally (never a full rebuild), then commit opportunistically.
+    {
+        let stored = s.event_store.all_events();
+        let start = stored.len().saturating_sub(result.ingested);
+        let new_fields: Vec<HashMap<String, String>> = stored[start..]
+            .iter()
+            .map(crate::server::event_to_search_fields)
+            .collect();
+        if !new_fields.is_empty() {
+            if let Err(e) = s.search_index.ingest(&new_fields) {
+                log::warn!("[SEARCH] failed to index ingested events: {e}");
+            } else if let Err(e) = s.search_index.maybe_commit() {
+                log::warn!("[SEARCH] failed to commit search index: {e}");
+            }
+        }
+    }
     // Dual-write to ClickHouse when configured
     if let Some(ref ch) = s.clickhouse_store {
         let ch_events: Vec<crate::storage_clickhouse::StoredEvent> = batch

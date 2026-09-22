@@ -2531,25 +2531,57 @@ pub(super) fn handle_dynamic_api_route(
                         );
                     }
                 };
-                let events = {
+                let search_index = {
                     let s = state
                         .lock()
                         .unwrap_or_else(std::sync::PoisonError::into_inner);
-                    s.event_store.all_events().to_vec()
+                    Arc::clone(&s.search_index)
                 };
-                match build_search_index_from_events(&events) {
-                    Ok(idx) => match idx.search(&query) {
-                        Ok(result) => {
-                            let body = serde_json::to_string(&result).unwrap_or_default();
-                            json_response(&body, 200)
-                        }
-                        Err(e) => error_json(&format!("search failed: {e}"), 500),
-                    },
-                    Err(e) => error_json(&format!("search index unavailable: {e}"), 500),
+                match search_index.search(&query) {
+                    Ok(result) => {
+                        let body = serde_json::to_string(&result).unwrap_or_default();
+                        json_response(&body, 200)
+                    }
+                    Err(e) => error_json(&format!("search failed: {e}"), 500),
                 }
             }
             Err(e) => error_json(&e, 400),
         }
+
+    // ── Search index maintenance ───────────────────────────
+    } else if method == Method::Post && url_path == "/api/search/rebuild" {
+        let (search_index, events) = {
+            let s = state
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
+            (
+                Arc::clone(&s.search_index),
+                s.event_store.all_events().to_vec(),
+            )
+        };
+        let fields: Vec<HashMap<String, String>> = events
+            .iter()
+            .map(crate::server::event_to_search_fields)
+            .collect();
+        match search_index.rebuild_from(&fields) {
+            Ok(total) => {
+                let body = serde_json::json!({
+                    "rebuilt": true,
+                    "total_documents": total,
+                });
+                json_response(&body.to_string(), 200)
+            }
+            Err(e) => error_json(&format!("search index rebuild failed: {e}"), 500),
+        }
+    } else if method == Method::Get && url_path == "/api/search/status" {
+        let search_index = {
+            let s = state
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
+            Arc::clone(&s.search_index)
+        };
+        let body = serde_json::to_string(&search_index.stats()).unwrap_or_default();
+        json_response(&body, 200)
 
     // ── Metering ──────────────────────────────────────────
     } else if method == Method::Get && url_path == "/api/metering/usage" {
@@ -3908,34 +3940,29 @@ pub(super) fn handle_dynamic_api_route(
                 if query.is_empty() {
                     return error_json("query cannot be empty", 400);
                 }
-                let events = {
+                let search_index = {
                     let s = state
                         .lock()
                         .unwrap_or_else(std::sync::PoisonError::into_inner);
-                    s.event_store.all_events().to_vec()
+                    Arc::clone(&s.search_index)
                 };
-                match build_search_index_from_events(&events) {
-                    Ok(idx) => {
-                        // Support pipe aggregation syntax
-                        if query.contains('|') {
-                            match idx.hunt_aggregate(query) {
-                                Ok(result) => {
-                                    let body = serde_json::to_string(&result).unwrap_or_default();
-                                    json_response(&body, 200)
-                                }
-                                Err(e) => error_json(&e, 400),
-                            }
-                        } else {
-                            match idx.hunt(query) {
-                                Ok(result) => {
-                                    let body = serde_json::to_string(&result).unwrap_or_default();
-                                    json_response(&body, 200)
-                                }
-                                Err(e) => error_json(&e, 400),
-                            }
+                // Support pipe aggregation syntax
+                if query.contains('|') {
+                    match search_index.hunt_aggregate(query) {
+                        Ok(result) => {
+                            let body = serde_json::to_string(&result).unwrap_or_default();
+                            json_response(&body, 200)
                         }
+                        Err(e) => error_json(&e, 400),
                     }
-                    Err(e) => error_json(&format!("search index unavailable: {e}"), 500),
+                } else {
+                    match search_index.hunt(query) {
+                        Ok(result) => {
+                            let body = serde_json::to_string(&result).unwrap_or_default();
+                            json_response(&body, 200)
+                        }
+                        Err(e) => error_json(&e, 400),
+                    }
                 }
             }
             Err(e) => error_json(&e, 400),

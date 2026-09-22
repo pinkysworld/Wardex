@@ -120,6 +120,17 @@ pub async fn run_server(
     let storage = SharedStorage::open("var/storage")
         .or_else(|_| SharedStorage::open("/tmp/wardex_storage"))
         .map_err(|e| format!("failed to initialise storage: {e}"))?;
+
+    let bootstrap_event_store = EventStore::with_persistence(10_000, "var/events.json");
+    let search_seed: Vec<HashMap<String, String>> = bootstrap_event_store
+        .all_events()
+        .iter()
+        .map(event_to_search_fields)
+        .collect();
+    let search_index = Arc::new(
+        crate::search::PersistentEventStore::open(initial_config.search.clone(), &search_seed)
+            .map_err(|e| format!("failed to initialise search index: {e}"))?,
+    );
     let failed_auth_snapshot: crate::server_auth::FailedAuthSnapshot =
         load_stored_json(&storage, FAILED_AUTH_TRACKER_STORAGE_KEY);
     crate::server_auth::failed_auth_restore_snapshot(failed_auth_snapshot);
@@ -180,7 +191,8 @@ pub async fn run_server(
         alerts: VecDeque::new(),
         server_start: std::time::Instant::now(),
         agent_registry: AgentRegistry::new("var/agents.json"),
-        event_store: EventStore::with_persistence(10_000, "var/events.json"),
+        event_store: bootstrap_event_store,
+        search_index,
         clickhouse_store: initial_config.clickhouse.as_ref().map(|cfg| {
             log::info!(
                 "[STORAGE] ClickHouse backend enabled: {}/{}",
@@ -773,6 +785,19 @@ pub(crate) fn spawn_test_server_with_state() -> (u16, String, Arc<Mutex<AppState
         event_store: EventStore::with_persistence(
             1000,
             state_root.join("events.json").to_string_lossy().to_string(),
+        ),
+        search_index: Arc::new(
+            crate::search::PersistentEventStore::open(
+                crate::search::EventStoreConfig {
+                    index_path: state_root
+                        .join("search_index")
+                        .to_string_lossy()
+                        .to_string(),
+                    ..Default::default()
+                },
+                &[],
+            )
+            .expect("test search index"),
         ),
         clickhouse_store: None,
         policy_store: PolicyStore::new(),
