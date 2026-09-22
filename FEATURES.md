@@ -127,7 +127,7 @@ Wardex is a self-hosted XDR and SIEM platform built in Rust for teams that want 
   - Real-time Linux kernel telemetry: `CN_PROC` netlink process connector for exec/fork/exit/uid-change events, fanotify/inotify for file activity, with automatic capability-aware fallback to `/proc` polling (see `docs/kernel-telemetry-linux.md`)
   - Collector lifecycle history with last-success/error checkpoints, retry/backoff context, freshness, failure-streak analytics, and 24h ingestion counters
   - Collector ingestion evidence with SOC Workbench and Infrastructure pivots for cloud, identity, and SaaS lanes
-  - Full-text search index with Tantivy persistent event store, query parsing, and faceted results
+  - Full-text search index backed by a real Tantivy engine: mmap'd on-disk index (schema: DATE fast/sort field + STRING keyword fields for device/process/IP/user with substring+wildcard matching via compiled regex queries, TEXT fields for message/cmdline), incremental single-writer/shared-reader indexing on event ingest, bounded commit batching, retention-aligned range deletion, and automatic schema-version-aware rebuild-from-storage on corruption. The existing KQL-like hunt DSL (`field:value`, `AND`/`OR`/`NOT`, parentheses, wildcards, pipe aggregations) compiles directly to Tantivy `BooleanQuery`/`RegexQuery`/`RangeQuery`; only the pipe-aggregation group-by/min/max/distinct step runs over the (Tantivy-narrowed) candidate set in-process, since Tantivy has no generic group-by collector for arbitrary stored fields
   - SigmaHQ YAML rule import from the community repository
   - Usage metering with plan limits and overage calculation
   - Billing engine with subscription management and invoice generation
