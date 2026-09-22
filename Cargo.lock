@@ -3571,6 +3571,7 @@ dependencies = [
  "nix",
  "notify",
  "rand 0.9.4",
+ "regex",
  "rusqlite",
  "serde",
  "serde_json",

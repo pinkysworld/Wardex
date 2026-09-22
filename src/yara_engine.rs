@@ -1,8 +1,11 @@
 //! Built-in YARA-style pattern matching engine.
 //!
-//! Provides a lightweight rule language for matching byte patterns
-//! and string signatures in files or memory buffers — without requiring
-//! the native libyara C library.
+//! Provides a rule language for matching byte patterns and string
+//! signatures in files or memory buffers — without requiring the native
+//! libyara C library. Rules can be authored either as JSON (the original,
+//! still-supported format) or as genuine `.yar` source compiled by
+//! [`crate::yara_parser`] for the documented subset described in
+//! `docs/YARA_COMPATIBILITY.md`.
 
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -17,16 +20,39 @@ pub struct YaraRule {
     pub strings: Vec<RuleString>,
     pub condition: RuleCondition,
     pub enabled: bool,
+    /// Tags declared as `rule name : tag1 tag2 { ... }`.
+    #[serde(default)]
+    pub tags: Vec<String>,
+    /// `private rule` — excluded from scan reports but still evaluated so
+    /// other rules' conditions can reference it by name.
+    #[serde(default)]
+    pub is_private: bool,
+    /// `global rule` — parsed and recorded, but Wardex does not implement
+    /// YARA's "AND'd into every rule" global-rule semantics; a global rule
+    /// behaves like an ordinary named rule that other conditions can
+    /// reference explicitly.
+    #[serde(default)]
+    pub is_global: bool,
 }
 
 /// Rule metadata.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct RuleMeta {
+    #[serde(default)]
     pub author: String,
+    #[serde(default)]
     pub description: String,
+    #[serde(default)]
     pub severity: String,
+    #[serde(default)]
     pub mitre_ids: Vec<String>,
+    #[serde(default)]
     pub created: String,
+    /// Arbitrary `meta:` key/value pairs from `.yar` source that do not map
+    /// to one of the fixed fields above (real YARA meta values are
+    /// unstructured `identifier = value` pairs).
+    #[serde(default)]
+    pub extra: HashMap<String, serde_json::Value>,
 }
 
 /// A string/byte pattern to search for.
@@ -34,7 +60,37 @@ pub struct RuleMeta {
 pub struct RuleString {
     pub id: String,
     pub pattern: StringPattern,
+    #[serde(default)]
     pub nocase: bool,
+    /// Match the pattern encoded as UTF-16LE ("wide") bytes.
+    #[serde(default)]
+    pub wide: bool,
+    /// Match the pattern as raw ASCII/UTF-8 bytes. Defaults to `true`; only
+    /// set to `false` when a `.yar` string declares `wide` without `ascii`
+    /// (YARA then matches wide-only).
+    #[serde(default = "default_ascii_modifier")]
+    pub ascii: bool,
+    /// Require the match to be bounded by non-alphanumeric bytes (or the
+    /// buffer edges) on both sides.
+    #[serde(default)]
+    pub fullword: bool,
+}
+
+fn default_ascii_modifier() -> bool {
+    true
+}
+
+impl Default for RuleString {
+    fn default() -> Self {
+        Self {
+            id: String::new(),
+            pattern: StringPattern::Text(String::new()),
+            nocase: false,
+            wide: false,
+            ascii: true,
+            fullword: false,
+        }
+    }
 }
 
 /// Pattern variants.
@@ -42,10 +98,42 @@ pub struct RuleString {
 pub enum StringPattern {
     /// Plain text match.
     Text(String),
-    /// Hex byte sequence (e.g., "4D 5A 90 00").
+    /// Hex byte sequence (e.g., "4D 5A 90 00") — a legacy, exact-bytes-only
+    /// form kept for JSON backward compatibility. New hex strings compiled
+    /// from `.yar` source (which may contain `??`, nibble wildcards, `[n-m]`
+    /// jumps, and `( .. | .. )` alternatives) use [`StringPattern::HexTokens`].
     Hex(Vec<u8>),
-    /// Simple regex-like glob (supports * and ?).
+    /// Simple glob (supports `*` and `?`), matched per line.
     Glob(String),
+    /// Compiled hex string: a sequence of tokens that may include
+    /// wildcards, nibble wildcards, jumps, and alternatives.
+    HexTokens(Vec<HexToken>),
+    /// A regular expression string (`/pattern/` in `.yar` source), matched
+    /// with the `regex` crate's bytes API.
+    Regex {
+        source: String,
+        case_insensitive: bool,
+        dotall: bool,
+    },
+}
+
+/// One token of a compiled hex string.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum HexToken {
+    /// A fixed byte, e.g. `4D`.
+    Byte(u8),
+    /// `??` — any byte.
+    Wildcard,
+    /// `A?` — high nibble fixed, low nibble any.
+    HighNibble(u8),
+    /// `?A` — low nibble fixed, high nibble any.
+    LowNibble(u8),
+    /// `[n]` or `[n-m]` or `[n-]` — skip a variable number of bytes.
+    /// `[n-]` is represented as `(n, None)`, meaning "n or more" up to a
+    /// bounded scan limit applied by the matcher.
+    Jump(usize, Option<usize>),
+    /// `( AA BB | CC DD )` — one of several alternative token sequences.
+    Alternative(Vec<Vec<HexToken>>),
 }
 
 /// Match condition.
@@ -59,6 +147,89 @@ pub enum RuleCondition {
     AtLeast(usize),
     /// File size must be below limit AND all strings match.
     AllOfWithMaxSize(u64),
+    /// A genuine YARA boolean condition expression, compiled from `.yar`
+    /// source — see [`crate::yara_parser`] and `docs/YARA_COMPATIBILITY.md`.
+    Expr(BoolExpr),
+}
+
+// ── Condition expression AST (compiled from `.yar` `condition:` blocks) ──
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum CmpOp {
+    Eq,
+    Ne,
+    Lt,
+    Le,
+    Gt,
+    Ge,
+}
+
+impl CmpOp {
+    fn apply(self, lhs: i64, rhs: i64) -> bool {
+        match self {
+            CmpOp::Eq => lhs == rhs,
+            CmpOp::Ne => lhs != rhs,
+            CmpOp::Lt => lhs < rhs,
+            CmpOp::Le => lhs <= rhs,
+            CmpOp::Gt => lhs > rhs,
+            CmpOp::Ge => lhs >= rhs,
+        }
+    }
+}
+
+/// An integer-valued expression (`filesize`, `#a`, `@a[i]`, `uint32(off)`, …).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum NumExpr {
+    Int(i64),
+    FileSize,
+    /// `#id` — number of matches of a string.
+    Count(String),
+    /// `@id[index]` — offset of the `index`-th (1-based) match.
+    OffsetOf(String, Box<NumExpr>),
+    /// `uintN`/`uintNbe(offset)` — read `width` bytes (1/2/4) at `offset`.
+    UintAt {
+        width: u8,
+        big_endian: bool,
+        offset: Box<NumExpr>,
+    },
+    Add(Box<NumExpr>, Box<NumExpr>),
+    Sub(Box<NumExpr>, Box<NumExpr>),
+}
+
+/// A quantifier for `<quantifier> of <string-set>`.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum OfQuantifier {
+    All,
+    Any,
+    Exactly(Box<NumExpr>),
+}
+
+/// The set of strings a `of` expression ranges over.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum StringSet {
+    /// `them` — every string declared in the rule.
+    Them,
+    /// An explicit list, which may include `$prefix*` wildcard entries.
+    Ids(Vec<String>),
+}
+
+/// A boolean-valued condition expression.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum BoolExpr {
+    Bool(bool),
+    /// `$id` — the string matched at least once.
+    StringRef(String),
+    Not(Box<BoolExpr>),
+    And(Box<BoolExpr>, Box<BoolExpr>),
+    Or(Box<BoolExpr>, Box<BoolExpr>),
+    Cmp(NumExpr, CmpOp, NumExpr),
+    /// `$id at N`.
+    StringAt(String, Box<NumExpr>),
+    /// `$id in (N..M)`.
+    StringInRange(String, Box<NumExpr>, Box<NumExpr>),
+    OfThem(OfQuantifier, StringSet),
+    /// A bare identifier referencing another rule, true iff that rule matched.
+    RuleRef(String),
 }
 
 /// A single match location.
@@ -122,27 +293,98 @@ impl YaraEngine {
         Ok(count)
     }
 
+    /// Compile and load rules from genuine `.yar` source (see
+    /// [`crate::yara_parser`] and `docs/YARA_COMPATIBILITY.md` for the
+    /// supported subset). Returns the number of rules loaded and any
+    /// non-fatal warnings (e.g. ignored imports); a malformed or
+    /// unsupported construct is a hard error with line/column, never a
+    /// silently-mismatched rule.
+    pub fn load_rules_yar(
+        &mut self,
+        source: &str,
+    ) -> Result<(usize, Vec<String>), crate::yara_parser::CompileError> {
+        let compiled = crate::yara_parser::compile(source)?;
+        let count = compiled.rules.len();
+        self.rules.extend(compiled.rules);
+        Ok((count, compiled.warnings))
+    }
+
+    /// Compile and load a `.yar` file by path.
+    pub fn load_rules_yar_file(
+        &mut self,
+        path: &str,
+    ) -> Result<(usize, Vec<String>), String> {
+        let source = std::fs::read(path).map_err(|e| format!("cannot read {path}: {e}"))?;
+        let source = String::from_utf8_lossy(&source);
+        self.load_rules_yar(&source)
+            .map_err(|e| format!("{path}: {e}"))
+    }
+
+    /// Load every `.yar`/`.yara` rule file in a directory (non-recursive).
+    /// JSON rule files are intentionally left to whatever loader already
+    /// handles them (e.g. the community malware pack) so this does not
+    /// double-load rules from a directory that mixes both formats. Returns
+    /// the total number of rules loaded and any warnings; a single bad file
+    /// is reported but does not stop the rest from loading.
+    pub fn load_rules_dir(&mut self, dir: &str) -> (usize, Vec<String>) {
+        let mut total = 0usize;
+        let mut messages = Vec::new();
+        let Ok(entries) = std::fs::read_dir(dir) else {
+            return (0, messages);
+        };
+        let mut paths: Vec<std::path::PathBuf> = entries
+            .filter_map(std::result::Result::ok)
+            .map(|e| e.path())
+            .collect();
+        paths.sort();
+        for path in paths {
+            let Some(ext) = path.extension().and_then(|e| e.to_str()) else {
+                continue;
+            };
+            if ext != "yar" && ext != "yara" {
+                continue;
+            }
+            let path_str = path.to_string_lossy().to_string();
+            match self.load_rules_yar_file(&path_str) {
+                Ok((n, warnings)) => {
+                    total += n;
+                    messages.extend(warnings);
+                }
+                Err(e) => messages.push(format!("error loading {path_str}: {e}")),
+            }
+        }
+        (total, messages)
+    }
+
     /// Number of loaded rules.
     pub fn rule_count(&self) -> usize {
         self.rules.len()
     }
 
-    /// Scan a byte buffer against all enabled rules.
+    /// Scan a byte buffer against all enabled rules. Rules are evaluated in
+    /// load order so a rule's condition may reference an earlier rule by
+    /// name; `private` rules are evaluated (so later rules can reference
+    /// them) but excluded from the returned results, matching YARA's
+    /// behaviour.
     pub fn scan(&self, data: &[u8]) -> ScanReport {
         let start = std::time::Instant::now();
         let mut results = Vec::new();
+        let mut rule_results: HashMap<String, bool> = HashMap::new();
 
         for rule in &self.rules {
             if !rule.enabled {
                 continue;
             }
-            let r = self.evaluate_rule(rule, data);
-            results.push(r);
+            let r = self.evaluate_rule(rule, data, &rule_results);
+            rule_results.insert(rule.name.clone(), r.matched);
+            if !rule.is_private {
+                results.push(r);
+            }
         }
 
         let matched_rules = results.iter().filter(|r| r.matched).count();
         ScanReport {
-            total_rules: self.rules.iter().filter(|r| r.enabled).count(),
+            total_rules: self.rules.iter().filter(|r| r.enabled && !r.is_private).count(),
             matched_rules,
             results,
             total_scan_time_us: start.elapsed().as_micros() as u64,
@@ -169,7 +411,12 @@ impl YaraEngine {
 
     // ── Internal matching ────────────────────────────────────────────
 
-    fn evaluate_rule(&self, rule: &YaraRule, data: &[u8]) -> ScanResult {
+    fn evaluate_rule(
+        &self,
+        rule: &YaraRule,
+        data: &[u8],
+        rule_results: &HashMap<String, bool>,
+    ) -> ScanResult {
         let start = std::time::Instant::now();
 
         // Size check for AllOfWithMaxSize.
@@ -192,15 +439,24 @@ impl YaraEngine {
             all_locations.insert(rs.id.clone(), locs);
         }
 
-        let matched_count = all_locations.values().filter(|v| !v.is_empty()).count();
-        let total_strings = rule.strings.len();
-
         let matched = match &rule.condition {
             RuleCondition::AllOf | RuleCondition::AllOfWithMaxSize(_) => {
-                matched_count == total_strings && total_strings > 0
+                let matched_count = all_locations.values().filter(|v| !v.is_empty()).count();
+                matched_count == rule.strings.len() && !rule.strings.is_empty()
             }
-            RuleCondition::AnyOf => matched_count > 0,
-            RuleCondition::AtLeast(n) => matched_count >= *n,
+            RuleCondition::AnyOf => all_locations.values().any(|v| !v.is_empty()),
+            RuleCondition::AtLeast(n) => {
+                all_locations.values().filter(|v| !v.is_empty()).count() >= *n
+            }
+            RuleCondition::Expr(expr) => {
+                let ctx = ExprContext {
+                    data,
+                    locations: &all_locations,
+                    strings: &rule.strings,
+                    rule_results,
+                };
+                expr.eval(&ctx)
+            }
         };
 
         let locations: Vec<MatchLocation> = all_locations.into_values().flatten().collect();
@@ -216,46 +472,20 @@ impl YaraEngine {
 
     fn find_pattern(&self, rs: &RuleString, data: &[u8]) -> Vec<MatchLocation> {
         match &rs.pattern {
-            StringPattern::Text(text) => self.find_text(data, text.as_bytes(), &rs.id, rs.nocase),
+            StringPattern::Text(text) => find_text_modifiers(data, text, &rs.id, rs),
             StringPattern::Hex(bytes) => self.find_bytes(data, bytes, &rs.id),
             StringPattern::Glob(pattern) => self.find_glob(data, pattern, &rs.id, rs.nocase),
+            StringPattern::HexTokens(tokens) => find_hex_tokens(data, tokens, &rs.id),
+            StringPattern::Regex {
+                source,
+                case_insensitive,
+                dotall,
+            } => find_regex(data, source, *case_insensitive, *dotall, &rs.id),
         }
-    }
-
-    fn find_text(&self, data: &[u8], needle: &[u8], id: &str, nocase: bool) -> Vec<MatchLocation> {
-        if needle.is_empty() {
-            return Vec::new();
-        }
-
-        let haystack: Vec<u8> = if nocase {
-            data.iter().map(u8::to_ascii_lowercase).collect()
-        } else {
-            data.to_vec()
-        };
-        let needle_norm: Vec<u8> = if nocase {
-            needle.iter().map(u8::to_ascii_lowercase).collect()
-        } else {
-            needle.to_vec()
-        };
-
-        let mut results = Vec::new();
-        let mut offset = 0;
-        while offset + needle_norm.len() <= haystack.len() {
-            if haystack[offset..offset + needle_norm.len()] == needle_norm[..] {
-                results.push(MatchLocation {
-                    string_id: id.to_string(),
-                    offset,
-                    length: needle_norm.len(),
-                    matched_bytes: data[offset..offset + needle_norm.len()].to_vec(),
-                });
-            }
-            offset += 1;
-        }
-        results
     }
 
     fn find_bytes(&self, data: &[u8], needle: &[u8], id: &str) -> Vec<MatchLocation> {
-        self.find_text(data, needle, id, false)
+        find_text_bytes(data, needle, id, false)
     }
 
     fn find_glob(&self, data: &[u8], pattern: &str, id: &str, nocase: bool) -> Vec<MatchLocation> {
@@ -276,6 +506,314 @@ impl YaraEngine {
             offset += line.len() + 1; // +1 for the newline
         }
         results
+    }
+}
+
+// ── Text / hex-token / regex matching ─────────────────────────────────
+
+/// Exact-bytes substring search (used by the legacy [`StringPattern::Hex`]
+/// form and as the ASCII/wide primitive below).
+fn find_text_bytes(data: &[u8], needle: &[u8], id: &str, nocase: bool) -> Vec<MatchLocation> {
+    if needle.is_empty() {
+        return Vec::new();
+    }
+    let haystack: Vec<u8> = if nocase {
+        data.iter().map(u8::to_ascii_lowercase).collect()
+    } else {
+        data.to_vec()
+    };
+    let needle_norm: Vec<u8> = if nocase {
+        needle.iter().map(u8::to_ascii_lowercase).collect()
+    } else {
+        needle.to_vec()
+    };
+
+    let mut results = Vec::new();
+    let mut offset = 0;
+    while offset + needle_norm.len() <= haystack.len() {
+        if haystack[offset..offset + needle_norm.len()] == needle_norm[..] {
+            results.push(MatchLocation {
+                string_id: id.to_string(),
+                offset,
+                length: needle_norm.len(),
+                matched_bytes: data[offset..offset + needle_norm.len()].to_vec(),
+            });
+        }
+        offset += 1;
+    }
+    results
+}
+
+/// A byte is a "word" byte for `fullword` boundary checks if it is
+/// alphanumeric or `_`, matching YARA's definition.
+fn is_word_byte(b: u8) -> bool {
+    b.is_ascii_alphanumeric() || b == b'_'
+}
+
+fn fullword_ok(data: &[u8], offset: usize, length: usize) -> bool {
+    let before_ok = offset == 0 || !is_word_byte(data[offset - 1]);
+    let after_ok = offset + length >= data.len() || !is_word_byte(data[offset + length]);
+    before_ok && after_ok
+}
+
+/// Encode a text string as UTF-16LE bytes (ASCII-range text is
+/// representative of the common `wide` use case: matching a narrow string
+/// as it appears inside a UTF-16LE-encoded buffer).
+fn to_utf16le_bytes(text: &str) -> Vec<u8> {
+    text.encode_utf16().flat_map(u16::to_le_bytes).collect()
+}
+
+/// Find a [`StringPattern::Text`] applying its `nocase`/`wide`/`ascii`/
+/// `fullword` modifiers.
+fn find_text_modifiers(data: &[u8], text: &str, id: &str, rs: &RuleString) -> Vec<MatchLocation> {
+    let mut results = Vec::new();
+    if rs.ascii {
+        for loc in find_text_bytes(data, text.as_bytes(), id, rs.nocase) {
+            if !rs.fullword || fullword_ok(data, loc.offset, loc.length) {
+                results.push(loc);
+            }
+        }
+    }
+    if rs.wide {
+        let wide_needle = to_utf16le_bytes(text);
+        for loc in find_text_bytes(data, &wide_needle, id, rs.nocase) {
+            if !rs.fullword || fullword_ok(data, loc.offset, loc.length) {
+                results.push(loc);
+            }
+        }
+    }
+    results
+}
+
+/// Try to match a hex-token sequence starting exactly at `data[pos..]`.
+/// Returns the end offset (exclusive) on success. Alternatives and jumps
+/// make this a small backtracking matcher rather than a simple byte
+/// comparison.
+fn hex_match_at(tokens: &[HexToken], data: &[u8], pos: usize) -> Option<usize> {
+    match tokens.split_first() {
+        None => Some(pos),
+        Some((HexToken::Byte(b), rest)) => {
+            if data.get(pos) == Some(b) {
+                hex_match_at(rest, data, pos + 1)
+            } else {
+                None
+            }
+        }
+        Some((HexToken::Wildcard, rest)) => {
+            if pos < data.len() {
+                hex_match_at(rest, data, pos + 1)
+            } else {
+                None
+            }
+        }
+        Some((HexToken::HighNibble(hi), rest)) => {
+            if data.get(pos).is_some_and(|b| (b >> 4) == *hi) {
+                hex_match_at(rest, data, pos + 1)
+            } else {
+                None
+            }
+        }
+        Some((HexToken::LowNibble(lo), rest)) => {
+            if data.get(pos).is_some_and(|b| (b & 0x0F) == *lo) {
+                hex_match_at(rest, data, pos + 1)
+            } else {
+                None
+            }
+        }
+        Some((HexToken::Jump(min, max), rest)) => {
+            // Bound unbounded jumps ([n-]) to avoid pathological scans (and,
+            // combined with the hex-body length cap in `yara_parser`,
+            // pathological compile-time backtracking cost too).
+            const MAX_JUMP: usize = 512;
+            let hi = max.unwrap_or(MAX_JUMP).min(data.len().saturating_sub(pos));
+            if hi < *min {
+                return None;
+            }
+            for skip in *min..=hi {
+                if let Some(end) = hex_match_at(rest, data, pos + skip) {
+                    return Some(end);
+                }
+            }
+            None
+        }
+        Some((HexToken::Alternative(branches), rest)) => {
+            for branch in branches {
+                let mut combined: Vec<HexToken> = Vec::with_capacity(branch.len() + rest.len());
+                combined.extend(branch.iter().cloned());
+                combined.extend(rest.iter().cloned());
+                if let Some(end) = hex_match_at(&combined, data, pos) {
+                    return Some(end);
+                }
+            }
+            None
+        }
+    }
+}
+
+fn find_hex_tokens(data: &[u8], tokens: &[HexToken], id: &str) -> Vec<MatchLocation> {
+    let mut results = Vec::new();
+    for start in 0..=data.len() {
+        if let Some(end) = hex_match_at(tokens, data, start) {
+            results.push(MatchLocation {
+                string_id: id.to_string(),
+                offset: start,
+                length: end - start,
+                matched_bytes: data[start..end].to_vec(),
+            });
+        }
+    }
+    results
+}
+
+fn find_regex(
+    data: &[u8],
+    source: &str,
+    case_insensitive: bool,
+    dotall: bool,
+    id: &str,
+) -> Vec<MatchLocation> {
+    let mut builder = regex::bytes::RegexBuilder::new(source);
+    builder.case_insensitive(case_insensitive).dot_matches_new_line(dotall);
+    let Ok(re) = builder.build() else {
+        // Compile-time validation (see `yara_parser`) should already have
+        // rejected an invalid pattern; fail closed (no matches) if not.
+        return Vec::new();
+    };
+    re.find_iter(data)
+        .map(|m| MatchLocation {
+            string_id: id.to_string(),
+            offset: m.start(),
+            length: m.end() - m.start(),
+            matched_bytes: data[m.start()..m.end()].to_vec(),
+        })
+        .collect()
+}
+
+// ── Condition expression evaluation ───────────────────────────────────
+
+struct ExprContext<'a> {
+    data: &'a [u8],
+    locations: &'a HashMap<String, Vec<MatchLocation>>,
+    strings: &'a [RuleString],
+    rule_results: &'a HashMap<String, bool>,
+}
+
+impl ExprContext<'_> {
+    fn resolve_set(&self, set: &StringSet) -> Vec<String> {
+        match set {
+            StringSet::Them => self.strings.iter().map(|s| s.id.clone()).collect(),
+            StringSet::Ids(ids) => {
+                let mut resolved = Vec::new();
+                for id in ids {
+                    if let Some(prefix) = id.strip_suffix('*') {
+                        for s in self.strings {
+                            if s.id.starts_with(prefix) {
+                                resolved.push(s.id.clone());
+                            }
+                        }
+                    } else {
+                        resolved.push(id.clone());
+                    }
+                }
+                resolved
+            }
+        }
+    }
+}
+
+impl NumExpr {
+    fn eval(&self, ctx: &ExprContext) -> Option<i64> {
+        match self {
+            NumExpr::Int(v) => Some(*v),
+            NumExpr::FileSize => Some(ctx.data.len() as i64),
+            NumExpr::Count(id) => Some(ctx.locations.get(id).map_or(0, Vec::len) as i64),
+            NumExpr::OffsetOf(id, index) => {
+                let idx = index.eval(ctx)?;
+                if idx < 1 {
+                    return None;
+                }
+                ctx.locations
+                    .get(id)
+                    .and_then(|locs| locs.get((idx - 1) as usize))
+                    .map(|loc| loc.offset as i64)
+            }
+            NumExpr::UintAt {
+                width,
+                big_endian,
+                offset,
+            } => {
+                let off = offset.eval(ctx)?;
+                if off < 0 {
+                    return None;
+                }
+                let off = off as usize;
+                let n = *width as usize;
+                let bytes = ctx.data.get(off..off + n)?;
+                Some(if *big_endian {
+                    match n {
+                        1 => bytes[0] as i64,
+                        2 => u16::from_be_bytes([bytes[0], bytes[1]]) as i64,
+                        _ => u32::from_be_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]) as i64,
+                    }
+                } else {
+                    match n {
+                        1 => bytes[0] as i64,
+                        2 => u16::from_le_bytes([bytes[0], bytes[1]]) as i64,
+                        _ => u32::from_le_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]) as i64,
+                    }
+                })
+            }
+            NumExpr::Add(a, b) => Some(a.eval(ctx)? + b.eval(ctx)?),
+            NumExpr::Sub(a, b) => Some(a.eval(ctx)? - b.eval(ctx)?),
+        }
+    }
+}
+
+impl BoolExpr {
+    fn eval(&self, ctx: &ExprContext) -> bool {
+        match self {
+            BoolExpr::Bool(b) => *b,
+            BoolExpr::StringRef(id) => ctx.locations.get(id).is_some_and(|v| !v.is_empty()),
+            BoolExpr::Not(inner) => !inner.eval(ctx),
+            BoolExpr::And(a, b) => a.eval(ctx) && b.eval(ctx),
+            BoolExpr::Or(a, b) => a.eval(ctx) || b.eval(ctx),
+            BoolExpr::Cmp(lhs, op, rhs) => match (lhs.eval(ctx), rhs.eval(ctx)) {
+                (Some(l), Some(r)) => op.apply(l, r),
+                _ => false,
+            },
+            BoolExpr::StringAt(id, offset) => {
+                let Some(target) = offset.eval(ctx) else {
+                    return false;
+                };
+                ctx.locations
+                    .get(id)
+                    .is_some_and(|locs| locs.iter().any(|loc| loc.offset as i64 == target))
+            }
+            BoolExpr::StringInRange(id, lo, hi) => {
+                let (Some(lo), Some(hi)) = (lo.eval(ctx), hi.eval(ctx)) else {
+                    return false;
+                };
+                ctx.locations.get(id).is_some_and(|locs| {
+                    locs.iter()
+                        .any(|loc| (loc.offset as i64) >= lo && (loc.offset as i64) <= hi)
+                })
+            }
+            BoolExpr::OfThem(quantifier, set) => {
+                let ids = ctx.resolve_set(set);
+                let matched = ids
+                    .iter()
+                    .filter(|id| ctx.locations.get(*id).is_some_and(|v| !v.is_empty()))
+                    .count();
+                match quantifier {
+                    OfQuantifier::All => !ids.is_empty() && matched == ids.len(),
+                    OfQuantifier::Any => matched >= 1,
+                    OfQuantifier::Exactly(n) => {
+                        n.eval(ctx).is_some_and(|need| matched as i64 >= need)
+                    }
+                }
+            }
+            BoolExpr::RuleRef(name) => ctx.rule_results.get(name).copied().unwrap_or(false),
+        }
     }
 }
 
@@ -333,21 +871,27 @@ pub fn builtin_rules() -> Vec<YaraRule> {
                 severity: "Severe".into(),
                 mitre_ids: vec!["T1027.002".into()],
                 created: "2026-01-01".into(),
+                ..Default::default()
             },
             strings: vec![
                 RuleString {
                     id: "$elf_magic".into(),
                     pattern: StringPattern::Hex(vec![0x7f, 0x45, 0x4c, 0x46]),
                     nocase: false,
+                    ..Default::default()
                 },
                 RuleString {
                     id: "$upx_sig".into(),
                     pattern: StringPattern::Text("UPX!".into()),
                     nocase: false,
+                    ..Default::default()
                 },
             ],
             condition: RuleCondition::AllOf,
             enabled: true,
+            tags: Vec::new(),
+            is_private: false,
+            is_global: false,
         },
         YaraRule {
             name: "webshell_php".into(),
@@ -357,26 +901,33 @@ pub fn builtin_rules() -> Vec<YaraRule> {
                 severity: "Critical".into(),
                 mitre_ids: vec!["T1505.003".into()],
                 created: "2026-01-01".into(),
+                ..Default::default()
             },
             strings: vec![
                 RuleString {
                     id: "$eval".into(),
                     pattern: StringPattern::Text("eval($_".into()),
                     nocase: true,
+                    ..Default::default()
                 },
                 RuleString {
                     id: "$base64".into(),
                     pattern: StringPattern::Text("base64_decode".into()),
                     nocase: true,
+                    ..Default::default()
                 },
                 RuleString {
                     id: "$system".into(),
                     pattern: StringPattern::Text("system($_".into()),
                     nocase: true,
+                    ..Default::default()
                 },
             ],
             condition: RuleCondition::AnyOf,
             enabled: true,
+            tags: Vec::new(),
+            is_private: false,
+            is_global: false,
         },
         YaraRule {
             name: "cryptominer_strings".into(),
@@ -386,26 +937,33 @@ pub fn builtin_rules() -> Vec<YaraRule> {
                 severity: "Severe".into(),
                 mitre_ids: vec!["T1496".into()],
                 created: "2026-01-01".into(),
+                ..Default::default()
             },
             strings: vec![
                 RuleString {
                     id: "$stratum".into(),
                     pattern: StringPattern::Text("stratum+tcp://".into()),
                     nocase: true,
+                    ..Default::default()
                 },
                 RuleString {
                     id: "$xmrig".into(),
                     pattern: StringPattern::Text("xmrig".into()),
                     nocase: true,
+                    ..Default::default()
                 },
                 RuleString {
                     id: "$pool".into(),
                     pattern: StringPattern::Glob("*pool.*:*".into()),
                     nocase: true,
+                    ..Default::default()
                 },
             ],
             condition: RuleCondition::AnyOf,
             enabled: true,
+            tags: Vec::new(),
+            is_private: false,
+            is_global: false,
         },
         YaraRule {
             name: "ransomware_note".into(),
@@ -415,26 +973,33 @@ pub fn builtin_rules() -> Vec<YaraRule> {
                 severity: "Critical".into(),
                 mitre_ids: vec!["T1486".into()],
                 created: "2026-01-01".into(),
+                ..Default::default()
             },
             strings: vec![
                 RuleString {
                     id: "$bitcoin".into(),
                     pattern: StringPattern::Text("bitcoin".into()),
                     nocase: true,
+                    ..Default::default()
                 },
                 RuleString {
                     id: "$decrypt".into(),
                     pattern: StringPattern::Text("decrypt your files".into()),
                     nocase: true,
+                    ..Default::default()
                 },
                 RuleString {
                     id: "$payment".into(),
                     pattern: StringPattern::Text("payment".into()),
                     nocase: true,
+                    ..Default::default()
                 },
             ],
             condition: RuleCondition::AtLeast(2),
             enabled: true,
+            tags: Vec::new(),
+            is_private: false,
+            is_global: false,
         },
     ]
 }
@@ -456,14 +1021,19 @@ mod tests {
                 severity: "Elevated".into(),
                 mitre_ids: vec![],
                 created: "2026-01-01".into(),
+                ..Default::default()
             },
             strings: vec![RuleString {
                 id: "$s1".into(),
                 pattern: StringPattern::Text("malware".into()),
                 nocase: false,
+                ..Default::default()
             }],
             condition: RuleCondition::AnyOf,
             enabled: true,
+            tags: Vec::new(),
+            is_private: false,
+            is_global: false,
         });
 
         let report = engine.scan(b"this contains malware inside");
@@ -483,14 +1053,19 @@ mod tests {
                 severity: "Elevated".into(),
                 mitre_ids: vec![],
                 created: "2026-01-01".into(),
+                ..Default::default()
             },
             strings: vec![RuleString {
                 id: "$s1".into(),
                 pattern: StringPattern::Text("eval".into()),
                 nocase: true,
+                ..Default::default()
             }],
             condition: RuleCondition::AnyOf,
             enabled: true,
+            tags: Vec::new(),
+            is_private: false,
+            is_global: false,
         });
 
         let report = engine.scan(b"EVAL(code);");
@@ -508,14 +1083,19 @@ mod tests {
                 severity: "Elevated".into(),
                 mitre_ids: vec![],
                 created: "2026-01-01".into(),
+                ..Default::default()
             },
             strings: vec![RuleString {
                 id: "$elf".into(),
                 pattern: StringPattern::Hex(vec![0x7f, 0x45, 0x4c, 0x46]),
                 nocase: false,
+                ..Default::default()
             }],
             condition: RuleCondition::AnyOf,
             enabled: true,
+            tags: Vec::new(),
+            is_private: false,
+            is_global: false,
         });
 
         let mut data = vec![0x7f, 0x45, 0x4c, 0x46];
@@ -535,21 +1115,27 @@ mod tests {
                 severity: "Severe".into(),
                 mitre_ids: vec![],
                 created: "2026-01-01".into(),
+                ..Default::default()
             },
             strings: vec![
                 RuleString {
                     id: "$a".into(),
                     pattern: StringPattern::Text("alpha".into()),
                     nocase: false,
+                    ..Default::default()
                 },
                 RuleString {
                     id: "$b".into(),
                     pattern: StringPattern::Text("beta".into()),
                     nocase: false,
+                    ..Default::default()
                 },
             ],
             condition: RuleCondition::AllOf,
             enabled: true,
+            tags: Vec::new(),
+            is_private: false,
+            is_global: false,
         });
 
         // Only one present → no match
@@ -572,26 +1158,33 @@ mod tests {
                 severity: "Severe".into(),
                 mitre_ids: vec![],
                 created: "2026-01-01".into(),
+                ..Default::default()
             },
             strings: vec![
                 RuleString {
                     id: "$a".into(),
                     pattern: StringPattern::Text("one".into()),
                     nocase: false,
+                    ..Default::default()
                 },
                 RuleString {
                     id: "$b".into(),
                     pattern: StringPattern::Text("two".into()),
                     nocase: false,
+                    ..Default::default()
                 },
                 RuleString {
                     id: "$c".into(),
                     pattern: StringPattern::Text("three".into()),
                     nocase: false,
+                    ..Default::default()
                 },
             ],
             condition: RuleCondition::AtLeast(2),
             enabled: true,
+            tags: Vec::new(),
+            is_private: false,
+            is_global: false,
         });
 
         let report = engine.scan(b"just one here");
@@ -612,14 +1205,19 @@ mod tests {
                 severity: "Elevated".into(),
                 mitre_ids: vec![],
                 created: "2026-01-01".into(),
+                ..Default::default()
             },
             strings: vec![RuleString {
                 id: "$g".into(),
                 pattern: StringPattern::Glob("*pool.*:*".into()),
                 nocase: true,
+                ..Default::default()
             }],
             condition: RuleCondition::AnyOf,
             enabled: true,
+            tags: Vec::new(),
+            is_private: false,
+            is_global: false,
         });
 
         let report = engine.scan(b"connecting to mining-pool.example:3333\n");
@@ -637,14 +1235,19 @@ mod tests {
                 severity: "Elevated".into(),
                 mitre_ids: vec![],
                 created: "2026-01-01".into(),
+                ..Default::default()
             },
             strings: vec![RuleString {
                 id: "$s".into(),
                 pattern: StringPattern::Text("match-me".into()),
                 nocase: false,
+                ..Default::default()
             }],
             condition: RuleCondition::AnyOf,
             enabled: false,
+            tags: Vec::new(),
+            is_private: false,
+            is_global: false,
         });
 
         let report = engine.scan(b"match-me");
@@ -742,14 +1345,19 @@ mod tests {
                 severity: "Elevated".into(),
                 mitre_ids: vec![],
                 created: "2026-01-01".into(),
+                ..Default::default()
             },
             strings: vec![RuleString {
                 id: "$s".into(),
                 pattern: StringPattern::Text("x".into()),
                 nocase: false,
+                ..Default::default()
             }],
             condition: RuleCondition::AllOfWithMaxSize(10),
             enabled: true,
+            tags: Vec::new(),
+            is_private: false,
+            is_global: false,
         });
 
         // Within size limit → match

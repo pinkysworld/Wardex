@@ -42,6 +42,7 @@ pub mod sigma;
 pub mod sigma_library;
 pub mod ueba;
 pub mod yara_engine;
+pub mod yara_parser;
 
 // ── Collection & Ingestion ───────────────────────────────────────────────────
 pub mod collector;

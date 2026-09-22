@@ -44,6 +44,8 @@ tantivy = "0.26"
 # present via several crypto crates; pinning a direct dependency lets us apply
 # it explicitly to long-lived secret fields (ML-DSA seed, transient API tokens).
 zeroize = { version = "1.8", features = ["zeroize_derive"] }
+# Pure-Rust regex strings for the YARA-subset engine (bytes API, no libyara).
+regex = "1"
 
 # Linux-only kernel telemetry backends: CN_PROC (process connector) netlink
 # socket, and fanotify/inotify for file events. Both crates provide safe
