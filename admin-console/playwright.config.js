@@ -20,7 +20,15 @@ export default defineConfig({
     timeout: 120000,
   },
   projects: [
-    { name: 'chromium', use: { browserName: 'chromium' } },
+    {
+      name: 'chromium',
+      use: {
+        browserName: 'chromium',
+        launchOptions: process.env.PW_CHROMIUM_PATH
+          ? { executablePath: process.env.PW_CHROMIUM_PATH }
+          : undefined,
+      },
+    },
     { name: 'firefox', use: { browserName: 'firefox' } },
     { name: 'webkit', use: { browserName: 'webkit' } },
   ],
