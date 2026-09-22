@@ -242,7 +242,9 @@ impl Lexer {
             match self.bump() {
                 None => return Err(self.err("unterminated regex literal, expected '/'")),
                 Some('\\') => {
-                    let next = self.bump().ok_or_else(|| self.err("unterminated regex escape"))?;
+                    let next = self
+                        .bump()
+                        .ok_or_else(|| self.err("unterminated regex escape"))?;
                     pattern.push('\\');
                     pattern.push(next);
                 }
@@ -625,14 +627,9 @@ impl Parser {
         let mut tags = Vec::new();
         if matches!(self.cur(), Tok::Colon) {
             self.advance();
-            loop {
-                match self.cur().clone() {
-                    Tok::Ident(tag) => {
-                        tags.push(tag);
-                        self.advance();
-                    }
-                    _ => break,
-                }
+            while let Tok::Ident(tag) = self.cur().clone() {
+                tags.push(tag);
+                self.advance();
             }
         }
 
@@ -667,8 +664,8 @@ impl Parser {
         }
         self.eat(&Tok::RBrace)?;
 
-        let condition = condition
-            .ok_or_else(|| self.err(format!("rule '{name}' has no condition: block")))?;
+        let condition =
+            condition.ok_or_else(|| self.err(format!("rule '{name}' has no condition: block")))?;
         validate_condition_refs(&condition, &strings, &self.rule_names, &name)
             .map_err(|message| self.err(message))?;
 
@@ -733,11 +730,7 @@ impl Parser {
     }
 
     fn parse_strings(&mut self, strings: &mut Vec<RuleString>) -> Result<(), CompileError> {
-        loop {
-            let id = match self.cur().clone() {
-                Tok::StrId(id) => id,
-                _ => break,
-            };
+        while let Tok::StrId(id) = self.cur().clone() {
             self.advance();
             self.eat(&Tok::Assign)?;
             let mut rs = RuleString {
@@ -773,7 +766,7 @@ impl Parser {
                     }
                 }
                 Tok::HexBody(body) => {
-                    rs.pattern = StringPattern::HexTokens(parse_hex_body(&body, &self)?);
+                    rs.pattern = StringPattern::HexTokens(parse_hex_body(&body, self)?);
                 }
                 Tok::Regex {
                     source,
@@ -893,9 +886,7 @@ impl Parser {
                     Ok(BoolExpr::StringRef(format!("${id}")))
                 }
             }
-            Tok::Ident(id) if id == "filesize" || is_uint_fn(&id) => {
-                self.parse_comparison_or_of()
-            }
+            Tok::Ident(id) if id == "filesize" || is_uint_fn(&id) => self.parse_comparison_or_of(),
             Tok::Ident(id) => {
                 // A bare identifier not recognised as a numeric primary is
                 // a reference to another rule.
@@ -1043,11 +1034,13 @@ fn validate_condition_refs(
     known_rules: &std::collections::HashSet<String>,
     rule_name: &str,
 ) -> Result<(), String> {
-    let declared: std::collections::HashSet<&str> =
-        strings.iter().map(|s| s.id.as_str()).collect();
-    fn check_id(id: &str, declared: &std::collections::HashSet<&str>, rule_name: &str) -> Result<(), String> {
-        if id.ends_with('*') {
-            let prefix = &id[..id.len() - 1];
+    let declared: std::collections::HashSet<&str> = strings.iter().map(|s| s.id.as_str()).collect();
+    fn check_id(
+        id: &str,
+        declared: &std::collections::HashSet<&str>,
+        rule_name: &str,
+    ) -> Result<(), String> {
+        if let Some(prefix) = id.strip_suffix('*') {
             if declared.iter().any(|d| d.starts_with(prefix)) {
                 Ok(())
             } else {
@@ -1063,7 +1056,11 @@ fn validate_condition_refs(
             ))
         }
     }
-    fn walk_num(n: &NumExpr, declared: &std::collections::HashSet<&str>, rule_name: &str) -> Result<(), String> {
+    fn walk_num(
+        n: &NumExpr,
+        declared: &std::collections::HashSet<&str>,
+        rule_name: &str,
+    ) -> Result<(), String> {
         match n {
             NumExpr::Int(_) | NumExpr::FileSize => Ok(()),
             NumExpr::Count(id) => check_id(id, declared, rule_name),
@@ -1737,13 +1734,24 @@ mod tests {
         for r in compiled.rules {
             engine.add_rule(r);
         }
-        let ps_sample = b"powershell.exe -EncodedCommand aGVsbG8gd29ybGQhaGVsbG8gd29ybGQhaGVsbG8gd29ybGQh==";
+        let ps_sample =
+            b"powershell.exe -EncodedCommand aGVsbG8gd29ybGQhaGVsbG8gd29ybGQhaGVsbG8gd29ybGQh==";
         let report = engine.scan(ps_sample);
-        assert!(report.results.iter().any(|r| r.rule_name == "Suspicious_Base64_PowerShell" && r.matched));
+        assert!(
+            report
+                .results
+                .iter()
+                .any(|r| r.rule_name == "Suspicious_Base64_PowerShell" && r.matched)
+        );
 
         let mut elf = vec![0x7F, 0x45, 0x4C, 0x46];
         elf.extend_from_slice(b"...UPX!...");
         let report = engine.scan(&elf);
-        assert!(report.results.iter().any(|r| r.rule_name == "Tiny_ELF_UPX" && r.matched));
+        assert!(
+            report
+                .results
+                .iter()
+                .any(|r| r.rule_name == "Tiny_ELF_UPX" && r.matched)
+        );
     }
 }

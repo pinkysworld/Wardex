@@ -310,10 +310,7 @@ impl YaraEngine {
     }
 
     /// Compile and load a `.yar` file by path.
-    pub fn load_rules_yar_file(
-        &mut self,
-        path: &str,
-    ) -> Result<(usize, Vec<String>), String> {
+    pub fn load_rules_yar_file(&mut self, path: &str) -> Result<(usize, Vec<String>), String> {
         let source = std::fs::read(path).map_err(|e| format!("cannot read {path}: {e}"))?;
         let source = String::from_utf8_lossy(&source);
         self.load_rules_yar(&source)
@@ -384,7 +381,11 @@ impl YaraEngine {
 
         let matched_rules = results.iter().filter(|r| r.matched).count();
         ScanReport {
-            total_rules: self.rules.iter().filter(|r| r.enabled && !r.is_private).count(),
+            total_rules: self
+                .rules
+                .iter()
+                .filter(|r| r.enabled && !r.is_private)
+                .count(),
             matched_rules,
             results,
             total_scan_time_us: start.elapsed().as_micros() as u64,
@@ -673,7 +674,9 @@ fn find_regex(
     id: &str,
 ) -> Vec<MatchLocation> {
     let mut builder = regex::bytes::RegexBuilder::new(source);
-    builder.case_insensitive(case_insensitive).dot_matches_new_line(dotall);
+    builder
+        .case_insensitive(case_insensitive)
+        .dot_matches_new_line(dotall);
     let Ok(re) = builder.build() else {
         // Compile-time validation (see `yara_parser`) should already have
         // rejected an invalid pattern; fail closed (no matches) if not.

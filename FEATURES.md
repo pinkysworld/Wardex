@@ -55,7 +55,7 @@ Wardex is a self-hosted XDR and SIEM platform built in Rust for teams that want 
 
 - **Malware detection & AV scanning**
   - In-memory malware hash database with ~48 built-in SHA256/MD5 signatures across 7 families
-  - YARA-based file scanning with 30 community rules (Emotet, Cobalt Strike, Mimikatz, WannaCry, etc.)
+  - YARA-based file scanning with 30 community rules (Emotet, Cobalt Strike, Mimikatz, WannaCry, etc.), plus a genuine `.yar` source compiler (`docs/YARA_COMPATIBILITY.md`) for a documented subset: text/hex/regex strings with nocase/wide/ascii/fullword modifiers, hex wildcards/jumps/alternatives, and full condition expressions (and/or/not, `#`/`@`/`at`/`in`, `of`, `filesize`, `uint8/16/32(+be)`, rule references)
   - Combined verdict engine: hash lookup + YARA match → malicious/suspicious/clean classification
   - Bulk signature import (JSON/CSV) and custom YARA rule creation via API
 
@@ -110,7 +110,7 @@ Wardex is a self-hosted XDR and SIEM platform built in Rust for teams that want 
   - Real OS enforcement execution with command safety filter and dry-run mode
   - Atomic agent update with SHA-256 verification, automatic rollback, and state tracking
   - Alert deduplication with time-window grouping and cross-device merge
-  - YARA-style pattern matching engine with built-in threat rules
+  - YARA-style pattern matching engine with built-in threat rules and a real `.yar` source compiler for a documented rule-language subset
   - Multi-tenancy isolation guards with cross-tenant access control
   - Real mesh networking with checksummed frames, hop limits, and peer state tracking
   - Dashboard deep-linking and timeline visualization
@@ -120,7 +120,7 @@ Wardex is a self-hosted XDR and SIEM platform built in Rust for teams that want 
   - Data archival with real gzip compression (flate2), CSV export, and SHA-256 manifests
   - 210 Sigma detection rules across 22 categories (including cloud-native)
   - ClickHouse storage adapter with buffered batch inserts, MergeTree DDL, and materialized views
-  - ML triage engine with 5-tree Random Forest ensemble for true-positive/false-positive/needs-review classification
+  - ML triage engine: Random Forest trained with a real Gini-impurity CART learner and bootstrap bagging over analyst-labelled alert feedback (out-of-bag accuracy/precision/recall/confusion-matrix/feature-importance metrics, persisted to storage), falling back to a pretrained cold-start forest until at least 50 labelled true/false-positive verdicts exist; retrain and status via `POST /api/ml/train` / `GET /api/ml/train/status`
   - HA cluster snapshots with log compaction and persistent Raft state schema
   - OIDC/SAML SSO with session management (config, login, callback, session, logout)
   - Cloud collectors for AWS CloudTrail (SigV4), Azure Activity Log (OAuth2), and GCP Audit Log (JWT/RS256) with live polling

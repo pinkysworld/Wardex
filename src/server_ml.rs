@@ -14,9 +14,9 @@ use chrono::{Datelike, Timelike};
 
 use crate::event_forward::{EventStore, StoredEvent};
 use crate::ml_engine::{ForestTrainConfig, TrainingExample, TriageFeatures, TriageLabel};
+use crate::server::save_stored_json;
 use crate::server::{AppState, read_body_limited, url_param};
 use crate::server_response::{error_json, json_response};
-use crate::server::save_stored_json;
 
 /// Storage key the trained Random Forest snapshot is persisted under (see
 /// `crate::server_support_helpers::{load_stored_json, save_stored_json}` and
@@ -170,8 +170,14 @@ pub(crate) fn alert_to_triage_features(store: &EventStore, event: &StoredEvent) 
         .unwrap_or(0);
     let alert_frequency_1h = u32::try_from(alert_frequency_1h).unwrap_or(u32::MAX);
 
-    const HIGH_RISK_KEYWORDS: &[&str] =
-        &["beacon", "c2", "exfil", "credential", "lateral", "privilege"];
+    const HIGH_RISK_KEYWORDS: &[&str] = &[
+        "beacon",
+        "c2",
+        "exfil",
+        "credential",
+        "lateral",
+        "privilege",
+    ];
     let high_risk_hits = event
         .alert
         .reasons

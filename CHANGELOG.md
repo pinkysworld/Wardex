@@ -4,6 +4,10 @@ All notable changes to Wardex are documented in this file.
 
 ## [Unreleased]
 
+### Added
+- **Real Random Forest triage training**: `RandomForest::train` fits genuine Gini-impurity CART trees with feature subsampling over bootstrap samples, evaluated out-of-bag (accuracy, per-class precision/recall, confusion matrix, feature importance). `ModelRegistry::train_random_forest` trains from analyst verdicts recorded via `POST /api/alerts/feedback`, falling back to (and reporting) the pretrained cold-start forest when fewer than 50 labelled true/false-positive examples exist. New endpoints `POST /api/ml/train` and `GET /api/ml/train/status`; the trained forest persists through the SQLite-backed config store and reloads on startup.
+- **Genuine `.yar` rule compiler**: `src/yara_parser.rs` compiles a documented subset of real YARA source (imports, `private`/`global` rules, tags, meta, text/hex/regex strings with modifiers, hex wildcards/nibbles/jumps/alternatives, and a full condition grammar — `and`/`or`/`not`, `$a`/`#a`/`@a[i]`/`at`/`in`, `filesize`, `all`/`any`/`N of (...)`, `uint8/16/32(+be)`, rule references) into `yara_engine.rs`, alongside the existing JSON rule format. Unsupported constructs are compile errors with line/column. See `docs/YARA_COMPATIBILITY.md`.
+
 ## [1.0.30] — 2026-07-10
 
 ### Added

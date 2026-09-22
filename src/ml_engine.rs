@@ -708,7 +708,13 @@ fn build_cart(
                 feature_idx: feature,
                 threshold,
                 left: Box::new(build_cart(
-                    &left_rows, xs, ys, depth + 1, cfg, rng, importance,
+                    &left_rows,
+                    xs,
+                    ys,
+                    depth + 1,
+                    cfg,
+                    rng,
+                    importance,
                 )),
                 right: Box::new(build_cart(
                     &right_rows,
@@ -827,9 +833,9 @@ impl RandomForest {
         };
 
         let mut per_class = Vec::with_capacity(3);
-        for class_idx in 0..3 {
-            let support: usize = confusion[class_idx].iter().sum();
-            let tp = confusion[class_idx][class_idx];
+        for (class_idx, row) in confusion.iter().enumerate() {
+            let support: usize = row.iter().sum();
+            let tp = row[class_idx];
             let predicted_total: usize = (0..3).map(|actual| confusion[actual][class_idx]).sum();
             let precision = if predicted_total > 0 {
                 tp as f64 / predicted_total as f64
@@ -2092,7 +2098,10 @@ mod tests {
 
         assert_eq!(metrics.sample_count, examples.len());
         assert!(metrics.accuracy > 0.9, "accuracy was {}", metrics.accuracy);
-        assert!(metrics.feature_importance[0] > 0.5, "feature 0 should dominate importance");
+        assert!(
+            metrics.feature_importance[0] > 0.5,
+            "feature 0 should dominate importance"
+        );
 
         let fp = forest.predict(&[0.02, 0.1, 0.0, 0.5, 0.5, 0.0, 0.02]);
         assert_eq!(fp.label, TriageLabel::FalsePositive);
@@ -2105,9 +2114,7 @@ mod tests {
         fn max_depth(node: &TreeNode) -> usize {
             match node {
                 TreeNode::Leaf { .. } => 0,
-                TreeNode::Split { left, right, .. } => {
-                    1 + max_depth(left).max(max_depth(right))
-                }
+                TreeNode::Split { left, right, .. } => 1 + max_depth(left).max(max_depth(right)),
             }
         }
         let examples = separable_examples(50);
