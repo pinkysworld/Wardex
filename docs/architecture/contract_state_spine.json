@@ -437,6 +437,8 @@
     "/api/ml/models/rollback",
     "/api/ml/models/status",
     "/api/ml/shadow/recent",
+    "/api/ml/train",
+    "/api/ml/train/status",
     "/api/ml/triage",
     "/api/ml/triage/v2",
     "/api/monitor/status",
