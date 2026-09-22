@@ -262,6 +262,11 @@ pub struct Config {
     /// Supply-chain attestation settings.
     #[serde(default)]
     pub attestation: AttestationSettings,
+    /// Full-text search index (Tantivy): index path, writer memory budget,
+    /// commit interval, and retention. All fields have serde defaults so
+    /// existing config files load unchanged.
+    #[serde(default)]
+    pub search: crate::search::EventStoreConfig,
 }
 
 /// `[collection]` — local telemetry collection cadence, documented in
