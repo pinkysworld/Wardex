@@ -3139,6 +3139,10 @@ pub(super) fn handle_dynamic_api_route(
         crate::server_ml::handle_ml_triage(body, state)
     } else if method == Method::Post && url_path == "/api/ml/triage/v2" {
         crate::server_ml::handle_ml_triage_v2(body, state)
+    } else if method == Method::Post && url_path == "/api/ml/train" {
+        crate::server_ml::handle_ml_train(state)
+    } else if method == Method::Get && url_path == "/api/ml/train/status" {
+        crate::server_ml::handle_ml_train_status(state)
 
     // ── Vulnerability Scanner ─────────────────────────────────
     } else if method == Method::Get && url_path == "/api/vulnerability/scan" {
@@ -4291,14 +4295,19 @@ pub(super) fn handle_dynamic_api_route(
                                     .to_string(),
                                 mitre_ids: Vec::new(),
                                 created: chrono::Utc::now().to_rfc3339(),
+                                ..Default::default()
                             },
                             strings: vec![crate::yara_engine::RuleString {
                                 id: "$s1".to_string(),
                                 pattern: crate::yara_engine::StringPattern::Text(pattern),
                                 nocase: false,
+                                ..Default::default()
                             }],
                             condition: crate::yara_engine::RuleCondition::AnyOf,
                             enabled: true,
+                            tags: Vec::new(),
+                            is_private: false,
+                            is_global: false,
                         };
                         let mut s = state
                             .lock()

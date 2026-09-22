@@ -124,6 +124,15 @@ pub async fn run_server(
         load_stored_json(&storage, FAILED_AUTH_TRACKER_STORAGE_KEY);
     crate::server_auth::failed_auth_restore_snapshot(failed_auth_snapshot);
 
+    // Restore a previously trained Random Forest triage model, if any, so a
+    // restart does not silently revert to the pretrained cold-start forest.
+    let persisted_random_forest: Option<crate::ml_engine::PersistedForestSnapshot> =
+        load_stored_json(&storage, crate::server_ml::RF_MODEL_STORAGE_KEY);
+    let mut model_registry = crate::ml_engine::ModelRegistry::new(&model_registry_dir);
+    if let Some(snapshot) = persisted_random_forest {
+        model_registry.import_random_forest_snapshot(snapshot);
+    }
+
     let state = Arc::new(Mutex::new(AppState {
         detector: AnomalyDetector::default(),
         checkpoints: CheckpointStore::new(10),
@@ -244,7 +253,7 @@ pub async fn run_server(
         efficacy_tracker: crate::detection_efficacy::EfficacyTracker::new(100_000),
         workflow_store: crate::investigation::WorkflowStore::new(),
         llm_analyst: Arc::new(Mutex::new(load_llm_analyst_from_env())),
-        model_registry: crate::ml_engine::ModelRegistry::new(&model_registry_dir),
+        model_registry,
         detection_feedback: crate::detection_feedback::DetectionFeedbackStore::new(
             &detection_feedback_path,
         ),
@@ -289,6 +298,23 @@ pub async fn run_server(
                 Ok(n) => tracing::info!("loaded {n} community YARA malware rules"),
                 Err(e) => tracing::warn!("failed to load YARA malware rules: {e}"),
             }
+        }
+    }
+
+    // Load genuine `.yar` source rules from rules/yara/ (see
+    // `crate::yara_parser` and `docs/YARA_COMPATIBILITY.md`). JSON rule
+    // files in the same directory (handled above / by any other loader)
+    // remain fully supported side by side.
+    {
+        let mut s = state
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let (n, messages) = s.yara_engine.load_rules_dir("rules/yara");
+        if n > 0 {
+            tracing::info!("loaded {n} rule(s) from rules/yara/*.yar");
+        }
+        for message in messages {
+            tracing::warn!("rules/yara: {message}");
         }
     }
 

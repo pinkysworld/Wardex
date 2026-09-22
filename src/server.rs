@@ -709,7 +709,7 @@ pub(crate) struct AppState {
     workflow_store: crate::investigation::WorkflowStore,
     llm_analyst: Arc<Mutex<crate::llm_analyst::LlmAnalyst>>,
     pub(crate) model_registry: crate::ml_engine::ModelRegistry,
-    detection_feedback: crate::detection_feedback::DetectionFeedbackStore,
+    pub(crate) detection_feedback: crate::detection_feedback::DetectionFeedbackStore,
     // Phase 43: malware detection
     pub(crate) malware_hash_db: crate::malware_signatures::MalwareHashDb,
     malware_scanner: crate::malware_scanner::MalwareScanner,
