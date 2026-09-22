@@ -147,8 +147,8 @@ def render_html(releases: list[dict]) -> str:
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400;500&amp;display=swap" rel="stylesheet">
     <link rel="icon" href="favicon.svg" type="image/svg+xml">
-    <link rel="stylesheet" href="styles.css?v=22">
-    <script defer src="app.js?v=22"></script>
+    <link rel="stylesheet" href="styles.css?v=23">
+    <script defer src="app.js?v=23"></script>
     <noscript><style>.reveal{{opacity:1!important;transform:none!important;}}</style></noscript>
   </head>
   <body>
