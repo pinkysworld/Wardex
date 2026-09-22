@@ -566,6 +566,35 @@ mod tests {
         let _ = std::fs::remove_dir_all(&dir);
     }
 
+    /// Forensic bundle blob (nonce(12) || ciphertext) produced by
+    /// `ForensicBundle::write_encrypted` under aes-gcm 0.10.3, with a fixed
+    /// key/nonce/plaintext, captured before bumping aes-gcm to a new major
+    /// version. Decrypting it must keep working forever so that bundles
+    /// written by older Wardex releases stay readable.
+    const PRE_AESGCM_UPGRADE_KEY: [u8; 32] = [0x7a; 32];
+    const PRE_AESGCM_UPGRADE_FIXTURE: &[u8] = &[
+        91, 91, 91, 91, 91, 91, 91, 91, 91, 91, 91, 91, 177, 198, 152, 237, 249, 242, 133, 175, 6,
+        49, 189, 54, 126, 206, 67, 122, 1, 31, 8, 110, 208, 206, 216, 167, 158, 141, 9, 144, 120,
+        58, 230, 189, 220, 46, 49, 99, 147, 198, 131, 87, 31, 182, 193, 255, 52, 71, 23, 55, 105,
+        37, 205, 131, 18, 213, 86, 50, 218, 27, 219, 200, 217, 140, 137, 92, 120, 224, 22, 115,
+        230, 242, 114, 16, 111, 11, 236,
+    ];
+    const PRE_AESGCM_UPGRADE_PLAINTEXT: &str =
+        "golden fixture plaintext for aes-gcm backward compatibility";
+
+    #[test]
+    fn read_encrypted_accepts_pre_upgrade_fixture() {
+        let dir = std::env::temp_dir().join("wardex_test_forensic_pre_upgrade_fixture");
+        let _ = std::fs::create_dir_all(&dir);
+        let path = dir.join("bundle.enc");
+        std::fs::write(&path, PRE_AESGCM_UPGRADE_FIXTURE).unwrap();
+
+        let decrypted = ForensicBundle::read_encrypted(&path, &PRE_AESGCM_UPGRADE_KEY).unwrap();
+        assert_eq!(decrypted, PRE_AESGCM_UPGRADE_PLAINTEXT);
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
     #[test]
     fn bundle_decrypt_wrong_key_fails() {
         let result = execute(&demo_samples());

@@ -439,6 +439,30 @@ mod tests {
         assert_eq!(decrypted, plaintext);
     }
 
+    /// Backup blob (salt(16) || nonce(12) || ciphertext) produced by
+    /// `encrypt_backup_data` under aes-gcm 0.10.3, with a fixed salt/nonce/
+    /// passphrase/plaintext, captured before bumping aes-gcm to a new major
+    /// version. Decrypting it must keep working forever so that backups
+    /// written by older Wardex releases stay restorable.
+    const PRE_AESGCM_UPGRADE_FIXTURE: &[u8] = &[
+        1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 202, 9,
+        144, 91, 177, 50, 122, 242, 124, 168, 143, 23, 71, 97, 125, 58, 224, 200, 96, 123, 154,
+        182, 211, 97, 128, 70, 139, 38, 50, 253, 225, 136, 79, 151, 102, 217, 212, 222, 192, 194,
+        13, 128, 53, 205, 72, 238, 189, 206, 157, 93, 246, 9, 108, 234, 32, 116, 11, 6, 53, 8, 28,
+        111, 239, 121, 104, 228, 205, 110, 141, 227, 118, 144, 23, 68, 4, 109, 136, 153, 177,
+    ];
+    const PRE_AESGCM_UPGRADE_PASSPHRASE: &str = "fixture-passphrase-v1";
+    const PRE_AESGCM_UPGRADE_PLAINTEXT: &[u8] =
+        b"golden fixture plaintext for aes-gcm backward compatibility";
+
+    #[test]
+    fn decrypt_backup_data_accepts_pre_upgrade_fixture() {
+        let decrypted =
+            super::decrypt_backup_data(PRE_AESGCM_UPGRADE_FIXTURE, PRE_AESGCM_UPGRADE_PASSPHRASE)
+                .unwrap();
+        assert_eq!(decrypted, PRE_AESGCM_UPGRADE_PLAINTEXT);
+    }
+
     #[test]
     fn test_decrypt_wrong_passphrase_fails() {
         let plaintext = b"secret data";

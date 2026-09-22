@@ -288,6 +288,56 @@ mod tests {
         }
     }
 
+    /// Ed25519 signature produced by `ed25519-dalek` 2.2 for a fixed 32-byte
+    /// seed and fixed message, captured before bumping ed25519-dalek to a new
+    /// major version. Ed25519 signing is deterministic (no RNG input), so the
+    /// exact same signature bytes must still be produced, and must still
+    /// verify, after the upgrade — proving the signature encoding and key
+    /// format are unchanged.
+    const PRE_UPGRADE_SEED: [u8; 32] = [0x11; 32];
+    const PRE_UPGRADE_MESSAGE: &[u8] =
+        b"golden fixture message for ed25519-dalek backward compatibility";
+    const PRE_UPGRADE_PUBKEY: [u8; 32] = [
+        208, 74, 178, 50, 116, 43, 180, 171, 58, 19, 104, 189, 70, 21, 228, 230, 208, 34, 74, 183,
+        26, 1, 107, 175, 133, 32, 163, 50, 201, 119, 135, 55,
+    ];
+    const PRE_UPGRADE_SIGNATURE: [u8; 64] = [
+        91, 207, 176, 38, 151, 73, 251, 133, 235, 126, 111, 191, 30, 30, 25, 180, 229, 29, 139, 63,
+        143, 90, 212, 156, 95, 171, 7, 123, 68, 17, 118, 42, 23, 15, 223, 67, 60, 57, 189, 17, 44,
+        78, 233, 74, 215, 163, 101, 219, 66, 231, 175, 87, 91, 89, 141, 101, 41, 11, 84, 181, 79,
+        210, 52, 9,
+    ];
+
+    #[test]
+    fn ed25519_signing_matches_pre_upgrade_fixture() {
+        // Deterministic signing: the exact same seed + message must still
+        // produce byte-identical signature output.
+        let signing_key = SigningKey::from_bytes(&PRE_UPGRADE_SEED);
+        assert_eq!(
+            signing_key.verifying_key().to_bytes(),
+            PRE_UPGRADE_PUBKEY,
+            "public key derivation from a fixed seed must be unchanged"
+        );
+        let signature = signing_key.sign(PRE_UPGRADE_MESSAGE);
+        assert_eq!(
+            signature.to_bytes(),
+            PRE_UPGRADE_SIGNATURE,
+            "deterministic Ed25519 signing must produce identical bytes across versions"
+        );
+    }
+
+    #[test]
+    fn ed25519_pre_upgrade_signature_still_verifies() {
+        let verifying_key = VerifyingKey::from_bytes(&PRE_UPGRADE_PUBKEY).unwrap();
+        let signature = Signature::from_bytes(&PRE_UPGRADE_SIGNATURE);
+        assert!(
+            verifying_key
+                .verify(PRE_UPGRADE_MESSAGE, &signature)
+                .is_ok(),
+            "a signature produced by an older ed25519-dalek version must still verify"
+        );
+    }
+
     #[test]
     fn generate_and_validate_roundtrip() {
         let (sk, pk) = test_keypair();
