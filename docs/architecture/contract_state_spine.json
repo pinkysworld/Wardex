@@ -63,6 +63,7 @@
       "route_prefixes": [
         "/api/agents",
         "/api/deployment",
+        "/api/federation",
         "/api/fleet",
         "/api/manager",
         "/api/policy",
@@ -78,7 +79,8 @@
         "deployment_store_path",
         "lifecycle_manager",
         "agent_logs",
-        "agent_inventories"
+        "agent_inventories",
+        "federation"
       ],
       "target_lock": "fleet_control"
     },

@@ -614,6 +614,11 @@ pub fn endpoint_permission(method: &str, path: &str) -> Permission {
             Permission::ManageFeatureFlags
         }
 
+        // Federated learning (admin control-plane endpoints only; agent
+        // fetch/submit endpoints are agent-token authenticated, not RBAC)
+        ("GET", p) if p.starts_with("/api/federation") => Permission::ViewAgents,
+        (_, p) if p.starts_with("/api/federation") => Permission::ManageAgents,
+
         // Default: require admin
         _ => Permission::ManageConfig,
     }

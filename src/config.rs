@@ -507,6 +507,10 @@ impl Default for AttestationSettings {
             trust_store_path: String::new(),
         }
     }
+    /// Federated-learning configuration (disabled by default). See
+    /// `docs/FEDERATED_LEARNING.md` for the protocol and threat model.
+    #[serde(default)]
+    pub federation: crate::federated::FederationConfig,
 }
 
 /// Security-related settings for token management and session control.

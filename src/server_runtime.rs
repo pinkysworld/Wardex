@@ -289,16 +289,29 @@ pub async fn run_server(
         dns_analyzer: crate::dns_threat::DnsAnalyzer::new(),
         alert_broadcaster: crate::ws_stream::AlertBroadcaster::new(),
         extra: HashMap::new(),
+        federation: crate::federated::FederationCoordinator::new(
+            crate::federated::FederationConfig::default(),
+            FEDERATION_PARAM_DIM,
+        ),
     }));
 
     // Apply loaded config
     let shutdown_timeout_secs = initial_config.server.shutdown_timeout_secs;
+    let federation_config = initial_config.federation.clone();
 
     {
         let mut s = crate::state_lock::tracked_lock(&state, "server/run_initial_config_apply");
         s.config = initial_config;
         let effective_rules = s.enterprise.effective_sigma_rules();
         s.sigma_engine.replace_rules(effective_rules);
+        // Restore any federation round/model/budget state persisted from a
+        // previous run; fall back to a fresh coordinator seeded with the
+        // loaded config otherwise.
+        let stored: Option<crate::federated::FederationCoordinator> =
+            load_stored_json(&s.storage, FEDERATION_STATE_STORAGE_KEY);
+        s.federation = stored.unwrap_or_else(|| {
+            crate::federated::FederationCoordinator::new(federation_config, FEDERATION_PARAM_DIM)
+        });
     }
 
     // Load community YARA malware rules
@@ -745,6 +758,7 @@ pub(crate) fn spawn_test_server_with_state() -> (u16, String, Arc<Mutex<AppState
     let user_preferences = UserPreferencesStore::new(&user_preferences_store_path(&config_path));
     let model_registry_dir = model_registry_path(&config_path);
     let detection_feedback_path = detection_feedback_store_path(&config_path);
+    let test_federation_config = test_config.federation.clone();
     let state = Arc::new(Mutex::new(AppState {
         detector: AnomalyDetector::default(),
         checkpoints: CheckpointStore::new(10),
@@ -892,6 +906,10 @@ pub(crate) fn spawn_test_server_with_state() -> (u16, String, Arc<Mutex<AppState
         dns_analyzer: crate::dns_threat::DnsAnalyzer::new(),
         alert_broadcaster: crate::ws_stream::AlertBroadcaster::new(),
         extra: HashMap::new(),
+        federation: crate::federated::FederationCoordinator::new(
+            test_federation_config,
+            FEDERATION_PARAM_DIM,
+        ),
     }));
     {
         let mut s = crate::state_lock::tracked_lock(&state, "server/spawn_enterprise_rules_apply");

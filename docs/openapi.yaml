@@ -14462,6 +14462,114 @@ paths:
       security:
       - bearerAuth: []
       x-wardex-auth: authenticated
+  /api/federation/start:
+    post:
+      summary: Start (or restart) a federated-learning round-robin across enrolled agents
+      operationId: startFederation
+      tags:
+      - federation
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: Start (or restart) a federated-learning round-robin across enrolled agents
+          content:
+            application/json:
+              schema:
+                type: object
+      security:
+      - bearerAuth: []
+      x-wardex-auth: authenticated
+  /api/federation/stop:
+    post:
+      summary: Stop the running federation; the in-progress round's submissions are discarded
+      operationId: stopFederation
+      tags:
+      - federation
+      responses:
+        '200':
+          description: Stop the running federation; the in-progress round's submissions are discarded
+          content:
+            application/json:
+              schema:
+                type: object
+      security:
+      - bearerAuth: []
+      x-wardex-auth: authenticated
+  /api/federation/status:
+    get:
+      summary: 'Federation coordinator status: model version, current round, and per-agent privacy budget spend'
+      operationId: getFederationStatus
+      tags:
+      - federation
+      responses:
+        '200':
+          description: 'Federation coordinator status: model version, current round, and per-agent privacy budget spend'
+          content:
+            application/json:
+              schema:
+                type: object
+      security:
+      - bearerAuth: []
+      x-wardex-auth: authenticated
+  /api/federation/rounds:
+    get:
+      summary: Completed federated-learning rounds plus the round currently open
+      operationId: listFederationRounds
+      tags:
+      - federation
+      responses:
+        '200':
+          description: Completed federated-learning rounds plus the round currently open
+          content:
+            application/json:
+              schema:
+                type: object
+      security:
+      - bearerAuth: []
+      x-wardex-auth: authenticated
+  /api/federation/round:
+    get:
+      summary: 'Agent: fetch the currently open federation round (global params + hyperparameters)'
+      operationId: fetchFederationRound
+      tags:
+      - federation
+      responses:
+        '200':
+          description: 'Agent: fetch the currently open federation round (global params + hyperparameters)'
+          content:
+            application/json:
+              schema:
+                type: object
+      security:
+      - bearerAuth: []
+      x-wardex-auth: agent
+  /api/federation/round/submit:
+    post:
+      summary: 'Agent: submit a clipped, differentially-private local model update for a round'
+      operationId: submitFederationUpdate
+      tags:
+      - federation
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: 'Agent: submit a clipped, differentially-private local model update for a round'
+          content:
+            application/json:
+              schema:
+                type: object
+      security:
+      - bearerAuth: []
+      x-wardex-auth: agent
 components:
   schemas:
     OperationalSnapshotMetadata:

@@ -203,6 +203,10 @@ use sha2::Digest;
 pub use crate::server_routing::{ApiRouteAccess, classify_api_route_access};
 
 const FAILED_AUTH_TRACKER_STORAGE_KEY: &str = "server.failed_auth_tracker";
+pub(crate) const FEDERATION_STATE_STORAGE_KEY: &str = "server.federation_state";
+/// Parameter dimension of the built-in [`crate::federated::LogisticRegressionModel`]
+/// federation model: 7 [`crate::ml_engine::TriageFeatures`] plus one bias weight.
+pub(crate) const FEDERATION_PARAM_DIM: usize = 8;
 
 // ── Rate Limiter ────────────────────────────────────────────
 
@@ -732,6 +736,8 @@ pub(crate) struct AppState {
     alert_broadcaster: crate::ws_stream::AlertBroadcaster,
     // Phase 46: extensible key-value store for webhooks etc.
     extra: HashMap<String, serde_json::Value>,
+    // Federated learning coordinator (R27)
+    pub(crate) federation: crate::federated::FederationCoordinator,
 }
 
 /// Map a stored event to the field set the search index understands. Shared
@@ -3535,6 +3541,26 @@ fn handle_api(
                 left.cmp(&right)
             });
             json_response(&serde_json::Value::Array(endpoints).to_string(), 200)
+        }
+
+        // ── Federated learning (R27) ───────────────────────────────
+        (Method::Post, "/api/federation/start") => {
+            crate::server_federated::handle_federation_start(body, state)
+        }
+        (Method::Post, "/api/federation/stop") => {
+            crate::server_federated::handle_federation_stop(state)
+        }
+        (Method::Get, "/api/federation/status") => {
+            crate::server_federated::handle_federation_status(state)
+        }
+        (Method::Get, "/api/federation/rounds") => {
+            crate::server_federated::handle_federation_rounds(state)
+        }
+        (Method::Get, "/api/federation/round") => {
+            crate::server_federated::handle_federation_fetch_round(headers, state)
+        }
+        (Method::Post, "/api/federation/round/submit") => {
+            crate::server_federated::handle_federation_submit_update(body, headers, state)
         }
 
         // ── XDR Agent Management ──────────────────────────────────

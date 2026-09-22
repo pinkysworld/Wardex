@@ -52,6 +52,53 @@ impl DpMechanism {
     }
 }
 
+/// Differential privacy noise generator using the (ε, δ)-Gaussian mechanism.
+///
+/// Calibrated with the classical Gaussian-mechanism bound (Dwork & Roth,
+/// "The Algorithmic Foundations of Differential Privacy", Thm 3.22):
+/// `sigma = sensitivity * sqrt(2 * ln(1.25 / delta)) / epsilon`.
+/// Used for federated-learning update aggregation (see [`crate::federated`])
+/// where noise must be added to a vector of bounded L2 norm (`sensitivity`
+/// is the per-round clipping norm `C`).
+#[derive(Debug, Clone)]
+pub struct GaussianMechanism {
+    pub epsilon: f64,
+    pub delta: f64,
+    pub sensitivity: f64,
+    pub sigma: f64,
+}
+
+impl GaussianMechanism {
+    pub fn new(epsilon: f64, delta: f64, sensitivity: f64) -> Self {
+        let epsilon = epsilon.max(0.001);
+        let delta = delta.clamp(1e-12, 0.5);
+        let sensitivity = sensitivity.max(0.0);
+        let sigma = sensitivity * (2.0 * (1.25 / delta).ln()).sqrt() / epsilon;
+        Self {
+            epsilon,
+            delta,
+            sensitivity,
+            sigma,
+        }
+    }
+
+    /// Sample one draw of zero-mean Gaussian noise with std-dev `sigma`,
+    /// using the Box-Muller transform.
+    pub fn noise(&self) -> f64 {
+        use rand::Rng;
+        let mut rng = rand::rng();
+        let u1: f64 = rng.random::<f64>().clamp(1e-12, 1.0);
+        let u2: f64 = rng.random::<f64>();
+        let z = (-2.0 * u1.ln()).sqrt() * (2.0 * std::f64::consts::PI * u2).cos();
+        z * self.sigma
+    }
+
+    /// Add independent Gaussian noise to every element of `values`.
+    pub fn privatize_vec(&self, values: &[f64]) -> Vec<f64> {
+        values.iter().map(|&v| v + self.noise()).collect()
+    }
+}
+
 /// Privacy accountant tracking cumulative privacy loss.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PrivacyAccountant {
@@ -636,6 +683,27 @@ mod tests {
         let redacted = regex_lite_replace_ips(input);
         assert!(redacted.contains("[REDACTED-IP]"));
         assert!(!redacted.contains("192.168"));
+    }
+
+    #[test]
+    fn gaussian_mechanism_sigma_scales_with_sensitivity_and_delta() {
+        let low_delta = GaussianMechanism::new(1.0, 1e-6, 1.0);
+        let high_delta = GaussianMechanism::new(1.0, 1e-2, 1.0);
+        // Smaller delta (stronger guarantee) requires more noise.
+        assert!(low_delta.sigma > high_delta.sigma);
+
+        let small_sensitivity = GaussianMechanism::new(1.0, 1e-5, 1.0);
+        let large_sensitivity = GaussianMechanism::new(1.0, 1e-5, 10.0);
+        assert!(large_sensitivity.sigma > small_sensitivity.sigma * 5.0);
+    }
+
+    #[test]
+    fn gaussian_mechanism_noise_is_zero_mean() {
+        let gauss = GaussianMechanism::new(2.0, 1e-5, 1.0);
+        let n = 2000;
+        let sum: f64 = (0..n).map(|_| gauss.noise()).sum();
+        let mean = sum / f64::from(n);
+        assert!(mean.abs() < gauss.sigma, "mean {mean} too far from 0");
     }
 
     #[test]

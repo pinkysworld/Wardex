@@ -52,6 +52,7 @@ fn is_agent_api_endpoint(method: &Method, route_path: &str) -> bool {
         || (*method == Method::Post
             && route_path.starts_with("/api/agents/")
             && route_path.ends_with("/inventory"))
+        || route_path.starts_with("/api/federation/round")
 }
 
 pub fn api_route_access(method: &Method, route_path: &str) -> ApiRouteAccess {

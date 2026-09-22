@@ -1095,6 +1095,10 @@ pub fn wardex_openapi_spec(version: &str) -> OpenApiSpec {
         .tag("updates", "Agent updates, releases, and rollouts")
         .tag("hunts", "Saved hunts, rule lifecycle, and content packs")
         .tag("observability", "Metrics, audit, and SLO monitoring")
+        .tag(
+            "federation",
+            "Federated learning: coordinator control-plane and agent round protocol",
+        )
         .schema(
             "Error",
             Schema {

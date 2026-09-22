@@ -86,7 +86,7 @@ Wardex is a self-hosted XDR and SIEM platform built in Rust for teams that want 
   - Centralised secrets management: env-var expansion, file-based secrets, HashiCorp Vault KV v2 with caching
 
 - **Research and AI**
-  - Federated learning with convergence loop and differential privacy
+  - Cross-agent federated learning: coordinator/participant round protocol over the authenticated agent↔server HTTP channel, FedAvg aggregation of a logistic-regression triage model, per-round L2-norm clipping with Gaussian (ε, δ)-differential-privacy noise, per-agent cumulative privacy-budget enforcement, convergence detection, and admin start/stop/status/rounds APIs (see `docs/FEDERATED_LEARNING.md`; secure aggregation against the coordinator itself is not implemented — the coordinator sees each agent's individual noised update)
   - Deception engine with randomised canary deployment and attacker behavior profiling
   - Privacy-preserving forensics with 4 redaction levels and ZK proofs
   - LLM-assisted security analyst with RAG pipeline (OpenAI/Azure/Anthropic/Ollama), conversation history, and citation generation
