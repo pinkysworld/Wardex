@@ -719,6 +719,7 @@ export default function Dashboard() {
     {
       label: 'Critical queue',
       value: formatNumber(critical),
+      tone: critical > 0 ? 'critical' : 'neutral',
       meta:
         critical > 0
           ? `${critical} alert${critical === 1 ? '' : 's'} need immediate review`
@@ -727,6 +728,7 @@ export default function Dashboard() {
     {
       label: 'Stale queue',
       value: formatNumber(staleAlerts.length),
+      tone: staleAlerts.length > 0 ? 'high' : 'neutral',
       meta:
         staleAlerts.length > 0
           ? 'Alerts older than 30 minutes still need ownership'
@@ -735,6 +737,7 @@ export default function Dashboard() {
     {
       label: 'Response blockers',
       value: formatNumber(respStats?.pending ?? 0),
+      tone: (respStats?.pending ?? 0) > 0 ? 'medium' : 'neutral',
       meta:
         (respStats?.pending ?? 0) > 0
           ? 'Response steps are waiting for approval'
@@ -743,6 +746,7 @@ export default function Dashboard() {
     {
       label: 'Collectors degraded',
       value: formatNumber(degradedCollectors.length),
+      tone: degradedCollectors.length > 0 ? 'high' : 'neutral',
       meta:
         degradedCollectors.length > 0
           ? `${collectorFreshnessCounts.error ?? 0} error • ${collectorFreshnessCounts.stale ?? 0} stale`
@@ -753,6 +757,7 @@ export default function Dashboard() {
     {
       title: 'Critical Now',
       value: formatNumber(critical),
+      tone: critical > 0 ? 'critical' : 'neutral',
       detail:
         critical > 0
           ? `${critical} alert${critical === 1 ? '' : 's'} need immediate review.`
@@ -763,6 +768,7 @@ export default function Dashboard() {
     {
       title: 'Stale Untriaged',
       value: formatNumber(staleAlerts.length),
+      tone: staleAlerts.length > 0 ? 'high' : 'neutral',
       detail:
         staleAlerts.length > 0
           ? 'Older than 30 minutes and still visible in the queue.'
@@ -773,6 +779,7 @@ export default function Dashboard() {
     {
       title: 'Response Pending Approval',
       value: formatNumber(respStats?.pending ?? 0),
+      tone: (respStats?.pending ?? 0) > 0 ? 'medium' : 'neutral',
       detail:
         (respStats?.pending ?? 0) > 0
           ? 'Response actions are waiting for operator approval.'
@@ -935,7 +942,7 @@ export default function Dashboard() {
         </div>
         <div className="summary-grid dashboard-home-summary-grid">
           {dashboardHomeSummary.map((item) => (
-            <div key={item.label} className="summary-card">
+            <div key={item.label} className="summary-card" data-tone={item.tone}>
               <div className="summary-label">{item.label}</div>
               <div className="summary-value">{item.value}</div>
               <div className="summary-meta">{item.meta}</div>
@@ -946,7 +953,7 @@ export default function Dashboard() {
 
       <div className="situation-grid">
         {situationCards.map((card) => (
-          <article key={card.title} className="situation-card">
+          <article key={card.title} className="situation-card" data-tone={card.tone}>
             <div className="situation-eyebrow">{card.title}</div>
             <div className="situation-value">{card.value}</div>
             <p className="situation-copy">{card.detail}</p>

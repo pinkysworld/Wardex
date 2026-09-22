@@ -1018,7 +1018,7 @@ export default function App() {
                 </button>
                 {currentSection.path !== '/help' && (
                   <button
-                    className="btn btn-sm"
+                    className="btn btn-sm btn-ghost"
                     onClick={() =>
                       navigate(buildContextualHelpHref(currentSection.id, location.search))
                     }
@@ -1029,14 +1029,14 @@ export default function App() {
                   </button>
                 )}
                 <button
-                  className="btn btn-sm"
+                  className="btn btn-sm btn-ghost"
                   onClick={copyShareLink}
                   title="Copy shareable deep-link to clipboard"
                 >
                   {linkCopied ? 'Copied' : 'Share Link'}
                 </button>
                 <button
-                  className={`btn btn-sm ${pinnedSections.includes(currentSection.id) ? 'btn-primary' : ''}`}
+                  className={`btn btn-sm ${pinnedSections.includes(currentSection.id) ? 'btn-primary' : 'btn-ghost'}`}
                   type="button"
                   onClick={() => togglePinnedSection(currentSection.id)}
                   aria-label={
