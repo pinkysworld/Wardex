@@ -453,7 +453,7 @@ function initScrollReveal() {
         observer.unobserve(entry.target);
       }
     });
-  }, { threshold: 0.08, rootMargin: "0px 0px -40px 0px" });
+  }, { threshold: 0, rootMargin: "0px 0px 120px 0px" });
 
   targets.forEach((target) => {
     target.classList.add("reveal");
@@ -464,6 +464,15 @@ function initScrollReveal() {
     }
     observer.observe(target);
   });
+
+  // Safety net: content must never stay permanently invisible if the
+  // observer fails to fire (throttled tabs, odd viewport states, older
+  // browsers). Force everything visible shortly after load regardless.
+  window.setTimeout(() => {
+    document.querySelectorAll(".reveal:not(.visible)").forEach((el) => {
+      el.classList.add("visible");
+    });
+  }, 1800);
 }
 
 function initCopyButtons() {
