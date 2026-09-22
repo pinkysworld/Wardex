@@ -45,11 +45,32 @@ tantivy = "0.26"
 # it explicitly to long-lived secret fields (ML-DSA seed, transient API tokens).
 zeroize = { version = "1.8", features = ["zeroize_derive"] }
 
+# Linux-only kernel telemetry backends: CN_PROC (process connector) netlink
+# socket, and fanotify/inotify for file events. Both crates provide safe
+# wrappers over the raw syscalls (all `unsafe` stays inside the dependency),
+# which keeps this crate's `unsafe_code = "forbid"` lint intact. Neither
+# crate compiles cleanly on non-Linux targets, so they are gated here rather
+# than pulled in unconditionally.
+[target.'cfg(target_os = "linux")'.dependencies]
+nix = { version = "0.31.3", features = ["net", "socket", "fanotify", "inotify", "poll", "user", "fs"] }
+netlink-sys = "0.9.0"
+# netlink-sys's Socket::recv_from is generic over bytes::BufMut; used directly
+# in src/kernel_linux/netlink_proc.rs.
+bytes = "1"
+
 [features]
 # TLS is on by default: the platform's outbound integrations (threat feeds,
 # AWS/Azure/GCP collectors, OIDC discovery, webhooks) all require HTTPS.
 default = ["tls"]
 tls = ["ureq/tls"]
+# Optional, OFF by default: planned real eBPF backend (CO-RE via aya). Not
+# implemented yet — see src/kernel_linux/mod.rs and
+# docs/kernel-telemetry-linux.md for why (BPF object compilation needs
+# nightly + bpf-linker, which this repo's pinned stable toolchain and
+# release pipeline cannot support). The feature exists only to reserve the
+# seam (`KernelBackendKind::Ebpf`, `EventSource::EbpfLinux`) so a future
+# change can land without another public API break.
+ebpf = []
 
 [lib]
 # The crate currently has no Rust doctest examples, and `rustdoc --test`

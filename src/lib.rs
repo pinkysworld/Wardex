@@ -53,6 +53,8 @@ pub mod collector_linux;
 pub mod collector_macos;
 pub mod collector_windows;
 pub mod event_forward;
+#[cfg(target_os = "linux")]
+pub mod kernel_linux;
 pub mod log_collector;
 pub mod ocsf;
 pub mod spool;
