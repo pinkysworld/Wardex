@@ -7,7 +7,7 @@ use std::path::Path;
 use crate::runtime::RunResult;
 
 use aes_gcm::{Aes256Gcm, Key, KeyInit, Nonce, aead::Aead};
-use rand::TryRngCore;
+use rand::TryRng;
 
 #[derive(Debug, Clone, Serialize)]
 pub struct ForensicBundle {
@@ -95,7 +95,7 @@ impl ForensicBundle {
 
         let cipher = Aes256Gcm::new(Key::<Aes256Gcm>::from_slice(key));
         let mut nonce_bytes = [0u8; 12];
-        let mut rng = rand::rngs::OsRng;
+        let mut rng = rand::rngs::SysRng;
         rng.try_fill_bytes(&mut nonce_bytes)
             .map_err(|e| format!("failed to generate forensic bundle nonce: {e}"))?;
         let nonce = Nonce::from_slice(&nonce_bytes);

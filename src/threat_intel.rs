@@ -752,7 +752,7 @@ impl DeceptionEngine {
     /// Deploy a randomised canary set: one of each decoy type with
     /// generated names. Returns the IDs of the deployed decoys.
     pub fn deploy_random_canary_set(&mut self) -> Vec<String> {
-        use rand::Rng;
+        use rand::RngExt;
         let mut rng = rand::rng();
         let suffix: u32 = rng.random::<u32>() % 10000;
         let configs = [

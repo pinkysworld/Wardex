@@ -27,7 +27,7 @@ impl DpMechanism {
 
     /// Generate Laplace noise with scale = sensitivity / epsilon.
     pub fn laplace_noise(&self) -> f64 {
-        use rand::Rng;
+        use rand::RngExt;
         let mut rng = rand::rng();
         let scale = self.sensitivity / self.epsilon;
         // Inverse CDF method for Laplace distribution
@@ -266,7 +266,7 @@ impl SecureAggregator {
 
     /// Generate a random mask for a participant.
     pub fn generate_mask(&self) -> (Vec<f64>, String) {
-        use rand::Rng;
+        use rand::RngExt;
         let mut rng = rand::rng();
         let mask: Vec<f64> = (0..self.dimension)
             .map(|_| rng.random::<f64>() * 2.0 - 1.0)

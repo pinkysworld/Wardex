@@ -5094,7 +5094,7 @@ pub(super) fn handle_dynamic_api_route(
                     }
                     // Assign an ID if not present
                     if hook.get("id").is_none() {
-                        use rand::Rng;
+                        use rand::RngExt;
                         let mut rng = rand::rng();
                         let mut buf = [0u8; 16];
                         rng.fill(&mut buf);

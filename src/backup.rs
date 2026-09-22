@@ -28,7 +28,7 @@ fn derive_key(passphrase: &str, salt: &[u8; 16]) -> [u8; 32] {
 /// The plaintext is prefixed with a 4-byte big-endian length header before encryption,
 /// allowing post-decryption integrity verification that the data wasn't truncated.
 pub fn encrypt_backup_data(plaintext: &[u8], passphrase: &str) -> Result<Vec<u8>, String> {
-    use rand::Rng;
+    use rand::RngExt;
     let mut rng = rand::rng();
     // Generate random salt and nonce — never reuse (key, nonce) pair
     let salt: [u8; 16] = rng.random();

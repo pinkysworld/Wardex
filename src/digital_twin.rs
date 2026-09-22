@@ -437,7 +437,7 @@ pub fn fleet_attack_simulation(
     neighbours: &[String],
     propagation_probability: f64,
 ) -> SimResult {
-    use rand::Rng;
+    use rand::RngExt;
     let mut rng = rand::rng();
 
     let mut steps = Vec::new();
