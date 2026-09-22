@@ -1,6 +1,4 @@
 //! AES-256-GCM encrypted backup and restore with passphrase-derived keys.
-// aes-gcm 0.10 uses generic-array 0.14 which deprecated from_slice; suppressed until aes-gcm 0.11
-#![allow(deprecated)]
 
 use chrono::Utc;
 use serde::{Deserialize, Serialize};
@@ -35,14 +33,14 @@ pub fn encrypt_backup_data(plaintext: &[u8], passphrase: &str) -> Result<Vec<u8>
     let nonce_bytes: [u8; 12] = rng.random();
     let key = derive_key(passphrase, &salt);
     let cipher = Aes256Gcm::new_from_slice(&key).map_err(|e| format!("key error: {e}"))?;
-    let nonce = Nonce::from_slice(&nonce_bytes);
+    let nonce = Nonce::from(nonce_bytes);
     // Prefix plaintext with 4-byte length header for post-decryption verification
     let len = plaintext.len() as u32;
     let mut prefixed = Vec::with_capacity(4 + plaintext.len());
     prefixed.extend_from_slice(&len.to_be_bytes());
     prefixed.extend_from_slice(plaintext);
     let ciphertext = cipher
-        .encrypt(nonce, prefixed.as_slice())
+        .encrypt(&nonce, prefixed.as_slice())
         .map_err(|e| format!("encrypt error: {e}"))?;
     let mut output = Vec::with_capacity(16 + 12 + ciphertext.len());
     output.extend_from_slice(&salt);
@@ -60,9 +58,10 @@ pub fn decrypt_backup_data(encrypted: &[u8], passphrase: &str) -> Result<Vec<u8>
     let salt: [u8; 16] = encrypted[..16].try_into().map_err(|_| "bad salt")?;
     let key = derive_key(passphrase, &salt);
     let cipher = Aes256Gcm::new_from_slice(&key).map_err(|e| format!("key error: {e}"))?;
-    let nonce = Nonce::from_slice(&encrypted[16..28]);
+    let nonce_bytes: [u8; 12] = encrypted[16..28].try_into().map_err(|_| "bad nonce")?;
+    let nonce = Nonce::from(nonce_bytes);
     let prefixed = cipher
-        .decrypt(nonce, &encrypted[28..])
+        .decrypt(&nonce, &encrypted[28..])
         .map_err(|e| format!("decrypt error: {e}"))?;
     // Verify length header
     if prefixed.len() < 4 {

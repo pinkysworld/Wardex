@@ -1,5 +1,3 @@
-// aes-gcm 0.10 uses generic-array 0.14 which deprecated from_slice; suppressed until aes-gcm 0.11
-#![allow(deprecated)]
 use serde::Serialize;
 use std::fs;
 use std::path::Path;
@@ -93,15 +91,15 @@ impl ForensicBundle {
         let json = serde_json::to_string_pretty(self)
             .map_err(|e| format!("failed to serialize forensic bundle: {e}"))?;
 
-        let cipher = Aes256Gcm::new(Key::<Aes256Gcm>::from_slice(key));
+        let cipher = Aes256Gcm::new(&Key::<Aes256Gcm>::from(*key));
         let mut nonce_bytes = [0u8; 12];
         let mut rng = rand::rngs::SysRng;
         rng.try_fill_bytes(&mut nonce_bytes)
             .map_err(|e| format!("failed to generate forensic bundle nonce: {e}"))?;
-        let nonce = Nonce::from_slice(&nonce_bytes);
+        let nonce = Nonce::from(nonce_bytes);
 
         let ciphertext = cipher
-            .encrypt(nonce, json.as_bytes())
+            .encrypt(&nonce, json.as_bytes())
             .map_err(|e| format!("AES-GCM encryption failed: {e}"))?;
 
         let mut output = Vec::with_capacity(12 + ciphertext.len());
@@ -119,11 +117,12 @@ impl ForensicBundle {
             return Err("encrypted bundle too short".into());
         }
         let (nonce_bytes, ciphertext) = data.split_at(12);
-        let cipher = Aes256Gcm::new(Key::<Aes256Gcm>::from_slice(key));
-        let nonce = Nonce::from_slice(nonce_bytes);
+        let cipher = Aes256Gcm::new(&Key::<Aes256Gcm>::from(*key));
+        let nonce_bytes: [u8; 12] = nonce_bytes.try_into().map_err(|_| "bad nonce")?;
+        let nonce = Nonce::from(nonce_bytes);
 
         let plaintext = cipher
-            .decrypt(nonce, ciphertext)
+            .decrypt(&nonce, ciphertext)
             .map_err(|e| format!("AES-GCM decryption failed: {e}"))?;
 
         String::from_utf8(plaintext)
