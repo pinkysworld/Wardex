@@ -47,6 +47,15 @@ zeroize = { version = "1.8", features = ["zeroize_derive"] }
 # Pure-Rust regex strings for the YARA-subset engine (bytes API, no libyara).
 regex = "1"
 
+# Direct use of the TLS stack `ureq`'s `tls` feature already pulls in, for
+# SMTP STARTTLS/implicit-TLS (see `notifications::smtp_send`). No new TLS
+# dependency: this reuses the rustls/webpki-roots versions ureq resolves.
+# Optional, and only enabled by the `tls` feature below, so building without
+# `tls` doesn't pull in a TLS stack this crate no longer needs.
+rustls = { version = "0.23", default-features = false, features = ["std", "ring", "tls12"], optional = true }
+rustls-pki-types = { version = "1", optional = true }
+webpki-roots = { version = "0.26", optional = true }
+
 # Linux-only kernel telemetry backends: CN_PROC (process connector) netlink
 # socket, and fanotify/inotify for file events. Both crates provide safe
 # wrappers over the raw syscalls (all `unsafe` stays inside the dependency),
@@ -64,7 +73,7 @@ bytes = "1"
 # TLS is on by default: the platform's outbound integrations (threat feeds,
 # AWS/Azure/GCP collectors, OIDC discovery, webhooks) all require HTTPS.
 default = ["tls"]
-tls = ["ureq/tls"]
+tls = ["ureq/tls", "dep:rustls", "dep:rustls-pki-types", "dep:webpki-roots"]
 # Optional, OFF by default: planned real eBPF backend (CO-RE via aya). Not
 # implemented yet — see src/kernel_linux/mod.rs and
 # docs/kernel-telemetry-linux.md for why (BPF object compilation needs
@@ -83,6 +92,9 @@ doctest = false
 [dev-dependencies]
 criterion = { version = "0.5", default-features = false, features = ["cargo_bench_support"] }
 tempfile = "3"
+# Test-only: generates a self-signed certificate for the SMTP STARTTLS test's
+# fake TLS server. Not used by any production code path.
+rcgen = { version = "0.13", default-features = false, features = ["ring", "pem"] }
 
 [[bench]]
 name = "pipeline"
