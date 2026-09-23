@@ -233,12 +233,12 @@ fn try_aggregate_if_ready(state: &Arc<Mutex<AppState>>) {
 fn verified_agent_id(
     headers: &HeaderMap,
     state: &Arc<Mutex<AppState>>,
-) -> Result<String, Response<Body>> {
+) -> Result<String, &'static str> {
     let Some(agent_id) = header_value(headers, AGENT_ID_HEADER) else {
-        return Err(error_json("missing agent identity header", 401));
+        return Err("missing agent identity header");
     };
     let Some(agent_token) = header_value(headers, AGENT_TOKEN_HEADER) else {
-        return Err(error_json("per-agent identity binding required", 401));
+        return Err("per-agent identity binding required");
     };
     let bound = {
         let s = state
@@ -249,7 +249,7 @@ fn verified_agent_id(
     if bound {
         Ok(agent_id.to_string())
     } else {
-        Err(error_json("per-agent identity binding required", 401))
+        Err("per-agent identity binding required")
     }
 }
 
@@ -263,7 +263,7 @@ pub(crate) fn handle_federation_fetch_round(
 ) -> Response<Body> {
     let agent_id = match verified_agent_id(headers, state) {
         Ok(id) => id,
-        Err(resp) => return resp,
+        Err(reason) => return error_json(reason, 401),
     };
     try_aggregate_if_ready(state);
     let s = state
@@ -301,7 +301,7 @@ pub(crate) fn handle_federation_submit_update(
 ) -> Response<Body> {
     let agent_id = match verified_agent_id(headers, state) {
         Ok(id) => id,
-        Err(resp) => return resp,
+        Err(reason) => return error_json(reason, 401),
     };
     let body = match read_body_limited(body, 1024 * 1024) {
         Ok(b) => b,
