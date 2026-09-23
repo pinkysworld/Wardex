@@ -1495,21 +1495,56 @@ impl ModelRegistry {
         }
 
         let (forest, metrics) = RandomForest::train(examples, &cfg);
-        let trained_at = chrono::Utc::now().to_rfc3339();
-        self.fallback.rf_triage = forest;
-        self.rf_metrics = Some(metrics.clone());
-        self.rf_trained_at = Some(trained_at.clone());
-        self.rf_sample_count = examples.len();
+        let sample_count = examples.len();
+        self.apply_trained_random_forest(forest, metrics.clone(), sample_count);
 
         RandomForestTrainingOutcome {
             trained: true,
             reason: None,
-            sample_count: examples.len(),
+            sample_count,
             min_required: self.min_training_samples,
             forest_version: self.fallback.rf_triage.version.clone(),
-            trained_at: Some(trained_at),
+            trained_at: self.rf_trained_at.clone(),
             metrics: Some(metrics),
         }
+    }
+
+    /// Minimum labelled sample count (with both classes present) required
+    /// before [`Self::train_random_forest`] will replace the pretrained
+    /// cold-start forest. Exposed so callers (e.g. the `/api/ml/train` HTTP
+    /// handler) can run the actual `RandomForest::train` computation without
+    /// holding the registry (and its enclosing `AppState` mutex) locked
+    /// across the whole training pass.
+    pub fn min_training_samples(&self) -> usize {
+        self.min_training_samples
+    }
+
+    /// Class-balance/size check identical to the one `train_random_forest`
+    /// applies before training, without doing any training. Lets a caller
+    /// decide, cheaply and off the state lock, whether it's worth running
+    /// `RandomForest::train` at all.
+    pub fn can_train_random_forest(examples: &[TrainingExample], min_required: usize) -> bool {
+        let mut class_counts = [0usize; 3];
+        for example in examples {
+            class_counts[label_idx(example.label)] += 1;
+        }
+        let has_both_classes = class_counts[0] > 0 && class_counts[2] > 0;
+        examples.len() >= min_required && has_both_classes
+    }
+
+    /// Apply an already-trained forest (e.g. produced by `RandomForest::
+    /// train` off the state lock) to the Random Forest triage slot.
+    pub fn apply_trained_random_forest(
+        &mut self,
+        forest: RandomForest,
+        metrics: TrainingMetrics,
+        sample_count: usize,
+    ) {
+        let trained_at = chrono::Utc::now().to_rfc3339();
+        self.fallback.rf_triage = forest;
+        self.rf_metrics = Some(metrics);
+        self.rf_trained_at = Some(trained_at);
+        self.rf_sample_count = sample_count;
     }
 
     /// Current state of the Random Forest triage slot for the status API.

@@ -239,21 +239,86 @@ pub(crate) fn build_training_examples(state: &AppState) -> Vec<TrainingExample> 
 /// success the trained forest, its metrics, and provenance are persisted to
 /// the SQLite-backed config store so they survive a restart.
 pub(crate) fn handle_ml_train(state: &Arc<Mutex<AppState>>) -> Response<Body> {
-    let mut s = state
-        .lock()
-        .unwrap_or_else(std::sync::PoisonError::into_inner);
-    let examples = build_training_examples(&s);
-    let outcome = s
-        .model_registry
-        .train_random_forest(&examples, ForestTrainConfig::default());
-    if outcome.trained
-        && let Some(snapshot) = s.model_registry.export_random_forest_snapshot()
-    {
-        let storage = s.storage.clone();
-        if let Err(error) = save_stored_json(&storage, RF_MODEL_STORAGE_KEY, &Some(snapshot)) {
-            eprintln!("[WARN] failed to persist trained random forest: {error}");
+    use crate::ml_engine::{ModelRegistry, RandomForest, RandomForestTrainingOutcome};
+
+    // Lock only to snapshot the labelled examples and the current
+    // min-sample threshold/forest version, then release the AppState mutex
+    // before running `RandomForest::train`, which fits a real bagged CART
+    // forest and can take a while on a large labelled set. Holding the
+    // global lock across that would stall every other request.
+    let (examples, min_required, forest_version, storage) = {
+        let s = state
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let examples = build_training_examples(&s);
+        let min_required = s.model_registry.min_training_samples();
+        let forest_version = s.model_registry.random_forest_status().version;
+        (examples, min_required, forest_version, s.storage.clone())
+    };
+
+    let cfg = ForestTrainConfig::default();
+    let trained_result = if ModelRegistry::can_train_random_forest(&examples, min_required) {
+        Some(RandomForest::train(&examples, &cfg))
+    } else {
+        None
+    };
+
+    let outcome = match trained_result {
+        Some((forest, metrics)) => {
+            let sample_count = examples.len();
+            let mut s = state
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
+            s.model_registry
+                .apply_trained_random_forest(forest, metrics.clone(), sample_count);
+            let outcome = RandomForestTrainingOutcome {
+                trained: true,
+                reason: None,
+                sample_count,
+                min_required,
+                forest_version: s.model_registry.random_forest_status().version,
+                trained_at: s.model_registry.random_forest_status().trained_at,
+                metrics: Some(metrics),
+            };
+            if let Some(snapshot) = s.model_registry.export_random_forest_snapshot() {
+                drop(s);
+                if let Err(error) =
+                    save_stored_json(&storage, RF_MODEL_STORAGE_KEY, &Some(snapshot))
+                {
+                    eprintln!("[WARN] failed to persist trained random forest: {error}");
+                }
+            }
+            outcome
         }
-    }
+        None => {
+            let mut class_counts = [0usize; 3];
+            for example in &examples {
+                match example.label {
+                    crate::ml_engine::TriageLabel::FalsePositive => class_counts[0] += 1,
+                    crate::ml_engine::TriageLabel::NeedsReview => class_counts[1] += 1,
+                    crate::ml_engine::TriageLabel::TruePositive => class_counts[2] += 1,
+                }
+            }
+            RandomForestTrainingOutcome {
+                trained: false,
+                reason: Some(format!(
+                    "insufficient labelled data: {} sample(s) (need >= {}) with both \
+                     true_positive and false_positive verdicts present ({} fp / {} review / \
+                     {} tp seen) — keeping the pretrained cold-start forest",
+                    examples.len(),
+                    min_required,
+                    class_counts[0],
+                    class_counts[1],
+                    class_counts[2]
+                )),
+                sample_count: examples.len(),
+                min_required,
+                forest_version,
+                trained_at: None,
+                metrics: None,
+            }
+        }
+    };
     json_response(&serde_json::to_string(&outcome).unwrap_or_default(), 200)
 }
 
