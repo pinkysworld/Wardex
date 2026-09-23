@@ -4,9 +4,9 @@
    ═══════════════════════════════════════════════════════════════════════════ */
 
 const RELEASE_VERSION = "1.0.30";
-const MODULE_COUNT = "174";
-const API_COUNT = "262";
-const TEST_COUNT = "2172";
+const MODULE_COUNT = "196";
+const API_COUNT = "268";
+const TEST_COUNT = "2390";
 
 const SITE_ROUTES = [
   { id: "overview", label: "Overview", file: "index.html", slug: "", nav: "primary" },
