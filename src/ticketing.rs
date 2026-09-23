@@ -100,13 +100,14 @@ impl JiraClient {
     fn authorize(&self, req: ureq::Request) -> ureq::Request {
         if !self.config.email.trim().is_empty() {
             use base64::Engine;
-            let basic = base64::engine::general_purpose::STANDARD.encode(format!(
-                "{}:{}",
-                self.config.email, self.config.api_token
-            ));
+            let basic = base64::engine::general_purpose::STANDARD
+                .encode(format!("{}:{}", self.config.email, self.config.api_token));
             req.set("Authorization", &format!("Basic {basic}"))
         } else {
-            req.set("Authorization", &format!("Bearer {}", self.config.api_token))
+            req.set(
+                "Authorization",
+                &format!("Bearer {}", self.config.api_token),
+            )
         }
     }
 
@@ -319,13 +320,14 @@ impl ServiceNowClient {
 
     fn authorize(&self, req: ureq::Request) -> ureq::Request {
         if !self.config.oauth_token.trim().is_empty() {
-            req.set("Authorization", &format!("Bearer {}", self.config.oauth_token))
+            req.set(
+                "Authorization",
+                &format!("Bearer {}", self.config.oauth_token),
+            )
         } else {
             use base64::Engine;
-            let basic = base64::engine::general_purpose::STANDARD.encode(format!(
-                "{}:{}",
-                self.config.username, self.config.password
-            ));
+            let basic = base64::engine::general_purpose::STANDARD
+                .encode(format!("{}:{}", self.config.username, self.config.password));
             req.set("Authorization", &format!("Basic {basic}"))
         }
     }
@@ -466,8 +468,8 @@ mod tests {
     use super::*;
     use std::io::{Read, Write};
     use std::net::TcpListener;
-    use std::sync::atomic::{AtomicUsize, Ordering};
     use std::sync::Arc;
+    use std::sync::atomic::{AtomicUsize, Ordering};
 
     /// Mock HTTP server that answers a fixed sequence of responses, one per
     /// connection, cycling if there are more requests than responses.

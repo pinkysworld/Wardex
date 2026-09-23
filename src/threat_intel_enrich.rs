@@ -428,7 +428,10 @@ impl VirusTotalClient {
             .and_then(|v| v.as_u64())
             .unwrap_or(0);
         let harmless_count = stats.get("harmless").and_then(|v| v.as_u64()).unwrap_or(0);
-        let undetected = stats.get("undetected").and_then(|v| v.as_u64()).unwrap_or(0);
+        let undetected = stats
+            .get("undetected")
+            .and_then(|v| v.as_u64())
+            .unwrap_or(0);
         let total = malicious_count + suspicious_count + harmless_count + undetected;
         let score = if total == 0 {
             0
@@ -514,10 +517,7 @@ impl AbuseIpDbClient {
                 success: false,
                 malicious: false,
                 score: 0,
-                summary: format!(
-                    "AbuseIPDB rate limit reached; retry in {}s",
-                    wait.as_secs()
-                ),
+                summary: format!("AbuseIPDB rate limit reached; retry in {}s", wait.as_secs()),
                 raw: None,
                 cached: false,
                 error: Some("rate_limited".into()),

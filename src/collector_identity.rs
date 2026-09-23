@@ -462,7 +462,9 @@ impl OktaCollector {
         }
 
         let url = self.build_url();
-        let response = ureq::get(&url).set("Authorization", &self.auth_header()).call();
+        let response = ureq::get(&url)
+            .set("Authorization", &self.auth_header())
+            .call();
 
         match response {
             Ok(resp) => {

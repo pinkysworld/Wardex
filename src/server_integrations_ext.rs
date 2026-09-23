@@ -301,7 +301,10 @@ pub(crate) fn handle_ticketing_jira_post(
             {
                 cfg.api_token = v.to_string();
             }
-            if let Some(v) = patch.get("timeout_secs").and_then(serde_json::Value::as_u64) {
+            if let Some(v) = patch
+                .get("timeout_secs")
+                .and_then(serde_json::Value::as_u64)
+            {
                 cfg.timeout_secs = v;
             }
             if let Some(v) = patch.get("enabled").and_then(serde_json::Value::as_bool) {
@@ -365,7 +368,10 @@ pub(crate) fn handle_ticketing_servicenow_post(
             {
                 cfg.oauth_token = v.to_string();
             }
-            if let Some(v) = patch.get("timeout_secs").and_then(serde_json::Value::as_u64) {
+            if let Some(v) = patch
+                .get("timeout_secs")
+                .and_then(serde_json::Value::as_u64)
+            {
                 cfg.timeout_secs = v;
             }
             if let Some(v) = patch.get("enabled").and_then(serde_json::Value::as_bool) {
@@ -529,10 +535,7 @@ pub(crate) fn handle_otlp_config_get(state: &Arc<Mutex<AppState>>) -> Response<B
     json_response(&serde_json::to_string(&cfg).unwrap_or_default(), 200)
 }
 
-pub(crate) fn handle_otlp_config_post(
-    body: &[u8],
-    state: &Arc<Mutex<AppState>>,
-) -> Response<Body> {
+pub(crate) fn handle_otlp_config_post(body: &[u8], state: &Arc<Mutex<AppState>>) -> Response<Body> {
     match read_json_body::<crate::telemetry::OtlpExporterConfig>(body, 8 * 1024) {
         Ok(cfg) => {
             let s = state

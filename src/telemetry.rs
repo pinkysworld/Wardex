@@ -617,7 +617,12 @@ impl OtlpExporter {
         self.config.enabled && !self.config.endpoint.trim().is_empty()
     }
 
-    fn enqueue<T>(queue: &std::sync::Mutex<std::collections::VecDeque<T>>, item: T, cap: usize, dropped: &AtomicU64) {
+    fn enqueue<T>(
+        queue: &std::sync::Mutex<std::collections::VecDeque<T>>,
+        item: T,
+        cap: usize,
+        dropped: &AtomicU64,
+    ) {
         if let Ok(mut q) = queue.lock() {
             if q.len() >= cap {
                 q.pop_front();
@@ -631,14 +636,24 @@ impl OtlpExporter {
         if !self.is_enabled() {
             return;
         }
-        Self::enqueue(&self.trace_queue, span, self.config.max_queue_size, &self.dropped);
+        Self::enqueue(
+            &self.trace_queue,
+            span,
+            self.config.max_queue_size,
+            &self.dropped,
+        );
     }
 
     pub fn enqueue_log(&self, record: serde_json::Value) {
         if !self.is_enabled() {
             return;
         }
-        Self::enqueue(&self.log_queue, record, self.config.max_queue_size, &self.dropped);
+        Self::enqueue(
+            &self.log_queue,
+            record,
+            self.config.max_queue_size,
+            &self.dropped,
+        );
     }
 
     pub fn enqueue_metric(&self, record: serde_json::Value) {
@@ -653,7 +668,10 @@ impl OtlpExporter {
         );
     }
 
-    fn drain_batch<T>(queue: &std::sync::Mutex<std::collections::VecDeque<T>>, max: usize) -> Vec<T> {
+    fn drain_batch<T>(
+        queue: &std::sync::Mutex<std::collections::VecDeque<T>>,
+        max: usize,
+    ) -> Vec<T> {
         let mut out = Vec::new();
         if let Ok(mut q) = queue.lock() {
             for _ in 0..max {
@@ -1058,8 +1076,8 @@ mod tests {
 
     use std::io::{Read, Write};
     use std::net::TcpListener;
-    use std::sync::atomic::{AtomicUsize, Ordering as AtomicOrdering};
     use std::sync::Arc;
+    use std::sync::atomic::{AtomicUsize, Ordering as AtomicOrdering};
 
     /// Mock collector endpoint that records how many requests it received
     /// and always answers with the given status.

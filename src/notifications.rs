@@ -754,10 +754,7 @@ impl SmtpSession {
         loop {
             let line = self.read_line()?;
             if line.len() < 3 || !line.starts_with(expect_code) {
-                return Err(format!(
-                    "smtp expected {expect_code}, got: {}",
-                    line.trim()
-                ));
+                return Err(format!("smtp expected {expect_code}, got: {}", line.trim()));
             }
             let continuation = line.as_bytes().get(3) == Some(&b'-');
             if !continuation {
@@ -1377,7 +1374,7 @@ mod tests {
                 rustls::ServerConnection,
                 std::net::TcpStream,
             >,
-                                      received: &mut String| {
+                                     received: &mut String| {
                 loop {
                     if let Some(pos) = received.find("\r\n") {
                         let line: String = received.drain(..pos + 2).collect();
@@ -1413,7 +1410,9 @@ mod tests {
 
             let data = read_tls_line(&mut tls_stream, &mut tls_received);
             assert!(data.starts_with("DATA"));
-            tls_stream.write_all(b"354 go ahead\r\n").expect("data reply");
+            tls_stream
+                .write_all(b"354 go ahead\r\n")
+                .expect("data reply");
 
             loop {
                 let line = read_tls_line(&mut tls_stream, &mut tls_received);
