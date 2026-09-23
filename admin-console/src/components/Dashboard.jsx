@@ -857,7 +857,6 @@ export default function Dashboard() {
   return (
     <div>
       <PageHeader
-        eyebrow="Operations Home"
         actions={
           <>
             {hostInf && (
