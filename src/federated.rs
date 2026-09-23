@@ -566,6 +566,13 @@ pub struct FederationCoordinator {
     #[serde(default)]
     pub budgets: HashMap<String, PrivacyAccountant>,
     pub converged: bool,
+    /// Monotonic count of rounds aggregated since the federation was last
+    /// started. Unlike `history` (capped at `MAX_HISTORY` entries) this is
+    /// never truncated, so it is what `max_rounds` is enforced against.
+    /// State persisted before this field existed deserializes as 0; see
+    /// [`FederationCoordinator::completed_round_count`].
+    #[serde(default)]
+    pub completed_rounds: u64,
 }
 
 /// Cap on retained round history to bound persisted-state size.
@@ -582,7 +589,19 @@ impl FederationCoordinator {
             history: Vec::new(),
             budgets: HashMap::new(),
             converged: false,
+            completed_rounds: 0,
         }
+    }
+
+    /// Number of rounds aggregated since the last start. Falls back to the
+    /// retained history length for state persisted before the counter was
+    /// introduced.
+    pub fn completed_round_count(&self) -> u64 {
+        self.completed_rounds.max(self.history.len() as u64)
+    }
+
+    fn max_rounds_reached(&self) -> bool {
+        self.completed_round_count() >= self.config.max_rounds as u64
     }
 
     /// Start (or restart) a federation from the given initial global
@@ -594,6 +613,7 @@ impl FederationCoordinator {
         self.model_version = 0;
         self.global_params = initial_params;
         self.history.clear();
+        self.completed_rounds = 0;
         self.current_round = None;
         self.open_round(now);
     }
@@ -611,7 +631,7 @@ impl FederationCoordinator {
         if !self.running || self.converged {
             return;
         }
-        if self.history.len() >= self.config.max_rounds {
+        if self.max_rounds_reached() {
             self.running = false;
             return;
         }
@@ -842,6 +862,7 @@ impl FederationCoordinator {
             avg_loss,
             closed_at_ms: now,
         };
+        self.completed_rounds = self.completed_round_count().saturating_add(1);
         self.history.push(completed.clone());
         if self.history.len() > MAX_HISTORY {
             let excess = self.history.len() - MAX_HISTORY;
@@ -851,7 +872,7 @@ impl FederationCoordinator {
         if convergence_delta < self.config.target_convergence_delta {
             self.converged = true;
             self.running = false;
-        } else if self.history.len() >= self.config.max_rounds {
+        } else if self.max_rounds_reached() {
             self.running = false;
         } else {
             self.open_round(now);
@@ -1098,6 +1119,58 @@ mod tests {
         }
         assert!(coord.try_aggregate(1004).is_none());
         assert_eq!(coord.global_params, vec![0.0, 0.0]);
+    }
+
+    #[test]
+    fn max_rounds_above_history_cap_still_stops_federation() {
+        let mut config = cfg();
+        config.min_participants = 1;
+        config.target_convergence_delta = 0.0; // never converge
+        config.max_rounds = MAX_HISTORY + 20;
+        config.total_epsilon_budget_per_agent = 1e9;
+        let mut coord = FederationCoordinator::new(config.clone(), 2);
+        coord.start(config.clone(), vec![0.0, 0.0], 0);
+        let mut aggregated = 0usize;
+        for step in 0..(config.max_rounds + 50) {
+            let Some(round_id) = coord.current_round.as_ref().map(|r| r.round_id) else {
+                break;
+            };
+            let now = step as u64 * 10 + 1;
+            coord
+                .submit_update("agent-a", round_id, vec![0.01, 0.0], 10, 0.1, now)
+                .unwrap();
+            if coord.try_aggregate(now + 1).is_some() {
+                aggregated += 1;
+            }
+            if !coord.is_running() {
+                break;
+            }
+        }
+        assert_eq!(aggregated, config.max_rounds);
+        assert_eq!(coord.completed_round_count(), config.max_rounds as u64);
+        assert_eq!(coord.history.len(), MAX_HISTORY);
+        assert!(!coord.is_running());
+        assert!(coord.current_round.is_none());
+    }
+
+    #[test]
+    fn completed_round_counter_defaults_from_history_for_old_state() {
+        let mut coord = FederationCoordinator::new(cfg(), 2);
+        coord.start(cfg(), vec![0.0, 0.0], 0);
+        let mut value = serde_json::to_value(&coord).unwrap();
+        value.as_object_mut().unwrap().remove("completed_rounds");
+        value["history"] = serde_json::json!([{
+            "round_id": 1,
+            "model_version": 1,
+            "participants": 2,
+            "total_samples": 20,
+            "convergence_delta": 1.0,
+            "avg_loss": 0.1,
+            "closed_at_ms": 5
+        }]);
+        let restored: FederationCoordinator = serde_json::from_value(value).unwrap();
+        assert_eq!(restored.completed_rounds, 0);
+        assert_eq!(restored.completed_round_count(), 1);
     }
 
     #[test]

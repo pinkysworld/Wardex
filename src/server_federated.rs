@@ -124,7 +124,7 @@ struct FederationStatusResponse {
     converged: bool,
     model_version: u64,
     current_round: Option<CurrentRoundSummary>,
-    completed_rounds: usize,
+    completed_rounds: u64,
     agent_budgets: Vec<AgentBudgetSummary>,
 }
 
@@ -172,7 +172,7 @@ pub(crate) fn handle_federation_status(state: &Arc<Mutex<AppState>>) -> Response
             opened_at_ms: r.opened_at_ms,
             deadline_ms: r.deadline_ms,
         }),
-        completed_rounds: fed.history.len(),
+        completed_rounds: fed.completed_round_count(),
         agent_budgets: fed
             .budget_status()
             .into_iter()
@@ -202,7 +202,7 @@ pub(crate) fn handle_federation_rounds(state: &Arc<Mutex<AppState>>) -> Response
     let body = serde_json::json!({
         "history": history,
         "current_round": s.federation.current_round,
-        "total": s.federation.history.len(),
+        "total": s.federation.completed_round_count(),
     });
     json_response(&body.to_string(), 200)
 }
