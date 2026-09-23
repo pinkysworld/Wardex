@@ -262,14 +262,35 @@ literal value or a secret reference resolved through the same `SecretsResolver` 
 
 | Integration | Config endpoint | Action endpoint(s) | Notes |
 |---|---|---|---|
-| VirusTotal / AbuseIPDB enrichment | `GET`/`POST /api/integrations/enrichment` | `POST /api/enrich/lookup` (`{"kind": "ip_address\|file_hash\|domain\|url", "indicator": "..."}`) | VT public-API default is 4 req/min; AbuseIPDB defaults to 60 req/min. Results are cached with a per-provider TTL (default 1h). Both degrade to a typed error (never a panic) when disabled, misconfigured, or rate-limited. |
+| VirusTotal / AbuseIPDB enrichment | `GET`/`POST /api/integrations/enrichment` | `POST /api/enrich/lookup` (`{"kind": "ip_address\|file_hash\|domain\|url", "indicator": "..."}`) | VT public-API default is 4 req/min; AbuseIPDB defaults to 60 req/min. Results are cached with a per-provider TTL (default 1h). Both degrade to a typed error (never a panic) when disabled, misconfigured, or rate-limited. `indicator` values (which can come from attacker-influenced telemetry) are validated per `kind` before being placed in the request path — a hash must be 32/40/64 hex characters, an IP must parse, a domain must match a hostname grammar — and percent-encoded, so `/`, `?`, `#`, or `..` in an indicator can't redirect the request to an unintended VirusTotal API path. |
 | Jira ticketing | `GET`/`POST /api/integrations/ticketing/jira` | `POST /api/tickets/sync`, `POST /api/tickets/pull` | Cloud (`email` + `api_token`) or Server (leave `email` empty, `api_token` used as a bearer PAT). Re-syncing an already-synced case adds a comment instead of creating a duplicate issue. |
 | ServiceNow ticketing | `GET`/`POST /api/integrations/ticketing/servicenow` | `POST /api/tickets/sync`, `POST /api/tickets/pull` | Table API against `table` (default `incident`); basic auth (`username`/`password`) or `oauth_token`. Re-syncing patches the existing incident by `sys_id` instead of creating a new one. |
 | OTLP/HTTP export | `GET`/`POST /api/telemetry/otlp` | `POST /api/telemetry/otlp/flush` | Exports batched OTLP/HTTP JSON to `{endpoint}/v1/traces`, `/v1/logs`, `/v1/metrics` with retry/backoff and a bounded, drop-counted queue. `OTEL_EXPORTER_OTLP_ENDPOINT` seeds the default endpoint. |
 
 `POST /api/tickets/sync` is idempotent: syncing the same `(provider, object_kind, object_id)` again updates the
 existing local record and the existing remote ticket (add-comment / patch) rather than creating a second one.
-When no ticketing provider is enabled, it keeps the prior local-only bookkeeping behavior unchanged.
+When no ticketing provider is enabled, it keeps the prior local-only bookkeeping behavior unchanged. When a
+provider **is** enabled but the remote call fails, the sync record is stored with `status: "failed"` and
+`last_error` set, and **no** external key is fabricated — a retry then creates the ticket for real, instead of
+patching/commenting a synthetic id (`JIRA-INCIDENT-123`-style) that was never actually created remotely.
+
+Outbound URLs configured here (Jira `base_url`, ServiceNow `instance_url`, the OTLP `endpoint`, and the
+VirusTotal/AbuseIPDB `base_url`s) are validated before being saved: only `http://`/`https://` is accepted,
+plaintext `http://` is rejected unless the host is loopback/localhost (so tests can point at a local mock
+server), and link-local (`169.254.0.0/16`, `fe80::/10`) and cloud-metadata hosts
+(`169.254.169.254`, `metadata.google.internal`, `fd00:ec2::254`) are always rejected. If a configured URL's
+*host* changes and the same request doesn't also supply a fresh credential, the previously stored
+credential/token/headers for that integration are cleared rather than carried over to the new host.
+
+`GET`/`POST /api/telemetry/otlp` never returns OTLP header *values* (they are typically bearer/API-key auth
+headers) — only header names plus a `has_headers` flag. To keep a header unchanged, echo back its name with
+the value `"__REDACTED__"`; any other value replaces the stored one.
+
+The heavier handlers here (`POST /api/ml/train`, `/api/enrich/lookup`, `/api/tickets/pull`,
+`/api/telemetry/otlp/flush`, and `/api/tickets/sync`) release the global server lock before doing the
+slow/network work (model training, outbound HTTP calls) and only re-acquire it briefly to read the inputs and
+write back the result, so a slow ticketing/enrichment/OTLP endpoint or a Random Forest retrain no longer stalls
+every other request. Configurable HTTP timeouts for these clients are clamped to 1-60 seconds.
 
 ### SMTP email notifications
 
@@ -279,13 +300,25 @@ server's advertised `AUTH` capability), and an optional `ca_cert_pem` to trust a
 to the built-in Mozilla root store. Certificate verification is always on. Requesting TLS in a binary built
 without the `tls` cargo feature fails delivery with a clear error instead of silently sending in plaintext.
 
+AUTH credentials are refused over a plaintext connection: `smtp_send` only sends `AUTH PLAIN`/`AUTH LOGIN` once
+the connection is on TLS (STARTTLS or implicit), unless `allow_plaintext_auth` is explicitly set **and** `host`
+is a loopback address (for a trusted local test/relay setup) — the default is to fail closed with a clear error
+rather than sending credentials in the clear. `from`/`to` addresses are validated at send time and reject CR,
+LF, `<`, and `>`, which otherwise could be used to inject extra SMTP commands or message headers.
+
 ### Okta identity collector
 
-The Okta System Log collector (`collector_identity::OktaCollector`) now has a `poll()` method that performs the
-HTTP fetch itself (matching the AWS/Azure/GCP collector shape), persists its `after` pagination cursor via the
-same collector-checkpoint storage the other collectors use (so repeated polls advance through the log instead of
-re-fetching the first page), and reads Okta's `X-Rate-Limit-Remaining`/`X-Rate-Limit-Reset` headers to report a
-`retry_after_secs` hint instead of hammering the API when the org-wide rate limit is close to empty.
+The Okta System Log collector (`collector_identity::OktaCollector`) has a `poll()` method that performs the
+HTTP fetch itself (matching the AWS/Azure/GCP collector shape) and reads Okta's
+`X-Rate-Limit-Remaining`/`X-Rate-Limit-Reset` headers to report a `retry_after_secs` hint instead of hammering
+the API when the org-wide rate limit is close to empty. Its `after` pagination cursor (parsed from the `Link`
+response header's `rel="next"` entry, and percent-encoded when rebuilt into the next request URL) is persisted
+via the same collector-checkpoint storage the other collectors use, but **only** by the background poll loop,
+and only after the polled events have actually been ingested into the event store — a crash between poll and
+ingest re-fetches the same page rather than silently skipping it. The `POST /api/collectors/okta/validate`
+config-test endpoint polls to show a sample of events but never advances the persisted cursor, since it never
+ingests anything; earlier behavior persisted the cursor from validation too, which meant every "Validate" click
+in the admin console silently skipped a page of real identity events.
 
 ## API Versioning
 
