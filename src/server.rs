@@ -6851,10 +6851,18 @@ fn handle_api(
                             error_json("username is required", 400)
                         } else {
                             let role = match v["role"].as_str().unwrap_or("viewer") {
-                                "admin" | "Admin" => Role::Admin,
-                                "analyst" | "Analyst" => Role::Analyst,
-                                "service" | "ServiceAccount" => Role::ServiceAccount,
-                                _ => Role::Viewer,
+                                "admin" | "Admin" => Some(Role::Admin),
+                                "analyst" | "Analyst" => Some(Role::Analyst),
+                                "viewer" | "Viewer" => Some(Role::Viewer),
+                                "service" | "service_account" | "service-account"
+                                | "ServiceAccount" => Some(Role::ServiceAccount),
+                                _ => None,
+                            };
+                            let Some(role) = role else {
+                                return error_json(
+                                    "role must be one of: admin, analyst, viewer, service-account",
+                                    400,
+                                );
                             };
                             let token = generate_token();
                             let user = User {
