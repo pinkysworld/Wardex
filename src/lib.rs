@@ -165,6 +165,7 @@ pub mod harness;
 pub mod kernel_events;
 pub mod ransomware;
 pub mod wasm_engine;
+pub mod wasm_runtime;
 
 // ── Infrastructure ───────────────────────────────────────────────────────────
 pub mod attestation;

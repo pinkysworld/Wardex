@@ -511,6 +511,9 @@ impl Default for AttestationSettings {
     /// `docs/FEDERATED_LEARNING.md` for the protocol and threat model.
     #[serde(default)]
     pub federation: crate::federated::FederationConfig,
+    /// Real WebAssembly extension runtime (see `wasm_runtime` module).
+    #[serde(default)]
+    pub wasm_runtime: crate::wasm_runtime::WasmRuntimeSettings,
 }
 
 /// Security-related settings for token management and session control.

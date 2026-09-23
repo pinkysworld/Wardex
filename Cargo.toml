@@ -55,6 +55,7 @@ regex = "1"
 rustls = { version = "0.23", default-features = false, features = ["std", "ring", "tls12"], optional = true }
 rustls-pki-types = { version = "1", optional = true }
 webpki-roots = { version = "0.26", optional = true }
+wasmi = "2.0.0"
 
 # Linux-only kernel telemetry backends: CN_PROC (process connector) netlink
 # socket, and fanotify/inotify for file events. Both crates provide safe
@@ -95,6 +96,7 @@ tempfile = "3"
 # Test-only: generates a self-signed certificate for the SMTP STARTTLS test's
 # fake TLS server. Not used by any production code path.
 rcgen = { version = "0.13", default-features = false, features = ["ring", "pem"] }
+wat = "1.259.0"
 
 [[bench]]
 name = "pipeline"

@@ -1,289 +1,181 @@
 # WASM Extension Tutorial
 
-Build custom detection and response logic as sandboxed WebAssembly modules
-that run inside the Wardex runtime.
+Build detection logic as sandboxed, real WebAssembly modules that run
+inside the Wardex runtime, using the `wardex_v1` host ABI. The full ABI
+contract lives in [`docs/WASM_ABI.md`](WASM_ABI.md) — this document is a
+walkthrough of building, loading, and testing an extension.
 
-> **Prerequisites:** Rust toolchain (1.85+), `wasm32-unknown-unknown` target,
-> a running Wardex instance.
+Wardex executes extensions with [`wasmi`][wasmi], a pure-Rust WebAssembly
+*interpreter* (no JIT). See `docs/WASM_ABI.md` for why, and for the
+sandbox limits (fuel, memory, module size) that apply to every extension.
+
+> **Prerequisites:** a running Wardex instance with `wasm_runtime.enabled
+> = true` in `wardex.toml`. To build the Rust example below you also need
+> the `wasm32-unknown-unknown` Rust target (`rustup target add
+> wasm32-unknown-unknown`). If you only want to try the WAT example, you
+> need `wat2wasm` from the [WABT toolkit][wabt] (or `wasm-tools`).
 
 ---
 
-## 1. Install the Wasm target
-
-```bash
-rustup target add wasm32-unknown-unknown
-```
-
-## 2. Create a detector plugin
-
-```bash
-cargo new --lib my_detector
-cd my_detector
-```
-
-Edit `Cargo.toml`:
+## 1. Enable the runtime
 
 ```toml
-[package]
-name = "my_detector"
-version = "0.1.0"
-edition = "2021"
-
-[lib]
-crate-type = ["cdylib"]
-
-[profile.release]
-opt-level = "s"
-lto = true
+# wardex.toml
+[wasm_runtime]
+enabled = true
+extensions_dir = "var/wasm_extensions"
+fuel_limit = 5000000
+max_memory_pages = 16
+max_module_bytes = 2097152
+max_kv_entries = 64
+max_kv_value_bytes = 4096
 ```
 
-## 3. Implement the plugin interface
+See `WasmRuntimeSettings` in `src/wasm_runtime.rs` for every field and its
+default.
 
-Edit `src/lib.rs`:
+## 2. The fastest path: a WAT extension
 
-```rust
-//! Custom detector plugin — detects auth failure spikes.
-
-use core::slice;
-
-// ── Imported host functions ────────────────────────────────────────
-extern "C" {
-    /// Log a message to the Wardex audit log.
-    /// severity: 0 = debug, 1 = info, 2 = warn
-    fn log(severity: i32, msg_ptr: *const u8, msg_len: i32);
-
-    /// Read the current baseline mean for dimension `dim`.
-    fn baseline_mean(dim: i32) -> f32;
-}
-
-// ── Helper: write a log message ────────────────────────────────────
-fn host_log(severity: i32, msg: &str) {
-    unsafe { log(severity, msg.as_ptr(), msg.len() as i32) }
-}
-
-// ── Exported functions ─────────────────────────────────────────────
-
-static mut THRESHOLD: f32 = 5.0;
-
-/// Called once at startup. Parse config JSON for the threshold.
-#[no_mangle]
-pub extern "C" fn init(config_ptr: *const u8, config_len: i32) -> i32 {
-    let config = unsafe { slice::from_raw_parts(config_ptr, config_len as usize) };
-    if let Ok(s) = core::str::from_utf8(config) {
-        // Minimal JSON parse: look for "threshold":
-        if let Some(pos) = s.find("\"threshold\"") {
-            if let Some(colon) = s[pos..].find(':') {
-                let rest = s[pos + colon + 1..].trim();
-                let end = rest.find(|c: char| !c.is_ascii_digit() && c != '.')
-                    .unwrap_or(rest.len());
-                if let Ok(v) = rest[..end].parse::<f32>() {
-                    unsafe { THRESHOLD = v; }
-                }
-            }
-        }
-        host_log(1, &format!("auth-detector init, threshold={}", unsafe { THRESHOLD }));
-    }
-    0 // success
-}
-
-/// Called for each telemetry sample. Returns a score adjustment.
-///
-/// TelemetrySample layout (little-endian, 80 bytes):
-///   offset 24: auth_failures (u32)
-#[no_mangle]
-pub extern "C" fn evaluate(sample_ptr: *const u8, sample_len: i32) -> f32 {
-    if sample_len < 28 {
-        return 0.0;
-    }
-    let sample = unsafe { slice::from_raw_parts(sample_ptr, sample_len as usize) };
-
-    // Read auth_failures at offset 24 (u32 little-endian)
-    let auth_failures = u32::from_le_bytes([
-        sample[24], sample[25], sample[26], sample[27],
-    ]);
-
-    // Compare against the baseline
-    let baseline = unsafe { baseline_mean(4) }; // dim 4 = auth_failures
-    let threshold = unsafe { THRESHOLD };
-    let delta = auth_failures as f32 - baseline;
-
-    if delta > threshold {
-        let score = ((delta - threshold) / threshold).min(10.0);
-        host_log(2, &format!(
-            "auth spike: {} failures (baseline={:.1}, delta={:.1})",
-            auth_failures, baseline, delta
-        ));
-        score
-    } else {
-        0.0
-    }
-}
-
-/// Return a human-readable reason string for the last evaluation.
-#[no_mangle]
-pub extern "C" fn explain(buf_ptr: *mut u8, buf_len: i32) -> i32 {
-    let msg = b"Auth failure count exceeds baseline";
-    let copy_len = msg.len().min(buf_len as usize);
-    unsafe {
-        core::ptr::copy_nonoverlapping(msg.as_ptr(), buf_ptr, copy_len);
-    }
-    copy_len as i32
-}
-```
-
-## 4. Build the Wasm module
+WebAssembly Text format (`.wat`) needs no Rust toolchain at all. A
+complete, runnable example lives at
+[`examples/wasm_extensions/auth_spike.wat`](../examples/wasm_extensions/auth_spike.wat):
+it tracks a counter in the extension's key/value state and raises a
+`T1110` (brute force) alert once the counter passes 3.
 
 ```bash
+wat2wasm examples/wasm_extensions/auth_spike.wat -o auth_spike.wasm
+mkdir -p var/wasm_extensions
+cp auth_spike.wasm var/wasm_extensions/
+wardex reload   # or restart the server; it scans extensions_dir at startup
+```
+
+Every extension must implement four exports and may import up to five
+host functions — see [`docs/WASM_ABI.md`](WASM_ABI.md) for the exact
+signatures. The short version:
+
+| You export | You get to call |
+|---|---|
+| `wardex_abi_version() -> i32` (must return `1`) | `log(ptr, len)` |
+| `init() -> i32` | `emit_alert(ptr, len) -> i32` |
+| `alloc(size: i32) -> i32` | `kv_get(key_ptr, key_len, val_ptr, val_max_len) -> i32` |
+| `on_event(ptr: i32, len: i32) -> i32` | `kv_set(key_ptr, key_len, val_ptr, val_len) -> i32` |
+| | `now_unix_ms() -> i64` |
+
+`on_event`'s `ptr`/`len` point at the current event, JSON-encoded, that
+the host wrote into your module's own memory (via your `alloc` export) —
+you never need to import anything to *read* the event, only to act on it.
+
+## 3. The Rust path
+
+A complete Cargo project is at
+[`examples/wasm_extensions/rust-guest/`](../examples/wasm_extensions/rust-guest/).
+It is **not** part of Wardex's own crate or build — it's a standalone
+project you copy out and build independently:
+
+```bash
+cd examples/wasm_extensions/rust-guest
 cargo build --target wasm32-unknown-unknown --release
+cp target/wasm32-unknown-unknown/release/wardex_example_extension.wasm \
+   /path/to/wardex/var/wasm_extensions/office_child_process.wasm
 ```
 
-The compiled module will be at:
-```
-target/wasm32-unknown-unknown/release/my_detector.wasm
-```
+The guest crate's `src/lib.rs` implements the same four exports by hand
+(no `std`, a tiny bump allocator, and manual `extern "C"` host imports) —
+read it alongside `docs/WASM_ABI.md` for the exact contract each export
+and import needs to honor. The example inspects the event's
+`process_name` and `parent_process_name` fields (Wardex's event JSON) and
+raises an alert when an Office application spawns a shell.
 
-Optionally strip debug info to reduce size:
-```bash
-wasm-strip target/wasm32-unknown-unknown/release/my_detector.wasm
-```
-
-## 5. Deploy to Wardex
-
-Copy the `.wasm` file into your Wardex plugins directory:
+## 4. Verify it loaded and test it
 
 ```bash
-cp target/wasm32-unknown-unknown/release/my_detector.wasm \
-   /opt/wardex/plugins/auth_detector.wasm
+curl -s -H "Authorization: Bearer $TOKEN" \
+  http://localhost:3000/api/wasm-extensions | jq .
 ```
 
-Add the plugin to your Wardex configuration (`wardex.toml`):
-
-```toml
-[[wasm.plugins]]
-name       = "auth-spike-detector"
-type       = "detector"
-path       = "plugins/auth_detector.wasm"
-config     = '{"threshold": 5}'
-priority   = 10
-enabled    = true
-```
-
-Restart or reload Wardex:
-
-```bash
-wardex reload
-# or
-systemctl restart wardex
-```
-
-## 6. Verify it's loaded
-
-```bash
-curl -s http://localhost:3000/api/wasm/plugins | jq .
-```
-
-Expected output:
 ```json
-[
-  {
-    "name": "auth-spike-detector",
-    "type": "detector",
-    "status": "loaded",
-    "fuel_remaining": 1000000,
-    "memory_pages": 16
-  }
-]
-```
-
----
-
-## Response Plugin Example
-
-Response plugins can override the built-in policy decision. Here's a
-plugin that forces isolation when battery is critically low:
-
-```rust
-use core::slice;
-
-extern "C" {
-    fn log(severity: i32, msg_ptr: *const u8, msg_len: i32);
-    fn battery_pct() -> f32;
-}
-
-fn host_log(severity: i32, msg: &str) {
-    unsafe { log(severity, msg.as_ptr(), msg.len() as i32) }
-}
-
-#[no_mangle]
-pub extern "C" fn init(_ptr: *const u8, _len: i32) -> i32 { 0 }
-
-/// Returns action override:
-///   0 = no override
-///   1 = observe
-///   2 = throttle
-///   3 = quarantine
-///   4 = isolate
-#[no_mangle]
-pub extern "C" fn adjust(
-    _signal_ptr: *const u8, _signal_len: i32,
-    _decision_ptr: *const u8, _decision_len: i32,
-) -> i32 {
-    let battery = unsafe { battery_pct() };
-    if battery < 10.0 {
-        host_log(2, "Battery critical — forcing isolation");
-        4 // isolate
-    } else if battery < 20.0 {
-        host_log(1, "Battery low — forcing throttle");
-        2 // throttle
-    } else {
-        0 // no override
+{
+  "enabled": true,
+  "extensions_dir": "var/wasm_extensions",
+  "extensions": [
+    {
+      "name": "auth_spike",
+      "sha256": "…",
+      "metrics": {
+        "invocations": 0,
+        "fuel_used_total": 0,
+        "traps": 0,
+        "errors": 0,
+        "alerts_emitted": 0,
+        "last_error": null,
+        "last_invocation_ms": null
+      }
     }
+  ]
 }
 ```
 
-Deploy the same way with `type = "response"` in the config.
+Run every loaded extension against a synthetic event without waiting for
+live traffic:
 
----
+```bash
+curl -s -X POST -H "Authorization: Bearer $TOKEN" \
+  -d '{"event": {"process_name": "cmd.exe", "parent_process_name": "winword.exe"}}' \
+  http://localhost:3000/api/wasm-extensions/run | jq .
+```
 
-## Resource Limits
+`wardex doctor` also reports whether the runtime is enabled and how many
+`.wasm` modules are present in `extensions_dir`.
 
-| Resource | Default | Config key |
-|----------|---------|------------|
-| Memory | 1 MiB (16 pages) | `wasm.max_memory_pages` |
-| Fuel (instructions) | 1,000,000 per call | `wasm.max_fuel` |
-| Stack depth | 256 frames | — |
+## 5. Upload via the API instead of the filesystem
 
-When a plugin exceeds its fuel budget, execution is trapped and the
-host falls back to the built-in result. The trap is logged in the
-audit trail.
+```bash
+WASM_B64=$(base64 -w0 auth_spike.wasm)
+SHA256=$(sha256sum auth_spike.wasm | cut -d' ' -f1)
+curl -s -X POST -H "Authorization: Bearer $TOKEN" \
+  -H 'Content-Type: application/json' \
+  -d "{\"name\":\"auth_spike\",\"wasm_base64\":\"$WASM_B64\",\"sha256\":\"$SHA256\"}" \
+  http://localhost:3000/api/wasm-extensions/upload
+```
 
-## Data Exchange Format
+If `wasm_runtime.require_signed_uploads = true`, also supply `signature`
+(base64 Ed25519 signature over the raw module bytes) and `signer_pubkey`
+(base64 public key), with `signer_pubkey` present in
+`wasm_runtime.trusted_upload_signers`. This mirrors the signing pattern
+used for agent update artifacts (`src/auto_update.rs`).
 
-All data is passed as flat binary structs (little-endian, no JSON
-parsing in Wasm):
+Remove an extension:
 
-| Struct | Size | Key fields |
-|--------|------|------------|
-| `TelemetrySample` | 80 B | timestamp, cpu, memory, temp, network, auth_failures, battery, integrity_drift, process_count, disk_pressure |
-| `AnomalySignal` | 24 B | score, confidence, suspicious_axes |
-| `PolicyDecision` | 16 B | level, action, isolation_pct |
+```bash
+curl -s -X DELETE -H "Authorization: Bearer $TOKEN" \
+  http://localhost:3000/api/wasm-extensions/auth_spike
+```
 
-See [DESIGN_WASM_EXTENSIONS.md](DESIGN_WASM_EXTENSIONS.md) for full
-byte-level layout.
+## Resource limits
 
-## Security Model
+| Resource | Config key | Default |
+|---|---|---|
+| CPU (fuel, enforces the wall-clock budget) | `wasm_runtime.fuel_limit` | 5,000,000 per invocation |
+| Memory | `wasm_runtime.max_memory_pages` | 16 pages (1 MiB) |
+| Module size | `wasm_runtime.max_module_bytes` | 2 MiB |
+| Extension state entries | `wasm_runtime.max_kv_entries` | 64 |
+| Extension state entry size | `wasm_runtime.max_kv_value_bytes` | 4 KiB |
 
-- **Memory isolation:** Wasm linear memory — plugins cannot access host memory
-- **No filesystem:** No WASI filesystem imports
-- **No networking:** No WASI socket imports
-- **Bounded execution:** Fuel metering with trap on exhaustion
-- **Audit trail:** Every plugin call and trap is recorded
+Exceeding fuel or the memory cap raises a trap; the extension's
+`traps` metric increments and the event pipeline continues unaffected —
+one extension's failure never blocks another extension or the rest of
+the pipeline.
 
 ## Troubleshooting
 
 | Symptom | Cause | Fix |
-|---------|-------|-----|
-| Plugin not listed in `/api/wasm/plugins` | Path wrong or file not readable | Check `path` in config, file permissions |
-| `status: "trapped"` | Plugin exceeded fuel budget | Increase `wasm.max_fuel` or optimize plugin |
-| `status: "init_failed"` | `init()` returned non-zero | Check plugin logs, validate config JSON |
-| Score not changing | `evaluate()` returns 0.0 | Add logging, check threshold vs baseline |
+|---|---|---|
+| Extension rejected at load with "forbidden import" | Module imports something other than the five `wardex_v1` functions (commonly WASI) | Remove the import; extensions have no filesystem/network access by design |
+| Extension rejected at load with "missing required export" | One of `wardex_abi_version`/`init`/`alloc`/`on_event` is missing | Add the missing export — see `docs/WASM_ABI.md` |
+| `errors` metric increases, `last_error` says "ABI version mismatch" | `wardex_abi_version()` returns something other than `1` | Return `1` (the only version the host currently supports) |
+| `traps` metric increases, `last_error` mentions fuel | The extension is doing too much work per event, or looping | Raise `wasm_runtime.fuel_limit`, or optimize the extension |
+| `traps` metric increases, no fuel mention | Memory grow past `max_memory_pages`, or an out-of-bounds access | Raise `max_memory_pages`, or check the extension's memory arithmetic |
+| Alerts never appear | `emit_alert`'s JSON doesn't parse, or the extension never calls it | Check the JSON shape in `docs/WASM_ABI.md`; use `log` to debug |
+
+[wasmi]: https://github.com/wasmi-labs/wasmi
+[wabt]: https://github.com/WebAssembly/wabt

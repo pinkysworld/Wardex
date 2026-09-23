@@ -169,6 +169,9 @@ pub async fn run_server(
         key_rotation: KeyRotationManager::new(3600),
         privacy: PrivacyAccountant::new(10.0),
         policy_vm: PolicyVm::default(),
+        wasm_extensions: crate::wasm_runtime::WasmExtensionManager::new(
+            initial_config.wasm_runtime.clone(),
+        ),
         fingerprint: None,
         monitor: Monitor::new(),
         drift: DriftDetector::new(0.005, 50.0),
@@ -312,6 +315,26 @@ pub async fn run_server(
         s.federation = stored.unwrap_or_else(|| {
             crate::federated::FederationCoordinator::new(federation_config, FEDERATION_PARAM_DIM)
         });
+    }
+
+    // Load WebAssembly extensions from the configured directory, if enabled.
+    {
+        let s = crate::state_lock::tracked_lock(&state, "server/run_wasm_extensions_load");
+        match s.wasm_extensions.load_dir() {
+            Ok(loaded) if !loaded.is_empty() => {
+                tracing::info!(
+                    "loaded {} WebAssembly extension(s): {}",
+                    loaded.len(),
+                    loaded
+                        .iter()
+                        .map(|o| o.name.as_str())
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                );
+            }
+            Ok(_) => {}
+            Err(e) => tracing::warn!("failed to load WebAssembly extensions: {e}"),
+        }
     }
 
     // Load community YARA malware rules
@@ -784,6 +807,9 @@ pub(crate) fn spawn_test_server_with_state() -> (u16, String, Arc<Mutex<AppState
         key_rotation: KeyRotationManager::new(3600),
         privacy: PrivacyAccountant::new(10.0),
         policy_vm: PolicyVm::default(),
+        wasm_extensions: crate::wasm_runtime::WasmExtensionManager::new(
+            test_config.wasm_runtime.clone(),
+        ),
         fingerprint: None,
         monitor: Monitor::new(),
         drift: DriftDetector::new(0.005, 50.0),

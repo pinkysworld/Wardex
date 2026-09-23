@@ -624,6 +624,7 @@ pub(crate) struct AppState {
     key_rotation: KeyRotationManager,
     privacy: PrivacyAccountant,
     policy_vm: PolicyVm,
+    pub(crate) wasm_extensions: crate::wasm_runtime::WasmExtensionManager,
     fingerprint: Option<DeviceFingerprint>,
     monitor: Monitor,
     drift: DriftDetector,
@@ -2136,8 +2137,23 @@ fn handle_api(
             json_response(&info.to_string(), 200)
         }
 
-        // ── Policy VM ─────────────────────────────────────────────
+        // ── Policy VM (legacy bytecode VM; see wasm_engine module docs) ──
         (Method::Post, "/api/policy-vm/execute") => handle_policy_vm_execute(body, state),
+
+        // ── WebAssembly extension runtime (wardex_v1 host ABI) ───────
+        (Method::Get, "/api/wasm-extensions") => handle_wasm_extensions_list(state),
+        (Method::Post, "/api/wasm-extensions/upload") => {
+            handle_wasm_extensions_upload(body, state)
+        }
+        (Method::Post, "/api/wasm-extensions/run") => handle_wasm_extensions_run(body, state),
+        (Method::Delete, p) if p.starts_with("/api/wasm-extensions/") => {
+            let name = p.strip_prefix("/api/wasm-extensions/").unwrap_or("");
+            if name.is_empty() {
+                error_json("extension name is required", 400)
+            } else {
+                handle_wasm_extensions_delete(name, state)
+            }
+        }
 
         // ── Fingerprint ───────────────────────────────────────────
         (Method::Get, "/api/fingerprint/status") => {
@@ -3461,6 +3477,10 @@ fn handle_api(
                 {"method": "GET", "path": "/api/host/apps", "auth": true, "description": "Enumerate installed applications"},
                 {"method": "GET", "path": "/api/host/inventory", "auth": true, "description": "Full system inventory (hardware, software, services, users)"},
                 {"method": "POST", "path": "/api/policy-vm/execute", "auth": true, "description": "Execute a policy VM program"},
+                {"method": "GET", "path": "/api/wasm-extensions", "auth": true, "description": "List loaded WebAssembly extensions and their metrics"},
+                {"method": "POST", "path": "/api/wasm-extensions/upload", "auth": true, "description": "Upload and register a WebAssembly extension module"},
+                {"method": "POST", "path": "/api/wasm-extensions/run", "auth": true, "description": "Run all loaded WebAssembly extensions against a sample event"},
+                {"method": "DELETE", "path": "/api/wasm-extensions/{name}", "auth": true, "description": "Remove a loaded WebAssembly extension"},
                 {"method": "POST", "path": "/api/policy/compose", "auth": true, "description": "Compose a policy from weighted inputs"},
                 {"method": "GET", "path": "/api/quantum/key-status", "auth": true, "description": "Quantum key rotation status"},
                 {"method": "POST", "path": "/api/quantum/rotate", "auth": true, "description": "Rotate quantum key material"},

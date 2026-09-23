@@ -321,6 +321,8 @@ jobs:
         run: cd fuzz && cargo +nightly fuzz run search_query -- -max_total_time=60
       - name: Fuzz secrets expand (60s)
         run: cd fuzz && cargo +nightly fuzz run secrets_expand -- -max_total_time=60
+      - name: Fuzz WASM extension loader (60s)
+        run: cd fuzz && cargo +nightly fuzz run wasm_extension_load -- -max_total_time=60
 
   typescript-sdk:
     runs-on: ubuntu-latest

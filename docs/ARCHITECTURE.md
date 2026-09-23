@@ -155,7 +155,9 @@ The operator-facing control plane layers additional enterprise state on top of t
 - `src/threat_intel.rs`
   - local threat-intelligence store with IOC matching
 - `src/wasm_engine.rs`
-  - Wasm extension sandbox for user-defined detection policies
+  - legacy stack-based bytecode VM predating real Wasm support; kept for `/api/policy-vm/execute`
+- `src/wasm_runtime.rs`
+  - real WebAssembly extension runtime on `wasmi` (fuel/memory-sandboxed, versioned `wardex_v1` host ABI); see `docs/WASM_ABI.md`
 
 ## Mapping to the research blueprint
 
@@ -199,7 +201,7 @@ The codebase has completed all 14 phases (0–13) of the backlog. Here is how th
   - Local threat-intelligence store with IOC matching and severity ratings (Phase 12).
   - Wired into runtime pipeline for per-sample enrichment (Phase 13).
 - **R17 Wasm-Based Extensible Policies**
-  - Wasm extension sandbox for user-defined detection policies (Phase 12).
+  - Real WebAssembly extension sandbox (`src/wasm_runtime.rs`, `wasmi`-based) for user-defined detection policies, with a versioned host ABI, fuel/memory limits, and per-extension metrics. See `docs/WASM_ABI.md`.
 - **R23 Verifiable Swarm Defence Coordination**
   - Swarm coordination protocol with peer discovery and digest gossip (Phase 12).
 - **R31 Digital Twin Fleet Simulation**

@@ -62,6 +62,7 @@ pub fn run() -> Vec<Check> {
         check_kernel_telemetry(),
         check_container_runtime(),
         check_search_index(),
+        check_wasm_extensions(),
     ]
 }
 
@@ -183,6 +184,56 @@ fn check_install_layout() -> Check {
                 .get("root")
                 .and_then(serde_json::Value::as_str)
                 .unwrap_or("unreported")
+        ),
+    }
+}
+
+/// Static preflight check for the WebAssembly extension runtime: whether
+/// it is enabled, whether its extensions directory exists, and how many
+/// `*.wasm` modules are present there. This does not load or execute any
+/// extension (that happens at server startup); it only reports on what
+/// *would* be loaded, using the resolved runtime config.
+fn check_wasm_extensions() -> Check {
+    let path = config::runtime_config_path();
+    let settings = match Config::load_from_path(&path) {
+        Ok(cfg) => cfg.wasm_runtime,
+        Err(_) => crate::wasm_runtime::WasmRuntimeSettings::default(),
+    };
+    if !settings.enabled {
+        return Check {
+            name: "WebAssembly extensions",
+            status: Status::Info,
+            detail: "disabled (config wasm_runtime.enabled = false)".to_string(),
+        };
+    }
+    let dir = Path::new(&settings.extensions_dir);
+    if !dir.exists() {
+        return Check {
+            name: "WebAssembly extensions",
+            status: Status::Warn,
+            detail: format!(
+                "enabled, but extensions_dir {} does not exist",
+                dir.display()
+            ),
+        };
+    }
+    let count = std::fs::read_dir(dir)
+        .map(|entries| {
+            entries
+                .filter_map(|e| e.ok())
+                .filter(|e| e.path().extension().and_then(|x| x.to_str()) == Some("wasm"))
+                .count()
+        })
+        .unwrap_or(0);
+    Check {
+        name: "WebAssembly extensions",
+        status: Status::Ok,
+        detail: format!(
+            "enabled; {} module(s) in {} (fuel_limit={}, max_memory_pages={})",
+            count,
+            dir.display(),
+            settings.fuel_limit,
+            settings.max_memory_pages
         ),
     }
 }
