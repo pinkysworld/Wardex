@@ -80,21 +80,34 @@ pub trait FederatedModel {
      `GaussianMechanism` in `src/privacy.rs`).
 5. **Submit.** `POST /api/federation/round/submit` with `{round_id,
    params, sample_count, loss}`. The coordinator:
-   - authenticates the request via the agent bearer token (same as every
-     other agent endpoint — enforced in `src/server.rs` before the
-     handler runs, not by the handler itself);
+   - authenticates the request via the per-agent enrollment credential
+     bound to the claimed agent id (enforced in `src/server.rs` before
+     the handler runs, and re-checked by the handler);
    - validates the round id (rejects stale/future rounds), the vector
-     shape, a generous norm bound (clip norm plus a wide multiple of the
-     noise scale — defense in depth against a corrupted/malicious
-     payload, not a privacy control), and rejects a second submission
-     from the same agent in the same round (replay/duplicate);
+     shape, that every value is finite, a generous norm bound (clip norm
+     plus a wide multiple of the noise scale — defense in depth against a
+     corrupted/malicious payload, not a privacy control), rejects a
+     `sample_count` above `max_sample_count_per_update` (default 100 000;
+     `sample_count_exceeded`), and rejects a second submission from the
+     same agent in the same round (replay/duplicate);
    - charges the agent's cumulative epsilon budget for the round; refuses
      with `budget_exhausted` if that would exceed the agent's lifetime
      allowance.
 6. **Aggregate.** Once `min_participants` agents have submitted, or the
    round's deadline passes with at least one submission, the coordinator
    computes FedAvg — the sample-count-weighted mean of submitted deltas —
-   and adds it to the global model. If the deadline passes with **zero**
+   and adds it to the global model. Weights are computed in floating
+   point from the (clamped) sample counts, and with two or more
+   participants no single agent's weight may exceed
+   `max_agent_weight_share` (default 0.5); excess weight is redistributed
+   to the other participants in proportion to their sample counts, and if
+   the cap cannot be met (`participants × cap < 1`) equal weights are used.
+   This bounds how far one agent that over-reports its sample count can
+   pull the model in a round, at the cost of under-weighting an agent
+   that genuinely holds most of the data; set the cap to `1.0` to restore
+   plain FedAvg. If the aggregate (or the resulting global model) is not
+   finite, the round's submissions are discarded and the round is
+   re-opened on the unchanged model. If the deadline passes with **zero**
    submissions, the round is simply re-opened with a fresh deadline
    (a temporarily offline fleet does not stall the federation).
 7. **Convergence.** The L2 norm of the aggregated delta is the
@@ -170,9 +183,11 @@ advanced composition.
   within the accepted shape/norm bounds — nothing here defends against a
   poisoning attack from a fully authenticated, budget-having agent. There
   is no Byzantine-robust aggregation (e.g. coordinate-wise median,
-  trimmed mean); FedAvg is a plain weighted mean, so a single
-  high-sample-count malicious agent can meaningfully bias the global
-  model within one round.
+  trimmed mean); FedAvg is a weighted mean. The per-update sample-count
+  limit and the per-agent weight-share cap bound, but do not remove, a
+  single malicious agent's influence: with the default cap it can still
+  contribute up to half of a round's aggregate direction (within the
+  norm bound).
 - **A coordinator that colludes with, or is, an attacker** learns
   everything an honest coordinator learns (individual noised updates) and
   can additionally choose to skip aggregation, replay stale rounds to a

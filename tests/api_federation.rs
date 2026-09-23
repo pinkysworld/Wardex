@@ -130,6 +130,7 @@ fn federation_lifecycle_start_train_submit_aggregate_status() {
         total_epsilon_budget_per_agent: 100_000.0,
         local_epochs: 8,
         learning_rate: 0.3,
+        ..FederationConfig::default()
     };
     let start_resp: serde_json::Value = ureq::post(&format!("{}/api/federation/start", base(port)))
         .set("Authorization", &auth_header(&admin_token))

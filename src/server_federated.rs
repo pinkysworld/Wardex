@@ -42,6 +42,8 @@ fn fed_error_status(err: &crate::federated::FedError) -> u16 {
         crate::federated::FedError::DuplicateSubmission => 409,
         crate::federated::FedError::InvalidShape { .. } => 400,
         crate::federated::FedError::NormExceeded { .. } => 400,
+        crate::federated::FedError::NonFiniteUpdate => 400,
+        crate::federated::FedError::SampleCountExceeded { .. } => 400,
         crate::federated::FedError::BudgetExhausted => 403,
     }
 }

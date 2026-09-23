@@ -81,6 +81,28 @@ pub struct FederationConfig {
     /// Local SGD learning rate.
     #[serde(default = "default_learning_rate")]
     pub learning_rate: f64,
+    /// Upper bound on the `sample_count` an agent may claim for a single
+    /// update. `sample_count` is agent-supplied and drives the FedAvg
+    /// weight, so submissions claiming more than this are rejected with
+    /// [`FedError::SampleCountExceeded`] instead of being trusted. Values
+    /// below 1 are treated as 1.
+    #[serde(default = "default_max_sample_count_per_update")]
+    pub max_sample_count_per_update: usize,
+    /// Maximum share of the aggregate FedAvg weight any single agent may
+    /// hold when a round has at least two participants. Weight above the
+    /// cap is redistributed to the other participants in proportion to
+    /// their sample counts. Values `>= 1.0` (or non-finite / `<= 0`)
+    /// disable the cap.
+    ///
+    /// Trade-off: the cap bounds how far one (possibly malicious or
+    /// misconfigured) agent can pull the global model in a round, at the
+    /// cost of statistical efficiency when data is genuinely skewed — an
+    /// agent that really does hold most of the fleet's samples is
+    /// under-weighted relative to plain FedAvg. When the cap cannot be met
+    /// (`participants * cap < 1`, e.g. two agents with a cap of 0.4) the
+    /// round falls back to equal weights, the most even split possible.
+    #[serde(default = "default_max_agent_weight_share")]
+    pub max_agent_weight_share: f64,
 }
 
 impl Default for FederationConfig {
@@ -97,6 +119,8 @@ impl Default for FederationConfig {
             total_epsilon_budget_per_agent: default_total_epsilon_budget(),
             local_epochs: default_local_epochs(),
             learning_rate: default_learning_rate(),
+            max_sample_count_per_update: default_max_sample_count_per_update(),
+            max_agent_weight_share: default_max_agent_weight_share(),
         }
     }
 }
@@ -130,6 +154,79 @@ fn default_local_epochs() -> usize {
 }
 fn default_learning_rate() -> f64 {
     0.1
+}
+fn default_max_sample_count_per_update() -> usize {
+    100_000
+}
+fn default_max_agent_weight_share() -> f64 {
+    0.5
+}
+
+/// FedAvg weights for the given per-agent sample counts, normalised to sum
+/// to 1 and computed entirely in `f64` (no integer sums that could wrap).
+/// With at least two participants and a cap in `(0, 1)`, no weight exceeds
+/// `max_share`: excess weight is redistributed to the uncapped agents in
+/// proportion to their sample counts (water-filling). If the cap is
+/// infeasible (`n * max_share < 1`) equal weights are returned. Returns
+/// `None` when there is nothing to weight (no samples at all).
+pub fn capped_fedavg_weights(sample_counts: &[f64], max_share: f64) -> Option<Vec<f64>> {
+    let n = sample_counts.len();
+    if n == 0 {
+        return None;
+    }
+    let raw: Vec<f64> = sample_counts
+        .iter()
+        .map(|&c| if c.is_finite() && c > 0.0 { c } else { 0.0 })
+        .collect();
+    let total: f64 = raw.iter().sum();
+    if !(total.is_finite() && total > 0.0) {
+        return None;
+    }
+    let mut weights: Vec<f64> = raw.iter().map(|&c| c / total).collect();
+    let cap_active = n >= 2 && max_share.is_finite() && max_share > 0.0 && max_share < 1.0;
+    if !cap_active {
+        return Some(weights);
+    }
+    let uniform = 1.0 / n as f64;
+    if max_share * n as f64 <= 1.0 {
+        return Some(vec![uniform; n]);
+    }
+    let tolerance = max_share * 1e-12;
+    let mut capped = vec![false; n];
+    for _ in 0..n {
+        let capped_count = capped.iter().filter(|&&c| c).count();
+        if capped_count == n {
+            return Some(vec![uniform; n]);
+        }
+        let free_mass = 1.0 - max_share * capped_count as f64;
+        let free_raw: f64 = raw
+            .iter()
+            .zip(&capped)
+            .filter(|(_, c)| !**c)
+            .map(|(r, _)| *r)
+            .sum();
+        let free_count = (n - capped_count) as f64;
+        for ((weight, &is_capped), &r) in weights.iter_mut().zip(&capped).zip(&raw) {
+            *weight = if is_capped {
+                max_share
+            } else if free_raw > 0.0 {
+                r / free_raw * free_mass
+            } else {
+                free_mass / free_count
+            };
+        }
+        let mut changed = false;
+        for (is_capped, &weight) in capped.iter_mut().zip(&weights) {
+            if !*is_capped && weight > max_share + tolerance {
+                *is_capped = true;
+                changed = true;
+            }
+        }
+        if !changed {
+            break;
+        }
+    }
+    Some(weights)
 }
 
 pub fn now_ms() -> u64 {
@@ -397,6 +494,8 @@ pub enum FedError {
     DuplicateSubmission,
     InvalidShape { expected: usize, got: usize },
     NormExceeded { max: String },
+    NonFiniteUpdate,
+    SampleCountExceeded { max: usize, got: usize },
     BudgetExhausted,
 }
 
@@ -409,6 +508,8 @@ impl FedError {
             FedError::DuplicateSubmission => "duplicate_submission",
             FedError::InvalidShape { .. } => "invalid_shape",
             FedError::NormExceeded { .. } => "norm_exceeded",
+            FedError::NonFiniteUpdate => "non_finite_update",
+            FedError::SampleCountExceeded { .. } => "sample_count_exceeded",
             FedError::BudgetExhausted => "budget_exhausted",
         }
     }
@@ -434,6 +535,13 @@ impl std::fmt::Display for FedError {
             FedError::NormExceeded { max } => {
                 write!(f, "submitted update norm exceeds allowed bound ({max})")
             }
+            FedError::NonFiniteUpdate => {
+                write!(f, "update vector must contain only finite values")
+            }
+            FedError::SampleCountExceeded { max, got } => write!(
+                f,
+                "sample_count {got} exceeds the per-update maximum of {max}"
+            ),
             FedError::BudgetExhausted => write!(f, "agent privacy budget exhausted"),
         }
     }
@@ -595,6 +703,16 @@ impl FederationCoordinator {
                     got: params.len(),
                 });
             }
+            if params.iter().any(|v| !v.is_finite()) {
+                return Err(FedError::NonFiniteUpdate);
+            }
+            let max_samples = self.config.max_sample_count_per_update.max(1);
+            if sample_count > max_samples {
+                return Err(FedError::SampleCountExceeded {
+                    max: max_samples,
+                    got: sample_count,
+                });
+            }
             // Generous defense-in-depth bound: clipped norm plus a wide
             // multiple of the noise scale so legitimate noised submissions
             // are never rejected, but a wildly out-of-range payload is.
@@ -662,24 +780,54 @@ impl FederationCoordinator {
             return None;
         }
         let round = self.current_round.take()?;
-        let total_samples: usize = round.submissions.iter().map(|s| s.sample_count).sum();
-        if total_samples == 0 {
+        // `sample_count` is agent-supplied: clamp again here (submissions
+        // are validated on entry, but persisted state may predate that)
+        // and do all weighting in f64 so nothing can wrap.
+        let max_samples = self.config.max_sample_count_per_update.max(1);
+        let clamped_counts: Vec<usize> = round
+            .submissions
+            .iter()
+            .map(|s| s.sample_count.min(max_samples))
+            .collect();
+        let total_samples = clamped_counts
+            .iter()
+            .fold(0usize, |acc, &c| acc.saturating_add(c));
+        let weight_inputs: Vec<f64> = clamped_counts.iter().map(|&c| c as f64).collect();
+        let Some(weights) =
+            capped_fedavg_weights(&weight_inputs, self.config.max_agent_weight_share)
+        else {
             self.open_round(now);
             return None;
-        }
+        };
         let dim = self.global_params.len();
         let mut aggregated_delta = vec![0.0f64; dim];
-        for submission in &round.submissions {
-            let weight = submission.sample_count as f64 / total_samples as f64;
+        for (submission, weight) in round.submissions.iter().zip(&weights) {
             for (i, &v) in submission.params.iter().enumerate() {
                 if i < dim {
                     aggregated_delta[i] += v * weight;
                 }
             }
         }
-        for (g, d) in self.global_params.iter_mut().zip(aggregated_delta.iter()) {
-            *g += d;
+        let candidate: Vec<f64> = self
+            .global_params
+            .iter()
+            .zip(aggregated_delta.iter())
+            .map(|(g, d)| g + d)
+            .collect();
+        if aggregated_delta.iter().any(|v| !v.is_finite())
+            || candidate.iter().any(|v| !v.is_finite())
+        {
+            // Never let a NaN/Inf aggregate overwrite the global model: drop
+            // this round's submissions and re-open the round on the
+            // unchanged model.
+            log::warn!(
+                "[FEDERATION] discarding round {}: aggregate is not finite",
+                round.round_id
+            );
+            self.open_round(now);
+            return None;
         }
+        self.global_params = candidate;
         self.model_version += 1;
         let convergence_delta = l2_norm(&aggregated_delta);
         let avg_loss =
@@ -738,6 +886,8 @@ mod tests {
             total_epsilon_budget_per_agent: 100.0,
             local_epochs: 5,
             learning_rate: 0.5,
+            max_sample_count_per_update: 100_000,
+            max_agent_weight_share: 0.5,
         }
     }
 
@@ -779,8 +929,11 @@ mod tests {
 
     #[test]
     fn fedavg_weights_by_sample_count() {
-        let mut coord = FederationCoordinator::new(cfg(), 2);
-        coord.start(cfg(), vec![0.0, 0.0], 1000);
+        // Plain FedAvg: disable the per-agent weight-share cap.
+        let mut config = cfg();
+        config.max_agent_weight_share = 1.0;
+        let mut coord = FederationCoordinator::new(config.clone(), 2);
+        coord.start(config, vec![0.0, 0.0], 1000);
         let round_id = coord.current_round.as_ref().unwrap().round_id;
 
         coord
@@ -796,6 +949,155 @@ mod tests {
         // Weighted average: 0.75*[10,0] + 0.25*[0,10] = [7.5, 2.5]
         assert!((coord.global_params[0] - 7.5).abs() < 1e-9);
         assert!((coord.global_params[1] - 2.5).abs() < 1e-9);
+    }
+
+    #[test]
+    fn rejects_sample_count_above_configured_maximum() {
+        let mut coord = FederationCoordinator::new(cfg(), 2);
+        coord.start(cfg(), vec![0.0, 0.0], 1000);
+        let round_id = coord.current_round.as_ref().unwrap().round_id;
+        // A value that would have wrapped the old `usize` sum.
+        let err = coord
+            .submit_update("agent-a", round_id, vec![1.0, 1.0], usize::MAX, 0.1, 1001)
+            .unwrap_err();
+        assert_eq!(err.code(), "sample_count_exceeded");
+        let err = coord
+            .submit_update("agent-a", round_id, vec![1.0, 1.0], 100_001, 0.1, 1001)
+            .unwrap_err();
+        assert_eq!(
+            err,
+            FedError::SampleCountExceeded {
+                max: 100_000,
+                got: 100_001
+            }
+        );
+        // Rejected submissions neither count nor spend budget.
+        assert!(coord.current_round.as_ref().unwrap().submissions.is_empty());
+        assert!(coord.budgets.is_empty());
+        coord
+            .submit_update("agent-a", round_id, vec![1.0, 1.0], 100_000, 0.1, 1002)
+            .unwrap();
+    }
+
+    #[test]
+    fn aggregation_never_wraps_on_huge_persisted_sample_counts() {
+        // State persisted before the per-update limit existed could carry
+        // arbitrary counts; aggregation must clamp and stay finite.
+        let mut config = cfg();
+        config.max_agent_weight_share = 1.0;
+        let mut coord = FederationCoordinator::new(config.clone(), 2);
+        coord.start(config, vec![0.0, 0.0], 1000);
+        let round = coord.current_round.as_mut().unwrap();
+        for (agent, count, params) in [
+            ("agent-a", usize::MAX, vec![2.0, 0.0]),
+            ("agent-b", 2, vec![0.0, 2.0]),
+        ] {
+            round.submissions.push(AgentSubmission {
+                agent_id: agent.into(),
+                params,
+                sample_count: count,
+                loss: 0.1,
+                submitted_at_ms: 1001,
+            });
+        }
+        let completed = coord.try_aggregate(1002).unwrap();
+        assert_eq!(completed.total_samples, 100_002);
+        assert!(coord.global_params.iter().all(|v| v.is_finite()));
+        assert!(coord.global_params[1] > 0.0);
+    }
+
+    #[test]
+    fn single_agent_weight_share_is_capped() {
+        let mut coord = FederationCoordinator::new(cfg(), 2);
+        coord.start(cfg(), vec![0.0, 0.0], 1000);
+        let round_id = coord.current_round.as_ref().unwrap().round_id;
+        // agent-a claims 99.99% of the samples and pushes hard on x0.
+        coord
+            .submit_update("agent-a", round_id, vec![10.0, 0.0], 100_000, 0.1, 1001)
+            .unwrap();
+        coord
+            .submit_update("agent-b", round_id, vec![0.0, 10.0], 10, 0.1, 1002)
+            .unwrap();
+        coord.try_aggregate(1003).unwrap();
+        // Capped at 0.5 each: [5, 5] instead of ~[9.999, 0.001].
+        assert!((coord.global_params[0] - 5.0).abs() < 1e-9);
+        assert!((coord.global_params[1] - 5.0).abs() < 1e-9);
+    }
+
+    #[test]
+    fn capped_weights_redistribute_proportionally_and_sum_to_one() {
+        let w = capped_fedavg_weights(&[900.0, 50.0, 30.0, 20.0], 0.5).unwrap();
+        assert!((w.iter().sum::<f64>() - 1.0).abs() < 1e-12);
+        assert!((w[0] - 0.5).abs() < 1e-12);
+        // Remaining 0.5 split 50:30:20.
+        assert!((w[1] - 0.25).abs() < 1e-12);
+        assert!((w[2] - 0.15).abs() < 1e-12);
+        assert!((w[3] - 0.10).abs() < 1e-12);
+        // Cascading caps: two heavy agents both end up at the cap.
+        let w = capped_fedavg_weights(&[1000.0, 900.0, 1.0, 1.0], 0.3).unwrap();
+        assert!(w.iter().all(|&x| x <= 0.3 + 1e-12));
+        assert!((w.iter().sum::<f64>() - 1.0).abs() < 1e-12);
+        // Infeasible cap falls back to equal weights.
+        let w = capped_fedavg_weights(&[10.0, 1.0], 0.4).unwrap();
+        assert_eq!(w, vec![0.5, 0.5]);
+        // A single participant always gets the full weight.
+        assert_eq!(capped_fedavg_weights(&[7.0], 0.5).unwrap(), vec![1.0]);
+        // Cap disabled keeps plain FedAvg.
+        let w = capped_fedavg_weights(&[3.0, 1.0], 1.0).unwrap();
+        assert_eq!(w, vec![0.75, 0.25]);
+        assert!(capped_fedavg_weights(&[0.0, 0.0], 0.5).is_none());
+        assert!(capped_fedavg_weights(&[], 0.5).is_none());
+    }
+
+    #[test]
+    fn rejects_non_finite_submission() {
+        let mut coord = FederationCoordinator::new(cfg(), 2);
+        coord.start(cfg(), vec![0.0, 0.0], 1000);
+        let round_id = coord.current_round.as_ref().unwrap().round_id;
+        let err = coord
+            .submit_update("agent-a", round_id, vec![f64::NAN, 0.0], 10, 0.1, 1001)
+            .unwrap_err();
+        assert_eq!(err.code(), "non_finite_update");
+    }
+
+    #[test]
+    fn non_finite_aggregate_never_overwrites_global_model() {
+        let mut coord = FederationCoordinator::new(cfg(), 2);
+        coord.start(cfg(), vec![f64::MAX, 0.0], 1000);
+        let round = coord.current_round.as_mut().unwrap();
+        let round_id = round.round_id;
+        for agent in ["agent-a", "agent-b"] {
+            round.submissions.push(AgentSubmission {
+                agent_id: agent.into(),
+                params: vec![f64::MAX, 1.0],
+                sample_count: 10,
+                loss: 0.1,
+                submitted_at_ms: 1001,
+            });
+        }
+        assert!(coord.try_aggregate(1002).is_none());
+        assert_eq!(coord.global_params, vec![f64::MAX, 0.0]);
+        assert_eq!(coord.model_version, 0);
+        assert!(coord.history.is_empty());
+        // The round is re-opened (empty) on the unchanged model.
+        let reopened = coord.current_round.as_ref().unwrap();
+        assert_eq!(reopened.round_id, round_id);
+        assert!(reopened.submissions.is_empty());
+
+        // NaN smuggled in via persisted state is handled the same way.
+        coord.global_params = vec![0.0, 0.0];
+        let round = coord.current_round.as_mut().unwrap();
+        for agent in ["agent-a", "agent-b"] {
+            round.submissions.push(AgentSubmission {
+                agent_id: agent.into(),
+                params: vec![f64::NAN, 1.0],
+                sample_count: 10,
+                loss: 0.1,
+                submitted_at_ms: 1003,
+            });
+        }
+        assert!(coord.try_aggregate(1004).is_none());
+        assert_eq!(coord.global_params, vec![0.0, 0.0]);
     }
 
     #[test]
