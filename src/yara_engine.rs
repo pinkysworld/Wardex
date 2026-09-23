@@ -8,7 +8,7 @@
 //! `docs/YARA_COMPATIBILITY.md`.
 
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use std::collections::{BTreeSet, HashMap};
 
 // ── Rule model ───────────────────────────────────────────────────────
 
@@ -586,69 +586,86 @@ fn find_text_modifiers(data: &[u8], text: &str, id: &str, rs: &RuleString) -> Ve
     results
 }
 
-/// Try to match a hex-token sequence starting exactly at `data[pos..]`.
-/// Returns the end offset (exclusive) on success. Alternatives and jumps
-/// make this a small backtracking matcher rather than a simple byte
-/// comparison.
-fn hex_match_at(tokens: &[HexToken], data: &[u8], pos: usize) -> Option<usize> {
-    match tokens.split_first() {
-        None => Some(pos),
-        Some((HexToken::Byte(b), rest)) => {
-            if data.get(pos) == Some(b) {
-                hex_match_at(rest, data, pos + 1)
-            } else {
-                None
-            }
+/// Advance a *set* of reachable data positions through a hex-token
+/// sequence, Thompson-NFA style, instead of recursively backtracking
+/// through every combination of alternative/jump choices.
+///
+/// A naive recursive backtracker (the previous implementation) explores
+/// the cross product of every alternative and jump choice: ~100
+/// sequential `( AA | AB )` groups — well within the hex-body length cap
+/// — yield roughly 2^100 paths per scan start offset, hanging the scan on
+/// an uploaded rule. Here, alternatives take the *union* of each branch's
+/// resulting position set instead of trying each branch's full
+/// continuation separately, and a jump expands each position into a
+/// bounded range of positions. Because the position set is deduplicated
+/// (via `BTreeSet`), its size never exceeds `data.len() + 1` no matter how
+/// many alternatives or jumps the pattern has, so the total cost of
+/// matching one token sequence from one start position is
+/// O(pattern_len * data.len()) rather than exponential.
+fn hex_run(tokens: &[HexToken], data: &[u8], starts: BTreeSet<usize>) -> BTreeSet<usize> {
+    let mut current = starts;
+    for token in tokens {
+        if current.is_empty() {
+            return current;
         }
-        Some((HexToken::Wildcard, rest)) => {
-            if pos < data.len() {
-                hex_match_at(rest, data, pos + 1)
-            } else {
-                None
-            }
-        }
-        Some((HexToken::HighNibble(hi), rest)) => {
-            if data.get(pos).is_some_and(|b| (b >> 4) == *hi) {
-                hex_match_at(rest, data, pos + 1)
-            } else {
-                None
-            }
-        }
-        Some((HexToken::LowNibble(lo), rest)) => {
-            if data.get(pos).is_some_and(|b| (b & 0x0F) == *lo) {
-                hex_match_at(rest, data, pos + 1)
-            } else {
-                None
-            }
-        }
-        Some((HexToken::Jump(min, max), rest)) => {
-            // Bound unbounded jumps ([n-]) to avoid pathological scans (and,
-            // combined with the hex-body length cap in `yara_parser`,
-            // pathological compile-time backtracking cost too).
-            const MAX_JUMP: usize = 512;
-            let hi = max.unwrap_or(MAX_JUMP).min(data.len().saturating_sub(pos));
-            if hi < *min {
-                return None;
-            }
-            for skip in *min..=hi {
-                if let Some(end) = hex_match_at(rest, data, pos + skip) {
-                    return Some(end);
+        current = match token {
+            HexToken::Byte(b) => current
+                .into_iter()
+                .filter(|&p| data.get(p) == Some(b))
+                .map(|p| p + 1)
+                .collect(),
+            HexToken::Wildcard => current
+                .into_iter()
+                .filter(|&p| p < data.len())
+                .map(|p| p + 1)
+                .collect(),
+            HexToken::HighNibble(hi) => current
+                .into_iter()
+                .filter(|&p| data.get(p).is_some_and(|b| (b >> 4) == *hi))
+                .map(|p| p + 1)
+                .collect(),
+            HexToken::LowNibble(lo) => current
+                .into_iter()
+                .filter(|&p| data.get(p).is_some_and(|b| (b & 0x0F) == *lo))
+                .map(|p| p + 1)
+                .collect(),
+            HexToken::Jump(min, max) => {
+                // Bound unbounded jumps ([n-]) to avoid pathological scans
+                // (and, combined with the hex-body length cap in
+                // `yara_parser`, pathological cost too).
+                const MAX_JUMP: usize = 512;
+                let mut next = BTreeSet::new();
+                for p in current {
+                    let hi = max.unwrap_or(MAX_JUMP).min(data.len().saturating_sub(p));
+                    if hi < *min {
+                        continue;
+                    }
+                    for skip in *min..=hi {
+                        next.insert(p + skip);
+                    }
                 }
+                next
             }
-            None
-        }
-        Some((HexToken::Alternative(branches), rest)) => {
-            for branch in branches {
-                let mut combined: Vec<HexToken> = Vec::with_capacity(branch.len() + rest.len());
-                combined.extend(branch.iter().cloned());
-                combined.extend(rest.iter().cloned());
-                if let Some(end) = hex_match_at(&combined, data, pos) {
-                    return Some(end);
+            HexToken::Alternative(branches) => {
+                let mut next = BTreeSet::new();
+                for branch in branches {
+                    next.extend(hex_run(branch, data, current.clone()));
                 }
+                next
             }
-            None
-        }
+        };
     }
+    current
+}
+
+/// Try to match a hex-token sequence starting exactly at `data[pos]`.
+/// Returns the shortest matching end offset (exclusive) on success. See
+/// [`hex_run`] for why this is a bounded set simulation rather than a
+/// recursive backtracker.
+fn hex_match_at(tokens: &[HexToken], data: &[u8], pos: usize) -> Option<usize> {
+    let mut starts = BTreeSet::new();
+    starts.insert(pos);
+    hex_run(tokens, data, starts).into_iter().next()
 }
 
 fn find_hex_tokens(data: &[u8], tokens: &[HexToken], id: &str) -> Vec<MatchLocation> {
@@ -1105,6 +1122,159 @@ mod tests {
         data.extend_from_slice(&[0x00; 100]);
         let report = engine.scan(&data);
         assert!(report.results[0].matched);
+    }
+
+    /// A regression test for the hex-alternative DoS: a naive recursive
+    /// backtracker exploring every `(AA|AB)` choice independently would
+    /// take ~2^100 paths per start offset for a pattern built from 100
+    /// sequential two-way alternatives. The bounded set-simulation matcher
+    /// must instead run in time roughly linear in pattern length * data
+    /// length, so this completes quickly rather than hanging the scan.
+    #[test]
+    fn hex_many_sequential_alternatives_does_not_hang() {
+        // ( AA | AB ) repeated 100 times, i.e. 2^100 naive backtracking
+        // paths per start offset.
+        let mut tokens = Vec::new();
+        for _ in 0..100 {
+            tokens.push(HexToken::Alternative(vec![
+                vec![HexToken::Byte(0xAA)],
+                vec![HexToken::Byte(0xAB)],
+            ]));
+        }
+
+        let mut engine = YaraEngine::new();
+        engine.add_rule(YaraRule {
+            name: "many_alts".into(),
+            meta: RuleMeta {
+                author: "test".into(),
+                description: "test".into(),
+                severity: "Elevated".into(),
+                mitre_ids: vec![],
+                created: "2026-01-01".into(),
+                ..Default::default()
+            },
+            strings: vec![RuleString {
+                id: "$a".into(),
+                pattern: StringPattern::HexTokens(tokens),
+                nocase: false,
+                ..Default::default()
+            }],
+            condition: RuleCondition::AnyOf,
+            enabled: true,
+            tags: Vec::new(),
+            is_private: false,
+            is_global: false,
+        });
+
+        // Every position taken is 0xAA — matches every branch of every
+        // alternative, so this also exercises the "no match" path where
+        // the byte doesn't match on top of the alternation.
+        let data = vec![0xAAu8; 100];
+        let start = std::time::Instant::now();
+        let report = engine.scan(&data);
+        assert!(
+            start.elapsed() < std::time::Duration::from_secs(1),
+            "hex alternative scan took too long: {:?}",
+            start.elapsed()
+        );
+        assert!(report.results[0].matched);
+
+        // Data too short to satisfy the pattern at all: must terminate
+        // quickly and report no match rather than hang.
+        let short_data = vec![0xAAu8; 10];
+        let start = std::time::Instant::now();
+        let report = engine.scan(&short_data);
+        assert!(
+            start.elapsed() < std::time::Duration::from_secs(1),
+            "hex alternative non-match scan took too long: {:?}",
+            start.elapsed()
+        );
+        assert!(!report.results[0].matched);
+    }
+
+    #[test]
+    fn hex_alternative_matches_either_branch() {
+        // { ( AA BB | CC DD ) } — direct HexToken construction, matching
+        // the parser-level test in yara_parser.rs but exercised here at
+        // the engine level.
+        let tokens = vec![HexToken::Alternative(vec![
+            vec![HexToken::Byte(0xAA), HexToken::Byte(0xBB)],
+            vec![HexToken::Byte(0xCC), HexToken::Byte(0xDD)],
+        ])];
+
+        let mut engine = YaraEngine::new();
+        engine.add_rule(YaraRule {
+            name: "alt_either".into(),
+            meta: RuleMeta {
+                author: "test".into(),
+                description: "test".into(),
+                severity: "Elevated".into(),
+                mitre_ids: vec![],
+                created: "2026-01-01".into(),
+                ..Default::default()
+            },
+            strings: vec![RuleString {
+                id: "$a".into(),
+                pattern: StringPattern::HexTokens(tokens),
+                nocase: false,
+                ..Default::default()
+            }],
+            condition: RuleCondition::AnyOf,
+            enabled: true,
+            tags: Vec::new(),
+            is_private: false,
+            is_global: false,
+        });
+
+        assert!(engine.scan(&[0xAA, 0xBB]).results[0].matched);
+        assert!(engine.scan(&[0xCC, 0xDD]).results[0].matched);
+        assert!(!engine.scan(&[0x11, 0x22]).results[0].matched);
+    }
+
+    #[test]
+    fn hex_jump_and_alternative_combined() {
+        // { AA [1-3] ( BB | CC ) DD } — jump followed by an alternative
+        // followed by a fixed byte, checking the position-set simulation
+        // correctly threads jumps through alternation.
+        let tokens = vec![
+            HexToken::Byte(0xAA),
+            HexToken::Jump(1, Some(3)),
+            HexToken::Alternative(vec![vec![HexToken::Byte(0xBB)], vec![HexToken::Byte(0xCC)]]),
+            HexToken::Byte(0xDD),
+        ];
+
+        let mut engine = YaraEngine::new();
+        engine.add_rule(YaraRule {
+            name: "jump_alt".into(),
+            meta: RuleMeta {
+                author: "test".into(),
+                description: "test".into(),
+                severity: "Elevated".into(),
+                mitre_ids: vec![],
+                created: "2026-01-01".into(),
+                ..Default::default()
+            },
+            strings: vec![RuleString {
+                id: "$a".into(),
+                pattern: StringPattern::HexTokens(tokens),
+                nocase: false,
+                ..Default::default()
+            }],
+            condition: RuleCondition::AnyOf,
+            enabled: true,
+            tags: Vec::new(),
+            is_private: false,
+            is_global: false,
+        });
+
+        // AA, jump 1, BB, DD → matches (jump of exactly 1).
+        assert!(engine.scan(&[0xAA, 0x00, 0xBB, 0xDD]).results[0].matched);
+        // AA, jump 2, CC, DD → matches.
+        assert!(engine.scan(&[0xAA, 0x00, 0x00, 0xCC, 0xDD]).results[0].matched);
+        // Jump of 0 is below the minimum of 1 → no match.
+        assert!(!engine.scan(&[0xAA, 0xBB, 0xDD]).results[0].matched);
+        // Neither BB nor CC after the jump → no match.
+        assert!(!engine.scan(&[0xAA, 0x00, 0x11, 0xDD]).results[0].matched);
     }
 
     #[test]
