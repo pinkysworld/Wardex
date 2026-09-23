@@ -20,33 +20,46 @@
 //   field             tantivy type              purpose
 //   ----------------  ------------------------  --------------------------
 //   timestamp         DATE  (FAST)               range filters + sort
-//   timestamp_kw      STRING (STORED)            display + `timestamp:`
-//   device_id         STRING (STORED)            exact/substring match
-//   event_class       STRING (STORED)            exact/substring match
-//   process_name      STRING (STORED)            exact/substring match
-//   src_ip            STRING (STORED)            exact/substring match
-//   dst_ip            STRING (STORED)            exact/substring match
-//   user_name         STRING (STORED)            exact/substring match
+//   timestamp_kw      STORED (text)              display (original case)
+//   timestamp_lc      STRING                     `timestamp:` match (lowercased)
+//   device_id         STORED (text)              display (original case)
+//   device_id_lc      STRING                     exact/substring match (lowercased)
+//   event_class       STORED (text)              display (original case)
+//   event_class_lc    STRING                     exact/substring match (lowercased)
+//   process_name      STORED (text)              display (original case)
+//   process_name_lc   STRING                     exact/substring match (lowercased)
+//   src_ip            STORED (text)               display (original case)
+//   src_ip_lc         STRING                     exact/substring match (lowercased)
+//   dst_ip            STORED (text)               display (original case)
+//   dst_ip_lc         STRING                     exact/substring match (lowercased)
+//   user_name         STORED (text)               display (original case)
+//   user_name_lc      STRING                     exact/substring match (lowercased)
 //   command_line      TEXT   (STORED)            tokenized full-text search
-//   command_line_kw   STRING                     substring/wildcard match
+//   command_line_lc   STRING                     substring/wildcard match (lowercased)
 //   raw_text          TEXT   (STORED)            tokenized full-text search
-//   raw_text_kw       STRING                     substring/wildcard match
+//   raw_text_lc       STRING                     substring/wildcard match (lowercased)
 //
-// `STRING` fields are untokenized (one raw token per document), which lets
-// `field:pattern` and free-text queries compile to a single case-insensitive
-// `RegexQuery` per field — this reproduces the substring/wildcard semantics
-// of the original hand-rolled scanner exactly (see `glob_to_regex`).
+// Every field used for `field:pattern`/free-text matching is untokenized
+// (one raw token per document) *and* lowercased at index time (its `_lc`
+// companion), with the query pattern lowercased the same way before being
+// compiled to a regex (see `glob_to_regex`) — this reproduces the
+// substring/wildcard semantics of the original hand-rolled scanner exactly,
+// without relying on inline regex flags: Tantivy's regex engine
+// (`tantivy-fst`, built on a restricted `regex-automata` syntax subset)
+// rejects the `(?i)` case-insensitive flag with a parse error, so case
+// folding has to happen on the data instead. The un-suffixed fields keep the
+// original-case value purely for display (`SearchHit`/aggregation output).
 //
 // ── DSL → Tantivy mapping ────────────────────────────────────────────────
 //
-//   HuntPredicate::FieldMatch { field, pattern } → RegexQuery on the `_kw`/
+//   HuntPredicate::FieldMatch { field, pattern } → RegexQuery on the `_lc`
 //     STRING field for `field` (glob `*` and bare substrings both compile to
 //     a regex; see `glob_to_regex`). An unknown field name matches every
 //     document for pattern `"*"` and no documents otherwise, matching the
 //     legacy scanner's behaviour for empty field values.
 //   HuntPredicate::FreeText(text)   → BooleanQuery (Should) of RegexQuery
-//     over every free-text field (device_id, process_name, command_line_kw,
-//     src_ip, dst_ip, user_name, raw_text_kw).
+//     over every free-text field (device_id_lc, process_name_lc,
+//     command_line_lc, src_ip_lc, dst_ip_lc, user_name_lc, raw_text_lc).
 //   HuntPredicate::And/Or/Not       → BooleanQuery (Must/Should/MustNot).
 //   SearchQuery.from/to             → RangeQuery on the `timestamp` fast
 //     field, ANDed with the free-text query.
@@ -80,7 +93,7 @@ use tantivy::{Index, IndexReader, IndexWriter, ReloadPolicy, Term};
 /// Bumped whenever the on-disk schema changes shape. A mismatch (or a
 /// missing/corrupt metadata sidecar) triggers an automatic rebuild of the
 /// on-disk index rather than a hard failure.
-pub const SEARCH_SCHEMA_VERSION: u32 = 1;
+pub const SEARCH_SCHEMA_VERSION: u32 = 2;
 
 /// Sidecar metadata file name written next to the Tantivy index directory.
 /// Doctor/status tooling reads this file directly instead of opening the
@@ -160,46 +173,70 @@ pub struct IndexStats {
 struct SearchFields {
     timestamp: Field,
     timestamp_kw: Field,
+    timestamp_lc: Field,
     device_id: Field,
+    device_id_lc: Field,
     event_class: Field,
+    event_class_lc: Field,
     process_name: Field,
+    process_name_lc: Field,
     command_line: Field,
-    command_line_kw: Field,
+    command_line_lc: Field,
     src_ip: Field,
+    src_ip_lc: Field,
     dst_ip: Field,
+    dst_ip_lc: Field,
     user_name: Field,
+    user_name_lc: Field,
     raw_text: Field,
-    raw_text_kw: Field,
+    raw_text_lc: Field,
 }
 
 fn build_schema() -> (Schema, SearchFields) {
     let mut b = Schema::builder();
     let timestamp = b.add_date_field("timestamp", FAST);
-    let timestamp_kw = b.add_text_field("timestamp_kw", STRING | STORED);
-    let device_id = b.add_text_field("device_id", STRING | STORED);
-    let event_class = b.add_text_field("event_class", STRING | STORED);
-    let process_name = b.add_text_field("process_name", STRING | STORED);
+    // Display copies keep the original-case text, stored only (not
+    // indexed): matching always goes through the lowercased `_lc` companion
+    // below, since Tantivy's regex engine has no case-insensitive flag.
+    let timestamp_kw = b.add_text_field("timestamp_kw", STORED);
+    let timestamp_lc = b.add_text_field("timestamp_lc", STRING);
+    let device_id = b.add_text_field("device_id", STORED);
+    let device_id_lc = b.add_text_field("device_id_lc", STRING);
+    let event_class = b.add_text_field("event_class", STORED);
+    let event_class_lc = b.add_text_field("event_class_lc", STRING);
+    let process_name = b.add_text_field("process_name", STORED);
+    let process_name_lc = b.add_text_field("process_name_lc", STRING);
     let command_line = b.add_text_field("command_line", TEXT | STORED);
-    let command_line_kw = b.add_text_field("command_line_kw", STRING);
-    let src_ip = b.add_text_field("src_ip", STRING | STORED);
-    let dst_ip = b.add_text_field("dst_ip", STRING | STORED);
-    let user_name = b.add_text_field("user_name", STRING | STORED);
+    let command_line_lc = b.add_text_field("command_line_lc", STRING);
+    let src_ip = b.add_text_field("src_ip", STORED);
+    let src_ip_lc = b.add_text_field("src_ip_lc", STRING);
+    let dst_ip = b.add_text_field("dst_ip", STORED);
+    let dst_ip_lc = b.add_text_field("dst_ip_lc", STRING);
+    let user_name = b.add_text_field("user_name", STORED);
+    let user_name_lc = b.add_text_field("user_name_lc", STRING);
     let raw_text = b.add_text_field("raw_text", TEXT | STORED);
-    let raw_text_kw = b.add_text_field("raw_text_kw", STRING);
+    let raw_text_lc = b.add_text_field("raw_text_lc", STRING);
     let schema = b.build();
     let fields = SearchFields {
         timestamp,
         timestamp_kw,
+        timestamp_lc,
         device_id,
+        device_id_lc,
         event_class,
+        event_class_lc,
         process_name,
+        process_name_lc,
         command_line,
-        command_line_kw,
+        command_line_lc,
         src_ip,
+        src_ip_lc,
         dst_ip,
+        dst_ip_lc,
         user_name,
+        user_name_lc,
         raw_text,
-        raw_text_kw,
+        raw_text_lc,
     };
     (schema, fields)
 }
@@ -418,26 +455,26 @@ impl SearchIndex {
             f.timestamp,
             tantivy::DateTime::from_timestamp_nanos(ts.timestamp_nanos_opt().unwrap_or_default()),
         );
-        doc.add_text(
-            f.timestamp_kw,
-            if ts_raw.is_empty() {
-                ts.to_rfc3339()
-            } else {
-                ts_raw
-            },
-        );
-        doc.add_text(f.device_id, get("device_id"));
-        doc.add_text(f.event_class, get("event_class"));
-        doc.add_text(f.process_name, get("process_name"));
-        let cmd = get("command_line");
-        doc.add_text(f.command_line, &cmd);
-        doc.add_text(f.command_line_kw, &cmd);
-        doc.add_text(f.src_ip, get("src_ip"));
-        doc.add_text(f.dst_ip, get("dst_ip"));
-        doc.add_text(f.user_name, get("user_name"));
-        let raw = get("raw_text");
-        doc.add_text(f.raw_text, &raw);
-        doc.add_text(f.raw_text_kw, &raw);
+        let ts_display = if ts_raw.is_empty() {
+            ts.to_rfc3339()
+        } else {
+            ts_raw
+        };
+        doc.add_text(f.timestamp_lc, ts_display.to_lowercase());
+        doc.add_text(f.timestamp_kw, ts_display);
+
+        let mut add_pair = |disp: Field, lc: Field, value: String| {
+            doc.add_text(lc, value.to_lowercase());
+            doc.add_text(disp, value);
+        };
+        add_pair(f.device_id, f.device_id_lc, get("device_id"));
+        add_pair(f.event_class, f.event_class_lc, get("event_class"));
+        add_pair(f.process_name, f.process_name_lc, get("process_name"));
+        add_pair(f.command_line, f.command_line_lc, get("command_line"));
+        add_pair(f.src_ip, f.src_ip_lc, get("src_ip"));
+        add_pair(f.dst_ip, f.dst_ip_lc, get("dst_ip"));
+        add_pair(f.user_name, f.user_name_lc, get("user_name"));
+        add_pair(f.raw_text, f.raw_text_lc, get("raw_text"));
         doc
     }
 
@@ -941,9 +978,27 @@ fn regex_escape(s: &str) -> String {
     out
 }
 
+/// Compile a glob/substring DSL pattern into a Tantivy `RegexQuery` pattern.
+///
+/// Two things make this different from writing an ordinary Rust regex:
+///
+/// - Tantivy's regex engine (`tantivy-fst`, an automaton built for FST
+///   intersection) matches a pattern against a whole term at once — it has
+///   no "search anywhere in the string" mode — so this never emits `^`/`$`
+///   anchors; a pattern like `10\.0\..*` already only matches terms that
+///   *start* with `10.0.` because matching starts at position 0 and must
+///   consume the entire term. Anchors aren't just redundant here, they're
+///   actively rejected (`Error::NoEmpty`, "empty match operators are not
+///   allowed") since `^`/`$` are zero-width assertions this engine doesn't
+///   support at all.
+/// - It also rejects the `(?i)` inline case-insensitive flag, so case
+///   folding happens by lowercasing the pattern here and matching it
+///   against the pre-lowercased `_lc` companion fields (see the module
+///   docs) instead of via a regex flag.
 fn glob_to_regex(pattern: &str) -> String {
+    let pattern = pattern.to_lowercase();
     if !pattern.contains('*') {
-        return format!("(?i).*{}.*", regex_escape(pattern));
+        return format!(".*{}.*", regex_escape(&pattern));
     }
     let mut body = String::new();
     let mut chars = pattern.chars().peekable();
@@ -957,30 +1012,22 @@ fn glob_to_regex(pattern: &str) -> String {
             regex_escape_char(c, &mut body);
         }
     }
-    let mut re = String::from("(?i)");
-    if !pattern.starts_with('*') {
-        re.push('^');
-    }
-    re.push_str(&body);
-    if !pattern.ends_with('*') {
-        re.push('$');
-    }
-    re
+    body
 }
 
 /// Resolve a DSL field alias to the schema field used for substring/wildcard
-/// matching (the untokenized `STRING`/`_kw` copy of that field).
+/// matching (the untokenized, lowercased `_lc` copy of that field).
 fn kw_field(alias: &str, f: &SearchFields) -> Option<Field> {
     match alias {
-        "timestamp" => Some(f.timestamp_kw),
-        "device_id" | "device" => Some(f.device_id),
-        "event_class" | "class" => Some(f.event_class),
-        "process_name" | "process" => Some(f.process_name),
-        "command_line" | "cmd" => Some(f.command_line_kw),
-        "src_ip" | "src" => Some(f.src_ip),
-        "dst_ip" | "dst" => Some(f.dst_ip),
-        "user_name" | "user" => Some(f.user_name),
-        "raw_text" | "raw" => Some(f.raw_text_kw),
+        "timestamp" => Some(f.timestamp_lc),
+        "device_id" | "device" => Some(f.device_id_lc),
+        "event_class" | "class" => Some(f.event_class_lc),
+        "process_name" | "process" => Some(f.process_name_lc),
+        "command_line" | "cmd" => Some(f.command_line_lc),
+        "src_ip" | "src" => Some(f.src_ip_lc),
+        "dst_ip" | "dst" => Some(f.dst_ip_lc),
+        "user_name" | "user" => Some(f.user_name_lc),
+        "raw_text" | "raw" => Some(f.raw_text_lc),
         _ => None,
     }
 }
@@ -991,13 +1038,13 @@ fn kw_field(alias: &str, f: &SearchFields) -> Option<Field> {
 /// `event_class` is intentionally excluded, matching legacy behaviour).
 fn free_text_fields(f: &SearchFields) -> [Field; 7] {
     [
-        f.device_id,
-        f.process_name,
-        f.command_line_kw,
-        f.src_ip,
-        f.dst_ip,
-        f.user_name,
-        f.raw_text_kw,
+        f.device_id_lc,
+        f.process_name_lc,
+        f.command_line_lc,
+        f.src_ip_lc,
+        f.dst_ip_lc,
+        f.user_name_lc,
+        f.raw_text_lc,
     ]
 }
 
@@ -1744,38 +1791,14 @@ mod tests {
         assert_eq!(idx.hunt("bogus_field:anything").unwrap().total, 0);
     }
 
-    #[test]
-    fn test_glob_to_regex_matches_expected_semantics() {
-        assert!(regex::is_match(&glob_to_regex("10.0.*"), "10.0.0.5"));
-        assert!(regex::is_match(&glob_to_regex("*.exe"), "mimikatz.exe"));
-        assert!(!regex::is_match(&glob_to_regex("10.1.*"), "10.0.0.5"));
-    }
-
-    // Minimal helper module so this test file doesn't need an extra dev-dep
-    // just to sanity-check the regex strings we build; the real matching
-    // happens inside Tantivy's `RegexQuery` (exercised by the hunt tests
-    // above).
-    mod regex {
-        pub fn is_match(pattern: &str, text: &str) -> bool {
-            let inner = pattern.strip_prefix("(?i)").unwrap_or(pattern);
-            let lower_pattern = inner.to_lowercase();
-            let lower_text = text.to_lowercase();
-            if let Some(stripped) = lower_pattern.strip_prefix('^') {
-                let stripped = stripped.strip_suffix('$').unwrap_or(stripped);
-                if let Some((prefix, suffix)) = stripped.split_once(".*") {
-                    lower_text.starts_with(prefix) && lower_text.ends_with(suffix)
-                } else {
-                    lower_text == stripped
-                }
-            } else {
-                let core = lower_pattern
-                    .strip_prefix(".*")
-                    .and_then(|s| s.strip_suffix(".*"))
-                    .unwrap_or(&lower_pattern);
-                lower_text.contains(core)
-            }
-        }
-    }
+    // `glob_to_regex` itself is exercised end-to-end (compiled into a real
+    // Tantivy `RegexQuery` and executed against the index) by
+    // `test_hunt_wildcard`, `test_hunt_field_match`, `test_case_insensitive_search`
+    // and friends above, rather than by a standalone unit test against a
+    // hand-rolled regex simulator — the actual matching engine is
+    // `tantivy-fst`, and a from-scratch reimplementation of it here would
+    // risk diverging from its real (restricted) syntax semantics instead of
+    // catching a mismatch.
 
     #[test]
     fn test_hunt_aggregate_count() {
