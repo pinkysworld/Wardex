@@ -1405,6 +1405,35 @@ impl EnterpriseStore {
         summary: String,
         synced_by: String,
     ) -> TicketSyncRecord {
+        self.sync_ticket_remote(
+            provider,
+            object_kind,
+            object_id,
+            queue_or_project,
+            summary,
+            synced_by,
+            None,
+        )
+    }
+
+    /// Same idempotent create-or-update dedupe as `sync_ticket`, but backed
+    /// by a real remote ticketing client's result when one is configured.
+    /// `remote` is `None` when no Jira/ServiceNow client is enabled (local
+    /// bookkeeping only, matching prior behaviour exactly); when `Some`, its
+    /// `external_key`/`url`/`status` become the source of truth instead of
+    /// the locally-fabricated key, and existing records are refreshed
+    /// in-place rather than re-created — the idempotency the remote clients
+    /// themselves also enforce (create only when no key was passed in).
+    pub fn sync_ticket_remote(
+        &mut self,
+        provider: String,
+        object_kind: String,
+        object_id: String,
+        queue_or_project: Option<String>,
+        summary: String,
+        synced_by: String,
+        remote: Option<crate::ticketing::RemoteTicket>,
+    ) -> TicketSyncRecord {
         if let Some(index) = self.snapshot.ticket_syncs.iter().position(|sync| {
             sync.provider == provider
                 && sync.object_kind == object_kind
@@ -1416,17 +1445,33 @@ impl EnterpriseStore {
                 existing.synced_at = now_rfc3339();
                 existing.summary = summary;
                 existing.status = "updated".to_string();
+                if let Some(ref remote) = remote {
+                    existing.external_url = remote.url.clone();
+                    existing.remote_status = Some(remote.status.clone());
+                    existing.last_pulled_at = Some(now_rfc3339());
+                }
                 existing.clone()
             };
             self.persist();
             return updated;
         }
-        let external_key = format!(
-            "{}-{}-{}",
-            provider.to_ascii_uppercase(),
-            object_kind.to_ascii_uppercase(),
-            object_id
-        );
+        let (external_key, external_url, remote_status) = match &remote {
+            Some(remote) => (
+                remote.external_key.clone(),
+                remote.url.clone(),
+                Some(remote.status.clone()),
+            ),
+            None => (
+                format!(
+                    "{}-{}-{}",
+                    provider.to_ascii_uppercase(),
+                    object_kind.to_ascii_uppercase(),
+                    object_id
+                ),
+                None,
+                None,
+            ),
+        };
         let record = TicketSyncRecord {
             id: self.next_id("ticket"),
             provider,
@@ -1439,10 +1484,30 @@ impl EnterpriseStore {
             synced_by,
             synced_at: now_rfc3339(),
             sync_count: 1,
+            external_url,
+            remote_status,
+            last_pulled_at: None,
         };
         self.snapshot.ticket_syncs.push(record.clone());
         self.persist();
         record
+    }
+
+    /// Refresh a ticket sync record's remote status (the pull side of
+    /// bidirectional sync), by local sync id.
+    pub fn update_ticket_sync_status(&mut self, sync_id: &str, remote_status: &str) -> bool {
+        let Some(record) = self
+            .snapshot
+            .ticket_syncs
+            .iter_mut()
+            .find(|sync| sync.id == sync_id)
+        else {
+            return false;
+        };
+        record.remote_status = Some(remote_status.to_string());
+        record.last_pulled_at = Some(now_rfc3339());
+        self.persist();
+        true
     }
 
     pub fn create_or_update_idp_provider(
