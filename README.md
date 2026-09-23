@@ -14,6 +14,26 @@ Wardex (`pinkysworld/Wardex`) is a Rust-based XDR and SIEM platform for private-
 - **Scan across platforms:** malware, virus, trojan, and rootkit workflows cover Linux, macOS, and Windows with local engines plus optional open-source signature presets.
 - **Ship verifiably:** releases include checksums, SBOMs, provenance, signed artifacts, and documented verification gates.
 
+## Unreleased
+
+Work merged since `v1.0.30` and not yet released:
+
+- **Real Tantivy-backed search** replacing the previous in-memory re-scan (`/api/search`, `/api/hunt`).
+- **Real kernel telemetry**: Linux (`CN_PROC` netlink process events, `fanotify`/`inotify` file activity — eBPF is not implemented), a Windows ETW consumer (requires elevation), and a macOS Endpoint Security client behind the opt-in `macos-es` feature (requires an Apple `endpoint-security` entitlement, not exercised in CI).
+- **Real `.yar` rule compiler** for a documented subset of YARA syntax, alongside the existing JSON rule format.
+- **Real Random Forest triage training** (CART trees, bootstrap + out-of-bag evaluation) from analyst-labelled alert feedback.
+- **Federated learning with differential privacy**: a coordinator/participant protocol for cross-agent federated averaging, with per-round gradient clipping and calibrated Gaussian noise.
+- **WASM extension runtime** (`wasmi`, fuel-metered, no JIT) for sandboxed third-party extensions with a versioned host ABI.
+- **Threat-intel enrichment**: VirusTotal and AbuseIPDB clients for hash/IP/domain/URL lookups.
+- **Bidirectional ticketing**: Jira and ServiceNow REST clients with idempotent create-or-update sync.
+- **OTLP export, SMTP STARTTLS, and Okta polling** integrations.
+- **Live Docker/Podman and Kubernetes container event sources**, including a best-effort in-cluster Kubernetes watch (documented as TLS-trust-limited pending a custom CA anchor).
+- **Previously documented-but-missing config keys implemented**, including `[collection]`, `[detection]`, `[collectors]`, `[relay]`, and `[attestation]`.
+- **Dependency and security updates**: `rustls` bumped for `RUSTSEC-2026-0285`, plus major-version upgrades to `rand`, `ed25519-dalek`, `aes-gcm`, and `toml`.
+- **Admin console redesign**: topbar/navigation chrome cleanup and a shared icon set.
+
+See [CHANGELOG.md](CHANGELOG.md#unreleased) for full details.
+
 ## Current Release: `v1.0.30`
 
 This release is a persistence-consolidation and reliability patch: every embedded store now persists to a durable SQLite `.db` file (migrating legacy JSON in place on first load), the dependency surface is refreshed, and several correctness edges in enforcement and server startup are hardened.
