@@ -75,9 +75,10 @@ pub trait FederatedModel {
    `clip_and_privatize(delta, clip_norm, epsilon, delta_param)`, which:
    - clips the delta's L2 norm to `clip_norm` (`C`) — this bounds the
      per-round sensitivity of any single agent's contribution;
-   - adds i.i.d. Gaussian noise with `sigma = C * sqrt(2 * ln(1.25/δ)) /
-     ε` to every coordinate (the classical (ε, δ)-Gaussian mechanism —
-     `GaussianMechanism` in `src/privacy.rs`).
+   - adds i.i.d. Gaussian noise with scale `sigma` to every coordinate,
+     where `sigma` is calibrated to `(ε, δ)` and sensitivity `C` by the
+     analytic Gaussian mechanism (`GaussianMechanism` in
+     `src/privacy.rs`; see [Privacy accounting](#privacy-accounting)).
 5. **Submit.** `POST /api/federation/round/submit` with `{round_id,
    params, sample_count, loss}`. The coordinator:
    - authenticates the request via the per-agent enrollment credential
@@ -129,6 +130,38 @@ that has exhausted its budget is refused at both `fetch_round` and
 participant cannot exhaust the model's usefulness for others, and
 operators can see exactly how much privacy loss each agent has accrued
 via `GET /api/federation/status`.
+
+### Noise calibration
+
+`GaussianMechanism::new(ε, δ, Δ)` uses the **analytic Gaussian mechanism**
+(Balle & Wang, *Improving the Gaussian Mechanism for Differential
+Privacy: Analytical Calibration and Optimal Denoising*, ICML 2018,
+Algorithm 1). It returns the smallest `σ` satisfying the exact
+(necessary and sufficient) privacy condition for Gaussian noise with L2
+sensitivity `Δ`:
+
+```text
+Φ(Δ/(2σ) − εσ/Δ) − e^ε · Φ(−Δ/(2σ) − εσ/Δ) ≤ δ
+```
+
+found by bisection (the left-hand side is strictly decreasing in `σ`).
+`Φ` is evaluated in log space through a Chebyshev `erfc` approximation
+with ~1e-15 relative accuracy (Numerical Recipes 3rd ed. §6.2.2), so the
+`e^ε` factor cannot overflow and the far tail is not truncated even for
+large ε or tiny δ.
+
+This calibration is valid for **every** ε > 0. The classical bound
+`σ = Δ·sqrt(2 ln(1.25/δ))/ε` (Dwork & Roth, Thm 3.22), used by earlier
+Wardex versions, is only a valid guarantee for ε < 1: where it is valid
+the analytic `σ` is smaller (e.g. ε = 1, δ = 1e-5: 3.73·Δ vs 4.84·Δ), and
+for large ε it under-noises (e.g. ε = 50, δ = 1e-3: the classical 0.076·Δ
+does not achieve the claimed guarantee; the analytic value is 0.134·Δ).
+Configurations with a large `epsilon_per_round` therefore get more noise
+than before — which is what the stated budget actually requires.
+`classical_gaussian_sigma` is kept in `src/privacy.rs` for comparison
+only.
+
+### Unit of protection and composition
 
 The privacy unit of protection here is **the individual training
 example**: an agent's noised update is a linear function of its local

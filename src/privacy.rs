@@ -54,9 +54,21 @@ impl DpMechanism {
 
 /// Differential privacy noise generator using the (ε, δ)-Gaussian mechanism.
 ///
-/// Calibrated with the classical Gaussian-mechanism bound (Dwork & Roth,
-/// "The Algorithmic Foundations of Differential Privacy", Thm 3.22):
-/// `sigma = sensitivity * sqrt(2 * ln(1.25 / delta)) / epsilon`.
+/// Calibrated with the *analytic* Gaussian mechanism (Balle & Wang, "Improving
+/// the Gaussian Mechanism for Differential Privacy: Analytical Calibration
+/// and Optimal Denoising", ICML 2018, Algorithm 1): `sigma` is the smallest
+/// value (found by bisection) satisfying the exact privacy-profile condition
+///
+/// ```text
+/// Φ(Δ/(2σ) − εσ/Δ) − e^ε · Φ(−Δ/(2σ) − εσ/Δ) ≤ δ
+/// ```
+///
+/// which is necessary and sufficient for (ε, δ)-DP of Gaussian noise with
+/// L2 sensitivity Δ, for **every** ε > 0. The classical bound
+/// `sigma = Δ·sqrt(2 ln(1.25/δ))/ε` (Dwork & Roth, Thm 3.22) is only valid
+/// for ε < 1 — for larger ε it under-noises — and is looser than the
+/// analytic value where it is valid (see [`classical_gaussian_sigma`]).
+///
 /// Used for federated-learning update aggregation (see [`crate::federated`])
 /// where noise must be added to a vector of bounded L2 norm (`sensitivity`
 /// is the per-round clipping norm `C`).
@@ -69,11 +81,27 @@ pub struct GaussianMechanism {
 }
 
 impl GaussianMechanism {
+    /// Build a mechanism for the given budget. Inputs are sanitised
+    /// conservatively: `epsilon` is floored at 0.001 (non-finite values use
+    /// the floor), `delta` is clamped to `[1e-12, 0.5]` (non-finite values
+    /// use 1e-12), and a negative/non-finite `sensitivity` becomes 0.
     pub fn new(epsilon: f64, delta: f64, sensitivity: f64) -> Self {
-        let epsilon = epsilon.max(0.001);
-        let delta = delta.clamp(1e-12, 0.5);
-        let sensitivity = sensitivity.max(0.0);
-        let sigma = sensitivity * (2.0 * (1.25 / delta).ln()).sqrt() / epsilon;
+        let epsilon = if epsilon.is_finite() {
+            epsilon.max(0.001)
+        } else {
+            0.001
+        };
+        let delta = if delta.is_finite() {
+            delta.clamp(1e-12, 0.5)
+        } else {
+            1e-12
+        };
+        let sensitivity = if sensitivity.is_finite() {
+            sensitivity.max(0.0)
+        } else {
+            0.0
+        };
+        let sigma = sensitivity * analytic_gaussian_unit_sigma(epsilon, delta);
         Self {
             epsilon,
             delta,
@@ -101,6 +129,126 @@ impl GaussianMechanism {
     pub fn privatize_vec(&self, values: &[f64]) -> Vec<f64> {
         values.iter().map(|&v| v + self.noise()).collect()
     }
+}
+
+/// Classical Gaussian-mechanism calibration
+/// `sigma = sensitivity * sqrt(2 ln(1.25/δ)) / ε` (Dwork & Roth, Thm 3.22).
+/// Only a valid (ε, δ)-DP guarantee for ε < 1; kept for comparison and
+/// documentation. [`GaussianMechanism::new`] uses the analytic calibration.
+pub fn classical_gaussian_sigma(epsilon: f64, delta: f64, sensitivity: f64) -> f64 {
+    sensitivity * (2.0 * (1.25 / delta).ln()).sqrt() / epsilon
+}
+
+/// Chebyshev coefficients for `erfc` on `z >= 0` (Press et al., Numerical
+/// Recipes 3rd ed., §6.2.2 `Erf::erfccheb`), accurate to ~1e-15 relative
+/// error across the whole range, including the far tail.
+const ERFC_CHEB: [f64; 28] = [
+    -1.302_653_719_781_709_4,
+    6.419_697_923_564_902e-1,
+    1.947_647_320_418_583_6e-2,
+    -9.561_514_786_808_63e-3,
+    -9.465_953_444_820_36e-4,
+    3.668_394_978_527_61e-4,
+    4.252_332_480_690_7e-5,
+    -2.027_857_811_253_4e-5,
+    -1.624_290_004_647e-6,
+    1.303_655_835_580e-6,
+    1.562_644_172_2e-8,
+    -8.523_809_591_5e-8,
+    6.529_054_439e-9,
+    5.059_343_495e-9,
+    -9.913_641_56e-10,
+    -2.273_651_22e-10,
+    9.646_791_1e-11,
+    2.394_038e-12,
+    -6.886_027e-12,
+    8.944_87e-13,
+    3.130_92e-13,
+    -1.127_08e-13,
+    3.81e-16,
+    7.106e-15,
+    -1.523e-15,
+    -9.4e-17,
+    1.21e-16,
+    -2.8e-17,
+];
+
+/// Natural log of `erfc(z)` for `z >= 0`, computed without forming
+/// `erfc(z)` itself so it stays finite deep in the tail (where `erfc`
+/// underflows, e.g. `z > 27`).
+fn ln_erfc_nonneg(z: f64) -> f64 {
+    let t = 2.0 / (2.0 + z);
+    let ty = 4.0 * t - 2.0;
+    let mut d = 0.0;
+    let mut dd = 0.0;
+    for &c in ERFC_CHEB.iter().skip(1).rev() {
+        let tmp = d;
+        d = ty * d - dd + c;
+        dd = tmp;
+    }
+    t.ln() - z * z + 0.5 * (ERFC_CHEB[0] + ty * d) - dd
+}
+
+/// Complementary error function with ~1e-15 relative accuracy.
+pub fn erfc(x: f64) -> f64 {
+    if x >= 0.0 {
+        ln_erfc_nonneg(x).exp()
+    } else {
+        2.0 - ln_erfc_nonneg(-x).exp()
+    }
+}
+
+/// Natural log of the standard normal CDF, `ln Φ(x)`, accurate in both
+/// tails.
+fn ln_std_normal_cdf(x: f64) -> f64 {
+    let z = x / std::f64::consts::SQRT_2;
+    if x <= 0.0 {
+        ln_erfc_nonneg(-z) - std::f64::consts::LN_2
+    } else {
+        (-0.5 * ln_erfc_nonneg(z).exp()).ln_1p()
+    }
+}
+
+/// Exact privacy profile of the Gaussian mechanism with unit sensitivity
+/// and noise scale `sigma` (Balle & Wang 2018, Theorem 8):
+/// `δ(σ) = Φ(1/(2σ) − εσ) − e^ε Φ(−1/(2σ) − εσ)`, evaluated in log space so
+/// the `e^ε` factor cannot overflow for large ε.
+pub fn gaussian_privacy_profile_delta(epsilon: f64, sigma: f64) -> f64 {
+    if sigma <= 0.0 {
+        return 1.0;
+    }
+    let a = 1.0 / (2.0 * sigma) - epsilon * sigma;
+    let b = -1.0 / (2.0 * sigma) - epsilon * sigma;
+    let first = ln_std_normal_cdf(a).exp();
+    let second = (epsilon + ln_std_normal_cdf(b)).exp();
+    (first - second).max(0.0)
+}
+
+/// Smallest noise scale (for sensitivity 1) such that the Gaussian
+/// mechanism is (ε, δ)-DP, via bisection on the exact condition. The
+/// returned value always satisfies the condition (it is the upper end of
+/// the final bracket).
+fn analytic_gaussian_unit_sigma(epsilon: f64, delta: f64) -> f64 {
+    // δ(σ) is strictly decreasing in σ, from 1 at σ→0 to 0 at σ→∞.
+    let mut hi = 1.0_f64;
+    let mut guard = 0;
+    while gaussian_privacy_profile_delta(epsilon, hi) > delta && guard < 200 {
+        hi *= 2.0;
+        guard += 1;
+    }
+    let mut lo = if guard > 0 { hi / 2.0 } else { 0.0 };
+    for _ in 0..200 {
+        let mid = 0.5 * (lo + hi);
+        if mid <= lo || mid >= hi {
+            break;
+        }
+        if gaussian_privacy_profile_delta(epsilon, mid) > delta {
+            lo = mid;
+        } else {
+            hi = mid;
+        }
+    }
+    hi
 }
 
 /// Privacy accountant tracking cumulative privacy loss.
@@ -699,6 +847,126 @@ mod tests {
         let small_sensitivity = GaussianMechanism::new(1.0, 1e-5, 1.0);
         let large_sensitivity = GaussianMechanism::new(1.0, 1e-5, 10.0);
         assert!(large_sensitivity.sigma > small_sensitivity.sigma * 5.0);
+    }
+
+    #[test]
+    fn erfc_matches_reference_values() {
+        // Reference values from high-precision tables.
+        let cases = [
+            (0.0, 1.0),
+            (0.5, 0.479_500_122_186_953_5),
+            (1.0, 0.157_299_207_050_285_13),
+            (2.0, 0.004_677_734_981_047_266),
+            (5.0, 1.537_459_794_428_035e-12),
+            (10.0, 2.088_487_583_762_545e-45),
+            (-1.0, 1.842_700_792_949_715),
+        ];
+        for (x, expected) in cases {
+            let got = erfc(x);
+            let rel = ((got - expected) / expected).abs();
+            assert!(rel < 1e-12, "erfc({x}) = {got}, expected {expected}");
+        }
+        // Deep tail, where erfc itself underflows: compare ln erfc with the
+        // asymptotic expansion -x² - ln(x√π) + ln(1 - 1/(2x²) + 3/(4x⁴) - …).
+        for x in [30.0_f64, 100.0] {
+            let series =
+                1.0 - 1.0 / (2.0 * x * x) + 3.0 / (4.0 * x.powi(4)) - 15.0 / (8.0 * x.powi(6));
+            let expected = -x * x - (x * std::f64::consts::PI.sqrt()).ln() + series.ln();
+            let got = ln_erfc_nonneg(x);
+            assert!(((got - expected) / expected).abs() < 1e-13, "ln erfc({x})");
+        }
+    }
+
+    const PROFILE_CASES: [(f64, f64); 9] = [
+        (0.1, 1e-5),
+        (0.5, 1e-5),
+        (0.9, 1e-3),
+        (1.0, 1e-5),
+        (1.0, 1e-3),
+        (2.0, 1e-5),
+        (8.0, 1e-5),
+        (8.0, 1e-10),
+        (50.0, 1e-3),
+    ];
+
+    #[test]
+    fn analytic_gaussian_satisfies_privacy_condition_tightly() {
+        for (epsilon, delta) in PROFILE_CASES {
+            for sensitivity in [1.0, 5.0] {
+                let mech = GaussianMechanism::new(epsilon, delta, sensitivity);
+                // Evaluate Φ(Δ/(2σ) − εσ/Δ) − e^ε Φ(−Δ/(2σ) − εσ/Δ) at the
+                // returned σ (normalised to unit sensitivity).
+                let unit_sigma = mech.sigma / sensitivity;
+                let achieved = gaussian_privacy_profile_delta(epsilon, unit_sigma);
+                assert!(
+                    achieved <= delta * (1.0 + 1e-9),
+                    "ε={epsilon} δ={delta}: condition violated ({achieved})"
+                );
+                // And it is the smallest such σ (not needlessly noisy).
+                let slightly_less = gaussian_privacy_profile_delta(epsilon, unit_sigma * 0.999);
+                assert!(
+                    slightly_less > delta,
+                    "ε={epsilon} δ={delta}: σ is not tight ({slightly_less})"
+                );
+            }
+        }
+        // Known value (Balle & Wang 2018): ε = 1, δ = 1e-5 → σ ≈ 3.7306.
+        let reference = GaussianMechanism::new(1.0, 1e-5, 1.0);
+        assert!(
+            (reference.sigma - 3.730_631_6).abs() < 1e-5,
+            "{}",
+            reference.sigma
+        );
+    }
+
+    #[test]
+    fn analytic_gaussian_sigma_decreases_with_epsilon() {
+        for delta in [1e-10, 1e-5, 1e-3] {
+            let mut previous = f64::INFINITY;
+            for epsilon in [
+                0.01, 0.1, 0.5, 0.9, 1.0, 1.5, 2.0, 4.0, 8.0, 16.0, 50.0, 100.0,
+            ] {
+                let sigma = GaussianMechanism::new(epsilon, delta, 1.0).sigma;
+                assert!(sigma.is_finite() && sigma > 0.0);
+                assert!(
+                    sigma < previous,
+                    "σ must shrink as ε grows (ε={epsilon}, δ={delta})"
+                );
+                previous = sigma;
+            }
+        }
+    }
+
+    #[test]
+    fn analytic_gaussian_is_no_noisier_than_classical_below_one() {
+        for delta in [1e-10, 1e-5, 1e-3] {
+            for epsilon in [0.05, 0.1, 0.3, 0.5, 0.75, 0.99] {
+                let analytic = GaussianMechanism::new(epsilon, delta, 1.0).sigma;
+                let classical = classical_gaussian_sigma(epsilon, delta, 1.0);
+                assert!(
+                    analytic <= classical,
+                    "ε={epsilon} δ={delta}: analytic {analytic} > classical {classical}"
+                );
+            }
+        }
+        // For large ε the classical formula under-noises: it violates the
+        // exact condition, which is why it must not be used there.
+        let classical = classical_gaussian_sigma(50.0, 1e-3, 1.0);
+        assert!(gaussian_privacy_profile_delta(50.0, classical) > 1e-3);
+    }
+
+    #[test]
+    fn gaussian_mechanism_sanitises_degenerate_inputs() {
+        let zero = GaussianMechanism::new(1.0, 1e-5, 0.0);
+        assert_eq!(zero.sigma, 0.0);
+        for mech in [
+            GaussianMechanism::new(f64::NAN, 1e-5, 1.0),
+            GaussianMechanism::new(1.0, f64::NAN, 1.0),
+            GaussianMechanism::new(f64::INFINITY, 1e-5, 1.0),
+            GaussianMechanism::new(1e-9, 1e-30, 1.0),
+        ] {
+            assert!(mech.sigma.is_finite() && mech.sigma > 0.0, "{mech:?}");
+        }
     }
 
     #[test]
