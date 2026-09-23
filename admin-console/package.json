@@ -27,7 +27,7 @@
   "dependencies": {
     "react": "^19.1.0",
     "react-dom": "^19.2.6",
-    "react-router-dom": "^7.14.0",
+    "react-router-dom": "^7.18.4",
     "recharts": "^2.15.3"
   },
   "devDependencies": {
@@ -40,7 +40,7 @@
     "@types/react": "^19.2.17",
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^6.0.2",
-    "@vitest/coverage-v8": "^4.1.5",
+    "@vitest/coverage-v8": "^4.1.11",
     "@wardex/sdk": "file:../sdk/typescript",
     "axe-core": "^4.12.1",
     "eslint": "^9.39.4",
@@ -56,6 +56,6 @@
     "prettier": "^3.8.1",
     "typescript": "^6.0.2",
     "vite": "^8.0.14",
-    "vitest": "^4.1.3"
+    "vitest": "^4.1.11"
   }
 }
