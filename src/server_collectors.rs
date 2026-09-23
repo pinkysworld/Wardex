@@ -455,7 +455,7 @@ pub(crate) fn handle_collector_okta_validate(state: &Arc<Mutex<AppState>>) -> Re
         .unwrap_or_else(std::sync::PoisonError::into_inner);
     let setup = load_okta_collector_setup(&s.storage);
     let resolver = build_secrets_resolver(&s.storage);
-    let body = validate_okta_collector(&setup, &resolver);
+    let body = validate_okta_collector(&s.storage, &setup, &resolver);
     collector_validation_response(&s.storage, "okta_identity", body)
 }
 
@@ -897,6 +897,28 @@ pub(crate) fn collector_checkpoint_key(provider: &str) -> String {
     format!("integrations.collectors.{provider}.checkpoint")
 }
 
+pub(crate) fn collector_cursor_key(provider: &str) -> String {
+    format!("integrations.collectors.{provider}.cursor")
+}
+
+/// Load a provider's persisted pagination cursor (e.g. Okta's `after`
+/// token), stored across polls the same way `CollectorCheckpoint` is.
+pub(crate) fn load_collector_cursor(storage: &SharedStorage, provider: &str) -> Option<String> {
+    let value: serde_json::Value = load_stored_json(storage, &collector_cursor_key(provider));
+    value
+        .get("cursor")
+        .and_then(serde_json::Value::as_str)
+        .map(str::to_string)
+}
+
+pub(crate) fn save_collector_cursor(storage: &SharedStorage, provider: &str, cursor: &str) {
+    let _ = save_stored_json(
+        storage,
+        &collector_cursor_key(provider),
+        &serde_json::json!({ "cursor": cursor }),
+    );
+}
+
 pub(crate) fn collector_lifecycle_key(provider: &str) -> String {
     format!("integrations.collectors.{provider}.lifecycle")
 }
@@ -1216,6 +1238,7 @@ where
 }
 
 pub(crate) fn validate_okta_collector(
+    storage: &SharedStorage,
     setup: &OktaCollectorSetup,
     resolver: &crate::secrets::SecretsResolver,
 ) -> serde_json::Value {
@@ -1235,52 +1258,28 @@ pub(crate) fn validate_okta_collector(
     match setup.to_runtime(resolver) {
         Ok(runtime) => {
             let mut collector = crate::collector_identity::OktaCollector::new(runtime);
-            let request_url = collector.build_url();
-            match ureq::get(&request_url)
-                .set("Authorization", &collector.auth_header())
-                .call()
-            {
-                Ok(response) => {
-                    let next_link = response
-                        .header("Link")
-                        .map(std::string::ToString::to_string);
-                    match response.into_string() {
-                        Ok(body) => {
-                            let result = collector.parse_response(&body, next_link.as_deref());
-                            let sample_events: Vec<_> =
-                                result.events.iter().take(5).cloned().collect();
-                            serde_json::json!({
-                                "provider": "okta_identity",
-                                "success": result.success,
-                                "event_count": result.event_count,
-                                "polled_at": result.polled_at,
-                                "sample_events": sample_events,
-                                "summary": crate::collector_identity::identity_summary(&result.events),
-                                "validation": validation,
-                                "error": result.error,
-                            })
-                        }
-                        Err(error) => serde_json::json!({
-                            "provider": "okta_identity",
-                            "success": false,
-                            "event_count": 0,
-                            "sample_events": [],
-                            "summary": {},
-                            "validation": validation,
-                            "error": format!("failed to read Okta response body: {error}"),
-                        }),
-                    }
-                }
-                Err(error) => serde_json::json!({
-                    "provider": "okta_identity",
-                    "success": false,
-                    "event_count": 0,
-                    "sample_events": [],
-                    "summary": {},
-                    "validation": validation,
-                    "error": format!("Okta validation request failed: {error}"),
-                }),
+            // Resume from the cursor persisted on the previous poll, so
+            // repeated polls advance through the System Log rather than
+            // re-fetching the same page (mirrors AWS's `next_token` and
+            // Azure/GCP's checkpoint-driven pagination).
+            collector.resume_from_cursor(load_collector_cursor(storage, "okta_identity"));
+            let result = collector.poll();
+            if let Some(cursor) = result.next_cursor.as_deref() {
+                save_collector_cursor(storage, "okta_identity", cursor);
             }
+            let sample_events: Vec<_> = result.events.iter().take(5).cloned().collect();
+            serde_json::json!({
+                "provider": "okta_identity",
+                "success": result.success,
+                "event_count": result.event_count,
+                "polled_at": result.polled_at,
+                "sample_events": sample_events,
+                "summary": crate::collector_identity::identity_summary(&result.events),
+                "validation": validation,
+                "error": result.error,
+                "next_cursor": result.next_cursor,
+                "retry_after_secs": result.retry_after_secs,
+            })
         }
         Err(error) => serde_json::json!({
             "provider": "okta_identity",

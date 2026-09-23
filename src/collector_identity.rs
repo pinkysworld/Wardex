@@ -74,6 +74,16 @@ pub struct IdentityPollResult {
     pub success: bool,
     pub error: Option<String>,
     pub polled_at: String,
+    /// Pagination cursor to persist and resume from on the next poll
+    /// (Okta's `after` cursor). Callers own persistence (e.g. via the
+    /// server's collector-checkpoint storage), matching the AWS/Azure/GCP
+    /// collector pattern where `next_token`/cursor state is caller-managed.
+    #[serde(default)]
+    pub next_cursor: Option<String>,
+    /// Seconds to wait before the next poll, when the provider signalled a
+    /// rate limit (e.g. Okta's `X-Rate-Limit-Remaining: 0`).
+    #[serde(default)]
+    pub retry_after_secs: Option<u64>,
 }
 
 // ── Configuration ─────────────────────────────────────────────────────────────
@@ -283,6 +293,8 @@ impl OktaCollector {
                     success: false,
                     error: Some(format!("JSON parse error: {e}")),
                     polled_at: now,
+                    next_cursor: None,
+                    retry_after_secs: None,
                 };
             }
         };
@@ -412,6 +424,116 @@ impl OktaCollector {
             success: true,
             error: None,
             polled_at: now,
+            next_cursor: self.after_cursor.clone(),
+            retry_after_secs: None,
+        }
+    }
+
+    /// Resume from a previously persisted `after` cursor (e.g. one saved
+    /// via the server's collector-checkpoint storage after the last poll).
+    /// Mirrors `AwsCloudTrailCollector`'s `next_token` handling.
+    pub fn resume_from_cursor(&mut self, cursor: Option<String>) {
+        self.after_cursor = cursor;
+    }
+
+    /// Current pagination cursor, if any.
+    pub fn cursor(&self) -> Option<&str> {
+        self.after_cursor.as_deref()
+    }
+
+    /// Poll the Okta System Log API over HTTPS: fetch, parse, and honour
+    /// rate-limit headers, matching the `poll()` shape of the AWS/Azure/GCP
+    /// collectors (fetch + parse in one call, instead of leaving the HTTP
+    /// round trip to the caller).
+    pub fn poll(&mut self) -> IdentityPollResult {
+        let now = chrono::Utc::now().to_rfc3339();
+
+        if !self.is_enabled() {
+            return IdentityPollResult {
+                provider: IdentityProvider::Okta,
+                events: Vec::new(),
+                event_count: 0,
+                success: false,
+                error: Some("Collector not enabled or not configured".into()),
+                polled_at: now,
+                next_cursor: self.after_cursor.clone(),
+                retry_after_secs: None,
+            };
+        }
+
+        let url = self.build_url();
+        let response = ureq::get(&url).set("Authorization", &self.auth_header()).call();
+
+        match response {
+            Ok(resp) => {
+                let remaining: Option<u64> = resp
+                    .header("X-Rate-Limit-Remaining")
+                    .and_then(|v| v.parse().ok());
+                let reset_epoch: Option<u64> = resp
+                    .header("X-Rate-Limit-Reset")
+                    .and_then(|v| v.parse().ok());
+                let next_link = resp.header("Link").map(std::string::ToString::to_string);
+                let retry_after_secs = match (remaining, reset_epoch) {
+                    (Some(0), Some(reset)) => {
+                        let now_epoch = std::time::SystemTime::now()
+                            .duration_since(std::time::UNIX_EPOCH)
+                            .unwrap_or_default()
+                            .as_secs();
+                        Some(reset.saturating_sub(now_epoch).max(1))
+                    }
+                    _ => None,
+                };
+                match resp.into_string() {
+                    Ok(body) => {
+                        let mut result = self.parse_response(&body, next_link.as_deref());
+                        result.retry_after_secs = retry_after_secs;
+                        result
+                    }
+                    Err(e) => IdentityPollResult {
+                        provider: IdentityProvider::Okta,
+                        events: Vec::new(),
+                        event_count: 0,
+                        success: false,
+                        error: Some(format!("failed to read Okta response body: {e}")),
+                        polled_at: now,
+                        next_cursor: self.after_cursor.clone(),
+                        retry_after_secs,
+                    },
+                }
+            }
+            Err(ureq::Error::Status(429, resp)) => {
+                let retry_after = resp
+                    .header("X-Rate-Limit-Reset")
+                    .and_then(|v| v.parse::<u64>().ok())
+                    .map(|reset| {
+                        let now_epoch = std::time::SystemTime::now()
+                            .duration_since(std::time::UNIX_EPOCH)
+                            .unwrap_or_default()
+                            .as_secs();
+                        reset.saturating_sub(now_epoch).max(1)
+                    })
+                    .or(Some(60));
+                IdentityPollResult {
+                    provider: IdentityProvider::Okta,
+                    events: Vec::new(),
+                    event_count: 0,
+                    success: false,
+                    error: Some("Okta API rate limit exceeded (HTTP 429)".into()),
+                    polled_at: now,
+                    next_cursor: self.after_cursor.clone(),
+                    retry_after_secs: retry_after,
+                }
+            }
+            Err(e) => IdentityPollResult {
+                provider: IdentityProvider::Okta,
+                events: Vec::new(),
+                event_count: 0,
+                success: false,
+                error: Some(format!("Okta System Log API call failed: {e}")),
+                polled_at: now,
+                next_cursor: self.after_cursor.clone(),
+                retry_after_secs: None,
+            },
         }
     }
 
@@ -509,6 +631,8 @@ impl EntraCollector {
                     success: false,
                     error: Some(format!("JSON parse error: {e}")),
                     polled_at: now,
+                    next_cursor: None,
+                    retry_after_secs: None,
                 };
             }
         };
@@ -523,6 +647,8 @@ impl EntraCollector {
                     success: true,
                     error: None,
                     polled_at: now,
+                    next_cursor: None,
+                    retry_after_secs: None,
                 };
             }
         };
@@ -627,6 +753,8 @@ impl EntraCollector {
             success: true,
             error: None,
             polled_at: now,
+            next_cursor: None,
+            retry_after_secs: None,
         }
     }
 
