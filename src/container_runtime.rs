@@ -371,10 +371,7 @@ impl DockerEventStream {
                 read_one_chunk(&mut self.reader)?
             } else {
                 let mut line = String::new();
-                let n = self
-                    .reader
-                    .read_line(&mut line)
-                    .map_err(|e| format!("read events stream: {e}"))?;
+                let n = read_line_bounded(&mut self.reader, &mut line, MAX_EVENT_LINE_LEN)?;
                 if n == 0 {
                     None
                 } else {
@@ -401,13 +398,59 @@ impl DockerEventStream {
     }
 }
 
-fn read_one_chunk(reader: &mut BufReader<UnixStream>) -> Result<Option<Vec<u8>>, String> {
+// ── Peer-controlled size limits ───────────────────────────────────────
+//
+// The Docker/Podman Engine API is reached over a local Unix socket, but
+// the daemon on the other end is still an untrusted peer as far as this
+// client's parsing is concerned (a compromised or misbehaving daemon, or
+// a socket pointed at the wrong thing, could send an attacker-chosen
+// response). None of these values were previously bounded, so a peer
+// could make this client allocate an arbitrarily large buffer from a
+// single length field, or stall it reading an unbounded header/status
+// line. libcurl and most HTTP clients apply similar caps by default.
+
+/// Maximum size of a single decoded HTTP body (Content-Length or the sum
+/// of chunked-transfer chunks).
+const MAX_BODY_LEN: usize = 16 * 1024 * 1024;
+/// Maximum size of a single chunked-transfer-encoding chunk.
+const MAX_CHUNK_LEN: usize = 8 * 1024 * 1024;
+/// Maximum length of a single line (status line, header line, or
+/// chunk-size line), including its terminator.
+const MAX_LINE_LEN: usize = 8 * 1024;
+/// Maximum number of headers accepted in one response.
+const MAX_HEADER_COUNT: usize = 100;
+/// Maximum length of one newline-delimited JSON event line from the
+/// (non-chunked) Docker events stream. Generous compared to a real
+/// Docker event, but still bounded so a misbehaving daemon cannot stall
+/// this client on an unterminated line.
+const MAX_EVENT_LINE_LEN: usize = 1024 * 1024;
+
+/// Read one line via `BufRead::read_line`, but never more than `max_len`
+/// bytes: `reader` is wrapped in a `Take` for the call so a peer that
+/// never sends a newline cannot force an unbounded read/allocation.
+/// Returns the number of bytes read, like `read_line` itself (`0` at
+/// EOF), or an error if the line exceeds `max_len` without terminating.
+fn read_line_bounded<R: BufRead>(
+    reader: &mut R,
+    buf: &mut String,
+    max_len: usize,
+) -> Result<usize, String> {
+    let n = reader
+        .by_ref()
+        .take(max_len as u64)
+        .read_line(buf)
+        .map_err(|e| format!("read line: {e}"))?;
+    if n as u64 >= max_len as u64 && !buf.ends_with('\n') {
+        return Err(format!("line exceeds the {max_len}-byte limit"));
+    }
+    Ok(n)
+}
+
+fn read_one_chunk<R: BufRead>(reader: &mut R) -> Result<Option<Vec<u8>>, String> {
     let mut size_line = String::new();
     loop {
         size_line.clear();
-        let n = reader
-            .read_line(&mut size_line)
-            .map_err(|e| format!("read chunk size: {e}"))?;
+        let n = read_line_bounded(reader, &mut size_line, MAX_LINE_LEN)?;
         if n == 0 {
             return Ok(None);
         }
@@ -421,6 +464,11 @@ fn read_one_chunk(reader: &mut BufReader<UnixStream>) -> Result<Option<Vec<u8>>,
     if size == 0 {
         return Ok(None);
     }
+    if size > MAX_CHUNK_LEN {
+        return Err(format!(
+            "chunk size {size} exceeds the {MAX_CHUNK_LEN}-byte limit"
+        ));
+    }
     let mut buf = vec![0u8; size];
     reader
         .read_exact(&mut buf)
@@ -432,6 +480,7 @@ fn read_one_chunk(reader: &mut BufReader<UnixStream>) -> Result<Option<Vec<u8>>,
     Ok(Some(buf))
 }
 
+#[derive(Debug)]
 struct StatusLine {
     code: u16,
     reason: String,
@@ -439,9 +488,7 @@ struct StatusLine {
 
 fn read_status_line<R: BufRead>(reader: &mut R) -> Result<StatusLine, String> {
     let mut line = String::new();
-    reader
-        .read_line(&mut line)
-        .map_err(|e| format!("read status line: {e}"))?;
+    read_line_bounded(reader, &mut line, MAX_LINE_LEN)?;
     let line = line.trim();
     let mut parts = line.splitn(3, ' ');
     let _http_version = parts.next().unwrap_or("");
@@ -457,10 +504,13 @@ fn read_status_line<R: BufRead>(reader: &mut R) -> Result<StatusLine, String> {
 fn read_headers<R: BufRead>(reader: &mut R) -> Result<HashMap<String, String>, String> {
     let mut headers = HashMap::new();
     loop {
+        if headers.len() >= MAX_HEADER_COUNT {
+            return Err(format!(
+                "response has more than the {MAX_HEADER_COUNT}-header limit"
+            ));
+        }
         let mut line = String::new();
-        reader
-            .read_line(&mut line)
-            .map_err(|e| format!("read header line: {e}"))?;
+        read_line_bounded(reader, &mut line, MAX_LINE_LEN)?;
         let trimmed = line.trim_end_matches(['\r', '\n']);
         if trimmed.is_empty() {
             break;
@@ -484,9 +534,7 @@ fn read_full_body<R: BufRead>(
         let mut body = Vec::new();
         loop {
             let mut size_line = String::new();
-            reader
-                .read_line(&mut size_line)
-                .map_err(|e| format!("read chunk size: {e}"))?;
+            read_line_bounded(reader, &mut size_line, MAX_LINE_LEN)?;
             let size_str = size_line.trim().split(';').next().unwrap_or("").trim();
             if size_str.is_empty() {
                 continue;
@@ -496,8 +544,18 @@ fn read_full_body<R: BufRead>(
             if size == 0 {
                 // Drain trailing headers (if any) then the final CRLF.
                 let mut trailer = String::new();
-                let _ = reader.read_line(&mut trailer);
+                let _ = read_line_bounded(reader, &mut trailer, MAX_LINE_LEN);
                 break;
+            }
+            if size > MAX_CHUNK_LEN {
+                return Err(format!(
+                    "chunk size {size} exceeds the {MAX_CHUNK_LEN}-byte limit"
+                ));
+            }
+            if body.len().saturating_add(size) > MAX_BODY_LEN {
+                return Err(format!(
+                    "chunked body exceeds the {MAX_BODY_LEN}-byte limit"
+                ));
             }
             let mut buf = vec![0u8; size];
             reader
@@ -512,6 +570,11 @@ fn read_full_body<R: BufRead>(
         return Ok(body);
     }
     if let Some(len) = headers.get("content-length").and_then(|v| v.parse().ok()) {
+        if len > MAX_BODY_LEN {
+            return Err(format!(
+                "content-length {len} exceeds the {MAX_BODY_LEN}-byte limit"
+            ));
+        }
         let mut buf = vec![0u8; len];
         reader
             .read_exact(&mut buf)
@@ -520,8 +583,12 @@ fn read_full_body<R: BufRead>(
     }
     let mut buf = Vec::new();
     reader
+        .take(MAX_BODY_LEN as u64 + 1)
         .read_to_end(&mut buf)
         .map_err(|e| format!("read body to end: {e}"))?;
+    if buf.len() > MAX_BODY_LEN {
+        return Err(format!("body exceeds the {MAX_BODY_LEN}-byte limit"));
+    }
     Ok(buf)
 }
 
@@ -1153,6 +1220,116 @@ mod tests {
             podman_socket_path_for_uid(1000),
             "/run/user/1000/podman/podman.sock"
         );
+    }
+
+    // ── Peer size-limit regression tests ────────────────────────────
+    //
+    // These exercise `read_status_line`/`read_headers`/`read_full_body`/
+    // `read_one_chunk` directly against an in-memory `Cursor`, standing in
+    // for a misbehaving daemon that sends oversized values, rather than
+    // spinning up a real fake-daemon thread for each case.
+
+    #[test]
+    fn read_full_body_rejects_oversized_content_length() {
+        let mut headers = HashMap::new();
+        headers.insert("content-length".to_string(), "999999999999".to_string());
+        let mut reader = std::io::Cursor::new(Vec::<u8>::new());
+        let err = read_full_body(&mut reader, &headers).unwrap_err();
+        assert!(err.contains("exceeds"), "unexpected error: {err}");
+    }
+
+    #[test]
+    fn read_full_body_rejects_oversized_chunk_size() {
+        let mut headers = HashMap::new();
+        headers.insert("transfer-encoding".to_string(), "chunked".to_string());
+        // A chunk-size line claiming far more than MAX_CHUNK_LEN bytes.
+        let mut reader = std::io::Cursor::new(b"ffffffff\r\n".to_vec());
+        let err = read_full_body(&mut reader, &headers).unwrap_err();
+        assert!(err.contains("exceeds"), "unexpected error: {err}");
+    }
+
+    #[test]
+    fn read_full_body_caps_unbounded_body_without_content_length() {
+        // No Content-Length and not chunked: the body is read to EOF, but
+        // must still be capped rather than growing without limit for a
+        // daemon that streams forever.
+        let headers = HashMap::new();
+        let oversized = vec![b'a'; MAX_BODY_LEN + 1024];
+        let mut reader = std::io::Cursor::new(oversized);
+        let err = read_full_body(&mut reader, &headers).unwrap_err();
+        assert!(err.contains("exceeds"), "unexpected error: {err}");
+    }
+
+    #[test]
+    fn read_one_chunk_rejects_oversized_chunk_size() {
+        let mut reader = std::io::Cursor::new(b"ffffffff\r\n".to_vec());
+        let err = read_one_chunk(&mut reader).unwrap_err();
+        assert!(err.contains("exceeds"), "unexpected error: {err}");
+    }
+
+    #[test]
+    fn read_headers_rejects_too_many_headers() {
+        let mut buf = String::new();
+        for i in 0..(MAX_HEADER_COUNT + 10) {
+            buf.push_str(&format!("X-Header-{i}: v\r\n"));
+        }
+        buf.push_str("\r\n");
+        let mut reader = std::io::Cursor::new(buf.into_bytes());
+        let err = read_headers(&mut reader).unwrap_err();
+        assert!(err.contains("header"), "unexpected error: {err}");
+    }
+
+    #[test]
+    fn read_status_line_rejects_oversized_line() {
+        // No CRLF terminator within MAX_LINE_LEN bytes.
+        let long = "HTTP/1.1 200 ".to_string() + &"A".repeat(MAX_LINE_LEN * 2);
+        let mut reader = std::io::Cursor::new(long.into_bytes());
+        let err = read_status_line(&mut reader).unwrap_err();
+        assert!(err.contains("exceeds"), "unexpected error: {err}");
+    }
+
+    #[test]
+    fn read_headers_rejects_oversized_header_line() {
+        let long = format!("X-Long: {}", "A".repeat(MAX_LINE_LEN * 2));
+        let mut reader = std::io::Cursor::new(long.into_bytes());
+        let err = read_headers(&mut reader).unwrap_err();
+        assert!(err.contains("exceeds"), "unexpected error: {err}");
+    }
+
+    /// End-to-end: a fake daemon that sends a `Content-Length` far beyond
+    /// the cap must make `get_json`/`get_body` fail cleanly rather than
+    /// allocate gigabytes or hang.
+    #[test]
+    fn fake_daemon_oversized_content_length_is_rejected() {
+        let dir = std::env::temp_dir().join(format!("wardex-docker-test-{}", std::process::id()));
+        let _ = std::fs::create_dir_all(&dir);
+        let sock_path = dir.join(format!("docker-oversize-{}.sock", rand_suffix()));
+        let sock_path_str = sock_path.to_string_lossy().to_string();
+        let _ = std::fs::remove_file(&sock_path);
+        let listener = UnixListener::bind(&sock_path).expect("bind fake docker socket");
+
+        thread::spawn(move || {
+            if let Ok((mut stream, _)) = listener.accept() {
+                let mut buf = [0u8; 4096];
+                let _ = stream.read(&mut buf);
+                // Claim a body far larger than MAX_BODY_LEN, but never
+                // actually send that many bytes — a well-behaved client
+                // must reject this from the header alone.
+                let resp =
+                    "HTTP/1.1 200 OK\r\nContent-Length: 999999999999\r\nConnection: close\r\n\r\n";
+                let _ = stream.write_all(resp.as_bytes());
+            }
+        });
+        thread::sleep(Duration::from_millis(30));
+
+        let cfg = ContainerRuntimeConfig {
+            docker_socket_path: sock_path_str,
+            docker_enabled: true,
+            ..Default::default()
+        };
+        let client = DockerClient::connect(&cfg).expect("connect");
+        let err = client.ping().unwrap_err();
+        assert!(err.contains("exceeds"), "unexpected error: {err}");
     }
 
     /// Live smoke test against a real Docker daemon, if one happens to be
