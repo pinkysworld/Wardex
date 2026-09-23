@@ -230,7 +230,13 @@ fn host_emit_alert(mut caller: Caller<'_, HostState>, ptr: i32, len: i32) -> i32
     }
 }
 
-fn host_kv_get(mut caller: Caller<'_, HostState>, key_ptr: i32, key_len: i32, val_ptr: i32, val_max_len: i32) -> i32 {
+fn host_kv_get(
+    mut caller: Caller<'_, HostState>,
+    key_ptr: i32,
+    key_len: i32,
+    val_ptr: i32,
+    val_max_len: i32,
+) -> i32 {
     let key_bytes = read_guest_bytes(&mut caller, key_ptr, key_len);
     let key = String::from_utf8_lossy(&key_bytes).to_string();
     let kv = caller.data().kv.clone();
@@ -251,7 +257,13 @@ fn host_kv_get(mut caller: Caller<'_, HostState>, key_ptr: i32, key_len: i32, va
     value.len() as i32
 }
 
-fn host_kv_set(mut caller: Caller<'_, HostState>, key_ptr: i32, key_len: i32, val_ptr: i32, val_len: i32) -> i32 {
+fn host_kv_set(
+    mut caller: Caller<'_, HostState>,
+    key_ptr: i32,
+    key_len: i32,
+    val_ptr: i32,
+    val_len: i32,
+) -> i32 {
     let key_bytes = read_guest_bytes(&mut caller, key_ptr, key_len);
     let key = String::from_utf8_lossy(&key_bytes).to_string();
     let value = read_guest_bytes(&mut caller, val_ptr, val_len);
@@ -367,7 +379,8 @@ impl WasmExtensionManager {
                 self.config.max_module_bytes
             ));
         }
-        let module = Module::new(&self.engine, bytes).map_err(|e| format!("invalid module: {e}"))?;
+        let module =
+            Module::new(&self.engine, bytes).map_err(|e| format!("invalid module: {e}"))?;
 
         for import in module.imports() {
             if import.module() != ABI_MODULE || !ALLOWED_IMPORTS.contains(&import.name()) {
@@ -454,7 +467,11 @@ impl WasmExtensionManager {
         out
     }
 
-    fn invoke(&self, extension: &Arc<WasmExtension>, event_bytes: &[u8]) -> Result<Vec<EmittedAlert>, String> {
+    fn invoke(
+        &self,
+        extension: &Arc<WasmExtension>,
+        event_bytes: &[u8],
+    ) -> Result<Vec<EmittedAlert>, String> {
         let start = Instant::now();
         let limits = StoreLimitsBuilder::new()
             .memory_size(self.config.max_memory_pages as usize * 65536)
@@ -515,7 +532,8 @@ impl WasmExtensionManager {
                 Ok(alerts)
             }
             Err(e) => {
-                let is_trap = e.contains("trap") || e.contains("fuel") || e.contains("out of bounds");
+                let is_trap =
+                    e.contains("trap") || e.contains("fuel") || e.contains("out of bounds");
                 if is_trap {
                     metrics.traps += 1;
                 } else {
@@ -634,7 +652,8 @@ pub fn verify_upload(
     let pk_arr: [u8; 32] = pk_bytes
         .try_into()
         .map_err(|_| "signer public key must be 32 bytes".to_string())?;
-    let verifying_key = VerifyingKey::from_bytes(&pk_arr).map_err(|e| format!("invalid signer key: {e}"))?;
+    let verifying_key =
+        VerifyingKey::from_bytes(&pk_arr).map_err(|e| format!("invalid signer key: {e}"))?;
 
     let sig_bytes = b64
         .decode(signature_b64)
@@ -730,14 +749,21 @@ mod tests {
         cfg.fuel_limit = 10_000;
         let mgr = manager(cfg);
         let bytes = wat_module(BUSY_LOOP_WAT);
-        mgr.load_bytes("looper", &bytes).expect("loads (no forbidden imports)");
+        mgr.load_bytes("looper", &bytes)
+            .expect("loads (no forbidden imports)");
         let alerts = mgr.run_on_event(&serde_json::json!({}));
         assert!(alerts.is_empty());
         let metrics = mgr.metrics();
         let m = &metrics["looper"];
         assert_eq!(m.invocations, 1);
         assert_eq!(m.traps, 1);
-        assert!(m.last_error.as_deref().unwrap_or("").to_lowercase().contains("fuel"));
+        assert!(
+            m.last_error
+                .as_deref()
+                .unwrap_or("")
+                .to_lowercase()
+                .contains("fuel")
+        );
     }
 
     #[test]
@@ -815,7 +841,10 @@ mod tests {
         let mgr = manager(enabled_config());
         let bytes = wat_module(NO_ON_EVENT_WAT);
         let err = mgr.load_bytes("incomplete", &bytes).unwrap_err();
-        assert!(err.contains("missing required export"), "unexpected error: {err}");
+        assert!(
+            err.contains("missing required export"),
+            "unexpected error: {err}"
+        );
     }
 
     #[test]
@@ -830,13 +859,19 @@ mod tests {
         "#;
         let mgr = manager(enabled_config());
         let bytes = wat_module(WRONG_VERSION_WAT);
-        mgr.load_bytes("wrongver", &bytes).expect("loads (validation is structural, not semantic)");
+        mgr.load_bytes("wrongver", &bytes)
+            .expect("loads (validation is structural, not semantic)");
         let alerts = mgr.run_on_event(&serde_json::json!({}));
         assert!(alerts.is_empty());
         let metrics = mgr.metrics();
         let m = &metrics["wrongver"];
         assert_eq!(m.errors, 1);
-        assert!(m.last_error.as_deref().unwrap_or("").contains("ABI version mismatch"));
+        assert!(
+            m.last_error
+                .as_deref()
+                .unwrap_or("")
+                .contains("ABI version mismatch")
+        );
     }
 
     #[test]

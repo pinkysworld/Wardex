@@ -2142,9 +2142,7 @@ fn handle_api(
 
         // ── WebAssembly extension runtime (wardex_v1 host ABI) ───────
         (Method::Get, "/api/wasm-extensions") => handle_wasm_extensions_list(state),
-        (Method::Post, "/api/wasm-extensions/upload") => {
-            handle_wasm_extensions_upload(body, state)
-        }
+        (Method::Post, "/api/wasm-extensions/upload") => handle_wasm_extensions_upload(body, state),
         (Method::Post, "/api/wasm-extensions/run") => handle_wasm_extensions_run(body, state),
         (Method::Delete, p) if p.starts_with("/api/wasm-extensions/") => {
             let name = p.strip_prefix("/api/wasm-extensions/").unwrap_or("");
