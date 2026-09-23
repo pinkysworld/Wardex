@@ -230,3 +230,55 @@ fn federation_admin_endpoints_require_bearer_auth() {
         Err(e) => panic!("unexpected transport error: {e}"),
     }
 }
+
+fn status_of(result: Result<ureq::Response, ureq::Error>) -> u16 {
+    match result {
+        Ok(r) => r.status(),
+        Err(ureq::Error::Status(status, _)) => status,
+        Err(e) => panic!("unexpected transport error: {e}"),
+    }
+}
+
+#[test]
+fn federation_rounds_history_requires_authenticated_user_with_view_agents() {
+    let (port, admin_token) = spawn_test_server();
+    let url = format!("{}/api/federation/rounds", base(port));
+
+    // No credentials at all.
+    assert_eq!(status_of(ureq::get(&url).call()), 401);
+
+    // A valid enrolled-agent credential is not a user session: the admin
+    // history route must not be reachable through the agent channel.
+    let agent = enroll_agent(port, &admin_token, "fed-rounds-agent");
+    assert_eq!(
+        status_of(
+            ureq::get(&url)
+                .set("X-Wardex-Agent-Id", &agent.agent_id)
+                .set("X-Wardex-Agent-Token", &agent.agent_token)
+                .call()
+        ),
+        401
+    );
+
+    // Authenticated user without ViewAgents.
+    let service_token = create_rbac_user_token(port, &admin_token, "fed-rounds-service", "service");
+    assert_eq!(
+        status_of(
+            ureq::get(&url)
+                .set("Authorization", &auth_header(&service_token))
+                .call()
+        ),
+        403
+    );
+
+    // Authenticated user with ViewAgents.
+    let viewer_token = create_rbac_user_token(port, &admin_token, "fed-rounds-viewer", "viewer");
+    assert_eq!(
+        status_of(
+            ureq::get(&url)
+                .set("Authorization", &auth_header(&viewer_token))
+                .call()
+        ),
+        200
+    );
+}

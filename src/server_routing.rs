@@ -52,7 +52,17 @@ fn is_agent_api_endpoint(method: &Method, route_path: &str) -> bool {
         || (*method == Method::Post
             && route_path.starts_with("/api/agents/")
             && route_path.ends_with("/inventory"))
-        || route_path.starts_with("/api/federation/round")
+        || is_federation_agent_route(method, route_path)
+}
+
+/// Federated-learning routes that enrolled agents call with their per-agent
+/// credential. Matched exactly: a prefix match would also capture admin
+/// routes such as `/api/federation/rounds` and let them skip user auth/RBAC.
+pub(crate) fn is_federation_agent_route(method: &Method, route_path: &str) -> bool {
+    matches!(
+        (method, route_path),
+        (&Method::Get, "/api/federation/round") | (&Method::Post, "/api/federation/round/submit")
+    )
 }
 
 pub fn api_route_access(method: &Method, route_path: &str) -> ApiRouteAccess {
@@ -87,4 +97,52 @@ pub fn method_from_name(value: &str) -> Option<Method> {
 
 pub fn classify_api_route_access(method: &str, route_path: &str) -> Option<ApiRouteAccess> {
     method_from_name(method).map(|parsed| api_route_access(&parsed, route_path))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn federation_agent_routes_are_matched_exactly() {
+        assert_eq!(
+            api_route_access(&Method::Get, "/api/federation/round"),
+            ApiRouteAccess::Agent
+        );
+        assert_eq!(
+            api_route_access(&Method::Post, "/api/federation/round/submit"),
+            ApiRouteAccess::Agent
+        );
+        // Admin history endpoint must stay behind user auth + RBAC.
+        assert_eq!(
+            api_route_access(&Method::Get, "/api/federation/rounds"),
+            ApiRouteAccess::Authenticated
+        );
+        for path in [
+            "/api/federation/roundsx",
+            "/api/federation/round/",
+            "/api/federation/round/submit/extra",
+            "/api/federation/start",
+            "/api/federation/status",
+        ] {
+            assert_eq!(
+                api_route_access(&Method::Get, path),
+                ApiRouteAccess::Authenticated,
+                "{path}"
+            );
+            assert_eq!(
+                api_route_access(&Method::Post, path),
+                ApiRouteAccess::Authenticated,
+                "{path}"
+            );
+        }
+        assert_eq!(
+            api_route_access(&Method::Post, "/api/federation/round"),
+            ApiRouteAccess::Authenticated
+        );
+        assert_eq!(
+            api_route_access(&Method::Get, "/api/federation/round/submit"),
+            ApiRouteAccess::Authenticated
+        );
+    }
 }
