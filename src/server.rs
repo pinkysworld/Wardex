@@ -896,12 +896,24 @@ fn handle_api(
         };
         let bound_agent_identity = route_path != "/api/agents/enroll"
             && agent_request_bound_to_agent(&method, &url, headers, body, state);
+        // Federation routes key replay protection, quorum and per-agent
+        // privacy budgets on the agent id. The shared agent token and mTLS
+        // do not bind a specific agent id, so a caller could mint arbitrary
+        // identities (Sybil). These routes therefore always require the
+        // per-agent enrollment credential for the claimed, registered agent,
+        // in every environment.
+        let per_agent_binding_required =
+            crate::server_routing::is_federation_agent_route(&method, route_path);
         let trust_configured = required_agent_token.is_some() || mtls_configured;
-        if trust_configured || is_production_env() {
-            let valid = required_agent_token.as_deref().is_some_and(|expected| {
-                secure_token_eq(presented_bearer_token.as_deref(), expected)
-            }) || mtls_verified
-                || bound_agent_identity;
+        if trust_configured || is_production_env() || per_agent_binding_required {
+            let valid = if per_agent_binding_required {
+                bound_agent_identity
+            } else {
+                required_agent_token.as_deref().is_some_and(|expected| {
+                    secure_token_eq(presented_bearer_token.as_deref(), expected)
+                }) || mtls_verified
+                    || bound_agent_identity
+            };
             if !valid {
                 let lockout = failed_auth_record_request(remote_addr, &failed_auth_key);
                 if !crate::server_auth::FailedAuthTracker::is_exempt(remote_addr) {

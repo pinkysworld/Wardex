@@ -3,11 +3,13 @@
 //! Admin endpoints (`/api/federation/start`, `/stop`, `/status`, `/rounds`)
 //! are RBAC-gated (`crate::rbac::endpoint_permission`) like the rest of the
 //! authenticated API surface. Agent endpoints (`/api/federation/round`,
-//! `/api/federation/round/submit`) are agent-token authenticated exactly
-//! like heartbeat/policy-poll (`X-Wardex-Agent-Id` / `X-Wardex-Agent-Token`
-//! headers), matching the existing agent↔server channel in
-//! `src/agent_client.rs`. See `docs/FEDERATED_LEARNING.md` for the protocol
-//! and threat model this implements.
+//! `/api/federation/round/submit`) always require the per-agent enrollment
+//! credential (`X-Wardex-Agent-Id` / `X-Wardex-Agent-Token` headers bound to
+//! a registered agent), matching the existing agent↔server channel in
+//! `src/agent_client.rs`. The shared `WARDEX_AGENT_TOKEN` and mTLS alone are
+//! not accepted here because they do not bind a specific agent id. See
+//! `docs/FEDERATED_LEARNING.md` for the protocol and threat model this
+//! implements.
 
 use std::sync::{Arc, Mutex};
 
@@ -221,8 +223,32 @@ fn try_aggregate_if_ready(state: &Arc<Mutex<AppState>>) {
 
 // ── Agent endpoints ───────────────────────────────────────────────────────────
 
-fn agent_id_from_headers(headers: &HeaderMap) -> Option<String> {
-    header_value(headers, AGENT_ID_HEADER).map(str::to_string)
+/// Resolve the calling agent's id, accepting it only when the presented
+/// per-agent token belongs to that registered agent. The request router
+/// already enforces this binding for the federation agent routes; checking
+/// again here keeps the handlers safe if they are ever reached another way,
+/// and guarantees that only registered agents can create budget entries.
+fn verified_agent_id(
+    headers: &HeaderMap,
+    state: &Arc<Mutex<AppState>>,
+) -> Result<String, Response<Body>> {
+    let Some(agent_id) = header_value(headers, AGENT_ID_HEADER) else {
+        return Err(error_json("missing agent identity header", 401));
+    };
+    let Some(agent_token) = header_value(headers, AGENT_TOKEN_HEADER) else {
+        return Err(error_json("per-agent identity binding required", 401));
+    };
+    let bound = {
+        let s = state
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        s.agent_registry.agent_token_matches(agent_id, agent_token)
+    };
+    if bound {
+        Ok(agent_id.to_string())
+    } else {
+        Err(error_json("per-agent identity binding required", 401))
+    }
 }
 
 /// GET /api/federation/round — an agent polls for the currently open round.
@@ -233,10 +259,11 @@ pub(crate) fn handle_federation_fetch_round(
     headers: &HeaderMap,
     state: &Arc<Mutex<AppState>>,
 ) -> Response<Body> {
-    try_aggregate_if_ready(state);
-    let Some(agent_id) = agent_id_from_headers(headers) else {
-        return error_json("missing agent identity header", 401);
+    let agent_id = match verified_agent_id(headers, state) {
+        Ok(id) => id,
+        Err(resp) => return resp,
     };
+    try_aggregate_if_ready(state);
     let s = state
         .lock()
         .unwrap_or_else(std::sync::PoisonError::into_inner);
@@ -262,17 +289,17 @@ struct SubmitUpdateRequest {
 
 /// POST /api/federation/round/submit — an agent submits its clipped,
 /// noised local-update vector for the round named by `round_id`. The
-/// caller (an enrolled agent) is authenticated the same way as every other
-/// agent-token endpoint; the agent identity used for replay/budget
-/// tracking comes from the verified `X-Wardex-Agent-Id` header, never from
-/// the request body.
+/// caller must present the per-agent token of the registered agent named in
+/// `X-Wardex-Agent-Id`; that verified id (never the request body) is used
+/// for replay/budget tracking.
 pub(crate) fn handle_federation_submit_update(
     body: &[u8],
     headers: &HeaderMap,
     state: &Arc<Mutex<AppState>>,
 ) -> Response<Body> {
-    let Some(agent_id) = agent_id_from_headers(headers) else {
-        return error_json("missing agent identity header", 401);
+    let agent_id = match verified_agent_id(headers, state) {
+        Ok(id) => id,
+        Err(resp) => return resp,
     };
     let body = match read_body_limited(body, 1024 * 1024) {
         Ok(b) => b,

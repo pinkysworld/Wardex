@@ -282,3 +282,109 @@ fn federation_rounds_history_requires_authenticated_user_with_view_agents() {
         200
     );
 }
+
+fn start_small_federation(port: u16, admin_token: &str) {
+    let config = FederationConfig {
+        enabled: true,
+        min_participants: 2,
+        round_deadline_secs: 3600,
+        ..FederationConfig::default()
+    };
+    let resp = ureq::post(&format!("{}/api/federation/start", base(port)))
+        .set("Authorization", &auth_header(admin_token))
+        .set("Content-Type", "application/json")
+        .send_string(&serde_json::json!({ "config": config }).to_string())
+        .unwrap_or_else(|e| panic!("start federation: {e}"));
+    assert_eq!(resp.status(), 200);
+}
+
+fn fetch_round_as(port: u16, agent_id: &str, agent_token: Option<&str>) -> u16 {
+    let mut req = ureq::get(&format!("{}/api/federation/round", base(port)))
+        .set("X-Wardex-Agent-Id", agent_id);
+    if let Some(token) = agent_token {
+        req = req.set("X-Wardex-Agent-Token", token);
+    }
+    status_of(req.call())
+}
+
+fn submit_as(port: u16, agent_id: &str, agent_token: &str, round_id: u64) -> u16 {
+    status_of(
+        ureq::post(&format!("{}/api/federation/round/submit", base(port)))
+            .set("X-Wardex-Agent-Id", agent_id)
+            .set("X-Wardex-Agent-Token", agent_token)
+            .set("Content-Type", "application/json")
+            .send_string(
+                &serde_json::json!({
+                    "round_id": round_id,
+                    "params": vec![0.0_f64; 8],
+                    "sample_count": 10,
+                    "loss": 0.5,
+                })
+                .to_string(),
+            ),
+    )
+}
+
+#[test]
+fn federation_agent_routes_bind_identity_to_per_agent_credential() {
+    let (port, admin_token) = spawn_test_server();
+    let agent_a = enroll_agent(port, &admin_token, "fed-bind-a");
+    let agent_b = enroll_agent(port, &admin_token, "fed-bind-b");
+    assert!(!agent_a.agent_token.is_empty());
+    start_small_federation(port, &admin_token);
+
+    // Unknown (never enrolled) agent id: rejected on both routes.
+    assert_eq!(fetch_round_as(port, "sybil-1", Some("made-up-token")), 401);
+    assert_eq!(submit_as(port, "sybil-1", "made-up-token", 1), 401);
+
+    // Agent A's credential presented under agent B's id: rejected.
+    assert_eq!(
+        fetch_round_as(port, &agent_b.agent_id, Some(&agent_a.agent_token)),
+        401
+    );
+    assert_eq!(
+        submit_as(port, &agent_b.agent_id, &agent_a.agent_token, 1),
+        401
+    );
+
+    // A registered id without its per-agent token: rejected.
+    assert_eq!(fetch_round_as(port, &agent_a.agent_id, None), 401);
+
+    // A user bearer token (even admin) does not stand in for an agent binding.
+    assert_eq!(
+        status_of(
+            ureq::get(&format!("{}/api/federation/round", base(port)))
+                .set("Authorization", &auth_header(&admin_token))
+                .set("X-Wardex-Agent-Id", &agent_a.agent_id)
+                .call()
+        ),
+        401
+    );
+
+    // Enrolled agent with its own credential: accepted.
+    let round = fetch_round(port, &agent_a).unwrap_or_else(|| panic!("open round expected"));
+    assert_eq!(
+        submit_as(
+            port,
+            &agent_a.agent_id,
+            &agent_a.agent_token,
+            round.round_id
+        ),
+        200
+    );
+
+    // Only the genuine agent shows up in the budget ledger; the rejected
+    // identities never created entries.
+    let status: serde_json::Value = ureq::get(&format!("{}/api/federation/status", base(port)))
+        .set("Authorization", &auth_header(&admin_token))
+        .call()
+        .unwrap_or_else(|e| panic!("status: {e}"))
+        .into_json()
+        .unwrap_or_else(|e| panic!("status json: {e}"));
+    let budgets = status["agent_budgets"]
+        .as_array()
+        .unwrap_or_else(|| panic!("agent_budgets array"));
+    assert_eq!(budgets.len(), 1);
+    assert_eq!(budgets[0]["agent_id"], agent_a.agent_id.as_str());
+    assert_eq!(status["current_round"]["submissions"], 1);
+}

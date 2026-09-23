@@ -24,11 +24,16 @@ false`); see `FederationConfig` for tunables.
 There is no peer-to-peer communication between agents; everything goes
 over the existing authenticated agent↔server HTTP channel used for
 enrollment, heartbeats, and policy distribution (`src/agent_client.rs`,
-`src/server_agents.rs`). Federation endpoints reuse the same
-`X-Wardex-Agent-Id` / `X-Wardex-Agent-Token` bearer identity as every other
-agent-scoped endpoint — see `is_agent_api_endpoint` in
-`src/server_routing.rs` and `agent_request_bound_to_agent` in
-`src/server_core_helpers.rs`.
+`src/server_agents.rs`). Federation endpoints use the per-agent
+`X-Wardex-Agent-Id` / `X-Wardex-Agent-Token` identity issued at enrollment
+— see `is_federation_agent_route` in `src/server_routing.rs` and
+`agent_request_bound_to_agent` in `src/server_core_helpers.rs`. Unlike
+other agent routes, the federation routes **always** require this
+per-agent binding: the shared `WARDEX_AGENT_TOKEN` and mTLS client
+certificates are not accepted on their own, because they do not bind a
+specific agent id and would let one caller claim arbitrarily many
+identities (Sybil) to bypass duplicate-submission and budget checks or to
+fill `min_participants`.
 
 ## Model
 
@@ -138,9 +143,12 @@ advanced composition.
   model.
 - **Unbounded privacy loss** from one agent's continued participation is
   bounded by its per-agent lifetime budget.
-- **Unauthenticated submissions** are rejected by the existing agent
-  bearer-token / mTLS enforcement in `src/server.rs` — federation
-  endpoints do not introduce a new trust boundary.
+- **Unauthenticated or unbound submissions** are rejected: the agent id
+  must name a registered agent and the presented per-agent token must
+  belong to it (enforced in `src/server.rs` and again in
+  `src/server_federated.rs`). An agent cannot submit, or spend budget,
+  under another agent's id, and only registered agents can create
+  budget-ledger entries.
 
 ## Threat model — what this does **not** protect
 
