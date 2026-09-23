@@ -43,11 +43,15 @@ The server reads `wardex.toml` from the working directory at startup (or from `-
 
 ### `[server]`
 
+Bind address and port are set via the `WARDEX_HOST` / `WARDEX_PORT` environment variables (see above), not in
+`wardex.toml`.
+
 ```toml
 [server]
-port = 8080
-host = "127.0.0.1"
+rate_limit_read_per_minute = 360   # Max GET/read requests per minute per client IP (0 = unlimited)
+rate_limit_write_per_minute = 60   # Max mutating requests per minute per client IP (0 = unlimited)
 shutdown_timeout_secs = 30
+openapi_public = true              # Whether /api/openapi.json stays public; must be set explicitly in production
 # metrics_bearer_token = "s3cret"  # When set, /api/metrics requires this bearer token.
 #                                  # Leave unset (default) to keep the endpoint public for Prometheus scrapers
 #                                  # that run on a trusted network.
@@ -58,11 +62,10 @@ shutdown_timeout_secs = 30
 ```toml
 [security]
 token_ttl_secs = 86400        # Token lifetime (0 = no expiry)
-rate_limit_per_min = 120       # API rate limit per client IP
-brute_force_lockout = 5        # Lock IP after N failed auth attempts
 require_mtls_agents = false    # When true, require verified agent mTLS identity
 agent_ca_cert_path = ""        # Optional CA bundle used by the TLS terminator or listener
 trusted_mtls_proxy_addrs = []  # Required in production when trusting mTLS identity headers
+cors_allowed_origins = []      # Allowed admin-console CORS origins (empty = same-origin only)
 
 [security.update_signing]
 require_signed_updates = true  # reject unsigned agent update releases
@@ -79,6 +82,20 @@ payload hash, replay counter, downgrade policy, and binary size before install. 
 `require_signed_updates = true`; unsigned update grace is now an explicit lab compatibility override instead of the
 default.
 
+### `[monitor]`
+
+```toml
+[monitor]
+interval_secs = 5              # Legacy sampling cadence, still used as the collection interval fallback
+alert_threshold = 3.5
+alert_log = "var/alerts.jsonl"
+dry_run = false
+duration_secs = 0              # 0 = run indefinitely
+syslog = false
+cef = false
+watch_paths = []
+```
+
 ### `[collection]`
 
 ```toml
@@ -87,15 +104,26 @@ collection_interval_secs = 10  # How often to collect local telemetry
 max_events_per_batch = 500     # Event batch size for SIEM forwarding
 ```
 
+`collection.collection_interval_secs` drives the agent's sampling loop. For backward compatibility with configs
+written before `[collection]` existed, the agent only uses `collection_interval_secs` when it is explicitly set in
+`wardex.toml`; otherwise it falls back to `monitor.interval_secs` (default `5`), so a config that sets only
+`[monitor] interval_secs` keeps its cadence unchanged. If both are set and differ, `collection_interval_secs` wins
+and the agent logs a one-time deprecation note.
+
 ### `[siem]`
 
 ```toml
 [siem]
 enabled = false
-url = ""
-token = ""
-format = "json"      # "json", "cef", or "leef"
-batch_size = 100
+siem_type = "generic"    # "splunk", "elastic", "sentinel", "qradar", or "generic"
+endpoint = ""            # SIEM endpoint URL (e.g. HEC endpoint for Splunk)
+auth_token = ""
+index = "wardex"
+source_type = "wardex:xdr"
+poll_interval_secs = 60
+pull_enabled = false
+batch_size = 50
+verify_tls = true
 ```
 
 ### `[taxii]`
@@ -103,8 +131,9 @@ batch_size = 100
 ```toml
 [taxii]
 enabled = false
-url = ""
-collection = "default"
+url = ""              # TAXII collection URL (e.g. https://taxii.example.com/api/collections/abc/objects/)
+auth_token = ""
+added_after = ""       # Optional RFC 3339 timestamp; only pull indicators newer than this
 poll_interval_secs = 300
 ```
 

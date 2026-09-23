@@ -168,11 +168,11 @@ The agent monitors these persistence-relevant registry paths:
 
 ### PowerShell Script Block Logging Conflicts
 
-If AMSI integration conflicts with existing security tools:
+If AMSI integration conflicts with existing security tools, disable the AMSI backend (there is no separate
+PowerShell-specific toggle; `amsi_enabled` covers script-content inspection):
 ```toml
 [collectors]
 amsi_enabled = false
-powershell_script_block_logging = false
 ```
 
 ## Uninstallation

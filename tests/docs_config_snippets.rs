@@ -36,8 +36,56 @@ fn extract_toml_blocks(markdown: &str) -> Vec<String> {
     blocks
 }
 
+/// Dot-separated table paths (relative to a documented section's root,
+/// e.g. `"compliance.controls"`) whose child keys are intentionally
+/// dynamic (a free-form map, not a fixed set of fields) and therefore
+/// exempt from the "documented key must exist in the schema" check below.
+/// Add an entry here only with a comment explaining why the section's
+/// keys aren't a fixed struct shape.
+const DYNAMIC_KEY_ALLOWLIST: &[&str] = &[
+    // (none yet — every documented section so far is a fixed struct shape)
+];
+
+/// Recursively confirm every key in `snippet_table` (as documented) also
+/// exists at the same path in `real`, the re-serialized, schema-accurate
+/// `Config`. This catches typo'd or removed config keys that would
+/// otherwise pass silently, since no `Config` struct uses
+/// `deny_unknown_fields` and unknown keys are simply dropped at
+/// deserialize time.
+fn assert_documented_keys_exist(
+    source: &str,
+    path: &str,
+    snippet_table: &toml::value::Table,
+    real: &toml::Value,
+) {
+    if DYNAMIC_KEY_ALLOWLIST.contains(&path) {
+        return;
+    }
+    let real_table = real.as_table().unwrap_or_else(|| {
+        panic!("{source}: expected `[{path}]` to be a table in the real config schema")
+    });
+    for (key, value) in snippet_table {
+        let child_path = if path.is_empty() {
+            key.clone()
+        } else {
+            format!("{path}.{key}")
+        };
+        let Some(real_value) = real_table.get(key) else {
+            panic!(
+                "{source}: documented key `{child_path}` does not exist in Config's real \
+                 schema (typo'd or stale docs — check the field actually exists in src/config.rs)"
+            );
+        };
+        if let Some(sub_table) = value.as_table() {
+            assert_documented_keys_exist(source, &child_path, sub_table, real_value);
+        }
+    }
+}
+
 /// Overlay a documented snippet's top-level tables onto a full default
-/// config, then confirm the merged document still deserializes.
+/// config, then confirm the merged document still deserializes, and that
+/// every key documented in the snippet actually exists in the real,
+/// deserialized `Config` schema (recursively, for nested tables).
 fn assert_snippet_merges_into_config(source: &str, snippet: &str) {
     let snippet_value: toml::Value = match toml::from_str(snippet) {
         Ok(v) => v,
@@ -56,20 +104,42 @@ fn assert_snippet_merges_into_config(source: &str, snippet: &str) {
         .as_table_mut()
         .expect("top-level Config TOML must be a table");
 
+    let mut sections_to_check: Vec<(String, toml::Value)> = Vec::new();
     for (key, value) in snippet_table {
-        // Only merge keys that name a real top-level config section;
+        // Only merge/check keys that name a real top-level config section;
         // some doc snippets show unrelated one-off examples (e.g. audit
         // rule fragments) that aren't config sections at all.
         if merged_table.contains_key(key) {
             merged_table.insert(key.clone(), value.clone());
+            sections_to_check.push((key.clone(), value.clone()));
         }
     }
 
     let merged_str = toml::to_string(&merged).expect("merged Value must reserialize");
-    if let Err(e) = toml::from_str::<Config>(&merged_str) {
-        panic!(
+    let parsed_config: Config = match toml::from_str(&merged_str) {
+        Ok(c) => c,
+        Err(e) => panic!(
             "{source}: snippet failed to deserialize once merged into Config: {e}\n---\n{snippet}"
-        );
+        ),
+    };
+
+    // Re-serialize the *parsed* Config (not the pre-deserialize merged
+    // Value) so the comparison reflects the real, schema-validated shape —
+    // any key the snippet set that Config silently dropped is caught here.
+    let real_toml = toml::to_string(&parsed_config).expect("parsed Config must reserialize");
+    let real_value: toml::Value =
+        toml::from_str(&real_toml).expect("reserialized Config TOML must reparse as a Value");
+    let real_table = real_value
+        .as_table()
+        .expect("top-level Config TOML must be a table");
+
+    for (section, value) in sections_to_check {
+        if let Some(sub_table) = value.as_table() {
+            let real_section = real_table
+                .get(&section)
+                .unwrap_or_else(|| panic!("{source}: `[{section}]` missing from real Config"));
+            assert_documented_keys_exist(source, &section, sub_table, real_section);
+        }
     }
 }
 
