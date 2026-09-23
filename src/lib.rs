@@ -117,6 +117,7 @@ pub mod malware_signatures;
 pub mod mitre_coverage;
 pub mod sbom;
 pub mod threat_intel;
+pub mod threat_intel_enrich;
 pub mod vulnerability;
 
 // ── Networking & Cloud ───────────────────────────────────────────────────────
@@ -141,6 +142,7 @@ pub mod monitor;
 pub mod siem;
 pub mod structured_log;
 pub mod telemetry;
+pub mod ticketing;
 
 // ── Business Logic ───────────────────────────────────────────────────────────
 pub mod billing;
