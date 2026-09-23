@@ -382,6 +382,7 @@ pub async fn run_server(
     spawn_retention_purge_scheduler(&state);
     crate::server_cluster::spawn_cluster_runtime_loop(&state);
     spawn_feed_ingestion_loop(&state);
+    spawn_okta_identity_poll_loop(&state);
     spawn_linux_kernel_telemetry(&state);
     spawn_container_runtime_loop(&state);
     spawn_windows_kernel_telemetry(&state);

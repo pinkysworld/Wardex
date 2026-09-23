@@ -152,6 +152,87 @@ impl Default for EntraConfig {
     }
 }
 
+// ── Link header / query-string helpers ──────────────────────────────────────
+//
+// Okta's System Log API paginates via an RFC 8288 `Link` HTTP header (e.g.
+// `<https://org.okta.com/api/v1/logs?after=abc%3D>; rel="next"`); the cursor
+// itself is server-controlled data that must not be trusted to be free of
+// query-string metacharacters.
+
+/// Find the URL for the `rel="next"` entry in a `Link` header value.
+/// Handles multiple comma-separated links (Okta also sends `rel="self"`).
+fn parse_link_header_next(link_header: &str) -> Option<&str> {
+    for part in link_header.split(',') {
+        let (url_part, params) = part.split_once(';')?;
+        let is_next = params
+            .split(';')
+            .any(|p| matches!(p.trim(), "rel=\"next\"" | "rel=next"));
+        if is_next {
+            return Some(
+                url_part
+                    .trim()
+                    .trim_start_matches('<')
+                    .trim_end_matches('>'),
+            );
+        }
+    }
+    None
+}
+
+/// Extract and percent-decode a single query parameter's value from a URL.
+fn query_param_value(url: &str, key: &str) -> Option<String> {
+    let query = url.split_once('?')?.1;
+    for pair in query.split('&') {
+        let (k, v) = pair.split_once('=').unwrap_or((pair, ""));
+        if k == key {
+            return Some(percent_decode(v));
+        }
+    }
+    None
+}
+
+fn percent_decode(s: &str) -> String {
+    let bytes = s.as_bytes();
+    let mut out = Vec::with_capacity(bytes.len());
+    let mut i = 0;
+    while i < bytes.len() {
+        match bytes[i] {
+            b'%' if i + 2 < bytes.len() => {
+                let hex = std::str::from_utf8(&bytes[i + 1..i + 3]).unwrap_or("");
+                if let Ok(byte) = u8::from_str_radix(hex, 16) {
+                    out.push(byte);
+                    i += 3;
+                    continue;
+                }
+                out.push(bytes[i]);
+                i += 1;
+            }
+            b'+' => {
+                out.push(b' ');
+                i += 1;
+            }
+            b => {
+                out.push(b);
+                i += 1;
+            }
+        }
+    }
+    String::from_utf8_lossy(&out).into_owned()
+}
+
+fn percent_encode(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    for b in s.bytes() {
+        match b {
+            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'.' | b'-' | b'_' | b'~' => {
+                out.push(b as char);
+            }
+            _ => out.push_str(&format!("%{b:02X}")),
+        }
+    }
+    out
+}
+
 // ── Risk Scoring ──────────────────────────────────────────────────────────────
 
 fn score_identity_event(
@@ -257,14 +338,25 @@ impl OktaCollector {
         self.config.enabled && !self.config.domain.is_empty() && !self.config.api_token.is_empty()
     }
 
-    /// System Log API URL.
+    /// System Log API URL. `domain` is normally a bare Okta org domain
+    /// (assumed `https://`); it may also be given as a full `http://` or
+    /// `https://` base URL, which lets tests point the collector at a local
+    /// mock server instead of a real Okta tenant.
     pub fn build_url(&self) -> String {
-        let mut url = format!(
-            "https://{}/api/v1/logs?sortOrder=ASCENDING&limit=100",
-            self.config.domain
-        );
+        let base = if self.config.domain.starts_with("http://")
+            || self.config.domain.starts_with("https://")
+        {
+            self.config.domain.trim_end_matches('/').to_string()
+        } else {
+            format!("https://{}", self.config.domain)
+        };
+        let mut url = format!("{base}/api/v1/logs?sortOrder=ASCENDING&limit=100");
         if let Some(ref cursor) = self.after_cursor {
-            url.push_str(&format!("&after={cursor}"));
+            // The cursor is opaque, provider-controlled data returned in a
+            // `Link` header; percent-encode it when rebuilding the request
+            // URL so a value containing `&`, `=`, or other reserved query
+            // characters can't corrupt or inject extra query parameters.
+            url.push_str(&format!("&after={}", percent_encode(cursor)));
         }
         url
     }
@@ -299,12 +391,18 @@ impl OktaCollector {
             }
         };
 
-        // Extract cursor from next link
+        // Extract the pagination cursor from the `Link` header properly:
+        // find the `rel="next"` entry (RFC 8288), then parse ITS query
+        // string for `after`. A naive `split("after=")` over the whole
+        // header breaks (or, worse, picks up the wrong value) whenever the
+        // cursor itself is embedded elsewhere in the header, contains `&`,
+        // or the header carries multiple links (Okta sends `rel="self"`
+        // alongside `rel="next"`).
         if let Some(link) = next_link
-            && let Some(after) = link.split("after=").nth(1)
+            && let Some(next_url) = parse_link_header_next(link)
+            && let Some(after) = query_param_value(next_url, "after")
         {
-            let cursor = after.split('&').next().unwrap_or(after);
-            self.after_cursor = Some(cursor.to_string());
+            self.after_cursor = Some(after);
         }
 
         let mut events = Vec::new();
@@ -998,5 +1096,56 @@ mod tests {
         let result = collector.parse_response(json, None);
         assert_eq!(result.event_count, 1);
         assert_eq!(result.events[0].event_type, "user.session.start");
+    }
+
+    #[test]
+    fn okta_cursor_survives_reserved_query_characters_round_trip() {
+        // A cursor value containing `&`/`=` (reserved query-string
+        // metacharacters) must round-trip through the Link-header parse and
+        // the next request's URL without being truncated or corrupting the
+        // query string — this is exactly the scenario the naive
+        // `split("after=")`/un-encoded interpolation approach breaks.
+        let config = OktaConfig {
+            domain: "dev-test.okta.com".into(),
+            api_token: "tok".into(),
+            poll_interval_secs: 30,
+            event_type_filter: vec![],
+            enabled: true,
+        };
+        let mut collector = OktaCollector::new(config);
+
+        let tricky_cursor = "abc&evil=1=";
+        let encoded_cursor = percent_encode(tricky_cursor);
+        let link_header = format!(
+            "<https://dev-test.okta.com/api/v1/logs?after={encoded_cursor}>; rel=\"next\", \
+             <https://dev-test.okta.com/api/v1/logs?after=self-token>; rel=\"self\""
+        );
+
+        let result = collector.parse_response("[]", Some(&link_header));
+        assert!(result.success);
+        assert_eq!(result.next_cursor.as_deref(), Some(tricky_cursor));
+
+        // The next request URL must carry the cursor back out
+        // percent-encoded, not raw, so it can't inject extra query params.
+        let url = collector.build_url();
+        assert!(url.contains(&format!("after={encoded_cursor}")));
+        assert!(!url.contains("after=abc&evil=1="));
+    }
+
+    #[test]
+    fn parse_link_header_next_picks_rel_next_not_rel_self() {
+        let header = "<https://x/api/v1/logs?after=self-val>; rel=\"self\", <https://x/api/v1/logs?after=next-val>; rel=\"next\"";
+        let next = parse_link_header_next(header).expect("next link");
+        assert_eq!(
+            query_param_value(next, "after").as_deref(),
+            Some("next-val")
+        );
+    }
+
+    #[test]
+    fn percent_encode_decode_round_trip() {
+        let value = "a b&c=d%e";
+        let encoded = percent_encode(value);
+        assert_eq!(percent_decode(&encoded), value);
     }
 }

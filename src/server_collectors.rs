@@ -1258,15 +1258,19 @@ pub(crate) fn validate_okta_collector(
     match setup.to_runtime(resolver) {
         Ok(runtime) => {
             let mut collector = crate::collector_identity::OktaCollector::new(runtime);
-            // Resume from the cursor persisted on the previous poll, so
-            // repeated polls advance through the System Log rather than
-            // re-fetching the same page (mirrors AWS's `next_token` and
-            // Azure/GCP's checkpoint-driven pagination).
+            // Resume from the cursor persisted by the background poll loop,
+            // so validation previews the *next* page a real poll would see
+            // rather than always re-fetching the first page.
             collector.resume_from_cursor(load_collector_cursor(storage, "okta_identity"));
             let result = collector.poll();
-            if let Some(cursor) = result.next_cursor.as_deref() {
-                save_collector_cursor(storage, "okta_identity", cursor);
-            }
+            // IMPORTANT: this is a preview/validation call, not an ingest —
+            // the polled events below are only shown back to the caller as
+            // `sample_events`, never written to the event store. Persisting
+            // `next_cursor` here would silently skip a page of identity
+            // events on every real poll that follows a "Validate" click, so
+            // the cursor advance only ever happens in the background poll
+            // loop (`crate::server_support_helpers`) after events are
+            // actually ingested.
             let sample_events: Vec<_> = result.events.iter().take(5).cloned().collect();
             serde_json::json!({
                 "provider": "okta_identity",

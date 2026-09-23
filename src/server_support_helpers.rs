@@ -555,6 +555,197 @@ pub(crate) fn spawn_feed_ingestion_loop(state: &Arc<Mutex<AppState>>) {
     });
 }
 
+/// Turn a polled Okta identity event into an [`AlertRecord`] so it flows
+/// through the same event store / search-index pipeline as agent-reported
+/// alerts. Identity events have no host telemetry sample, so a zeroed
+/// `TelemetrySample` is used as a placeholder; the signal lives in `score`,
+/// `reasons`, and `hostname` (the acting user principal).
+fn okta_identity_event_to_alert(
+    event: &crate::collector_identity::IdentityEvent,
+) -> crate::collector::AlertRecord {
+    let level = if event.risk_score >= 7.0 {
+        "Critical"
+    } else if event.risk_score >= 5.0 {
+        "Severe"
+    } else if event.risk_score >= 3.0 {
+        "Elevated"
+    } else {
+        "Info"
+    };
+    let mut reasons = vec![format!("okta:{}", event.event_type)];
+    if let Some(reason) = &event.failure_reason {
+        reasons.push(format!("failure_reason:{reason}"));
+    }
+    if let Some(risk) = &event.provider_risk {
+        reasons.push(format!("provider_risk:{risk}"));
+    }
+    reasons.extend(event.mitre_techniques.iter().map(|t| format!("mitre:{t}")));
+
+    let timestamp_ms = chrono::DateTime::parse_from_rfc3339(&event.timestamp)
+        .map(|ts| u64::try_from(ts.timestamp_millis()).unwrap_or(0))
+        .unwrap_or(0);
+
+    crate::collector::AlertRecord {
+        timestamp: event.timestamp.clone(),
+        hostname: event
+            .user_principal
+            .clone()
+            .unwrap_or_else(|| "okta".to_string()),
+        platform: "identity".to_string(),
+        score: event.risk_score,
+        confidence: 0.7,
+        level: level.to_string(),
+        action: "monitor".to_string(),
+        reasons,
+        sample: crate::telemetry::TelemetrySample {
+            timestamp_ms,
+            cpu_load_pct: 0.0,
+            memory_load_pct: 0.0,
+            temperature_c: 0.0,
+            network_kbps: 0.0,
+            auth_failures: u32::from(event.outcome == "FAILURE"),
+            battery_pct: 0.0,
+            integrity_drift: 0.0,
+            process_count: 0,
+            disk_pressure_pct: 0.0,
+        },
+        enforced: false,
+        mitre: Vec::new(),
+        narrative: None,
+    }
+}
+
+/// Background loop that polls the Okta System Log collector (when enabled)
+/// and ingests its events into the shared event store / search index, the
+/// same pipeline `POST /api/events/ingest` feeds. Honors the configured
+/// `poll_interval_secs`, and backs off for `retry_after_secs` when Okta
+/// signals a rate limit.
+///
+/// The pagination cursor is only persisted **after** a poll's events have
+/// actually been ingested — unlike `validate_okta_collector` (the
+/// config-test/validate endpoint), which polls to preview a sample but must
+/// never advance the cursor, since nothing there was ingested. Advancing it
+/// from validation would silently skip a page of real identity events on
+/// the next real poll.
+pub(crate) fn spawn_okta_identity_poll_loop(state: &Arc<Mutex<AppState>>) {
+    let state = Arc::clone(state);
+    std::thread::spawn(move || {
+        loop {
+            let shutdown = {
+                let s = crate::state_lock::tracked_lock(&state, "server/okta_poll_shutdown");
+                s.shutdown.load(Ordering::Relaxed)
+            };
+            if shutdown {
+                break;
+            }
+
+            let sleep_for = run_okta_identity_poll_once(&state);
+            std::thread::sleep(sleep_for);
+        }
+    });
+}
+
+/// One iteration of the Okta poll loop: load config, poll (off the
+/// AppState lock), ingest any events, and only then persist the cursor.
+/// Returns how long the caller should sleep before the next iteration.
+/// Factored out of [`spawn_okta_identity_poll_loop`] so it can be driven
+/// synchronously, once, from tests.
+fn run_okta_identity_poll_once(state: &Arc<Mutex<AppState>>) -> std::time::Duration {
+    let (setup, cursor, storage) = {
+        let s = crate::state_lock::tracked_lock(state, "server/okta_poll_setup");
+        (
+            crate::server_collectors::load_okta_collector_setup(&s.storage),
+            crate::server_collectors::load_collector_cursor(&s.storage, "okta_identity"),
+            s.storage.clone(),
+        )
+    };
+    let poll_interval = std::time::Duration::from_secs(setup.poll_interval_secs.max(1));
+
+    if !setup.enabled {
+        return poll_interval;
+    }
+
+    let resolver = crate::server_collectors::build_secrets_resolver(&storage);
+    let runtime = match setup.to_runtime(&resolver) {
+        Ok(runtime) => runtime,
+        Err(error) => {
+            crate::server_collectors::record_collector_checkpoint(
+                &storage,
+                "okta_identity",
+                false,
+                0,
+                Some(&error),
+            );
+            return poll_interval;
+        }
+    };
+
+    // The HTTP round trip to Okta happens here, off the AppState lock (only
+    // re-acquired below, briefly, to ingest results).
+    let mut collector = crate::collector_identity::OktaCollector::new(runtime);
+    collector.resume_from_cursor(cursor);
+    let result = collector.poll();
+    let sleep_for = result
+        .retry_after_secs
+        .map(std::time::Duration::from_secs)
+        .unwrap_or(poll_interval);
+
+    if !result.success {
+        crate::server_collectors::record_collector_checkpoint(
+            &storage,
+            "okta_identity",
+            false,
+            0,
+            result.error.as_deref(),
+        );
+        return sleep_for;
+    }
+
+    if !result.events.is_empty() {
+        let batch = crate::event_forward::EventBatch {
+            agent_id: "okta_identity".to_string(),
+            events: result
+                .events
+                .iter()
+                .map(okta_identity_event_to_alert)
+                .collect(),
+        };
+        let mut s = crate::state_lock::tracked_lock(state, "server/okta_poll_ingest");
+        let ingest_result = s.event_store.ingest(&batch);
+        // Feed newly ingested events into the search index incrementally,
+        // matching `handle_event_ingest`.
+        let stored = s.event_store.all_events();
+        let start = stored.len().saturating_sub(ingest_result.ingested);
+        let new_fields: Vec<HashMap<String, String>> = stored[start..]
+            .iter()
+            .map(crate::server::event_to_search_fields)
+            .collect();
+        if !new_fields.is_empty() {
+            if let Err(e) = s.search_index.ingest(&new_fields) {
+                tracing::warn!("[SEARCH] failed to index okta identity events: {e}");
+            } else if let Err(e) = s.search_index.maybe_commit() {
+                tracing::warn!("[SEARCH] failed to commit okta identity events: {e}");
+            }
+        }
+    }
+
+    // Only now that the polled events (if any) are durably ingested is it
+    // safe to persist the cursor: a crash between poll and ingest instead
+    // re-fetches the same page next time.
+    crate::server_collectors::record_collector_checkpoint(
+        &storage,
+        "okta_identity",
+        true,
+        u64::try_from(result.event_count).unwrap_or(u64::MAX),
+        None,
+    );
+    if let Some(cursor) = result.next_cursor.as_deref() {
+        crate::server_collectors::save_collector_cursor(&storage, "okta_identity", cursor);
+    }
+
+    sleep_for
+}
+
 /// Background loop that ingests live Docker/Podman container events into
 /// the existing `ContainerDetector` rules. No-ops when disabled in config.
 /// Reconnects with exponential backoff, resuming the Docker `/events`
@@ -1336,4 +1527,135 @@ pub(crate) fn monitoring_paths_payload(host: &HostInfo, config: &Config) -> serd
             "scheduled_tasks": config.monitor.scope.scheduled_tasks,
         }
     })
+}
+
+#[cfg(test)]
+mod okta_poll_tests {
+    use super::*;
+    use std::io::{Read, Write};
+    use std::net::TcpListener;
+
+    /// Spawn a tiny single-request mock Okta System Log server: it always
+    /// returns one event and a `Link: <...>; rel="next"` header carrying
+    /// `next_cursor`. `OktaCollector::build_url` accepts a full `http://`
+    /// base URL (in addition to a bare domain), which is what lets this
+    /// point at a local plaintext mock instead of a real Okta tenant.
+    fn spawn_mock_okta_server(next_cursor: &'static str) -> String {
+        let listener = TcpListener::bind("127.0.0.1:0").expect("bind mock okta");
+        let port = listener.local_addr().expect("addr").port();
+        std::thread::spawn(move || {
+            if let Ok((mut stream, _)) = listener.accept() {
+                let mut buf = [0u8; 4096];
+                let mut received = Vec::new();
+                loop {
+                    let n = stream.read(&mut buf).unwrap_or(0);
+                    if n == 0 {
+                        break;
+                    }
+                    received.extend_from_slice(&buf[..n]);
+                    if received.windows(4).any(|w| w == b"\r\n\r\n") {
+                        break;
+                    }
+                }
+                let body = r#"[{"uuid":"evt-1","eventType":"user.session.start","published":"2026-01-01T00:00:00Z","outcome":{"result":"SUCCESS"},"actor":{"alternateId":"user@example.com"},"client":{},"securityContext":{},"authenticationContext":{}}]"#;
+                let link = format!(
+                    "<http://127.0.0.1:{port}/api/v1/logs?after={next_cursor}>; rel=\"next\""
+                );
+                let response = format!(
+                    "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nLink: {link}\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+                    body.len()
+                );
+                let _ = stream.write_all(response.as_bytes());
+                let _ = stream.flush();
+            }
+        });
+        format!("http://127.0.0.1:{port}")
+    }
+
+    fn test_okta_setup(base_url: String) -> crate::integration_setup::OktaCollectorSetup {
+        crate::integration_setup::OktaCollectorSetup {
+            domain: base_url,
+            api_token: "test-token".into(),
+            poll_interval_secs: 30,
+            // A non-empty filter is required for `validate()` to report
+            // "ready" rather than "warning" (an empty filter is valid but
+            // warns); "warning" is otherwise treated as "not ready enough
+            // to poll" by `validate_okta_collector`/the poll loop.
+            event_type_filter: vec!["user.session.start".into()],
+            enabled: true,
+        }
+    }
+
+    /// Regression test for the Okta cursor data-loss bug: the config-test/
+    /// validate endpoint (`validate_okta_collector`) only *previews* events
+    /// — it must never advance the persisted cursor, or every "Validate"
+    /// click silently skips a page of real identity events on the next
+    /// real poll.
+    #[test]
+    fn okta_validate_never_persists_cursor() {
+        let (_port, _token, state) = crate::server::spawn_test_server_with_state();
+        let storage = {
+            let s = state
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
+            s.storage.clone()
+        };
+        let base_url = spawn_mock_okta_server("cursor-from-preview");
+        let setup = test_okta_setup(base_url);
+        let resolver = crate::server_collectors::build_secrets_resolver(&storage);
+
+        assert!(
+            crate::server_collectors::load_collector_cursor(&storage, "okta_identity").is_none()
+        );
+        let body = crate::server_collectors::validate_okta_collector(&storage, &setup, &resolver);
+        assert_eq!(body["success"], serde_json::json!(true));
+        assert_eq!(body["event_count"], serde_json::json!(1));
+        // The preview reported a next_cursor to the caller...
+        assert_eq!(
+            body["next_cursor"],
+            serde_json::json!("cursor-from-preview")
+        );
+        // ...but it must NOT have been written to storage: a real poll
+        // later must still start from the beginning, not skip this page.
+        assert!(
+            crate::server_collectors::load_collector_cursor(&storage, "okta_identity").is_none(),
+            "validate must never persist the pagination cursor"
+        );
+    }
+
+    /// The background poll loop (unlike validate) DOES ingest events, and
+    /// only then persists the cursor.
+    #[test]
+    fn okta_poll_once_ingests_events_and_persists_cursor_after() {
+        let (_port, _token, state) = crate::server::spawn_test_server_with_state();
+        let base_url = spawn_mock_okta_server("cursor-after-poll");
+        let storage = {
+            let s = state
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
+            let setup = test_okta_setup(base_url);
+            save_stored_json(&s.storage, OKTA_COLLECTOR_SETUP_KEY, &setup).expect("save setup");
+            let events_before = s.event_store.all_events().len();
+            assert_eq!(events_before, 0);
+            s.storage.clone()
+        };
+
+        assert!(
+            crate::server_collectors::load_collector_cursor(&storage, "okta_identity").is_none()
+        );
+        let _ = run_okta_identity_poll_once(&state);
+
+        let events_after = {
+            let s = state
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
+            s.event_store.all_events().len()
+        };
+        assert_eq!(events_after, 1, "poll should have ingested the event");
+        assert_eq!(
+            crate::server_collectors::load_collector_cursor(&storage, "okta_identity").as_deref(),
+            Some("cursor-after-poll"),
+            "poll loop must persist the cursor once events are ingested"
+        );
+    }
 }
