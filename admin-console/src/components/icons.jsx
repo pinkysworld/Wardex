@@ -431,32 +431,45 @@ function IconGraph(props) {
   );
 }
 
+// Maps each nav section to its icon component and a stable, human-readable
+// icon name. The name is exposed via `data-icon` on rendered nav icons (see
+// `sectionIconName` below) so tests and tooling can assert *which* icon a
+// nav item renders instead of an incidental array index or DOM position.
 const SECTION_ICONS = {
-  dashboard: IconGrid,
-  'operator-launchpad': IconCompass,
-  'live-monitor': IconActivity,
-  'threat-detection': IconShieldAlert,
-  'fleet-agents': IconServer,
-  'security-policy': IconLock,
-  'soc-workbench': IconTarget,
-  'command-center': IconTerminal,
-  'assistant-workspace': IconChat,
-  'malware-scanning': IconBug,
-  'detection-lab': IconFlask,
-  'response-safety': IconShieldCheck,
-  integrations: IconPlug,
-  'operations-health': IconPulse,
-  infrastructure: IconDatabase,
-  'reports-exports': IconFileText,
-  settings: IconGear,
-  'help-docs': IconBook,
-  ueba: IconUserCheck,
-  ndr: IconNetwork,
-  'email-security': IconMail,
-  'attack-graph': IconGraph,
+  dashboard: [IconGrid, 'grid'],
+  'operator-launchpad': [IconCompass, 'compass'],
+  'live-monitor': [IconActivity, 'activity'],
+  'threat-detection': [IconShieldAlert, 'shield-alert'],
+  'fleet-agents': [IconServer, 'server'],
+  'security-policy': [IconLock, 'lock'],
+  'soc-workbench': [IconTarget, 'target'],
+  'command-center': [IconTerminal, 'terminal'],
+  'assistant-workspace': [IconChat, 'chat'],
+  'malware-scanning': [IconBug, 'bug'],
+  'detection-lab': [IconFlask, 'flask'],
+  'response-safety': [IconShieldCheck, 'shield-check'],
+  integrations: [IconPlug, 'plug'],
+  'operations-health': [IconPulse, 'pulse'],
+  infrastructure: [IconDatabase, 'database'],
+  'reports-exports': [IconFileText, 'file-text'],
+  settings: [IconGear, 'gear'],
+  'help-docs': [IconBook, 'book'],
+  ueba: [IconUserCheck, 'user-check'],
+  ndr: [IconNetwork, 'network'],
+  'email-security': [IconMail, 'mail'],
+  'attack-graph': [IconGraph, 'graph'],
 };
 
+const DEFAULT_SECTION_ICON = [IconGrid, 'grid'];
+
 export function SectionIcon({ sectionId, ...rest }) {
-  const Component = SECTION_ICONS[sectionId] || IconGrid;
+  const [Component] = SECTION_ICONS[sectionId] || DEFAULT_SECTION_ICON;
   return <Component {...rest} />;
+}
+
+/** The stable icon name (see `SECTION_ICONS`) rendered for a given nav section id. */
+// eslint-disable-next-line react-refresh/only-export-components
+export function sectionIconName(sectionId) {
+  const [, name] = SECTION_ICONS[sectionId] || DEFAULT_SECTION_ICON;
+  return name;
 }
