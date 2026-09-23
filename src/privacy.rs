@@ -85,8 +85,12 @@ impl GaussianMechanism {
     /// Sample one draw of zero-mean Gaussian noise with std-dev `sigma`,
     /// using the Box-Muller transform.
     pub fn noise(&self) -> f64 {
-        use rand::RngExt;
-        let mut rng = rand::rng();
+        self.noise_with(&mut rand::rng())
+    }
+
+    /// Like [`Self::noise`], but draws from the supplied RNG so callers
+    /// (tests, simulations) can make the noise reproducible.
+    pub fn noise_with<R: rand::RngExt + ?Sized>(&self, rng: &mut R) -> f64 {
         let u1: f64 = rng.random::<f64>().clamp(1e-12, 1.0);
         let u2: f64 = rng.random::<f64>();
         let z = (-2.0 * u1.ln()).sqrt() * (2.0 * std::f64::consts::PI * u2).cos();

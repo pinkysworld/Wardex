@@ -295,10 +295,25 @@ pub fn l2_norm(v: &[f64]) -> f64 {
 /// `(epsilon, delta)` with sensitivity `clip_norm`. This is what an agent
 /// runs on its raw `weight_delta` before submitting it to the coordinator.
 pub fn clip_and_privatize(update: &[f64], clip_norm: f64, epsilon: f64, delta: f64) -> Vec<f64> {
+    clip_and_privatize_with(update, clip_norm, epsilon, delta, &mut rand::rng())
+}
+
+/// [`clip_and_privatize`] with a caller-supplied RNG, so simulations and
+/// tests can reproduce the exact noise draws.
+pub fn clip_and_privatize_with<R: rand::RngExt + ?Sized>(
+    update: &[f64],
+    clip_norm: f64,
+    epsilon: f64,
+    delta: f64,
+    rng: &mut R,
+) -> Vec<f64> {
     let mut clipped = update.to_vec();
     clip_l2(&mut clipped, clip_norm);
     let mechanism = GaussianMechanism::new(epsilon, delta, clip_norm);
-    mechanism.privatize_vec(&clipped)
+    clipped
+        .iter()
+        .map(|&v| v + mechanism.noise_with(rng))
+        .collect()
 }
 
 // ── Protocol types ────────────────────────────────────────────────────────────
@@ -944,6 +959,9 @@ mod tests {
         let agents: Vec<Vec<(Vec<f64>, f64)>> =
             (0..4).map(|i| make_agent_data(i + 1, 200)).collect();
 
+        // Seeded so the DP noise draws, and therefore the final accuracy,
+        // are identical on every run.
+        let mut noise_rng = <rand::rngs::StdRng as rand::SeedableRng>::seed_from_u64(0x5eed);
         let mut current_global = LogisticRegressionModel::new(2);
         for round_num in 0..config.max_rounds {
             let Some(round) = coord.current_round.clone() else {
@@ -957,11 +975,12 @@ mod tests {
                     round.hyperparams.learning_rate,
                     round.hyperparams.local_epochs,
                 );
-                let privatized = clip_and_privatize(
+                let privatized = clip_and_privatize_with(
                     &result.weight_delta,
                     round.hyperparams.clip_norm,
                     round.hyperparams.epsilon,
                     round.hyperparams.delta,
+                    &mut noise_rng,
                 );
                 let _ = coord.submit_update(
                     &format!("agent-{i}"),
