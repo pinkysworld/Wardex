@@ -32,7 +32,16 @@ pub struct JiraConfig {
     #[serde(default)]
     pub email: String,
     /// API token (Cloud, paired with `email`) or PAT (Server, used as bearer).
-    #[serde(skip_serializing)]
+    ///
+    /// This is NOT `#[serde(skip_serializing)]`: this struct is round-tripped
+    /// through the config store as its own JSON representation (see
+    /// `save_stored_json`/`load_stored_json` in `server_support_helpers.rs`),
+    /// so skipping it on serialize would silently discard the token on every
+    /// save and never persist it. The HTTP handlers in
+    /// `server_integrations_ext.rs` already build their own redacted view
+    /// (`has_api_token: bool`) rather than serializing this struct directly,
+    /// so there's no risk of the token leaking in an API response.
+    #[serde(default)]
     pub api_token: String,
     /// Request timeout, in seconds.
     #[serde(default = "default_timeout_secs")]
@@ -266,11 +275,14 @@ pub struct ServiceNowConfig {
     #[serde(default)]
     pub username: String,
     /// Basic-auth password.
-    #[serde(skip_serializing)]
+    ///
+    /// Not `#[serde(skip_serializing)]` — see the comment on
+    /// `JiraConfig::api_token` for why: this struct round-trips through the
+    /// config store's own JSON, and the HTTP handlers already redact these
+    /// fields themselves rather than serializing this struct directly.
     #[serde(default)]
     pub password: String,
     /// OAuth bearer token, used instead of username/password when set.
-    #[serde(skip_serializing)]
     #[serde(default)]
     pub oauth_token: String,
     #[serde(default = "default_timeout_secs")]
