@@ -13,6 +13,8 @@ use axum::http::{HeaderMap, HeaderValue, Method as HttpMethod, StatusCode};
 use axum::response::Response;
 use serde::de::DeserializeOwned;
 
+use crate::ticketing::RemoteTicket;
+
 /// Local Method enum preserving tiny_http variant names for match compatibility.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Method {
@@ -5180,9 +5182,6 @@ fn handle_api(
             let started = std::time::Instant::now();
             match read_json_value(body, 12 * 1024) {
                 Ok(v) => {
-                    let mut s = state
-                        .lock()
-                        .unwrap_or_else(std::sync::PoisonError::into_inner);
                     let provider = v["provider"].as_str().unwrap_or("jira").to_string();
                     let object_kind = v["object_kind"].as_str().unwrap_or("incident").to_string();
                     let object_id = v["object_id"].as_str().unwrap_or("").to_string();
@@ -5195,46 +5194,75 @@ fn handle_api(
                         .and_then(|value| value.as_str())
                         .unwrap_or(&summary)
                         .to_string();
-                    // Idempotency: if we already synced this object, reuse
-                    // its external key so a real Jira/ServiceNow client
-                    // updates the existing remote ticket instead of
-                    // creating a duplicate on retry.
-                    let existing_external_key = s
-                        .enterprise
-                        .ticket_syncs()
-                        .iter()
-                        .find(|sync| {
-                            sync.provider == provider
-                                && sync.object_kind == object_kind
-                                && sync.object_id == object_id
-                        })
-                        .map(|sync| sync.external_key.clone());
+                    let queue_or_project = v
+                        .get("queue_or_project")
+                        .and_then(|value| value.as_str())
+                        .map(std::string::ToString::to_string);
+
+                    // Lock only to read what's needed (idempotency key, a
+                    // cheap Arc clone of storage), then release the global
+                    // lock before making any network calls to Jira/
+                    // ServiceNow — those can take seconds, and every other
+                    // request needing AppState would otherwise stall behind
+                    // them.
+                    let (storage, existing_external_key) = {
+                        let s = state
+                            .lock()
+                            .unwrap_or_else(std::sync::PoisonError::into_inner);
+                        // Idempotency: if we already synced this object, reuse
+                        // its external key so a real Jira/ServiceNow client
+                        // updates the existing remote ticket instead of
+                        // creating a duplicate on retry. A previously failed
+                        // sync has no external key (empty string), which
+                        // correctly causes the next attempt to create afresh.
+                        let existing_external_key = s
+                            .enterprise
+                            .ticket_syncs()
+                            .iter()
+                            .find(|sync| {
+                                sync.provider == provider
+                                    && sync.object_kind == object_kind
+                                    && sync.object_id == object_id
+                            })
+                            .map(|sync| sync.external_key.clone())
+                            .filter(|key| !key.is_empty());
+                        (s.storage.clone(), existing_external_key)
+                    };
+
                     let remote_result = sync_remote_ticket(
-                        &s.storage,
+                        &storage,
                         &provider,
                         existing_external_key.as_deref(),
                         &summary,
                         &description,
                     );
-                    let mut remote_error = None;
-                    let remote_ticket = match remote_result {
-                        Some(Ok(ticket)) => Some(ticket),
-                        Some(Err(error)) => {
-                            remote_error = Some(error);
-                            None
-                        }
-                        None => None,
+                    let remote_error = match &remote_result {
+                        Some(Err(error)) => Some(error.clone()),
+                        _ => None,
                     };
+                    // `Ok(None)` = no provider configured (local bookkeeping
+                    // only); `Ok(Some(_))` = remote call succeeded; `Err(_)`
+                    // = a provider is configured but the call failed — this
+                    // must NOT be treated like "no provider" or a synthetic
+                    // external key would be fabricated for a ticket that was
+                    // never actually created remotely.
+                    let remote_outcome: Result<Option<RemoteTicket>, String> = match remote_result {
+                        Some(Ok(ticket)) => Ok(Some(ticket)),
+                        Some(Err(error)) => Err(error),
+                        None => Ok(None),
+                    };
+
+                    let mut s = state
+                        .lock()
+                        .unwrap_or_else(std::sync::PoisonError::into_inner);
                     let sync = s.enterprise.sync_ticket_remote(
                         provider,
                         object_kind,
                         object_id,
-                        v.get("queue_or_project")
-                            .and_then(|value| value.as_str())
-                            .map(std::string::ToString::to_string),
+                        queue_or_project,
                         summary,
                         auth_identity.actor().to_string(),
-                        remote_ticket,
+                        remote_outcome,
                     );
                     s.enterprise
                         .record_ticket_sync_metrics(started.elapsed().as_millis() as u64);

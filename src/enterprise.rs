@@ -892,6 +892,13 @@ pub struct TicketSyncRecord {
     /// When the remote status was last pulled.
     #[serde(default)]
     pub last_pulled_at: Option<String>,
+    /// Error message from the most recent failed remote sync attempt, when
+    /// `status` is `"failed"`. A configured provider that returns an error
+    /// (auth failure, network error, 4xx/5xx) must not fabricate a synthetic
+    /// external key: that would make later retries PATCH/comment against a
+    /// remote id that was never created. `None` once a sync has succeeded.
+    #[serde(default)]
+    pub last_error: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
