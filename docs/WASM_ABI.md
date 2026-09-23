@@ -31,6 +31,22 @@ instantiated for each event:
   memory growth at `wasm_runtime.max_memory_pages` 64 KiB pages (config
   default 16 pages = 1 MiB). A grow past the cap traps rather than
   silently failing.
+- **Table bound**: the same `ResourceLimiter` caps every table at
+  `wasm_runtime.max_table_elements` elements (config default 4096) —
+  `wasmi` otherwise leaves table size unbounded, so a module declaring
+  (or growing) a table with hundreds of millions of elements would cost
+  the host hundreds of MB per invocation. Exceeding it fails
+  instantiation or traps on `table.grow`, the same as the memory limit.
+- **Host-call cost bound**: reading guest memory in a host call (`log`,
+  `emit_alert`, `kv_get`/`kv_set` key and value arguments) charges extra
+  fuel proportional to the bytes copied, on top of `wasmi`'s own
+  per-instruction accounting — those bytes are host-side `memcpy`/JSON-
+  parse work the guest's own interpreted instruction count would not
+  otherwise reflect. `emit_alert` is additionally capped per invocation
+  at `wasm_runtime.max_alerts_per_invocation` alerts (default 32) and
+  `wasm_runtime.max_alert_bytes_per_invocation` total payload bytes
+  (default 1 MiB); calls past either cap are rejected (see the return
+  codes below) rather than growing the alert list without bound.
 - **No ambient authority**: extensions get **no WASI**, no filesystem, no
   network, no clock beyond the explicit `now_unix_ms` host call. The only
   imports permitted are the five functions under the `wardex_v1` module
@@ -79,7 +95,11 @@ target `wasm_extension`. Reads are clamped to 256 KiB regardless of the
 
 Reads a JSON object from the guest's memory (`ptr`/`len`) and, if it
 parses, records it as a detection. Returns `0` on success, `-1` if the
-bytes are not valid JSON for the expected shape.
+bytes are not valid JSON for the expected shape, `-2` if the invocation
+has already emitted `wasm_runtime.max_alerts_per_invocation` alerts, or
+`-3` if accepting this payload would exceed
+`wasm_runtime.max_alert_bytes_per_invocation` total bytes for the
+invocation.
 
 JSON shape:
 
@@ -105,13 +125,16 @@ key/value store. On a hit, writes the value into the guest's memory at
 `val_ptr` (if it fits within `val_max_len`) and returns its length. On a
 miss, returns `-1`. If the value doesn't fit in `val_max_len`, returns
 `-2` without writing anything. Returns `-3` on a memory-access failure.
+Returns `-4` if `key` exceeds `wasm_runtime.max_kv_key_bytes`.
 
 ### `kv_set(key_ptr: i32, key_len: i32, val_ptr: i32, val_len: i32) -> i32`
 
 Stores `value` (bytes at `val_ptr`/`val_len`) under `key`. Returns `0` on
 success. Returns `-1` if the store is at `wasm_runtime.max_kv_entries`
 and `key` is not already present (bounded state — no unbounded growth).
-Returns `-2` if `value` exceeds `wasm_runtime.max_kv_value_bytes`.
+Returns `-2` if `value` exceeds `wasm_runtime.max_kv_value_bytes`. Returns
+`-4` if `key` exceeds `wasm_runtime.max_kv_key_bytes` — only values were
+size-capped before; an unbounded key is the same risk.
 
 The key/value store is:
 - **Scoped per extension.** Extension `a` can never read or overwrite
@@ -201,6 +224,10 @@ timeout_ms = 50
 max_module_bytes = 2097152
 max_kv_entries = 64
 max_kv_value_bytes = 4096
+max_kv_key_bytes = 256
+max_table_elements = 4096
+max_alerts_per_invocation = 32
+max_alert_bytes_per_invocation = 1048576
 require_signed_uploads = false
 trusted_upload_signers = []
 ```
@@ -219,7 +246,11 @@ trusted_upload_signers = []
   bytes from a `signer_pubkey` present in `trusted_upload_signers` — the
   same signing shape used for agent update artifacts in
   `src/auto_update.rs`, reused here rather than inventing a second
-  pattern.
+  pattern. Independently of `require_signed_uploads`, a `signature` that
+  *is* supplied is always verified: an invalid signature, or one from a
+  `signer_pubkey` not in `trusted_upload_signers`, is rejected even when
+  signing is not mandatory. Only an upload with no `signature` field at
+  all skips verification when `require_signed_uploads` is off.
 - `GET /api/wasm-extensions` lists loaded extensions with their SHA-256
   and per-extension metrics (invocations, fuel used, traps, errors,
   alerts emitted).

@@ -92,6 +92,27 @@ pub struct WasmRuntimeSettings {
     pub max_kv_entries: usize,
     /// Maximum size, in bytes, of a single key/value entry's value.
     pub max_kv_value_bytes: usize,
+    /// Maximum size, in bytes, of a single key/value entry's key. Only
+    /// values were capped before; an unbounded key is the same
+    /// unbounded-memory-per-extension problem `max_kv_value_bytes` exists
+    /// to prevent.
+    pub max_kv_key_bytes: usize,
+    /// Maximum number of elements any single Wasm table in an extension
+    /// may grow to. Without this, a module can declare (or grow) a table
+    /// with hundreds of millions of elements, costing the host hundreds
+    /// of MB per invocation, since `wasmi`'s `StoreLimits` leaves table
+    /// size unbounded by default.
+    pub max_table_elements: u32,
+    /// Maximum number of alerts a single extension invocation may emit
+    /// via `emit_alert`. Bounds an extension that calls `emit_alert` in a
+    /// loop from growing `alerts` (and downstream alert processing)
+    /// without limit for one event.
+    pub max_alerts_per_invocation: usize,
+    /// Maximum total bytes across all `emit_alert` payloads accepted in a
+    /// single invocation, independent of `max_alerts_per_invocation` (a
+    /// small number of very large alerts is bounded the same way as many
+    /// small ones).
+    pub max_alert_bytes_per_invocation: usize,
     /// Require an Ed25519 signature (checked against
     /// `trusted_upload_signers`) on every module uploaded through the API,
     /// in addition to the content-hash the caller supplies.
@@ -112,6 +133,10 @@ impl Default for WasmRuntimeSettings {
             max_module_bytes: 2 * 1024 * 1024,
             max_kv_entries: 64,
             max_kv_value_bytes: 4096,
+            max_kv_key_bytes: 256,
+            max_table_elements: 4096,
+            max_alerts_per_invocation: 32,
+            max_alert_bytes_per_invocation: 1024 * 1024,
             require_signed_uploads: false,
             trusted_upload_signers: Vec::new(),
         }
@@ -164,9 +189,15 @@ struct WasmExtension {
 struct HostState {
     extension_name: String,
     alerts: Vec<EmittedAlert>,
+    /// Running total of `emit_alert` payload bytes accepted this
+    /// invocation; see `max_alert_bytes_per_invocation`.
+    alert_bytes_used: usize,
     kv: Arc<Mutex<HashMap<String, Vec<u8>>>>,
     max_kv_entries: usize,
     max_kv_value_bytes: usize,
+    max_kv_key_bytes: usize,
+    max_alerts_per_invocation: usize,
+    max_alert_bytes_per_invocation: usize,
     limits: StoreLimits,
 }
 
@@ -178,6 +209,15 @@ fn lock<T>(m: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
 /// memory limits, so a malformed `len` argument cannot force an
 /// unbounded host-side allocation.
 const MAX_HOST_READ_BYTES: usize = 256 * 1024;
+
+/// Fuel charged per byte copied out of guest memory by a host call, on
+/// top of `wasmi`'s own per-instruction fuel accounting. Host calls run
+/// as native Rust (a `memcpy` plus, for `emit_alert`, a JSON parse) and
+/// are not themselves metered by the guest's interpreted instruction
+/// count, so a guest could otherwise make many "free" (from fuel's
+/// perspective) large host-memory reads. One fuel per byte makes that
+/// cost visible against the same budget as everything else.
+const FUEL_PER_HOST_READ_BYTE: u64 = 1;
 
 fn read_guest_bytes(caller: &mut Caller<'_, HostState>, ptr: i32, len: i32) -> Vec<u8> {
     if ptr < 0 || len < 0 {
@@ -192,7 +232,19 @@ fn read_guest_bytes(caller: &mut Caller<'_, HostState>, ptr: i32, len: i32) -> V
     if memory.read(&caller, ptr as usize, &mut buf).is_err() {
         return Vec::new();
     }
+    charge_host_read_fuel(caller, buf.len());
     buf
+}
+
+/// Deduct fuel proportional to `bytes` from the invocation's remaining
+/// budget, in addition to `wasmi`'s own instruction-level accounting.
+/// Best-effort: if fuel accounting is unavailable for some reason, this
+/// silently does nothing rather than failing the host call.
+fn charge_host_read_fuel(caller: &mut Caller<'_, HostState>, bytes: usize) {
+    let cost = bytes as u64 * FUEL_PER_HOST_READ_BYTE;
+    if let Ok(remaining) = caller.get_fuel() {
+        let _ = caller.set_fuel(remaining.saturating_sub(cost));
+    }
 }
 
 fn host_log(mut caller: Caller<'_, HostState>, ptr: i32, len: i32) {
@@ -216,9 +268,30 @@ struct RawAlert {
 
 fn host_emit_alert(mut caller: Caller<'_, HostState>, ptr: i32, len: i32) -> i32 {
     let bytes = read_guest_bytes(&mut caller, ptr, len);
+    let (alerts_so_far, alert_bytes_so_far, max_alerts, max_alert_bytes) = {
+        let s = caller.data();
+        (
+            s.alerts.len(),
+            s.alert_bytes_used,
+            s.max_alerts_per_invocation,
+            s.max_alert_bytes_per_invocation,
+        )
+    };
+    // Cap both the count and total bytes of alerts a single invocation can
+    // emit — a guest calling `emit_alert` in a loop must not be able to
+    // grow the alert list (or the bytes downstream processing has to
+    // handle) without bound for one event.
+    if alerts_so_far >= max_alerts {
+        return -2;
+    }
+    if alert_bytes_so_far.saturating_add(bytes.len()) > max_alert_bytes {
+        return -3;
+    }
     match serde_json::from_slice::<RawAlert>(&bytes) {
         Ok(raw) => {
-            caller.data_mut().alerts.push(EmittedAlert {
+            let state = caller.data_mut();
+            state.alert_bytes_used = state.alert_bytes_used.saturating_add(bytes.len());
+            state.alerts.push(EmittedAlert {
                 severity: raw.severity,
                 title: raw.title,
                 mitre_technique: raw.mitre_technique,
@@ -238,6 +311,9 @@ fn host_kv_get(
     val_max_len: i32,
 ) -> i32 {
     let key_bytes = read_guest_bytes(&mut caller, key_ptr, key_len);
+    if key_bytes.len() > caller.data().max_kv_key_bytes {
+        return -4;
+    }
     let key = String::from_utf8_lossy(&key_bytes).to_string();
     let kv = caller.data().kv.clone();
     let value = lock(&kv).get(&key).cloned();
@@ -265,12 +341,15 @@ fn host_kv_set(
     val_len: i32,
 ) -> i32 {
     let key_bytes = read_guest_bytes(&mut caller, key_ptr, key_len);
+    let (max_entries, max_val_bytes, max_key_bytes) = {
+        let s = caller.data();
+        (s.max_kv_entries, s.max_kv_value_bytes, s.max_kv_key_bytes)
+    };
+    if key_bytes.len() > max_key_bytes {
+        return -4;
+    }
     let key = String::from_utf8_lossy(&key_bytes).to_string();
     let value = read_guest_bytes(&mut caller, val_ptr, val_len);
-    let (max_entries, max_val_bytes) = {
-        let s = caller.data();
-        (s.max_kv_entries, s.max_kv_value_bytes)
-    };
     if value.len() > max_val_bytes {
         return -2;
     }
@@ -475,6 +554,7 @@ impl WasmExtensionManager {
         let start = Instant::now();
         let limits = StoreLimitsBuilder::new()
             .memory_size(self.config.max_memory_pages as usize * 65536)
+            .table_elements(self.config.max_table_elements as usize)
             .memories(1)
             .tables(4)
             .instances(1)
@@ -483,9 +563,13 @@ impl WasmExtensionManager {
         let host_state = HostState {
             extension_name: extension.name.clone(),
             alerts: Vec::new(),
+            alert_bytes_used: 0,
             kv: extension.kv.clone(),
             max_kv_entries: self.config.max_kv_entries,
             max_kv_value_bytes: self.config.max_kv_value_bytes,
+            max_kv_key_bytes: self.config.max_kv_key_bytes,
+            max_alerts_per_invocation: self.config.max_alerts_per_invocation,
+            max_alert_bytes_per_invocation: self.config.max_alert_bytes_per_invocation,
             limits,
         };
         let mut store = Store::new(&self.engine, host_state);
@@ -630,7 +714,12 @@ pub fn verify_upload(
         ));
     }
 
-    if !settings.require_signed_uploads {
+    // A signature is verified whenever one is *supplied*, not only when
+    // `require_signed_uploads` mandates one — otherwise a caller that
+    // attaches a signature while the setting happens to be off would have
+    // it silently ignored, including an invalid one or one from an
+    // untrusted signer, contradicting the documented contract.
+    if !settings.require_signed_uploads && signature_b64.is_none() {
         return Ok(actual_sha256);
     }
 
@@ -965,6 +1054,185 @@ mod tests {
 
         // Missing signature entirely, once required, is rejected.
         assert!(verify_upload(&bytes, &sha, None, None, &settings).is_err());
+    }
+
+    #[test]
+    fn huge_table_declaration_is_rejected_or_trapped() {
+        // Declares a table with a million elements — far beyond any real
+        // extension's needs. Without a `table_elements` limit, `wasmi`'s
+        // `StoreLimits` leaves this unbounded (see `limiter.rs`: "By
+        // default, table elements will not be limited"), so a module
+        // could cost the host hundreds of MB per invocation.
+        const HUGE_TABLE_WAT: &str = r#"
+            (module
+              (table 1000000 funcref)
+              (memory (export "memory") 1)
+              (func (export "wardex_abi_version") (result i32) (i32.const 1))
+              (func (export "init") (result i32) (i32.const 0))
+              (func (export "alloc") (param $size i32) (result i32) (i32.const 1024))
+              (func (export "on_event") (param $ptr i32) (param $len i32) (result i32) (i32.const 0)))
+        "#;
+        let mut cfg = enabled_config();
+        cfg.max_table_elements = 10;
+        let mgr = manager(cfg);
+        let bytes = wat_module(HUGE_TABLE_WAT);
+        mgr.load_bytes("huge_table", &bytes)
+            .expect("loads (validation is structural; the limit is enforced at instantiation)");
+        let alerts = mgr.run_on_event(&serde_json::json!({}));
+        assert!(alerts.is_empty());
+        let metrics = mgr.metrics();
+        let m = &metrics["huge_table"];
+        assert_eq!(
+            m.errors + m.traps,
+            1,
+            "expected the oversized table to be rejected, metrics: {m:?}"
+        );
+    }
+
+    #[test]
+    fn alert_flood_is_capped_per_invocation() {
+        // Calls `emit_alert` far more times than `max_alerts_per_invocation`
+        // permits in a single event; the excess calls must be rejected
+        // (non-zero return code) rather than growing `alerts` without
+        // bound.
+        const ALERT_FLOOD_WAT: &str = r#"
+            (module
+              (import "wardex_v1" "emit_alert" (func $emit_alert (param i32 i32) (result i32)))
+              (memory (export "memory") 1)
+              (data (i32.const 0) "{\"title\":\"x\"}")
+              (func (export "wardex_abi_version") (result i32) (i32.const 1))
+              (func (export "init") (result i32) (i32.const 0))
+              (func (export "alloc") (param $size i32) (result i32) (i32.const 1024))
+              (func (export "on_event") (param $ptr i32) (param $len i32) (result i32)
+                (drop (call $emit_alert (i32.const 0) (i32.const 13)))
+                (drop (call $emit_alert (i32.const 0) (i32.const 13)))
+                (drop (call $emit_alert (i32.const 0) (i32.const 13)))
+                (drop (call $emit_alert (i32.const 0) (i32.const 13)))
+                (drop (call $emit_alert (i32.const 0) (i32.const 13)))
+                (drop (call $emit_alert (i32.const 0) (i32.const 13)))
+                (drop (call $emit_alert (i32.const 0) (i32.const 13)))
+                (drop (call $emit_alert (i32.const 0) (i32.const 13)))
+                (i32.const 0)))
+        "#;
+        let mut cfg = enabled_config();
+        cfg.max_alerts_per_invocation = 3;
+        let mgr = manager(cfg);
+        let bytes = wat_module(ALERT_FLOOD_WAT);
+        mgr.load_bytes("flooder", &bytes).expect("loads");
+        let alerts = mgr.run_on_event(&serde_json::json!({}));
+        assert_eq!(alerts.len(), 3);
+        let metrics = mgr.metrics();
+        assert_eq!(metrics["flooder"].alerts_emitted, 3);
+    }
+
+    #[test]
+    fn alert_flood_is_capped_by_total_bytes() {
+        // A handful of alerts, each within MAX_HOST_READ_BYTES, whose
+        // combined size exceeds `max_alert_bytes_per_invocation` — this
+        // must be capped independently of the per-invocation count limit.
+        const ALERT_BYTES_WAT: &str = r#"
+            (module
+              (import "wardex_v1" "emit_alert" (func $emit_alert (param i32 i32) (result i32)))
+              (memory (export "memory") 1)
+              (data (i32.const 0) "{\"title\":\"x\"}")
+              (func (export "wardex_abi_version") (result i32) (i32.const 1))
+              (func (export "init") (result i32) (i32.const 0))
+              (func (export "alloc") (param $size i32) (result i32) (i32.const 1024))
+              (func (export "on_event") (param $ptr i32) (param $len i32) (result i32)
+                (drop (call $emit_alert (i32.const 0) (i32.const 13)))
+                (drop (call $emit_alert (i32.const 0) (i32.const 13)))
+                (drop (call $emit_alert (i32.const 0) (i32.const 13)))
+                (i32.const 0)))
+        "#;
+        let mut cfg = enabled_config();
+        cfg.max_alerts_per_invocation = 100; // not the limit under test
+        cfg.max_alert_bytes_per_invocation = 20; // less than 2 * 13 bytes
+        let mgr = manager(cfg);
+        let bytes = wat_module(ALERT_BYTES_WAT);
+        mgr.load_bytes("byte_flooder", &bytes).expect("loads");
+        let alerts = mgr.run_on_event(&serde_json::json!({}));
+        assert_eq!(alerts.len(), 1);
+    }
+
+    #[test]
+    fn kv_key_length_is_capped() {
+        // A 10-byte key against a 4-byte cap: both `kv_set` and `kv_get`
+        // must reject it (return `-4`) rather than only capping value
+        // size.
+        const KV_KEY_TOO_LONG_WAT: &str = r#"
+            (module
+              (import "wardex_v1" "kv_set" (func $kv_set (param i32 i32 i32 i32) (result i32)))
+              (import "wardex_v1" "kv_get" (func $kv_get (param i32 i32 i32 i32) (result i32)))
+              (import "wardex_v1" "emit_alert" (func $emit_alert (param i32 i32) (result i32)))
+              (memory (export "memory") 1)
+              (data (i32.const 0) "0123456789")
+              (data (i32.const 32) "{\"title\":\"rejected\"}")
+              (func (export "wardex_abi_version") (result i32) (i32.const 1))
+              (func (export "init") (result i32) (i32.const 0))
+              (func (export "alloc") (param $size i32) (result i32) (i32.const 512))
+              (func (export "on_event") (param $ptr i32) (param $len i32) (result i32)
+                (if (i32.and
+                      (i32.eq (call $kv_set (i32.const 0) (i32.const 10) (i32.const 0) (i32.const 1)) (i32.const -4))
+                      (i32.eq (call $kv_get (i32.const 0) (i32.const 10) (i32.const 100) (i32.const 10)) (i32.const -4)))
+                  (then (drop (call $emit_alert (i32.const 32) (i32.const 20)))))
+                (i32.const 0)))
+        "#;
+        let mut cfg = enabled_config();
+        cfg.max_kv_key_bytes = 4;
+        let mgr = manager(cfg);
+        let bytes = wat_module(KV_KEY_TOO_LONG_WAT);
+        mgr.load_bytes("kv_key_cap", &bytes).expect("loads");
+        let alerts = mgr.run_on_event(&serde_json::json!({}));
+        assert_eq!(
+            alerts.len(),
+            1,
+            "kv_set/kv_get did not both reject the oversized key"
+        );
+        assert_eq!(alerts[0].1.title, "rejected");
+    }
+
+    #[test]
+    fn upload_signature_is_verified_even_when_not_required() {
+        // `require_signed_uploads: false` must not mean "an attached
+        // signature is ignored" — if one is supplied, it is still checked
+        // against `trusted_upload_signers`, and an invalid or untrusted
+        // one is rejected rather than silently accepted.
+        use base64::Engine as _;
+        use ed25519_dalek::{Signer, SigningKey};
+
+        let bytes = wat_module(HAPPY_PATH_WAT);
+        let sha = {
+            use sha2::{Digest, Sha256};
+            hex::encode(Sha256::digest(&bytes))
+        };
+        let signing_key = SigningKey::from_bytes(&[9u8; 32]);
+        let signature = signing_key.sign(&bytes);
+        let b64 = base64::engine::general_purpose::STANDARD;
+        let sig_b64 = b64.encode(signature.to_bytes());
+        let pk_b64 = b64.encode(signing_key.verifying_key().to_bytes());
+
+        let mut settings = WasmRuntimeSettings {
+            require_signed_uploads: false,
+            ..Default::default()
+        };
+
+        // No signature at all: still fine, since signing isn't required.
+        assert!(verify_upload(&bytes, &sha, None, None, &settings).is_ok());
+
+        // A signature from a signer not in `trusted_upload_signers` must
+        // be rejected even though signing isn't required.
+        assert!(verify_upload(&bytes, &sha, Some(&sig_b64), Some(&pk_b64), &settings).is_err());
+
+        // Once trusted, a valid signature is accepted.
+        settings.trusted_upload_signers.push(pk_b64.clone());
+        assert!(verify_upload(&bytes, &sha, Some(&sig_b64), Some(&pk_b64), &settings).is_ok());
+
+        // A corrupted signature from an otherwise-trusted signer must
+        // still be rejected.
+        let mut bad_sig_bytes = signature.to_bytes();
+        bad_sig_bytes[0] ^= 0xFF;
+        let bad_sig_b64 = b64.encode(bad_sig_bytes);
+        assert!(verify_upload(&bytes, &sha, Some(&bad_sig_b64), Some(&pk_b64), &settings).is_err());
     }
 
     #[test]
