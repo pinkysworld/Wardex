@@ -57,6 +57,7 @@ pub fn compile(source: &str) -> Result<CompiledRules, CompileError> {
         pos: 0,
         rule_names: std::collections::HashSet::new(),
         warnings: Vec::new(),
+        cond_depth: 0,
     };
     let rules = parser.parse_source()?;
     Ok(CompiledRules {
@@ -491,11 +492,21 @@ fn lex(source: &str) -> Result<Vec<STok>, CompileError> {
 
 // ── Parser ─────────────────────────────────────────────────────────────
 
+/// Maximum nesting depth for boolean condition expressions (`not`/`( )`
+/// nesting). Recursive-descent parsing uses one native stack frame per
+/// level; without a limit, a `.yar` file containing thousands of nested
+/// `not` or parenthesised groups can overflow the stack and abort the
+/// process while compiling an untrusted uploaded rule. libyara itself
+/// imposes a similar bound.
+const MAX_CONDITION_DEPTH: usize = 128;
+
 struct Parser {
     tokens: Vec<STok>,
     pos: usize,
     rule_names: std::collections::HashSet<String>,
     warnings: Vec<String>,
+    /// Current boolean-expression nesting depth; see [`MAX_CONDITION_DEPTH`].
+    cond_depth: usize,
 }
 
 impl Parser {
@@ -830,11 +841,26 @@ impl Parser {
     }
 
     fn parse_not(&mut self) -> Result<BoolExpr, CompileError> {
-        if self.ident_is("not") {
-            self.advance();
-            return Ok(BoolExpr::Not(Box::new(self.parse_not()?)));
+        // `not not not ...` and `((((...))))` both recurse back through
+        // this function once per nesting level (the latter via
+        // `parse_primary_bool`'s `(` branch calling `parse_or` again), so
+        // guarding depth here bounds both. Without this, a deeply nested
+        // uploaded rule would overflow the native stack and abort the
+        // process rather than fail to compile.
+        self.cond_depth += 1;
+        if self.cond_depth > MAX_CONDITION_DEPTH {
+            return Err(self.err(format!(
+                "condition expression nested too deeply (limit is {MAX_CONDITION_DEPTH})"
+            )));
         }
-        self.parse_primary_bool()
+        let result = if self.ident_is("not") {
+            self.advance();
+            self.parse_not().map(|inner| BoolExpr::Not(Box::new(inner)))
+        } else {
+            self.parse_primary_bool()
+        };
+        self.cond_depth -= 1;
+        result
     }
 
     fn parse_primary_bool(&mut self) -> Result<BoolExpr, CompileError> {
@@ -1138,10 +1164,19 @@ fn validate_condition_refs(
 /// `[n]`/`[n-m]`/`[n-]` jumps, and `( .. | .. )` alternatives (which may
 /// themselves contain any of the above, recursively).
 /// Hex bodies longer than this are rejected at compile time. This is a
-/// generous limit for real signatures, and it bounds the worst-case cost of
-/// the backtracking hex-token matcher (jumps and alternatives can combine
-/// combinatorially in a pathological, e.g. fuzzer-generated, hex string).
+/// generous limit for real signatures, and it bounds the size of the
+/// position-set the hex matcher simulates per scan (jumps and alternatives
+/// no longer combine combinatorially — see `hex_run` in `yara_engine.rs` —
+/// but an unbounded body is still an unnecessary allocation/scan-time
+/// footgun for a pathological, e.g. fuzzer-generated, hex string).
 const MAX_HEX_BODY_LEN: usize = 2048;
+
+/// Maximum nesting depth for `( .. | .. )` groups inside a hex string body.
+/// `parse_hex_tokens` recurses once per nested `(`; without a limit, deeply
+/// nested parentheses in an uploaded rule's hex string could overflow the
+/// native stack while compiling, mirroring the boolean-condition nesting
+/// limit above.
+const MAX_HEX_NEST_DEPTH: usize = 128;
 
 fn parse_hex_body(body: &str, parser: &Parser) -> Result<Vec<HexToken>, CompileError> {
     if body.len() > MAX_HEX_BODY_LEN {
@@ -1151,7 +1186,7 @@ fn parse_hex_body(body: &str, parser: &Parser) -> Result<Vec<HexToken>, CompileE
     }
     let chars: Vec<char> = body.chars().collect();
     let mut pos = 0usize;
-    let tokens = parse_hex_tokens(&chars, &mut pos, parser)?;
+    let tokens = parse_hex_tokens(&chars, &mut pos, parser, 0)?;
     skip_hex_ws(&chars, &mut pos);
     if pos != chars.len() {
         return Err(parser.err(format!(
@@ -1174,7 +1209,13 @@ fn parse_hex_tokens(
     chars: &[char],
     pos: &mut usize,
     parser: &Parser,
+    depth: usize,
 ) -> Result<Vec<HexToken>, CompileError> {
+    if depth > MAX_HEX_NEST_DEPTH {
+        return Err(parser.err(format!(
+            "hex string alternatives nested too deeply (limit is {MAX_HEX_NEST_DEPTH})"
+        )));
+    }
     let mut tokens = Vec::new();
     loop {
         skip_hex_ws(chars, pos);
@@ -1187,13 +1228,13 @@ fn parse_hex_tokens(
             }
             Some('(') => {
                 *pos += 1;
-                let mut branches = vec![parse_hex_tokens(chars, pos, parser)?];
+                let mut branches = vec![parse_hex_tokens(chars, pos, parser, depth + 1)?];
                 loop {
                     skip_hex_ws(chars, pos);
                     match chars.get(*pos) {
                         Some('|') => {
                             *pos += 1;
-                            branches.push(parse_hex_tokens(chars, pos, parser)?);
+                            branches.push(parse_hex_tokens(chars, pos, parser, depth + 1)?);
                         }
                         Some(')') => {
                             *pos += 1;
@@ -1280,6 +1321,78 @@ mod tests {
 
     fn compile_ok(src: &str) -> CompiledRules {
         compile(src).unwrap_or_else(|e| panic!("compile error: {e}"))
+    }
+
+    /// Runs `f` on a thread with an ordinary, explicitly-sized stack (8
+    /// MiB — a typical default thread stack size, not a generously large
+    /// one), so a test with a 10,000-level-deep input proves the parser
+    /// itself bounds recursion depth (`MAX_CONDITION_DEPTH`/
+    /// `MAX_HEX_NEST_DEPTH`) rather than merely happening to fit under
+    /// however much native stack is available. Without the depth guard,
+    /// 10,000 levels of native recursion would overflow this (or any
+    /// realistic) stack.
+    fn run_with_bounded_stack<F: FnOnce() + Send + 'static>(f: F) {
+        std::thread::Builder::new()
+            .stack_size(8 * 1024 * 1024)
+            .spawn(f)
+            .expect("spawn bounded-stack thread")
+            .join()
+            .expect("bounded-stack thread panicked (likely a stack overflow)");
+    }
+
+    #[test]
+    fn deeply_nested_not_is_rejected_cleanly() {
+        run_with_bounded_stack(|| {
+            let condition = "not ".repeat(10_000) + "true";
+            let src = format!("rule deep_not {{ condition: {condition} }}");
+            let err = compile(&src).expect_err("must reject, not stack-overflow");
+            assert!(
+                err.message.contains("nested too deeply"),
+                "unexpected error: {err}"
+            );
+        });
+    }
+
+    #[test]
+    fn deeply_nested_parens_condition_is_rejected_cleanly() {
+        run_with_bounded_stack(|| {
+            let condition = format!("{}true{}", "(".repeat(10_000), ")".repeat(10_000));
+            let src = format!("rule deep_parens {{ condition: {condition} }}");
+            let err = compile(&src).expect_err("must reject, not stack-overflow");
+            assert!(
+                err.message.contains("nested too deeply"),
+                "unexpected error: {err}"
+            );
+        });
+    }
+
+    #[test]
+    fn deeply_nested_hex_alternative_is_rejected_cleanly() {
+        run_with_bounded_stack(|| {
+            // Bounded by MAX_HEX_BODY_LEN (2048 chars), so this uses a
+            // depth well past MAX_HEX_NEST_DEPTH (128) but still within
+            // the body-length cap: 2 * 500 + 2 = 1002 characters.
+            let hex_body = format!("{}AA{}", "(".repeat(500), ")".repeat(500));
+            let src = format!("rule deep_hex {{ strings: $a = {{ {hex_body} }} condition: $a }}");
+            let err = compile(&src).expect_err("must reject, not stack-overflow");
+            assert!(
+                err.message.contains("nested too deeply"),
+                "unexpected error: {err}"
+            );
+        });
+    }
+
+    #[test]
+    fn moderately_nested_not_and_parens_still_compile() {
+        // A sanity check that the depth limit doesn't reject reasonable,
+        // real-world nesting (comfortably under MAX_CONDITION_DEPTH).
+        let condition = format!("{}true{}", "(".repeat(20), ")".repeat(20));
+        let src = format!("rule shallow {{ condition: {condition} }}");
+        compile_ok(&src);
+
+        let condition = "not ".repeat(20) + "true";
+        let src = format!("rule shallow_not {{ condition: {condition} }}");
+        compile_ok(&src);
     }
 
     #[test]

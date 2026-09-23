@@ -79,7 +79,7 @@ outside of string/hex/regex literals.
 | Form | Example | Notes |
 |---|---|---|
 | Text | `$a = "eval(" nocase wide ascii fullword` | `nocase`, `wide` (UTF-16LE), `ascii` (default on unless `wide` is given alone), `fullword` (boundary is any non-alphanumeric/`_` byte, or the buffer edge) |
-| Hex | `$b = { 4D 5A ?? A? ?5 [2-4] [8] [3-] ( AA BB \| CC DD ) }` | `??` any byte; `A?`/`?5` nibble wildcards; `[n]`, `[n-m]`, `[n-]` jumps (unbounded jumps are capped at 512 bytes to bound worst-case matching cost); `( x \| y )` alternatives, which may themselves contain any of the above |
+| Hex | `$b = { 4D 5A ?? A? ?5 [2-4] [8] [3-] ( AA BB \| CC DD ) }` | `??` any byte; `A?`/`?5` nibble wildcards; `[n]`, `[n-m]`, `[n-]` jumps (unbounded jumps are capped at 512 bytes to bound worst-case matching cost); `( x \| y )` alternatives, which may themselves contain any of the above, nested up to 128 levels deep (see "Limits" below) |
 | Regex | `$c = /[A-Za-z0-9+\/]{40,}={0,2}/is` | Compiled with the `regex` crate's bytes API; `i` = case-insensitive, `s` = `.` matches newlines. Anchoring, character classes, quantifiers, and alternation follow standard `regex` crate syntax (a close superset of PCRE for this purpose), **not** PCRE backreferences/lookaround, which `regex` does not support. |
 
 A string-level `private` modifier is accepted and parsed but has no
@@ -127,6 +127,33 @@ never a rule that loads and then silently mis-matches:
   `include` directive.
 - Backreferences and lookaround in regex strings (a `regex`-crate
   limitation, not a Wardex-specific one).
+
+## Limits
+
+Compiling an untrusted `.yar` file (e.g. one uploaded through the API)
+must never hang the process or crash it, so both the parser and the hex
+matcher enforce bounds a hand-authored rule is never expected to reach:
+
+- **Condition nesting depth**: `not`/parenthesised nesting in a
+  `condition:` block (`not not not ...`, `((((...))))`) is capped at 128
+  levels. `src/yara_parser.rs`'s recursive-descent parser uses one native
+  stack frame per level; without a cap, a rule with thousands of nested
+  levels could overflow the stack while compiling. Exceeding the limit is
+  an ordinary `CompileError` with a line and column, not a crash.
+- **Hex alternative nesting depth**: `( .. | .. )` groups inside a hex
+  string body, which may nest (`( ( AA | BB ) | CC )`), are capped the
+  same way, at 128 levels, for the same reason (the hex-body parser also
+  recurses once per nested `(`).
+- **Hex matching cost**: hex-token matching (`src/yara_engine.rs`) is a
+  bounded position-set simulation, not a recursive backtracker — a
+  pattern built from many sequential `( .. | .. )` alternatives costs
+  time roughly proportional to `pattern length * scanned data length`,
+  never exponential in the number of alternatives (a naive backtracker
+  exploring the cross product of ~100 sequential two-way alternatives
+  would need on the order of 2^100 attempts per scan start offset).
+  `[n-]` unbounded jumps are still capped at 512 bytes (see the Strings
+  table above), and hex bodies are capped at 2048 characters
+  (`MAX_HEX_BODY_LEN`).
 
 ## Loading
 
