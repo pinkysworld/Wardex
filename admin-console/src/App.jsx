@@ -355,11 +355,10 @@ export default function App() {
   });
   const [showShortcuts, setShowShortcuts] = useState(false);
   const [showInboxLocationKey, setShowInboxLocationKey] = useState(null);
-  const [showTopbarActionsLocationKey, setShowTopbarActionsLocationKey] = useState(null);
+  const [showTopbarActions, setShowTopbarActions] = useState(false);
   const [pinnedSections, setPinnedSections] = useState(() => readStoredPinnedSections());
   const pinnedSectionsRef = useRef(pinnedSections);
   const showInbox = showInboxLocationKey === location.key;
-  const showTopbarActions = showTopbarActionsLocationKey === location.key;
 
   useEffect(() => {
     pinnedSectionsRef.current = pinnedSections;
@@ -714,7 +713,6 @@ export default function App() {
                   type="button"
                   onClick={() => toggleGroup(group.id)}
                   aria-expanded={!collapsedGroups.includes(group.id)}
-                  title={group.description}
                 >
                   <span className="sidebar-group-heading">
                     <span>{group.label}</span>
@@ -1029,11 +1027,7 @@ export default function App() {
                 <button
                   className="btn btn-sm btn-icon-labelled"
                   type="button"
-                  onClick={() =>
-                    setShowTopbarActionsLocationKey((current) =>
-                      current === location.key ? null : location.key,
-                    )
-                  }
+                  onClick={() => setShowTopbarActions((current) => !current)}
                   aria-expanded={showTopbarActions}
                   aria-haspopup="menu"
                   title="More actions"
@@ -1054,7 +1048,7 @@ export default function App() {
                         role="menuitem"
                         onClick={() => {
                           navigate(buildContextualHelpHref(currentSection.id, location.search));
-                          setShowTopbarActionsLocationKey(null);
+                          setShowTopbarActions(false);
                         }}
                       >
                         <IconHelp size={14} />
@@ -1067,7 +1061,7 @@ export default function App() {
                       role="menuitem"
                       onClick={() => {
                         copyShareLink();
-                        setShowTopbarActionsLocationKey(null);
+                        setShowTopbarActions(false);
                       }}
                     >
                       <IconLink size={14} />

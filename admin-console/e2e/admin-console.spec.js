@@ -42,7 +42,7 @@ test.describe('Admin console smoke', () => {
       {
         title: 'Dashboard',
         navTitle: 'Dashboard',
-        marker: () => page.getByText('Operations home'),
+        marker: () => page.getByText('Priority Stack', { exact: true }),
       },
       {
         title: 'Live Monitor',
@@ -191,12 +191,12 @@ test.describe('Admin console smoke', () => {
     });
     await seedAuthenticatedSession(page);
 
-    await expect(page.getByText('Operations home')).toBeVisible();
+    await expect(page.getByText('Priority Stack', { exact: true })).toBeVisible();
     await expect.poll(() => trackedKeys.every((key) => counts[key] > 0)).toBe(true);
 
     const initialCounts = { ...counts };
 
-    await page.getByRole('button', { name: 'Refresh' }).click();
+    await page.getByRole('button', { name: 'Refresh', exact: true }).click();
 
     await expect
       .poll(() => trackedKeys.every((key) => counts[key] === initialCounts[key] + 1))
