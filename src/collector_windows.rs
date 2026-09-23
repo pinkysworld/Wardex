@@ -39,6 +39,36 @@ impl WindowsCapabilities {
         }
     }
 
+    /// Apply operator-configured backend preferences on top of detected
+    /// host capabilities.
+    ///
+    /// `false` force-disables a backend even when the host supports it.
+    /// `true` "prefers" the backend but never fabricates support: if the
+    /// backend isn't available on this build/host, a warning is logged
+    /// and the capability stays unavailable.
+    pub fn apply_backend_flags(
+        &mut self,
+        wmi_enabled: bool,
+        etw_enabled: bool,
+        amsi_enabled: bool,
+    ) {
+        if !wmi_enabled {
+            self.has_wmi = false;
+        }
+        if !etw_enabled {
+            self.has_etw = false;
+        } else if !self.has_etw {
+            log::warn!("etw_enabled=true but the ETW backend is not available in this build/host");
+        }
+        if !amsi_enabled {
+            self.has_amsi = false;
+        } else if !self.has_amsi {
+            log::warn!(
+                "amsi_enabled=true but the AMSI backend is not available in this build/host"
+            );
+        }
+    }
+
     /// Return list of unavailable features for documentation/logging.
     pub fn unavailable_features(&self) -> Vec<&'static str> {
         let mut missing = Vec::new();
@@ -943,6 +973,44 @@ fn risk_ord(level: &str) -> u8 {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn apply_backend_flags_force_disables() {
+        let mut caps = WindowsCapabilities {
+            version: "Windows 10".into(),
+            build_number: 19045,
+            is_server: false,
+            has_wmi: true,
+            has_etw: true,
+            has_amsi: true,
+            has_sysmon: false,
+            has_powershell_logging: true,
+            has_wmic: true,
+        };
+        caps.apply_backend_flags(false, false, false);
+        assert!(!caps.has_wmi);
+        assert!(!caps.has_etw);
+        assert!(!caps.has_amsi);
+    }
+
+    #[test]
+    fn apply_backend_flags_prefers_without_fabricating_support() {
+        let mut caps = WindowsCapabilities {
+            version: "Windows 7".into(),
+            build_number: 7601,
+            is_server: false,
+            has_wmi: true,
+            has_etw: false,
+            has_amsi: false,
+            has_sysmon: false,
+            has_powershell_logging: false,
+            has_wmic: true,
+        };
+        caps.apply_backend_flags(true, true, true);
+        assert!(caps.has_wmi);
+        assert!(!caps.has_etw);
+        assert!(!caps.has_amsi);
+    }
 
     #[test]
     fn test_capabilities_detect_defaults() {
