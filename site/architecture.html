@@ -88,7 +88,7 @@
             <div class="arch-stage">
               <div class="arch-num">1</div>
               <h3>Collect</h3>
-              <p>Cross-platform agents emit structured telemetry from macOS (EndpointSecurity), Linux (kernel event streams via process connector and fanotify), and Windows (ETW). Encrypted spool buffers events during outages.</p>
+              <p>Cross-platform agents emit structured telemetry from Linux (kernel event streams via process connector and fanotify), Windows (a real-time ETW consumer on kernel process/file/network providers, requiring an elevated process), and macOS (Endpoint Security Framework, an opt-in build feature requiring Apple's entitlement, a signed binary, and TCC approval). Each platform falls back to polling collection when the privileged path isn't available. Encrypted spool buffers events during outages.</p>
             </div>
             <div class="arch-stage">
               <div class="arch-num">2</div>

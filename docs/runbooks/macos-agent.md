@@ -113,8 +113,55 @@ The agent requires FDA for complete telemetry. Deploy via MDM profile or manuall
 | `mount` | External storage mounts | Always available |
 | `last` | Login history | Always available |
 | LaunchAgent/Daemon plists | Persistence items | FDA recommended |
-| Endpoint Security (ES) | Process, file, network events | System Extension + FDA |
+| Endpoint Security (ESF) | Real-time process exec/fork/exit, file create/write/close/rename/unlink | Built with the `macos-es` cargo feature (off by default) + Apple entitlement + code signature + FDA + root — see below |
 | Unified Logging | System events | Always available |
+
+### Endpoint Security Framework (ESF): feature-gated, requires an Apple entitlement
+
+The agent has real ESF client code (`src/kernel_macos/`, built on the
+[`endpoint-sec`](https://crates.io/crates/endpoint-sec) crate), but it ships **disabled by
+default** behind the `macos-es` cargo feature, and cannot function at all without steps only Apple
+and your MDM can perform:
+
+1. **Apple entitlement.** `es_new_client()` fails outright without the
+   `com.apple.developer.endpoint-security.client` entitlement. Apple grants this only to
+   registered Team IDs on request (via the [Developer Support
+   form](https://developer.apple.com/contact/request/system-extension/)) — it is not something a
+   build pipeline or this repository can self-provision. The entitlement must be baked into a
+   signing profile and the binary re-signed with it.
+2. **Code signature.** The entitled binary must be signed with that provisioning profile (and,
+   in most real deployments, distributed as a signed system extension rather than a bare CLI
+   binary — see Apple's *System Extensions and DriverKit* documentation).
+3. **Full Disk Access (TCC).** Same requirement as the polling collector already documents above,
+   deployed via the same manual or MDM steps.
+4. **Root.** `es_new_client()` also requires the calling process to run as root (the LaunchDaemon
+   install above already runs as root).
+
+None of this can be arranged or exercised in an automated build/test environment — there is no
+way to obtain Apple's entitlement, sign a binary with it, or grant TCC approval headlessly. To
+build with it anyway once you do have all four:
+
+```bash
+cargo build --release --features macos-es
+```
+
+At runtime, `wardex doctor` reports which backend is actually active and, if ESF didn't come up,
+exactly which precondition failed (missing feature, not root, or the specific `es_new_client()`
+rejection — not entitled / not permitted / not privileged):
+
+```bash
+wardex doctor
+# ...
+#   [WARN] ⚠  Kernel telemetry (macOS Endpoint Security)
+#          backend=PollingMacos (built without the `macos-es` cargo feature ...); ...
+```
+
+Whenever ESF isn't active — which is every default build, and any build where
+`es_new_client()` is rejected — the agent transparently keeps using the `ps`/`lsof`/`mount`
+polling collector documented in the rest of this runbook. The default build (without
+`macos-es`) is completely unaffected by this code: the `endpoint-sec` dependency is both
+optional and `target_os = "macos"`-gated in `Cargo.toml`, so it is never even fetched on other
+platforms or without the feature.
 
 ## Persistence Monitoring
 

@@ -63,6 +63,8 @@ pub fn run() -> Vec<Check> {
         check_container_runtime(),
         check_search_index(),
         check_wasm_extensions(),
+        check_windows_telemetry(),
+        check_macos_telemetry(),
     ]
 }
 
@@ -120,6 +122,8 @@ pub fn format_report_json(checks: &[Check]) -> String {
         },
         "service_health": service_health_summary(),
         "kernel_telemetry": kernel_telemetry_summary(),
+        "windows_telemetry": windows_telemetry_summary(),
+        "macos_telemetry": macos_telemetry_summary(),
         "logs": {
             "locations": logs,
         },
@@ -490,6 +494,47 @@ fn check_kernel_telemetry() -> Check {
     }
 }
 
+/// Report which Windows telemetry backend is actually active — a real ETW
+/// consumer, or the pre-existing WMI/PowerShell polling collector — and
+/// why. `kernel_windows::detect_capability()` is unconditional (it
+/// internally reports "not on Windows" elsewhere), so this needs no
+/// `cfg(windows)` split the way `check_kernel_telemetry` does.
+fn check_windows_telemetry() -> Check {
+    let cap = crate::kernel_windows::detect_capability();
+    let status = if !cfg!(windows) {
+        Status::Info
+    } else if cap.fully_degraded() {
+        Status::Warn
+    } else {
+        Status::Ok
+    };
+    Check {
+        name: "Kernel telemetry (Windows ETW)",
+        status,
+        detail: cap.summary(),
+    }
+}
+
+/// Report which macOS telemetry backend is actually active — a real
+/// Endpoint Security client (only ever possible with the `macos-es`
+/// feature, root, and Apple's entitlement), or the pre-existing
+/// `ps`/`lsof` polling collector — and why.
+fn check_macos_telemetry() -> Check {
+    let cap = crate::kernel_macos::detect_capability();
+    let status = if !cfg!(target_os = "macos") {
+        Status::Info
+    } else if cap.fully_degraded() {
+        Status::Warn
+    } else {
+        Status::Ok
+    };
+    Check {
+        name: "Kernel telemetry (macOS Endpoint Security)",
+        status,
+        detail: cap.summary(),
+    }
+}
+
 fn check_redaction_policy() -> Check {
     Check {
         name: "Redaction summary",
@@ -625,6 +670,31 @@ fn kernel_telemetry_summary() -> serde_json::Value {
 #[cfg(not(target_os = "linux"))]
 fn kernel_telemetry_summary() -> serde_json::Value {
     serde_json::json!({ "applicable": false })
+}
+
+fn windows_telemetry_summary() -> serde_json::Value {
+    let cap = crate::kernel_windows::detect_capability();
+    serde_json::json!({
+        "applicable": cfg!(windows),
+        "backend": format!("{:?}", cap.backend),
+        "backend_reason": cap.backend_reason,
+        "is_elevated": cap.is_elevated,
+        "amsi_etw_active": cap.amsi_etw_active,
+        "amsi_provider_active": cap.amsi_provider_active,
+        "fully_degraded": cap.fully_degraded(),
+    })
+}
+
+fn macos_telemetry_summary() -> serde_json::Value {
+    let cap = crate::kernel_macos::detect_capability();
+    serde_json::json!({
+        "applicable": cfg!(target_os = "macos"),
+        "backend": format!("{:?}", cap.backend),
+        "backend_reason": cap.backend_reason,
+        "compiled_with_es_feature": cap.compiled_with_es_feature,
+        "is_root": cap.is_root,
+        "fully_degraded": cap.fully_degraded(),
+    })
 }
 
 fn service_health_summary() -> serde_json::Value {

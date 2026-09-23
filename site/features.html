@@ -109,7 +109,7 @@
               </div>
               <div class="feature-cell">
                 <h3>Kernel Event Bridge</h3>
-                <p>Process creation, file writes, DNS queries, and network connections flow through a unified schema on Linux (kernel event streams via process connector and fanotify), macOS (EndpointSecurity), and Windows (ETW).</p>
+                <p>Process creation, file writes, DNS queries, and network connections flow through a unified schema on Linux (kernel event streams via process connector and fanotify), Windows (a real-time ETW consumer, requires an elevated agent process), and macOS (Endpoint Security Framework, opt-in build feature requiring Apple's entitlement). Every platform falls back to polling collection, and reports which mode is active, when the required privilege or entitlement isn't available.</p>
               </div>
               <div class="feature-cell">
                 <h3>MITRE ATT&amp;CK Coverage</h3>

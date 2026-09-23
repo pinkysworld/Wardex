@@ -264,6 +264,17 @@ pub enum KernelEventKind {
         query: String,
     },
 
+    // ── PowerShell ScriptBlock logging (Windows, ETW event 4104) ──
+    ScriptBlockExecution {
+        pid: u32,
+        script_block_id: String,
+        /// Which fragment this is, out of `message_total` (large script
+        /// blocks are split across several ETW events).
+        message_number: u32,
+        message_total: u32,
+        script_text: String,
+    },
+
     // ── macOS-specific ───────────────────────────────────────
     TccAccess {
         /// The service that was granted/denied access.
@@ -445,6 +456,7 @@ pub fn kernel_event_kind_name(kind: &KernelEventKind) -> &'static str {
         KernelEventKind::NamedPipeConnect { .. } => "pipe_connect",
         KernelEventKind::AmsiScan { .. } => "amsi",
         KernelEventKind::WmiPersistence { .. } => "wmi",
+        KernelEventKind::ScriptBlockExecution { .. } => "scriptblock",
         KernelEventKind::TccAccess { .. } => "tcc",
         KernelEventKind::GatekeeperVerdict { .. } => "gatekeeper",
         KernelEventKind::SystemExtensionEvent { .. } => "sysext",
@@ -520,6 +532,17 @@ pub fn suggest_mitre(kind: &KernelEventKind) -> Vec<MitreTechnique> {
         }
         KernelEventKind::WmiPersistence { .. } => {
             vec![T1546_EVENT_TRIGGERED()]
+        }
+        KernelEventKind::ScriptBlockExecution { script_text, .. } => {
+            let mut v = vec![T1059_COMMAND_INTERPRETER()];
+            let lower = script_text.to_lowercase();
+            if lower.contains("frombase64string")
+                || lower.contains("-enc")
+                || lower.contains("compress")
+            {
+                v.push(T1027_OBFUSCATED_FILES());
+            }
+            v
         }
         KernelEventKind::DriverLoad { signed, .. } => {
             if !signed {

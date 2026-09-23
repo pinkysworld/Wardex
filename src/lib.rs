@@ -56,6 +56,13 @@ pub mod collector_windows;
 pub mod event_forward;
 #[cfg(target_os = "linux")]
 pub mod kernel_linux;
+// Unconditional on every target (unlike `kernel_linux`, which is Linux-only
+// end to end): only the real ETW/Endpoint-Security consumers inside these
+// modules are `#[cfg(windows)]` / `#[cfg(target_os = "macos")]`-gated, so
+// their pure event-mapping and capability-decision logic gets unit-tested
+// on every CI host, including Linux. See each module's doc comment.
+pub mod kernel_macos;
+pub mod kernel_windows;
 pub mod log_collector;
 pub mod ocsf;
 pub mod spool;

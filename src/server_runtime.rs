@@ -384,6 +384,8 @@ pub async fn run_server(
     spawn_feed_ingestion_loop(&state);
     spawn_linux_kernel_telemetry(&state);
     spawn_container_runtime_loop(&state);
+    spawn_windows_kernel_telemetry(&state);
+    spawn_macos_kernel_telemetry(&state);
 
     // ── Spawn local host monitoring thread ──────────────────────────
     {
@@ -1239,3 +1241,73 @@ fn spawn_linux_kernel_telemetry(state: &Arc<Mutex<AppState>>) {
 
 #[cfg(not(target_os = "linux"))]
 fn spawn_linux_kernel_telemetry(_state: &Arc<Mutex<AppState>>) {}
+
+/// Start the real-time ETW telemetry consumer on Windows, degrading to the
+/// existing WMI/PowerShell polling collector in `collector_windows.rs`
+/// when not elevated. See `src/kernel_windows/`.
+#[cfg(windows)]
+fn spawn_windows_kernel_telemetry(state: &Arc<Mutex<AppState>>) {
+    let (stream, hostname, agent_uid) = {
+        let s = state
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        (
+            s.kernel_event_stream.clone(),
+            s.local_host_info.hostname.clone(),
+            s.config.agent.agent_id.clone(),
+        )
+    };
+    let handle = crate::kernel_windows::spawn(
+        stream,
+        hostname,
+        agent_uid,
+        crate::kernel_windows::WindowsTelemetryOptions::default(),
+    );
+    log::info!(
+        "kernel_windows: telemetry backend selected — {}",
+        handle.capability.summary()
+    );
+    // Unlike `kernel_linux`'s handle, `WindowsTelemetryHandle` owns the
+    // live ETW session (`ferrisetw::trace::UserTrace` stops tracing on
+    // `Drop`) — so, unlike the plain `drop(handle)` used for the Linux and
+    // macOS backends below, this one is deliberately never dropped. It
+    // must outlive this function call for telemetry to keep flowing for
+    // the life of the process; `mem::forget` documents that intent instead
+    // of leaving a `Box::leak`'d value with no clear owner.
+    std::mem::forget(handle);
+}
+
+#[cfg(not(windows))]
+fn spawn_windows_kernel_telemetry(_state: &Arc<Mutex<AppState>>) {}
+
+/// Start a real Endpoint Security client on macOS when built with the
+/// `macos-es` feature and entitled to do so, degrading to the existing
+/// `ps`/`lsof` polling collector in `collector_macos.rs` otherwise. See
+/// `src/kernel_macos/`.
+#[cfg(target_os = "macos")]
+fn spawn_macos_kernel_telemetry(state: &Arc<Mutex<AppState>>) {
+    let (stream, hostname, agent_uid) = {
+        let s = state
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        (
+            s.kernel_event_stream.clone(),
+            s.local_host_info.hostname.clone(),
+            s.config.agent.agent_id.clone(),
+        )
+    };
+    let handle = crate::kernel_macos::spawn(
+        stream,
+        hostname,
+        agent_uid,
+        crate::kernel_macos::MacosTelemetryOptions::default(),
+    );
+    log::info!(
+        "kernel_macos: telemetry backend selected — {}",
+        handle.capability.summary()
+    );
+    drop(handle);
+}
+
+#[cfg(not(target_os = "macos"))]
+fn spawn_macos_kernel_telemetry(_state: &Arc<Mutex<AppState>>) {}

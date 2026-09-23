@@ -15,8 +15,12 @@
 
 ### Deep OS-native monitoring
 
-- Unified kernel-event stream normalising real kernel-pushed Linux telemetry (`CN_PROC` netlink process connector for exec/fork/exit/uid-change, fanotify/inotify for file activity — falling back to `/proc` polling per-domain when the required capability is missing), ESF (macOS), and ETW (Windows) telemetry. eBPF is not implemented; see `docs/kernel-telemetry-linux.md`
-- 22 event kinds: process lifecycle, file ops, network, registry, AMSI, WMI persistence, TCC, Gatekeeper, SELinux/AppArmor denials, container events
+- Unified kernel-event stream normalising real kernel-pushed telemetry across all three OS families, each falling back to polling per-domain (and saying why) when the required privilege/entitlement is missing:
+  - **Linux** — `CN_PROC` netlink process connector for exec/fork/exit/uid-change, fanotify/inotify for file activity, falling back to `/proc` polling (see `docs/kernel-telemetry-linux.md`)
+  - **Windows** — a real ETW consumer (`ferrisetw`) for `Microsoft-Windows-Kernel-Process`/`-Kernel-File`/`-Kernel-Network` plus DNS-Client and PowerShell ScriptBlock logging, requiring an elevated process; falls back to WMI/PowerShell/`reg.exe` polling otherwise (see `docs/runbooks/windows-agent.md`). AMSI is consumed via its ETW provider (verdicts from whichever provider is installed), not implemented as an AMSI provider (COM DLL) itself
+  - **macOS** — a real Endpoint Security Framework client behind the off-by-default `macos-es` cargo feature, requiring Apple's `com.apple.developer.endpoint-security.client` entitlement, a signed binary, root, and TCC Full Disk Access; falls back to `ps`/`lsof` polling otherwise (see `docs/runbooks/macos-agent.md`)
+  - eBPF is not implemented; see `docs/kernel-telemetry-linux.md`
+- 23 event kinds: process lifecycle, file ops, network, registry, AMSI, WMI persistence, PowerShell ScriptBlock execution, TCC, Gatekeeper, SELinux/AppArmor denials, container events
 - Automatic MITRE ATT&CK technique tagging for kernel events
 - Thread-safe ring-buffer with capacity management and type-filtered queries
 
