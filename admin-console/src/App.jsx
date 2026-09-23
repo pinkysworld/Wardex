@@ -76,18 +76,36 @@ function isWideTopbarViewport() {
   return typeof window !== 'undefined' && window.innerWidth >= WIDE_TOPBAR_BREAKPOINT;
 }
 
-/** True once the viewport is wide enough to show topbar secondary actions
- * inline rather than behind the "More" overflow menu. Re-evaluated on
- * resize. */
-function useIsWideTopbar() {
-  const [isWide, setIsWide] = useState(isWideTopbarViewport);
+/** Phone-width breakpoint (px): at or below it Search and Pin View also
+ * move into the "More" menu so the topbar fits on one row. */
+const COMPACT_TOPBAR_BREAKPOINT = 768;
+
+function isCompactTopbarViewport() {
+  return typeof window !== 'undefined' && window.innerWidth <= COMPACT_TOPBAR_BREAKPOINT;
+}
+
+/** Tracks a viewport predicate, re-evaluated on resize. */
+function useViewportMatch(predicate) {
+  const [matches, setMatches] = useState(predicate);
   useEffect(() => {
     if (typeof window === 'undefined') return undefined;
-    const handleResize = () => setIsWide(isWideTopbarViewport());
+    const handleResize = () => setMatches(predicate());
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
-  }, []);
-  return isWide;
+  }, [predicate]);
+  return matches;
+}
+
+/** True once the viewport is wide enough to show topbar secondary actions
+ * inline rather than behind the "More" overflow menu. */
+function useIsWideTopbar() {
+  return useViewportMatch(isWideTopbarViewport);
+}
+
+/** True on phone-width viewports, where every secondary topbar action lives
+ * in the "More" menu. */
+function useIsCompactTopbar() {
+  return useViewportMatch(isCompactTopbarViewport);
 }
 
 /**
@@ -421,6 +439,7 @@ export default function App() {
   const pinnedSectionsRef = useRef(pinnedSections);
   const showInbox = showInboxLocationKey === location.key;
   const isWideTopbar = useIsWideTopbar();
+  const isCompactTopbar = useIsCompactTopbar();
 
   const inboxTriggerRef = useRef(null);
   const inboxPopoverRef = useRef(null);
@@ -1091,7 +1110,7 @@ export default function App() {
                 )}
               </div>
             )}
-            {authenticated && (
+            {authenticated && !isCompactTopbar && (
               <button
                 className="btn btn-sm topbar-search-trigger"
                 onClick={() => setSearchOpen(true)}
@@ -1103,7 +1122,7 @@ export default function App() {
                 <kbd aria-hidden="true">⌘K</kbd>
               </button>
             )}
-            {authenticated && (
+            {authenticated && !isCompactTopbar && (
               <button
                 className={`btn btn-sm btn-icon-labelled ${pinnedSections.includes(currentSection.id) ? 'btn-primary' : 'btn-ghost'}`}
                 type="button"
@@ -1180,6 +1199,20 @@ export default function App() {
                       items[nextIndex]?.focus();
                     }}
                   >
+                    {isCompactTopbar && (
+                      <button
+                        className="btn btn-sm"
+                        type="button"
+                        role="menuitem"
+                        onClick={() => {
+                          setSearchOpen(true);
+                          setShowTopbarActions(false);
+                        }}
+                      >
+                        <IconSearch size={14} />
+                        Search
+                      </button>
+                    )}
                     {currentSection.path !== '/help' && (
                       <button
                         className="btn btn-sm"
@@ -1206,6 +1239,20 @@ export default function App() {
                       <IconLink size={14} />
                       {linkCopied ? 'Copied' : 'Share Link'}
                     </button>
+                    {isCompactTopbar && (
+                      <button
+                        className="btn btn-sm"
+                        type="button"
+                        role="menuitem"
+                        onClick={() => {
+                          togglePinnedSection(currentSection.id);
+                          setShowTopbarActions(false);
+                        }}
+                      >
+                        <IconStar size={14} filled={pinnedSections.includes(currentSection.id)} />
+                        {pinnedSections.includes(currentSection.id) ? 'Pinned' : 'Pin View'}
+                      </button>
+                    )}
                   </div>
                 )}
               </div>

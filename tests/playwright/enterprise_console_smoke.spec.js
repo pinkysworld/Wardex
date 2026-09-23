@@ -41,7 +41,7 @@ test('enterprise admin console smoke', async ({ page }) => {
 
   const sidebar = page.locator('#sidebar-nav');
 
-  await expect(page.getByRole('heading', { name: 'Security Overview' })).toBeVisible();
+  await expect(page.getByRole('heading', { level: 2, name: 'Dashboard', exact: true })).toBeVisible();
 
   await sidebar.getByRole('link', { name: 'Command Center', exact: true }).click();
   await expect(page.getByRole('heading', { name: /Operate incidents/i })).toBeVisible();
