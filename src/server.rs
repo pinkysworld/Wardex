@@ -2041,6 +2041,12 @@ fn handle_api(
         // ── Platform ──────────────────────────────────────────────
         (Method::Get, "/api/platform") => {
             let caps = PlatformCapabilities::detect_current();
+            let container_status = {
+                let s = state
+                    .lock()
+                    .unwrap_or_else(std::sync::PoisonError::into_inner);
+                crate::container_runtime::probe_status(&s.config.container)
+            };
             let info = serde_json::json!({
                 "platform": format!("{:?}", caps.platform),
                 "has_tpm": caps.has_tpm,
@@ -2048,6 +2054,14 @@ fn handle_api(
                 "has_ebpf": caps.has_ebpf,
                 "has_firewall": caps.has_firewall,
                 "max_threads": caps.max_threads,
+                "container_runtime": {
+                    "docker_status": format!("{:?}", container_status.docker_status),
+                    "docker_socket_path": container_status.docker_socket_path,
+                    "docker_server_version": container_status.docker_server_version,
+                    "docker_error": container_status.docker_error,
+                    "kubernetes_status": format!("{:?}", container_status.kubernetes_status),
+                    "kubernetes_error": container_status.kubernetes_error,
+                },
             });
             json_response(&info.to_string(), 200)
         }

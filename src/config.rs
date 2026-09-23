@@ -244,6 +244,264 @@ pub struct Config {
     pub cluster: crate::cluster::ClusterConfig,
     #[serde(default)]
     pub clickhouse: Option<crate::storage_clickhouse::ClickHouseConfig>,
+    /// Live container (Docker/Podman) and Kubernetes event sources.
+    #[serde(default)]
+    pub container: crate::container_runtime::ContainerRuntimeConfig,
+    /// Local telemetry collection cadence.
+    #[serde(default)]
+    pub collection: CollectionSettings,
+    /// Detection engine tuning, including the low-and-slow window.
+    #[serde(default)]
+    pub detection: DetectionSettings,
+    /// Platform collector backend selection (eBPF/ETW/AMSI/WMI) and scan cadences.
+    #[serde(default)]
+    pub collectors: CollectorsSettings,
+    /// Relay/edge sync settings.
+    #[serde(default)]
+    pub relay: RelaySettings,
+    /// Supply-chain attestation settings.
+    #[serde(default)]
+    pub attestation: AttestationSettings,
+}
+
+/// `[collection]` — local telemetry collection cadence, documented in
+/// `docs/CONFIGURATION.md`.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CollectionSettings {
+    /// How often to collect local telemetry, in seconds. Drives the
+    /// agent's main sampling loop cadence (see `agent_client::run_monitor_loop`).
+    #[serde(default = "default_collection_interval_secs")]
+    pub collection_interval_secs: u64,
+    /// Event batch size for SIEM forwarding.
+    #[serde(default = "default_max_events_per_batch")]
+    pub max_events_per_batch: usize,
+}
+
+fn default_collection_interval_secs() -> u64 {
+    10
+}
+fn default_max_events_per_batch() -> usize {
+    500
+}
+
+impl Default for CollectionSettings {
+    fn default() -> Self {
+        Self {
+            collection_interval_secs: default_collection_interval_secs(),
+            max_events_per_batch: default_max_events_per_batch(),
+        }
+    }
+}
+
+/// `[detection]` — detection engine tuning, documented in `docs/CONFIGURATION.md`.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DetectionSettings {
+    /// Detection sensitivity profile: "aggressive", "balanced", or "quiet".
+    #[serde(default = "default_detection_profile")]
+    pub profile: String,
+    /// Anomaly score threshold above which a sample is treated as anomalous.
+    #[serde(default = "default_anomaly_threshold")]
+    pub anomaly_threshold: f32,
+    /// Long-window size, in seconds, for low-and-slow attack detection
+    /// (see `detector::SlowAttackDetector`). Converted to a sample count
+    /// assuming one sample per `collection.collection_interval_secs`.
+    #[serde(default = "default_slow_attack_window_secs")]
+    pub slow_attack_window_secs: u64,
+    /// Canary directories monitored for ransomware-style mass file changes.
+    #[serde(default)]
+    pub ransomware_canary_dirs: Vec<String>,
+}
+
+fn default_detection_profile() -> String {
+    "balanced".into()
+}
+fn default_anomaly_threshold() -> f32 {
+    0.75
+}
+fn default_slow_attack_window_secs() -> u64 {
+    3600
+}
+
+impl Default for DetectionSettings {
+    fn default() -> Self {
+        Self {
+            profile: default_detection_profile(),
+            anomaly_threshold: default_anomaly_threshold(),
+            slow_attack_window_secs: default_slow_attack_window_secs(),
+            ransomware_canary_dirs: Vec::new(),
+        }
+    }
+}
+
+impl DetectionSettings {
+    /// Build a [`crate::detector::SlowAttackConfig`] whose long window
+    /// covers `slow_attack_window_secs`, sampling once per
+    /// `sample_interval_secs` (typically `collection.collection_interval_secs`).
+    pub fn slow_attack_config(
+        &self,
+        sample_interval_secs: u64,
+    ) -> crate::detector::SlowAttackConfig {
+        let interval = sample_interval_secs.max(1);
+        let long_window = (self.slow_attack_window_secs / interval).max(1) as usize;
+        let short_window = (long_window / 24).max(1);
+        crate::detector::SlowAttackConfig {
+            short_window,
+            long_window,
+            ..crate::detector::SlowAttackConfig::default()
+        }
+    }
+}
+
+/// `[collectors]` — platform collector backend selection and scan
+/// cadences, documented in the Linux/Windows agent runbooks.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CollectorsSettings {
+    /// Prefer the eBPF backend when the kernel supports it; `false` force-disables
+    /// it even if available. When no eBPF backend is compiled in, this is a no-op
+    /// and collectors log that the backend is unavailable in this build.
+    #[serde(default = "default_backend_enabled")]
+    pub ebpf_enabled: bool,
+    /// eBPF programs to attach when `ebpf_enabled` and the backend is available.
+    #[serde(default)]
+    pub ebpf_programs: Vec<String>,
+    /// Prefer the Windows ETW backend when available; `false` force-disables it.
+    #[serde(default = "default_backend_enabled")]
+    pub etw_enabled: bool,
+    /// Prefer the AMSI backend for script-content inspection; `false` force-disables it.
+    #[serde(default = "default_backend_enabled")]
+    pub amsi_enabled: bool,
+    /// Enable the WMI/PowerShell-based Windows collector paths (process,
+    /// registry, service, and PowerShell activity collection).
+    #[serde(default = "default_backend_enabled")]
+    pub wmi_enabled: bool,
+    /// Windows registry persistence-key scan cadence, in seconds.
+    #[serde(default = "default_registry_scan_interval_secs")]
+    pub registry_scan_interval_secs: u64,
+    /// Process inventory scan cadence, in seconds.
+    #[serde(default = "default_process_scan_interval_secs")]
+    pub process_scan_interval_secs: u64,
+    /// Network connection scan cadence, in seconds.
+    #[serde(default = "default_network_scan_interval_secs")]
+    pub network_scan_interval_secs: u64,
+}
+
+fn default_backend_enabled() -> bool {
+    true
+}
+fn default_registry_scan_interval_secs() -> u64 {
+    300
+}
+fn default_process_scan_interval_secs() -> u64 {
+    30
+}
+fn default_network_scan_interval_secs() -> u64 {
+    15
+}
+
+impl CollectorsSettings {
+    /// Log a clear, honest message for every backend the operator asked
+    /// to prefer (`*_enabled = true`) that is not compiled into this
+    /// build, so a "why isn't eBPF/ETW/AMSI running?" question has an
+    /// obvious answer in the logs instead of silent no-op behaviour.
+    pub fn log_backend_status(&self) {
+        if self.ebpf_enabled {
+            log::warn!(
+                "ebpf_enabled=true but this build has no eBPF backend compiled in; \
+                 falling back to non-eBPF collection"
+            );
+        }
+        #[cfg(not(target_os = "windows"))]
+        {
+            if self.etw_enabled {
+                log::warn!("etw_enabled=true but ETW is only available on Windows");
+            }
+            if self.amsi_enabled {
+                log::warn!("amsi_enabled=true but AMSI is only available on Windows");
+            }
+        }
+    }
+}
+
+impl Default for CollectorsSettings {
+    fn default() -> Self {
+        Self {
+            ebpf_enabled: default_backend_enabled(),
+            ebpf_programs: Vec::new(),
+            etw_enabled: default_backend_enabled(),
+            amsi_enabled: default_backend_enabled(),
+            wmi_enabled: default_backend_enabled(),
+            registry_scan_interval_secs: default_registry_scan_interval_secs(),
+            process_scan_interval_secs: default_process_scan_interval_secs(),
+            network_scan_interval_secs: default_network_scan_interval_secs(),
+        }
+    }
+}
+
+/// `[relay]` — edge/relay-mode sync settings, documented in
+/// `docs/DEPLOYMENT_MODELS.md`.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RelaySettings {
+    #[serde(default)]
+    pub enabled: bool,
+    #[serde(default)]
+    pub upstream: String,
+    /// How often the relay pushes its spool to the upstream, in seconds.
+    #[serde(default = "default_sync_interval_secs")]
+    pub sync_interval_secs: u64,
+    #[serde(default = "default_spool_max_bytes")]
+    pub spool_max_bytes: u64,
+}
+
+fn default_sync_interval_secs() -> u64 {
+    300
+}
+fn default_spool_max_bytes() -> u64 {
+    104_857_600
+}
+
+impl Default for RelaySettings {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            upstream: String::new(),
+            sync_interval_secs: default_sync_interval_secs(),
+            spool_max_bytes: default_spool_max_bytes(),
+        }
+    }
+}
+
+/// `[attestation]` — supply-chain attestation settings, documented in
+/// `docs/DESIGN_SUPPLY_CHAIN.md`.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AttestationSettings {
+    #[serde(default)]
+    pub enabled: bool,
+    #[serde(default)]
+    pub manifest_path: String,
+    #[serde(default)]
+    pub require_at_boot: bool,
+    #[serde(default = "default_periodic_check_minutes")]
+    pub periodic_check_minutes: u64,
+    /// Path to the local JSON trust store of accepted release-signer
+    /// public keys (see `attestation::TrustStore`).
+    #[serde(default)]
+    pub trust_store_path: String,
+}
+
+fn default_periodic_check_minutes() -> u64 {
+    30
+}
+
+impl Default for AttestationSettings {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            manifest_path: String::new(),
+            require_at_boot: false,
+            periodic_check_minutes: default_periodic_check_minutes(),
+            trust_store_path: String::new(),
+        }
+    }
 }
 
 /// Security-related settings for token management and session control.
@@ -1299,5 +1557,63 @@ scheduled_tasks = false
             parsed.retention.remote_syslog_endpoint.as_deref(),
             Some("udp://syslog:514")
         );
+    }
+
+    #[test]
+    fn collection_detection_collectors_relay_attestation_defaults() {
+        let config = Config::default();
+        assert_eq!(config.collection.collection_interval_secs, 10);
+        assert_eq!(config.collection.max_events_per_batch, 500);
+        assert_eq!(config.detection.slow_attack_window_secs, 3600);
+        assert!((config.detection.anomaly_threshold - 0.75).abs() < 0.001);
+        assert!(config.collectors.ebpf_enabled);
+        assert!(config.collectors.etw_enabled);
+        assert!(config.collectors.wmi_enabled);
+        assert!(config.collectors.amsi_enabled);
+        assert_eq!(config.collectors.registry_scan_interval_secs, 300);
+        assert_eq!(config.collectors.process_scan_interval_secs, 30);
+        assert_eq!(config.collectors.network_scan_interval_secs, 15);
+        assert_eq!(config.relay.sync_interval_secs, 300);
+        assert_eq!(config.attestation.periodic_check_minutes, 30);
+        assert!(!config.container.docker_enabled);
+        assert_eq!(config.container.docker_socket_path, "/var/run/docker.sock");
+    }
+
+    #[test]
+    fn new_sections_round_trip_toml() {
+        let mut config = Config::default();
+        config.collection.collection_interval_secs = 20;
+        config.detection.slow_attack_window_secs = 7200;
+        config.collectors.wmi_enabled = false;
+        config.relay.sync_interval_secs = 600;
+        config.attestation.trust_store_path = "/etc/wardex/trust_store.json".into();
+        let toml_str = toml::to_string_pretty(&config).unwrap();
+        let parsed: Config = toml::from_str(&toml_str).unwrap();
+        assert_eq!(parsed.collection.collection_interval_secs, 20);
+        assert_eq!(parsed.detection.slow_attack_window_secs, 7200);
+        assert!(!parsed.collectors.wmi_enabled);
+        assert_eq!(parsed.relay.sync_interval_secs, 600);
+        assert_eq!(
+            parsed.attestation.trust_store_path,
+            "/etc/wardex/trust_store.json"
+        );
+    }
+
+    #[test]
+    fn slow_attack_config_converts_window_secs_to_samples() {
+        let detection = super::DetectionSettings {
+            slow_attack_window_secs: 3600,
+            ..super::DetectionSettings::default()
+        };
+        let cfg = detection.slow_attack_config(10);
+        assert_eq!(cfg.long_window, 360);
+        assert_eq!(cfg.short_window, 15);
+    }
+
+    #[test]
+    fn collectors_log_backend_status_does_not_panic() {
+        // Exercises the "backend not available in this build" logging
+        // path; nothing to assert beyond "doesn't panic".
+        super::CollectorsSettings::default().log_backend_status();
     }
 }

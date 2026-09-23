@@ -239,7 +239,11 @@ pub async fn run_server(
         kernel_event_stream: crate::kernel_events::KernelEventStream::new(10_000),
         last_alert_analysis: None,
         storage: storage.clone(),
-        slow_attack: crate::detector::SlowAttackDetector::default(),
+        slow_attack: crate::detector::SlowAttackDetector::new(
+            initial_config
+                .detection
+                .slow_attack_config(initial_config.collection.collection_interval_secs),
+        ),
         ransomware: crate::ransomware::RansomwareDetector::default(),
         mitre_coverage: crate::mitre_coverage::MitreCoverageTracker::new(),
         tuning_profile: crate::detector::TuningProfile::default(),
@@ -331,6 +335,7 @@ pub async fn run_server(
     crate::server_cluster::spawn_cluster_runtime_loop(&state);
     spawn_feed_ingestion_loop(&state);
     spawn_linux_kernel_telemetry(&state);
+    spawn_container_runtime_loop(&state);
 
     // ── Spawn local host monitoring thread ──────────────────────────
     {

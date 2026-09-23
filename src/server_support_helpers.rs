@@ -555,6 +555,168 @@ pub(crate) fn spawn_feed_ingestion_loop(state: &Arc<Mutex<AppState>>) {
     });
 }
 
+/// Background loop that ingests live Docker/Podman container events into
+/// the existing `ContainerDetector` rules. No-ops when disabled in config.
+/// Reconnects with exponential backoff, resuming the Docker `/events`
+/// stream from its last-seen timestamp.
+fn spawn_docker_watch_loop(
+    state: &Arc<Mutex<AppState>>,
+    config: crate::container_runtime::ContainerRuntimeConfig,
+) {
+    let state = Arc::clone(state);
+    std::thread::spawn(move || {
+        let hostname = crate::collector::detect_platform().hostname;
+        let mut backoff = config.docker_backoff_secs.max(1);
+        let mut since: Option<i64> = None;
+        loop {
+            let shutdown = {
+                let s = crate::state_lock::tracked_lock(&state, "server/container_docker_shutdown");
+                s.shutdown.load(Ordering::Relaxed)
+            };
+            if shutdown {
+                break;
+            }
+
+            match crate::container_runtime::DockerClient::connect(&config) {
+                Ok(client) => match client.events_stream(since) {
+                    Ok(mut stream) => {
+                        backoff = config.docker_backoff_secs.max(1);
+                        loop {
+                            match stream.next_event() {
+                                Ok(Some(msg)) => {
+                                    since = Some(stream.resume_since());
+                                    if let Some(event) =
+                                        crate::container_runtime::docker_event_to_container_event(
+                                            &msg, &hostname,
+                                        )
+                                    {
+                                        let mut s = crate::state_lock::tracked_lock(
+                                            &state,
+                                            "server/container_docker_event",
+                                        );
+                                        s.container_detector.record_event(event);
+                                    }
+                                }
+                                Ok(None) => break, // daemon closed the stream; reconnect
+                                Err(e) => {
+                                    log::warn!("[container] docker events stream error: {e}");
+                                    break;
+                                }
+                            }
+                            let shutdown = {
+                                let s = crate::state_lock::tracked_lock(
+                                    &state,
+                                    "server/container_docker_shutdown_inner",
+                                );
+                                s.shutdown.load(Ordering::Relaxed)
+                            };
+                            if shutdown {
+                                return;
+                            }
+                        }
+                    }
+                    Err(e) => log::warn!("[container] failed to open docker events stream: {e}"),
+                },
+                Err(e) => log::warn!("[container] docker client unavailable: {e}"),
+            }
+
+            std::thread::sleep(std::time::Duration::from_secs(backoff));
+            backoff = (backoff * 2).min(config.docker_max_backoff_secs.max(backoff));
+        }
+    });
+}
+
+/// Best-effort in-cluster Kubernetes Pod watch loop. See
+/// `container_runtime::KubeClient::watch_pods` for the known TLS-trust
+/// limitation; this loop logs a warning and backs off rather than spinning
+/// when the API server is unreachable or untrusted.
+fn spawn_kubernetes_watch_loop(
+    state: &Arc<Mutex<AppState>>,
+    config: crate::container_runtime::ContainerRuntimeConfig,
+) {
+    let state = Arc::clone(state);
+    std::thread::spawn(move || {
+        let hostname = crate::collector::detect_platform().hostname;
+        let mut backoff = 5u64;
+        loop {
+            let shutdown = {
+                let s = crate::state_lock::tracked_lock(&state, "server/container_kube_shutdown");
+                s.shutdown.load(Ordering::Relaxed)
+            };
+            if shutdown {
+                break;
+            }
+
+            match crate::container_runtime::KubeClient::in_cluster() {
+                Ok(client) => {
+                    let namespaces: Vec<Option<String>> = if config.kubernetes_namespaces.is_empty()
+                    {
+                        vec![None]
+                    } else {
+                        config
+                            .kubernetes_namespaces
+                            .iter()
+                            .cloned()
+                            .map(Some)
+                            .collect()
+                    };
+                    for ns in namespaces {
+                        match client.watch_pods(ns.as_deref(), "") {
+                            Ok(body) => {
+                                for line in body.lines() {
+                                    if line.trim().is_empty() {
+                                        continue;
+                                    }
+                                    match crate::container_runtime::kube_watch_line_to_events(
+                                        line,
+                                        &hostname,
+                                        chrono::Utc::now().timestamp_millis().max(0) as u64,
+                                    ) {
+                                        Ok(events) => {
+                                            let mut s = crate::state_lock::tracked_lock(
+                                                &state,
+                                                "server/container_kube_event",
+                                            );
+                                            for event in events {
+                                                s.container_detector.record_event(event);
+                                            }
+                                        }
+                                        Err(e) => log::warn!(
+                                            "[container] failed to parse kube watch line: {e}"
+                                        ),
+                                    }
+                                }
+                            }
+                            Err(e) => log::warn!(
+                                "[container] kubernetes watch unavailable (known TLS-trust limitation, see docs/CONFIGURATION.md): {e}"
+                            ),
+                        }
+                    }
+                }
+                Err(e) => log::info!("[container] not running in a Kubernetes pod: {e}"),
+            }
+
+            std::thread::sleep(std::time::Duration::from_secs(backoff));
+            backoff = (backoff * 2).min(300);
+        }
+    });
+}
+
+/// Spawn the live Docker/Podman and Kubernetes container event sources
+/// configured under `[container]`. No-ops entirely when both are disabled.
+pub(crate) fn spawn_container_runtime_loop(state: &Arc<Mutex<AppState>>) {
+    let config = {
+        let s = crate::state_lock::tracked_lock(state, "server/container_runtime_config");
+        s.config.container.clone()
+    };
+    if config.docker_enabled {
+        spawn_docker_watch_loop(state, config.clone());
+    }
+    if config.kubernetes_enabled {
+        spawn_kubernetes_watch_loop(state, config);
+    }
+}
+
 pub(crate) fn first_run_operator_proof(
     state: &Arc<Mutex<AppState>>,
     auth: &AuthIdentity,

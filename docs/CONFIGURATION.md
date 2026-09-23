@@ -150,6 +150,82 @@ disable-account, and flush-dns adapters. Recommended operator posture is to keep
 `execute_live_rollback_commands = false` outside controlled maintenance windows and only enable it after verifying
 the typed-hostname confirmation flow plus the platform-specific command set on the target host.
 
+### `[collectors]`
+
+Selects which platform collector backends are preferred, and the scan cadence for
+each Windows telemetry source. `*_enabled = false` force-disables a backend even
+when it is available; `*_enabled = true` (the default) prefers it but never
+fabricates support — when the backend isn't compiled into this build or isn't
+available on the running host, Wardex logs `"<name>_enabled=true but ... is not
+available"` and falls back to the non-accelerated collection path instead of
+silently doing nothing.
+
+```toml
+[collectors]
+ebpf_enabled = true             # Linux eBPF tracing backend; not compiled into
+                                 # this build yet, so enabling it only logs a
+                                 # notice — kernel-event collection is tracked
+                                 # separately (see kernel_events.rs).
+ebpf_programs = ["execsnoop", "tcpconnect", "filelife"]
+etw_enabled = true              # Windows Event Tracing for Windows
+wmi_enabled = true              # Windows WMI/PowerShell collector paths
+amsi_enabled = true             # Windows AMSI script-content inspection
+registry_scan_interval_secs = 300
+process_scan_interval_secs = 30
+network_scan_interval_secs = 15
+```
+
+### `[container]`
+
+Live Docker/Podman and in-cluster Kubernetes event sources (see
+`src/container_runtime.rs`). Reachability is surfaced via `wardex doctor` and
+`GET /api/platform`.
+
+```toml
+[container]
+docker_enabled = false
+docker_socket_path = "/var/run/docker.sock"  # or a Podman socket, e.g.
+                                              # "/run/user/1000/podman/podman.sock"
+docker_timeout_secs = 10
+docker_backoff_secs = 1
+docker_max_backoff_secs = 60
+kubernetes_enabled = false
+kubernetes_namespaces = []       # empty = all namespaces
+```
+
+Kubernetes support is best-effort: the in-cluster API server presents a TLS
+certificate signed by the cluster's own CA, and this build's HTTP client does
+not currently trust a custom root CA, so live Pod watching against a real
+cluster will fail TLS verification. The watch-stream parsing and detection
+mapping are implemented and unit-tested against fixtures so the feature can be
+enabled as soon as a custom trust anchor is wired through.
+
+### `[relay]`
+
+```toml
+[relay]
+enabled = true
+upstream = "https://central.example.com"
+sync_interval_secs = 300
+spool_max_bytes = 104857600  # 100 MB
+```
+
+### `[attestation]`
+
+```toml
+[attestation]
+enabled = true
+manifest_path = "/etc/wardex/manifest.json"
+require_at_boot = true
+periodic_check_minutes = 30
+trust_store_path = "/etc/wardex/trust_store.json"
+```
+
+`trust_store_path` points at the local JSON trust store of accepted release
+signer public keys (`attestation::TrustStore`). Verify a manifest against it
+with `wardex attest-verify [manifest] [trust-store]`, which falls back to the
+paths configured here when not given explicitly.
+
 ## API Versioning
 
 All API endpoints support both `/api/` and `/api/v1/` prefixes. For example:

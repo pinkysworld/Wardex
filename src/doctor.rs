@@ -60,6 +60,7 @@ pub fn run() -> Vec<Check> {
         check_support_bundle_digest(),
         check_redaction_policy(),
         check_kernel_telemetry(),
+        check_container_runtime(),
     ]
 }
 
@@ -208,6 +209,72 @@ fn check_config() -> Check {
             status: Status::Fail,
             detail: format!("{}: {e}", path.display()),
         },
+    }
+}
+
+/// Docker/Podman and in-cluster Kubernetes reachability, for
+/// `[container]` in the config file.
+fn check_container_runtime() -> Check {
+    let path = config::runtime_config_path();
+    let config = if path.exists() {
+        Config::load_from_path(&path).unwrap_or_default()
+    } else {
+        Config::default()
+    };
+
+    let report = crate::container_runtime::probe_status(&config.container);
+    use crate::container_runtime::RuntimeStatus;
+
+    if report.docker_status == RuntimeStatus::Disabled
+        && report.kubernetes_status == RuntimeStatus::Disabled
+    {
+        return Check {
+            name: "Container/Kubernetes sources",
+            status: Status::Info,
+            detail: "docker_enabled=false, kubernetes_enabled=false (not configured)".into(),
+        };
+    }
+
+    let mut parts = Vec::new();
+    let mut any_fail = false;
+    match report.docker_status {
+        RuntimeStatus::Disabled => {}
+        RuntimeStatus::Reachable => parts.push(format!(
+            "docker reachable at {} ({})",
+            report.docker_socket_path,
+            report
+                .docker_server_version
+                .as_deref()
+                .unwrap_or("unknown version")
+        )),
+        RuntimeStatus::Unreachable => {
+            any_fail = true;
+            parts.push(format!(
+                "docker unreachable at {}: {}",
+                report.docker_socket_path,
+                report.docker_error.as_deref().unwrap_or("unknown error")
+            ));
+        }
+    }
+    match report.kubernetes_status {
+        RuntimeStatus::Disabled => {}
+        RuntimeStatus::Reachable => parts.push("kubernetes in-cluster credentials found".into()),
+        RuntimeStatus::Unreachable => {
+            any_fail = true;
+            parts.push(format!(
+                "kubernetes unreachable: {}",
+                report
+                    .kubernetes_error
+                    .as_deref()
+                    .unwrap_or("unknown error")
+            ));
+        }
+    }
+
+    Check {
+        name: "Container/Kubernetes sources",
+        status: if any_fail { Status::Warn } else { Status::Ok },
+        detail: parts.join("; "),
     }
 }
 

@@ -124,6 +124,7 @@ pub mod cert_monitor;
 pub mod cloud_inventory;
 pub mod container;
 pub mod container_image;
+pub mod container_runtime;
 pub mod digital_twin;
 pub mod ndr;
 pub mod quantum;
