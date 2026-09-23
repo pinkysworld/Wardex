@@ -88,7 +88,7 @@ impl EtwSession {
     /// the trace session can't be opened — e.g. a race where privileges
     /// were revoked between the capability probe and this call, or another
     /// process already owns a same-named session.
-    pub fn start(
+    pub(crate) fn start(
         tx: SyncSender<RawEvent>,
         stats: Arc<WindowsTelemetryStats>,
         options: &WindowsTelemetryOptions,
@@ -119,7 +119,9 @@ impl EtwSession {
 /// when it's missing or fails to parse, `EventRecord`'s own header (the
 /// process that logged the event) is usually the right fallback.
 fn pid_or_header(parser: &Parser, record: &EventRecord, field: &str) -> u32 {
-    parser.try_parse::<u32>(field).unwrap_or_else(|_| record.process_id())
+    parser
+        .try_parse::<u32>(field)
+        .unwrap_or_else(|_| record.process_id())
 }
 
 fn process_provider(tx: SyncSender<RawEvent>, stats: Arc<WindowsTelemetryStats>) -> Provider {
@@ -140,8 +142,7 @@ fn process_provider(tx: SyncSender<RawEvent>, stats: Arc<WindowsTelemetryStats>)
                         .try_parse("ImageName")
                         .or_else(|_| parser.try_parse::<String>("ImageFileName"))
                         .unwrap_or_default();
-                    let command_line: String =
-                        parser.try_parse("CommandLine").unwrap_or_default();
+                    let command_line: String = parser.try_parse("CommandLine").unwrap_or_default();
                     let kind = map_process_event(EtwProcessEvent {
                         pid,
                         ppid,
@@ -186,8 +187,7 @@ fn process_provider(tx: SyncSender<RawEvent>, stats: Arc<WindowsTelemetryStats>)
                         .or_else(|_| parser.try_parse::<String>("ImageName"))
                         .unwrap_or_default();
                     if !image_path.is_empty() {
-                        let kind =
-                            map_image_load_event(EtwImageLoadEvent { pid, image_path });
+                        let kind = map_image_load_event(EtwImageLoadEvent { pid, image_path });
                         send_or_drop(
                             &tx,
                             &stats,
@@ -249,7 +249,13 @@ fn file_provider(tx: SyncSender<RawEvent>, stats: Arc<WindowsTelemetryStats>) ->
                 op,
                 bytes_written,
             });
-            send_or_drop(&tx, &stats, EventSource::EtwWindows, kind, &stats.file_events);
+            send_or_drop(
+                &tx,
+                &stats,
+                EventSource::EtwWindows,
+                kind,
+                &stats.file_events,
+            );
         })
         .build()
 }
@@ -347,7 +353,13 @@ fn dns_provider(tx: SyncSender<RawEvent>, stats: Arc<WindowsTelemetryStats>) -> 
                 query_type,
                 results,
             });
-            send_or_drop(&tx, &stats, EventSource::EtwWindows, kind, &stats.dns_events);
+            send_or_drop(
+                &tx,
+                &stats,
+                EventSource::EtwWindows,
+                kind,
+                &stats.dns_events,
+            );
         })
         .build()
 }
@@ -370,8 +382,7 @@ fn powershell_provider(tx: SyncSender<RawEvent>, stats: Arc<WindowsTelemetryStat
                 Ok(s) => s,
                 Err(_) => return,
             };
-            let script_block_id: String =
-                parser.try_parse("ScriptBlockId").unwrap_or_default();
+            let script_block_id: String = parser.try_parse("ScriptBlockId").unwrap_or_default();
             let message_number: u32 = parser.try_parse("MessageNumber").unwrap_or(1);
             let message_total: u32 = parser.try_parse("MessageTotal").unwrap_or(1);
 
@@ -417,9 +428,7 @@ fn amsi_provider(tx: SyncSender<RawEvent>, stats: Arc<WindowsTelemetryStats>) ->
                 .try_parse("Content Name")
                 .or_else(|_| parser.try_parse::<String>("ContentName"))
                 .unwrap_or_default();
-            let content_preview: String = parser
-                .try_parse("Content")
-                .unwrap_or_default();
+            let content_preview: String = parser.try_parse("Content").unwrap_or_default();
             let result_code: u32 = parser
                 .try_parse("Scan Result")
                 .or_else(|_| parser.try_parse::<u32>("ScanResult"))
@@ -432,7 +441,13 @@ fn amsi_provider(tx: SyncSender<RawEvent>, stats: Arc<WindowsTelemetryStats>) ->
                 content_preview,
                 result_code,
             });
-            send_or_drop(&tx, &stats, EventSource::AmsiWindows, kind, &stats.amsi_events);
+            send_or_drop(
+                &tx,
+                &stats,
+                EventSource::AmsiWindows,
+                kind,
+                &stats.amsi_events,
+            );
         })
         .build()
 }

@@ -25,8 +25,11 @@ use crate::container::{ContainerEvent, ContainerEventKind};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::io::{BufRead, BufReader, Read, Write};
+#[cfg(unix)]
 use std::os::unix::net::UnixStream;
 use std::time::Duration;
+#[cfg(not(unix))]
+use unsupported_transport::UnixStream;
 
 // ── Configuration ───────────────────────────────────────────────────
 
@@ -845,7 +848,54 @@ pub fn kube_watch_line_to_events(
 
 // ── Tests ────────────────────────────────────────────────────────────
 
-#[cfg(test)]
+/// The Docker Engine API is reached over a Unix socket. Windows Docker
+/// Desktop exposes it on a named pipe instead, which this client does not
+/// implement yet, so on non-Unix targets every dial fails with a clear
+/// error and the watch loop reports the runtime as unreachable.
+#[cfg(not(unix))]
+mod unsupported_transport {
+    use std::io;
+    use std::path::Path;
+    use std::time::Duration;
+
+    pub struct UnixStream(());
+
+    impl UnixStream {
+        pub fn connect<P: AsRef<Path>>(_path: P) -> io::Result<Self> {
+            Err(io::Error::new(
+                io::ErrorKind::Unsupported,
+                "Docker Engine API over a Unix socket is not available on this platform \
+                 (named-pipe transport not implemented)",
+            ))
+        }
+
+        pub fn set_read_timeout(&self, _timeout: Option<Duration>) -> io::Result<()> {
+            Ok(())
+        }
+
+        pub fn set_write_timeout(&self, _timeout: Option<Duration>) -> io::Result<()> {
+            Ok(())
+        }
+    }
+
+    impl io::Read for UnixStream {
+        fn read(&mut self, _buf: &mut [u8]) -> io::Result<usize> {
+            Ok(0)
+        }
+    }
+
+    impl io::Write for UnixStream {
+        fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+            Ok(buf.len())
+        }
+
+        fn flush(&mut self) -> io::Result<()> {
+            Ok(())
+        }
+    }
+}
+
+#[cfg(all(test, unix))]
 mod tests {
     use super::*;
     use std::os::unix::net::UnixListener;

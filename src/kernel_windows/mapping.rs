@@ -294,7 +294,11 @@ mod tests {
         });
         match kind {
             KernelEventKind::ProcessExec {
-                pid, ppid, exe, args, ..
+                pid,
+                ppid,
+                exe,
+                args,
+                ..
             } => {
                 assert_eq!(pid, 100);
                 assert_eq!(ppid, 4);
@@ -432,10 +436,7 @@ mod tests {
             message_total: 1,
             script_text: "Invoke-Mimikatz".into(),
         });
-        assert!(matches!(
-            kind,
-            KernelEventKind::ScriptBlockExecution { .. }
-        ));
+        assert!(matches!(kind, KernelEventKind::ScriptBlockExecution { .. }));
         let mitre = crate::kernel_events::suggest_mitre(&kind);
         assert!(mitre.iter().any(|t| t.technique_id == "T1059"));
     }

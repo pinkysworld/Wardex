@@ -1247,22 +1247,23 @@ fn spawn_linux_kernel_telemetry(_state: &Arc<Mutex<AppState>>) {}
 /// when not elevated. See `src/kernel_windows/`.
 #[cfg(windows)]
 fn spawn_windows_kernel_telemetry(state: &Arc<Mutex<AppState>>) {
-    let (stream, hostname, agent_uid) = {
+    let (stream, hostname, agent_uid, options) = {
         let s = state
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let options = crate::kernel_windows::WindowsTelemetryOptions {
+            etw: s.config.collectors.etw_enabled,
+            amsi_etw: s.config.collectors.etw_enabled && s.config.collectors.amsi_enabled,
+            ..Default::default()
+        };
         (
             s.kernel_event_stream.clone(),
             s.local_host_info.hostname.clone(),
             s.config.agent.agent_id.clone(),
+            options,
         )
     };
-    let handle = crate::kernel_windows::spawn(
-        stream,
-        hostname,
-        agent_uid,
-        crate::kernel_windows::WindowsTelemetryOptions::default(),
-    );
+    let handle = crate::kernel_windows::spawn(stream, hostname, agent_uid, options);
     log::info!(
         "kernel_windows: telemetry backend selected — {}",
         handle.capability.summary()

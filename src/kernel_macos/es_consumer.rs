@@ -26,11 +26,13 @@
 use std::sync::Arc;
 use std::sync::mpsc::SyncSender;
 
-use endpoint_sec::{Client, Event};
 use endpoint_sec::sys::{NewClientError, es_event_type_t};
+use endpoint_sec::{Client, Event};
 
-use super::mapping::{EsExecEvent, EsExitEvent, EsFileEvent, EsFileOp, map_exec_event, map_exit_event, map_file_event};
-use super::{RawEvent, MacosTelemetryStats, send_or_drop};
+use super::mapping::{
+    EsExecEvent, EsExitEvent, EsFileEvent, EsFileOp, map_exec_event, map_exit_event, map_file_event,
+};
+use super::{MacosTelemetryStats, RawEvent, send_or_drop};
 use crate::kernel_events::EventSource;
 
 /// Handle to the background thread hosting the ESF client. The client
@@ -133,14 +135,26 @@ fn handle_message(
                 args,
                 cwd,
             });
-            send_or_drop(tx, stats, EventSource::EsfMacos, kind, &stats.process_events);
+            send_or_drop(
+                tx,
+                stats,
+                EventSource::EsfMacos,
+                kind,
+                &stats.process_events,
+            );
         }
         Event::NotifyExit(exit) => {
             let kind = map_exit_event(EsExitEvent {
                 pid,
                 exit_code: exit.stat(),
             });
-            send_or_drop(tx, stats, EventSource::EsfMacos, kind, &stats.process_events);
+            send_or_drop(
+                tx,
+                stats,
+                EventSource::EsfMacos,
+                kind,
+                &stats.process_events,
+            );
         }
         Event::NotifyFork(_) => {
             // No dedicated `KernelEventKind` variant for fork, matching
@@ -236,7 +250,10 @@ fn rename_destination_path(rename: &endpoint_sec::EventRename<'_>) -> Option<Str
         EventRenameDestinationFile::ExistingFile { file } => {
             Some(file.path().to_string_lossy().into_owned())
         }
-        EventRenameDestinationFile::NewPath { directory, filename } => {
+        EventRenameDestinationFile::NewPath {
+            directory,
+            filename,
+        } => {
             let mut p = std::path::PathBuf::from(directory.path());
             p.push(filename);
             Some(p.to_string_lossy().into_owned())

@@ -33,7 +33,7 @@ pub mod mapping;
 pub mod etw_consumer;
 
 use std::sync::Arc;
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::AtomicU64;
 use std::sync::mpsc::{Receiver, SyncSender, sync_channel};
 use std::thread::JoinHandle;
 
@@ -202,6 +202,7 @@ fn now_ms() -> u64 {
 /// Forward an event onto the bounded channel, counting it either as
 /// delivered or dropped-on-backpressure. Shared by every provider callback
 /// in `etw_consumer.rs`.
+#[cfg(windows)]
 pub(crate) fn send_or_drop(
     tx: &SyncSender<RawEvent>,
     stats: &WindowsTelemetryStats,
@@ -209,9 +210,11 @@ pub(crate) fn send_or_drop(
     kind: KernelEventKind,
     counter: &AtomicU64,
 ) {
-    counter.fetch_add(1, Ordering::Relaxed);
+    counter.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
     if tx.try_send(RawEvent { source, kind }).is_err() {
-        stats.dropped_events.fetch_add(1, Ordering::Relaxed);
+        stats
+            .dropped_events
+            .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
     }
 }
 

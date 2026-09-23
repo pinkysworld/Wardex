@@ -22,7 +22,7 @@ pub mod mapping;
 pub mod es_consumer;
 
 use std::sync::Arc;
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::AtomicU64;
 use std::sync::mpsc::{Receiver, SyncSender, sync_channel};
 use std::thread::JoinHandle;
 
@@ -164,6 +164,7 @@ fn now_ms() -> u64 {
         .unwrap_or(0)
 }
 
+#[cfg(all(target_os = "macos", feature = "macos-es"))]
 pub(crate) fn send_or_drop(
     tx: &SyncSender<RawEvent>,
     stats: &MacosTelemetryStats,
@@ -171,9 +172,11 @@ pub(crate) fn send_or_drop(
     kind: KernelEventKind,
     counter: &AtomicU64,
 ) {
-    counter.fetch_add(1, Ordering::Relaxed);
+    counter.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
     if tx.try_send(RawEvent { source, kind }).is_err() {
-        stats.dropped_events.fetch_add(1, Ordering::Relaxed);
+        stats
+            .dropped_events
+            .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
     }
 }
 

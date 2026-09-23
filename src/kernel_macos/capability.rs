@@ -77,7 +77,11 @@ fn is_root() -> bool {
 
 /// Run the full capability probe against the live host.
 pub fn detect_capability() -> MacosTelemetryCapability {
-    detect_capability_with(is_root(), cfg!(target_os = "macos"), cfg!(feature = "macos-es"))
+    detect_capability_with(
+        is_root(),
+        cfg!(target_os = "macos"),
+        cfg!(feature = "macos-es"),
+    )
 }
 
 /// Testable core of [`detect_capability`], parameterized so the decision
