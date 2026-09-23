@@ -63,6 +63,52 @@ pub struct SmtpConfig {
     /// anchors, it never disables verification.
     #[serde(default)]
     pub ca_cert_pem: Option<String>,
+    /// Explicit opt-in to send AUTH credentials over a plaintext (non-TLS)
+    /// connection. Refused by default: `smtp_send` sends AUTH only once the
+    /// connection is on TLS (STARTTLS or implicit), unless this is set AND
+    /// `host` is a loopback address, for trusted local test/relay setups.
+    #[serde(default)]
+    pub allow_plaintext_auth: bool,
+}
+
+impl SmtpConfig {
+    /// Reject `from`/`to` addresses that could be used for SMTP command or
+    /// header injection: they are interpolated directly into `MAIL FROM:`,
+    /// `RCPT TO:`, and the `From`/`To` message headers, so a value carrying
+    /// CR/LF (a new SMTP command or message header) or `<`/`>` (closing the
+    /// angle-bracket address early to splice in extra header lines) must be
+    /// rejected up front rather than sent to the wire.
+    pub fn validate(&self) -> Result<(), String> {
+        fn is_safe_address(addr: &str) -> bool {
+            !addr
+                .bytes()
+                .any(|b| matches!(b, b'\r' | b'\n' | b'<' | b'>'))
+        }
+        if !is_safe_address(&self.from) {
+            return Err("smtp 'from' address contains an invalid character (CR/LF/'<'/'>')".into());
+        }
+        if self.to.is_empty() {
+            return Err("smtp 'to' must have at least one recipient".into());
+        }
+        for rcpt in &self.to {
+            if !is_safe_address(rcpt) {
+                return Err(format!(
+                    "smtp 'to' address {rcpt:?} contains an invalid character (CR/LF/'<'/'>')"
+                ));
+            }
+        }
+        Ok(())
+    }
+
+    /// Whether `host` is a loopback address — the only case
+    /// `allow_plaintext_auth` is honoured for.
+    fn host_is_loopback(&self) -> bool {
+        matches!(self.host.as_str(), "127.0.0.1" | "::1" | "localhost")
+            || self
+                .host
+                .parse::<std::net::IpAddr>()
+                .is_ok_and(|ip| ip.is_loopback())
+    }
 }
 
 // ── Notification payload ─────────────────────────────────────────────
@@ -808,6 +854,8 @@ fn smtp_send(cfg: &SmtpConfig, message: &str) -> Result<(), String> {
     use std::net::TcpStream;
     use std::time::Duration;
 
+    cfg.validate()?;
+
     let wants_tls = cfg.use_tls || cfg.implicit_tls;
     if wants_tls && cfg!(not(feature = "tls")) {
         return Err(
@@ -820,6 +868,7 @@ fn smtp_send(cfg: &SmtpConfig, message: &str) -> Result<(), String> {
     tcp.set_read_timeout(Some(Duration::from_secs(20))).ok();
     tcp.set_write_timeout(Some(Duration::from_secs(20))).ok();
 
+    let mut connection_is_tls = cfg.implicit_tls;
     let transport = if cfg.implicit_tls {
         upgrade_to_tls(tcp, &cfg.host, cfg.ca_cert_pem.as_deref())?
     } else {
@@ -859,6 +908,7 @@ fn smtp_send(cfg: &SmtpConfig, message: &str) -> Result<(), String> {
         }
         let transport = upgrade_to_tls(tcp, &cfg.host, cfg.ca_cert_pem.as_deref())?;
         session = SmtpSession::new(transport);
+        connection_is_tls = true;
 
         // RFC 3207: state resets after STARTTLS, so re-issue EHLO.
         session.command(&format!("EHLO {helo}"))?;
@@ -866,6 +916,18 @@ fn smtp_send(cfg: &SmtpConfig, message: &str) -> Result<(), String> {
     }
 
     if let (Some(username), Some(password)) = (cfg.username.as_ref(), cfg.password.as_ref()) {
+        // Sending AUTH over a plaintext connection hands credentials to
+        // anyone on the network path. Refuse unless the connection is on
+        // TLS, or the operator has explicitly opted in for a trusted
+        // loopback relay (e.g. a local test/dev mail sink).
+        if !(connection_is_tls || (cfg.allow_plaintext_auth && cfg.host_is_loopback())) {
+            return Err(
+                "refusing to send SMTP AUTH credentials over a plaintext connection; \
+                 enable use_tls/implicit_tls, or set allow_plaintext_auth for a \
+                 trusted loopback relay"
+                    .into(),
+            );
+        }
         let auth_line = capabilities
             .iter()
             .find(|c| c.starts_with("AUTH "))
@@ -1019,6 +1081,7 @@ mod tests {
                 use_tls: true,
                 implicit_tls: false,
                 ca_cert_pem: None,
+                allow_plaintext_auth: false,
             }),
             min_level: "Severe".into(),
         });
@@ -1068,6 +1131,7 @@ mod tests {
                 use_tls: true,
                 implicit_tls: false,
                 ca_cert_pem: None,
+                allow_plaintext_auth: false,
             }),
             min_level: "Critical".into(),
         });
@@ -1149,6 +1213,7 @@ mod tests {
                 use_tls: false,
                 implicit_tls: false,
                 ca_cert_pem: None,
+                allow_plaintext_auth: false,
             }),
             min_level: "Elevated".into(),
         });
@@ -1288,6 +1353,7 @@ mod tests {
             use_tls: false,
             implicit_tls: false,
             ca_cert_pem: None,
+            allow_plaintext_auth: false,
         };
         let result = smtp_send(&cfg, "Subject: hi\r\n\r\nbody");
         handle.join().expect("server thread");
@@ -1443,6 +1509,7 @@ mod tests {
             use_tls: true,
             implicit_tls: false,
             ca_cert_pem: Some(cert_pem),
+            allow_plaintext_auth: false,
         };
         let result = smtp_send(&cfg, "Subject: hi over tls\r\n\r\nbody");
         handle.join().expect("server thread");
@@ -1466,6 +1533,7 @@ mod tests {
             use_tls: true,
             implicit_tls: false,
             ca_cert_pem: None, // not trusted -> must fail closed
+            allow_plaintext_auth: false,
         };
         let result = smtp_send(&cfg, "Subject: hi\r\n\r\nbody");
         assert!(result.is_err(), "must not accept an unverified certificate");
@@ -1473,5 +1541,176 @@ mod tests {
         // client aborted; drop the handle without joining to avoid hanging
         // the test suite.
         drop(handle);
+    }
+
+    #[test]
+    fn smtp_refuses_auth_over_plaintext_by_default() {
+        use std::io::{Read, Write};
+        use std::net::TcpListener;
+
+        // Credentials configured but no TLS and no explicit opt-in: the
+        // documented guarantee ("password... never used over a plaintext
+        // connection") must hold, so `smtp_send` should fail before ever
+        // reaching the AUTH command.
+        let listener = TcpListener::bind("127.0.0.1:0").expect("bind fake smtp");
+        let port = listener.local_addr().expect("addr").port();
+        let handle = std::thread::spawn(move || {
+            let (mut stream, _) = listener.accept().expect("accept smtp connection");
+            stream
+                .write_all(b"220 fake.smtp ready\r\n")
+                .expect("greeting");
+            let mut buf = [0u8; 4096];
+            let mut received = String::new();
+            let mut read_line = |stream: &mut std::net::TcpStream, received: &mut String| {
+                loop {
+                    if let Some(pos) = received.find("\r\n") {
+                        let line: String = received.drain(..pos + 2).collect();
+                        return line;
+                    }
+                    let n = stream.read(&mut buf).unwrap_or(0);
+                    if n == 0 {
+                        return String::new();
+                    }
+                    received.push_str(&String::from_utf8_lossy(&buf[..n]));
+                }
+            };
+            let ehlo = read_line(&mut stream, &mut received);
+            assert!(ehlo.starts_with("EHLO"));
+            // Advertise AUTH so a client that (incorrectly) proceeds would
+            // have something to use — the test is that ours does not.
+            stream
+                .write_all(b"250-fake.smtp\r\n250 AUTH PLAIN LOGIN\r\n")
+                .expect("ehlo reply");
+            // The client should disconnect here without sending AUTH or
+            // MAIL FROM; best-effort read to observe that.
+            let next = read_line(&mut stream, &mut received);
+            assert!(
+                !next.starts_with("AUTH"),
+                "client must not send AUTH over plaintext, got: {next:?}"
+            );
+        });
+
+        let cfg = SmtpConfig {
+            host: "127.0.0.1".into(),
+            port,
+            from: "wardex@test.local".into(),
+            to: vec!["ops@test.local".into()],
+            username: Some("wardex-bot".into()),
+            password: Some("s3cret".into()),
+            use_tls: false,
+            implicit_tls: false,
+            ca_cert_pem: None,
+            allow_plaintext_auth: false,
+        };
+        let result = smtp_send(&cfg, "Subject: hi\r\n\r\nbody");
+        assert!(
+            result.is_err(),
+            "expected AUTH-over-plaintext to be refused"
+        );
+        assert!(result.unwrap_err().contains("plaintext"));
+        let _ = handle.join();
+    }
+
+    #[test]
+    fn smtp_allows_auth_over_plaintext_loopback_with_explicit_opt_in() {
+        use std::io::{Read, Write};
+        use std::net::TcpListener;
+
+        let listener = TcpListener::bind("127.0.0.1:0").expect("bind fake smtp");
+        let port = listener.local_addr().expect("addr").port();
+        let handle = std::thread::spawn(move || {
+            let (mut stream, _) = listener.accept().expect("accept smtp connection");
+            stream
+                .write_all(b"220 fake.smtp ready\r\n")
+                .expect("greeting");
+            let mut buf = [0u8; 4096];
+            let mut received = String::new();
+            let mut read_line = |stream: &mut std::net::TcpStream, received: &mut String| {
+                loop {
+                    if let Some(pos) = received.find("\r\n") {
+                        let line: String = received.drain(..pos + 2).collect();
+                        return line;
+                    }
+                    let n = stream.read(&mut buf).unwrap_or(0);
+                    if n == 0 {
+                        return String::new();
+                    }
+                    received.push_str(&String::from_utf8_lossy(&buf[..n]));
+                }
+            };
+            let ehlo = read_line(&mut stream, &mut received);
+            assert!(ehlo.starts_with("EHLO"));
+            stream
+                .write_all(b"250-fake.smtp\r\n250 AUTH PLAIN LOGIN\r\n")
+                .expect("ehlo reply");
+            let auth = read_line(&mut stream, &mut received);
+            assert!(auth.starts_with("AUTH PLAIN"));
+            stream.write_all(b"235 OK\r\n").expect("auth reply");
+            let mail_from = read_line(&mut stream, &mut received);
+            assert!(mail_from.starts_with("MAIL FROM:"));
+            stream.write_all(b"250 OK\r\n").expect("mail reply");
+            let rcpt_to = read_line(&mut stream, &mut received);
+            assert!(rcpt_to.starts_with("RCPT TO:"));
+            stream.write_all(b"250 OK\r\n").expect("rcpt reply");
+            let data = read_line(&mut stream, &mut received);
+            assert!(data.starts_with("DATA"));
+            stream.write_all(b"354 go ahead\r\n").expect("data reply");
+            loop {
+                let line = read_line(&mut stream, &mut received);
+                if line == ".\r\n" || line.is_empty() {
+                    break;
+                }
+            }
+            stream.write_all(b"250 queued\r\n").expect("data done");
+            let _ = read_line(&mut stream, &mut received);
+        });
+
+        let cfg = SmtpConfig {
+            host: "127.0.0.1".into(),
+            port,
+            from: "wardex@test.local".into(),
+            to: vec!["ops@test.local".into()],
+            username: Some("wardex-bot".into()),
+            password: Some("s3cret".into()),
+            use_tls: false,
+            implicit_tls: false,
+            ca_cert_pem: None,
+            allow_plaintext_auth: true,
+        };
+        let result = smtp_send(&cfg, "Subject: hi\r\n\r\nbody");
+        handle.join().expect("server thread");
+        assert!(result.is_ok(), "smtp_send failed: {result:?}");
+    }
+
+    #[test]
+    fn smtp_config_rejects_crlf_injection_in_addresses() {
+        let mut cfg = SmtpConfig {
+            host: "127.0.0.1".into(),
+            port: 25,
+            from: "wardex@test.local".into(),
+            to: vec!["ops@test.local".into()],
+            username: None,
+            password: None,
+            use_tls: false,
+            implicit_tls: false,
+            ca_cert_pem: None,
+            allow_plaintext_auth: false,
+        };
+        assert!(cfg.validate().is_ok());
+
+        cfg.from = "wardex@test.local\r\nBcc: evil@attacker.example".into();
+        assert!(cfg.validate().is_err());
+        cfg.from = "wardex@test.local".into();
+
+        cfg.to = vec!["ops@test.local\r\nX-Injected: 1".into()];
+        assert!(cfg.validate().is_err());
+        cfg.to = vec!["ops@test.local".into()];
+
+        cfg.from = "wardex@test.local>evil".into();
+        assert!(cfg.validate().is_err());
+        cfg.from = "wardex@test.local".into();
+
+        cfg.to = vec!["<ops@test.local".into()];
+        assert!(cfg.validate().is_err());
     }
 }
