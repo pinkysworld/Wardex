@@ -125,7 +125,10 @@ test('advanced admin console workflows smoke', async ({ page }) => {
   await page.goto(`${BASE}/admin/soc`, { waitUntil: 'domcontentloaded' });
   await expect(page.getByText('Workbench Overview')).toBeVisible();
   await expect(page.getByText('Investigations In Flight')).toBeVisible();
-  await page.getByRole('button', { name: 'Response', exact: true }).click();
+  await page
+    .getByRole('main', { name: 'Main content' })
+    .getByRole('button', { name: 'Response', exact: true })
+    .click();
   await expect(page.getByText('Pending Responses', { exact: true })).toBeVisible();
   await expect(page.getByText('Response Stats', { exact: true })).toBeVisible();
   await expect(page.getByText('Response Requests', { exact: true })).toBeVisible();
