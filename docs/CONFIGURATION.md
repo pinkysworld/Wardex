@@ -22,7 +22,7 @@ This document covers all configuration options for the Wardex XDR agent and serv
 | `WARDEX_TLS_KEY` | — | Path to TLS private key (PEM) |
 | `WARDEX_DB_PATH` | `var/wardex.db` | SQLite database path |
 | `RUST_LOG` | `info` | Log level filter (`debug`, `info`, `warn`, `error`) |
-| `OTEL_EXPORTER_OTLP_ENDPOINT` | — | OpenTelemetry collector endpoint |
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | — | OpenTelemetry collector base URL (e.g. `http://otel-collector:4318`); used as the default when no endpoint has been saved via `POST /api/telemetry/otlp` |
 
 ### Production fail-closed baseline
 
@@ -225,6 +225,38 @@ trust_store_path = "/etc/wardex/trust_store.json"
 signer public keys (`attestation::TrustStore`). Verify a manifest against it
 with `wardex attest-verify [manifest] [trust-store]`, which falls back to the
 paths configured here when not given explicitly.
+## Threat-Intel Enrichment, Ticketing, and OTLP Export
+
+These integrations are configured at runtime through the admin API (not `wardex.toml`); every field takes a
+literal value or a secret reference resolved through the same `SecretsResolver` the cloud collectors use
+(`${ENV_VAR}`, `file:///path`, or `vault://mount/path#key`).
+
+| Integration | Config endpoint | Action endpoint(s) | Notes |
+|---|---|---|---|
+| VirusTotal / AbuseIPDB enrichment | `GET`/`POST /api/integrations/enrichment` | `POST /api/enrich/lookup` (`{"kind": "ip_address\|file_hash\|domain\|url", "indicator": "..."}`) | VT public-API default is 4 req/min; AbuseIPDB defaults to 60 req/min. Results are cached with a per-provider TTL (default 1h). Both degrade to a typed error (never a panic) when disabled, misconfigured, or rate-limited. |
+| Jira ticketing | `GET`/`POST /api/integrations/ticketing/jira` | `POST /api/tickets/sync`, `POST /api/tickets/pull` | Cloud (`email` + `api_token`) or Server (leave `email` empty, `api_token` used as a bearer PAT). Re-syncing an already-synced case adds a comment instead of creating a duplicate issue. |
+| ServiceNow ticketing | `GET`/`POST /api/integrations/ticketing/servicenow` | `POST /api/tickets/sync`, `POST /api/tickets/pull` | Table API against `table` (default `incident`); basic auth (`username`/`password`) or `oauth_token`. Re-syncing patches the existing incident by `sys_id` instead of creating a new one. |
+| OTLP/HTTP export | `GET`/`POST /api/telemetry/otlp` | `POST /api/telemetry/otlp/flush` | Exports batched OTLP/HTTP JSON to `{endpoint}/v1/traces`, `/v1/logs`, `/v1/metrics` with retry/backoff and a bounded, drop-counted queue. `OTEL_EXPORTER_OTLP_ENDPOINT` seeds the default endpoint. |
+
+`POST /api/tickets/sync` is idempotent: syncing the same `(provider, object_kind, object_id)` again updates the
+existing local record and the existing remote ticket (add-comment / patch) rather than creating a second one.
+When no ticketing provider is enabled, it keeps the prior local-only bookkeeping behavior unchanged.
+
+### SMTP email notifications
+
+`notifications::SmtpConfig` now supports `use_tls` (STARTTLS on a plaintext port, typically 587), `implicit_tls`
+(TLS from the first byte, typically port 465), `username`/`password` (AUTH PLAIN/LOGIN, negotiated from the
+server's advertised `AUTH` capability), and an optional `ca_cert_pem` to trust an internal/private CA in addition
+to the built-in Mozilla root store. Certificate verification is always on. Requesting TLS in a binary built
+without the `tls` cargo feature fails delivery with a clear error instead of silently sending in plaintext.
+
+### Okta identity collector
+
+The Okta System Log collector (`collector_identity::OktaCollector`) now has a `poll()` method that performs the
+HTTP fetch itself (matching the AWS/Azure/GCP collector shape), persists its `after` pagination cursor via the
+same collector-checkpoint storage the other collectors use (so repeated polls advance through the log instead of
+re-fetching the first page), and reads Okta's `X-Rate-Limit-Remaining`/`X-Rate-Limit-Reset` headers to report a
+`retry_after_secs` hint instead of hammering the API when the org-wide rate limit is close to empty.
 
 ## API Versioning
 

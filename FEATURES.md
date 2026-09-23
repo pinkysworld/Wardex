@@ -71,7 +71,7 @@ Wardex is a self-hosted XDR and SIEM platform built in Rust for teams that want 
 
 - **Observability & analytics**
   - API usage analytics with per-endpoint request tracking, latency percentiles (p95), and error rates
-  - OpenTelemetry-compatible tracing with span hierarchy, OTLP JSON export, and trace statistics
+  - OpenTelemetry-compatible tracing with span hierarchy, trace statistics, and a real OTLP/HTTP JSON exporter (batched, retried with backoff, bounded queue with a drop counter) for traces/logs/metrics
   - Backup encryption with AES-256-GCM and passphrase-derived keys
   - Production assurance APIs for release provenance, upgrade rehearsal, synthetic console monitoring, incident replay, retention forecast, adversarial validation, and support bundle diffing
   - Release verification APIs for clean release cut readiness, container parity, data quality, scale baseline, failover execution, secrets rotation, task automation, and detection validation packs
@@ -93,9 +93,11 @@ Wardex is a self-hosted XDR and SIEM platform built in Rust for teams that want 
   - Gradient-boosted alert-triage classifier (real multiclass gradient boosting) with Random Forest shadow comparison and calibrated confidence
 
 - **Integrations and evidence**
-  - Structured SIEM output, OCSF normalization, TAXII pull, and threat-intel enrichment
+  - Structured SIEM output, OCSF normalization, TAXII pull, and threat-intel enrichment (VirusTotal v3 file/IP/domain/URL reports and AbuseIPDB v2 IP reputation, with per-provider rate limiting, TTL caching, and an on-demand lookup API)
+  - Real Jira (Cloud/Server REST v2) and ServiceNow (Table API) ticketing clients: idempotent create/update, comments, transitions, and bidirectional status pull, layered on the existing case-sync bookkeeping
+  - Okta identity collector: polls `/api/v1/logs` with SSWS auth, persisted `after`-cursor pagination via Link headers, and rate-limit header handling
   - Compliance evidence, forensic exports, tamper-evident audit chain, and encrypted event spooling
-  - Outbound notifications to Slack, Teams, PagerDuty, Webhook, and Email (real SMTP delivery with retry) with severity filtering
+  - Outbound notifications to Slack, Teams, PagerDuty, Webhook, and Email (real SMTP delivery with STARTTLS/implicit TLS, AUTH PLAIN/LOGIN, and retry) with severity filtering
   - CycloneDX 1.5 and SPDX 2.3 SBOM generation from Cargo.lock for supply-chain compliance
   - Runbooks, OpenAPI contract, deployment models, disaster recovery guidance, and production hardening docs
   - Python SDK with production assurance, cursor-page, preflight, snapshot, and release-proof helpers

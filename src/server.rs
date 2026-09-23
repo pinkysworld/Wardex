@@ -182,6 +182,9 @@ pub(crate) use server_core_helpers::*;
 #[path = "server_dynamic_routes.rs"]
 mod server_dynamic_routes;
 use server_dynamic_routes::handle_dynamic_api_route;
+#[path = "server_integrations_ext.rs"]
+mod server_integrations_ext;
+pub(crate) use server_integrations_ext::*;
 #[path = "server_views.rs"]
 mod server_views;
 use crate::server_response::{
@@ -5124,18 +5127,58 @@ fn handle_api(
                     let mut s = state
                         .lock()
                         .unwrap_or_else(std::sync::PoisonError::into_inner);
-                    let sync = s.enterprise.sync_ticket(
-                        v["provider"].as_str().unwrap_or("jira").to_string(),
-                        v["object_kind"].as_str().unwrap_or("incident").to_string(),
-                        v["object_id"].as_str().unwrap_or("").to_string(),
+                    let provider = v["provider"].as_str().unwrap_or("jira").to_string();
+                    let object_kind = v["object_kind"].as_str().unwrap_or("incident").to_string();
+                    let object_id = v["object_id"].as_str().unwrap_or("").to_string();
+                    let summary = v["summary"]
+                        .as_str()
+                        .unwrap_or("Enterprise sync")
+                        .to_string();
+                    let description = v
+                        .get("description")
+                        .and_then(|value| value.as_str())
+                        .unwrap_or(&summary)
+                        .to_string();
+                    // Idempotency: if we already synced this object, reuse
+                    // its external key so a real Jira/ServiceNow client
+                    // updates the existing remote ticket instead of
+                    // creating a duplicate on retry.
+                    let existing_external_key = s
+                        .enterprise
+                        .ticket_syncs()
+                        .iter()
+                        .find(|sync| {
+                            sync.provider == provider
+                                && sync.object_kind == object_kind
+                                && sync.object_id == object_id
+                        })
+                        .map(|sync| sync.external_key.clone());
+                    let remote_result = sync_remote_ticket(
+                        &s.storage,
+                        &provider,
+                        existing_external_key.as_deref(),
+                        &summary,
+                        &description,
+                    );
+                    let mut remote_error = None;
+                    let remote_ticket = match remote_result {
+                        Some(Ok(ticket)) => Some(ticket),
+                        Some(Err(error)) => {
+                            remote_error = Some(error);
+                            None
+                        }
+                        None => None,
+                    };
+                    let sync = s.enterprise.sync_ticket_remote(
+                        provider,
+                        object_kind,
+                        object_id,
                         v.get("queue_or_project")
                             .and_then(|value| value.as_str())
                             .map(std::string::ToString::to_string),
-                        v["summary"]
-                            .as_str()
-                            .unwrap_or("Enterprise sync")
-                            .to_string(),
+                        summary,
                         auth_identity.actor().to_string(),
+                        remote_ticket,
                     );
                     s.enterprise
                         .record_ticket_sync_metrics(started.elapsed().as_millis() as u64);
@@ -5151,7 +5194,12 @@ fn handle_api(
                         Some(&v.to_string()),
                     );
                     json_response(
-                        &serde_json::json!({"status": "synced", "sync": sync}).to_string(),
+                        &serde_json::json!({
+                            "status": "synced",
+                            "sync": sync,
+                            "remote_sync_error": remote_error,
+                        })
+                        .to_string(),
                         200,
                     )
                 }

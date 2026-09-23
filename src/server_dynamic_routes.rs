@@ -5186,6 +5186,33 @@ pub(super) fn handle_dynamic_api_route(
                 None => error_json("lane not found", 404),
             }
         }
+    // ── Threat-intel enrichment (VirusTotal / AbuseIPDB) ────────────
+    } else if method == Method::Get && url_path == "/api/integrations/enrichment" {
+        crate::server::handle_enrichment_config_get(state)
+    } else if method == Method::Post && url_path == "/api/integrations/enrichment" {
+        crate::server::handle_enrichment_config_post(body, state)
+    } else if method == Method::Post && url_path == "/api/enrich/lookup" {
+        crate::server::handle_enrich_lookup(body, state)
+
+    // ── Ticketing (Jira / ServiceNow) ────────────────────────────────
+    } else if method == Method::Get && url_path == "/api/integrations/ticketing/jira" {
+        crate::server::handle_ticketing_jira_get(state)
+    } else if method == Method::Post && url_path == "/api/integrations/ticketing/jira" {
+        crate::server::handle_ticketing_jira_post(body, state)
+    } else if method == Method::Get && url_path == "/api/integrations/ticketing/servicenow" {
+        crate::server::handle_ticketing_servicenow_get(state)
+    } else if method == Method::Post && url_path == "/api/integrations/ticketing/servicenow" {
+        crate::server::handle_ticketing_servicenow_post(body, state)
+    } else if method == Method::Post && url_path == "/api/tickets/pull" {
+        crate::server::handle_tickets_pull(body, state)
+
+    // ── OTLP export ──────────────────────────────────────────────────
+    } else if method == Method::Get && url_path == "/api/telemetry/otlp" {
+        crate::server::handle_otlp_config_get(state)
+    } else if method == Method::Post && url_path == "/api/telemetry/otlp" {
+        crate::server::handle_otlp_config_post(body, state)
+    } else if method == Method::Post && url_path == "/api/telemetry/otlp/flush" {
+        crate::server::handle_otlp_flush(state)
     } else {
         error_json("not found", 404)
     }
